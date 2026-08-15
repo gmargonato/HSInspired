@@ -3,6 +3,7 @@ import { gsap } from 'gsap'
 import { Scene } from './Scene'
 import { GAME_HEIGHT, GAME_WIDTH } from '../main'
 import { FlipCard } from '../actors/FlipCard'
+import { Button } from '../actors/Button'
 import tableImage from '@assets/images/TABLE.png'
 import boxImage from '@assets/images/BOX.png'
 import leftLidImage from '@assets/images/LEFT_LID.png'
@@ -16,20 +17,20 @@ import buttonCollectionImage from '@assets/images/MENU_BUTTON_COLLECTION.png'
 // Every piece defaults to x=0 (the chest's center line); the lids are
 // shifted automatically so their inner edges meet at the center.
 const Layout = {
-  box: { x: 0, y: -40 },
-  centerPart: { x: 0, y: -32 },
-  leftLid: { x: 27, y: -37 },
-  rightLid: { x: 0, y: -37 },
-  buttonPlay: { x: 0, y: -175 },
-  buttonCollection: { x: 0, y: -82 }
+  box: { x: 0, y: 0 },
+  centerPart: { x: 0, y: 0 },
+  leftLid: { x: 30, y: 0 },
+  rightLid: { x: 0, y: 0 },
+  buttonPlay: { x: 0, y: -145 },
+  buttonCollection: { x: 0, y: -52 }
 }
 
 export class MainMenuScene extends Scene {
   private table!: Sprite
   private menuGroup!: Container
   private centerCard!: FlipCard
-  private buttonPlay!: Sprite
-  private buttonCollection!: Sprite
+  private buttonPlay!: Button
+  private buttonCollection!: Button
   private menuOpened = false
 
   async init(): Promise<void> {
@@ -65,26 +66,29 @@ export class MainMenuScene extends Scene {
     this.root.addChild(this.menuGroup)
 
     this.centerCard = new FlipCard(centerPartTexture, centerPartMenuTexture, {
+      oneShot: true,
       onClick: () => this.openMenu()
     })
     this.centerCard.position.set(Layout.centerPart.x, Layout.centerPart.y)
     this.menuGroup.addChild(this.centerCard)
 
-    this.buttonPlay = new Sprite(buttonPlayTexture)
-    this.buttonPlay.anchor.set(0.5)
+    this.buttonPlay = new Button(buttonPlayTexture, {
+      onClick: () => console.log('play clicked')
+    })
     this.buttonPlay.position.set(Layout.buttonPlay.x, Layout.buttonPlay.y)
-    this.buttonPlay.eventMode = 'static'
-    this.buttonPlay.cursor = 'pointer'
+    this.buttonPlay.setBaseY(Layout.buttonPlay.y)
+    this.buttonPlay.visible = false
     this.menuGroup.addChild(this.buttonPlay)
 
-    this.buttonCollection = new Sprite(buttonCollectionTexture)
-    this.buttonCollection.anchor.set(0.5)
+    this.buttonCollection = new Button(buttonCollectionTexture, {
+      onClick: () => console.log('collection clicked')
+    })
     this.buttonCollection.position.set(
       Layout.buttonCollection.x,
       Layout.buttonCollection.y
     )
-    this.buttonCollection.eventMode = 'static'
-    this.buttonCollection.cursor = 'pointer'
+    this.buttonCollection.setBaseY(Layout.buttonCollection.y)
+    this.buttonCollection.visible = false
     this.menuGroup.addChild(this.buttonCollection)
   }
 

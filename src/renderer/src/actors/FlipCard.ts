@@ -4,6 +4,7 @@ import { Actor } from './Actor'
 export interface FlipCardOptions {
   durationMs?: number
   onClick?: () => void
+  oneShot?: boolean
 }
 
 /**
@@ -11,17 +12,22 @@ export interface FlipCardOptions {
  * the card narrows edge-on, the faces swap mid-flip, then it widens back.
  * The scale is animated on this container, so the sprite's anchor must be
  * centered for the effect to look like a rotation.
+ *
+ * With `oneShot: true` the card flips from front to back exactly once and
+ * can never flip back again.
  */
 export class FlipCard extends Actor {
   readonly front: Sprite
   readonly back: Sprite
   private readonly durationMs: number
+  private readonly oneShot: boolean
   private flipped = false
   private flipping = false
 
   constructor(texture: Texture, backTexture: Texture, options: FlipCardOptions = {}) {
     super()
     this.durationMs = options.durationMs ?? 400
+    this.oneShot = options.oneShot ?? false
 
     this.front = new Sprite(texture)
     this.front.anchor.set(0.5)
@@ -38,6 +44,7 @@ export class FlipCard extends Actor {
     this.cursor = 'pointer'
     this.on('pointertap', () => {
       if (this.flipping) return
+      if (this.oneShot && this.flipped) return
       void this.flip().then(() => options.onClick?.())
     })
   }
@@ -48,6 +55,7 @@ export class FlipCard extends Actor {
 
   async flip(): Promise<void> {
     if (this.flipping) return
+    if (this.oneShot && this.flipped) return
     this.flipping = true
 
     const halfMs = this.durationMs / 2
@@ -62,6 +70,10 @@ export class FlipCard extends Actor {
           this.front.visible = target === this.front
           this.back.visible = target === this.back
           this.flipped = !this.flipped
+          if (this.oneShot && this.flipped) {
+            this.eventMode = 'none'
+            this.cursor = 'default'
+          }
           this.tweenTo(this.scale, {
             x: 1,
             duration: halfMs / 1000,
