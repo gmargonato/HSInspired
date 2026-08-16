@@ -6,6 +6,22 @@ import icon from '../../resources/icon.png?asset'
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
 
+function isAllowedExternalUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function openExternalUrl(url: string): void {
+  if (!isAllowedExternalUrl(url)) return
+
+  void shell.openExternal(url).catch((error: unknown) => {
+    console.error('Failed to open external URL:', error)
+  })
+}
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: WINDOW_WIDTH,
@@ -20,7 +36,10 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
     }
   })
 
@@ -29,8 +48,13 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    openExternalUrl(details.url)
     return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault()
+    openExternalUrl(url)
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -40,19 +64,25 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.hsinspired.app')
+void app
+  .whenReady()
+  .then(() => {
+    electronApp.setAppUserModelId('com.hsinspired.app')
 
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
+
+    createWindow()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-
-  createWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  .catch((error: unknown) => {
+    console.error('Failed to initialize Electron:', error)
+    app.quit()
   })
-})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

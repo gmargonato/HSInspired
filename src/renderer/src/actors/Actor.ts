@@ -1,16 +1,11 @@
 import { Container } from 'pixi.js'
-import { gsap } from 'gsap'
+import { AnimationScope } from '../core/animations'
 
 export abstract class Actor extends Container {
-  private readonly tweens: gsap.core.Animation[] = []
+  protected readonly animationScope = new AnimationScope()
 
-  protected tweenTo(
-    target: gsap.TweenTarget,
-    vars: gsap.TweenVars
-  ): gsap.core.Tween {
-    const tween = gsap.to(target, vars)
-    this.tweens.push(tween)
-    return tween
+  protected tweenTo(target: gsap.TweenTarget, vars: gsap.TweenVars): gsap.core.Tween {
+    return this.animationScope.to(target, vars)
   }
 
   protected tweenFromTo(
@@ -18,26 +13,35 @@ export abstract class Actor extends Container {
     fromVars: gsap.TweenVars,
     toVars: gsap.TweenVars
   ): gsap.core.Tween {
-    const tween = gsap.fromTo(target, fromVars, toVars)
-    this.tweens.push(tween)
-    return tween
+    return this.animationScope.fromTo(target, fromVars, toVars)
   }
 
   protected timeline(vars?: gsap.TimelineVars): gsap.core.Timeline {
-    const timeline = gsap.timeline(vars)
-    this.tweens.push(timeline)
-    return timeline
+    return this.animationScope.timeline(vars)
+  }
+
+  protected killTweensOf(target: gsap.TweenTarget): void {
+    this.animationScope.kill(target)
+  }
+
+  pauseAnimations(): void {
+    this.animationScope.pause()
+  }
+
+  resumeAnimations(): void {
+    this.animationScope.resume()
+  }
+
+  killAnimations(): void {
+    this.animationScope.kill()
   }
 
   killTweens(): void {
-    for (const tween of this.tweens) {
-      tween.kill()
-    }
-    this.tweens.length = 0
+    this.killAnimations()
   }
 
   dispose(): void {
-    this.killTweens()
+    this.killAnimations()
     this.destroy({ children: true })
   }
 }

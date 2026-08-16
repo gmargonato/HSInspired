@@ -1,9 +1,10 @@
 import { Application } from 'pixi.js'
 import { MainMenuScene } from './scenes/MainMenuScene'
-import { Game } from './core/Game'
+import { SceneManager } from './core/SceneManager'
+import { GAME_HEIGHT, GAME_WIDTH } from './core/config'
+import './styles.css'
 
-export const GAME_WIDTH = 1920
-export const GAME_HEIGHT = 1080
+export { GAME_HEIGHT, GAME_WIDTH }
 
 async function bootstrap(): Promise<void> {
   const app = new Application()
@@ -18,13 +19,25 @@ async function bootstrap(): Promise<void> {
     resizeTo: window
   })
 
+  const container = document.getElementById('game-container')
+  if (!container) {
+    throw new Error('Game container was not found')
+  }
+
+  container.appendChild(app.canvas)
+
   app.ticker.maxFPS = 60
 
-  const game = new Game(app)
+  const game = new SceneManager(app)
 
   await game.start(new MainMenuScene())
-
-  document.getElementById('game-container')?.appendChild(app.canvas)
 }
 
-void bootstrap()
+void bootstrap().catch((error: unknown) => {
+  console.error('Failed to start the game:', error)
+
+  const container = document.getElementById('game-container')
+  if (container) {
+    container.textContent = 'Unable to start the game. Please restart the application.'
+  }
+})

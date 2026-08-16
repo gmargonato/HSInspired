@@ -1,11 +1,23 @@
 appId: com.hsinspired.app
 productName: HS Inspired
 directories:
-  buildResources: build
+  buildResources: resources
   output: dist
 files:
   - '!**/.vscode/*'
   - '!src/*'
+  # Vite emits imported runtime assets under out/renderer/assets.
+  - '!assets/**'
+  - '!.github/**'
+  - '!tests/**'
+  - '!scripts/**'
+  - '!**/*.test.*'
+  - '!**/*.psd'
+  - '!eslint.config.*'
+  - '!vitest.config.*'
+  - '!tsconfig*.json'
+  - '!.prettier*'
+  - '!package-lock.json'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
@@ -13,17 +25,17 @@ asarUnpack:
   - resources/**
 win:
   executableName: hsinspired
-  icon: resources/icon.png
+  icon: icon.png
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
-  icon: resources/icon.png
+  icon: icon.png
   category: public.app-category.games
 linux:
-  icon: resources/icon.png
+  icon: icon.png
   target:
     - AppImage
 npmRebuild: false

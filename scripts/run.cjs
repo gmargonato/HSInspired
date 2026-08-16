@@ -1,5 +1,4 @@
 const { spawn } = require('node:child_process')
-const path = require('node:path')
 
 const BANNED_FLAGS = ['--use-system-ca']
 
@@ -9,9 +8,11 @@ if (process.env.NODE_OPTIONS) {
   process.env.NODE_OPTIONS = cleaned.join(' ')
 }
 
-const electronVite = require.resolve('electron-vite/package.json', {
-  paths: [__dirname]
-}).replace('package.json', 'bin/electron-vite.js')
+const electronVite = require
+  .resolve('electron-vite/package.json', {
+    paths: [__dirname]
+  })
+  .replace('package.json', 'bin/electron-vite.js')
 const args = process.argv.slice(2)
 
 const child = spawn(process.execPath, [electronVite, ...args], {

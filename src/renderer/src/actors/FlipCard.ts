@@ -3,7 +3,7 @@ import { Actor } from './Actor'
 
 export interface FlipCardOptions {
   durationMs?: number
-  onClick?: () => void
+  onClick?: () => void | Promise<void>
   oneShot?: boolean
 }
 
@@ -23,6 +23,7 @@ export class FlipCard extends Actor {
   private readonly oneShot: boolean
   private flipped = false
   private flipping = false
+  private flipPromise: Promise<void> | null = null
 
   constructor(texture: Texture, backTexture: Texture, options: FlipCardOptions = {}) {
     super()
@@ -45,7 +46,11 @@ export class FlipCard extends Actor {
     this.on('pointertap', () => {
       if (this.flipping) return
       if (this.oneShot && this.flipped) return
-      void this.flip().then(() => options.onClick?.())
+      void this.flip()
+        .then(() => options.onClick?.())
+        .catch((error: unknown) => {
+          console.error('Card action failed:', error)
+        })
     })
   }
 
@@ -53,15 +58,54 @@ export class FlipCard extends Actor {
     return this.flipped
   }
 
+  /**
+   * Flips a full 180° from whatever face is shown (front/back toggling).
+   * Disallowed while a one-shot card is already showing its back.
+   */
   async flip(): Promise<void> {
+    if (this.flipPromise) return this.flipPromise
     if (this.flipping) return
     if (this.oneShot && this.flipped) return
+
+    const target = this.flipped ? this.front : this.back
+    await this.startFlip(target)
+  }
+
+  /**
+   * Flips back to the front face. Also allowed for one-shot cards when
+   * explicitly requested by code (e.g. closing the menu back to a chest).
+   */
+  async flipToFront(): Promise<void> {
+    if (this.flipPromise) return this.flipPromise
+    if (this.flipping) return
+    if (!this.flipped) return
+
+    await this.startFlip(this.front)
+  }
+
+  private async startFlip(target: Sprite): Promise<void> {
+    if (this.flipPromise) return this.flipPromise
+
+    this.flipPromise = this.runFlip(target).finally(() => {
+      this.flipPromise = null
+    })
+    await this.flipPromise
+  }
+
+  private async runFlip(target: Sprite): Promise<void> {
     this.flipping = true
 
     const halfMs = this.durationMs / 2
-    const target = this.flipped ? this.front : this.back
 
     await new Promise<void>((resolve) => {
+      let completed = false
+      const finish = (): void => {
+        if (completed) return
+        completed = true
+        this.flipping = false
+        resolve()
+      }
+
       this.tweenTo(this.scale, {
         x: 0,
         duration: halfMs / 1000,
@@ -69,21 +113,18 @@ export class FlipCard extends Actor {
         onComplete: () => {
           this.front.visible = target === this.front
           this.back.visible = target === this.back
-          this.flipped = !this.flipped
-          if (this.oneShot && this.flipped) {
-            this.eventMode = 'none'
-            this.cursor = 'default'
-          }
+          this.flipped = target === this.back
+          this.eventMode = this.oneShot && this.flipped ? 'none' : 'static'
+          this.cursor = this.oneShot && this.flipped ? 'default' : 'pointer'
           this.tweenTo(this.scale, {
             x: 1,
             duration: halfMs / 1000,
             ease: 'power2.out',
-            onComplete: () => {
-              this.flipping = false
-              resolve()
-            }
+            onComplete: finish,
+            onInterrupt: finish
           })
-        }
+        },
+        onInterrupt: finish
       })
     })
   }

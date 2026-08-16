@@ -1,5 +1,5 @@
-import { Container, Texture, Sprite, ColorMatrixFilter } from 'pixi.js'
-import { gsap } from 'gsap'
+import { ColorMatrixFilter, Sprite, Texture } from 'pixi.js'
+import { Actor } from './Actor'
 
 export interface ButtonOptions {
   pressedScale?: number
@@ -7,16 +7,11 @@ export interface ButtonOptions {
   hoverBrightness?: number
   pressedBrightness?: number
   sinkPx?: number
-  onClick?: () => void
+  onClick?: () => void | Promise<void>
 }
 
-/**
- * A single-texture button with two code-driven states:
- *  - hover: brightness lifted only (no resize) via GSAP
- *  - pressed: brightness dimmed, scale shrinks, and the sprite sinks
- *            downward a few pixels to read as occluded into the surface.
- */
-export class Button extends Container {
+/** A single-texture button with scoped hover and pressed animations. */
+export class Button extends Actor {
   readonly sprite: Sprite
   private readonly pressedScale: number
   private readonly idleBrightness: number
@@ -24,8 +19,12 @@ export class Button extends Container {
   private readonly pressedBrightness: number
   private readonly sinkPx: number
   private readonly myFilter = new ColorMatrixFilter()
-  private baseY: number
-  private readonly onClick?: () => void
+  private readonly brightnessState = { value: 1 }
+  private baseY = 0
+  private hovered = false
+  private pressed = false
+  private enabled = true
+  private readonly onClick?: () => void | Promise<void>
 
   constructor(texture: Texture, options: ButtonOptions = {}) {
     super()
@@ -36,14 +35,14 @@ export class Button extends Container {
     this.pressedBrightness = options.pressedBrightness ?? 0.8
     this.sinkPx = options.sinkPx ?? 6
     this.onClick = options.onClick
+    this.brightnessState.value = this.idleBrightness
 
     this.sprite = new Sprite(texture)
     this.sprite.anchor.set(0.5)
     this.sprite.position.set(0, 0)
     this.sprite.filters = [this.myFilter]
     this.addChild(this.sprite)
-
-    this.baseY = 0
+    this.setBrightness(this.idleBrightness)
 
     this.eventMode = 'static'
     this.cursor = 'pointer'
@@ -52,7 +51,8 @@ export class Button extends Container {
     this.on('pointerout', this.onHoverEnd)
     this.on('pointerdown', this.onPressStart)
     this.on('pointerup', this.onPressEnd)
-    this.on('pointerupoutside', this.onPressEnd)
+    this.on('pointerupoutside', this.onPressOutside)
+    this.on('pointercancel', this.onPressOutside)
     this.on('pointertap', this.handleClick)
   }
 
@@ -64,37 +64,62 @@ export class Button extends Container {
     return this.baseY
   }
 
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled
+    this.eventMode = enabled ? 'static' : 'none'
+    this.cursor = enabled ? 'pointer' : 'default'
+
+    if (!enabled) {
+      this.hovered = false
+      this.pressed = false
+      this.killTweensOf(this.sprite.scale)
+      this.killTweensOf(this)
+      this.killTweensOf(this.brightnessState)
+      this.sprite.scale.set(1)
+      this.y = this.baseY
+      this.setBrightness(this.idleBrightness)
+    }
+  }
+
   private setBrightness(brightness: number): void {
     this.myFilter.brightness(brightness, false)
   }
 
   private tweenBrightness(to: number, duration: number): void {
-    const from = { value: this.idleBrightness }
-    gsap.to(from, {
+    this.killTweensOf(this.brightnessState)
+    this.tweenTo(this.brightnessState, {
       value: to,
       duration,
       ease: 'power2.out',
-      onUpdate: () => this.setBrightness(from.value)
+      onUpdate: () => this.setBrightness(this.brightnessState.value)
     })
   }
 
   private onHoverStart = (): void => {
-    this.tweenBrightness(this.hoverBrightness, 0.15)
+    if (!this.enabled) return
+    this.hovered = true
+    if (!this.pressed) this.tweenBrightness(this.hoverBrightness, 0.15)
   }
 
   private onHoverEnd = (): void => {
-    this.tweenBrightness(this.idleBrightness, 0.15)
+    if (!this.enabled) return
+    this.hovered = false
+    if (!this.pressed) this.tweenBrightness(this.idleBrightness, 0.15)
   }
 
   private onPressStart = (): void => {
-    gsap.to(this.sprite.scale, {
+    if (!this.enabled) return
+    this.pressed = true
+    this.killTweensOf(this.sprite.scale)
+    this.killTweensOf(this)
+    this.tweenTo(this.sprite.scale, {
       x: this.pressedScale,
       y: this.pressedScale,
       duration: 0.08,
       ease: 'power2.out'
     })
     this.tweenBrightness(this.pressedBrightness, 0.08)
-    gsap.to(this, {
+    this.tweenTo(this, {
       y: this.baseY + this.sinkPx,
       duration: 0.08,
       ease: 'power2.out'
@@ -102,14 +127,30 @@ export class Button extends Container {
   }
 
   private onPressEnd = (): void => {
-    gsap.to(this.sprite.scale, {
+    this.endPress()
+  }
+
+  private onPressOutside = (): void => {
+    this.hovered = false
+    this.endPress()
+  }
+
+  private endPress(): void {
+    if (!this.enabled) return
+    this.pressed = false
+    this.killTweensOf(this.sprite.scale)
+    this.killTweensOf(this)
+    this.tweenTo(this.sprite.scale, {
       x: 1,
       y: 1,
       duration: 0.12,
       ease: 'power2.out'
     })
-    this.tweenBrightness(this.hoverBrightness, 0.12)
-    gsap.to(this, {
+    this.tweenBrightness(
+      this.hovered ? this.hoverBrightness : this.idleBrightness,
+      0.12
+    )
+    this.tweenTo(this, {
       y: this.baseY,
       duration: 0.12,
       ease: 'power2.out'
@@ -117,6 +158,13 @@ export class Button extends Container {
   }
 
   private handleClick = (): void => {
-    this.onClick?.()
+    if (!this.enabled) return
+
+    const result = this.onClick?.()
+    if (result) {
+      void Promise.resolve(result).catch((error: unknown) => {
+        console.error('Button action failed:', error)
+      })
+    }
   }
 }
