@@ -54,7 +54,9 @@ export class SceneNavigator {
       inset: FULL_VIEWPORT,
       scaleMode: 'cover',
       overlayAlpha: 0.25,
-      duration: 0.2
+      duration: 0.2,
+      afterTransition:
+        scene instanceof CollectionScene ? () => scene.playCoverReveal() : undefined
     })
 
     console.info('[Scenes menu][navigator] transition complete', request)

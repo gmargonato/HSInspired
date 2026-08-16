@@ -1,5 +1,6 @@
-import { Application, Container } from 'pixi.js'
+import { Application, Container, Graphics } from 'pixi.js'
 import { GAME_HEIGHT, GAME_WIDTH } from './config'
+import { AnimationScope } from './animations'
 import { Scene } from '../scenes/Scene'
 import {
   DEFAULT_SCENE_EXPAND_DURATION,
@@ -7,8 +8,12 @@ import {
 } from './SceneTransitionHost'
 import type { TransitionRect, TransitionScaleMode } from './SceneTransitionHost'
 
+const DEFAULT_SCENE_FADE_DURATION = 0.6
+
 export interface SceneTransitionOptions {
   inset: TransitionRect
+  /** Uses a two-stage opacity fade instead of the inset expansion effect. */
+  mode?: 'expand' | 'fade'
   scaleMode?: TransitionScaleMode
   overlayAlpha?: number
   duration?: number
@@ -19,6 +24,12 @@ export interface SceneTransitionOptions {
     previous: Scene,
     next: Scene
   ) => Promise<void> | void
+  /**
+   * Runs after the destination transition has completed, become active, and
+   * the previous scene has been unloaded. Destination-specific reveals belong
+   * here so they do not begin inside a transition preview or fade.
+   */
+  afterTransition?: (previous: Scene, next: Scene) => Promise<void> | void
 }
 
 /** Owns the Pixi application and a serialized stack of full-screen scenes. */
@@ -64,7 +75,11 @@ export class SceneManager {
       if (!this.started) {
         throw new Error('SceneManager must be started before transitioning scenes')
       }
-      await this.transitionImmediate(scene, options)
+      if (options.mode === 'fade') {
+        await this.fadeImmediate(scene, options)
+      } else {
+        await this.transitionImmediate(scene, options)
+      }
     })
   }
 
@@ -183,6 +198,7 @@ export class SceneManager {
       committed = true
       await previous.unload()
       this.fitToScreen()
+      await options.afterTransition?.(previous, scene)
     } catch (error) {
       this.transitioningScene = null
 
@@ -196,6 +212,102 @@ export class SceneManager {
 
       throw error
     }
+  }
+
+  /**
+   * Performs a real two-stage fade: the current scene reaches black first,
+   * then the destination is swapped in underneath the black overlay and is
+   * faded back into view. This is intentionally separate from
+   * SceneTransitionHost, whose overlay only fades the destination in.
+   */
+  private async fadeImmediate(
+    scene: Scene,
+    options: SceneTransitionOptions
+  ): Promise<void> {
+    const previous = this.current
+    if (!previous) {
+      throw new Error('Cannot transition without a current scene')
+    }
+
+    const fadeDuration = Math.max(0, options.duration ?? DEFAULT_SCENE_FADE_DURATION)
+    const halfDuration = fadeDuration / 2
+    let loaded = false
+    let committed = false
+    let overlay: Graphics | null = null
+    this.transitioningScene = scene
+
+    try {
+      overlay = new Graphics()
+      overlay.rect(0, 0, GAME_WIDTH, GAME_HEIGHT).fill({ color: 0x000000 })
+      overlay.alpha = 0
+      // The overlay prevents the outgoing scene from receiving input while
+      // the screen is fading out.
+      overlay.eventMode = 'static'
+      this.world.addChild(overlay)
+      this.fitToScreen()
+
+      await this.fadeOverlay(overlay, 1, halfDuration)
+
+      await scene.load(this.app, this)
+      loaded = true
+
+      this.world.addChild(scene.root)
+      // Adding the destination moves it above the overlay, so add the
+      // overlay again to keep the scene hidden until the fade-back begins.
+      this.world.addChild(overlay)
+      this.stack[this.stack.length - 1] = scene
+      this.transitioningScene = null
+      committed = true
+      await previous.unload()
+      this.fitToScreen()
+
+      await this.fadeOverlay(overlay, 0, halfDuration)
+      this.removeFadeOverlay(overlay)
+      overlay = null
+      await options.afterTransition?.(previous, scene)
+    } catch (error) {
+      this.transitioningScene = null
+
+      if (!committed && (loaded || scene.state !== 'new')) {
+        await scene.unload().catch(() => undefined)
+      }
+
+      if (overlay) {
+        this.removeFadeOverlay(overlay)
+      }
+
+      throw error
+    }
+  }
+
+  private fadeOverlay(
+    overlay: Graphics,
+    alpha: number,
+    duration: number
+  ): Promise<void> {
+    const animations = new AnimationScope()
+
+    return new Promise<void>((resolve) => {
+      const timeline = animations.timeline({
+        onComplete: resolve,
+        onInterrupt: resolve
+      })
+
+      timeline.to(
+        overlay,
+        {
+          alpha,
+          duration,
+          ease: 'power2.inOut'
+        },
+        0
+      )
+    })
+  }
+
+  private removeFadeOverlay(overlay: Graphics): void {
+    overlay.parent?.removeChild(overlay)
+    overlay.destroy()
   }
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {

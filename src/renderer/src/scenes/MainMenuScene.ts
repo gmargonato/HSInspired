@@ -169,12 +169,16 @@ export class MainMenuScene extends Scene {
   }
 
   private onCollectionPressed(): Promise<void> {
-    return this.openDestination(new CollectionScene(), 'collection')
+    const destination = new CollectionScene()
+    return this.openDestination(destination, 'collection', () =>
+      destination.playCoverReveal()
+    )
   }
 
   private async openDestination(
     destination: Scene,
-    destinationName: string
+    destinationName: string,
+    afterTransition?: () => Promise<void> | void
   ): Promise<void> {
     if (this.transitionOpened) return
     this.transitionOpened = true
@@ -210,7 +214,8 @@ export class MainMenuScene extends Scene {
           this.centerCard.visible = false
           this.buttonPlay.visible = false
           this.buttonCollection.visible = false
-        }
+        },
+        afterTransition
       })
     } catch (error) {
       console.error(`Failed to open ${destinationName}:`, error)
