@@ -11,7 +11,7 @@ import { MainMenuScene } from './MainMenuScene'
 // The values align the buttons with the two empty slots in DECK_SELECTION.png.
 const Layout = {
   panel: { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 },
-  toCollectionButton: { x: 755, y: 1038 },
+  toCollectionButton: { x: 752, y: 1033 },
   backButton: { x: 1664, y: 1043 }
 }
 
