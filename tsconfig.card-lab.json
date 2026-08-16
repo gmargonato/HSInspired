@@ -1,0 +1,12 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": ["card-lab/**/*.ts", "card-lab/**/*.d.ts", "tests/card-lab.test.ts"],
+  "compilerOptions": {
+    "composite": false,
+    "baseUrl": ".",
+    "resolveJsonModule": true,
+    "paths": {
+      "@assets/*": ["assets/*"]
+    }
+  }
+}

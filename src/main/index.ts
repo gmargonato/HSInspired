@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, Menu, MenuItem } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import icon from '../../assets/icon.png?asset'
 import { SCENE_MENU_ENTRIES, SCENE_REQUEST_CHANNEL } from '../shared/sceneNavigation'
 
 const WINDOW_WIDTH = 1920
@@ -89,8 +89,6 @@ function installSceneMenu(mainWindow: BrowserWindow): void {
     submenu: Object.values(SCENE_MENU_ENTRIES).map((entry) => ({
       label: entry.label,
       click: () => {
-        console.info('[Scenes menu][main] clicked', entry.request)
-
         // On macOS the app can create a new window after the original one
         // closes while the application menu remains alive. Prefer the active
         // window so the menu does not retain a stale renderer reference.
@@ -98,17 +96,6 @@ function installSceneMenu(mainWindow: BrowserWindow): void {
           BrowserWindow.getFocusedWindow() ??
           BrowserWindow.getAllWindows()[0] ??
           mainWindow
-
-        if (targetWindow.isDestroyed() || targetWindow.webContents.isDestroyed()) {
-          console.warn('[Scenes menu][main] target window is unavailable')
-          return
-        }
-
-        console.info(
-          '[Scenes menu][main] sending request to window',
-          targetWindow.id,
-          entry.request
-        )
         targetWindow.webContents.send(SCENE_REQUEST_CHANNEL, entry.request)
       }
     }))
@@ -120,10 +107,6 @@ function installSceneMenu(mainWindow: BrowserWindow): void {
   const insertionIndex = helpIndex === -1 ? applicationMenu.items.length : helpIndex
   applicationMenu.insert(insertionIndex, scenesMenu)
   Menu.setApplicationMenu(applicationMenu)
-  console.info(
-    '[Scenes menu][main] installed',
-    Object.values(SCENE_MENU_ENTRIES).map((entry) => entry.request.id)
-  )
 }
 
 void app

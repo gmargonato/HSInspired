@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Card Lab</title>
+  </head>
+  <body>
+    <div id="app">
+      <aside id="controls">
+        <h1>Card Lab</h1>
+        <p>
+          Standalone card composition harness. Choose a card ID and inspect the
+          assembled layers.
+        </p>
+        <label>
+          Card ID
+          <input id="card-id" list="card-id-options" value="basic_acidic_swamp_ooze" />
+          <datalist id="card-id-options"></datalist>
+        </label>
+        <button id="render-card" type="button">Render card</button>
+        <label class="check-row">
+          <input id="premium" type="checkbox" />
+          Premium frame
+        </label>
+        <label class="check-row">
+          <input id="debug" type="checkbox" checked />
+          Debug geometry
+        </label>
+        <pre id="diagnostics"></pre>
+      </aside>
+      <main id="stage-wrap">
+        <div id="stage"></div>
+      </main>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

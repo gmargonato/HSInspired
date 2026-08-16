@@ -8,6 +8,18 @@ body {
   background: #000;
 }
 
+@font-face {
+  font-family: 'Belwe';
+  src: url('../../../assets/fonts/belwe_bold.ttf') format('truetype');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Franklin Gothic Condensed';
+  src: url('../../../assets/fonts/franklin_gothic_condensed.ttf') format('truetype');
+  font-display: block;
+}
+
 #game-container {
   width: 100vw;
   height: 100vh;
@@ -15,4 +27,19 @@ body {
 
 #game-container canvas {
   display: block;
+}
+
+#game-container.custom-cursor-enabled,
+#game-container.custom-cursor-enabled canvas {
+  /* Pixi may set an inline pointer cursor on interactive actors. */
+  cursor: none !important;
+}
+
+#game-container .game-cursor {
+  position: fixed;
+  z-index: 1000;
+  display: block;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
 }

@@ -3,6 +3,7 @@ import { SceneManager } from './SceneManager'
 import { CollectionScene } from '../scenes/CollectionScene'
 import { DeckSelectionScene } from '../scenes/DeckSelectionScene'
 import { MainMenuScene } from '../scenes/MainMenuScene'
+import { CardViewScene } from '../scenes/CardViewScene'
 import { Scene } from '../scenes/Scene'
 import type { SceneId, SceneRequest } from '../../../shared/sceneNavigation'
 
@@ -26,7 +27,8 @@ type SceneFactory = (request: SceneRequest) => Scene
 const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
   'main-menu': () => new MainMenuScene(),
   'deck-selection': () => new DeckSelectionScene(),
-  collection: () => new CollectionScene()
+  collection: () => new CollectionScene(),
+  'card-view': () => new CardViewScene()
 }
 
 /** Creates a fresh scene instance for a native-menu request. */

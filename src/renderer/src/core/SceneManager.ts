@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from 'pixi.js'
 import { GAME_HEIGHT, GAME_WIDTH } from './config'
 import { AnimationScope } from './animations'
 import { Scene } from '../scenes/Scene'
+import type { CursorManager } from './cursor'
 import {
   DEFAULT_SCENE_EXPAND_DURATION,
   SceneTransitionHost
@@ -32,17 +33,25 @@ export interface SceneTransitionOptions {
   afterTransition?: (previous: Scene, next: Scene) => Promise<void> | void
 }
 
+export interface SceneManagerOptions {
+  /** App-wide services that scenes may consume without owning their lifecycle. */
+  cursor?: CursorManager
+}
+
 /** Owns the Pixi application and a serialized stack of full-screen scenes. */
 export class SceneManager {
   readonly app: Application
+  /** The future settings scene can call cursor?.setScale(value). */
+  readonly cursor: CursorManager | null
   private readonly world = new Container()
   private readonly stack: Scene[] = []
   private transition: Promise<void> = Promise.resolve()
   private transitioningScene: Scene | null = null
   private started = false
 
-  constructor(app: Application) {
+  constructor(app: Application, options: SceneManagerOptions = {}) {
     this.app = app
+    this.cursor = options.cursor ?? null
     this.app.stage.addChild(this.world)
   }
 

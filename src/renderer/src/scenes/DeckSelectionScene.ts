@@ -12,7 +12,7 @@ import { MainMenuScene } from './MainMenuScene'
 const Layout = {
   panel: { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 },
   toCollectionButton: { x: 752, y: 1033 },
-  backButton: { x: 1664, y: 1043 }
+  backButton: { x: 1670, y: 1044 }
 }
 
 const FADE_TRANSITION_DURATION = 0.6

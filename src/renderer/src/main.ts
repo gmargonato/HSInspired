@@ -3,6 +3,7 @@ import { MainMenuScene } from './scenes/MainMenuScene'
 import { SceneManager } from './core/SceneManager'
 import { SceneNavigator } from './core/SceneNavigator'
 import { GAME_HEIGHT, GAME_WIDTH } from './core/config'
+import { CursorManager } from './core/cursor'
 import type { SceneRequest } from '../../shared/sceneNavigation'
 import './styles.css'
 
@@ -46,6 +47,7 @@ async function bootstrap(): Promise<void> {
     height: GAME_HEIGHT,
     backgroundColor: 0x0a0f1e,
     antialias: true,
+    eventFeatures: { wheel: true },
     resolution: window.devicePixelRatio || 1,
     autoDensity: true,
     resizeTo: window
@@ -60,23 +62,36 @@ async function bootstrap(): Promise<void> {
 
   app.ticker.maxFPS = 60
 
-  const game = new SceneManager(app)
+  const cursor = new CursorManager(container)
+  cursor.mount()
 
-  await game.start(new MainMenuScene())
+  try {
+    const game = new SceneManager(app, { cursor })
 
-  // The native Electron menu sends requests through preload. Keep all scene
-  // construction in the renderer, where SceneManager and Pixi are available.
-  const sceneNavigator = new SceneNavigator(game)
-  const unsubscribeFromSceneMenu = subscribeToSceneMenu((request) => {
-    console.info('[Scenes menu][renderer] navigating', request)
-    void sceneNavigator.navigate(request).catch((error: unknown) => {
-      console.error('Failed to navigate from the Scenes menu:', error)
+    await game.start(new MainMenuScene())
+
+    // The native Electron menu sends requests through preload. Keep all scene
+    // construction in the renderer, where SceneManager and Pixi are available.
+    const sceneNavigator = new SceneNavigator(game)
+    const unsubscribeFromSceneMenu = subscribeToSceneMenu((request) => {
+      console.info('[Scenes menu][renderer] navigating', request)
+      void sceneNavigator.navigate(request).catch((error: unknown) => {
+        console.error('Failed to navigate from the Scenes menu:', error)
+      })
     })
-  })
 
-  window.addEventListener('beforeunload', () => unsubscribeFromSceneMenu(), {
-    once: true
-  })
+    window.addEventListener(
+      'beforeunload',
+      () => {
+        unsubscribeFromSceneMenu()
+        cursor.destroy()
+      },
+      { once: true }
+    )
+  } catch (error) {
+    cursor.destroy()
+    throw error
+  }
 }
 
 void bootstrap().catch((error: unknown) => {

@@ -1,0 +1,148 @@
+@font-face {
+  font-family: 'Belwe';
+  src: url('../assets/fonts/belwe_bold.ttf') format('truetype');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Franklin Gothic Condensed';
+  src: url('../assets/fonts/franklin_gothic_condensed.ttf') format('truetype');
+  font-display: block;
+}
+
+:root {
+  color: #eee5d1;
+  background: #10131b;
+  font-family: 'Franklin Gothic Condensed', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-width: 100%;
+  min-height: 100%;
+  background: #10131b;
+}
+
+body {
+  min-height: 100vh;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 330px 1fr;
+  min-height: 100vh;
+}
+
+#controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  background: #1a202c;
+  border-right: 1px solid #384257;
+}
+
+#controls h1 {
+  margin: 0;
+  font-family: 'Belwe', serif;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+#controls p {
+  margin: 0;
+  color: #aeb8ca;
+  line-height: 1.35;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #c7d0df;
+}
+
+input,
+button {
+  border: 1px solid #52627e;
+  border-radius: 5px;
+  padding: 9px 10px;
+  color: #f4ead5;
+  background: #111722;
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: #3a587e;
+}
+
+button:hover {
+  background: #4b6e9d;
+}
+
+.check-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.check-row input {
+  width: auto;
+}
+
+#diagnostics {
+  margin: 0;
+  min-height: 120px;
+  white-space: pre-wrap;
+  color: #9aa8bd;
+  font:
+    13px/1.4 Consolas,
+    monospace;
+}
+
+#stage-wrap {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  overflow: auto;
+  background:
+    linear-gradient(45deg, #171d28 25%, transparent 25%) 0 0 / 32px 32px,
+    linear-gradient(-45deg, #171d28 25%, transparent 25%) 0 0 / 32px 32px,
+    linear-gradient(45deg, transparent 75%, #171d28 75%) 0 0 / 32px 32px,
+    linear-gradient(-45deg, transparent 75%, #171d28 75%) 0 0 / 32px 32px,
+    #121720;
+}
+
+#stage {
+  width: 1280px;
+  height: 900px;
+  display: grid;
+  place-items: center;
+}
+
+#stage canvas {
+  display: block;
+}
+
+body[data-export='true'] #controls {
+  display: none;
+}
+
+body[data-export='true'] #app {
+  display: block;
+}
+
+body[data-export='true'] #stage-wrap {
+  min-height: 100vh;
+  background: #10131b;
+}
+
+body[data-export='true'] #stage {
+  width: 900px;
+  height: 900px;
+}
