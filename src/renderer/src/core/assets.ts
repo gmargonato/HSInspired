@@ -8,13 +8,15 @@ import centerPartMenuImage from '@assets/images/CENTER_PART_MENU.png'
 import buttonPlayImage from '@assets/images/MENU_BUTTON_PLAY.png'
 import buttonCollectionImage from '@assets/images/MENU_BUTTON_COLLECTION.png'
 import deckSelectionImage from '@assets/images/DECK_SELECTION.png'
+import collectionBackgroundImage from '@assets/images/COLLECTION_BACKGROUND.png'
 import { registerAssetBundle } from './assetScope'
 
 export { AssetScope } from './assetScope'
 
 export const ASSET_BUNDLE_IDS = {
   mainMenu: 'main-menu',
-  deckSelection: 'deck-selection'
+  deckSelection: 'deck-selection',
+  collection: 'collection'
 } as const
 
 export interface MainMenuAssets {
@@ -32,6 +34,10 @@ export interface DeckSelectionAssets {
   panel: Texture
 }
 
+export interface CollectionAssets {
+  background: Texture
+}
+
 registerAssetBundle(ASSET_BUNDLE_IDS.mainMenu, {
   table: tableImage,
   box: boxImage,
@@ -45,4 +51,8 @@ registerAssetBundle(ASSET_BUNDLE_IDS.mainMenu, {
 
 registerAssetBundle(ASSET_BUNDLE_IDS.deckSelection, {
   panel: deckSelectionImage
+})
+
+registerAssetBundle(ASSET_BUNDLE_IDS.collection, {
+  background: collectionBackgroundImage
 })

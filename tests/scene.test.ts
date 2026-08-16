@@ -4,6 +4,8 @@ import type { Application } from 'pixi.js'
 import { Scene } from '../src/renderer/src/scenes/Scene'
 import { SceneManager } from '../src/renderer/src/core/SceneManager'
 import { calculateTransitionScale } from '../src/renderer/src/core/SceneTransitionHost'
+import { createScene } from '../src/renderer/src/core/SceneNavigator'
+import { SCENE_MENU_ENTRIES } from '../src/shared/sceneNavigation'
 
 class TestScene extends Scene {
   readonly events: string[] = []
@@ -166,5 +168,13 @@ describe('SceneManager transitions', () => {
     expect(first.events).not.toContain('pause')
 
     await manager.stop()
+  })
+})
+
+describe('Developer scene navigation', () => {
+  it('keeps every native Scenes menu entry connected to a scene factory', () => {
+    for (const entry of Object.values(SCENE_MENU_ENTRIES)) {
+      expect(createScene(entry.request)).toBeInstanceOf(Scene)
+    }
   })
 })

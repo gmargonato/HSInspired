@@ -1,9 +1,12 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+import type { SceneRequest } from '../shared/sceneNavigation'
+
+interface SceneNavigationAPI {
+  onSceneRequest(listener: (request: SceneRequest) => void): () => void
+}
 
 declare global {
   interface Window {
-    electron: ElectronAPI
-    api: unknown
+    api: SceneNavigationAPI
   }
 }
 

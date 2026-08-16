@@ -1,7 +1,8 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, Menu, MenuItem } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { SCENE_MENU_ENTRIES, SCENE_REQUEST_CHANNEL } from '../shared/sceneNavigation'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
@@ -22,7 +23,7 @@ function openExternalUrl(url: string): void {
   })
 }
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
@@ -62,6 +63,67 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
+}
+
+/**
+ * Adds the developer-only scene switcher to Electron's native application
+ * menu. The menu owns no renderer objects; it sends a small typed request
+ * through preload, where the renderer resolves the request to a Scene.
+ */
+function installSceneMenu(mainWindow: BrowserWindow): void {
+  if (!is.dev) return
+
+  const applicationMenu = Menu.getApplicationMenu()
+  if (!applicationMenu) {
+    console.warn('Could not install the Scenes menu: application menu is missing')
+    return
+  }
+
+  if (applicationMenu.getMenuItemById('debug-scenes-menu')) return
+
+  const scenesMenu = new MenuItem({
+    id: 'debug-scenes-menu',
+    label: 'Scenes',
+    submenu: Object.values(SCENE_MENU_ENTRIES).map((entry) => ({
+      label: entry.label,
+      click: () => {
+        console.info('[Scenes menu][main] clicked', entry.request)
+
+        // On macOS the app can create a new window after the original one
+        // closes while the application menu remains alive. Prefer the active
+        // window so the menu does not retain a stale renderer reference.
+        const targetWindow =
+          BrowserWindow.getFocusedWindow() ??
+          BrowserWindow.getAllWindows()[0] ??
+          mainWindow
+
+        if (targetWindow.isDestroyed() || targetWindow.webContents.isDestroyed()) {
+          console.warn('[Scenes menu][main] target window is unavailable')
+          return
+        }
+
+        console.info(
+          '[Scenes menu][main] sending request to window',
+          targetWindow.id,
+          entry.request
+        )
+        targetWindow.webContents.send(SCENE_REQUEST_CHANNEL, entry.request)
+      }
+    }))
+  })
+
+  const helpIndex = applicationMenu.items.findIndex(
+    (item) => item.role === 'help' || item.label === 'Help'
+  )
+  const insertionIndex = helpIndex === -1 ? applicationMenu.items.length : helpIndex
+  applicationMenu.insert(insertionIndex, scenesMenu)
+  Menu.setApplicationMenu(applicationMenu)
+  console.info(
+    '[Scenes menu][main] installed',
+    Object.values(SCENE_MENU_ENTRIES).map((entry) => entry.request.id)
+  )
 }
 
 void app
@@ -73,7 +135,8 @@ void app
       optimizer.watchWindowShortcuts(window)
     })
 
-    createWindow()
+    const mainWindow = createWindow()
+    installSceneMenu(mainWindow)
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -4,6 +4,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
 import { FlipCard } from '../actors/FlipCard'
 import { Button } from '../actors/Button'
 import { DeckSelectionScene } from './DeckSelectionScene'
+import { CollectionScene } from './CollectionScene'
 import { ASSET_BUNDLE_IDS } from '../core/assets'
 import type { MainMenuAssets } from '../core/assets'
 import type { TransitionRect } from '../core/SceneTransitionHost'
@@ -22,7 +23,7 @@ const Layout = {
 const LID_OPEN_DURATION = 0.6
 const LID_MIN_WIDTH = 1
 const LID_PERSPECTIVE_DEPTH = 14
-const DECK_SELECTION_GAP: TransitionRect = {
+const SCENE_SELECTION_GAP: TransitionRect = {
   x: (GAME_WIDTH - 1090) / 2,
   y: (GAME_HEIGHT - 735) / 2,
   width: 1090,
@@ -42,7 +43,7 @@ export class MainMenuScene extends Scene {
   private buttonPlay!: Button
   private buttonCollection!: Button
   private menuOpened = false
-  private deckOpened = false
+  private transitionOpened = false
 
   async init(): Promise<void> {
     const assets = await this.assetScope.acquire<MainMenuAssets>(
@@ -73,7 +74,7 @@ export class MainMenuScene extends Scene {
     this.menuGroup.addChild(this.buttonPlay)
 
     this.buttonCollection = new Button(assets.buttonCollection, {
-      onClick: () => console.log('collection clicked')
+      onClick: () => this.onCollectionPressed()
     })
     this.buttonCollection.position.set(
       Layout.buttonCollection.x,
@@ -163,9 +164,20 @@ export class MainMenuScene extends Scene {
     })
   }
 
-  private async onPlayPressed(): Promise<void> {
-    if (this.deckOpened) return
-    this.deckOpened = true
+  private onPlayPressed(): Promise<void> {
+    return this.openDestination(new DeckSelectionScene(), 'deck selection')
+  }
+
+  private onCollectionPressed(): Promise<void> {
+    return this.openDestination(new CollectionScene(), 'collection')
+  }
+
+  private async openDestination(
+    destination: Scene,
+    destinationName: string
+  ): Promise<void> {
+    if (this.transitionOpened) return
+    this.transitionOpened = true
 
     // Hide the menu buttons while the chest transitions.
     this.killTweensOf(this.buttonPlay)
@@ -177,12 +189,11 @@ export class MainMenuScene extends Scene {
 
     // Start returning the center card while the transition manager loads the
     // destination scene in its temporary presentation host.
-    const deck = new DeckSelectionScene()
     const centerFlip = this.centerCard.flipToFront()
 
     try {
-      await this.sceneManager.transitionTo(deck, {
-        inset: DECK_SELECTION_GAP,
+      await this.sceneManager.transitionTo(destination, {
+        inset: SCENE_SELECTION_GAP,
         scaleMode: 'cover',
         duration: 0.45,
         hostParent: this.root,
@@ -202,8 +213,8 @@ export class MainMenuScene extends Scene {
         }
       })
     } catch (error) {
-      console.error('Failed to open deck selection:', error)
-      this.deckOpened = false
+      console.error(`Failed to open ${destinationName}:`, error)
+      this.transitionOpened = false
       this.killTweensOf(this.buttonPlay)
       this.killTweensOf(this.buttonCollection)
       this.buttonPlay.visible = true
