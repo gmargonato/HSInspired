@@ -1,6 +1,25 @@
 import { Application, Container } from 'pixi.js'
 import { GAME_HEIGHT, GAME_WIDTH } from './config'
 import { Scene } from '../scenes/Scene'
+import {
+  DEFAULT_SCENE_EXPAND_DURATION,
+  SceneTransitionHost
+} from './SceneTransitionHost'
+import type { TransitionRect, TransitionScaleMode } from './SceneTransitionHost'
+
+export interface SceneTransitionOptions {
+  inset: TransitionRect
+  scaleMode?: TransitionScaleMode
+  overlayAlpha?: number
+  duration?: number
+  hostParent?: Container
+  hostIndex?: number
+  beforeExpand?: (
+    host: SceneTransitionHost,
+    previous: Scene,
+    next: Scene
+  ) => Promise<void> | void
+}
 
 /** Owns the Pixi application and a serialized stack of full-screen scenes. */
 export class SceneManager {
@@ -8,6 +27,7 @@ export class SceneManager {
   private readonly world = new Container()
   private readonly stack: Scene[] = []
   private transition: Promise<void> = Promise.resolve()
+  private transitioningScene: Scene | null = null
   private started = false
 
   constructor(app: Application) {
@@ -39,6 +59,15 @@ export class SceneManager {
     })
   }
 
+  async transitionTo(scene: Scene, options: SceneTransitionOptions): Promise<void> {
+    return this.enqueue(async () => {
+      if (!this.started) {
+        throw new Error('SceneManager must be started before transitioning scenes')
+      }
+      await this.transitionImmediate(scene, options)
+    })
+  }
+
   async pop(): Promise<Scene | null> {
     return this.enqueue(() => this.popImmediate())
   }
@@ -60,7 +89,7 @@ export class SceneManager {
     let loaded = false
     try {
       previous?.pause()
-      await scene.load(this.app)
+      await scene.load(this.app, this)
       loaded = true
       this.stack.push(scene)
       this.world.addChild(scene.root)
@@ -110,6 +139,65 @@ export class SceneManager {
     return top
   }
 
+  private async transitionImmediate(
+    scene: Scene,
+    options: SceneTransitionOptions
+  ): Promise<void> {
+    const previous = this.current
+    if (!previous) {
+      throw new Error('Cannot transition without a current scene')
+    }
+
+    let loaded = false
+    let host: SceneTransitionHost | null = null
+    let committed = false
+    this.transitioningScene = scene
+
+    try {
+      await scene.load(this.app, this)
+      loaded = true
+
+      host = new SceneTransitionHost(scene.root, {
+        inset: options.inset,
+        scaleMode: options.scaleMode,
+        overlayAlpha: options.overlayAlpha
+      })
+
+      const parent = options.hostParent ?? this.world
+      if (options.hostIndex === undefined) {
+        parent.addChild(host)
+      } else {
+        parent.addChildAt(
+          host,
+          Math.min(Math.max(options.hostIndex, 0), parent.children.length)
+        )
+      }
+
+      await options.beforeExpand?.(host, previous, scene)
+      await host.expand(options.duration ?? DEFAULT_SCENE_EXPAND_DURATION)
+
+      this.world.addChild(scene.root)
+      this.stack[this.stack.length - 1] = scene
+      this.transitioningScene = null
+      host.dispose()
+      committed = true
+      await previous.unload()
+      this.fitToScreen()
+    } catch (error) {
+      this.transitioningScene = null
+
+      if (!committed) {
+        host?.dispose()
+
+        if (loaded || scene.state !== 'new') {
+          await scene.unload().catch(() => undefined)
+        }
+      }
+
+      throw error
+    }
+  }
+
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.transition.then(operation, operation)
     this.transition = result.then(
@@ -135,5 +223,8 @@ export class SceneManager {
   private tick = (): void => {
     this.fitToScreen()
     this.current?.tick(this.app.ticker.deltaMS)
+    if (this.transitioningScene && this.transitioningScene !== this.current) {
+      this.transitioningScene.tick(this.app.ticker.deltaMS)
+    }
   }
 }

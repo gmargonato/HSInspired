@@ -6,6 +6,7 @@ import { Button } from '../actors/Button'
 import { DeckSelectionScene } from './DeckSelectionScene'
 import { ASSET_BUNDLE_IDS } from '../core/assets'
 import type { MainMenuAssets } from '../core/assets'
+import type { TransitionRect } from '../core/SceneTransitionHost'
 
 // Manual nudges only (multi-line tweaks while designing the layout).
 // The lid x values are the inner edges of the closed chest.
@@ -21,6 +22,12 @@ const Layout = {
 const LID_OPEN_DURATION = 0.6
 const LID_MIN_WIDTH = 1
 const LID_PERSPECTIVE_DEPTH = 14
+const DECK_SELECTION_GAP: TransitionRect = {
+  x: (GAME_WIDTH - 1090) / 2,
+  y: (GAME_HEIGHT - 735) / 2,
+  width: 1090,
+  height: 735
+}
 
 type LidSide = 'left' | 'right'
 
@@ -168,37 +175,34 @@ export class MainMenuScene extends Scene {
     this.tweenTo(this.buttonPlay, { alpha: 0, duration: 0.15 })
     this.tweenTo(this.buttonCollection, { alpha: 0, duration: 0.15 })
 
-    // Loading step: flip the card back AND load the deck scene together.
+    // Start returning the center card while the transition manager loads the
+    // destination scene in its temporary presentation host.
     const deck = new DeckSelectionScene()
-    let deckAttached = false
+    const centerFlip = this.centerCard.flipToFront()
+
     try {
-      await Promise.all([this.centerCard.flipToFront(), deck.load(this.appInstance)])
+      await this.sceneManager.transitionTo(deck, {
+        inset: DECK_SELECTION_GAP,
+        scaleMode: 'cover',
+        duration: 0.45,
+        hostParent: this.root,
+        hostIndex: 2,
+        beforeExpand: async () => {
+          await centerFlip
+          this.centerCard.visible = false
 
-      // Once the center piece has returned to its closed artwork, remove it
-      // immediately instead of sending it off to the side.
-      this.centerCard.visible = false
+          await this.openChest()
 
-      // Keep the deck panel above the chest frame but below the lids, so the
-      // perspective meshes fold over it before revealing the deck screen.
-      this.attachSubScene(deck, 2)
-      deckAttached = true
-
-      await this.openChest()
-
-      // The box stays as the chest's frame; the lids, center piece, and
-      // buttons are hidden after the deck has been revealed.
-      this.lidLeft.visible = false
-      this.lidRight.visible = false
-      this.centerCard.visible = false
-      this.buttonPlay.visible = false
-      this.buttonCollection.visible = false
+          // The destination expands after the lids reach their edge-on state.
+          this.lidLeft.visible = false
+          this.lidRight.visible = false
+          this.centerCard.visible = false
+          this.buttonPlay.visible = false
+          this.buttonCollection.visible = false
+        }
+      })
     } catch (error) {
       console.error('Failed to open deck selection:', error)
-      if (deckAttached) {
-        await this.removeSubScene(deck).catch(() => undefined)
-      } else {
-        await deck.unload().catch(() => undefined)
-      }
       this.deckOpened = false
       this.killTweensOf(this.buttonPlay)
       this.killTweensOf(this.buttonCollection)

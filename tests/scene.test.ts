@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Application } from 'pixi.js'
 import { Scene } from '../src/renderer/src/scenes/Scene'
 import { SceneManager } from '../src/renderer/src/core/SceneManager'
+import { calculateTransitionScale } from '../src/renderer/src/core/SceneTransitionHost'
 
 class TestScene extends Scene {
   readonly events: string[] = []
@@ -110,5 +111,60 @@ describe('SceneManager transitions', () => {
     expect(manager.current).toBe(first)
     expect(first.state).toBe('active')
     expect(second.state).toBe('unloaded')
+  })
+
+  it('promotes a transition destination after the presentation completes', async () => {
+    const manager = new SceneManager(createApplication())
+    const first = new TestScene()
+    const second = new TestScene()
+    let callbackRanWhileBothScenesWereActive = false
+
+    await manager.start(first)
+    await manager.transitionTo(second, {
+      inset: { x: 415, y: 172.5, width: 1090, height: 735 },
+      duration: 0,
+      beforeExpand: () => {
+        callbackRanWhileBothScenesWereActive =
+          first.state === 'active' && second.state === 'active'
+      }
+    })
+
+    expect(callbackRanWhileBothScenesWereActive).toBe(true)
+    expect(manager.current).toBe(second)
+    expect(first.state).toBe('unloaded')
+    expect(second.state).toBe('active')
+
+    await manager.stop()
+  })
+
+  it('uses cover and contain scales for inset scene presentation', () => {
+    const inset = { x: 415, y: 172.5, width: 1090, height: 735 }
+
+    expect(calculateTransitionScale(inset, 'cover')).toBeCloseTo(735 / 1080)
+    expect(calculateTransitionScale(inset, 'contain')).toBeCloseTo(1090 / 1920)
+  })
+
+  it('rolls back a failed transition without pausing the source scene', async () => {
+    const manager = new SceneManager(createApplication())
+    const first = new TestScene()
+    const second = new TestScene()
+
+    await manager.start(first)
+    await expect(
+      manager.transitionTo(second, {
+        inset: { x: 415, y: 172.5, width: 1090, height: 735 },
+        duration: 0,
+        beforeExpand: () => {
+          throw new Error('transition failed')
+        }
+      })
+    ).rejects.toThrow('transition failed')
+
+    expect(manager.current).toBe(first)
+    expect(first.state).toBe('active')
+    expect(second.state).toBe('unloaded')
+    expect(first.events).not.toContain('pause')
+
+    await manager.stop()
   })
 })

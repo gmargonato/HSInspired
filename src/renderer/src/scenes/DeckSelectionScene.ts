@@ -4,10 +4,9 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
 import { ASSET_BUNDLE_IDS, DeckSelectionAssets } from '../core/assets'
 
 /**
- * Sub-scene revealed after the main menu chest opens. For now it is a
- * placeholder showing the DECK_SELECTION art; decks, names, wins, and a
- * play button will be added later. Its root is added under the main
- * menu's scene via Scene.addSubScene().
+ * Full-viewport deck selection scene. It is presented through a transition
+ * host when entered from the main menu; decks, names, wins, and a play button
+ * will be added later.
  */
 export class DeckSelectionScene extends Scene {
   private panel!: Container

@@ -1,6 +1,7 @@
 import { Application, Container } from 'pixi.js'
 import { AnimationScope } from '../core/animations'
 import { AssetScope } from '../core/assetScope'
+import type { SceneManager } from '../core/SceneManager'
 
 export type SceneLifecycle =
   'new' | 'loading' | 'active' | 'paused' | 'failed' | 'unloading' | 'unloaded'
@@ -28,6 +29,7 @@ export abstract class Scene {
   readonly root: Container = new Container()
 
   private app: Application | null = null
+  private manager: SceneManager | null = null
   private subScenes: Scene[] = []
   private active = false
   private lifecycle: SceneLifecycle = 'new'
@@ -46,12 +48,13 @@ export abstract class Scene {
     return this.lifecycle === 'active' || this.lifecycle === 'paused'
   }
 
-  async load(app: Application): Promise<void> {
+  async load(app: Application, manager?: SceneManager): Promise<void> {
     if (this.lifecycle !== 'new') {
       throw new Error(`Cannot load a scene from the ${this.lifecycle} state`)
     }
 
     this.app = app
+    this.manager = manager ?? null
     this.lifecycle = 'loading'
 
     try {
@@ -89,6 +92,7 @@ export abstract class Scene {
     } finally {
       this.active = false
       this.app = null
+      this.manager = null
       this.lifecycle = 'unloaded'
     }
 
@@ -171,6 +175,13 @@ export abstract class Scene {
     return this.app
   }
 
+  protected get sceneManager(): SceneManager {
+    if (!this.manager) {
+      throw new Error('Scene accessed SceneManager before load()')
+    }
+    return this.manager
+  }
+
   protected tweenTo(target: gsap.TweenTarget, vars: gsap.TweenVars): gsap.core.Tween {
     return this.animationScope.to(target, vars)
   }
@@ -189,7 +200,7 @@ export abstract class Scene {
   protected onResume(): void {}
 
   async addSubScene(scene: Scene, index?: number): Promise<void> {
-    await scene.load(this.appInstance)
+    await scene.load(this.appInstance, this.manager ?? undefined)
     this.attachSubScene(scene, index)
   }
 
