@@ -39,10 +39,10 @@ export class MainMenuScene extends Scene {
   private chestBox!: Sprite
   private lidLeft!: PerspectiveMesh
   private lidRight!: PerspectiveMesh
+  private centerPartMount!: Container
   private centerCard!: FlipCard
   private buttonPlay!: Button
   private buttonCollection!: Button
-  private menuOpened = false
   private transitionOpened = false
 
   async init(): Promise<void> {
@@ -57,20 +57,27 @@ export class MainMenuScene extends Scene {
 
     this.buildChest(assets.box, assets.leftLid, assets.rightLid)
 
-    this.centerCard = new FlipCard(assets.centerPart, assets.centerPartMenu, {
-      oneShot: true,
-      onClick: () => this.openMenu()
+    // The menu face is the initial face. The game-room face is revealed when
+    // a destination is selected, immediately before the chest opens.
+    this.centerCard = new FlipCard(assets.centerPartMenu, assets.centerPart, {
+      oneShot: true
     })
-    this.centerCard.position.set(Layout.centerPart.x, Layout.centerPart.y)
-    this.menuGroup.addChild(this.centerCard)
+    this.centerCard.eventMode = 'none'
+
+    // Keep the center part mounted to the right lid so it follows the lid's
+    // free edge while the chest opens.
+    this.centerPartMount = new Container()
+    this.centerPartMount.addChild(this.centerCard)
+    this.lidRight.addChild(this.centerPartMount)
+    this.updateLidMeshes(0)
 
     this.buttonPlay = new Button(assets.buttonPlay, {
       onClick: () => this.onPlayPressed()
     })
     this.buttonPlay.position.set(Layout.buttonPlay.x, Layout.buttonPlay.y)
     this.buttonPlay.setBaseY(Layout.buttonPlay.y)
-    this.buttonPlay.visible = false
-    this.buttonPlay.setEnabled(false)
+    this.buttonPlay.visible = true
+    this.buttonPlay.setEnabled(true)
     this.menuGroup.addChild(this.buttonPlay)
 
     this.buttonCollection = new Button(assets.buttonCollection, {
@@ -81,8 +88,8 @@ export class MainMenuScene extends Scene {
       Layout.buttonCollection.y
     )
     this.buttonCollection.setBaseY(Layout.buttonCollection.y)
-    this.buttonCollection.visible = false
-    this.buttonCollection.setEnabled(false)
+    this.buttonCollection.visible = true
+    this.buttonCollection.setEnabled(true)
     this.menuGroup.addChild(this.buttonCollection)
   }
 
@@ -135,35 +142,6 @@ export class MainMenuScene extends Scene {
     return mesh
   }
 
-  private openMenu(): void {
-    if (this.menuOpened) return
-    this.menuOpened = true
-
-    this.buttonPlay.visible = true
-    this.buttonCollection.visible = true
-    this.buttonPlay.setEnabled(true)
-    this.buttonCollection.setEnabled(true)
-    this.buttonPlay.alpha = 0
-    this.buttonCollection.alpha = 0
-    this.buttonPlay.y = Layout.buttonPlay.y - 16
-    this.buttonCollection.y = Layout.buttonCollection.y - 16
-
-    this.tweenTo(this.buttonPlay, {
-      alpha: 1,
-      y: Layout.buttonPlay.y,
-      duration: 0.3,
-      ease: 'power2.out',
-      delay: 0.05
-    })
-    this.tweenTo(this.buttonCollection, {
-      alpha: 1,
-      y: Layout.buttonCollection.y,
-      duration: 0.3,
-      ease: 'power2.out',
-      delay: 0.15
-    })
-  }
-
   private onPlayPressed(): Promise<void> {
     return this.openDestination(new DeckSelectionScene(), 'deck selection')
   }
@@ -191,9 +169,9 @@ export class MainMenuScene extends Scene {
     this.tweenTo(this.buttonPlay, { alpha: 0, duration: 0.15 })
     this.tweenTo(this.buttonCollection, { alpha: 0, duration: 0.15 })
 
-    // Start returning the center card while the transition manager loads the
+    // Reveal the center part while the transition manager loads the
     // destination scene in its temporary presentation host.
-    const centerFlip = this.centerCard.flipToFront()
+    const centerFlip = this.centerCard.flip()
 
     try {
       await this.sceneManager.transitionTo(destination, {
@@ -204,8 +182,6 @@ export class MainMenuScene extends Scene {
         hostIndex: 2,
         beforeExpand: async () => {
           await centerFlip
-          this.centerCard.visible = false
-
           await this.openChest()
 
           // The destination expands after the lids reach their edge-on state.
@@ -219,6 +195,8 @@ export class MainMenuScene extends Scene {
       })
     } catch (error) {
       console.error(`Failed to open ${destinationName}:`, error)
+      await centerFlip
+      await this.centerCard.flipToFront()
       this.transitionOpened = false
       this.killTweensOf(this.buttonPlay)
       this.killTweensOf(this.buttonCollection)
@@ -231,6 +209,7 @@ export class MainMenuScene extends Scene {
       this.buttonPlay.y = Layout.buttonPlay.y
       this.buttonCollection.y = Layout.buttonCollection.y
       this.centerCard.visible = true
+      this.centerCard.eventMode = 'none'
       this.lidLeft.visible = true
       this.lidRight.visible = true
       this.updateLidMeshes(0)
@@ -266,6 +245,20 @@ export class MainMenuScene extends Scene {
 
     this.setLidCorners(this.lidLeft, 'left', widthScale, depth)
     this.setLidCorners(this.lidRight, 'right', widthScale, depth)
+    this.updateCenterPartMount(widthScale)
+  }
+
+  private updateCenterPartMount(widthScale: number): void {
+    const width = this.lidRight.texture.width
+    const height = this.lidRight.texture.height
+    const visibleWidth = Math.max(LID_MIN_WIDTH, width * widthScale)
+    const freeEdgeX = -visibleWidth
+
+    this.centerPartMount.position.set(
+      Layout.centerPart.x - Layout.rightLid.x + freeEdgeX,
+      height / 2 + Layout.centerPart.y - Layout.rightLid.y
+    )
+    this.centerPartMount.scale.set(widthScale, 1)
   }
 
   private setLidCorners(

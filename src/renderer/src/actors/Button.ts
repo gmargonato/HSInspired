@@ -1,6 +1,8 @@
 import { ColorMatrixFilter, Sprite, Texture } from 'pixi.js'
 import { Actor } from './Actor'
 
+const DEFAULT_HOVER_BRIGHTNESS = 1.5
+
 export interface ButtonOptions {
   pressedScale?: number
   idleBrightness?: number
@@ -31,7 +33,7 @@ export class Button extends Actor {
 
     this.pressedScale = options.pressedScale ?? 0.95
     this.idleBrightness = options.idleBrightness ?? 1
-    this.hoverBrightness = options.hoverBrightness ?? 1.15
+    this.hoverBrightness = options.hoverBrightness ?? DEFAULT_HOVER_BRIGHTNESS
     this.pressedBrightness = options.pressedBrightness ?? 0.8
     this.sinkPx = options.sinkPx ?? 6
     this.onClick = options.onClick
