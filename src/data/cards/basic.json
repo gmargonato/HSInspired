@@ -30,10 +30,11 @@
     "cardClass": "Mage",
     "type": "Spell",
     "subtype": "General",
+    "spellSchool": "Arcane",
     "cost": 2,
     "attack": null,
     "health": null,
-    "effect": "Deal 1 damage to all enemy minions"
+    "effect": "Deal 1 damage to all enemy minions."
   },
   {
     "id": "basic_arcane_intellect",
@@ -94,18 +95,6 @@
     "attack": 4,
     "health": 7,
     "effect": "Spell Damage +1."
-  },
-  {
-    "id": "basic_armor_up",
-    "name": "Armor Up!",
-    "rarity": "Free",
-    "cardClass": "Warrior",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "effect": "Gain 2 Armor."
   },
   {
     "id": "basic_assassins_blade",
@@ -324,18 +313,6 @@
     "effect": "Choose an enemy minion. At the start of your turn, destroy it."
   },
   {
-    "id": "basic_dagger_mastery",
-    "name": "Dagger Mastery",
-    "rarity": "Free",
-    "cardClass": "Rogue",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "effect": "Equip a 1/2 Dagger"
-  },
-  {
     "id": "basic_dalaran_mage",
     "name": "Dalaran Mage",
     "rarity": "Free",
@@ -526,30 +503,6 @@
     "attack": null,
     "health": null,
     "effect": "Deal 6 damage."
-  },
-  {
-    "id": "basic_fireblast",
-    "name": "Fireblast",
-    "rarity": "Free",
-    "cardClass": "Mage",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "effect": "Deal 1 Damage."
-  },
-  {
-    "id": "basic_flames_of_azzinoth",
-    "name": "Flames of Azzinoth",
-    "rarity": "Free",
-    "cardClass": "Hunter",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 1,
-    "attack": 3,
-    "health": 2,
-    "effect": "Hero Power: Summon two 2/1 minions."
   },
   {
     "id": "basic_flamestrike",
@@ -912,18 +865,6 @@
     "effect": "Charge"
   },
   {
-    "id": "basic_lesser_heal",
-    "name": "Lesser Heal",
-    "rarity": "Free",
-    "cardClass": "Priest",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "effect": "Restore 2 Health."
-  },
-  {
     "id": "basic_magma_rager",
     "name": "Magma Rager",
     "rarity": "Free",
@@ -1224,18 +1165,6 @@
     "effect": "Charge"
   },
   {
-    "id": "basic_reinforce",
-    "name": "Reinforce",
-    "rarity": "Free",
-    "cardClass": "Paladin",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "effect": "Summon a 1/1 Silver Hand Recruit."
-  },
-  {
     "id": "basic_river_crocolisk",
     "name": "River Crocolisk",
     "rarity": "Free",
@@ -1356,18 +1285,6 @@
     "effect": "Destroy a minion with 3 or less Attack."
   },
   {
-    "id": "basic_shapeshift",
-    "name": "Shapeshift",
-    "rarity": "Free",
-    "cardClass": "Druid",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "effect": "+Attack this turn.+1 Armor."
-  },
-  {
     "id": "basic_shattered_sun_cleric",
     "name": "Shattered Sun Cleric",
     "rarity": "Free",
@@ -1402,18 +1319,6 @@
     "attack": null,
     "health": null,
     "effect": "Deal 1 damage. Draw a card."
-  },
-  {
-    "id": "basic_shotgun_blast",
-    "name": "Shotgun Blast",
-    "rarity": "Free",
-    "cardClass": "Hunter",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "effect": "Deal 1 damage."
   },
   {
     "id": "basic_silver_hand_recruit",
@@ -1474,18 +1379,6 @@
     "attack": 3,
     "health": 2,
     "effect": "Whenever you Summon a Beast, draw a card."
-  },
-  {
-    "id": "basic_steady_shot",
-    "name": "Steady Shot",
-    "rarity": "Free",
-    "cardClass": "Hunter",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "effect": "Deal 2 damage to the enemy hero."
   },
   {
     "id": "basic_stoneclaw_totem",
@@ -1582,18 +1475,6 @@
     "attack": 1,
     "health": 1,
     "effect": "Your other Beasts have +1 Attack."
-  },
-  {
-    "id": "basic_totemic_call",
-    "name": "Totemic Call",
-    "rarity": "Free",
-    "cardClass": "Shaman",
-    "type": "Hero Power",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "effect": "Summon a random Totem."
   },
   {
     "id": "basic_totemic_might",

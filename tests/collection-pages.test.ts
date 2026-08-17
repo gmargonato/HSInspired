@@ -46,4 +46,16 @@ describe('Collection pages', () => {
     expect(cards).toHaveLength(eligibleCards.length)
     expect(new Set(ids).size).toBe(eligibleCards.length)
   })
+
+  it('can restrict the collection to Neutral and one selected class', () => {
+    const hunterPages = buildCollectionPages(CARD_CATALOG.all, ['Neutral', 'Hunter'])
+    const visibleClasses = new Set(hunterPages.map((page) => page.cardClass))
+
+    expect(visibleClasses).toEqual(new Set(['Neutral', 'Hunter']))
+    expect(
+      hunterPages
+        .flatMap((page) => page.cards)
+        .every((card) => card.cardClass === 'Neutral' || card.cardClass === 'Hunter')
+    ).toBe(true)
+  })
 })

@@ -41,6 +41,7 @@ export interface CardDefinition {
   readonly cardClass: CardClass
   readonly type: CardType
   readonly subtype: string | null
+  readonly spellSchool: string | null
   readonly cost: number
   readonly attack: number | null
   readonly health: number | null
@@ -55,6 +56,7 @@ interface RawCardRecord {
   cardClass?: unknown
   type?: unknown
   subtype?: unknown
+  spellSchool?: unknown
   cost?: unknown
   attack?: unknown
   health?: unknown
@@ -117,6 +119,11 @@ function readSubtype(value: unknown): string | null {
   return value
 }
 
+function readOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  return value.trim()
+}
+
 export function normalizeCard(raw: RawCardRecord, set: CardSet): CardDefinition {
   const id = readString(raw.id, 'id')
   const name = readString(raw.name, 'name', id)
@@ -131,6 +138,7 @@ export function normalizeCard(raw: RawCardRecord, set: CardSet): CardDefinition 
     cardClass: readEnum(raw.cardClass, CARD_CLASSES, 'cardClass', id),
     type,
     subtype: readSubtype(raw.subtype),
+    spellSchool: readOptionalString(raw.spellSchool),
     cost: readCost(raw.cost, id),
     attack: readNullableNumber(raw.attack, 'attack', id),
     health: type === 'Weapon' ? null : health,

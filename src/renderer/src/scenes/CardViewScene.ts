@@ -14,8 +14,8 @@ const Layout = {
   listViewport: { x: 42, y: 218, width: 464, height: 812 },
   rightPanel: { x: 548, y: 24, width: 1348, height: 1032 },
   cardStage: { x: 572, y: 140, width: 1300, height: 880 },
-  layerViewer: { x: 1434, y: 582, width: 420, height: 430 },
-  layerViewport: { x: 1450, y: 653, width: 388, height: 342 }
+  layerViewer: { x: 1434, y: 140, width: 420, height: 880 },
+  layerViewport: { x: 1450, y: 211, width: 388, height: 792 }
 } as const
 
 const LIST_ROW_HEIGHT = 38
@@ -373,7 +373,10 @@ export class CardViewScene extends Scene {
   private selectedCardText!: Text
   private statusText!: Text
   private diagnosticsText!: Text
+  private premiumButton!: UiButton
   private currentView: CardView | null = null
+  private selectedCard: CardDefinition | null = null
+  private premium = false
   private scrollOffset = 0
   private layerScrollOffset = 0
   private renderSequence = 0
@@ -385,9 +388,13 @@ export class CardViewScene extends Scene {
     this.createPanels()
     this.createList()
     this.createCardStage()
+    // The stage and layer viewer are created after the controls. Re-adding
+    // this control keeps the standard/premium toggle above every scene panel.
+    this.root.addChild(this.premiumButton)
 
     const firstCard = this.cards[0]
     if (firstCard) {
+      this.selectedCard = firstCard
       this.selectButton(firstCard)
       await this.renderCard(firstCard)
     }
@@ -405,6 +412,7 @@ export class CardViewScene extends Scene {
 
     await Promise.all([
       document.fonts.load('30px Belwe'),
+      document.fonts.load('38px "Arial Narrow"'),
       document.fonts.load('18px "Franklin Gothic Condensed"')
     ])
   }
@@ -506,6 +514,14 @@ export class CardViewScene extends Scene {
       Layout.rightPanel.y + 88
     )
     this.root.addChild(this.diagnosticsText)
+
+    this.premiumButton = new UiButton('PREMIUM', 112, 26, () => {
+      this.premium = !this.premium
+      this.premiumButton.setSelected(this.premium)
+      if (this.selectedCard) void this.renderCard(this.selectedCard)
+    })
+    this.premiumButton.position.set(Layout.rightPanel.x + 24, Layout.rightPanel.y + 108)
+    this.root.addChild(this.premiumButton)
   }
 
   private createFilters(): void {
@@ -749,6 +765,7 @@ export class CardViewScene extends Scene {
   }
 
   private readonly handleCardSelected = (card: CardDefinition): void => {
+    this.selectedCard = card
     this.selectButton(card)
     void this.renderCard(card)
   }
@@ -813,7 +830,11 @@ export class CardViewScene extends Scene {
     this.diagnosticsText.text = card.id
 
     try {
-      const view = await CardView.create(card, this.resolver)
+      const artwork = await this.resolver.loadArtwork(card.id)
+      const view = await CardView.create(card, this.resolver, {
+        artwork,
+        premium: this.premium
+      })
 
       if (this.disposed || sequence !== this.renderSequence) {
         view.destroy({ children: true })
@@ -826,20 +847,21 @@ export class CardViewScene extends Scene {
       }
 
       this.currentView = view
+      const cardAreaWidth = Layout.layerViewer.x - Layout.cardStage.x
       const scale = Math.min(
         0.95,
-        (Layout.cardStage.width - 80) / view.plan.width,
-        (Layout.cardStage.height - 40) / view.plan.height
+        (cardAreaWidth - 80) / view.plan.width,
+        (Layout.cardStage.height - 40) / view.renderedHeight
       )
       view.scale.set(scale)
       view.position.set(
-        (Layout.cardStage.width - view.plan.width * scale) / 2,
-        (Layout.cardStage.height - view.plan.height * scale) / 2
+        (cardAreaWidth - view.plan.width * scale) / 2,
+        (Layout.cardStage.height - view.renderedHeight * scale) / 2
       )
       this.cardStage.addChild(view)
       this.rebuildLayerViewer(view)
 
-      this.statusText.text = `${view.plan.template} · ${view.plan.layers.length} layers`
+      this.statusText.text = `${view.plan.template} · ${this.premium ? 'premium' : 'standard'} · ${view.plan.layers.length} layers`
       this.diagnosticsText.text = [card.id, ...view.plan.diagnostics].join('  ·  ')
     } catch (error) {
       if (this.disposed || sequence !== this.renderSequence) return

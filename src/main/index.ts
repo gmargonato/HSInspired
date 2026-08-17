@@ -3,6 +3,8 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../assets/icon.png?asset'
 import { SCENE_MENU_ENTRIES, SCENE_REQUEST_CHANNEL } from '../shared/sceneNavigation'
+import { DeckRepository } from './services/deckRepository'
+import { registerDeckIpc } from './services/deckIpc'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
@@ -113,6 +115,8 @@ void app
   .whenReady()
   .then(() => {
     electronApp.setAppUserModelId('com.hsinspired.app')
+
+    registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)

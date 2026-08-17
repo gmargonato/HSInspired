@@ -1,0 +1,102 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import {
+  MAX_DECK_CARDS,
+  addCardToDeck,
+  countDeckCards,
+  type Deck
+} from '../src/shared/decks'
+import { DeckRepository } from '../src/main/services/deckRepository'
+
+const baseDeck: Deck = {
+  id: 'deck-test',
+  name: 'Test deck',
+  cards: {},
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z'
+}
+
+describe('deck rules', () => {
+  it('allows two non-legendary copies but only one legendary copy', () => {
+    const common = { id: 'common-card', rarity: 'Common' }
+    const legendary = { id: 'legendary-card', rarity: 'Legendary' }
+
+    const firstCommon = addCardToDeck(baseDeck, common)
+    expect(firstCommon.ok).toBe(true)
+    if (!firstCommon.ok) return
+
+    const secondCommon = addCardToDeck(firstCommon.deck, common)
+    expect(secondCommon.ok).toBe(true)
+    if (!secondCommon.ok) return
+
+    expect(addCardToDeck(secondCommon.deck, common)).toMatchObject({
+      ok: false,
+      code: 'copy-limit'
+    })
+
+    const firstLegendary = addCardToDeck(secondCommon.deck, legendary)
+    expect(firstLegendary.ok).toBe(true)
+    if (!firstLegendary.ok) return
+
+    expect(addCardToDeck(firstLegendary.deck, legendary)).toMatchObject({
+      ok: false,
+      code: 'copy-limit'
+    })
+  })
+
+  it('rejects cards after the deck reaches thirty total cards', () => {
+    const cards = Object.fromEntries(
+      Array.from({ length: MAX_DECK_CARDS }, (_, index) => [`card-${index}`, 1])
+    )
+    const fullDeck = { ...baseDeck, cards }
+
+    expect(countDeckCards(fullDeck)).toBe(MAX_DECK_CARDS)
+    expect(addCardToDeck(fullDeck, { id: 'new-card', rarity: 'Common' })).toMatchObject(
+      {
+        ok: false,
+        code: 'deck-full'
+      }
+    )
+  })
+})
+
+describe('DeckRepository', () => {
+  it('persists, reloads, updates, and deletes decks as versioned JSON', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'hs-inspired-decks-'))
+    const filePath = join(directory, 'decks.json')
+
+    try {
+      const repository = new DeckRepository(filePath)
+      const created = await repository.create({
+        name: 'Persistent deck',
+        heroClass: 'Mage',
+        heroId: 'jaina'
+      })
+
+      const file = JSON.parse(await readFile(filePath, 'utf8')) as {
+        version: number
+        decks: readonly Deck[]
+      }
+      expect(file.version).toBe(1)
+      expect(file.decks).toHaveLength(1)
+      expect(file.decks[0]?.heroClass).toBe('Mage')
+      expect(file.decks[0]?.heroId).toBe('jaina')
+
+      const reloaded = new DeckRepository(filePath)
+      expect(await reloaded.list()).toEqual([created])
+
+      const updated = await reloaded.update({
+        ...created,
+        cards: { 'common-card': 2 }
+      })
+      expect((await reloaded.list())[0]).toEqual(updated)
+
+      await reloaded.delete(updated.id)
+      expect(await reloaded.list()).toEqual([])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})

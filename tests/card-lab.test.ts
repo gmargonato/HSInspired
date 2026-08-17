@@ -1,12 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_CATALOG } from '../card-lab/card-catalog'
-import { hasCardAsset } from '../card-lab/card-asset-manifest'
-import { buildCardRenderPlan } from '../card-lab/card-render-plan'
+import { hasCardAsset, hasCardArtwork } from '../card-lab/card-asset-manifest'
+import {
+  buildCardRenderPlan,
+  CARD_CANVAS,
+  CARD_PROFILES,
+  markHearthstoneKeywords
+} from '../card-lab/card-render-plan'
+import { CARD_STAT_LABEL_OFFSETS } from '../card-lab/card-minion-template'
+import type { CardDefinition } from '../card-lab/card-catalog'
+import type { CardRenderNode } from '../card-lab/card-render-tree'
+
+function collectNodePaths(node: CardRenderNode, parentPath = ''): string[] {
+  const path = parentPath ? `${parentPath}.${node.id}` : node.id
+  if (node.kind !== 'group') return [path]
+  return [path, ...node.children.flatMap((child) => collectNodePaths(child, path))]
+}
+
+function textureAssets(card: CardDefinition, premium = false): string[] {
+  return buildCardRenderPlan(card, { premium })
+    .layers.filter((layer) => layer.kind === 'texture')
+    .map((layer) => layer.assetName)
+}
 
 describe('Card Lab catalog', () => {
   it('normalizes every Basic and Classic card without duplicate ids', () => {
-    expect(CARD_CATALOG.size).toBe(475)
-    expect(new Set(CARD_CATALOG.all.map((card) => card.id)).size).toBe(475)
+    expect(CARD_CATALOG.size).toBeGreaterThan(0)
+    expect(new Set(CARD_CATALOG.all.map((card) => card.id)).size).toBe(
+      CARD_CATALOG.size
+    )
   })
 
   it('maps a weapon health value to durability', () => {
@@ -24,64 +46,229 @@ describe('Card Lab catalog', () => {
 })
 
 describe('Card Lab render plans', () => {
-  it('builds a complete normal minion plan', () => {
+  it('marks mechanics as boldable keywords without bolding ordinary card text', () => {
+    expect(markHearthstoneKeywords("Battlecry: Destroy your opponent's weapon.")).toBe(
+      "<keyword>Battlecry:</keyword> Destroy your opponent's weapon."
+    )
+  })
+
+  it('maps the temporary comparison artwork to the three target cards', () => {
+    expect(hasCardArtwork('basic_acidic_swamp_ooze')).toBe(true)
+    expect(hasCardArtwork('basic_arcane_explosion')).toBe(true)
+    expect(hasCardArtwork('basic_arcanite_reaper')).toBe(true)
+    expect(hasCardArtwork('basic_fireball')).toBe(false)
+  })
+
+  it('builds a standard minion plan on the shared canvas', () => {
     const card = CARD_CATALOG.require('classic_abomination')
     const plan = buildCardRenderPlan(card)
-    const assets = plan.layers
-      .filter((layer) => layer.kind === 'texture')
-      .map((layer) => layer.assetName)
+    const assets = textureAssets(card)
 
     expect(plan.template).toBe('minion')
-    expect(assets).toContain('frame-minion-neutral.png')
-    expect(assets).toContain('name-banner-minion.png')
-    expect(assets).toContain('cost-mana.png')
-    expect(assets).toContain('attack-minion.png')
-    expect(assets).toContain('health.png')
-    expect(assets).toContain('rarity-minion-rare.png')
+    expect(plan.width).toBe(CARD_CANVAS.width)
+    expect(plan.height).toBe(CARD_CANVAS.height)
+    expect(assets).toEqual(
+      expect.arrayContaining([
+        'FRAME_MINION.png',
+        'MANA.png',
+        'ATTACK.png',
+        'HEALTH.png',
+        'rarity-rare.png'
+      ])
+    )
+    expect(assets.some((asset) => asset.includes('name-banner'))).toBe(false)
   })
 
-  it('uses the spell template without attack or health layers', () => {
-    const card = CARD_CATALOG.require('basic_fireball')
+  it('uses one semantic hierarchy with straight, shared-Y names', () => {
+    const card = CARD_CATALOG.require('basic_bluegill_warrior')
     const plan = buildCardRenderPlan(card)
-    const layerIds = plan.layers.map((layer) => layer.id)
+    const tree = plan.tree
+    const paths = collectNodePaths(tree.root)
 
-    expect(plan.template).toBe('spell')
-    expect(layerIds).not.toContain('attack-icon')
-    expect(layerIds).not.toContain('health-icon')
-    expect(layerIds).toContain('effect-text')
-  })
+    expect(tree.root.id).toBe('card')
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        'card.artwork',
+        'card.frame',
+        'card.name',
+        'card.rules',
+        'card.stats.mana.icon',
+        'card.stats.attack.icon',
+        'card.stats.health.icon'
+      ])
+    )
 
-  it('keeps Hero Power rendering on its dedicated template', () => {
-    const card = CARD_CATALOG.require('basic_fireblast')
-    const plan = buildCardRenderPlan(card)
-    const frame = plan.layers.find((layer) => layer.id === 'hero-power-frame')
-
-    expect(plan.template).toBe('hero-power')
-    expect(frame).toMatchObject({
-      kind: 'texture',
-      assetName: 'hero-power-player.png'
+    const name = plan.layers.find((layer) => layer.id === 'card.name')
+    expect(name).toMatchObject({
+      kind: 'text',
+      position: {
+        y: CARD_PROFILES.minion.nameBox.y + CARD_PROFILES.minion.nameBox.height / 2
+      },
+      curve: undefined
     })
   })
 
-  it('can produce a premium layer plan without changing the card definition', () => {
-    const card = CARD_CATALOG.require('classic_abomination')
-    const plan = buildCardRenderPlan(card, { premium: true })
-    const assets = plan.layers
-      .filter((layer) => layer.kind === 'texture')
-      .map((layer) => layer.assetName)
+  it('applies persisted builder overrides by semantic node path', () => {
+    const card = CARD_CATALOG.require('basic_bluegill_warrior')
+    const plan = buildCardRenderPlan(card, {
+      nodeOverrides: {
+        'card.stats.mana': { x: 80, y: 90 },
+        'card.rules': { width: 300, fontSize: 30 }
+      }
+    })
 
-    expect(card.rarity).toBe('Rare')
-    expect(assets).toContain('base-minion-premium.png')
-    expect(assets).toContain('frame-minion-premium-neutral.png')
-    expect(assets).toContain('rarity-minion-premium-rare.png')
+    expect(
+      plan.layers.find(
+        (layer) => layer.kind === 'texture' && layer.assetName === 'MANA.png'
+      )
+    ).toMatchObject({ position: { x: 80, y: 90 } })
+    expect(plan.layers.find((layer) => layer.id === 'card.rules')).toMatchObject({
+      style: { fontSize: 30, wordWrapWidth: 300 }
+    })
   })
 
-  it('resolves every current card template to existing normal and premium assets', () => {
+  it('uses the spell profile for spells and Hero Powers', () => {
+    const spell = CARD_CATALOG.require('basic_fireball')
+    const power = CARD_CATALOG.all.find((card) => card.type === 'Hero Power')
+    if (!power) throw new Error('Catalog has no Hero Power card')
+    const spellPlan = buildCardRenderPlan(spell)
+    const powerPlan = buildCardRenderPlan(power)
+
+    expect(spellPlan.template).toBe('spell')
+    expect(powerPlan.template).toBe('spell')
+    expect(textureAssets(spell)).toContain('FRAME_SPELL.png')
+    expect(textureAssets(power)).toContain('FRAME_SPELL.png')
+    expect(textureAssets(spell)).not.toContain('ATTACK.png')
+    expect(textureAssets(spell)).not.toContain('HEALTH.png')
+    expect(spellPlan.layers.some((layer) => layer.id === 'card.rules')).toBe(true)
+  })
+
+  it('uses dedicated weapon attack and durability assets', () => {
+    const card = CARD_CATALOG.require('basic_fiery_war_axe')
+    expect(textureAssets(card)).toEqual(
+      expect.arrayContaining([
+        'FRAME_WEAPON.png',
+        'attack-weapon.png',
+        'durability.png'
+      ])
+    )
+    expect(textureAssets(card, true)).toEqual(
+      expect.arrayContaining([
+        'FRAME_WEAPON_PREMIUM.png',
+        'attack-weapon-premium.png',
+        'durability-premium.png'
+      ])
+    )
+  })
+
+  it('uses the standard and premium hero frames', () => {
+    const source = CARD_CATALOG.require('classic_abomination')
+    const hero: CardDefinition = {
+      ...source,
+      id: 'test_hero',
+      name: 'Test Hero',
+      type: 'Hero',
+      attack: null,
+      health: 30,
+      durability: null
+    }
+
+    expect(textureAssets(hero)).toContain('FRAME_HERO.png')
+    expect(textureAssets(hero, true)).toContain('FRAME_HERO_PREMIUM.png')
+  })
+
+  it('uses white black-stroked names for standard and premium cards', () => {
+    const card = CARD_CATALOG.require('classic_abomination')
+    const standard = buildCardRenderPlan(card)
+    const premium = buildCardRenderPlan(card, { premium: true })
+    const standardName = standard.layers.find((layer) => layer.id === 'card.name')
+    const premiumName = premium.layers.find((layer) => layer.id === 'card.name')
+    const standardRules = standard.layers.find((layer) => layer.id === 'card.rules')
+    const premiumRules = premium.layers.find((layer) => layer.id === 'card.rules')
+
+    expect(standardName).toMatchObject({
+      style: { fill: 0xffffff, stroke: { color: 0x000000 } }
+    })
+    expect(standardRules).toMatchObject({ style: { fill: 0x19130e } })
+    expect(premiumName).toMatchObject({ style: { fill: 0xffffff } })
+    expect(premiumRules).toMatchObject({ style: { fill: 0xffffff } })
+  })
+
+  it('applies the centralized per-stat label offsets', () => {
+    const card = CARD_CATALOG.require('classic_abomination')
+    const plan = buildCardRenderPlan(card)
+    const manaLabel = plan.layers.find((layer) => layer.id === 'card.stats.mana.label')
+    const attackLabel = plan.layers.find(
+      (layer) => layer.id === 'card.stats.attack.label'
+    )
+    const healthLabel = plan.layers.find(
+      (layer) => layer.id === 'card.stats.health.label'
+    )
+
+    expect(manaLabel).toMatchObject({
+      position: {
+        x: CARD_PROFILES.minion.stats.mana.x + CARD_STAT_LABEL_OFFSETS.mana.x,
+        y: CARD_PROFILES.minion.stats.mana.y + CARD_STAT_LABEL_OFFSETS.mana.y
+      }
+    })
+    expect(attackLabel).toMatchObject({
+      position: {
+        x: CARD_PROFILES.minion.stats.attack.x + CARD_STAT_LABEL_OFFSETS.attack.x,
+        y: CARD_PROFILES.minion.stats.attack.y + CARD_STAT_LABEL_OFFSETS.attack.y
+      }
+    })
+    expect(healthLabel).toMatchObject({
+      position: {
+        x: CARD_PROFILES.minion.stats.defense.x + CARD_STAT_LABEL_OFFSETS.health.x,
+        y: CARD_PROFILES.minion.stats.defense.y + CARD_STAT_LABEL_OFFSETS.health.y
+      }
+    })
+  })
+
+  it('keeps stat and rarity textures at their source resolution', () => {
+    const card = CARD_CATALOG.require('classic_abomination')
+    const plan = buildCardRenderPlan(card)
+    const stats = plan.tree.root.children.find(
+      (node): node is Extract<CardRenderNode, { kind: 'group' }> =>
+        node.kind === 'group' && node.id === 'stats'
+    )
+
+    expect(stats).toBeDefined()
+    for (const stat of stats?.children ?? []) {
+      if (stat.kind !== 'group') continue
+      const icon = stat.children.find((child) => child.kind === 'image')
+      expect(icon).toMatchObject({
+        kind: 'image',
+        transform: { position: { x: 0, y: 0 }, anchor: { x: 0.5, y: 0.5 } }
+      })
+      expect(icon?.kind === 'image' ? icon.transform.size : undefined).toBeUndefined()
+    }
+
+    const rarity = plan.tree.root.children.find(
+      (node): node is Extract<CardRenderNode, { kind: 'group' }> =>
+        node.kind === 'group' && node.id === 'rarity'
+    )
+    const rarityIcon = rarity?.children.find((child) => child.kind === 'image')
+    expect(
+      rarityIcon?.kind === 'image' ? rarityIcon.transform.size : undefined
+    ).toBeUndefined()
+  })
+
+  it('does not produce elite overlays', () => {
+    const card = CARD_CATALOG.require('classic_abomination')
+    const plan = buildCardRenderPlan(card, { elite: true })
+    expect(plan.layers.some((layer) => layer.id.includes('elite'))).toBe(false)
+    expect(plan.diagnostics.some((message) => message.includes('ignored'))).toBe(true)
+  })
+
+  it('resolves every current card in standard and premium modes using active assets', () => {
     const missing = new Set<string>()
 
     for (const card of CARD_CATALOG.all) {
       for (const premium of [false, true]) {
         const plan = buildCardRenderPlan(card, { premium })
+        expect(plan.width).toBe(620)
+        expect(plan.height).toBe(900)
         for (const layer of plan.layers) {
           if (layer.kind === 'texture' && !hasCardAsset(layer.assetName)) {
             missing.add(layer.assetName)

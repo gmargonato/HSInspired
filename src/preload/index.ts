@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { isSceneRequest, SCENE_REQUEST_CHANNEL } from '../shared/sceneNavigation'
 import type { SceneRequest } from '../shared/sceneNavigation'
+import { DECK_IPC_CHANNELS, type Deck, type DeckCreateRequest } from '../shared/decks'
 
 const api = {
   /**
@@ -21,6 +22,16 @@ const api = {
     ipcRenderer.on(SCENE_REQUEST_CHANNEL, handleSceneRequest)
     console.info('[Scenes menu][preload] listener registered')
     return () => ipcRenderer.removeListener(SCENE_REQUEST_CHANNEL, handleSceneRequest)
+  },
+
+  decks: {
+    list: (): Promise<readonly Deck[]> => ipcRenderer.invoke(DECK_IPC_CHANNELS.list),
+    create: (request?: DeckCreateRequest): Promise<Deck> =>
+      ipcRenderer.invoke(DECK_IPC_CHANNELS.create, request),
+    update: (deck: Deck): Promise<Deck> =>
+      ipcRenderer.invoke(DECK_IPC_CHANNELS.update, deck),
+    delete: (deckId: string): Promise<void> =>
+      ipcRenderer.invoke(DECK_IPC_CHANNELS.delete, deckId)
   }
 }
 

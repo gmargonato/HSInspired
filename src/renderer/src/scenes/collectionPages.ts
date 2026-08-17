@@ -22,14 +22,19 @@ export interface CollectionPage {
  *
  * The catalog remains the source of truth for the card data. This helper only
  * chooses the display order and chunks the cards so the scene can mount one
- * eight-card page at a time.
+ * eight-card page at a time. An optional class allow-list keeps deck creation
+ * filtering in the same place as normal collection pagination.
  */
 export function buildCollectionPages(
-  cards: readonly CardDefinition[]
+  cards: readonly CardDefinition[],
+  allowedClasses?: readonly CardClass[]
 ): readonly CollectionPage[] {
   const pages: CollectionPage[] = []
+  const allowedClassSet = allowedClasses ? new Set(allowedClasses) : null
 
   for (const cardClass of CARD_CLASSES) {
+    if (allowedClassSet && !allowedClassSet.has(cardClass)) continue
+
     const classCards = cards
       .filter(
         (card) =>

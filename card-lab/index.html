@@ -27,6 +27,47 @@
           <input id="debug" type="checkbox" checked />
           Debug geometry
         </label>
+        <section id="builder" hidden>
+          <h2>Card Builder</h2>
+          <p id="builder-status">Select a card element to inspect it.</p>
+          <div id="builder-tree" class="builder-tree"></div>
+          <label>
+            Selected node
+            <input id="builder-selected" type="text" readonly />
+          </label>
+          <label>
+            Kind
+            <input id="builder-kind" type="text" readonly />
+          </label>
+          <label class="check-row">
+            <input id="builder-visible" type="checkbox" />
+            Visible
+          </label>
+          <div class="builder-grid">
+            <label>X <input id="builder-x" type="number" step="0.5" /></label>
+            <label>Y <input id="builder-y" type="number" step="0.5" /></label>
+            <label
+              >Width <input id="builder-width" type="number" step="0.5" min="1"
+            /></label>
+            <label
+              >Height <input id="builder-height" type="number" step="0.5" min="1"
+            /></label>
+          </div>
+          <div id="builder-typography" class="builder-grid" hidden>
+            <label
+              >Font size <input id="builder-font-size" type="number" step="1" min="1"
+            /></label>
+            <label
+              >Line height
+              <input id="builder-line-height" type="number" step="1" min="1"
+            /></label>
+          </div>
+          <div class="builder-actions">
+            <button id="builder-reset" type="button">Reset edits</button>
+            <button id="builder-copy" type="button">Copy overrides</button>
+          </div>
+          <pre id="builder-output"></pre>
+        </section>
         <pre id="diagnostics"></pre>
       </aside>
       <main id="stage-wrap">

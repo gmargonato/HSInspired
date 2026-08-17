@@ -4,6 +4,7 @@ import { CollectionScene } from '../scenes/CollectionScene'
 import { DeckSelectionScene } from '../scenes/DeckSelectionScene'
 import { MainMenuScene } from '../scenes/MainMenuScene'
 import { CardViewScene } from '../scenes/CardViewScene'
+import { NewDeckScene } from '../scenes/NewDeckScene'
 import { Scene } from '../scenes/Scene'
 import type { SceneId, SceneRequest } from '../../../shared/sceneNavigation'
 
@@ -28,6 +29,7 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
   'main-menu': () => new MainMenuScene(),
   'deck-selection': () => new DeckSelectionScene(),
   collection: () => new CollectionScene(),
+  'new-deck': () => new NewDeckScene(),
   'card-view': () => new CardViewScene()
 }
 
@@ -58,7 +60,11 @@ export class SceneNavigator {
       overlayAlpha: 0.25,
       duration: 0.2,
       afterTransition:
-        scene instanceof CollectionScene ? () => scene.playCoverReveal() : undefined
+        scene instanceof CollectionScene
+          ? () => scene.playCoverReveal()
+          : scene instanceof NewDeckScene
+            ? () => scene.open()
+            : undefined
     })
 
     console.info('[Scenes menu][navigator] transition complete', request)

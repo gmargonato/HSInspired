@@ -1,6 +1,6 @@
-import clickCursorImage from '@assets/images/cursor/hearthstone-click.png'
-import collectionNewPageImage from '@assets/images/cursor/collection-new-page.png'
-import defaultCursorImage from '@assets/images/cursor/hearthstone-cursor.png'
+import defaultCursorImage from '@assets/images/cursor/CURSOR_BASE.png'
+import clickCursorImage from '@assets/images/cursor/CURSOR_CLICK.png'
+import collectionNewPageImage from '@assets/images/cursor/CURSOR_PASS_PAGE.png'
 
 export type CursorVariant =
   'default' | 'click' | 'collection-next-page' | 'collection-previous-page'

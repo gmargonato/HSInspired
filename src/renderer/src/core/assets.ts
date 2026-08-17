@@ -13,7 +13,23 @@ import collectionCoverImage from '@assets/images/COLLECTION_COVER.png'
 import collectionCoverLockImage from '@assets/images/COLLECTION_COVER_LOCK.png'
 import deckSelectionToCollectionButtonImage from '@assets/images/DECK_SELECTION_TO_COLLECTION_BUTTON.png'
 import uiBackButtonImage from '@assets/images/UI_BACK_BUTTON.png'
+import loadDeckButtonImage from '@assets/images/LOAD_DECK_BUTTON.png'
+import newDeckButtonImage from '@assets/images/NEW_DECK_BUTTON.png'
+import newDeckHeroSelectionImage from '@assets/images/NEW_DECK_HERO_SELECTION.png'
+import selectClassButtonImage from '@assets/images/SELECT_CLASS_BUTTON.png'
+import uiCancelButtonImage from '@assets/images/UI_CANCEL_BUTTON.png'
+import verticalSliderImage from '@assets/images/VERTICAL_SLIDER.png'
+import druidDeckFrameImage from '@assets/images/portraits/DRUID_DECK_FRAME.png'
+import hunterDeckFrameImage from '@assets/images/portraits/HUNTER_DECK_FRAME.png'
+import mageDeckFrameImage from '@assets/images/portraits/MAGE_DECK_FRAME.png'
+import paladinDeckFrameImage from '@assets/images/portraits/PALADIN_DECK_FRAME.png'
+import priestDeckFrameImage from '@assets/images/portraits/PRIEST_DECK_FRAME.png'
+import rogueDeckFrameImage from '@assets/images/portraits/ROGUE_DECK_FRAME.png'
+import shamanDeckFrameImage from '@assets/images/portraits/SHAMAN_DECK_FRAME.png'
+import warlockDeckFrameImage from '@assets/images/portraits/WARLOCK_DECK_FRAME.png'
+import warriorDeckFrameImage from '@assets/images/portraits/WARRIOR_DECK_FRAME.png'
 import { registerAssetBundle } from './assetScope'
+import { HERO_ASSET_SOURCES, type HeroAssetKey } from './heroes'
 
 export { AssetScope } from './assetScope'
 
@@ -40,10 +56,17 @@ export interface DeckSelectionAssets {
   backButton: Texture
 }
 
-export interface CollectionAssets {
+export interface CollectionAssets extends Record<HeroAssetKey, Texture> {
   background: Texture
   cover: Texture
   coverLock: Texture
+  loadDeckButton: Texture
+  newDeckButton: Texture
+  newDeckHeroSelection: Texture
+  selectClassButton: Texture
+  cancelButton: Texture
+  verticalSlider: Texture
+  backButton: Texture
 }
 
 registerAssetBundle(ASSET_BUNDLE_IDS.mainMenu, {
@@ -66,5 +89,22 @@ registerAssetBundle(ASSET_BUNDLE_IDS.deckSelection, {
 registerAssetBundle(ASSET_BUNDLE_IDS.collection, {
   background: collectionBackgroundImage,
   cover: collectionCoverImage,
-  coverLock: collectionCoverLockImage
+  coverLock: collectionCoverLockImage,
+  loadDeckButton: loadDeckButtonImage,
+  newDeckButton: newDeckButtonImage,
+  newDeckHeroSelection: newDeckHeroSelectionImage,
+  selectClassButton: selectClassButtonImage,
+  cancelButton: uiCancelButtonImage,
+  verticalSlider: verticalSliderImage,
+  backButton: uiBackButtonImage,
+  druidDeckFrame: druidDeckFrameImage,
+  hunterDeckFrame: hunterDeckFrameImage,
+  mageDeckFrame: mageDeckFrameImage,
+  paladinDeckFrame: paladinDeckFrameImage,
+  priestDeckFrame: priestDeckFrameImage,
+  rogueDeckFrame: rogueDeckFrameImage,
+  shamanDeckFrame: shamanDeckFrameImage,
+  warlockDeckFrame: warlockDeckFrameImage,
+  warriorDeckFrame: warriorDeckFrameImage,
+  ...HERO_ASSET_SOURCES
 })
