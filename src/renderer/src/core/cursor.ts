@@ -1,9 +1,12 @@
 import clickCursorImage from '@assets/images/cursor/hearthstone-click.png'
+import collectionNewPageImage from '@assets/images/cursor/collection-new-page.png'
 import defaultCursorImage from '@assets/images/cursor/hearthstone-cursor.png'
 
-export type CursorVariant = 'default' | 'click'
+export type CursorVariant =
+  'default' | 'click' | 'collection-next-page' | 'collection-previous-page'
+export type CursorContextVariant = Exclude<CursorVariant, 'default' | 'click'>
 
-/** The source artwork is 32 CSS pixels at the default scale. */
+/** The standard cursor artwork is 32 CSS pixels at the default scale. */
 export const CURSOR_BASE_SIZE = 32
 export const DEFAULT_CURSOR_SCALE = 1
 export const CURSOR_SCALE_LIMITS = {
@@ -17,8 +20,12 @@ const CUSTOM_CURSOR_CLASS = 'custom-cursor-enabled'
 
 interface CursorAsset {
   image: string
+  width: number
+  height: number
   hotspotX: number
   hotspotY: number
+  flipX?: boolean
+  scaleWithCursor?: boolean
 }
 
 /**
@@ -26,20 +33,41 @@ interface CursorAsset {
  * an asset entry and a new CursorVariant value. The grab artwork is
  * intentionally not registered until drag interactions are implemented.
  *
- * The hotspots align the pointer with the visible fingertip in each 32x32
- * image. They are stored per variant so future artwork can opt into a
- * different anchor without changing the positioning code.
+ * The standard cursor hotspots align the pointer with the visible fingertip
+ * in each 32x32 image. They are stored per variant so future artwork can opt
+ * into a different anchor without changing the positioning code.
  */
 const CURSOR_ASSETS: Record<CursorVariant, CursorAsset> = {
   default: {
     image: defaultCursorImage,
+    width: CURSOR_BASE_SIZE,
+    height: CURSOR_BASE_SIZE,
     hotspotX: 9,
     hotspotY: 0
   },
   click: {
     image: clickCursorImage,
+    width: CURSOR_BASE_SIZE,
+    height: CURSOR_BASE_SIZE,
     hotspotX: 4,
     hotspotY: 0
+  },
+  'collection-next-page': {
+    image: collectionNewPageImage,
+    width: 87,
+    height: 81,
+    hotspotX: 43.5,
+    hotspotY: 40.5,
+    scaleWithCursor: false
+  },
+  'collection-previous-page': {
+    image: collectionNewPageImage,
+    width: 87,
+    height: 81,
+    hotspotX: 43.5,
+    hotspotY: 40.5,
+    flipX: true,
+    scaleWithCursor: false
   }
 }
 
@@ -57,6 +85,14 @@ export function getCursorVariant(leftButtonDown: boolean): CursorVariant {
   return leftButtonDown ? 'click' : 'default'
 }
 
+export function resolveCursorVariant(
+  leftButtonDown: boolean,
+  contextVariant: CursorContextVariant | null = null
+): CursorVariant {
+  if (leftButtonDown) return 'click'
+  return contextVariant ?? 'default'
+}
+
 /**
  * Owns the app-wide cursor visual. It deliberately lives outside scenes so a
  * scene transition cannot reset the pointer image or its pressed state.
@@ -66,6 +102,7 @@ export class CursorManager {
   private readonly element: HTMLImageElement
   private scale = DEFAULT_CURSOR_SCALE
   private variant: CursorVariant = 'default'
+  private contextVariant: CursorContextVariant | null = null
   private leftButtonDown = false
   private pointerX: number | null = null
   private pointerY: number | null = null
@@ -114,17 +151,17 @@ export class CursorManager {
     this.host.classList.remove(CUSTOM_CURSOR_CLASS)
     this.element.remove()
     this.element.style.visibility = 'hidden'
+    this.contextVariant = null
     this.leftButtonDown = false
-    this.setVariant(getCursorVariant(this.leftButtonDown))
+    this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
     this.mounted = false
   }
 
   /**
-   * Updates the shared size of every cursor variant.
+   * Updates the shared size of the standard cursor variants.
    *
-   * The future game settings slider should call this method with its chosen
-   * scale. Since the size is applied here, the setting will automatically
-   * affect default, click, and any later cursor variants.
+   * The collection page cursor deliberately keeps its source dimensions so
+   * the artwork remains at the size it was authored for.
    */
   setScale(scale: number): void {
     this.scale = normalizeCursorScale(scale)
@@ -136,6 +173,11 @@ export class CursorManager {
     return this.scale
   }
 
+  setContextVariant(variant: CursorContextVariant | null): void {
+    this.contextVariant = variant
+    this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
+  }
+
   private onPointerMove = (event: PointerEvent): void => {
     if (!this.isInsideHost(event)) {
       // A missed pointerup can otherwise leave the pressed artwork active;
@@ -145,6 +187,7 @@ export class CursorManager {
       if (this.leftButtonDown && (event.buttons & LEFT_BUTTON_MASK) === 0) {
         this.releaseLeftButton()
       }
+      this.setContextVariant(null)
       this.hide()
       return
     }
@@ -164,7 +207,7 @@ export class CursorManager {
     if (event.button !== LEFT_BUTTON || !this.isInsideHost(event)) return
 
     this.leftButtonDown = true
-    this.setVariant(getCursorVariant(this.leftButtonDown))
+    this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
     this.setPointerPosition(event.clientX, event.clientY)
     this.show()
   }
@@ -179,12 +222,14 @@ export class CursorManager {
   }
 
   private onWindowBlur = (): void => {
+    this.setContextVariant(null)
     this.releaseLeftButton()
     this.hide()
   }
 
   private onVisibilityChange = (): void => {
     if (document.visibilityState !== 'visible') {
+      this.setContextVariant(null)
       this.releaseLeftButton()
       this.hide()
     }
@@ -194,7 +239,7 @@ export class CursorManager {
     if (!this.leftButtonDown) return
 
     this.leftButtonDown = false
-    this.setVariant(getCursorVariant(this.leftButtonDown))
+    this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
   }
 
   private isInsideHost(event: Event): boolean {
@@ -207,17 +252,26 @@ export class CursorManager {
 
     this.variant = variant
     this.applyVariant()
+    this.applyScale()
     this.updatePosition()
   }
 
   private applyVariant(): void {
-    this.element.src = CURSOR_ASSETS[this.variant].image
+    const asset = CURSOR_ASSETS[this.variant]
+    this.element.src = asset.image
+    this.element.style.transform = asset.flipX ? 'scaleX(-1)' : ''
   }
 
   private applyScale(): void {
-    const size = getCursorSize(this.scale)
-    this.element.style.width = `${size}px`
-    this.element.style.height = `${size}px`
+    const asset = CURSOR_ASSETS[this.variant]
+    if (asset.scaleWithCursor === false) {
+      this.element.style.width = ''
+      this.element.style.height = ''
+      return
+    }
+
+    this.element.style.width = `${asset.width * this.scale}px`
+    this.element.style.height = `${asset.height * this.scale}px`
   }
 
   private setPointerPosition(clientX: number, clientY: number): void {
@@ -230,8 +284,9 @@ export class CursorManager {
     if (this.pointerX === null || this.pointerY === null) return
 
     const asset = CURSOR_ASSETS[this.variant]
-    this.element.style.left = `${this.pointerX - asset.hotspotX * this.scale}px`
-    this.element.style.top = `${this.pointerY - asset.hotspotY * this.scale}px`
+    const assetScale = asset.scaleWithCursor === false ? 1 : this.scale
+    this.element.style.left = `${this.pointerX - asset.hotspotX * assetScale}px`
+    this.element.style.top = `${this.pointerY - asset.hotspotY * assetScale}px`
   }
 
   private show(): void {

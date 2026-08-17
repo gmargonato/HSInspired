@@ -5,13 +5,25 @@ import {
   DEFAULT_CURSOR_SCALE,
   getCursorSize,
   getCursorVariant,
-  normalizeCursorScale
+  normalizeCursorScale,
+  resolveCursorVariant
 } from '../src/renderer/src/core/cursor'
 
 describe('cursor state helpers', () => {
   it('selects the click variant only while the left button is down', () => {
     expect(getCursorVariant(false)).toBe('default')
     expect(getCursorVariant(true)).toBe('click')
+  })
+
+  it('uses a collection page cursor while the pointer is over a page edge', () => {
+    expect(resolveCursorVariant(false, 'collection-next-page')).toBe(
+      'collection-next-page'
+    )
+    expect(resolveCursorVariant(false, 'collection-previous-page')).toBe(
+      'collection-previous-page'
+    )
+    expect(resolveCursorVariant(true, 'collection-next-page')).toBe('click')
+    expect(resolveCursorVariant(false, null)).toBe('default')
   })
 
   it('normalizes the shared scale for every cursor variant', () => {
