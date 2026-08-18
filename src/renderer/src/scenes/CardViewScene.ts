@@ -7,6 +7,7 @@ import {
 import { CardAssetResolver } from '../../../../card-lab/card-asset-manifest'
 import { CardView } from '../../../../card-lab/card-view'
 import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
+import { CardPreviewParallax, resolveParallaxTarget } from './cardPreviewParallax'
 import { Scene } from './Scene'
 
 export interface CardPreviewSourceBounds {
@@ -40,6 +41,7 @@ const COLORS = {
 
 const PREVIEW = {
   cardCenter: { x: 1080, y: GAME_HEIGHT / 2 },
+  pointerRange: { x: 480, y: 440 },
   maxScale: 0.86,
   panel: { x: 150, y: 128, width: 500, height: 824 },
   panelPadding: 28,
@@ -49,6 +51,10 @@ const PREVIEW = {
   effectHeadingGap: 24,
   animationDuration: 0.28
 } as const
+
+// The preview effect is intentionally controlled here so it can be disabled
+// without touching the shared CardView renderer or collection interactions.
+const CARD_PREVIEW_PARALLAX_ENABLED = true
 
 const DETAIL_LABEL_STYLE = {
   fontFamily: 'Franklin Gothic Condensed',
@@ -108,7 +114,9 @@ export class CardViewScene extends Scene {
 
   private backdrop!: Graphics
   private detailsPanel!: Container
+  private cardMotion!: Container
   private cardView!: CardView
+  private parallax: CardPreviewParallax | null = null
   private activeTimeline: { kill: () => void } | null = null
   private closing = false
 
@@ -139,24 +147,40 @@ export class CardViewScene extends Scene {
     const artwork = await this.resolver.loadArtwork(this.card.id)
     this.cardView = await CardView.create(this.card, this.resolver, { artwork })
     this.cardView.eventMode = 'static'
+
+    this.cardMotion = new Container()
+    this.cardMotion.addChild(this.cardView)
+    if (CARD_PREVIEW_PARALLAX_ENABLED) {
+      this.parallax = new CardPreviewParallax(this.cardView)
+      this.backdrop.on('globalpointermove', this.handlePointerMove)
+    }
     this.positionAtSource()
-    this.root.addChild(this.cardView)
+    this.root.addChild(this.cardMotion)
   }
 
-  update(_deltaMS: number): void {}
+  update(deltaMS: number): void {
+    this.parallax?.update(deltaMS)
+  }
 
   protected onEnter(): void {
     window.addEventListener('keydown', this.handleKeyDown)
+    window.addEventListener('blur', this.handlePointerExit)
+    this.appInstance.canvas.addEventListener('pointerleave', this.handlePointerExit)
     this.playOpenAnimation()
   }
 
   protected onExit(): void {
     window.removeEventListener('keydown', this.handleKeyDown)
+    window.removeEventListener('blur', this.handlePointerExit)
+    this.appInstance.canvas.removeEventListener('pointerleave', this.handlePointerExit)
     this.activeTimeline?.kill()
     this.activeTimeline = null
     this.killTweensOf(this.backdrop)
     this.killTweensOf(this.detailsPanel)
-    this.killTweensOf(this.cardView)
+    this.killTweensOf(this.cardMotion)
+    this.killTweensOf(this.cardMotion.scale)
+    this.parallax?.destroy()
+    this.parallax = null
   }
 
   private async waitForFonts(): Promise<void> {
@@ -265,8 +289,8 @@ export class CardViewScene extends Scene {
       this.sourceBounds.width / this.cardView.plan.width,
       this.sourceBounds.height / this.cardView.renderedHeight
     )
-    this.cardView.scale.set(Math.max(0.001, sourceScale))
-    this.cardView.position.set(this.sourceBounds.x, this.sourceBounds.y)
+    this.cardMotion.scale.set(Math.max(0.001, sourceScale))
+    this.cardMotion.position.set(this.sourceBounds.x, this.sourceBounds.y)
   }
 
   private positionAtPreview(): { scale: number; x: number; y: number } {
@@ -293,7 +317,7 @@ export class CardViewScene extends Scene {
       0
     )
     timeline.to(
-      this.cardView,
+      this.cardMotion,
       {
         x: target.x,
         y: target.y,
@@ -303,7 +327,7 @@ export class CardViewScene extends Scene {
       0
     )
     timeline.to(
-      this.cardView.scale,
+      this.cardMotion.scale,
       {
         x: target.scale,
         y: target.scale,
@@ -331,9 +355,23 @@ export class CardViewScene extends Scene {
     void this.close()
   }
 
+  private readonly handlePointerMove = (event: FederatedPointerEvent): void => {
+    if (this.closing || !this.parallax) return
+
+    const pointer = this.root.toLocal(event.global)
+    this.parallax.setTarget(
+      resolveParallaxTarget(pointer, PREVIEW.cardCenter, PREVIEW.pointerRange)
+    )
+  }
+
+  private readonly handlePointerExit = (): void => {
+    this.parallax?.release()
+  }
+
   private async close(): Promise<void> {
     if (this.closing) return
     this.closing = true
+    this.parallax?.release()
 
     this.activeTimeline?.kill()
     const timeline = this.timeline()
@@ -349,7 +387,7 @@ export class CardViewScene extends Scene {
       0
     )
     timeline.to(
-      this.cardView,
+      this.cardMotion,
       {
         x: this.sourceBounds.x,
         y: this.sourceBounds.y,
@@ -363,7 +401,7 @@ export class CardViewScene extends Scene {
       this.sourceBounds.height / this.cardView.renderedHeight
     )
     timeline.to(
-      this.cardView.scale,
+      this.cardMotion.scale,
       {
         x: Math.max(0.001, sourceScale),
         y: Math.max(0.001, sourceScale),
