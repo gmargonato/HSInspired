@@ -36,7 +36,18 @@ describe('Card Lab catalog', () => {
 
     expect(card.type).toBe('Weapon')
     expect(card.health).toBeNull()
+    expect(card.armor).toBeNull()
     expect(card.durability).toBe(2)
+  })
+
+  it('normalizes hero armor separately from minion health', () => {
+    const card = CARD_CATALOG.require('classic_lord_jaraxxus')
+
+    expect(card.type).toBe('Hero')
+    expect(card.attack).toBeNull()
+    expect(card.health).toBeNull()
+    expect(card.armor).toBe(5)
+    expect(card.durability).toBeNull()
   })
 
   it('defaults omitted token costs to zero for display', () => {
@@ -70,16 +81,16 @@ describe('Card Lab render plans', () => {
     expect(assets).toEqual(
       expect.arrayContaining([
         'FRAME_MINION.png',
+        'CARD_NAME.png',
         'MANA.png',
         'ATTACK.png',
         'HEALTH.png',
         'rarity-rare.png'
       ])
     )
-    expect(assets.some((asset) => asset.includes('name-banner'))).toBe(false)
   })
 
-  it('uses one semantic hierarchy with straight, shared-Y names', () => {
+  it('uses one semantic hierarchy with centralized name offsets', () => {
     const card = CARD_CATALOG.require('basic_bluegill_warrior')
     const plan = buildCardRenderPlan(card)
     const tree = plan.tree
@@ -90,6 +101,7 @@ describe('Card Lab render plans', () => {
       expect.arrayContaining([
         'card.artwork',
         'card.frame',
+        'card.name-banner',
         'card.name',
         'card.rules',
         'card.stats.mana.icon',
@@ -102,7 +114,14 @@ describe('Card Lab render plans', () => {
     expect(name).toMatchObject({
       kind: 'text',
       position: {
-        y: CARD_PROFILES.minion.nameBox.y + CARD_PROFILES.minion.nameBox.height / 2
+        x:
+          CARD_PROFILES.minion.nameBox.x +
+          CARD_PROFILES.minion.nameBox.width / 2 +
+          CARD_STAT_LABEL_OFFSETS.name.x,
+        y:
+          CARD_PROFILES.minion.nameBox.y +
+          CARD_PROFILES.minion.nameBox.height / 2 +
+          CARD_STAT_LABEL_OFFSETS.name.y
       },
       curve: undefined
     })
@@ -180,6 +199,50 @@ describe('Card Lab render plans', () => {
     )
   })
 
+  it('uses type-specific name banners directly above the card frame', () => {
+    const minionPlan = buildCardRenderPlan(CARD_CATALOG.require('classic_abomination'))
+    const weaponPlan = buildCardRenderPlan(CARD_CATALOG.require('basic_fiery_war_axe'))
+
+    const minionBanner = minionPlan.layers.find(
+      (layer) => layer.id === 'card.name-banner'
+    )
+    const weaponBanner = weaponPlan.layers.find(
+      (layer) => layer.id === 'card.name-banner'
+    )
+    const minionBannerNode = minionPlan.tree.root.children.find(
+      (node) => node.id === 'name-banner'
+    )
+    const weaponBannerNode = weaponPlan.tree.root.children.find(
+      (node) => node.id === 'name-banner'
+    )
+    const minionFrame = minionPlan.layers.find((layer) => layer.id === 'card.frame')
+    const minionName = minionPlan.layers.find((layer) => layer.id === 'card.name')
+
+    expect(minionBanner).toMatchObject({
+      kind: 'texture',
+      assetName: 'CARD_NAME.png',
+      zIndex: 110,
+      anchor: { x: 0.5, y: 0.5 },
+      position: { x: 310, y: 490 }
+    })
+    expect(weaponBanner).toMatchObject({
+      kind: 'texture',
+      assetName: 'WEAPON_NAME.png',
+      zIndex: 110
+    })
+    expect(minionBannerNode).toMatchObject({
+      kind: 'image',
+      transform: { size: { width: 665, height: 198 } }
+    })
+    expect(weaponBannerNode).toMatchObject({
+      kind: 'image',
+      transform: { size: { width: 665, height: 198 } }
+    })
+    expect(minionFrame?.zIndex).toBe(100)
+    expect(minionBanner?.zIndex).toBeLessThan(minionName?.zIndex ?? 0)
+    expect(minionBanner?.zIndex).toBeGreaterThan(minionFrame?.zIndex ?? 0)
+  })
+
   it('uses the standard hero frame', () => {
     const source = CARD_CATALOG.require('classic_abomination')
     const hero: CardDefinition = {
@@ -188,11 +251,15 @@ describe('Card Lab render plans', () => {
       name: 'Test Hero',
       type: 'Hero',
       attack: null,
-      health: 30,
+      health: null,
+      armor: 30,
       durability: null
     }
 
-    expect(textureAssets(hero)).toContain('FRAME_HERO.png')
+    const assets = textureAssets(hero)
+    expect(assets).toEqual(expect.arrayContaining(['FRAME_HERO.png', 'armor.png']))
+    expect(assets).not.toContain('ATTACK.png')
+    expect(assets).not.toContain('HEALTH.png')
   })
 
   it('uses white black-stroked names and type-specific rules colors', () => {

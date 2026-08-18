@@ -69,6 +69,7 @@ export interface CardDefinition {
   readonly cost: number
   readonly attack: number | null
   readonly health: number | null
+  readonly armor: number | null
   readonly durability: number | null
   readonly effect: string
 }
@@ -88,6 +89,7 @@ interface RawCardRecord {
   cost?: unknown
   attack?: unknown
   health?: unknown
+  armor?: unknown
   effect?: unknown
 }
 
@@ -157,6 +159,8 @@ export function normalizeCard(raw: RawCardRecord, set: CardSet): CardDefinition 
   const name = readString(raw.name, 'name', id)
   const type = readEnum(raw.type, CARD_TYPES, 'type', id)
   const health = readNullableNumber(raw.health, 'health', id)
+  const armor = readNullableNumber(raw.armor, 'armor', id)
+  const attack = readNullableNumber(raw.attack, 'attack', id)
 
   return {
     id,
@@ -168,8 +172,9 @@ export function normalizeCard(raw: RawCardRecord, set: CardSet): CardDefinition 
     subtype: readSubtype(raw.subtype),
     spellSchool: readOptionalString(raw.spellSchool),
     cost: readCost(raw.cost, id),
-    attack: readNullableNumber(raw.attack, 'attack', id),
-    health: type === 'Weapon' ? null : health,
+    attack: type === 'Hero' ? null : attack,
+    health: type === 'Minion' ? health : null,
+    armor: type === 'Hero' ? armor : null,
     durability: type === 'Weapon' ? health : null,
     effect: typeof raw.effect === 'string' ? raw.effect : ''
   }

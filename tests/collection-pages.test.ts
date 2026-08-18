@@ -49,6 +49,12 @@ describe('Collection pages', () => {
     expect(new Set(ids).size).toBe(eligibleCards.length)
   })
 
+  it('includes collectible heroes in the collection', () => {
+    const cards = pages.flatMap((page) => page.cards)
+
+    expect(cards.map((card) => card.id)).toContain('classic_lord_jaraxxus')
+  })
+
   it('can restrict the collection to Neutral and one selected class', () => {
     const hunterPages = buildCollectionPages(CARD_CATALOG.all, ['Neutral', 'Hunter'])
     const visibleClasses = new Set(hunterPages.map((page) => page.cardClass))

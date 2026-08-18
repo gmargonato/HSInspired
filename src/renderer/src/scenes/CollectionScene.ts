@@ -68,12 +68,18 @@ const Layout = {
 }
 
 const DECK_EDITOR_LAYOUT = {
-  header: { x: 1575, y: 50 },
-  name: { x: 1575, y: 185 },
-  count: { x: 1575, y: 225 },
-  status: { x: 1575, y: 265 },
-  cardList: { x: 1415, y: 310, width: 330, height: 650 },
-  backButton: { x: 1705, y: 1038 }
+  header: {
+    x: Layout.deckList.x + Layout.deckList.width / 2,
+    y: 50
+  },
+  count: { x: 1495, y: 1038 },
+  cardList: {
+    x: Layout.deckList.x + 10,
+    y: 118,
+    width: Layout.deckList.width - 20,
+    height: 872
+  },
+  footerButton: { x: 1660, y: 1038 }
 }
 
 const CARD_GRID_COLUMNS = 4
@@ -89,7 +95,23 @@ const DECK_BUTTON_HEIGHT = 151
 // The button textures include transparent padding around their visible frames.
 // A negative layout gap brings the visible frames closer together.
 const DECK_BUTTON_GAP = -30
-const DECK_EDITOR_CARD_ROW_HEIGHT = 20
+const DECK_EDITOR_CARD_ROW_HEIGHT = 28
+const DECK_EDITOR_CARD_ROW_GAP = 1
+const DECK_EDITOR_COST_WIDTH = 27
+const DECK_EDITOR_COPIES_WIDTH = 24
+const DECK_EDITOR_ROW_INSET = 2
+const DECK_EDITOR_TRANSITION_DURATION = 0.45
+const DECK_EDITOR_CONTENT_FADE_DURATION = 0.2
+const DECK_EDITOR_ROW_REMOVE_DURATION = 0.22
+const DECK_EDITOR_ROW_COLLAPSE_DURATION = 0.18
+const DECK_EDITOR_PREVIEW = {
+  maxWidth: 190,
+  maxHeight: 345,
+  gap: 18,
+  viewportPadding: 16
+}
+const DECK_EDITOR_COUNT_FILL = 0xffffff
+const DECK_EDITOR_ERROR_FILL = 0xff9a9a
 const COLLECTION_BACK_TRANSITION_DURATION = 0.6
 const FULL_VIEWPORT = {
   x: 0,
@@ -120,11 +142,9 @@ export class CollectionScene extends Scene {
   private deckSlider!: Sprite
   private deckEditorLayer!: Container
   private deckEditorButton!: Button
-  private deckEditorName!: Text
   private deckEditorCount!: Text
-  private deckEditorStatus!: Text
+  private deckEditorDoneButton!: Button
   private deckEditorCardContent!: Container
-  private deckEditorBackButton!: Button
   private collectionBackButton!: Button
   private newDeckScene!: NewDeckScene
   private readonly deckEntries: Container[] = []
@@ -134,6 +154,17 @@ export class CollectionScene extends Scene {
   private deckSliderDragging = false
   private deckSliderDragOffset = 0
   private activeDeckId: string | null = null
+  private deckEditorOrigin: { x: number; y: number } | null = null
+  private deckEditorTransitioning = false
+  private deckEditorClosing = false
+  private deckEditorTransitionSequence = 0
+  private deckEditorTransitionTimeline: gsap.core.Timeline | null = null
+  private deckEditorTransitionResolve: (() => void) | null = null
+  private deckEditorRenderSequence = 0
+  private deckEditorCountFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+  private deckEditorCardMutationInProgress = false
+  private deckEditorCardPreview: CardView | null = null
+  private deckEditorCardPreviewRequest = 0
   private unsubscribeDeckStore: (() => void) | null = null
   private deckAssets!: Pick<CollectionAssets, CollectionDeckAssetKey>
   private classLabel!: Text
@@ -473,21 +504,8 @@ export class CollectionScene extends Scene {
   ): void {
     this.deckEditorLayer = new Container()
 
-    const cardListPanel = new Graphics()
-      .rect(
-        DECK_EDITOR_LAYOUT.cardList.x,
-        DECK_EDITOR_LAYOUT.cardList.y,
-        DECK_EDITOR_LAYOUT.cardList.width,
-        DECK_EDITOR_LAYOUT.cardList.height
-      )
-      .fill({ color: 0x130e1c, alpha: 0.72 })
-      .stroke({ color: 0x705338, width: 2, alpha: 0.9 })
-    cardListPanel.eventMode = 'none'
-    this.deckEditorLayer.addChild(cardListPanel)
-
     this.deckEditorButton = new Button(assets.loadDeckButton, {
-      onClick: () =>
-        this.renderDeckStatus('Right-click the deck portrait to delete it.')
+      onClick: () => undefined
     })
     this.deckEditorButton.position.set(
       DECK_EDITOR_LAYOUT.header.x,
@@ -500,39 +518,46 @@ export class CollectionScene extends Scene {
     })
     this.deckEditorLayer.addChild(this.deckEditorButton)
 
-    this.deckEditorName = this.createEditorText(28, 0xf1e4c8)
-    this.deckEditorName.position.set(
-      DECK_EDITOR_LAYOUT.name.x,
-      DECK_EDITOR_LAYOUT.name.y
-    )
-    this.deckEditorLayer.addChild(this.deckEditorName)
-
-    this.deckEditorCount = this.createEditorText(24, 0xc9b384)
+    this.deckEditorCount = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 24,
+        fill: DECK_EDITOR_COUNT_FILL,
+        stroke: { color: 0x000000, width: 4 },
+        letterSpacing: -1,
+        align: 'center'
+      }
+    })
+    this.deckEditorCount.anchor.set(0.5)
+    this.deckEditorCount.eventMode = 'none'
     this.deckEditorCount.position.set(
       DECK_EDITOR_LAYOUT.count.x,
       DECK_EDITOR_LAYOUT.count.y
     )
     this.deckEditorLayer.addChild(this.deckEditorCount)
 
-    this.deckEditorStatus = this.createEditorText(18, 0x9d8aaa)
-    this.deckEditorStatus.position.set(
-      DECK_EDITOR_LAYOUT.status.x,
-      DECK_EDITOR_LAYOUT.status.y
-    )
-    this.deckEditorLayer.addChild(this.deckEditorStatus)
-
     this.deckEditorCardContent = new Container()
+    this.deckEditorCardContent.mask = new Graphics()
+      .rect(
+        DECK_EDITOR_LAYOUT.cardList.x,
+        DECK_EDITOR_LAYOUT.cardList.y,
+        DECK_EDITOR_LAYOUT.cardList.width,
+        DECK_EDITOR_LAYOUT.cardList.height
+      )
+      .fill(0xffffff)
+    this.deckEditorLayer.addChild(this.deckEditorCardContent.mask as Graphics)
     this.deckEditorLayer.addChild(this.deckEditorCardContent)
 
-    this.deckEditorBackButton = new Button(sharedAssets.backButton, {
+    this.deckEditorDoneButton = new Button(sharedAssets.doneButton, {
       onClick: () => this.exitDeckEditor()
     })
-    this.deckEditorBackButton.position.set(
-      DECK_EDITOR_LAYOUT.backButton.x,
-      DECK_EDITOR_LAYOUT.backButton.y
+    this.deckEditorDoneButton.position.set(
+      DECK_EDITOR_LAYOUT.footerButton.x,
+      DECK_EDITOR_LAYOUT.footerButton.y
     )
-    this.deckEditorBackButton.setBaseY(DECK_EDITOR_LAYOUT.backButton.y)
-    this.deckEditorLayer.addChild(this.deckEditorBackButton)
+    this.deckEditorDoneButton.setBaseY(DECK_EDITOR_LAYOUT.footerButton.y)
+    this.deckEditorLayer.addChild(this.deckEditorDoneButton)
 
     this.deckEditorLayer.visible = false
     this.deckEditorLayer.alpha = 0
@@ -544,27 +569,12 @@ export class CollectionScene extends Scene {
       onClick: () => this.leaveCollection()
     })
     this.collectionBackButton.position.set(
-      DECK_EDITOR_LAYOUT.backButton.x,
-      DECK_EDITOR_LAYOUT.backButton.y
+      DECK_EDITOR_LAYOUT.footerButton.x,
+      DECK_EDITOR_LAYOUT.footerButton.y
     )
-    this.collectionBackButton.setBaseY(DECK_EDITOR_LAYOUT.backButton.y)
+    this.collectionBackButton.setBaseY(DECK_EDITOR_LAYOUT.footerButton.y)
     this.collectionBackButton.visible = true
     this.root.addChild(this.collectionBackButton)
-  }
-
-  private createEditorText(fontSize: number, fill: number): Text {
-    const text = new Text({
-      text: '',
-      style: {
-        fontFamily: 'Belwe',
-        fontSize,
-        fill,
-        align: 'center'
-      }
-    })
-    text.anchor.set(0.5)
-    text.eventMode = 'none'
-    return text
   }
 
   private renderDeckList(): void {
@@ -582,8 +592,7 @@ export class CollectionScene extends Scene {
         this.getDeckFrameTexture(deck),
         () => this.enterDeck(deck.id),
         index,
-        () => this.deleteDeck(deck.id),
-        deck.name
+        () => this.deleteDeck(deck.id)
       )
     }
 
@@ -605,8 +614,7 @@ export class CollectionScene extends Scene {
     texture: Texture,
     onClick: () => void | Promise<void>,
     index: number,
-    onDelete?: () => void | Promise<void>,
-    label?: string
+    onDelete?: () => void | Promise<void>
   ): void {
     const entry = new Container()
     entry.position.set(
@@ -629,26 +637,6 @@ export class CollectionScene extends Scene {
     }
     entry.addChild(button)
     this.deckButtons.push(button)
-
-    if (label) {
-      const name = new Text({
-        text: label,
-        style: {
-          fontFamily: 'Belwe',
-          fontSize: 20,
-          fill: 0xf1e4c8,
-          stroke: { color: 0x19130e, width: 4 },
-          align: 'center'
-        }
-      })
-      name.anchor.set(0.5)
-      name.position.set(0, DECK_BUTTON_HEIGHT / 2 - 18)
-      name.eventMode = 'none'
-      if (name.width > Layout.deckList.width - 24) {
-        name.scale.x = (Layout.deckList.width - 24) / name.width
-      }
-      entry.addChild(name)
-    }
 
     this.deckEntries.push(entry)
     this.deckContent.addChild(entry)
@@ -709,11 +697,21 @@ export class CollectionScene extends Scene {
       this.deckSlider.cursor = listEnabled ? 'pointer' : 'default'
     }
 
-    if (this.deckEditorBackButton) {
-      this.deckEditorBackButton.setEnabled(enabled && this.activeDeckId !== null)
-    }
     if (this.deckEditorButton) {
-      this.deckEditorButton.setEnabled(enabled && this.activeDeckId !== null)
+      this.deckEditorButton.setEnabled(
+        enabled &&
+          this.activeDeckId !== null &&
+          !this.deckEditorTransitioning &&
+          !this.deckEditorCardMutationInProgress
+      )
+    }
+    if (this.deckEditorDoneButton) {
+      this.deckEditorDoneButton.setEnabled(
+        enabled &&
+          this.activeDeckId !== null &&
+          !this.deckEditorTransitioning &&
+          !this.deckEditorCardMutationInProgress
+      )
     }
 
     if (this.collectionBackButton) {
@@ -805,9 +803,21 @@ export class CollectionScene extends Scene {
   }
 
   private async enterDeck(deckId: string): Promise<void> {
-    if (!this.navigationReady || this.disposed) return
+    if (
+      !this.navigationReady ||
+      this.disposed ||
+      this.activeDeckId !== null ||
+      this.deckEditorTransitioning
+    ) {
+      return
+    }
     const deck = this.deckStore.getDeck(deckId)
     if (!deck) return
+
+    const origin = this.getDeckEntryOrigin(deckId) ?? {
+      x: DECK_EDITOR_LAYOUT.header.x,
+      y: DECK_EDITOR_LAYOUT.header.y
+    }
 
     this.setDeckInteractionEnabled(false)
 
@@ -821,17 +831,36 @@ export class CollectionScene extends Scene {
     if (this.disposed) return
 
     this.activeDeckId = deckId
+    this.deckEditorOrigin = origin
+    this.clearDeckEditorCardPreview()
+    this.deckEditorCardMutationInProgress = false
+    this.deckEditorTransitioning = true
+    const transitionSequence = ++this.deckEditorTransitionSequence
+    this.setDeckInteractionEnabled(false)
     this.deckViewport.visible = false
     this.deckSlider.visible = false
     this.deckEditorLayer.visible = true
-    this.deckEditorLayer.alpha = 0
+    this.deckEditorLayer.alpha = 1
+    this.deckEditorButton.position.set(origin.x, origin.y)
+    this.deckEditorButton.setBaseY(origin.y)
+    this.deckEditorButton.setEnabled(false)
+    this.deckEditorCardContent.alpha = 0
+    this.deckEditorCount.alpha = 0
+    this.deckEditorDoneButton.alpha = 0
     this.updateDeckEditor()
+
+    await this.animateDeckEditorTransition(origin, true)
+    if (
+      this.disposed ||
+      this.activeDeckId !== deckId ||
+      this.deckEditorTransitionSequence !== transitionSequence
+    ) {
+      return
+    }
+
+    this.deckEditorButton.setBaseY(DECK_EDITOR_LAYOUT.header.y)
+    this.deckEditorTransitioning = false
     this.setDeckInteractionEnabled(true)
-    this.tweenTo(this.deckEditorLayer, {
-      alpha: 1,
-      duration: 0.2,
-      ease: 'power2.out'
-    })
   }
 
   private getDeckClass(deck: Deck): DeckClass | null {
@@ -843,14 +872,42 @@ export class CollectionScene extends Scene {
   }
 
   private async exitDeckEditor(): Promise<void> {
-    if (!this.deckEditorLayer || this.disposed) return
+    if (
+      !this.deckEditorLayer ||
+      this.disposed ||
+      !this.activeDeckId ||
+      this.deckEditorClosing
+    ) {
+      return
+    }
 
-    this.killTweensOf(this.deckEditorLayer)
+    this.deckEditorClosing = true
+    ++this.deckEditorTransitionSequence
+    this.clearDeckEditorCardPreview()
+    this.deckEditorCardMutationInProgress = false
+    this.killTweensOf(this.deckEditorButton)
+    this.killTweensOf(this.deckEditorCardContent)
+    this.killTweensOf(this.deckEditorCount)
+    this.killTweensOf(this.deckEditorDoneButton)
+    this.deckEditorTransitioning = true
     this.setNavigationEnabled(false)
     this.setDeckInteractionEnabled(false)
+
+    const origin = this.deckEditorOrigin
+    if (origin && this.deckEditorLayer.visible) {
+      await this.animateDeckEditorTransition(origin, false)
+    }
+    if (this.disposed) return
+
     this.activeDeckId = null
+    this.deckEditorOrigin = null
+    this.deckEditorRenderSequence += 1
     this.deckEditorLayer.visible = false
     this.deckEditorLayer.alpha = 0
+    this.deckEditorCardContent.alpha = 1
+    this.deckEditorCount.alpha = 1
+    this.deckEditorDoneButton.alpha = 1
+    this.deckEditorButton.setBaseY(DECK_EDITOR_LAYOUT.header.y)
     this.deckViewport.visible = true
     this.updateDeckSliderPosition()
 
@@ -860,10 +917,79 @@ export class CollectionScene extends Scene {
       console.error('Failed to restore the full collection:', error)
     } finally {
       if (!this.disposed) {
+        this.deckEditorTransitioning = false
+        this.deckEditorClosing = false
         this.setNavigationEnabled(true)
         this.setDeckInteractionEnabled(true)
       }
     }
+  }
+
+  private getDeckEntryOrigin(deckId: string): { x: number; y: number } | null {
+    const deckIndex = this.deckStore.getDecks().findIndex((deck) => deck.id === deckId)
+    const entry = deckIndex === -1 ? undefined : this.deckEntries[deckIndex]
+    if (!entry) return null
+
+    const bounds = entry.getBounds()
+    const center = this.deckEditorLayer.toLocal({
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2
+    })
+    return { x: center.x, y: center.y }
+  }
+
+  private animateDeckEditorTransition(
+    origin: { x: number; y: number },
+    opening: boolean
+  ): Promise<void> {
+    this.cancelDeckEditorTransition()
+
+    return new Promise<void>((resolve) => {
+      const targetY = opening ? DECK_EDITOR_LAYOUT.header.y : origin.y
+      const targetAlpha = opening ? 1 : 0
+      const finish = (): void => {
+        if (this.deckEditorTransitionTimeline === timeline) {
+          this.deckEditorTransitionTimeline = null
+          this.deckEditorTransitionResolve = null
+        }
+        resolve()
+      }
+      const timeline = this.timeline({
+        onComplete: finish,
+        onInterrupt: finish
+      })
+      this.deckEditorTransitionTimeline = timeline
+      this.deckEditorTransitionResolve = finish
+
+      timeline.to(
+        this.deckEditorButton,
+        {
+          x: origin.x,
+          y: targetY,
+          duration: DECK_EDITOR_TRANSITION_DURATION,
+          ease: 'power2.inOut'
+        },
+        0
+      )
+      timeline.to(
+        [this.deckEditorCardContent, this.deckEditorCount, this.deckEditorDoneButton],
+        {
+          alpha: targetAlpha,
+          duration: DECK_EDITOR_CONTENT_FADE_DURATION,
+          ease: 'power2.out'
+        },
+        opening ? DECK_EDITOR_TRANSITION_DURATION * 0.55 : 0
+      )
+    })
+  }
+
+  private cancelDeckEditorTransition(): void {
+    const timeline = this.deckEditorTransitionTimeline
+    const finish = this.deckEditorTransitionResolve
+    this.deckEditorTransitionTimeline = null
+    this.deckEditorTransitionResolve = null
+    timeline?.kill()
+    finish?.()
   }
 
   private updateDeckEditor(): void {
@@ -878,92 +1004,499 @@ export class CollectionScene extends Scene {
     }
 
     this.deckEditorButton.sprite.texture = this.getDeckFrameTexture(deck)
-    this.deckEditorName.text = deck.name
-    this.deckEditorCount.text = `${countDeckCards(deck)} / ${MAX_DECK_CARDS} cards`
-    this.renderDeckStatus('Click a collection card to add it')
+    this.clearDeckEditorCountFeedback()
+    this.deckEditorCount.text = `${countDeckCards(deck)} / ${MAX_DECK_CARDS} Cards`
+    this.renderDeckCardRows(deck)
+  }
 
+  private flashDeckEditorCount(): void {
+    if (!this.deckEditorCount) return
+
+    if (this.deckEditorCountFeedbackTimer !== null) {
+      clearTimeout(this.deckEditorCountFeedbackTimer)
+    }
+    this.deckEditorCount.style.fill = DECK_EDITOR_ERROR_FILL
+    this.deckEditorCountFeedbackTimer = setTimeout(() => {
+      this.deckEditorCountFeedbackTimer = null
+      if (!this.disposed && this.deckEditorCount) {
+        this.deckEditorCount.style.fill = DECK_EDITOR_COUNT_FILL
+      }
+    }, 650)
+  }
+
+  private clearDeckEditorCountFeedback(): void {
+    if (this.deckEditorCountFeedbackTimer !== null) {
+      clearTimeout(this.deckEditorCountFeedbackTimer)
+      this.deckEditorCountFeedbackTimer = null
+    }
+    if (this.deckEditorCount) {
+      this.deckEditorCount.style.fill = DECK_EDITOR_COUNT_FILL
+    }
+  }
+
+  private renderDeckCardRows(deck: Deck): void {
+    this.clearDeckEditorCardPreview()
+    const sequence = ++this.deckEditorRenderSequence
     const oldRows = this.deckEditorCardContent.removeChildren()
     for (const row of oldRows) {
       row.destroy({ children: true })
     }
 
-    const entries = Object.entries(deck.cards).sort(([left], [right]) =>
-      left.localeCompare(right)
-    )
-    for (const [index, [cardId, count]] of entries.entries()) {
-      const card = CARD_CATALOG.get(cardId)
-      const row = new Text({
-        text: `${count}× ${card?.name ?? cardId}`,
-        style: {
-          fontFamily: 'Franklin Gothic Condensed',
-          fontSize: 20,
-          fill: 0xe6d9bd
-        }
+    const entries = Object.entries(deck.cards)
+      .map(([cardId, count]) => {
+        const card = CARD_CATALOG.get(cardId)
+        return { cardId, count, card }
       })
-      row.position.set(
-        DECK_EDITOR_LAYOUT.cardList.x + 18,
-        DECK_EDITOR_LAYOUT.cardList.y + 16 + index * DECK_EDITOR_CARD_ROW_HEIGHT
-      )
-      row.eventMode = 'static'
-      row.cursor = 'pointer'
-      row.on('rightclick', (event: FederatedPointerEvent) => {
-        event.stopPropagation()
-        void this.removeCardFromActiveDeck(cardId).catch((error: unknown) => {
-          console.error(
-            `Failed to remove ${card?.name ?? cardId} from the deck:`,
-            error
-          )
-          this.renderDeckStatus('Could not update the deck.', true)
+      .sort((left, right) => {
+        const costDifference = (left.card?.cost ?? 0) - (right.card?.cost ?? 0)
+        if (costDifference !== 0) return costDifference
+
+        const nameDifference = (left.card?.name ?? left.cardId).localeCompare(
+          right.card?.name ?? right.cardId
+        )
+        return nameDifference !== 0
+          ? nameDifference
+          : left.cardId.localeCompare(right.cardId)
+      })
+
+    for (const [index, entry] of entries.entries()) {
+      const row = this.createDeckCardRow(entry.cardId, entry.card, entry.count, index)
+      this.deckEditorCardContent.addChild(row.row)
+
+      if (!entry.card) continue
+
+      void this.cardResolver
+        .loadArtwork(entry.card.id)
+        .then((artwork) => {
+          if (
+            !artwork ||
+            sequence !== this.deckEditorRenderSequence ||
+            row.row.parent !== this.deckEditorCardContent
+          ) {
+            return
+          }
+          this.applyDeckRowArtwork(row, artwork)
         })
-      })
-      this.deckEditorCardContent.addChild(row)
+        .catch((error: unknown) => {
+          console.warn(`Failed to load deck artwork for ${entry.card?.name}:`, error)
+        })
     }
   }
 
-  private renderDeckStatus(message: string, error = false): void {
-    this.deckEditorStatus.text = message
-    this.deckEditorStatus.style.fill = error ? 0xff9b86 : 0x9d8aaa
+  private createDeckCardRow(
+    cardId: string,
+    card: CardDefinition | undefined,
+    count: number,
+    index: number
+  ): {
+    row: Container
+    artworkLayer: Container
+    artworkPlaceholder: Graphics
+    artworkWidth: number
+    artworkHeight: number
+  } {
+    const rowWidth = DECK_EDITOR_LAYOUT.cardList.width - DECK_EDITOR_ROW_INSET * 2
+    const rowHeight = DECK_EDITOR_CARD_ROW_HEIGHT - DECK_EDITOR_CARD_ROW_GAP
+    const row = new Container()
+    row.position.set(
+      DECK_EDITOR_LAYOUT.cardList.x + DECK_EDITOR_ROW_INSET,
+      DECK_EDITOR_LAYOUT.cardList.y +
+        index * DECK_EDITOR_CARD_ROW_HEIGHT +
+        DECK_EDITOR_ROW_INSET
+    )
+    row.hitArea = new Rectangle(0, 0, rowWidth, rowHeight)
+    row.eventMode = 'static'
+    row.cursor = 'pointer'
+    row.on('pointertap', (event: FederatedPointerEvent) => {
+      if (event.button !== 0) return
+      event.stopPropagation()
+      void this.removeCardFromActiveDeck(cardId, row)
+    })
+    row.on('pointerover', () => {
+      if (card) void this.showDeckCardPreview(card, row)
+    })
+    row.on('pointerout', () => {
+      this.hideDeckCardPreview()
+    })
+
+    const background = new Graphics()
+      .rect(0, 0, rowWidth, rowHeight)
+      .fill({ color: 0x241c32, alpha: 0.92 })
+      .stroke({ color: 0x6d4a38, width: 1, alpha: 0.95 })
+    background.eventMode = 'none'
+    row.addChild(background)
+
+    const costBox = new Graphics()
+      .rect(2, 2, DECK_EDITOR_COST_WIDTH - 4, rowHeight - 4)
+      .fill(0x326dcc)
+      .stroke({ color: 0x8eb8ff, width: 1, alpha: 0.9 })
+    costBox.eventMode = 'none'
+    row.addChild(costBox)
+
+    const cost = new Text({
+      text: String(card?.cost ?? 0),
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 17,
+        fill: 0xffffff,
+        stroke: { color: 0x000000, width: 2 },
+        letterSpacing: -1,
+        align: 'center'
+      }
+    })
+    cost.anchor.set(0.5)
+    cost.position.set(DECK_EDITOR_COST_WIDTH / 2, rowHeight / 2)
+    cost.eventMode = 'none'
+    row.addChild(cost)
+
+    const artworkX = DECK_EDITOR_COST_WIDTH
+    const artworkWidth =
+      rowWidth - DECK_EDITOR_COST_WIDTH - DECK_EDITOR_COPIES_WIDTH - 4
+    const artworkHeight = rowHeight - 2
+    const name = new Text({
+      text: card?.name ?? cardId,
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 18,
+        fill: 0xffffff,
+        stroke: { color: 0x000000, width: 3 },
+        letterSpacing: -1,
+        align: 'left'
+      }
+    })
+    name.anchor.set(0, 0.5)
+    name.position.set(DECK_EDITOR_COST_WIDTH + 7, rowHeight / 2)
+    name.eventMode = 'none'
+    const copiesX = rowWidth - DECK_EDITOR_COPIES_WIDTH - 2
+    const maxNameWidth = copiesX - name.x - 4
+    if (name.width > maxNameWidth) name.scale.x = maxNameWidth / name.width
+
+    const artworkLayer = new Container()
+    artworkLayer.position.set(artworkX, 1)
+    const artworkPlaceholder = new Graphics()
+      .rect(0, 0, artworkWidth, artworkHeight)
+      .fill(0x3d3150)
+    artworkPlaceholder.eventMode = 'none'
+    artworkLayer.addChild(artworkPlaceholder)
+    const artworkMask = new Graphics()
+      .rect(0, 0, artworkWidth, artworkHeight)
+      .fill(0xffffff)
+    artworkLayer.mask = artworkMask
+    artworkLayer.addChild(artworkMask)
+    artworkLayer.eventMode = 'none'
+    row.addChild(artworkLayer)
+    row.addChild(name)
+
+    const copies = new Text({
+      text: String(count),
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 18,
+        fill: 0xf4d44d,
+        stroke: { color: 0x000000, width: 2 },
+        letterSpacing: -1,
+        align: 'center'
+      }
+    })
+    copies.anchor.set(0.5)
+    copies.position.set(rowWidth - DECK_EDITOR_COPIES_WIDTH / 2 - 1, rowHeight / 2)
+    copies.eventMode = 'none'
+    row.addChild(copies)
+
+    return { row, artworkLayer, artworkPlaceholder, artworkWidth, artworkHeight }
+  }
+
+  private applyDeckRowArtwork(
+    row: {
+      artworkLayer: Container
+      artworkPlaceholder: Graphics
+      artworkWidth: number
+      artworkHeight: number
+    },
+    artwork: Texture
+  ): void {
+    if (row.artworkPlaceholder.parent === row.artworkLayer) {
+      row.artworkLayer.removeChild(row.artworkPlaceholder)
+      row.artworkPlaceholder.destroy()
+    }
+
+    const sprite = new Sprite(artwork)
+    sprite.anchor.set(0.5)
+    const scale = Math.max(
+      row.artworkWidth / artwork.width,
+      row.artworkHeight / artwork.height
+    )
+    sprite.scale.set(scale)
+    sprite.position.set(row.artworkWidth / 2, row.artworkHeight / 2)
+    sprite.eventMode = 'none'
+    row.artworkLayer.addChildAt(sprite, 0)
+  }
+
+  private animateDeckRowRemoval(row: Container): Promise<void> {
+    if (!row.parent) return Promise.resolve()
+
+    return new Promise<void>((resolve) => {
+      this.tweenTo(row, {
+        x: row.x - 96,
+        alpha: 0,
+        duration: DECK_EDITOR_ROW_REMOVE_DURATION,
+        ease: 'power2.in',
+        onComplete: resolve,
+        onInterrupt: resolve
+      })
+    })
+  }
+
+  private collapseDeckRows(rows: readonly Container[]): Promise<void> {
+    if (rows.length === 0) return Promise.resolve()
+
+    return Promise.all(
+      rows.map(
+        (row) =>
+          new Promise<void>((resolve) => {
+            this.tweenTo(row, {
+              y: row.y - DECK_EDITOR_CARD_ROW_HEIGHT,
+              duration: DECK_EDITOR_ROW_COLLAPSE_DURATION,
+              ease: 'power2.out',
+              onComplete: resolve,
+              onInterrupt: resolve
+            })
+          })
+      )
+    ).then(() => undefined)
+  }
+
+  private positionDeckCardPreview(
+    preview: CardView,
+    row: Container,
+    scale: number
+  ): void {
+    const rowBounds = row.getBounds()
+    const rowTopLeft = this.root.toLocal({ x: rowBounds.x, y: rowBounds.y })
+    const rowBottomRight = this.root.toLocal({
+      x: rowBounds.x + rowBounds.width,
+      y: rowBounds.y + rowBounds.height
+    })
+    const rowLeft = Math.min(rowTopLeft.x, rowBottomRight.x)
+    const rowRight = Math.max(rowTopLeft.x, rowBottomRight.x)
+    const rowCenterY = (rowTopLeft.y + rowBottomRight.y) / 2
+    const previewWidth = preview.plan.width * scale
+    const previewHeight = preview.renderedHeight * scale
+    const viewportLeft = FULL_VIEWPORT.x + DECK_EDITOR_PREVIEW.viewportPadding
+    const viewportRight =
+      FULL_VIEWPORT.x + FULL_VIEWPORT.width - DECK_EDITOR_PREVIEW.viewportPadding
+    const viewportTop = FULL_VIEWPORT.y + DECK_EDITOR_PREVIEW.viewportPadding
+    const viewportBottom =
+      FULL_VIEWPORT.y + FULL_VIEWPORT.height - DECK_EDITOR_PREVIEW.viewportPadding
+    const minLeft = viewportLeft
+    const maxLeft = viewportRight - previewWidth
+    const minTop = viewportTop
+    const maxTop = viewportBottom - previewHeight
+    const preferredLeft = rowRight + DECK_EDITOR_PREVIEW.gap
+    const leftOfRow = rowLeft - DECK_EDITOR_PREVIEW.gap - previewWidth
+    const left = Math.max(
+      minLeft,
+      Math.min(
+        maxLeft,
+        preferredLeft > maxLeft && leftOfRow >= minLeft ? leftOfRow : preferredLeft
+      )
+    )
+    const top = Math.max(minTop, Math.min(maxTop, rowCenterY - previewHeight / 2))
+
+    preview.position.set(left, top)
+  }
+
+  private async showDeckCardPreview(
+    card: CardDefinition,
+    row: Container
+  ): Promise<void> {
+    if (
+      this.disposed ||
+      !this.activeDeckId ||
+      this.deckEditorTransitioning ||
+      this.deckEditorCardMutationInProgress
+    ) {
+      return
+    }
+
+    this.hideDeckCardPreview()
+    const request = this.deckEditorCardPreviewRequest
+
+    try {
+      const artwork = await this.cardResolver.loadArtwork(card.id)
+      const preview = await CardView.create(card, this.cardResolver, { artwork })
+      if (
+        this.disposed ||
+        !this.activeDeckId ||
+        this.deckEditorTransitioning ||
+        this.deckEditorCardMutationInProgress ||
+        row.parent !== this.deckEditorCardContent ||
+        request !== this.deckEditorCardPreviewRequest
+      ) {
+        preview.destroy({ children: true })
+        return
+      }
+
+      const scale = Math.min(
+        DECK_EDITOR_PREVIEW.maxWidth / preview.plan.width,
+        DECK_EDITOR_PREVIEW.maxHeight / preview.renderedHeight
+      )
+      preview.scale.set(scale)
+      this.positionDeckCardPreview(preview, row, scale)
+      preview.alpha = 0
+      preview.eventMode = 'none'
+      this.root.addChild(preview)
+      this.deckEditorCardPreview = preview
+      this.tweenTo(preview, {
+        alpha: 1,
+        duration: 0.12,
+        ease: 'power2.out'
+      })
+    } catch (error) {
+      if (!this.disposed && request === this.deckEditorCardPreviewRequest) {
+        console.warn(`Failed to render deck preview for ${card.name}:`, error)
+      }
+    }
+  }
+
+  private hideDeckCardPreview(): void {
+    ++this.deckEditorCardPreviewRequest
+    const preview = this.deckEditorCardPreview
+    this.deckEditorCardPreview = null
+    if (!preview) return
+
+    this.killTweensOf(preview)
+    let destroyed = false
+    const destroy = (): void => {
+      if (destroyed) return
+      destroyed = true
+      preview.destroy({ children: true })
+    }
+    this.tweenTo(preview, {
+      alpha: 0,
+      duration: 0.1,
+      ease: 'power2.in',
+      onComplete: destroy,
+      onInterrupt: destroy
+    })
+  }
+
+  private clearDeckEditorCardPreview(): void {
+    ++this.deckEditorCardPreviewRequest
+    const preview = this.deckEditorCardPreview
+    this.deckEditorCardPreview = null
+    if (!preview) return
+
+    this.killTweensOf(preview)
+    preview.destroy({ children: true })
   }
 
   private async addCardToActiveDeck(card: CardDefinition): Promise<void> {
     const deckId = this.activeDeckId
-    if (!deckId) return
+    if (
+      !deckId ||
+      this.deckEditorTransitioning ||
+      this.deckEditorCardMutationInProgress
+    ) {
+      return
+    }
 
     const result = await this.deckStore.addCard(deckId, card)
     if (!result.ok) {
-      this.renderDeckStatus(result.message, true)
+      console.warn(result.message)
+      this.flashDeckEditorCount()
       return
     }
 
     this.updateDeckEditor()
-    this.renderDeckStatus(`Added ${card.name}`)
   }
 
-  private async removeCardFromActiveDeck(cardId: string): Promise<void> {
+  private async removeCardFromActiveDeck(
+    cardId: string,
+    row?: Container
+  ): Promise<void> {
     const deckId = this.activeDeckId
-    if (!deckId) return
-
-    const result = await this.deckStore.removeCard(deckId, cardId)
-    if (!result.ok) {
-      this.renderDeckStatus(result.message, true)
+    if (
+      !deckId ||
+      this.deckEditorTransitioning ||
+      this.deckEditorCardMutationInProgress
+    ) {
       return
     }
 
-    this.updateDeckEditor()
-    const card = CARD_CATALOG.get(cardId)
-    this.renderDeckStatus(`Removed ${card?.name ?? cardId}`)
+    const transitionSequence = this.deckEditorTransitionSequence
+    this.deckEditorCardMutationInProgress = true
+    this.setDeckInteractionEnabled(false)
+    try {
+      if (row?.parent === this.deckEditorCardContent) {
+        row.eventMode = 'none'
+        this.hideDeckCardPreview()
+        const rowIndex = this.deckEditorCardContent.getChildIndex(row)
+        const rowsToCollapse = this.deckEditorCardContent.children
+          .slice(rowIndex + 1)
+          .filter((child): child is Container => child instanceof Container)
+
+        await this.animateDeckRowRemoval(row)
+        if (row.parent === this.deckEditorCardContent) {
+          this.deckEditorCardContent.removeChild(row)
+          row.destroy({ children: true })
+          await this.collapseDeckRows(rowsToCollapse)
+        }
+      }
+
+      if (
+        this.disposed ||
+        this.activeDeckId !== deckId ||
+        this.deckEditorTransitionSequence !== transitionSequence
+      ) {
+        return
+      }
+
+      const result = await this.deckStore.removeCard(deckId, cardId)
+      if (!result.ok) {
+        console.warn(result.message)
+        this.updateDeckEditor()
+        this.flashDeckEditorCount()
+        return
+      }
+
+      this.updateDeckEditor()
+    } catch (error) {
+      console.error(`Failed to remove ${cardId} from the deck:`, error)
+      if (!this.disposed && this.activeDeckId === deckId) {
+        this.updateDeckEditor()
+        this.flashDeckEditorCount()
+      }
+    } finally {
+      this.deckEditorCardMutationInProgress = false
+      if (
+        !this.disposed &&
+        this.activeDeckId === deckId &&
+        !this.deckEditorTransitioning &&
+        !this.deckEditorClosing
+      ) {
+        this.setDeckInteractionEnabled(true)
+      }
+    }
   }
 
   private readonly handleCollectionCardTap = (
     event: FederatedPointerEvent,
     card: CardDefinition
   ): void => {
-    if (event.button !== 0 || !this.activeDeckId) return
+    if (
+      event.button !== 0 ||
+      !this.activeDeckId ||
+      this.deckEditorTransitioning ||
+      this.deckEditorCardMutationInProgress
+    ) {
+      return
+    }
 
     event.stopPropagation()
     void this.addCardToActiveDeck(card).catch((error: unknown) => {
       console.error(`Failed to add ${card.name} to the deck:`, error)
-      this.renderDeckStatus('Could not update the deck.', true)
+      this.flashDeckEditorCount()
     })
   }
 
@@ -972,7 +1505,15 @@ export class CollectionScene extends Scene {
     card: CardDefinition,
     view: CardView
   ): void => {
-    if (event.button !== 2 || this.disposed || !this.navigationReady) return
+    if (
+      event.button !== 2 ||
+      this.disposed ||
+      !this.navigationReady ||
+      this.deckEditorTransitioning ||
+      this.deckEditorCardMutationInProgress
+    ) {
+      return
+    }
 
     event.stopPropagation()
     if (this.cardPreviewOpening) return
@@ -1181,15 +1722,23 @@ export class CollectionScene extends Scene {
 
   protected onExit(): void {
     this.disposed = true
+    this.cancelDeckEditorTransition()
     this.renderSequence += 1
     this.pageLoading = false
     this.navigationEnabled = false
     this.navigationReady = false
     this.hoveredPageZone = null
     this.cardPreviewOpening = false
+    this.clearDeckEditorCardPreview()
     this.unsubscribeDeckStore?.()
     this.unsubscribeDeckStore = null
     this.activeDeckId = null
+    this.deckEditorTransitionSequence += 1
+    this.deckEditorRenderSequence += 1
+    this.deckEditorTransitioning = false
+    this.deckEditorClosing = false
+    this.deckEditorCardMutationInProgress = false
+    this.clearDeckEditorCountFeedback()
     this.previousPageZone.eventMode = 'none'
     this.nextPageZone.eventMode = 'none'
     this.setDeckInteractionEnabled(false)

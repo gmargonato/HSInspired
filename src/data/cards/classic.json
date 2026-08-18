@@ -2200,11 +2200,11 @@
     "name": "Lord Jaraxxus",
     "rarity": "Legendary",
     "cardClass": "Warlock",
-    "type": "hero",
+    "type": "Hero",
     "subtype": "Demon",
     "cost": 9,
-    "attack": 0,
-    "health": 5,
+    "attack": null,
+    "armor": 5,
     "effect": "Battlecry: Equip a 3/8 Blood Fury."
   },
   {

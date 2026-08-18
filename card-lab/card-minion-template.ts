@@ -36,13 +36,16 @@ interface CardProfile {
 }
 
 const SHARED_ARTWORK = {
-  bounds: { x: 83, y: 0, width: 454, height: 454 }
+  bounds: { x: 5, y: 5, width: 600, height: 600 }
 } as const
 
 const SHARED_NAME_BOX = { x: 74, y: 454, width: 472, height: 72 } as const
 const SHARED_RULES_BOX = { x: 94, y: 600, width: 432, height: 190 } as const
+const NAME_BANNER_SOURCE_SIZE = { width: 665, height: 198 } as const
+const NAME_BANNER_SIZE = NAME_BANNER_SOURCE_SIZE
+const NAME_BANNER_Z_INDEX = 110
 const SHARED_STATS = {
-  mana: { x: 77, y: 50 },
+  mana: { x: 60, y: 50 },
   attack: { x: 60, y: 800 },
   defense: { x: 570, y: 800 },
   weaponAttack: { x: 60, y: 800 },
@@ -158,6 +161,25 @@ function artwork(profile: CardProfile): Extract<CardRenderNode, { kind: 'artwork
   }
 }
 
+function nameBanner(
+  card: CardDefinition,
+  profile: CardProfile
+): Extract<CardRenderNode, { kind: 'image' }> {
+  return image(
+    'name-banner',
+    card.type === 'Weapon' ? 'WEAPON_NAME.png' : 'CARD_NAME.png',
+    {
+      x: profile.nameBox.x + profile.nameBox.width / 2,
+      y: profile.nameBox.y + profile.nameBox.height / 2
+    },
+    NAME_BANNER_Z_INDEX,
+    {
+      size: NAME_BANNER_SIZE,
+      anchor: { x: 0.5, y: 0.5 }
+    }
+  )
+}
+
 const NAME_STYLE_BASE: CardTextStyle = {
   fontFamily: 'Belwe',
   fontSize: 42,
@@ -207,10 +229,12 @@ export const CARD_STAT_LABEL_OFFSETS = {
   mana: { x: 0, y: -10 },
   attack: { x: 20, y: 15 },
   health: { x: 0, y: 15 },
-  durability: { x: 0, y: 15 }
+  armor: { x: 0, y: 15 },
+  durability: { x: 0, y: 15 },
+  name: { x: 0, y: -15 }
 } as const
 
-type CardStatId = keyof typeof CARD_STAT_LABEL_OFFSETS
+type CardStatId = Exclude<keyof typeof CARD_STAT_LABEL_OFFSETS, 'name'>
 
 function stat(
   id: CardStatId,
@@ -238,8 +262,8 @@ function stats(card: CardDefinition, profile: CardProfile): CardGroupNode {
     stat('mana', card.cost, profile.stats.mana, 'MANA.png')
   ]
 
-  if (card.attack !== null && card.type !== 'Spell') {
-    const attackAsset = card.type === 'Weapon' ? 'attack-weapon.png' : 'ATTACK.png'
+  if ((card.type === 'Minion' || card.type === 'Weapon') && card.attack !== null) {
+    const attackAsset = card.type === 'Weapon' ? 'WEAPON_ATTACK.png' : 'ATTACK.png'
     children.push(
       stat(
         'attack',
@@ -252,10 +276,12 @@ function stats(card: CardDefinition, profile: CardProfile): CardGroupNode {
 
   if (card.type === 'Weapon' && card.durability !== null) {
     children.push(
-      stat('durability', card.durability, profile.stats.weaponDefense, 'durability.png')
+      stat('durability', card.durability, profile.stats.weaponDefense, 'WEAPON_DURABILITY.png')
     )
-  } else if ((card.type === 'Minion' || card.type === 'Hero') && card.health !== null) {
+  } else if (card.type === 'Minion' && card.health !== null) {
     children.push(stat('health', card.health, profile.stats.defense, 'HEALTH.png'))
+  } else if (card.type === 'Hero' && card.armor !== null) {
+    children.push(stat('armor', card.armor, profile.stats.defense, 'ARMOR.png'))
   }
 
   return group('stats', { x: 0, y: 0 }, 300, children)
@@ -264,7 +290,7 @@ function stats(card: CardDefinition, profile: CardProfile): CardGroupNode {
 function rarity(card: CardDefinition, profile: CardProfile): CardGroupNode | null {
   if (!['Common', 'Rare', 'Epic', 'Legendary'].includes(card.rarity)) return null
   return group('rarity', { x: 0, y: 0 }, 400, [
-    image('gem', `rarity-${card.rarity.toLowerCase()}.png`, profile.rarity, 400, {
+    image('gem', `RARITY_${card.rarity.toLowerCase()}.png`, profile.rarity, 400, {
       anchor: { x: 0.5, y: 0.5 }
     })
   ])
@@ -368,7 +394,18 @@ export function buildCardRenderTree(
   const children: CardRenderNode[] = [
     artwork(profile),
     image('frame', profile.frame, { x: 0, y: 0 }, 100, { size: CARD_CANVAS }),
-    text('name', card.name, profile.nameBox, NAME_STYLE_BASE, 200)
+    nameBanner(card, profile),
+    text(
+      'name',
+      card.name,
+      {
+        ...profile.nameBox,
+        x: profile.nameBox.x + CARD_STAT_LABEL_OFFSETS.name.x,
+        y: profile.nameBox.y + CARD_STAT_LABEL_OFFSETS.name.y
+      },
+      NAME_STYLE_BASE,
+      200
+    )
   ]
 
   if (card.effect) {

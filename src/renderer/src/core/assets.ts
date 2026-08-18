@@ -13,6 +13,7 @@ import collectionCoverImage from '@assets/images/COLLECTION_COVER.png'
 import collectionCoverLockImage from '@assets/images/COLLECTION_COVER_LOCK.png'
 import deckSelectionToCollectionButtonImage from '@assets/images/DECK_SELECTION_TO_COLLECTION_BUTTON.png'
 import uiBackButtonImage from '@assets/images/UI_BACK_BUTTON.png'
+import uiDoneButtonImage from '@assets/images/UI_DONE_BUTTON.png'
 import loadDeckButtonImage from '@assets/images/LOAD_DECK_BUTTON.png'
 import newDeckButtonImage from '@assets/images/NEW_DECK_BUTTON.png'
 import newDeckHeroSelectionImage from '@assets/images/NEW_DECK_HERO_SELECTION.png'
@@ -58,6 +59,7 @@ export interface DeckSelectionAssets {
 
 export interface SharedUIAssets {
   backButton: Texture
+  doneButton: Texture
 }
 
 export interface CollectionAssets extends Record<HeroAssetKey, Texture> {
@@ -120,5 +122,6 @@ registerAssetBundle(ASSET_BUNDLE_IDS.collection, {
 })
 
 registerAssetBundle(ASSET_BUNDLE_IDS.sharedUI, {
-  backButton: uiBackButtonImage
+  backButton: uiBackButtonImage,
+  doneButton: uiDoneButtonImage
 })

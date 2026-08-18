@@ -86,10 +86,17 @@ export function cardDetailRows(card: CardDefinition): readonly CardDetailRow[] {
 
   if (card.subtype) rows.push({ label: 'Subtype', value: card.subtype })
   if (card.spellSchool) rows.push({ label: 'School', value: card.spellSchool })
-  if (card.attack !== null) rows.push({ label: 'Attack', value: String(card.attack) })
+  if (
+    (card.type === 'Minion' || card.type === 'Weapon') &&
+    card.attack !== null
+  ) {
+    rows.push({ label: 'Attack', value: String(card.attack) })
+  }
   if (card.type === 'Weapon' && card.durability !== null) {
     rows.push({ label: 'Durability', value: String(card.durability) })
-  } else if (card.health !== null && (card.type === 'Minion' || card.type === 'Hero')) {
+  } else if (card.type === 'Hero' && card.armor !== null) {
+    rows.push({ label: 'Armor', value: String(card.armor) })
+  } else if (card.type === 'Minion' && card.health !== null) {
     rows.push({ label: 'Health', value: String(card.health) })
   }
 

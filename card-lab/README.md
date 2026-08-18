@@ -74,10 +74,17 @@ frame is the one intentional exception: it is fitted to the canonical 620 x
 900 card canvas. Rarity gems share one centered anchor directly below the card
 title, leaving the rules area below them.
 
-For manual number placement, edit `CARD_STAT_LABEL_OFFSETS` in
-`card-minion-template.ts`. These offsets move only the mana, attack, health, or
-durability text relative to its icon; the profile stat positions move the icon
-and label together.
+For manual label placement, edit `CARD_STAT_LABEL_OFFSETS` in
+`card-minion-template.ts`. The `name` offset moves only the card name text,
+while the mana, attack, health, armor, and durability offsets move only their
+numbers relative to their icons. The profile positions move an icon and its
+label together.
+
+For weapon stat labels, edit the `attack` and `durability` entries in
+`CARD_STAT_LABEL_OFFSETS`. Those offsets move the numbers over the weapon attack
+and durability assets without moving the assets themselves. To move an entire
+weapon asset and its number together, edit `SHARED_STATS.weaponAttack` or
+`SHARED_STATS.weaponDefense` instead.
 
 The shared card tree is organized as:
 
@@ -85,12 +92,13 @@ The shared card tree is organized as:
 card
 |-- artwork
 |-- frame
+|-- name-banner
 |-- name
 |-- rules
 |-- stats
 |   |-- mana
 |   |-- attack
-|   `-- health-or-durability
+|   `-- health/armor-or-durability
 |-- rarity
 `-- overlays
 ```
