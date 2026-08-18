@@ -3,6 +3,7 @@ import { Actor } from './Actor'
 
 export interface FlipCardOptions {
   durationMs?: number
+  initialFace?: 'front' | 'back'
   onClick?: () => void | Promise<void>
   oneShot?: boolean
 }
@@ -36,13 +37,15 @@ export class FlipCard extends Actor {
     this.back = new Sprite(backTexture)
     this.back.anchor.set(0.5)
     this.back.position.set(0, 0)
-    this.back.visible = false
+    this.flipped = options.initialFace === 'back'
+    this.front.visible = !this.flipped
+    this.back.visible = this.flipped
 
     this.addChild(this.front)
     this.addChild(this.back)
 
-    this.eventMode = 'static'
-    this.cursor = 'pointer'
+    this.eventMode = this.oneShot && this.flipped ? 'none' : 'static'
+    this.cursor = this.oneShot && this.flipped ? 'default' : 'pointer'
     this.on('pointertap', () => {
       if (this.flipping) return
       if (this.oneShot && this.flipped) return

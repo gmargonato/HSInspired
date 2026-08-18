@@ -85,9 +85,38 @@ describe('Card Lab render plans', () => {
         'MANA.png',
         'ATTACK.png',
         'HEALTH.png',
-        'rarity-rare.png'
+        'RARITY_rare.png'
       ])
     )
+  })
+
+  it('adds the legendary frame only to legendary minions', () => {
+    const deathwing = CARD_CATALOG.require('classic_deathwing')
+    const deathwingPlan = buildCardRenderPlan(deathwing)
+    const legendaryFrame = deathwingPlan.layers.find(
+      (layer) => layer.id === 'card.legendary-frame'
+    )
+
+    expect(legendaryFrame).toMatchObject({
+      kind: 'texture',
+      assetName: 'LEGENDARY.png',
+      position: { x: CARD_CANVAS.width / 2 + 78, y: -18 },
+      anchor: { x: 0.5, y: 0 },
+      zIndex: 105
+    })
+    expect(textureAssets(deathwing)).toContain('LEGENDARY.png')
+
+    const ordinaryMinion = CARD_CATALOG.require('classic_abomination')
+    expect(textureAssets(ordinaryMinion)).not.toContain('LEGENDARY.png')
+
+    const legendarySpell: CardDefinition = {
+      ...deathwing,
+      id: 'test_legendary_spell',
+      type: 'Spell',
+      attack: null,
+      health: null
+    }
+    expect(textureAssets(legendarySpell)).not.toContain('LEGENDARY.png')
   })
 
   it('uses one semantic hierarchy with centralized name offsets', () => {
@@ -149,11 +178,11 @@ describe('Card Lab render plans', () => {
     expect(artwork).toMatchObject({
       kind: 'artwork',
       position: { x: 0, y: 0 },
-      bounds: { x: 83, y: 0, width: 454, height: 454 }
+      bounds: CARD_PROFILES.minion.artwork.bounds
     })
     expect(plan.layers.find((layer) => layer.kind === 'placeholder')).toMatchObject({
       shape: 'rectangle',
-      bounds: { x: 83, y: 0, width: 454, height: 454 }
+      bounds: CARD_PROFILES.minion.artwork.bounds
     })
   })
 
@@ -193,8 +222,8 @@ describe('Card Lab render plans', () => {
     expect(textureAssets(card)).toEqual(
       expect.arrayContaining([
         'FRAME_WEAPON.png',
-        'attack-weapon.png',
-        'durability.png'
+        'WEAPON_ATTACK.png',
+        'WEAPON_DURABILITY.png'
       ])
     )
   })
@@ -257,7 +286,7 @@ describe('Card Lab render plans', () => {
     }
 
     const assets = textureAssets(hero)
-    expect(assets).toEqual(expect.arrayContaining(['FRAME_HERO.png', 'armor.png']))
+    expect(assets).toEqual(expect.arrayContaining(['FRAME_HERO.png', 'ARMOR.png']))
     expect(assets).not.toContain('ATTACK.png')
     expect(assets).not.toContain('HEALTH.png')
   })
@@ -274,6 +303,31 @@ describe('Card Lab render plans', () => {
     })
     expect(minionRules).toMatchObject({ style: { fill: 0x19130e } })
     expect(weaponRules).toMatchObject({ style: { fill: 0xffffff } })
+  })
+
+  it('keeps Deathwing rules data intact while matching the reference line layout', () => {
+    const card = CARD_CATALOG.require('classic_deathwing')
+    const rules = buildCardRenderPlan(card).layers.find(
+      (layer) => layer.id === 'card.rules'
+    )
+
+    expect(card.effect).toBe(
+      'Battlecry: Destroy all other minions and discard your hand.'
+    )
+    expect(rules).toMatchObject({
+      kind: 'text',
+      text: '<keyword>Battlecry:</keyword> Destroy all other minions and discard\nyour hand.',
+      style: {
+        fontFamily: 'Franklin Gothic Condensed',
+        fontSize: 44,
+        fontWeight: 'normal',
+        letterSpacing: -0.5,
+        stroke: { color: 0x19130e, width: 0.75 },
+        lineHeight: 50,
+        tagStyles: { keyword: { fontWeight: 'bold' } },
+        wordWrapWidth: CARD_PROFILES.minion.rulesBox.width
+      }
+    })
   })
 
   it('places rarity gems below the shared card title', () => {

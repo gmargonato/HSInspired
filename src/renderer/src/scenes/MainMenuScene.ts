@@ -8,6 +8,7 @@ import { CollectionScene } from './CollectionScene'
 import { ASSET_BUNDLE_IDS } from '../core/assets'
 import type { MainMenuAssets } from '../core/assets'
 import type { TransitionRect } from '../core/SceneTransitionHost'
+import type { SceneTransitionOptions } from '../core/SceneManager'
 import {
   createHingedDoorMesh,
   updateHingedDoor,
@@ -26,6 +27,7 @@ const Layout = {
 }
 
 const LID_OPEN_DURATION = 0.6
+const MENU_REVEAL_DURATION = 0.15
 const LID_MIN_WIDTH = 1
 const LID_PERSPECTIVE_DEPTH = 14
 const SCENE_SELECTION_GAP: TransitionRect = {
@@ -36,6 +38,7 @@ const SCENE_SELECTION_GAP: TransitionRect = {
 }
 
 type LidSide = HingeSide
+type MainMenuEntryMode = 'closed' | 'returning'
 
 export class MainMenuScene extends Scene {
   private table!: Sprite
@@ -49,6 +52,33 @@ export class MainMenuScene extends Scene {
   private buttonPlay!: Button
   private buttonCollection!: Button
   private transitionOpened = false
+  private returnClosePromise: Promise<void> | null = null
+  private returnRevealPromise: Promise<void> | null = null
+
+  constructor(private readonly entryMode: MainMenuEntryMode = 'closed') {
+    super()
+  }
+
+  static forReturn(): MainMenuScene {
+    return new MainMenuScene('returning')
+  }
+
+  createReturnTransitionOptions(): SceneTransitionOptions {
+    if (this.entryMode !== 'returning') {
+      throw new Error('Return transition options require a returning main menu')
+    }
+
+    return {
+      inset: SCENE_SELECTION_GAP,
+      mode: 'collapse',
+      scaleMode: 'cover',
+      duration: 0.45,
+      hostParent: this.root,
+      hostIndex: 2,
+      afterCollapse: () => this.closeReturningChest(),
+      afterTransition: () => this.revealReturnedMenu()
+    }
+  }
 
   async init(): Promise<void> {
     const assets = await this.assetScope.acquire<MainMenuAssets>(
@@ -65,6 +95,7 @@ export class MainMenuScene extends Scene {
     // The menu face is the initial face. The game-room face is revealed when
     // a destination is selected, immediately before the chest opens.
     this.centerCard = new FlipCard(assets.centerPartMenu, assets.centerPart, {
+      initialFace: this.entryMode === 'returning' ? 'back' : 'front',
       oneShot: true
     })
     this.centerCard.eventMode = 'none'
@@ -74,7 +105,14 @@ export class MainMenuScene extends Scene {
     this.centerPartMount = new Container()
     this.centerPartMount.addChild(this.centerCard)
     this.lidRight.addChild(this.centerPartMount)
-    this.updateLidMeshes(0)
+    this.updateLidMeshes(this.entryMode === 'returning' ? 1 : 0)
+    if (this.entryMode === 'returning') {
+      // At the fully open angle the meshes retain a one-pixel minimum width.
+      // Keep that edge hidden until the outgoing scene has finished shrinking.
+      this.lidLeft.visible = false
+      this.lidRight.visible = false
+      this.centerCard.visible = false
+    }
 
     this.buttonPlay = new Button(assets.buttonPlay, {
       onClick: () => this.onPlayPressed()
@@ -82,7 +120,8 @@ export class MainMenuScene extends Scene {
     this.buttonPlay.position.set(Layout.buttonPlay.x, Layout.buttonPlay.y)
     this.buttonPlay.setBaseY(Layout.buttonPlay.y)
     this.buttonPlay.visible = true
-    this.buttonPlay.setEnabled(true)
+    this.buttonPlay.alpha = this.entryMode === 'returning' ? 0 : 1
+    this.buttonPlay.setEnabled(this.entryMode !== 'returning')
     this.menuGroup.addChild(this.buttonPlay)
 
     this.buttonCollection = new Button(assets.buttonCollection, {
@@ -94,8 +133,54 @@ export class MainMenuScene extends Scene {
     )
     this.buttonCollection.setBaseY(Layout.buttonCollection.y)
     this.buttonCollection.visible = true
-    this.buttonCollection.setEnabled(true)
+    this.buttonCollection.alpha = this.entryMode === 'returning' ? 0 : 1
+    this.buttonCollection.setEnabled(this.entryMode !== 'returning')
     this.menuGroup.addChild(this.buttonCollection)
+  }
+
+  private closeReturningChest(): Promise<void> {
+    if (this.returnClosePromise) return this.returnClosePromise
+
+    this.lidLeft.visible = true
+    this.lidRight.visible = true
+    this.centerCard.visible = true
+    this.returnClosePromise = this.animateChest(1, 0, 'power2.out')
+    return this.returnClosePromise
+  }
+
+  private revealReturnedMenu(): Promise<void> {
+    if (this.returnRevealPromise) return this.returnRevealPromise
+
+    this.returnRevealPromise = this.finishReturnReveal()
+    return this.returnRevealPromise
+  }
+
+  private async finishReturnReveal(): Promise<void> {
+    await this.centerCard.flipToFront()
+    this.centerCard.eventMode = 'none'
+    await this.fadeMenuButtonsIn()
+    this.transitionOpened = false
+    this.buttonPlay.setEnabled(true)
+    this.buttonCollection.setEnabled(true)
+  }
+
+  private fadeMenuButtonsIn(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const timeline = this.timeline({
+        onComplete: resolve,
+        onInterrupt: resolve
+      })
+
+      timeline.to(
+        [this.buttonPlay, this.buttonCollection],
+        {
+          alpha: 1,
+          duration: MENU_REVEAL_DURATION,
+          ease: 'power2.out'
+        },
+        0
+      )
+    })
   }
 
   private buildChest(box: Texture, leftLid: Texture, rightLid: Texture): void {
@@ -204,8 +289,16 @@ export class MainMenuScene extends Scene {
   }
 
   private openChest(): Promise<void> {
+    return this.animateChest(0, 1, 'power2.in')
+  }
+
+  private animateChest(
+    fromProgress: number,
+    toProgress: number,
+    ease: string
+  ): Promise<void> {
     return new Promise<void>((resolve) => {
-      const state = { progress: 0 }
+      const state = { progress: fromProgress }
       const timeline = this.timeline({
         onComplete: resolve,
         onInterrupt: resolve
@@ -214,9 +307,9 @@ export class MainMenuScene extends Scene {
       timeline.to(
         state,
         {
-          progress: 1,
+          progress: toProgress,
           duration: LID_OPEN_DURATION,
-          ease: 'power2.in',
+          ease,
           onUpdate: () => this.updateLidMeshes(state.progress)
         },
         0

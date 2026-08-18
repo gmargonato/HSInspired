@@ -2,11 +2,7 @@ import { Container, Sprite } from 'pixi.js'
 import { Button } from '../actors/Button'
 import { Scene } from './Scene'
 import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
-import {
-  ASSET_BUNDLE_IDS,
-  DeckSelectionAssets,
-  SharedUIAssets
-} from '../core/assets'
+import { ASSET_BUNDLE_IDS, DeckSelectionAssets, SharedUIAssets } from '../core/assets'
 import { CollectionScene } from './CollectionScene'
 import { MainMenuScene } from './MainMenuScene'
 
@@ -96,12 +92,9 @@ export class DeckSelectionScene extends Scene {
     if (this.navigationStarted) return Promise.resolve()
     this.beginNavigation()
 
+    const destination = MainMenuScene.forReturn()
     return this.sceneManager
-      .transitionTo(new MainMenuScene(), {
-        inset: FULL_VIEWPORT,
-        mode: 'fade',
-        duration: FADE_TRANSITION_DURATION
-      })
+      .transitionTo(destination, destination.createReturnTransitionOptions())
       .catch((error: unknown) => {
         this.restoreNavigation(error, 'main menu')
         throw error

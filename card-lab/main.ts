@@ -338,7 +338,8 @@ async function waitForFonts(): Promise<void> {
   await Promise.all([
     document.fonts.load('42px Belwe'),
     document.fonts.load('38px "Arial Narrow"'),
-    document.fonts.load('34px "Franklin Gothic Condensed"')
+    document.fonts.load('400 38px "Franklin Gothic Condensed"'),
+    document.fonts.load('700 38px "Franklin Gothic Condensed"')
   ])
 }
 

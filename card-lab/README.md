@@ -63,16 +63,17 @@ normalization or layout rules.
 
 ## Card coordinate system
 
-Every card uses a 620 x 900 design canvas. Source frame images are normalized to
-that canvas at render time. Preview scaling in the lab is uniform and happens
-after the card has been composed. Artwork is a shared native-size 454 x 454
-square behind the frame; a simple rectangular crop prevents legacy artwork
-from bleeding outside the card while assets are being regenerated.
+Every complete card uses one canonical 620 x 900 design canvas. Text wrapping
+is resolved on that canvas before the finished display tree is uniformly scaled
+for collection slots, previews, or future hand cards. This keeps composition
+and line breaks identical at every display size.
 
-Dynamic stat icons and rarity gems are loaded at their source dimensions. The
-frame is the one intentional exception: it is fitted to the canonical 620 x
-900 card canvas. Rarity gems share one centered anchor directly below the card
-title, leaving the rules area below them.
+Source frame images are normalized to the canonical canvas at render time.
+Dynamic stat icons, rarity gems, and artwork retain their authored dimensions.
+Rarity gems share one centered anchor directly below the card title, leaving
+the rules area below them. Gameplay pieces that are intentionally different,
+such as board minions, should use a separate renderer rather than changing the
+complete card layout.
 
 For manual label placement, edit `CARD_STAT_LABEL_OFFSETS` in
 `card-minion-template.ts`. The `name` offset moves only the card name text,

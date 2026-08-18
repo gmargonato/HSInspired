@@ -139,6 +139,71 @@ describe('SceneManager transitions', () => {
     await manager.stop()
   })
 
+  it('keeps the outgoing scene in the inset until collapse choreography finishes', async () => {
+    const manager = new SceneManager(createApplication())
+    const first = new TestScene()
+    const second = new TestScene()
+    const events: string[] = []
+
+    await manager.start(first)
+    await manager.transitionTo(second, {
+      inset: { x: 415, y: 172.5, width: 1090, height: 735 },
+      mode: 'collapse',
+      duration: 0,
+      hostParent: second.root,
+      hostIndex: 0,
+      afterCollapse: (host) => {
+        events.push('collapsed')
+        expect(host.parent).toBe(second.root)
+        expect(host.sceneRoot).toBe(first.root)
+        expect(manager.current).toBe(first)
+        expect(first.state).toBe('active')
+        expect(second.state).toBe('active')
+      },
+      afterTransition: () => {
+        events.push('committed')
+        expect(manager.current).toBe(second)
+        expect(first.state).toBe('unloaded')
+      }
+    })
+
+    expect(events).toEqual(['collapsed', 'committed'])
+    expect(manager.current).toBe(second)
+
+    await manager.stop()
+  })
+
+  it('restores the outgoing scene when collapse choreography fails', async () => {
+    const manager = new SceneManager(createApplication())
+    const first = new TestScene()
+    const second = new TestScene()
+    first.root.eventMode = 'static'
+
+    await manager.start(first)
+    const originalParent = first.root.parent
+
+    await expect(
+      manager.transitionTo(second, {
+        inset: { x: 415, y: 172.5, width: 1090, height: 735 },
+        mode: 'collapse',
+        duration: 0,
+        hostParent: second.root,
+        hostIndex: 0,
+        afterCollapse: () => {
+          throw new Error('collapse failed')
+        }
+      })
+    ).rejects.toThrow('collapse failed')
+
+    expect(manager.current).toBe(first)
+    expect(first.state).toBe('active')
+    expect(first.root.parent).toBe(originalParent)
+    expect(first.root.eventMode).toBe('static')
+    expect(second.state).toBe('unloaded')
+
+    await manager.stop()
+  })
+
   it('uses cover and contain scales for inset scene presentation', () => {
     const inset = { x: 415, y: 172.5, width: 1090, height: 735 }
 

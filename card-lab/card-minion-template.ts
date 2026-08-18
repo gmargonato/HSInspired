@@ -36,18 +36,20 @@ interface CardProfile {
 }
 
 const SHARED_ARTWORK = {
-  bounds: { x: 5, y: 5, width: 600, height: 600 }
+  bounds: { x: 60, y: 20, width: 500, height: 500 }
 } as const
 
-const SHARED_NAME_BOX = { x: 74, y: 454, width: 472, height: 72 } as const
-const SHARED_RULES_BOX = { x: 94, y: 600, width: 432, height: 190 } as const
+const SHARED_NAME_BOX = { x: 74, y: 454, width: 490, height: 72 } as const
+const SHARED_RULES_BOX = { x: 60, y: 600, width: 500, height: 190 } as const
 const NAME_BANNER_SOURCE_SIZE = { width: 665, height: 198 } as const
 const NAME_BANNER_SIZE = NAME_BANNER_SOURCE_SIZE
 const NAME_BANNER_Z_INDEX = 110
+const LEGENDARY_FRAME_Z_INDEX = 105
+const LEGENDARY_FRAME_OFFSET = { x: 60, y: -35 } as const
 const SHARED_STATS = {
   mana: { x: 60, y: 50 },
-  attack: { x: 60, y: 800 },
-  defense: { x: 570, y: 800 },
+  attack: { x: 40, y: 810 },
+  defense: { x: 570, y: 810 },
   weaponAttack: { x: 60, y: 800 },
   weaponDefense: { x: 570, y: 800 }
 } as const
@@ -169,7 +171,7 @@ function nameBanner(
     'name-banner',
     card.type === 'Weapon' ? 'WEAPON_NAME.png' : 'CARD_NAME.png',
     {
-      x: profile.nameBox.x + profile.nameBox.width / 2,
+      x: profile.nameBox.x + profile.nameBox.width / 2 - 10,
       y: profile.nameBox.y + profile.nameBox.height / 2
     },
     NAME_BANNER_Z_INDEX,
@@ -182,7 +184,7 @@ function nameBanner(
 
 const NAME_STYLE_BASE: CardTextStyle = {
   fontFamily: 'Belwe',
-  fontSize: 42,
+  fontSize: 47,
   fill: 0xffffff,
   align: 'center',
   stroke: { color: 0x000000, width: 7 },
@@ -192,13 +194,35 @@ const NAME_STYLE_BASE: CardTextStyle = {
 
 const RULES_STYLE_BASE: CardTextStyle = {
   fontFamily: 'Franklin Gothic Condensed',
-  fontSize: 34,
+  fontSize: 44,
   fill: 0x19130e,
   align: 'center',
   fontWeight: 'normal',
-  lineHeight: 38,
+  letterSpacing: -0.5,
+  stroke: { color: 0x19130e, width: 0.75 },
+  lineHeight: 50,
   breakWords: true,
   tagStyles: { keyword: { fontWeight: 'bold' } }
+}
+
+/**
+ * Display-only line-break hints for cards whose reference layout uses a
+ * deliberate break that the generic greedy wrapper cannot reproduce.
+ * Card data remains the canonical, unbroken rules text.
+ */
+const CARD_RULES_LINE_BREAKS: Readonly<Record<string, readonly string[]>> = {
+  classic_deathwing: ['discard']
+}
+
+function rulesText(card: CardDefinition): string {
+  if (!card.effect) return ''
+
+  const displayText = (CARD_RULES_LINE_BREAKS[card.id] ?? []).reduce(
+    (text, phrase) => text.replace(`${phrase} `, `${phrase}\n`),
+    card.effect
+  )
+
+  return markHearthstoneKeywords(displayText)
 }
 
 const WEAPON_RULES_STYLE: CardTextStyle = {
@@ -231,7 +255,7 @@ export const CARD_STAT_LABEL_OFFSETS = {
   health: { x: 0, y: 15 },
   armor: { x: 0, y: 15 },
   durability: { x: 0, y: 15 },
-  name: { x: 0, y: -15 }
+  name: { x: 0, y: -17 }
 } as const
 
 type CardStatId = Exclude<keyof typeof CARD_STAT_LABEL_OFFSETS, 'name'>
@@ -276,7 +300,12 @@ function stats(card: CardDefinition, profile: CardProfile): CardGroupNode {
 
   if (card.type === 'Weapon' && card.durability !== null) {
     children.push(
-      stat('durability', card.durability, profile.stats.weaponDefense, 'WEAPON_DURABILITY.png')
+      stat(
+        'durability',
+        card.durability,
+        profile.stats.weaponDefense,
+        'WEAPON_DURABILITY.png'
+      )
     )
   } else if (card.type === 'Minion' && card.health !== null) {
     children.push(stat('health', card.health, profile.stats.defense, 'HEALTH.png'))
@@ -294,6 +323,23 @@ function rarity(card: CardDefinition, profile: CardProfile): CardGroupNode | nul
       anchor: { x: 0.5, y: 0.5 }
     })
   ])
+}
+
+function legendaryFrame(
+  card: CardDefinition
+): Extract<CardRenderNode, { kind: 'image' }> | null {
+  if (card.type !== 'Minion' || card.rarity !== 'Legendary') return null
+
+  return image(
+    'legendary-frame',
+    'LEGENDARY.png',
+    {
+      x: CARD_CANVAS.width / 2 + LEGENDARY_FRAME_OFFSET.x,
+      y: LEGENDARY_FRAME_OFFSET.y
+    },
+    LEGENDARY_FRAME_Z_INDEX,
+    { anchor: { x: 0.5, y: 0 } }
+  )
 }
 
 function overlays(options: CardRenderOptions): CardGroupNode | null {
@@ -391,9 +437,11 @@ export function buildCardRenderTree(
   options: CardRenderOptions = {}
 ): { readonly root: CardGroupNode } {
   const profile = CARD_PROFILES[visualTemplateFor(card.type)]
+  const legendaryFrameNode = legendaryFrame(card)
   const children: CardRenderNode[] = [
     artwork(profile),
     image('frame', profile.frame, { x: 0, y: 0 }, 100, { size: CARD_CANVAS }),
+    ...(legendaryFrameNode ? [legendaryFrameNode] : []),
     nameBanner(card, profile),
     text(
       'name',
@@ -412,7 +460,7 @@ export function buildCardRenderTree(
     children.push(
       text(
         'rules',
-        markHearthstoneKeywords(card.effect),
+        rulesText(card),
         profile.rulesBox,
         card.type === 'Weapon' ? WEAPON_RULES_STYLE : RULES_STYLE_BASE,
         220

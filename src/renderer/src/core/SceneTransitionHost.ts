@@ -15,6 +15,7 @@ export interface SceneTransitionHostOptions {
   inset: TransitionRect
   scaleMode?: TransitionScaleMode
   overlayAlpha?: number
+  initialState?: 'inset' | 'full'
 }
 
 export const DEFAULT_SCENE_EXPAND_DURATION = 0.45
@@ -42,9 +43,9 @@ type TransitionState = {
 }
 
 /**
- * Presents a full-viewport scene inside an inset rectangle, then expands it
- * to the game viewport. The scene root remains in its normal 1920x1080
- * coordinate space while the host owns the presentation transform and mask.
+ * Presents a full-viewport scene through an inset expansion or collapse. The
+ * scene root remains in its normal 1920x1080 coordinate space while the host
+ * owns the presentation transform and mask.
  */
 export class SceneTransitionHost extends Container {
   readonly sceneRoot: Container
@@ -56,6 +57,8 @@ export class SceneTransitionHost extends Container {
   private readonly state: TransitionState
   private readonly initialOverlayAlpha: number
   private readonly sceneEventMode: Container['eventMode']
+  private inset: TransitionRect
+  private insetScale: number
   private disposed = false
 
   constructor(sceneRoot: Container, options: SceneTransitionHostOptions) {
@@ -63,6 +66,8 @@ export class SceneTransitionHost extends Container {
 
     this.sceneRoot = sceneRoot
     this.sceneEventMode = sceneRoot.eventMode
+    this.inset = { ...options.inset }
+    this.insetScale = calculateTransitionScale(options.inset, options.scaleMode)
     sceneRoot.eventMode = 'none'
     this.content = new Container()
     this.content.pivot.set(GAME_WIDTH / 2, GAME_HEIGHT / 2)
@@ -92,16 +97,32 @@ export class SceneTransitionHost extends Container {
       overlayAlpha: this.initialOverlayAlpha
     }
 
-    this.setInset(options.inset, options.scaleMode)
+    if (options.initialState === 'full') {
+      this.setFullViewport()
+    } else {
+      this.setInset(options.inset, options.scaleMode)
+    }
   }
 
   setInset(inset: TransitionRect, mode: TransitionScaleMode = 'cover'): void {
-    this.state.scale = calculateTransitionScale(inset, mode)
+    this.inset = { ...inset }
+    this.insetScale = calculateTransitionScale(inset, mode)
+    this.state.scale = this.insetScale
     this.state.clipX = inset.x
     this.state.clipY = inset.y
     this.state.clipWidth = inset.width
     this.state.clipHeight = inset.height
     this.state.overlayAlpha = this.initialOverlayAlpha
+    this.applyState()
+  }
+
+  setFullViewport(): void {
+    this.state.scale = 1
+    this.state.clipX = 0
+    this.state.clipY = 0
+    this.state.clipWidth = GAME_WIDTH
+    this.state.clipHeight = GAME_HEIGHT
+    this.state.overlayAlpha = 0
     this.applyState()
   }
 
@@ -131,6 +152,34 @@ export class SceneTransitionHost extends Container {
           overlayAlpha: 0,
           duration,
           ease: 'power2.out',
+          onUpdate: () => this.applyState()
+        },
+        0
+      )
+    })
+  }
+
+  /** Shrinks a full-viewport scene back into the configured inset. */
+  collapse(duration = DEFAULT_SCENE_EXPAND_DURATION): Promise<void> {
+    if (this.disposed) return Promise.resolve()
+
+    return new Promise<void>((resolve) => {
+      const timeline = this.animations.timeline({
+        onComplete: resolve,
+        onInterrupt: resolve
+      })
+
+      timeline.to(
+        this.state,
+        {
+          scale: this.insetScale,
+          clipX: this.inset.x,
+          clipY: this.inset.y,
+          clipWidth: this.inset.width,
+          clipHeight: this.inset.height,
+          overlayAlpha: this.initialOverlayAlpha,
+          duration,
+          ease: 'power2.in',
           onUpdate: () => this.applyState()
         },
         0

@@ -33,6 +33,18 @@ function artworkFileName(cardId: string): string {
   return `${cardId}${CARD_ARTWORK_EXTENSION}`
 }
 
+/** Improves minification when the same authored texture is used by compact cards. */
+function configureCardTexture(texture: Texture): Texture {
+  const source = texture.source
+  source.autoGenerateMipmaps = true
+  source.mipLevelCount =
+    Math.floor(Math.log2(Math.max(source.pixelWidth, source.pixelHeight))) + 1
+  source.style.minFilter = 'linear'
+  source.style.mipmapFilter = 'linear'
+  source.style.update()
+  return texture
+}
+
 export function hasCardAsset(fileName: string): boolean {
   return assetUrl(fileName) !== undefined
 }
@@ -59,7 +71,9 @@ export class CardAssetResolver {
     const existing = this.texturePromises.get(fileName)
     if (existing) return existing
 
-    const promise = Assets.load<Texture>(getCardAssetUrl(fileName))
+    const promise = Assets.load<Texture>(getCardAssetUrl(fileName)).then(
+      configureCardTexture
+    )
     this.texturePromises.set(fileName, promise)
     void promise.catch(() => {
       if (this.texturePromises.get(fileName) === promise) {
@@ -76,7 +90,7 @@ export class CardAssetResolver {
     const existing = this.artworkPromises.get(cardId)
     if (existing) return existing
 
-    const promise = Assets.load<Texture>(artworkUrl)
+    const promise = Assets.load<Texture>(artworkUrl).then(configureCardTexture)
     this.artworkPromises.set(cardId, promise)
     void promise.catch(() => {
       if (this.artworkPromises.get(cardId) === promise) {

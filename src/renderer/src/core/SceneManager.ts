@@ -13,14 +13,20 @@ const DEFAULT_SCENE_FADE_DURATION = 0.6
 
 export interface SceneTransitionOptions {
   inset: TransitionRect
-  /** Uses a two-stage opacity fade instead of the inset expansion effect. */
-  mode?: 'expand' | 'fade'
+  /** Selects an inset expansion, inset collapse, or two-stage opacity fade. */
+  mode?: 'expand' | 'collapse' | 'fade'
   scaleMode?: TransitionScaleMode
   overlayAlpha?: number
   duration?: number
   hostParent?: Container
   hostIndex?: number
   beforeExpand?: (
+    host: SceneTransitionHost,
+    previous: Scene,
+    next: Scene
+  ) => Promise<void> | void
+  /** Runs after collapse while the outgoing scene is still inside the inset. */
+  afterCollapse?: (
     host: SceneTransitionHost,
     previous: Scene,
     next: Scene
@@ -86,10 +92,98 @@ export class SceneManager {
       }
       if (options.mode === 'fade') {
         await this.fadeImmediate(scene, options)
+      } else if (options.mode === 'collapse') {
+        await this.collapseImmediate(scene, options)
       } else {
         await this.transitionImmediate(scene, options)
       }
     })
+  }
+
+  /**
+   * Places the destination underneath the current scene, shrinks the current
+   * scene into the configured inset, and then promotes the destination.
+   */
+  private async collapseImmediate(
+    scene: Scene,
+    options: SceneTransitionOptions
+  ): Promise<void> {
+    const previous = this.current
+    if (!previous) {
+      throw new Error('Cannot transition without a current scene')
+    }
+
+    const previousWorldIndex =
+      previous.root.parent === this.world
+        ? this.world.getChildIndex(previous.root)
+        : this.world.children.length
+    let loaded = false
+    let host: SceneTransitionHost | null = null
+    let committed = false
+    this.transitioningScene = scene
+
+    try {
+      await scene.load(this.app, this)
+      loaded = true
+
+      this.world.addChildAt(
+        scene.root,
+        Math.min(Math.max(previousWorldIndex, 0), this.world.children.length)
+      )
+
+      host = new SceneTransitionHost(previous.root, {
+        inset: options.inset,
+        scaleMode: options.scaleMode,
+        overlayAlpha: options.overlayAlpha,
+        initialState: 'full'
+      })
+
+      const parent = options.hostParent ?? this.world
+      if (options.hostIndex === undefined) {
+        parent.addChild(host)
+      } else {
+        parent.addChildAt(
+          host,
+          Math.min(Math.max(options.hostIndex, 0), parent.children.length)
+        )
+      }
+
+      this.fitToScreen()
+      await host.collapse(options.duration ?? DEFAULT_SCENE_EXPAND_DURATION)
+      await options.afterCollapse?.(host, previous, scene)
+
+      host.dispose()
+      host = null
+      this.stack[this.stack.length - 1] = scene
+      this.transitioningScene = null
+      committed = true
+      await previous.unload()
+      this.fitToScreen()
+      await this.runAfterTransition(options, previous, scene)
+    } catch (error) {
+      this.transitioningScene = null
+
+      if (!committed) {
+        host?.dispose()
+
+        if (scene.root.parent === this.world) {
+          this.world.removeChild(scene.root)
+        }
+        if (!previous.root.parent) {
+          this.world.addChildAt(
+            previous.root,
+            Math.min(Math.max(previousWorldIndex, 0), this.world.children.length)
+          )
+        }
+
+        if (loaded || scene.state !== 'new') {
+          await scene.unload().catch(() => undefined)
+        }
+        this.fitToScreen()
+      }
+
+      throw error
+    }
   }
 
   async pop(): Promise<Scene | null> {

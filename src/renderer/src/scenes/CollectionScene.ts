@@ -1,4 +1,6 @@
 import {
+  AlphaFilter,
+  ColorMatrixFilter,
   Container,
   Graphics,
   PerspectiveMesh,
@@ -35,6 +37,8 @@ import { MainMenuScene } from './MainMenuScene'
 import {
   MAX_DECK_CARDS,
   countDeckCards,
+  getCardCopyLimit,
+  getDeckCardCount,
   type Deck,
   type DeckClass
 } from '../../../shared/decks'
@@ -98,6 +102,7 @@ const DECK_BUTTON_GAP = -30
 const DECK_EDITOR_CARD_ROW_HEIGHT = 28
 const DECK_EDITOR_CARD_ROW_GAP = 1
 const DECK_EDITOR_COST_WIDTH = 27
+const DECK_EDITOR_MANA_ICON_SIZE = 25
 const DECK_EDITOR_COPIES_WIDTH = 24
 const DECK_EDITOR_ROW_INSET = 2
 const DECK_EDITOR_TRANSITION_DURATION = 0.45
@@ -110,9 +115,9 @@ const DECK_EDITOR_PREVIEW = {
   gap: 18,
   viewportPadding: 16
 }
+const COMPLETED_COLLECTION_CARD_ALPHA = 0.25
 const DECK_EDITOR_COUNT_FILL = 0xffffff
 const DECK_EDITOR_ERROR_FILL = 0xff9a9a
-const COLLECTION_BACK_TRANSITION_DURATION = 0.6
 const FULL_VIEWPORT = {
   x: 0,
   y: 0,
@@ -132,6 +137,9 @@ export class CollectionScene extends Scene {
   private previousCollectionClassFilter: DeckClass | null = null
   private readonly cardResolver = new CardAssetResolver()
   private readonly deckStore: DeckStore
+  private deckManaTexture: Texture | null = null
+  private completedCollectionCardFilter: ColorMatrixFilter | null = null
+  private completedCollectionCardAlphaFilter: AlphaFilter | null = null
 
   private background!: Sprite
   private pageContent!: Container
@@ -282,6 +290,7 @@ export class CollectionScene extends Scene {
     this.setNavigationEnabled(false)
     await this.deckStore.load()
     await this.waitForFonts()
+    this.deckManaTexture = await this.cardResolver.load('MANA.png')
     this.createDeckList(assets)
     this.createDeckEditor(assets, sharedAssets)
     this.createCollectionBackButton(sharedAssets)
@@ -341,7 +350,8 @@ export class CollectionScene extends Scene {
     await Promise.all([
       document.fonts.load('38px Belwe'),
       document.fonts.load('38px "Arial Narrow"'),
-      document.fonts.load('27px "Franklin Gothic Condensed"')
+      document.fonts.load('400 27px "Franklin Gothic Condensed"'),
+      document.fonts.load('700 27px "Franklin Gothic Condensed"')
     ])
   }
 
@@ -419,6 +429,7 @@ export class CollectionScene extends Scene {
 
       this.pageIndex = index
       this.updatePageLabels(page)
+      this.updateCollectionCardCompletionState()
     } finally {
       if (sequence === this.renderSequence) {
         this.pageLoading = false
@@ -773,11 +784,11 @@ export class CollectionScene extends Scene {
     this.setDeckInteractionEnabled(false)
 
     try {
-      await this.sceneManager.transitionTo(new MainMenuScene(), {
-        inset: FULL_VIEWPORT,
-        mode: 'fade',
-        duration: COLLECTION_BACK_TRANSITION_DURATION
-      })
+      const destination = MainMenuScene.forReturn()
+      await this.sceneManager.transitionTo(
+        destination,
+        destination.createReturnTransitionOptions()
+      )
     } catch (error) {
       console.error('Failed to return to the main menu:', error)
       if (!this.disposed) {
@@ -900,6 +911,7 @@ export class CollectionScene extends Scene {
     if (this.disposed) return
 
     this.activeDeckId = null
+    this.updateCollectionCardCompletionState()
     this.deckEditorOrigin = null
     this.deckEditorRenderSequence += 1
     this.deckEditorLayer.visible = false
@@ -1007,6 +1019,53 @@ export class CollectionScene extends Scene {
     this.clearDeckEditorCountFeedback()
     this.deckEditorCount.text = `${countDeckCards(deck)} / ${MAX_DECK_CARDS} Cards`
     this.renderDeckCardRows(deck)
+    this.updateCollectionCardCompletionState()
+  }
+
+  private getCompletedCollectionCardFilter(): ColorMatrixFilter {
+    if (!this.completedCollectionCardFilter) {
+      this.completedCollectionCardFilter = new ColorMatrixFilter({
+        resolution: 'inherit',
+        antialias: 'inherit'
+      })
+      this.completedCollectionCardFilter.grayscale(1, false)
+    }
+    return this.completedCollectionCardFilter
+  }
+
+  private getCompletedCollectionCardAlphaFilter(): AlphaFilter {
+    if (!this.completedCollectionCardAlphaFilter) {
+      this.completedCollectionCardAlphaFilter = new AlphaFilter({
+        alpha: COMPLETED_COLLECTION_CARD_ALPHA,
+        resolution: 'inherit',
+        antialias: 'inherit'
+      })
+    }
+    return this.completedCollectionCardAlphaFilter
+  }
+
+  private updateCollectionCardCompletionState(): void {
+    const page = this.pages[this.pageIndex]
+    if (!this.cardLayer || !page) return
+
+    const deck = this.activeDeckId
+      ? this.deckStore.getDeck(this.activeDeckId)
+      : undefined
+    for (const [cardIndex, child] of this.cardLayer.children.entries()) {
+      if (!(child instanceof CardView)) continue
+
+      const card = page.cards[cardIndex]
+      const isAtCopyLimit = Boolean(
+        deck && card && getDeckCardCount(deck, card.id) >= getCardCopyLimit(card)
+      )
+      child.filters = isAtCopyLimit
+        ? [
+            this.getCompletedCollectionCardFilter(),
+            this.getCompletedCollectionCardAlphaFilter()
+          ]
+        : null
+      child.alpha = 1
+    }
   }
 
   private flashDeckEditorCount(): void {
@@ -1126,12 +1185,18 @@ export class CollectionScene extends Scene {
     background.eventMode = 'none'
     row.addChild(background)
 
-    const costBox = new Graphics()
-      .rect(2, 2, DECK_EDITOR_COST_WIDTH - 4, rowHeight - 4)
-      .fill(0x326dcc)
-      .stroke({ color: 0x8eb8ff, width: 1, alpha: 0.9 })
-    costBox.eventMode = 'none'
-    row.addChild(costBox)
+    if (this.deckManaTexture) {
+      const manaIcon = new Sprite(this.deckManaTexture)
+      manaIcon.anchor.set(0.5)
+      const manaScale = Math.min(
+        DECK_EDITOR_MANA_ICON_SIZE / this.deckManaTexture.width,
+        DECK_EDITOR_MANA_ICON_SIZE / this.deckManaTexture.height
+      )
+      manaIcon.scale.set(manaScale)
+      manaIcon.position.set(DECK_EDITOR_COST_WIDTH / 2, rowHeight / 2)
+      manaIcon.eventMode = 'none'
+      row.addChild(manaIcon)
+    }
 
     const cost = new Text({
       text: String(card?.cost ?? 0),

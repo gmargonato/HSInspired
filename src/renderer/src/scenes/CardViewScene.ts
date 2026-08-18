@@ -86,10 +86,7 @@ export function cardDetailRows(card: CardDefinition): readonly CardDetailRow[] {
 
   if (card.subtype) rows.push({ label: 'Subtype', value: card.subtype })
   if (card.spellSchool) rows.push({ label: 'School', value: card.spellSchool })
-  if (
-    (card.type === 'Minion' || card.type === 'Weapon') &&
-    card.attack !== null
-  ) {
+  if ((card.type === 'Minion' || card.type === 'Weapon') && card.attack !== null) {
     rows.push({ label: 'Attack', value: String(card.attack) })
   }
   if (card.type === 'Weapon' && card.durability !== null) {
@@ -167,7 +164,8 @@ export class CardViewScene extends Scene {
 
     await Promise.all([
       document.fonts.load('28px Belwe'),
-      document.fonts.load('22px "Franklin Gothic Condensed"')
+      document.fonts.load('400 22px "Franklin Gothic Condensed"'),
+      document.fonts.load('700 22px "Franklin Gothic Condensed"')
     ])
   }
 

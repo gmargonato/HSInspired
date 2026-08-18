@@ -1,5 +1,7 @@
+import { Texture } from 'pixi.js'
 import { describe, expect, it } from 'vitest'
 import { gsap, AnimationScope } from '../src/renderer/src/core/animations'
+import { FlipCard } from '../src/renderer/src/actors/FlipCard'
 
 describe('AnimationScope', () => {
   it('pauses, resumes, and kills arbitrary animation targets', () => {
@@ -29,5 +31,21 @@ describe('AnimationScope', () => {
     expect(gsap.getTweensOf(firstTarget)).toHaveLength(0)
     expect(gsap.getTweensOf(secondTarget)).toHaveLength(1)
     scope.kill()
+  })
+})
+
+describe('FlipCard', () => {
+  it('can start on its back face for reverse scene choreography', () => {
+    const card = new FlipCard(Texture.EMPTY, Texture.EMPTY, {
+      initialFace: 'back',
+      oneShot: true
+    })
+
+    expect(card.isFlipped).toBe(true)
+    expect(card.front.visible).toBe(false)
+    expect(card.back.visible).toBe(true)
+    expect(card.eventMode).toBe('none')
+
+    card.dispose()
   })
 })

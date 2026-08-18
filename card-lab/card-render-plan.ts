@@ -32,6 +32,7 @@ export interface CardTextStyle {
   readonly fill: number
   readonly align: 'left' | 'center'
   readonly fontWeight?: 'normal' | 'bold'
+  readonly letterSpacing?: number
   readonly stroke?: { readonly color: number; readonly width: number }
   readonly wordWrap?: boolean
   readonly wordWrapWidth?: number
