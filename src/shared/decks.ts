@@ -15,6 +15,9 @@ export const DECK_CLASSES = [
 ] as const
 export type DeckClass = (typeof DECK_CLASSES)[number]
 
+/** Rarities used by the source data for cards that cannot be collected. */
+export const NON_COLLECTIBLE_RARITIES = ['None', 'Summon', 'Dream'] as const
+
 export const DECK_IPC_CHANNELS = {
   list: 'decks:list',
   create: 'decks:create',
@@ -48,10 +51,17 @@ export interface DecksApi {
 export interface DeckCardLike {
   readonly id: string
   readonly rarity: string
+  /** Optional metadata used to enforce class legality in the renderer. */
+  readonly cardClass?: string
+  readonly collectible?: boolean
 }
 
 export type DeckMutationErrorCode =
-  'deck-full' | 'copy-limit' | 'card-not-in-deck' | 'deck-not-found'
+  | 'deck-full'
+  | 'copy-limit'
+  | 'card-not-in-deck'
+  | 'card-not-allowed'
+  | 'deck-not-found'
 
 export interface DeckMutationFailure {
   readonly ok: false
@@ -71,6 +81,13 @@ export interface PersistedDeckFile {
   readonly decks: readonly Deck[]
 }
 
+export function cloneDeck(deck: Deck): Deck {
+  return {
+    ...deck,
+    cards: { ...deck.cards }
+  }
+}
+
 export function countDeckCards(deck: Pick<Deck, 'cards'>): number {
   return Object.values(deck.cards).reduce((total, count) => total + count, 0)
 }
@@ -83,11 +100,42 @@ export function getCardCopyLimit(card: Pick<DeckCardLike, 'rarity'>): number {
   return card.rarity === 'Legendary' ? MAX_LEGENDARY_COPIES : MAX_NON_LEGENDARY_COPIES
 }
 
+export function isCollectibleDeckCard(
+  card: Pick<DeckCardLike, 'rarity' | 'collectible'>
+): boolean {
+  if (card.collectible === false) return false
+  return !NON_COLLECTIBLE_RARITIES.includes(
+    card.rarity as (typeof NON_COLLECTIBLE_RARITIES)[number]
+  )
+}
+
+export function isCardAllowedInDeck(
+  deck: Pick<Deck, 'heroClass'>,
+  card: Pick<DeckCardLike, 'rarity' | 'cardClass' | 'collectible'>
+): boolean {
+  if (!isCollectibleDeckCard(card)) return false
+  if (!deck.heroClass) return true
+  if (!card.cardClass) return false
+  if (card.cardClass === 'Neutral') return true
+
+  return card.cardClass === deck.heroClass
+}
+
 export function addCardToDeck(
   deck: Deck,
   card: DeckCardLike,
   updatedAt = new Date().toISOString()
 ): DeckMutationResult {
+  if (!isCardAllowedInDeck(deck, card)) {
+    return {
+      ok: false,
+      code: 'card-not-allowed',
+      message: deck.heroClass
+        ? `That card cannot be added to a ${deck.heroClass} deck.`
+        : 'That card cannot be added to a deck.'
+    }
+  }
+
   const totalCards = countDeckCards(deck)
   if (totalCards >= MAX_DECK_CARDS) {
     return {

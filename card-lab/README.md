@@ -11,7 +11,7 @@ the Collection scene.
 npm run card-lab:dev
 ```
 
-Then choose any card ID from the input. The lab currently loads all 475 Basic
+Then choose any card ID from the input. The lab currently loads all 465 Basic
 and Classic cards.
 
 ## In-game view
@@ -54,10 +54,10 @@ usable in the collection scene or a game board later. A card is a display
 object, not a scene: the same view can be instantiated many times for a hand,
 board, preview, or tooltip.
 
-The catalog has no artwork field, so cards without an artwork mapping render a
-neutral art placeholder. The lab currently maps the three temporary files in
-`assets/images/artwork` to Acidic Swamp Ooze, Arcane Explosion, and Arcanite
-Reaper. Artwork is passed to `CardView` without changing card data
+The catalog has no artwork field, so cards without a matching `<card-id>.jpg`
+file in `assets/images/artwork` render a neutral art placeholder. The artwork
+resolver discovers ID-named JPGs automatically, while cards without artwork
+remain unmapped. Artwork is passed to `CardView` without changing card data
 normalization or layout rules.
 
 ## Card coordinate system

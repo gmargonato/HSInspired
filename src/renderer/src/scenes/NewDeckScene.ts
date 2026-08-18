@@ -4,6 +4,7 @@ import { Button } from '../actors/Button'
 import { ASSET_BUNDLE_IDS, type CollectionAssets } from '../core/assets'
 import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
 import { playerDeckStore, type DeckStore } from '../core/decks'
+import { DECK_FRAME_ASSET_KEYS } from '../core/deckFrames'
 import { getPrimaryHeroForClass, type HeroDefinition } from '../core/heroes'
 import { Scene } from './Scene'
 import { DECK_CLASSES, type Deck, type DeckClass } from '../../../shared/decks'
@@ -22,29 +23,6 @@ const NEW_DECK_HERO_SELECTION_LAYOUT = {
   selectClassButton: { x: 1470, y: 935 },
   cancelButton: { x: 1670, y: 1045 },
   slideDuration: 0.5
-}
-
-type NewDeckFrameAssetKey =
-  | 'druidDeckFrame'
-  | 'hunterDeckFrame'
-  | 'mageDeckFrame'
-  | 'paladinDeckFrame'
-  | 'priestDeckFrame'
-  | 'rogueDeckFrame'
-  | 'shamanDeckFrame'
-  | 'warlockDeckFrame'
-  | 'warriorDeckFrame'
-
-const NEW_DECK_FRAME_ASSET_KEYS: Record<DeckClass, NewDeckFrameAssetKey> = {
-  Warlock: 'warlockDeckFrame',
-  Hunter: 'hunterDeckFrame',
-  Rogue: 'rogueDeckFrame',
-  Warrior: 'warriorDeckFrame',
-  Druid: 'druidDeckFrame',
-  Paladin: 'paladinDeckFrame',
-  Priest: 'priestDeckFrame',
-  Mage: 'mageDeckFrame',
-  Shaman: 'shamanDeckFrame'
 }
 
 export interface NewDeckSceneCallbacks {
@@ -158,7 +136,7 @@ export class NewDeckScene extends Scene {
     this.selectionContent.addChild(this.heroName)
 
     for (const [index, heroClass] of DECK_CLASSES.entries()) {
-      const texture = assets[NEW_DECK_FRAME_ASSET_KEYS[heroClass]]
+      const texture = assets[DECK_FRAME_ASSET_KEYS[heroClass]]
       const button = new Button(texture, {
         onClick: () => this.selectClass(heroClass)
       })

@@ -36,7 +36,8 @@ export { AssetScope } from './assetScope'
 export const ASSET_BUNDLE_IDS = {
   mainMenu: 'main-menu',
   deckSelection: 'deck-selection',
-  collection: 'collection'
+  collection: 'collection',
+  sharedUI: 'shared-ui'
 } as const
 
 export interface MainMenuAssets {
@@ -53,6 +54,9 @@ export interface MainMenuAssets {
 export interface DeckSelectionAssets {
   panel: Texture
   toCollectionButton: Texture
+}
+
+export interface SharedUIAssets {
   backButton: Texture
 }
 
@@ -66,7 +70,15 @@ export interface CollectionAssets extends Record<HeroAssetKey, Texture> {
   selectClassButton: Texture
   cancelButton: Texture
   verticalSlider: Texture
-  backButton: Texture
+  druidDeckFrame: Texture
+  hunterDeckFrame: Texture
+  mageDeckFrame: Texture
+  paladinDeckFrame: Texture
+  priestDeckFrame: Texture
+  rogueDeckFrame: Texture
+  shamanDeckFrame: Texture
+  warlockDeckFrame: Texture
+  warriorDeckFrame: Texture
 }
 
 registerAssetBundle(ASSET_BUNDLE_IDS.mainMenu, {
@@ -82,8 +94,7 @@ registerAssetBundle(ASSET_BUNDLE_IDS.mainMenu, {
 
 registerAssetBundle(ASSET_BUNDLE_IDS.deckSelection, {
   panel: deckSelectionImage,
-  toCollectionButton: deckSelectionToCollectionButtonImage,
-  backButton: uiBackButtonImage
+  toCollectionButton: deckSelectionToCollectionButtonImage
 })
 
 registerAssetBundle(ASSET_BUNDLE_IDS.collection, {
@@ -96,7 +107,6 @@ registerAssetBundle(ASSET_BUNDLE_IDS.collection, {
   selectClassButton: selectClassButtonImage,
   cancelButton: uiCancelButtonImage,
   verticalSlider: verticalSliderImage,
-  backButton: uiBackButtonImage,
   druidDeckFrame: druidDeckFrameImage,
   hunterDeckFrame: hunterDeckFrameImage,
   mageDeckFrame: mageDeckFrameImage,
@@ -107,4 +117,8 @@ registerAssetBundle(ASSET_BUNDLE_IDS.collection, {
   warlockDeckFrame: warlockDeckFrameImage,
   warriorDeckFrame: warriorDeckFrameImage,
   ...HERO_ASSET_SOURCES
+})
+
+registerAssetBundle(ASSET_BUNDLE_IDS.sharedUI, {
+  backButton: uiBackButtonImage
 })

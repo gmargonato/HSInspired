@@ -100,7 +100,3 @@ export class AnimationScope implements Animations {
     }
   }
 }
-
-export function createAnimations(): Animations {
-  return new AnimationScope()
-}

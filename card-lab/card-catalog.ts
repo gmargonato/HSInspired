@@ -1,5 +1,6 @@
 import basicCards from '../src/data/cards/basic.json'
 import classicCards from '../src/data/cards/classic.json'
+import { isCollectibleDeckCard } from '../src/shared/decks'
 
 export const CARD_TYPES = ['Minion', 'Spell', 'Weapon', 'Hero', 'Hero Power'] as const
 export type CardType = (typeof CARD_TYPES)[number]
@@ -47,6 +48,10 @@ export interface CardDefinition {
   readonly health: number | null
   readonly durability: number | null
   readonly effect: string
+}
+
+export function isCollectibleCard(card: Pick<CardDefinition, 'rarity'>): boolean {
+  return isCollectibleDeckCard(card)
 }
 
 interface RawCardRecord {

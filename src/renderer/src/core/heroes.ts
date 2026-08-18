@@ -93,10 +93,6 @@ export const HERO_ASSET_SOURCES = Object.fromEntries(
   HERO_DEFINITIONS.map((hero) => [hero.assetKey, hero.image])
 ) as Record<HeroAssetKey, string>
 
-export function getHeroesForClass(heroClass: DeckClass): readonly HeroDefinition[] {
-  return HERO_DEFINITIONS.filter((hero) => hero.heroClass === heroClass)
-}
-
 export function getPrimaryHeroForClass(
   heroClass: DeckClass
 ): HeroDefinition | undefined {

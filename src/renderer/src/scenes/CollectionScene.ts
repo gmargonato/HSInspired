@@ -17,12 +17,24 @@ import { CardAssetResolver } from '../../../../card-lab/card-asset-manifest'
 import { CardView } from '../../../../card-lab/card-view'
 import { Scene } from './Scene'
 import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
-import { ASSET_BUNDLE_IDS, CollectionAssets } from '../core/assets'
+import {
+  ASSET_BUNDLE_IDS,
+  CollectionAssets,
+  SharedUIAssets
+} from '../core/assets'
 import type { CursorContextVariant } from '../core/cursor'
 import { playerDeckStore, type DeckStore } from '../core/decks'
+import { DECK_FRAME_ASSET_KEYS, type DeckFrameAssetKey } from '../core/deckFrames'
+import {
+  createHingedDoorMesh,
+  updateHingedDoor,
+  type HingeSide
+} from '../core/hingedDoor'
+import { HERO_DEFINITIONS } from '../core/heroes'
 import { Button } from '../actors/Button'
 import { buildCollectionPages, type CollectionPage } from './collectionPages'
 import { NewDeckScene } from './NewDeckScene'
+import { MainMenuScene } from './MainMenuScene'
 import {
   MAX_DECK_CARDS,
   countDeckCards,
@@ -58,7 +70,6 @@ const Layout = {
 }
 
 const DECK_EDITOR_LAYOUT = {
-  panel: { x: 1385, y: 0, width: 390, height: GAME_HEIGHT },
   header: { x: 1575, y: 50 },
   name: { x: 1575, y: 185 },
   count: { x: 1575, y: 225 },
@@ -80,10 +91,22 @@ const DECK_BUTTON_HEIGHT = 151
 // The button textures include transparent padding around their visible frames.
 // A negative layout gap brings the visible frames closer together.
 const DECK_BUTTON_GAP = -30
-const DECK_NUMBER_FONT_SIZE = 64
 const DECK_EDITOR_CARD_ROW_HEIGHT = 20
+const COLLECTION_BACK_TRANSITION_DURATION = 0.6
+const FULL_VIEWPORT = {
+  x: 0,
+  y: 0,
+  width: GAME_WIDTH,
+  height: GAME_HEIGHT
+}
 
-type DoorSide = 'left' | 'right'
+type DoorSide = HingeSide
+
+type CollectionDeckAssetKey =
+  | 'loadDeckButton'
+  | 'newDeckButton'
+  | 'verticalSlider'
+  | DeckFrameAssetKey
 
 /** Full-viewport collection scene presented through the main menu transition. */
 export class CollectionScene extends Scene {
@@ -102,12 +125,12 @@ export class CollectionScene extends Scene {
   private deckSlider!: Sprite
   private deckEditorLayer!: Container
   private deckEditorButton!: Button
-  private deckEditorNumber!: Text
   private deckEditorName!: Text
   private deckEditorCount!: Text
   private deckEditorStatus!: Text
   private deckEditorCardContent!: Container
   private deckEditorBackButton!: Button
+  private collectionBackButton!: Button
   private newDeckScene!: NewDeckScene
   private readonly deckEntries: Container[] = []
   private readonly deckButtons: Button[] = []
@@ -117,10 +140,7 @@ export class CollectionScene extends Scene {
   private deckSliderDragOffset = 0
   private activeDeckId: string | null = null
   private unsubscribeDeckStore: (() => void) | null = null
-  private deckAssets!: Pick<
-    CollectionAssets,
-    'loadDeckButton' | 'newDeckButton' | 'verticalSlider' | 'backButton'
-  >
+  private deckAssets!: Pick<CollectionAssets, CollectionDeckAssetKey>
   private classLabel!: Text
   private pageLabel!: Text
   private previousPageZone!: Container
@@ -142,6 +162,9 @@ export class CollectionScene extends Scene {
   async init(): Promise<void> {
     const assets = await this.assetScope.acquire<CollectionAssets>(
       ASSET_BUNDLE_IDS.collection
+    )
+    const sharedAssets = await this.assetScope.acquire<SharedUIAssets>(
+      ASSET_BUNDLE_IDS.sharedUI
     )
 
     this.background = new Sprite(assets.background)
@@ -200,10 +223,10 @@ export class CollectionScene extends Scene {
 
     // The cover is hinged on its left edge. The separate lock is hinged on
     // its right edge, matching the direction shown in the reference images.
-    this.cover = this.createDoorMesh(assets.cover, 'left', Layout.cover)
+    this.cover = createHingedDoorMesh(assets.cover, 'left', Layout.cover)
     this.root.addChild(this.cover)
 
-    this.coverLock = this.createDoorMesh(assets.coverLock, 'right', {
+    this.coverLock = createHingedDoorMesh(assets.coverLock, 'right', {
       x: Layout.cover.x + Layout.coverLock.x,
       y: Layout.cover.y + Layout.coverLock.y
     })
@@ -214,8 +237,14 @@ export class CollectionScene extends Scene {
     // opening animation after the destination reaches the full viewport.
     this.cover.visible = true
     this.coverLock.visible = true
-    this.updateDoor(this.cover, 'left', 0, COVER_PERSPECTIVE_DEPTH)
-    this.updateDoor(this.coverLock, 'right', 0, COVER_LOCK_PERSPECTIVE_DEPTH)
+    updateHingedDoor(this.cover, 'left', 0, COVER_PERSPECTIVE_DEPTH, DOOR_MIN_WIDTH)
+    updateHingedDoor(
+      this.coverLock,
+      'right',
+      0,
+      COVER_LOCK_PERSPECTIVE_DEPTH,
+      DOOR_MIN_WIDTH
+    )
 
     if (this.pages.length === 0) {
       throw new Error('Collection has no cards to display')
@@ -225,15 +254,16 @@ export class CollectionScene extends Scene {
     await this.deckStore.load()
     await this.waitForFonts()
     this.createDeckList(assets)
-    this.createDeckEditor(assets)
+    this.createDeckEditor(assets, sharedAssets)
+    this.createCollectionBackButton(sharedAssets)
     this.newDeckScene = new NewDeckScene(this.deckStore, {
       onClassSelected: (hero) => this.handleNewDeckHeroSelected(hero.heroClass),
       onCancelled: () => this.handleNewDeckCreationCancelled(),
       onDeckCreated: (deck) => this.handleNewDeckCreated(deck)
     })
     await this.addSubScene(this.newDeckScene)
-    this.unsubscribeDeckStore = this.deckStore.subscribe(this.handleDeckStoreChanged)
     await this.renderPage(0)
+    this.unsubscribeDeckStore = this.deckStore.subscribe(this.handleDeckStoreChanged)
   }
 
   /**
@@ -281,7 +311,6 @@ export class CollectionScene extends Scene {
 
     await Promise.all([
       document.fonts.load('38px Belwe'),
-      document.fonts.load(`${DECK_NUMBER_FONT_SIZE}px Belwe`),
       document.fonts.load('38px "Arial Narrow"'),
       document.fonts.load('27px "Franklin Gothic Condensed"')
     ])
@@ -398,12 +427,7 @@ export class CollectionScene extends Scene {
   }
 
   private createDeckList(assets: CollectionAssets): void {
-    this.deckAssets = {
-      loadDeckButton: assets.loadDeckButton,
-      newDeckButton: assets.newDeckButton,
-      verticalSlider: assets.verticalSlider,
-      backButton: assets.backButton
-    }
+    this.deckAssets = assets
 
     this.deckMask = new Graphics()
       .rect(0, 0, Layout.deckList.width, Layout.deckList.height)
@@ -442,27 +466,11 @@ export class CollectionScene extends Scene {
     this.renderDeckList()
   }
 
-  private createDeckEditor(assets: CollectionAssets): void {
+  private createDeckEditor(
+    assets: CollectionAssets,
+    sharedAssets: SharedUIAssets
+  ): void {
     this.deckEditorLayer = new Container()
-
-    const panel = new Graphics()
-      .rect(
-        DECK_EDITOR_LAYOUT.panel.x,
-        DECK_EDITOR_LAYOUT.panel.y,
-        DECK_EDITOR_LAYOUT.panel.width,
-        DECK_EDITOR_LAYOUT.panel.height
-      )
-      .fill({ color: 0x251a35, alpha: 0.97 })
-    panel
-      .rect(
-        DECK_EDITOR_LAYOUT.panel.x + 4,
-        4,
-        DECK_EDITOR_LAYOUT.panel.width - 8,
-        DECK_EDITOR_LAYOUT.panel.height - 8
-      )
-      .stroke({ color: 0xc49a4b, width: 4, alpha: 0.9 })
-    panel.eventMode = 'none'
-    this.deckEditorLayer.addChild(panel)
 
     const cardListPanel = new Graphics()
       .rect(
@@ -477,7 +485,8 @@ export class CollectionScene extends Scene {
     this.deckEditorLayer.addChild(cardListPanel)
 
     this.deckEditorButton = new Button(assets.loadDeckButton, {
-      onClick: () => undefined
+      onClick: () =>
+        this.renderDeckStatus('Right-click the deck portrait to delete it.')
     })
     this.deckEditorButton.position.set(
       DECK_EDITOR_LAYOUT.header.x,
@@ -489,13 +498,6 @@ export class CollectionScene extends Scene {
       void this.deleteActiveDeck()
     })
     this.deckEditorLayer.addChild(this.deckEditorButton)
-
-    this.deckEditorNumber = this.createEditorText(DECK_NUMBER_FONT_SIZE, 0xf4e6c8)
-    this.deckEditorNumber.position.set(
-      DECK_EDITOR_LAYOUT.header.x,
-      DECK_EDITOR_LAYOUT.header.y
-    )
-    this.deckEditorLayer.addChild(this.deckEditorNumber)
 
     this.deckEditorName = this.createEditorText(28, 0xf1e4c8)
     this.deckEditorName.position.set(
@@ -521,7 +523,7 @@ export class CollectionScene extends Scene {
     this.deckEditorCardContent = new Container()
     this.deckEditorLayer.addChild(this.deckEditorCardContent)
 
-    this.deckEditorBackButton = new Button(assets.backButton, {
+    this.deckEditorBackButton = new Button(sharedAssets.backButton, {
       onClick: () => this.exitDeckEditor()
     })
     this.deckEditorBackButton.position.set(
@@ -534,6 +536,19 @@ export class CollectionScene extends Scene {
     this.deckEditorLayer.visible = false
     this.deckEditorLayer.alpha = 0
     this.root.addChild(this.deckEditorLayer)
+  }
+
+  private createCollectionBackButton(sharedAssets: SharedUIAssets): void {
+    this.collectionBackButton = new Button(sharedAssets.backButton, {
+      onClick: () => this.leaveCollection()
+    })
+    this.collectionBackButton.position.set(
+      DECK_EDITOR_LAYOUT.backButton.x,
+      DECK_EDITOR_LAYOUT.backButton.y
+    )
+    this.collectionBackButton.setBaseY(DECK_EDITOR_LAYOUT.backButton.y)
+    this.collectionBackButton.visible = true
+    this.root.addChild(this.collectionBackButton)
   }
 
   private createEditorText(fontSize: number, fill: number): Text {
@@ -563,17 +578,16 @@ export class CollectionScene extends Scene {
     const decks = this.deckStore.getDecks()
     for (const [index, deck] of decks.entries()) {
       this.addDeckEntry(
-        this.deckAssets.loadDeckButton,
-        String(index + 1),
+        this.getDeckFrameTexture(deck),
         () => this.enterDeck(deck.id),
         index,
-        () => this.deleteDeck(deck.id)
+        () => this.deleteDeck(deck.id),
+        deck.name
       )
     }
 
     this.addDeckEntry(
       this.deckAssets.newDeckButton,
-      null,
       () => this.beginNewDeckCreation(),
       decks.length
     )
@@ -588,10 +602,10 @@ export class CollectionScene extends Scene {
 
   private addDeckEntry(
     texture: Texture,
-    label: string | null,
     onClick: () => void | Promise<void>,
     index: number,
-    onDelete?: () => void | Promise<void>
+    onDelete?: () => void | Promise<void>,
+    label?: string
   ): void {
     const entry = new Container()
     entry.position.set(
@@ -615,24 +629,37 @@ export class CollectionScene extends Scene {
     entry.addChild(button)
     this.deckButtons.push(button)
 
-    if (label !== null) {
-      const number = new Text({
+    if (label) {
+      const name = new Text({
         text: label,
         style: {
           fontFamily: 'Belwe',
-          fontSize: DECK_NUMBER_FONT_SIZE,
-          fill: 0xf4e6c8,
+          fontSize: 20,
+          fill: 0xf1e4c8,
+          stroke: { color: 0x19130e, width: 4 },
           align: 'center'
         }
       })
-      number.anchor.set(0.5)
-      number.position.set(0, 0)
-      number.eventMode = 'none'
-      entry.addChild(number)
+      name.anchor.set(0.5)
+      name.position.set(0, DECK_BUTTON_HEIGHT / 2 - 18)
+      name.eventMode = 'none'
+      if (name.width > Layout.deckList.width - 24) {
+        name.scale.x = (Layout.deckList.width - 24) / name.width
+      }
+      entry.addChild(name)
     }
 
     this.deckEntries.push(entry)
     this.deckContent.addChild(entry)
+  }
+
+  private getDeckFrameTexture(deck: Deck): Texture {
+    const deckClass = this.getDeckClass(deck)
+    const assetKey = deckClass ? DECK_FRAME_ASSET_KEYS[deckClass] : undefined
+
+    // Legacy decks may not have class metadata. Keep those decks usable while
+    // ensuring all class-aware decks use their baked-in portrait frame.
+    return assetKey ? this.deckAssets[assetKey] : this.deckAssets.loadDeckButton
   }
 
   private setDeckScroll(offset: number): void {
@@ -688,6 +715,12 @@ export class CollectionScene extends Scene {
       this.deckEditorButton.setEnabled(enabled && this.activeDeckId !== null)
     }
 
+    if (this.collectionBackButton) {
+      const backEnabled = enabled && this.activeDeckId === null && !newDeckSelectionOpen
+      this.collectionBackButton.visible = this.activeDeckId === null
+      this.collectionBackButton.setEnabled(backEnabled)
+    }
+
     if (!listEnabled) {
       this.stopDeckSliderDrag()
     }
@@ -727,11 +760,40 @@ export class CollectionScene extends Scene {
     this.deckSliderDragOffset = 0
   }
 
+  private async leaveCollection(): Promise<void> {
+    if (
+      !this.navigationReady ||
+      this.disposed ||
+      this.activeDeckId !== null ||
+      this.newDeckScene?.isOpen
+    ) {
+      return
+    }
+
+    this.setNavigationEnabled(false)
+    this.setDeckInteractionEnabled(false)
+
+    try {
+      await this.sceneManager.transitionTo(new MainMenuScene(), {
+        inset: FULL_VIEWPORT,
+        mode: 'fade',
+        duration: COLLECTION_BACK_TRANSITION_DURATION
+      })
+    } catch (error) {
+      console.error('Failed to return to the main menu:', error)
+      if (!this.disposed) {
+        this.setNavigationEnabled(true)
+        this.setDeckInteractionEnabled(true)
+      }
+    }
+  }
+
   private readonly handleDeckStoreChanged = (): void => {
     if (this.activeDeckId) {
       if (!this.deckStore.getDeck(this.activeDeckId)) {
-        this.exitDeckEditor()
-        this.renderDeckList()
+        void this.exitDeckEditor().then(() => {
+          if (!this.disposed) this.renderDeckList()
+        })
       } else {
         this.updateDeckEditor()
       }
@@ -741,9 +803,21 @@ export class CollectionScene extends Scene {
     this.renderDeckList()
   }
 
-  private enterDeck(deckId: string): void {
+  private async enterDeck(deckId: string): Promise<void> {
     if (!this.navigationReady || this.disposed) return
-    if (!this.deckStore.getDeck(deckId)) return
+    const deck = this.deckStore.getDeck(deckId)
+    if (!deck) return
+
+    this.setDeckInteractionEnabled(false)
+
+    try {
+      await this.applyCollectionClassFilter(this.getDeckClass(deck))
+    } catch (error) {
+      console.error(`Failed to filter the collection for ${deck.name}:`, error)
+      if (!this.disposed) this.setDeckInteractionEnabled(true)
+      return
+    }
+    if (this.disposed) return
 
     this.activeDeckId = deckId
     this.deckViewport.visible = false
@@ -759,16 +833,36 @@ export class CollectionScene extends Scene {
     })
   }
 
-  private exitDeckEditor(): void {
-    if (!this.deckEditorLayer) return
+  private getDeckClass(deck: Deck): DeckClass | null {
+    return (
+      deck.heroClass ??
+      HERO_DEFINITIONS.find((hero) => hero.id === deck.heroId)?.heroClass ??
+      null
+    )
+  }
+
+  private async exitDeckEditor(): Promise<void> {
+    if (!this.deckEditorLayer || this.disposed) return
 
     this.killTweensOf(this.deckEditorLayer)
+    this.setNavigationEnabled(false)
+    this.setDeckInteractionEnabled(false)
     this.activeDeckId = null
     this.deckEditorLayer.visible = false
     this.deckEditorLayer.alpha = 0
     this.deckViewport.visible = true
     this.updateDeckSliderPosition()
-    this.setDeckInteractionEnabled(this.navigationReady && !this.disposed)
+
+    try {
+      await this.applyCollectionClassFilter(null)
+    } catch (error) {
+      console.error('Failed to restore the full collection:', error)
+    } finally {
+      if (!this.disposed) {
+        this.setNavigationEnabled(true)
+        this.setDeckInteractionEnabled(true)
+      }
+    }
   }
 
   private updateDeckEditor(): void {
@@ -776,14 +870,13 @@ export class CollectionScene extends Scene {
 
     const deck = this.deckStore.getDeck(this.activeDeckId)
     if (!deck) {
-      this.exitDeckEditor()
+      void this.exitDeckEditor().then(() => {
+        if (!this.disposed) this.renderDeckList()
+      })
       return
     }
 
-    const deckNumber = this.deckStore
-      .getDecks()
-      .findIndex((candidate) => candidate.id === deck.id)
-    this.deckEditorNumber.text = String(deckNumber + 1)
+    this.deckEditorButton.sprite.texture = this.getDeckFrameTexture(deck)
     this.deckEditorName.text = deck.name
     this.deckEditorCount.text = `${countDeckCards(deck)} / ${MAX_DECK_CARDS} cards`
     this.renderDeckStatus('Click a collection card to add it')
@@ -881,7 +974,16 @@ export class CollectionScene extends Scene {
     this.previousCollectionClassFilter = this.collectionClassFilter
     this.setNavigationEnabled(false)
     this.setDeckInteractionEnabled(false)
-    await this.newDeckScene.open()
+    try {
+      await this.newDeckScene.open()
+    } catch (error) {
+      console.error('Failed to open the new deck selector:', error)
+      this.previousCollectionClassFilter = null
+      if (!this.disposed) {
+        this.setNavigationEnabled(true)
+        this.setDeckInteractionEnabled(true)
+      }
+    }
   }
 
   private async handleNewDeckHeroSelected(heroClass: DeckClass): Promise<void> {
@@ -908,12 +1010,12 @@ export class CollectionScene extends Scene {
     }
   }
 
-  private handleNewDeckCreated(deck: Deck): void {
+  private async handleNewDeckCreated(deck: Deck): Promise<void> {
     this.previousCollectionClassFilter = null
     if (this.disposed) return
 
     this.setNavigationEnabled(true)
-    this.enterDeck(deck.id)
+    await this.enterDeck(deck.id)
   }
 
   private async deleteDeck(deckId: string): Promise<void> {
@@ -979,40 +1081,7 @@ export class CollectionScene extends Scene {
     })
   }
 
-  /** Creates a mesh whose local origin is the selected door hinge. */
-  private createDoorMesh(
-    texture: Texture,
-    side: DoorSide,
-    topLeft: { x: number; y: number }
-  ): PerspectiveMesh {
-    const width = texture.width
-    const height = texture.height
-    const hingeOnLeft = side === 'left'
-
-    const mesh = new PerspectiveMesh({
-      texture,
-      verticesX: 10,
-      verticesY: 10,
-      x0: hingeOnLeft ? 0 : -width,
-      y0: 0,
-      x1: hingeOnLeft ? width : 0,
-      y1: 0,
-      x2: hingeOnLeft ? width : 0,
-      y2: height,
-      x3: hingeOnLeft ? 0 : -width,
-      y3: height
-    })
-
-    mesh.position.set(topLeft.x + (hingeOnLeft ? 0 : width), topLeft.y)
-
-    return mesh
-  }
-
-  /**
-   * Animates the same top-view door geometry used by the main-menu lids:
-   * cosine compresses the visible width while sine adds a small perspective
-   * bend at the free edge.
-   */
+  /** Animates the shared top-view door geometry used by the main menu. */
   private animateDoor(
     mesh: PerspectiveMesh,
     side: DoorSide,
@@ -1032,44 +1101,18 @@ export class CollectionScene extends Scene {
           progress: 1,
           duration,
           ease: 'power2.in',
-          onUpdate: () => this.updateDoor(mesh, side, state.progress, perspectiveDepth)
+          onUpdate: () =>
+            updateHingedDoor(
+              mesh,
+              side,
+              state.progress,
+              perspectiveDepth,
+              DOOR_MIN_WIDTH
+            )
         },
         0
       )
     })
-  }
-
-  private updateDoor(
-    mesh: PerspectiveMesh,
-    side: DoorSide,
-    progress: number,
-    perspectiveDepth: number
-  ): void {
-    const clampedProgress = Math.max(0, Math.min(1, progress))
-    const angle = clampedProgress * (Math.PI / 2)
-    const widthScale = Math.cos(angle)
-    const depth = Math.sin(angle) * perspectiveDepth
-    const visibleWidth = Math.max(DOOR_MIN_WIDTH, mesh.texture.width * widthScale)
-
-    this.setDoorCorners(mesh, side, visibleWidth, depth)
-  }
-
-  private setDoorCorners(
-    mesh: PerspectiveMesh,
-    side: DoorSide,
-    visibleWidth: number,
-    depth: number
-  ): void {
-    const height = mesh.texture.height
-    const hingeOnLeft = side === 'left'
-    const freeEdgeX = hingeOnLeft ? visibleWidth : -visibleWidth
-
-    if (hingeOnLeft) {
-      mesh.setCorners(0, 0, freeEdgeX, -depth, freeEdgeX, height + depth, 0, height)
-      return
-    }
-
-    mesh.setCorners(freeEdgeX, -depth, 0, 0, 0, height, freeEdgeX, height + depth)
   }
 
   protected onExit(): void {

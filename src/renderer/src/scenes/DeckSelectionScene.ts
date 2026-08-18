@@ -2,7 +2,11 @@ import { Container, Sprite } from 'pixi.js'
 import { Button } from '../actors/Button'
 import { Scene } from './Scene'
 import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
-import { ASSET_BUNDLE_IDS, DeckSelectionAssets } from '../core/assets'
+import {
+  ASSET_BUNDLE_IDS,
+  DeckSelectionAssets,
+  SharedUIAssets
+} from '../core/assets'
 import { CollectionScene } from './CollectionScene'
 import { MainMenuScene } from './MainMenuScene'
 
@@ -38,6 +42,9 @@ export class DeckSelectionScene extends Scene {
     const assets = await this.assetScope.acquire<DeckSelectionAssets>(
       ASSET_BUNDLE_IDS.deckSelection
     )
+    const sharedAssets = await this.assetScope.acquire<SharedUIAssets>(
+      ASSET_BUNDLE_IDS.sharedUI
+    )
 
     this.panel = new Container()
     this.panel.position.set(Layout.panel.x, Layout.panel.y)
@@ -59,7 +66,7 @@ export class DeckSelectionScene extends Scene {
     this.toCollectionButton.setBaseY(Layout.toCollectionButton.y)
     this.root.addChild(this.toCollectionButton)
 
-    this.backButton = new Button(assets.backButton, {
+    this.backButton = new Button(sharedAssets.backButton, {
       onClick: () => this.onBackPressed()
     })
     this.backButton.position.set(Layout.backButton.x, Layout.backButton.y)

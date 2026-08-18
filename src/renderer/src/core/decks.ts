@@ -1,6 +1,7 @@
 import type { CardDefinition } from '../../../../card-lab/card-catalog'
 import {
   addCardToDeck,
+  cloneDeck,
   removeCardFromDeck,
   type Deck,
   type DeckCreateRequest,
@@ -18,13 +19,6 @@ export interface DeckStore {
   addCard(deckId: string, card: CardDefinition): Promise<DeckMutationResult>
   removeCard(deckId: string, cardId: string): Promise<DeckMutationResult>
   subscribe(listener: () => void): () => void
-}
-
-function cloneDeck(deck: Deck): Deck {
-  return {
-    ...deck,
-    cards: { ...deck.cards }
-  }
 }
 
 function getDeckApi(): DecksApi {
@@ -164,7 +158,13 @@ export class PersistentDeckStore implements DeckStore {
   }
 
   private notify(): void {
-    for (const listener of this.listeners) listener()
+    for (const listener of this.listeners) {
+      try {
+        listener()
+      } catch (error) {
+        console.error('Deck store listener failed:', error)
+      }
+    }
   }
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {

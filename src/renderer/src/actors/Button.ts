@@ -1,4 +1,5 @@
 import { ColorMatrixFilter, Sprite, Texture } from 'pixi.js'
+import type { FederatedPointerEvent } from 'pixi.js'
 import { Actor } from './Actor'
 
 const DEFAULT_HOVER_BRIGHTNESS = 1.5
@@ -159,8 +160,10 @@ export class Button extends Actor {
     })
   }
 
-  private handleClick = (): void => {
-    if (!this.enabled) return
+  private handleClick = (event: FederatedPointerEvent): void => {
+    // Pixi dispatches pointertap for right mouse clicks as well as rightclick.
+    // Buttons with a right-click action must not also run their left-click action.
+    if (!this.enabled || event.button !== 0) return
 
     const result = this.onClick?.()
     if (result) {

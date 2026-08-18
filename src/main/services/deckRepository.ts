@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { CARD_CATALOG } from '../../../card-lab/card-catalog'
 import {
   DECK_CLASSES,
   DECK_FILE_VERSION,
   MAX_DECK_CARDS,
   MAX_NON_LEGENDARY_COPIES,
+  cloneDeck,
+  getCardCopyLimit,
+  isCardAllowedInDeck,
   countDeckCards,
   type Deck,
   type DeckClass,
@@ -56,28 +60,44 @@ function isValidDeck(value: unknown): value is Deck {
   )
 }
 
-function cloneDeck(deck: Deck): Deck {
-  return {
-    ...deck,
-    cards: { ...deck.cards }
-  }
-}
-
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error
 }
 
-function assertPersistableDeck(deck: Deck): void {
-  if (!isValidDeck(deck)) {
+function assertPersistableDeck(deck: Deck, previous?: Deck): void {
+  if (!isValidDeck(deck) || !hasValidCatalogCards(deck, previous)) {
     throw new Error('Invalid deck data')
   }
+}
+
+function hasValidCatalogCards(deck: Deck, previous?: Deck): boolean {
+  return Object.entries(deck.cards).every(([cardId, count]) => {
+    const card = CARD_CATALOG.get(cardId)
+    const previousCount = previous?.cards[cardId]
+    // Keep legacy cards loadable while allowing users to remove them. Any
+    // newly added copies still have to pass the current catalog and class rules.
+    if (
+      previous?.heroClass === deck.heroClass &&
+      previousCount !== undefined &&
+      count <= previousCount
+    ) {
+      return true
+    }
+    return (
+      card !== undefined &&
+      count <= getCardCopyLimit(card) &&
+      isCardAllowedInDeck(deck, card)
+    )
+  })
 }
 
 /** Durable JSON-backed storage for the player's decks. */
 export class DeckRepository {
   private loaded = false
+  private loadPromise: Promise<void> | null = null
   private decks: Deck[] = []
   private writeQueue: Promise<void> = Promise.resolve()
+  private mutationQueue: Promise<void> = Promise.resolve()
 
   constructor(private readonly filePath: string) {}
 
@@ -87,71 +107,99 @@ export class DeckRepository {
   }
 
   async create(request?: DeckCreateRequest): Promise<Deck> {
-    await this.ensureLoaded()
+    return this.enqueueMutation(async () => {
+      await this.ensureLoaded()
 
-    const requestedName = request?.name
-    const requestedHeroClass = request?.heroClass
-    const requestedHeroId = request?.heroId
-    if (
-      (requestedName !== undefined && typeof requestedName !== 'string') ||
-      (requestedHeroClass !== undefined && !isDeckClass(requestedHeroClass)) ||
-      (requestedHeroId !== undefined && typeof requestedHeroId !== 'string')
-    ) {
-      throw new Error('Invalid deck creation request')
-    }
+      const requestRecord =
+        request === undefined ? undefined : isRecord(request) ? request : null
+      const requestedName = requestRecord?.name
+      const requestedHeroClass = requestRecord?.heroClass
+      const requestedHeroId = requestRecord?.heroId
+      if (
+        requestRecord === null ||
+        (requestedName !== undefined && typeof requestedName !== 'string') ||
+        (requestedHeroClass !== undefined && !isDeckClass(requestedHeroClass)) ||
+        (requestedHeroId !== undefined &&
+          (typeof requestedHeroId !== 'string' || requestedHeroId.trim().length === 0))
+      ) {
+        throw new Error('Invalid deck creation request')
+      }
 
-    const now = new Date().toISOString()
-    const deck: Deck = {
-      id: randomUUID(),
-      name: requestedName?.trim() || `Deck ${this.decks.length + 1}`,
-      ...(requestedHeroClass ? { heroClass: requestedHeroClass } : {}),
-      ...(requestedHeroId ? { heroId: requestedHeroId } : {}),
-      cards: {},
-      createdAt: now,
-      updatedAt: now
-    }
+      const now = new Date().toISOString()
+      const deck: Deck = {
+        id: randomUUID(),
+        name: requestedName?.trim() || this.nextDefaultDeckName(),
+        ...(requestedHeroClass ? { heroClass: requestedHeroClass } : {}),
+        ...(requestedHeroId ? { heroId: requestedHeroId.trim() } : {}),
+        cards: {},
+        createdAt: now,
+        updatedAt: now
+      }
 
-    this.decks.push(deck)
-    await this.persist()
-    return cloneDeck(deck)
+      const nextDecks = [...this.decks, deck]
+      await this.persist(nextDecks)
+      this.decks = nextDecks
+      return cloneDeck(deck)
+    })
   }
 
   async update(deck: Deck): Promise<Deck> {
-    await this.ensureLoaded()
-    assertPersistableDeck(deck)
+    return this.enqueueMutation(async () => {
+      await this.ensureLoaded()
 
-    const index = this.decks.findIndex((candidate) => candidate.id === deck.id)
-    if (index === -1) {
-      throw new Error(`Cannot update missing deck: ${deck.id}`)
-    }
+      if (!isValidDeck(deck)) {
+        throw new Error('Invalid deck data')
+      }
+      const index = this.decks.findIndex((candidate) => candidate.id === deck.id)
+      if (index === -1) {
+        throw new Error(`Cannot update missing deck: ${deck.id}`)
+      }
 
-    const existing = this.decks[index]
-    const updated: Deck = {
-      ...cloneDeck(deck),
-      name: deck.name.trim(),
-      createdAt: existing.createdAt,
-      updatedAt: new Date().toISOString()
-    }
-    this.decks[index] = updated
-    await this.persist()
-    return cloneDeck(updated)
+      const existing = this.decks[index]
+      assertPersistableDeck(deck, existing)
+      const updated: Deck = {
+        ...cloneDeck(deck),
+        name: deck.name.trim(),
+        createdAt: existing.createdAt,
+        updatedAt: new Date().toISOString()
+      }
+      const nextDecks = [...this.decks]
+      nextDecks[index] = updated
+      await this.persist(nextDecks)
+      this.decks = nextDecks
+      return cloneDeck(updated)
+    })
   }
 
   async delete(deckId: string): Promise<void> {
-    await this.ensureLoaded()
+    return this.enqueueMutation(async () => {
+      await this.ensureLoaded()
 
-    const index = this.decks.findIndex((deck) => deck.id === deckId)
-    if (index === -1) {
-      throw new Error(`Cannot delete missing deck: ${deckId}`)
-    }
+      const index = this.decks.findIndex((deck) => deck.id === deckId)
+      if (index === -1) {
+        throw new Error(`Cannot delete missing deck: ${deckId}`)
+      }
 
-    this.decks.splice(index, 1)
-    await this.persist()
+      const nextDecks = this.decks.filter(
+        (_, candidateIndex) => candidateIndex !== index
+      )
+      await this.persist(nextDecks)
+      this.decks = nextDecks
+    })
   }
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return
 
+    if (this.loadPromise) return this.loadPromise
+
+    this.loadPromise = this.readPersistedDecks().finally(() => {
+      this.loadPromise = null
+    })
+    return this.loadPromise
+  }
+
+  private async readPersistedDecks(): Promise<void> {
     let parsed: unknown
     try {
       parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as unknown
@@ -177,10 +225,10 @@ export class DeckRepository {
     this.loaded = true
   }
 
-  private async persist(): Promise<void> {
+  private async persist(decks = this.decks): Promise<void> {
     const payload: PersistedDeckFile = {
       version: DECK_FILE_VERSION,
-      decks: this.decks.map(cloneDeck)
+      decks: decks.map(cloneDeck)
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
 
@@ -202,5 +250,21 @@ export class DeckRepository {
 
     this.writeQueue = write
     await write
+  }
+
+  private nextDefaultDeckName(): string {
+    const names = new Set(this.decks.map((deck) => deck.name))
+    let number = this.decks.length + 1
+    while (names.has(`Deck ${number}`)) number += 1
+    return `Deck ${number}`
+  }
+
+  private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.mutationQueue.then(operation, operation)
+    this.mutationQueue = next.then(
+      () => undefined,
+      () => undefined
+    )
+    return next
   }
 }

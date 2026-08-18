@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_CATALOG } from '../card-lab/card-catalog'
+import { CARD_CATALOG, isCollectibleCard } from '../card-lab/card-catalog'
 import {
   buildCollectionPages,
   COLLECTION_CARD_TYPES,
@@ -39,8 +39,10 @@ describe('Collection pages', () => {
   it('includes every catalog card exactly once', () => {
     const cards = pages.flatMap((page) => page.cards)
     const ids = cards.map((card) => card.id)
-    const eligibleCards = CARD_CATALOG.all.filter((card) =>
-      COLLECTION_CARD_TYPES.some((cardType) => cardType === card.type)
+    const eligibleCards = CARD_CATALOG.all.filter(
+      (card) =>
+        COLLECTION_CARD_TYPES.some((cardType) => cardType === card.type) &&
+        isCollectibleCard(card)
     )
 
     expect(cards).toHaveLength(eligibleCards.length)

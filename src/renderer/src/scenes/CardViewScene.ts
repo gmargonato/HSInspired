@@ -572,6 +572,13 @@ export class CardViewScene extends Scene {
   }
 
   private createList(): void {
+    const listMask = new Graphics()
+      .rect(0, 0, Layout.listViewport.width, Layout.listViewport.height)
+      .fill({ color: 0xffffff })
+    listMask.position.set(Layout.listViewport.x, Layout.listViewport.y)
+    listMask.eventMode = 'none'
+    this.root.addChild(listMask)
+
     this.listViewport = new Container()
     this.listViewport.position.set(Layout.listViewport.x, Layout.listViewport.y)
     this.listViewport.eventMode = 'static'
@@ -585,6 +592,7 @@ export class CardViewScene extends Scene {
 
     this.listContent = new Container()
     this.listViewport.addChild(this.listContent)
+    this.listViewport.mask = listMask
 
     for (const [index, card] of this.cards.entries()) {
       const button = new CardListButton(
@@ -677,6 +685,13 @@ export class CardViewScene extends Scene {
     noneButton.position.set(actionX + 66, actionY)
     this.root.addChild(noneButton)
 
+    const layerMask = new Graphics()
+      .rect(0, 0, Layout.layerViewport.width, Layout.layerViewport.height)
+      .fill({ color: 0xffffff })
+    layerMask.position.set(Layout.layerViewport.x, Layout.layerViewport.y)
+    layerMask.eventMode = 'none'
+    this.root.addChild(layerMask)
+
     this.layerViewport = new Container()
     this.layerViewport.position.set(Layout.layerViewport.x, Layout.layerViewport.y)
     this.layerViewport.eventMode = 'static'
@@ -690,6 +705,7 @@ export class CardViewScene extends Scene {
 
     this.layerContent = new Container()
     this.layerViewport.addChild(this.layerContent)
+    this.layerViewport.mask = layerMask
     this.root.addChild(this.layerViewport)
   }
 

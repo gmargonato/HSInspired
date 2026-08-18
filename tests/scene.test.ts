@@ -169,6 +169,34 @@ describe('SceneManager transitions', () => {
 
     await manager.stop()
   })
+
+  it('keeps the destination committed when its reveal callback fails', async () => {
+    const manager = new SceneManager(createApplication())
+    const first = new TestScene()
+    const second = new TestScene()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    try {
+      await manager.start(first)
+      await expect(
+        manager.transitionTo(second, {
+          inset: { x: 0, y: 0, width: 1920, height: 1080 },
+          duration: 0,
+          afterTransition: () => {
+            throw new Error('reveal failed')
+          }
+        })
+      ).resolves.toBeUndefined()
+
+      expect(manager.current).toBe(second)
+      expect(first.state).toBe('unloaded')
+      expect(second.state).toBe('active')
+
+      await manager.stop()
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
 })
 
 describe('Developer scene navigation', () => {

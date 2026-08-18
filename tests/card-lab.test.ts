@@ -52,10 +52,10 @@ describe('Card Lab render plans', () => {
     )
   })
 
-  it('maps the temporary comparison artwork to the three target cards', () => {
+  it('resolves ID-named artwork and leaves cards without artwork unmapped', () => {
     expect(hasCardArtwork('basic_acidic_swamp_ooze')).toBe(true)
-    expect(hasCardArtwork('basic_arcane_explosion')).toBe(true)
-    expect(hasCardArtwork('basic_arcanite_reaper')).toBe(true)
+    expect(hasCardArtwork('classic_abusive_sergeant')).toBe(true)
+    expect(hasCardArtwork('basic_arcanite_reaper')).toBe(false)
     expect(hasCardArtwork('basic_fireball')).toBe(false)
   })
 

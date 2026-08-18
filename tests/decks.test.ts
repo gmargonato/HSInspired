@@ -6,8 +6,10 @@ import {
   MAX_DECK_CARDS,
   addCardToDeck,
   countDeckCards,
+  isCollectibleDeckCard,
   type Deck
 } from '../src/shared/decks'
+import { CARD_CATALOG } from '../card-lab/card-catalog'
 import { DeckRepository } from '../src/main/services/deckRepository'
 
 const baseDeck: Deck = {
@@ -60,6 +62,27 @@ describe('deck rules', () => {
       }
     )
   })
+
+  it('rejects off-class and non-collectible cards', () => {
+    const mageDeck = { ...baseDeck, heroClass: 'Mage' as const }
+    const warrior = CARD_CATALOG.require('basic_execute')
+    const coin = CARD_CATALOG.require('basic_the_coin')
+    const missingClass = { id: 'missing-class', rarity: 'Common' }
+
+    expect(addCardToDeck(mageDeck, warrior)).toMatchObject({
+      ok: false,
+      code: 'card-not-allowed'
+    })
+    expect(addCardToDeck(mageDeck, coin)).toMatchObject({
+      ok: false,
+      code: 'card-not-allowed'
+    })
+    expect(addCardToDeck(mageDeck, missingClass)).toMatchObject({
+      ok: false,
+      code: 'card-not-allowed'
+    })
+    expect(isCollectibleDeckCard(coin)).toBe(false)
+  })
 })
 
 describe('DeckRepository', () => {
@@ -89,12 +112,58 @@ describe('DeckRepository', () => {
 
       const updated = await reloaded.update({
         ...created,
-        cards: { 'common-card': 2 }
+        cards: { basic_fireball: 2 }
       })
       expect((await reloaded.list())[0]).toEqual(updated)
 
+      await expect(
+        reloaded.update({
+          ...updated,
+          cards: { basic_execute: 1 }
+        })
+      ).rejects.toThrow('Invalid deck data')
+
       await reloaded.delete(updated.id)
       expect(await reloaded.list()).toEqual([])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps generated names unique after deletions', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'hs-inspired-deck-names-'))
+    const filePath = join(directory, 'decks.json')
+
+    try {
+      const repository = new DeckRepository(filePath)
+      const first = await repository.create()
+      const second = await repository.create()
+      await repository.delete(first.id)
+      const third = await repository.create()
+
+      expect([first.name, second.name, third.name]).toEqual([
+        'Deck 1',
+        'Deck 2',
+        'Deck 3'
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('serializes concurrent mutations without losing a deck', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'hs-inspired-deck-concurrency-'))
+    const filePath = join(directory, 'decks.json')
+
+    try {
+      const repository = new DeckRepository(filePath)
+      const created = await Promise.all([repository.create(), repository.create()])
+
+      expect(new Set(created.map((deck) => deck.id)).size).toBe(2)
+      expect((await repository.list()).map((deck) => deck.name)).toEqual([
+        'Deck 1',
+        'Deck 2'
+      ])
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

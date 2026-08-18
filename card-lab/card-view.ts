@@ -1,9 +1,10 @@
 import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js'
+import type { FederatedPointerEvent } from 'pixi.js'
 import type {
   CardBounds,
+  CardNodeOverride,
   CardNodeOverrides,
   CardPoint,
-  CardLayer,
   CardRenderOptions,
   CardRenderPlan,
   CardShape,
@@ -17,6 +18,7 @@ import type { CardRenderNode, CardTextNode } from './card-render-tree'
 export interface CardViewOptions extends CardRenderOptions {
   readonly artwork?: Texture
   readonly onNodeSelected?: (path: string) => void
+  readonly onNodePointerDown?: (path: string, event: FederatedPointerEvent) => void
 }
 
 export interface CardNodeInspector {
@@ -94,14 +96,6 @@ function drawShape(
     graphics.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, 28)
   }
   graphics.fill(color)
-}
-
-function createPlaceholder(
-  layer: Extract<CardLayer, { kind: 'placeholder' }>
-): Graphics {
-  const placeholder = new Graphics()
-  drawShape(placeholder, layer.bounds, layer.shape, layer.color)
-  return placeholder
 }
 
 function drawShapeOutline(
@@ -310,11 +304,20 @@ export class CardView extends Container {
   >()
   private readonly artworkObjects = new Map<string, ArtworkObjectEntry>()
   private readonly onNodeSelected?: (path: string) => void
+  private readonly onNodePointerDown?: (
+    path: string,
+    event: FederatedPointerEvent
+  ) => void
 
-  private constructor(plan: CardRenderPlan, onNodeSelected?: (path: string) => void) {
+  private constructor(
+    plan: CardRenderPlan,
+    onNodeSelected?: (path: string) => void,
+    onNodePointerDown?: (path: string, event: FederatedPointerEvent) => void
+  ) {
     super()
     this.plan = plan
     this.onNodeSelected = onNodeSelected
+    this.onNodePointerDown = onNodePointerDown
     this.sortableChildren = true
     this.eventMode = 'static'
     this.label = `card:${plan.cardId}`
@@ -336,8 +339,13 @@ export class CardView extends Container {
     options: CardViewOptions = {}
   ): Promise<CardView> {
     const plan = buildCardRenderPlan(card, options)
-    const view = new CardView(plan, options.onNodeSelected)
-    await view.build(resolver, options.artwork)
+    const view = new CardView(plan, options.onNodeSelected, options.onNodePointerDown)
+    try {
+      await view.build(resolver, options.artwork)
+    } catch (error) {
+      view.destroy({ children: true })
+      throw error
+    }
     return view
   }
 
@@ -386,6 +394,10 @@ export class CardView extends Container {
     object.on('pointertap', (event) => {
       event.stopPropagation()
       this.onNodeSelected?.(path)
+    })
+    object.on('pointerdown', (event: FederatedPointerEvent) => {
+      event.stopPropagation()
+      this.onNodePointerDown?.(path, event)
     })
   }
 
@@ -608,9 +620,33 @@ export class CardView extends Container {
   }
 
   getNodeOverrides(): CardNodeOverrides {
-    return Object.fromEntries(
-      [...this.nodeEditorState.entries()].map(([path, state]) => [path, { ...state }])
-    )
+    const overrides: Record<string, CardNodeOverride> = {}
+
+    for (const [path, state] of this.nodeEditorState) {
+      const original = this.originalNodeEditorState.get(path)
+      if (!original) continue
+
+      const patch: {
+        x?: number
+        y?: number
+        width?: number
+        height?: number
+        visible?: boolean
+        fontSize?: number
+        lineHeight?: number
+      } = {}
+      if (state.x !== original.x) patch.x = state.x
+      if (state.y !== original.y) patch.y = state.y
+      if (state.width !== original.width) patch.width = state.width
+      if (state.height !== original.height) patch.height = state.height
+      if (state.visible !== original.visible) patch.visible = state.visible
+      if (state.fontSize !== original.fontSize) patch.fontSize = state.fontSize
+      if (state.lineHeight !== original.lineHeight) patch.lineHeight = state.lineHeight
+
+      if (Object.keys(patch).length > 0) overrides[path] = patch
+    }
+
+    return overrides
   }
 
   private async buildTreeNode(
@@ -719,88 +755,7 @@ export class CardView extends Container {
   }
 
   private async build(resolver: CardAssetResolver, artwork?: Texture): Promise<void> {
-    if (this.plan.tree) {
-      await this.buildTreeNode(this.plan.tree.root, this.content, resolver, artwork, '')
-      return
-    }
-
-    const artLayer = this.plan.layers.find(
-      (layer): layer is Extract<CardLayer, { kind: 'placeholder' }> =>
-        layer.kind === 'placeholder' && layer.id === 'art-placeholder'
-    )
-
-    if (artwork && artLayer) {
-      const artworkLayer = new Container()
-      const mask = new Graphics()
-      drawShape(mask, artLayer.bounds, artLayer.shape, 0xffffff)
-
-      const art = new Sprite(artwork)
-      art.anchor.set(0.5)
-      art.position.set(
-        artLayer.bounds.x +
-          artLayer.bounds.width / 2 +
-          (artLayer.artwork?.offset.x ?? 0),
-        artLayer.bounds.y +
-          artLayer.bounds.height / 2 +
-          (artLayer.artwork?.offset.y ?? 0)
-      )
-      const scale = Math.max(
-        artLayer.bounds.width / artwork.width,
-        artLayer.bounds.height / artwork.height
-      )
-      art.scale.set(scale * (artLayer.artwork?.overscan ?? 1))
-      artworkLayer.mask = mask
-      artworkLayer.addChild(art)
-      artworkLayer.addChild(mask)
-      artworkLayer.zIndex = artLayer.zIndex
-      this.content.addChild(artworkLayer)
-      this.registerLayerObject(artLayer.id, artworkLayer)
-    }
-
-    for (const layer of this.plan.layers) {
-      if (layer.kind === 'placeholder') {
-        if (!artwork || layer.id !== 'art-placeholder') {
-          const placeholder = createPlaceholder(layer)
-          placeholder.zIndex = layer.zIndex
-          this.content.addChild(placeholder)
-          this.registerLayerObject(layer.id, placeholder)
-        }
-        continue
-      }
-
-      if (layer.kind === 'texture') {
-        const texture = await resolver.load(layer.assetName)
-        const sprite = new Sprite(texture)
-        sprite.anchor.set(layer.anchor?.x ?? 0, layer.anchor?.y ?? 0)
-        sprite.position.set(layer.position.x, layer.position.y)
-        if (layer.scale) sprite.scale.set(layer.scale.x, layer.scale.y)
-        sprite.zIndex = layer.zIndex
-        sprite.label = `${this.plan.cardId}:${layer.id}`
-        this.content.addChild(sprite)
-        this.registerLayerObject(layer.id, sprite)
-        continue
-      }
-
-      if (layer.curve) {
-        const text = createCurvedText(layer)
-        text.zIndex = layer.zIndex
-        text.label = `${this.plan.cardId}:${layer.id}`
-        this.content.addChild(text)
-        this.registerLayerObject(layer.id, text)
-        continue
-      }
-
-      const text = new Text({
-        text: layer.text,
-        style: layer.style,
-        anchor: layer.anchor ?? { x: 0.5, y: 0.5 }
-      })
-      text.position.set(layer.position.x, layer.position.y)
-      text.zIndex = layer.zIndex
-      text.label = `${this.plan.cardId}:${layer.id}`
-      this.content.addChild(text)
-      this.registerLayerObject(layer.id, text)
-    }
+    await this.buildTreeNode(this.plan.tree.root, this.content, resolver, artwork, '')
   }
 
   addDebugOverlay(): void {
@@ -813,61 +768,7 @@ export class CardView extends Container {
     cardBounds.stroke({ color: 0x55e6ff, width: 3, alpha: 0.8 })
     overlay.addChild(cardBounds)
 
-    if (this.plan.tree) {
-      drawNodeDebug(this.plan.tree.root, overlay, { x: 0, y: 0 })
-    } else {
-      const artLayer = this.plan.layers.find(
-        (layer): layer is Extract<CardLayer, { kind: 'placeholder' }> =>
-          layer.kind === 'placeholder' && layer.id === 'art-placeholder'
-      )
-      if (!artLayer) {
-        this.content.addChild(overlay)
-        return
-      }
-      const artBounds = new Graphics()
-      drawShape(artBounds, artLayer.bounds, artLayer.shape, 0x000000)
-      artBounds.clear()
-      if (artLayer.shape === 'ellipse') {
-        artBounds.ellipse(
-          artLayer.bounds.x + artLayer.bounds.width / 2,
-          artLayer.bounds.y + artLayer.bounds.height / 2,
-          artLayer.bounds.width / 2,
-          artLayer.bounds.height / 2
-        )
-      } else if (artLayer.shape === 'circle') {
-        artBounds.circle(
-          artLayer.bounds.x + artLayer.bounds.width / 2,
-          artLayer.bounds.y + artLayer.bounds.height / 2,
-          Math.min(artLayer.bounds.width, artLayer.bounds.height) / 2
-        )
-      } else if (artLayer.shape === 'arch') {
-        const radius = Math.min(
-          artLayer.bounds.width / 2,
-          artLayer.bounds.height * 0.72
-        )
-        const centerX = artLayer.bounds.x + artLayer.bounds.width / 2
-        const springY = artLayer.bounds.y + radius
-        artBounds
-          .moveTo(artLayer.bounds.x, artLayer.bounds.y + artLayer.bounds.height)
-          .lineTo(artLayer.bounds.x, springY)
-          .arc(centerX, springY, radius, Math.PI, 0)
-          .lineTo(
-            artLayer.bounds.x + artLayer.bounds.width,
-            artLayer.bounds.y + artLayer.bounds.height
-          )
-          .closePath()
-      } else {
-        artBounds.roundRect(
-          artLayer.bounds.x,
-          artLayer.bounds.y,
-          artLayer.bounds.width,
-          artLayer.bounds.height,
-          28
-        )
-      }
-      artBounds.stroke({ color: 0xffe066, width: 3, alpha: 0.9 })
-      overlay.addChild(artBounds)
-    }
+    drawNodeDebug(this.plan.tree.root, overlay, { x: 0, y: 0 })
 
     const center = new Graphics()
     center.moveTo(this.plan.width / 2 - 12, this.plan.height / 2)

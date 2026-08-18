@@ -19,11 +19,7 @@ const artworkUrls = import.meta.glob('../assets/images/artwork/*.{jpg,jpeg,png}'
   query: '?url'
 }) as Record<string, string>
 
-const CARD_ARTWORK_FILES: Readonly<Record<string, string>> = {
-  basic_acidic_swamp_ooze: '01.jpg',
-  basic_arcane_explosion: '02.jpg',
-  basic_arcanite_reaper: '03.jpg'
-}
+const CARD_ARTWORK_EXTENSION = '.jpg'
 
 function assetUrl(fileName: string): string | undefined {
   return cardAssetUrlsByName[fileName.toLowerCase()]
@@ -31,6 +27,10 @@ function assetUrl(fileName: string): string | undefined {
 
 function artworkGlobKey(fileName: string): string {
   return `../assets/images/artwork/${fileName}`
+}
+
+function artworkFileName(cardId: string): string {
+  return `${cardId}${CARD_ARTWORK_EXTENSION}`
 }
 
 export function hasCardAsset(fileName: string): boolean {
@@ -44,14 +44,11 @@ export function getCardAssetUrl(fileName: string): string {
 }
 
 export function hasCardArtwork(cardId: string): boolean {
-  const fileName = CARD_ARTWORK_FILES[cardId]
-  return fileName !== undefined && artworkGlobKey(fileName) in artworkUrls
+  return artworkGlobKey(artworkFileName(cardId)) in artworkUrls
 }
 
 export function getCardArtworkUrl(cardId: string): string | undefined {
-  const fileName = CARD_ARTWORK_FILES[cardId]
-  if (!fileName) return undefined
-  return artworkUrls[artworkGlobKey(fileName)]
+  return artworkUrls[artworkGlobKey(artworkFileName(cardId))]
 }
 
 export class CardAssetResolver {
@@ -64,6 +61,11 @@ export class CardAssetResolver {
 
     const promise = Assets.load<Texture>(getCardAssetUrl(fileName))
     this.texturePromises.set(fileName, promise)
+    void promise.catch(() => {
+      if (this.texturePromises.get(fileName) === promise) {
+        this.texturePromises.delete(fileName)
+      }
+    })
     return promise
   }
 
@@ -76,6 +78,11 @@ export class CardAssetResolver {
 
     const promise = Assets.load<Texture>(artworkUrl)
     this.artworkPromises.set(cardId, promise)
+    void promise.catch(() => {
+      if (this.artworkPromises.get(cardId) === promise) {
+        this.artworkPromises.delete(cardId)
+      }
+    })
     return promise
   }
 }

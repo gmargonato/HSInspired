@@ -1,5 +1,6 @@
 import {
   CARD_CLASSES,
+  isCollectibleCard,
   type CardClass,
   type CardDefinition,
   type CardType
@@ -38,7 +39,9 @@ export function buildCollectionPages(
     const classCards = cards
       .filter(
         (card) =>
-          card.cardClass === cardClass && COLLECTION_CARD_TYPE_SET.has(card.type)
+          card.cardClass === cardClass &&
+          COLLECTION_CARD_TYPE_SET.has(card.type) &&
+          isCollectibleCard(card)
       )
       .sort(compareCards)
 

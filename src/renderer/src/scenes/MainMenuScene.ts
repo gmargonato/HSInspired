@@ -8,6 +8,11 @@ import { CollectionScene } from './CollectionScene'
 import { ASSET_BUNDLE_IDS } from '../core/assets'
 import type { MainMenuAssets } from '../core/assets'
 import type { TransitionRect } from '../core/SceneTransitionHost'
+import {
+  createHingedDoorMesh,
+  updateHingedDoor,
+  type HingeSide
+} from '../core/hingedDoor'
 
 // Manual nudges only (multi-line tweaks while designing the layout).
 // The lid x values are the inner edges of the closed chest.
@@ -30,7 +35,7 @@ const SCENE_SELECTION_GAP: TransitionRect = {
   height: 735
 }
 
-type LidSide = 'left' | 'right'
+type LidSide = HingeSide
 
 export class MainMenuScene extends Scene {
   private table!: Sprite
@@ -115,31 +120,13 @@ export class MainMenuScene extends Scene {
   }
 
   private createLidMesh(texture: Texture, side: LidSide): PerspectiveMesh {
-    const width = texture.width
     const height = texture.height
     const hingeOnLeft = side === 'left'
-    const hingeX = hingeOnLeft ? Layout.leftLid.x - width : Layout.rightLid.x + width
+    const topLeft = hingeOnLeft
+      ? { x: Layout.leftLid.x - texture.width, y: Layout.leftLid.y - height / 2 }
+      : { x: Layout.rightLid.x, y: Layout.rightLid.y - height / 2 }
 
-    const mesh = new PerspectiveMesh({
-      texture,
-      verticesX: 10,
-      verticesY: 10,
-      x0: hingeOnLeft ? 0 : -width,
-      y0: 0,
-      x1: hingeOnLeft ? width : 0,
-      y1: 0,
-      x2: hingeOnLeft ? width : 0,
-      y2: height,
-      x3: hingeOnLeft ? 0 : -width,
-      y3: height
-    })
-
-    mesh.position.set(
-      hingeX,
-      (hingeOnLeft ? Layout.leftLid.y : Layout.rightLid.y) - height / 2
-    )
-
-    return mesh
+    return createHingedDoorMesh(texture, side, topLeft)
   }
 
   private onPlayPressed(): Promise<void> {
@@ -239,12 +226,22 @@ export class MainMenuScene extends Scene {
 
   private updateLidMeshes(progress: number): void {
     const clampedProgress = Math.max(0, Math.min(1, progress))
-    const angle = clampedProgress * (Math.PI / 2)
-    const widthScale = Math.cos(angle)
-    const depth = Math.sin(angle) * LID_PERSPECTIVE_DEPTH
+    const widthScale = Math.cos(clampedProgress * (Math.PI / 2))
 
-    this.setLidCorners(this.lidLeft, 'left', widthScale, depth)
-    this.setLidCorners(this.lidRight, 'right', widthScale, depth)
+    updateHingedDoor(
+      this.lidLeft,
+      'left',
+      clampedProgress,
+      LID_PERSPECTIVE_DEPTH,
+      LID_MIN_WIDTH
+    )
+    updateHingedDoor(
+      this.lidRight,
+      'right',
+      clampedProgress,
+      LID_PERSPECTIVE_DEPTH,
+      LID_MIN_WIDTH
+    )
     this.updateCenterPartMount(widthScale)
   }
 
@@ -259,26 +256,6 @@ export class MainMenuScene extends Scene {
       height / 2 + Layout.centerPart.y - Layout.rightLid.y
     )
     this.centerPartMount.scale.set(widthScale, 1)
-  }
-
-  private setLidCorners(
-    mesh: PerspectiveMesh,
-    side: LidSide,
-    widthScale: number,
-    depth: number
-  ): void {
-    const width = mesh.texture.width
-    const height = mesh.texture.height
-    const visibleWidth = Math.max(LID_MIN_WIDTH, width * widthScale)
-    const hingeOnLeft = side === 'left'
-    const freeEdgeX = hingeOnLeft ? visibleWidth : -visibleWidth
-
-    if (hingeOnLeft) {
-      mesh.setCorners(0, 0, freeEdgeX, -depth, freeEdgeX, height + depth, 0, height)
-      return
-    }
-
-    mesh.setCorners(freeEdgeX, -depth, 0, 0, 0, height, freeEdgeX, height + depth)
   }
 
   update(_deltaMS: number): void {}

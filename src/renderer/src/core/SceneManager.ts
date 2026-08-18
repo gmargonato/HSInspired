@@ -207,7 +207,7 @@ export class SceneManager {
       committed = true
       await previous.unload()
       this.fitToScreen()
-      await options.afterTransition?.(previous, scene)
+      await this.runAfterTransition(options, previous, scene)
     } catch (error) {
       this.transitioningScene = null
 
@@ -273,7 +273,7 @@ export class SceneManager {
       await this.fadeOverlay(overlay, 0, halfDuration)
       this.removeFadeOverlay(overlay)
       overlay = null
-      await options.afterTransition?.(previous, scene)
+      await this.runAfterTransition(options, previous, scene)
     } catch (error) {
       this.transitioningScene = null
 
@@ -317,6 +317,21 @@ export class SceneManager {
   private removeFadeOverlay(overlay: Graphics): void {
     overlay.parent?.removeChild(overlay)
     overlay.destroy()
+  }
+
+  private async runAfterTransition(
+    options: SceneTransitionOptions,
+    previous: Scene,
+    next: Scene
+  ): Promise<void> {
+    try {
+      await options.afterTransition?.(previous, next)
+    } catch (error) {
+      // The destination is already committed and the source has been
+      // unloaded, so rolling back would leave callers holding destroyed UI.
+      // Keep navigation usable and report the destination reveal failure.
+      console.error('Destination reveal failed after scene transition:', error)
+    }
   }
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
