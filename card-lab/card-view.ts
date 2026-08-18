@@ -7,7 +7,6 @@ import type {
   CardPoint,
   CardRenderOptions,
   CardRenderPlan,
-  CardShape,
   CardTextLayer
 } from './card-render-plan'
 import { buildCardRenderPlan } from './card-render-plan'
@@ -66,67 +65,13 @@ interface ArtworkObjectEntry {
   readonly node: Extract<CardRenderNode, { kind: 'artwork' }>
 }
 
-function drawShape(
-  graphics: Graphics,
-  bounds: CardBounds,
-  shape: CardShape,
-  color: number
-): void {
-  if (shape === 'ellipse') {
-    graphics.ellipse(
-      bounds.x + bounds.width / 2,
-      bounds.y + bounds.height / 2,
-      bounds.width / 2,
-      bounds.height / 2
-    )
-  } else if (shape === 'circle') {
-    const radius = Math.min(bounds.width, bounds.height) / 2
-    graphics.circle(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, radius)
-  } else if (shape === 'arch') {
-    const radius = Math.min(bounds.width / 2, bounds.height * 0.72)
-    const centerX = bounds.x + bounds.width / 2
-    const springY = bounds.y + radius
-    graphics
-      .moveTo(bounds.x, bounds.y + bounds.height)
-      .lineTo(bounds.x, springY)
-      .arc(centerX, springY, radius, Math.PI, 0)
-      .lineTo(bounds.x + bounds.width, bounds.y + bounds.height)
-      .closePath()
-  } else {
-    graphics.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, 28)
-  }
+function drawShape(graphics: Graphics, bounds: CardBounds, color: number): void {
+  graphics.rect(bounds.x, bounds.y, bounds.width, bounds.height)
   graphics.fill(color)
 }
 
-function drawShapeOutline(
-  graphics: Graphics,
-  bounds: CardBounds,
-  shape: CardShape,
-  color: number
-): void {
-  if (shape === 'ellipse') {
-    graphics.ellipse(
-      bounds.x + bounds.width / 2,
-      bounds.y + bounds.height / 2,
-      bounds.width / 2,
-      bounds.height / 2
-    )
-  } else if (shape === 'circle') {
-    const radius = Math.min(bounds.width, bounds.height) / 2
-    graphics.circle(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, radius)
-  } else if (shape === 'arch') {
-    const radius = Math.min(bounds.width / 2, bounds.height * 0.72)
-    const centerX = bounds.x + bounds.width / 2
-    const springY = bounds.y + radius
-    graphics
-      .moveTo(bounds.x, bounds.y + bounds.height)
-      .lineTo(bounds.x, springY)
-      .arc(centerX, springY, radius, Math.PI, 0)
-      .lineTo(bounds.x + bounds.width, bounds.y + bounds.height)
-      .closePath()
-  } else {
-    graphics.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, 28)
-  }
+function drawShapeOutline(graphics: Graphics, bounds: CardBounds, color: number): void {
+  graphics.rect(bounds.x, bounds.y, bounds.width, bounds.height)
   graphics.stroke({ color, width: 3, alpha: 0.9 })
 }
 
@@ -248,12 +193,12 @@ function drawNodeDebug(
 
   if (node.kind === 'artwork') {
     const bounds = {
-      ...node.mask.bounds,
-      x: parentPosition.x + node.position.x + node.mask.bounds.x,
-      y: parentPosition.y + node.position.y + node.mask.bounds.y
+      ...node.bounds,
+      x: parentPosition.x + node.position.x + node.bounds.x,
+      y: parentPosition.y + node.position.y + node.bounds.y
     }
     const shape = new Graphics()
-    drawShapeOutline(shape, bounds, node.mask.shape, 0xffe066)
+    drawShapeOutline(shape, bounds, 0xffe066)
     overlay.addChild(shape)
     return
   }
@@ -438,8 +383,6 @@ export class CardView extends Container {
     return {
       x: node.position.x,
       y: node.position.y,
-      width: node.mask.bounds.width,
-      height: node.mask.bounds.height,
       visible: object.visible
     }
   }
@@ -465,28 +408,23 @@ export class CardView extends Container {
     if (!entry || !state) return
 
     const bounds = {
-      x: 0,
-      y: 0,
-      width: state.width ?? entry.node.mask.bounds.width,
-      height: state.height ?? entry.node.mask.bounds.height
+      ...entry.node.bounds,
+      width: state.width ?? entry.node.bounds.width,
+      height: state.height ?? entry.node.bounds.height
     }
     entry.container.position.set(state.x, state.y)
     entry.mask.clear()
-    drawShape(entry.mask, bounds, entry.node.mask.shape, 0xffffff)
+    drawShape(entry.mask, bounds, 0xffffff)
     if (entry.placeholder) {
       entry.placeholder.clear()
-      drawShape(entry.placeholder, bounds, entry.node.mask.shape, entry.node.mask.color)
+      drawShape(entry.placeholder, bounds, 0x535b65)
     }
     if (entry.image) {
-      entry.image.position.set(
-        bounds.x + bounds.width / 2 + entry.node.artwork.offset.x,
-        bounds.y + bounds.height / 2 + entry.node.artwork.offset.y
-      )
-      const scale = Math.max(
-        bounds.width / entry.image.texture.width,
-        bounds.height / entry.image.texture.height
-      )
-      entry.image.scale.set(scale * entry.node.artwork.overscan)
+      entry.image.position.set(bounds.x, bounds.y)
+      entry.image.width =
+        state.width === undefined ? entry.image.texture.width : bounds.width
+      entry.image.height =
+        state.height === undefined ? entry.image.texture.height : bounds.height
     }
   }
 
@@ -677,30 +615,24 @@ export class CardView extends Container {
       const artworkLayer = new Container()
       artworkLayer.position.set(node.position.x, node.position.y)
       const mask = new Graphics()
-      drawShape(mask, node.mask.bounds, node.mask.shape, 0xffffff)
+      drawShape(mask, node.bounds, 0xffffff)
       let image: Sprite | undefined
       let placeholder: Graphics | undefined
 
       if (artwork) {
         image = new Sprite(artwork)
-        image.anchor.set(0.5)
-        image.position.set(
-          node.mask.bounds.x + node.mask.bounds.width / 2 + node.artwork.offset.x,
-          node.mask.bounds.y + node.mask.bounds.height / 2 + node.artwork.offset.y
-        )
-        const scale = Math.max(
-          node.mask.bounds.width / artwork.width,
-          node.mask.bounds.height / artwork.height
-        )
-        image.scale.set(scale * node.artwork.overscan)
-        artworkLayer.mask = mask
+        // Artwork is deliberately rendered at its authored/native size. The
+        // card frame is composited above it and supplies the visible window.
+        image.anchor.set(0)
+        image.position.set(node.bounds.x, node.bounds.y)
         artworkLayer.addChild(image)
-        artworkLayer.addChild(mask)
       } else {
         placeholder = new Graphics()
-        drawShape(placeholder, node.mask.bounds, node.mask.shape, node.mask.color)
+        drawShape(placeholder, node.bounds, 0x535b65)
         artworkLayer.addChild(placeholder)
       }
+      artworkLayer.mask = mask
+      artworkLayer.addChild(mask)
 
       artworkLayer.zIndex = node.zIndex
       artworkLayer.visible = node.visible ?? true

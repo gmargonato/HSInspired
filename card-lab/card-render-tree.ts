@@ -1,8 +1,6 @@
 import type {
-  CardArtworkPlacement,
   CardBounds,
   CardPoint,
-  CardShape,
   CardTextCurve,
   CardTextStyle,
   CardLayer,
@@ -64,12 +62,8 @@ export interface CardArtworkNode {
   readonly kind: 'artwork'
   readonly id: string
   readonly position: CardPoint
-  readonly mask: {
-    readonly bounds: CardBounds
-    readonly shape: CardShape
-    readonly color: number
-  }
-  readonly artwork: CardArtworkPlacement
+  /** Native-size square artwork bounds in card coordinates. */
+  readonly bounds: CardBounds
   readonly zIndex: number
   readonly visible?: boolean
 }
@@ -146,14 +140,13 @@ function flattenNode(
     kind: 'placeholder',
     id: path,
     bounds: {
-      x: parentPosition.x + node.position.x + node.mask.bounds.x,
-      y: parentPosition.y + node.position.y + node.mask.bounds.y,
-      width: node.mask.bounds.width,
-      height: node.mask.bounds.height
+      x: parentPosition.x + node.position.x + node.bounds.x,
+      y: parentPosition.y + node.position.y + node.bounds.y,
+      width: node.bounds.width,
+      height: node.bounds.height
     },
-    shape: node.mask.shape,
-    color: node.mask.color,
-    artwork: node.artwork,
+    shape: 'rectangle',
+    color: 0x535b65,
     zIndex: node.zIndex
   }
   layers.push(placeholder)

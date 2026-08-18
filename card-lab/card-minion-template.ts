@@ -1,11 +1,9 @@
 import type { CardDefinition, CardType } from './card-catalog'
 import type {
-  CardArtworkPlacement,
   CardBounds,
   CardNodeOverrides,
   CardPoint,
   CardRenderOptions,
-  CardShape,
   CardTextStyle
 } from './card-render-plan'
 import type { CardGroupNode, CardRenderNode, CardSize } from './card-render-tree'
@@ -21,11 +19,9 @@ type CardVisualTemplate = 'minion' | 'spell' | 'weapon' | 'hero'
 
 interface CardProfile {
   readonly template: CardVisualTemplate
-  readonly frame: { readonly normal: string; readonly premium: string }
+  readonly frame: string
   readonly artwork: {
     readonly bounds: CardBounds
-    readonly shape: CardShape
-    readonly placement: CardArtworkPlacement
   }
   readonly nameBox: CardBounds
   readonly rulesBox: CardBounds
@@ -39,6 +35,22 @@ interface CardProfile {
   readonly rarity: CardPoint
 }
 
+const SHARED_ARTWORK = {
+  bounds: { x: 83, y: 0, width: 454, height: 454 }
+} as const
+
+const SHARED_NAME_BOX = { x: 74, y: 454, width: 472, height: 72 } as const
+const SHARED_RULES_BOX = { x: 94, y: 600, width: 432, height: 190 } as const
+const SHARED_STATS = {
+  mana: { x: 77, y: 50 },
+  attack: { x: 60, y: 800 },
+  defense: { x: 570, y: 800 },
+  weaponAttack: { x: 60, y: 800 },
+  weaponDefense: { x: 570, y: 800 }
+} as const
+/** Centered below the shared title box; rarity assets are 42x58 at source size. */
+const SHARED_RARITY = { x: 310, y: 560 } as const
+
 /**
  * Geometry is centralized here. Source frame files are normalized to this
  * 620x900 design coordinate system when rendered.
@@ -46,96 +58,44 @@ interface CardProfile {
 export const CARD_PROFILES: Readonly<Record<CardVisualTemplate, CardProfile>> = {
   minion: {
     template: 'minion',
-    frame: {
-      normal: 'FRAME_MINION.png',
-      premium: 'FRAME_MINION_PREMIUM.png'
-    },
-    artwork: {
-      bounds: { x: 100, y: 5, width: 405, height: 550 },
-      shape: 'ellipse',
-      placement: { offset: { x: 0, y: 26 }, overscan: 1.02 }
-    },
-    nameBox: { x: 74, y: 450, width: 472, height: 72 },
-    rulesBox: { x: 94, y: 560, width: 432, height: 230 },
-    stats: {
-      mana: { x: 60, y: 70 },
-      attack: { x: 60, y: 800 },
-      defense: { x: 570, y: 800 },
-      weaponAttack: { x: 68, y: 834 },
-      weaponDefense: { x: 557, y: 830 }
-    },
-    rarity: { x: 310, y: 563 }
+    frame: 'FRAME_MINION.png',
+    artwork: SHARED_ARTWORK,
+    nameBox: SHARED_NAME_BOX,
+    rulesBox: SHARED_RULES_BOX,
+    stats: SHARED_STATS,
+    rarity: SHARED_RARITY
   },
   spell: {
     template: 'spell',
-    frame: {
-      normal: 'FRAME_SPELL.png',
-      premium: 'FRAME_SPELL_PREMIUM.png'
-    },
-    artwork: {
-      bounds: { x: 76, y: 58, width: 468, height: 386 },
-      shape: 'rounded-rectangle',
-      placement: { offset: { x: 0, y: 0 }, overscan: 1.02 }
-    },
-    nameBox: { x: 74, y: 454, width: 472, height: 72 },
-    rulesBox: { x: 94, y: 555, width: 432, height: 245 },
-    stats: {
-      mana: { x: 77, y: 91 },
-      attack: { x: 102, y: 775 },
-      defense: { x: 542, y: 790 },
-      weaponAttack: { x: 68, y: 834 },
-      weaponDefense: { x: 557, y: 830 }
-    },
-    rarity: { x: 310, y: 842 }
+    frame: 'FRAME_SPELL.png',
+    artwork: SHARED_ARTWORK,
+    nameBox: SHARED_NAME_BOX,
+    rulesBox: SHARED_RULES_BOX,
+    stats: SHARED_STATS,
+    rarity: SHARED_RARITY
   },
   weapon: {
     template: 'weapon',
-    frame: {
-      normal: 'FRAME_WEAPON.png',
-      premium: 'FRAME_WEAPON_PREMIUM.png'
-    },
-    artwork: {
-      bounds: { x: 95, y: 58, width: 430, height: 390 },
-      shape: 'circle',
-      placement: { offset: { x: 0, y: 0 }, overscan: 1.02 }
-    },
-    nameBox: { x: 74, y: 454, width: 472, height: 72 },
-    rulesBox: { x: 94, y: 555, width: 432, height: 245 },
-    stats: {
-      mana: { x: 77, y: 91 },
-      attack: { x: 102, y: 775 },
-      defense: { x: 542, y: 790 },
-      weaponAttack: { x: 68, y: 834 },
-      weaponDefense: { x: 557, y: 830 }
-    },
-    rarity: { x: 310, y: 842 }
+    frame: 'FRAME_WEAPON.png',
+    artwork: SHARED_ARTWORK,
+    nameBox: SHARED_NAME_BOX,
+    rulesBox: SHARED_RULES_BOX,
+    stats: SHARED_STATS,
+    rarity: SHARED_RARITY
   },
   hero: {
     template: 'hero',
-    frame: {
-      normal: 'FRAME_HERO.png',
-      premium: 'FRAME_HERO_PREMIUM.png'
-    },
-    artwork: {
-      bounds: { x: 92, y: 48, width: 436, height: 408 },
-      shape: 'arch',
-      placement: { offset: { x: 0, y: 0 }, overscan: 1.02 }
-    },
-    nameBox: { x: 74, y: 454, width: 472, height: 72 },
-    rulesBox: { x: 94, y: 555, width: 432, height: 245 },
-    stats: {
-      mana: { x: 77, y: 91 },
-      attack: { x: 102, y: 775 },
-      defense: { x: 542, y: 790 },
-      weaponAttack: { x: 68, y: 834 },
-      weaponDefense: { x: 557, y: 830 }
-    },
-    rarity: { x: 310, y: 842 }
+    frame: 'FRAME_HERO.png',
+    artwork: SHARED_ARTWORK,
+    nameBox: SHARED_NAME_BOX,
+    rulesBox: SHARED_RULES_BOX,
+    stats: SHARED_STATS,
+    rarity: SHARED_RARITY
   }
 } as const
 
 export function visualTemplateFor(type: CardType): CardVisualTemplate {
-  if (type === 'Spell' || type === 'Hero Power') return 'spell'
+  if (type === 'Spell') return 'spell'
   if (type === 'Weapon') return 'weapon'
   if (type === 'Hero') return 'hero'
   return 'minion'
@@ -192,18 +152,8 @@ function artwork(profile: CardProfile): Extract<CardRenderNode, { kind: 'artwork
   return {
     kind: 'artwork',
     id: 'artwork',
-    position: { x: profile.artwork.bounds.x, y: profile.artwork.bounds.y },
-    mask: {
-      bounds: {
-        x: 0,
-        y: 0,
-        width: profile.artwork.bounds.width,
-        height: profile.artwork.bounds.height
-      },
-      shape: profile.artwork.shape,
-      color: 0x535b65
-    },
-    artwork: profile.artwork.placement,
+    position: { x: 0, y: 0 },
+    bounds: profile.artwork.bounds,
     zIndex: 0
   }
 }
@@ -218,12 +168,6 @@ const NAME_STYLE_BASE: CardTextStyle = {
   breakWords: true
 }
 
-const PREMIUM_NAME_STYLE: CardTextStyle = {
-  ...NAME_STYLE_BASE,
-  fill: 0xffffff,
-  stroke: { color: 0x17120f, width: 5 }
-}
-
 const RULES_STYLE_BASE: CardTextStyle = {
   fontFamily: 'Franklin Gothic Condensed',
   fontSize: 34,
@@ -235,7 +179,7 @@ const RULES_STYLE_BASE: CardTextStyle = {
   tagStyles: { keyword: { fontWeight: 'bold' } }
 }
 
-const PREMIUM_RULES_STYLE: CardTextStyle = {
+const WEAPON_RULES_STYLE: CardTextStyle = {
   ...RULES_STYLE_BASE,
   fill: 0xffffff
 }
@@ -263,7 +207,7 @@ export const CARD_STAT_LABEL_OFFSETS = {
   mana: { x: 0, y: -10 },
   attack: { x: 20, y: 15 },
   health: { x: 0, y: 15 },
-  durability: { x: 0, y: 0 }
+  durability: { x: 0, y: 15 }
 } as const
 
 type CardStatId = keyof typeof CARD_STAT_LABEL_OFFSETS
@@ -289,22 +233,13 @@ function stat(
   ])
 }
 
-function stats(
-  card: CardDefinition,
-  profile: CardProfile,
-  premium: boolean
-): CardGroupNode {
+function stats(card: CardDefinition, profile: CardProfile): CardGroupNode {
   const children: CardRenderNode[] = [
     stat('mana', card.cost, profile.stats.mana, 'MANA.png')
   ]
 
-  if (card.attack !== null && card.type !== 'Spell' && card.type !== 'Hero Power') {
-    const attackAsset =
-      card.type === 'Weapon'
-        ? premium
-          ? 'attack-weapon-premium.png'
-          : 'attack-weapon.png'
-        : 'ATTACK.png'
+  if (card.attack !== null && card.type !== 'Spell') {
+    const attackAsset = card.type === 'Weapon' ? 'attack-weapon.png' : 'ATTACK.png'
     children.push(
       stat(
         'attack',
@@ -317,12 +252,7 @@ function stats(
 
   if (card.type === 'Weapon' && card.durability !== null) {
     children.push(
-      stat(
-        'durability',
-        card.durability,
-        profile.stats.weaponDefense,
-        premium ? 'durability-premium.png' : 'durability.png'
-      )
+      stat('durability', card.durability, profile.stats.weaponDefense, 'durability.png')
     )
   } else if ((card.type === 'Minion' || card.type === 'Hero') && card.health !== null) {
     children.push(stat('health', card.health, profile.stats.defense, 'HEALTH.png'))
@@ -419,13 +349,10 @@ function applyNodeOverrides(
         x: override.x ?? node.position.x,
         y: override.y ?? node.position.y
       },
-      mask: {
-        ...node.mask,
-        bounds: {
-          ...node.mask.bounds,
-          width: override.width ?? node.mask.bounds.width,
-          height: override.height ?? node.mask.bounds.height
-        }
+      bounds: {
+        ...node.bounds,
+        width: override.width ?? node.bounds.width,
+        height: override.height ?? node.bounds.height
       }
     }
   }
@@ -437,24 +364,11 @@ export function buildCardRenderTree(
   card: CardDefinition,
   options: CardRenderOptions = {}
 ): { readonly root: CardGroupNode } {
-  const premium = options.premium ?? false
   const profile = CARD_PROFILES[visualTemplateFor(card.type)]
   const children: CardRenderNode[] = [
     artwork(profile),
-    image(
-      'frame',
-      premium ? profile.frame.premium : profile.frame.normal,
-      { x: 0, y: 0 },
-      100,
-      { size: CARD_CANVAS }
-    ),
-    text(
-      'name',
-      card.name,
-      profile.nameBox,
-      premium ? PREMIUM_NAME_STYLE : NAME_STYLE_BASE,
-      200
-    )
+    image('frame', profile.frame, { x: 0, y: 0 }, 100, { size: CARD_CANVAS }),
+    text('name', card.name, profile.nameBox, NAME_STYLE_BASE, 200)
   ]
 
   if (card.effect) {
@@ -463,13 +377,13 @@ export function buildCardRenderTree(
         'rules',
         markHearthstoneKeywords(card.effect),
         profile.rulesBox,
-        premium ? PREMIUM_RULES_STYLE : RULES_STYLE_BASE,
+        card.type === 'Weapon' ? WEAPON_RULES_STYLE : RULES_STYLE_BASE,
         220
       )
     )
   }
 
-  children.push(stats(card, profile, premium))
+  children.push(stats(card, profile))
   const rarityNode = rarity(card, profile)
   if (rarityNode) children.push(rarityNode)
   const overlayNode = overlays(options)

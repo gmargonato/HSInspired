@@ -15,7 +15,6 @@ const DEFAULT_CARD_ID = 'basic_acidic_swamp_ooze'
 
 const query = new URLSearchParams(window.location.search)
 const exportMode = query.get('export') === '1'
-const premiumFromQuery = query.get('premium') === '1'
 document.body.dataset.export = String(exportMode)
 
 const app = new Application()
@@ -36,13 +35,7 @@ let builderDrag: {
 
 type StoredCardOverrides = Readonly<Partial<Record<CardTemplate, CardNodeOverrides>>>
 
-const CARD_TEMPLATES: readonly CardTemplate[] = [
-  'minion',
-  'spell',
-  'weapon',
-  'hero',
-  'hero-power'
-]
+const CARD_TEMPLATES: readonly CardTemplate[] = ['minion', 'spell', 'weapon', 'hero']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -369,13 +362,9 @@ async function renderCard(cardId: string): Promise<void> {
     const card = CARD_CATALOG.get(cardId)
     if (!card) throw new Error(`Unknown card id: ${cardId}`)
 
-    const premium = exportMode
-      ? premiumFromQuery
-      : getElement<HTMLInputElement>('premium').checked
     const debug = exportMode ? false : getElement<HTMLInputElement>('debug').checked
     const artwork = await resolver.loadArtwork(card.id)
     const view = await CardView.create(card, resolver, {
-      premium,
       debug,
       artwork,
       nodeOverrides: !exportMode

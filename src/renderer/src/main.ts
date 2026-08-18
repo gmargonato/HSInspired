@@ -60,6 +60,11 @@ async function bootstrap(): Promise<void> {
 
   container.appendChild(app.canvas)
 
+  const preventContextMenu = (event: MouseEvent): void => {
+    event.preventDefault()
+  }
+  app.canvas.addEventListener('contextmenu', preventContextMenu)
+
   app.ticker.maxFPS = 60
 
   const cursor = new CursorManager(container)
@@ -84,6 +89,7 @@ async function bootstrap(): Promise<void> {
       'beforeunload',
       () => {
         unsubscribeFromSceneMenu()
+        app.canvas.removeEventListener('contextmenu', preventContextMenu)
         cursor.destroy()
       },
       { once: true }

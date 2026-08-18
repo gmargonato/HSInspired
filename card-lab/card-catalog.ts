@@ -2,7 +2,8 @@ import basicCards from '../src/data/cards/basic.json'
 import classicCards from '../src/data/cards/classic.json'
 import { isCollectibleDeckCard } from '../src/shared/decks'
 
-export const CARD_TYPES = ['Minion', 'Spell', 'Weapon', 'Hero', 'Hero Power'] as const
+/** Card types that can be collected and rendered as cards. */
+export const CARD_TYPES = ['Minion', 'Spell', 'Weapon', 'Hero'] as const
 export type CardType = (typeof CARD_TYPES)[number]
 
 export const CARD_CLASSES = [
@@ -32,7 +33,29 @@ export const CARD_RARITIES = [
 ] as const
 export type CardRarity = (typeof CARD_RARITIES)[number]
 
-export type CardSet = 'basic' | 'classic'
+/**
+ * Set identifiers are intentionally open-ended so future expansion files can
+ * be added without changing the card renderer's domain model.
+ */
+export type CardSet = 'basic' | 'classic' | (string & {})
+
+export const CARD_SET_LABELS: Readonly<Record<string, string>> = {
+  basic: 'Basic',
+  classic: 'Classic',
+  goblins_vs_gnomes: 'Goblins vs Gnomes',
+  naxxramas: 'Curse of Naxxramas'
+}
+
+export function formatCardSetName(set: CardSet): string {
+  const knownLabel = CARD_SET_LABELS[set]
+  if (knownLabel) return knownLabel
+
+  return set
+    .split(/[_-]+/u)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
 
 export interface CardDefinition {
   readonly id: string
@@ -156,7 +179,13 @@ function normalizeSet(
   records: readonly RawCardRecord[],
   set: CardSet
 ): CardDefinition[] {
-  return records.map((record) => normalizeCard(record, set))
+  // Hero Powers are game content, but they are not cards and therefore do not
+  // belong in the card catalog. Keep their source records available for a
+  // future dedicated hero-power catalog without pretending they use a card
+  // frame or a card type.
+  return records
+    .filter((record) => record.type !== 'Hero Power')
+    .map((record) => normalizeCard(record, set))
 }
 
 export class CardCatalog {

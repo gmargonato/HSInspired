@@ -16,7 +16,6 @@ export interface SceneParamsById {
   'deck-selection': undefined
   collection: undefined
   'new-deck': undefined
-  'card-view': undefined
 }
 
 export type SceneId = keyof SceneParamsById
@@ -52,8 +51,7 @@ export const SCENE_MENU_ENTRIES = {
     request: { id: 'deck-selection' }
   },
   collection: { label: 'Collection', request: { id: 'collection' } },
-  'new-deck': { label: 'New Deck', request: { id: 'new-deck' } },
-  'card-view': { label: 'Card View', request: { id: 'card-view' } }
+  'new-deck': { label: 'New Deck', request: { id: 'new-deck' } }
 } as const satisfies SceneMenuCatalog
 
 const knownSceneIds = new Set<string>(

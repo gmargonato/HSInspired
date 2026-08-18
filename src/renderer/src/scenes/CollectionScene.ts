@@ -17,11 +17,7 @@ import { CardAssetResolver } from '../../../../card-lab/card-asset-manifest'
 import { CardView } from '../../../../card-lab/card-view'
 import { Scene } from './Scene'
 import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
-import {
-  ASSET_BUNDLE_IDS,
-  CollectionAssets,
-  SharedUIAssets
-} from '../core/assets'
+import { ASSET_BUNDLE_IDS, CollectionAssets, SharedUIAssets } from '../core/assets'
 import type { CursorContextVariant } from '../core/cursor'
 import { playerDeckStore, type DeckStore } from '../core/decks'
 import { DECK_FRAME_ASSET_KEYS, type DeckFrameAssetKey } from '../core/deckFrames'
@@ -33,6 +29,7 @@ import {
 import { HERO_DEFINITIONS } from '../core/heroes'
 import { Button } from '../actors/Button'
 import { buildCollectionPages, type CollectionPage } from './collectionPages'
+import { CardViewScene, type CardPreviewSourceBounds } from './CardViewScene'
 import { NewDeckScene } from './NewDeckScene'
 import { MainMenuScene } from './MainMenuScene'
 import {
@@ -48,6 +45,7 @@ const PAGE_RIGHT = 1380
 const PAGE_BOTTOM = GAME_HEIGHT - 80
 const PAGE_CENTER_X = (PAGE_LEFT + PAGE_RIGHT) / 2
 const PAGE_HEIGHT = PAGE_BOTTOM - PAGE_TOP
+const PAGE_NAV_ZONE_WIDTH = 90
 
 // Manual nudges only. Keep the lock position relative to the cover so the two
 // assets stay aligned when the main collection panel is moved during layout.
@@ -103,10 +101,7 @@ const FULL_VIEWPORT = {
 type DoorSide = HingeSide
 
 type CollectionDeckAssetKey =
-  | 'loadDeckButton'
-  | 'newDeckButton'
-  | 'verticalSlider'
-  | DeckFrameAssetKey
+  'loadDeckButton' | 'newDeckButton' | 'verticalSlider' | DeckFrameAssetKey
 
 /** Full-viewport collection scene presented through the main menu transition. */
 export class CollectionScene extends Scene {
@@ -151,7 +146,10 @@ export class CollectionScene extends Scene {
   private pageIndex = 0
   private renderSequence = 0
   private pageLoading = false
+  private navigationEnabled = false
   private navigationReady = false
+  private hoveredPageZone: CursorContextVariant | null = null
+  private cardPreviewOpening = false
   private disposed = false
 
   constructor(deckStore: DeckStore = playerDeckStore) {
@@ -208,13 +206,13 @@ export class CollectionScene extends Scene {
 
     this.previousPageZone = this.createPageZone(
       PAGE_LEFT,
-      50,
+      PAGE_NAV_ZONE_WIDTH,
       'collection-previous-page',
       () => this.changePage(-1)
     )
     this.nextPageZone = this.createPageZone(
-      1310,
-      PAGE_RIGHT - 1310,
+      PAGE_RIGHT - PAGE_NAV_ZONE_WIDTH,
+      PAGE_NAV_ZONE_WIDTH,
       'collection-next-page',
       () => this.changePage(1)
     )
@@ -341,7 +339,9 @@ export class CollectionScene extends Scene {
 
     const sequence = ++this.renderSequence
     this.pageLoading = true
-    this.setNavigationEnabled(false)
+    // Keep the page zones interactive while the card artwork is loading. The
+    // page-loading guard still rejects duplicate taps, while leaving the
+    // zones mounted preserves their hover state when the pointer is stationary.
 
     const nextCardLayer = new Container()
     try {
@@ -372,6 +372,9 @@ export class CollectionScene extends Scene {
           view.on('pointertapcapture', (event: FederatedPointerEvent) =>
             this.handleCollectionCardTap(event, card)
           )
+          view.on('rightclick', (event: FederatedPointerEvent) =>
+            this.handleCollectionCardPreview(event, card, view)
+          )
         }
         this.layoutCard(view, cardIndex)
         nextCardLayer.addChild(view)
@@ -388,9 +391,7 @@ export class CollectionScene extends Scene {
     } finally {
       if (sequence === this.renderSequence) {
         this.pageLoading = false
-        if (!this.disposed && this.navigationReady) {
-          this.setNavigationEnabled(true)
-        }
+        if (!this.disposed) this.updatePageZoneModes()
       }
     }
   }
@@ -957,13 +958,53 @@ export class CollectionScene extends Scene {
     event: FederatedPointerEvent,
     card: CardDefinition
   ): void => {
-    if (!this.activeDeckId) return
+    if (event.button !== 0 || !this.activeDeckId) return
 
     event.stopPropagation()
     void this.addCardToActiveDeck(card).catch((error: unknown) => {
       console.error(`Failed to add ${card.name} to the deck:`, error)
       this.renderDeckStatus('Could not update the deck.', true)
     })
+  }
+
+  private readonly handleCollectionCardPreview = (
+    event: FederatedPointerEvent,
+    card: CardDefinition,
+    view: CardView
+  ): void => {
+    if (event.button !== 2 || this.disposed || !this.navigationReady) return
+
+    event.stopPropagation()
+    if (this.cardPreviewOpening) return
+
+    this.cardPreviewOpening = true
+    const bounds = view.getBounds()
+    const topLeft = this.root.toLocal({ x: bounds.x, y: bounds.y })
+    const bottomRight = this.root.toLocal({
+      x: bounds.x + bounds.width,
+      y: bounds.y + bounds.height
+    })
+    const sourceBounds: CardPreviewSourceBounds = {
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y
+    }
+
+    void this.sceneManager
+      .push(
+        new CardViewScene({
+          card,
+          sourceBounds,
+          resolver: this.cardResolver
+        })
+      )
+      .catch((error: unknown) => {
+        console.error(`Failed to open card preview for ${card.name}:`, error)
+      })
+      .finally(() => {
+        this.cardPreviewOpening = false
+      })
   }
 
   private async beginNewDeckCreation(): Promise<void> {
@@ -1050,24 +1091,47 @@ export class CollectionScene extends Scene {
     zone.position.set(x, PAGE_TOP)
     zone.hitArea = new Rectangle(0, 0, width, PAGE_HEIGHT)
     zone.eventMode = 'none'
-    zone.on('pointerover', () =>
+    zone.on('pointerover', () => {
+      this.hoveredPageZone = cursorVariant
       this.sceneManager.cursor?.setContextVariant(cursorVariant)
-    )
-    zone.on('pointerout', () => this.sceneManager.cursor?.setContextVariant(null))
+    })
+    zone.on('pointerout', () => {
+      if (this.hoveredPageZone !== cursorVariant) return
+
+      this.hoveredPageZone = null
+      this.sceneManager.cursor?.setContextVariant(null)
+    })
     zone.on('pointertap', onClick)
     return zone
   }
 
   private setNavigationEnabled(enabled: boolean): void {
+    this.navigationEnabled = enabled
+    this.hoveredPageZone = null
     this.sceneManager.cursor?.setContextVariant(null)
 
-    const creationOpen = this.newDeckScene?.isOpen ?? false
-    const navigationEnabled = enabled && !creationOpen
+    this.updatePageZoneModes()
+  }
 
-    this.previousPageZone.eventMode =
-      navigationEnabled && this.pageIndex > 0 ? 'static' : 'none'
-    this.nextPageZone.eventMode =
-      navigationEnabled && this.pageIndex < this.pages.length - 1 ? 'static' : 'none'
+  private updatePageZoneModes(): void {
+    const creationOpen = this.newDeckScene?.isOpen ?? false
+    const navigationEnabled = this.navigationEnabled && !creationOpen
+
+    const previousPageEnabled = navigationEnabled && this.pageIndex > 0
+    const nextPageEnabled = navigationEnabled && this.pageIndex < this.pages.length - 1
+
+    this.previousPageZone.eventMode = previousPageEnabled ? 'static' : 'none'
+    this.nextPageZone.eventMode = nextPageEnabled ? 'static' : 'none'
+
+    const hoveredZoneIsStillEnabled =
+      this.hoveredPageZone === null ||
+      (this.hoveredPageZone === 'collection-previous-page'
+        ? previousPageEnabled
+        : nextPageEnabled)
+    if (!hoveredZoneIsStillEnabled) {
+      this.hoveredPageZone = null
+      this.sceneManager.cursor?.setContextVariant(null)
+    }
   }
 
   private changePage(delta: number): void {
@@ -1119,7 +1183,10 @@ export class CollectionScene extends Scene {
     this.disposed = true
     this.renderSequence += 1
     this.pageLoading = false
+    this.navigationEnabled = false
     this.navigationReady = false
+    this.hoveredPageZone = null
+    this.cardPreviewOpening = false
     this.unsubscribeDeckStore?.()
     this.unsubscribeDeckStore = null
     this.activeDeckId = null

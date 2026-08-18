@@ -94,8 +94,7 @@ if (!runningInElectronApiMode) {
       await window.loadFile(indexPath, {
         query: {
           cardId,
-          export: '1',
-          premium: process.argv.includes('--premium') ? '1' : '0'
+          export: '1'
         }
       })
       await waitForCardLab(window)

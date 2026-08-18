@@ -1,9 +1,9 @@
 # Card Lab
 
 Card Lab is an isolated card-data and rendering harness. It does not import the
-game's scene manager or production actors. The game has a separate development
-bridge, `CardViewScene`, that uses the same renderer without touching gameplay or
-the Collection scene.
+game's scene manager or production actors. The game uses the same renderer for
+an in-collection contextual preview without coupling card composition to
+gameplay scenes.
 
 ## Run it
 
@@ -11,20 +11,20 @@ the Collection scene.
 npm run card-lab:dev
 ```
 
-Then choose any card ID from the input. The lab currently loads all 465 Basic
-and Classic cards.
+Then choose any card ID from the input. The lab currently loads all Basic and
+Classic card records (Hero Powers are kept out of the card catalog).
 
-## In-game view
+## In-game preview
 
-Run the game in development mode:
+Run the game in development mode and open the Collection:
 
 ```text
 npm run dev
 ```
 
-Open the native `Scenes` menu and choose `Card View`. The left side contains a
-scrollable button for every Basic and Classic card; clicking one renders it on
-the right. Leaving the scene unloads the temporary view and its display tree.
+Right-click a card to open the contextual `CardViewScene` preview; the card
+grows from its collection slot while the metadata panel appears beside it.
+Click the backdrop or press Escape to return to the Collection.
 
 For a deterministic PNG export, build first and run:
 
@@ -33,9 +33,9 @@ npm run card-lab:build
 node scripts/render-card.cjs --card-id classic_abomination --output artifacts/classic_abomination.png
 ```
 
-Add `--premium` to exercise the premium asset path. Standard and premium cards
-use one complete frame sprite. Card names are white with a black outline in
-both modes; premium cards also switch their rules/effect text to white.
+The renderer uses one standard frame and stat set for every card. Card names are
+white with a black outline; weapon rules/effect text is white while other card
+types keep the standard dark rules text.
 
 ## Rendering boundary
 
@@ -47,7 +47,8 @@ The renderer is intentionally split into four small boundaries:
    `card-minion-template.ts`.
 3. `card-asset-manifest.ts` resolves only assets referenced by that plan.
 4. `card-view.ts` turns either plan representation into a Pixi display object
-   and accepts an artwork texture clipped to the art bounds.
+   and accepts an artwork texture rendered behind the frame and cropped to the
+   shared square bounds.
 
 This makes the plan testable without a renderer and makes the final `CardView`
 usable in the collection scene or a game board later. A card is a display
@@ -64,12 +65,14 @@ normalization or layout rules.
 
 Every card uses a 620 x 900 design canvas. Source frame images are normalized to
 that canvas at render time. Preview scaling in the lab is uniform and happens
-after the card has been composed. Individual images, text boxes, masks, and
-groups have their own named positions and dimensions.
+after the card has been composed. Artwork is a shared native-size 454 x 454
+square behind the frame; a simple rectangular crop prevents legacy artwork
+from bleeding outside the card while assets are being regenerated.
 
 Dynamic stat icons and rarity gems are loaded at their source dimensions. The
 frame is the one intentional exception: it is fitted to the canonical 620 x
-900 card canvas.
+900 card canvas. Rarity gems share one centered anchor directly below the card
+title, leaving the rules area below them.
 
 For manual number placement, edit `CARD_STAT_LABEL_OFFSETS` in
 `card-minion-template.ts`. These offsets move only the mana, attack, health, or

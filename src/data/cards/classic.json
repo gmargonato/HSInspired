@@ -2200,12 +2200,12 @@
     "name": "Lord Jaraxxus",
     "rarity": "Legendary",
     "cardClass": "Warlock",
-    "type": "Minion",
+    "type": "hero",
     "subtype": "Demon",
     "cost": 9,
-    "attack": 3,
-    "health": 15,
-    "effect": "Battlecry: Destroy your hero and replace him with Lord Jaraxxus."
+    "attack": 0,
+    "health": 5,
+    "effect": "Battlecry: Equip a 3/8 Blood Fury."
   },
   {
     "id": "classic_lord_of_the_arena",
@@ -2221,7 +2221,7 @@
   },
   {
     "id": "classic_lorewalker_cho",
-    "name": "Lorewalker Cho (card)",
+    "name": "Lorewalker Cho",
     "rarity": "Legendary",
     "cardClass": "Neutral",
     "type": "Minion",
@@ -2389,7 +2389,7 @@
   },
   {
     "id": "classic_millhouse_manastorm",
-    "name": "Millhouse Manastorm (card)",
+    "name": "Millhouse Manastorm",
     "rarity": "Legendary",
     "cardClass": "Mage",
     "type": "Minion",
@@ -3070,6 +3070,18 @@
     "attack": 0,
     "health": 4,
     "effect": "Taunt"
+  },
+    {
+    "id": "classic_southsea_deckhand",
+    "name": "Southsea Deckhand",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "effect": "Has Charge while you have a weapon equipped."
   },
   {
     "id": "classic_si_7_agent",

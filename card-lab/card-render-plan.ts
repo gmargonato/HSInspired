@@ -9,9 +9,10 @@ import { flattenCardRenderTree, type CardRenderTree } from './card-render-tree'
 export { markHearthstoneKeywords } from './card-text-markup'
 export { CARD_CANVAS, CARD_PROFILES, visualTemplateFor }
 
-export type CardTemplate = 'minion' | 'spell' | 'weapon' | 'hero' | 'hero-power'
+export type CardTemplate = 'minion' | 'spell' | 'weapon' | 'hero'
 export type CardLayerKind = 'texture' | 'text' | 'placeholder'
-export type CardShape = 'ellipse' | 'circle' | 'rounded-rectangle' | 'arch'
+/** Artwork is authored as a plain square behind the frame. */
+export type CardShape = 'rectangle'
 
 export interface CardPoint {
   readonly x: number
@@ -49,11 +50,6 @@ export interface CardTextCurve {
   readonly endY: number
 }
 
-export interface CardArtworkPlacement {
-  readonly offset: CardPoint
-  readonly overscan: number
-}
-
 export interface CardTextureLayer {
   readonly kind: 'texture'
   readonly id: string
@@ -81,7 +77,6 @@ export interface CardPlaceholderLayer {
   readonly bounds: CardBounds
   readonly shape: CardShape
   readonly color: number
-  readonly artwork?: CardArtworkPlacement
   readonly zIndex: number
 }
 
@@ -100,8 +95,6 @@ export interface CardNodeOverride {
 export type CardNodeOverrides = Readonly<Record<string, CardNodeOverride>>
 
 export interface CardRenderOptions {
-  readonly premium?: boolean
-  /** Kept for API compatibility; Hero Power now uses the spell profile. */
   readonly opponent?: boolean
   readonly debug?: boolean
   /** Elite overlays are intentionally ignored in the simplified design. */
@@ -134,11 +127,8 @@ export function buildCardRenderPlan(
     'Card class does not affect visual asset selection.'
   ]
 
-  if (card.type === 'Hero Power') {
-    diagnostics.push('Hero Power temporarily uses the spell profile.')
-  }
   if (card.type === 'Hero') {
-    diagnostics.push('Hero uses the dedicated standard or premium hero frame.')
+    diagnostics.push('Hero uses the dedicated standard hero frame.')
   }
   if (options.elite) {
     diagnostics.push('Elite overlay request ignored by the simplified card design.')
