@@ -272,6 +272,69 @@ describe('Card Lab render plans', () => {
     expect(minionBanner?.zIndex).toBeGreaterThan(minionFrame?.zIndex ?? 0)
   })
 
+  it('renders minion races on the bottom banner with the requested typography', () => {
+    const card = CARD_CATALOG.require('classic_southsea_deckhand')
+    const plan = buildCardRenderPlan(card)
+    const banner = plan.layers.find((layer) => layer.id === 'card.race-banner')
+    const race = plan.layers.find((layer) => layer.id === 'card.race')
+
+    expect(banner).toMatchObject({
+      kind: 'texture',
+      assetName: 'RACE_BANNER.png',
+      position: { x: 310, y: 825.5 },
+      anchor: { x: 0.5, y: 0.5 },
+      zIndex: 230
+    })
+    expect(race).toMatchObject({
+      kind: 'text',
+      text: 'Pirate',
+      position: { x: 310, y: 826 },
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 30,
+        fill: 0xffffff,
+        stroke: { color: 0x000000, width: 4 }
+      },
+      zIndex: 231
+    })
+  })
+
+  it('uses spell school labels and supports future spell subtype data', () => {
+    const spell = CARD_CATALOG.require('basic_arcane_explosion')
+    const spellRace = buildCardRenderPlan(spell).layers.find(
+      (layer) => layer.id === 'card.race'
+    )
+    expect(spellRace).toMatchObject({ kind: 'text', text: 'Arcane' })
+
+    const futureSpell: CardDefinition = {
+      ...spell,
+      id: 'test_fire_spell',
+      spellSchool: null,
+      subtype: 'Fire'
+    }
+    expect(buildCardRenderPlan(futureSpell).layers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'card.race', text: 'Fire' })
+      ])
+    )
+  })
+
+  it('does not render race metadata for general or unsupported card types', () => {
+    const generalMinion = buildCardRenderPlan(
+      CARD_CATALOG.require('classic_abomination')
+    )
+    expect(generalMinion.layers.some((layer) => layer.id.startsWith('card.race'))).toBe(
+      false
+    )
+
+    const weapon = CARD_CATALOG.require('basic_fiery_war_axe')
+    expect(
+      buildCardRenderPlan(weapon).layers.some((layer) =>
+        layer.id.startsWith('card.race')
+      )
+    ).toBe(false)
+  })
+
   it('uses the standard hero frame', () => {
     const source = CARD_CATALOG.require('classic_abomination')
     const hero: CardDefinition = {
@@ -364,18 +427,61 @@ describe('Card Lab render plans', () => {
         y: CARD_PROFILES.minion.stats.mana.y + CARD_STAT_LABEL_OFFSETS.mana.y
       }
     })
+    expect(manaLabel).not.toMatchObject({ style: { letterSpacing: -4 } })
     expect(attackLabel).toMatchObject({
       position: {
         x: CARD_PROFILES.minion.stats.attack.x + CARD_STAT_LABEL_OFFSETS.attack.x,
         y: CARD_PROFILES.minion.stats.attack.y + CARD_STAT_LABEL_OFFSETS.attack.y
-      }
+      },
+      style: { letterSpacing: -4 }
     })
     expect(healthLabel).toMatchObject({
       position: {
         x: CARD_PROFILES.minion.stats.defense.x + CARD_STAT_LABEL_OFFSETS.health.x,
         y: CARD_PROFILES.minion.stats.defense.y + CARD_STAT_LABEL_OFFSETS.health.y
-      }
+      },
+      style: { letterSpacing: -4 }
     })
+  })
+
+  it('keeps weapon attack label placement separate from minion attack', () => {
+    const card = CARD_CATALOG.require('basic_fiery_war_axe')
+    const plan = buildCardRenderPlan(card)
+    const attackLabel = plan.layers.find(
+      (layer) => layer.id === 'card.stats.attack.label'
+    )
+    const durabilityLabel = plan.layers.find(
+      (layer) => layer.id === 'card.stats.durability.label'
+    )
+
+    expect(attackLabel).toMatchObject({
+      position: {
+        x:
+          CARD_PROFILES.weapon.stats.weaponAttack.x +
+          CARD_STAT_LABEL_OFFSETS.weaponAttack.x,
+        y:
+          CARD_PROFILES.weapon.stats.weaponAttack.y +
+          CARD_STAT_LABEL_OFFSETS.weaponAttack.y
+      },
+      style: { letterSpacing: -4 }
+    })
+    expect(durabilityLabel).toMatchObject({
+      position: {
+        x:
+          CARD_PROFILES.weapon.stats.weaponDefense.x +
+          CARD_STAT_LABEL_OFFSETS.durability.x,
+        y:
+          CARD_PROFILES.weapon.stats.weaponDefense.y +
+          CARD_STAT_LABEL_OFFSETS.durability.y
+      },
+      style: { letterSpacing: -4 }
+    })
+  })
+
+  it('keeps minion life and hero armor profile positions independent', () => {
+    expect(CARD_PROFILES.minion.stats.defense).not.toBe(
+      CARD_PROFILES.minion.stats.armor
+    )
   })
 
   it('keeps stat and rarity textures at their source resolution', () => {

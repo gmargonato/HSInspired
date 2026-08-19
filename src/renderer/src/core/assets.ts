@@ -20,6 +20,9 @@ import newDeckHeroSelectionImage from '@assets/images/NEW_DECK_HERO_SELECTION.pn
 import selectClassButtonImage from '@assets/images/SELECT_CLASS_BUTTON.png'
 import uiCancelButtonImage from '@assets/images/UI_CANCEL_BUTTON.png'
 import verticalSliderImage from '@assets/images/VERTICAL_SLIDER.png'
+import manaCrystalImage from '@assets/images/cards/MANA.png'
+import searchClearImage from '@assets/images/cards/silence.png'
+import searchNoResultsImage from '@assets/images/SEARCH_NO_RESULTS.png'
 import druidDeckFrameImage from '@assets/images/portraits/DRUID_DECK_FRAME.png'
 import hunterDeckFrameImage from '@assets/images/portraits/HUNTER_DECK_FRAME.png'
 import mageDeckFrameImage from '@assets/images/portraits/MAGE_DECK_FRAME.png'
@@ -72,6 +75,9 @@ export interface CollectionAssets extends Record<HeroAssetKey, Texture> {
   selectClassButton: Texture
   cancelButton: Texture
   verticalSlider: Texture
+  manaCrystal: Texture
+  searchClear: Texture
+  searchNoResults: Texture
   druidDeckFrame: Texture
   hunterDeckFrame: Texture
   mageDeckFrame: Texture
@@ -109,6 +115,9 @@ registerAssetBundle(ASSET_BUNDLE_IDS.collection, {
   selectClassButton: selectClassButtonImage,
   cancelButton: uiCancelButtonImage,
   verticalSlider: verticalSliderImage,
+  manaCrystal: manaCrystalImage,
+  searchClear: searchClearImage,
+  searchNoResults: searchNoResultsImage,
   druidDeckFrame: druidDeckFrameImage,
   hunterDeckFrame: hunterDeckFrameImage,
   mageDeckFrame: mageDeckFrameImage,

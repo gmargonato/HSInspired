@@ -1605,7 +1605,7 @@
     "cost": 8,
     "attack": 4,
     "health": 9,
-    "effect": "Charge. Engrage: +6 Attack."
+    "effect": "Charge. Enrage: +6 Attack."
   },
   {
     "id": "classic_gruul",
@@ -2073,7 +2073,7 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "effect": "Give your minions +2/+2.(+2 attack/+2 health}"
+    "effect": "Give your minions +2/+2."
   },
   {
     "id": "classic_leokk",

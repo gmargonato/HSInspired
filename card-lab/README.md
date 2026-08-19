@@ -81,11 +81,15 @@ while the mana, attack, health, armor, and durability offsets move only their
 numbers relative to their icons. The profile positions move an icon and its
 label together.
 
-For weapon stat labels, edit the `attack` and `durability` entries in
-`CARD_STAT_LABEL_OFFSETS`. Those offsets move the numbers over the weapon attack
-and durability assets without moving the assets themselves. To move an entire
-weapon asset and its number together, edit `SHARED_STATS.weaponAttack` or
-`SHARED_STATS.weaponDefense` instead.
+For minion attack labels, edit `CARD_STAT_LABEL_OFFSETS.attack`; for weapon
+attack labels, edit `CARD_STAT_LABEL_OFFSETS.weaponAttack`. The `durability`
+offset is already weapon-specific. Those offsets move the numbers over their
+assets without moving the assets themselves. To move an entire weapon asset
+and its number together, edit `SHARED_STATS.weaponAttack` or
+`SHARED_STATS.weaponDefense` instead. `SHARED_STATS.defense` controls minion
+life/health, while `SHARED_STATS.armor` independently controls hero armor.
+Attack, health, armor, and durability labels use `TIGHT_STAT_STYLE` with
+`letterSpacing: -4`; mana keeps the standard stat spacing.
 
 The shared card tree is organized as:
 

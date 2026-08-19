@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CARD_PREVIEW_PARALLAX_LAYERS,
   resolveCardPlaneTransform,
   resolveParallaxLayerOffset,
   resolveParallaxSmoothing,
@@ -59,6 +60,16 @@ describe('Card preview parallax', () => {
     expect(Math.abs(foreground.y)).toBeGreaterThan(Math.abs(background.y))
     expect(background.x).toBeLessThan(0)
     expect(background.y).toBeGreaterThan(0)
+  })
+
+  it('keeps race metadata on the same zero-depth surface as card description text', () => {
+    expect(CARD_PREVIEW_PARALLAX_LAYERS).toEqual(
+      expect.arrayContaining([
+        { path: 'card.rules', depth: 0 },
+        { path: 'card.race-banner', depth: 0 },
+        { path: 'card.race', depth: 0 }
+      ])
+    )
   })
 
   it('uses frame-rate-independent smoothing without advancing zero-time frames', () => {

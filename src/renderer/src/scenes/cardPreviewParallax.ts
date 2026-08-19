@@ -22,13 +22,16 @@ interface ParallaxLayer extends ParallaxLayerDefinition {
   readonly y: number
 }
 
-const PARALLAX_LAYERS: readonly ParallaxLayerDefinition[] = [
+export const CARD_PREVIEW_PARALLAX_LAYERS: readonly ParallaxLayerDefinition[] = [
   // Artwork sits just behind the frame; its small depth avoids exposing the
   // edge of the existing artwork mask.
   { path: 'card.artwork', depth: -18 },
   // Printed elements remain locked to one rigid card surface.
   { path: 'card.frame', depth: 0 },
   { path: 'card.rules', depth: 0 },
+  // Race metadata is printed on the same rigid card surface as the rules.
+  { path: 'card.race-banner', depth: 0 },
+  { path: 'card.race', depth: 0 },
   // The name and its banner form one raised physical layer.
   { path: 'card.name-banner', depth: 16 },
   { path: 'card.name', depth: 16 },
@@ -119,7 +122,7 @@ export class CardPreviewParallax {
     const nodes = new Map(
       cardView.getNodeInspectors().map((inspector) => [inspector.path, inspector])
     )
-    this.layers = PARALLAX_LAYERS.flatMap((definition) => {
+    this.layers = CARD_PREVIEW_PARALLAX_LAYERS.flatMap((definition) => {
       const node = nodes.get(definition.path)
       return node ? [{ ...definition, x: node.x, y: node.y }] : []
     })

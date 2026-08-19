@@ -32,6 +32,12 @@ import { HERO_DEFINITIONS } from '../core/heroes'
 import { gameAudio, type SoundEffectId } from '../core/audio'
 import { Button } from '../actors/Button'
 import { buildCollectionPages, type CollectionPage } from './collectionPages'
+import {
+  filterCollectionCards,
+  formatManaFilterLabel,
+  MANA_FILTER_VALUES,
+  type ManaFilterValue
+} from './collectionFilters'
 import { CardViewScene, type CardPreviewSourceBounds } from './CardViewScene'
 import { NewDeckScene } from './NewDeckScene'
 import { MainMenuScene } from './MainMenuScene'
@@ -74,8 +80,23 @@ const Layout = {
     height: PAGE_HEIGHT
   },
   classLabel: { x: PAGE_CENTER_X, y: 115 },
-  pageLabel: { x: PAGE_CENTER_X, y: 960 },
+  pageLabel: { x: PAGE_CENTER_X, y: 940 },
   cardGrid: { x: 305, y: 145, width: 1000, height: 770 },
+  // Collection filter positions are in the 1920x1080 scene coordinate space.
+  // Keep these values together so visual alignment can be tuned without
+  // changing filter behavior.
+  collectionFilters: {
+    mana: {
+      firstCrystalCenter: { x: 450, y: 1030 },
+      gap: 65,
+      crystal: { width: 44, height: 52 },
+      rotation: Math.PI / 2,
+      labelOffset: { x: 0, y: 0 }
+    },
+    searchInput: { x: 1100, y: 1003, width: 220, height: 43 },
+    searchClear: { x: 1323, y: 1026, width: 30, height: 30 },
+    noResults: { x: PAGE_CENTER_X, y: 480 }
+  },
   cover: { x: 242, y: 0 },
   coverLock: { x: 905, y: 418 },
   deckList: { x: 1404, y: 120, width: 283, height: 870 },
@@ -135,6 +156,7 @@ const DECK_EDITOR_PREVIEW = {
 const COMPLETED_COLLECTION_CARD_ALPHA = 0.25
 const DECK_EDITOR_COUNT_FILL = 0xffffff
 const DECK_EDITOR_ERROR_FILL = 0xff9a9a
+const MANA_FILTER_SELECTED_BRIGHTNESS = 2
 const FULL_VIEWPORT = {
   x: 0,
   y: 0,
@@ -152,9 +174,10 @@ export class CollectionScene extends Scene {
   private pages: readonly CollectionPage[] = buildCollectionPages(CARD_CATALOG.all)
   private collectionClassFilter: DeckClass | null = null
   private previousCollectionClassFilter: DeckClass | null = null
+  private searchQuery = ''
+  private manaFilter: ManaFilterValue | null = null
   private readonly cardResolver = new CardAssetResolver()
   private readonly deckStore: DeckStore
-  private completedCollectionCardFilter: ColorMatrixFilter | null = null
   private completedCollectionCardAlphaFilter: AlphaFilter | null = null
 
   private background!: Sprite
@@ -196,6 +219,15 @@ export class CollectionScene extends Scene {
   private deckEditorCardPreviewRequest = 0
   private unsubscribeDeckStore: (() => void) | null = null
   private deckAssets!: Pick<CollectionAssets, CollectionDeckAssetKey>
+  private collectionFilterLayer!: Container
+  private emptyStateImage!: Sprite
+  private searchInput: HTMLInputElement | null = null
+  private searchInputResizeHandler: (() => void) | null = null
+  private searchClearButton!: Sprite
+  private readonly manaFilterControls: Container[] = []
+  private readonly manaFilterCrystals: Sprite[] = []
+  private readonly manaFilterLabels: Text[] = []
+  private manaFilterHighlightFilter: ColorMatrixFilter | null = null
   private classLabel!: Text
   private pageLabel!: Text
   private previousPageZone!: Container
@@ -264,6 +296,16 @@ export class CollectionScene extends Scene {
     this.pageLabel.eventMode = 'none'
     this.pageContent.addChild(this.pageLabel)
 
+    this.emptyStateImage = new Sprite(assets.searchNoResults)
+    this.emptyStateImage.anchor.set(0.5)
+    this.emptyStateImage.position.set(
+      Layout.collectionFilters.noResults.x,
+      Layout.collectionFilters.noResults.y
+    )
+    this.emptyStateImage.eventMode = 'none'
+    this.emptyStateImage.visible = false
+    this.pageContent.addChild(this.emptyStateImage)
+
     this.previousPageZone = this.createPageZone(
       PAGE_LEFT,
       PAGE_NAV_ZONE_WIDTH,
@@ -311,6 +353,7 @@ export class CollectionScene extends Scene {
     this.setNavigationEnabled(false)
     await this.deckStore.load()
     await this.waitForFonts()
+    this.createCollectionFilters(assets)
     this.createDeckList(assets)
     this.createDeckEditor(assets, sharedAssets)
     this.createCollectionBackButton(sharedAssets)
@@ -360,6 +403,7 @@ export class CollectionScene extends Scene {
       COVER_PERSPECTIVE_DEPTH
     )
     this.cover.visible = false
+    this.setSearchInputVisible(true)
 
     if (!this.disposed) {
       this.navigationReady = true
@@ -379,23 +423,243 @@ export class CollectionScene extends Scene {
     ])
   }
 
+  private createCollectionFilters(assets: CollectionAssets): void {
+    this.collectionFilterLayer = new Container()
+    this.pageContent.addChild(this.collectionFilterLayer)
+
+    for (const [index, value] of MANA_FILTER_VALUES.entries()) {
+      const control = new Container()
+      control.position.set(
+        Layout.collectionFilters.mana.firstCrystalCenter.x +
+          index * Layout.collectionFilters.mana.gap,
+        Layout.collectionFilters.mana.firstCrystalCenter.y
+      )
+      control.hitArea = new Rectangle(-30, -52, 60, 96)
+      control.eventMode = 'static'
+      control.cursor = 'pointer'
+      control.on('pointertap', (event: FederatedPointerEvent) => {
+        event.stopPropagation()
+        this.handleManaFilterTap(value)
+      })
+
+      const crystal = new Sprite(assets.manaCrystal)
+      crystal.anchor.set(0.5)
+      crystal.width = Layout.collectionFilters.mana.crystal.width
+      crystal.height = Layout.collectionFilters.mana.crystal.height
+      crystal.rotation = Layout.collectionFilters.mana.rotation
+      crystal.eventMode = 'none'
+      control.addChild(crystal)
+
+      const label = new Text({
+        text: formatManaFilterLabel(value),
+        style: {
+          fontFamily: 'Belwe',
+          fontSize: 24,
+          fill: 0xffffff,
+          stroke: { color: 0x000000, width: 4 },
+          align: 'center'
+        }
+      })
+      label.anchor.set(0.5)
+      label.position.set(
+        Layout.collectionFilters.mana.labelOffset.x,
+        Layout.collectionFilters.mana.labelOffset.y
+      )
+      label.eventMode = 'none'
+      control.addChild(label)
+
+      this.manaFilterControls.push(control)
+      this.manaFilterCrystals.push(crystal)
+      this.manaFilterLabels.push(label)
+      this.collectionFilterLayer.addChild(control)
+    }
+
+    this.searchClearButton = new Sprite(assets.searchClear)
+    this.searchClearButton.anchor.set(0.5)
+    this.searchClearButton.position.set(
+      Layout.collectionFilters.searchClear.x,
+      Layout.collectionFilters.searchClear.y
+    )
+    this.searchClearButton.width = Layout.collectionFilters.searchClear.width
+    this.searchClearButton.height = Layout.collectionFilters.searchClear.height
+    this.searchClearButton.hitArea = new Rectangle(-20, -20, 40, 40)
+    this.searchClearButton.eventMode = 'static'
+    this.searchClearButton.cursor = 'pointer'
+    this.searchClearButton.visible = false
+    this.searchClearButton.on('pointertap', (event: FederatedPointerEvent) => {
+      event.stopPropagation()
+      this.clearSearch()
+    })
+    this.collectionFilterLayer.addChild(this.searchClearButton)
+
+    this.updateManaFilterAppearance()
+    this.createSearchInput()
+  }
+
+  private createSearchInput(): void {
+    const parent = this.appInstance.canvas.parentElement
+    if (!parent) return
+
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.className = 'collection-search-input'
+    input.autocomplete = 'off'
+    input.spellcheck = false
+    input.setAttribute('aria-label', 'Search cards')
+    input.value = this.searchQuery
+    input.addEventListener('input', this.handleSearchInput)
+    parent.appendChild(input)
+
+    this.searchInput = input
+    this.searchInputResizeHandler = this.updateSearchInputPosition
+    window.addEventListener('resize', this.searchInputResizeHandler)
+    this.updateSearchInputPosition()
+    this.setSearchInputVisible(false)
+  }
+
+  private readonly handleSearchInput = (): void => {
+    if (!this.searchInput) return
+
+    this.searchQuery = this.searchInput.value
+    this.updateSearchClearVisibility()
+    void this.applyCollectionFilters().catch((error: unknown) => {
+      console.error('Failed to filter the collection:', error)
+    })
+  }
+
+  private clearSearch(): void {
+    if (!this.searchInput) return
+
+    this.searchInput.value = ''
+    this.searchQuery = ''
+    this.updateSearchClearVisibility()
+    this.searchInput.focus()
+    void this.applyCollectionFilters().catch((error: unknown) => {
+      console.error('Failed to clear the collection search:', error)
+    })
+  }
+
+  private updateSearchClearVisibility(): void {
+    this.searchClearButton.visible = this.searchQuery.length > 0
+  }
+
+  private readonly updateSearchInputPosition = (): void => {
+    const input = this.searchInput
+    const canvas = this.appInstance.canvas
+    const parent = canvas.parentElement
+    if (!input || !parent) return
+
+    const canvasBounds = canvas.getBoundingClientRect()
+    const parentBounds = parent.getBoundingClientRect()
+    const scale = Math.min(
+      canvasBounds.width / GAME_WIDTH,
+      canvasBounds.height / GAME_HEIGHT
+    )
+    const offsetX = (canvasBounds.width - GAME_WIDTH * scale) / 2
+    const offsetY = (canvasBounds.height - GAME_HEIGHT * scale) / 2
+
+    input.style.left = `${canvasBounds.left - parentBounds.left + offsetX + Layout.collectionFilters.searchInput.x * scale}px`
+    input.style.top = `${canvasBounds.top - parentBounds.top + offsetY + Layout.collectionFilters.searchInput.y * scale}px`
+    input.style.width = `${Layout.collectionFilters.searchInput.width * scale}px`
+    input.style.height = `${Layout.collectionFilters.searchInput.height * scale}px`
+    input.style.fontSize = `${24 * scale}px`
+  }
+
+  private setSearchInputVisible(visible: boolean): void {
+    if (!this.searchInput) return
+    this.searchInput.style.visibility = visible ? 'visible' : 'hidden'
+  }
+
+  private setSearchInputEnabled(enabled: boolean): void {
+    if (!this.searchInput) return
+    this.searchInput.disabled = !enabled
+    this.setSearchInputVisible(enabled)
+  }
+
+  private handleManaFilterTap(value: ManaFilterValue): void {
+    if (
+      !this.navigationReady ||
+      !this.navigationEnabled ||
+      this.activeDeckId !== null ||
+      this.newDeckScene?.isOpen
+    ) {
+      return
+    }
+
+    this.manaFilter = this.manaFilter === value ? null : value
+    this.updateManaFilterAppearance()
+    void this.applyCollectionFilters().catch((error: unknown) => {
+      console.error('Failed to filter the collection:', error)
+    })
+  }
+
+  private updateManaFilterAppearance(): void {
+    for (const [index, control] of this.manaFilterControls.entries()) {
+      const value = MANA_FILTER_VALUES[index]
+      const isActive = value === this.manaFilter
+      const crystal = this.manaFilterCrystals[index]
+      const label = this.manaFilterLabels[index]
+      if (!crystal || !label) continue
+
+      crystal.alpha = 1
+      crystal.filters = isActive ? [this.getManaFilterHighlightFilter()] : null
+      label.alpha = 1
+      control.cursor = 'pointer'
+    }
+  }
+
+  private getManaFilterHighlightFilter(): ColorMatrixFilter {
+    if (!this.manaFilterHighlightFilter) {
+      const filter = new ColorMatrixFilter()
+      filter.brightness(MANA_FILTER_SELECTED_BRIGHTNESS, false)
+      this.manaFilterHighlightFilter = filter
+    }
+
+    return this.manaFilterHighlightFilter
+  }
+
   private async applyCollectionClassFilter(heroClass: DeckClass | null): Promise<void> {
     if (this.collectionClassFilter === heroClass && this.pages.length > 0) return
 
-    const allowedClasses: readonly CardClass[] | undefined = heroClass
-      ? ['Neutral', heroClass]
-      : undefined
-    const pages = buildCollectionPages(CARD_CATALOG.all, allowedClasses)
-    if (pages.length === 0) {
-      throw new Error(
-        `No collection cards are available for ${heroClass ?? 'all classes'}`
-      )
-    }
-
     this.collectionClassFilter = heroClass
+    await this.applyCollectionFilters()
+  }
+
+  private async applyCollectionFilters(): Promise<void> {
+    const filteredCards = filterCollectionCards(CARD_CATALOG.all, {
+      query: this.searchQuery,
+      manaCost: this.manaFilter
+    })
+    const allowedClasses: readonly CardClass[] | undefined = this.collectionClassFilter
+      ? ['Neutral', this.collectionClassFilter]
+      : undefined
+    const pages = buildCollectionPages(filteredCards, allowedClasses)
+
     this.pages = pages
     this.pageIndex = 0
+    if (pages.length === 0) {
+      this.renderEmptyCollectionState()
+      return
+    }
+
+    this.emptyStateImage.visible = false
     await this.renderPage(0)
+  }
+
+  private renderEmptyCollectionState(): void {
+    this.renderSequence += 1
+    this.pageLoading = false
+
+    const previousCardLayer = this.cardLayer
+    this.cardLayer = new Container()
+    this.pageContent.removeChild(previousCardLayer)
+    this.pageContent.addChildAt(this.cardLayer, 0)
+    previousCardLayer.destroy({ children: true })
+
+    this.classLabel.text = ''
+    this.pageLabel.text = ''
+    this.emptyStateImage.visible = true
+    this.updatePageZoneModes()
   }
 
   private async renderPage(index: number): Promise<void> {
@@ -838,6 +1102,8 @@ export class CollectionScene extends Scene {
     if (!sliderEnabled) {
       this.stopDeckSliderDrag()
     }
+
+    this.updateCollectionFilterModes()
   }
 
   private readonly handleDeckWheel = (event: FederatedWheelEvent): void => {
@@ -1195,17 +1461,6 @@ export class CollectionScene extends Scene {
     this.updateCollectionCardCompletionState()
   }
 
-  private getCompletedCollectionCardFilter(): ColorMatrixFilter {
-    if (!this.completedCollectionCardFilter) {
-      this.completedCollectionCardFilter = new ColorMatrixFilter({
-        resolution: 'inherit',
-        antialias: 'inherit'
-      })
-      this.completedCollectionCardFilter.grayscale(1, false)
-    }
-    return this.completedCollectionCardFilter
-  }
-
   private getCompletedCollectionCardAlphaFilter(): AlphaFilter {
     if (!this.completedCollectionCardAlphaFilter) {
       this.completedCollectionCardAlphaFilter = new AlphaFilter({
@@ -1232,10 +1487,7 @@ export class CollectionScene extends Scene {
         deck && card && getDeckCardCount(deck, card.id) >= getCardCopyLimit(card)
       )
       child.filters = isAtCopyLimit
-        ? [
-            this.getCompletedCollectionCardFilter(),
-            this.getCompletedCollectionCardAlphaFilter()
-          ]
+        ? [this.getCompletedCollectionCardAlphaFilter()]
         : null
       child.alpha = 1
     }
@@ -1919,6 +2171,24 @@ export class CollectionScene extends Scene {
     this.sceneManager.cursor?.setContextVariant(null)
 
     this.updatePageZoneModes()
+    this.updateCollectionFilterModes()
+  }
+
+  private updateCollectionFilterModes(): void {
+    const filtersEnabled =
+      this.navigationEnabled &&
+      this.navigationReady &&
+      !(this.newDeckScene?.isOpen ?? false) &&
+      !this.deckEditorTransitioning &&
+      !this.deckEditorClosing
+
+    for (const control of this.manaFilterControls) {
+      control.eventMode = filtersEnabled ? 'static' : 'none'
+    }
+    if (this.searchClearButton) {
+      this.searchClearButton.eventMode = filtersEnabled ? 'static' : 'none'
+    }
+    this.setSearchInputEnabled(filtersEnabled)
   }
 
   private updatePageZoneModes(): void {
@@ -2014,7 +2284,29 @@ export class CollectionScene extends Scene {
     this.previousPageZone.eventMode = 'none'
     this.nextPageZone.eventMode = 'none'
     this.setDeckInteractionEnabled(false)
+    for (const control of this.manaFilterControls) {
+      control.eventMode = 'none'
+    }
+    this.setSearchInputVisible(false)
+    if (this.searchInputResizeHandler) {
+      window.removeEventListener('resize', this.searchInputResizeHandler)
+      this.searchInputResizeHandler = null
+    }
+    this.searchInput?.removeEventListener('input', this.handleSearchInput)
+    this.searchInput?.remove()
+    this.searchInput = null
     this.sceneManager.cursor?.setContextVariant(null)
+  }
+
+  protected onPause(): void {
+    this.setSearchInputVisible(false)
+    for (const control of this.manaFilterControls) {
+      control.eventMode = 'none'
+    }
+  }
+
+  protected onResume(): void {
+    this.updateCollectionFilterModes()
   }
 
   update(_deltaMS: number): void {}

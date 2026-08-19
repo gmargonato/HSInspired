@@ -23,7 +23,7 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
 win:
   executableName: hsinspired
-  icon: icon.png
+  icon: assets/icon.png
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

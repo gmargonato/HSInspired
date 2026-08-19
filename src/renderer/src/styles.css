@@ -33,12 +33,39 @@ body {
 }
 
 #game-container {
+  position: relative;
   width: 100vw;
   height: 100vh;
 }
 
 #game-container canvas {
   display: block;
+}
+
+.collection-search-input {
+  position: absolute;
+  z-index: 10;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #8f3c3c;
+  caret-color: #8f3c3c;
+  font-family: 'Belwe', serif;
+  font-weight: 700;
+  line-height: 1;
+  text-align: left;
+  text-shadow: 0 1px 0 rgba(30, 5, 5, 0.22);
+}
+
+.collection-search-input::selection {
+  background: rgba(143, 60, 60, 0.28);
+}
+
+.collection-search-input:disabled {
+  cursor: default;
 }
 
 #game-container.custom-cursor-enabled,

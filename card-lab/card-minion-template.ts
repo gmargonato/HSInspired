@@ -29,6 +29,7 @@ interface CardProfile {
     readonly mana: CardPoint
     readonly attack: CardPoint
     readonly defense: CardPoint
+    readonly armor: CardPoint
     readonly weaponAttack: CardPoint
     readonly weaponDefense: CardPoint
   }
@@ -40,19 +41,43 @@ const SHARED_ARTWORK = {
 } as const
 
 const SHARED_NAME_BOX = { x: 74, y: 454, width: 490, height: 72 } as const
-const SHARED_RULES_BOX = { x: 60, y: 600, width: 500, height: 190 } as const
+const SHARED_RULES_BOX = { x: 80, y: 600, width: 460, height: 190 } as const
 const NAME_BANNER_SOURCE_SIZE = { width: 665, height: 198 } as const
 const NAME_BANNER_SIZE = NAME_BANNER_SOURCE_SIZE
 const NAME_BANNER_Z_INDEX = 110
+const RACE_BANNER_SIZE = { width: 408, height: 69 } as const
+const RACE_BANNER_POSITION = {
+  x: CARD_CANVAS.width / 2,
+  y: CARD_CANVAS.height - 40 - RACE_BANNER_SIZE.height / 2
+} as const
+const RACE_TEXT_BOX = { x: 105, y: 795, width: 410, height: 62 } as const
+const RACE_BANNER_Z_INDEX = 230
+const RACE_TEXT_Z_INDEX = 231
 const LEGENDARY_FRAME_Z_INDEX = 105
 const LEGENDARY_FRAME_OFFSET = { x: 60, y: -35 } as const
 const SHARED_STATS = {
   mana: { x: 60, y: 50 },
   attack: { x: 40, y: 810 },
   defense: { x: 570, y: 810 },
-  weaponAttack: { x: 60, y: 800 },
-  weaponDefense: { x: 570, y: 800 }
+  armor: { x: 570, y: 820 },
+  weaponAttack: { x: 60, y: 830 },
+  weaponDefense: { x: 570, y: 830 }
 } as const
+
+/**
+ * Per-stat label calibration, in pixels relative to each stat group's center.
+ * Edit these values when a number needs to move without moving its icon.
+ */
+export const CARD_STAT_LABEL_OFFSETS = {
+  mana: { x: 0, y: -10 },
+  attack: { x: 10, y: 10 },
+  weaponAttack: { x: 0, y: -5 },
+  health: { x: 0, y: 10 },
+  armor: { x: 0, y: -5 },
+  durability: { x: 0, y: 0 },
+  name: { x: 0, y: -17 }
+} as const
+
 /** Centered below the shared title box; rarity assets are 42x58 at source size. */
 const SHARED_RARITY = { x: 310, y: 560 } as const
 
@@ -182,6 +207,16 @@ function nameBanner(
   )
 }
 
+function raceBanner(): Extract<CardRenderNode, { kind: 'image' }> {
+  return image(
+    'race-banner',
+    'RACE_BANNER.png',
+    RACE_BANNER_POSITION,
+    RACE_BANNER_Z_INDEX,
+    { size: RACE_BANNER_SIZE, anchor: { x: 0.5, y: 0.5 } }
+  )
+}
+
 const NAME_STYLE_BASE: CardTextStyle = {
   fontFamily: 'Belwe',
   fontSize: 47,
@@ -225,9 +260,25 @@ function rulesText(card: CardDefinition): string {
   return markHearthstoneKeywords(displayText)
 }
 
+function raceLabel(card: CardDefinition): string | null {
+  if (card.type === 'Minion') return card.subtype
+  if (card.type === 'Spell') return card.spellSchool ?? card.subtype
+  return null
+}
+
 const WEAPON_RULES_STYLE: CardTextStyle = {
   ...RULES_STYLE_BASE,
   fill: 0xffffff
+}
+
+const RACE_STYLE: CardTextStyle = {
+  fontFamily: 'Belwe',
+  fontSize: 30,
+  fill: 0xffffff,
+  align: 'center',
+  stroke: { color: 0x000000, width: 4 },
+  wordWrap: true,
+  breakWords: true
 }
 
 const STAT_STYLE: CardTextStyle = {
@@ -237,6 +288,10 @@ const STAT_STYLE: CardTextStyle = {
   align: 'center',
   stroke: { color: 0x17120f, width: 8 }
 }
+const TIGHT_STAT_STYLE: CardTextStyle = {
+  ...STAT_STYLE,
+  letterSpacing: -4
+}
 
 const STAT_VALUE_BOX: CardBounds = {
   x: -55,
@@ -245,39 +300,29 @@ const STAT_VALUE_BOX: CardBounds = {
   height: 110
 }
 
-/**
- * Per-stat label calibration, in pixels relative to each stat group's center.
- * Edit these values when a number needs to move without moving its icon.
- */
-export const CARD_STAT_LABEL_OFFSETS = {
-  mana: { x: 0, y: -10 },
-  attack: { x: 20, y: 15 },
-  health: { x: 0, y: 15 },
-  armor: { x: 0, y: 15 },
-  durability: { x: 0, y: 15 },
-  name: { x: 0, y: -17 }
-} as const
-
-type CardStatId = Exclude<keyof typeof CARD_STAT_LABEL_OFFSETS, 'name'>
+type CardStatId = Exclude<keyof typeof CARD_STAT_LABEL_OFFSETS, 'name' | 'weaponAttack'>
+type CardStatLabelId = Exclude<keyof typeof CARD_STAT_LABEL_OFFSETS, 'name'>
 
 function stat(
   id: CardStatId,
   value: number,
   position: CardPoint,
-  assetName: string
+  assetName: string,
+  labelId: CardStatLabelId = id
 ): CardGroupNode {
-  const labelOffset = CARD_STAT_LABEL_OFFSETS[id]
+  const labelOffset = CARD_STAT_LABEL_OFFSETS[labelId]
   const labelBox: CardBounds = {
     ...STAT_VALUE_BOX,
     x: STAT_VALUE_BOX.x + labelOffset.x,
     y: STAT_VALUE_BOX.y + labelOffset.y
   }
+  const labelStyle = id === 'mana' ? STAT_STYLE : TIGHT_STAT_STYLE
 
   return group(id, position, 300, [
     image('icon', assetName, { x: 0, y: 0 }, 300, {
       anchor: { x: 0.5, y: 0.5 }
     }),
-    text('label', String(value), labelBox, STAT_STYLE, 301)
+    text('label', String(value), labelBox, labelStyle, 301)
   ])
 }
 
@@ -293,7 +338,8 @@ function stats(card: CardDefinition, profile: CardProfile): CardGroupNode {
         'attack',
         card.attack,
         card.type === 'Weapon' ? profile.stats.weaponAttack : profile.stats.attack,
-        attackAsset
+        attackAsset,
+        card.type === 'Weapon' ? 'weaponAttack' : 'attack'
       )
     )
   }
@@ -310,7 +356,7 @@ function stats(card: CardDefinition, profile: CardProfile): CardGroupNode {
   } else if (card.type === 'Minion' && card.health !== null) {
     children.push(stat('health', card.health, profile.stats.defense, 'HEALTH.png'))
   } else if (card.type === 'Hero' && card.armor !== null) {
-    children.push(stat('armor', card.armor, profile.stats.defense, 'ARMOR.png'))
+    children.push(stat('armor', card.armor, profile.stats.armor, 'ARMOR.png'))
   }
 
   return group('stats', { x: 0, y: 0 }, 300, children)
@@ -465,6 +511,14 @@ export function buildCardRenderTree(
         card.type === 'Weapon' ? WEAPON_RULES_STYLE : RULES_STYLE_BASE,
         220
       )
+    )
+  }
+
+  const label = raceLabel(card)
+  if (label) {
+    children.push(
+      raceBanner(),
+      text('race', label, RACE_TEXT_BOX, RACE_STYLE, RACE_TEXT_Z_INDEX)
     )
   }
 

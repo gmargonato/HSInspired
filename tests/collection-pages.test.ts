@@ -5,6 +5,7 @@ import {
   COLLECTION_CARD_TYPES,
   COLLECTION_PAGE_SIZE
 } from '../src/renderer/src/scenes/collectionPages'
+import { filterCollectionCards } from '../src/renderer/src/scenes/collectionFilters'
 
 describe('Collection pages', () => {
   const pages = buildCollectionPages(CARD_CATALOG.all)
@@ -65,5 +66,22 @@ describe('Collection pages', () => {
         .flatMap((page) => page.cards)
         .every((card) => card.cardClass === 'Neutral' || card.cardClass === 'Hunter')
     ).toBe(true)
+  })
+
+  it('paginates filtered cards after applying the search constraints', () => {
+    const filteredCards = filterCollectionCards(CARD_CATALOG.all, {
+      query: 'cost:4'
+    })
+    const filteredPages = buildCollectionPages(filteredCards)
+
+    expect(filteredPages.length).toBeGreaterThan(0)
+    expect(
+      filteredPages.flatMap((page) => page.cards).every((card) => card.cost === 4)
+    ).toBe(true)
+
+    for (const page of filteredPages) {
+      expect(page.pageNumber).toBeGreaterThanOrEqual(1)
+      expect(page.pageNumber).toBeLessThanOrEqual(page.pageCount)
+    }
   })
 })
