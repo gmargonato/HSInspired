@@ -4,6 +4,7 @@ import { SceneManager } from './core/SceneManager'
 import { SceneNavigator } from './core/SceneNavigator'
 import { GAME_HEIGHT, GAME_WIDTH } from './core/config'
 import { CursorManager } from './core/cursor'
+import { gameAudio } from './core/audio'
 import type { SceneRequest } from '../../shared/sceneNavigation'
 import './styles.css'
 
@@ -65,6 +66,10 @@ async function bootstrap(): Promise<void> {
   }
   app.canvas.addEventListener('contextmenu', preventContextMenu)
 
+  await gameAudio.preload()
+  const unlockAudio = (): void => gameAudio.unlock()
+  app.canvas.addEventListener('pointerdown', unlockAudio, { capture: true })
+
   app.ticker.maxFPS = 60
 
   const cursor = new CursorManager(container)
@@ -90,11 +95,14 @@ async function bootstrap(): Promise<void> {
       () => {
         unsubscribeFromSceneMenu()
         app.canvas.removeEventListener('contextmenu', preventContextMenu)
+        app.canvas.removeEventListener('pointerdown', unlockAudio, { capture: true })
+        void gameAudio.dispose()
         cursor.destroy()
       },
       { once: true }
     )
   } catch (error) {
+    void gameAudio.dispose()
     cursor.destroy()
     throw error
   }

@@ -29,6 +29,7 @@ import {
   type HingeSide
 } from '../core/hingedDoor'
 import { HERO_DEFINITIONS } from '../core/heroes'
+import { gameAudio, type SoundEffectId } from '../core/audio'
 import { Button } from '../actors/Button'
 import { buildCollectionPages, type CollectionPage } from './collectionPages'
 import { CardViewScene, type CardPreviewSourceBounds } from './CardViewScene'
@@ -36,6 +37,7 @@ import { NewDeckScene } from './NewDeckScene'
 import { MainMenuScene } from './MainMenuScene'
 import {
   MAX_DECK_CARDS,
+  MAX_DECKS,
   countDeckCards,
   getCardCopyLimit,
   getDeckCardCount,
@@ -50,6 +52,15 @@ const PAGE_BOTTOM = GAME_HEIGHT - 80
 const PAGE_CENTER_X = (PAGE_LEFT + PAGE_RIGHT) / 2
 const PAGE_HEIGHT = PAGE_BOTTOM - PAGE_TOP
 const PAGE_NAV_ZONE_WIDTH = 90
+
+const COLLECTION_PAGE_FLIP_FORWARD_SOUNDS = [
+  'collection-page-flip-forward',
+  'collection-page-flip-forward-3'
+] as const
+const COLLECTION_PAGE_FLIP_BACK_SOUNDS = [
+  'collection-page-flip-back',
+  'collection-page-flip-back-3'
+] as const
 
 // Manual nudges only. Keep the lock position relative to the cover so the two
 // assets stay aligned when the main collection panel is moved during layout.
@@ -71,17 +82,25 @@ const Layout = {
   deckSlider: { x: 1705, minY: 50, maxY: 900 }
 }
 
+const DECK_EDITOR_CARD_ROW_HEIGHT = 34
+const DECK_EDITOR_CARD_ROW_GAP = 1
+const DECK_EDITOR_ROW_INSET = 2
+const DECK_EDITOR_CARD_LIST_VISIBLE_ROWS = 25
+const DECK_EDITOR_CARD_LIST_HEIGHT =
+  DECK_EDITOR_CARD_ROW_HEIGHT * DECK_EDITOR_CARD_LIST_VISIBLE_ROWS +
+  DECK_EDITOR_ROW_INSET
+
 const DECK_EDITOR_LAYOUT = {
   header: {
     x: Layout.deckList.x + Layout.deckList.width / 2,
-    y: 50
+    y: 64
   },
   count: { x: 1495, y: 1038 },
   cardList: {
     x: Layout.deckList.x + 10,
-    y: 118,
+    y: 132,
     width: Layout.deckList.width - 20,
-    height: 872
+    height: DECK_EDITOR_CARD_LIST_HEIGHT
   },
   footerButton: { x: 1660, y: 1038 }
 }
@@ -99,14 +118,12 @@ const DECK_BUTTON_HEIGHT = 151
 // The button textures include transparent padding around their visible frames.
 // A negative layout gap brings the visible frames closer together.
 const DECK_BUTTON_GAP = -30
-const DECK_EDITOR_CARD_ROW_HEIGHT = 28
-const DECK_EDITOR_CARD_ROW_GAP = 1
 const DECK_EDITOR_COST_WIDTH = 27
-const DECK_EDITOR_MANA_ICON_SIZE = 25
 const DECK_EDITOR_COPIES_WIDTH = 24
-const DECK_EDITOR_ROW_INSET = 2
 const DECK_EDITOR_TRANSITION_DURATION = 0.45
 const DECK_EDITOR_CONTENT_FADE_DURATION = 0.2
+const DECK_EDITOR_FRAME_TARGET_WIDTH = Layout.deckList.width
+const DECK_EDITOR_FRAME_CARD_LIST_GAP = 4
 const DECK_EDITOR_ROW_REMOVE_DURATION = 0.22
 const DECK_EDITOR_ROW_COLLAPSE_DURATION = 0.18
 const DECK_EDITOR_PREVIEW = {
@@ -137,7 +154,6 @@ export class CollectionScene extends Scene {
   private previousCollectionClassFilter: DeckClass | null = null
   private readonly cardResolver = new CardAssetResolver()
   private readonly deckStore: DeckStore
-  private deckManaTexture: Texture | null = null
   private completedCollectionCardFilter: ColorMatrixFilter | null = null
   private completedCollectionCardAlphaFilter: AlphaFilter | null = null
 
@@ -149,16 +165,21 @@ export class CollectionScene extends Scene {
   private deckMask!: Graphics
   private deckSlider!: Sprite
   private deckEditorLayer!: Container
+  private deckEditorCardViewport!: Container
   private deckEditorButton!: Button
   private deckEditorCount!: Text
   private deckEditorDoneButton!: Button
   private deckEditorCardContent!: Container
+  private deckListCount!: Text
   private collectionBackButton!: Button
   private newDeckScene!: NewDeckScene
   private readonly deckEntries: Container[] = []
   private readonly deckButtons: Button[] = []
+  private newDeckButton: Button | null = null
   private deckScrollOffset = 0
   private deckMaxScroll = 0
+  private deckEditorCardScrollOffset = 0
+  private deckEditorCardMaxScroll = 0
   private deckSliderDragging = false
   private deckSliderDragOffset = 0
   private activeDeckId: string | null = null
@@ -290,7 +311,6 @@ export class CollectionScene extends Scene {
     this.setNavigationEnabled(false)
     await this.deckStore.load()
     await this.waitForFonts()
-    this.deckManaTexture = await this.cardResolver.load('MANA.png')
     this.createDeckList(assets)
     this.createDeckEditor(assets, sharedAssets)
     this.createCollectionBackButton(sharedAssets)
@@ -321,6 +341,8 @@ export class CollectionScene extends Scene {
     this.cover.visible = true
     this.coverLock.visible = true
 
+    void gameAudio
+    // gameAudio.play('collection-latch')
     await this.animateDoor(
       this.coverLock,
       'right',
@@ -329,6 +351,8 @@ export class CollectionScene extends Scene {
     )
     this.coverLock.visible = false
 
+    void gameAudio
+    // gameAudio.play('collection-cover-open')
     await this.animateDoor(
       this.cover,
       'left',
@@ -506,6 +530,25 @@ export class CollectionScene extends Scene {
     this.deckSlider.on('pointercancel', this.stopDeckSliderDrag)
     this.root.addChild(this.deckSlider)
 
+    this.deckListCount = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 24,
+        fill: DECK_EDITOR_COUNT_FILL,
+        stroke: { color: 0x000000, width: 4 },
+        letterSpacing: -1,
+        align: 'center'
+      }
+    })
+    this.deckListCount.anchor.set(0.5)
+    this.deckListCount.eventMode = 'none'
+    this.deckListCount.position.set(
+      DECK_EDITOR_LAYOUT.count.x,
+      DECK_EDITOR_LAYOUT.count.y
+    )
+    this.root.addChild(this.deckListCount)
+
     this.renderDeckList()
   }
 
@@ -548,8 +591,7 @@ export class CollectionScene extends Scene {
     )
     this.deckEditorLayer.addChild(this.deckEditorCount)
 
-    this.deckEditorCardContent = new Container()
-    this.deckEditorCardContent.mask = new Graphics()
+    const deckEditorCardMask = new Graphics()
       .rect(
         DECK_EDITOR_LAYOUT.cardList.x,
         DECK_EDITOR_LAYOUT.cardList.y,
@@ -557,8 +599,23 @@ export class CollectionScene extends Scene {
         DECK_EDITOR_LAYOUT.cardList.height
       )
       .fill(0xffffff)
-    this.deckEditorLayer.addChild(this.deckEditorCardContent.mask as Graphics)
-    this.deckEditorLayer.addChild(this.deckEditorCardContent)
+    deckEditorCardMask.eventMode = 'none'
+
+    this.deckEditorCardViewport = new Container()
+    this.deckEditorCardViewport.hitArea = new Rectangle(
+      DECK_EDITOR_LAYOUT.cardList.x,
+      DECK_EDITOR_LAYOUT.cardList.y,
+      DECK_EDITOR_LAYOUT.cardList.width,
+      DECK_EDITOR_LAYOUT.cardList.height
+    )
+    this.deckEditorCardViewport.eventMode = 'none'
+    this.deckEditorCardViewport.on('wheel', this.handleDeckEditorCardWheel)
+    this.deckEditorCardViewport.mask = deckEditorCardMask
+
+    this.deckEditorCardContent = new Container()
+    this.deckEditorCardViewport.addChild(this.deckEditorCardContent)
+    this.deckEditorLayer.addChild(deckEditorCardMask)
+    this.deckEditorLayer.addChild(this.deckEditorCardViewport)
 
     this.deckEditorDoneButton = new Button(sharedAssets.doneButton, {
       onClick: () => this.exitDeckEditor()
@@ -577,6 +634,7 @@ export class CollectionScene extends Scene {
 
   private createCollectionBackButton(sharedAssets: SharedUIAssets): void {
     this.collectionBackButton = new Button(sharedAssets.backButton, {
+      clickSound: 'back-click',
       onClick: () => this.leaveCollection()
     })
     this.collectionBackButton.position.set(
@@ -596,21 +654,26 @@ export class CollectionScene extends Scene {
 
     this.deckEntries.length = 0
     this.deckButtons.length = 0
+    this.newDeckButton = null
 
     const decks = this.deckStore.getDecks()
+    this.deckListCount.text = `${decks.length} / ${MAX_DECKS} Decks`
     for (const [index, deck] of decks.entries()) {
       this.addDeckEntry(
         this.getDeckFrameTexture(deck),
         () => this.enterDeck(deck.id),
         index,
-        () => this.deleteDeck(deck.id)
+        () => this.deleteDeck(deck.id),
+        'collection-new-deck-edge-flips'
       )
     }
 
-    this.addDeckEntry(
+    this.newDeckButton = this.addDeckEntry(
       this.deckAssets.newDeckButton,
       () => this.beginNewDeckCreation(),
-      decks.length
+      decks.length,
+      undefined,
+      'collection-new-deck-edge-flips'
     )
 
     const itemCount = decks.length + 1
@@ -625,15 +688,16 @@ export class CollectionScene extends Scene {
     texture: Texture,
     onClick: () => void | Promise<void>,
     index: number,
-    onDelete?: () => void | Promise<void>
-  ): void {
+    onDelete?: () => void | Promise<void>,
+    pressSound?: SoundEffectId
+  ): Button {
     const entry = new Container()
     entry.position.set(
       Layout.deckList.width / 2,
       index * (DECK_BUTTON_HEIGHT + DECK_BUTTON_GAP) + DECK_BUTTON_HEIGHT / 2
     )
 
-    const button = new Button(texture, { onClick })
+    const button = new Button(texture, { pressSound, onClick })
     button.setBaseY(0)
     if (onDelete) {
       button.on('rightclick', (event: FederatedPointerEvent) => {
@@ -651,6 +715,7 @@ export class CollectionScene extends Scene {
 
     this.deckEntries.push(entry)
     this.deckContent.addChild(entry)
+    return button
   }
 
   private getDeckFrameTexture(deck: Deck): Texture {
@@ -669,6 +734,21 @@ export class CollectionScene extends Scene {
     this.updateDeckSliderPosition()
   }
 
+  private setDeckEditorCardScroll(offset: number): void {
+    this.deckEditorCardScrollOffset = Math.max(
+      -this.deckEditorCardMaxScroll,
+      Math.min(0, offset)
+    )
+    this.deckEditorCardContent.y = this.deckEditorCardScrollOffset
+    this.updateDeckSliderPosition()
+  }
+
+  private getActiveScrollMax(): number {
+    return this.activeDeckId !== null
+      ? this.deckEditorCardMaxScroll
+      : this.deckMaxScroll
+  }
+
   private updateDeckEntryVisibility(): void {
     for (const entry of this.deckEntries) {
       const entryTop = entry.y - DECK_BUTTON_HEIGHT / 2 + this.deckScrollOffset
@@ -678,34 +758,55 @@ export class CollectionScene extends Scene {
   }
 
   private updateDeckSliderPosition(): void {
-    if (this.deckMaxScroll === 0) {
+    const editorContext = this.activeDeckId !== null
+    const maxScroll = editorContext ? this.deckEditorCardMaxScroll : this.deckMaxScroll
+    const scrollOffset = editorContext
+      ? this.deckEditorCardScrollOffset
+      : this.deckScrollOffset
+
+    if (
+      maxScroll === 0 ||
+      (editorContext && (this.deckEditorTransitioning || this.deckEditorClosing))
+    ) {
       this.deckSlider.visible = false
       this.deckSlider.eventMode = 'none'
       this.deckSliderDragging = false
       return
     }
 
-    const scrollRatio = -this.deckScrollOffset / this.deckMaxScroll
+    const scrollRatio = -scrollOffset / maxScroll
     const sliderY =
       Layout.deckSlider.minY +
       scrollRatio * (Layout.deckSlider.maxY - Layout.deckSlider.minY)
 
     this.deckSlider.visible = true
     this.deckSlider.position.set(Layout.deckSlider.x, sliderY)
-    this.deckSlider.eventMode = this.navigationReady ? 'static' : 'none'
   }
 
   private setDeckInteractionEnabled(enabled: boolean): void {
     const newDeckSelectionOpen = this.newDeckScene?.isOpen ?? false
     const listEnabled = enabled && this.activeDeckId === null && !newDeckSelectionOpen
+    const editorContentEnabled =
+      enabled &&
+      this.activeDeckId !== null &&
+      !this.deckEditorTransitioning &&
+      !this.deckEditorClosing &&
+      !this.deckEditorCardMutationInProgress
+    const editorScrollEnabled = editorContentEnabled && this.deckEditorCardMaxScroll > 0
+    const sliderEnabled = listEnabled || editorScrollEnabled
     this.deckViewport.eventMode = listEnabled ? 'static' : 'none'
+    const canCreateDeck = this.deckStore.getDecks().length < MAX_DECKS
     for (const button of this.deckButtons) {
-      button.setEnabled(listEnabled)
+      button.setEnabled(listEnabled && (button !== this.newDeckButton || canCreateDeck))
+    }
+
+    if (this.deckEditorCardViewport) {
+      this.deckEditorCardViewport.eventMode = editorContentEnabled ? 'static' : 'none'
     }
 
     if (this.deckSlider.visible) {
-      this.deckSlider.eventMode = listEnabled ? 'static' : 'none'
-      this.deckSlider.cursor = listEnabled ? 'pointer' : 'default'
+      this.deckSlider.eventMode = sliderEnabled ? 'static' : 'none'
+      this.deckSlider.cursor = sliderEnabled ? 'pointer' : 'default'
     }
 
     if (this.deckEditorButton) {
@@ -730,8 +831,11 @@ export class CollectionScene extends Scene {
       this.collectionBackButton.visible = this.activeDeckId === null
       this.collectionBackButton.setEnabled(backEnabled)
     }
+    if (this.deckListCount) {
+      this.deckListCount.visible = this.activeDeckId === null
+    }
 
-    if (!listEnabled) {
+    if (!sliderEnabled) {
       this.stopDeckSliderDrag()
     }
   }
@@ -743,8 +847,34 @@ export class CollectionScene extends Scene {
     event.stopPropagation()
   }
 
+  private readonly handleDeckEditorCardWheel = (event: FederatedWheelEvent): void => {
+    if (
+      !this.navigationReady ||
+      !this.activeDeckId ||
+      this.deckEditorTransitioning ||
+      this.deckEditorClosing ||
+      this.deckEditorCardMutationInProgress ||
+      this.deckEditorCardMaxScroll === 0
+    ) {
+      return
+    }
+
+    this.setDeckEditorCardScroll(this.deckEditorCardScrollOffset - event.deltaY)
+    event.stopPropagation()
+  }
+
   private readonly startDeckSliderDrag = (event: FederatedPointerEvent): void => {
-    if (!this.navigationReady || this.deckMaxScroll === 0) return
+    const maxScroll = this.getActiveScrollMax()
+    if (
+      !this.navigationReady ||
+      maxScroll === 0 ||
+      (this.activeDeckId !== null &&
+        (this.deckEditorTransitioning ||
+          this.deckEditorClosing ||
+          this.deckEditorCardMutationInProgress))
+    ) {
+      return
+    }
 
     this.deckSliderDragging = true
     this.deckSliderDragOffset = event.global.y - this.deckSlider.y
@@ -752,7 +882,8 @@ export class CollectionScene extends Scene {
   }
 
   private readonly handleDeckSliderMove = (event: FederatedPointerEvent): void => {
-    if (!this.deckSliderDragging || this.deckMaxScroll === 0) return
+    const maxScroll = this.getActiveScrollMax()
+    if (!this.deckSliderDragging || maxScroll === 0) return
 
     const trackRange = Layout.deckSlider.maxY - Layout.deckSlider.minY
     const sliderY = Math.max(
@@ -761,7 +892,11 @@ export class CollectionScene extends Scene {
     )
     const scrollRatio = (sliderY - Layout.deckSlider.minY) / trackRange
 
-    this.setDeckScroll(-scrollRatio * this.deckMaxScroll)
+    if (this.activeDeckId !== null) {
+      this.setDeckEditorCardScroll(-scrollRatio * maxScroll)
+    } else {
+      this.setDeckScroll(-scrollRatio * maxScroll)
+    }
     event.stopPropagation()
   }
 
@@ -844,6 +979,9 @@ export class CollectionScene extends Scene {
     this.activeDeckId = deckId
     this.deckEditorOrigin = origin
     this.clearDeckEditorCardPreview()
+    this.deckEditorCardScrollOffset = 0
+    this.deckEditorCardMaxScroll = 0
+    this.deckEditorCardContent.y = 0
     this.deckEditorCardMutationInProgress = false
     this.deckEditorTransitioning = true
     const transitionSequence = ++this.deckEditorTransitionSequence
@@ -852,6 +990,7 @@ export class CollectionScene extends Scene {
     this.deckSlider.visible = false
     this.deckEditorLayer.visible = true
     this.deckEditorLayer.alpha = 1
+    this.deckEditorButton.scale.set(1)
     this.deckEditorButton.position.set(origin.x, origin.y)
     this.deckEditorButton.setBaseY(origin.y)
     this.deckEditorButton.setEnabled(false)
@@ -871,6 +1010,7 @@ export class CollectionScene extends Scene {
 
     this.deckEditorButton.setBaseY(DECK_EDITOR_LAYOUT.header.y)
     this.deckEditorTransitioning = false
+    this.updateDeckSliderPosition()
     this.setDeckInteractionEnabled(true)
   }
 
@@ -903,6 +1043,7 @@ export class CollectionScene extends Scene {
     this.deckEditorTransitioning = true
     this.setNavigationEnabled(false)
     this.setDeckInteractionEnabled(false)
+    this.deckSlider.visible = false
 
     const origin = this.deckEditorOrigin
     if (origin && this.deckEditorLayer.visible) {
@@ -919,6 +1060,10 @@ export class CollectionScene extends Scene {
     this.deckEditorCardContent.alpha = 1
     this.deckEditorCount.alpha = 1
     this.deckEditorDoneButton.alpha = 1
+    this.deckEditorCardScrollOffset = 0
+    this.deckEditorCardMaxScroll = 0
+    this.deckEditorCardContent.y = 0
+    this.deckEditorButton.scale.set(1)
     this.deckEditorButton.setBaseY(DECK_EDITOR_LAYOUT.header.y)
     this.deckViewport.visible = true
     this.updateDeckSliderPosition()
@@ -950,6 +1095,23 @@ export class CollectionScene extends Scene {
     return { x: center.x, y: center.y }
   }
 
+  private getDeckEditorFrameTargetScale(): number {
+    const texture = this.deckEditorButton.sprite.texture
+    if (texture === Texture.EMPTY || texture.width <= 0 || texture.height <= 0) {
+      return 1
+    }
+
+    const widthScale = DECK_EDITOR_FRAME_TARGET_WIDTH / texture.width
+    const maxHeightScale =
+      (2 *
+        (DECK_EDITOR_LAYOUT.cardList.y -
+          DECK_EDITOR_LAYOUT.header.y -
+          DECK_EDITOR_FRAME_CARD_LIST_GAP)) /
+      texture.height
+
+    return Math.max(1, Math.min(widthScale, maxHeightScale))
+  }
+
   private animateDeckEditorTransition(
     origin: { x: number; y: number },
     opening: boolean
@@ -958,6 +1120,7 @@ export class CollectionScene extends Scene {
 
     return new Promise<void>((resolve) => {
       const targetY = opening ? DECK_EDITOR_LAYOUT.header.y : origin.y
+      const targetScale = opening ? this.getDeckEditorFrameTargetScale() : 1
       const targetAlpha = opening ? 1 : 0
       const finish = (): void => {
         if (this.deckEditorTransitionTimeline === timeline) {
@@ -978,6 +1141,16 @@ export class CollectionScene extends Scene {
         {
           x: origin.x,
           y: targetY,
+          duration: DECK_EDITOR_TRANSITION_DURATION,
+          ease: 'power2.inOut'
+        },
+        0
+      )
+      timeline.to(
+        this.deckEditorButton.scale,
+        {
+          x: targetScale,
+          y: targetScale,
           duration: DECK_EDITOR_TRANSITION_DURATION,
           ease: 'power2.inOut'
         },
@@ -1093,6 +1266,16 @@ export class CollectionScene extends Scene {
     }
   }
 
+  private getDeckEditorCardContentHeight(rowCount: number): number {
+    if (rowCount === 0) return 0
+
+    return (
+      DECK_EDITOR_ROW_INSET +
+      rowCount * DECK_EDITOR_CARD_ROW_HEIGHT -
+      DECK_EDITOR_CARD_ROW_GAP
+    )
+  }
+
   private renderDeckCardRows(deck: Deck): void {
     this.clearDeckEditorCardPreview()
     const sequence = ++this.deckEditorRenderSequence
@@ -1117,6 +1300,13 @@ export class CollectionScene extends Scene {
           ? nameDifference
           : left.cardId.localeCompare(right.cardId)
       })
+
+    this.deckEditorCardMaxScroll = Math.max(
+      0,
+      this.getDeckEditorCardContentHeight(entries.length) -
+        DECK_EDITOR_LAYOUT.cardList.height
+    )
+    this.setDeckEditorCardScroll(this.deckEditorCardScrollOffset)
 
     for (const [index, entry] of entries.entries()) {
       const row = this.createDeckCardRow(entry.cardId, entry.card, entry.count, index)
@@ -1185,18 +1375,11 @@ export class CollectionScene extends Scene {
     background.eventMode = 'none'
     row.addChild(background)
 
-    if (this.deckManaTexture) {
-      const manaIcon = new Sprite(this.deckManaTexture)
-      manaIcon.anchor.set(0.5)
-      const manaScale = Math.min(
-        DECK_EDITOR_MANA_ICON_SIZE / this.deckManaTexture.width,
-        DECK_EDITOR_MANA_ICON_SIZE / this.deckManaTexture.height
-      )
-      manaIcon.scale.set(manaScale)
-      manaIcon.position.set(DECK_EDITOR_COST_WIDTH / 2, rowHeight / 2)
-      manaIcon.eventMode = 'none'
-      row.addChild(manaIcon)
-    }
+    const costBackground = new Graphics()
+      .rect(1, 1, DECK_EDITOR_COST_WIDTH - 2, rowHeight - 2)
+      .fill(0x355376)
+    costBackground.eventMode = 'none'
+    row.addChild(costBackground)
 
     const cost = new Text({
       text: String(card?.cost ?? 0),
@@ -1251,6 +1434,12 @@ export class CollectionScene extends Scene {
     artworkLayer.eventMode = 'none'
     row.addChild(artworkLayer)
     row.addChild(name)
+
+    const copiesBackground = new Graphics()
+      .rect(copiesX, 1, DECK_EDITOR_COPIES_WIDTH - 2, rowHeight - 2)
+      .fill(0x312f31)
+    copiesBackground.eventMode = 'none'
+    row.addChild(copiesBackground)
 
     const copies = new Text({
       text: String(count),
@@ -1473,6 +1662,12 @@ export class CollectionScene extends Scene {
       return
     }
 
+    void gameAudio
+    // gameAudio.play('collection-card-add')
+    if (getDeckCardCount(result.deck, card.id) === getCardCopyLimit(card)) {
+      void gameAudio
+      // gameAudio.play('card-limit-lock')
+    }
     this.updateDeckEditor()
   }
 
@@ -1584,6 +1779,8 @@ export class CollectionScene extends Scene {
     if (this.cardPreviewOpening) return
 
     this.cardPreviewOpening = true
+    void gameAudio
+    // gameAudio.play('collection-card-preview')
     const bounds = view.getBounds()
     const topLeft = this.root.toLocal({ x: bounds.x, y: bounds.y })
     const bottomRight = this.root.toLocal({
@@ -1614,7 +1811,12 @@ export class CollectionScene extends Scene {
   }
 
   private async beginNewDeckCreation(): Promise<void> {
-    if (!this.navigationReady || this.disposed || this.newDeckScene.isOpen) {
+    if (
+      !this.navigationReady ||
+      this.disposed ||
+      this.newDeckScene.isOpen ||
+      this.deckStore.getDecks().length >= MAX_DECKS
+    ) {
       return
     }
 
@@ -1746,6 +1948,11 @@ export class CollectionScene extends Scene {
     const nextIndex = this.pageIndex + delta
     if (nextIndex < 0 || nextIndex >= this.pages.length) return
 
+    const pageFlipSounds =
+      delta > 0 ? COLLECTION_PAGE_FLIP_FORWARD_SOUNDS : COLLECTION_PAGE_FLIP_BACK_SOUNDS
+    void pageFlipSounds
+    void gameAudio
+    // gameAudio.playRandom(pageFlipSounds)
     void this.renderPage(nextIndex).catch((error: unknown) => {
       console.error(`Failed to render collection page ${nextIndex}:`, error)
     })

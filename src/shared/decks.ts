@@ -1,5 +1,6 @@
 export const DECK_FILE_VERSION = 1
 export const MAX_DECK_CARDS = 30
+export const MAX_DECKS = 9
 export const MAX_NON_LEGENDARY_COPIES = 2
 export const MAX_LEGENDARY_COPIES = 1
 export const DECK_CLASSES = [

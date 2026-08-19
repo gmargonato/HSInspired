@@ -138,6 +138,7 @@ export class NewDeckScene extends Scene {
     for (const [index, heroClass] of DECK_CLASSES.entries()) {
       const texture = assets[DECK_FRAME_ASSET_KEYS[heroClass]]
       const button = new Button(texture, {
+        pressSound: 'collection-select-hero',
         onClick: () => this.selectClass(heroClass)
       })
       const column = index % 3

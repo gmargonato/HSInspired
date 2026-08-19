@@ -6,6 +6,7 @@ import {
   DECK_CLASSES,
   DECK_FILE_VERSION,
   MAX_DECK_CARDS,
+  MAX_DECKS,
   MAX_NON_LEGENDARY_COPIES,
   cloneDeck,
   getCardCopyLimit,
@@ -109,6 +110,10 @@ export class DeckRepository {
   async create(request?: DeckCreateRequest): Promise<Deck> {
     return this.enqueueMutation(async () => {
       await this.ensureLoaded()
+
+      if (this.decks.length >= MAX_DECKS) {
+        throw new Error(`You can have at most ${MAX_DECKS} decks.`)
+      }
 
       const requestRecord =
         request === undefined ? undefined : isRecord(request) ? request : null

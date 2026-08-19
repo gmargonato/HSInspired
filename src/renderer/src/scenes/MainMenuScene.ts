@@ -6,6 +6,7 @@ import { Button } from '../actors/Button'
 import { DeckSelectionScene } from './DeckSelectionScene'
 import { CollectionScene } from './CollectionScene'
 import { ASSET_BUNDLE_IDS } from '../core/assets'
+import { gameAudio } from '../core/audio'
 import type { MainMenuAssets } from '../core/assets'
 import type { TransitionRect } from '../core/SceneTransitionHost'
 import type { SceneTransitionOptions } from '../core/SceneManager'
@@ -115,6 +116,8 @@ export class MainMenuScene extends Scene {
     }
 
     this.buttonPlay = new Button(assets.buttonPlay, {
+      pressSound: 'box-hub-button-press',
+      hoverSound: 'hub-mouseover',
       onClick: () => this.onPlayPressed()
     })
     this.buttonPlay.position.set(Layout.buttonPlay.x, Layout.buttonPlay.y)
@@ -125,6 +128,8 @@ export class MainMenuScene extends Scene {
     this.menuGroup.addChild(this.buttonPlay)
 
     this.buttonCollection = new Button(assets.buttonCollection, {
+      pressSound: 'box-hub-button-press',
+      hoverSound: 'hub-mouseover',
       onClick: () => this.onCollectionPressed()
     })
     this.buttonCollection.position.set(
@@ -254,6 +259,8 @@ export class MainMenuScene extends Scene {
         hostIndex: 2,
         beforeExpand: async () => {
           await centerFlip
+          void gameAudio
+          // gameAudio.play('hub-click')
           await this.openChest()
 
           // The destination expands after the lids reach their edge-on state.

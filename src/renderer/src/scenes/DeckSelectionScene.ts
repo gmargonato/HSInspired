@@ -63,6 +63,7 @@ export class DeckSelectionScene extends Scene {
     this.root.addChild(this.toCollectionButton)
 
     this.backButton = new Button(sharedAssets.backButton, {
+      clickSound: 'back-click',
       onClick: () => this.onBackPressed()
     })
     this.backButton.position.set(Layout.backButton.x, Layout.backButton.y)

@@ -1,6 +1,7 @@
 import { ColorMatrixFilter, Sprite, Texture } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
 import { Actor } from './Actor'
+import { gameAudio, type SoundEffectId } from '../core/audio'
 
 const DEFAULT_HOVER_BRIGHTNESS = 1.5
 
@@ -10,6 +11,9 @@ export interface ButtonOptions {
   hoverBrightness?: number
   pressedBrightness?: number
   sinkPx?: number
+  pressSound?: SoundEffectId
+  clickSound?: SoundEffectId
+  hoverSound?: SoundEffectId
   onClick?: () => void | Promise<void>
 }
 
@@ -27,6 +31,9 @@ export class Button extends Actor {
   private hovered = false
   private pressed = false
   private enabled = true
+  private readonly pressSound?: SoundEffectId
+  private readonly clickSound?: SoundEffectId
+  private readonly hoverSound?: SoundEffectId
   private readonly onClick?: () => void | Promise<void>
 
   constructor(texture: Texture, options: ButtonOptions = {}) {
@@ -37,6 +44,9 @@ export class Button extends Actor {
     this.hoverBrightness = options.hoverBrightness ?? DEFAULT_HOVER_BRIGHTNESS
     this.pressedBrightness = options.pressedBrightness ?? 0.8
     this.sinkPx = options.sinkPx ?? 6
+    this.pressSound = options.pressSound
+    this.clickSound = options.clickSound
+    this.hoverSound = options.hoverSound
     this.onClick = options.onClick
     this.brightnessState.value = this.idleBrightness
 
@@ -101,6 +111,10 @@ export class Button extends Actor {
   private onHoverStart = (): void => {
     if (!this.enabled) return
     this.hovered = true
+    if (this.hoverSound) {
+      void gameAudio
+      // gameAudio.play(this.hoverSound)
+    }
     if (!this.pressed) this.tweenBrightness(this.hoverBrightness, 0.15)
   }
 
@@ -110,8 +124,12 @@ export class Button extends Actor {
     if (!this.pressed) this.tweenBrightness(this.idleBrightness, 0.15)
   }
 
-  private onPressStart = (): void => {
-    if (!this.enabled) return
+  private onPressStart = (event: FederatedPointerEvent): void => {
+    if (!this.enabled || event.button !== 0) return
+    if (this.pressSound) {
+      void gameAudio
+      // gameAudio.play(this.pressSound)
+    }
     this.pressed = true
     this.killTweensOf(this.sprite.scale)
     this.killTweensOf(this)
@@ -165,6 +183,10 @@ export class Button extends Actor {
     // Buttons with a right-click action must not also run their left-click action.
     if (!this.enabled || event.button !== 0) return
 
+    if (this.clickSound) {
+      void gameAudio
+      // gameAudio.play(this.clickSound)
+    }
     const result = this.onClick?.()
     if (result) {
       void Promise.resolve(result).catch((error: unknown) => {

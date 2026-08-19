@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   MAX_DECK_CARDS,
+  MAX_DECKS,
   addCardToDeck,
   countDeckCards,
   isCollectibleDeckCard,
@@ -146,6 +147,25 @@ describe('DeckRepository', () => {
         'Deck 2',
         'Deck 3'
       ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects creating more than nine decks', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'hs-inspired-deck-limit-'))
+    const filePath = join(directory, 'decks.json')
+
+    try {
+      const repository = new DeckRepository(filePath)
+      for (let index = 0; index < MAX_DECKS; index += 1) {
+        await repository.create()
+      }
+
+      await expect(repository.create()).rejects.toThrow(
+        `You can have at most ${MAX_DECKS} decks.`
+      )
+      expect(await repository.list()).toHaveLength(MAX_DECKS)
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

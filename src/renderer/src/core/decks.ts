@@ -2,6 +2,7 @@ import type { CardDefinition } from '../../../../card-lab/card-catalog'
 import {
   addCardToDeck,
   cloneDeck,
+  MAX_DECKS,
   removeCardFromDeck,
   type Deck,
   type DeckCreateRequest,
@@ -68,6 +69,11 @@ export class PersistentDeckStore implements DeckStore {
   createDeck(request?: DeckCreateRequest): Promise<Deck> {
     return this.enqueue(async () => {
       await this.load()
+
+      if (this.decks.length >= MAX_DECKS) {
+        throw new Error(`You can have at most ${MAX_DECKS} decks.`)
+      }
+
       const deck = await this.apiProvider().create(request)
       this.decks.push(cloneDeck(deck))
       this.notify()
