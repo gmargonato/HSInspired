@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\basic_stormwind_champion.jpg",
+  "source_name": "basic_stormwind_champion.jpg",
+  "crop_box": [
+    10,
+    0,
+    443,
+    433
+  ],
+  "scale": 1.1554621848739497,
+  "offset_x": -12.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-18T16:08:30.247718"
+}

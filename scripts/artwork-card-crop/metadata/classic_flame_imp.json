@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_flame_imp.jpg",
+  "source_name": "classic_flame_imp.jpg",
+  "crop_box": [
+    122,
+    0,
+    1208,
+    1086
+  ],
+  "scale": 0.4604051565377532,
+  "offset_x": -56.32235444113904,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:32.363715",
+  "card_id": "classic_flame_imp",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

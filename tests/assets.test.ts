@@ -1,7 +1,7 @@
 import { Assets } from 'pixi.js'
 import { describe, expect, it, vi } from 'vitest'
-import { ASSET_BUNDLE_IDS } from '../src/renderer/src/core/assets'
-import { AssetScope } from '../src/renderer/src/core/assetScope'
+import { ASSET_BUNDLE_IDS } from '../src/renderer/src/ui/asset-registry'
+import { AssetScope } from '../src/renderer/src/ui/asset-registry/asset-scope'
 
 describe('AssetScope', () => {
   it('shares concurrent loads and unloads only after the final release', async () => {

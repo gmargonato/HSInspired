@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_worthless_imp.jpg",
+  "source_name": "classic_worthless_imp.jpg",
+  "crop_box": [
+    276,
+    0,
+    1280,
+    1004
+  ],
+  "scale": 0.49800796812749004,
+  "offset_x": -137.45019920318725,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:06:37.263249",
+  "card_id": "classic_worthless_imp",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

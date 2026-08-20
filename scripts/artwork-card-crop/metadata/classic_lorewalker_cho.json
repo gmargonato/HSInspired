@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\classic_lorewalker_cho.jpg",
+  "source_name": "classic_lorewalker_cho.jpg",
+  "crop_box": [
+    16,
+    44,
+    743,
+    771
+  ],
+  "scale": 0.6875,
+  "offset_x": -10.699999999999989,
+  "offset_y": -30.412500000000023,
+  "timestamp": "2026-08-18T16:10:22.190595"
+}

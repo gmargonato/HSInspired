@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_mortal_strike.jpg",
+  "source_name": "classic_mortal_strike.jpg",
+  "crop_box": [
+    55,
+    0,
+    449,
+    394
+  ],
+  "scale": 1.2690355329949239,
+  "offset_x": -69.79695431472084,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:04:33.061042",
+  "card_id": "classic_mortal_strike",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

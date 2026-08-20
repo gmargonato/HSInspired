@@ -1,14 +1,19 @@
-import { Container, Graphics, Rectangle, Text } from 'pixi.js'
+import { Container, Graphics, Rectangle } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
+import type { CardDefinition } from '../../../game/content/cards'
+import { CardAssetResolver } from '../ui/asset-registry/card-asset-resolver'
+import { CardView } from '../rendering/cards/card-view'
+import { GAME_HEIGHT, GAME_WIDTH } from '../app/config'
 import {
-  formatCardSetName,
-  type CardDefinition
-} from '../../../../card-lab/card-catalog'
-import { CardAssetResolver } from '../../../../card-lab/card-asset-manifest'
-import { CardView } from '../../../../card-lab/card-view'
-import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
+  cardDetailRows,
+  createCardDetailPanel,
+  type CardDetailRow
+} from '../features/collection/card-detail-panel'
 import { CardPreviewParallax, resolveParallaxTarget } from './cardPreviewParallax'
 import { Scene } from './Scene'
+
+export { cardDetailRows }
+export type { CardDetailRow }
 
 export interface CardPreviewSourceBounds {
   readonly x: number
@@ -23,88 +28,20 @@ export interface CardViewSceneOptions {
   readonly resolver?: CardAssetResolver
 }
 
-export interface CardDetailRow {
-  readonly label: string
-  readonly value: string
-}
-
 const COLORS = {
-  backdrop: 0x080b12,
-  panel: 0x161d2b,
-  panelBorder: 0xb08a4e,
-  heading: 0xf1e4c8,
-  label: 0xb8a781,
-  value: 0xffffff,
-  effect: 0xe6d9bd,
-  muted: 0x8f9bb0
+  backdrop: 0x080b12
 } as const
 
 const PREVIEW = {
   cardCenter: { x: 1080, y: GAME_HEIGHT / 2 },
   pointerRange: { x: 480, y: 440 },
   maxScale: 0.86,
-  panel: { x: 150, y: 128, width: 500, height: 824 },
-  panelPadding: 28,
-  panelHeadingY: 26,
-  rowStartY: 92,
-  rowStep: 42,
-  effectHeadingGap: 24,
   animationDuration: 0.28
 } as const
 
 // The preview effect is intentionally controlled here so it can be disabled
 // without touching the shared CardView renderer or collection interactions.
 const CARD_PREVIEW_PARALLAX_ENABLED = true
-
-const DETAIL_LABEL_STYLE = {
-  fontFamily: 'Franklin Gothic Condensed',
-  fontSize: 18,
-  fill: COLORS.label
-} as const
-
-const DETAIL_VALUE_STYLE = {
-  fontFamily: 'Franklin Gothic Condensed',
-  fontSize: 21,
-  fill: COLORS.value,
-  wordWrap: true,
-  breakWords: true
-} as const
-
-const EFFECT_STYLE = {
-  fontFamily: 'Franklin Gothic Condensed',
-  fontSize: 22,
-  fill: COLORS.effect,
-  wordWrap: true,
-  breakWords: true,
-  lineHeight: 27
-} as const
-
-/** Builds the metadata rows shown beside the enlarged card. */
-export function cardDetailRows(card: CardDefinition): readonly CardDetailRow[] {
-  const rows: CardDetailRow[] = [
-    { label: 'Name', value: card.name },
-    { label: 'Type', value: card.type },
-    { label: 'Mana', value: String(card.cost) },
-    { label: 'Class', value: card.cardClass },
-    { label: 'Collection', value: formatCardSetName(card.set) },
-    { label: 'Rarity', value: card.rarity }
-  ]
-
-  if (card.subtype) rows.push({ label: 'Subtype', value: card.subtype })
-  if (card.spellSchool) rows.push({ label: 'School', value: card.spellSchool })
-  if ((card.type === 'Minion' || card.type === 'Weapon') && card.attack !== null) {
-    rows.push({ label: 'Attack', value: String(card.attack) })
-  }
-  if (card.type === 'Weapon' && card.durability !== null) {
-    rows.push({ label: 'Durability', value: String(card.durability) })
-  } else if (card.type === 'Hero' && card.armor !== null) {
-    rows.push({ label: 'Armor', value: String(card.armor) })
-  } else if (card.type === 'Minion' && card.health !== null) {
-    rows.push({ label: 'Health', value: String(card.health) })
-  }
-
-  return rows
-}
 
 /** Contextual enlarged card preview opened from the Collection scene. */
 export class CardViewScene extends Scene {
@@ -140,7 +77,7 @@ export class CardViewScene extends Scene {
     this.backdrop.on('pointertap', this.handleBackdropTap)
     this.root.addChild(this.backdrop)
 
-    this.detailsPanel = this.createDetailsPanel()
+    this.detailsPanel = createCardDetailPanel(this.card)
     this.detailsPanel.alpha = 0
     this.root.addChild(this.detailsPanel)
 
@@ -191,97 +128,6 @@ export class CardViewScene extends Scene {
       document.fonts.load('400 22px "Franklin Gothic Condensed"'),
       document.fonts.load('700 22px "Franklin Gothic Condensed"')
     ])
-  }
-
-  private createDetailsPanel(): Container {
-    const panel = new Container()
-    panel.position.set(PREVIEW.panel.x, PREVIEW.panel.y)
-
-    const background = new Graphics()
-      .roundRect(0, 0, PREVIEW.panel.width, PREVIEW.panel.height, 14)
-      .fill({ color: COLORS.panel, alpha: 0.96 })
-    background
-      .roundRect(0, 0, PREVIEW.panel.width, PREVIEW.panel.height, 14)
-      .stroke({ color: COLORS.panelBorder, width: 2, alpha: 0.9 })
-    background.eventMode = 'none'
-    panel.addChild(background)
-    panel.eventMode = 'static'
-    panel.hitArea = new Rectangle(0, 0, PREVIEW.panel.width, PREVIEW.panel.height)
-    panel.on('pointertap', (event: FederatedPointerEvent) => {
-      event.stopPropagation()
-    })
-
-    const heading = new Text({
-      text: 'CARD DETAILS',
-      style: {
-        fontFamily: 'Belwe',
-        fontSize: 28,
-        fill: COLORS.heading
-      }
-    })
-    heading.position.set(PREVIEW.panelPadding, PREVIEW.panelHeadingY)
-    panel.addChild(heading)
-
-    const rows = cardDetailRows(this.card)
-    for (const [index, row] of rows.entries()) {
-      const y = PREVIEW.rowStartY + index * PREVIEW.rowStep
-      const label = new Text({
-        text: row.label.toUpperCase(),
-        style: DETAIL_LABEL_STYLE
-      })
-      label.position.set(PREVIEW.panelPadding, y)
-      label.anchor.set(0, 0.5)
-      label.eventMode = 'none'
-      panel.addChild(label)
-
-      const value = new Text({
-        text: row.value,
-        style: {
-          ...DETAIL_VALUE_STYLE,
-          wordWrapWidth: PREVIEW.panel.width - PREVIEW.panelPadding * 2 - 140
-        }
-      })
-      value.position.set(PREVIEW.panel.width - PREVIEW.panelPadding, y)
-      value.anchor.set(1, 0.5)
-      value.eventMode = 'none'
-      panel.addChild(value)
-    }
-
-    const effectY =
-      PREVIEW.rowStartY + rows.length * PREVIEW.rowStep + PREVIEW.effectHeadingGap
-    const effectHeading = new Text({
-      text: 'EFFECT',
-      style: DETAIL_LABEL_STYLE
-    })
-    effectHeading.position.set(PREVIEW.panelPadding, effectY)
-    effectHeading.eventMode = 'none'
-    panel.addChild(effectHeading)
-
-    const effect = new Text({
-      text: this.card.effect || 'No effect',
-      style: {
-        ...EFFECT_STYLE,
-        wordWrapWidth: PREVIEW.panel.width - PREVIEW.panelPadding * 2
-      }
-    })
-    effect.position.set(PREVIEW.panelPadding, effectY + 28)
-    effect.eventMode = 'none'
-    panel.addChild(effect)
-
-    const hint = new Text({
-      text: 'Click outside the card or press Escape to close',
-      style: {
-        fontFamily: 'Franklin Gothic Condensed',
-        fontSize: 16,
-        fill: COLORS.muted
-      }
-    })
-    hint.position.set(PREVIEW.panelPadding, PREVIEW.panel.height - 30)
-    hint.anchor.set(0, 0.5)
-    hint.eventMode = 'none'
-    panel.addChild(hint)
-
-    return panel
   }
 
   private positionAtSource(): void {

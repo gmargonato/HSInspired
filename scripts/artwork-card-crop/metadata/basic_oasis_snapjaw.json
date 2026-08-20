@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\basic_oasis_snapjaw.jpg",
+  "source_name": "basic_oasis_snapjaw.jpg",
+  "crop_box": [
+    110,
+    45,
+    915,
+    850
+  ],
+  "scale": 0.6211498973305956,
+  "offset_x": -68.06000000000012,
+  "offset_y": -27.730000000000075,
+  "timestamp": "2026-08-18T16:07:49.087845"
+}

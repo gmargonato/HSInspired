@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\basic_razorfen_hunter.jpg",
+  "source_name": "basic_razorfen_hunter.jpg",
+  "crop_box": [
+    0,
+    147,
+    497,
+    644
+  ],
+  "scale": 1.0065687500000002,
+  "offset_x": 0.0,
+  "offset_y": -147.64429312500016,
+  "timestamp": "2026-08-18T16:08:02.841893"
+}

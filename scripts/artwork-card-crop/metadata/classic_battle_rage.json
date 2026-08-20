@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_battle_rage.jpg",
+  "source_name": "classic_battle_rage.jpg",
+  "crop_box": [
+    0,
+    1,
+    800,
+    801
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -0.48076923076928324,
+  "timestamp": "2026-08-19T20:01:19.759808",
+  "card_id": "classic_battle_rage",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

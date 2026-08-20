@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_CATALOG } from '../card-lab/card-catalog'
+import { CARD_CATALOG } from '../src/game/content/cards'
 import {
   filterCollectionCards,
   formatManaFilterLabel,
@@ -41,7 +41,11 @@ describe('Collection filters', () => {
       query: 'attack:6 health:6'
     })
 
-    expect(cards.every((card) => card.attack === 6 && card.health === 6)).toBe(true)
+    expect(
+      cards.every(
+        (card) => card.type === 'Minion' && card.attack === 6 && card.health === 6
+      )
+    ).toBe(true)
   })
 
   it('supports the seven-plus cost bucket', () => {
@@ -63,7 +67,7 @@ describe('Collection filters', () => {
     expect(cards.every((card) => card.cost === 2)).toBe(true)
     expect(
       cards.every((card) =>
-        `${card.name} ${card.effect}`.toLowerCase().includes('taunt')
+        `${card.name} ${card.rulesText}`.toLowerCase().includes('taunt')
       )
     ).toBe(true)
   })

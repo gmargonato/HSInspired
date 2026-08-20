@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_sacrificial_pact.jpg",
+  "source_name": "basic_sacrificial_pact.jpg",
+  "crop_box": [
+    0,
+    7,
+    714,
+    721
+  ],
+  "scale": 0.7002801120448179,
+  "offset_x": 0.0,
+  "offset_y": -5.088343029519505,
+  "timestamp": "2026-08-19T19:59:32.900996",
+  "card_id": "basic_sacrificial_pact",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

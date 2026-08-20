@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_whirlwind.jpg",
+  "source_name": "basic_whirlwind.jpg",
+  "crop_box": [
+    101,
+    0,
+    1146,
+    1045
+  ],
+  "scale": 0.4784688995215311,
+  "offset_x": -48.501273463378766,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:00:11.358695",
+  "card_id": "basic_whirlwind",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

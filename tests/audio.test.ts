@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { AudioService, SOUND_EFFECT_URLS } from '../src/renderer/src/core/audio'
+import { AudioService, SOUND_EFFECT_URLS } from '../src/renderer/src/app/audio'
 
 interface FakeAudioContext {
   context: AudioContext
@@ -134,10 +134,11 @@ describe('AudioService', () => {
         arrayBuffer: async () => new ArrayBuffer(4)
       } as Response
     })
-    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const warning = vi.fn()
     const audio = new AudioService({
       contextFactory: () => fake.context,
-      fetcher
+      fetcher,
+      logger: { warn: warning }
     })
 
     await expect(audio.preload()).resolves.toBeUndefined()

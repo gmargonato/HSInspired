@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_sword_of_justice.jpg",
+  "source_name": "classic_sword_of_justice.jpg",
+  "crop_box": [
+    0,
+    75,
+    1024,
+    1099
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": -36.62109375,
+  "timestamp": "2026-08-19T20:06:03.084191",
+  "card_id": "classic_sword_of_justice",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

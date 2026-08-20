@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_drain_life.jpg",
+  "source_name": "basic_drain_life.jpg",
+  "crop_box": [
+    12,
+    0,
+    888,
+    876
+  ],
+  "scale": 0.5707762557077626,
+  "offset_x": -7.0600632244468216,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:58:12.040702",
+  "card_id": "basic_drain_life",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

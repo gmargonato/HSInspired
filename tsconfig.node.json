@@ -4,6 +4,7 @@
     "electron.vite.config.*",
     "src/main/**/*",
     "src/preload/**/*",
+    "src/game/**/*",
     "src/shared/**/*"
   ],
   "compilerOptions": {
@@ -14,5 +15,6 @@
       "@renderer/*": ["src/renderer/src/*"],
       "@assets/*": ["assets/*"]
     }
-  }
+  },
+  "exclude": ["src/**/*.test.ts"]
 }

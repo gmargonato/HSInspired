@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_humility.jpg",
+  "source_name": "basic_humility.jpg",
+  "crop_box": [
+    116,
+    0,
+    947,
+    831
+  ],
+  "scale": 0.601684717208183,
+  "offset_x": -69.86577802462284,
+  "offset_y": -5.684341886080802e-14,
+  "timestamp": "2026-08-19T19:58:48.012567",
+  "card_id": "basic_humility",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

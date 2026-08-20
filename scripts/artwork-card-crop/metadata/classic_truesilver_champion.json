@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_truesilver_champion.jpg",
+  "source_name": "classic_truesilver_champion.jpg",
+  "crop_box": [
+    0,
+    29,
+    416,
+    445
+  ],
+  "scale": 1.2019230769230769,
+  "offset_x": 0.0,
+  "offset_y": -34.85576923076917,
+  "timestamp": "2026-08-19T20:06:11.431793",
+  "card_id": "classic_truesilver_champion",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

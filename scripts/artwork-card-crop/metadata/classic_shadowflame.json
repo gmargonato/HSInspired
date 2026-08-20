@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_shadowflame.jpg",
+  "source_name": "classic_shadowflame.jpg",
+  "crop_box": [
+    116,
+    0,
+    1108,
+    992
+  ],
+  "scale": 0.5040322580645161,
+  "offset_x": -58.629372673697276,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:05:18.069859",
+  "card_id": "classic_shadowflame",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

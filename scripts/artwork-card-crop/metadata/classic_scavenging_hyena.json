@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_scavenging_hyena.jpg",
+  "source_name": "classic_scavenging_hyena.jpg",
+  "crop_box": [
+    0,
+    0,
+    365,
+    365
+  ],
+  "scale": 1.36986301369863,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:05:10.518259",
+  "card_id": "classic_scavenging_hyena",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

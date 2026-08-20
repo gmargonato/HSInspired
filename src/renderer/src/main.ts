@@ -1,10 +1,10 @@
 import { Application } from 'pixi.js'
-import { MainMenuScene } from './scenes/MainMenuScene'
-import { SceneManager } from './core/SceneManager'
-import { SceneNavigator } from './core/SceneNavigator'
-import { GAME_HEIGHT, GAME_WIDTH } from './core/config'
-import { CursorManager } from './core/cursor'
-import { gameAudio } from './core/audio'
+import { SceneManager } from './scenes/SceneManager'
+import { SceneNavigator } from './app/SceneNavigator'
+import { createAppServices } from './app/services'
+import type { AppLogger } from './app/services'
+import { GAME_HEIGHT, GAME_WIDTH } from './app/config'
+import { CursorManager } from './ui/components/cursor'
 import type { SceneRequest } from '../../shared/sceneNavigation'
 import './styles.css'
 
@@ -21,22 +21,25 @@ type SceneMenuAPI = {
  * preload intentionally exposes only this narrow API because the Electron
  * sandbox cannot load the external toolkit preload module.
  */
-function subscribeToSceneMenu(listener: (request: SceneRequest) => void): () => void {
+function subscribeToSceneMenu(
+  listener: (request: SceneRequest) => void,
+  logger: AppLogger
+): () => void {
   const sceneAPI = window.api as SceneMenuAPI | undefined
   if (typeof sceneAPI?.onSceneRequest === 'function') {
     try {
       const unsubscribe = sceneAPI.onSceneRequest((request) => {
-        console.info('[Scenes menu][renderer] received via window.api', request)
+        logger.info('[Scenes menu][renderer] received via window.api', request)
         listener(request)
       })
-      console.info('[Scenes menu][renderer] listening via window.api')
+      logger.info('[Scenes menu][renderer] listening via window.api')
       return unsubscribe
     } catch (error) {
-      console.warn('The custom Scenes bridge could not be registered:', error)
+      logger.warn('The custom Scenes bridge could not be registered.', error)
     }
   }
 
-  console.warn('Scenes menu bridge is unavailable; developer navigation is disabled')
+  logger.warn('Scenes menu bridge is unavailable; developer navigation is disabled.')
   return () => undefined
 }
 
@@ -66,44 +69,79 @@ async function bootstrap(): Promise<void> {
   }
   app.canvas.addEventListener('contextmenu', preventContextMenu)
 
-  await gameAudio.preload()
-  const unlockAudio = (): void => gameAudio.unlock()
-  app.canvas.addEventListener('pointerdown', unlockAudio, { capture: true })
+  const services = createAppServices()
+  const audio = services.audio
+  const unlockAudio = (): void => audio.unlock()
+  let cursor: CursorManager | null = null
+  let sceneNavigator: SceneNavigator | null = null
+  let sceneManagerReady = false
+  const pendingSceneRequests: SceneRequest[] = []
 
-  app.ticker.maxFPS = 60
+  const navigateSceneRequest = (request: SceneRequest): void => {
+    if (!sceneManagerReady || !sceneNavigator) {
+      pendingSceneRequests.push(request)
+      return
+    }
 
-  const cursor = new CursorManager(container)
-  cursor.mount()
+    services.logger.info('[Scenes menu][renderer] navigating', request)
+    void sceneNavigator.navigateRequest(request).catch((error: unknown) => {
+      services.logger.error('Failed to navigate from the Scenes menu.', error)
+    })
+  }
+
+  // Register before audio and scene loading so native menu requests are not
+  // lost while the renderer is becoming ready.
+  const unsubscribeFromSceneMenu = subscribeToSceneMenu(
+    navigateSceneRequest,
+    services.logger
+  )
 
   try {
-    const game = new SceneManager(app, { cursor })
+    await audio.preload()
+    app.canvas.addEventListener('pointerdown', unlockAudio, { capture: true })
+    app.ticker.maxFPS = 60
 
-    await game.start(new MainMenuScene())
+    cursor = new CursorManager(container)
+    cursor.mount()
+
+    const game = new SceneManager(app, {
+      cursor: cursor ?? undefined,
+      logger: services.logger
+    })
+    const navigator = new SceneNavigator(game, services)
+    sceneNavigator = navigator
+
+    const directInspectorStart =
+      import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'card-inspector'
+    if (directInspectorStart) {
+      const { CardInspectorScene } = await import('@dev-inspector')
+      await game.start(new CardInspectorScene())
+    } else {
+      await game.start(navigator.createInitialScene())
+    }
+
+    sceneManagerReady = true
+    for (const request of pendingSceneRequests.splice(0)) {
+      navigateSceneRequest(request)
+    }
 
     // The native Electron menu sends requests through preload. Keep all scene
     // construction in the renderer, where SceneManager and Pixi are available.
-    const sceneNavigator = new SceneNavigator(game)
-    const unsubscribeFromSceneMenu = subscribeToSceneMenu((request) => {
-      console.info('[Scenes menu][renderer] navigating', request)
-      void sceneNavigator.navigate(request).catch((error: unknown) => {
-        console.error('Failed to navigate from the Scenes menu:', error)
-      })
-    })
-
     window.addEventListener(
       'beforeunload',
       () => {
         unsubscribeFromSceneMenu()
         app.canvas.removeEventListener('contextmenu', preventContextMenu)
         app.canvas.removeEventListener('pointerdown', unlockAudio, { capture: true })
-        void gameAudio.dispose()
-        cursor.destroy()
+        void audio.dispose()
+        cursor?.destroy()
       },
       { once: true }
     )
   } catch (error) {
-    void gameAudio.dispose()
-    cursor.destroy()
+    unsubscribeFromSceneMenu()
+    void audio.dispose()
+    cursor?.destroy()
     throw error
   }
 }

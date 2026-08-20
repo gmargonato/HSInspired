@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_animal_companion.jpg",
+  "source_name": "classic_animal_companion.jpg",
+  "crop_box": [
+    155,
+    0,
+    1158,
+    1003
+  ],
+  "scale": 0.4985044865403789,
+  "offset_x": -77.18199156215684,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:00:47.446289",
+  "card_id": "classic_animal_companion",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

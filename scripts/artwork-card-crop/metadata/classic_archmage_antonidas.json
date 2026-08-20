@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_archmage_antonidas.jpg",
+  "source_name": "classic_archmage_antonidas.jpg",
+  "crop_box": [
+    0,
+    75,
+    507,
+    582
+  ],
+  "scale": 0.9861932938856016,
+  "offset_x": 0.0,
+  "offset_y": -73.59126081019569,
+  "timestamp": "2026-08-19T20:00:55.748320",
+  "card_id": "classic_archmage_antonidas",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

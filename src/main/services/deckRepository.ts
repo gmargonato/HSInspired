@@ -1,99 +1,86 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
-import { CARD_CATALOG } from '../../../card-lab/card-catalog'
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
+import { HERO_CATALOG, asHeroId } from '../../game/content'
 import {
-  DECK_CLASSES,
   DECK_FILE_VERSION,
-  MAX_DECK_CARDS,
+  DECK_RULES,
   MAX_DECKS,
-  MAX_NON_LEGENDARY_COPIES,
   cloneDeck,
-  getCardCopyLimit,
-  isCardAllowedInDeck,
   countDeckCards,
+  parseDeck,
+  parsePersistedDeckFile,
   type Deck,
-  type DeckClass,
   type DeckCreateRequest,
   type PersistedDeckFile
-} from '../../shared/decks'
+} from '../../game/decks'
+import type { DeckRepository as DeckRepositoryPort } from '../../game/decks'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isIsoDate(value: unknown): value is string {
-  return typeof value === 'string' && Number.isFinite(Date.parse(value))
-}
-
-function isDeckClass(value: unknown): value is DeckClass {
-  return typeof value === 'string' && DECK_CLASSES.includes(value as DeckClass)
-}
-
-function isValidCards(value: unknown): value is Readonly<Record<string, number>> {
-  if (!isRecord(value)) return false
-
-  return Object.entries(value).every(
-    ([cardId, count]) =>
-      cardId.trim().length > 0 &&
-      typeof count === 'number' &&
-      Number.isInteger(count) &&
-      count >= 1 &&
-      count <= MAX_NON_LEGENDARY_COPIES
-  )
-}
-
-function isValidDeck(value: unknown): value is Deck {
-  if (!isRecord(value)) return false
-
-  return (
-    typeof value.id === 'string' &&
-    value.id.trim().length > 0 &&
-    typeof value.name === 'string' &&
-    value.name.trim().length > 0 &&
-    (value.heroClass === undefined || isDeckClass(value.heroClass)) &&
-    (value.heroId === undefined ||
-      (typeof value.heroId === 'string' && value.heroId.trim().length > 0)) &&
-    isValidCards(value.cards) &&
-    countDeckCards({ cards: value.cards }) <= MAX_DECK_CARDS &&
-    isIsoDate(value.createdAt) &&
-    isIsoDate(value.updatedAt)
-  )
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error
 }
 
-function assertPersistableDeck(deck: Deck, previous?: Deck): void {
-  if (!isValidDeck(deck) || !hasValidCatalogCards(deck, previous)) {
-    throw new Error('Invalid deck data')
+function validateDeckForPersistence(deck: Deck): void {
+  const errors = DECK_RULES.validate(deck)
+  if (errors.length > 0) throw new Error(`Invalid deck data: ${errors.join(' ')}`)
+}
+
+function findHero(value: unknown, property: 'id' | 'classId') {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim().toLowerCase()
+  return HERO_CATALOG.all.find((hero) => hero[property].toLowerCase() === normalized)
+}
+
+function migrateLegacyDeckFile(value: unknown): Deck[] | null {
+  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.decks)) {
+    return null
+  }
+
+  const decks = value.decks.map((legacyDeck, index) => {
+    if (!isRecord(legacyDeck)) {
+      throw new Error(`Legacy decks[${index}] must be an object`)
+    }
+
+    const hero =
+      findHero(legacyDeck.heroId, 'id') ??
+      findHero(legacyDeck.heroClass, 'classId') ??
+      HERO_CATALOG.require('guldan')
+    const deck = parseDeck({ ...legacyDeck, heroId: hero.id })
+    validateDeckForPersistence(deck)
+    return deck
+  })
+
+  if (decks.length > MAX_DECKS) {
+    throw new Error(`Too many legacy decks: ${decks.length}`)
+  }
+
+  return decks
+}
+
+function validateCreateRequest(value: unknown): DeckCreateRequest {
+  if (value === undefined) return {}
+  if (!isRecord(value)) throw new Error('Invalid deck creation request')
+  if (value.name !== undefined && typeof value.name !== 'string') {
+    throw new Error('Invalid deck creation request name')
+  }
+  if (
+    value.heroId !== undefined &&
+    (typeof value.heroId !== 'string' || value.heroId.trim() === '')
+  ) {
+    throw new Error('Invalid deck creation request heroId')
+  }
+  return {
+    ...(value.name === undefined ? {} : { name: value.name }),
+    ...(value.heroId === undefined ? {} : { heroId: asHeroId(value.heroId) })
   }
 }
 
-function hasValidCatalogCards(deck: Deck, previous?: Deck): boolean {
-  return Object.entries(deck.cards).every(([cardId, count]) => {
-    const card = CARD_CATALOG.get(cardId)
-    const previousCount = previous?.cards[cardId]
-    // Keep legacy cards loadable while allowing users to remove them. Any
-    // newly added copies still have to pass the current catalog and class rules.
-    if (
-      previous?.heroClass === deck.heroClass &&
-      previousCount !== undefined &&
-      count <= previousCount
-    ) {
-      return true
-    }
-    return (
-      card !== undefined &&
-      count <= getCardCopyLimit(card) &&
-      isCardAllowedInDeck(deck, card)
-    )
-  })
-}
-
-/** Durable JSON-backed storage for the player's decks. */
-export class DeckRepository {
+/** JSON filesystem adapter for the platform-neutral DeckRepository port. */
+export class DeckRepository implements DeckRepositoryPort {
   private loaded = false
   private loadPromise: Promise<void> | null = null
   private decks: Deck[] = []
@@ -110,40 +97,23 @@ export class DeckRepository {
   async create(request?: DeckCreateRequest): Promise<Deck> {
     return this.enqueueMutation(async () => {
       await this.ensureLoaded()
-
-      if (this.decks.length >= MAX_DECKS) {
+      if (this.decks.length >= MAX_DECKS)
         throw new Error(`You can have at most ${MAX_DECKS} decks.`)
-      }
 
-      const requestRecord =
-        request === undefined ? undefined : isRecord(request) ? request : null
-      const requestedName = requestRecord?.name
-      const requestedHeroClass = requestRecord?.heroClass
-      const requestedHeroId = requestRecord?.heroId
-      if (
-        requestRecord === null ||
-        (requestedName !== undefined && typeof requestedName !== 'string') ||
-        (requestedHeroClass !== undefined && !isDeckClass(requestedHeroClass)) ||
-        (requestedHeroId !== undefined &&
-          (typeof requestedHeroId !== 'string' || requestedHeroId.trim().length === 0))
-      ) {
-        throw new Error('Invalid deck creation request')
-      }
-
+      const validatedRequest = validateCreateRequest(request)
+      const heroId = validatedRequest.heroId ?? HERO_CATALOG.require('guldan').id
+      HERO_CATALOG.require(heroId)
       const now = new Date().toISOString()
       const deck: Deck = {
         id: randomUUID(),
-        name: requestedName?.trim() || this.nextDefaultDeckName(),
-        ...(requestedHeroClass ? { heroClass: requestedHeroClass } : {}),
-        ...(requestedHeroId ? { heroId: requestedHeroId.trim() } : {}),
+        name: validatedRequest.name?.trim() || this.nextDefaultDeckName(),
+        heroId,
         cards: {},
         createdAt: now,
         updatedAt: now
       }
-
-      const nextDecks = [...this.decks, deck]
-      await this.persist(nextDecks)
-      this.decks = nextDecks
+      await this.persist([...this.decks, deck])
+      this.decks.push(deck)
       return cloneDeck(deck)
     })
   }
@@ -151,27 +121,28 @@ export class DeckRepository {
   async update(deck: Deck): Promise<Deck> {
     return this.enqueueMutation(async () => {
       await this.ensureLoaded()
-
-      if (!isValidDeck(deck)) {
-        throw new Error('Invalid deck data')
-      }
-      const index = this.decks.findIndex((candidate) => candidate.id === deck.id)
-      if (index === -1) {
-        throw new Error(`Cannot update missing deck: ${deck.id}`)
-      }
+      const validatedDeck = parseDeck(deck)
+      HERO_CATALOG.require(validatedDeck.heroId)
+      validateDeckForPersistence(validatedDeck)
+      const index = this.decks.findIndex(
+        (candidate) => candidate.id === validatedDeck.id
+      )
+      if (index === -1)
+        throw new Error(`Cannot update missing deck: ${validatedDeck.id}`)
 
       const existing = this.decks[index]
-      assertPersistableDeck(deck, existing)
       const updated: Deck = {
-        ...cloneDeck(deck),
-        name: deck.name.trim(),
+        ...cloneDeck(validatedDeck),
+        name: validatedDeck.name.trim(),
         createdAt: existing.createdAt,
         updatedAt: new Date().toISOString()
       }
-      const nextDecks = [...this.decks]
-      nextDecks[index] = updated
-      await this.persist(nextDecks)
-      this.decks = nextDecks
+      await this.persist(
+        this.decks.map((candidate, candidateIndex) =>
+          candidateIndex === index ? updated : candidate
+        )
+      )
+      this.decks[index] = updated
       return cloneDeck(updated)
     })
   }
@@ -179,15 +150,12 @@ export class DeckRepository {
   async delete(deckId: string): Promise<void> {
     return this.enqueueMutation(async () => {
       await this.ensureLoaded()
-
-      const index = this.decks.findIndex((deck) => deck.id === deckId)
-      if (index === -1) {
+      if (typeof deckId !== 'string' || deckId.trim() === '')
+        throw new Error('Invalid deck id')
+      const nextDecks = this.decks.filter((deck) => deck.id !== deckId)
+      if (nextDecks.length === this.decks.length) {
         throw new Error(`Cannot delete missing deck: ${deckId}`)
       }
-
-      const nextDecks = this.decks.filter(
-        (_, candidateIndex) => candidateIndex !== index
-      )
       await this.persist(nextDecks)
       this.decks = nextDecks
     })
@@ -195,9 +163,7 @@ export class DeckRepository {
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return
-
     if (this.loadPromise) return this.loadPromise
-
     this.loadPromise = this.readPersistedDecks().finally(() => {
       this.loadPromise = null
     })
@@ -218,25 +184,114 @@ export class DeckRepository {
     }
 
     if (!isRecord(parsed) || parsed.version !== DECK_FILE_VERSION) {
-      throw new Error(`Unsupported deck data format in ${this.filePath}`)
+      let migrated: Deck[] | null = null
+      try {
+        migrated = migrateLegacyDeckFile(parsed)
+      } catch (error) {
+        console.warn('Could not migrate the unsupported deck file.', error)
+      }
+
+      await this.replaceUnsupportedFile(migrated ?? [])
+      this.decks = migrated ?? []
+      this.loaded = true
+      return
     }
 
-    const file = parsed as unknown as PersistedDeckFile
-    if (!Array.isArray(file.decks) || !file.decks.every(isValidDeck)) {
-      throw new Error(`Invalid deck data in ${this.filePath}`)
+    const file = parsePersistedDeckFile(parsed)
+    for (const deck of file.decks) {
+      HERO_CATALOG.require(deck.heroId)
+      validateDeckForPersistence(deck)
+    }
+    if (file.decks.length > MAX_DECKS)
+      throw new Error(`Too many decks in ${this.filePath}`)
+    if (file.decks.some((deck) => countDeckCards(deck) > 30)) {
+      throw new Error('Invalid deck card count')
     }
 
-    this.decks = file.decks.map(cloneDeck)
+    let decks = file.decks
+    if (decks.length === 0) {
+      const recovered = await this.recoverUnsupportedBackup()
+      if (recovered !== null) decks = recovered
+    }
+
+    this.decks = decks.map(cloneDeck)
     this.loaded = true
   }
 
-  private async persist(decks = this.decks): Promise<void> {
+  private async recoverUnsupportedBackup(): Promise<readonly Deck[] | null> {
+    const backupPath = await this.findUnsupportedBackup()
+    if (!backupPath) return null
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(await readFile(backupPath, 'utf8')) as unknown
+    } catch (error) {
+      console.warn(`Could not read the deck backup at ${backupPath}.`, error)
+      return null
+    }
+
+    let migrated: Deck[] | null = null
+    try {
+      migrated = migrateLegacyDeckFile(parsed)
+    } catch (error) {
+      console.warn(`Could not migrate the deck backup at ${backupPath}.`, error)
+    }
+    if (migrated === null) return null
+
+    await this.persist(migrated)
+    console.warn(
+      `Recovered ${migrated.length} deck(s) from ${backupPath} into the version ${DECK_FILE_VERSION} deck file.`
+    )
+    return migrated
+  }
+
+  private async findUnsupportedBackup(): Promise<string | null> {
+    let names: string[]
+    try {
+      names = await readdir(dirname(this.filePath))
+    } catch {
+      return null
+    }
+
+    const prefix = `${basename(this.filePath)}.unsupported-`
+    const backupName = names
+      .filter((name) => name.startsWith(prefix) && name.endsWith('.bak'))
+      .sort()
+      .at(-1)
+    return backupName ? join(dirname(this.filePath), backupName) : null
+  }
+
+  /** Keep an unsupported file recoverable while replacing it with version 2. */
+  private async replaceUnsupportedFile(decks: readonly Deck[]): Promise<void> {
+    const backupPath = `${this.filePath}.unsupported-${Date.now()}-${randomUUID()}.bak`
+
+    await rename(this.filePath, backupPath)
+    try {
+      await this.persist(decks)
+    } catch (error) {
+      await rename(backupPath, this.filePath).catch(() => undefined)
+      throw new Error(`Failed to replace unsupported deck data in ${this.filePath}`, {
+        cause: error
+      })
+    }
+
+    if (decks.length > 0) {
+      console.warn(
+        `Migrated ${decks.length} legacy deck(s); the original deck data was kept at ${backupPath}.`
+      )
+    } else {
+      console.warn(
+        `Unsupported deck data was moved to ${backupPath}; initialized a version ${DECK_FILE_VERSION} deck file.`
+      )
+    }
+  }
+
+  private async persist(decks: readonly Deck[]): Promise<void> {
     const payload: PersistedDeckFile = {
       version: DECK_FILE_VERSION,
       decks: decks.map(cloneDeck)
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
-
     const write = this.writeQueue
       .catch(() => undefined)
       .then(async () => {
@@ -252,7 +307,6 @@ export class DeckRepository {
           await unlink(temporaryPath).catch(() => undefined)
         }
       })
-
     this.writeQueue = write
     await write
   }

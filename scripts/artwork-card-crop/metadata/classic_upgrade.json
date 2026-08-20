@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_upgrade.jpg",
+  "source_name": "classic_upgrade.jpg",
+  "crop_box": [
+    62,
+    0,
+    450,
+    388
+  ],
+  "scale": 1.288659793814433,
+  "offset_x": -79.85725614591594,
+  "offset_y": -5.684341886080802e-14,
+  "timestamp": "2026-08-19T20:06:19.841968",
+  "card_id": "classic_upgrade",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_demonfire.jpg",
+  "source_name": "classic_demonfire.jpg",
+  "crop_box": [
+    118,
+    0,
+    1058,
+    940
+  ],
+  "scale": 0.5319148936170213,
+  "offset_x": -62.73322422258593,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:02.976721",
+  "card_id": "classic_demonfire",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

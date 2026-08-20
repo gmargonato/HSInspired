@@ -77,11 +77,7 @@ function createWindow(): BrowserWindow {
 function installSceneMenu(mainWindow: BrowserWindow): void {
   if (!is.dev) return
 
-  const applicationMenu = Menu.getApplicationMenu()
-  if (!applicationMenu) {
-    console.warn('Could not install the Scenes menu: application menu is missing')
-    return
-  }
+  const applicationMenu = Menu.getApplicationMenu() ?? Menu.buildFromTemplate([])
 
   if (applicationMenu.getMenuItemById('debug-scenes-menu')) return
 

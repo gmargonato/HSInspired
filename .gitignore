@@ -7,3 +7,4 @@ dist
 .DS_Store
 dist-card-lab
 artifacts
+scripts/artwork-card-crop/__pycache__/

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_blessing_of_might.jpg",
+  "source_name": "basic_blessing_of_might.jpg",
+  "crop_box": [
+    41,
+    0,
+    462,
+    421
+  ],
+  "scale": 1.187648456057007,
+  "offset_x": -48.099762470308804,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:57:17.949370",
+  "card_id": "basic_blessing_of_might",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

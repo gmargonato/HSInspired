@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_starfire.jpg",
+  "source_name": "basic_starfire.jpg",
+  "crop_box": [
+    0,
+    0,
+    500,
+    500
+  ],
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:59:46.855746",
+  "card_id": "basic_starfire",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

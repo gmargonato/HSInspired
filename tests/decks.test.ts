@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -8,14 +8,17 @@ import {
   addCardToDeck,
   countDeckCards,
   isCollectibleDeckCard,
+  removeCardFromDeck,
   type Deck
-} from '../src/shared/decks'
-import { CARD_CATALOG } from '../card-lab/card-catalog'
+} from '../src/game/decks'
+import { CARD_CATALOG } from '../src/game/content/cards'
+import { asHeroId } from '../src/game/content'
 import { DeckRepository } from '../src/main/services/deckRepository'
 
 const baseDeck: Deck = {
   id: 'deck-test',
   name: 'Test deck',
+  heroId: asHeroId('jaina'),
   cards: {},
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z'
@@ -23,8 +26,8 @@ const baseDeck: Deck = {
 
 describe('deck rules', () => {
   it('allows two non-legendary copies but only one legendary copy', () => {
-    const common = { id: 'common-card', rarity: 'Common' }
-    const legendary = { id: 'legendary-card', rarity: 'Legendary' }
+    const common = CARD_CATALOG.require('basic_fireball')
+    const legendary = CARD_CATALOG.require('classic_archmage_antonidas')
 
     const firstCommon = addCardToDeck(baseDeck, common)
     expect(firstCommon.ok).toBe(true)
@@ -56,29 +59,44 @@ describe('deck rules', () => {
     const fullDeck = { ...baseDeck, cards }
 
     expect(countDeckCards(fullDeck)).toBe(MAX_DECK_CARDS)
-    expect(addCardToDeck(fullDeck, { id: 'new-card', rarity: 'Common' })).toMatchObject(
-      {
-        ok: false,
-        code: 'deck-full'
-      }
-    )
+    expect(
+      addCardToDeck(fullDeck, CARD_CATALOG.require('basic_fireball'))
+    ).toMatchObject({
+      ok: false,
+      code: 'deck-full'
+    })
+  })
+
+  it('decrements duplicate copies before removing the final copy', () => {
+    const card = CARD_CATALOG.require('basic_fireball')
+    const doubleCopyDeck: Deck = {
+      ...baseDeck,
+      cards: { [card.id]: 2 }
+    }
+
+    const firstRemoval = removeCardFromDeck(doubleCopyDeck, card.id)
+    expect(firstRemoval.ok).toBe(true)
+    if (!firstRemoval.ok) return
+
+    expect(firstRemoval.deck.cards[card.id]).toBe(1)
+
+    const finalRemoval = removeCardFromDeck(firstRemoval.deck, card.id)
+    expect(finalRemoval.ok).toBe(true)
+    if (!finalRemoval.ok) return
+
+    expect(finalRemoval.deck.cards[card.id]).toBeUndefined()
+    expect(countDeckCards(finalRemoval.deck)).toBe(0)
   })
 
   it('rejects off-class and non-collectible cards', () => {
-    const mageDeck = { ...baseDeck, heroClass: 'Mage' as const }
+    const mageDeck = { ...baseDeck, heroId: asHeroId('jaina') }
     const warrior = CARD_CATALOG.require('basic_execute')
     const coin = CARD_CATALOG.require('basic_the_coin')
-    const missingClass = { id: 'missing-class', rarity: 'Common' }
-
     expect(addCardToDeck(mageDeck, warrior)).toMatchObject({
       ok: false,
       code: 'card-not-allowed'
     })
     expect(addCardToDeck(mageDeck, coin)).toMatchObject({
-      ok: false,
-      code: 'card-not-allowed'
-    })
-    expect(addCardToDeck(mageDeck, missingClass)).toMatchObject({
       ok: false,
       code: 'card-not-allowed'
     })
@@ -95,17 +113,15 @@ describe('DeckRepository', () => {
       const repository = new DeckRepository(filePath)
       const created = await repository.create({
         name: 'Persistent deck',
-        heroClass: 'Mage',
-        heroId: 'jaina'
+        heroId: asHeroId('jaina')
       })
 
       const file = JSON.parse(await readFile(filePath, 'utf8')) as {
         version: number
         decks: readonly Deck[]
       }
-      expect(file.version).toBe(1)
+      expect(file.version).toBe(2)
       expect(file.decks).toHaveLength(1)
-      expect(file.decks[0]?.heroClass).toBe('Mage')
       expect(file.decks[0]?.heroId).toBe('jaina')
 
       const reloaded = new DeckRepository(filePath)
@@ -126,6 +142,101 @@ describe('DeckRepository', () => {
 
       await reloaded.delete(updated.id)
       expect(await reloaded.list()).toEqual([])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('replaces an unsupported persisted version while keeping a backup', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'hs-inspired-deck-reset-'))
+    const filePath = join(directory, 'decks.json')
+
+    try {
+      await writeFile(
+        filePath,
+        JSON.stringify({ version: 99, decks: [{ id: 'legacy-deck' }] }),
+        'utf8'
+      )
+
+      const repository = new DeckRepository(filePath)
+
+      expect(await repository.list()).toEqual([])
+      expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual({
+        version: 2,
+        decks: []
+      })
+      expect((await readdir(directory)).some((name) => name.endsWith('.bak'))).toBe(
+        true
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('migrates legacy decks to version 2 using their hero class', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'hs-inspired-deck-migration-'))
+    const filePath = join(directory, 'decks.json')
+
+    try {
+      await writeFile(
+        filePath,
+        JSON.stringify({
+          version: 1,
+          decks: [
+            {
+              id: 'legacy-mage',
+              name: 'Legacy Mage',
+              heroClass: 'Mage',
+              cards: { basic_fireball: 2 },
+              createdAt: baseDeck.createdAt,
+              updatedAt: baseDeck.updatedAt
+            }
+          ]
+        }),
+        'utf8'
+      )
+
+      const repository = new DeckRepository(filePath)
+      const decks = await repository.list()
+
+      expect(decks).toMatchObject([
+        { id: 'legacy-mage', name: 'Legacy Mage', heroId: 'jaina' }
+      ])
+      expect(JSON.parse(await readFile(filePath, 'utf8')).version).toBe(2)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('recovers legacy decks from the backup created by the reset', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'hs-inspired-deck-backup-'))
+    const filePath = join(directory, 'decks.json')
+
+    try {
+      await writeFile(filePath, JSON.stringify({ version: 2, decks: [] }), 'utf8')
+      await writeFile(
+        `${filePath}.unsupported-1787179170221-test.bak`,
+        JSON.stringify({
+          version: 1,
+          decks: [
+            {
+              id: 'backup-mage',
+              name: 'Backup Mage',
+              heroClass: 'Mage',
+              cards: {},
+              createdAt: baseDeck.createdAt,
+              updatedAt: baseDeck.updatedAt
+            }
+          ]
+        }),
+        'utf8'
+      )
+
+      const repository = new DeckRepository(filePath)
+
+      await expect(repository.list()).resolves.toMatchObject([
+        { id: 'backup-mage', heroId: 'jaina' }
+      ])
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

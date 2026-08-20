@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_summoning_portal.jpg",
+  "source_name": "classic_summoning_portal.jpg",
+  "crop_box": [
+    0,
+    0,
+    920,
+    920
+  ],
+  "scale": 0.5434782608695652,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:05:59.906157",
+  "card_id": "classic_summoning_portal",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

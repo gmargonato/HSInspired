@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_southsea_captain.jpg",
+  "source_name": "classic_southsea_captain.jpg",
+  "crop_box": [
+    0,
+    0,
+    500,
+    500
+  ],
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:46:46.777436",
+  "card_id": "classic_southsea_captain",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_blessing_of_wisdom.jpg",
+  "source_name": "classic_blessing_of_wisdom.jpg",
+  "crop_box": [
+    145,
+    0,
+    1137,
+    992
+  ],
+  "scale": 0.5040322580645161,
+  "offset_x": -72.88461538461536,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:01:25.611113",
+  "card_id": "classic_blessing_of_wisdom",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

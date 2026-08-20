@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_misha.jpg",
+  "source_name": "basic_misha.jpg",
+  "crop_box": [
+    208,
+    0,
+    550,
+    342
+  ],
+  "scale": 1.4641000000000006,
+  "offset_x": -305.25500000000034,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:59:13.842366",
+  "card_id": "basic_misha",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_CATALOG } from '../card-lab/card-catalog'
+import { asExpansionId, CARD_CATALOG } from '../src/game/content/cards'
 import { cardDetailRows } from '../src/renderer/src/scenes/CardViewScene'
 
 describe('Card View metadata', () => {
@@ -19,7 +19,11 @@ describe('Card View metadata', () => {
 
   it('formats collection labels for current and future set identifiers', () => {
     const card = CARD_CATALOG.require('basic_fireball')
-    const rows = cardDetailRows({ ...card, set: 'goblins_vs_gnomes' })
+    const rows = cardDetailRows({
+      ...card,
+      set: asExpansionId('goblins_vs_gnomes'),
+      expansionId: asExpansionId('goblins_vs_gnomes')
+    })
 
     expect(rows).toContainEqual({ label: 'Collection', value: 'Goblins vs Gnomes' })
   })

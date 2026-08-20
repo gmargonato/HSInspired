@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_arathi_weaponsmith.jpg",
+  "source_name": "classic_arathi_weaponsmith.jpg",
+  "crop_box": [
+    33,
+    0,
+    1153,
+    1120
+  ],
+  "scale": 0.44642857142857145,
+  "offset_x": -14.593729395604498,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:00:49.987618",
+  "card_id": "classic_arathi_weaponsmith",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

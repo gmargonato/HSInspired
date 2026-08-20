@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_void_terror.jpg",
+  "source_name": "classic_void_terror.jpg",
+  "crop_box": [
+    153,
+    0,
+    835,
+    682
+  ],
+  "scale": 0.7331378299120235,
+  "offset_x": -112.30769230769229,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:06:27.693386",
+  "card_id": "classic_void_terror",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

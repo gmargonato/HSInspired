@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_gnomish_inventor.jpg",
+  "source_name": "basic_gnomish_inventor.jpg",
+  "crop_box": [
+    0,
+    0,
+    500,
+    500
+  ],
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:44:51.646341",
+  "card_id": "basic_gnomish_inventor",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_inner_rage.jpg",
+  "source_name": "classic_inner_rage.jpg",
+  "crop_box": [
+    76,
+    0,
+    859,
+    783
+  ],
+  "scale": 0.6385696040868455,
+  "offset_x": -48.53688967482071,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:03:07.581932",
+  "card_id": "classic_inner_rage",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

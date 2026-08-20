@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\classic_kirin_tor_mage.jpg",
+  "source_name": "classic_kirin_tor_mage.jpg",
+  "crop_box": [
+    55,
+    0,
+    964,
+    909
+  ],
+  "scale": 0.55,
+  "offset_x": -30.5,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-18T16:10:17.839301"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_rampage.jpg",
+  "source_name": "classic_rampage.jpg",
+  "crop_box": [
+    122,
+    0,
+    1143,
+    1021
+  ],
+  "scale": 0.48971596474045054,
+  "offset_x": -59.88548180516841,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:04:54.836127",
+  "card_id": "classic_rampage",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

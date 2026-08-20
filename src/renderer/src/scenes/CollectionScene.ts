@@ -10,46 +10,64 @@ import {
   Texture
 } from 'pixi.js'
 import type { FederatedPointerEvent, FederatedWheelEvent } from 'pixi.js'
-import {
-  CARD_CATALOG,
-  type CardClass,
-  type CardDefinition
-} from '../../../../card-lab/card-catalog'
-import { CardAssetResolver } from '../../../../card-lab/card-asset-manifest'
-import { CardView } from '../../../../card-lab/card-view'
+import { CARD_CATALOG, type CardDefinition } from '../../../game/content/cards'
+import { CardAssetResolver } from '../ui/asset-registry/card-asset-resolver'
+import { CardView } from '../rendering/cards/card-view'
 import { Scene } from './Scene'
-import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
-import { ASSET_BUNDLE_IDS, CollectionAssets, SharedUIAssets } from '../core/assets'
-import type { CursorContextVariant } from '../core/cursor'
-import { playerDeckStore, type DeckStore } from '../core/decks'
-import { DECK_FRAME_ASSET_KEYS, type DeckFrameAssetKey } from '../core/deckFrames'
+import { GAME_HEIGHT, GAME_WIDTH } from '../app/config'
 import {
+  ASSET_BUNDLE_IDS,
+  CollectionAssets,
+  SharedUIAssets
+} from '../ui/asset-registry'
+import type { CursorContextVariant } from '../ui/components/cursor'
+import type { DeckStore } from '../features/deck-builder/deck-store'
+import { NewDeckView } from '../features/deck-builder/NewDeckView'
+import {
+  DECK_FRAME_ASSET_KEYS,
+  type DeckFrameAssetKey
+} from '../features/deck-builder/deck-frames'
+import {
+  animateHingedDoor,
   createHingedDoorMesh,
-  updateHingedDoor,
-  type HingeSide
-} from '../core/hingedDoor'
-import { HERO_DEFINITIONS } from '../core/heroes'
-import { gameAudio, type SoundEffectId } from '../core/audio'
-import { Button } from '../actors/Button'
-import { buildCollectionPages, type CollectionPage } from './collectionPages'
+  updateHingedDoor
+} from '../features/collection/choreography/hinged-door'
+import { HERO_CATALOG } from '../../../game/content/heroes'
+import type { AudioService, SoundEffectId } from '../app/audio'
+import type { AppLogger, DialogService } from '../app/services'
+import { Button } from '../ui/components/Button'
 import {
-  filterCollectionCards,
+  buildCollectionPages,
+  type CollectionPage
+} from '../features/collection/collection-pages'
+import {
   formatManaFilterLabel,
   MANA_FILTER_VALUES,
   type ManaFilterValue
-} from './collectionFilters'
-import { CardViewScene, type CardPreviewSourceBounds } from './CardViewScene'
-import { NewDeckScene } from './NewDeckScene'
-import { MainMenuScene } from './MainMenuScene'
+} from '../features/collection/collection-filters'
+import { queryCollectionCards } from '../features/collection/collection-query'
+import {
+  buildDeckEditorEntries,
+  shouldAnimateDeckRowRemoval
+} from '../features/collection/deck-editor-model'
+import {
+  getCollectionCardPlacement,
+  type CollectionCardGridLayout
+} from '../features/collection/collection-card-grid'
+import { CollectionSearchInput } from '../features/collection/search-input'
+import { buildCollectionDeckListEntries } from '../features/collection/deck-list-model'
+import { CollectionDeckController } from '../features/collection/collection-deck-controller'
+import { CollectionQueryController } from '../features/collection/collection-query-controller'
+import type { CardPreviewRouteBounds, SceneRouter } from '../app/router'
 import {
   MAX_DECK_CARDS,
   MAX_DECKS,
   countDeckCards,
   getCardCopyLimit,
   getDeckCardCount,
-  type Deck,
-  type DeckClass
-} from '../../../shared/decks'
+  type Deck
+} from '../../../game/decks'
+import type { DeckClass } from '../../../game/content/cards'
 
 const PAGE_LEFT = 250
 const PAGE_TOP = 80
@@ -93,7 +111,7 @@ const Layout = {
       rotation: Math.PI / 2,
       labelOffset: { x: 0, y: 0 }
     },
-    searchInput: { x: 1100, y: 1003, width: 220, height: 43 },
+    searchInput: { x: 1090, y: 1006, width: 220, height: 43 },
     searchClear: { x: 1323, y: 1026, width: 30, height: 30 },
     noResults: { x: PAGE_CENTER_X, y: 480 }
   },
@@ -130,6 +148,13 @@ const CARD_GRID_COLUMNS = 4
 const CARD_GRID_ROWS = 2
 const CARD_SLOT_PADDING_X = 10
 const CARD_SLOT_PADDING_Y = 12
+const CARD_GRID_LAYOUT: CollectionCardGridLayout = {
+  ...Layout.cardGrid,
+  columns: CARD_GRID_COLUMNS,
+  rows: CARD_GRID_ROWS,
+  paddingX: CARD_SLOT_PADDING_X,
+  paddingY: CARD_SLOT_PADDING_Y
+}
 const COVER_LOCK_OPEN_DURATION = 0.45
 const COVER_OPEN_DURATION = 0.6
 const DOOR_MIN_WIDTH = 1
@@ -147,6 +172,9 @@ const DECK_EDITOR_FRAME_TARGET_WIDTH = Layout.deckList.width
 const DECK_EDITOR_FRAME_CARD_LIST_GAP = 4
 const DECK_EDITOR_ROW_REMOVE_DURATION = 0.22
 const DECK_EDITOR_ROW_COLLAPSE_DURATION = 0.18
+const DECK_EDITOR_FULL_WARNING_DURATION = 1800
+const DECK_EDITOR_FULL_WARNING_FONT_SIZE = 64
+const DECK_EDITOR_FULL_WARNING_STROKE_WIDTH = 6
 const DECK_EDITOR_PREVIEW = {
   maxWidth: 190,
   maxHeight: 345,
@@ -164,20 +192,15 @@ const FULL_VIEWPORT = {
   height: GAME_HEIGHT
 }
 
-type DoorSide = HingeSide
-
 type CollectionDeckAssetKey =
   'loadDeckButton' | 'newDeckButton' | 'verticalSlider' | DeckFrameAssetKey
 
 /** Full-viewport collection scene presented through the main menu transition. */
 export class CollectionScene extends Scene {
   private pages: readonly CollectionPage[] = buildCollectionPages(CARD_CATALOG.all)
-  private collectionClassFilter: DeckClass | null = null
+  private readonly collectionQuery = new CollectionQueryController()
   private previousCollectionClassFilter: DeckClass | null = null
-  private searchQuery = ''
-  private manaFilter: ManaFilterValue | null = null
   private readonly cardResolver = new CardAssetResolver()
-  private readonly deckStore: DeckStore
   private completedCollectionCardAlphaFilter: AlphaFilter | null = null
 
   private background!: Sprite
@@ -191,11 +214,12 @@ export class CollectionScene extends Scene {
   private deckEditorCardViewport!: Container
   private deckEditorButton!: Button
   private deckEditorCount!: Text
+  private deckFullWarning!: Text
   private deckEditorDoneButton!: Button
   private deckEditorCardContent!: Container
   private deckListCount!: Text
   private collectionBackButton!: Button
-  private newDeckScene!: NewDeckScene
+  private newDeckScene!: NewDeckView
   private readonly deckEntries: Container[] = []
   private readonly deckButtons: Button[] = []
   private newDeckButton: Button | null = null
@@ -214,6 +238,7 @@ export class CollectionScene extends Scene {
   private deckEditorTransitionResolve: (() => void) | null = null
   private deckEditorRenderSequence = 0
   private deckEditorCountFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+  private deckFullWarningTimer: ReturnType<typeof setTimeout> | null = null
   private deckEditorCardMutationInProgress = false
   private deckEditorCardPreview: CardView | null = null
   private deckEditorCardPreviewRequest = 0
@@ -221,8 +246,7 @@ export class CollectionScene extends Scene {
   private deckAssets!: Pick<CollectionAssets, CollectionDeckAssetKey>
   private collectionFilterLayer!: Container
   private emptyStateImage!: Sprite
-  private searchInput: HTMLInputElement | null = null
-  private searchInputResizeHandler: (() => void) | null = null
+  private searchInput: CollectionSearchInput | null = null
   private searchClearButton!: Sprite
   private readonly manaFilterControls: Container[] = []
   private readonly manaFilterCrystals: Sprite[] = []
@@ -243,10 +267,35 @@ export class CollectionScene extends Scene {
   private hoveredPageZone: CursorContextVariant | null = null
   private cardPreviewOpening = false
   private disposed = false
+  private readonly deckController: CollectionDeckController
 
-  constructor(deckStore: DeckStore = playerDeckStore) {
+  constructor(
+    deckStore: DeckStore,
+    private readonly router?: SceneRouter,
+    private readonly audio?: AudioService,
+    private readonly dialogs: DialogService = {
+      confirm: () => true,
+      error: () => undefined
+    },
+    private readonly logger: AppLogger = {
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined
+    }
+  ) {
     super()
-    this.deckStore = deckStore
+    this.deckController = new CollectionDeckController(deckStore, (message) =>
+      this.dialogs.confirm(message)
+    )
+  }
+
+  private reportError(message: string, error?: unknown): void {
+    this.logger.error(message, error)
+    this.dialogs.error(message)
+  }
+
+  private reportWarning(message: string, error?: unknown): void {
+    this.logger.warn(message, error)
   }
 
   async init(): Promise<void> {
@@ -351,20 +400,29 @@ export class CollectionScene extends Scene {
     }
 
     this.setNavigationEnabled(false)
-    await this.deckStore.load()
+    await this.deckController.load()
     await this.waitForFonts()
     this.createCollectionFilters(assets)
     this.createDeckList(assets)
     this.createDeckEditor(assets, sharedAssets)
     this.createCollectionBackButton(sharedAssets)
-    this.newDeckScene = new NewDeckScene(this.deckStore, {
-      onClassSelected: (hero) => this.handleNewDeckHeroSelected(hero.heroClass),
-      onCancelled: () => this.handleNewDeckCreationCancelled(),
-      onDeckCreated: (deck) => this.handleNewDeckCreated(deck)
-    })
-    await this.addSubScene(this.newDeckScene)
+    this.newDeckScene = new NewDeckView(
+      this.deckController,
+      {
+        onClassSelected: (hero) =>
+          this.handleNewDeckHeroSelected(hero.classId as DeckClass),
+        onCancelled: () => this.handleNewDeckCreationCancelled(),
+        onDeckCreated: (deck) => this.handleNewDeckCreated(deck)
+      },
+      this.audio,
+      this.logger
+    )
+    await this.newDeckScene.mount()
+    this.root.addChild(this.newDeckScene)
     await this.renderPage(0)
-    this.unsubscribeDeckStore = this.deckStore.subscribe(this.handleDeckStoreChanged)
+    this.unsubscribeDeckStore = this.deckController.subscribe(
+      this.handleDeckStoreChanged
+    )
   }
 
   /**
@@ -384,9 +442,9 @@ export class CollectionScene extends Scene {
     this.cover.visible = true
     this.coverLock.visible = true
 
-    void gameAudio
-    // gameAudio.play('collection-latch')
-    await this.animateDoor(
+    this.audio?.play('collection-latch')
+    await animateHingedDoor(
+      (vars) => this.timeline(vars),
       this.coverLock,
       'right',
       COVER_LOCK_OPEN_DURATION,
@@ -394,9 +452,9 @@ export class CollectionScene extends Scene {
     )
     this.coverLock.visible = false
 
-    void gameAudio
-    // gameAudio.play('collection-cover-open')
-    await this.animateDoor(
+    this.audio?.play('collection-cover-open')
+    await animateHingedDoor(
+      (vars) => this.timeline(vars),
       this.cover,
       'left',
       COVER_OPEN_DURATION,
@@ -500,80 +558,46 @@ export class CollectionScene extends Scene {
     const parent = this.appInstance.canvas.parentElement
     if (!parent) return
 
-    const input = document.createElement('input')
-    input.type = 'text'
-    input.className = 'collection-search-input'
-    input.autocomplete = 'off'
-    input.spellcheck = false
-    input.setAttribute('aria-label', 'Search cards')
-    input.value = this.searchQuery
-    input.addEventListener('input', this.handleSearchInput)
-    parent.appendChild(input)
-
-    this.searchInput = input
-    this.searchInputResizeHandler = this.updateSearchInputPosition
-    window.addEventListener('resize', this.searchInputResizeHandler)
-    this.updateSearchInputPosition()
+    this.searchInput = new CollectionSearchInput({
+      canvas: this.appInstance.canvas,
+      parent,
+      bounds: Layout.collectionFilters.searchInput,
+      onInput: this.handleSearchInput
+    })
+    this.searchInput.mount(this.collectionQuery.searchQuery)
     this.setSearchInputVisible(false)
   }
 
-  private readonly handleSearchInput = (): void => {
-    if (!this.searchInput) return
-
-    this.searchQuery = this.searchInput.value
+  private readonly handleSearchInput = (value: string): void => {
+    this.collectionQuery.setSearchQuery(value)
     this.updateSearchClearVisibility()
     void this.applyCollectionFilters().catch((error: unknown) => {
-      console.error('Failed to filter the collection:', error)
+      this.reportError('Failed to filter the collection.', error)
     })
   }
 
   private clearSearch(): void {
     if (!this.searchInput) return
 
-    this.searchInput.value = ''
-    this.searchQuery = ''
+    this.searchInput.setValue('')
+    this.collectionQuery.setSearchQuery('')
     this.updateSearchClearVisibility()
     this.searchInput.focus()
     void this.applyCollectionFilters().catch((error: unknown) => {
-      console.error('Failed to clear the collection search:', error)
+      this.reportError('Failed to clear the collection search.', error)
     })
   }
 
   private updateSearchClearVisibility(): void {
-    this.searchClearButton.visible = this.searchQuery.length > 0
-  }
-
-  private readonly updateSearchInputPosition = (): void => {
-    const input = this.searchInput
-    const canvas = this.appInstance.canvas
-    const parent = canvas.parentElement
-    if (!input || !parent) return
-
-    const canvasBounds = canvas.getBoundingClientRect()
-    const parentBounds = parent.getBoundingClientRect()
-    const scale = Math.min(
-      canvasBounds.width / GAME_WIDTH,
-      canvasBounds.height / GAME_HEIGHT
-    )
-    const offsetX = (canvasBounds.width - GAME_WIDTH * scale) / 2
-    const offsetY = (canvasBounds.height - GAME_HEIGHT * scale) / 2
-
-    input.style.left = `${canvasBounds.left - parentBounds.left + offsetX + Layout.collectionFilters.searchInput.x * scale}px`
-    input.style.top = `${canvasBounds.top - parentBounds.top + offsetY + Layout.collectionFilters.searchInput.y * scale}px`
-    input.style.width = `${Layout.collectionFilters.searchInput.width * scale}px`
-    input.style.height = `${Layout.collectionFilters.searchInput.height * scale}px`
-    input.style.fontSize = `${24 * scale}px`
+    this.searchClearButton.visible = this.collectionQuery.searchQuery.length > 0
   }
 
   private setSearchInputVisible(visible: boolean): void {
-    if (!this.searchInput) return
-    this.searchInput.style.visibility = visible ? 'visible' : 'hidden'
+    this.searchInput?.setVisible(visible)
   }
 
   private setSearchInputEnabled(enabled: boolean): void {
-    if (!this.searchInput) return
-    this.searchInput.disabled = !enabled
-    this.setSearchInputVisible(enabled)
+    this.searchInput?.setEnabled(enabled)
   }
 
   private handleManaFilterTap(value: ManaFilterValue): void {
@@ -586,17 +610,17 @@ export class CollectionScene extends Scene {
       return
     }
 
-    this.manaFilter = this.manaFilter === value ? null : value
+    this.collectionQuery.toggleManaFilter(value)
     this.updateManaFilterAppearance()
     void this.applyCollectionFilters().catch((error: unknown) => {
-      console.error('Failed to filter the collection:', error)
+      this.reportError('Failed to filter the collection.', error)
     })
   }
 
   private updateManaFilterAppearance(): void {
     for (const [index, control] of this.manaFilterControls.entries()) {
       const value = MANA_FILTER_VALUES[index]
-      const isActive = value === this.manaFilter
+      const isActive = value === this.collectionQuery.manaFilter
       const crystal = this.manaFilterCrystals[index]
       const label = this.manaFilterLabels[index]
       if (!crystal || !label) continue
@@ -619,21 +643,18 @@ export class CollectionScene extends Scene {
   }
 
   private async applyCollectionClassFilter(heroClass: DeckClass | null): Promise<void> {
-    if (this.collectionClassFilter === heroClass && this.pages.length > 0) return
+    if (this.collectionQuery.classFilter === heroClass && this.pages.length > 0) return
 
-    this.collectionClassFilter = heroClass
+    this.collectionQuery.setClassFilter(heroClass)
     await this.applyCollectionFilters()
   }
 
   private async applyCollectionFilters(): Promise<void> {
-    const filteredCards = filterCollectionCards(CARD_CATALOG.all, {
-      query: this.searchQuery,
-      manaCost: this.manaFilter
-    })
-    const allowedClasses: readonly CardClass[] | undefined = this.collectionClassFilter
-      ? ['Neutral', this.collectionClassFilter]
-      : undefined
-    const pages = buildCollectionPages(filteredCards, allowedClasses)
+    const filteredCards = queryCollectionCards(
+      CARD_CATALOG.all,
+      this.collectionQuery.snapshot()
+    )
+    const pages = buildCollectionPages(filteredCards)
 
     this.pages = pages
     this.pageIndex = 0
@@ -727,23 +748,14 @@ export class CollectionScene extends Scene {
   }
 
   private layoutCard(view: CardView, cardIndex: number): void {
-    const slotWidth = Layout.cardGrid.width / CARD_GRID_COLUMNS
-    const slotHeight = Layout.cardGrid.height / CARD_GRID_ROWS
-    const column = cardIndex % CARD_GRID_COLUMNS
-    const row = Math.floor(cardIndex / CARD_GRID_COLUMNS)
-    const maxWidth = slotWidth - CARD_SLOT_PADDING_X * 2
-    const maxHeight = slotHeight - CARD_SLOT_PADDING_Y * 2
-    const scale = Math.min(maxWidth / view.plan.width, maxHeight / view.renderedHeight)
-
-    view.scale.set(scale)
-    view.position.set(
-      Layout.cardGrid.x +
-        column * slotWidth +
-        (slotWidth - view.plan.width * scale) / 2,
-      Layout.cardGrid.y +
-        row * slotHeight +
-        (slotHeight - view.renderedHeight * scale) / 2
+    const placement = getCollectionCardPlacement(
+      cardIndex,
+      view.plan.width,
+      view.renderedHeight,
+      CARD_GRID_LAYOUT
     )
+    view.scale.set(placement.scale)
+    view.position.set(placement.x, placement.y)
   }
 
   private destroyCardViews(views: readonly CardView[]): void {
@@ -823,6 +835,7 @@ export class CollectionScene extends Scene {
     this.deckEditorLayer = new Container()
 
     this.deckEditorButton = new Button(assets.loadDeckButton, {
+      audio: this.audio,
       onClick: () => undefined
     })
     this.deckEditorButton.position.set(
@@ -855,6 +868,28 @@ export class CollectionScene extends Scene {
     )
     this.deckEditorLayer.addChild(this.deckEditorCount)
 
+    this.deckFullWarning = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: DECK_EDITOR_FULL_WARNING_FONT_SIZE,
+        fill: 0xffffff,
+        stroke: {
+          color: 0x000000,
+          width: DECK_EDITOR_FULL_WARNING_STROKE_WIDTH
+        },
+        align: 'center',
+        wordWrap: true,
+        wordWrapWidth: GAME_WIDTH - 160,
+        lineHeight: DECK_EDITOR_FULL_WARNING_FONT_SIZE * 1.1
+      }
+    })
+    this.deckFullWarning.anchor.set(0.5)
+    this.deckFullWarning.position.set(GAME_WIDTH / 2, GAME_HEIGHT / 2)
+    this.deckFullWarning.eventMode = 'none'
+    this.deckFullWarning.visible = false
+    this.deckFullWarning.alpha = 0
+
     const deckEditorCardMask = new Graphics()
       .rect(
         DECK_EDITOR_LAYOUT.cardList.x,
@@ -882,6 +917,7 @@ export class CollectionScene extends Scene {
     this.deckEditorLayer.addChild(this.deckEditorCardViewport)
 
     this.deckEditorDoneButton = new Button(sharedAssets.doneButton, {
+      audio: this.audio,
       onClick: () => this.exitDeckEditor()
     })
     this.deckEditorDoneButton.position.set(
@@ -894,11 +930,13 @@ export class CollectionScene extends Scene {
     this.deckEditorLayer.visible = false
     this.deckEditorLayer.alpha = 0
     this.root.addChild(this.deckEditorLayer)
+    this.root.addChild(this.deckFullWarning)
   }
 
   private createCollectionBackButton(sharedAssets: SharedUIAssets): void {
     this.collectionBackButton = new Button(sharedAssets.backButton, {
       clickSound: 'back-click',
+      audio: this.audio,
       onClick: () => this.leaveCollection()
     })
     this.collectionBackButton.position.set(
@@ -920,9 +958,9 @@ export class CollectionScene extends Scene {
     this.deckButtons.length = 0
     this.newDeckButton = null
 
-    const decks = this.deckStore.getDecks()
+    const decks = this.deckController.getDecks()
     this.deckListCount.text = `${decks.length} / ${MAX_DECKS} Decks`
-    for (const [index, deck] of decks.entries()) {
+    for (const { deck, index } of buildCollectionDeckListEntries(decks)) {
       this.addDeckEntry(
         this.getDeckFrameTexture(deck),
         () => this.enterDeck(deck.id),
@@ -961,7 +999,7 @@ export class CollectionScene extends Scene {
       index * (DECK_BUTTON_HEIGHT + DECK_BUTTON_GAP) + DECK_BUTTON_HEIGHT / 2
     )
 
-    const button = new Button(texture, { pressSound, onClick })
+    const button = new Button(texture, { pressSound, audio: this.audio, onClick })
     button.setBaseY(0)
     if (onDelete) {
       button.on('rightclick', (event: FederatedPointerEvent) => {
@@ -969,7 +1007,7 @@ export class CollectionScene extends Scene {
         const result = onDelete()
         if (result) {
           void Promise.resolve(result).catch((error: unknown) => {
-            console.error('Failed to delete deck:', error)
+            this.reportError('Failed to delete deck.', error)
           })
         }
       })
@@ -1059,7 +1097,7 @@ export class CollectionScene extends Scene {
     const editorScrollEnabled = editorContentEnabled && this.deckEditorCardMaxScroll > 0
     const sliderEnabled = listEnabled || editorScrollEnabled
     this.deckViewport.eventMode = listEnabled ? 'static' : 'none'
-    const canCreateDeck = this.deckStore.getDecks().length < MAX_DECKS
+    const canCreateDeck = this.deckController.getDecks().length < MAX_DECKS
     for (const button of this.deckButtons) {
       button.setEnabled(listEnabled && (button !== this.newDeckButton || canCreateDeck))
     }
@@ -1185,13 +1223,10 @@ export class CollectionScene extends Scene {
     this.setDeckInteractionEnabled(false)
 
     try {
-      const destination = MainMenuScene.forReturn()
-      await this.sceneManager.transitionTo(
-        destination,
-        destination.createReturnTransitionOptions()
-      )
+      if (!this.router) throw new Error('Collection router is not configured')
+      await this.router.navigate({ id: 'main-menu', entryMode: 'returning' })
     } catch (error) {
-      console.error('Failed to return to the main menu:', error)
+      this.reportError('Failed to return to the main menu.', error)
       if (!this.disposed) {
         this.setNavigationEnabled(true)
         this.setDeckInteractionEnabled(true)
@@ -1201,7 +1236,7 @@ export class CollectionScene extends Scene {
 
   private readonly handleDeckStoreChanged = (): void => {
     if (this.activeDeckId) {
-      if (!this.deckStore.getDeck(this.activeDeckId)) {
+      if (!this.deckController.getDeck(this.activeDeckId)) {
         void this.exitDeckEditor().then(() => {
           if (!this.disposed) this.renderDeckList()
         })
@@ -1223,7 +1258,7 @@ export class CollectionScene extends Scene {
     ) {
       return
     }
-    const deck = this.deckStore.getDeck(deckId)
+    const deck = this.deckController.getDeck(deckId)
     if (!deck) return
 
     const origin = this.getDeckEntryOrigin(deckId) ?? {
@@ -1236,7 +1271,7 @@ export class CollectionScene extends Scene {
     try {
       await this.applyCollectionClassFilter(this.getDeckClass(deck))
     } catch (error) {
-      console.error(`Failed to filter the collection for ${deck.name}:`, error)
+      this.reportError(`Failed to filter the collection for ${deck.name}.`, error)
       if (!this.disposed) this.setDeckInteractionEnabled(true)
       return
     }
@@ -1281,11 +1316,7 @@ export class CollectionScene extends Scene {
   }
 
   private getDeckClass(deck: Deck): DeckClass | null {
-    return (
-      deck.heroClass ??
-      HERO_DEFINITIONS.find((hero) => hero.id === deck.heroId)?.heroClass ??
-      null
-    )
+    return (HERO_CATALOG.get(deck.heroId)?.classId as DeckClass | undefined) ?? null
   }
 
   private async exitDeckEditor(): Promise<void> {
@@ -1337,7 +1368,7 @@ export class CollectionScene extends Scene {
     try {
       await this.applyCollectionClassFilter(null)
     } catch (error) {
-      console.error('Failed to restore the full collection:', error)
+      this.reportError('Failed to restore the full collection.', error)
     } finally {
       if (!this.disposed) {
         this.deckEditorTransitioning = false
@@ -1349,7 +1380,9 @@ export class CollectionScene extends Scene {
   }
 
   private getDeckEntryOrigin(deckId: string): { x: number; y: number } | null {
-    const deckIndex = this.deckStore.getDecks().findIndex((deck) => deck.id === deckId)
+    const deckIndex = this.deckController
+      .getDecks()
+      .findIndex((deck) => deck.id === deckId)
     const entry = deckIndex === -1 ? undefined : this.deckEntries[deckIndex]
     if (!entry) return null
 
@@ -1446,8 +1479,9 @@ export class CollectionScene extends Scene {
   private updateDeckEditor(): void {
     if (!this.activeDeckId) return
 
-    const deck = this.deckStore.getDeck(this.activeDeckId)
+    const deck = this.deckController.getDeck(this.activeDeckId)
     if (!deck) {
+      this.clearDeckFullWarning()
       void this.exitDeckEditor().then(() => {
         if (!this.disposed) this.renderDeckList()
       })
@@ -1455,6 +1489,7 @@ export class CollectionScene extends Scene {
     }
 
     this.deckEditorButton.sprite.texture = this.getDeckFrameTexture(deck)
+    this.clearDeckFullWarning()
     this.clearDeckEditorCountFeedback()
     this.deckEditorCount.text = `${countDeckCards(deck)} / ${MAX_DECK_CARDS} Cards`
     this.renderDeckCardRows(deck)
@@ -1477,7 +1512,7 @@ export class CollectionScene extends Scene {
     if (!this.cardLayer || !page) return
 
     const deck = this.activeDeckId
-      ? this.deckStore.getDeck(this.activeDeckId)
+      ? this.deckController.getDeck(this.activeDeckId)
       : undefined
     for (const [cardIndex, child] of this.cardLayer.children.entries()) {
       if (!(child instanceof CardView)) continue
@@ -1518,6 +1553,51 @@ export class CollectionScene extends Scene {
     }
   }
 
+  private showDeckFullWarning(message: string): void {
+    if (!this.deckFullWarning) return
+
+    this.clearDeckFullWarning()
+    this.deckFullWarning.text = message
+    this.deckFullWarning.visible = true
+    this.tweenTo(this.deckFullWarning, {
+      alpha: 1,
+      duration: 0.12,
+      ease: 'power2.out'
+    })
+    this.deckFullWarningTimer = setTimeout(() => {
+      this.deckFullWarningTimer = null
+      if (this.disposed || !this.deckFullWarning) return
+
+      this.tweenTo(this.deckFullWarning, {
+        alpha: 0,
+        duration: 0.25,
+        ease: 'power2.in',
+        onComplete: () => {
+          if (!this.disposed && this.deckFullWarning) {
+            this.deckFullWarning.visible = false
+          }
+        },
+        onInterrupt: () => {
+          if (!this.disposed && this.deckFullWarning) {
+            this.deckFullWarning.visible = false
+          }
+        }
+      })
+    }, DECK_EDITOR_FULL_WARNING_DURATION)
+  }
+
+  private clearDeckFullWarning(): void {
+    if (this.deckFullWarningTimer !== null) {
+      clearTimeout(this.deckFullWarningTimer)
+      this.deckFullWarningTimer = null
+    }
+    if (!this.deckFullWarning) return
+
+    this.killTweensOf(this.deckFullWarning)
+    this.deckFullWarning.alpha = 0
+    this.deckFullWarning.visible = false
+  }
+
   private getDeckEditorCardContentHeight(rowCount: number): number {
     if (rowCount === 0) return 0
 
@@ -1536,22 +1616,7 @@ export class CollectionScene extends Scene {
       row.destroy({ children: true })
     }
 
-    const entries = Object.entries(deck.cards)
-      .map(([cardId, count]) => {
-        const card = CARD_CATALOG.get(cardId)
-        return { cardId, count, card }
-      })
-      .sort((left, right) => {
-        const costDifference = (left.card?.cost ?? 0) - (right.card?.cost ?? 0)
-        if (costDifference !== 0) return costDifference
-
-        const nameDifference = (left.card?.name ?? left.cardId).localeCompare(
-          right.card?.name ?? right.cardId
-        )
-        return nameDifference !== 0
-          ? nameDifference
-          : left.cardId.localeCompare(right.cardId)
-      })
+    const entries = buildDeckEditorEntries(deck)
 
     this.deckEditorCardMaxScroll = Math.max(
       0,
@@ -1579,7 +1644,10 @@ export class CollectionScene extends Scene {
           this.applyDeckRowArtwork(row, artwork)
         })
         .catch((error: unknown) => {
-          console.warn(`Failed to load deck artwork for ${entry.card?.name}:`, error)
+          this.reportWarning(
+            `Failed to load deck artwork for ${entry.card?.name}.`,
+            error
+          )
         })
     }
   }
@@ -1860,7 +1928,7 @@ export class CollectionScene extends Scene {
       })
     } catch (error) {
       if (!this.disposed && request === this.deckEditorCardPreviewRequest) {
-        console.warn(`Failed to render deck preview for ${card.name}:`, error)
+        this.reportError(`Failed to render deck preview for ${card.name}.`, error)
       }
     }
   }
@@ -1907,18 +1975,21 @@ export class CollectionScene extends Scene {
       return
     }
 
-    const result = await this.deckStore.addCard(deckId, card)
+    const result = await this.deckController.addCard(deckId, card)
     if (!result.ok) {
-      console.warn(result.message)
+      if (result.code === 'deck-full') {
+        this.reportWarning(result.message)
+        this.showDeckFullWarning(result.message)
+      } else {
+        this.reportError(result.message)
+      }
       this.flashDeckEditorCount()
       return
     }
 
-    void gameAudio
-    // gameAudio.play('collection-card-add')
+    this.audio?.play('collection-card-add')
     if (getDeckCardCount(result.deck, card.id) === getCardCopyLimit(card)) {
-      void gameAudio
-      // gameAudio.play('card-limit-lock')
+      this.audio?.play('card-limit-lock')
     }
     this.updateDeckEditor()
   }
@@ -1937,22 +2008,28 @@ export class CollectionScene extends Scene {
     }
 
     const transitionSequence = this.deckEditorTransitionSequence
+    const deck = this.deckController.getDeck(deckId)
+    const shouldAnimateRowRemoval = shouldAnimateDeckRowRemoval(
+      deck ? getDeckCardCount(deck, cardId) : 0
+    )
     this.deckEditorCardMutationInProgress = true
     this.setDeckInteractionEnabled(false)
     try {
       if (row?.parent === this.deckEditorCardContent) {
         row.eventMode = 'none'
         this.hideDeckCardPreview()
-        const rowIndex = this.deckEditorCardContent.getChildIndex(row)
-        const rowsToCollapse = this.deckEditorCardContent.children
-          .slice(rowIndex + 1)
-          .filter((child): child is Container => child instanceof Container)
+        if (shouldAnimateRowRemoval) {
+          const rowIndex = this.deckEditorCardContent.getChildIndex(row)
+          const rowsToCollapse = this.deckEditorCardContent.children
+            .slice(rowIndex + 1)
+            .filter((child): child is Container => child instanceof Container)
 
-        await this.animateDeckRowRemoval(row)
-        if (row.parent === this.deckEditorCardContent) {
-          this.deckEditorCardContent.removeChild(row)
-          row.destroy({ children: true })
-          await this.collapseDeckRows(rowsToCollapse)
+          await this.animateDeckRowRemoval(row)
+          if (row.parent === this.deckEditorCardContent) {
+            this.deckEditorCardContent.removeChild(row)
+            row.destroy({ children: true })
+            await this.collapseDeckRows(rowsToCollapse)
+          }
         }
       }
 
@@ -1964,9 +2041,9 @@ export class CollectionScene extends Scene {
         return
       }
 
-      const result = await this.deckStore.removeCard(deckId, cardId)
+      const result = await this.deckController.removeCard(deckId, cardId)
       if (!result.ok) {
-        console.warn(result.message)
+        this.reportError(result.message)
         this.updateDeckEditor()
         this.flashDeckEditorCount()
         return
@@ -1974,7 +2051,7 @@ export class CollectionScene extends Scene {
 
       this.updateDeckEditor()
     } catch (error) {
-      console.error(`Failed to remove ${cardId} from the deck:`, error)
+      this.reportError(`Failed to remove ${cardId} from the deck.`, error)
       if (!this.disposed && this.activeDeckId === deckId) {
         this.updateDeckEditor()
         this.flashDeckEditorCount()
@@ -2007,7 +2084,7 @@ export class CollectionScene extends Scene {
 
     event.stopPropagation()
     void this.addCardToActiveDeck(card).catch((error: unknown) => {
-      console.error(`Failed to add ${card.name} to the deck:`, error)
+      this.reportError(`Failed to add ${card.name} to the deck.`, error)
       this.flashDeckEditorCount()
     })
   }
@@ -2031,31 +2108,27 @@ export class CollectionScene extends Scene {
     if (this.cardPreviewOpening) return
 
     this.cardPreviewOpening = true
-    void gameAudio
-    // gameAudio.play('collection-card-preview')
+    this.audio?.play('collection-card-preview')
     const bounds = view.getBounds()
     const topLeft = this.root.toLocal({ x: bounds.x, y: bounds.y })
     const bottomRight = this.root.toLocal({
       x: bounds.x + bounds.width,
       y: bounds.y + bounds.height
     })
-    const sourceBounds: CardPreviewSourceBounds = {
+    const sourceBounds: CardPreviewRouteBounds = {
       x: topLeft.x,
       y: topLeft.y,
       width: bottomRight.x - topLeft.x,
       height: bottomRight.y - topLeft.y
     }
 
-    void this.sceneManager
-      .push(
-        new CardViewScene({
-          card,
-          sourceBounds,
-          resolver: this.cardResolver
-        })
-      )
+    void (
+      this.router
+        ? this.router.navigate({ id: 'card-preview', cardId: card.id, sourceBounds })
+        : Promise.reject(new Error('Collection router is not configured'))
+    )
       .catch((error: unknown) => {
-        console.error(`Failed to open card preview for ${card.name}:`, error)
+        this.reportError(`Failed to open card preview for ${card.name}.`, error)
       })
       .finally(() => {
         this.cardPreviewOpening = false
@@ -2067,18 +2140,18 @@ export class CollectionScene extends Scene {
       !this.navigationReady ||
       this.disposed ||
       this.newDeckScene.isOpen ||
-      this.deckStore.getDecks().length >= MAX_DECKS
+      this.deckController.getDecks().length >= MAX_DECKS
     ) {
       return
     }
 
-    this.previousCollectionClassFilter = this.collectionClassFilter
+    this.previousCollectionClassFilter = this.collectionQuery.classFilter
     this.setNavigationEnabled(false)
     this.setDeckInteractionEnabled(false)
     try {
       await this.newDeckScene.open()
     } catch (error) {
-      console.error('Failed to open the new deck selector:', error)
+      this.reportError('Failed to open the new deck selector.', error)
       this.previousCollectionClassFilter = null
       if (!this.disposed) {
         this.setNavigationEnabled(true)
@@ -2091,7 +2164,7 @@ export class CollectionScene extends Scene {
     try {
       await this.applyCollectionClassFilter(heroClass)
     } catch (error) {
-      console.error(`Failed to filter the collection for ${heroClass}:`, error)
+      this.reportError(`Failed to filter the collection for ${heroClass}.`, error)
     }
   }
 
@@ -2101,7 +2174,7 @@ export class CollectionScene extends Scene {
     try {
       await this.applyCollectionClassFilter(previousFilter)
     } catch (error) {
-      console.error('Failed to restore the collection after cancelling:', error)
+      this.reportError('Failed to restore the collection after cancelling.', error)
     } finally {
       this.previousCollectionClassFilter = null
       if (!this.disposed) {
@@ -2120,25 +2193,20 @@ export class CollectionScene extends Scene {
   }
 
   private async deleteDeck(deckId: string): Promise<void> {
-    const deck = this.deckStore.getDeck(deckId)
+    const deck = this.deckController.getDeck(deckId)
     if (!deck) return
-    if (!this.confirmDeckDeletion(deck)) return
+    if (!this.deckController.confirmDeckDeletion(deck)) return
 
     try {
-      await this.deckStore.deleteDeck(deckId)
+      await this.deckController.deleteDeck(deckId)
     } catch (error) {
-      console.error(`Failed to delete ${deck.name}:`, error)
+      this.reportError(`Failed to delete ${deck.name}.`, error)
     }
   }
 
   private async deleteActiveDeck(): Promise<void> {
     if (!this.activeDeckId) return
     await this.deleteDeck(this.activeDeckId)
-  }
-
-  private confirmDeckDeletion(deck: Deck): boolean {
-    if (typeof window.confirm !== 'function') return true
-    return window.confirm(`Delete ${deck.name}? This cannot be undone.`)
   }
 
   private createPageZone(
@@ -2221,44 +2289,9 @@ export class CollectionScene extends Scene {
     const pageFlipSounds =
       delta > 0 ? COLLECTION_PAGE_FLIP_FORWARD_SOUNDS : COLLECTION_PAGE_FLIP_BACK_SOUNDS
     void pageFlipSounds
-    void gameAudio
-    // gameAudio.playRandom(pageFlipSounds)
+    this.audio?.playRandom(pageFlipSounds)
     void this.renderPage(nextIndex).catch((error: unknown) => {
-      console.error(`Failed to render collection page ${nextIndex}:`, error)
-    })
-  }
-
-  /** Animates the shared top-view door geometry used by the main menu. */
-  private animateDoor(
-    mesh: PerspectiveMesh,
-    side: DoorSide,
-    duration: number,
-    perspectiveDepth: number
-  ): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const state = { progress: 0 }
-      const timeline = this.timeline({
-        onComplete: resolve,
-        onInterrupt: resolve
-      })
-
-      timeline.to(
-        state,
-        {
-          progress: 1,
-          duration,
-          ease: 'power2.in',
-          onUpdate: () =>
-            updateHingedDoor(
-              mesh,
-              side,
-              state.progress,
-              perspectiveDepth,
-              DOOR_MIN_WIDTH
-            )
-        },
-        0
-      )
+      this.reportError(`Failed to render collection page ${nextIndex}.`, error)
     })
   }
 
@@ -2281,6 +2314,7 @@ export class CollectionScene extends Scene {
     this.deckEditorClosing = false
     this.deckEditorCardMutationInProgress = false
     this.clearDeckEditorCountFeedback()
+    this.clearDeckFullWarning()
     this.previousPageZone.eventMode = 'none'
     this.nextPageZone.eventMode = 'none'
     this.setDeckInteractionEnabled(false)
@@ -2288,14 +2322,10 @@ export class CollectionScene extends Scene {
       control.eventMode = 'none'
     }
     this.setSearchInputVisible(false)
-    if (this.searchInputResizeHandler) {
-      window.removeEventListener('resize', this.searchInputResizeHandler)
-      this.searchInputResizeHandler = null
-    }
-    this.searchInput?.removeEventListener('input', this.handleSearchInput)
-    this.searchInput?.remove()
+    this.searchInput?.dispose()
     this.searchInput = null
     this.sceneManager.cursor?.setContextVariant(null)
+    void this.newDeckScene?.dispose()
   }
 
   protected onPause(): void {

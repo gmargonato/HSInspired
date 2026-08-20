@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_wild_growth.jpg",
+  "source_name": "basic_wild_growth.jpg",
+  "crop_box": [
+    0,
+    0,
+    500,
+    500
+  ],
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:00:12.529361",
+  "card_id": "basic_wild_growth",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_equality.jpg",
+  "source_name": "classic_equality.jpg",
+  "crop_box": [
+    72,
+    0,
+    617,
+    545
+  ],
+  "scale": 0.9174311926605505,
+  "offset_x": -66.02681721947778,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:17.556187",
+  "card_id": "classic_equality",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

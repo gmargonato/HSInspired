@@ -30,7 +30,12 @@ export default defineConfig(({ mode }) => ({
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
-        '@assets': resolve('assets')
+        '@assets': resolve('assets'),
+        '@dev-inspector': resolve(
+          mode === 'production'
+            ? 'src/renderer/src/app/renderer-production-placeholder.ts'
+            : 'src/renderer/src/scenes/dev/CardInspectorScene.ts'
+        )
       }
     },
     server: {

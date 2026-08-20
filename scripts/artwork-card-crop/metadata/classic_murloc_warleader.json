@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\classic_murloc_warleader.jpg",
+  "source_name": "classic_murloc_warleader.jpg",
+  "crop_box": [
+    81,
+    65,
+    970,
+    954
+  ],
+  "scale": 0.5623721881390593,
+  "offset_x": -45.53456032719839,
+  "offset_y": -36.30000000000001,
+  "timestamp": "2026-08-18T16:10:27.936378"
+}

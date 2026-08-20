@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\basic_raid_leader.jpg",
+  "source_name": "basic_raid_leader.jpg",
+  "crop_box": [
+    128,
+    0,
+    1146,
+    1018
+  ],
+  "scale": 0.49107142857142866,
+  "offset_x": -62.88571428571436,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-18T16:07:53.876943"
+}

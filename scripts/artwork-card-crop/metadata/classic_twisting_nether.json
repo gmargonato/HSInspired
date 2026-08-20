@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_twisting_nether.jpg",
+  "source_name": "classic_twisting_nether.jpg",
+  "crop_box": [
+    4,
+    0,
+    977,
+    973
+  ],
+  "scale": 0.513874614594039,
+  "offset_x": -1.956676417108099,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:06:13.704298",
+  "card_id": "classic_twisting_nether",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

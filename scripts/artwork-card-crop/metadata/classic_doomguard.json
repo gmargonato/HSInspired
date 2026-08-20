@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_doomguard.jpg",
+  "source_name": "classic_doomguard.jpg",
+  "crop_box": [
+    150,
+    0,
+    996,
+    846
+  ],
+  "scale": 0.5910165484633569,
+  "offset_x": -88.48881614839055,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:09.794556",
+  "card_id": "classic_doomguard",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

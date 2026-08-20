@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_silverback_patriarch.jpg",
+  "source_name": "classic_silverback_patriarch.jpg",
+  "crop_box": [
+    48,
+    77,
+    461,
+    490
+  ],
+  "scale": 1.2100000000000002,
+  "offset_x": -58.076923076923144,
+  "offset_y": -93.44615384615389,
+  "timestamp": "2026-08-19T20:05:32.207643",
+  "card_id": "classic_silverback_patriarch",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

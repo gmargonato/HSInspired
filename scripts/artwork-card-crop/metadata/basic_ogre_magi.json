@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\basic_ogre_magi.jpg",
+  "source_name": "basic_ogre_magi.jpg",
+  "crop_box": [
+    106,
+    0,
+    1098,
+    992
+  ],
+  "scale": 0.5040322580645161,
+  "offset_x": -53.580645161290306,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-18T16:07:50.826998"
+}

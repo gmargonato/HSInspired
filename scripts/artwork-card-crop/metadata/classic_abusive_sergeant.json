@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\classic_abusive_sergeant.jpg",
+  "source_name": "classic_abusive_sergeant.jpg",
+  "crop_box": [
+    88,
+    13,
+    1019,
+    944
+  ],
+  "scale": 0.537109375,
+  "offset_x": -47.5,
+  "offset_y": -6.8396484375000455,
+  "timestamp": "2026-08-18T16:08:35.899071"
+}

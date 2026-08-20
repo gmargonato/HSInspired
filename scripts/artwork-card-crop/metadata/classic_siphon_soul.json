@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_siphon_soul.jpg",
+  "source_name": "classic_siphon_soul.jpg",
+  "crop_box": [
+    77,
+    0,
+    913,
+    836
+  ],
+  "scale": 0.5980861244019139,
+  "offset_x": -46.3314317261686,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:05:35.116224",
+  "card_id": "classic_siphon_soul",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

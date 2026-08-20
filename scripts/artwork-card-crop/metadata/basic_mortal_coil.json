@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_mortal_coil.jpg",
+  "source_name": "basic_mortal_coil.jpg",
+  "crop_box": [
+    84,
+    0,
+    789,
+    705
+  ],
+  "scale": 0.7092198581560284,
+  "offset_x": -59.530823786142946,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:59:15.626703",
+  "card_id": "basic_mortal_coil",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_shield_slam.jpg",
+  "source_name": "classic_shield_slam.jpg",
+  "crop_box": [
+    72,
+    0,
+    892,
+    820
+  ],
+  "scale": 0.6097560975609756,
+  "offset_x": -43.73358348968104,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:05:23.591469",
+  "card_id": "classic_shield_slam",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

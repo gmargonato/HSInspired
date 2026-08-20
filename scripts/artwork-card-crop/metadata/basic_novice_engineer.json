@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\basic_novice_engineer.jpg",
+  "source_name": "basic_novice_engineer.jpg",
+  "crop_box": [
+    179,
+    0,
+    1173,
+    994
+  ],
+  "scale": 0.5030181086519114,
+  "offset_x": -89.93158953722332,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-18T16:07:45.989717"
+}

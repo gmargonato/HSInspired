@@ -3,3 +3,6 @@ dist
 out
 assets
 package-lock.json
+scripts/artwork-card-crop/metadata
+scripts/artwork-card-crop/Output
+scripts/artwork-card-crop/__pycache__

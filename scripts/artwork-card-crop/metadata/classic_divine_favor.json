@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_divine_favor.jpg",
+  "source_name": "classic_divine_favor.jpg",
+  "crop_box": [
+    62,
+    0,
+    884,
+    822
+  ],
+  "scale": 0.6082725060827251,
+  "offset_x": -37.53696425229282,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:06.384544",
+  "card_id": "classic_divine_favor",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

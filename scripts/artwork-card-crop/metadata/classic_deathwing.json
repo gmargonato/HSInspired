@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_deathwing.jpg",
+  "source_name": "classic_deathwing.jpg",
+  "crop_box": [
+    0,
+    0,
+    500,
+    500
+  ],
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:01:56.414256",
+  "card_id": "classic_deathwing",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

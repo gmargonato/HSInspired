@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\basic_mirror_image.jpg",
+  "source_name": "basic_mirror_image.jpg",
+  "crop_box": [
+    176,
+    43,
+    1014,
+    881
+  ],
+  "scale": 0.5966469428007891,
+  "offset_x": -105.00000000000011,
+  "offset_y": -25.800000000000068,
+  "timestamp": "2026-08-18T16:07:38.589042"
+}

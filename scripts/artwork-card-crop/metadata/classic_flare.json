@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_flare.jpg",
+  "source_name": "classic_flare.jpg",
+  "crop_box": [
+    0,
+    0,
+    500,
+    500
+  ],
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:33.133436",
+  "card_id": "classic_flare",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_lights_justice.jpg",
+  "source_name": "classic_lights_justice.jpg",
+  "crop_box": [
+    0,
+    124,
+    1024,
+    1148
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": -60.546875,
+  "timestamp": "2026-08-19T20:03:38.604799",
+  "card_id": "classic_lights_justice",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

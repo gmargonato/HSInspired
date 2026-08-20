@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_consecration.jpg",
+  "source_name": "basic_consecration.jpg",
+  "crop_box": [
+    324,
+    0,
+    1147,
+    823
+  ],
+  "scale": 0.6077625570776257,
+  "offset_x": -197.11224470272953,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:57:52.887519",
+  "card_id": "basic_consecration",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

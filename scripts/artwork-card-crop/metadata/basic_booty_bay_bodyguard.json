@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_booty_bay_bodyguard.jpg",
+  "source_name": "basic_booty_bay_bodyguard.jpg",
+  "crop_box": [
+    0,
+    0,
+    500,
+    500
+  ],
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:57:38.807529",
+  "card_id": "basic_booty_bay_bodyguard",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

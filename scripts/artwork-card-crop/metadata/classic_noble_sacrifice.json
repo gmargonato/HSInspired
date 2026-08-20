@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_noble_sacrifice.jpg",
+  "source_name": "classic_noble_sacrifice.jpg",
+  "crop_box": [
+    65,
+    0,
+    628,
+    563
+  ],
+  "scale": 0.8880994671403197,
+  "offset_x": -57.85763082388303,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:04:40.170657",
+  "card_id": "classic_noble_sacrifice",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

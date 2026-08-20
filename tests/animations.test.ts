@@ -1,7 +1,7 @@
 import { Texture } from 'pixi.js'
 import { describe, expect, it } from 'vitest'
-import { gsap, AnimationScope } from '../src/renderer/src/core/animations'
-import { FlipCard } from '../src/renderer/src/actors/FlipCard'
+import { gsap, AnimationScope } from '../src/renderer/src/animation/animations'
+import { FlipCard } from '../src/renderer/src/ui/components/FlipCard'
 
 describe('AnimationScope', () => {
   it('pauses, resumes, and kills arbitrary animation targets', () => {

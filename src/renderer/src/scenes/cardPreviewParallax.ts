@@ -1,4 +1,4 @@
-import type { CardView } from '../../../../card-lab/card-view'
+import type { CardView } from '../rendering/cards/card-view'
 
 export interface ParallaxPoint {
   readonly x: number
@@ -120,7 +120,7 @@ export class CardPreviewParallax {
 
   constructor(private readonly cardView: CardView) {
     const nodes = new Map(
-      cardView.getNodeInspectors().map((inspector) => [inspector.path, inspector])
+      cardView.getNodeMetadata().map((metadata) => [metadata.path, metadata])
     )
     this.layers = CARD_PREVIEW_PARALLAX_LAYERS.flatMap((definition) => {
       const node = nodes.get(definition.path)
@@ -158,10 +158,7 @@ export class CardPreviewParallax {
 
     for (const layer of this.layers) {
       const offset = resolveParallaxLayerOffset(this.current, layer.depth)
-      this.cardView.setNodeGeometry(layer.path, {
-        x: layer.x + offset.x,
-        y: layer.y + offset.y
-      })
+      this.cardView.setSemanticLayerOffset(layer.path, offset)
     }
   }
 
@@ -170,7 +167,7 @@ export class CardPreviewParallax {
     this.destroyed = true
 
     for (const layer of this.layers) {
-      this.cardView.setNodeGeometry(layer.path, { x: layer.x, y: layer.y })
+      this.cardView.setSemanticLayerOffset(layer.path, { x: 0, y: 0 })
     }
     this.cardView.skew.set(0)
     this.cardView.scale.set(1)

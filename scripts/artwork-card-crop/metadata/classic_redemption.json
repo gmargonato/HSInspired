@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_redemption.jpg",
+  "source_name": "classic_redemption.jpg",
+  "crop_box": [
+    109,
+    0,
+    911,
+    802
+  ],
+  "scale": 0.6234413965087282,
+  "offset_x": -67.75369269134859,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:04:57.247631",
+  "card_id": "classic_redemption",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

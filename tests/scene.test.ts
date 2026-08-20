@@ -2,9 +2,13 @@ import { Container } from 'pixi.js'
 import { describe, expect, it, vi } from 'vitest'
 import type { Application } from 'pixi.js'
 import { Scene } from '../src/renderer/src/scenes/Scene'
-import { SceneManager } from '../src/renderer/src/core/SceneManager'
-import { calculateTransitionScale } from '../src/renderer/src/core/SceneTransitionHost'
-import { createScene } from '../src/renderer/src/core/SceneNavigator'
+import { SceneManager } from '../src/renderer/src/scenes/SceneManager'
+import { calculateTransitionScale } from '../src/renderer/src/scenes/transitions/SceneTransitionHost'
+import { createScene, SceneNavigator } from '../src/renderer/src/app/SceneNavigator'
+import { MainMenuScene } from '../src/renderer/src/scenes/MainMenuScene'
+import { DeckSelectionScene } from '../src/renderer/src/scenes/DeckSelectionScene'
+import { CollectionScene } from '../src/renderer/src/scenes/CollectionScene'
+import type { AppServices } from '../src/renderer/src/app/services'
 import { SCENE_MENU_ENTRIES } from '../src/shared/sceneNavigation'
 
 class TestScene extends Scene {
@@ -269,5 +273,88 @@ describe('Developer scene navigation', () => {
     for (const entry of Object.values(SCENE_MENU_ENTRIES)) {
       expect(createScene(entry.request)).toBeInstanceOf(Scene)
     }
+  })
+})
+
+describe('Application route transitions', () => {
+  function createNavigator(current: Scene | null): {
+    navigator: SceneNavigator
+    transitionTo: ReturnType<typeof vi.fn>
+  } {
+    const transitionTo = vi.fn().mockResolvedValue(undefined)
+    const manager = {
+      current,
+      transitionTo,
+      push: vi.fn().mockResolvedValue(undefined)
+    } as unknown as SceneManager
+    const services = {
+      audio: {},
+      deckStore: {},
+      dialogs: { confirm: () => true, error: () => undefined },
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined }
+    } as unknown as AppServices
+
+    return { navigator: new SceneNavigator(manager, services), transitionTo }
+  }
+
+  it('restores the chest zoom when a main-menu button has opened the destination', async () => {
+    const mainMenu = new MainMenuScene()
+    ;(mainMenu as unknown as { transitionOpened: boolean }).transitionOpened = true
+    const { navigator, transitionTo } = createNavigator(mainMenu)
+
+    await navigator.navigate({ id: 'deck-selection' })
+
+    const options = transitionTo.mock.calls[0]?.[1]
+    expect(options).toMatchObject({
+      inset: { x: 415, y: 172.5, width: 1090, height: 735 },
+      scaleMode: 'cover',
+      duration: 0.45,
+      hostParent: mainMenu.root,
+      hostIndex: 2,
+      beforeExpand: expect.any(Function)
+    })
+
+    const collectionNavigator = createNavigator(mainMenu)
+    await collectionNavigator.navigator.navigate({ id: 'collection' })
+
+    expect(collectionNavigator.transitionTo.mock.calls[0]?.[1]).toMatchObject({
+      inset: { x: 415, y: 172.5, width: 1090, height: 735 },
+      duration: 0.45,
+      hostParent: mainMenu.root,
+      hostIndex: 2
+    })
+    expect(collectionNavigator.transitionTo.mock.calls[0]?.[1].afterTransition).toEqual(
+      expect.any(Function)
+    )
+  })
+
+  it('uses the collection fade from deck selection', async () => {
+    const { navigator, transitionTo } = createNavigator(new DeckSelectionScene())
+
+    await navigator.navigate({ id: 'collection' })
+
+    expect(transitionTo.mock.calls[0]?.[1]).toMatchObject({
+      mode: 'fade',
+      duration: 0.6,
+      inset: { x: 0, y: 0, width: 1920, height: 1080 }
+    })
+    expect(transitionTo.mock.calls[0]?.[1].afterTransition).toEqual(
+      expect.any(Function)
+    )
+  })
+
+  it('uses the returning main-menu collapse for back navigation and menu requests', async () => {
+    const { navigator, transitionTo } = createNavigator(
+      new CollectionScene({} as never)
+    )
+
+    await navigator.navigateRequest({ id: 'main-menu' })
+
+    expect(transitionTo.mock.calls[0]?.[1]).toMatchObject({
+      mode: 'collapse',
+      duration: 0.45,
+      hostIndex: 2,
+      inset: { x: 415, y: 172.5, width: 1090, height: 735 }
+    })
   })
 })

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_lay_on_hands.jpg",
+  "source_name": "classic_lay_on_hands.jpg",
+  "crop_box": [
+    63,
+    0,
+    913,
+    850
+  ],
+  "scale": 0.5882352941176471,
+  "offset_x": -36.83257918552039,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:03:29.863396",
+  "card_id": "classic_lay_on_hands",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_frothing_berserker.jpg",
+  "source_name": "classic_frothing_berserker.jpg",
+  "crop_box": [
+    162,
+    0,
+    933,
+    771
+  ],
+  "scale": 0.648508430609598,
+  "offset_x": -104.80295320762245,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:41.319315",
+  "card_id": "classic_frothing_berserker",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

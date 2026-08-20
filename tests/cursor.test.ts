@@ -7,7 +7,7 @@ import {
   getCursorVariant,
   normalizeCursorScale,
   resolveCursorVariant
-} from '../src/renderer/src/core/cursor'
+} from '../src/renderer/src/ui/components/cursor'
 
 describe('cursor state helpers', () => {
   it('selects the click variant only while the left button is down', () => {

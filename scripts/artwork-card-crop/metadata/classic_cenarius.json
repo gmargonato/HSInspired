@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\classic_cenarius.jpg",
+  "source_name": "classic_cenarius.jpg",
+  "crop_box": [
+    220,
+    0,
+    1141,
+    921
+  ],
+  "scale": 0.5429417571569596,
+  "offset_x": -119.2827245804541,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-18T16:09:01.658763"
+}

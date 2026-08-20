@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_fiery_war_axe.jpg",
+  "source_name": "basic_fiery_war_axe.jpg",
+  "crop_box": [
+    0,
+    0,
+    920,
+    920
+  ],
+  "scale": 0.5434782608695652,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:58:20.224696",
+  "card_id": "basic_fiery_war_axe",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

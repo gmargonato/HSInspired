@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_ancient_of_lore.jpg",
+  "source_name": "classic_ancient_of_lore.jpg",
+  "crop_box": [
+    79,
+    97,
+    455,
+    473
+  ],
+  "scale": 1.3310000000000004,
+  "offset_x": -105.45384615384629,
+  "offset_y": -129.52769230769243,
+  "timestamp": "2026-08-19T20:00:30.390733",
+  "card_id": "classic_ancient_of_lore",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_felguard.jpg",
+  "source_name": "classic_felguard.jpg",
+  "crop_box": [
+    124,
+    0,
+    1117,
+    993
+  ],
+  "scale": 0.5035246727089627,
+  "offset_x": -62.63072275156861,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:26.811220",
+  "card_id": "classic_felguard",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

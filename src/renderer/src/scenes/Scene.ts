@@ -1,7 +1,7 @@
 import { Application, Container } from 'pixi.js'
-import { AnimationScope } from '../core/animations'
-import { AssetScope } from '../core/assetScope'
-import type { SceneManager } from '../core/SceneManager'
+import { AnimationScope } from '../animation/animations'
+import { AssetScope } from '../ui/asset-registry/asset-scope'
+import type { SceneManagerPort } from './scene-manager-port'
 
 export type SceneLifecycle =
   'new' | 'loading' | 'active' | 'paused' | 'failed' | 'unloading' | 'unloaded'
@@ -29,7 +29,7 @@ export abstract class Scene {
   readonly root: Container = new Container()
 
   private app: Application | null = null
-  private manager: SceneManager | null = null
+  private manager: SceneManagerPort | null = null
   private subScenes: Scene[] = []
   private active = false
   private lifecycle: SceneLifecycle = 'new'
@@ -48,7 +48,7 @@ export abstract class Scene {
     return this.lifecycle === 'active' || this.lifecycle === 'paused'
   }
 
-  async load(app: Application, manager?: SceneManager): Promise<void> {
+  async load(app: Application, manager?: SceneManagerPort): Promise<void> {
     if (this.lifecycle !== 'new') {
       throw new Error(`Cannot load a scene from the ${this.lifecycle} state`)
     }
@@ -175,7 +175,7 @@ export abstract class Scene {
     return this.app
   }
 
-  protected get sceneManager(): SceneManager {
+  protected get sceneManager(): SceneManagerPort {
     if (!this.manager) {
       throw new Error('Scene accessed SceneManager before load()')
     }

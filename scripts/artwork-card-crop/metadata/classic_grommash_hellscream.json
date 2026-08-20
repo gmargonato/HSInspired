@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_grommash_hellscream.jpg",
+  "source_name": "classic_grommash_hellscream.jpg",
+  "crop_box": [
+    0,
+    234,
+    464,
+    698
+  ],
+  "scale": 1.0775862068965518,
+  "offset_x": -2.842170943040401e-14,
+  "offset_y": -251.77055702917775,
+  "timestamp": "2026-08-19T20:02:50.971064",
+  "card_id": "classic_grommash_hellscream",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

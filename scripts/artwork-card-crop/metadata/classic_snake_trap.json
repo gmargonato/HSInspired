@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_snake_trap.jpg",
+  "source_name": "classic_snake_trap.jpg",
+  "crop_box": [
+    0,
+    0,
+    500,
+    500
+  ],
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:05:37.546842",
+  "card_id": "classic_snake_trap",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

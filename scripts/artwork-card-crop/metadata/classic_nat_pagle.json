@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\classic_nat_pagle.jpg",
+  "source_name": "classic_nat_pagle.jpg",
+  "crop_box": [
+    59,
+    101,
+    644,
+    686
+  ],
+  "scale": 0.8540372670807455,
+  "offset_x": -50.000000000000114,
+  "offset_y": -86.67391304347836,
+  "timestamp": "2026-08-18T16:10:30.106505"
+}

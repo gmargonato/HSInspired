@@ -5,14 +5,7 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: [
-      'node_modules/**',
-      'dist/**',
-      'dist-card-lab/**',
-      'out/**',
-      'artifacts/**',
-      'assets/**'
-    ]
+    ignores: ['node_modules/**', 'dist/**', 'out/**', 'artifacts/**', 'assets/**']
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,

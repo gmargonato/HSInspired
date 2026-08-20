@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_hunters_mark.jpg",
+  "source_name": "basic_hunters_mark.jpg",
+  "crop_box": [
+    151,
+    0,
+    1111,
+    960
+  ],
+  "scale": 0.5208333333333334,
+  "offset_x": -78.74125874125875,
+  "offset_y": -5.684341886080802e-14,
+  "timestamp": "2026-08-19T19:58:57.823655",
+  "card_id": "basic_hunters_mark",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

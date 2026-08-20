@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_gorehowl.jpg",
+  "source_name": "classic_gorehowl.jpg",
+  "crop_box": [
+    0,
+    70,
+    700,
+    770
+  ],
+  "scale": 0.7142857142857143,
+  "offset_x": 0.0,
+  "offset_y": -50.05494505494511,
+  "timestamp": "2026-08-19T20:02:47.596860",
+  "card_id": "classic_gorehowl",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

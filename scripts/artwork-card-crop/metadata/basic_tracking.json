@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\basic_tracking.jpg",
+  "source_name": "basic_tracking.jpg",
+  "crop_box": [
+    30,
+    236,
+    691,
+    897
+  ],
+  "scale": 0.7562500000000002,
+  "offset_x": -22.500000000000057,
+  "offset_y": -178.31250000000017,
+  "timestamp": "2026-08-18T16:00:41.526579"
+}

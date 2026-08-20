@@ -1,20 +1,20 @@
 import { Container, PerspectiveMesh, Sprite, Texture } from 'pixi.js'
 import { Scene } from './Scene'
-import { GAME_HEIGHT, GAME_WIDTH } from '../core/config'
-import { FlipCard } from '../actors/FlipCard'
-import { Button } from '../actors/Button'
-import { DeckSelectionScene } from './DeckSelectionScene'
-import { CollectionScene } from './CollectionScene'
-import { ASSET_BUNDLE_IDS } from '../core/assets'
-import { gameAudio } from '../core/audio'
-import type { MainMenuAssets } from '../core/assets'
-import type { TransitionRect } from '../core/SceneTransitionHost'
-import type { SceneTransitionOptions } from '../core/SceneManager'
+import { GAME_HEIGHT, GAME_WIDTH } from '../app/config'
+import { FlipCard } from '../ui/components/FlipCard'
+import { Button } from '../ui/components/Button'
+import { ASSET_BUNDLE_IDS } from '../ui/asset-registry'
+import type { AppRoute, SceneRouter } from '../app/router'
+import type { AudioService } from '../app/audio'
+import type { AppLogger } from '../app/services'
+import type { MainMenuAssets } from '../ui/asset-registry'
+import type { TransitionRect } from './transitions/SceneTransitionHost'
+import type { SceneTransitionOptions } from './SceneManager'
 import {
   createHingedDoorMesh,
   updateHingedDoor,
   type HingeSide
-} from '../core/hingedDoor'
+} from '../features/collection/choreography/hinged-door'
 
 // Manual nudges only (multi-line tweaks while designing the layout).
 // The lid x values are the inner edges of the closed chest.
@@ -31,7 +31,7 @@ const LID_OPEN_DURATION = 0.6
 const MENU_REVEAL_DURATION = 0.15
 const LID_MIN_WIDTH = 1
 const LID_PERSPECTIVE_DEPTH = 14
-const SCENE_SELECTION_GAP: TransitionRect = {
+export const SCENE_SELECTION_GAP: TransitionRect = {
   x: (GAME_WIDTH - 1090) / 2,
   y: (GAME_HEIGHT - 735) / 2,
   width: 1090,
@@ -53,15 +53,50 @@ export class MainMenuScene extends Scene {
   private buttonPlay!: Button
   private buttonCollection!: Button
   private transitionOpened = false
+  private destinationPreparation: Promise<void> | null = null
   private returnClosePromise: Promise<void> | null = null
   private returnRevealPromise: Promise<void> | null = null
 
-  constructor(private readonly entryMode: MainMenuEntryMode = 'closed') {
+  constructor(
+    private readonly router?: SceneRouter,
+    private readonly entryMode: MainMenuEntryMode = 'closed',
+    private readonly audio?: AudioService,
+    private readonly logger: AppLogger = {
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined
+    }
+  ) {
     super()
   }
 
-  static forReturn(): MainMenuScene {
-    return new MainMenuScene('returning')
+  /** True while a button-initiated destination transition is being prepared. */
+  get isDestinationTransitionOpen(): boolean {
+    return this.transitionOpened
+  }
+
+  /**
+   * Starts the chest choreography that gates the destination expansion.
+   * SceneManager calls this after the destination has been loaded into its
+   * inset host, so the destination is already visible, small, and dark while
+   * the lids open.
+   */
+  prepareDestinationTransition(): Promise<void> {
+    if (!this.destinationPreparation) {
+      const centerFlip = this.centerCard.flip()
+      this.destinationPreparation = (async () => {
+        await centerFlip
+        await this.openChest()
+
+        this.lidLeft.visible = false
+        this.lidRight.visible = false
+        this.centerCard.visible = false
+        this.buttonPlay.visible = false
+        this.buttonCollection.visible = false
+      })()
+    }
+
+    return this.destinationPreparation
   }
 
   createReturnTransitionOptions(): SceneTransitionOptions {
@@ -118,6 +153,7 @@ export class MainMenuScene extends Scene {
     this.buttonPlay = new Button(assets.buttonPlay, {
       pressSound: 'box-hub-button-press',
       hoverSound: 'hub-mouseover',
+      audio: this.audio,
       onClick: () => this.onPlayPressed()
     })
     this.buttonPlay.position.set(Layout.buttonPlay.x, Layout.buttonPlay.y)
@@ -130,6 +166,7 @@ export class MainMenuScene extends Scene {
     this.buttonCollection = new Button(assets.buttonCollection, {
       pressSound: 'box-hub-button-press',
       hoverSound: 'hub-mouseover',
+      audio: this.audio,
       onClick: () => this.onCollectionPressed()
     })
     this.buttonCollection.position.set(
@@ -220,20 +257,16 @@ export class MainMenuScene extends Scene {
   }
 
   private onPlayPressed(): Promise<void> {
-    return this.openDestination(new DeckSelectionScene(), 'deck selection')
+    return this.openDestination({ id: 'deck-selection' }, 'deck selection')
   }
 
   private onCollectionPressed(): Promise<void> {
-    const destination = new CollectionScene()
-    return this.openDestination(destination, 'collection', () =>
-      destination.playCoverReveal()
-    )
+    return this.openDestination({ id: 'collection' }, 'collection')
   }
 
   private async openDestination(
-    destination: Scene,
-    destinationName: string,
-    afterTransition?: () => Promise<void> | void
+    route: AppRoute,
+    destinationName: string
   ): Promise<void> {
     if (this.transitionOpened) return
     this.transitionOpened = true
@@ -246,37 +279,19 @@ export class MainMenuScene extends Scene {
     this.tweenTo(this.buttonPlay, { alpha: 0, duration: 0.15 })
     this.tweenTo(this.buttonCollection, { alpha: 0, duration: 0.15 })
 
-    // Reveal the center part while the transition manager loads the
-    // destination scene in its temporary presentation host.
-    const centerFlip = this.centerCard.flip()
+    // Start the chest choreography before navigation. SceneManager waits for
+    // this promise after it has loaded the destination into its inset host.
+    const destinationPreparation = this.prepareDestinationTransition()
 
     try {
-      await this.sceneManager.transitionTo(destination, {
-        inset: SCENE_SELECTION_GAP,
-        scaleMode: 'cover',
-        duration: 0.45,
-        hostParent: this.root,
-        hostIndex: 2,
-        beforeExpand: async () => {
-          await centerFlip
-          void gameAudio
-          // gameAudio.play('hub-click')
-          await this.openChest()
-
-          // The destination expands after the lids reach their edge-on state.
-          this.lidLeft.visible = false
-          this.lidRight.visible = false
-          this.centerCard.visible = false
-          this.buttonPlay.visible = false
-          this.buttonCollection.visible = false
-        },
-        afterTransition
-      })
+      if (!this.router) throw new Error('Main menu router is not configured')
+      await this.router.navigate(route)
     } catch (error) {
-      console.error(`Failed to open ${destinationName}:`, error)
-      await centerFlip
+      this.logger.error(`Failed to open ${destinationName}.`, error)
+      await destinationPreparation.catch(() => undefined)
       await this.centerCard.flipToFront()
       this.transitionOpened = false
+      this.destinationPreparation = null
       this.killTweensOf(this.buttonPlay)
       this.killTweensOf(this.buttonCollection)
       this.buttonPlay.visible = true

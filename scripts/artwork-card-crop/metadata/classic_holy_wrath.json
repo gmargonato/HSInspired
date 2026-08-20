@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_holy_wrath.jpg",
+  "source_name": "classic_holy_wrath.jpg",
+  "crop_box": [
+    0,
+    0,
+    968,
+    968
+  ],
+  "scale": 0.5165289256198347,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:56.579128",
+  "card_id": "classic_holy_wrath",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

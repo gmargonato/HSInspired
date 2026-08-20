@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_eaglehorn_bow.jpg",
+  "source_name": "classic_eaglehorn_bow.jpg",
+  "crop_box": [
+    0,
+    0,
+    500,
+    500
+  ],
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:02:15.042878",
+  "card_id": "classic_eaglehorn_bow",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

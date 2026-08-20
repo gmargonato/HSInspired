@@ -1,0 +1,14 @@
+{
+  "source_path": "HSInspired\\assets\\images\\artwork\\classic_freezing_trap.jpg",
+  "source_name": "classic_freezing_trap.jpg",
+  "crop_box": [
+    82,
+    277,
+    685,
+    880
+  ],
+  "scale": 0.8287671232876714,
+  "offset_x": -68.33000000000004,
+  "offset_y": -229.33041095890428,
+  "timestamp": "2026-08-18T16:09:48.057648"
+}

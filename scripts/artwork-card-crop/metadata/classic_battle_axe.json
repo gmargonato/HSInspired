@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_battle_axe.jpg",
+  "source_name": "classic_battle_axe.jpg",
+  "crop_box": [
+    86,
+    0,
+    1008,
+    922
+  ],
+  "scale": 0.5422993492407809,
+  "offset_x": -46.80794259969968,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T20:01:18.494467",
+  "card_id": "classic_battle_axe",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

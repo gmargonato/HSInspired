@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_corruption.jpg",
+  "source_name": "basic_corruption.jpg",
+  "crop_box": [
+    288,
+    0,
+    1280,
+    992
+  ],
+  "scale": 0.5040322580645161,
+  "offset_x": -145.1612903225806,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:44:29.667586",
+  "card_id": "basic_corruption",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

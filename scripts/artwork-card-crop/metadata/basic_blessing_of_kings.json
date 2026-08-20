@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_blessing_of_kings.jpg",
+  "source_name": "basic_blessing_of_kings.jpg",
+  "crop_box": [
+    194,
+    0,
+    1138,
+    944
+  ],
+  "scale": 0.5296610169491526,
+  "offset_x": -102.82920469361152,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-19T19:57:16.864520",
+  "card_id": "basic_blessing_of_kings",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}
