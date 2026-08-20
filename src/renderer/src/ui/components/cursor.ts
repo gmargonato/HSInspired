@@ -1,10 +1,9 @@
 import defaultCursorImage from '@assets/images/cursor/cursor-base.png'
-import clickCursorImage from '@assets/images/cursor/cursor-click.png'
 import collectionNewPageImage from '@assets/images/cursor/cursor-pass-page.png'
 
 export type CursorVariant =
-  'default' | 'click' | 'collection-next-page' | 'collection-previous-page'
-export type CursorContextVariant = Exclude<CursorVariant, 'default' | 'click'>
+  'default' | 'collection-next-page' | 'collection-previous-page'
+export type CursorContextVariant = Exclude<CursorVariant, 'default'>
 
 /** The standard cursor artwork is 32 CSS pixels at the default scale. */
 export const CURSOR_BASE_SIZE = 32
@@ -45,13 +44,6 @@ const CURSOR_ASSETS: Record<CursorVariant, CursorAsset> = {
     hotspotX: 9,
     hotspotY: 0
   },
-  click: {
-    image: clickCursorImage,
-    width: CURSOR_BASE_SIZE,
-    height: CURSOR_BASE_SIZE,
-    hotspotX: 4,
-    hotspotY: 0
-  },
   'collection-next-page': {
     image: collectionNewPageImage,
     width: 87,
@@ -81,15 +73,9 @@ export function getCursorSize(scale: number): number {
   return CURSOR_BASE_SIZE * normalizeCursorScale(scale)
 }
 
-export function getCursorVariant(leftButtonDown: boolean): CursorVariant {
-  return leftButtonDown ? 'click' : 'default'
-}
-
 export function resolveCursorVariant(
-  leftButtonDown: boolean,
   contextVariant: CursorContextVariant | null = null
 ): CursorVariant {
-  if (leftButtonDown) return 'click'
   return contextVariant ?? 'default'
 }
 
@@ -168,7 +154,7 @@ export class CursorManager {
     this.contextVariant = null
     this.leftButtonDown = false
     this.pointerInsideHost = false
-    this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
+    this.setVariant(resolveCursorVariant(this.contextVariant))
     this.mounted = false
   }
 
@@ -190,7 +176,7 @@ export class CursorManager {
 
   setContextVariant(variant: CursorContextVariant | null): void {
     this.contextVariant = variant
-    this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
+    this.setVariant(resolveCursorVariant(this.contextVariant))
   }
 
   private onPointerMove = (event: PointerEvent): void => {
@@ -225,7 +211,6 @@ export class CursorManager {
 
     this.pointerInsideHost = true
     this.leftButtonDown = true
-    this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
     this.setPointerPosition(event.clientX, event.clientY)
     this.show()
   }
@@ -279,7 +264,6 @@ export class CursorManager {
     if (!this.leftButtonDown) return
 
     this.leftButtonDown = false
-    this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
   }
 
   private isInsideHost(event: Event): boolean {
