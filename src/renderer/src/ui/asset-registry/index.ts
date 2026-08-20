@@ -12,6 +12,7 @@ import collectionBackgroundImage from '@assets/images/ui/collection-background.p
 import collectionCoverImage from '@assets/images/ui/collection-cover.png'
 import collectionCoverLockImage from '@assets/images/ui/collection-cover-lock.png'
 import deckSelectionToCollectionButtonImage from '@assets/images/ui/deck-selection-to-collection-button.png'
+import playButtonImage from '@assets/images/ui/play-button.png'
 import uiBackButtonImage from '@assets/images/ui/ui-back-button.png'
 import uiDoneButtonImage from '@assets/images/ui/ui-done-button.png'
 import loadDeckButtonImage from '@assets/images/ui/load-deck-button.png'
@@ -20,6 +21,20 @@ import newDeckHeroSelectionImage from '@assets/images/ui/new-deck-hero-selection
 import selectClassButtonImage from '@assets/images/ui/select-class-button.png'
 import uiCancelButtonImage from '@assets/images/ui/ui-cancel-button.png'
 import verticalSliderImage from '@assets/images/ui/vertical-slider.png'
+import menuSettingsBackgroundImage from '@assets/images/ui/menu-settings-background.png'
+import gameSettingsBackgroundImage from '@assets/images/ui/game-settings-background.png'
+import gameBoardImage from '@assets/images/game/board.png'
+import gameDeckImage from '@assets/images/game/deck.png'
+import gameEndTurnImage from '@assets/images/game/button-end-my-turn.png'
+import gameEnemyTurnImage from '@assets/images/game/button-enemy-turn.png'
+import gameYourTurnImage from '@assets/images/game/flag-your-turn.png'
+import cardBackImage from '@assets/images/cards/card-back.png'
+import startOfGameVsImage from '@assets/images/ui/start-of-game-vs.png'
+import mulliganAnnouncementImage from '@assets/images/ui/mulligan-announcement.png'
+import mulliganReplaceCrossImage from '@assets/images/ui/mulligan-replace-cross.png'
+import mulliganReplacedLabelImage from '@assets/images/ui/mulligan-replaced-label.png'
+import confirmMulliganButtonImage from '@assets/images/ui/confirm-mulligan-button.png'
+import mulliganCoinAnnouncementImage from '@assets/images/ui/mulligan-coin-announcement.png'
 import manaCrystalImage from '@assets/images/cards/mana.png'
 import searchClearImage from '@assets/images/cards/silence.png'
 import searchNoResultsImage from '@assets/images/ui/search-no-results.png'
@@ -43,6 +58,10 @@ export * from './card-assets'
 export const ASSET_BUNDLE_IDS = {
   mainMenu: 'main-menu',
   deckSelection: 'deck-selection',
+  deckPresentation: 'deck-presentation',
+  game: 'game',
+  menuSettings: 'menu-settings',
+  gameSettings: 'game-settings',
   collection: 'collection',
   sharedUI: 'shared-ui',
   cardRendering: 'card-rendering'
@@ -181,6 +200,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'deck-selection'
   ),
   asset(
+    'scene.deck-selection.play-button',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'playButton',
+    playButtonImage,
+    199,
+    199,
+    'deck-selection'
+  ),
+  asset(
     'scene.collection.background',
     ASSET_BUNDLE_IDS.collection,
     'background',
@@ -188,6 +216,141 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     1920,
     1080,
     'collection'
+  ),
+  asset(
+    'scene.menu-settings.background',
+    ASSET_BUNDLE_IDS.menuSettings,
+    'background',
+    menuSettingsBackgroundImage,
+    1920,
+    1080,
+    'menu-settings'
+  ),
+  asset(
+    'scene.game-settings.background',
+    ASSET_BUNDLE_IDS.gameSettings,
+    'background',
+    gameSettingsBackgroundImage,
+    1920,
+    1080,
+    'game-settings'
+  ),
+  asset(
+    'scene.game.table',
+    ASSET_BUNDLE_IDS.game,
+    'table',
+    tableImage,
+    1920,
+    1080,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board',
+    ASSET_BUNDLE_IDS.game,
+    'board',
+    gameBoardImage,
+    1443,
+    1046,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.deck',
+    ASSET_BUNDLE_IDS.game,
+    'deck',
+    gameDeckImage,
+    83,
+    181,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.end-turn',
+    ASSET_BUNDLE_IDS.game,
+    'endTurn',
+    gameEndTurnImage,
+    157,
+    86,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.enemy-turn',
+    ASSET_BUNDLE_IDS.game,
+    'enemyTurn',
+    gameEnemyTurnImage,
+    158,
+    87,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.your-turn',
+    ASSET_BUNDLE_IDS.game,
+    'yourTurn',
+    gameYourTurnImage,
+    856,
+    345,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.card-back',
+    ASSET_BUNDLE_IDS.game,
+    'cardBack',
+    cardBackImage,
+    620,
+    900,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.start-of-game-vs',
+    ASSET_BUNDLE_IDS.game,
+    'startOfGameVs',
+    startOfGameVsImage,
+    273,
+    279,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.mulligan-announcement',
+    ASSET_BUNDLE_IDS.game,
+    'mulliganAnnouncement',
+    mulliganAnnouncementImage,
+    721,
+    223,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.mulligan-replace-cross',
+    ASSET_BUNDLE_IDS.game,
+    'mulliganReplaceCross',
+    mulliganReplaceCrossImage,
+    210,
+    265,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.mulligan-replaced-label',
+    ASSET_BUNDLE_IDS.game,
+    'mulliganReplacedLabel',
+    mulliganReplacedLabelImage,
+    267,
+    55,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.confirm-mulligan-button',
+    ASSET_BUNDLE_IDS.game,
+    'confirmMulliganButton',
+    confirmMulliganButtonImage,
+    235,
+    127,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.mulligan-coin-announcement',
+    ASSET_BUNDLE_IDS.game,
+    'mulliganCoinAnnouncement',
+    mulliganCoinAnnouncementImage,
+    646,
+    455,
+    'game-scene'
   ),
   asset(
     'scene.collection.cover',
@@ -289,85 +452,85 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'collection'
   ),
   asset(
-    'scene.collection.druid-deck-frame',
-    ASSET_BUNDLE_IDS.collection,
+    'deck-presentation.druid-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
     'druidDeckFrame',
     druidDeckFrameImage,
     239,
     107,
-    'collection'
+    'deck-presentation'
   ),
   asset(
-    'scene.collection.hunter-deck-frame',
-    ASSET_BUNDLE_IDS.collection,
+    'deck-presentation.hunter-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
     'hunterDeckFrame',
     hunterDeckFrameImage,
     239,
     107,
-    'collection'
+    'deck-presentation'
   ),
   asset(
-    'scene.collection.mage-deck-frame',
-    ASSET_BUNDLE_IDS.collection,
+    'deck-presentation.mage-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
     'mageDeckFrame',
     mageDeckFrameImage,
     239,
     107,
-    'collection'
+    'deck-presentation'
   ),
   asset(
-    'scene.collection.paladin-deck-frame',
-    ASSET_BUNDLE_IDS.collection,
+    'deck-presentation.paladin-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
     'paladinDeckFrame',
     paladinDeckFrameImage,
     239,
     107,
-    'collection'
+    'deck-presentation'
   ),
   asset(
-    'scene.collection.priest-deck-frame',
-    ASSET_BUNDLE_IDS.collection,
+    'deck-presentation.priest-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
     'priestDeckFrame',
     priestDeckFrameImage,
     239,
     107,
-    'collection'
+    'deck-presentation'
   ),
   asset(
-    'scene.collection.rogue-deck-frame',
-    ASSET_BUNDLE_IDS.collection,
+    'deck-presentation.rogue-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
     'rogueDeckFrame',
     rogueDeckFrameImage,
     239,
     107,
-    'collection'
+    'deck-presentation'
   ),
   asset(
-    'scene.collection.shaman-deck-frame',
-    ASSET_BUNDLE_IDS.collection,
+    'deck-presentation.shaman-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
     'shamanDeckFrame',
     shamanDeckFrameImage,
     239,
     107,
-    'collection'
+    'deck-presentation'
   ),
   asset(
-    'scene.collection.warlock-deck-frame',
-    ASSET_BUNDLE_IDS.collection,
+    'deck-presentation.warlock-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
     'warlockDeckFrame',
     warlockDeckFrameImage,
     239,
     107,
-    'collection'
+    'deck-presentation'
   ),
   asset(
-    'scene.collection.warrior-deck-frame',
-    ASSET_BUNDLE_IDS.collection,
+    'deck-presentation.warrior-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
     'warriorDeckFrame',
     warriorDeckFrameImage,
     239,
     107,
-    'collection'
+    'deck-presentation'
   ),
   asset(
     'ui.back-button',
@@ -390,7 +553,7 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
   ...Object.entries(HERO_ASSET_SOURCES).map(([key, source]) =>
     asset(
       `hero.${key}`,
-      ASSET_BUNDLE_IDS.collection,
+      ASSET_BUNDLE_IDS.deckPresentation,
       key,
       source,
       345,
@@ -463,6 +626,39 @@ export interface MainMenuAssets {
 export interface DeckSelectionAssets {
   panel: Texture
   toCollectionButton: Texture
+  playButton: Texture
+}
+
+export interface DeckPresentationAssets extends Record<HeroAssetKey, Texture> {
+  druidDeckFrame: Texture
+  hunterDeckFrame: Texture
+  mageDeckFrame: Texture
+  paladinDeckFrame: Texture
+  priestDeckFrame: Texture
+  rogueDeckFrame: Texture
+  shamanDeckFrame: Texture
+  warlockDeckFrame: Texture
+  warriorDeckFrame: Texture
+}
+
+export interface GameAssets {
+  table: Texture
+  board: Texture
+  deck: Texture
+  endTurn: Texture
+  enemyTurn: Texture
+  yourTurn: Texture
+  cardBack: Texture
+  startOfGameVs: Texture
+  mulliganAnnouncement: Texture
+  mulliganReplaceCross: Texture
+  mulliganReplacedLabel: Texture
+  confirmMulliganButton: Texture
+  mulliganCoinAnnouncement: Texture
+}
+
+export interface SettingsBackgroundAssets {
+  background: Texture
 }
 
 export interface SharedUIAssets {
@@ -470,7 +666,7 @@ export interface SharedUIAssets {
   doneButton: Texture
 }
 
-export interface CollectionAssets extends Record<HeroAssetKey, Texture> {
+export interface CollectionAssets {
   background: Texture
   cover: Texture
   coverLock: Texture
@@ -483,13 +679,4 @@ export interface CollectionAssets extends Record<HeroAssetKey, Texture> {
   manaCrystal: Texture
   searchClear: Texture
   searchNoResults: Texture
-  druidDeckFrame: Texture
-  hunterDeckFrame: Texture
-  mageDeckFrame: Texture
-  paladinDeckFrame: Texture
-  priestDeckFrame: Texture
-  rogueDeckFrame: Texture
-  shamanDeckFrame: Texture
-  warlockDeckFrame: Texture
-  warriorDeckFrame: Texture
 }

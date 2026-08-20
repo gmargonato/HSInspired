@@ -74,6 +74,7 @@ async function bootstrap(): Promise<void> {
   const unlockAudio = (): void => audio.unlock()
   let cursor: CursorManager | null = null
   let sceneNavigator: SceneNavigator | null = null
+  let removeSettingsShortcut = (): void => undefined
   let sceneManagerReady = false
   const pendingSceneRequests: SceneRequest[] = []
 
@@ -120,6 +121,17 @@ async function bootstrap(): Promise<void> {
       await game.start(navigator.createInitialScene())
     }
 
+    const handleSettingsShortcut = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.repeat) return
+      if (!navigator.requestSettingsToggle()) return
+
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+    window.addEventListener('keydown', handleSettingsShortcut)
+    removeSettingsShortcut = () =>
+      window.removeEventListener('keydown', handleSettingsShortcut)
+
     sceneManagerReady = true
     for (const request of pendingSceneRequests.splice(0)) {
       navigateSceneRequest(request)
@@ -130,6 +142,7 @@ async function bootstrap(): Promise<void> {
     window.addEventListener(
       'beforeunload',
       () => {
+        removeSettingsShortcut()
         unsubscribeFromSceneMenu()
         app.canvas.removeEventListener('contextmenu', preventContextMenu)
         app.canvas.removeEventListener('pointerdown', unlockAudio, { capture: true })
@@ -139,6 +152,7 @@ async function bootstrap(): Promise<void> {
       { once: true }
     )
   } catch (error) {
+    removeSettingsShortcut()
     unsubscribeFromSceneMenu()
     void audio.dispose()
     cursor?.destroy()

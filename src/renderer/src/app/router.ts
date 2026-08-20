@@ -17,7 +17,7 @@ export type AppRoute =
   | { readonly id: 'deck-selection' }
   | { readonly id: 'collection' }
   | { readonly id: 'new-deck' }
-  /** Reserved contract for the future GameScene; setup is never global state. */
+  /** Complete match setup handed directly to GameScene; setup is never global state. */
   | { readonly id: 'game'; readonly setup: MatchSetup }
   | {
       readonly id: 'card-preview'

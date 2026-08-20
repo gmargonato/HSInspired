@@ -7,6 +7,8 @@ import { CollectionScene } from '../scenes/CollectionScene'
 import { DeckSelectionScene } from '../scenes/DeckSelectionScene'
 import { MainMenuScene } from '../scenes/MainMenuScene'
 import { NewDeckScene } from '../scenes/NewDeckScene'
+import { GameScene } from '../scenes/GameScene'
+import { GameSettingsScene, MenuSettingsScene } from '../scenes/SettingsScenes'
 import { CardViewScene } from '../scenes/CardViewScene'
 import { Scene } from '../scenes/Scene'
 import { SceneManager } from '../scenes/SceneManager'
@@ -45,6 +47,7 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
     ),
   'deck-selection': (_request, dependencies) =>
     new DeckSelectionScene(
+      dependencies.services.deckStore,
       dependencies.router,
       dependencies.services.audio,
       dependencies.services.logger
@@ -78,6 +81,7 @@ export function createScene(
 /** App-level route composition. Scenes only emit typed routes through this port. */
 export class SceneNavigator implements SceneRouter {
   private readonly cardResolver = new CardAssetResolver()
+  private settingsTogglePending = false
 
   constructor(
     private readonly sceneManager: SceneManager,
@@ -121,6 +125,38 @@ export class SceneNavigator implements SceneRouter {
     await this.navigate(route)
   }
 
+  /** Handles settings-only Escape presses without taking over contextual overlays. */
+  requestSettingsToggle(): boolean {
+    const current = this.sceneManager.current
+    let operation: (() => Promise<unknown>) | null = null
+
+    if (current instanceof MenuSettingsScene || current instanceof GameSettingsScene) {
+      operation = () => this.sceneManager.pop()
+    } else if (current instanceof GameScene) {
+      operation = () => this.sceneManager.push(new GameSettingsScene())
+    } else if (
+      current instanceof MainMenuScene ||
+      current instanceof DeckSelectionScene ||
+      current instanceof CollectionScene ||
+      current instanceof NewDeckScene
+    ) {
+      operation = () => this.sceneManager.push(new MenuSettingsScene())
+    }
+
+    if (!operation) return false
+    if (this.settingsTogglePending) return true
+
+    this.settingsTogglePending = true
+    void operation()
+      .catch((error: unknown) => {
+        this.services.logger.error('Failed to toggle the settings overlay.', error)
+      })
+      .finally(() => {
+        this.settingsTogglePending = false
+      })
+    return true
+  }
+
   private createTransitionOptions(
     route: AppRoute,
     scene: Scene
@@ -131,7 +167,9 @@ export class SceneNavigator implements SceneRouter {
         ? () => scene.playCoverReveal()
         : scene instanceof NewDeckScene
           ? () => scene.open()
-          : undefined
+          : scene instanceof GameScene
+            ? () => scene.playOpeningReveal()
+            : undefined
 
     if (
       route.id === 'main-menu' &&
@@ -160,7 +198,10 @@ export class SceneNavigator implements SceneRouter {
       }
     }
 
-    if (previous instanceof DeckSelectionScene && route.id === 'collection') {
+    if (
+      previous instanceof DeckSelectionScene &&
+      (route.id === 'collection' || route.id === 'game')
+    ) {
       return {
         inset: FULL_VIEWPORT,
         mode: 'fade',
@@ -188,7 +229,12 @@ export class SceneNavigator implements SceneRouter {
           this.services.logger
         )
       case 'deck-selection':
-        return new DeckSelectionScene(this, this.services.audio, this.services.logger)
+        return new DeckSelectionScene(
+          this.services.deckStore,
+          this,
+          this.services.audio,
+          this.services.logger
+        )
       case 'collection':
         return new CollectionScene(
           this.services.deckStore,
@@ -204,8 +250,11 @@ export class SceneNavigator implements SceneRouter {
           this.services.logger
         )
       case 'game':
-        throw new Error(
-          `GameScene is not implemented yet; received setup for ${route.setup.participants.length} participants.`
+        return new GameScene(
+          route,
+          this.services.deckStore,
+          this.services.audio,
+          this.services.logger
         )
       case 'card-preview':
         return new CardViewScene({

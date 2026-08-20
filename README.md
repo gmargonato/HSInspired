@@ -2,8 +2,8 @@
 
 HSInspired is an Electron, TypeScript, and PixiJS card-game shell. The current
 scope establishes production content, deck persistence, renderer composition,
-and a headless match boundary. It does not implement a `GameScene` or gameplay
-rules yet.
+and the first playable Game Scene opening sequence. Card play and full gameplay
+rules remain future work.
 
 ## Setup and commands
 
@@ -74,6 +74,6 @@ version 1 deck files are migrated, while unsupported files are backed up before
 a replacement version 2 file is initialized.
 
 `MatchSetup` contains exactly two participant setups and an optional seed. The
-headless proof exercises serializable state, an accepted command with multiple
-ordered events, explicit rejection without mutation, and deterministic seeded
-randomness. See [docs/MATCH.md](docs/MATCH.md).
+opening match boundary now deals the Hearthstone opening hands, accepts
+mulligan confirmations, grants the second player the Coin, and emits the first
+turn draw as ordered serializable events. See [docs/MATCH.md](docs/MATCH.md).

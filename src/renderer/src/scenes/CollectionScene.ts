@@ -18,6 +18,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../app/config'
 import {
   ASSET_BUNDLE_IDS,
   CollectionAssets,
+  DeckPresentationAssets,
   SharedUIAssets
 } from '../ui/asset-registry'
 import type { CursorContextVariant } from '../ui/components/cursor'
@@ -192,8 +193,11 @@ const FULL_VIEWPORT = {
   height: GAME_HEIGHT
 }
 
-type CollectionDeckAssetKey =
-  'loadDeckButton' | 'newDeckButton' | 'verticalSlider' | DeckFrameAssetKey
+type CollectionDeckAssets = Pick<
+  CollectionAssets,
+  'loadDeckButton' | 'newDeckButton' | 'verticalSlider'
+> &
+  Pick<DeckPresentationAssets, DeckFrameAssetKey>
 
 /** Full-viewport collection scene presented through the main menu transition. */
 export class CollectionScene extends Scene {
@@ -243,7 +247,7 @@ export class CollectionScene extends Scene {
   private deckEditorCardPreview: CardView | null = null
   private deckEditorCardPreviewRequest = 0
   private unsubscribeDeckStore: (() => void) | null = null
-  private deckAssets!: Pick<CollectionAssets, CollectionDeckAssetKey>
+  private deckAssets!: CollectionDeckAssets
   private collectionFilterLayer!: Container
   private emptyStateImage!: Sprite
   private searchInput: CollectionSearchInput | null = null
@@ -306,6 +310,10 @@ export class CollectionScene extends Scene {
     const sharedAssets = await this.assetScope.acquire<SharedUIAssets>(
       ASSET_BUNDLE_IDS.sharedUI
     )
+    const deckPresentationAssets =
+      await this.assetScope.acquire<DeckPresentationAssets>(
+        ASSET_BUNDLE_IDS.deckPresentation
+      )
 
     this.background = new Sprite(assets.background)
     this.background.width = GAME_WIDTH
@@ -404,7 +412,7 @@ export class CollectionScene extends Scene {
     await this.deckController.load()
     await this.waitForFonts()
     this.createCollectionFilters(assets)
-    this.createDeckList(assets)
+    this.createDeckList(assets, deckPresentationAssets)
     this.createDeckEditor(assets, sharedAssets)
     this.createCollectionBackButton(sharedAssets)
     this.newDeckScene = new NewDeckView(
@@ -770,8 +778,11 @@ export class CollectionScene extends Scene {
     this.pageLabel.text = `Page ${page.pageNumber}`
   }
 
-  private createDeckList(assets: CollectionAssets): void {
-    this.deckAssets = assets
+  private createDeckList(
+    assets: CollectionAssets,
+    deckPresentationAssets: DeckPresentationAssets
+  ): void {
+    this.deckAssets = { ...assets, ...deckPresentationAssets }
 
     this.deckMask = new Graphics()
       .rect(0, 0, Layout.deckList.width, Layout.deckList.height)

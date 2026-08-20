@@ -33,4 +33,31 @@ describe('runtime asset registry', () => {
       expect(resolveAssetDefinition(`hero.${hero.presentationAssetKey}`)).toBeDefined()
     }
   })
+
+  it('registers the complete game-opening asset set with the game bundle', () => {
+    for (const key of [
+      'scene.game.card-back',
+      'scene.game.start-of-game-vs',
+      'scene.game.mulligan-announcement',
+      'scene.game.mulligan-replace-cross',
+      'scene.game.mulligan-replaced-label',
+      'scene.game.confirm-mulligan-button',
+      'scene.game.mulligan-coin-announcement'
+    ]) {
+      expect(resolveAssetDefinition(key).bundle).toBe('game')
+    }
+  })
+
+  it('registers both settings backgrounds in separate lazy bundles', () => {
+    expect(resolveAssetDefinition('scene.menu-settings.background')).toMatchObject({
+      bundle: 'menu-settings',
+      authoredWidth: 1920,
+      authoredHeight: 1080
+    })
+    expect(resolveAssetDefinition('scene.game-settings.background')).toMatchObject({
+      bundle: 'game-settings',
+      authoredWidth: 1920,
+      authoredHeight: 1080
+    })
+  })
 })

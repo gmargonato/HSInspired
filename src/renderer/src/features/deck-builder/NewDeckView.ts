@@ -1,7 +1,11 @@
 import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
 import { Button } from '../../ui/components/Button'
-import { ASSET_BUNDLE_IDS, type CollectionAssets } from '../../ui/asset-registry'
+import {
+  ASSET_BUNDLE_IDS,
+  type CollectionAssets,
+  type DeckPresentationAssets
+} from '../../ui/asset-registry'
 import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
 import type { AudioService } from '../../app/audio'
 import type { AppLogger } from '../../app/services'
@@ -42,7 +46,7 @@ export class NewDeckView extends Container {
   private readonly animationScope = new AnimationScope()
   private readonly assetScope = new AssetScope()
 
-  private collectionAssets!: CollectionAssets
+  private deckPresentationAssets!: DeckPresentationAssets
   private selectionLayer!: Container
   private selectionContent!: Container
   private selectionBackground!: Sprite
@@ -80,8 +84,10 @@ export class NewDeckView extends Container {
     const assets = await this.assetScope.acquire<CollectionAssets>(
       ASSET_BUNDLE_IDS.collection
     )
+    this.deckPresentationAssets = await this.assetScope.acquire<DeckPresentationAssets>(
+      ASSET_BUNDLE_IDS.deckPresentation
+    )
 
-    this.collectionAssets = assets
     this.createSelection(assets)
     this.visible = false
   }
@@ -148,7 +154,7 @@ export class NewDeckView extends Container {
     this.selectionContent.addChild(this.heroName)
 
     for (const [index, heroClass] of PLAYABLE_CLASSES.entries()) {
-      const texture = assets[DECK_FRAME_ASSET_KEYS[heroClass]]
+      const texture = this.deckPresentationAssets[DECK_FRAME_ASSET_KEYS[heroClass]]
       const button = new Button(texture, {
         pressSound: 'collection-select-hero',
         audio: this.audio,
@@ -246,7 +252,7 @@ export class NewDeckView extends Container {
     if (!hero) return
 
     this.selectedHero = hero
-    this.heroPortrait.texture = this.collectionAssets[hero.presentationAssetKey]
+    this.heroPortrait.texture = this.deckPresentationAssets[hero.presentationAssetKey]
     this.heroPortrait.visible = true
     this.heroName.text = hero.displayName
     this.heroName.visible = true
