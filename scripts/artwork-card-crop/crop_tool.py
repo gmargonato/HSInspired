@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import math
 from pathlib import Path
 import re
 import tkinter as tk
@@ -76,11 +77,13 @@ FALLBACK_FRAME_TYPES = ("Minion", "Spell", "Weapon", "Hero")
 
 CANVAS_BG = "#202020"
 PREPARED_FG = "#ff9800"
-EXPORTED_FG = "#2e7d32"
-UNMATCHED_FG = "#c62828"
+FIXED_FG = "#2e7d32"
+NEEDS_FIX_FG = "#c62828"
+UNMATCHED_FG = "#7b1fa2"
 PREPARED_PREFIX = "[*] "
-EXPORTED_PREFIX = "[x] "
-UNMATCHED_PREFIX = "! "
+FIXED_PREFIX = "[x] "
+NEEDS_FIX_PREFIX = "[ ] "
+UNMATCHED_PREFIX = "[!] "
 WINDOW_TITLE = "Card Art Cropper - 500x500 Artwork + Card Preview"
 # ===========================================================================
 
@@ -147,7 +150,32 @@ def visible_source_box(
 def crop_to_artwork(
     image: Image.Image, crop_box: tuple[int, int, int, int]
 ) -> Image.Image:
-    return image.crop(crop_box).resize((CROP_SIZE, CROP_SIZE), Image.Resampling.LANCZOS)
+    width, height = image.size
+    left, top, right, bottom = clamp_crop_box(crop_box, width, height)
+    return image.crop((left, top, right, bottom)).resize(
+        (CROP_SIZE, CROP_SIZE), Image.Resampling.LANCZOS
+    )
+
+
+def clamp_crop_box(
+    crop_box: tuple[int, int, int, int], width: int, height: int
+) -> tuple[int, int, int, int]:
+    """Keep a crop inside the current source image.
+
+    Pillow intentionally pads crops that extend outside an image. That is
+    useful in some image-processing workflows, but it produces black borders
+    for this tool. Exported artwork must always be made from real source
+    pixels, so invalid coordinates are clamped before cropping.
+    """
+    if width < 1 or height < 1:
+        raise ValueError("source image has no pixels")
+
+    left, top, right, bottom = crop_box
+    left = max(0, min(int(left), width - 1))
+    top = max(0, min(int(top), height - 1))
+    right = max(left + 1, min(int(right), width))
+    bottom = max(top + 1, min(int(bottom), height))
+    return left, top, right, bottom
 
 
 def compose_card_preview(
@@ -435,13 +463,102 @@ def has_prepared_metadata(
     return metadata_path(image_path, meta_folder).exists()
 
 
+def image_size(image_path: Path) -> tuple[int, int] | None:
+    """Read an image's dimensions without keeping the file open."""
+    try:
+        with Image.open(image_path) as image:
+            return image.size
+    except (OSError, ValueError):
+        return None
+
+
+def has_exact_artwork_size(image_path: Path) -> bool:
+    """Return whether an input or output image is already 500x500."""
+    return image_size(image_path) == (CROP_SIZE, CROP_SIZE)
+
+
 def artwork_output_path(image_path: Path, output_folder: Path) -> Path:
     return output_folder / f"{image_path.stem}.jpg"
 
 
+def artwork_output_candidates(image_path: Path, output_folder: Path) -> tuple[Path, ...]:
+    """Return legacy and canonical output names for one source image."""
+    candidates = (
+        output_folder / image_path.name,
+        artwork_output_path(image_path, output_folder),
+    )
+    return tuple(dict.fromkeys(candidates))
+
+
+def has_fixed_output(image_path: Path, output_folder: Path) -> bool:
+    """Return whether an exported candidate has the required 500x500 size."""
+    return any(
+        has_exact_artwork_size(candidate)
+        for candidate in artwork_output_candidates(image_path, output_folder)
+    )
+
+
+def has_any_output(image_path: Path, output_folder: Path) -> bool:
+    """Return whether any output file exists, regardless of its dimensions."""
+    return any(
+        candidate.exists()
+        for candidate in artwork_output_candidates(image_path, output_folder)
+    )
+
+
 def has_exported_output(image_path: Path, output_folder: Path) -> bool:
-    current_name = output_folder / image_path.name
-    return current_name.exists() or artwork_output_path(image_path, output_folder).exists()
+    """Return whether an exported output is a valid 500x500 artwork."""
+    return has_fixed_output(image_path, output_folder)
+
+
+def has_fixed_artwork(image_path: Path, output_folder: Path) -> bool:
+    """Return whether the source or its exported result is already 500x500."""
+    return has_exact_artwork_size(image_path) or has_exported_output(
+        image_path, output_folder
+    )
+
+
+def crop_box_from_metadata(
+    metadata: dict[str, Any], width: int, height: int
+) -> tuple[int, int, int, int]:
+    """Resolve crop metadata against the current source dimensions.
+
+    Older metadata can refer to a larger source file that has since been
+    replaced by a 500x500 asset. In that case the stored ``crop_box`` is no
+    longer authoritative. Reconstructing the box from the saved view scale
+    and offset keeps the crop inside the current image and avoids Pillow's
+    out-of-bounds black padding. The raw box remains a fallback for older
+    metadata that predates scale/offset fields.
+    """
+    try:
+        scale = float(metadata["scale"])
+        offset_x = float(metadata["offset_x"])
+        offset_y = float(metadata["offset_y"])
+        if (
+            math.isfinite(scale)
+            and math.isfinite(offset_x)
+            and math.isfinite(offset_y)
+            and scale > 0
+        ):
+            scale = max(scale, cover_fit_scale(width, height))
+            offset_x, offset_y = clamp_offset(
+                offset_x, offset_y, scale, width, height
+            )
+            return visible_source_box(
+                offset_x, offset_y, scale, width, height
+            )
+    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        pass
+
+    raw_box = metadata.get("crop_box")
+    if isinstance(raw_box, (list, tuple)) and len(raw_box) == 4:
+        try:
+            return clamp_crop_box(
+                tuple(int(value) for value in raw_box), width, height
+            )
+        except (TypeError, ValueError, OverflowError):
+            pass
+    raise ValueError("metadata has no usable crop coordinates")
 
 
 class CropToolApp:
@@ -477,6 +594,8 @@ class CropToolApp:
         self.frame_folder_var = tk.StringVar(value=str(self.frame_folder))
         self.fallback_frame_var = tk.StringVar(value=FALLBACK_FRAME_TYPES[0])
         self.search_var = tk.StringVar()
+        self.show_fixed_var = tk.BooleanVar(value=True)
+        self.show_needs_fix_var = tk.BooleanVar(value=True)
         self.collections_summary_var = tk.StringVar()
         self.card_info_var = tk.StringVar(value="Select an artwork file to preview it.")
         self.status_var = tk.StringVar(value="Loading...")
@@ -544,14 +663,14 @@ class CropToolApp:
             anchor="w",
         ).grid(row=4, column=1, sticky="ew", padx=4, pady=4)
         ttk.Button(
-            config_frame, text="Load JSONs...", command=self._choose_collections
+            config_frame, text="Choose card JSONs...", command=self._choose_collections
         ).grid(row=4, column=2, padx=4, pady=4)
         ttk.Button(
-            config_frame, text="Clear", command=self._clear_collections
+            config_frame, text="Clear card JSONs", command=self._clear_collections
         ).grid(row=4, column=3, padx=(0, 8), pady=4)
 
         ttk.Button(
-            config_frame, text="Apply / Reload", command=self._apply_configuration
+            config_frame, text="Apply folder changes", command=self._apply_configuration
         ).grid(row=5, column=3, padx=(0, 8), pady=(2, 8), sticky="e")
 
         main_frame = ttk.Frame(self.root)
@@ -565,14 +684,50 @@ class CropToolApp:
         ttk.Label(search_frame, text="Search:").pack(side=tk.LEFT, padx=(0, 4))
         search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
         search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(
+            search_frame, text="Clear search", command=self._clear_search
+        ).pack(side=tk.LEFT, padx=(4, 0))
         search_entry.bind("<KeyRelease>", self._on_search_changed)
         search_entry.bind("<Escape>", self._clear_search)
         self.search_entry = search_entry
 
+        filter_frame = ttk.Frame(self.list_frame)
+        filter_frame.pack(side=tk.TOP, fill=tk.X, padx=4, pady=(4, 0))
+        ttk.Label(filter_frame, text="Show:").pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Checkbutton(
+            filter_frame,
+            text="Fixed (500x500)",
+            variable=self.show_fixed_var,
+            command=self._on_status_filter_changed,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Checkbutton(
+            filter_frame,
+            text="Needs fixing",
+            variable=self.show_needs_fix_var,
+            command=self._on_status_filter_changed,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(
+            filter_frame, text="Show all", command=self._show_all_statuses
+        ).pack(side=tk.RIGHT)
+
+        legend_frame = ttk.Frame(self.list_frame)
+        legend_frame.pack(side=tk.TOP, fill=tk.X, padx=4, pady=(4, 0))
+        for prefix, label, color in (
+            (FIXED_PREFIX, "Fixed", FIXED_FG),
+            (PREPARED_PREFIX, "Saved crop", PREPARED_FG),
+            (NEEDS_FIX_PREFIX, "Needs fixing", NEEDS_FIX_FG),
+            (UNMATCHED_PREFIX, "No card match", UNMATCHED_FG),
+        ):
+            ttk.Label(
+                legend_frame,
+                text=f"{prefix}{label}",
+                foreground=color,
+            ).pack(side=tk.LEFT, padx=(0, 7))
+
         self.tree = ttk.Treeview(
             self.list_frame, show="tree", selectmode="browse", height=24
         )
-        self.tree.column("#0", width=300, minwidth=220, stretch=True)
+        self.tree.column("#0", width=340, minwidth=240, stretch=True)
         ttk.Style().configure("Treeview", rowheight=THUMBNAIL_SIZE + 8)
         self.tree.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=(4, 0), pady=4)
 
@@ -589,14 +744,20 @@ class CropToolApp:
         toolbar = ttk.Frame(right_frame)
         toolbar.pack(side=tk.TOP, fill=tk.X, pady=(0, 8))
 
-        ttk.Button(toolbar, text="Reset View", command=self._reset_view).pack(
+        ttk.Button(toolbar, text="Reset crop", command=self._reset_view).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="Save crop", command=self._on_save).pack(
             side=tk.LEFT, padx=4
         )
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(
             side=tk.LEFT, padx=8, fill=tk.Y
         )
         ttk.Button(
-            toolbar, text="Export Prepared", command=self._on_export_all
+            toolbar, text="Export saved crops", command=self._on_export_all
+        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(
+            toolbar, text="Refresh status", command=self._refresh_status
         ).pack(side=tk.LEFT, padx=4)
 
         preview_area = ttk.Frame(right_frame)
@@ -633,7 +794,6 @@ class CropToolApp:
         self.root.bind("<Control-S>", self._on_save)
         self.root.bind("<Control-f>", self._focus_search)
         self.root.bind("<Control-F>", self._focus_search)
-        self.root.bind("<Return>", self._on_save)
 
     def _add_path_row(
         self,
@@ -735,6 +895,19 @@ class CropToolApp:
     def _on_search_changed(self, _event: tk.Event | None = None) -> None:
         self._rebuild_file_tree()
 
+    def _on_status_filter_changed(self) -> None:
+        self._rebuild_file_tree()
+
+    def _show_all_statuses(self) -> None:
+        self.show_fixed_var.set(True)
+        self.show_needs_fix_var.set(True)
+        self._rebuild_file_tree()
+
+    def _refresh_status(self) -> None:
+        """Rescan output/metadata state without changing the current crop."""
+        self._rebuild_file_tree()
+        self._update_status_bar()
+
     def _update_collection_summary(self) -> None:
         if not self.collection_paths:
             self.collections_summary_var.set("No collection JSONs loaded")
@@ -767,6 +940,7 @@ class CropToolApp:
             return
 
         source_changed = new_source != self.source_folder
+        output_changed = new_output != self.output_folder
         frame_changed = new_frame != self.frame_folder
         self.output_folder = new_output
         self.frame_folder = new_frame
@@ -779,10 +953,12 @@ class CropToolApp:
                 self._save_metadata()
             self.source_folder = new_source
             self._reload_source_files()
+        elif output_changed:
+            self._rebuild_file_tree()
         else:
             self._refresh_tree_states()
-            if self.current_path is not None:
-                self._redraw_canvas()
+        if not source_changed and self.current_path is not None:
+            self._redraw_canvas()
         self._update_status_bar()
 
     def _reload_source_files(self) -> None:
@@ -799,11 +975,18 @@ class CropToolApp:
 
     def _filtered_source_files(self) -> list[Path]:
         query = normalize_match_text(self.search_var.get())
-        if not query:
-            return list(self.source_list)
-
         visible: list[Path] = []
         for path in self.source_list:
+            is_fixed = has_fixed_artwork(path, self.output_folder)
+            if is_fixed and not self.show_fixed_var.get():
+                continue
+            if not is_fixed and not self.show_needs_fix_var.get():
+                continue
+
+            if not query:
+                visible.append(path)
+                continue
+
             card = self._card_record_for_path(path)
             searchable_values = [path.stem, display_name_from_stem(path.stem)]
             if card is not None:
@@ -829,8 +1012,9 @@ class CropToolApp:
             self.tree.see(str(selected_path))
 
     def _load_thumbnails(self) -> None:
-        self.tree.tag_configure("exported", foreground=EXPORTED_FG)
+        self.tree.tag_configure("fixed", foreground=FIXED_FG)
         self.tree.tag_configure("prepared", foreground=PREPARED_FG)
+        self.tree.tag_configure("needs_fix", foreground=NEEDS_FIX_FG)
         self.tree.tag_configure("unmatched", foreground=UNMATCHED_FG)
         self.visible_source_list = self._filtered_source_files()
 
@@ -844,13 +1028,17 @@ class CropToolApp:
                     f"Loaded thumbnails: {index + 1}/{len(self.visible_source_list)}"
                 )
                 self.root.update()
-        query = self.search_var.get().strip()
-        title = (
-            f"Artwork files ({len(self.visible_source_list)}/{self.total_files})"
-            if query
-            else f"Artwork files ({self.total_files})"
-        )
+        title = f"Artwork files ({len(self.visible_source_list)}/{self.total_files})"
         self.list_frame.configure(text=title)
+
+    def _status_for_path(self, path: Path) -> str:
+        if has_fixed_artwork(path, self.output_folder):
+            return "fixed"
+        if has_prepared_metadata(path, self.metadata_folder):
+            return "prepared"
+        if self.card_records and self._card_record_for_path(path) is None:
+            return "unmatched"
+        return "needs_fix"
 
     def _card_record_for_path(self, path: Path) -> CollectionRecord | None:
         direct_match = self.card_records.get(normalize_card_id(path.stem))
@@ -870,18 +1058,16 @@ class CropToolApp:
         )
 
     def _update_tree_row(self, path: Path, insert: bool = False) -> None:
-        if has_exported_output(path, self.output_folder):
-            tags = ("exported",)
-            text = EXPORTED_PREFIX + path.name
-        elif has_prepared_metadata(path, self.metadata_folder):
-            tags = ("prepared",)
-            text = PREPARED_PREFIX + path.name
-        elif self.card_records and self._card_record_for_path(path) is None:
-            tags = ("unmatched",)
-            text = UNMATCHED_PREFIX + path.name
-        else:
-            tags = ()
-            text = path.name
+        status = self._status_for_path(path)
+        status_details = {
+            "fixed": ("fixed", FIXED_PREFIX),
+            "prepared": ("prepared", PREPARED_PREFIX),
+            "unmatched": ("unmatched", UNMATCHED_PREFIX),
+            "needs_fix": ("needs_fix", NEEDS_FIX_PREFIX),
+        }
+        tag, prefix = status_details[status]
+        tags = (tag,)
+        text = prefix + path.name
 
         iid = str(path)
         if insert:
@@ -1089,26 +1275,42 @@ class CropToolApp:
             self._card_canvas_image_id, image=self._current_card_photo
         )
 
+        source_details = f"Source: {width}x{height}"
+        if has_fixed_output(self.current_path, self.output_folder):
+            output_details = "Output: 500x500"
+        elif has_any_output(self.current_path, self.output_folder):
+            output_details = "Output exists but is not 500x500"
+        else:
+            output_details = "Output: not exported"
+
         if card is None:
             self.card_info_var.set(
                 f"No collection match for {self.current_path.stem}\n"
-                f"{frame_error or 'Showing the fallback frame.'}"
+                f"{frame_error or 'Showing the fallback frame.'}\n"
+                f"{source_details}  |  {output_details}"
             )
         else:
             card_name = card.get("name", self.current_path.stem)
             card_type = card.get("type", "Unknown type")
             if frame_error:
-                self.card_info_var.set(f"{card_name} - {card_type}\n{frame_error}")
+                self.card_info_var.set(
+                    f"{card_name} - {card_type}\n{frame_error}\n"
+                    f"{source_details}  |  {output_details}"
+                )
             else:
                 self.card_info_var.set(
                     f"{card_name} - {card_type}\n"
-                    f"Frame: {frame_filename_for_card(card)}"
+                    f"Frame: {frame_filename_for_card(card)}\n"
+                    f"{source_details}  |  {output_details}"
                 )
         self._update_status_bar()
 
     def _update_status_bar(self) -> None:
+        fixed = sum(
+            1 for path in self.source_list if has_fixed_artwork(path, self.output_folder)
+        )
         exported = sum(
-            1 for path in self.source_list if has_exported_output(path, self.output_folder)
+            1 for path in self.source_list if has_fixed_output(path, self.output_folder)
         )
         prepared = sum(
             1
@@ -1118,8 +1320,9 @@ class CropToolApp:
         collection_text = f"Cards: {len(self.card_records)}"
         if self.current_path is None or self.current_image is None:
             self.status_var.set(
-                f"Exported: {exported}/{self.total_files}  |  "
-                f"Prepared: {prepared}/{self.total_files}  |  {collection_text}"
+                f"Fixed: {fixed}/{self.total_files}  |  "
+                f"Exported 500x500: {exported}/{self.total_files}  |  "
+                f"Saved crops: {prepared}/{self.total_files}  |  {collection_text}"
             )
             return
 
@@ -1128,8 +1331,9 @@ class CropToolApp:
         zoom_pct = round(self.scale / cover * 100)
         dirty_indicator = " *" if self._is_dirty else ""
         self.status_var.set(
-            f"Exported: {exported}/{self.total_files}  |  "
-            f"Prepared: {prepared}/{self.total_files}  |  {collection_text}  |  "
+            f"Fixed: {fixed}/{self.total_files}  |  "
+            f"Exported 500x500: {exported}/{self.total_files}  |  "
+            f"Saved crops: {prepared}/{self.total_files}  |  {collection_text}  |  "
             f"{self.current_path.name}{dirty_indicator}  |  Zoom: {zoom_pct}%"
         )
 
@@ -1175,7 +1379,7 @@ class CropToolApp:
             if has_prepared_metadata(path, self.metadata_folder)
         ]
         if not prepared_files:
-            self.status_var.set("No prepared images to export.")
+            self.status_var.set("No saved crops to export.")
             return
 
         try:
@@ -1189,18 +1393,16 @@ class CropToolApp:
 
         self.output_folder.mkdir(parents=True, exist_ok=True)
         exported_count = 0
+        failed_files: list[str] = []
 
         for index, path in enumerate(prepared_files):
             try:
                 meta = load_crop_metadata(path, self.metadata_folder)
                 if not meta:
                     continue
-                raw_box = meta.get("crop_box")
-                if not isinstance(raw_box, (list, tuple)) or len(raw_box) != 4:
-                    raise ValueError("metadata has no valid crop_box")
-                crop_box = tuple(int(value) for value in raw_box)
 
                 with Image.open(path) as source:
+                    crop_box = crop_box_from_metadata(meta, *source.size)
                     artwork = crop_to_artwork(source.convert("RGB"), crop_box)
                     artwork.save(
                         artwork_output_path(path, self.output_folder),
@@ -1209,7 +1411,6 @@ class CropToolApp:
                     )
                 exported_count += 1
 
-                self._update_tree_row(path)
                 if (index + 1) % max(1, len(prepared_files) // 10) == 0:
                     self.status_var.set(
                         f"Exporting... {index + 1}/{len(prepared_files)}"
@@ -1218,12 +1419,16 @@ class CropToolApp:
 
             except Exception as error:
                 print(f"Error exporting {path.name}: {error}")
+                failed_files.append(path.name)
                 continue
 
         message = (
             f"Exported {exported_count}/{len(prepared_files)} artwork files to "
             f"{self.output_folder}."
         )
+        if failed_files:
+            message += f" Failed: {len(failed_files)}. See the console for details."
+        self._rebuild_file_tree()
         self._update_status_bar()
         self.status_var.set(message)
 

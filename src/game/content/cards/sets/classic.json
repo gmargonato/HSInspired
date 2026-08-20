@@ -169,6 +169,7 @@
   },
   {
     "id": "classic_ancient_secrets",
+    "collectible": false,
     "name": "Ancient Secrets",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -181,6 +182,7 @@
   },
   {
     "id": "classic_ancient_teachings",
+    "collectible": false,
     "name": "Ancient Teachings",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -313,6 +315,7 @@
   },
   {
     "id": "classic_ashbringer",
+    "collectible": false,
     "name": "Ashbringer",
     "rarity": "Legendary",
     "cardClass": "Paladin",
@@ -361,6 +364,7 @@
   },
   {
     "id": "classic_baine_bloodhoof",
+    "collectible": false,
     "name": "Baine Bloodhoof",
     "rarity": "Legendary",
     "cardClass": "Neutral",
@@ -373,6 +377,7 @@
   },
   {
     "id": "classic_bananas",
+    "collectible": false,
     "name": "Bananas",
     "rarity": "None",
     "cardClass": "Neutral",
@@ -409,6 +414,7 @@
   },
   {
     "id": "classic_barrel",
+    "collectible": false,
     "name": "Barrel",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -421,6 +427,7 @@
   },
   {
     "id": "classic_barrel_toss",
+    "collectible": false,
     "name": "Barrel Toss",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -433,6 +440,7 @@
   },
   {
     "id": "classic_battle_axe",
+    "collectible": false,
     "name": "Battle Axe",
     "rarity": "None",
     "cardClass": "Warrior",
@@ -457,6 +465,7 @@
   },
   {
     "id": "classic_bear_form",
+    "collectible": false,
     "name": "Bear Form",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -565,6 +574,7 @@
   },
   {
     "id": "classic_blood_fury",
+    "collectible": false,
     "name": "Blood Fury",
     "rarity": "Common",
     "cardClass": "Warlock",
@@ -637,6 +647,7 @@
   },
   {
     "id": "classic_boar",
+    "collectible": false,
     "name": "Boar",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -661,6 +672,7 @@
   },
   {
     "id": "classic_brewmaster",
+    "collectible": false,
     "name": "Brewmaster",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -733,6 +745,7 @@
   },
   {
     "id": "classic_chicken",
+    "collectible": false,
     "name": "Chicken",
     "rarity": "None",
     "cardClass": "Neutral",
@@ -853,6 +866,7 @@
   },
   {
     "id": "classic_crazed_hunter",
+    "collectible": false,
     "name": "Crazed Hunter",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -865,6 +879,7 @@
   },
   {
     "id": "classic_crazy_monkey",
+    "collectible": false,
     "name": "Crazy Monkey",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -901,6 +916,7 @@
   },
   {
     "id": "classic_damaged_golem",
+    "collectible": false,
     "name": "Damaged Golem",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -949,6 +965,7 @@
   },
   {
     "id": "classic_defender",
+    "collectible": false,
     "name": "Defender",
     "rarity": "Common",
     "cardClass": "Paladin",
@@ -973,6 +990,7 @@
   },
   {
     "id": "classic_defias_bandit",
+    "collectible": false,
     "name": "Defias Bandit",
     "rarity": "Common",
     "cardClass": "Rogue",
@@ -1021,6 +1039,7 @@
   },
   {
     "id": "classic_devilsaur",
+    "collectible": false,
     "name": "Devilsaur",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1045,6 +1064,7 @@
   },
   {
     "id": "classic_dispel",
+    "collectible": false,
     "name": "Dispel",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -1129,6 +1149,7 @@
   },
   {
     "id": "classic_dual_warglaives",
+    "collectible": false,
     "name": "Dual Warglaives",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1213,6 +1234,7 @@
   },
   {
     "id": "classic_emboldener_3000",
+    "collectible": false,
     "name": "Emboldener 3000",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1225,6 +1247,7 @@
   },
   {
     "id": "classic_emerald_drake",
+    "collectible": false,
     "name": "Emerald Drake",
     "rarity": "Dream",
     "cardClass": "Neutral",
@@ -1393,6 +1416,7 @@
   },
   {
     "id": "classic_finkle_einhorn",
+    "collectible": false,
     "name": "Finkle Einhorn",
     "rarity": "Legendary",
     "cardClass": "Neutral",
@@ -1405,6 +1429,7 @@
   },
   {
     "id": "classic_flame_burst",
+    "collectible": false,
     "name": "Flame Burst",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1429,6 +1454,7 @@
   },
   {
     "id": "classic_flame_of_azzinoth",
+    "collectible": false,
     "name": "Flame of Azzinoth",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1501,6 +1527,7 @@
   },
   {
     "id": "classic_frog",
+    "collectible": false,
     "name": "Frog",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1561,6 +1588,7 @@
   },
   {
     "id": "classic_gnoll",
+    "collectible": false,
     "name": "Gnoll",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1657,6 +1685,7 @@
   },
   {
     "id": "classic_hidden_gnome",
+    "collectible": false,
     "name": "Hidden Gnome",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1681,6 +1710,7 @@
   },
   {
     "id": "classic_hogger_smash",
+    "collectible": false,
     "name": "Hogger SMASH!",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1729,6 +1759,7 @@
   },
   {
     "id": "classic_homing_chicken",
+    "collectible": false,
     "name": "Homing Chicken",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -1753,6 +1784,7 @@
   },
   {
     "id": "classic_hyena",
+    "collectible": false,
     "name": "Hyena",
     "rarity": "Rare",
     "cardClass": "Hunter",
@@ -1813,6 +1845,7 @@
   },
   {
     "id": "classic_imp",
+    "collectible": false,
     "name": "Imp",
     "rarity": "Rare",
     "cardClass": "Neutral",
@@ -1837,6 +1870,7 @@
   },
   {
     "id": "classic_infernal",
+    "collectible": false,
     "name": "Infernal",
     "rarity": "Common",
     "cardClass": "Warlock",
@@ -2017,6 +2051,7 @@
   },
   {
     "id": "classic_laughing_sister",
+    "collectible": false,
     "name": "Laughing Sister",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -2065,6 +2100,7 @@
   },
   {
     "id": "classic_legacy_of_the_emperor",
+    "collectible": false,
     "name": "Legacy of the Emperor",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -2077,6 +2113,7 @@
   },
   {
     "id": "classic_leokk",
+    "collectible": false,
     "name": "Leokk",
     "rarity": "Common",
     "cardClass": "Hunter",
@@ -2101,6 +2138,7 @@
   },
   {
     "id": "classic_life_tap",
+    "collectible": false,
     "name": "Life Tap",
     "rarity": "Free",
     "cardClass": "Warlock",
@@ -2341,6 +2379,7 @@
   },
   {
     "id": "classic_massive_gnoll",
+    "collectible": false,
     "name": "Massive Gnoll",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -2377,6 +2416,7 @@
   },
   {
     "id": "classic_mechanical_dragonling",
+    "collectible": false,
     "name": "Mechanical Dragonling",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -2497,6 +2537,7 @@
   },
   {
     "id": "classic_muklas_big_brother",
+    "collectible": false,
     "name": "Mukla's Big Brother",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -2533,6 +2574,7 @@
   },
   {
     "id": "classic_naga_myrmidon",
+    "collectible": false,
     "name": "Naga Myrmidon",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -2617,6 +2659,7 @@
   },
   {
     "id": "classic_pandaren_scout",
+    "collectible": false,
     "name": "Pandaren Scout",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -2629,6 +2672,7 @@
   },
   {
     "id": "classic_panther",
+    "collectible": false,
     "name": "Panther",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -2701,6 +2745,7 @@
   },
   {
     "id": "classic_poultryizer",
+    "collectible": false,
     "name": "Poultryizer",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -2953,6 +2998,7 @@
   },
   {
     "id": "classic_shado_pan_monk",
+    "collectible": false,
     "name": "Shado-Pan Monk",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -2977,6 +3023,7 @@
   },
   {
     "id": "classic_shadow_of_nothing",
+    "collectible": false,
     "name": "Shadow of Nothing",
     "rarity": "Epic",
     "cardClass": "Priest",
@@ -3025,6 +3072,7 @@
   },
   {
     "id": "classic_shandos_lesson",
+    "collectible": false,
     "name": "Shan'do's Lesson",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -3157,6 +3205,7 @@
   },
   {
     "id": "classic_skeleton",
+    "collectible": false,
     "name": "Skeleton",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -3181,6 +3230,7 @@
   },
   {
     "id": "classic_snake",
+    "collectible": false,
     "name": "Snake",
     "rarity": "Common",
     "cardClass": "Hunter",
@@ -3265,6 +3315,7 @@
   },
   {
     "id": "classic_spellbender_minion",
+    "collectible": false,
     "name": "Spellbender (minion)",
     "rarity": "Epic",
     "cardClass": "Mage",
@@ -3289,6 +3340,7 @@
   },
   {
     "id": "classic_spirit_wolf",
+    "collectible": false,
     "name": "Spirit Wolf",
     "rarity": "Rare",
     "cardClass": "Shaman",
@@ -3325,6 +3377,7 @@
   },
   {
     "id": "classic_squire",
+    "collectible": false,
     "name": "Squire",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -3337,6 +3390,7 @@
   },
   {
     "id": "classic_squirrel",
+    "collectible": false,
     "name": "Squirrel",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -3373,6 +3427,7 @@
   },
   {
     "id": "classic_stomp",
+    "collectible": false,
     "name": "Stomp",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -3421,6 +3476,7 @@
   },
   {
     "id": "classic_summon_a_panther",
+    "collectible": false,
     "name": "Summon a Panther",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -3589,6 +3645,7 @@
   },
   {
     "id": "classic_treant_force_of_nature",
+    "collectible": false,
     "name": "Treant (Force of Nature)",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -3685,6 +3742,7 @@
   },
   {
     "id": "classic_uproot",
+    "collectible": false,
     "name": "Uproot",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -3721,6 +3779,7 @@
   },
   {
     "id": "classic_violet_apprentice",
+    "collectible": false,
     "name": "Violet Apprentice",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -3757,6 +3816,7 @@
   },
   {
     "id": "classic_warglaive_of_azzinoth",
+    "collectible": false,
     "name": "Warglaive of Azzinoth",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -3769,6 +3829,7 @@
   },
   {
     "id": "classic_whelp",
+    "collectible": false,
     "name": "Whelp",
     "rarity": "Summon",
     "cardClass": "Neutral",
@@ -3829,6 +3890,7 @@
   },
   {
     "id": "classic_worthless_imp",
+    "collectible": false,
     "name": "Worthless Imp",
     "rarity": "Common",
     "cardClass": "Warlock",
@@ -3901,6 +3963,7 @@
   },
   {
     "id": "classic_ysera_awakens",
+    "collectible": false,
     "name": "Ysera Awakens",
     "rarity": "Common",
     "cardClass": "Neutral",

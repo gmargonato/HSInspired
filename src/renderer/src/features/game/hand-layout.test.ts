@@ -34,9 +34,11 @@ describe('dynamic hand layout', () => {
   })
 
   it('keeps small hands compact while preserving the reduced ten-card span', () => {
+    const two = layoutHand(2)
     const four = layoutHand(4)
     const ten = layoutHand(10)
 
+    expect((two[1]?.x ?? 0) - (two[0]?.x ?? 0)).toBeCloseTo(105)
     expect((four[1]?.x ?? 0) - (four[0]?.x ?? 0)).toBeCloseTo(105)
     expect((ten[9]?.x ?? 0) - (ten[0]?.x ?? 0)).toBeCloseTo(945)
   })

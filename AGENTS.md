@@ -19,6 +19,16 @@ ownership rules. Use this file for repository-specific agent workflow and constr
 Run `npm run verify` before handoff. Focused commands are `npm run content:check`,
 `npm run deps:check`, `npm run typecheck`, `npm test`, and `npm run build:smoke`.
 
+## Layout
+
+Scene geometry (positions, sizes, anchors, scales, reference frames) is described in
+[docs/LAYOUT.md](docs/LAYOUT.md). The shared contract is
+`src/renderer/src/rendering/layout` (`LayoutPlacement`, `placement()`, anchor constants,
+`applyPlacement`/`applyAnchor`). Each scene keeps its layout in a `*-layout.ts` module next
+to the feature that owns it; fanned/dynamic spreads (mulligan, hand) are parameterized, not
+hand-placed. A dev-only overlay (toggle **F2** in `npm run dev`) annotates every labelled
+Pixi object live. Do not change layout values when refactoring; reorganize and annotate only.
+
 Do not introduce imports from game to Electron/Pixi/DOM/filesystem, from main to renderer,
 from features to scenes, from rendering/UI to workflows, or from production modules to tests
 or dev-only modules. Keep scene construction in the app factory and use typed routes.

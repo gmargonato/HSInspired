@@ -55,7 +55,7 @@ export function layoutHand(
     cardCount === 1
       ? [0]
       : Array.from({ length: cardCount }, (_, index) => {
-          const normalized = (index - midpoint) / Math.max(1, midpoint)
+          const normalized = (index - midpoint) / midpoint
           return normalized * (handSpan / 2)
         })
 

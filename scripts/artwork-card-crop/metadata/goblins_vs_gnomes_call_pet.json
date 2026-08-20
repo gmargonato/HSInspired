@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_call_pet.jpg",
+  "source_name": "goblins_vs_gnomes_call_pet.jpg",
+  "crop_box": [
+    143,
+    0,
+    770,
+    627
+  ],
+  "scale": 0.7974481658692185,
+  "offset_x": -113.79708011286962,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:17:25.626928",
+  "card_id": "goblins_vs_gnomes_call_pet",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

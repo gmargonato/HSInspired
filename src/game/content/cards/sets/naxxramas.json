@@ -358,5 +358,57 @@
     "attack": 1,
     "health": 7,
     "rulesText": "Your minions trigger their Deathrattles twice."
+  },
+  {
+    "id": "naxxramas_putrid_slime",
+    "collectible": false,
+    "name": "Putrid Slime",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 2,
+    "rulesText": "Taunt"
+  },
+  {
+    "id": "naxxramas_nerubian",
+    "collectible": false,
+    "name": "Nerubian",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 4,
+    "rulesText": ""
+  },
+  {
+    "id": "naxxramas_spectral_spider",
+    "collectible": false,
+    "name": "Spectral Spider",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": ""
+  },
+  {
+    "id": "naxxramas_thaddius",
+    "collectible": false,
+    "name": "Thaddius",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 10,
+    "attack": 11,
+    "health": 11,
+    "rulesText": ""
   }
 ]

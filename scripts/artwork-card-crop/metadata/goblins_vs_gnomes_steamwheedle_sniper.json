@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_steamwheedle_sniper.jpg",
+  "source_name": "goblins_vs_gnomes_steamwheedle_sniper.jpg",
+  "crop_box": [
+    105,
+    0,
+    705,
+    600
+  ],
+  "scale": 0.8333333333333334,
+  "offset_x": -87.724358974359,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:16:55.446776",
+  "card_id": "goblins_vs_gnomes_steamwheedle_sniper",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

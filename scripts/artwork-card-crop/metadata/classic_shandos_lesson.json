@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_shandos_lesson.jpg",
+  "source_name": "classic_shandos_lesson.jpg",
+  "crop_box": [
+    94,
+    0,
+    1094,
+    1000
+  ],
+  "scale": 0.5,
+  "offset_x": -47.21252530769226,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:18:28.261085",
+  "card_id": "classic_shandos_lesson",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

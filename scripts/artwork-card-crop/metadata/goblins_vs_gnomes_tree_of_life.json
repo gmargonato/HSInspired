@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_tree_of_life.jpg",
+  "source_name": "goblins_vs_gnomes_tree_of_life.jpg",
+  "crop_box": [
+    0,
+    0,
+    792,
+    792
+  ],
+  "scale": 0.6313131313131313,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:16:51.008690",
+  "card_id": "goblins_vs_gnomes_tree_of_life",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

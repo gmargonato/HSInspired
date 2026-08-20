@@ -3,14 +3,14 @@
   "source_name": "classic_truesilver_champion.jpg",
   "crop_box": [
     0,
-    29,
-    416,
-    445
+    0,
+    500,
+    500
   ],
-  "scale": 1.2019230769230769,
+  "scale": 1.0,
   "offset_x": 0.0,
-  "offset_y": -34.85576923076917,
-  "timestamp": "2026-08-19T20:06:11.431793",
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:17:48.165036",
   "card_id": "classic_truesilver_champion",
   "card_type": "Weapon",
   "frame_file": "frame-weapon.png"

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_guardian_of_kings.jpg",
+  "source_name": "basic_guardian_of_kings.jpg",
+  "crop_box": [
+    200,
+    0,
+    882,
+    682
+  ],
+  "scale": 0.7331378299120235,
+  "offset_x": -146.29821791112118,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:46:32.462873",
+  "card_id": "basic_guardian_of_kings",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

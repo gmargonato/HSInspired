@@ -62,7 +62,11 @@ artwork under `assets/images/card-artwork-to-do`, and obsolete card assets under
 packages.
 
 The renderer uses 1920 x 1080 scene coordinates and a 620 x 900 complete-card
-coordinate system. Layout values belong beside the feature that owns them.
+coordinate system. Layout values belong beside the feature that owns them: each
+scene keeps its geometry in a `*-layout.ts` module as self-describing
+`LayoutPlacement` entries (position, anchor, size, scale). A development-only
+overlay (toggle with **F2** during `npm run dev`) annotates every labelled Pixi
+object live. See [docs/LAYOUT.md](docs/LAYOUT.md).
 
 ## Navigation and match readiness
 

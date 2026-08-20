@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_holy_light.jpg",
+  "source_name": "basic_holy_light.jpg",
+  "crop_box": [
+    30,
+    0,
+    506,
+    476
+  ],
+  "scale": 1.050420168067227,
+  "offset_x": -31.512605042016844,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:46:57.136982",
+  "card_id": "basic_holy_light",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

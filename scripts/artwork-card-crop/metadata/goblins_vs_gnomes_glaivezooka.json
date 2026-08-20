@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_glaivezooka.jpg",
+  "source_name": "goblins_vs_gnomes_glaivezooka.jpg",
+  "crop_box": [
+    2,
+    0,
+    986,
+    984
+  ],
+  "scale": 0.508130081300813,
+  "offset_x": -1.016260162601668,
+  "offset_y": -5.684341886080802e-14,
+  "timestamp": "2026-08-20T12:17:11.967931",
+  "card_id": "goblins_vs_gnomes_glaivezooka",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

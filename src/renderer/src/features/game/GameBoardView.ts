@@ -23,11 +23,14 @@ import type { AudioService } from '../../app/audio'
 import type { GameRoute } from '../../app/router'
 import type { AppLogger } from '../../app/services'
 import { CardView } from '../../rendering/cards/card-view'
+import { gsap } from '../../animation/animations'
 import { type DeckPresentationAssets, type GameAssets } from '../../ui/asset-registry'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { Actor } from '../../ui/components/Actor'
 import { Button } from '../../ui/components/Button'
-import { DEFAULT_HAND_LAYOUT, layoutHand } from './hand-layout'
+import { DEFAULT_HAND_LAYOUT, HandCardTransform, layoutHand } from './hand-layout'
+import { GAME_BOARD_LAYOUT } from './game-scene-layout'
+import type { LayoutPlacement } from '../../rendering/layout'
 
 export interface GameBoardViewOptions {
   readonly route: GameRoute
@@ -37,21 +40,6 @@ export interface GameBoardViewOptions {
   readonly audio?: AudioService
   readonly logger?: AppLogger
 }
-
-export const GAME_SCENE_LAYOUT = {
-  board: { x: 960, y: 540, scale: 1 },
-  localHero: { x: 960, y: 852, scale: 0.46 },
-  remoteHero: { x: 960, y: 184, scale: 0.46 },
-  localIntroHero: { x: 350, y: 665, scale: 1 },
-  remoteIntroHero: { x: 1540, y: 250, scale: 1 },
-  localDeck: { x: 1650, y: 640, scale: 0.82 },
-  remoteDeck: { x: 1650, y: 390, scale: 0.82 },
-  localMulligan: { centerX: 960, baselineY: 710, gap: 250, scale: 0.38 },
-  remoteHand: { centerX: 960, baselineY: 92, gap: 52, scale: 0.22 },
-  confirmButton: { x: 960, y: 855 },
-  mulliganAnnouncement: { x: 960, y: 72 },
-  coinAnnouncement: { x: 1450, y: 590, scale: 0.55 }
-} as const
 
 /** Feature-local timings make the opening easy to tune without layout edits. */
 const OPENING_TIMING = {
@@ -67,7 +55,6 @@ const OPENING_TIMING = {
   confirmationPause: 0.5,
   replacementPause: 0.25,
   handoffPause: 0.5,
-  handSettle: 0.48,
   hover: 0.2
 } as const
 
@@ -96,25 +83,37 @@ class GameCardSlot extends Container {
     this.instanceId = instanceId
     this.eventMode = 'static'
     this.cursor = 'pointer'
-    this.hitArea = new Rectangle(-310, -900, 620, 900)
+    const slotLayout = GAME_BOARD_LAYOUT.mulligan.slot
+    this.hitArea = new Rectangle(
+      slotLayout.hitArea.x,
+      slotLayout.hitArea.y,
+      slotLayout.hitArea.width,
+      slotLayout.hitArea.height
+    )
     this.label = `game-card:${instanceId}`
 
     card.eventMode = 'none'
-    card.position.set(-310, -900)
+    card.position.set(slotLayout.cardOffset.x, slotLayout.cardOffset.y)
     this.addChild(card)
 
     this.replaceCross = new Sprite(replaceCrossTexture)
     this.replaceCross.anchor.set(0.5)
-    this.replaceCross.position.set(0, -450)
-    this.replaceCross.scale.set(2)
+    this.replaceCross.position.set(
+      slotLayout.replaceCrossOffset.x,
+      slotLayout.replaceCrossOffset.y
+    )
+    this.replaceCross.scale.set(slotLayout.overlayScale)
     this.replaceCross.visible = false
     this.replaceCross.eventMode = 'none'
     this.addChild(this.replaceCross)
 
     this.replacedLabel = new Sprite(replacedLabelTexture)
     this.replacedLabel.anchor.set(0.5, 0)
-    this.replacedLabel.position.set(0, 24)
-    this.replacedLabel.scale.set(2)
+    this.replacedLabel.position.set(
+      slotLayout.replacedLabelOffset.x,
+      slotLayout.replacedLabelOffset.y
+    )
+    this.replacedLabel.scale.set(slotLayout.overlayScale)
     this.replacedLabel.visible = false
     this.replacedLabel.eventMode = 'none'
     this.addChild(this.replacedLabel)
@@ -126,12 +125,29 @@ class GameCardSlot extends Container {
   }
 }
 
+/** Ordered pair of a hand card and its interactive slot — single source of truth. */
+interface HandEntry {
+  card: OpeningCard
+  slot: GameCardSlot
+  /**
+   * Resting transform (no hover applied). Set by `applyHandLayout` after every
+   * structural change (deal, mulligan resolve, draw) and read by `applyHoverDelta`
+   * to compute hover targets without re-running `layoutHand`.
+   */
+  restTransform: HandCardTransform | undefined
+  /**
+   * True while the card is at a non-rest position due to hover. Cleared by
+   * `applyHandLayout`. Used by `applyHoverDelta` to skip cards that are at rest
+   * and should not be touched (the common case — only one card is hovered).
+   */
+  displaced: boolean
+}
+
 /** Feature-owned board, opening choreography, mulligan, and local hand interaction. */
 export class GameBoardView extends Actor {
   private readonly resolver = new CardAssetResolver()
-  private readonly localSlots = new Map<string, GameCardSlot>()
+  private readonly handEntries: HandEntry[] = []
   private readonly selectedIds = new Set<string>()
-  private readonly localHand: OpeningCard[] = []
   private readonly initialSlots: GameCardSlot[] = []
   private readonly remoteBacks: Sprite[] = []
   private readonly boardLayer = new Container()
@@ -149,11 +165,23 @@ export class GameBoardView extends Actor {
   private remoteParticipantId!: PlayerId
   private localPlayerNumber!: 1 | 2
   private remotePlayerNumber!: 1 | 2
-  private localHoveredIndex: number | null = null
+  private localHoveredSlot: GameCardSlot | null = null
   private confirmButton!: Button
   private confirmationLocked = false
   private remoteBackCount = 0
   private openingRevealStarted = false
+  /**
+   * True while a structural reflow (deal, mulligan resolve, draw) is animating.
+   * Hover is blocked during reflow so the pointermove handler does not fight
+   * the structural timeline animating the same slot properties.
+   */
+  private reflowing = false
+  /**
+   * True once `activateHandHover` has wired the pointermove/pointerleave
+   * listeners on handLayer. Stays true for the lifetime of the hand; the
+   * pointermove handler checks this to bail during teardown.
+   */
+  private handModeActive = false
 
   constructor(private readonly options: GameBoardViewOptions) {
     super()
@@ -174,6 +202,7 @@ export class GameBoardView extends Actor {
     this.addChild(this.handLayer)
     this.deckLayer.visible = false
     this.remoteHandLayer.visible = false
+    this.handLayer.eventMode = 'none'
     this.travelLayer.sortableChildren = true
     this.deckLayer.sortableChildren = true
     this.mulliganLayer.sortableChildren = true
@@ -210,8 +239,7 @@ export class GameBoardView extends Actor {
     this.createMulliganLayer()
 
     const localPlayer = this.findPlayer(initialState, this.localParticipantId)
-    this.localHand.push(...localPlayer.hand.map(cloneCard))
-    await this.createInitialLocalCards()
+    await this.createInitialLocalCards(localPlayer.hand.map(cloneCard))
 
     const aiResult = this.match.dispatch({
       type: 'confirm-mulligan',
@@ -230,10 +258,10 @@ export class GameBoardView extends Actor {
       onClick: () => void this.confirmMulligan()
     })
     this.confirmButton.position.set(
-      GAME_SCENE_LAYOUT.confirmButton.x,
-      GAME_SCENE_LAYOUT.confirmButton.y
+      GAME_BOARD_LAYOUT.mulligan.confirmButton.position.x,
+      GAME_BOARD_LAYOUT.mulligan.confirmButton.position.y
     )
-    this.confirmButton.setBaseY(GAME_SCENE_LAYOUT.confirmButton.y)
+    this.confirmButton.setBaseY(GAME_BOARD_LAYOUT.mulligan.confirmButton.position.y)
     this.confirmButton.visible = false
     this.confirmButton.setEnabled(false)
     this.mulliganLayer.addChild(this.confirmButton)
@@ -248,8 +276,8 @@ export class GameBoardView extends Actor {
         this.animateHeroToBoard(
           sprite,
           participantId === this.localParticipantId
-            ? GAME_SCENE_LAYOUT.localHero
-            : GAME_SCENE_LAYOUT.remoteHero
+            ? GAME_BOARD_LAYOUT.heroes.local
+            : GAME_BOARD_LAYOUT.heroes.remote
         )
       ),
       this.fadeTo(this.openingLayer, 0, OPENING_TIMING.heroSettle)
@@ -267,7 +295,10 @@ export class GameBoardView extends Actor {
     this.boardLayer.addChild(table)
     const board = new Sprite(this.options.gameAssets.board)
     board.anchor.set(0.5)
-    board.position.set(GAME_SCENE_LAYOUT.board.x, GAME_SCENE_LAYOUT.board.y)
+    board.position.set(
+      GAME_BOARD_LAYOUT.board.position.x,
+      GAME_BOARD_LAYOUT.board.position.y
+    )
     board.eventMode = 'none'
     this.boardLayer.addChild(board)
   }
@@ -280,12 +311,12 @@ export class GameBoardView extends Actor {
         ]
       const intro =
         player.participantId === this.localParticipantId
-          ? GAME_SCENE_LAYOUT.localIntroHero
-          : GAME_SCENE_LAYOUT.remoteIntroHero
+          ? GAME_BOARD_LAYOUT.heroes.localIntro
+          : GAME_BOARD_LAYOUT.heroes.remoteIntro
       const sprite = new Sprite(texture)
       sprite.anchor.set(0.5)
-      sprite.position.set(intro.x, intro.y)
-      sprite.scale.set(intro.scale)
+      sprite.position.set(intro.position.x, intro.position.y)
+      sprite.scale.set(intro.scale ?? 1)
       sprite.eventMode = 'none'
       this.heroSprites.set(player.participantId, sprite)
       this.heroLayer.addChild(sprite)
@@ -294,13 +325,13 @@ export class GameBoardView extends Actor {
 
   private createDecks(): void {
     for (const position of [
-      GAME_SCENE_LAYOUT.localDeck,
-      GAME_SCENE_LAYOUT.remoteDeck
+      GAME_BOARD_LAYOUT.decks.local,
+      GAME_BOARD_LAYOUT.decks.remote
     ] as const) {
       const deck = new Sprite(this.options.gameAssets.deck)
       deck.anchor.set(0.5)
-      deck.position.set(position.x, position.y)
-      deck.scale.set(position.scale)
+      deck.position.set(position.position.x, position.position.y)
+      deck.scale.set(position.scale ?? 1)
       deck.eventMode = 'none'
       this.deckLayer.addChild(deck)
     }
@@ -311,15 +342,18 @@ export class GameBoardView extends Actor {
 
     const versus = new Sprite(this.options.gameAssets.startOfGameVs)
     versus.anchor.set(0.5)
-    versus.position.set(960, 540)
+    versus.position.set(
+      GAME_BOARD_LAYOUT.versus.position.x,
+      GAME_BOARD_LAYOUT.versus.position.y
+    )
     versus.eventMode = 'none'
     this.openingLayer.addChild(versus)
     for (const player of state.players) {
       const hero = HERO_CATALOG.require(player.heroId)
       const intro =
         player.participantId === this.localParticipantId
-          ? GAME_SCENE_LAYOUT.localIntroHero
-          : GAME_SCENE_LAYOUT.remoteIntroHero
+          ? GAME_BOARD_LAYOUT.heroes.localIntro
+          : GAME_BOARD_LAYOUT.heroes.remoteIntro
       const label = new Text({
         text: `${hero.displayName}\n${hero.classId.toUpperCase()}`,
         style: {
@@ -332,7 +366,11 @@ export class GameBoardView extends Actor {
         }
       })
       label.anchor.set(0.5, 0)
-      label.position.set(intro.x, intro.y + 265 * intro.scale)
+      label.position.set(
+        intro.position.x,
+        intro.position.y +
+          GAME_BOARD_LAYOUT.heroes.introLabelOffset * (intro.scale ?? 1)
+      )
       label.eventMode = 'none'
       this.openingLayer.addChild(label)
     }
@@ -347,8 +385,8 @@ export class GameBoardView extends Actor {
     const announcement = new Sprite(this.options.gameAssets.mulliganAnnouncement)
     announcement.anchor.set(0.5, 0)
     announcement.position.set(
-      GAME_SCENE_LAYOUT.mulliganAnnouncement.x,
-      GAME_SCENE_LAYOUT.mulliganAnnouncement.y
+      GAME_BOARD_LAYOUT.mulligan.announcement.position.x,
+      GAME_BOARD_LAYOUT.mulligan.announcement.position.y
     )
     announcement.label = 'mulligan-announcement'
     announcement.alpha = 0
@@ -364,9 +402,9 @@ export class GameBoardView extends Actor {
     return overlay
   }
 
-  private async createInitialLocalCards(): Promise<void> {
-    const slots = await Promise.all(
-      this.localHand.map(async (card) => {
+  private async createInitialLocalCards(cards: readonly OpeningCard[]): Promise<void> {
+    const entries = await Promise.all(
+      cards.map(async (card) => {
         const slot = await this.createSlot(card)
         slot.alpha = 0
         slot.on('pointertap', (event: FederatedPointerEvent) => {
@@ -376,12 +414,14 @@ export class GameBoardView extends Actor {
           else this.selectedIds.delete(slot.instanceId)
           slot.setSelected(selected)
         })
-        this.localSlots.set(slot.instanceId, slot)
         this.mulliganLayer.addChild(slot)
-        return slot
+        return { card, slot, restTransform: undefined, displaced: false } as const
       })
     )
-    this.initialSlots.push(...slots)
+    for (const entry of entries) {
+      this.handEntries.push(entry)
+      this.initialSlots.push(entry.slot)
+    }
   }
 
   private async createSlot(card: OpeningCard): Promise<GameCardSlot> {
@@ -423,12 +463,12 @@ export class GameBoardView extends Actor {
       back.visible = visible
       if (!visible) return
       back.position.set(
-        GAME_SCENE_LAYOUT.remoteHand.centerX +
-          (index - midpoint) * GAME_SCENE_LAYOUT.remoteHand.gap,
-        GAME_SCENE_LAYOUT.remoteHand.baselineY
+        GAME_BOARD_LAYOUT.remoteHand.centerX +
+          (index - midpoint) * GAME_BOARD_LAYOUT.remoteHand.gap,
+        GAME_BOARD_LAYOUT.remoteHand.baselineY
       )
-      back.rotation = -(index - midpoint) * 0.05
-      back.scale.set(GAME_SCENE_LAYOUT.remoteHand.scale)
+      back.rotation = -(index - midpoint) * GAME_BOARD_LAYOUT.remoteHand.rotationStep
+      back.scale.set(GAME_BOARD_LAYOUT.remoteHand.scale)
     })
   }
 
@@ -461,10 +501,10 @@ export class GameBoardView extends Actor {
     const announcement = new Sprite(this.options.gameAssets.mulliganCoinAnnouncement)
     announcement.anchor.set(0.5)
     announcement.position.set(
-      GAME_SCENE_LAYOUT.coinAnnouncement.x,
-      GAME_SCENE_LAYOUT.coinAnnouncement.y
+      GAME_BOARD_LAYOUT.mulligan.coinAnnouncement.position.x,
+      GAME_BOARD_LAYOUT.mulligan.coinAnnouncement.position.y
     )
-    announcement.scale.set(GAME_SCENE_LAYOUT.coinAnnouncement.scale)
+    announcement.scale.set(GAME_BOARD_LAYOUT.mulligan.coinAnnouncement.scale ?? 1)
     announcement.alpha = 0
     announcement.eventMode = 'none'
     this.mulliganLayer.addChild(announcement)
@@ -482,7 +522,7 @@ export class GameBoardView extends Actor {
     await Promise.all(
       this.initialSlots.slice(start, end).map((slot, offset) => {
         const index = start + offset
-        this.prepareSlotAtDeck(slot, GAME_SCENE_LAYOUT.localDeck, index)
+        this.prepareSlotAtDeck(slot, GAME_BOARD_LAYOUT.decks.local, index)
         this.travelLayer.addChild(slot)
         return this.animateSlotToMulligan(
           slot,
@@ -521,7 +561,7 @@ export class GameBoardView extends Actor {
     if (this.confirmationLocked) return
     this.confirmationLocked = true
     this.confirmButton.setEnabled(false)
-    for (const slot of this.localSlots.values()) slot.eventMode = 'none'
+    for (const entry of this.handEntries) entry.slot.eventMode = 'none'
     await this.wait(OPENING_TIMING.confirmationPause)
     const result = this.match.dispatch({
       type: 'confirm-mulligan',
@@ -539,7 +579,6 @@ export class GameBoardView extends Actor {
     await this.wait(OPENING_TIMING.handoffPause)
     await this.fadeTo(this.mulliganLayer, 0, OPENING_TIMING.mulliganFade)
     this.mulliganLayer.visible = false
-    this.layoutLocalHand()
   }
 
   private async presentEvent(event: OpeningMatchEvent): Promise<void> {
@@ -575,38 +614,38 @@ export class GameBoardView extends Actor {
   }
 
   private async presentLocalMulligan(event: MulliganResolvedEvent): Promise<void> {
-    const returnedIds = new Set(event.returnedCards.map((card) => card.instanceId))
     const returnedSlots = event.returnedCards
-      .map((card) => this.localSlots.get(card.instanceId))
+      .map((card) => this.findEntry(card.instanceId)?.slot)
       .filter((slot): slot is GameCardSlot => slot !== undefined)
     await Promise.all(
       returnedSlots.map((slot, index) =>
-        this.animateSlotToDeck(slot, GAME_SCENE_LAYOUT.localDeck, index)
+        this.animateSlotToDeck(slot, GAME_BOARD_LAYOUT.decks.local, index)
       )
     )
     for (const slot of returnedSlots) {
-      this.localSlots.delete(slot.instanceId)
+      const entryIndex = this.handEntries.findIndex((entry) => entry.slot === slot)
+      if (entryIndex >= 0) this.handEntries.splice(entryIndex, 1)
       slot.destroy({ children: true })
     }
     await this.wait(OPENING_TIMING.replacementPause)
 
-    const kept = this.localHand.filter((card) => !returnedIds.has(card.instanceId))
-    this.localHand.splice(0, this.localHand.length, ...kept)
     const replacementSlots: GameCardSlot[] = []
     for (const card of event.replacementCards) {
       const slot = await this.createSlot(card)
-      this.localSlots.set(card.instanceId, slot)
-      this.localHand.push(cloneCard(card))
+      this.handEntries.push({
+        card: cloneCard(card),
+        slot,
+        restTransform: undefined,
+        displaced: false
+      })
       replacementSlots.push(slot)
     }
-    const allSlots = this.localHand
-      .map((card) => this.localSlots.get(card.instanceId))
-      .filter((slot): slot is GameCardSlot => slot !== undefined)
+    const allSlots = this.handEntries.map((entry) => entry.slot)
     allSlots.forEach((slot, index) => {
       slot.setSelected(false)
       slot.eventMode = 'none'
       if (!replacementSlots.includes(slot)) return
-      this.prepareSlotAtDeck(slot, GAME_SCENE_LAYOUT.localDeck, index)
+      this.prepareSlotAtDeck(slot, GAME_BOARD_LAYOUT.decks.local, index)
       this.travelLayer.addChild(slot)
     })
     await Promise.all(
@@ -619,12 +658,18 @@ export class GameBoardView extends Actor {
         )
       )
     )
+    this.reflowing = true
     for (const slot of allSlots) {
       if (slot.parent !== this.handLayer) this.handLayer.addChild(slot)
       this.configureHandSlot(slot)
     }
-    this.localHoveredIndex = null
-    await this.animateLocalHandLayout()
+    this.localHoveredSlot = null
+    await this.applyHandLayout({
+      positionDuration: OPENING_TIMING.cardDeal,
+      scaleDuration: OPENING_TIMING.cardDeal
+    })
+    this.reflowing = false
+    this.activateHandHover()
     await this.dismissMulliganPresentation()
   }
 
@@ -640,46 +685,53 @@ export class GameBoardView extends Actor {
   }
 
   private async addLocalCard(card: OpeningCard): Promise<void> {
-    if (this.localSlots.has(card.instanceId)) return
+    if (this.findEntry(card.instanceId)) return
     const slot = await this.createSlot(card)
-    this.prepareSlotAtDeck(slot, GAME_SCENE_LAYOUT.localDeck, this.localHand.length)
+    this.prepareSlotAtDeck(slot, GAME_BOARD_LAYOUT.decks.local, this.handEntries.length)
     this.travelLayer.addChild(slot)
-    this.localSlots.set(card.instanceId, slot)
-    this.localHand.push(cloneCard(card))
-    this.localHoveredIndex = null
-    const transforms = layoutHand(this.localHand.length, DEFAULT_HAND_LAYOUT)
-    await Promise.all(
-      this.localHand.map((handCard, index) => {
-        const handSlot = this.localSlots.get(handCard.instanceId)
-        const target = transforms[index]
-        if (!handSlot || !target) return Promise.resolve()
-        return this.animateSlotToHand(
-          handSlot,
-          target,
-          handCard.instanceId === card.instanceId ? 0.05 : 0
-        )
-      })
-    )
+    this.handEntries.push({
+      card: cloneCard(card),
+      slot,
+      restTransform: undefined,
+      displaced: false
+    })
+    this.localHoveredSlot = null
+    this.reflowing = true
+    await this.applyHandLayout({
+      positionDuration: OPENING_TIMING.cardDeal,
+      scaleDuration: OPENING_TIMING.cardDeal,
+      delayedInstanceId: card.instanceId
+    })
+    this.reflowing = false
     this.handLayer.addChild(slot)
     this.configureHandSlot(slot)
   }
 
   private prepareSlotAtDeck(
     slot: GameCardSlot,
-    deck: { readonly x: number; readonly y: number },
+    deck: LayoutPlacement,
     sequence: number
   ): void {
     slot.eventMode = 'none'
-    slot.position.set(deck.x, deck.y)
-    slot.scale.set(0.08, 0.24)
+    slot.position.set(deck.position.x, deck.position.y)
+    slot.scale.set(
+      GAME_BOARD_LAYOUT.cardTravel.slotScale.x,
+      GAME_BOARD_LAYOUT.cardTravel.slotScale.y
+    )
     slot.skew.set(sequence % 2 === 0 ? 0.3 : -0.3, -0.06)
     slot.rotation = sequence % 2 === 0 ? -0.08 : 0.08
     slot.alpha = 1
   }
 
   private prepareBackAtDeck(back: Sprite, sequence: number): void {
-    back.position.set(GAME_SCENE_LAYOUT.remoteDeck.x, GAME_SCENE_LAYOUT.remoteDeck.y)
-    back.scale.set(0.08, 0.12)
+    back.position.set(
+      GAME_BOARD_LAYOUT.decks.remote.position.x,
+      GAME_BOARD_LAYOUT.decks.remote.position.y
+    )
+    back.scale.set(
+      GAME_BOARD_LAYOUT.cardTravel.backScale.x,
+      GAME_BOARD_LAYOUT.cardTravel.backScale.y
+    )
     back.rotation = sequence % 2 === 0 ? -0.08 : 0.08
     back.alpha = 1
     back.visible = true
@@ -694,12 +746,12 @@ export class GameBoardView extends Actor {
   ): Promise<void> {
     const midpoint = (count - 1) / 2
     const x =
-      GAME_SCENE_LAYOUT.localMulligan.centerX +
-      (index - midpoint) * GAME_SCENE_LAYOUT.localMulligan.gap
+      GAME_BOARD_LAYOUT.mulligan.cards.centerX +
+      (index - midpoint) * GAME_BOARD_LAYOUT.mulligan.cards.gap
     const timeline = this.timeline()
     timeline.to(slot, {
       x,
-      y: GAME_SCENE_LAYOUT.localMulligan.baselineY,
+      y: GAME_BOARD_LAYOUT.mulligan.cards.baselineY,
       rotation: 0,
       alpha: 1,
       duration,
@@ -709,8 +761,8 @@ export class GameBoardView extends Actor {
     timeline.to(
       slot.scale,
       {
-        x: GAME_SCENE_LAYOUT.localMulligan.scale,
-        y: GAME_SCENE_LAYOUT.localMulligan.scale,
+        x: GAME_BOARD_LAYOUT.mulligan.cards.scale,
+        y: GAME_BOARD_LAYOUT.mulligan.cards.scale,
         duration,
         delay: staggerIndex * OPENING_TIMING.cardStagger,
         ease: 'power2.out'
@@ -743,13 +795,13 @@ export class GameBoardView extends Actor {
   ): Promise<void> {
     const midpoint = (count - 1) / 2
     const x =
-      GAME_SCENE_LAYOUT.remoteHand.centerX +
-      (index - midpoint) * GAME_SCENE_LAYOUT.remoteHand.gap
+      GAME_BOARD_LAYOUT.remoteHand.centerX +
+      (index - midpoint) * GAME_BOARD_LAYOUT.remoteHand.gap
     const timeline = this.timeline()
     timeline.to(back, {
       x,
-      y: GAME_SCENE_LAYOUT.remoteHand.baselineY,
-      rotation: -(index - midpoint) * 0.05,
+      y: GAME_BOARD_LAYOUT.remoteHand.baselineY,
+      rotation: -(index - midpoint) * GAME_BOARD_LAYOUT.remoteHand.rotationStep,
       alpha: 1,
       duration,
       delay: staggerIndex * OPENING_TIMING.cardStagger,
@@ -758,8 +810,8 @@ export class GameBoardView extends Actor {
     timeline.to(
       back.scale,
       {
-        x: GAME_SCENE_LAYOUT.remoteHand.scale,
-        y: GAME_SCENE_LAYOUT.remoteHand.scale,
+        x: GAME_BOARD_LAYOUT.remoteHand.scale,
+        y: GAME_BOARD_LAYOUT.remoteHand.scale,
         duration,
         delay: staggerIndex * OPENING_TIMING.cardStagger,
         ease: 'power2.out'
@@ -769,31 +821,187 @@ export class GameBoardView extends Actor {
     return this.completeTimeline(timeline)
   }
 
-  private async animateLocalHandLayout(): Promise<void> {
-    const transforms = layoutHand(this.localHand.length, DEFAULT_HAND_LAYOUT)
+  private findEntry(instanceId: string): HandEntry | undefined {
+    return this.handEntries.find((entry) => entry.card.instanceId === instanceId)
+  }
+
+  /**
+   * Activates a single fixed hit zone on handLayer covering the bottom of the
+   * screen. Pointer position is mapped to the nearest card by x — no per-card
+   * hit areas that move with the card, eliminating hover oscillation.
+   *
+   * Why a single hit zone instead of per-card hit areas: when a card lifts and
+   * scales on hover, its hit area moves with it. That causes the pointer to
+   * exit the card's hit area, drop the hover, re-enter at the rest position,
+   * re-hover — infinite oscillation (the "dancing" bug). A fixed hit zone on
+   * the layer decouples "which card is hovered" (pointer x vs. rest x) from
+   * "where the card is drawn" (animated). The card can move freely; the hover
+   * target is recomputed from the pointer position alone.
+   *
+   * `pointermove` early-returns when the nearest card hasn't changed, so
+   * moving the mouse within a single card's zone does not create redundant
+   * tweens. `pointerleave` clears hover when the cursor exits the hit zone
+   * (e.g. moves to the board or off-screen).
+   */
+  private activateHandHover(): void {
+    if (this.handModeActive) return
+    this.handModeActive = true
+    this.handLayer.eventMode = 'static'
+    this.handLayer.hitArea = new Rectangle(0, 850, 1920, 230)
+    this.handLayer.on('pointermove', (event: FederatedPointerEvent) => {
+      if (!this.handModeActive || this.reflowing) return
+      const local = event.getLocalPosition(this.handLayer)
+      const nearest = this.findNearestHandEntry(local.x)?.slot ?? null
+      if (nearest === this.localHoveredSlot) return
+      this.localHoveredSlot = nearest
+      this.applyHoverDelta()
+    })
+    this.handLayer.on('pointerleave', () => {
+      if (!this.handModeActive) return
+      this.localHoveredSlot = null
+      this.applyHoverDelta()
+    })
+  }
+
+  /**
+   * Returns the hand entry whose rest x is nearest to `x`, or `undefined` if
+   * the nearest card is farther than half a card step. The threshold prevents
+   * the edge cards from staying hovered when the pointer moves past the hand
+   * toward the screen edges.
+   */
+  private findNearestHandEntry(x: number): HandEntry | undefined {
+    const threshold = DEFAULT_HAND_LAYOUT.maxCardStep / 2
+    let nearest: HandEntry | undefined
+    let nearestDistance = Infinity
+    for (const entry of this.handEntries) {
+      if (!entry.restTransform) continue
+      const distance = Math.abs(entry.restTransform.x - x)
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nearest = entry
+      }
+    }
+    return nearestDistance <= threshold ? nearest : undefined
+  }
+
+  /**
+   * Recomputes the rest layout for every card and animates each slot to its
+   * rest transform. Called only for structural changes (deal, mulligan
+   * resolve, draw) — never for hover. Stores `restTransform` on each entry so
+   * `applyHoverDelta` can compute hover targets without re-running `layoutHand`.
+   * Clears `displaced` on every entry since the structural animation overwrites
+   * any in-flight hover state. Hover is blocked by the `reflowing` flag during
+   * this call.
+   */
+  private async applyHandLayout(opts: {
+    readonly positionDuration: number
+    readonly scaleDuration: number
+    readonly delayedInstanceId?: string
+  }): Promise<void> {
+    const transforms = layoutHand(this.handEntries.length, DEFAULT_HAND_LAYOUT, null)
     await Promise.all(
-      this.localHand.map((card, index) => {
-        const slot = this.localSlots.get(card.instanceId)
-        const target = transforms[index]
-        return slot && target
-          ? this.animateSlotToHand(slot, target, 0)
-          : Promise.resolve()
+      this.handEntries.map((entry, index) => {
+        const transform = transforms[index]
+        if (!transform) return Promise.resolve()
+        entry.restTransform = transform
+        entry.displaced = false
+        const delay =
+          opts.delayedInstanceId !== undefined &&
+          entry.card.instanceId === opts.delayedInstanceId
+            ? 0.05
+            : 0
+        return this.animateSlotToHand(
+          entry.slot,
+          transform,
+          delay,
+          opts.positionDuration,
+          opts.scaleDuration
+        )
       })
     )
   }
 
+  /**
+   * Animates only the hovered card (lift, scale, straighten, front). All other
+   * cards stay frozen at their rest positions. This mirrors Hearthstone: a
+   * hover change touches at most 2 cards (old hover returns to rest, new hover
+   * lifts), never the full hand.
+   */
+  private applyHoverDelta(): void {
+    const hoveredIndex = this.localHoveredSlot
+      ? this.handEntries.findIndex((entry) => entry.slot === this.localHoveredSlot)
+      : -1
+
+    this.handEntries.forEach((entry, index) => {
+      if (!entry.restTransform) return
+      const shouldDisplace = hoveredIndex >= 0 && index === hoveredIndex
+      if (!shouldDisplace && !entry.displaced) return
+      const target = this.computeHoverTarget(entry.restTransform, index, hoveredIndex)
+      this.animateHoverTarget(entry.slot, target)
+      entry.displaced = shouldDisplace
+    })
+  }
+
+  /**
+   * Pure transform computation for hover. The hovered card lifts by
+   * `hoverLift`, scales to `hoverScale`, straightens its rotation, and jumps to
+   * the front (zIndex 1000). All other cards return their rest transform
+   * unchanged — neighbors do NOT shift, matching Hearthstone where only the
+   * hovered card moves and the rest of the hand stays still.
+   */
+  private computeHoverTarget(
+    rest: HandCardTransform,
+    index: number,
+    hoveredIndex: number
+  ): HandCardTransform {
+    if (hoveredIndex < 0 || index !== hoveredIndex) return rest
+    return {
+      x: rest.x,
+      y: rest.y - DEFAULT_HAND_LAYOUT.hoverLift,
+      rotation: 0,
+      scale: DEFAULT_HAND_LAYOUT.hoverScale,
+      zIndex: 1000
+    }
+  }
+
+  /**
+   * Fire-and-forget hover tween. Uses `overwrite: 'auto'` so GSAP cleanly hands
+   * off the slot's properties from the previous hover tween to the new one
+   * without snapping. No `killTweensOf` — the overwrite mode handles it per
+   * property. `zIndex` is set immediately (not tweened) so the hovered card
+   * jumps to the front instantly.
+   */
+  private animateHoverTarget(slot: GameCardSlot, target: HandCardTransform): void {
+    this.tweenTo(slot, {
+      x: target.x,
+      y: target.y,
+      rotation: target.rotation,
+      duration: OPENING_TIMING.hover,
+      ease: 'power2.out',
+      overwrite: 'auto'
+    })
+    this.tweenTo(slot.scale, {
+      x: target.scale,
+      y: target.scale,
+      duration: OPENING_TIMING.hover,
+      ease: 'power2.out',
+      overwrite: 'auto'
+    })
+    slot.zIndex = target.zIndex
+  }
+
   private animateSlotToDeck(
     slot: GameCardSlot,
-    deck: { readonly x: number; readonly y: number },
+    deck: LayoutPlacement,
     sequence: number
   ): Promise<void> {
     this.travelLayer.addChild(slot)
     slot.eventMode = 'none'
-    const direction = slot.x < deck.x ? -1 : 1
+    const direction = slot.x < deck.position.x ? -1 : 1
     const timeline = this.timeline()
     timeline.to(slot, {
-      x: deck.x,
-      y: deck.y,
+      x: deck.position.x,
+      y: deck.position.y,
       alpha: 0,
       rotation: direction * (0.16 + sequence * 0.015),
       duration: OPENING_TIMING.cardDeal,
@@ -802,8 +1010,8 @@ export class GameBoardView extends Actor {
     timeline.to(
       slot.scale,
       {
-        x: 0.08,
-        y: 0.24,
+        x: GAME_BOARD_LAYOUT.cardTravel.slotScale.x,
+        y: GAME_BOARD_LAYOUT.cardTravel.slotScale.y,
         duration: OPENING_TIMING.cardDeal,
         ease: 'power2.in'
       },
@@ -812,22 +1020,19 @@ export class GameBoardView extends Actor {
     return this.completeTimeline(timeline)
   }
 
-  private animateHeroToBoard(
-    sprite: Sprite,
-    target: { readonly x: number; readonly y: number; readonly scale: number }
-  ): Promise<void> {
+  private animateHeroToBoard(sprite: Sprite, target: LayoutPlacement): Promise<void> {
     const timeline = this.timeline()
     timeline.to(sprite, {
-      x: target.x,
-      y: target.y,
+      x: target.position.x,
+      y: target.position.y,
       duration: OPENING_TIMING.heroSettle,
       ease: 'power2.inOut'
     })
     timeline.to(
       sprite.scale,
       {
-        x: target.scale,
-        y: target.scale,
+        x: target.scale ?? 1,
+        y: target.scale ?? 1,
         duration: OPENING_TIMING.heroSettle,
         ease: 'power2.inOut'
       },
@@ -838,16 +1043,22 @@ export class GameBoardView extends Actor {
 
   private animateSlotToHand(
     slot: GameCardSlot,
-    transform: ReturnType<typeof layoutHand>[number],
-    delay: number
+    transform: HandCardTransform,
+    delay: number,
+    positionDuration: number,
+    scaleDuration: number
   ): Promise<void> {
+    gsap.killTweensOf(slot)
+    gsap.killTweensOf(slot.scale)
+    gsap.killTweensOf(slot.skew)
+
     const timeline = this.timeline()
     timeline.to(slot, {
       x: transform.x,
       y: transform.y,
       rotation: transform.rotation,
       alpha: 1,
-      duration: OPENING_TIMING.cardDeal,
+      duration: positionDuration,
       delay,
       ease: 'power2.out'
     })
@@ -856,7 +1067,7 @@ export class GameBoardView extends Actor {
       {
         x: transform.scale,
         y: transform.scale,
-        duration: OPENING_TIMING.cardDeal,
+        duration: scaleDuration,
         delay,
         ease: 'power2.out'
       },
@@ -867,7 +1078,7 @@ export class GameBoardView extends Actor {
       {
         x: 0,
         y: 0,
-        duration: OPENING_TIMING.cardDeal,
+        duration: positionDuration,
         delay,
         ease: 'power2.out'
       },
@@ -877,49 +1088,17 @@ export class GameBoardView extends Actor {
     return this.completeTimeline(timeline)
   }
 
+  /**
+   * Strips a slot's mulligan-era interaction and disables its own pointer
+   * events. In hand mode, hover is driven by a single pointermove listener on
+   * handLayer (see `activateHandHover`), so individual slots must not receive
+   * pointer events — a moving hit area on the animated slot causes oscillation.
+   */
   private configureHandSlot(slot: GameCardSlot): void {
-    slot.eventMode = 'static'
+    slot.eventMode = 'none'
     slot.removeAllListeners('pointertap')
     slot.removeAllListeners('pointerover')
     slot.removeAllListeners('pointerout')
-    slot.on('pointerover', () => {
-      this.localHoveredIndex = this.localHand.findIndex(
-        (card) => card.instanceId === slot.instanceId
-      )
-      this.layoutLocalHand()
-    })
-    slot.on('pointerout', () => {
-      this.localHoveredIndex = null
-      this.layoutLocalHand()
-    })
-  }
-
-  private layoutLocalHand(): void {
-    const transforms = layoutHand(
-      this.localHand.length,
-      DEFAULT_HAND_LAYOUT,
-      this.localHoveredIndex
-    )
-    this.localHand.forEach((card, index) => {
-      const slot = this.localSlots.get(card.instanceId)
-      const transform = transforms[index]
-      if (!slot || !transform) return
-      this.tweenTo(slot, {
-        x: transform.x,
-        y: transform.y,
-        rotation: transform.rotation,
-        duration: OPENING_TIMING.handSettle,
-        ease: 'power2.out'
-      })
-      this.tweenTo(slot.scale, {
-        x: transform.scale,
-        y: transform.scale,
-        duration: OPENING_TIMING.hover,
-        ease: 'power2.out'
-      })
-      slot.zIndex = transform.zIndex
-    })
-    this.handLayer.sortableChildren = true
   }
 
   private fadeTo(

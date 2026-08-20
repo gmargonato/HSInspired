@@ -132,6 +132,19 @@ async function bootstrap(): Promise<void> {
     removeSettingsShortcut = () =>
       window.removeEventListener('keydown', handleSettingsShortcut)
 
+    if (import.meta.env.DEV) {
+      const { createLayoutInspector } = await import('@dev-layout-inspector')
+      const layoutInspector = createLayoutInspector(app, {
+        getRoot: () => (game.current ? game.current.root : null)
+      })
+      const toggleLayoutInspector = (event: KeyboardEvent): void => {
+        if (event.key !== 'F2' || event.repeat) return
+        event.preventDefault()
+        layoutInspector.toggle()
+      }
+      window.addEventListener('keydown', toggleLayoutInspector)
+    }
+
     sceneManagerReady = true
     for (const request of pendingSceneRequests.splice(0)) {
       navigateSceneRequest(request)

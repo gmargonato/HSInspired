@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_mech_bear_cat.jpg",
+  "source_name": "goblins_vs_gnomes_mech_bear_cat.jpg",
+  "crop_box": [
+    0,
+    167,
+    656,
+    823
+  ],
+  "scale": 0.7621951219512195,
+  "offset_x": 0.0,
+  "offset_y": -127.19277673545963,
+  "timestamp": "2026-08-20T12:17:01.085981",
+  "card_id": "goblins_vs_gnomes_mech_bear_cat",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

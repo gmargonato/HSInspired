@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_dispel.jpg",
+  "source_name": "classic_dispel.jpg",
+  "crop_box": [
+    0,
+    0,
+    488,
+    488
+  ],
+  "scale": 1.0245901639344261,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:47:03.883403",
+  "card_id": "classic_dispel",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

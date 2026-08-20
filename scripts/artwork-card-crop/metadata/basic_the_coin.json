@@ -2,15 +2,15 @@
   "source_path": "assets\\images\\card-artwork\\basic_the_coin.jpg",
   "source_name": "basic_the_coin.jpg",
   "crop_box": [
-    175,
     0,
-    1826,
-    1651
+    0,
+    500,
+    500
   ],
-  "scale": 0.30284675953967294,
-  "offset_x": -52.89102175837496,
+  "scale": 1.0,
+  "offset_x": 0.0,
   "offset_y": 0.0,
-  "timestamp": "2026-08-19T19:59:57.335371",
+  "timestamp": "2026-08-20T12:20:23.934416",
   "card_id": "basic_the_coin",
   "card_type": "Spell",
   "frame_file": "frame-spell.png"

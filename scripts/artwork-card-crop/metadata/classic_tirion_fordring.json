@@ -2,15 +2,15 @@
   "source_path": "assets\\images\\card-artwork\\classic_tirion_fordring.jpg",
   "source_name": "classic_tirion_fordring.jpg",
   "crop_box": [
-    114,
-    44,
-    715,
-    645
+    0,
+    0,
+    500,
+    500
   ],
-  "scale": 0.8318750000000001,
-  "offset_x": -94.70615384615395,
-  "offset_y": -36.25125000000003,
-  "timestamp": "2026-08-19T19:46:19.522890",
+  "scale": 1.0,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:17:51.293117",
   "card_id": "classic_tirion_fordring",
   "card_type": "Minion",
   "frame_file": "frame-minion.png"

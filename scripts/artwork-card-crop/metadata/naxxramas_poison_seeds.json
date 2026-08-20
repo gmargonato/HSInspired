@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_poison_seeds.jpg",
+  "source_name": "naxxramas_poison_seeds.jpg",
+  "crop_box": [
+    196,
+    0,
+    1024,
+    828
+  ],
+  "scale": 0.6038647342995169,
+  "offset_x": -118.35748792270533,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:47:20.629339",
+  "card_id": "naxxramas_poison_seeds",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,6 +1,5 @@
 import { Container, Sprite, Text } from 'pixi.js'
 import type { AudioService } from '../../app/audio'
-import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
 import type { AppLogger } from '../../app/services'
 import {
   ASSET_BUNDLE_IDS,
@@ -14,17 +13,7 @@ import { HERO_CATALOG } from '../../../../game/content/heroes'
 import type { DeckStore } from '../deck-builder/deck-store'
 import { DECK_FRAME_ASSET_KEYS } from '../deck-builder/deck-frames'
 import { buildDeckSelectionEntries } from './deck-selection-model'
-
-const Layout = {
-  panel: { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 },
-  frameStart: { x: 360, y: 300 },
-  frameGap: { x: 25, y: 100 },
-  heroPortrait: { x: 1470, y: 490 },
-  heroName: { x: 1470, y: 720 },
-  playButton: { x: 1470, y: 930 },
-  toCollectionButton: { x: 752, y: 1033 },
-  backButton: { x: 1670, y: 1044 }
-} as const
+import { DECK_SELECTION_LAYOUT } from './deck-selection-layout'
 
 export interface DeckSelectionViewCallbacks {
   readonly onCollectionPressed?: () => void | Promise<void>
@@ -60,6 +49,7 @@ export class DeckSelectionView extends Container {
   }
 
   async mount(): Promise<void> {
+    await this.waitForFonts()
     try {
       const assets = await this.assetScope.acquire<DeckSelectionAssets>(
         ASSET_BUNDLE_IDS.deckSelection
@@ -87,7 +77,10 @@ export class DeckSelectionView extends Container {
   private createBackground(assets: DeckSelectionAssets): void {
     const panel = new Sprite(assets.panel)
     panel.anchor.set(0.5)
-    panel.position.set(Layout.panel.x, Layout.panel.y)
+    panel.position.set(
+      DECK_SELECTION_LAYOUT.panel.position.x,
+      DECK_SELECTION_LAYOUT.panel.position.y
+    )
     panel.eventMode = 'none'
     this.addChild(panel)
   }
@@ -96,7 +89,10 @@ export class DeckSelectionView extends Container {
     this.heroPortrait = new Sprite()
     this.heroPortrait.anchor.set(0.5)
     this.heroPortrait.scale.set(0.85 * 1.1, 0.85 * 1.05)
-    this.heroPortrait.position.set(Layout.heroPortrait.x, Layout.heroPortrait.y)
+    this.heroPortrait.position.set(
+      DECK_SELECTION_LAYOUT.heroPortrait.position.x,
+      DECK_SELECTION_LAYOUT.heroPortrait.position.y
+    )
     this.heroPortrait.visible = false
     this.heroPortrait.eventMode = 'none'
     this.addChild(this.heroPortrait)
@@ -111,7 +107,10 @@ export class DeckSelectionView extends Container {
       }
     })
     this.heroName.anchor.set(0.5)
-    this.heroName.position.set(Layout.heroName.x, Layout.heroName.y)
+    this.heroName.position.set(
+      DECK_SELECTION_LAYOUT.heroName.position.x,
+      DECK_SELECTION_LAYOUT.heroName.position.y
+    )
     this.heroName.visible = false
     this.heroName.eventMode = 'none'
     this.addChild(this.heroName)
@@ -126,8 +125,11 @@ export class DeckSelectionView extends Container {
         )
       }
     })
-    this.playButton.position.set(Layout.playButton.x, Layout.playButton.y)
-    this.playButton.setBaseY(Layout.playButton.y)
+    this.playButton.position.set(
+      DECK_SELECTION_LAYOUT.playButton.position.x,
+      DECK_SELECTION_LAYOUT.playButton.position.y
+    )
+    this.playButton.setBaseY(DECK_SELECTION_LAYOUT.playButton.position.y)
     this.playButton.visible = false
     this.playButton.setEnabled(false)
     this.addChild(this.playButton)
@@ -143,12 +145,12 @@ export class DeckSelectionView extends Container {
         onClick: () => this.selectDeck(entry.deck, assets)
       })
       button.position.set(
-        Layout.frameStart.x +
+        DECK_SELECTION_LAYOUT.deckGrid.frameStart.x +
           texture.width / 2 +
-          entry.column * (texture.width + Layout.frameGap.x),
-        Layout.frameStart.y +
+          entry.column * (texture.width + DECK_SELECTION_LAYOUT.deckGrid.frameGap.x),
+        DECK_SELECTION_LAYOUT.deckGrid.frameStart.y +
           texture.height / 2 +
-          entry.row * (texture.height + Layout.frameGap.y)
+          entry.row * (texture.height + DECK_SELECTION_LAYOUT.deckGrid.frameGap.y)
       )
       button.setBaseY(button.position.y)
       this.deckButtons.push(button)
@@ -179,10 +181,12 @@ export class DeckSelectionView extends Container {
       onClick: () => this.navigate(this.callbacks.onCollectionPressed, 'collection')
     })
     this.toCollectionButton.position.set(
-      Layout.toCollectionButton.x,
-      Layout.toCollectionButton.y
+      DECK_SELECTION_LAYOUT.toCollectionButton.position.x,
+      DECK_SELECTION_LAYOUT.toCollectionButton.position.y
     )
-    this.toCollectionButton.setBaseY(Layout.toCollectionButton.y)
+    this.toCollectionButton.setBaseY(
+      DECK_SELECTION_LAYOUT.toCollectionButton.position.y
+    )
     this.addChild(this.toCollectionButton)
 
     this.backButton = new Button(sharedAssets.backButton, {
@@ -190,8 +194,11 @@ export class DeckSelectionView extends Container {
       audio: this.audio,
       onClick: () => this.navigate(this.callbacks.onBackPressed, 'main menu')
     })
-    this.backButton.position.set(Layout.backButton.x, Layout.backButton.y)
-    this.backButton.setBaseY(Layout.backButton.y)
+    this.backButton.position.set(
+      DECK_SELECTION_LAYOUT.backButton.position.x,
+      DECK_SELECTION_LAYOUT.backButton.position.y
+    )
+    this.backButton.setBaseY(DECK_SELECTION_LAYOUT.backButton.position.y)
     this.addChild(this.backButton)
   }
 
@@ -219,6 +226,11 @@ export class DeckSelectionView extends Container {
     this.toCollectionButton.setEnabled(enabled)
     this.backButton.setEnabled(enabled)
     this.playButton.setEnabled(enabled && this.selectedDeck !== null)
+  }
+
+  private async waitForFonts(): Promise<void> {
+    if (typeof document === 'undefined' || !document.fonts) return
+    await document.fonts.load('30px Belwe')
   }
 
   async dispose(): Promise<void> {

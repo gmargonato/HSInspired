@@ -56,6 +56,12 @@ presentation resources.
 read-only geometry metadata for demonstrated consumers such as preview parallax and the
 dev inspector; editor mutation state does not belong in production rendering.
 
+Scene geometry is self-describing: a `LayoutPlacement` bundles position, anchor, size, and
+optional scale so a number is understandable without reading the surrounding logic. Each scene
+keeps its geometry in a `*-layout.ts` module next to the feature that owns it, and a
+development-only overlay (toggle F2) annotates every labelled Pixi object live. See
+[docs/LAYOUT.md](docs/LAYOUT.md).
+
 ## Conventions, not new abstractions
 
 - Runtime image filenames use lowercase kebab-case; card artwork uses exact `CardId` filenames.

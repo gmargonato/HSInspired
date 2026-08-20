@@ -3,14 +3,14 @@
   "source_name": "classic_sword_of_justice.jpg",
   "crop_box": [
     0,
-    75,
-    1024,
-    1099
+    0,
+    500,
+    500
   ],
-  "scale": 0.48828125,
+  "scale": 1.0,
   "offset_x": 0.0,
-  "offset_y": -36.62109375,
-  "timestamp": "2026-08-19T20:06:03.084191",
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:17:57.727510",
   "card_id": "classic_sword_of_justice",
   "card_type": "Weapon",
   "frame_file": "frame-weapon.png"

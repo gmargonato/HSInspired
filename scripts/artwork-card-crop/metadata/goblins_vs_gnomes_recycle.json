@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_recycle.jpg",
+  "source_name": "goblins_vs_gnomes_recycle.jpg",
+  "crop_box": [
+    77,
+    0,
+    645,
+    568
+  ],
+  "scale": 0.8802816901408451,
+  "offset_x": -67.94149512459373,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:16:58.843627",
+  "card_id": "goblins_vs_gnomes_recycle",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

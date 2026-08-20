@@ -13,25 +13,10 @@ import { AnimationScope } from '../../animation/animations'
 import { AssetScope } from '../../ui/asset-registry/asset-scope'
 import type { DeckStore } from './deck-store'
 import { DECK_FRAME_ASSET_KEYS } from './deck-frames'
+import { NEW_DECK_LAYOUT } from './new-deck-layout'
 import { HERO_CATALOG, type HeroDefinition } from '../../../../game/content/heroes'
 import { PLAYABLE_CLASSES, type DeckClass } from '../../../../game/content/cards'
 import type { Deck } from '../../../../game/decks'
-
-// Manual nudges only. These coordinates are local to the selection artwork,
-// so the whole creation panel can be moved with selectionOffsetX while its
-// individual controls remain easy to tune.
-const NEW_DECK_HERO_SELECTION_LAYOUT = {
-  selectionOffsetX: 0,
-  frameStartX: 360,
-  frameStartY: 300,
-  columnGap: 25,
-  rowGap: 100,
-  heroPortrait: { x: 1470, y: 490 },
-  heroName: { x: 1470, y: 720 },
-  selectClassButton: { x: 1470, y: 935 },
-  cancelButton: { x: 1670, y: 1045 },
-  slideDuration: 0.5
-}
 
 export interface NewDeckViewCallbacks {
   onClassSelected?: (hero: HeroDefinition) => void | Promise<void>
@@ -128,8 +113,8 @@ export class NewDeckView extends Container {
     this.heroPortrait.anchor.set(0.5)
     this.heroPortrait.scale.set(0.85 * 1.1, 0.85 * 1.05)
     this.heroPortrait.position.set(
-      NEW_DECK_HERO_SELECTION_LAYOUT.heroPortrait.x,
-      NEW_DECK_HERO_SELECTION_LAYOUT.heroPortrait.y
+      NEW_DECK_LAYOUT.heroPortrait.position.x,
+      NEW_DECK_LAYOUT.heroPortrait.position.y
     )
     this.heroPortrait.visible = false
     this.heroPortrait.eventMode = 'none'
@@ -146,8 +131,8 @@ export class NewDeckView extends Container {
     })
     this.heroName.anchor.set(0.5)
     this.heroName.position.set(
-      NEW_DECK_HERO_SELECTION_LAYOUT.heroName.x,
-      NEW_DECK_HERO_SELECTION_LAYOUT.heroName.y
+      NEW_DECK_LAYOUT.heroName.position.x,
+      NEW_DECK_LAYOUT.heroName.position.y
     )
     this.heroName.visible = false
     this.heroName.eventMode = 'none'
@@ -163,12 +148,12 @@ export class NewDeckView extends Container {
       const column = index % 3
       const row = Math.floor(index / 3)
       button.position.set(
-        NEW_DECK_HERO_SELECTION_LAYOUT.frameStartX +
+        NEW_DECK_LAYOUT.classGrid.frameStart.x +
           texture.width / 2 +
-          column * (texture.width + NEW_DECK_HERO_SELECTION_LAYOUT.columnGap),
-        NEW_DECK_HERO_SELECTION_LAYOUT.frameStartY +
+          column * (texture.width + NEW_DECK_LAYOUT.classGrid.frameGap.x),
+        NEW_DECK_LAYOUT.classGrid.frameStart.y +
           texture.height / 2 +
-          row * (texture.height + NEW_DECK_HERO_SELECTION_LAYOUT.rowGap)
+          row * (texture.height + NEW_DECK_LAYOUT.classGrid.frameGap.y)
       )
       button.setBaseY(button.position.y)
       button.setEnabled(false)
@@ -181,10 +166,10 @@ export class NewDeckView extends Container {
       onClick: () => this.confirmClass()
     })
     this.selectButton.position.set(
-      NEW_DECK_HERO_SELECTION_LAYOUT.selectClassButton.x,
-      NEW_DECK_HERO_SELECTION_LAYOUT.selectClassButton.y
+      NEW_DECK_LAYOUT.selectClassButton.position.x,
+      NEW_DECK_LAYOUT.selectClassButton.position.y
     )
-    this.selectButton.setBaseY(NEW_DECK_HERO_SELECTION_LAYOUT.selectClassButton.y)
+    this.selectButton.setBaseY(NEW_DECK_LAYOUT.selectClassButton.position.y)
     this.selectButton.visible = false
     this.selectButton.setEnabled(false)
     this.selectionContent.addChild(this.selectButton)
@@ -194,10 +179,10 @@ export class NewDeckView extends Container {
       onClick: () => this.cancel()
     })
     this.cancelButton.position.set(
-      NEW_DECK_HERO_SELECTION_LAYOUT.cancelButton.x,
-      NEW_DECK_HERO_SELECTION_LAYOUT.cancelButton.y
+      NEW_DECK_LAYOUT.cancelButton.position.x,
+      NEW_DECK_LAYOUT.cancelButton.position.y
     )
-    this.cancelButton.setBaseY(NEW_DECK_HERO_SELECTION_LAYOUT.cancelButton.y)
+    this.cancelButton.setBaseY(NEW_DECK_LAYOUT.cancelButton.position.y)
     this.cancelButton.setEnabled(false)
     this.selectionContent.addChild(this.cancelButton)
 
@@ -208,7 +193,7 @@ export class NewDeckView extends Container {
   private setSelectionContentY(y: number): void {
     this.selectionContent.position.set(
       (GAME_WIDTH - this.selectionBackground.texture.width) / 2 +
-        NEW_DECK_HERO_SELECTION_LAYOUT.selectionOffsetX,
+        NEW_DECK_LAYOUT.panel.offsetX,
       y
     )
   }
@@ -362,7 +347,7 @@ export class NewDeckView extends Container {
     return new Promise<void>((resolve) => {
       this.animationScope.to(this.selectionContent, {
         y,
-        duration: NEW_DECK_HERO_SELECTION_LAYOUT.slideDuration,
+        duration: NEW_DECK_LAYOUT.panel.slideDuration,
         ease: 'power2.out',
         onComplete: resolve,
         onInterrupt: resolve

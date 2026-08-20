@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_ancient_teachings.jpg",
+  "source_name": "classic_ancient_teachings.jpg",
+  "crop_box": [
+    80,
+    0,
+    1115,
+    1035
+  ],
+  "scale": 0.4830917874396135,
+  "offset_x": -38.52038424377545,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:20:01.429239",
+  "card_id": "classic_ancient_teachings",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

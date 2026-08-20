@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_feign_death.jpg",
+  "source_name": "goblins_vs_gnomes_feign_death.jpg",
+  "crop_box": [
+    2,
+    0,
+    512,
+    510
+  ],
+  "scale": 0.9803921568627451,
+  "offset_x": -1.9306184012066296,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:17:13.591621",
+  "card_id": "goblins_vs_gnomes_feign_death",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

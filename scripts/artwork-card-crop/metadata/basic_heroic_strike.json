@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_heroic_strike.jpg",
+  "source_name": "basic_heroic_strike.jpg",
+  "crop_box": [
+    0,
+    20,
+    712,
+    732
+  ],
+  "scale": 0.702247191011236,
+  "offset_x": -5.684341886080802e-14,
+  "offset_y": -13.725151253241147,
+  "timestamp": "2026-08-20T12:46:37.996833",
+  "card_id": "basic_heroic_strike",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

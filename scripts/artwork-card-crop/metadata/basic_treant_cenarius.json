@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_treant_cenarius.jpg",
+  "source_name": "basic_treant_cenarius.jpg",
+  "crop_box": [
+    104,
+    0,
+    1104,
+    1000
+  ],
+  "scale": 0.5,
+  "offset_x": -51.865384615384585,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:20:20.537187",
+  "card_id": "basic_treant_cenarius",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

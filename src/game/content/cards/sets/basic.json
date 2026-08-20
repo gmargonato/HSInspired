@@ -422,6 +422,7 @@
   },
   {
     "id": "basic_excess_mana",
+    "collectible": false,
     "name": "Excess Mana",
     "rarity": "Free",
     "cardClass": "Neutral",
@@ -662,6 +663,7 @@
   },
   {
     "id": "basic_healing_totem",
+    "collectible": false,
     "name": "Healing Totem",
     "rarity": "Free",
     "cardClass": "Shaman",
@@ -686,6 +688,7 @@
   },
   {
     "id": "basic_heavy_axe",
+    "collectible": false,
     "name": "Heavy Axe",
     "rarity": "None",
     "cardClass": "Warrior",
@@ -770,6 +773,7 @@
   },
   {
     "id": "basic_huffer",
+    "collectible": false,
     "name": "Huffer",
     "rarity": "Free",
     "cardClass": "Hunter",
@@ -938,6 +942,7 @@
   },
   {
     "id": "basic_mirror_image_minion",
+    "collectible": false,
     "name": "Mirror Image (minion)",
     "rarity": "Common",
     "cardClass": "Mage",
@@ -950,6 +955,7 @@
   },
   {
     "id": "basic_misha",
+    "collectible": false,
     "name": "Misha",
     "rarity": "Common",
     "cardClass": "Hunter",
@@ -998,6 +1004,7 @@
   },
   {
     "id": "basic_murloc_scout",
+    "collectible": false,
     "name": "Murloc Scout",
     "rarity": "Free",
     "cardClass": "Neutral",
@@ -1214,6 +1221,7 @@
   },
   {
     "id": "basic_searing_totem",
+    "collectible": false,
     "name": "Searing Totem",
     "rarity": "Free",
     "cardClass": "Shaman",
@@ -1286,6 +1294,7 @@
   },
   {
     "id": "basic_sheep",
+    "collectible": false,
     "name": "Sheep",
     "rarity": "Free",
     "cardClass": "Neutral",
@@ -1310,6 +1319,7 @@
   },
   {
     "id": "basic_silver_hand_recruit",
+    "collectible": false,
     "name": "Silver Hand Recruit",
     "rarity": "Free",
     "cardClass": "Paladin",
@@ -1370,6 +1380,7 @@
   },
   {
     "id": "basic_stoneclaw_totem",
+    "collectible": false,
     "name": "Stoneclaw Totem",
     "rarity": "Free",
     "cardClass": "Shaman",
@@ -1442,6 +1453,7 @@
   },
   {
     "id": "basic_the_coin",
+    "collectible": false,
     "name": "The Coin",
     "rarity": "None",
     "cardClass": "Neutral",
@@ -1490,6 +1502,7 @@
   },
   {
     "id": "basic_treant_cenarius",
+    "collectible": false,
     "name": "Treant (Cenarius)",
     "rarity": "Free",
     "cardClass": "Druid",
@@ -1502,6 +1515,7 @@
   },
   {
     "id": "basic_treant_soul_of_the_forest",
+    "collectible": false,
     "name": "Treant (Soul of the Forest)",
     "rarity": "Free",
     "cardClass": "Druid",
@@ -1598,6 +1612,7 @@
   },
   {
     "id": "basic_wicked_knife",
+    "collectible": false,
     "name": "Wicked Knife",
     "rarity": "Free",
     "cardClass": "Rogue",
@@ -1658,6 +1673,7 @@
   },
   {
     "id": "basic_wrath_of_air_totem",
+    "collectible": false,
     "name": "Wrath of Air Totem",
     "rarity": "Free",
     "cardClass": "Shaman",

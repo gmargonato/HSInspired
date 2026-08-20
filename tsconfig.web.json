@@ -13,7 +13,10 @@
     "paths": {
       "@renderer/*": ["src/renderer/src/*"],
       "@assets/*": ["assets/*"],
-      "@dev-inspector": ["src/renderer/src/scenes/dev/CardInspectorScene.ts"]
+      "@dev-inspector": ["src/renderer/src/scenes/dev/CardInspectorScene.ts"],
+      "@dev-layout-inspector": [
+        "src/renderer/src/features/dev/layout-inspector/index.ts"
+      ]
     }
   },
   "exclude": ["src/renderer/**/*.test.ts", "src/game/**/*.test.ts"]

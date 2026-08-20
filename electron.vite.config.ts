@@ -35,6 +35,11 @@ export default defineConfig(({ mode }) => ({
           mode === 'production'
             ? 'src/renderer/src/app/renderer-production-placeholder.ts'
             : 'src/renderer/src/scenes/dev/CardInspectorScene.ts'
+        ),
+        '@dev-layout-inspector': resolve(
+          mode === 'production'
+            ? 'src/renderer/src/app/renderer-production-placeholder.ts'
+            : 'src/renderer/src/features/dev/layout-inspector/index.ts'
         )
       }
     },

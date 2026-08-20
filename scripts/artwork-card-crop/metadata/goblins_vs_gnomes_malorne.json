@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_malorne.jpg",
+  "source_name": "goblins_vs_gnomes_malorne.jpg",
+  "crop_box": [
+    0,
+    34,
+    736,
+    770
+  ],
+  "scale": 0.6793478260869565,
+  "offset_x": 0.0,
+  "offset_y": -23.361204013377943,
+  "timestamp": "2026-08-20T12:17:06.934606",
+  "card_id": "goblins_vs_gnomes_malorne",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

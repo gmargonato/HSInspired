@@ -3,14 +3,14 @@
   "source_name": "classic_spellbreaker.jpg",
   "crop_box": [
     0,
-    30,
-    314,
-    344
+    0,
+    500,
+    500
   ],
-  "scale": 1.5923566878980893,
+  "scale": 1.0,
   "offset_x": 0.0,
-  "offset_y": -48.28025477707007,
-  "timestamp": "2026-08-19T20:05:46.654610",
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:18:13.854945",
   "card_id": "classic_spellbreaker",
   "card_type": "Minion",
   "frame_file": "frame-minion.png"

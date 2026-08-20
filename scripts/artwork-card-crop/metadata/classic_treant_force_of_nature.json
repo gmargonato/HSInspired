@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_treant_force_of_nature.jpg",
+  "source_name": "classic_treant_force_of_nature.jpg",
+  "crop_box": [
+    97,
+    0,
+    1097,
+    1000
+  ],
+  "scale": 0.5,
+  "offset_x": -48.678011153846185,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:17:50.503425",
+  "card_id": "classic_treant_force_of_nature",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

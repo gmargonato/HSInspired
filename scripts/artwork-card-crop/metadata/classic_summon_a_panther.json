@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_summon_a_panther.jpg",
+  "source_name": "classic_summon_a_panther.jpg",
+  "crop_box": [
+    134,
+    0,
+    1171,
+    1037
+  ],
+  "scale": 0.4821600771456123,
+  "offset_x": -64.78187003931453,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:18:01.216153",
+  "card_id": "classic_summon_a_panther",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

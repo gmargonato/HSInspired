@@ -2,15 +2,15 @@
   "source_path": "assets\\images\\card-artwork\\classic_keeper_of_the_grove.jpg",
   "source_name": "classic_keeper_of_the_grove.jpg",
   "crop_box": [
+    28,
     0,
-    26,
-    455,
-    481
+    483,
+    455
   ],
   "scale": 1.1,
-  "offset_x": 0.0,
-  "offset_y": -28.92307692307694,
-  "timestamp": "2026-08-19T20:03:23.347816",
+  "offset_x": -30.769230769230766,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:19:23.696056",
   "card_id": "classic_keeper_of_the_grove",
   "card_type": "Minion",
   "frame_file": "frame-minion.png"

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_bane_of_doom.jpg",
+  "source_name": "classic_bane_of_doom.jpg",
+  "crop_box": [
+    20,
+    0,
+    1024,
+    1004
+  ],
+  "scale": 0.49800796812749004,
+  "offset_x": -9.960159362549803,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:47:05.008345",
+  "card_id": "classic_bane_of_doom",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

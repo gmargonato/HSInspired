@@ -8,35 +8,22 @@ import type { AppRoute, SceneRouter } from '../app/router'
 import type { AudioService } from '../app/audio'
 import type { AppLogger } from '../app/services'
 import type { MainMenuAssets } from '../ui/asset-registry'
-import type { TransitionRect } from './transitions/SceneTransitionHost'
 import type { SceneTransitionOptions } from './SceneManager'
 import {
   createHingedDoorMesh,
   updateHingedDoor,
   type HingeSide
 } from '../features/collection/choreography/hinged-door'
+import {
+  MAIN_MENU_HINGE,
+  MAIN_MENU_LAYOUT,
+  MAIN_MENU_TIMING,
+  SCENE_SELECTION_GAP
+} from './main-menu-layout'
 
-// Manual nudges only (multi-line tweaks while designing the layout).
-// The lid x values are the inner edges of the closed chest.
-const Layout = {
-  box: { x: 0, y: 0 },
-  centerPart: { x: 0, y: 0 },
-  leftLid: { x: 30, y: 0 },
-  rightLid: { x: 0, y: 0 },
-  buttonPlay: { x: 0, y: -145 },
-  buttonCollection: { x: 0, y: -52 }
-}
+export { SCENE_SELECTION_GAP }
 
-const LID_OPEN_DURATION = 0.6
-const MENU_REVEAL_DURATION = 0.15
-const LID_MIN_WIDTH = 1
-const LID_PERSPECTIVE_DEPTH = 14
-export const SCENE_SELECTION_GAP: TransitionRect = {
-  x: (GAME_WIDTH - 1090) / 2,
-  y: (GAME_HEIGHT - 735) / 2,
-  width: 1090,
-  height: 735
-}
+const { chest, menuButtons } = MAIN_MENU_LAYOUT
 
 type LidSide = HingeSide
 type MainMenuEntryMode = 'closed' | 'returning'
@@ -156,8 +143,11 @@ export class MainMenuScene extends Scene {
       audio: this.audio,
       onClick: () => this.onPlayPressed()
     })
-    this.buttonPlay.position.set(Layout.buttonPlay.x, Layout.buttonPlay.y)
-    this.buttonPlay.setBaseY(Layout.buttonPlay.y)
+    this.buttonPlay.position.set(
+      menuButtons.play.position.x,
+      menuButtons.play.position.y
+    )
+    this.buttonPlay.setBaseY(menuButtons.play.position.y)
     this.buttonPlay.visible = true
     this.buttonPlay.alpha = this.entryMode === 'returning' ? 0 : 1
     this.buttonPlay.setEnabled(this.entryMode !== 'returning')
@@ -170,10 +160,10 @@ export class MainMenuScene extends Scene {
       onClick: () => this.onCollectionPressed()
     })
     this.buttonCollection.position.set(
-      Layout.buttonCollection.x,
-      Layout.buttonCollection.y
+      menuButtons.collection.position.x,
+      menuButtons.collection.position.y
     )
-    this.buttonCollection.setBaseY(Layout.buttonCollection.y)
+    this.buttonCollection.setBaseY(menuButtons.collection.position.y)
     this.buttonCollection.visible = true
     this.buttonCollection.alpha = this.entryMode === 'returning' ? 0 : 1
     this.buttonCollection.setEnabled(this.entryMode !== 'returning')
@@ -217,7 +207,7 @@ export class MainMenuScene extends Scene {
         [this.buttonPlay, this.buttonCollection],
         {
           alpha: 1,
-          duration: MENU_REVEAL_DURATION,
+          duration: MAIN_MENU_TIMING.menuReveal,
           ease: 'power2.out'
         },
         0
@@ -236,7 +226,7 @@ export class MainMenuScene extends Scene {
 
     this.chestBox = new Sprite(box)
     this.chestBox.anchor.set(0.5)
-    this.chestBox.position.set(Layout.box.x, Layout.box.y)
+    this.chestBox.position.set(chest.box.position.x, chest.box.position.y)
     this.boxLayer.addChild(this.chestBox)
 
     this.lidLeft = this.createLidMesh(leftLid, 'left')
@@ -250,8 +240,14 @@ export class MainMenuScene extends Scene {
     const height = texture.height
     const hingeOnLeft = side === 'left'
     const topLeft = hingeOnLeft
-      ? { x: Layout.leftLid.x - texture.width, y: Layout.leftLid.y - height / 2 }
-      : { x: Layout.rightLid.x, y: Layout.rightLid.y - height / 2 }
+      ? {
+          x: chest.leftLidInnerEdge.x - texture.width,
+          y: chest.leftLidInnerEdge.y - height / 2
+        }
+      : {
+          x: chest.rightLidInnerEdge.x,
+          y: chest.rightLidInnerEdge.y - height / 2
+        }
 
     return createHingedDoorMesh(texture, side, topLeft)
   }
@@ -300,8 +296,8 @@ export class MainMenuScene extends Scene {
       this.buttonCollection.setEnabled(true)
       this.buttonPlay.alpha = 1
       this.buttonCollection.alpha = 1
-      this.buttonPlay.y = Layout.buttonPlay.y
-      this.buttonCollection.y = Layout.buttonCollection.y
+      this.buttonPlay.y = menuButtons.play.position.y
+      this.buttonCollection.y = menuButtons.collection.position.y
       this.centerCard.visible = true
       this.centerCard.eventMode = 'none'
       this.lidLeft.visible = true
@@ -330,7 +326,7 @@ export class MainMenuScene extends Scene {
         state,
         {
           progress: toProgress,
-          duration: LID_OPEN_DURATION,
+          duration: MAIN_MENU_TIMING.lidOpen,
           ease,
           onUpdate: () => this.updateLidMeshes(state.progress)
         },
@@ -347,15 +343,15 @@ export class MainMenuScene extends Scene {
       this.lidLeft,
       'left',
       clampedProgress,
-      LID_PERSPECTIVE_DEPTH,
-      LID_MIN_WIDTH
+      MAIN_MENU_HINGE.perspectiveDepth,
+      MAIN_MENU_HINGE.minWidth
     )
     updateHingedDoor(
       this.lidRight,
       'right',
       clampedProgress,
-      LID_PERSPECTIVE_DEPTH,
-      LID_MIN_WIDTH
+      MAIN_MENU_HINGE.perspectiveDepth,
+      MAIN_MENU_HINGE.minWidth
     )
     this.updateCenterPartMount(widthScale)
   }
@@ -363,12 +359,12 @@ export class MainMenuScene extends Scene {
   private updateCenterPartMount(widthScale: number): void {
     const width = this.lidRight.texture.width
     const height = this.lidRight.texture.height
-    const visibleWidth = Math.max(LID_MIN_WIDTH, width * widthScale)
+    const visibleWidth = Math.max(MAIN_MENU_HINGE.minWidth, width * widthScale)
     const freeEdgeX = -visibleWidth
 
     this.centerPartMount.position.set(
-      Layout.centerPart.x - Layout.rightLid.x + freeEdgeX,
-      height / 2 + Layout.centerPart.y - Layout.rightLid.y
+      chest.centerPartOffset.x - chest.rightLidInnerEdge.x + freeEdgeX,
+      height / 2 + chest.centerPartOffset.y - chest.rightLidInnerEdge.y
     )
     this.centerPartMount.scale.set(widthScale, 1)
   }

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_bear_form.jpg",
+  "source_name": "classic_bear_form.jpg",
+  "crop_box": [
+    0,
+    29,
+    1024,
+    1053
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": -14.17068810096157,
+  "timestamp": "2026-08-20T12:19:51.624375",
+  "card_id": "classic_bear_form",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_treant_soul_of_the_forest.jpg",
+  "source_name": "basic_treant_soul_of_the_forest.jpg",
+  "crop_box": [
+    104,
+    0,
+    1104,
+    1000
+  ],
+  "scale": 0.5,
+  "offset_x": -51.964183846153844,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T12:20:19.254585",
+  "card_id": "basic_treant_soul_of_the_forest",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

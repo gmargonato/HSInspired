@@ -14,6 +14,14 @@ import { CARD_CATALOG, type CardDefinition } from '../../../game/content/cards'
 import { CardAssetResolver } from '../ui/asset-registry/card-asset-resolver'
 import { CardView } from '../rendering/cards/card-view'
 import { Scene } from './Scene'
+import {
+  COLLECTION_LAYOUT,
+  PAGE_HEIGHT,
+  PAGE_LEFT,
+  PAGE_NAV_ZONE_WIDTH,
+  PAGE_RIGHT,
+  PAGE_TOP
+} from './collection-layout'
 import { GAME_HEIGHT, GAME_WIDTH } from '../app/config'
 import {
   ASSET_BUNDLE_IDS,
@@ -70,14 +78,6 @@ import {
 } from '../../../game/decks'
 import type { DeckClass } from '../../../game/content/cards'
 
-const PAGE_LEFT = 250
-const PAGE_TOP = 80
-const PAGE_RIGHT = 1380
-const PAGE_BOTTOM = GAME_HEIGHT - 80
-const PAGE_CENTER_X = (PAGE_LEFT + PAGE_RIGHT) / 2
-const PAGE_HEIGHT = PAGE_BOTTOM - PAGE_TOP
-const PAGE_NAV_ZONE_WIDTH = 90
-
 const COLLECTION_PAGE_FLIP_FORWARD_SOUNDS = [
   'collection-page-flip-forward',
   'collection-page-flip-forward-3'
@@ -86,41 +86,6 @@ const COLLECTION_PAGE_FLIP_BACK_SOUNDS = [
   'collection-page-flip-back',
   'collection-page-flip-back-3'
 ] as const
-
-// Manual nudges only. Keep the lock position relative to the cover so the two
-// assets stay aligned when the main collection panel is moved during layout.
-// These starting values line the 1157x1080 cover up with the center panel of
-// the 1920x1080 collection background.
-const Layout = {
-  page: {
-    x: PAGE_LEFT,
-    y: PAGE_TOP,
-    width: PAGE_RIGHT - PAGE_LEFT,
-    height: PAGE_HEIGHT
-  },
-  classLabel: { x: PAGE_CENTER_X, y: 115 },
-  pageLabel: { x: PAGE_CENTER_X, y: 940 },
-  cardGrid: { x: 305, y: 145, width: 1000, height: 770 },
-  // Collection filter positions are in the 1920x1080 scene coordinate space.
-  // Keep these values together so visual alignment can be tuned without
-  // changing filter behavior.
-  collectionFilters: {
-    mana: {
-      firstCrystalCenter: { x: 450, y: 1030 },
-      gap: 65,
-      crystal: { width: 44, height: 52 },
-      rotation: Math.PI / 2,
-      labelOffset: { x: 0, y: 0 }
-    },
-    searchInput: { x: 1090, y: 1006, width: 205, height: 43 },
-    searchClear: { x: 1323, y: 1026, width: 30, height: 30 },
-    noResults: { x: PAGE_CENTER_X, y: 480 }
-  },
-  cover: { x: 242, y: 0 },
-  coverLock: { x: 905, y: 418 },
-  deckList: { x: 1404, y: 120, width: 283, height: 870 },
-  deckSlider: { x: 1705, minY: 50, maxY: 900 }
-}
 
 const DECK_EDITOR_CARD_ROW_HEIGHT = 34
 const DECK_EDITOR_CARD_ROW_GAP = 1
@@ -132,14 +97,14 @@ const DECK_EDITOR_CARD_LIST_HEIGHT =
 
 const DECK_EDITOR_LAYOUT = {
   header: {
-    x: Layout.deckList.x + Layout.deckList.width / 2,
+    x: COLLECTION_LAYOUT.deckList.x + COLLECTION_LAYOUT.deckList.width / 2,
     y: 64
   },
   count: { x: 1495, y: 1038 },
   cardList: {
-    x: Layout.deckList.x + 10,
+    x: COLLECTION_LAYOUT.deckList.x + 10,
     y: 132,
-    width: Layout.deckList.width - 20,
+    width: COLLECTION_LAYOUT.deckList.width - 20,
     height: DECK_EDITOR_CARD_LIST_HEIGHT
   },
   footerButton: { x: 1660, y: 1038 }
@@ -150,7 +115,7 @@ const CARD_GRID_ROWS = 2
 const CARD_SLOT_PADDING_X = 10
 const CARD_SLOT_PADDING_Y = 12
 const CARD_GRID_LAYOUT: CollectionCardGridLayout = {
-  ...Layout.cardGrid,
+  ...COLLECTION_LAYOUT.cardGrid,
   columns: CARD_GRID_COLUMNS,
   rows: CARD_GRID_ROWS,
   paddingX: CARD_SLOT_PADDING_X,
@@ -169,7 +134,7 @@ const DECK_EDITOR_COST_WIDTH = 27
 const DECK_EDITOR_COPIES_WIDTH = 24
 const DECK_EDITOR_TRANSITION_DURATION = 0.45
 const DECK_EDITOR_CONTENT_FADE_DURATION = 0.2
-const DECK_EDITOR_FRAME_TARGET_WIDTH = Layout.deckList.width
+const DECK_EDITOR_FRAME_TARGET_WIDTH = COLLECTION_LAYOUT.deckList.width
 const DECK_EDITOR_FRAME_CARD_LIST_GAP = 4
 const DECK_EDITOR_ROW_REMOVE_DURATION = 0.22
 const DECK_EDITOR_ROW_COLLAPSE_DURATION = 0.18
@@ -336,7 +301,10 @@ export class CollectionScene extends Scene {
       }
     })
     this.classLabel.anchor.set(0.5)
-    this.classLabel.position.set(Layout.classLabel.x, Layout.classLabel.y)
+    this.classLabel.position.set(
+      COLLECTION_LAYOUT.classLabel.x,
+      COLLECTION_LAYOUT.classLabel.y
+    )
     this.classLabel.eventMode = 'none'
     this.pageContent.addChild(this.classLabel)
 
@@ -350,15 +318,18 @@ export class CollectionScene extends Scene {
       }
     })
     this.pageLabel.anchor.set(0.5)
-    this.pageLabel.position.set(Layout.pageLabel.x, Layout.pageLabel.y)
+    this.pageLabel.position.set(
+      COLLECTION_LAYOUT.pageLabel.x,
+      COLLECTION_LAYOUT.pageLabel.y
+    )
     this.pageLabel.eventMode = 'none'
     this.pageContent.addChild(this.pageLabel)
 
     this.emptyStateImage = new Sprite(assets.searchNoResults)
     this.emptyStateImage.anchor.set(0.5)
     this.emptyStateImage.position.set(
-      Layout.collectionFilters.noResults.x,
-      Layout.collectionFilters.noResults.y
+      COLLECTION_LAYOUT.collectionFilters.noResults.x,
+      COLLECTION_LAYOUT.collectionFilters.noResults.y
     )
     this.emptyStateImage.eventMode = 'none'
     this.emptyStateImage.visible = false
@@ -381,12 +352,12 @@ export class CollectionScene extends Scene {
 
     // The cover is hinged on its left edge. The separate lock is hinged on
     // its right edge, matching the direction shown in the reference images.
-    this.cover = createHingedDoorMesh(assets.cover, 'left', Layout.cover)
+    this.cover = createHingedDoorMesh(assets.cover, 'left', COLLECTION_LAYOUT.cover)
     this.root.addChild(this.cover)
 
     this.coverLock = createHingedDoorMesh(assets.coverLock, 'right', {
-      x: Layout.cover.x + Layout.coverLock.x,
-      y: Layout.cover.y + Layout.coverLock.y
+      x: COLLECTION_LAYOUT.cover.x + COLLECTION_LAYOUT.coverLock.x,
+      y: COLLECTION_LAYOUT.cover.y + COLLECTION_LAYOUT.coverLock.y
     })
     this.root.addChild(this.coverLock)
 
@@ -497,9 +468,9 @@ export class CollectionScene extends Scene {
     for (const [index, value] of MANA_FILTER_VALUES.entries()) {
       const control = new Container()
       control.position.set(
-        Layout.collectionFilters.mana.firstCrystalCenter.x +
-          index * Layout.collectionFilters.mana.gap,
-        Layout.collectionFilters.mana.firstCrystalCenter.y
+        COLLECTION_LAYOUT.collectionFilters.mana.firstCrystalCenter.x +
+          index * COLLECTION_LAYOUT.collectionFilters.mana.gap,
+        COLLECTION_LAYOUT.collectionFilters.mana.firstCrystalCenter.y
       )
       control.hitArea = new Rectangle(-30, -52, 60, 96)
       control.eventMode = 'static'
@@ -511,9 +482,9 @@ export class CollectionScene extends Scene {
 
       const crystal = new Sprite(assets.manaCrystal)
       crystal.anchor.set(0.5)
-      crystal.width = Layout.collectionFilters.mana.crystal.width
-      crystal.height = Layout.collectionFilters.mana.crystal.height
-      crystal.rotation = Layout.collectionFilters.mana.rotation
+      crystal.width = COLLECTION_LAYOUT.collectionFilters.mana.crystal.width
+      crystal.height = COLLECTION_LAYOUT.collectionFilters.mana.crystal.height
+      crystal.rotation = COLLECTION_LAYOUT.collectionFilters.mana.rotation
       crystal.eventMode = 'none'
       control.addChild(crystal)
 
@@ -529,8 +500,8 @@ export class CollectionScene extends Scene {
       })
       label.anchor.set(0.5)
       label.position.set(
-        Layout.collectionFilters.mana.labelOffset.x,
-        Layout.collectionFilters.mana.labelOffset.y
+        COLLECTION_LAYOUT.collectionFilters.mana.labelOffset.x,
+        COLLECTION_LAYOUT.collectionFilters.mana.labelOffset.y
       )
       label.eventMode = 'none'
       control.addChild(label)
@@ -544,11 +515,12 @@ export class CollectionScene extends Scene {
     this.searchClearButton = new Sprite(assets.searchClear)
     this.searchClearButton.anchor.set(0.5)
     this.searchClearButton.position.set(
-      Layout.collectionFilters.searchClear.x,
-      Layout.collectionFilters.searchClear.y
+      COLLECTION_LAYOUT.collectionFilters.searchClear.x,
+      COLLECTION_LAYOUT.collectionFilters.searchClear.y
     )
-    this.searchClearButton.width = Layout.collectionFilters.searchClear.width
-    this.searchClearButton.height = Layout.collectionFilters.searchClear.height
+    this.searchClearButton.width = COLLECTION_LAYOUT.collectionFilters.searchClear.width
+    this.searchClearButton.height =
+      COLLECTION_LAYOUT.collectionFilters.searchClear.height
     this.searchClearButton.hitArea = new Rectangle(-26, -26, 52, 52)
     this.searchClearButton.eventMode = 'static'
     this.searchClearButton.cursor = 'pointer'
@@ -570,7 +542,7 @@ export class CollectionScene extends Scene {
     this.searchInput = new CollectionSearchInput({
       canvas: this.appInstance.canvas,
       parent,
-      bounds: Layout.collectionFilters.searchInput,
+      bounds: COLLECTION_LAYOUT.collectionFilters.searchInput,
       onInput: this.handleSearchInput
     })
     this.searchInput.mount(this.collectionQuery.searchQuery)
@@ -785,19 +757,25 @@ export class CollectionScene extends Scene {
     this.deckAssets = { ...assets, ...deckPresentationAssets }
 
     this.deckMask = new Graphics()
-      .rect(0, 0, Layout.deckList.width, Layout.deckList.height)
+      .rect(0, 0, COLLECTION_LAYOUT.deckList.width, COLLECTION_LAYOUT.deckList.height)
       .fill({ color: 0xffffff })
-    this.deckMask.position.set(Layout.deckList.x, Layout.deckList.y)
+    this.deckMask.position.set(
+      COLLECTION_LAYOUT.deckList.x,
+      COLLECTION_LAYOUT.deckList.y
+    )
     this.deckMask.eventMode = 'none'
     this.root.addChild(this.deckMask)
 
     this.deckViewport = new Container()
-    this.deckViewport.position.set(Layout.deckList.x, Layout.deckList.y)
+    this.deckViewport.position.set(
+      COLLECTION_LAYOUT.deckList.x,
+      COLLECTION_LAYOUT.deckList.y
+    )
     this.deckViewport.hitArea = new Rectangle(
       0,
       0,
-      Layout.deckList.width,
-      Layout.deckList.height
+      COLLECTION_LAYOUT.deckList.width,
+      COLLECTION_LAYOUT.deckList.height
     )
     this.deckViewport.eventMode = 'none'
     this.deckViewport.on('wheel', this.handleDeckWheel)
@@ -808,7 +786,10 @@ export class CollectionScene extends Scene {
     this.root.addChild(this.deckViewport)
 
     this.deckSlider = new Sprite(this.deckAssets.verticalSlider)
-    this.deckSlider.position.set(Layout.deckSlider.x, Layout.deckSlider.minY)
+    this.deckSlider.position.set(
+      COLLECTION_LAYOUT.deckSlider.x,
+      COLLECTION_LAYOUT.deckSlider.minY
+    )
     this.deckSlider.eventMode = 'none'
     this.deckSlider.cursor = 'pointer'
     this.deckSlider.on('pointerdown', this.startDeckSliderDrag)
@@ -993,7 +974,7 @@ export class CollectionScene extends Scene {
     const itemCount = decks.length + 1
     const contentHeight =
       itemCount * DECK_BUTTON_HEIGHT + Math.max(0, itemCount - 1) * DECK_BUTTON_GAP
-    this.deckMaxScroll = Math.max(0, contentHeight - Layout.deckList.height)
+    this.deckMaxScroll = Math.max(0, contentHeight - COLLECTION_LAYOUT.deckList.height)
     this.setDeckScroll(this.deckScrollOffset)
     this.setDeckInteractionEnabled(this.navigationReady && !this.disposed)
   }
@@ -1007,7 +988,7 @@ export class CollectionScene extends Scene {
   ): Button {
     const entry = new Container()
     entry.position.set(
-      Layout.deckList.width / 2,
+      COLLECTION_LAYOUT.deckList.width / 2,
       index * (DECK_BUTTON_HEIGHT + DECK_BUTTON_GAP) + DECK_BUTTON_HEIGHT / 2
     )
 
@@ -1067,7 +1048,7 @@ export class CollectionScene extends Scene {
     for (const entry of this.deckEntries) {
       const entryTop = entry.y - DECK_BUTTON_HEIGHT / 2 + this.deckScrollOffset
       const entryBottom = entryTop + DECK_BUTTON_HEIGHT
-      entry.visible = entryBottom > 0 && entryTop < Layout.deckList.height
+      entry.visible = entryBottom > 0 && entryTop < COLLECTION_LAYOUT.deckList.height
     }
   }
 
@@ -1090,11 +1071,12 @@ export class CollectionScene extends Scene {
 
     const scrollRatio = -scrollOffset / maxScroll
     const sliderY =
-      Layout.deckSlider.minY +
-      scrollRatio * (Layout.deckSlider.maxY - Layout.deckSlider.minY)
+      COLLECTION_LAYOUT.deckSlider.minY +
+      scrollRatio *
+        (COLLECTION_LAYOUT.deckSlider.maxY - COLLECTION_LAYOUT.deckSlider.minY)
 
     this.deckSlider.visible = true
-    this.deckSlider.position.set(Layout.deckSlider.x, sliderY)
+    this.deckSlider.position.set(COLLECTION_LAYOUT.deckSlider.x, sliderY)
   }
 
   private setDeckInteractionEnabled(enabled: boolean): void {
@@ -1201,12 +1183,16 @@ export class CollectionScene extends Scene {
     const maxScroll = this.getActiveScrollMax()
     if (!this.deckSliderDragging || maxScroll === 0) return
 
-    const trackRange = Layout.deckSlider.maxY - Layout.deckSlider.minY
+    const trackRange =
+      COLLECTION_LAYOUT.deckSlider.maxY - COLLECTION_LAYOUT.deckSlider.minY
     const sliderY = Math.max(
-      Layout.deckSlider.minY,
-      Math.min(Layout.deckSlider.maxY, event.global.y - this.deckSliderDragOffset)
+      COLLECTION_LAYOUT.deckSlider.minY,
+      Math.min(
+        COLLECTION_LAYOUT.deckSlider.maxY,
+        event.global.y - this.deckSliderDragOffset
+      )
     )
-    const scrollRatio = (sliderY - Layout.deckSlider.minY) / trackRange
+    const scrollRatio = (sliderY - COLLECTION_LAYOUT.deckSlider.minY) / trackRange
 
     if (this.activeDeckId !== null) {
       this.setDeckEditorCardScroll(-scrollRatio * maxScroll)

@@ -2,15 +2,15 @@
   "source_path": "assets\\images\\card-artwork\\classic_scavenging_hyena.jpg",
   "source_name": "classic_scavenging_hyena.jpg",
   "crop_box": [
-    0,
-    0,
-    365,
-    365
+    87,
+    39,
+    500,
+    452
   ],
-  "scale": 1.36986301369863,
-  "offset_x": 0.0,
-  "offset_y": 0.0,
-  "timestamp": "2026-08-19T20:05:10.518259",
+  "scale": 1.2100000000000002,
+  "offset_x": -105.00000000000011,
+  "offset_y": -47.78461538461541,
+  "timestamp": "2026-08-20T12:18:37.548284",
   "card_id": "classic_scavenging_hyena",
   "card_type": "Minion",
   "frame_file": "frame-minion.png"
