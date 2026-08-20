@@ -93,6 +93,17 @@ export function resolveCursorVariant(
   return contextVariant ?? 'default'
 }
 
+export function shouldRestoreCursor(
+  documentIsVisible: boolean,
+  windowIsFocused: boolean,
+  pointerIsInsideHost: boolean,
+  hasPointerPosition: boolean
+): boolean {
+  return (
+    documentIsVisible && windowIsFocused && pointerIsInsideHost && hasPointerPosition
+  )
+}
+
 /**
  * Owns the app-wide cursor visual. It deliberately lives outside scenes so a
  * scene transition cannot reset the pointer image or its pressed state.
@@ -106,6 +117,7 @@ export class CursorManager {
   private leftButtonDown = false
   private pointerX: number | null = null
   private pointerY: number | null = null
+  private pointerInsideHost = false
   private mounted = false
 
   constructor(host: HTMLElement) {
@@ -135,6 +147,7 @@ export class CursorManager {
     window.addEventListener('pointerup', this.onPointerUp, true)
     window.addEventListener('pointercancel', this.onPointerCancel, true)
     window.addEventListener('blur', this.onWindowBlur)
+    window.addEventListener('focus', this.onWindowFocus)
     document.addEventListener('visibilitychange', this.onVisibilityChange)
   }
 
@@ -146,6 +159,7 @@ export class CursorManager {
     window.removeEventListener('pointerup', this.onPointerUp, true)
     window.removeEventListener('pointercancel', this.onPointerCancel, true)
     window.removeEventListener('blur', this.onWindowBlur)
+    window.removeEventListener('focus', this.onWindowFocus)
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
 
     this.host.classList.remove(CUSTOM_CURSOR_CLASS)
@@ -153,6 +167,7 @@ export class CursorManager {
     this.element.style.visibility = 'hidden'
     this.contextVariant = null
     this.leftButtonDown = false
+    this.pointerInsideHost = false
     this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
     this.mounted = false
   }
@@ -180,6 +195,7 @@ export class CursorManager {
 
   private onPointerMove = (event: PointerEvent): void => {
     if (!this.isInsideHost(event)) {
+      this.pointerInsideHost = false
       // A missed pointerup can otherwise leave the pressed artwork active;
       // only clear it once the browser reports that the button is no longer
       // held, so dragging outside the window still preserves the pressed
@@ -192,6 +208,7 @@ export class CursorManager {
       return
     }
 
+    this.pointerInsideHost = true
     this.setPointerPosition(event.clientX, event.clientY)
 
     // This is a defensive fallback for platform/window transitions where a
@@ -206,6 +223,7 @@ export class CursorManager {
   private onPointerDown = (event: PointerEvent): void => {
     if (event.button !== LEFT_BUTTON || !this.isInsideHost(event)) return
 
+    this.pointerInsideHost = true
     this.leftButtonDown = true
     this.setVariant(resolveCursorVariant(this.leftButtonDown, this.contextVariant))
     this.setPointerPosition(event.clientX, event.clientY)
@@ -227,12 +245,34 @@ export class CursorManager {
     this.hide()
   }
 
+  private onWindowFocus = (): void => {
+    this.restoreAfterWindowReturn()
+  }
+
   private onVisibilityChange = (): void => {
     if (document.visibilityState !== 'visible') {
       this.setContextVariant(null)
       this.releaseLeftButton()
       this.hide()
+      return
     }
+
+    this.restoreAfterWindowReturn()
+  }
+
+  private restoreAfterWindowReturn(): void {
+    if (
+      !shouldRestoreCursor(
+        document.visibilityState === 'visible',
+        document.hasFocus(),
+        this.pointerInsideHost,
+        this.pointerX !== null && this.pointerY !== null
+      )
+    ) {
+      return
+    }
+
+    this.show()
   }
 
   private releaseLeftButton(): void {

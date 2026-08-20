@@ -42,6 +42,10 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Keep Pixi animations and timers active while the game window is
+      // backgrounded or minimized. This deliberately trades power use for
+      // uninterrupted game presentation.
+      backgroundThrottling: false,
       webSecurity: true
     }
   })

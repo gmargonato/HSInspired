@@ -111,7 +111,7 @@ const Layout = {
       rotation: Math.PI / 2,
       labelOffset: { x: 0, y: 0 }
     },
-    searchInput: { x: 1090, y: 1006, width: 220, height: 43 },
+    searchInput: { x: 1090, y: 1006, width: 205, height: 43 },
     searchClear: { x: 1323, y: 1026, width: 30, height: 30 },
     noResults: { x: PAGE_CENTER_X, y: 480 }
   },
@@ -265,6 +265,7 @@ export class CollectionScene extends Scene {
   private navigationEnabled = false
   private navigationReady = false
   private hoveredPageZone: CursorContextVariant | null = null
+  private pageHoverSequence = 0
   private cardPreviewOpening = false
   private disposed = false
   private readonly deckController: CollectionDeckController
@@ -540,7 +541,7 @@ export class CollectionScene extends Scene {
     )
     this.searchClearButton.width = Layout.collectionFilters.searchClear.width
     this.searchClearButton.height = Layout.collectionFilters.searchClear.height
-    this.searchClearButton.hitArea = new Rectangle(-20, -20, 40, 40)
+    this.searchClearButton.hitArea = new Rectangle(-26, -26, 52, 52)
     this.searchClearButton.eventMode = 'static'
     this.searchClearButton.cursor = 'pointer'
     this.searchClearButton.visible = false
@@ -2220,14 +2221,26 @@ export class CollectionScene extends Scene {
     zone.hitArea = new Rectangle(0, 0, width, PAGE_HEIGHT)
     zone.eventMode = 'none'
     zone.on('pointerover', () => {
+      this.pageHoverSequence += 1
       this.hoveredPageZone = cursorVariant
       this.sceneManager.cursor?.setContextVariant(cursorVariant)
     })
     zone.on('pointerout', () => {
-      if (this.hoveredPageZone !== cursorVariant) return
+      const hoverSequence = this.pageHoverSequence
+      // Replacing the card layer can briefly make Pixi emit pointerout and
+      // pointerover for a stationary pointer. Wait one microtask so a matching
+      // pointerover keeps the page-pass cursor instead of flashing default.
+      queueMicrotask(() => {
+        if (
+          this.pageHoverSequence !== hoverSequence ||
+          this.hoveredPageZone !== cursorVariant
+        ) {
+          return
+        }
 
-      this.hoveredPageZone = null
-      this.sceneManager.cursor?.setContextVariant(null)
+        this.hoveredPageZone = null
+        this.sceneManager.cursor?.setContextVariant(null)
+      })
     })
     zone.on('pointertap', onClick)
     return zone
@@ -2235,6 +2248,7 @@ export class CollectionScene extends Scene {
 
   private setNavigationEnabled(enabled: boolean): void {
     this.navigationEnabled = enabled
+    this.pageHoverSequence += 1
     this.hoveredPageZone = null
     this.sceneManager.cursor?.setContextVariant(null)
 

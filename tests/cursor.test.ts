@@ -6,7 +6,8 @@ import {
   getCursorSize,
   getCursorVariant,
   normalizeCursorScale,
-  resolveCursorVariant
+  resolveCursorVariant,
+  shouldRestoreCursor
 } from '../src/renderer/src/ui/components/cursor'
 
 describe('cursor state helpers', () => {
@@ -35,5 +36,13 @@ describe('cursor state helpers', () => {
       CURSOR_SCALE_LIMITS.max
     )
     expect(getCursorSize(2)).toBe(CURSOR_BASE_SIZE * 2)
+  })
+
+  it('restores the custom cursor only after a visible focused return inside the game', () => {
+    expect(shouldRestoreCursor(true, true, true, true)).toBe(true)
+    expect(shouldRestoreCursor(false, true, true, true)).toBe(false)
+    expect(shouldRestoreCursor(true, false, true, true)).toBe(false)
+    expect(shouldRestoreCursor(true, true, false, true)).toBe(false)
+    expect(shouldRestoreCursor(true, true, true, false)).toBe(false)
   })
 })
