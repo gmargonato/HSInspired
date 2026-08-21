@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_avenge.jpg",
+  "source_name": "naxxramas_avenge.jpg",
+  "crop_box": [
+    96,
+    0,
+    512,
+    416
+  ],
+  "scale": 1.2019230769230769,
+  "offset_x": -115.38461538461536,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:19:24.816865",
+  "card_id": "naxxramas_avenge",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

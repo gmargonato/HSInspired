@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_sludge_belcher.jpg",
+  "source_name": "naxxramas_sludge_belcher.jpg",
+  "crop_box": [
+    207,
+    0,
+    641,
+    434
+  ],
+  "scale": 1.153360026041667,
+  "offset_x": -238.25190184495213,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:21:04.729544",
+  "card_id": "naxxramas_sludge_belcher",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

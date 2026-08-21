@@ -78,6 +78,12 @@ version 1 deck files are migrated, while unsupported files are backed up before
 a replacement version 2 file is initialized.
 
 `MatchSetup` contains exactly two participant setups and an optional seed. The
-opening match boundary now deals the Hearthstone opening hands, accepts
-mulligan confirmations, grants the second player the Coin, and emits the first
-turn draw as ordered serializable events. See [docs/MATCH.md](docs/MATCH.md).
+match boundary deals the Hearthstone opening hands, accepts mulligan
+confirmations, grants the second player the Coin, and runs an alternating
+turn/draw loop: ending the active player's turn draws one card for the next
+player (burning when the hand holds ten, stopping when a deck is empty) and
+grows the new player's mana crystals (one per turn, up to ten). The Game Scene
+presents the end turn button on the right of the board (switching between the
+local "End Turn" and the "Enemy Turn" states), live deck card-count and mana
+labels, and a swept "Your Turn" banner; the AI simply passes the turn back to
+the local player. See [docs/MATCH.md](docs/MATCH.md).

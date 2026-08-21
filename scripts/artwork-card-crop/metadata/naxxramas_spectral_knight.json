@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_spectral_knight.jpg",
+  "source_name": "naxxramas_spectral_knight.jpg",
+  "crop_box": [
+    0,
+    0,
+    554,
+    554
+  ],
+  "scale": 0.9025270758122743,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:21:08.581101",
+  "card_id": "naxxramas_spectral_knight",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

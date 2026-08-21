@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_loatheb.jpg",
+  "source_name": "naxxramas_loatheb.jpg",
+  "crop_box": [
+    0,
+    25,
+    459,
+    484
+  ],
+  "scale": 1.0893246187363834,
+  "offset_x": 0.0,
+  "offset_y": -27.375565610859702,
+  "timestamp": "2026-08-20T17:20:16.831466",
+  "card_id": "naxxramas_loatheb",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

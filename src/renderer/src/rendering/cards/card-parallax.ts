@@ -1,4 +1,4 @@
-import type { CardView } from '../rendering/cards/card-view'
+import type { CardView } from './card-view'
 
 export interface ParallaxPoint {
   readonly x: number
@@ -17,28 +17,23 @@ interface ParallaxLayerDefinition {
   readonly depth: number
 }
 
-interface ParallaxLayer extends ParallaxLayerDefinition {
-  readonly x: number
-  readonly y: number
+interface CardBaseTransform {
+  readonly position: ParallaxPoint
+  readonly pivot: ParallaxPoint
+  readonly scale: ParallaxPoint
+  readonly skew: ParallaxPoint
 }
 
-export const CARD_PREVIEW_PARALLAX_LAYERS: readonly ParallaxLayerDefinition[] = [
-  // Artwork sits just behind the frame; its small depth avoids exposing the
-  // edge of the existing artwork mask.
+export const CARD_PARALLAX_LAYERS: readonly ParallaxLayerDefinition[] = [
   { path: 'card.artwork', depth: -18 },
-  // Printed elements remain locked to one rigid card surface.
   { path: 'card.frame', depth: 0 },
   { path: 'card.rules', depth: 0 },
-  // Race metadata is printed on the same rigid card surface as the rules.
   { path: 'card.race-banner', depth: 0 },
   { path: 'card.race', depth: 0 },
-  // The name and its banner form one raised physical layer.
   { path: 'card.name-banner', depth: 16 },
   { path: 'card.name', depth: 16 },
-  // Physical ornaments sit slightly above the printed card surface.
   { path: 'card.legendary-frame', depth: 12 },
   { path: 'card.rarity', depth: 10 },
-  // Stat medallions are the strongest available foreground cue.
   { path: 'card.stats.mana', depth: 30 },
   { path: 'card.stats.attack', depth: 30 },
   { path: 'card.stats.health', depth: 30 },
@@ -55,7 +50,7 @@ function clampUnit(value: number): number {
   return Math.max(-1, Math.min(1, value))
 }
 
-/** Converts a pointer position into a bounded tilt around the preview card. */
+/** Converts a pointer position into a bounded tilt around a card. */
 export function resolveParallaxTarget(
   pointer: ParallaxPoint,
   center: ParallaxPoint,
@@ -67,17 +62,13 @@ export function resolveParallaxTarget(
   }
 }
 
-/** Frame-rate-independent interpolation factor for the weighted card motion. */
+/** Frame-rate-independent interpolation factor for weighted card motion. */
 export function resolveParallaxSmoothing(deltaMS: number): number {
   if (deltaMS <= 0) return 0
   return 1 - Math.exp(-deltaMS / RESPONSE_TIME_MS)
 }
 
-/**
- * Projects a rigid card plane after X/Y rotation using an orthographic camera.
- * A single-axis tilt only foreshortens that axis; shear appears naturally only
- * when both rotations are present.
- */
+/** Projects a rigid card plane after X/Y rotation using an orthographic camera. */
 export function resolveCardPlaneTransform(tilt: ParallaxPoint): CardPlaneTransform {
   const rotateX = -clampUnit(tilt.y) * MAX_TILT_X
   const rotateY = clampUnit(tilt.x) * MAX_TILT_Y
@@ -107,32 +98,36 @@ export function resolveParallaxLayerOffset(
 }
 
 /**
- * Preview-only 2.5D motion for a composed CardView.
- *
- * It intentionally uses CardView's public semantic-node API so the effect can
- * be removed without changing the shared renderer or its card templates.
+ * Reusable 2.5D motion for a composed CardView. It preserves the card's local
+ * placement, so callers can apply it both to a top-left preview and to a card
+ * positioned inside a bottom-centred hand slot.
  */
-export class CardPreviewParallax {
-  private readonly layers: readonly ParallaxLayer[]
+export class CardParallaxEffect {
+  private readonly layers: readonly ParallaxLayerDefinition[]
+  private readonly base: CardBaseTransform
   private readonly target = { x: 0, y: 0 }
   private readonly current = { x: 0, y: 0 }
   private destroyed = false
 
   constructor(private readonly cardView: CardView) {
-    const nodes = new Map(
-      cardView.getNodeMetadata().map((metadata) => [metadata.path, metadata])
+    const paths = new Set(cardView.getNodeMetadata().map((metadata) => metadata.path))
+    this.layers = CARD_PARALLAX_LAYERS.filter((definition) =>
+      paths.has(definition.path)
     )
-    this.layers = CARD_PREVIEW_PARALLAX_LAYERS.flatMap((definition) => {
-      const node = nodes.get(definition.path)
-      return node ? [{ ...definition, x: node.x, y: node.y }] : []
-    })
+    this.base = {
+      position: { x: cardView.position.x, y: cardView.position.y },
+      pivot: { x: cardView.pivot.x, y: cardView.pivot.y },
+      scale: { x: cardView.scale.x, y: cardView.scale.y },
+      skew: { x: cardView.skew.x, y: cardView.skew.y }
+    }
 
-    // Keep the wrapper's origin at the visual top-left while making all local
-    // skew and compression happen around the center of the card.
     const centerX = cardView.plan.width / 2
     const centerY = cardView.renderedHeight / 2
     cardView.pivot.set(centerX, centerY)
-    cardView.position.set(centerX, centerY)
+    cardView.position.set(
+      this.base.position.x + centerX * this.base.scale.x,
+      this.base.position.y + centerY * this.base.scale.y
+    )
   }
 
   setTarget(target: ParallaxPoint): void {
@@ -153,8 +148,14 @@ export class CardPreviewParallax {
     this.current.y += (this.target.y - this.current.y) * smoothing
 
     const plane = resolveCardPlaneTransform(this.current)
-    this.cardView.skew.set(plane.skewX, plane.skewY)
-    this.cardView.scale.set(plane.scaleX, plane.scaleY)
+    this.cardView.skew.set(
+      this.base.skew.x + plane.skewX,
+      this.base.skew.y + plane.skewY
+    )
+    this.cardView.scale.set(
+      this.base.scale.x * plane.scaleX,
+      this.base.scale.y * plane.scaleY
+    )
 
     for (const layer of this.layers) {
       const offset = resolveParallaxLayerOffset(this.current, layer.depth)
@@ -169,9 +170,9 @@ export class CardPreviewParallax {
     for (const layer of this.layers) {
       this.cardView.setSemanticLayerOffset(layer.path, { x: 0, y: 0 })
     }
-    this.cardView.skew.set(0)
-    this.cardView.scale.set(1)
-    this.cardView.pivot.set(0)
-    this.cardView.position.set(0)
+    this.cardView.position.set(this.base.position.x, this.base.position.y)
+    this.cardView.pivot.set(this.base.pivot.x, this.base.pivot.y)
+    this.cardView.scale.set(this.base.scale.x, this.base.scale.y)
+    this.cardView.skew.set(this.base.skew.x, this.base.skew.y)
   }
 }

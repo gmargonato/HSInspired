@@ -263,6 +263,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.mana-crystal',
+    ASSET_BUNDLE_IDS.game,
+    'manaCrystal',
+    manaCrystalImage,
+    153,
+    181,
+    'game-scene'
+  ),
+  asset(
     'scene.game.end-turn',
     ASSET_BUNDLE_IDS.game,
     'endTurn',
@@ -645,6 +654,7 @@ export interface GameAssets {
   table: Texture
   board: Texture
   deck: Texture
+  manaCrystal: Texture
   endTurn: Texture
   enemyTurn: Texture
   yourTurn: Texture

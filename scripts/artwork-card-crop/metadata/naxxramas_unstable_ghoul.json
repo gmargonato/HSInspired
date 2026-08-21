@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_unstable_ghoul.jpg",
+  "source_name": "naxxramas_unstable_ghoul.jpg",
+  "crop_box": [
+    0,
+    36,
+    719,
+    755
+  ],
+  "scale": 0.6954102920723226,
+  "offset_x": 0.0,
+  "offset_y": -25.102171819835235,
+  "timestamp": "2026-08-20T17:21:31.542578",
+  "card_id": "naxxramas_unstable_ghoul",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

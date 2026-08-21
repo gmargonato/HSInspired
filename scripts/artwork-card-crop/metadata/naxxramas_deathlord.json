@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_deathlord.jpg",
+  "source_name": "naxxramas_deathlord.jpg",
+  "crop_box": [
+    0,
+    73,
+    558,
+    631
+  ],
+  "scale": 0.8960573476702509,
+  "offset_x": 0.0,
+  "offset_y": -65.43700027570995,
+  "timestamp": "2026-08-20T17:19:42.866651",
+  "card_id": "naxxramas_deathlord",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

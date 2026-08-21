@@ -42,7 +42,8 @@ describe('runtime asset registry', () => {
       'scene.game.mulligan-replace-cross',
       'scene.game.mulligan-replaced-label',
       'scene.game.confirm-mulligan-button',
-      'scene.game.mulligan-coin-announcement'
+      'scene.game.mulligan-coin-announcement',
+      'scene.game.mana-crystal'
     ]) {
       expect(resolveAssetDefinition(key).bundle).toBe('game')
     }

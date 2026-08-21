@@ -1,8 +1,9 @@
 import defaultCursorImage from '@assets/images/cursor/cursor-base.png'
+import grabCursorImage from '@assets/images/cursor/cursor-grab.png'
 import collectionNewPageImage from '@assets/images/cursor/cursor-pass-page.png'
 
 export type CursorVariant =
-  'default' | 'collection-next-page' | 'collection-previous-page'
+  'default' | 'grab' | 'collection-next-page' | 'collection-previous-page'
 export type CursorContextVariant = Exclude<CursorVariant, 'default'>
 
 /** The standard cursor artwork is 32 CSS pixels at the default scale. */
@@ -29,8 +30,7 @@ interface CursorAsset {
 
 /**
  * Keep cursor artwork in one registry so adding a future variant only needs
- * an asset entry and a new CursorVariant value. The grab artwork is
- * intentionally not registered until drag interactions are implemented.
+ * an asset entry and a new CursorVariant value.
  *
  * The standard cursor hotspots align the pointer with the visible fingertip
  * in each 32x32 image. They are stored per variant so future artwork can opt
@@ -39,6 +39,13 @@ interface CursorAsset {
 const CURSOR_ASSETS: Record<CursorVariant, CursorAsset> = {
   default: {
     image: defaultCursorImage,
+    width: CURSOR_BASE_SIZE,
+    height: CURSOR_BASE_SIZE,
+    hotspotX: 9,
+    hotspotY: 0
+  },
+  grab: {
+    image: grabCursorImage,
     width: CURSOR_BASE_SIZE,
     height: CURSOR_BASE_SIZE,
     hotspotX: 9,

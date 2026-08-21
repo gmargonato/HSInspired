@@ -53,6 +53,8 @@ export class GameScene extends Scene {
       decks,
       gameAssets,
       heroAssets,
+      renderer: this.appInstance.renderer,
+      cursor: this.sceneManager.cursor,
       audio: this.audio,
       logger: this.logger
     })

@@ -1,8 +1,8 @@
 /**
- * Geometry for the Game Scene opening sequence (board, heroes, decks, versus,
- * mulligan, and remote hand). All values are 1920x1080 design-canvas pixels at
- * 1x, except the fanned `cards` / `remoteHand` spreads which document their own
- * parameters.
+ * Geometry for the Game Scene (board, heroes, decks, deck counts, versus,
+ * mulligan, remote hand, turn controls, mana, and the your-turn flag). All
+ * values are 1920x1080 design-canvas pixels at 1x, except the fanned `cards` /
+ * `remoteHand` spreads which document their own parameters.
  *
  * Fanned layouts (mulligan hand of 3 or 4 cards, remote hand of card backs) are
  * NOT single placements: they are parameterized spreads. Only the parameters
@@ -83,20 +83,104 @@ export const GAME_BOARD_LAYOUT = {
   decks: {
     /** Local player's deck pile. */
     local: placement(
-      { x: 1650, y: 640 },
+      { x: 1672, y: 653 },
       { width: 83, height: 181 },
       {
         anchor: CENTER,
-        scale: 0.82
+        scale: 1
       }
     ),
     /** Remote player's deck pile. */
     remote: placement(
-      { x: 1650, y: 390 },
+      { x: 1672, y: 350 },
       { width: 83, height: 181 },
       {
         anchor: CENTER,
-        scale: 0.82
+        scale: 1
+      }
+    ),
+    /** Local deck card count label, just right of the pile. */
+    localCount: placement(
+      { x: 1672, y: 750 },
+      { width: 90, height: 60 },
+      {
+        anchor: CENTER
+      }
+    ),
+    /** Remote deck card count label, just right of the pile. */
+    remoteCount: placement(
+      { x: 1672, y: 390 },
+      { width: 90, height: 60 },
+      {
+        anchor: CENTER
+      }
+    )
+  },
+
+  /**
+   * The end turn button on the right edge of the board, centred on the dark
+   * notch in the board art between the two deck piles. It shows the "End Turn"
+   * texture during the local player's turn and the "Enemy Turn" texture during
+   * the remote player's turn.
+   */
+  endTurnButton: placement(
+    { x: 1584, y: 514 },
+    { width: 157, height: 86 },
+    {
+      anchor: CENTER,
+      scale: 1.15
+    }
+  ),
+
+  /**
+   * "Your turn" banner, always centred on the board. It fades in while growing
+   * from `yourTurnStartScale` up to its full `scale`, holds briefly, and fades
+   * out — it never slides.
+   */
+  yourTurnFlag: placement(
+    { x: 960, y: 540 },
+    { width: 856, height: 345 },
+    {
+      anchor: CENTER,
+      scale: 1
+    }
+  ),
+  yourTurnStartScale: 0.5,
+
+  /**
+   * Mana crystal plus "available/maximum" label for each player. The local
+   * display sits right of the local hero above the hand; the smaller remote
+   * display sits right of the remote hero below the remote hand of card backs.
+   */
+  mana: {
+    localCrystal: placement(
+      { x: 1240, y: 915 },
+      { width: 153, height: 181 },
+      {
+        anchor: CENTER,
+        scale: 0.28
+      }
+    ),
+    localLabel: placement(
+      { x: 1320, y: 915 },
+      { width: 110, height: 60 },
+      {
+        anchor: CENTER
+      }
+    ),
+    remoteCrystal: placement(
+      { x: 1240, y: 212 },
+      { width: 153, height: 181 },
+      {
+        anchor: CENTER,
+        scale: 0.2
+      }
+    ),
+    remoteLabel: placement(
+      { x: 1305, y: 212 },
+      { width: 90, height: 50 },
+      {
+        anchor: CENTER
       }
     )
   },

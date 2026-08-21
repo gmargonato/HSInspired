@@ -5,6 +5,7 @@ import {
   Sprite,
   Text,
   Texture,
+  type Renderer,
   type FederatedPointerEvent
 } from 'pixi.js'
 import type { Deck } from '../../../../game/decks'
@@ -28,7 +29,22 @@ import { type DeckPresentationAssets, type GameAssets } from '../../ui/asset-reg
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { Actor } from '../../ui/components/Actor'
 import { Button } from '../../ui/components/Button'
-import { DEFAULT_HAND_LAYOUT, HandCardTransform, layoutHand } from './hand-layout'
+import type { CursorManager } from '../../ui/components/cursor'
+import {
+  DEFAULT_HAND_LAYOUT,
+  HandCardTransform,
+  HandPointer,
+  handHoverHitBounds,
+  layoutHand,
+  resolveHandHover
+} from './hand-layout'
+import {
+  DEFAULT_HAND_DRAG,
+  initialDragState,
+  stepDrag,
+  type HandDragState
+} from './hand-drag'
+import { HandCardPerspective } from './hand-card-perspective'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import type { LayoutPlacement } from '../../rendering/layout'
 
@@ -37,6 +53,8 @@ export interface GameBoardViewOptions {
   readonly decks: readonly Deck[]
   readonly gameAssets: GameAssets
   readonly heroAssets: DeckPresentationAssets
+  readonly renderer: Renderer
+  readonly cursor?: CursorManager | null
   readonly audio?: AudioService
   readonly logger?: AppLogger
 }
@@ -56,6 +74,15 @@ const OPENING_TIMING = {
   replacementPause: 0.25,
   handoffPause: 0.5,
   hover: 0.2
+} as const
+
+/** Turn-control timings (end turn button, AI pass, your-turn flag). */
+const TURN_TIMING = {
+  /** How long the AI "thinks" before passing the turn back. */
+  aiTurnDelay: 1.8,
+  yourTurnGrow: 0.35,
+  yourTurnHold: 0.5,
+  yourTurnFadeOut: 0.15
 } as const
 
 function cardDefinition(card: OpeningCard): CardDefinition {
@@ -155,6 +182,7 @@ export class GameBoardView extends Actor {
   private readonly openingLayer = new Container()
   private readonly travelLayer = new Container()
   private readonly deckLayer = new Container()
+  private readonly turnLayer = new Container()
   private readonly mulliganLayer = new Container()
   private readonly handLayer = new Container()
   private readonly remoteHandLayer = new Container()
@@ -167,6 +195,15 @@ export class GameBoardView extends Actor {
   private remotePlayerNumber!: 1 | 2
   private localHoveredSlot: GameCardSlot | null = null
   private confirmButton!: Button
+  private endTurnButton!: Button
+  private deckCountLabels: { local: Text; remote: Text } | null = null
+  private manaLabels: { local: Text; remote: Text } | null = null
+  private yourTurnFlag: Sprite | null = null
+  /**
+   * True while a turn is being processed (a local end-turn or the AI's pass).
+   * Blocks repeat end-turn commands and the AI from acting out of turn.
+   */
+  private turnInProgress = false
   private confirmationLocked = false
   private remoteBackCount = 0
   private openingRevealStarted = false
@@ -182,6 +219,26 @@ export class GameBoardView extends Actor {
    * pointermove handler checks this to bail during teardown.
    */
   private handModeActive = false
+  /**
+   * Index of the hand card currently being dragged, or null when no drag is
+   * active. While set, the pointermove handler feeds `dragPointer` and the
+   * `gsap.ticker` loop advances the card's position with resistance.
+   */
+  private draggingIndex: number | null = null
+  /** Latest pointer position in handLayer space while dragging. */
+  private dragPointer: HandPointer | null = null
+  /** Resistance-lerped position/tilt advanced every ticker frame. */
+  private dragState: HandDragState | null = null
+  /** Registered `gsap.ticker` callback; removed when the drag ends. */
+  private dragTick: ((time: number, deltaMS: number) => void) | null = null
+  /** Rigid-plane and semantic-layer motion applied only to the held card. */
+  private dragPerspective: HandCardPerspective | null = null
+  /** Keeps input blocked while the released card is animating back into the fan. */
+  private dragReturning = false
+  private readonly handleWindowPointerDown = (event: PointerEvent): void => {
+    if (event.button === 2) this.endDrag()
+  }
+  private readonly handleWindowBlur = (): void => this.endDrag()
 
   constructor(private readonly options: GameBoardViewOptions) {
     super()
@@ -194,6 +251,7 @@ export class GameBoardView extends Actor {
     this.addChild(this.openingLayer)
     this.addChild(this.heroLayer)
     this.addChild(this.deckLayer)
+    this.addChild(this.turnLayer)
     this.addChild(this.mulliganLayer)
     // Dealt cards must stay above the mulligan dimmer while they travel from
     // the deck; they are reparented to their final layers after the animation.
@@ -237,6 +295,7 @@ export class GameBoardView extends Actor {
     this.createDecks()
     this.createOpeningLayer(initialState)
     this.createMulliganLayer()
+    this.createTurnControls(initialState)
 
     const localPlayer = this.findPlayer(initialState, this.localParticipantId)
     await this.createInitialLocalCards(localPlayer.hand.map(cloneCard))
@@ -335,6 +394,150 @@ export class GameBoardView extends Actor {
       deck.eventMode = 'none'
       this.deckLayer.addChild(deck)
     }
+  }
+
+  /** Builds the end turn button and the deck card-count labels (hidden for now). */
+  private createTurnControls(state: OpeningMatchState): void {
+    this.endTurnButton = new Button(this.options.gameAssets.endTurn, {
+      audio: this.options.audio,
+      onClick: () => void this.endTurn()
+    })
+    this.endTurnButton.position.set(
+      GAME_BOARD_LAYOUT.endTurnButton.position.x,
+      GAME_BOARD_LAYOUT.endTurnButton.position.y
+    )
+    this.endTurnButton.scale.set(GAME_BOARD_LAYOUT.endTurnButton.scale ?? 1)
+    this.endTurnButton.setBaseY(GAME_BOARD_LAYOUT.endTurnButton.position.y)
+    this.endTurnButton.setEnabled(false)
+    this.turnLayer.addChild(this.endTurnButton)
+
+    const localCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.localCount, 34)
+    const remoteCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.remoteCount, 34)
+    this.deckCountLabels = { local: localCount, remote: remoteCount }
+    this.turnLayer.addChild(localCount, remoteCount)
+
+    const localManaCrystal = this.createManaCrystal(GAME_BOARD_LAYOUT.mana.localCrystal)
+    const remoteManaCrystal = this.createManaCrystal(
+      GAME_BOARD_LAYOUT.mana.remoteCrystal
+    )
+    const localManaLabel = this.createHudLabel(GAME_BOARD_LAYOUT.mana.localLabel, 34)
+    const remoteManaLabel = this.createHudLabel(GAME_BOARD_LAYOUT.mana.remoteLabel, 26)
+    this.manaLabels = { local: localManaLabel, remote: remoteManaLabel }
+    this.turnLayer.addChild(
+      localManaCrystal,
+      remoteManaCrystal,
+      localManaLabel,
+      remoteManaLabel
+    )
+
+    this.syncTurnHud(state)
+    this.turnLayer.visible = false
+  }
+
+  private createHudLabel(placement: LayoutPlacement, fontSize: number): Text {
+    const label = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize,
+        fill: 0xffffff,
+        stroke: { color: 0x17120f, width: 6 },
+        align: 'center'
+      }
+    })
+    label.anchor.set(0.5)
+    label.position.set(placement.position.x, placement.position.y)
+    label.eventMode = 'none'
+    return label
+  }
+
+  private createManaCrystal(placement: LayoutPlacement): Sprite {
+    const crystal = new Sprite(this.options.gameAssets.manaCrystal)
+    crystal.anchor.set(0.5)
+    crystal.position.set(placement.position.x, placement.position.y)
+    crystal.scale.set(placement.scale ?? 1)
+    crystal.eventMode = 'none'
+    return crystal
+  }
+
+  /** Refreshes both deck card-count labels from the engine state. */
+  private syncDeckCounts(state: OpeningMatchState): void {
+    if (!this.deckCountLabels) return
+    this.deckCountLabels.local.text = String(
+      this.findPlayer(state, this.localParticipantId).deck.length
+    )
+    this.deckCountLabels.remote.text = String(
+      this.findPlayer(state, this.remoteParticipantId).deck.length
+    )
+  }
+
+  /** Refreshes both "available/maximum" mana labels from the engine state. */
+  private syncMana(state: OpeningMatchState): void {
+    if (!this.manaLabels) return
+    const local = this.findPlayer(state, this.localParticipantId).mana
+    const remote = this.findPlayer(state, this.remoteParticipantId).mana
+    this.manaLabels.local.text = `${local.available}/${local.maximum}`
+    this.manaLabels.remote.text = `${remote.available}/${remote.maximum}`
+  }
+
+  /** Refreshes every turn HUD element (deck counts and mana labels). */
+  private syncTurnHud(state: OpeningMatchState): void {
+    this.syncDeckCounts(state)
+    this.syncMana(state)
+  }
+
+  /** Reflects whose turn it is in the end turn button's texture and enabled state. */
+  private syncTurnControls(state: OpeningMatchState): void {
+    if (!this.endTurnButton) return
+    const isLocalTurn = state.activePlayerId === this.localParticipantId
+    const localTurnTexture = isLocalTurn
+      ? this.options.gameAssets.endTurn
+      : this.options.gameAssets.enemyTurn
+    if (this.endTurnButton.sprite.texture !== localTurnTexture) {
+      this.endTurnButton.sprite.texture = localTurnTexture
+    }
+    this.endTurnButton.setEnabled(isLocalTurn && !this.turnInProgress)
+  }
+
+  /**
+   * Local player clicked End Turn: hand the turn to the remote participant and
+   * present the remote's draw. The button stays disabled until the AI passes
+   * the turn back.
+   */
+  private async endTurn(): Promise<void> {
+    if (this.turnInProgress) return
+    this.turnInProgress = true
+    this.endTurnButton.setEnabled(false)
+    const result = this.match.dispatch({
+      type: 'end-turn',
+      participantId: this.localParticipantId
+    })
+    if (!result.accepted) {
+      this.logger.error(result.message)
+      this.turnInProgress = false
+      this.syncTurnControls(this.match.getState())
+      return
+    }
+    this.syncTurnHud(result.state)
+    this.syncTurnControls(result.state)
+    for (const event of result.events) await this.presentEvent(event)
+  }
+
+  /** Waits, then the remote (AI) passes the turn back to the local player. */
+  private async scheduleAiPass(): Promise<void> {
+    await this.wait(TURN_TIMING.aiTurnDelay)
+    if (!this.turnLayer.visible) return
+    if (this.match.getState().activePlayerId !== this.remoteParticipantId) return
+    const result = this.match.dispatch({
+      type: 'end-turn',
+      participantId: this.remoteParticipantId
+    })
+    if (!result.accepted) {
+      this.logger.error(result.message)
+      return
+    }
+    this.syncTurnHud(result.state)
+    for (const event of result.events) await this.presentEvent(event)
   }
 
   private createOpeningLayer(state: OpeningMatchState): void {
@@ -590,27 +793,111 @@ export class GameBoardView extends Actor {
         return
       case 'coin-granted':
       case 'opening-card-drawn':
-        if (event.participantId === this.localParticipantId) {
-          await this.addLocalCard(event.card)
-        } else {
-          this.remoteBackCount += 1
-          this.ensureRemoteBacks(this.remoteBackCount)
-          const back = this.remoteBacks[this.remoteBackCount - 1]
-          if (back) {
-            this.prepareBackAtDeck(back, this.remoteBackCount - 1)
-            await this.animateBackToHand(
-              back,
-              this.remoteBackCount - 1,
-              this.remoteBackCount,
-              OPENING_TIMING.cardDeal
-            )
-          }
-        }
-        await this.wait(OPENING_TIMING.replacementPause)
+      case 'card-drawn':
+        await this.presentDraw(event.participantId, event.card)
+        return
+      case 'card-burned':
+        this.syncTurnHud(this.match.getState())
         return
       case 'opening-turn-started':
+        this.syncTurnHud(this.match.getState())
+        this.handleTurnStarted(event.participantId)
+        return
+      case 'turn-started':
+        this.syncTurnHud(this.match.getState())
+        this.handleTurnStarted(event.participantId)
         return
     }
+  }
+
+  private async presentDraw(participantId: PlayerId, card: OpeningCard): Promise<void> {
+    if (participantId === this.localParticipantId) {
+      await this.addLocalCard(card)
+    } else {
+      this.remoteBackCount += 1
+      this.ensureRemoteBacks(this.remoteBackCount)
+      const back = this.remoteBacks[this.remoteBackCount - 1]
+      if (back) {
+        this.prepareBackAtDeck(back, this.remoteBackCount - 1)
+        await this.animateBackToHand(
+          back,
+          this.remoteBackCount - 1,
+          this.remoteBackCount,
+          OPENING_TIMING.cardDeal
+        )
+      }
+    }
+    this.syncTurnHud(this.match.getState())
+    await this.wait(OPENING_TIMING.replacementPause)
+  }
+
+  /** Reveals the turn controls and reflects the new active player's turn. */
+  private handleTurnStarted(participantId: PlayerId): void {
+    if (!this.turnLayer.visible) this.turnLayer.visible = true
+    if (participantId === this.localParticipantId) {
+      this.turnInProgress = false
+      this.presentYourTurnFlag()
+    }
+    this.syncTurnControls(this.match.getState())
+    if (participantId === this.remoteParticipantId) {
+      void this.scheduleAiPass()
+    }
+  }
+
+  /**
+   * Shows the "Your turn" banner, always centred on the board: it fades in
+   * while growing from a small scale up to full size, holds briefly, then fades
+   * out. Fire-and-forget — turn flow and draw animations continue underneath
+   * it. No sound.
+   */
+  private presentYourTurnFlag(): void {
+    if (this.yourTurnFlag) {
+      this.killTweensOf(this.yourTurnFlag)
+      this.yourTurnFlag.destroy({ children: true })
+      this.yourTurnFlag = null
+    }
+    const layout = GAME_BOARD_LAYOUT.yourTurnFlag
+    const flag = new Sprite(this.options.gameAssets.yourTurn)
+    flag.anchor.set(0.5)
+    flag.position.set(layout.position.x, layout.position.y)
+    flag.scale.set(GAME_BOARD_LAYOUT.yourTurnStartScale)
+    flag.alpha = 0
+    flag.label = 'your-turn-flag'
+    flag.eventMode = 'none'
+    this.turnLayer.addChild(flag)
+    this.yourTurnFlag = flag
+
+    const finalScale = layout.scale ?? 1
+    const timeline = this.timeline()
+    timeline.to(flag, {
+      alpha: 1,
+      duration: TURN_TIMING.yourTurnGrow,
+      ease: 'power2.out'
+    })
+    timeline.to(
+      flag.scale,
+      {
+        x: finalScale,
+        y: finalScale,
+        duration: TURN_TIMING.yourTurnGrow,
+        ease: 'power2.out'
+      },
+      0
+    )
+    timeline.to(
+      flag,
+      {
+        alpha: 0,
+        duration: TURN_TIMING.yourTurnFadeOut,
+        ease: 'power2.in'
+      },
+      TURN_TIMING.yourTurnGrow + TURN_TIMING.yourTurnHold
+    )
+    void this.completeTimeline(timeline).then(() => {
+      if (this.yourTurnFlag !== flag || flag.destroyed) return
+      this.yourTurnFlag = null
+      flag.destroy({ children: true })
+    })
   }
 
   private async presentLocalMulligan(event: MulliganResolvedEvent): Promise<void> {
@@ -827,18 +1114,28 @@ export class GameBoardView extends Actor {
 
   /**
    * Activates a single fixed hit zone on handLayer covering the bottom of the
-   * screen. Pointer position is mapped to the nearest card by x — no per-card
-   * hit areas that move with the card, eliminating hover oscillation.
+   * screen (the resting hand strip plus the tallest lifted card). Which card is
+   * hovered is resolved by `resolveHandHover` against the cards' *resting*
+   * transforms — no per-card hit areas that move with the card, eliminating
+   * hover oscillation.
    *
    * Why a single hit zone instead of per-card hit areas: when a card lifts and
    * scales on hover, its hit area moves with it. That causes the pointer to
    * exit the card's hit area, drop the hover, re-enter at the rest position,
    * re-hover — infinite oscillation (the "dancing" bug). A fixed hit zone on
-   * the layer decouples "which card is hovered" (pointer x vs. rest x) from
-   * "where the card is drawn" (animated). The card can move freely; the hover
-   * target is recomputed from the pointer position alone.
+   * the layer decouples "which card is hovered" (pointer vs. rest geometry)
+   * from "where the card is drawn" (animated). The card can move freely; the
+   * hover target is recomputed from the pointer position alone.
    *
-   * `pointermove` early-returns when the nearest card hasn't changed, so
+   * Hover only *enters* while the pointer is level with a resting card's
+   * visible top edge (plus a small grace margin), so empty space above the
+   * hand no longer triggers hover. Within that entry strip the pointer's x
+   * maps to a logical fan slot, not to any card sprite, so overlapping art or
+   * a lifted card's wide body never steals the selection from a tight fan.
+   * Once a card is lifted, the pointer may roam anywhere over the lifted
+   * card's bounds and it stays hovered.
+   *
+   * `pointermove` early-returns when the hovered card hasn't changed, so
    * moving the mouse within a single card's zone does not create redundant
    * tweens. `pointerleave` clears hover when the cursor exits the hit zone
    * (e.g. moves to the board or off-screen).
@@ -847,41 +1144,258 @@ export class GameBoardView extends Actor {
     if (this.handModeActive) return
     this.handModeActive = true
     this.handLayer.eventMode = 'static'
-    this.handLayer.hitArea = new Rectangle(0, 850, 1920, 230)
+    window.addEventListener('pointerdown', this.handleWindowPointerDown, true)
+    window.addEventListener('blur', this.handleWindowBlur)
+    const bounds = handHoverHitBounds(DEFAULT_HAND_LAYOUT)
+    this.handLayer.hitArea = new Rectangle(
+      bounds.x,
+      bounds.y,
+      bounds.width,
+      bounds.height
+    )
     this.handLayer.on('pointermove', (event: FederatedPointerEvent) => {
       if (!this.handModeActive || this.reflowing) return
       const local = event.getLocalPosition(this.handLayer)
-      const nearest = this.findNearestHandEntry(local.x)?.slot ?? null
+      if (this.draggingIndex !== null) return
+      const transforms = this.handEntries.map((entry) => entry.restTransform)
+      const hoveredIndex = this.localHoveredSlot
+        ? this.handEntries.findIndex((entry) => entry.slot === this.localHoveredSlot)
+        : -1
+      const resolved = resolveHandHover(
+        local,
+        transforms,
+        DEFAULT_HAND_LAYOUT,
+        hoveredIndex >= 0 ? hoveredIndex : null
+      )
+      const nearest =
+        resolved !== null ? (this.handEntries[resolved]?.slot ?? null) : null
       if (nearest === this.localHoveredSlot) return
       this.localHoveredSlot = nearest
       this.applyHoverDelta()
     })
     this.handLayer.on('pointerleave', () => {
-      if (!this.handModeActive) return
+      if (!this.handModeActive || this.draggingIndex !== null) return
       this.localHoveredSlot = null
       this.applyHoverDelta()
     })
+    this.handLayer.on('pointerdown', (event: FederatedPointerEvent) => {
+      this.onHandPointerDown(event)
+    })
+    this.handLayer.on('globalpointermove', (event: FederatedPointerEvent) => {
+      if (this.draggingIndex === null || this.dragReturning) return
+      const local = event.getLocalPosition(this.handLayer)
+      this.dragPointer = { x: local.x, y: local.y }
+    })
+    this.handLayer.on('rightdown', (event: FederatedPointerEvent) => {
+      this.onHandRightDown(event)
+    })
+  }
+
+  private cardCostAt(index: number): number {
+    const entry = this.handEntries[index]
+    return entry ? cardDefinition(entry.card).cost : Number.POSITIVE_INFINITY
+  }
+
+  private isLocalTurn(): boolean {
+    return this.match.getState().activePlayerId === this.localParticipantId
+  }
+
+  private localManaAvailable(): number {
+    return this.findPlayer(this.match.getState(), this.localParticipantId).mana
+      .available
   }
 
   /**
-   * Returns the hand entry whose rest x is nearest to `x`, or `undefined` if
-   * the nearest card is farther than half a card step. The threshold prevents
-   * the edge cards from staying hovered when the pointer moves past the hand
-   * toward the screen edges.
+   * Left click on the hand: resolve the card under the pointer and attach it to
+   * the cursor if the local player can afford it on their turn, otherwise give
+   * it a small "no" shake. Clicks on the opponent's turn are ignored.
    */
-  private findNearestHandEntry(x: number): HandEntry | undefined {
-    const threshold = DEFAULT_HAND_LAYOUT.maxCardStep / 2
-    let nearest: HandEntry | undefined
-    let nearestDistance = Infinity
-    for (const entry of this.handEntries) {
-      if (!entry.restTransform) continue
-      const distance = Math.abs(entry.restTransform.x - x)
-      if (distance < nearestDistance) {
-        nearestDistance = distance
-        nearest = entry
-      }
+  private onHandPointerDown(event: FederatedPointerEvent): void {
+    if (this.reflowing || event.button !== 0) return
+    if (this.draggingIndex !== null) return
+    const local = event.getLocalPosition(this.handLayer)
+    const transforms = this.handEntries.map((entry) => entry.restTransform)
+    const hoveredIndex = this.localHoveredSlot
+      ? this.handEntries.findIndex((entry) => entry.slot === this.localHoveredSlot)
+      : -1
+    const resolved = resolveHandHover(
+      local,
+      transforms,
+      DEFAULT_HAND_LAYOUT,
+      hoveredIndex >= 0 ? hoveredIndex : null
+    )
+    if (resolved === null) return
+    if (!this.isLocalTurn()) return
+    if (this.cardCostAt(resolved) > this.localManaAvailable()) {
+      this.shakeCard(resolved)
+      return
     }
-    return nearestDistance <= threshold ? nearest : undefined
+    this.beginDrag(resolved, local)
+  }
+
+  /** Right-click cancels the current drag, mirroring Hearthstone. */
+  private onHandRightDown(event: FederatedPointerEvent): void {
+    if (this.draggingIndex === null) return
+    event.stopPropagation()
+    this.endDrag()
+  }
+
+  /**
+   * Attaches a hand card to the cursor: straightens it, scales it to
+   * `dragScale`, and starts a `gsap.ticker` loop that lerps it toward the
+   * pointer with resistance. Velocity drives a four-corner perspective mesh,
+   * producing the visible trapezoidal warp of a rigid card tilting in 3D.
+   */
+  private beginDrag(index: number, pointer: HandPointer): void {
+    const entry = this.handEntries[index]
+    const rest = entry?.restTransform
+    if (!entry || !rest) return
+    this.draggingIndex = index
+    this.dragPointer = pointer
+    this.dragReturning = false
+    // Start from the card's current (hovered) position so the pickup glides up
+    // toward the cursor instead of snapping back to the resting baseline.
+    this.dragState = initialDragState(entry.slot.x, entry.slot.y)
+    this.dragPerspective?.destroy()
+    this.dragPerspective = new HandCardPerspective(
+      this.options.renderer,
+      entry.slot.card
+    )
+    this.options.cursor?.setContextVariant('grab')
+
+    this.killTweensOf(entry.slot)
+    this.killTweensOf(entry.slot.scale)
+    this.tweenTo(entry.slot, {
+      rotation: 0,
+      duration: OPENING_TIMING.hover,
+      ease: 'power2.out',
+      overwrite: 'auto'
+    })
+    this.tweenTo(entry.slot.scale, {
+      x: DEFAULT_HAND_DRAG.dragScale,
+      y: DEFAULT_HAND_DRAG.dragScale,
+      duration: OPENING_TIMING.hover,
+      ease: 'power2.out',
+      overwrite: 'auto'
+    })
+    entry.slot.zIndex = 1000
+
+    const tick = (_time: number, deltaMS: number): void => this.stepDragFrame(deltaMS)
+    this.dragTick = tick
+    gsap.ticker.add(tick)
+  }
+
+  /** One ticker frame: advance the resistance lerp and apply it to the slot. */
+  private stepDragFrame(deltaMS: number): void {
+    if (this.draggingIndex === null) return
+    if (this.dragReturning) {
+      this.dragPerspective?.update(deltaMS)
+      return
+    }
+    if (!this.dragPointer || !this.dragState) return
+    const entry = this.handEntries[this.draggingIndex]
+    if (!entry || entry.slot.destroyed) {
+      this.endDrag()
+      return
+    }
+    this.dragState = stepDrag(
+      this.dragState,
+      this.dragPointer.x,
+      this.dragPointer.y,
+      deltaMS,
+      DEFAULT_HAND_DRAG
+    )
+    entry.slot.position.set(this.dragState.x, this.dragState.y)
+    this.dragPerspective?.setTarget({
+      x: -this.dragState.tiltX,
+      y: -this.dragState.tiltY
+    })
+    this.dragPerspective?.update(deltaMS)
+  }
+
+  /**
+   * Detaches the card and animates it back to its resting hand slot (hand
+   * size, hand rotation, fan position) — never back to the lifted hover state.
+   */
+  private endDrag(): void {
+    if (this.draggingIndex === null || this.dragReturning) return
+    const index = this.draggingIndex
+    this.dragPointer = null
+    this.dragState = null
+    this.dragReturning = true
+    this.dragPerspective?.release()
+    this.options.cursor?.setContextVariant(null)
+    this.localHoveredSlot = null
+    const entry = this.handEntries[index]
+    if (entry?.restTransform) {
+      void this.animateSlotToHand(
+        entry.slot,
+        entry.restTransform,
+        0,
+        OPENING_TIMING.hover,
+        OPENING_TIMING.hover
+      ).then(() => this.finishDrag(index, entry.slot))
+      return
+    }
+    this.finishDrag(index)
+  }
+
+  /** Restores all transient drag state after the return animation settles. */
+  private finishDrag(index: number, slot?: GameCardSlot): void {
+    if (this.draggingIndex !== index) return
+    if (this.dragTick) gsap.ticker.remove(this.dragTick)
+    this.dragTick = null
+    this.dragPerspective?.destroy()
+    this.dragPerspective = null
+    this.draggingIndex = null
+    this.dragReturning = false
+    const entry = slot
+      ? this.handEntries.find((candidate) => candidate.slot === slot)
+      : this.handEntries[index]
+    if (entry) entry.displaced = false
+  }
+
+  /** A quick horizontal wobble for an unaffordable card, settling back at rest. */
+  private shakeCard(index: number): void {
+    const entry = this.handEntries[index]
+    if (!entry) return
+    const slot = entry.slot
+    const { shakeDistance, shakeDuration } = DEFAULT_HAND_DRAG
+    const baseX = slot.x
+    const steps = 5
+    const stepDuration = shakeDuration / (steps * 2)
+    const timeline = this.timeline()
+    for (let i = 0; i < steps; i += 1) {
+      const direction = i % 2 === 0 ? 1 : -1
+      timeline.to(slot, {
+        x: baseX + direction * shakeDistance,
+        duration: stepDuration,
+        ease: 'power1.inOut'
+      })
+      timeline.to(slot, {
+        x: baseX - direction * shakeDistance,
+        duration: stepDuration,
+        ease: 'power1.inOut'
+      })
+    }
+    timeline.to(slot, { x: baseX, duration: stepDuration, ease: 'power1.inOut' })
+  }
+
+  override dispose(): void {
+    window.removeEventListener('pointerdown', this.handleWindowPointerDown, true)
+    window.removeEventListener('blur', this.handleWindowBlur)
+    this.options.cursor?.setContextVariant(null)
+    if (this.draggingIndex !== null) {
+      if (this.dragTick) gsap.ticker.remove(this.dragTick)
+      this.dragTick = null
+      this.dragPerspective?.destroy()
+      this.dragPerspective = null
+      this.draggingIndex = null
+      this.dragPointer = null
+      this.dragState = null
+      this.dragReturning = false
+    }
+    super.dispose()
   }
 
   /**

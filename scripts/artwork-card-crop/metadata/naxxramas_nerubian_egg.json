@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_nerubian_egg.jpg",
+  "source_name": "naxxramas_nerubian_egg.jpg",
+  "crop_box": [
+    0,
+    23,
+    791,
+    814
+  ],
+  "scale": 0.6321112515802781,
+  "offset_x": 0.0,
+  "offset_y": -14.283769328017058,
+  "timestamp": "2026-08-20T17:20:37.973087",
+  "card_id": "naxxramas_nerubian_egg",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

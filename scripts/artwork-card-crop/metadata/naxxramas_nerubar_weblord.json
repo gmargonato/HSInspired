@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_nerubar_weblord.jpg",
+  "source_name": "naxxramas_nerubar_weblord.jpg",
+  "crop_box": [
+    18,
+    0,
+    481,
+    463
+  ],
+  "scale": 1.079913606911447,
+  "offset_x": -19.97840172786175,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:20:28.125445",
+  "card_id": "naxxramas_nerubar_weblord",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

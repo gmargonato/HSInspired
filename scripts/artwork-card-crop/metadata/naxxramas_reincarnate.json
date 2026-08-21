@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_reincarnate.jpg",
+  "source_name": "naxxramas_reincarnate.jpg",
+  "crop_box": [
+    202,
+    0,
+    1230,
+    1028
+  ],
+  "scale": 0.48638132295719844,
+  "offset_x": -98.17512870398085,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:20:47.116105",
+  "card_id": "naxxramas_reincarnate",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

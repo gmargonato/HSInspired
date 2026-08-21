@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_dark_cultist.jpg",
+  "source_name": "naxxramas_dark_cultist.jpg",
+  "crop_box": [
+    0,
+    0,
+    800,
+    800
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:19:38.094410",
+  "card_id": "naxxramas_dark_cultist",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

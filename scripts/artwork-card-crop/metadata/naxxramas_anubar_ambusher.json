@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_anubar_ambusher.jpg",
+  "source_name": "naxxramas_anubar_ambusher.jpg",
+  "crop_box": [
+    244,
+    0,
+    1080,
+    836
+  ],
+  "scale": 0.5980861244019139,
+  "offset_x": -145.93301435406704,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:19:22.264686",
+  "card_id": "naxxramas_anubar_ambusher",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

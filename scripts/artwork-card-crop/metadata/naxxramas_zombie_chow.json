@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_zombie_chow.jpg",
+  "source_name": "naxxramas_zombie_chow.jpg",
+  "crop_box": [
+    80,
+    0,
+    933,
+    853
+  ],
+  "scale": 0.5861664712778429,
+  "offset_x": -46.709811524934594,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:21:42.453210",
+  "card_id": "naxxramas_zombie_chow",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

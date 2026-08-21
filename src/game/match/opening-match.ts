@@ -8,11 +8,23 @@ import type {
   PlayerId
 } from './match-types'
 
-export type OpeningPhase = 'mulligan' | 'first-turn'
+export type OpeningPhase = 'mulligan' | 'turns'
+
+/** Maximum number of cards a player may hold in hand. */
+export const MAX_HAND_SIZE = 10
+
+/** Maximum number of mana crystals a player may accumulate. */
+export const MAX_MANA = 10
 
 export interface OpeningCard {
   readonly instanceId: string
   readonly cardId: CardId
+}
+
+/** A player's mana crystals: available spendable mana and the grown maximum. */
+export interface PlayerMana {
+  readonly available: number
+  readonly maximum: number
 }
 
 export interface OpeningPlayerState {
@@ -22,6 +34,7 @@ export interface OpeningPlayerState {
   readonly playerNumber: 1 | 2
   readonly deck: readonly OpeningCard[]
   readonly hand: readonly OpeningCard[]
+  readonly mana: PlayerMana
   readonly mulliganConfirmed: boolean
 }
 
@@ -30,6 +43,7 @@ export interface OpeningMatchState {
   readonly playerOneId: PlayerId
   readonly playerTwoId: PlayerId
   readonly activePlayerId: PlayerId | null
+  readonly turnNumber: number
   readonly players: readonly [OpeningPlayerState, OpeningPlayerState]
   readonly revision: number
 }
@@ -40,7 +54,12 @@ export interface ConfirmMulliganCommand {
   readonly replaceInstanceIds: readonly string[]
 }
 
-export type OpeningMatchCommand = ConfirmMulliganCommand
+export interface EndTurnCommand {
+  readonly type: 'end-turn'
+  readonly participantId: PlayerId
+}
+
+export type OpeningMatchCommand = ConfirmMulliganCommand | EndTurnCommand
 
 export interface MulliganResolvedEvent {
   readonly type: 'mulligan-resolved'
@@ -59,10 +78,30 @@ export interface OpeningTurnStartedEvent {
   readonly type: 'opening-turn-started'
   readonly participantId: PlayerId
   readonly playerNumber: 1 | 2
+  readonly mana: PlayerMana
 }
 
 export interface OpeningCardDrawnEvent {
   readonly type: 'opening-card-drawn'
+  readonly participantId: PlayerId
+  readonly card: OpeningCard
+}
+
+export interface TurnStartedEvent {
+  readonly type: 'turn-started'
+  readonly participantId: PlayerId
+  readonly turnNumber: number
+  readonly mana: PlayerMana
+}
+
+export interface CardDrawnEvent {
+  readonly type: 'card-drawn'
+  readonly participantId: PlayerId
+  readonly card: OpeningCard
+}
+
+export interface CardBurnedEvent {
+  readonly type: 'card-burned'
   readonly participantId: PlayerId
   readonly card: OpeningCard
 }
@@ -72,6 +111,9 @@ export type OpeningMatchEvent =
   | CoinGrantedEvent
   | OpeningTurnStartedEvent
   | OpeningCardDrawnEvent
+  | TurnStartedEvent
+  | CardDrawnEvent
+  | CardBurnedEvent
 
 export interface OpeningAcceptedResult {
   readonly accepted: true
@@ -85,6 +127,7 @@ export type OpeningRejectionCode =
   | 'wrong-phase'
   | 'already-confirmed'
   | 'invalid-card-selection'
+  | 'not-active-player'
 
 export interface OpeningRejectedResult {
   readonly accepted: false
@@ -112,7 +155,8 @@ function clonePlayer(player: OpeningPlayerState): OpeningPlayerState {
   return {
     ...player,
     deck: player.deck.map(cloneCard),
-    hand: player.hand.map(cloneCard)
+    hand: player.hand.map(cloneCard),
+    mana: { ...player.mana }
   }
 }
 
@@ -127,17 +171,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function parseCommand(value: unknown): ConfirmMulliganCommand | null {
-  if (!isRecord(value) || value.type !== 'confirm-mulligan') return null
-  if (typeof value.participantId !== 'string') return null
-  if (!Array.isArray(value.replaceInstanceIds)) return null
-  if (!value.replaceInstanceIds.every((id) => typeof id === 'string')) return null
+function parseCommand(value: unknown): OpeningMatchCommand | null {
+  if (!isRecord(value) || typeof value.participantId !== 'string') return null
 
-  return {
-    type: 'confirm-mulligan',
-    participantId: value.participantId as PlayerId,
-    replaceInstanceIds: value.replaceInstanceIds
+  if (value.type === 'confirm-mulligan') {
+    if (!Array.isArray(value.replaceInstanceIds)) return null
+    if (!value.replaceInstanceIds.every((id) => typeof id === 'string')) return null
+    return {
+      type: 'confirm-mulligan',
+      participantId: value.participantId as PlayerId,
+      replaceInstanceIds: value.replaceInstanceIds
+    }
   }
+
+  if (value.type === 'end-turn') {
+    return { type: 'end-turn', participantId: value.participantId as PlayerId }
+  }
+
+  return null
 }
 
 function shuffle<T>(items: readonly T[], random: DeterministicRng): T[] {
@@ -218,6 +269,88 @@ function reject(
 }
 
 /**
+ * Mana growth at the start of a player's turn: the crystal maximum grows by one
+ * (capped at MAX_MANA) and available mana refills to the new maximum.
+ */
+function growMana(mana: PlayerMana): PlayerMana {
+  const maximum = Math.min(MAX_MANA, mana.maximum + 1)
+  return { available: maximum, maximum }
+}
+
+/**
+ * Ends the active player's turn: passes play to the other player, increments
+ * the turn counter, and draws one card for the new active player. The draw is
+ * skipped when the deck is empty; when the hand is already full the drawn card
+ * is burned (removed from the deck) per the Hearthstone rule. The new active
+ * player's mana grows and refills at the start of their turn.
+ */
+function applyEndTurn(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1
+): OpeningCommandResult {
+  if (state.phase !== 'turns') {
+    return reject(state, 'wrong-phase', 'Turns have not started yet.')
+  }
+  if (state.activePlayerId !== state.players[playerIndex].participantId) {
+    return reject(
+      state,
+      'not-active-player',
+      'Only the active player can end the turn.'
+    )
+  }
+
+  const nextPlayerIndex: 0 | 1 = playerIndex === 0 ? 1 : 0
+  const nextPlayer = state.players[nextPlayerIndex]
+  const nextMana = growMana(nextPlayer.mana)
+  const events: OpeningMatchEvent[] = []
+
+  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+
+  const card = nextPlayer.deck[0]
+  if (card && nextPlayer.hand.length >= MAX_HAND_SIZE) {
+    const burned: OpeningCard = cloneCard(card)
+    nextPlayers[nextPlayerIndex] = {
+      ...nextPlayer,
+      deck: nextPlayer.deck.slice(1)
+    }
+    events.push({
+      type: 'card-burned',
+      participantId: nextPlayer.participantId,
+      card: burned
+    })
+  } else if (card) {
+    const drawn = drawCards(nextPlayer, 1)
+    nextPlayers[nextPlayerIndex] = drawn.player
+    const drawnCard = drawn.cards[0]
+    if (drawnCard) {
+      events.push({
+        type: 'card-drawn',
+        participantId: nextPlayer.participantId,
+        card: cloneCard(drawnCard)
+      })
+    }
+  }
+  nextPlayers[nextPlayerIndex] = { ...nextPlayers[nextPlayerIndex], mana: nextMana }
+
+  const turnNumber = state.turnNumber + 1
+  const nextState: OpeningMatchState = {
+    ...state,
+    activePlayerId: nextPlayer.participantId,
+    turnNumber,
+    players: nextPlayers,
+    revision: state.revision + 1
+  }
+  events.unshift({
+    type: 'turn-started',
+    participantId: nextPlayer.participantId,
+    turnNumber,
+    mana: nextMana
+  })
+
+  return { accepted: true, state: cloneOpeningMatchState(nextState), events }
+}
+
+/**
  * Creates the platform-neutral opening sequence used by GameScene.
  *
  * Deck contents are supplied as snapshots so the game process owns all card
@@ -250,6 +383,7 @@ export function createOpeningMatch(
       playerNumber: (seatIndex + 1) as 1 | 2,
       deck: shuffled.slice(initialCount),
       hand: initialCards,
+      mana: { available: 0, maximum: 0 },
       mulliganConfirmed: false
     } satisfies OpeningPlayerState
   }
@@ -263,6 +397,7 @@ export function createOpeningMatch(
     playerOneId: players[0].participantId,
     playerTwoId: players[1].participantId,
     activePlayerId: null,
+    turnNumber: 0,
     players,
     revision: 0
   }
@@ -275,10 +410,7 @@ export function createOpeningMatch(
     dispatch(commandValue: unknown): OpeningCommandResult {
       const command = parseCommand(commandValue)
       if (!command)
-        return reject(state, 'invalid-command', 'The mulligan command is invalid.')
-      if (state.phase !== 'mulligan') {
-        return reject(state, 'wrong-phase', 'Mulligan has already ended.')
-      }
+        return reject(state, 'invalid-command', 'The match command is invalid.')
 
       const playerIndex = findPlayerIndex(state.players, command.participantId)
       if (playerIndex === -1) {
@@ -287,6 +419,16 @@ export function createOpeningMatch(
           'unknown-participant',
           `Unknown participant: ${command.participantId}`
         )
+      }
+
+      if (command.type === 'end-turn') {
+        const result = applyEndTurn(state, playerIndex)
+        if (result.accepted) state = result.state
+        return result
+      }
+
+      if (state.phase !== 'mulligan') {
+        return reject(state, 'wrong-phase', 'Mulligan has already ended.')
       }
 
       const player = state.players[playerIndex]
@@ -361,18 +503,21 @@ export function createOpeningMatch(
 
         const playerOne = nextPlayers[0]
         const drawn = drawCards(playerOne, 1)
-        nextPlayers[0] = drawn.player
+        const playerOneMana = growMana(playerOne.mana)
+        nextPlayers[0] = { ...drawn.player, mana: playerOneMana }
         state = {
           ...state,
-          phase: 'first-turn',
+          phase: 'turns',
           activePlayerId: playerOne.participantId,
+          turnNumber: 1,
           players: nextPlayers,
           revision: state.revision + 1
         }
         events.push({
           type: 'opening-turn-started',
           participantId: playerOne.participantId,
-          playerNumber: 1
+          playerNumber: 1,
+          mana: playerOneMana
         })
         const card = drawn.cards[0]
         if (card) {

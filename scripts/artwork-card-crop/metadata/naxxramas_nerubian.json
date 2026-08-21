@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_nerubian.jpg",
+  "source_name": "naxxramas_nerubian.jpg",
+  "crop_box": [
+    0,
+    31,
+    564,
+    595
+  ],
+  "scale": 0.8865248226950354,
+  "offset_x": 0.0,
+  "offset_y": -27.596835788325166,
+  "timestamp": "2026-08-20T17:20:30.647949",
+  "card_id": "naxxramas_nerubian",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

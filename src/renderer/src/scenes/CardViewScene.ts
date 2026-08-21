@@ -9,7 +9,10 @@ import {
   createCardDetailPanel,
   type CardDetailRow
 } from '../features/collection/card-detail-panel'
-import { CardPreviewParallax, resolveParallaxTarget } from './cardPreviewParallax'
+import {
+  CardParallaxEffect,
+  resolveParallaxTarget
+} from '../rendering/cards/card-parallax'
 import { Scene } from './Scene'
 
 export { cardDetailRows }
@@ -53,7 +56,7 @@ export class CardViewScene extends Scene {
   private detailsPanel!: Container
   private cardMotion!: Container
   private cardView!: CardView
-  private parallax: CardPreviewParallax | null = null
+  private parallax: CardParallaxEffect | null = null
   private activeTimeline: { kill: () => void } | null = null
   private closing = false
 
@@ -88,7 +91,7 @@ export class CardViewScene extends Scene {
     this.cardMotion = new Container()
     this.cardMotion.addChild(this.cardView)
     if (CARD_PREVIEW_PARALLAX_ENABLED) {
-      this.parallax = new CardPreviewParallax(this.cardView)
+      this.parallax = new CardParallaxEffect(this.cardView)
       this.backdrop.on('globalpointermove', this.handlePointerMove)
     }
     this.positionAtSource()

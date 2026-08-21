@@ -11,6 +11,7 @@ import {
 
 describe('cursor state helpers', () => {
   it('uses a collection page cursor while the pointer is over a page edge', () => {
+    expect(resolveCursorVariant('grab')).toBe('grab')
     expect(resolveCursorVariant('collection-next-page')).toBe('collection-next-page')
     expect(resolveCursorVariant('collection-previous-page')).toBe(
       'collection-previous-page'

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_deaths_bite.jpg",
+  "source_name": "naxxramas_deaths_bite.jpg",
+  "crop_box": [
+    76,
+    0,
+    1006,
+    930
+  ],
+  "scale": 0.5376344086021505,
+  "offset_x": -40.860215053763454,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:19:48.120005",
+  "card_id": "naxxramas_deaths_bite",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

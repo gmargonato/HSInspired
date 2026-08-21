@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_stoneskin_gargoyle.jpg",
+  "source_name": "naxxramas_stoneskin_gargoyle.jpg",
+  "crop_box": [
+    76,
+    0,
+    626,
+    550
+  ],
+  "scale": 0.9090909090909091,
+  "offset_x": -69.12587412587413,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:21:22.124392",
+  "card_id": "naxxramas_stoneskin_gargoyle",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

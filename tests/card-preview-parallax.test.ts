@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CARD_PREVIEW_PARALLAX_LAYERS,
+  CARD_PARALLAX_LAYERS,
   resolveCardPlaneTransform,
   resolveParallaxLayerOffset,
   resolveParallaxSmoothing,
   resolveParallaxTarget
-} from '../src/renderer/src/scenes/cardPreviewParallax'
+} from '../src/renderer/src/rendering/cards/card-parallax'
 
 describe('Card preview parallax', () => {
   it('normalizes pointer movement around the card and clamps distant input', () => {
@@ -63,7 +63,7 @@ describe('Card preview parallax', () => {
   })
 
   it('keeps race metadata on the same zero-depth surface as card description text', () => {
-    expect(CARD_PREVIEW_PARALLAX_LAYERS).toEqual(
+    expect(CARD_PARALLAX_LAYERS).toEqual(
       expect.arrayContaining([
         { path: 'card.rules', depth: 0 },
         { path: 'card.race-banner', depth: 0 },

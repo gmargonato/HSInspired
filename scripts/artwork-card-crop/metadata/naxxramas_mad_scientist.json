@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_mad_scientist.jpg",
+  "source_name": "naxxramas_mad_scientist.jpg",
+  "crop_box": [
+    46,
+    0,
+    966,
+    920
+  ],
+  "scale": 0.5434782608695652,
+  "offset_x": -25.21030936454851,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:20:21.492163",
+  "card_id": "naxxramas_mad_scientist",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

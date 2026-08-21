@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_haunted_creeper.jpg",
+  "source_name": "naxxramas_haunted_creeper.jpg",
+  "crop_box": [
+    0,
+    0,
+    1005,
+    1005
+  ],
+  "scale": 0.4975124378109453,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-20T17:20:03.008192",
+  "card_id": "naxxramas_haunted_creeper",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

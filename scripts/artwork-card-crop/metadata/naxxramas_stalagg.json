@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_stalagg.jpg",
+  "source_name": "naxxramas_stalagg.jpg",
+  "crop_box": [
+    0,
+    315,
+    736,
+    1051
+  ],
+  "scale": 0.6793478260869565,
+  "offset_x": 0.0,
+  "offset_y": -213.86810200668899,
+  "timestamp": "2026-08-20T17:21:19.577108",
+  "card_id": "naxxramas_stalagg",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

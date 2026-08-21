@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\naxxramas_kelthuzad.jpg",
+  "source_name": "naxxramas_kelthuzad.jpg",
+  "crop_box": [
+    106,
+    266,
+    767,
+    927
+  ],
+  "scale": 0.7562500000000001,
+  "offset_x": -79.97902097902094,
+  "offset_y": -201.30598776223783,
+  "timestamp": "2026-08-20T17:20:12.901518",
+  "card_id": "naxxramas_kelthuzad",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}
