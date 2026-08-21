@@ -108,6 +108,8 @@ ${GLSL_DISTANCE_SAMPLES.join('\n')}
 }
 
 void main() {
+    // Pixi's input-pixel uniform converts texture UVs to pixels and its
+    // reciprocal converts requested outline pixels back to texture UVs.
     float width = uShape.x;
     float feather = uShape.y;
     float coreWidth = uShape.z;
@@ -124,30 +126,35 @@ void main() {
 
     vec4 source = texture(uTexture, vTextureCoord);
     vec2 pixel = vTextureCoord * uInputPixel.xy;
+    vec2 patternPixel = pixel;
     float time = uTime * speed;
     float maxRadius = width + feather + blobExpansion + 3.0;
     DistanceResult field = outlineDistance(vTextureCoord, maxRadius);
-    float blobNoise = outlineFbm(pixel * 0.02 + vec2(time * 0.7, -time * 0.5));
+    float blobNoise = outlineFbm(patternPixel * 0.02 + vec2(time * 0.7, -time * 0.5));
     float blobWeight = pow(outlineSmooth((blobNoise - 0.42) / 0.45), 2.0);
     float distanceToEdge = field.distance - blobWeight * blobExpansion;
     float sourceMask = outlineSmooth((source.a - 0.04) / 0.5);
     float exterior = 1.0 - sourceMask;
-    float ribbonAlpha = 1.0 - smoothstep(max(0.0, width - feather), width + feather, distanceToEdge);
+    // Keep the GLSL path compatible with WebGL 1. Pixi may fall back to it,
+    // and derivatives are not available there unless an extension is enabled.
+    float antiAlias = 0.5;
+    float edgeWidth = max(feather, antiAlias);
+    float ribbonAlpha = 1.0 - smoothstep(max(0.0, width - edgeWidth), width + edgeWidth, distanceToEdge);
     ribbonAlpha *= exterior;
-    float coreWeight = 1.0 - smoothstep(coreWidth, coreWidth + max(1.0, feather * 0.55), distanceToEdge);
+    float coreWeight = 1.0 - smoothstep(coreWidth, coreWidth + max(antiAlias, edgeWidth * 0.55), distanceToEdge);
     coreWeight *= ribbonAlpha;
-    float lipStart = max(coreWidth + 0.5, width - lipWidth);
-    float lipWeight = smoothstep(lipStart - feather * 0.45, lipStart + feather * 0.45, distanceToEdge) * ribbonAlpha;
+    float lipStart = max(coreWidth + antiAlias, width - lipWidth);
+    float lipWeight = smoothstep(lipStart - edgeWidth * 0.45, lipStart + edgeWidth * 0.45, distanceToEdge) * ribbonAlpha;
     float mainWeight = ribbonAlpha * (1.0 - coreWeight) * (1.0 - lipWeight * 0.82);
 
     vec2 outward = -normalize(field.inward);
     vec2 lightDirection = normalize(vec2(0.55, -0.83));
     float directional = pow(max(dot(outward, lightDirection), 0.0), specularPower);
-    float pearlNoise = outlineFbm(pixel / max(8.0, pearlScale) + vec2(-time * 1.65, time * 0.55));
+    float pearlNoise = outlineFbm(patternPixel / max(8.0, pearlScale) + vec2(-time * 1.65, time * 0.55));
     float pearl = directional * outlineSmooth((pearlNoise - 0.43) / 0.28) * specularStrength * ribbonAlpha;
-    float surfaceNoise = outlineFbm(pixel / max(8.0, textureScale) + vec2(time * 0.82, -time * 1.18));
+    float surfaceNoise = outlineFbm(patternPixel / max(8.0, textureScale) + vec2(time * 0.82, -time * 1.18));
     float surfaceLight = 1.0 + (surfaceNoise * 2.0 - 1.0) * textureStrength;
-    float travelingWave = 0.5 + 0.5 * sin(pixel.x * 0.052 + pixel.y * 0.031 - time * 5.2 + surfaceNoise * 4.4);
+    float travelingWave = 0.5 + 0.5 * sin(patternPixel.x * 0.052 + patternPixel.y * 0.031 - time * 5.2 + surfaceNoise * 4.4);
     float caustic = outlineSmooth((surfaceNoise + travelingWave * 0.38 - 0.46) / 0.42);
     float slowBreath = 0.96 + 0.04 * sin(time * 2.4);
     surfaceLight *= (0.72 + caustic * 0.56) * slowBreath;
@@ -199,24 +206,25 @@ ${WGSL_DISTANCE_SAMPLES.join('\n')}
   let bodyAlpha = outlineUniforms.uAtmosphere.x; let blobExpansion = outlineUniforms.uAtmosphere.y;
   let textureStrength = outlineUniforms.uSurface.x; let textureScale = outlineUniforms.uSurface.y; let specularStrength = outlineUniforms.uSurface.z; let specularPower = outlineUniforms.uSurface.w;
   let speed = outlineUniforms.uMotion.x; let pearlScale = outlineUniforms.uMotion.y; let coreWhiteness = outlineUniforms.uMotion.z;
-  let source = textureSample(uTexture, uSampler, uv); let pixel = uv * gfu.uInputPixel.xy; let time = outlineUniforms.uTime * speed;
+  let source = textureSample(uTexture, uSampler, uv); let pixel = uv * gfu.uInputPixel.xy; let patternPixel = pixel; let time = outlineUniforms.uTime * speed;
   let maxRadius = width + feather + blobExpansion + 3.0; let field = outlineDistance(uv, maxRadius);
-  let blobNoise = outlineFbm(pixel * 0.02 + vec2<f32>(time * 0.7, -time * 0.5));
+  let blobNoise = outlineFbm(patternPixel * 0.02 + vec2<f32>(time * 0.7, -time * 0.5));
   let blobWeight = pow(outlineSmooth((blobNoise - 0.42) / 0.45), 2.0);
   let distanceToEdge = field.distance - blobWeight * blobExpansion;
   let sourceMask = outlineSmooth((source.a - 0.04) / 0.5); let exterior = 1.0 - sourceMask;
-  var ribbonAlpha = 1.0 - smoothstep(max(0.0, width - feather), width + feather, distanceToEdge); ribbonAlpha *= exterior;
-  var coreWeight = 1.0 - smoothstep(coreWidth, coreWidth + max(1.0, feather * 0.55), distanceToEdge); coreWeight *= ribbonAlpha;
-  let lipStart = max(coreWidth + 0.5, width - lipWidth);
-  let lipWeight = smoothstep(lipStart - feather * 0.45, lipStart + feather * 0.45, distanceToEdge) * ribbonAlpha;
+  let antiAlias = 0.5; let edgeWidth = max(feather, antiAlias);
+  var ribbonAlpha = 1.0 - smoothstep(max(0.0, width - edgeWidth), width + edgeWidth, distanceToEdge); ribbonAlpha *= exterior;
+  var coreWeight = 1.0 - smoothstep(coreWidth, coreWidth + max(antiAlias, edgeWidth * 0.55), distanceToEdge); coreWeight *= ribbonAlpha;
+  let lipStart = max(coreWidth + antiAlias, width - lipWidth);
+  let lipWeight = smoothstep(lipStart - edgeWidth * 0.45, lipStart + edgeWidth * 0.45, distanceToEdge) * ribbonAlpha;
   let mainWeight = ribbonAlpha * (1.0 - coreWeight) * (1.0 - lipWeight * 0.82);
   let outward = -normalize(field.inward); let lightDirection = normalize(vec2<f32>(0.55, -0.83));
   let directional = pow(max(dot(outward, lightDirection), 0.0), specularPower);
-  let pearlNoise = outlineFbm(pixel / max(8.0, pearlScale) + vec2<f32>(-time * 1.65, time * 0.55));
+  let pearlNoise = outlineFbm(patternPixel / max(8.0, pearlScale) + vec2<f32>(-time * 1.65, time * 0.55));
   var pearl = directional * outlineSmooth((pearlNoise - 0.43) / 0.28) * specularStrength * ribbonAlpha;
-  let surfaceNoise = outlineFbm(pixel / max(8.0, textureScale) + vec2<f32>(time * 0.82, -time * 1.18));
+  let surfaceNoise = outlineFbm(patternPixel / max(8.0, textureScale) + vec2<f32>(time * 0.82, -time * 1.18));
   var surfaceLight = 1.0 + (surfaceNoise * 2.0 - 1.0) * textureStrength;
-  let travelingWave = 0.5 + 0.5 * sin(pixel.x * 0.052 + pixel.y * 0.031 - time * 5.2 + surfaceNoise * 4.4); let caustic = outlineSmooth((surfaceNoise + travelingWave * 0.38 - 0.46) / 0.42); let slowBreath = 0.96 + 0.04 * sin(time * 2.4); surfaceLight *= (0.72 + caustic * 0.56) * slowBreath; pearl *= 0.72 + travelingWave * 0.48;
+  let travelingWave = 0.5 + 0.5 * sin(patternPixel.x * 0.052 + patternPixel.y * 0.031 - time * 5.2 + surfaceNoise * 4.4); let caustic = outlineSmooth((surfaceNoise + travelingWave * 0.38 - 0.46) / 0.42); let slowBreath = 0.96 + 0.04 * sin(time * 2.4); surfaceLight *= (0.72 + caustic * 0.56) * slowBreath; pearl *= 0.72 + travelingWave * 0.48;
   let coreColor = mix(outlineUniforms.uBaseColor.rgb, vec3<f32>(1.0), coreWhiteness);
   var effectRgb = coreColor * coreWeight;
   effectRgb += outlineUniforms.uBaseColor.rgb * mainWeight * surfaceLight;

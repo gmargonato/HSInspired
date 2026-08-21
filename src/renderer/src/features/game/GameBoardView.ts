@@ -24,6 +24,11 @@ import type { AudioService } from '../../app/audio'
 import type { GameRoute } from '../../app/router'
 import type { AppLogger } from '../../app/services'
 import { CardView } from '../../rendering/cards/card-view'
+import { CARD_PROFILES } from '../../rendering/cards/card-layout'
+import {
+  AnimatedOutline,
+  OUTLINE_PROFILES
+} from '../../rendering/effects/animated-outline'
 import { gsap } from '../../animation/animations'
 import { type DeckPresentationAssets, type GameAssets } from '../../ui/asset-registry'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
@@ -65,7 +70,7 @@ export interface GameBoardViewOptions {
 
 /** Feature-local timings make the opening easy to tune without layout edits. */
 const OPENING_TIMING = {
-  versusHold: 1,
+  versusHold: 2,
   heroSettle: 0.6,
   boardPause: 0.5,
   mulliganFade: 0.3,
@@ -100,18 +105,24 @@ function cloneCard(card: OpeningCard): OpeningCard {
 class GameCardSlot extends Container {
   readonly card: CardView
   readonly instanceId: string
+  readonly playableOutlineTexture: Texture
+  readonly playableOutline: AnimatedOutline
   private readonly replaceCross: Sprite
   private readonly replacedLabel: Sprite
+  private playableOutlineRequested = false
+  private playableOutlineSuppressed = false
 
   constructor(
     card: CardView,
     instanceId: string,
     replaceCrossTexture: Texture,
-    replacedLabelTexture: Texture
+    replacedLabelTexture: Texture,
+    outlineTexture: Texture
   ) {
     super()
     this.card = card
     this.instanceId = instanceId
+    this.playableOutlineTexture = outlineTexture
     this.eventMode = 'static'
     this.cursor = 'pointer'
     const slotLayout = GAME_BOARD_LAYOUT.mulligan.slot
@@ -125,6 +136,22 @@ class GameCardSlot extends Container {
 
     card.eventMode = 'none'
     card.position.set(slotLayout.cardOffset.x, slotLayout.cardOffset.y)
+
+    const outlineTarget = new Sprite(outlineTexture)
+    outlineTarget.width = card.plan.width
+    outlineTarget.height = card.renderedHeight
+    outlineTarget.position.set(slotLayout.cardOffset.x, slotLayout.cardOffset.y)
+    outlineTarget.zIndex = -1
+    outlineTarget.eventMode = 'none'
+    outlineTarget.label = `${card.label}:playable-outline-target`
+    this.addChild(outlineTarget)
+    this.playableOutline = new AnimatedOutline(
+      outlineTarget,
+      'green',
+      OUTLINE_PROFILES.card
+    )
+    this.setPlayableOutlineEnabled(false)
+
     this.addChild(card)
 
     this.replaceCross = new Sprite(replaceCrossTexture)
@@ -153,6 +180,26 @@ class GameCardSlot extends Container {
   setSelected(selected: boolean): void {
     this.replaceCross.visible = selected
     this.replacedLabel.visible = selected
+  }
+
+  setPlayableOutlineEnabled(enabled: boolean): void {
+    this.playableOutlineRequested = enabled
+    this.syncPlayableOutline()
+  }
+
+  isPlayableOutlineEnabled(): boolean {
+    return this.playableOutlineRequested
+  }
+
+  suppressPlayableOutline(suppressed: boolean): void {
+    this.playableOutlineSuppressed = suppressed
+    this.syncPlayableOutline()
+  }
+
+  private syncPlayableOutline(): void {
+    this.playableOutline.setEnabled(
+      this.playableOutlineRequested && !this.playableOutlineSuppressed
+    )
   }
 }
 
@@ -405,19 +452,10 @@ export class GameBoardView extends Actor {
     this.deckCountLabels = { local: localCount, remote: remoteCount }
     this.turnLayer.addChild(localCount, remoteCount)
 
-    const localManaCrystal = this.createManaCrystal(GAME_BOARD_LAYOUT.mana.localCrystal)
-    const remoteManaCrystal = this.createManaCrystal(
-      GAME_BOARD_LAYOUT.mana.remoteCrystal
-    )
     const localManaLabel = this.createHudLabel(GAME_BOARD_LAYOUT.mana.localLabel, 34)
     const remoteManaLabel = this.createHudLabel(GAME_BOARD_LAYOUT.mana.remoteLabel, 26)
     this.manaLabels = { local: localManaLabel, remote: remoteManaLabel }
-    this.turnLayer.addChild(
-      localManaCrystal,
-      remoteManaCrystal,
-      localManaLabel,
-      remoteManaLabel
-    )
+    this.turnLayer.addChild(localManaLabel, remoteManaLabel)
 
     this.syncTurnHud(state)
     this.turnLayer.visible = false
@@ -437,13 +475,6 @@ export class GameBoardView extends Actor {
     applyAnchoredPlacement(label, placement)
     label.eventMode = 'none'
     return label
-  }
-
-  private createManaCrystal(placement: LayoutPlacement): Sprite {
-    const crystal = new Sprite(this.options.gameAssets.manaCrystal)
-    applyAnchoredPlacement(crystal, placement)
-    crystal.eventMode = 'none'
-    return crystal
   }
 
   /** Refreshes both deck card-count labels from the engine state. */
@@ -470,6 +501,24 @@ export class GameBoardView extends Actor {
   private syncTurnHud(state: OpeningMatchState): void {
     this.syncDeckCounts(state)
     this.syncMana(state)
+    this.syncPlayableCardOutlines(state)
+  }
+
+  /** Shows the green outline only on cards the local player can currently afford. */
+  private syncPlayableCardOutlines(state: OpeningMatchState): void {
+    const local = this.findPlayer(state, this.localParticipantId)
+    const isLocalTurn = state.activePlayerId === this.localParticipantId
+    const draggingEntry =
+      this.draggingIndex === null ? undefined : this.handEntries[this.draggingIndex]
+
+    for (const entry of this.handEntries) {
+      const canPlay =
+        isLocalTurn && cardDefinition(entry.card).cost <= local.mana.available
+      entry.slot.setPlayableOutlineEnabled(canPlay)
+      if (entry === draggingEntry) {
+        this.dragPerspective?.setOutlineEnabled(canPlay)
+      }
+    }
   }
 
   /** Reflects whose turn it is in the end turn button's texture and enabled state. */
@@ -609,11 +658,15 @@ export class GameBoardView extends Actor {
     const view = await CardView.create(cardDefinition(card), this.resolver, {
       artwork: await this.resolver.loadArtwork(card.cardId)
     })
+    const outlineTexture = await this.resolver.load(
+      CARD_PROFILES[view.plan.template].frame
+    )
     return new GameCardSlot(
       view,
       card.instanceId,
       this.options.gameAssets.mulliganReplaceCross,
-      this.options.gameAssets.mulliganReplacedLabel
+      this.options.gameAssets.mulliganReplacedLabel,
+      outlineTexture
     )
   }
 
@@ -883,6 +936,8 @@ export class GameBoardView extends Actor {
     )
     for (const slot of returnedSlots) {
       const entryIndex = this.handEntries.findIndex((entry) => entry.slot === slot)
+      const entry = entryIndex >= 0 ? this.handEntries[entryIndex] : undefined
+      entry?.slot.playableOutline.dispose()
       if (entryIndex >= 0) this.handEntries.splice(entryIndex, 1)
       slot.destroy({ children: true })
     }
@@ -1229,10 +1284,24 @@ export class GameBoardView extends Actor {
     // toward the cursor instead of snapping back to the resting baseline.
     this.dragState = initialDragState(entry.slot.x, entry.slot.y)
     this.dragPerspective?.destroy()
-    this.dragPerspective = new HandCardPerspective(
-      this.options.renderer,
-      entry.slot.card
-    )
+    this.dragPerspective = null
+    const outlineEnabled = entry.slot.isPlayableOutlineEnabled()
+    entry.slot.suppressPlayableOutline(true)
+    try {
+      this.dragPerspective = new HandCardPerspective(
+        this.options.renderer,
+        entry.slot.card,
+        {
+          outlineTexture: entry.slot.playableOutlineTexture,
+          outlineEnabled,
+          outlineColor: 'green',
+          outlineProfile: OUTLINE_PROFILES.card
+        }
+      )
+    } catch (error) {
+      entry.slot.suppressPlayableOutline(false)
+      throw error
+    }
     this.options.cursor?.setContextVariant('grab')
 
     this.killTweensOf(entry.slot)
@@ -1315,16 +1384,19 @@ export class GameBoardView extends Actor {
   /** Restores all transient drag state after the return animation settles. */
   private finishDrag(index: number, slot?: GameCardSlot): void {
     if (this.draggingIndex !== index) return
+    const entry = slot
+      ? this.handEntries.find((candidate) => candidate.slot === slot)
+      : this.handEntries[index]
     if (this.dragTick) gsap.ticker.remove(this.dragTick)
     this.dragTick = null
     this.dragPerspective?.destroy()
     this.dragPerspective = null
     this.draggingIndex = null
     this.dragReturning = false
-    const entry = slot
-      ? this.handEntries.find((candidate) => candidate.slot === slot)
-      : this.handEntries[index]
-    if (entry) entry.displaced = false
+    if (entry) {
+      entry.slot.suppressPlayableOutline(false)
+      entry.displaced = false
+    }
   }
 
   /** A quick horizontal wobble for an unaffordable card, settling back at rest. */
@@ -1358,6 +1430,7 @@ export class GameBoardView extends Actor {
     window.removeEventListener('blur', this.handleWindowBlur)
     this.options.cursor?.setContextVariant(null)
     if (this.draggingIndex !== null) {
+      this.handEntries[this.draggingIndex]?.slot.suppressPlayableOutline(false)
       if (this.dragTick) gsap.ticker.remove(this.dragTick)
       this.dragTick = null
       this.dragPerspective?.destroy()
@@ -1366,6 +1439,9 @@ export class GameBoardView extends Actor {
       this.dragPointer = null
       this.dragState = null
       this.dragReturning = false
+    }
+    for (const entry of this.handEntries) {
+      entry.slot.playableOutline.dispose()
     }
     super.dispose()
   }

@@ -31,36 +31,36 @@ export const GAME_BOARD_LAYOUT = {
   /** The wooden play surface; board art is centered on the canvas. */
   board: placement(
     { x: 960, y: 540 },
-    { width: 1443, height: 1046 },
+    { width: 1573, height: 1080 },
     {
       anchor: CENTER,
       scale: 1,
-      note: 'Board artwork is 1443x1046 authored and drawn at 1x.'
+      note: 'Board artwork.'
     }
   ),
 
   heroes: {
     /** Local hero portrait in its board slot (bottom of the screen). */
     local: placement(
-      { x: 960, y: 852 },
+      { x: 985, y: 825 },
       { width: 345, height: 433 },
       {
         anchor: CENTER,
-        scale: 0.46
+        scale: 0.5
       }
     ),
     /** Remote hero portrait in its board slot (top of the screen). */
     remote: placement(
-      { x: 960, y: 184 },
+      { x: 985, y: 180 },
       { width: 345, height: 433 },
       {
         anchor: CENTER,
-        scale: 0.46
+        scale: 0.5
       }
     ),
     /** Local hero banner used by the pre-match "versus" intro. */
     localIntro: placement(
-      { x: 350, y: 665 },
+      { x: 600, y: 700 },
       { width: 345, height: 433 },
       {
         anchor: CENTER,
@@ -69,7 +69,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote hero banner used by the pre-match "versus" intro. */
     remoteIntro: placement(
-      { x: 1540, y: 250 },
+      { x: 1350, y: 280 },
       { width: 345, height: 433 },
       {
         anchor: CENTER,
@@ -77,31 +77,31 @@ export const GAME_BOARD_LAYOUT = {
       }
     ),
     /** Vertical distance from an intro hero anchor to its name label, multiplied by hero scale. */
-    introLabelOffset: 265
+    introLabelOffset: 225
   },
 
   decks: {
     /** Local player's deck pile. */
     local: placement(
-      { x: 1672, y: 653 },
+      { x: 1680, y: 643 },
       { width: 83, height: 181 },
       {
         anchor: CENTER,
-        scale: 1
+        scale: 0.9
       }
     ),
     /** Remote player's deck pile. */
     remote: placement(
-      { x: 1672, y: 350 },
+      { x: 1680, y: 347 },
       { width: 83, height: 181 },
       {
         anchor: CENTER,
-        scale: 1
+        scale: 0.9
       }
     ),
     /** Local deck card count label, just right of the pile. */
     localCount: placement(
-      { x: 1672, y: 750 },
+      { x: 1660, y: 770 },
       { width: 90, height: 60 },
       {
         anchor: CENTER
@@ -109,7 +109,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote deck card count label, just right of the pile. */
     remoteCount: placement(
-      { x: 1672, y: 390 },
+      { x: 1660, y: 215 },
       { width: 90, height: 60 },
       {
         anchor: CENTER
@@ -124,11 +124,11 @@ export const GAME_BOARD_LAYOUT = {
    * the remote player's turn.
    */
   endTurnButton: placement(
-    { x: 1584, y: 514 },
+    { x: 1600, y: 500 },
     { width: 157, height: 86 },
     {
       anchor: CENTER,
-      scale: 1.15
+      scale: 1
     }
   ),
 
@@ -153,31 +153,15 @@ export const GAME_BOARD_LAYOUT = {
    * display sits right of the remote hero below the remote hand of card backs.
    */
   mana: {
-    localCrystal: placement(
-      { x: 1240, y: 915 },
-      { width: 171, height: 165 },
-      {
-        anchor: CENTER,
-        scale: 0.28
-      }
-    ),
     localLabel: placement(
-      { x: 1320, y: 915 },
-      { width: 110, height: 60 },
+      { x: 1290, y: 1010 },
+      { width: 90, height: 50 },
       {
         anchor: CENTER
       }
     ),
-    remoteCrystal: placement(
-      { x: 1240, y: 212 },
-      { width: 171, height: 165 },
-      {
-        anchor: CENTER,
-        scale: 0.2
-      }
-    ),
     remoteLabel: placement(
-      { x: 1305, y: 212 },
+      { x: 1260, y: 50 },
       { width: 90, height: 50 },
       {
         anchor: CENTER
@@ -204,12 +188,12 @@ export const GAME_BOARD_LAYOUT = {
       centerX: 960,
       baselineY: 710,
       gap: 250,
-      scale: 0.38,
+      scale: 0.35,
       anchor: BOTTOM_CENTER
     },
     /** The confirm button shown under the mulligan hand. */
     confirmButton: placement(
-      { x: 960, y: 855 },
+      { x: 960, y: 875 },
       { width: 235, height: 127 },
       {
         anchor: CENTER
@@ -217,10 +201,11 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** "Choose your cards" banner at the top of the screen (top-center). */
     announcement: placement(
-      { x: 960, y: 72 },
+      { x: 960, y: 160 },
       { width: 721, height: 223 },
       {
-        anchor: TOP_CENTER
+        anchor: TOP_CENTER,
+        scale: 0.8
       }
     ),
     /** Coin announcement shown when the local player goes second. */

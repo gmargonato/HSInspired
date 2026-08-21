@@ -7,7 +7,7 @@ import {
 } from './animated-outline-shader'
 
 export const OUTLINE_COLORS = {
-  blue: 0x00a2ff,
+  blue: 0x2383fc,
   green: 0x57fc38,
   orange: 0xff8c00,
   red: 0xff2b2b,
@@ -16,32 +16,70 @@ export const OUTLINE_COLORS = {
 
 export type OutlineColorName = keyof typeof OUTLINE_COLORS
 
-const OUTLINE_THICKNESS = 12
-const OUTLINE_EDGE_SOFTNESS = 0
-const OUTLINE_BLOB_EXPANSION = 7
-const OUTLINE_BLUR_STRENGTH = 2
-const OUTLINE_BLUR_QUALITY = 2
+const OUTLINE_INTENSITY = 3
+export interface OutlineProfile {
+  /** Width of the ribbon in logical screen pixels. */
+  readonly thickness: number
+  /** Soft transition around the ribbon in logical screen pixels. */
+  readonly edgeSoftness: number
+  /** Width of the bright inner core in logical screen pixels. */
+  readonly coreWidth: number
+  /** Width of the colored outer lip in logical screen pixels. */
+  readonly lipWidth: number
+  /** Maximum animated expansion in logical screen pixels. */
+  readonly blobExpansion: number
+  /** Gaussian blur strength in logical screen pixels. */
+  readonly blurStrength: number
+  /** Number of blur passes. */
+  readonly blurQuality: number
+}
+
+/** Separate visual budgets keep small cards from inheriting the button's halo. */
+export const OUTLINE_PROFILES = {
+  card: {
+    thickness: 6,
+    edgeSoftness: 3,
+    coreWidth: 2,
+    lipWidth: 2,
+    blobExpansion: 3,
+    blurStrength: 0.75,
+    blurQuality: 2
+  },
+  button: {
+    thickness: 10,
+    edgeSoftness: 10,
+    coreWidth: 3,
+    lipWidth: 3,
+    blobExpansion: 9,
+    blurStrength: 1,
+    blurQuality: 2
+  }
+} as const satisfies Record<'card' | 'button', OutlineProfile>
+
+function outlinePadding(profile: OutlineProfile): number {
+  return (
+    profile.thickness +
+    profile.edgeSoftness +
+    profile.blobExpansion +
+    profile.blurStrength * 2 +
+    4
+  )
+}
 
 function toRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255]
 }
 
-/** Preserves hue while producing a darker, slightly less saturated material edge. */
-function deriveEdgeRgb([r, g, b]: readonly number[]): [number, number, number] {
+/** Scattered light shows the hue fully saturated, so the halo strips the white component. */
+function deriveGlowRgb([r, g, b]: readonly number[]): [number, number, number] {
   const maximum = Math.max(r, g, b)
   const minimum = Math.min(r, g, b)
   const chroma = maximum - minimum
-  const edgeMaximum = maximum * 0.67
 
-  if (chroma === 0 || maximum === 0) return [edgeMaximum, edgeMaximum, edgeMaximum]
+  if (chroma === 0 || maximum === 0) return [maximum, maximum, maximum]
+  const saturate = (channel: number): number => ((channel - minimum) / chroma) * maximum
 
-  const saturation = chroma / maximum
-  const edgeMinimum = edgeMaximum * (1 - saturation * 0.96)
-  const edgeChroma = edgeMaximum - edgeMinimum
-  const remap = (channel: number): number =>
-    edgeMinimum + ((channel - minimum) / chroma) * edgeChroma
-
-  return [remap(r), remap(g), remap(b)]
+  return [saturate(r), saturate(g), saturate(b)]
 }
 
 /** Asset-agnostic animated ribbon applied to the alpha silhouette of a display object. */
@@ -52,8 +90,13 @@ export class AnimatedOutline extends Actor {
   private readonly uniforms: UniformGroup
   private readonly timeState = { value: 0 }
   private timeTween?: gsap.core.Tween
+  private enabled = true
 
-  constructor(target: Container, color: OutlineColorName | number) {
+  constructor(
+    target: Container,
+    color: OutlineColorName | number,
+    profile: OutlineProfile = OUTLINE_PROFILES.button
+  ) {
     super()
     this.target = target
 
@@ -61,11 +104,16 @@ export class AnimatedOutline extends Actor {
       uBaseColor: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
       uEdgeColor: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
       uShape: {
-        value: [OUTLINE_THICKNESS, OUTLINE_EDGE_SOFTNESS, 2, 3],
+        value: [
+          profile.thickness,
+          profile.edgeSoftness,
+          profile.coreWidth,
+          profile.lipWidth
+        ],
         type: 'vec4<f32>'
       },
       uAtmosphere: {
-        value: [0.98, OUTLINE_BLOB_EXPANSION, 0, 0],
+        value: [0.98, profile.blobExpansion, 0, 0],
         type: 'vec4<f32>'
       },
       uSurface: {
@@ -73,7 +121,7 @@ export class AnimatedOutline extends Actor {
         type: 'vec4<f32>'
       },
       uMotion: {
-        value: [0.32, 34, 0.74, 0],
+        value: [0.32, 34, 0.85, 1],
         type: 'vec4<f32>'
       },
       uTime: { value: 0, type: 'f32' }
@@ -83,12 +131,15 @@ export class AnimatedOutline extends Actor {
       glProgram: createAnimatedOutlineGlProgram(),
       gpuProgram: createAnimatedOutlineGpuProgram(),
       resources: { outlineUniforms: this.uniforms },
-      padding: OUTLINE_THICKNESS + OUTLINE_EDGE_SOFTNESS + OUTLINE_BLOB_EXPANSION + 4
+      padding: outlinePadding(profile),
+      resolution: 'inherit',
+      antialias: 'inherit'
     })
     this.blurFilter = new BlurFilter({
-      strength: OUTLINE_BLUR_STRENGTH,
-      quality: OUTLINE_BLUR_QUALITY,
-      resolution: 1,
+      strength: profile.blurStrength,
+      quality: profile.blurQuality,
+      resolution: 'inherit',
+      antialias: 'inherit',
       kernelSize: 5
     })
     this.label = 'animated-outline'
@@ -106,14 +157,19 @@ export class AnimatedOutline extends Actor {
   }
 
   setEnabled(enabled: boolean): void {
+    this.enabled = enabled
     this.target.visible = enabled
+  }
+
+  isEnabled(): boolean {
+    return this.enabled
   }
 
   setColor(color: OutlineColorName | number): void {
     const hex = typeof color === 'number' ? color : OUTLINE_COLORS[color]
     const baseRgb = toRgb01(hex)
     this.writeRgb('uBaseColor', baseRgb)
-    this.writeRgb('uEdgeColor', deriveEdgeRgb(baseRgb))
+    this.writeRgb('uEdgeColor', deriveGlowRgb(baseRgb))
   }
 
   override dispose(): void {
@@ -130,9 +186,9 @@ export class AnimatedOutline extends Actor {
     [r, g, b]: readonly number[]
   ): void {
     const value = this.uniforms.uniforms[uniformName] as unknown as number[]
-    value[0] = r
-    value[1] = g
-    value[2] = b
+    value[0] = r * OUTLINE_INTENSITY
+    value[1] = g * OUTLINE_INTENSITY
+    value[2] = b * OUTLINE_INTENSITY
     value[3] = 1
   }
 

@@ -8,7 +8,10 @@ import {
   type SharedUIAssets
 } from '../../ui/asset-registry'
 import { AssetScope } from '../../ui/asset-registry/asset-scope'
-import { AnimatedOutline } from '../../rendering/effects/animated-outline'
+import {
+  AnimatedOutline,
+  OUTLINE_PROFILES
+} from '../../rendering/effects/animated-outline'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/Button'
 import { HERO_CATALOG } from '../../../../game/content/heroes'
@@ -127,7 +130,11 @@ export class DeckSelectionView extends Container {
     this.playButton.setEnabled(false)
     this.addChild(this.playButton)
 
-    this.playOutline = new AnimatedOutline(this.playOutlineTarget, 'blue')
+    this.playOutline = new AnimatedOutline(
+      this.playOutlineTarget,
+      'blue',
+      OUTLINE_PROFILES.button
+    )
     this.playOutline.setEnabled(false)
   }
 

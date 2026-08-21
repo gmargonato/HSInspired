@@ -1,6 +1,13 @@
-import { PerspectiveMesh, Rectangle, type Renderer } from 'pixi.js'
+import { Container, PerspectiveMesh, Rectangle, Sprite, type Renderer } from 'pixi.js'
 import type { CardView } from '../../rendering/cards/card-view'
 import { resolveParallaxSmoothing } from '../../rendering/cards/card-parallax'
+import {
+  AnimatedOutline,
+  OUTLINE_PROFILES,
+  type OutlineColorName,
+  type OutlineProfile
+} from '../../rendering/effects/animated-outline'
+import type { Texture } from 'pixi.js'
 
 export interface PerspectivePoint {
   readonly x: number
@@ -14,10 +21,19 @@ export interface PerspectiveCorners {
   readonly bottomLeft: PerspectivePoint
 }
 
+export interface HandCardPerspectiveOptions {
+  /** Raw card-frame texture used to keep the outline outside the card snapshot. */
+  readonly outlineTexture?: Texture
+  readonly outlineEnabled?: boolean
+  readonly outlineColor?: OutlineColorName | number
+  readonly outlineProfile?: OutlineProfile
+}
+
 const MAX_TILT_X = (14 * Math.PI) / 180
 const MAX_TILT_Y = (18 * Math.PI) / 180
 const PERSPECTIVE_DEPTH = 950
-const SNAPSHOT_PADDING = 4
+/** Leaves room for the playable-card outline and its blur when snapshotting. */
+const SNAPSHOT_PADDING = 40
 
 function clampUnit(value: number): number {
   return Math.max(-1, Math.min(1, value))
@@ -62,6 +78,9 @@ export function resolvePerspectiveCorners(
 export class HandCardPerspective {
   private readonly mesh: PerspectiveMesh
   private readonly texture: ReturnType<Renderer['generateTexture']>
+  private readonly outlineMesh: PerspectiveMesh | null
+  private readonly outlineMaskTexture: ReturnType<Renderer['generateTexture']> | null
+  private readonly outlineEffect: AnimatedOutline | null
   private readonly current = { x: 0, y: 0 }
   private readonly target = { x: 0, y: 0 }
   private readonly wasVisible: boolean
@@ -69,7 +88,8 @@ export class HandCardPerspective {
 
   constructor(
     renderer: Renderer,
-    private readonly cardView: CardView
+    private readonly cardView: CardView,
+    options: HandCardPerspectiveOptions = {}
   ) {
     const bounds = cardView.getLocalBounds()
     const frame = new Rectangle(
@@ -104,7 +124,53 @@ export class HandCardPerspective {
     const parent = cardView.parent
     if (!parent) throw new Error('Attached hand card must have a parent container.')
     const cardIndex = parent.getChildIndex(cardView)
-    parent.addChildAt(this.mesh, cardIndex)
+
+    if (options.outlineTexture) {
+      const maskContainer = new Container()
+      const maskSprite = new Sprite(options.outlineTexture)
+      maskSprite.position.set(-frame.x, -frame.y)
+      maskSprite.width = cardView.plan.width
+      maskSprite.height = cardView.renderedHeight
+      maskSprite.eventMode = 'none'
+      maskContainer.addChild(maskSprite)
+      this.outlineMaskTexture = renderer.generateTexture({
+        target: maskContainer,
+        frame: new Rectangle(0, 0, width, height),
+        antialias: true
+      })
+      maskSprite.removeFromParent()
+      maskSprite.destroy({ texture: false })
+      maskContainer.destroy()
+
+      this.outlineMesh = new PerspectiveMesh({
+        texture: this.outlineMaskTexture,
+        verticesX: 10,
+        verticesY: 10,
+        x0: 0,
+        y0: 0,
+        x1: width,
+        y1: 0,
+        x2: width,
+        y2: height,
+        x3: 0,
+        y3: height
+      })
+      this.outlineMesh.position.copyFrom(this.mesh.position)
+      this.outlineMesh.eventMode = 'none'
+      this.outlineEffect = new AnimatedOutline(
+        this.outlineMesh,
+        options.outlineColor ?? 'green',
+        options.outlineProfile ?? OUTLINE_PROFILES.card
+      )
+      this.outlineEffect.setEnabled(options.outlineEnabled ?? true)
+    } else {
+      this.outlineMesh = null
+      this.outlineMaskTexture = null
+      this.outlineEffect = null
+    }
+
+    if (this.outlineMesh) parent.addChildAt(this.outlineMesh, cardIndex)
+    parent.addChildAt(this.mesh, cardIndex + (this.outlineMesh ? 1 : 0))
     this.wasVisible = cardView.visible
     cardView.visible = false
   }
@@ -130,7 +196,7 @@ export class HandCardPerspective {
       this.texture.width,
       this.texture.height
     )
-    this.mesh.setCorners(
+    this.setCorners(
       corners.topLeft.x,
       corners.topLeft.y,
       corners.topRight.x,
@@ -142,12 +208,52 @@ export class HandCardPerspective {
     )
   }
 
+  setOutlineEnabled(enabled: boolean): void {
+    this.outlineEffect?.setEnabled(enabled)
+  }
+
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
     this.cardView.visible = this.wasVisible
+    this.outlineEffect?.dispose()
+    this.outlineMesh?.removeFromParent()
+    this.outlineMesh?.destroy()
+    this.outlineMaskTexture?.destroy(true)
     this.mesh.removeFromParent()
     this.mesh.destroy()
     this.texture.destroy(true)
+  }
+
+  private setCorners(
+    topLeftX: number,
+    topLeftY: number,
+    topRightX: number,
+    topRightY: number,
+    bottomRightX: number,
+    bottomRightY: number,
+    bottomLeftX: number,
+    bottomLeftY: number
+  ): void {
+    this.mesh.setCorners(
+      topLeftX,
+      topLeftY,
+      topRightX,
+      topRightY,
+      bottomRightX,
+      bottomRightY,
+      bottomLeftX,
+      bottomLeftY
+    )
+    this.outlineMesh?.setCorners(
+      topLeftX,
+      topLeftY,
+      topRightX,
+      topRightY,
+      bottomRightX,
+      bottomRightY,
+      bottomLeftX,
+      bottomLeftY
+    )
   }
 }
