@@ -35,9 +35,13 @@ export const CARD_PARALLAX_LAYERS: readonly ParallaxLayerDefinition[] = [
   { path: 'card.legendary-frame', depth: 12 },
   { path: 'card.rarity', depth: 10 },
   { path: 'card.stats.mana', depth: 30 },
+  { path: 'card.stats.mana.label', depth: 8 },
   { path: 'card.stats.attack', depth: 30 },
+  { path: 'card.stats.attack.label', depth: 8 },
   { path: 'card.stats.health', depth: 30 },
+  { path: 'card.stats.health.label', depth: 8 },
   { path: 'card.stats.durability', depth: 30 },
+  { path: 'card.stats.durability.label', depth: 8 },
   { path: 'card.stats.armor', depth: 30 },
   { path: 'card.overlays', depth: 32 }
 ]

@@ -428,6 +428,23 @@ export class CardView extends Container {
       sprite.visible = node.visible ?? true
       sprite.label = `${this.plan.cardId}:${path}`
       parent.addChild(sprite)
+      if (node.alphaMask) {
+        const mask = new Sprite(await resolver.load(node.alphaMask.assetKey))
+        const maskTransform = node.alphaMask.transform
+        mask.anchor.set(maskTransform.anchor?.x ?? 0, maskTransform.anchor?.y ?? 0)
+        mask.position.set(maskTransform.position.x, maskTransform.position.y)
+        if (maskTransform.size) mask.width = maskTransform.size.width
+        if (maskTransform.size) mask.height = maskTransform.size.height
+        else if (maskTransform.scale) {
+          mask.scale.set(maskTransform.scale.x, maskTransform.scale.y)
+        }
+        if (maskTransform.rotation !== undefined) {
+          mask.rotation = maskTransform.rotation
+        }
+        mask.eventMode = 'none'
+        sprite.mask = mask
+        parent.addChild(mask)
+      }
       this.registerTreeObject(path, node, sprite)
       return
     }

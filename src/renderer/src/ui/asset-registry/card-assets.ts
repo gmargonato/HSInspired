@@ -14,6 +14,7 @@ import rarityEpicImage from '@assets/images/cards/rarity-epic.png'
 import rarityLegendaryImage from '@assets/images/cards/rarity-legendary.png'
 import rarityRareImage from '@assets/images/cards/rarity-rare.png'
 import silenceImage from '@assets/images/cards/silence.png'
+import shadowManaImage from '@assets/images/cards/shadow-mana.png'
 import weaponAttackImage from '@assets/images/cards/weapon-attack.png'
 import weaponDurabilityImage from '@assets/images/cards/weapon-durability.png'
 import weaponNameImage from '@assets/images/cards/weapon-name.png'
@@ -46,7 +47,8 @@ export const CARD_ASSET_DEFINITIONS = [
   cardAsset('card.frame.weapon', 'frame-weapon.png', frameWeaponImage, 620, 905),
   cardAsset('card.stat.health', 'health.png', healthImage, 136, 192),
   cardAsset('card.frame.legendary', 'legendary.png', legendaryImage, 436, 317),
-  cardAsset('card.stat.mana', 'mana.png', manaImage, 153, 181),
+  cardAsset('card.stat.mana', 'mana.png', manaImage, 174, 165),
+  cardAsset('card.shadow.mana', 'shadow-mana.png', shadowManaImage, 267, 270),
   cardAsset('card.race-banner', 'race-banner.png', raceBannerImage, 408, 69),
   cardAsset('card.rarity.common', 'rarity-common.png', rarityCommonImage, 58, 79),
   cardAsset('card.rarity.epic', 'rarity-epic.png', rarityEpicImage, 58, 79),

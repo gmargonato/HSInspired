@@ -223,7 +223,7 @@
     "cardClass": "Warrior",
     "type": "Spell",
     "subtype": "General",
-    "cost": 0,
+    "cost": 3,
     "attack": null,
     "health": null,
     "rulesText": "Give a friendly minion Charge"
@@ -803,7 +803,7 @@
     "cardClass": "Hunter",
     "type": "Spell",
     "subtype": "General",
-    "cost": 0,
+    "cost": 1,
     "attack": null,
     "health": null,
     "rulesText": "Change a minion's Health to 1."
@@ -943,7 +943,7 @@
   {
     "id": "basic_mirror_image_minion",
     "collectible": false,
-    "name": "Mirror Image (minion)",
+    "name": "Mirror Image",
     "rarity": "Common",
     "cardClass": "Mage",
     "type": "Minion",

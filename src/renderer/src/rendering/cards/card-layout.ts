@@ -2,6 +2,7 @@ import type { CardDefinition, CardId, CardType } from '../../../../game/content/
 import type {
   CardBounds,
   CardGroupNode,
+  CardImageAlphaMask,
   CardPoint,
   CardRenderNode,
   CardRenderTree,
@@ -71,6 +72,7 @@ const RACE_TEXT_BOX = { x: 105, y: 795, width: 410, height: 62 } as const
 const RACE_BANNER_Z_INDEX = 230
 const RACE_TEXT_Z_INDEX = 231
 const LEGENDARY_FRAME_Z_INDEX = 105
+const MANA_SHADOW_Z_INDEX = 290
 const LEGENDARY_FRAME_OFFSET = { x: 60, y: -35 } as const
 const SHARED_STATS = {
   mana: { x: 60, y: 50 },
@@ -166,13 +168,16 @@ function image(
     readonly size?: CardSize
     readonly anchor?: CardPoint
     readonly scale?: CardPoint
+    readonly alphaMask?: CardImageAlphaMask
   } = {}
 ): Extract<CardRenderNode, { kind: 'image' }> {
+  const { alphaMask, ...transform } = options
   return {
     kind: 'image',
     id,
     assetKey,
-    transform: { position, ...options },
+    transform: { position, ...transform },
+    alphaMask,
     zIndex
   }
 }
@@ -434,6 +439,12 @@ export function buildCardRenderTree(
     artwork(profile),
     image('frame', profile.frame, { x: 0, y: 0 }, 100, { size: CARD_CANVAS }),
     ...(legendaryFrameNode ? [legendaryFrameNode] : []),
+    image('mana-shadow', 'card.shadow.mana', { x: 0, y: 0 }, MANA_SHADOW_Z_INDEX, {
+      alphaMask: {
+        assetKey: profile.frame,
+        transform: { position: { x: 0, y: 0 }, size: CARD_CANVAS }
+      }
+    }),
     nameBanner(card, profile),
     text(
       'name',

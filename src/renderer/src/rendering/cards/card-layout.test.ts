@@ -165,6 +165,50 @@ describe('Card semantic layouts', () => {
     })
   })
 
+  it('layers the frame-masked mana shadow below the standard mana stat', () => {
+    const plan = buildCardLayout(CARD_CATALOG.require('classic_abomination'))
+    const shadow = plan.tree.root.children.find((node) => node.id === 'mana-shadow')
+    const mana = plan.tree.root.children
+      .find(
+        (node): node is Extract<CardRenderNode, { kind: 'group' }> =>
+          node.kind === 'group' && node.id === 'stats'
+      )
+      ?.children.find(
+        (node): node is Extract<CardRenderNode, { kind: 'group' }> =>
+          node.kind === 'group' && node.id === 'mana'
+      )
+    expect(shadow).toMatchObject({
+      kind: 'image',
+      assetKey: 'card.shadow.mana',
+      transform: { position: { x: 0, y: 0 } },
+      alphaMask: {
+        assetKey: 'card.frame.minion',
+        transform: { position: { x: 0, y: 0 }, size: CARD_CANVAS }
+      },
+      zIndex: 290
+    })
+    expect(mana?.children.map((node) => node.id)).toEqual(['icon', 'label'])
+  })
+
+  it('masks the mana shadow with the active visual profile frame', () => {
+    const profiles = [
+      ['classic_abomination', 'card.frame.minion'],
+      ['basic_fireball', 'card.frame.spell'],
+      ['basic_fiery_war_axe', 'card.frame.weapon'],
+      ['classic_lord_jaraxxus', 'card.frame.hero']
+    ] as const
+
+    for (const [cardId, frameAsset] of profiles) {
+      const shadow = buildCardLayout(
+        CARD_CATALOG.require(cardId)
+      ).tree.root.children.find((node) => node.id === 'mana-shadow')
+      expect(shadow).toMatchObject({
+        kind: 'image',
+        alphaMask: { assetKey: frameAsset }
+      })
+    }
+  })
+
   it('marks card names as single-line text with width fitting enabled', () => {
     const card = CARD_CATALOG.require('classic_treant_force_of_nature')
     const plan = buildCardLayout(card)

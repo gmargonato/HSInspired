@@ -267,8 +267,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'manaCrystal',
     manaCrystalImage,
-    153,
-    181,
+    171,
+    165,
     'game-scene'
   ),
   asset(
@@ -438,8 +438,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.collection,
     'manaCrystal',
     manaCrystalImage,
-    153,
-    181,
+    171,
+    165,
     'collection'
   ),
   asset(

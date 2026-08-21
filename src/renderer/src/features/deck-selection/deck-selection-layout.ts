@@ -28,16 +28,13 @@ export const DECK_SELECTION_LAYOUT = {
     frameSize: { width: 239, height: 107 } satisfies LayoutSize
   },
 
-  /**
-   * Selected hero portrait. The portrait sprite is scaled non-uniformly
-   * (0.85 * 1.1, 0.85 * 1.05) to fit the target frame; see
-   * DeckSelectionView.createSelectionDetails.
-   */
+  /** Selected hero portrait, widened slightly to fit its frame. */
   heroPortrait: placement(
     { x: 1470, y: 490 },
     { width: 345, height: 433 },
     {
-      anchor: CENTER
+      anchor: CENTER,
+      scale: { x: 0.85 * 1.1, y: 0.85 * 1.05 }
     }
   ),
 

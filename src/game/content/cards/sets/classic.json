@@ -3420,7 +3420,7 @@
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
-    "cost": 0,
+    "cost": 5,
     "attack": null,
     "health": null,
     "rulesText": "Deal 5 damage to a minion."
@@ -3908,7 +3908,7 @@
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
-    "cost": 0,
+    "cost": 2,
     "attack": null,
     "health": null,
     "rulesText": "Deal 1 damage to a minion. Draw a card."

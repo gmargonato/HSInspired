@@ -28,7 +28,7 @@ interface LayoutPlacement {
   position: LayoutPoint // where the element's anchor point sits
   anchor: LayoutPoint // (0,0) top-left .. (1,1) bottom-right, like Pixi
   size: LayoutSize // display size at scale 1 (usually authored asset size)
-  scale?: number // optional uniform scale; final size = size * scale
+  scale?: LayoutScale // optional x/y scale; final size is multiplied per axis
   note?: string // human hint
 }
 ```
@@ -54,8 +54,11 @@ existing scenes also set `position`/`anchor`/`scale` directly while sourcing the
 numbers from the layout module):
 
 ```ts
-applyPlacement(sprite, value) // sets position + uniform scale
-applyAnchor(sprite.anchor, value) // sets anchor
+applyAnchoredPlacement(sprite, value) // sets position + anchor + x/y scale
+
+// Lower-level helpers remain available for bare Containers or special cases:
+applyPlacement(container, value) // sets position + x/y scale
+applyAnchor(sprite.anchor, value) // sets anchor only
 ```
 
 ## Where layout lives
@@ -97,7 +100,9 @@ canvas (`CARD_CANVAS`), named regions per template (`nameBox`, `rulesBox`,
   pieces are offsets from the `screenCenter` frame at `(960, 540)`).
 - `anchor` is normalized exactly like Pixi `Sprite.anchor`.
 - `size` is the display size at scale 1 (usually the authored asset size from
-  `src/renderer/src/ui/asset-registry`). Final on-screen size is `size * scale`.
+  `src/renderer/src/ui/asset-registry`). Final width and height are multiplied
+  by `scale.x` and `scale.y` respectively. Uniform scale declarations passed to
+  `placement()` are normalized to equal x/y values.
 - Sizes/anchors for each asset are available in the asset registry
   (`authoredWidth`/`authoredHeight`); the layout module is where they are
   recorded next to positions.

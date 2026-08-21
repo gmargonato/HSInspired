@@ -8,6 +8,8 @@ import {
   type SharedUIAssets
 } from '../../ui/asset-registry'
 import { AssetScope } from '../../ui/asset-registry/asset-scope'
+import { AnimatedOutline } from '../../rendering/effects/animated-outline'
+import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/Button'
 import { HERO_CATALOG } from '../../../../game/content/heroes'
 import type { DeckStore } from '../deck-builder/deck-store'
@@ -31,7 +33,9 @@ export class DeckSelectionView extends Container {
   private backButton!: Button
   private heroPortrait!: Sprite
   private heroName!: Text
+  private playOutlineTarget!: Sprite
   private playButton!: Button
+  private playOutline!: AnimatedOutline
   private selectedDeck: import('../../../../game/decks').Deck | null = null
   private navigationStarted = false
 
@@ -76,23 +80,14 @@ export class DeckSelectionView extends Container {
 
   private createBackground(assets: DeckSelectionAssets): void {
     const panel = new Sprite(assets.panel)
-    panel.anchor.set(0.5)
-    panel.position.set(
-      DECK_SELECTION_LAYOUT.panel.position.x,
-      DECK_SELECTION_LAYOUT.panel.position.y
-    )
+    applyAnchoredPlacement(panel, DECK_SELECTION_LAYOUT.panel)
     panel.eventMode = 'none'
     this.addChild(panel)
   }
 
   private createSelectionDetails(assets: DeckSelectionAssets): void {
     this.heroPortrait = new Sprite()
-    this.heroPortrait.anchor.set(0.5)
-    this.heroPortrait.scale.set(0.85 * 1.1, 0.85 * 1.05)
-    this.heroPortrait.position.set(
-      DECK_SELECTION_LAYOUT.heroPortrait.position.x,
-      DECK_SELECTION_LAYOUT.heroPortrait.position.y
-    )
+    applyAnchoredPlacement(this.heroPortrait, DECK_SELECTION_LAYOUT.heroPortrait)
     this.heroPortrait.visible = false
     this.heroPortrait.eventMode = 'none'
     this.addChild(this.heroPortrait)
@@ -106,14 +101,15 @@ export class DeckSelectionView extends Container {
         align: 'center'
       }
     })
-    this.heroName.anchor.set(0.5)
-    this.heroName.position.set(
-      DECK_SELECTION_LAYOUT.heroName.position.x,
-      DECK_SELECTION_LAYOUT.heroName.position.y
-    )
+    applyAnchoredPlacement(this.heroName, DECK_SELECTION_LAYOUT.heroName)
     this.heroName.visible = false
     this.heroName.eventMode = 'none'
     this.addChild(this.heroName)
+
+    this.playOutlineTarget = new Sprite(assets.playButton)
+    applyAnchoredPlacement(this.playOutlineTarget, DECK_SELECTION_LAYOUT.playButton)
+    this.playOutlineTarget.eventMode = 'none'
+    this.addChild(this.playOutlineTarget)
 
     this.playButton = new Button(assets.playButton, {
       audio: this.audio,
@@ -125,14 +121,14 @@ export class DeckSelectionView extends Container {
         )
       }
     })
-    this.playButton.position.set(
-      DECK_SELECTION_LAYOUT.playButton.position.x,
-      DECK_SELECTION_LAYOUT.playButton.position.y
-    )
+    applyPlacement(this.playButton, DECK_SELECTION_LAYOUT.playButton)
     this.playButton.setBaseY(DECK_SELECTION_LAYOUT.playButton.position.y)
     this.playButton.visible = false
     this.playButton.setEnabled(false)
     this.addChild(this.playButton)
+
+    this.playOutline = new AnimatedOutline(this.playOutlineTarget, 'blue')
+    this.playOutline.setEnabled(false)
   }
 
   private createDeckGrid(assets: DeckPresentationAssets): void {
@@ -170,6 +166,7 @@ export class DeckSelectionView extends Container {
     this.heroName.visible = true
     this.playButton.visible = true
     this.playButton.setEnabled(!this.navigationStarted)
+    this.playOutline.setEnabled(!this.navigationStarted)
   }
 
   private createNavigation(
@@ -180,10 +177,7 @@ export class DeckSelectionView extends Container {
       audio: this.audio,
       onClick: () => this.navigate(this.callbacks.onCollectionPressed, 'collection')
     })
-    this.toCollectionButton.position.set(
-      DECK_SELECTION_LAYOUT.toCollectionButton.position.x,
-      DECK_SELECTION_LAYOUT.toCollectionButton.position.y
-    )
+    applyPlacement(this.toCollectionButton, DECK_SELECTION_LAYOUT.toCollectionButton)
     this.toCollectionButton.setBaseY(
       DECK_SELECTION_LAYOUT.toCollectionButton.position.y
     )
@@ -194,10 +188,7 @@ export class DeckSelectionView extends Container {
       audio: this.audio,
       onClick: () => this.navigate(this.callbacks.onBackPressed, 'main menu')
     })
-    this.backButton.position.set(
-      DECK_SELECTION_LAYOUT.backButton.position.x,
-      DECK_SELECTION_LAYOUT.backButton.position.y
-    )
+    applyPlacement(this.backButton, DECK_SELECTION_LAYOUT.backButton)
     this.backButton.setBaseY(DECK_SELECTION_LAYOUT.backButton.position.y)
     this.addChild(this.backButton)
   }
@@ -226,6 +217,7 @@ export class DeckSelectionView extends Container {
     this.toCollectionButton.setEnabled(enabled)
     this.backButton.setEnabled(enabled)
     this.playButton.setEnabled(enabled && this.selectedDeck !== null)
+    this.playOutline.setEnabled(enabled && this.selectedDeck !== null)
   }
 
   private async waitForFonts(): Promise<void> {
@@ -234,6 +226,7 @@ export class DeckSelectionView extends Container {
   }
 
   async dispose(): Promise<void> {
+    this.playOutline?.dispose()
     await this.assetScope.releaseAll()
   }
 }

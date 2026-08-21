@@ -18,8 +18,8 @@
  *     unless a layout module explicitly documents a local reference frame.
  *   - `anchor` is normalized (0..1) exactly like Pixi's `Sprite.anchor`.
  *   - `size` is the element's display size at scale 1 (usually the authored
- *     asset size from the asset registry). Final on-screen size is
- *     `size * scale`.
+ *     asset size from the asset registry). Final width and height are
+ *     multiplied by `scale.x` and `scale.y` respectively.
  */
 
 import type { Container, ObservablePoint } from 'pixi.js'
@@ -35,6 +35,9 @@ export interface LayoutSize {
   readonly width: number
   readonly height: number
 }
+
+/** Pixi scale on each axis. Equal values represent a uniform scale. */
+export type LayoutScale = LayoutPoint
 
 /**
  * Normalized anchor, exactly like Pixi `Sprite.anchor`:
@@ -53,8 +56,8 @@ export interface LayoutPlacement {
   readonly anchor: LayoutPoint
   /** Display size at scale 1 (usually the authored asset size). */
   readonly size: LayoutSize
-  /** Optional uniform scale applied on top of `size`. Omit for 1x. */
-  readonly scale?: number
+  /** Optional x/y scale applied on top of `size`. Omit for (1,1). */
+  readonly scale?: LayoutScale
   /** Human hint explaining what the element is or how it is aligned. */
   readonly note?: string
 }
@@ -66,7 +69,8 @@ export const BOTTOM_CENTER: LayoutPoint = { x: 0.5, y: 1 }
 
 interface PlacementOptions {
   readonly anchor?: LayoutPoint
-  readonly scale?: number
+  /** A number is normalized to equal x/y values in the returned placement. */
+  readonly scale?: number | LayoutScale
   readonly note?: string
 }
 
@@ -76,29 +80,41 @@ export function placement(
   size: LayoutSize,
   options: PlacementOptions = {}
 ): LayoutPlacement {
+  const scale =
+    typeof options.scale === 'number'
+      ? { x: options.scale, y: options.scale }
+      : options.scale
+
   return {
     position,
     size,
     anchor: options.anchor ?? TOP_LEFT,
-    ...(options.scale === undefined ? {} : { scale: options.scale }),
+    ...(scale === undefined ? {} : { scale }),
     ...(options.note === undefined ? {} : { note: options.note })
   }
 }
 
 /**
- * Applies a placement's position and uniform scale to a Pixi container.
+ * Applies a placement's position and x/y scale to a Pixi container.
  * Anchor is deliberately left to the caller because `Sprite` exposes one while
  * a bare `Container` does not; see `applyAnchor`.
  */
 export function applyPlacement(target: Container, value: LayoutPlacement): Container {
   target.position.set(value.position.x, value.position.y)
-  if (value.scale !== undefined) {
-    target.scale.set(value.scale, value.scale)
-  }
+  target.scale.set(value.scale?.x ?? 1, value.scale?.y ?? 1)
   return target
 }
 
 /** Applies a placement's anchor to a Pixi `ObservablePoint` (e.g. a Sprite). */
 export function applyAnchor(point: ObservablePoint, value: LayoutPlacement): void {
   point.set(value.anchor.x, value.anchor.y)
+}
+
+/** Applies position, anchor, and scale atomically to a Sprite/Text-like object. */
+export function applyAnchoredPlacement<
+  Target extends Container & { readonly anchor: ObservablePoint }
+>(target: Target, value: LayoutPlacement): Target {
+  applyPlacement(target, value)
+  applyAnchor(target.anchor, value)
+  return target
 }

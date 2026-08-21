@@ -20,6 +20,7 @@ import {
   MAIN_MENU_TIMING,
   SCENE_SELECTION_GAP
 } from './main-menu-layout'
+import { applyAnchoredPlacement, applyPlacement } from '../rendering/layout'
 
 export { SCENE_SELECTION_GAP }
 
@@ -109,6 +110,7 @@ export class MainMenuScene extends Scene {
     )
 
     this.table = new Sprite(assets.table)
+    applyAnchoredPlacement(this.table, MAIN_MENU_LAYOUT.screen.table)
     this.table.width = GAME_WIDTH
     this.table.height = GAME_HEIGHT
     this.root.addChild(this.table)
@@ -143,10 +145,7 @@ export class MainMenuScene extends Scene {
       audio: this.audio,
       onClick: () => this.onPlayPressed()
     })
-    this.buttonPlay.position.set(
-      menuButtons.play.position.x,
-      menuButtons.play.position.y
-    )
+    applyPlacement(this.buttonPlay, menuButtons.play)
     this.buttonPlay.setBaseY(menuButtons.play.position.y)
     this.buttonPlay.visible = true
     this.buttonPlay.alpha = this.entryMode === 'returning' ? 0 : 1
@@ -159,10 +158,7 @@ export class MainMenuScene extends Scene {
       audio: this.audio,
       onClick: () => this.onCollectionPressed()
     })
-    this.buttonCollection.position.set(
-      menuButtons.collection.position.x,
-      menuButtons.collection.position.y
-    )
+    applyPlacement(this.buttonCollection, menuButtons.collection)
     this.buttonCollection.setBaseY(menuButtons.collection.position.y)
     this.buttonCollection.visible = true
     this.buttonCollection.alpha = this.entryMode === 'returning' ? 0 : 1
@@ -225,8 +221,7 @@ export class MainMenuScene extends Scene {
     this.root.addChild(this.menuGroup)
 
     this.chestBox = new Sprite(box)
-    this.chestBox.anchor.set(0.5)
-    this.chestBox.position.set(chest.box.position.x, chest.box.position.y)
+    applyAnchoredPlacement(this.chestBox, chest.box)
     this.boxLayer.addChild(this.chestBox)
 
     this.lidLeft = this.createLidMesh(leftLid, 'left')

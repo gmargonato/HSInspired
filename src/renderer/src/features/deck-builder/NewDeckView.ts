@@ -17,6 +17,7 @@ import { NEW_DECK_LAYOUT } from './new-deck-layout'
 import { HERO_CATALOG, type HeroDefinition } from '../../../../game/content/heroes'
 import { PLAYABLE_CLASSES, type DeckClass } from '../../../../game/content/cards'
 import type { Deck } from '../../../../game/decks'
+import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 
 export interface NewDeckViewCallbacks {
   onClassSelected?: (hero: HeroDefinition) => void | Promise<void>
@@ -110,12 +111,7 @@ export class NewDeckView extends Container {
     this.setSelectionContentY(GAME_HEIGHT)
 
     this.heroPortrait = new Sprite(Texture.EMPTY)
-    this.heroPortrait.anchor.set(0.5)
-    this.heroPortrait.scale.set(0.85 * 1.1, 0.85 * 1.05)
-    this.heroPortrait.position.set(
-      NEW_DECK_LAYOUT.heroPortrait.position.x,
-      NEW_DECK_LAYOUT.heroPortrait.position.y
-    )
+    applyAnchoredPlacement(this.heroPortrait, NEW_DECK_LAYOUT.heroPortrait)
     this.heroPortrait.visible = false
     this.heroPortrait.eventMode = 'none'
     this.selectionContent.addChild(this.heroPortrait)
@@ -129,11 +125,7 @@ export class NewDeckView extends Container {
         align: 'center'
       }
     })
-    this.heroName.anchor.set(0.5)
-    this.heroName.position.set(
-      NEW_DECK_LAYOUT.heroName.position.x,
-      NEW_DECK_LAYOUT.heroName.position.y
-    )
+    applyAnchoredPlacement(this.heroName, NEW_DECK_LAYOUT.heroName)
     this.heroName.visible = false
     this.heroName.eventMode = 'none'
     this.selectionContent.addChild(this.heroName)
@@ -165,10 +157,7 @@ export class NewDeckView extends Container {
       audio: this.audio,
       onClick: () => this.confirmClass()
     })
-    this.selectButton.position.set(
-      NEW_DECK_LAYOUT.selectClassButton.position.x,
-      NEW_DECK_LAYOUT.selectClassButton.position.y
-    )
+    applyPlacement(this.selectButton, NEW_DECK_LAYOUT.selectClassButton)
     this.selectButton.setBaseY(NEW_DECK_LAYOUT.selectClassButton.position.y)
     this.selectButton.visible = false
     this.selectButton.setEnabled(false)
@@ -178,10 +167,7 @@ export class NewDeckView extends Container {
       audio: this.audio,
       onClick: () => this.cancel()
     })
-    this.cancelButton.position.set(
-      NEW_DECK_LAYOUT.cancelButton.position.x,
-      NEW_DECK_LAYOUT.cancelButton.position.y
-    )
+    applyPlacement(this.cancelButton, NEW_DECK_LAYOUT.cancelButton)
     this.cancelButton.setBaseY(NEW_DECK_LAYOUT.cancelButton.position.y)
     this.cancelButton.setEnabled(false)
     this.selectionContent.addChild(this.cancelButton)

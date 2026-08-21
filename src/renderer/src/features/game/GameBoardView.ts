@@ -46,7 +46,11 @@ import {
 } from './hand-drag'
 import { HandCardPerspective } from './hand-card-perspective'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
-import type { LayoutPlacement } from '../../rendering/layout'
+import {
+  applyAnchoredPlacement,
+  applyPlacement,
+  type LayoutPlacement
+} from '../../rendering/layout'
 
 export interface GameBoardViewOptions {
   readonly route: GameRoute
@@ -316,10 +320,7 @@ export class GameBoardView extends Actor {
       audio: this.options.audio,
       onClick: () => void this.confirmMulligan()
     })
-    this.confirmButton.position.set(
-      GAME_BOARD_LAYOUT.mulligan.confirmButton.position.x,
-      GAME_BOARD_LAYOUT.mulligan.confirmButton.position.y
-    )
+    applyPlacement(this.confirmButton, GAME_BOARD_LAYOUT.mulligan.confirmButton)
     this.confirmButton.setBaseY(GAME_BOARD_LAYOUT.mulligan.confirmButton.position.y)
     this.confirmButton.visible = false
     this.confirmButton.setEnabled(false)
@@ -353,11 +354,7 @@ export class GameBoardView extends Actor {
     table.eventMode = 'none'
     this.boardLayer.addChild(table)
     const board = new Sprite(this.options.gameAssets.board)
-    board.anchor.set(0.5)
-    board.position.set(
-      GAME_BOARD_LAYOUT.board.position.x,
-      GAME_BOARD_LAYOUT.board.position.y
-    )
+    applyAnchoredPlacement(board, GAME_BOARD_LAYOUT.board)
     board.eventMode = 'none'
     this.boardLayer.addChild(board)
   }
@@ -373,9 +370,7 @@ export class GameBoardView extends Actor {
           ? GAME_BOARD_LAYOUT.heroes.localIntro
           : GAME_BOARD_LAYOUT.heroes.remoteIntro
       const sprite = new Sprite(texture)
-      sprite.anchor.set(0.5)
-      sprite.position.set(intro.position.x, intro.position.y)
-      sprite.scale.set(intro.scale ?? 1)
+      applyAnchoredPlacement(sprite, intro)
       sprite.eventMode = 'none'
       this.heroSprites.set(player.participantId, sprite)
       this.heroLayer.addChild(sprite)
@@ -388,9 +383,7 @@ export class GameBoardView extends Actor {
       GAME_BOARD_LAYOUT.decks.remote
     ] as const) {
       const deck = new Sprite(this.options.gameAssets.deck)
-      deck.anchor.set(0.5)
-      deck.position.set(position.position.x, position.position.y)
-      deck.scale.set(position.scale ?? 1)
+      applyAnchoredPlacement(deck, position)
       deck.eventMode = 'none'
       this.deckLayer.addChild(deck)
     }
@@ -402,11 +395,7 @@ export class GameBoardView extends Actor {
       audio: this.options.audio,
       onClick: () => void this.endTurn()
     })
-    this.endTurnButton.position.set(
-      GAME_BOARD_LAYOUT.endTurnButton.position.x,
-      GAME_BOARD_LAYOUT.endTurnButton.position.y
-    )
-    this.endTurnButton.scale.set(GAME_BOARD_LAYOUT.endTurnButton.scale ?? 1)
+    applyPlacement(this.endTurnButton, GAME_BOARD_LAYOUT.endTurnButton)
     this.endTurnButton.setBaseY(GAME_BOARD_LAYOUT.endTurnButton.position.y)
     this.endTurnButton.setEnabled(false)
     this.turnLayer.addChild(this.endTurnButton)
@@ -445,17 +434,14 @@ export class GameBoardView extends Actor {
         align: 'center'
       }
     })
-    label.anchor.set(0.5)
-    label.position.set(placement.position.x, placement.position.y)
+    applyAnchoredPlacement(label, placement)
     label.eventMode = 'none'
     return label
   }
 
   private createManaCrystal(placement: LayoutPlacement): Sprite {
     const crystal = new Sprite(this.options.gameAssets.manaCrystal)
-    crystal.anchor.set(0.5)
-    crystal.position.set(placement.position.x, placement.position.y)
-    crystal.scale.set(placement.scale ?? 1)
+    applyAnchoredPlacement(crystal, placement)
     crystal.eventMode = 'none'
     return crystal
   }
@@ -544,11 +530,7 @@ export class GameBoardView extends Actor {
     this.openingLayer.addChild(this.createDarkOverlay())
 
     const versus = new Sprite(this.options.gameAssets.startOfGameVs)
-    versus.anchor.set(0.5)
-    versus.position.set(
-      GAME_BOARD_LAYOUT.versus.position.x,
-      GAME_BOARD_LAYOUT.versus.position.y
-    )
+    applyAnchoredPlacement(versus, GAME_BOARD_LAYOUT.versus)
     versus.eventMode = 'none'
     this.openingLayer.addChild(versus)
     for (const player of state.players) {
@@ -572,7 +554,7 @@ export class GameBoardView extends Actor {
       label.position.set(
         intro.position.x,
         intro.position.y +
-          GAME_BOARD_LAYOUT.heroes.introLabelOffset * (intro.scale ?? 1)
+          GAME_BOARD_LAYOUT.heroes.introLabelOffset * (intro.scale?.y ?? 1)
       )
       label.eventMode = 'none'
       this.openingLayer.addChild(label)
@@ -586,11 +568,7 @@ export class GameBoardView extends Actor {
     this.mulliganLayer.addChild(overlay)
 
     const announcement = new Sprite(this.options.gameAssets.mulliganAnnouncement)
-    announcement.anchor.set(0.5, 0)
-    announcement.position.set(
-      GAME_BOARD_LAYOUT.mulligan.announcement.position.x,
-      GAME_BOARD_LAYOUT.mulligan.announcement.position.y
-    )
+    applyAnchoredPlacement(announcement, GAME_BOARD_LAYOUT.mulligan.announcement)
     announcement.label = 'mulligan-announcement'
     announcement.alpha = 0
     announcement.eventMode = 'none'
@@ -702,12 +680,7 @@ export class GameBoardView extends Actor {
 
   private async presentPlayerTwoAnnouncement(): Promise<void> {
     const announcement = new Sprite(this.options.gameAssets.mulliganCoinAnnouncement)
-    announcement.anchor.set(0.5)
-    announcement.position.set(
-      GAME_BOARD_LAYOUT.mulligan.coinAnnouncement.position.x,
-      GAME_BOARD_LAYOUT.mulligan.coinAnnouncement.position.y
-    )
-    announcement.scale.set(GAME_BOARD_LAYOUT.mulligan.coinAnnouncement.scale ?? 1)
+    applyAnchoredPlacement(announcement, GAME_BOARD_LAYOUT.mulligan.coinAnnouncement)
     announcement.alpha = 0
     announcement.eventMode = 'none'
     this.mulliganLayer.addChild(announcement)
@@ -858,8 +831,7 @@ export class GameBoardView extends Actor {
     }
     const layout = GAME_BOARD_LAYOUT.yourTurnFlag
     const flag = new Sprite(this.options.gameAssets.yourTurn)
-    flag.anchor.set(0.5)
-    flag.position.set(layout.position.x, layout.position.y)
+    applyAnchoredPlacement(flag, layout)
     flag.scale.set(GAME_BOARD_LAYOUT.yourTurnStartScale)
     flag.alpha = 0
     flag.label = 'your-turn-flag'
@@ -867,7 +839,7 @@ export class GameBoardView extends Actor {
     this.turnLayer.addChild(flag)
     this.yourTurnFlag = flag
 
-    const finalScale = layout.scale ?? 1
+    const finalScale = layout.scale ?? { x: 1, y: 1 }
     const timeline = this.timeline()
     timeline.to(flag, {
       alpha: 1,
@@ -877,8 +849,8 @@ export class GameBoardView extends Actor {
     timeline.to(
       flag.scale,
       {
-        x: finalScale,
-        y: finalScale,
+        x: finalScale.x,
+        y: finalScale.y,
         duration: TURN_TIMING.yourTurnGrow,
         ease: 'power2.out'
       },
@@ -1545,8 +1517,8 @@ export class GameBoardView extends Actor {
     timeline.to(
       sprite.scale,
       {
-        x: target.scale ?? 1,
-        y: target.scale ?? 1,
+        x: target.scale?.x ?? 1,
+        y: target.scale?.y ?? 1,
         duration: OPENING_TIMING.heroSettle,
         ease: 'power2.inOut'
       },

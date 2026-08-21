@@ -13,6 +13,7 @@
  */
 
 import { GAME_HEIGHT } from '../app/config'
+import { CENTER, placement } from '../rendering/layout'
 
 /** The card page region (left side of the collection spread). */
 export const PAGE_LEFT = 250
@@ -51,10 +52,16 @@ export const COLLECTION_LAYOUT = {
       firstCrystalCenter: { x: 450, y: 1030 },
       /** Center-to-center spacing between crystals. */
       gap: 65,
-      /** Display size of one crystal (the 153x181 source is scaled down). */
-      crystal: { width: 44, height: 52 },
-      /** Crystals are rotated a quarter turn. */
-      rotation: Math.PI / 2,
+      /** Native crystal size with a uniform scale, local to each control. */
+      crystal: placement(
+        { x: 0, y: 0 },
+        { width: 171, height: 165 },
+        {
+          anchor: CENTER,
+          scale: 0.287,
+          note: 'Native mana asset dimensions; placement is local to the control.'
+        }
+      ),
       /** Text label offset from the crystal center. */
       labelOffset: { x: 0, y: 0 }
     },

@@ -13,6 +13,7 @@ import type { FederatedPointerEvent, FederatedWheelEvent } from 'pixi.js'
 import { CARD_CATALOG, type CardDefinition } from '../../../game/content/cards'
 import { CardAssetResolver } from '../ui/asset-registry/card-asset-resolver'
 import { CardView } from '../rendering/cards/card-view'
+import { applyAnchoredPlacement } from '../rendering/layout'
 import { Scene } from './Scene'
 import {
   COLLECTION_LAYOUT,
@@ -481,10 +482,7 @@ export class CollectionScene extends Scene {
       })
 
       const crystal = new Sprite(assets.manaCrystal)
-      crystal.anchor.set(0.5)
-      crystal.width = COLLECTION_LAYOUT.collectionFilters.mana.crystal.width
-      crystal.height = COLLECTION_LAYOUT.collectionFilters.mana.crystal.height
-      crystal.rotation = COLLECTION_LAYOUT.collectionFilters.mana.rotation
+      applyAnchoredPlacement(crystal, COLLECTION_LAYOUT.collectionFilters.mana.crystal)
       crystal.eventMode = 'none'
       control.addChild(crystal)
 

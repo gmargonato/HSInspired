@@ -51,6 +51,12 @@ export interface CardImageTransform {
   readonly rotation?: number
 }
 
+export interface CardImageAlphaMask {
+  /** Semantic asset whose alpha channel defines the visible image area. */
+  readonly assetKey: string
+  readonly transform: CardImageTransform
+}
+
 export interface CardGroupNode {
   readonly kind: 'group'
   readonly id: string
@@ -66,6 +72,7 @@ export interface CardImageNode {
   /** Semantic registry key; renderers never depend on authored filenames. */
   readonly assetKey: string
   readonly transform: CardImageTransform
+  readonly alphaMask?: CardImageAlphaMask
   readonly zIndex: number
   readonly visible?: boolean
 }

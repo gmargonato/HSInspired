@@ -155,7 +155,7 @@ export const GAME_BOARD_LAYOUT = {
   mana: {
     localCrystal: placement(
       { x: 1240, y: 915 },
-      { width: 153, height: 181 },
+      { width: 171, height: 165 },
       {
         anchor: CENTER,
         scale: 0.28
@@ -170,7 +170,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     remoteCrystal: placement(
       { x: 1240, y: 212 },
-      { width: 153, height: 181 },
+      { width: 171, height: 165 },
       {
         anchor: CENTER,
         scale: 0.2

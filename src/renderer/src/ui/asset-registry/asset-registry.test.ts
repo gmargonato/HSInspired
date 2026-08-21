@@ -27,6 +27,14 @@ describe('runtime asset registry', () => {
     expect(hasCardArtwork('classic-abomination')).toBe(false)
   })
 
+  it('registers the mana shadow at its authored size', () => {
+    expect(resolveAssetDefinition('card.shadow.mana')).toMatchObject({
+      authoredWidth: 267,
+      authoredHeight: 270,
+      bundle: 'card-rendering'
+    })
+  })
+
   it('resolves every hero presentation asset reference', () => {
     for (const hero of HERO_CATALOG.all) {
       expect(HERO_ASSET_SOURCES[hero.presentationAssetKey]).toEqual(expect.any(String))
