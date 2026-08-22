@@ -5,10 +5,6 @@ Runtime images live under `assets/images` by semantic use: `cards`, `card-artwor
 exception: its basename is the exact `CardId`, so a catalog entry such as
 `classic_abomination` resolves to `classic_abomination.jpg`.
 
-Runtime audio lives under `assets/audio` and also uses lowercase kebab-case. The injected
-`AudioService` imports only approved cues, preloads them once, and keeps failed optional cues
-non-fatal.
-
 Editable PSDs and source material live in `assets/source`; pending artwork is in
 `assets/images/card-artwork-to-do`; old card assets are in `assets/card-assets-archive`.
 `electron-builder.yml` excludes the source `assets/**` tree; Vite-emitted runtime assets under

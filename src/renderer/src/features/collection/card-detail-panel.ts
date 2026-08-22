@@ -24,11 +24,11 @@ const PANEL = {
   rowStartY: 91,
   rowGap: 12,
   effectHeadingGap: 14,
-  plaqueY: 532,
-  rarityGemY: 615,
+  plaqueY: 438, // collection
+  rarityGemY: 520,
   rarityGemHeight: 58,
   rarityLabelGap: 4,
-  typeY: 650
+  typeY: 555 //spell/weapon/minion
 } as const
 
 const DETAIL_HEADING_STYLE = {

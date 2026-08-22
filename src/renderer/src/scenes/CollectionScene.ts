@@ -11,7 +11,12 @@ import {
   Texture
 } from 'pixi.js'
 import type { FederatedPointerEvent, FederatedWheelEvent } from 'pixi.js'
-import { CARD_CATALOG, type CardDefinition } from '../../../game/content/cards'
+import {
+  CARD_CATALOG,
+  type CardDefinition,
+  type DeckClass,
+  type ExpansionId
+} from '../../../game/content/cards'
 import { CardAssetResolver } from '../ui/asset-registry/card-asset-resolver'
 import { CardView } from '../rendering/cards/card-view'
 import { createManaHighlightFilter } from '../rendering/filters/highlight'
@@ -19,11 +24,13 @@ import { applyAnchoredPlacement } from '../rendering/layout'
 import { Scene } from './Scene'
 import {
   COLLECTION_LAYOUT,
+  COLLECTION_TIMING,
   PAGE_HEIGHT,
   PAGE_LEFT,
   PAGE_NAV_ZONE_WIDTH,
   PAGE_RIGHT,
-  PAGE_TOP
+  PAGE_TOP,
+  getExpansionFilterButtonPlacement
 } from './collection-layout'
 import { GAME_HEIGHT, GAME_WIDTH } from '../app/config'
 import {
@@ -70,6 +77,7 @@ import { CollectionSearchInput } from '../features/collection/search-input'
 import { buildCollectionDeckListEntries } from '../features/collection/deck-list-model'
 import { CollectionDeckController } from '../features/collection/collection-deck-controller'
 import { CollectionQueryController } from '../features/collection/collection-query-controller'
+import { ExpansionTray } from '../features/collection/expansion-tray'
 import type { CardPreviewRouteBounds, SceneRouter } from '../app/router'
 import {
   MAX_DECK_CARDS,
@@ -79,7 +87,7 @@ import {
   getDeckCardCount,
   type Deck
 } from '../../../game/decks'
-import type { DeckClass } from '../../../game/content/cards'
+import { EXPANSION_CATALOG } from '../../../game/content/expansions'
 
 const DECK_EDITOR_CARD_ROW_HEIGHT = 34
 const DECK_EDITOR_CARD_ROW_GAP = 1
@@ -210,6 +218,7 @@ export class CollectionScene extends Scene {
   private unsubscribeDeckStore: (() => void) | null = null
   private deckAssets!: CollectionDeckAssets
   private collectionFilterLayer!: Container
+  private expansionTray: ExpansionTray | null = null
   private emptyStateImage!: Sprite
   private searchInput: CollectionSearchInput | null = null
   private searchClearButton!: Sprite
@@ -378,6 +387,7 @@ export class CollectionScene extends Scene {
     await this.deckController.load()
     await this.waitForFonts()
     this.createCollectionFilters(assets)
+    this.createExpansionFilter(assets)
     this.createDeckList(assets, deckPresentationAssets)
     this.createDeckEditor(assets, sharedAssets)
     this.createCollectionBackButton(sharedAssets)
@@ -534,6 +544,31 @@ export class CollectionScene extends Scene {
     this.createSearchInput()
   }
 
+  private createExpansionFilter(assets: CollectionAssets): void {
+    this.expansionTray = new ExpansionTray({
+      assets: {
+        toggle: assets.expansionToggle,
+        tray: assets.expansionTray,
+        collectionOn: assets.expansionCollectionOn,
+        collectionOff: assets.expansionCollectionOff
+      },
+      layout: {
+        toggle: COLLECTION_LAYOUT.expansionFilter.toggle,
+        trayOpen: COLLECTION_LAYOUT.expansionFilter.trayOpen,
+        trayClosed: COLLECTION_LAYOUT.expansionFilter.trayClosed,
+        buttons: EXPANSION_CATALOG.all.map((_, index) =>
+          getExpansionFilterButtonPlacement(index)
+        )
+      },
+      slideDuration: COLLECTION_TIMING.expansionTraySlide,
+      isHidden: (expansionId) =>
+        this.collectionQuery.hiddenExpansionIds.includes(expansionId),
+      onToggleExpansion: (expansionId) => this.handleExpansionFilterTap(expansionId),
+      onError: (error) => this.reportError('Failed to filter the collection.', error)
+    })
+    this.pageContent.addChild(this.expansionTray)
+  }
+
   private createSearchInput(): void {
     const parent = this.appInstance.canvas.parentElement
     if (!parent) return
@@ -578,6 +613,18 @@ export class CollectionScene extends Scene {
 
   private setSearchInputEnabled(enabled: boolean): void {
     this.searchInput?.setEnabled(enabled)
+  }
+
+  private handleExpansionFilterTap(expansionId: ExpansionId): void {
+    if (!this.navigationReady || !this.navigationEnabled || this.newDeckScene?.isOpen) {
+      return
+    }
+
+    this.collectionQuery.toggleExpansionVisibility(expansionId)
+    this.expansionTray?.syncHiddenExpansions()
+    void this.applyCollectionFilters().catch((error: unknown) => {
+      this.reportError('Failed to filter the collection.', error)
+    })
   }
 
   private handleManaFilterTap(value: ManaFilterValue): void {
@@ -2239,6 +2286,7 @@ export class CollectionScene extends Scene {
       this.searchClearButton.eventMode = filtersEnabled ? 'static' : 'none'
     }
     this.setSearchInputEnabled(filtersEnabled)
+    this.expansionTray?.setEnabled(filtersEnabled)
   }
 
   private updatePageZoneModes(): void {
@@ -2303,6 +2351,8 @@ export class CollectionScene extends Scene {
     this.setSearchInputVisible(false)
     this.searchInput?.dispose()
     this.searchInput = null
+    this.expansionTray?.dispose()
+    this.expansionTray = null
     this.sceneManager.cursor?.setContextVariant(null)
     void this.newDeckScene?.dispose()
     void this.deleteDeckView?.dispose()
@@ -2314,6 +2364,7 @@ export class CollectionScene extends Scene {
     for (const control of this.manaFilterControls) {
       control.eventMode = 'none'
     }
+    this.expansionTray?.setEnabled(false)
   }
 
   protected onResume(): void {

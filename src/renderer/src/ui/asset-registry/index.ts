@@ -36,8 +36,14 @@ import mulliganReplacedLabelImage from '@assets/images/ui/mulligan-replaced-labe
 import confirmMulliganButtonImage from '@assets/images/ui/confirm-mulligan-button.png'
 import mulliganCoinAnnouncementImage from '@assets/images/ui/mulligan-coin-announcement.png'
 import manaCrystalImage from '@assets/images/cards/mana.png'
+import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
+import heroPowerManaImage from '@assets/images/heroes/hero-power/hero-power-mana.png'
 import searchClearImage from '@assets/images/cards/silence.png'
 import searchNoResultsImage from '@assets/images/ui/search-no-results.png'
+import expansionButtonToggleImage from '@assets/images/ui/expansion-button-toggle.png'
+import expansionTrayImage from '@assets/images/ui/expansion-tray.png'
+import expansionCollectionOnImage from '@assets/images/ui/expansion-collection-on.png'
+import expansionCollectionOffImage from '@assets/images/ui/expansion-collection-off.png'
 import deleteDeckContainerImage from '@assets/images/ui/delete-deck-container.png'
 import actionButtonConfirmImage from '@assets/images/ui/action-button-confirm.png'
 import actionButtonCancelImage from '@assets/images/ui/action-button-cancel.png'
@@ -61,12 +67,14 @@ import warlockNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-fram
 import warriorDeckFrameImage from '@assets/images/heroes/frames/warrior-deck-frame.png'
 import warriorNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-warrior.png'
 import { HERO_ASSET_SOURCES, type HeroAssetKey } from './hero-assets'
+import { HERO_POWER_ASSET_SOURCES, type HeroPowerAssetKey } from './hero-power-assets'
 import { CARD_ASSET_DEFINITIONS, type CardAssetDefinition } from './card-assets'
 import { registerAssetBundle } from './asset-scope'
 
 export { AssetScope } from './asset-scope'
 export { CardAssetResolver } from './card-asset-resolver'
 export * from './card-assets'
+export type { HeroPowerAssetKey } from './hero-power-assets'
 
 export const ASSET_BUNDLE_IDS = {
   mainMenu: 'main-menu',
@@ -376,6 +384,35 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.hero-power-back',
+    ASSET_BUNDLE_IDS.game,
+    'heroPowerBack',
+    heroPowerBackImage,
+    148,
+    162,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.hero-power-mana',
+    ASSET_BUNDLE_IDS.game,
+    'heroPowerMana',
+    heroPowerManaImage,
+    57,
+    55,
+    'game-scene'
+  ),
+  ...Object.entries(HERO_POWER_ASSET_SOURCES).map(([key, source]) =>
+    asset(
+      `scene.game.hero-power.${key}`,
+      ASSET_BUNDLE_IDS.game,
+      key,
+      source,
+      150,
+      150,
+      'game-scene'
+    )
+  ),
+  asset(
     'scene.collection.cover',
     ASSET_BUNDLE_IDS.collection,
     'cover',
@@ -472,6 +509,42 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     searchNoResultsImage,
     328,
     226,
+    'collection'
+  ),
+  asset(
+    'scene.collection.expansion-toggle',
+    ASSET_BUNDLE_IDS.collection,
+    'expansionToggle',
+    expansionButtonToggleImage,
+    102,
+    77,
+    'collection'
+  ),
+  asset(
+    'scene.collection.expansion-tray',
+    ASSET_BUNDLE_IDS.collection,
+    'expansionTray',
+    expansionTrayImage,
+    369,
+    657,
+    'collection'
+  ),
+  asset(
+    'scene.collection.expansion-collection-on',
+    ASSET_BUNDLE_IDS.collection,
+    'expansionCollectionOn',
+    expansionCollectionOnImage,
+    312,
+    116,
+    'collection'
+  ),
+  asset(
+    'scene.collection.expansion-collection-off',
+    ASSET_BUNDLE_IDS.collection,
+    'expansionCollectionOff',
+    expansionCollectionOffImage,
+    312,
+    116,
     'collection'
   ),
   asset(
@@ -790,7 +863,7 @@ export interface DeckPresentationAssets extends Record<HeroAssetKey, Texture> {
   warriorNewDeckFrame: Texture
 }
 
-export interface GameAssets {
+export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   table: Texture
   board: Texture
   deck: Texture
@@ -805,6 +878,8 @@ export interface GameAssets {
   mulliganReplacedLabel: Texture
   confirmMulliganButton: Texture
   mulliganCoinAnnouncement: Texture
+  heroPowerBack: Texture
+  heroPowerMana: Texture
 }
 
 export interface SettingsBackgroundAssets {
@@ -829,6 +904,10 @@ export interface CollectionAssets {
   manaCrystal: Texture
   searchClear: Texture
   searchNoResults: Texture
+  expansionToggle: Texture
+  expansionTray: Texture
+  expansionCollectionOn: Texture
+  expansionCollectionOff: Texture
   deleteDeckContainer: Texture
   deleteDeckConfirm: Texture
   deleteDeckCancel: Texture

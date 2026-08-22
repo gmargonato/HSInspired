@@ -16,7 +16,7 @@ export const OUTLINE_COLORS = {
 
 export type OutlineColorName = keyof typeof OUTLINE_COLORS
 
-const OUTLINE_INTENSITY = 3
+const OUTLINE_INTENSITY = 2.2
 export interface OutlineProfile {
   /** Width of the ribbon in logical screen pixels. */
   readonly thickness: number
@@ -38,11 +38,11 @@ export interface OutlineProfile {
 export const OUTLINE_PROFILES = {
   card: {
     thickness: 6,
-    edgeSoftness: 3,
+    edgeSoftness: 2,
     coreWidth: 2,
     lipWidth: 2,
     blobExpansion: 3,
-    blurStrength: 0.75,
+    blurStrength: 0.5,
     blurQuality: 2
   },
   button: {
@@ -113,7 +113,7 @@ export class AnimatedOutline extends Actor {
         type: 'vec4<f32>'
       },
       uAtmosphere: {
-        value: [0.98, profile.blobExpansion, 0, 0],
+        value: [1, profile.blobExpansion, 0, 0],
         type: 'vec4<f32>'
       },
       uSurface: {

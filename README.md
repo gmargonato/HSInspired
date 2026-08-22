@@ -85,5 +85,10 @@ player (burning when the hand holds ten, stopping when a deck is empty) and
 grows the new player's mana crystals (one per turn, up to ten). The Game Scene
 presents the end turn button on the right of the board (switching between the
 local "End Turn" and the "Enemy Turn" states), live deck card-count and mana
-labels, and a swept "Your Turn" banner; the AI simply passes the turn back to
-the local player. See [docs/MATCH.md](docs/MATCH.md).
+labels, and a swept "Your Turn" banner. Each player's hero power sits right of
+their hero portrait for the whole match (back face until the first turn flips
+both up with their cost gem): clicking the local card while affordable spends
+its mana cost and flips it to its exhausted back, and it flips back up at the
+start of the next local turn. Hero power effects themselves are future work;
+the AI simply passes the turn back to the local player. See
+[docs/MATCH.md](docs/MATCH.md).

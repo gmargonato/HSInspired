@@ -200,6 +200,43 @@ export const GAME_BOARD_LAYOUT = {
     }
   ),
 
+  /**
+   * Hero power cards on the right of each hero portrait. They sit there from
+   * the moment the board is created (showing the back face) and never move
+   * during the opening choreography; they only flip when the first turn
+   * starts, when used, and at the start of each new turn.
+   */
+  heroPowers: {
+    /** Local hero power card, right of the local hero portrait. */
+    local: placement(
+      { x: 1160, y: 825 },
+      { width: 150, height: 150 },
+      {
+        anchor: CENTER,
+        scale: 1,
+        note: 'Front art is 150x150; the back is 148x162, so both faces share this center.'
+      }
+    ),
+    /** Remote hero power card, right of the remote hero portrait. */
+    remote: placement(
+      { x: 1160, y: 180 },
+      { width: 150, height: 150 },
+      {
+        anchor: CENTER,
+        scale: 1
+      }
+    ),
+    /**
+     * The cost gem drawn on top of the "up" face: the mana crystal sits
+     * slightly above the card center, and the cost label is centered on the
+     * crystal. Both offsets are relative to the card center.
+     */
+    manaOverlay: {
+      crystalOffset: { x: 0, y: -48 } satisfies LayoutPoint,
+      costOffset: { x: 0, y: 0 } satisfies LayoutPoint
+    }
+  },
+
   mulligan: {
     /**
      * Fanned local mulligan hand. The card origin is its bottom-center, so

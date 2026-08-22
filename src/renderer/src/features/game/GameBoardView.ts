@@ -11,6 +11,7 @@ import {
 import type { Deck } from '../../../../game/decks'
 import { CARD_CATALOG, type CardDefinition } from '../../../../game/content/cards'
 import { HERO_CATALOG } from '../../../../game/content/heroes'
+import { HERO_POWER_CATALOG } from '../../../../game/content/hero-powers'
 import {
   createOpeningMatch,
   type MulliganResolvedEvent,
@@ -29,7 +30,11 @@ import {
   OUTLINE_PROFILES
 } from '../../rendering/effects/animated-outline'
 import { gsap } from '../../animation/animations'
-import { type DeckPresentationAssets, type GameAssets } from '../../ui/asset-registry'
+import {
+  type DeckPresentationAssets,
+  type GameAssets,
+  type HeroPowerAssetKey
+} from '../../ui/asset-registry'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { Actor } from '../../ui/components/Actor'
 import { Button } from '../../ui/components/Button'
@@ -50,6 +55,7 @@ import {
 } from './hand-drag'
 import { HandCardPerspective } from './hand-card-perspective'
 import { ManaTray, resolveManaCrystalStates } from './mana-tray'
+import { HeroPowerView, type HeroPowerLayout } from './hero-power-view'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import {
   applyAnchoredPlacement,
@@ -228,6 +234,12 @@ export class GameBoardView extends Actor {
   private readonly initialSlots: GameCardSlot[] = []
   private readonly remoteBacks: Sprite[] = []
   private readonly boardLayer = new Container()
+  /**
+   * Hero power cards sit in their own layer immediately above the board but
+   * BELOW the opening/intro layer, so the pre-match black overlay covers them
+   * while the versus sequence plays out; they appear as it fades.
+   */
+  private readonly heroPowerLayer = new Container()
   private readonly heroLayer = new Container()
   private readonly openingLayer = new Container()
   private readonly travelLayer = new Container()
@@ -237,6 +249,11 @@ export class GameBoardView extends Actor {
   private readonly handLayer = new Container()
   private readonly remoteHandLayer = new Container()
   private readonly heroSprites = new Map<PlayerId, Sprite>()
+  /**
+   * One hero power card per player. Both start on the back face, right of the
+   * hero portraits, and flip up when the first turn starts.
+   */
+  private readonly heroPowerViews = new Map<PlayerId, HeroPowerView>()
   private readonly logger: AppLogger
   private match!: OpeningMatchInstance
   private localParticipantId!: PlayerId
@@ -250,6 +267,8 @@ export class GameBoardView extends Actor {
   private manaLabels: { local: Text; remote: Text } | null = null
   private manaLocalTray: ManaTray | null = null
   private yourTurnFlag: Sprite | null = null
+  /** True once the first turn has flipped both hero powers to their fronts. */
+  private heroPowerRevealed = false
   /**
    * True while a turn is being processed (a local end-turn or the AI's pass).
    * Blocks repeat end-turn commands and the AI from acting out of turn.
@@ -299,6 +318,7 @@ export class GameBoardView extends Actor {
       error: () => undefined
     }
     this.addChild(this.boardLayer)
+    this.addChild(this.heroPowerLayer)
     this.addChild(this.openingLayer)
     this.addChild(this.heroLayer)
     this.addChild(this.deckLayer)
@@ -343,6 +363,7 @@ export class GameBoardView extends Actor {
 
     this.createBoard()
     this.createHeroes(initialState)
+    this.createHeroPowers(initialState)
     this.createDecks()
     this.createOpeningLayer(initialState)
     this.createMulliganLayer()
@@ -420,6 +441,39 @@ export class GameBoardView extends Actor {
       sprite.eventMode = 'none'
       this.heroSprites.set(player.participantId, sprite)
       this.heroLayer.addChild(sprite)
+    }
+  }
+
+  /**
+   * Builds both hero power cards in their final board positions. They show the
+   * back face here and never move during the opening choreography; the first
+   * turn's `opening-turn-started` flips them up.
+   */
+  private createHeroPowers(state: OpeningMatchState): void {
+    for (const player of state.players) {
+      const hero = HERO_CATALOG.require(player.heroId)
+      const heroPower = HERO_POWER_CATALOG.require(hero.heroPowerId)
+      const frontTexture =
+        this.options.gameAssets[heroPower.presentationAssetKey as HeroPowerAssetKey]
+      const isLocal = player.participantId === this.localParticipantId
+      const layout: HeroPowerLayout = {
+        card: isLocal
+          ? GAME_BOARD_LAYOUT.heroPowers.local
+          : GAME_BOARD_LAYOUT.heroPowers.remote,
+        crystalOffset: GAME_BOARD_LAYOUT.heroPowers.manaOverlay.crystalOffset,
+        costOffset: GAME_BOARD_LAYOUT.heroPowers.manaOverlay.costOffset
+      }
+      const view = new HeroPowerView({
+        layout,
+        backTexture: this.options.gameAssets.heroPowerBack,
+        frontTexture,
+        manaTexture: this.options.gameAssets.heroPowerMana,
+        cost: player.heroPower.cost,
+        onClick: isLocal ? () => void this.useHeroPower() : undefined
+      })
+      view.label = `hero-power:${player.participantId}`
+      this.heroPowerViews.set(player.participantId, view)
+      this.heroPowerLayer.addChild(view)
     }
   }
 
@@ -539,6 +593,50 @@ export class GameBoardView extends Actor {
     this.syncDeckCounts(state)
     this.syncMana(state)
     this.syncPlayableCardOutlines(state)
+    this.syncHeroPowerViews(state)
+  }
+
+  /**
+   * Refreshes each hero power card from engine state: the effective cost and
+   * the local card's interactivity. The local card is clickable only while it
+   * is the local turn, the power is still available, and the local mana can
+   * afford it; the remote card is never clickable.
+   */
+  private syncHeroPowerViews(state: OpeningMatchState): void {
+    for (const player of state.players) {
+      const view = this.heroPowerViews.get(player.participantId)
+      if (!view) continue
+      view.setCost(player.heroPower.cost)
+      // The cost label stays white today; future cost-changing effects will
+      // tint it reduced (green) or increased (red) through `setCostColor`.
+      view.setCostColor('normal')
+      view.setEnabled(
+        player.participantId === this.localParticipantId &&
+          state.activePlayerId === this.localParticipantId &&
+          player.heroPower.available &&
+          player.mana.available >= player.heroPower.cost
+      )
+    }
+  }
+
+  /**
+   * Local player clicked their hero power: the engine spends the mana and
+   * exhausts the power (a future card effect will be presented alongside).
+   * Rejections (e.g. mana changed under the cursor) only shake the card.
+   */
+  private async useHeroPower(): Promise<void> {
+    if (this.turnInProgress) return
+    const result = this.match.dispatch({
+      type: 'use-hero-power',
+      participantId: this.localParticipantId
+    })
+    if (!result.accepted) {
+      this.logger.error(result.message)
+      this.heroPowerViews.get(this.localParticipantId)?.playUnavailable()
+      return
+    }
+    this.syncTurnHud(result.state)
+    for (const event of result.events) await this.presentEvent(event)
   }
 
   /** Shows the green outline only on cards the local player can currently afford. */
@@ -870,12 +968,39 @@ export class GameBoardView extends Actor {
       case 'opening-turn-started':
         this.syncTurnHud(this.match.getState())
         this.handleTurnStarted(event.participantId)
+        await this.presentHeroPowerReveal()
         return
       case 'turn-started':
         this.syncTurnHud(this.match.getState())
         this.handleTurnStarted(event.participantId)
+        await this.presentHeroPowerFlip(event.participantId, true)
+        return
+      case 'hero-power-used':
+        this.syncTurnHud(this.match.getState())
+        await this.presentHeroPowerFlip(event.participantId, false)
         return
     }
+  }
+
+  /**
+   * First turn: both hero power cards flip from their backs to their fronts
+   * (the cost gems appear). Runs once, on `opening-turn-started`.
+   */
+  private async presentHeroPowerReveal(): Promise<void> {
+    if (this.heroPowerRevealed) return
+    this.heroPowerRevealed = true
+    await Promise.all([...this.heroPowerViews.values()].map((view) => view.flipUp()))
+  }
+
+  /** Flips one player's hero power up (new turn) or down (used this turn). */
+  private async presentHeroPowerFlip(
+    participantId: PlayerId,
+    up: boolean
+  ): Promise<void> {
+    const view = this.heroPowerViews.get(participantId)
+    if (!view) return
+    if (up) await view.flipUp()
+    else await view.flipDown()
   }
 
   private async presentDraw(participantId: PlayerId, card: OpeningCard): Promise<void> {
@@ -1293,13 +1418,30 @@ export class GameBoardView extends Actor {
       DEFAULT_HAND_LAYOUT,
       hoveredIndex >= 0 ? hoveredIndex : null
     )
-    if (resolved === null) return
+    if (resolved === null) {
+      this.tryHeroPowerClick(local)
+      return
+    }
     if (!this.isLocalTurn()) return
     if (this.cardCostAt(resolved) > this.localManaAvailable()) {
       this.shakeCard(resolved)
       return
     }
     this.beginDrag(resolved, local)
+  }
+
+  /**
+   * The hand layer's pointer hit zone spans the whole bottom strip and sits
+   * above the hero power layer, so clicks over the local hero power land on
+   * handLayer instead of the hero power view. Route them here: when the
+   * pointer is over the currently interactive hero power, use it. The view's
+   * own pointertap remains as a fallback for layouts that stop covering it.
+   */
+  private tryHeroPowerClick(local: HandPointer): void {
+    const view = this.heroPowerViews.get(this.localParticipantId)
+    if (!view?.isClickable()) return
+    if (!view.containsCanvasPoint(local.x, local.y)) return
+    void this.useHeroPower()
   }
 
   /** Right-click cancels the current drag, mirroring Hearthstone. */
@@ -1336,7 +1478,9 @@ export class GameBoardView extends Actor {
         {
           outlineTexture: entry.slot.playableOutlineTexture,
           outlineEnabled,
-          outlineColor: 'green',
+          // In-hand playable cards wear the green outline; the card switches
+          // to blue once it is selected and warps around under the cursor.
+          outlineColor: 'blue',
           outlineProfile: OUTLINE_PROFILES.card
         }
       )
@@ -1487,6 +1631,10 @@ export class GameBoardView extends Actor {
     for (const entry of this.handEntries) {
       entry.slot.playableOutline.dispose()
     }
+    for (const view of this.heroPowerViews.values()) {
+      view.dispose()
+    }
+    this.heroPowerViews.clear()
     this.manaLocalTray?.dispose()
     this.manaLocalTray = null
     super.dispose()

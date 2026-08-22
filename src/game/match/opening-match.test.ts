@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { asHeroId } from '../content/cards'
 import type { Deck } from '../decks'
-import { createOpeningMatch } from './opening-match'
+import { createOpeningMatch, type OpeningMatchState } from './opening-match'
 import { createSeededRng } from './rng'
 import { asPlayerId, type MatchSetup } from './match-types'
 
@@ -381,5 +381,167 @@ describe('turn passing', () => {
     for (const player of current.players) {
       expect(player.mana).toEqual({ available: 10, maximum: 10 })
     }
+  })
+})
+
+function passTurns(
+  match: ReturnType<typeof createOpeningMatch>,
+  targetTurn: number
+): OpeningMatchState {
+  let current = match.getState()
+  while (current.turnNumber < targetTurn) {
+    const result = match.dispatch({
+      type: 'end-turn',
+      participantId: current.activePlayerId
+    })
+    if (!result.accepted) throw new Error(result.message)
+    current = match.getState()
+  }
+  return current
+}
+
+describe('hero power', () => {
+  it('is available to the starting player at their first turn and to the second player at theirs', () => {
+    const { match, state } = startTurns()
+    const playerOne = state.players.find((p) => p.participantId === state.playerOneId)
+    const playerTwo = state.players.find((p) => p.participantId === state.playerTwoId)
+    expect(playerOne?.heroPower).toEqual({ cost: 2, available: true })
+    expect(playerTwo?.heroPower).toEqual({ cost: 2, available: false })
+
+    const second = match.dispatch({
+      type: 'end-turn',
+      participantId: state.activePlayerId
+    })
+    expect(second.accepted).toBe(true)
+    if (!second.accepted) throw new Error(second.message)
+    expect(
+      match.getState().players.find((p) => p.participantId === state.playerTwoId)
+        ?.heroPower
+    ).toEqual({ cost: 2, available: true })
+  })
+
+  it('spends its cost and exhausts until the owner starts another turn', () => {
+    // Turn 3 is player one's second turn with 2/2 mana: enough for the power.
+    const match = createOpeningMatch(
+      makeSetup(),
+      [makeDeck('human-deck'), makeDeck('ai-deck')],
+      createSeededRng(42)
+    )
+    const initial = match.getState()
+    for (const player of initial.players) {
+      const result = match.dispatch({
+        type: 'confirm-mulligan',
+        participantId: player.participantId,
+        replaceInstanceIds: []
+      })
+      if (!result.accepted) throw new Error(result.message)
+    }
+    const state = passTurns(match, 3)
+    const playerOne = state.players.find((p) => p.participantId === state.playerOneId)
+    if (!playerOne) throw new Error('Expected player one.')
+    expect(playerOne.mana).toEqual({ available: 2, maximum: 2 })
+
+    const used = match.dispatch({
+      type: 'use-hero-power',
+      participantId: playerOne.participantId
+    })
+    expect(used.accepted).toBe(true)
+    if (!used.accepted) throw new Error(used.message)
+    expect(used.events).toEqual([
+      {
+        type: 'hero-power-used',
+        participantId: playerOne.participantId,
+        cost: 2,
+        mana: { available: 0, maximum: 2 }
+      }
+    ])
+    const afterUse = match.getState()
+    const playerOneAfterUse = afterUse.players.find(
+      (p) => p.participantId === state.playerOneId
+    )
+    expect(playerOneAfterUse?.mana).toEqual({ available: 0, maximum: 2 })
+    expect(playerOneAfterUse?.heroPower).toEqual({ cost: 2, available: false })
+
+    // The power stays exhausted through player two's turn...
+    const passed = match.dispatch({
+      type: 'end-turn',
+      participantId: playerOne.participantId
+    })
+    expect(passed.accepted).toBe(true)
+    const afterPlayerTwoTurn = match.getState()
+    expect(
+      afterPlayerTwoTurn.players.find((p) => p.participantId === state.playerOneId)
+        ?.heroPower
+    ).toEqual({ cost: 2, available: false })
+
+    // ...and refreshes when player one starts their next turn.
+    const returned = match.dispatch({
+      type: 'end-turn',
+      participantId: afterPlayerTwoTurn.activePlayerId
+    })
+    expect(returned.accepted).toBe(true)
+    expect(
+      match.getState().players.find((p) => p.participantId === state.playerOneId)
+        ?.heroPower
+    ).toEqual({ cost: 2, available: true })
+  })
+
+  it('rejects use before turns start, by a non-active player, when reusing, and without mana', () => {
+    const match = createOpeningMatch(
+      makeSetup(),
+      [makeDeck('human-deck'), makeDeck('ai-deck')],
+      createSeededRng(42)
+    )
+    const player = match.getState().players[0]
+
+    const duringMulligan = match.dispatch({
+      type: 'use-hero-power',
+      participantId: player.participantId
+    })
+    expect(duringMulligan.accepted).toBe(false)
+    if (duringMulligan.accepted) throw new Error('Expected rejection.')
+    expect(duringMulligan.code).toBe('wrong-phase')
+
+    for (const candidate of ['human-player', 'ai-player'] as const) {
+      const result = match.dispatch({
+        type: 'confirm-mulligan',
+        participantId: asPlayerId(candidate),
+        replaceInstanceIds: []
+      })
+      if (!result.accepted) throw new Error(result.message)
+    }
+    const state = match.getState()
+    const nonActive = state.players.find(
+      (p) => p.participantId !== state.activePlayerId
+    )
+    if (!nonActive) throw new Error('Expected a non-active player.')
+    const notActive = match.dispatch({
+      type: 'use-hero-power',
+      participantId: nonActive.participantId
+    })
+    expect(notActive.accepted).toBe(false)
+    if (notActive.accepted) throw new Error('Expected rejection.')
+    expect(notActive.code).toBe('not-active-player')
+
+    // The starting player has 1 mana on turn 1, below the 2-cost power.
+    const broke = match.dispatch({
+      type: 'use-hero-power',
+      participantId: state.activePlayerId
+    })
+    expect(broke.accepted).toBe(false)
+    if (broke.accepted) throw new Error('Expected rejection.')
+    expect(broke.code).toBe('insufficient-mana')
+
+    // Give the active player mana, use the power, then try to reuse it.
+    const funded = passTurns(match, 3)
+    const active = funded.activePlayerId
+    const first = match.dispatch({ type: 'use-hero-power', participantId: active })
+    expect(first.accepted).toBe(true)
+    if (!first.accepted) throw new Error(first.message)
+    const second = match.dispatch({ type: 'use-hero-power', participantId: active })
+    expect(second.accepted).toBe(false)
+    if (second.accepted) throw new Error('Expected rejection.')
+    expect(second.code).toBe('hero-power-unavailable')
+    expect(match.getState()).toEqual(second.state)
   })
 })

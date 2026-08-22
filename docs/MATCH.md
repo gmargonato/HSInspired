@@ -22,16 +22,26 @@ the turn counter, and draws one card for the new active player (emitting `turn-s
 Hearthstone rule. Non-active players and mulligan-phase `end-turn` commands are rejected with
 no mutation.
 
-Each player also carries `mana` (`available`/`maximum`): at the start of every turn the
-starting player's crystal maximum grows by one up to `MAX_MANA` (10) and available mana
-refills to the new maximum. Both `opening-turn-started` and `turn-started` events carry the
-new value. Spending mana arrives together with card play.
+Each player also carries `mana` (`available`/`maximum`) and a `heroPower`
+record (`cost`, seeded from the class definition's catalog, plus `available`).
+At the start of every turn the starting player's crystal maximum grows by one
+up to `MAX_MANA` (10) and available mana refills to the new maximum. Both
+`opening-turn-started` and `turn-started` events carry the new value, and each
+turn start refreshes the new active player's hero power.
+
+The active player may dispatch `use-hero-power` once per own turn: it spends
+`heroPower.cost` mana from the available pool, exhausts the power until the
+owner's next turn start, and emits `hero-power-used` with the cost and
+remaining mana. Non-active players, already-used powers, and unaffordable uses
+are rejected with no mutation. The power's in-game effect arrives with future
+gameplay; cost-altering effects are also future work, and the renderer already
+tints the cost label red/green for such a case.
 
 Deck-selection adapters use `createHumanVsAiMatchSetup` (or the renderer's
 `createHumanVsAiGameRoute`) to create the typed future `GameScene` route. No match inputs are
 discovered through renderer globals.
 
 `runMatchArchitectureProof` remains intentionally thin for the original boundary proof. The
-current boundary covers the opening hands, mulligan, an alternating turn/draw loop, and mana
-crystal growth; mana spending, combat, card resolution, triggers, an action stack, networking,
-account state, and AI strategy remain future work.
+current boundary covers the opening hands, mulligan, an alternating turn/draw loop, mana
+crystal growth, and hero power mana spending; combat, card resolution, triggers, an action
+stack, networking, account state, and AI strategy remain future work.

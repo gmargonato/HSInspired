@@ -39,8 +39,8 @@ describe('dynamic hand layout', () => {
   })
 
   it('uses the compact live-hand card scale', () => {
-    expect(layoutHand(4).every((card) => card.scale === 0.25)).toBe(true)
-    expect(layoutHand(4, undefined, 1)[1]?.scale).toBe(0.4)
+    expect(layoutHand(4).every((card) => card.scale === 0.2)).toBe(true)
+    expect(layoutHand(4, undefined, 1)[1]?.scale).toBe(0.5)
   })
 
   it('keeps small hands snug and compresses large hands to the maximum width', () => {
@@ -69,15 +69,15 @@ describe('dynamic hand layout', () => {
   it('keeps every card on a single shared baseline', () => {
     const hand = layoutHand(5)
 
-    expect(hand[2]?.y).toBeCloseTo(1200)
-    expect(hand[0]?.y).toBeCloseTo(1200)
+    expect(hand[2]?.y).toBeCloseTo(1140)
+    expect(hand[0]?.y).toBeCloseTo(1140)
     expect(hand[0]?.y).toBe(hand[2]?.y)
   })
 })
 
 describe('hand hover resolution', () => {
-  // A five-card fan on a single shared baseline: every card rests at y 1200,
-  // so each card's top edge sits at 975 (900 * 0.25 below the baseline).
+  // A five-card fan on a single shared baseline: every card rests at y 1140,
+  // so each card's top edge sits at 960 (900 * 0.2 below the baseline).
   const hand = layoutHand(5)
   const center = hand[2]
   const edge = hand[0]
@@ -96,22 +96,22 @@ describe('hand hover resolution', () => {
   })
 
   it('does not hover when the pointer is above the resting card tops', () => {
-    // The resting top (975) minus the 15px grace is 960; above that the
+    // The resting top (960) minus the 15px grace is 945; above that the
     // pointer cannot enter hover.
     expect(
-      resolveHandHover({ x: center.x, y: 950 }, hand, DEFAULT_HAND_LAYOUT, null)
+      resolveHandHover({ x: center.x, y: 940 }, hand, DEFAULT_HAND_LAYOUT, null)
     ).toBeNull()
     expect(
-      resolveHandHover({ x: edge.x, y: 950 }, hand, DEFAULT_HAND_LAYOUT, null)
+      resolveHandHover({ x: edge.x, y: 940 }, hand, DEFAULT_HAND_LAYOUT, null)
     ).toBeNull()
   })
 
   it('allows a small grace margin above the resting top edge', () => {
     expect(
-      resolveHandHover({ x: center.x, y: 960 }, hand, DEFAULT_HAND_LAYOUT, null)
+      resolveHandHover({ x: center.x, y: 945 }, hand, DEFAULT_HAND_LAYOUT, null)
     ).toBe(2)
     expect(
-      resolveHandHover({ x: center.x, y: 959 }, hand, DEFAULT_HAND_LAYOUT, null)
+      resolveHandHover({ x: center.x, y: 944 }, hand, DEFAULT_HAND_LAYOUT, null)
     ).toBeNull()
   })
 
@@ -125,7 +125,7 @@ describe('hand hover resolution', () => {
   })
 
   it('keeps the lifted card hovered while the pointer roams over its body', () => {
-    // Center card lifted: bottom 1045, top 685. The pointer at y 800 is far
+    // Center card lifted: bottom 1020, top 570. The pointer at y 800 is far
     // above the entry strip yet stays on the hovered card.
     expect(
       resolveHandHover({ x: center.x, y: 800 }, hand, DEFAULT_HAND_LAYOUT, 2)
@@ -138,11 +138,11 @@ describe('hand hover resolution', () => {
   it('drops the lifted card once the pointer leaves its bounds', () => {
     // Above the lifted card: keep-alive fails and entry rules reject the height.
     expect(
-      resolveHandHover({ x: center.x, y: 660 }, hand, DEFAULT_HAND_LAYOUT, 2)
+      resolveHandHover({ x: center.x, y: 550 }, hand, DEFAULT_HAND_LAYOUT, 2)
     ).toBeNull()
     // Horizontally past the lifted card, in empty space above the entry strip.
     expect(
-      resolveHandHover({ x: center.x + 160, y: 900 }, hand, DEFAULT_HAND_LAYOUT, 2)
+      resolveHandHover({ x: center.x + 180, y: 900 }, hand, DEFAULT_HAND_LAYOUT, 2)
     ).toBeNull()
   })
 
@@ -185,8 +185,8 @@ describe('hand hover resolution', () => {
 describe('hand hover hit bounds', () => {
   it('covers the resting strip and the tallest lifted card', () => {
     const bounds = handHoverHitBounds(DEFAULT_HAND_LAYOUT)
-    // The tallest lifted card reaches y ~685; the zone starts just above it.
-    expect(bounds.y).toBeCloseTo(675)
+    // The tallest lifted card reaches y ~570; the zone starts just above it.
+    expect(bounds.y).toBeCloseTo(560)
     // The zone reaches the bottom of the 1920x1080 canvas.
     expect(bounds.y + bounds.height).toBeCloseTo(1080)
     expect(bounds.x).toBe(0)

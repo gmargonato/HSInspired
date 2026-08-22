@@ -3,9 +3,10 @@
  * pixels at 1x.
  *
  * The scene composes several independent regions on top of one 1920x1080
- * background: a card "page" on the left, a deck list on the right, and a set of
- * mana/search filters along the bottom. Each region below documents its size,
- * anchor, and alignment so a position can be read and tuned on its own.
+ * background: a card "page" on the left, a deck list on the right, mana/search
+ * filters along the bottom, and an expansion filter tray that slides up from
+ * off-screen. Each region below documents its size, anchor, and alignment so a
+ * position can be read and tuned on its own.
  *
  * The cover and its lock are `PerspectiveMesh` elements (hinged doors). Their
  * `x`/`y` values are the hinge/corner inputs to `createHingedDoorMesh`, not a
@@ -13,7 +14,7 @@
  */
 
 import { GAME_HEIGHT } from '../app/config'
-import { CENTER, placement } from '../rendering/layout'
+import { CENTER, TOP_LEFT, placement, type LayoutPlacement } from '../rendering/layout'
 
 /** The card page region (left side of the collection spread). */
 export const PAGE_LEFT = 250
@@ -74,6 +75,49 @@ export const COLLECTION_LAYOUT = {
   },
 
   /**
+   * Expansion filter: a bottom-bar toggle that slides the set tray up from
+   * below the 1080 canvas. Row buttons are a parameterized stack; do not
+   * hand-place individual expansions.
+   */
+  expansionFilter: {
+    toggle: placement(
+      { x: 320, y: 1025 },
+      { width: 102, height: 77 },
+      {
+        anchor: CENTER,
+        note: 'Tray open/close toggle on the bottom filter bar.'
+      }
+    ),
+    trayOpen: placement(
+      { x: 243, y: 335 },
+      { width: 369, height: 657 },
+      {
+        anchor: TOP_LEFT,
+        note: 'Resting pose after the tray slides up from below the canvas.'
+      }
+    ),
+    trayClosed: placement(
+      { x: 243, y: GAME_HEIGHT },
+      { width: 369, height: 657 },
+      {
+        anchor: TOP_LEFT,
+        note: 'Fully below the 1080 canvas; only y is animated.'
+      }
+    ),
+    buttons: {
+      first: placement(
+        { x: 235, y: 375 },
+        { width: 312, height: 116 },
+        {
+          anchor: TOP_LEFT,
+          note: 'First expansion row, canvas space. Later rows use gap.'
+        }
+      ),
+      gap: -10
+    }
+  },
+
+  /**
    * The collection cover (hinged on its left edge). `x`/`y` are the hinge
    * corner passed to createHingedDoorMesh; the authored texture is 1157x1080.
    */
@@ -88,3 +132,24 @@ export const COLLECTION_LAYOUT = {
   /** The vertical scrollbar track for the deck list. */
   deckSlider: { x: 1705, minY: 50, maxY: 900 }
 } as const
+
+/** Durations for collection-owned choreography (seconds). */
+export const COLLECTION_TIMING = {
+  expansionTraySlide: 0.35
+} as const
+
+/** Canvas-space placement for one expansion row in the sliding tray. */
+export function getExpansionFilterButtonPlacement(index: number): LayoutPlacement {
+  const { first, gap } = COLLECTION_LAYOUT.expansionFilter.buttons
+  return placement(
+    {
+      x: first.position.x,
+      y: first.position.y + index * (first.size.height + gap)
+    },
+    first.size,
+    {
+      anchor: first.anchor,
+      note: 'Stacked expansion row; index 0 is Basic.'
+    }
+  )
+}

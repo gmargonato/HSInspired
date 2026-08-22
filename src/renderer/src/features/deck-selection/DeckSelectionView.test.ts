@@ -92,8 +92,8 @@ describe('DeckSelectionView', () => {
     }
 
     expect(internals.heroPortrait.visible).toBe(false)
-    expect(internals.heroPortrait.scale.x).toBeCloseTo(0.85 * 1.1)
-    expect(internals.heroPortrait.scale.y).toBeCloseTo(0.85 * 1.05)
+    expect(internals.heroPortrait.scale.x).toBeCloseTo(1)
+    expect(internals.heroPortrait.scale.y).toBeCloseTo(1)
     expect(internals.heroName.visible).toBe(false)
     expect(internals.playButton.visible).toBe(false)
     expect(internals.playButton.eventMode).toBe('none')

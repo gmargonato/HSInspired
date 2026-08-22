@@ -59,8 +59,8 @@ export function resolveManaCrystalStates(
 /** Opacity of a consumed (spent) crystal. */
 const MANA_TRAY_CONSUMED_ALPHA = 0.35
 /** Scale multiplier for the brief pop a crystal makes when it becomes full. */
-const MANA_TRAY_POP_SCALE = 1.3
-const MANA_TRAY_POP_DURATION = 0.25
+const MANA_TRAY_POP_SCALE = 1.5
+const MANA_TRAY_POP_DURATION = 0.5
 
 /**
  * The local player's mana crystal tray: one pooled `Sprite` per crystal slot

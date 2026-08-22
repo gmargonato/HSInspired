@@ -1,4 +1,8 @@
-import { CARD_CLASSES, type CardDefinition } from '../../../../game/content/cards'
+import {
+  CARD_CLASSES,
+  type CardDefinition,
+  type ExpansionId
+} from '../../../../game/content/cards'
 
 export const MANA_FILTER_VALUES = [0, 1, 2, 3, 4, 5, 6, '7+'] as const
 
@@ -11,6 +15,7 @@ export function formatManaFilterLabel(value: ManaFilterValue): string {
 export interface CollectionFilterState {
   readonly query?: string
   readonly manaCost?: ManaFilterValue | null
+  readonly hiddenExpansionIds?: readonly ExpansionId[]
 }
 
 interface NumericConstraint {
@@ -34,6 +39,7 @@ export function filterCollectionCards(
 ): readonly CardDefinition[] {
   const parsedQuery = parseCollectionQuery(state.query ?? '')
   const manaCost = state.manaCost ?? null
+  const hiddenExpansionIds = new Set(state.hiddenExpansionIds ?? [])
 
   if (
     parsedQuery.hasInvalidConstraint ||
@@ -43,6 +49,7 @@ export function filterCollectionCards(
   }
 
   return cards.filter((card) => {
+    if (hiddenExpansionIds.has(card.expansionId)) return false
     if (manaCost !== null && !matchesCost(card.cost, manaCost)) return false
 
     if (

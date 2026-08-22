@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_CATALOG } from '../src/game/content/cards'
+import { asExpansionId, CARD_CATALOG } from '../src/game/content/cards'
 import {
   filterCollectionCards,
   formatManaFilterLabel,
@@ -55,6 +55,26 @@ describe('Collection filters', () => {
 
     expect(cards.length).toBeGreaterThan(0)
     expect(cards.every((card) => card.cost >= 7)).toBe(true)
+  })
+
+  it('hides cards from excluded expansions', () => {
+    const hiddenExpansionIds = [asExpansionId('naxxramas')]
+    const cards = filterCollectionCards(CARD_CATALOG.all, { hiddenExpansionIds })
+
+    expect(cards.length).toBeGreaterThan(0)
+    expect(cards.every((card) => card.expansionId !== 'naxxramas')).toBe(true)
+    expect(cards.some((card) => card.expansionId === 'classic')).toBe(true)
+  })
+
+  it('combines expansion, mana, and search constraints with AND semantics', () => {
+    const cards = filterCollectionCards(CARD_CATALOG.all, {
+      query: 'taunt',
+      manaCost: 2,
+      hiddenExpansionIds: [asExpansionId('basic')]
+    })
+
+    expect(cards.every((card) => card.expansionId !== 'basic')).toBe(true)
+    expect(cards.every((card) => card.cost === 2)).toBe(true)
   })
 
   it('combines mana and search constraints with AND semantics', () => {

@@ -41,10 +41,10 @@ export interface HandPointer {
 }
 
 export const DEFAULT_HAND_LAYOUT: HandLayoutConfig = {
-  centerX: 960,
+  centerX: 930,
   // The card origin is its bottom centre. Keep the hand mostly below the
   // viewport, leaving only its upper portion visible until hover.
-  baselineY: 1180,
+  baselineY: 1140,
   // Cards overlap at rest: `maxCardStep` steps on ~155px-wide cards leave
   // about 55px of each card exposed. The fan compresses to this maximum width
   // once the natural spacing would exceed it (a ten-card hand ends up ~55px
@@ -52,8 +52,8 @@ export const DEFAULT_HAND_LAYOUT: HandLayoutConfig = {
   span: 500,
   maxCardStep: 100,
   maxRotation: 0.2,
-  cardScale: 0.25,
-  hoverScale: 0.4,
+  cardScale: 0.2,
+  hoverScale: 0.5,
   hoverLift: 120,
   hoverSpread: 45,
   hoverEntryMargin: 15,

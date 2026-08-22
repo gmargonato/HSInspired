@@ -166,7 +166,8 @@ void main() {
     effectRgb += uEdgeColor.rgb * lipWeight * (0.86 + surfaceNoise * 0.12);
     effectRgb += vec3(1.0) * pearl * 0.68;
     float effectAlpha = min(1.0, ribbonAlpha * bodyAlpha + pearl * 0.22);
-    finalColor = vec4(effectRgb * bodyAlpha, effectAlpha);
+    float overFactor = 2.0 - effectAlpha;
+    finalColor = vec4(effectRgb * bodyAlpha * overFactor, effectAlpha * overFactor);
 }
 `
 
@@ -231,7 +232,8 @@ ${WGSL_DISTANCE_SAMPLES.join('\n')}
   effectRgb += outlineUniforms.uEdgeColor.rgb * lipWeight * (0.86 + surfaceNoise * 0.12);
   effectRgb += vec3<f32>(1.0) * pearl * 0.68;
   let effectAlpha = min(1.0, ribbonAlpha * bodyAlpha + pearl * 0.22);
-  return vec4<f32>(effectRgb * bodyAlpha, effectAlpha);
+  let overFactor = 2.0 - effectAlpha;
+  return vec4<f32>(effectRgb * bodyAlpha * overFactor, effectAlpha * overFactor);
 }
 `
 

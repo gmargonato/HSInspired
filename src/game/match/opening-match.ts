@@ -1,4 +1,6 @@
 import { CARD_CATALOG, asCardId, type CardId, type HeroId } from '../content/cards'
+import { HERO_CATALOG } from '../content/heroes'
+import { HERO_POWER_CATALOG } from '../content/hero-powers'
 import { countDeckCards, type Deck } from '../decks'
 import { createSeededRng, type DeterministicRng } from './rng'
 import type {
@@ -27,6 +29,16 @@ export interface PlayerMana {
   readonly maximum: number
 }
 
+/**
+ * A player's hero power. `cost` starts at the class definition's cost; future
+ * card effects may raise or lower it (the renderer tints the cost red/green
+ * accordingly). `available` is reset at the start of the owner's turn.
+ */
+export interface PlayerHeroPower {
+  readonly cost: number
+  readonly available: boolean
+}
+
 export interface OpeningPlayerState {
   readonly participantId: PlayerId
   readonly controllerKind: ControllerKind
@@ -35,6 +47,7 @@ export interface OpeningPlayerState {
   readonly deck: readonly OpeningCard[]
   readonly hand: readonly OpeningCard[]
   readonly mana: PlayerMana
+  readonly heroPower: PlayerHeroPower
   readonly mulliganConfirmed: boolean
 }
 
@@ -59,7 +72,13 @@ export interface EndTurnCommand {
   readonly participantId: PlayerId
 }
 
-export type OpeningMatchCommand = ConfirmMulliganCommand | EndTurnCommand
+export interface UseHeroPowerCommand {
+  readonly type: 'use-hero-power'
+  readonly participantId: PlayerId
+}
+
+export type OpeningMatchCommand =
+  ConfirmMulliganCommand | EndTurnCommand | UseHeroPowerCommand
 
 export interface MulliganResolvedEvent {
   readonly type: 'mulligan-resolved'
@@ -106,6 +125,13 @@ export interface CardBurnedEvent {
   readonly card: OpeningCard
 }
 
+export interface HeroPowerUsedEvent {
+  readonly type: 'hero-power-used'
+  readonly participantId: PlayerId
+  readonly cost: number
+  readonly mana: PlayerMana
+}
+
 export type OpeningMatchEvent =
   | MulliganResolvedEvent
   | CoinGrantedEvent
@@ -114,6 +140,7 @@ export type OpeningMatchEvent =
   | TurnStartedEvent
   | CardDrawnEvent
   | CardBurnedEvent
+  | HeroPowerUsedEvent
 
 export interface OpeningAcceptedResult {
   readonly accepted: true
@@ -128,6 +155,8 @@ export type OpeningRejectionCode =
   | 'already-confirmed'
   | 'invalid-card-selection'
   | 'not-active-player'
+  | 'hero-power-unavailable'
+  | 'insufficient-mana'
 
 export interface OpeningRejectedResult {
   readonly accepted: false
@@ -156,7 +185,8 @@ function clonePlayer(player: OpeningPlayerState): OpeningPlayerState {
     ...player,
     deck: player.deck.map(cloneCard),
     hand: player.hand.map(cloneCard),
-    mana: { ...player.mana }
+    mana: { ...player.mana },
+    heroPower: { ...player.heroPower }
   }
 }
 
@@ -186,6 +216,13 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
 
   if (value.type === 'end-turn') {
     return { type: 'end-turn', participantId: value.participantId as PlayerId }
+  }
+
+  if (value.type === 'use-hero-power') {
+    return {
+      type: 'use-hero-power',
+      participantId: value.participantId as PlayerId
+    }
   }
 
   return null
@@ -330,7 +367,11 @@ function applyEndTurn(
       })
     }
   }
-  nextPlayers[nextPlayerIndex] = { ...nextPlayers[nextPlayerIndex], mana: nextMana }
+  nextPlayers[nextPlayerIndex] = {
+    ...nextPlayers[nextPlayerIndex],
+    mana: nextMana,
+    heroPower: { ...nextPlayers[nextPlayerIndex].heroPower, available: true }
+  }
 
   const turnNumber = state.turnNumber + 1
   const nextState: OpeningMatchState = {
@@ -348,6 +389,68 @@ function applyEndTurn(
   })
 
   return { accepted: true, state: cloneOpeningMatchState(nextState), events }
+}
+
+/**
+ * Uses the active player's hero power: spends its cost from the available mana
+ * pool and exhausts it until the owner's next turn start. The effects of the
+ * power itself arrive with future gameplay; for now the command only consumes
+ * mana and flips the card to its exhausted state.
+ */
+function applyUseHeroPower(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1
+): OpeningCommandResult {
+  if (state.phase !== 'turns') {
+    return reject(state, 'wrong-phase', 'Turns have not started yet.')
+  }
+  const player = state.players[playerIndex]
+  if (state.activePlayerId !== player.participantId) {
+    return reject(
+      state,
+      'not-active-player',
+      'Only the active player can use their hero power.'
+    )
+  }
+  if (!player.heroPower.available) {
+    return reject(
+      state,
+      'hero-power-unavailable',
+      'The hero power was already used this turn.'
+    )
+  }
+  if (player.mana.available < player.heroPower.cost) {
+    return reject(state, 'insufficient-mana', 'Not enough mana to use the hero power.')
+  }
+
+  const nextPlayer: OpeningPlayerState = {
+    ...player,
+    mana: {
+      ...player.mana,
+      available: player.mana.available - player.heroPower.cost
+    },
+    heroPower: { ...player.heroPower, available: false }
+  }
+  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+  nextPlayers[playerIndex] = nextPlayer
+  const nextState: OpeningMatchState = {
+    ...state,
+    players: nextPlayers,
+    revision: state.revision + 1
+  }
+
+  return {
+    accepted: true,
+    state: cloneOpeningMatchState(nextState),
+    events: [
+      {
+        type: 'hero-power-used',
+        participantId: player.participantId,
+        cost: player.heroPower.cost,
+        mana: nextPlayer.mana
+      }
+    ]
+  }
 }
 
 /**
@@ -373,6 +476,8 @@ export function createOpeningMatch(
     const participant = setup.participants[participantIndex]
     const deck = decksById.get(participant.deckId)
     if (!deck) throw new Error(`Deck ${participant.deckId} is not available.`)
+    const hero = HERO_CATALOG.require(participant.heroId)
+    const heroPower = HERO_POWER_CATALOG.require(hero.heroPowerId)
     const shuffled = shuffle(expandDeck(deck, participant), rng)
     const initialCount = seatIndex === 0 ? 3 : 4
     const initialCards = shuffled.slice(0, initialCount)
@@ -384,6 +489,7 @@ export function createOpeningMatch(
       deck: shuffled.slice(initialCount),
       hand: initialCards,
       mana: { available: 0, maximum: 0 },
+      heroPower: { cost: heroPower.cost, available: false },
       mulliganConfirmed: false
     } satisfies OpeningPlayerState
   }
@@ -423,6 +529,12 @@ export function createOpeningMatch(
 
       if (command.type === 'end-turn') {
         const result = applyEndTurn(state, playerIndex)
+        if (result.accepted) state = result.state
+        return result
+      }
+
+      if (command.type === 'use-hero-power') {
+        const result = applyUseHeroPower(state, playerIndex)
         if (result.accepted) state = result.state
         return result
       }
@@ -504,7 +616,11 @@ export function createOpeningMatch(
         const playerOne = nextPlayers[0]
         const drawn = drawCards(playerOne, 1)
         const playerOneMana = growMana(playerOne.mana)
-        nextPlayers[0] = { ...drawn.player, mana: playerOneMana }
+        nextPlayers[0] = {
+          ...drawn.player,
+          mana: playerOneMana,
+          heroPower: { ...drawn.player.heroPower, available: true }
+        }
         state = {
           ...state,
           phase: 'turns',
