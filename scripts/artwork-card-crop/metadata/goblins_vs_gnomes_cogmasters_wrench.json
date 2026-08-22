@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_cogmasters_wrench.jpg",
+  "source_name": "goblins_vs_gnomes_cogmasters_wrench.jpg",
+  "crop_box": [
+    0,
+    0,
+    1024,
+    1024
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:32:53.619708",
+  "card_id": "goblins_vs_gnomes_cogmasters_wrench",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_fan_of_knives.jpg",
+  "source_name": "basic_fan_of_knives.jpg",
+  "crop_box": [
+    190,
+    0,
+    1018,
+    828
+  ],
+  "scale": 0.6038647342995169,
+  "offset_x": -114.48757896692679,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:18:42.379373",
+  "card_id": "basic_fan_of_knives",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

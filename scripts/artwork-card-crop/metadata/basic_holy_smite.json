@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_holy_smite.jpg",
+  "source_name": "basic_holy_smite.jpg",
+  "crop_box": [
+    0,
+    0,
+    837,
+    837
+  ],
+  "scale": 0.5973715651135006,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:19:08.569919",
+  "card_id": "basic_holy_smite",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

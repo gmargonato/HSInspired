@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_doomhammer.jpg",
+  "source_name": "classic_doomhammer.jpg",
+  "crop_box": [
+    741,
+    275,
+    1570,
+    1104
+  ],
+  "scale": 0.6028079710144929,
+  "offset_x": -446.60198439241924,
+  "offset_y": -165.5000000000001,
+  "timestamp": "2026-08-22T15:21:36.072437",
+  "card_id": "classic_doomhammer",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

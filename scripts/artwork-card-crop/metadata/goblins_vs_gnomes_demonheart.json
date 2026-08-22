@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_demonheart.jpg",
+  "source_name": "goblins_vs_gnomes_demonheart.jpg",
+  "crop_box": [
+    174,
+    0,
+    1114,
+    940
+  ],
+  "scale": 0.5319148936170213,
+  "offset_x": -92.72631833060564,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:33:08.733126",
+  "card_id": "goblins_vs_gnomes_demonheart",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

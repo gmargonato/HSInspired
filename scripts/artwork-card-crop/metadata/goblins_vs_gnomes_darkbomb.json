@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_darkbomb.jpg",
+  "source_name": "goblins_vs_gnomes_darkbomb.jpg",
+  "crop_box": [
+    79,
+    0,
+    989,
+    910
+  ],
+  "scale": 0.5494505494505495,
+  "offset_x": -43.14713440405754,
+  "offset_y": -5.684341886080802e-14,
+  "timestamp": "2026-08-22T16:33:04.875751",
+  "card_id": "goblins_vs_gnomes_darkbomb",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

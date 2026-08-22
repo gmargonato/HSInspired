@@ -1,0 +1,14 @@
+{
+  "source_path": "assets\\images\\card-artwork\\800px-Scarlet_Subjugator_full.jpg",
+  "source_name": "800px-Scarlet_Subjugator_full.jpg",
+  "crop_box": [
+    0,
+    51,
+    800,
+    851
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -31.68269230769232,
+  "timestamp": "2026-08-22T15:17:58.827502"
+}

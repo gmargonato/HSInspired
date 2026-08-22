@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_lightbomb.jpg",
+  "source_name": "goblins_vs_gnomes_lightbomb.jpg",
+  "crop_box": [
+    96,
+    0,
+    926,
+    830
+  ],
+  "scale": 0.6024096385542169,
+  "offset_x": -57.910101946246584,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:34:02.512766",
+  "card_id": "goblins_vs_gnomes_lightbomb",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

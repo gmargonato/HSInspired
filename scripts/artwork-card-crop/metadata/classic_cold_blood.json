@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_cold_blood.jpg",
+  "source_name": "classic_cold_blood.jpg",
+  "crop_box": [
+    78,
+    0,
+    954,
+    876
+  ],
+  "scale": 0.5707762557077626,
+  "offset_x": -44.46786090621703,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:21:16.477801",
+  "card_id": "classic_cold_blood",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

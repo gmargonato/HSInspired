@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_illidan_stormrage.jpg",
+  "source_name": "classic_illidan_stormrage.jpg",
+  "crop_box": [
+    0,
+    200,
+    800,
+    1000
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -125.09615384615381,
+  "timestamp": "2026-08-22T16:32:18.629261",
+  "card_id": "classic_illidan_stormrage",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

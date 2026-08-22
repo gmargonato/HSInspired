@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_eviscerate.jpg",
+  "source_name": "classic_eviscerate.jpg",
+  "crop_box": [
+    0,
+    20,
+    1024,
+    1044
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": -9.765625,
+  "timestamp": "2026-08-22T15:22:08.047705",
+  "card_id": "classic_eviscerate",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_sprint.jpg",
+  "source_name": "classic_sprint.jpg",
+  "crop_box": [
+    24,
+    0,
+    845,
+    821
+  ],
+  "scale": 0.6090133982947625,
+  "offset_x": -14.818954370842334,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:24:41.895824",
+  "card_id": "classic_sprint",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

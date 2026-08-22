@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_ancestral_spirit.jpg",
+  "source_name": "classic_ancestral_spirit.jpg",
+  "crop_box": [
+    0,
+    0,
+    823,
+    823
+  ],
+  "scale": 0.6075334143377886,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:20:40.367360",
+  "card_id": "classic_ancestral_spirit",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

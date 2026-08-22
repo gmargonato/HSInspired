@@ -36,48 +36,48 @@ module.exports = {
     {
       name: 'no-ui-to-higher-layers',
       severity: 'error',
-      from: { path: '^src/renderer/src/ui' },
-      to: { path: '^src/renderer/src/(features|scenes|app)' }
+      from: { path: '^src/renderer/ui' },
+      to: { path: '^src/renderer/(features|scenes|app)' }
     },
     {
       name: 'no-rendering-to-workflows',
       severity: 'error',
-      from: { path: '^src/renderer/src/rendering' },
-      to: { path: '^src/renderer/src/(features|scenes|app)' }
+      from: { path: '^src/renderer/rendering' },
+      to: { path: '^src/renderer/(features|scenes|app)' }
     },
     {
       name: 'no-feature-to-scenes',
       severity: 'error',
-      from: { path: '^src/renderer/src/features' },
-      to: { path: '^src/renderer/src/scenes' }
+      from: { path: '^src/renderer/features' },
+      to: { path: '^src/renderer/scenes' }
     },
     {
       name: 'no-deck-builder-to-collection-internals',
       severity: 'error',
-      from: { path: '^src/renderer/src/features/deck-builder' },
-      to: { path: '^src/renderer/src/features/collection' }
+      from: { path: '^src/renderer/features/deck-builder' },
+      to: { path: '^src/renderer/features/collection' }
     },
     {
       name: 'no-collection-to-deck-builder-internals',
       severity: 'error',
-      from: { path: '^src/renderer/src/features/collection' },
-      to: { path: '^src/renderer/src/features/deck-builder' }
+      from: { path: '^src/renderer/features/collection' },
+      to: { path: '^src/renderer/features/deck-builder' }
     },
     {
       name: 'no-scene-to-concrete-scene',
       severity: 'error',
-      from: { path: '^src/renderer/src/scenes/(?!dev)' },
+      from: { path: '^src/renderer/scenes/(?!dev)' },
       to: {
-        path: '^src/renderer/src/scenes/(?!transitions|dev)(?:[A-Z][^/]*Scene)\\.ts$'
+        path: '^src/renderer/scenes/(?!transitions|dev)(?:[a-z0-9-]+-scene)\\.ts$'
       }
     },
     {
       name: 'no-production-to-development',
       severity: 'error',
       from: {
-        path: '^src/renderer/src/(?!features/dev|scenes/dev|main\\.ts$)'
+        path: '^src/renderer/(?!features/dev|scenes/dev|main\\.ts$)'
       },
-      to: { path: '^src/renderer/src/(features/dev|scenes/dev)' }
+      to: { path: '^src/renderer/(features/dev|scenes/dev)' }
     },
     {
       name: 'no-production-test-imports',

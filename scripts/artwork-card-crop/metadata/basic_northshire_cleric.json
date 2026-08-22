@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_northshire_cleric.jpg",
+  "source_name": "basic_northshire_cleric.jpg",
+  "crop_box": [
+    0,
+    0,
+    1014,
+    1014
+  ],
+  "scale": 0.4930966469428008,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:19:34.803298",
+  "card_id": "basic_northshire_cleric",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

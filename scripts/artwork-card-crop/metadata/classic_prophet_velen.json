@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_prophet_velen.jpg",
+  "source_name": "classic_prophet_velen.jpg",
+  "crop_box": [
+    80,
+    236,
+    741,
+    897
+  ],
+  "scale": 0.7562500000000001,
+  "offset_x": -60.52307692307692,
+  "offset_y": -178.51394230769242,
+  "timestamp": "2026-08-22T15:24:19.914588",
+  "card_id": "classic_prophet_velen",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

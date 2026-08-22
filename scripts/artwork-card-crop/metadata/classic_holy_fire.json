@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_holy_fire.jpg",
+  "source_name": "classic_holy_fire.jpg",
+  "crop_box": [
+    72,
+    0,
+    1101,
+    1029
+  ],
+  "scale": 0.4859086491739553,
+  "offset_x": -34.77395679150783,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:22:41.084131",
+  "card_id": "classic_holy_fire",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -588,6 +588,7 @@ class CropToolApp:
         self._frame_cache: dict[Path, Image.Image] = {}
         self._name_banner_cache: dict[Path, Image.Image] = {}
         self._is_dirty = False
+        self._changed_paths: set[Path] = set()
 
         self.source_folder_var = tk.StringVar(value=str(self.source_folder))
         self.output_folder_var = tk.StringVar(value=str(self.output_folder))
@@ -665,13 +666,6 @@ class CropToolApp:
         ttk.Button(
             config_frame, text="Choose card JSONs...", command=self._choose_collections
         ).grid(row=4, column=2, padx=4, pady=4)
-        ttk.Button(
-            config_frame, text="Clear card JSONs", command=self._clear_collections
-        ).grid(row=4, column=3, padx=(0, 8), pady=4)
-
-        ttk.Button(
-            config_frame, text="Apply folder changes", command=self._apply_configuration
-        ).grid(row=5, column=3, padx=(0, 8), pady=(2, 8), sticky="e")
 
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 8))
@@ -744,9 +738,6 @@ class CropToolApp:
         toolbar = ttk.Frame(right_frame)
         toolbar.pack(side=tk.TOP, fill=tk.X, pady=(0, 8))
 
-        ttk.Button(toolbar, text="Reset crop", command=self._reset_view).pack(
-            side=tk.LEFT, padx=4
-        )
         ttk.Button(toolbar, text="Save crop", command=self._on_save).pack(
             side=tk.LEFT, padx=4
         )
@@ -754,10 +745,7 @@ class CropToolApp:
             side=tk.LEFT, padx=8, fill=tk.Y
         )
         ttk.Button(
-            toolbar, text="Export saved crops", command=self._on_export_all
-        ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            toolbar, text="Refresh status", command=self._refresh_status
+            toolbar, text="Export changed crops", command=self._on_export_all
         ).pack(side=tk.LEFT, padx=4)
 
         preview_area = ttk.Frame(right_frame)
@@ -806,12 +794,18 @@ class CropToolApp:
         ttk.Label(parent, text=label).grid(
             row=row, column=0, sticky="w", padx=(8, 6), pady=4
         )
-        ttk.Entry(parent, textvariable=variable).grid(
+        path_entry = ttk.Entry(parent, textvariable=variable)
+        path_entry.grid(
             row=row, column=1, columnspan=2, sticky="ew", padx=4, pady=4
         )
+        path_entry.bind("<Return>", self._on_folder_entry_commit)
+        path_entry.bind("<FocusOut>", self._on_folder_entry_commit)
         ttk.Button(parent, text="Browse...", command=browse_command).grid(
             row=row, column=3, padx=(0, 8), pady=4
         )
+
+    def _on_folder_entry_commit(self, _event: tk.Event | None = None) -> None:
+        self._apply_configuration()
 
     def _browse_source_folder(self) -> None:
         selected = filedialog.askdirectory(
@@ -868,15 +862,6 @@ class CropToolApp:
                 + (f"\n...and {len(warnings) - 12} more." if len(warnings) > 12 else ""),
             )
 
-    def _clear_collections(self) -> None:
-        self.collection_paths = []
-        self.card_records = {}
-        self.collection_warnings = []
-        self._update_collection_summary()
-        self._rebuild_file_tree()
-        if self.current_path is not None:
-            self._redraw_canvas()
-
     def _on_fallback_frame_changed(self, _event: tk.Event) -> None:
         if self.current_path is not None:
             self._redraw_canvas()
@@ -902,11 +887,6 @@ class CropToolApp:
         self.show_fixed_var.set(True)
         self.show_needs_fix_var.set(True)
         self._rebuild_file_tree()
-
-    def _refresh_status(self) -> None:
-        """Rescan output/metadata state without changing the current crop."""
-        self._rebuild_file_tree()
-        self._update_status_bar()
 
     def _update_collection_summary(self) -> None:
         if not self.collection_paths:
@@ -942,6 +922,9 @@ class CropToolApp:
         source_changed = new_source != self.source_folder
         output_changed = new_output != self.output_folder
         frame_changed = new_frame != self.frame_folder
+        if source_changed or output_changed or frame_changed:
+            self._save_current_if_dirty()
+
         self.output_folder = new_output
         self.frame_folder = new_frame
         if frame_changed:
@@ -949,8 +932,6 @@ class CropToolApp:
             self._name_banner_cache.clear()
 
         if source_changed:
-            if self._is_dirty:
-                self._save_metadata()
             self.source_folder = new_source
             self._reload_source_files()
         elif output_changed:
@@ -1003,6 +984,7 @@ class CropToolApp:
     def _rebuild_file_tree(self) -> None:
         if not hasattr(self, "tree"):
             return
+        self._save_current_if_dirty()
         selected_path = self.current_path
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -1087,8 +1069,7 @@ class CropToolApp:
             self._update_tree_row(path)
 
     def _on_list_select(self, _event: tk.Event) -> None:
-        if self._is_dirty and self.current_path is not None:
-            self._save_metadata()
+        self._save_current_if_dirty()
 
         selection = self.tree.selection()
         if not selection:
@@ -1126,15 +1107,6 @@ class CropToolApp:
             self.status_var.set(f"Error loading {path.name}: {error}")
             self.card_canvas.bell()
 
-    def _reset_view(self) -> None:
-        if self.current_image is None:
-            return
-        width, height = self.current_image.size
-        self.scale = default_view_scale(width, height)
-        self.offset_x, self.offset_y = initial_offset(width, height, self.scale)
-        self._is_dirty = True
-        self._redraw_canvas()
-
     def _on_mouse_wheel(self, event: tk.Event) -> None:
         if self.current_image is None or self.current_path is None:
             return
@@ -1151,7 +1123,7 @@ class CropToolApp:
             width,
             height,
         )
-        self._is_dirty = True
+        self._mark_dirty()
         self._redraw_canvas()
 
     def _on_drag_start(self, event: tk.Event) -> None:
@@ -1180,8 +1152,23 @@ class CropToolApp:
         self.offset_x, self.offset_y = clamp_offset(
             new_ox, new_oy, self.scale, width, height
         )
-        self._is_dirty = True
+        self._mark_dirty()
         self._redraw_canvas()
+
+    @staticmethod
+    def _path_key(path: Path) -> Path:
+        return path.resolve()
+
+    def _mark_dirty(self) -> None:
+        self._is_dirty = True
+        if self.current_path is not None:
+            self._changed_paths.add(self._path_key(self.current_path))
+
+    def _save_current_if_dirty(self) -> None:
+        if self._is_dirty and self.current_path is not None:
+            path = self.current_path
+            self._save_metadata()
+            self._mark_prepared(path)
 
     def _frame_for_path(
         self, path: Path
@@ -1317,12 +1304,18 @@ class CropToolApp:
             for path in self.source_list
             if has_prepared_metadata(path, self.metadata_folder)
         )
+        changed = sum(
+            1
+            for path in self.source_list
+            if self._path_key(path) in self._changed_paths
+        )
         collection_text = f"Cards: {len(self.card_records)}"
         if self.current_path is None or self.current_image is None:
             self.status_var.set(
                 f"Fixed: {fixed}/{self.total_files}  |  "
                 f"Exported 500x500: {exported}/{self.total_files}  |  "
-                f"Saved crops: {prepared}/{self.total_files}  |  {collection_text}"
+                f"Saved crops: {prepared}/{self.total_files}  |  "
+                f"Changed now: {changed}/{self.total_files}  |  {collection_text}"
             )
             return
 
@@ -1333,7 +1326,8 @@ class CropToolApp:
         self.status_var.set(
             f"Fixed: {fixed}/{self.total_files}  |  "
             f"Exported 500x500: {exported}/{self.total_files}  |  "
-            f"Saved crops: {prepared}/{self.total_files}  |  {collection_text}  |  "
+            f"Saved crops: {prepared}/{self.total_files}  |  "
+            f"Changed now: {changed}/{self.total_files}  |  {collection_text}  |  "
             f"{self.current_path.name}{dirty_indicator}  |  Zoom: {zoom_pct}%"
         )
 
@@ -1369,17 +1363,22 @@ class CropToolApp:
         self._update_tree_row(path)
 
     def _on_export_all(self) -> None:
-        """Export prepared 500x500 artwork files."""
-        if self._is_dirty and self.current_path is not None:
-            self._save_metadata()
+        """Export crops changed during the current application session."""
+        try:
+            self._save_current_if_dirty()
+        except Exception as error:
+            self.status_var.set(f"Error saving metadata before export: {error}")
+            self.card_canvas.bell()
+            return
 
         prepared_files = [
             path
             for path in self.source_list
-            if has_prepared_metadata(path, self.metadata_folder)
+            if self._path_key(path) in self._changed_paths
+            and has_prepared_metadata(path, self.metadata_folder)
         ]
         if not prepared_files:
-            self.status_var.set("No saved crops to export.")
+            self.status_var.set("No crops changed since the last export.")
             return
 
         try:
@@ -1394,6 +1393,7 @@ class CropToolApp:
         self.output_folder.mkdir(parents=True, exist_ok=True)
         exported_count = 0
         failed_files: list[str] = []
+        successful_paths: set[Path] = set()
 
         for index, path in enumerate(prepared_files):
             try:
@@ -1410,6 +1410,7 @@ class CropToolApp:
                         quality=JPEG_QUALITY,
                     )
                 exported_count += 1
+                successful_paths.add(self._path_key(path))
 
                 if (index + 1) % max(1, len(prepared_files) // 10) == 0:
                     self.status_var.set(
@@ -1428,6 +1429,7 @@ class CropToolApp:
         )
         if failed_files:
             message += f" Failed: {len(failed_files)}. See the console for details."
+        self._changed_paths.difference_update(successful_paths)
         self._rebuild_file_tree()
         self._update_status_bar()
         self.status_var.set(message)

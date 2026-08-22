@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_assassinate.jpg",
+  "source_name": "basic_assassinate.jpg",
+  "crop_box": [
+    0,
+    44,
+    800,
+    844
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -27.668269230769226,
+  "timestamp": "2026-08-22T15:18:09.595521",
+  "card_id": "basic_assassinate",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_shadowform.jpg",
+  "source_name": "classic_shadowform.jpg",
+  "crop_box": [
+    91,
+    0,
+    1014,
+    923
+  ],
+  "scale": 0.5417118093174431,
+  "offset_x": -49.51612634386197,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:24:29.298106",
+  "card_id": "classic_shadowform",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

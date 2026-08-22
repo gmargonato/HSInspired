@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_seal_of_light.jpg",
+  "source_name": "goblins_vs_gnomes_seal_of_light.jpg",
+  "crop_box": [
+    49,
+    0,
+    459,
+    410
+  ],
+  "scale": 1.2195121951219512,
+  "offset_x": -59.756097560975604,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:35:01.003461",
+  "card_id": "goblins_vs_gnomes_seal_of_light",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

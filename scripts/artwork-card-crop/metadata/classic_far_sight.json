@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_far_sight.jpg",
+  "source_name": "classic_far_sight.jpg",
+  "crop_box": [
+    0,
+    0,
+    850,
+    850
+  ],
+  "scale": 0.5882352941176471,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:22:18.362477",
+  "card_id": "classic_far_sight",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

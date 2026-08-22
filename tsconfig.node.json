@@ -12,7 +12,7 @@
     "types": ["electron-vite/node"],
     "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["src/renderer/src/*"],
+      "@renderer/*": ["src/renderer/*"],
       "@assets/*": ["assets/*"]
     }
   },

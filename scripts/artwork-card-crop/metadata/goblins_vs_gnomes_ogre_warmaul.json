@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_ogre_warmaul.jpg",
+  "source_name": "goblins_vs_gnomes_ogre_warmaul.jpg",
+  "crop_box": [
+    0,
+    0,
+    988,
+    988
+  ],
+  "scale": 0.5060728744939271,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:34:31.447338",
+  "card_id": "goblins_vs_gnomes_ogre_warmaul",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_auchenai_soulpriest.jpg",
+  "source_name": "classic_auchenai_soulpriest.jpg",
+  "crop_box": [
+    0,
+    25,
+    800,
+    825
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -15.576923076923109,
+  "timestamp": "2026-08-22T15:20:47.500155",
+  "card_id": "classic_auchenai_soulpriest",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

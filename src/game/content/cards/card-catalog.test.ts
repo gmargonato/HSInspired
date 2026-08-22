@@ -31,6 +31,47 @@ describe('canonical card catalog', () => {
     expect(CARD_CATALOG.get('classic_life_tap')).toBeUndefined()
   })
 
+  it('preserves the original release names and excludes later Priest additions', () => {
+    const laterOrRevisedNames = [
+      'Radiance',
+      'Psychic Conjurer',
+      'Power Infusion',
+      'Kul Tiran Chaplain',
+      'Scarlet Subjugator',
+      'Shadow Word: Ruin',
+      'Natalie Seline',
+      'Focused Will',
+      'Thrive in the Shadows',
+      'Crimson Clergy',
+      'Shadowed Spirit',
+      'Icicle',
+      'Tome of Intellect',
+      'Call of the Void',
+      'Pilfer',
+      'Siegebreaker',
+      'Gift of the Wild',
+      'Righteousness',
+      'Brightwing',
+      'High Inquisitor Whitemane',
+      'Barrens Stablehand',
+      'SI:7 Infiltrator',
+      'Arcane Devourer',
+      'Queen of Pain',
+      'Burrowing Mine'
+    ]
+
+    for (const name of laterOrRevisedNames) {
+      expect(CARD_CATALOG.all.some((card) => card.name === name)).toBe(false)
+    }
+
+    expect(CARD_CATALOG.require('goblins_vs_gnomes_mistress_of_pain').name).toBe(
+      'Mistress of Pain'
+    )
+    expect(CARD_CATALOG.require('goblins_vs_gnomes_imp_losion').rulesText).toBe(
+      'Deal 2-4 damage to a minion. Summon a 1/1 Imp for each damage dealt.'
+    )
+  })
+
   it('keeps each expansion source compatible with a future loader', () => {
     for (const expansion of EXPANSION_CATALOG.all) {
       expect(expansion.sourceModule.expansionId).toBe(expansion.id)

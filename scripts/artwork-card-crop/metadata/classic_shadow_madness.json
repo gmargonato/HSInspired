@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_shadow_madness.jpg",
+  "source_name": "classic_shadow_madness.jpg",
+  "crop_box": [
+    209,
+    0,
+    1205,
+    996
+  ],
+  "scale": 0.5020080321285141,
+  "offset_x": -105.15359746679025,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:24:26.621980",
+  "card_id": "classic_shadow_madness",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

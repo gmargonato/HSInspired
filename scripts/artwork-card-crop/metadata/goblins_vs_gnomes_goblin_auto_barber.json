@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_goblin_auto_barber.jpg",
+  "source_name": "goblins_vs_gnomes_goblin_auto_barber.jpg",
+  "crop_box": [
+    0,
+    78,
+    760,
+    838
+  ],
+  "scale": 0.6578947368421053,
+  "offset_x": -5.684341886080802e-14,
+  "offset_y": -51.57894736842104,
+  "timestamp": "2026-08-22T16:33:30.857978",
+  "card_id": "goblins_vs_gnomes_goblin_auto_barber",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

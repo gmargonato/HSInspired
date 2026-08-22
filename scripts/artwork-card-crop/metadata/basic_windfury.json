@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_windfury.jpg",
+  "source_name": "basic_windfury.jpg",
+  "crop_box": [
+    153,
+    0,
+    1146,
+    993
+  ],
+  "scale": 0.5035246727089627,
+  "offset_x": -77.05608490200638,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:20:26.008157",
+  "card_id": "basic_windfury",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

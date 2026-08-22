@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_flame_leviathan.jpg",
+  "source_name": "goblins_vs_gnomes_flame_leviathan.jpg",
+  "crop_box": [
+    0,
+    41,
+    776,
+    817
+  ],
+  "scale": 0.6443298969072165,
+  "offset_x": 0.0,
+  "offset_y": -26.306502775574984,
+  "timestamp": "2026-08-22T16:33:22.820946",
+  "card_id": "goblins_vs_gnomes_flame_leviathan",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

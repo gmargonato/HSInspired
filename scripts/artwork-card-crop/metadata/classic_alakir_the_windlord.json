@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_alakir_the_windlord.jpg",
+  "source_name": "classic_alakir_the_windlord.jpg",
+  "crop_box": [
+    139,
+    0,
+    1132,
+    993
+  ],
+  "scale": 0.5035246727089627,
+  "offset_x": -70.1877116740259,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:20:35.111948",
+  "card_id": "classic_alakir_the_windlord",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

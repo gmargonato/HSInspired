@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_sabotage.jpg",
+  "source_name": "goblins_vs_gnomes_sabotage.jpg",
+  "crop_box": [
+    133,
+    0,
+    1130,
+    997
+  ],
+  "scale": 0.5015045135406219,
+  "offset_x": -66.62412622482833,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:34:50.560641",
+  "card_id": "goblins_vs_gnomes_sabotage",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

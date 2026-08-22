@@ -717,7 +717,7 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2-4 damage to a minion. Summon a 1/1 Imp for each damage dealt."
+    "rulesText": "Deal 2-4 damage. Summon 4 Imps, minus one for each damage dealt."
   },
   {
     "id": "goblins_vs_gnomes_demonheart",

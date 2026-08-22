@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_silence.jpg",
+  "source_name": "classic_silence.jpg",
+  "crop_box": [
+    51,
+    0,
+    462,
+    411
+  ],
+  "scale": 1.2165450121654502,
+  "offset_x": -61.43552311435525,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:24:37.775204",
+  "card_id": "classic_silence",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

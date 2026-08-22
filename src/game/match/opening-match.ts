@@ -18,9 +18,20 @@ export const MAX_HAND_SIZE = 10
 /** Maximum number of mana crystals a player may accumulate. */
 export const MAX_MANA = 10
 
+/** Maximum number of minions a player may have on their board. */
+export const MAX_BOARD_SIZE = 7
+
 export interface OpeningCard {
   readonly instanceId: string
   readonly cardId: CardId
+}
+
+/** A minion in play. Stats are current values (base today; buffs later). */
+export interface BoardMinion {
+  readonly instanceId: string
+  readonly cardId: CardId
+  readonly attack: number
+  readonly health: number
 }
 
 /** A player's mana crystals: available spendable mana and the grown maximum. */
@@ -46,6 +57,7 @@ export interface OpeningPlayerState {
   readonly playerNumber: 1 | 2
   readonly deck: readonly OpeningCard[]
   readonly hand: readonly OpeningCard[]
+  readonly board: readonly BoardMinion[]
   readonly mana: PlayerMana
   readonly heroPower: PlayerHeroPower
   readonly mulliganConfirmed: boolean
@@ -77,8 +89,16 @@ export interface UseHeroPowerCommand {
   readonly participantId: PlayerId
 }
 
+export interface PlayMinionCommand {
+  readonly type: 'play-minion'
+  readonly participantId: PlayerId
+  readonly cardInstanceId: string
+  /** Insertion index into the player's board row: 0..board.length inclusive. */
+  readonly position: number
+}
+
 export type OpeningMatchCommand =
-  ConfirmMulliganCommand | EndTurnCommand | UseHeroPowerCommand
+  ConfirmMulliganCommand | EndTurnCommand | UseHeroPowerCommand | PlayMinionCommand
 
 export interface MulliganResolvedEvent {
   readonly type: 'mulligan-resolved'
@@ -132,6 +152,13 @@ export interface HeroPowerUsedEvent {
   readonly mana: PlayerMana
 }
 
+export interface MinionPlayedEvent {
+  readonly type: 'minion-played'
+  readonly participantId: PlayerId
+  readonly minion: BoardMinion
+  readonly position: number
+}
+
 export type OpeningMatchEvent =
   | MulliganResolvedEvent
   | CoinGrantedEvent
@@ -141,6 +168,7 @@ export type OpeningMatchEvent =
   | CardDrawnEvent
   | CardBurnedEvent
   | HeroPowerUsedEvent
+  | MinionPlayedEvent
 
 export interface OpeningAcceptedResult {
   readonly accepted: true
@@ -157,6 +185,9 @@ export type OpeningRejectionCode =
   | 'not-active-player'
   | 'hero-power-unavailable'
   | 'insufficient-mana'
+  | 'not-a-minion'
+  | 'board-full'
+  | 'invalid-position'
 
 export interface OpeningRejectedResult {
   readonly accepted: false
@@ -180,11 +211,16 @@ function cloneCard(card: OpeningCard): OpeningCard {
   return { ...card }
 }
 
+function cloneBoardMinion(minion: BoardMinion): BoardMinion {
+  return { ...minion }
+}
+
 function clonePlayer(player: OpeningPlayerState): OpeningPlayerState {
   return {
     ...player,
     deck: player.deck.map(cloneCard),
     hand: player.hand.map(cloneCard),
+    board: player.board.map(cloneBoardMinion),
     mana: { ...player.mana },
     heroPower: { ...player.heroPower }
   }
@@ -222,6 +258,19 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
     return {
       type: 'use-hero-power',
       participantId: value.participantId as PlayerId
+    }
+  }
+
+  if (value.type === 'play-minion') {
+    if (typeof value.cardInstanceId !== 'string') return null
+    if (typeof value.position !== 'number' || !Number.isInteger(value.position)) {
+      return null
+    }
+    return {
+      type: 'play-minion',
+      participantId: value.participantId as PlayerId,
+      cardInstanceId: value.cardInstanceId,
+      position: value.position
     }
   }
 
@@ -453,6 +502,94 @@ function applyUseHeroPower(
   }
 }
 
+function applyPlayMinion(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1,
+  command: PlayMinionCommand
+): OpeningCommandResult {
+  if (state.phase !== 'turns') {
+    return reject(state, 'wrong-phase', 'Turns have not started yet.')
+  }
+
+  const player = state.players[playerIndex]
+  if (state.activePlayerId !== player.participantId) {
+    return reject(
+      state,
+      'not-active-player',
+      'Only the active player can play a minion.'
+    )
+  }
+
+  const card = player.hand.find(
+    (candidate) => candidate.instanceId === command.cardInstanceId
+  )
+  if (!card) {
+    return reject(
+      state,
+      'invalid-card-selection',
+      'The selected card is not in the player hand.'
+    )
+  }
+
+  const definition = CARD_CATALOG.get(card.cardId)
+  if (!definition || definition.type !== 'Minion') {
+    return reject(state, 'not-a-minion', 'Only minion cards can be played here.')
+  }
+  if (player.mana.available < definition.cost) {
+    return reject(state, 'insufficient-mana', 'Not enough mana to play that minion.')
+  }
+  if (player.board.length >= MAX_BOARD_SIZE) {
+    return reject(state, 'board-full', 'The board is full.')
+  }
+  if (
+    !Number.isInteger(command.position) ||
+    command.position < 0 ||
+    command.position > player.board.length
+  ) {
+    return reject(state, 'invalid-position', 'The minion position is invalid.')
+  }
+
+  const minion: BoardMinion = {
+    instanceId: card.instanceId,
+    cardId: card.cardId,
+    attack: definition.attack,
+    health: definition.health
+  }
+  const nextBoard = player.board.map(cloneBoardMinion)
+  nextBoard.splice(command.position, 0, minion)
+  const nextPlayer: OpeningPlayerState = {
+    ...player,
+    hand: player.hand.filter(
+      (candidate) => candidate.instanceId !== command.cardInstanceId
+    ),
+    board: nextBoard,
+    mana: {
+      ...player.mana,
+      available: player.mana.available - definition.cost
+    }
+  }
+  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+  nextPlayers[playerIndex] = nextPlayer
+  const nextState: OpeningMatchState = {
+    ...state,
+    players: nextPlayers,
+    revision: state.revision + 1
+  }
+
+  return {
+    accepted: true,
+    state: cloneOpeningMatchState(nextState),
+    events: [
+      {
+        type: 'minion-played',
+        participantId: player.participantId,
+        minion: cloneBoardMinion(minion),
+        position: command.position
+      }
+    ]
+  }
+}
+
 /**
  * Creates the platform-neutral opening sequence used by GameScene.
  *
@@ -488,6 +625,7 @@ export function createOpeningMatch(
       playerNumber: (seatIndex + 1) as 1 | 2,
       deck: shuffled.slice(initialCount),
       hand: initialCards,
+      board: [],
       mana: { available: 0, maximum: 0 },
       heroPower: { cost: heroPower.cost, available: false },
       mulliganConfirmed: false
@@ -535,6 +673,12 @@ export function createOpeningMatch(
 
       if (command.type === 'use-hero-power') {
         const result = applyUseHeroPower(state, playerIndex)
+        if (result.accepted) state = result.state
+        return result
+      }
+
+      if (command.type === 'play-minion') {
+        const result = applyPlayMinion(state, playerIndex, command)
         if (result.accepted) state = result.state
         return result
       }

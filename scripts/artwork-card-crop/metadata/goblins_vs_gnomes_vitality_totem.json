@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_vitality_totem.jpg",
+  "source_name": "goblins_vs_gnomes_vitality_totem.jpg",
+  "crop_box": [
+    26,
+    0,
+    1024,
+    998
+  ],
+  "scale": 0.501002004008016,
+  "offset_x": -13.026052104208361,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:36:04.536736",
+  "card_id": "goblins_vs_gnomes_vitality_totem",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

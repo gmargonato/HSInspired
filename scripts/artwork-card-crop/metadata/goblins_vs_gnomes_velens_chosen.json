@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_velens_chosen.jpg",
+  "source_name": "goblins_vs_gnomes_velens_chosen.jpg",
+  "crop_box": [
+    146,
+    0,
+    1138,
+    992
+  ],
+  "scale": 0.5040322580645161,
+  "offset_x": -73.42316222084372,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:36:01.487963",
+  "card_id": "goblins_vs_gnomes_velens_chosen",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_preparation.jpg",
+  "source_name": "classic_preparation.jpg",
+  "crop_box": [
+    139,
+    0,
+    1133,
+    994
+  ],
+  "scale": 0.5030181086519114,
+  "offset_x": -69.70234174276425,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:24:12.298669",
+  "card_id": "classic_preparation",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

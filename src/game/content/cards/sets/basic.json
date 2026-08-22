@@ -313,18 +313,6 @@
     "rulesText": "Spell Damage +1."
   },
   {
-    "id": "basic_dark_summoner",
-    "name": "Dark Summoner",
-    "rarity": "Free",
-    "cardClass": "Neutral",
-    "type": "Minion",
-    "subtype": "General",
-    "cost": 5,
-    "attack": 5,
-    "health": 3,
-    "rulesText": "The first minion you play each turn costs (3) less."
-  },
-  {
     "id": "basic_darkscale_healer",
     "name": "Darkscale Healer",
     "rarity": "Free",
@@ -881,18 +869,6 @@
     "rulesText": "Give a minion Taunt and +2/+2. (+2 Attack/ +2 Health)"
   },
   {
-    "id": "basic_mental_collapse",
-    "name": "Mental Collapse",
-    "rarity": "Free",
-    "cardClass": "Neutral",
-    "type": "Spell",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "rulesText": "Deal 1 damage to the enemy hero for each card in his hand."
-  },
-  {
     "id": "basic_mind_blast",
     "name": "Mind Blast",
     "rarity": "Free",
@@ -1110,18 +1086,6 @@
     "attack": null,
     "health": null,
     "rulesText": "Give a minion +2 Health. Draw a card."
-  },
-  {
-    "id": "basic_prayer_of_fortitude",
-    "name": "Prayer of Fortitude",
-    "rarity": "Free",
-    "cardClass": "Priest",
-    "type": "Spell",
-    "subtype": "General",
-    "cost": 1,
-    "attack": null,
-    "health": null,
-    "rulesText": "Give your minions +1/+1 (+1 Attack/+1 Health)"
   },
   {
     "id": "basic_raid_leader",

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_lightwell.jpg",
+  "source_name": "classic_lightwell.jpg",
+  "crop_box": [
+    156,
+    253,
+    888,
+    985
+  ],
+  "scale": 0.6830134553650706,
+  "offset_x": -106.27378962134776,
+  "offset_y": -172.78402063751423,
+  "timestamp": "2026-08-22T15:23:30.227872",
+  "card_id": "classic_lightwell",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

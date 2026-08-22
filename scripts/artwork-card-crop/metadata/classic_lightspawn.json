@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_lightspawn.jpg",
+  "source_name": "classic_lightspawn.jpg",
+  "crop_box": [
+    0,
+    77,
+    1024,
+    1101
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": -37.50073094430429,
+  "timestamp": "2026-08-22T15:23:17.924772",
+  "card_id": "classic_lightspawn",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

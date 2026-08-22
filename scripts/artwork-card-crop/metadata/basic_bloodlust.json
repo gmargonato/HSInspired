@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_bloodlust.jpg",
+  "source_name": "basic_bloodlust.jpg",
+  "crop_box": [
+    105,
+    0,
+    931,
+    826
+  ],
+  "scale": 0.6053268765133172,
+  "offset_x": -63.72508847085126,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:18:23.344104",
+  "card_id": "basic_bloodlust",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

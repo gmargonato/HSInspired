@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_crackle.jpg",
+  "source_name": "goblins_vs_gnomes_crackle.jpg",
+  "crop_box": [
+    78,
+    0,
+    546,
+    468
+  ],
+  "scale": 1.0683760683760684,
+  "offset_x": -83.33333333333326,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:32:56.694931",
+  "card_id": "goblins_vs_gnomes_crackle",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

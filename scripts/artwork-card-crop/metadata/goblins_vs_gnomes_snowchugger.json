@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_snowchugger.jpg",
+  "source_name": "goblins_vs_gnomes_snowchugger.jpg",
+  "crop_box": [
+    0,
+    101,
+    773,
+    874
+  ],
+  "scale": 0.6468305304010349,
+  "offset_x": 0.0,
+  "offset_y": -65.50900587123093,
+  "timestamp": "2026-08-22T16:35:33.572318",
+  "card_id": "goblins_vs_gnomes_snowchugger",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

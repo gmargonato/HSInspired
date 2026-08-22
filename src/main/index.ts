@@ -2,9 +2,9 @@ import { app, shell, BrowserWindow, Menu, MenuItem } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../assets/icon.png?asset'
-import { SCENE_MENU_ENTRIES, SCENE_REQUEST_CHANNEL } from '../shared/sceneNavigation'
-import { DeckRepository } from './services/deckRepository'
-import { registerDeckIpc } from './services/deckIpc'
+import { SCENE_MENU_ENTRIES, SCENE_REQUEST_CHANNEL } from '../shared/scene-navigation'
+import { DeckRepository } from './services/deck-repository'
+import { registerDeckIpc } from './services/deck-ipc'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080

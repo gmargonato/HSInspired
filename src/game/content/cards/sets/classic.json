@@ -36,18 +36,6 @@
     "rulesText": "Whenever this minion takes damage, draw a card."
   },
   {
-    "id": "classic_adrenaline_rush",
-    "name": "Adrenaline Rush",
-    "rarity": "Epic",
-    "cardClass": "Neutral",
-    "type": "Spell",
-    "subtype": "General",
-    "cost": 1,
-    "attack": null,
-    "health": null,
-    "rulesText": "Draw a card. Combo: Draw 2 cards instead."
-  },
-  {
     "id": "classic_alakir_the_windlord",
     "name": "Al'Akir the Windlord",
     "rarity": "Legendary",
@@ -730,18 +718,6 @@
     "attack": 5,
     "health": 8,
     "rulesText": "Choose One - Give your other minions +2/+2; or Summon two 2/2 Treants with Taunt."
-  },
-  {
-    "id": "classic_chaos_bolt",
-    "name": "Chaos Bolt",
-    "rarity": "Common",
-    "cardClass": "Warlock",
-    "type": "Spell",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "rulesText": "Deal 2 damage to a minion. If the target is a Demon, give it +2/+2 instead."
   },
   {
     "id": "classic_chicken",
@@ -1612,18 +1588,6 @@
     "rulesText": "Attacking a minion costs 1 Attack instead of 1 Durability."
   },
   {
-    "id": "classic_greater_heal",
-    "name": "Greater Heal",
-    "rarity": "Rare",
-    "cardClass": "Priest",
-    "type": "Spell",
-    "subtype": "General",
-    "cost": 2,
-    "attack": null,
-    "health": null,
-    "rulesText": "Restore 2 Health to a character for each card in your opponent's hand."
-  },
-  {
     "id": "classic_grommash_hellscream",
     "name": "Grommash Hellscream",
     "rarity": "Legendary",
@@ -2306,18 +2270,6 @@
     "rulesText": "Whenever you cast a spell, gain +2 Attack this turn."
   },
   {
-    "id": "classic_mana_spring_totem",
-    "name": "Mana Spring Totem",
-    "rarity": "Epic",
-    "cardClass": "Shaman",
-    "type": "Minion",
-    "subtype": "Totem",
-    "cost": 3,
-    "attack": 0,
-    "health": 3,
-    "rulesText": "Your cards cost (1) less.."
-  },
-  {
     "id": "classic_mana_tide_totem",
     "name": "Mana Tide Totem",
     "rarity": "Rare",
@@ -2694,18 +2646,6 @@
     "attack": 1,
     "health": 1,
     "rulesText": "Stealth. Destroy any minion damaged by this minion."
-  },
-  {
-    "id": "classic_penance",
-    "name": "Penance",
-    "rarity": "Common",
-    "cardClass": "Priest",
-    "type": "Spell",
-    "subtype": "General",
-    "cost": 3,
-    "attack": null,
-    "health": null,
-    "rulesText": "Deal 3 damage. Restore 3 Health to your hero.."
   },
   {
     "id": "classic_perditions_blade",

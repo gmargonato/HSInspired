@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_shrinkmeister.jpg",
+  "source_name": "goblins_vs_gnomes_shrinkmeister.jpg",
+  "crop_box": [
+    0,
+    91,
+    748,
+    839
+  ],
+  "scale": 0.6684491978609626,
+  "offset_x": 0.0,
+  "offset_y": -60.5265322912382,
+  "timestamp": "2026-08-22T16:35:23.971651",
+  "card_id": "goblins_vs_gnomes_shrinkmeister",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

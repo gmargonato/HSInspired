@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_mind_blast.jpg",
+  "source_name": "basic_mind_blast.jpg",
+  "crop_box": [
+    133,
+    0,
+    916,
+    783
+  ],
+  "scale": 0.6385696040868455,
+  "offset_x": -84.76667649081448,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:19:19.969321",
+  "card_id": "basic_mind_blast",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

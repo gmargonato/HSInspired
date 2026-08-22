@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_kidnapper.jpg",
+  "source_name": "classic_kidnapper.jpg",
+  "crop_box": [
+    222,
+    0,
+    1000,
+    778
+  ],
+  "scale": 0.6426735218508998,
+  "offset_x": -142.67352185089976,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:22:54.362985",
+  "card_id": "classic_kidnapper",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

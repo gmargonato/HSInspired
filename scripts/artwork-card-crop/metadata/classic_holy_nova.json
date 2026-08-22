@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_holy_nova.jpg",
+  "source_name": "classic_holy_nova.jpg",
+  "crop_box": [
+    142,
+    0,
+    972,
+    830
+  ],
+  "scale": 0.6024096385542169,
+  "offset_x": -85.2455977757183,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:22:46.517305",
+  "card_id": "classic_holy_nova",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

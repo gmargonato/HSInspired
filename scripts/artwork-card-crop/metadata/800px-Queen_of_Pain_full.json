@@ -1,0 +1,14 @@
+{
+  "source_path": "assets\\images\\card-artwork\\800px-Queen_of_Pain_full.jpg",
+  "source_name": "800px-Queen_of_Pain_full.jpg",
+  "crop_box": [
+    0,
+    58,
+    800,
+    858
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -36.06942307692318,
+  "timestamp": "2026-08-22T16:31:58.260562"
+}

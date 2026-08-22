@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_lightning_bolt.jpg",
+  "source_name": "classic_lightning_bolt.jpg",
+  "crop_box": [
+    180,
+    0,
+    800,
+    620
+  ],
+  "scale": 0.8064516129032258,
+  "offset_x": -145.1612903225806,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:23:05.179300",
+  "card_id": "classic_lightning_bolt",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

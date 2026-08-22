@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.web.json",
   "include": [
-    "src/renderer/src/**/*",
+    "src/renderer/**/*",
     "src/game/**/*",
     "src/preload/index.d.ts",
     "src/shared/**/*",

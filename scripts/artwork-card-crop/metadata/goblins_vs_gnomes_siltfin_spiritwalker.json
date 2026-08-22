@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_siltfin_spiritwalker.jpg",
+  "source_name": "goblins_vs_gnomes_siltfin_spiritwalker.jpg",
+  "crop_box": [
+    38,
+    0,
+    475,
+    437
+  ],
+  "scale": 1.1441647597254005,
+  "offset_x": -42.90617848970254,
+  "offset_y": -5.684341886080802e-14,
+  "timestamp": "2026-08-22T16:35:28.355889",
+  "card_id": "goblins_vs_gnomes_siltfin_spiritwalker",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

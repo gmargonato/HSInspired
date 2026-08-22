@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_conceal.jpg",
+  "source_name": "classic_conceal.jpg",
+  "crop_box": [
+    156,
+    0,
+    949,
+    793
+  ],
+  "scale": 0.6305170239596469,
+  "offset_x": -98.3354350567465,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:21:20.701500",
+  "card_id": "classic_conceal",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

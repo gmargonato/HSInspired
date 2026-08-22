@@ -29,17 +29,17 @@ export default defineConfig(({ mode }) => ({
     plugins: [cspPlugin(mode)],
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src'),
+        '@renderer': resolve('src/renderer'),
         '@assets': resolve('assets'),
         '@dev-inspector': resolve(
           mode === 'production'
-            ? 'src/renderer/src/app/renderer-production-placeholder.ts'
-            : 'src/renderer/src/scenes/dev/CardInspectorScene.ts'
+            ? 'src/renderer/app/renderer-production-placeholder.ts'
+            : 'src/renderer/scenes/dev/card-inspector-scene.ts'
         ),
         '@dev-layout-inspector': resolve(
           mode === 'production'
-            ? 'src/renderer/src/app/renderer-production-placeholder.ts'
-            : 'src/renderer/src/features/dev/layout-inspector/index.ts'
+            ? 'src/renderer/app/renderer-production-placeholder.ts'
+            : 'src/renderer/features/dev/layout-inspector/index.ts'
         )
       }
     },

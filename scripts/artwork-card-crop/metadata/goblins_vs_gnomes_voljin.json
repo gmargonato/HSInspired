@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_voljin.jpg",
+  "source_name": "goblins_vs_gnomes_voljin.jpg",
+  "crop_box": [
+    0,
+    67,
+    373,
+    440
+  ],
+  "scale": 1.3404825737265416,
+  "offset_x": 0.0,
+  "offset_y": -89.14209115281506,
+  "timestamp": "2026-08-22T16:36:07.778134",
+  "card_id": "goblins_vs_gnomes_voljin",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

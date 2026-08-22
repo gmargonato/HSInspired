@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_mass_dispel.jpg",
+  "source_name": "classic_mass_dispel.jpg",
+  "crop_box": [
+    55,
+    0,
+    448,
+    393
+  ],
+  "scale": 1.272264631043257,
+  "offset_x": -70.61068702290072,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:23:37.832128",
+  "card_id": "classic_mass_dispel",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_betrayal.jpg",
+  "source_name": "classic_betrayal.jpg",
+  "crop_box": [
+    171,
+    0,
+    1240,
+    1069
+  ],
+  "scale": 0.4677268475210477,
+  "offset_x": -79.92412031373681,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:20:53.733755",
+  "card_id": "classic_betrayal",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

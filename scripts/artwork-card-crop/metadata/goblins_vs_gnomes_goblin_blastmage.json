@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_goblin_blastmage.jpg",
+  "source_name": "goblins_vs_gnomes_goblin_blastmage.jpg",
+  "crop_box": [
+    0,
+    90,
+    720,
+    810
+  ],
+  "scale": 0.6944444444444444,
+  "offset_x": 0.0,
+  "offset_y": -62.16880341880341,
+  "timestamp": "2026-08-22T16:33:33.098051",
+  "card_id": "goblins_vs_gnomes_goblin_blastmage",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

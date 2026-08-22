@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_bolvar_fordragon.jpg",
+  "source_name": "goblins_vs_gnomes_bolvar_fordragon.jpg",
+  "crop_box": [
+    0,
+    64,
+    768,
+    832
+  ],
+  "scale": 0.6510416666666666,
+  "offset_x": 0.0,
+  "offset_y": -41.63060897435897,
+  "timestamp": "2026-08-22T16:32:29.975328",
+  "card_id": "goblins_vs_gnomes_bolvar_fordragon",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

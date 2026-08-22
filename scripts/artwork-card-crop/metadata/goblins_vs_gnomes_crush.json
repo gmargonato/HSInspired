@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_crush.jpg",
+  "source_name": "goblins_vs_gnomes_crush.jpg",
+  "crop_box": [
+    110,
+    0,
+    938,
+    828
+  ],
+  "scale": 0.6038647342995169,
+  "offset_x": -66.13526570048305,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:32:59.074005",
+  "card_id": "goblins_vs_gnomes_crush",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

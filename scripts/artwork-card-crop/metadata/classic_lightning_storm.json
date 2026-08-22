@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_lightning_storm.jpg",
+  "source_name": "classic_lightning_storm.jpg",
+  "crop_box": [
+    0,
+    0,
+    834,
+    834
+  ],
+  "scale": 0.5995203836930456,
+  "offset_x": 0.0,
+  "offset_y": -5.684341886080802e-14,
+  "timestamp": "2026-08-22T15:23:09.465137",
+  "card_id": "classic_lightning_storm",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

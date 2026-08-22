@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_tinkers_sharpsword_oil.jpg",
+  "source_name": "goblins_vs_gnomes_tinkers_sharpsword_oil.jpg",
+  "crop_box": [
+    0,
+    0,
+    941,
+    941
+  ],
+  "scale": 0.5313496280552603,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:35:41.542023",
+  "card_id": "goblins_vs_gnomes_tinkers_sharpsword_oil",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

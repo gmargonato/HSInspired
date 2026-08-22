@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_stormforged_axe.jpg",
+  "source_name": "classic_stormforged_axe.jpg",
+  "crop_box": [
+    0,
+    0,
+    1018,
+    1018
+  ],
+  "scale": 0.4911591355599214,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:24:46.178074",
+  "card_id": "classic_stormforged_axe",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

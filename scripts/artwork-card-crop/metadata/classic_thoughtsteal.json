@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_thoughtsteal.jpg",
+  "source_name": "classic_thoughtsteal.jpg",
+  "crop_box": [
+    136,
+    0,
+    1135,
+    999
+  ],
+  "scale": 0.5005005005005005,
+  "offset_x": -67.98360668360672,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:24:54.251283",
+  "card_id": "classic_thoughtsteal",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

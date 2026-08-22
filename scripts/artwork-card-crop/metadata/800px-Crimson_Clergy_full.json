@@ -1,0 +1,14 @@
+{
+  "source_path": "assets\\images\\card-artwork\\800px-Crimson_Clergy_full.jpg",
+  "source_name": "800px-Crimson_Clergy_full.jpg",
+  "crop_box": [
+    0,
+    110,
+    800,
+    910
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -68.7259615384616,
+  "timestamp": "2026-08-22T15:17:49.434051"
+}

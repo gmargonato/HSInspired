@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_inner_fire.jpg",
+  "source_name": "classic_inner_fire.jpg",
+  "crop_box": [
+    65,
+    0,
+    919,
+    854
+  ],
+  "scale": 0.585480093676815,
+  "offset_x": -37.993154386597,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:22:50.568072",
+  "card_id": "classic_inner_fire",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

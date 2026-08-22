@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_malganis.jpg",
+  "source_name": "goblins_vs_gnomes_malganis.jpg",
+  "crop_box": [
+    0,
+    78,
+    518,
+    596
+  ],
+  "scale": 0.9649122807017545,
+  "offset_x": 0.0,
+  "offset_y": -75.16923076923074,
+  "timestamp": "2026-08-22T16:34:13.039658",
+  "card_id": "goblins_vs_gnomes_malganis",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

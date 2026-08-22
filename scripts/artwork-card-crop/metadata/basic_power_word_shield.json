@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_power_word_shield.jpg",
+  "source_name": "basic_power_word_shield.jpg",
+  "crop_box": [
+    128,
+    0,
+    755,
+    627
+  ],
+  "scale": 0.7974481658692185,
+  "offset_x": -102.01938412464733,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:19:40.195162",
+  "card_id": "basic_power_word_shield",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

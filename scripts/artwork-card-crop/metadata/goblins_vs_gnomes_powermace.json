@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_powermace.jpg",
+  "source_name": "goblins_vs_gnomes_powermace.jpg",
+  "crop_box": [
+    17,
+    0,
+    468,
+    451
+  ],
+  "scale": 1.1086474501108647,
+  "offset_x": -18.429131843765994,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:34:44.500564",
+  "card_id": "goblins_vs_gnomes_powermace",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

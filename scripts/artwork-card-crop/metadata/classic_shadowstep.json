@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_shadowstep.jpg",
+  "source_name": "classic_shadowstep.jpg",
+  "crop_box": [
+    98,
+    0,
+    1092,
+    994
+  ],
+  "scale": 0.5030181086519114,
+  "offset_x": -49.31502708559043,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:24:31.931141",
+  "card_id": "classic_shadowstep",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

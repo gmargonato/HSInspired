@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_upgraded_repair_bot.jpg",
+  "source_name": "goblins_vs_gnomes_upgraded_repair_bot.jpg",
+  "crop_box": [
+    0,
+    63,
+    386,
+    449
+  ],
+  "scale": 1.2953367875647668,
+  "offset_x": 0.0,
+  "offset_y": -81.6062176165803,
+  "timestamp": "2026-08-22T16:35:58.303295",
+  "card_id": "goblins_vs_gnomes_upgraded_repair_bot",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -1,4 +1,4 @@
-import type { SceneRequest } from '../shared/sceneNavigation'
+import type { SceneRequest } from '../shared/scene-navigation'
 import type { DecksApi } from '../shared/ipc/decks'
 
 interface SceneNavigationAPI {

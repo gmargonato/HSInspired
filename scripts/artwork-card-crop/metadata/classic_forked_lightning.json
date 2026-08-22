@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_forked_lightning.jpg",
+  "source_name": "classic_forked_lightning.jpg",
+  "crop_box": [
+    101,
+    0,
+    1130,
+    1029
+  ],
+  "scale": 0.4859086491739553,
+  "offset_x": -49.260197353666754,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:22:30.374276",
+  "card_id": "classic_forked_lightning",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_shielded_minibot.jpg",
+  "source_name": "goblins_vs_gnomes_shielded_minibot.jpg",
+  "crop_box": [
+    0,
+    36,
+    800,
+    836
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -22.451923076922988,
+  "timestamp": "2026-08-22T16:35:15.902438",
+  "card_id": "goblins_vs_gnomes_shielded_minibot",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

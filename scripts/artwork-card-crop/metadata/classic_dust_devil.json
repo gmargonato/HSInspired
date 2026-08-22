@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_dust_devil.jpg",
+  "source_name": "classic_dust_devil.jpg",
+  "crop_box": [
+    0,
+    62,
+    800,
+    862
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -38.635576923076954,
+  "timestamp": "2026-08-22T15:21:45.702188",
+  "card_id": "classic_dust_devil",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

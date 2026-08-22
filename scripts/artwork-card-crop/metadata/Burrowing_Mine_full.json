@@ -1,0 +1,14 @@
+{
+  "source_path": "assets\\images\\card-artwork\\Burrowing_Mine_full.jpg",
+  "source_name": "Burrowing_Mine_full.jpg",
+  "crop_box": [
+    60,
+    0,
+    449,
+    389
+  ],
+  "scale": 1.2853470437017995,
+  "offset_x": -76.4781491002571,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:32:03.637119"
+}

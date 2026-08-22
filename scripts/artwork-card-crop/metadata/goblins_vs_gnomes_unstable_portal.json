@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_unstable_portal.jpg",
+  "source_name": "goblins_vs_gnomes_unstable_portal.jpg",
+  "crop_box": [
+    71,
+    0,
+    665,
+    594
+  ],
+  "scale": 0.8417508417508418,
+  "offset_x": -59.94690494690496,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:35:55.267925",
+  "card_id": "goblins_vs_gnomes_unstable_portal",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

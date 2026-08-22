@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_feral_spirit.jpg",
+  "source_name": "classic_feral_spirit.jpg",
+  "crop_box": [
+    14,
+    0,
+    942,
+    928
+  ],
+  "scale": 0.5387931034482759,
+  "offset_x": -7.7685676392573555,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:22:23.758469",
+  "card_id": "classic_feral_spirit",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

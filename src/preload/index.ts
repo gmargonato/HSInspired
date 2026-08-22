@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { isSceneRequest, SCENE_REQUEST_CHANNEL } from '../shared/sceneNavigation'
-import type { SceneRequest } from '../shared/sceneNavigation'
+import { isSceneRequest, SCENE_REQUEST_CHANNEL } from '../shared/scene-navigation'
+import type { SceneRequest } from '../shared/scene-navigation'
 import {
   DECK_IPC_CHANNELS,
   parseDeckCreateRequest,

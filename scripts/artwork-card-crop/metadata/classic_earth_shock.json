@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_earth_shock.jpg",
+  "source_name": "classic_earth_shock.jpg",
+  "crop_box": [
+    87,
+    0,
+    562,
+    475
+  ],
+  "scale": 1.0526315789473684,
+  "offset_x": -91.57894736842104,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:21:57.157174",
+  "card_id": "classic_earth_shock",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

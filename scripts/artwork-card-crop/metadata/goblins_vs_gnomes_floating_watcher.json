@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_floating_watcher.jpg",
+  "source_name": "goblins_vs_gnomes_floating_watcher.jpg",
+  "crop_box": [
+    14,
+    0,
+    481,
+    467
+  ],
+  "scale": 1.0706638115631693,
+  "offset_x": -15.524625267665954,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:33:28.765657",
+  "card_id": "goblins_vs_gnomes_floating_watcher",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

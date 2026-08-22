@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_fire_elemental.jpg",
+  "source_name": "basic_fire_elemental.jpg",
+  "crop_box": [
+    76,
+    0,
+    465,
+    389
+  ],
+  "scale": 1.2853470437017995,
+  "offset_x": -98.17282974095315,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:18:46.749080",
+  "card_id": "basic_fire_elemental",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

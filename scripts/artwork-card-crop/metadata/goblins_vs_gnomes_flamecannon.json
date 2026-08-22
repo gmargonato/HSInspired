@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_flamecannon.jpg",
+  "source_name": "goblins_vs_gnomes_flamecannon.jpg",
+  "crop_box": [
+    239,
+    0,
+    1099,
+    860
+  ],
+  "scale": 0.5813953488372093,
+  "offset_x": -138.87298747763862,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:33:26.101799",
+  "card_id": "goblins_vs_gnomes_flamecannon",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

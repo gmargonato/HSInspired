@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_trade_prince_gallywix.jpg",
+  "source_name": "goblins_vs_gnomes_trade_prince_gallywix.jpg",
+  "crop_box": [
+    0,
+    98,
+    800,
+    898
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -61.27403846153851,
+  "timestamp": "2026-08-22T16:35:48.019304",
+  "card_id": "goblins_vs_gnomes_trade_prince_gallywix",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

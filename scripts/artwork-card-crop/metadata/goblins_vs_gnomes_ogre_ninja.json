@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_ogre_ninja.jpg",
+  "source_name": "goblins_vs_gnomes_ogre_ninja.jpg",
+  "crop_box": [
+    54,
+    0,
+    667,
+    613
+  ],
+  "scale": 0.8156606851549756,
+  "offset_x": -44.41460660057726,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:34:28.302647",
+  "card_id": "goblins_vs_gnomes_ogre_ninja",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

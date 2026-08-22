@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_neptulon.jpg",
+  "source_name": "goblins_vs_gnomes_neptulon.jpg",
+  "crop_box": [
+    72,
+    0,
+    738,
+    666
+  ],
+  "scale": 0.7507507507507507,
+  "offset_x": -53.81612381612382,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:34:24.380191",
+  "card_id": "goblins_vs_gnomes_neptulon",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

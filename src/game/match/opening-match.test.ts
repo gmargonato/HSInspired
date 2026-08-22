@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { asHeroId } from '../content/cards'
 import type { Deck } from '../decks'
-import { createOpeningMatch, type OpeningMatchState } from './opening-match'
+import {
+  MAX_BOARD_SIZE,
+  createOpeningMatch,
+  type OpeningMatchState
+} from './opening-match'
 import { createSeededRng } from './rng'
 import { asPlayerId, type MatchSetup } from './match-types'
 
@@ -545,3 +549,364 @@ describe('hero power', () => {
     expect(match.getState()).toEqual(second.state)
   })
 })
+
+describe('playing minions', () => {
+  it('plays a minion, spends mana, removes it from hand, and emits one event', () => {
+    const match = createOpeningMatch(
+      makeSetup(),
+      [
+        makeDeck('human-deck', 'basic_murloc_raider'),
+        makeDeck('ai-deck', 'basic_murloc_raider')
+      ],
+      createSeededRng(42)
+    )
+    const state = startTurnsForMatch(match)
+    const player = state.players.find(
+      (candidate) => candidate.participantId === state.activePlayerId
+    )
+    if (!player) throw new Error('Expected an active player.')
+    const card = player.hand.find(
+      (candidate) => candidate.cardId === 'basic_murloc_raider'
+    )
+    if (!card) throw new Error('Expected a minion in hand.')
+
+    const result = match.dispatch({
+      type: 'play-minion',
+      participantId: player.participantId,
+      cardInstanceId: card.instanceId,
+      position: 0
+    })
+
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    expect(result.events).toEqual([
+      {
+        type: 'minion-played',
+        participantId: player.participantId,
+        minion: {
+          instanceId: card.instanceId,
+          cardId: 'basic_murloc_raider',
+          attack: 2,
+          health: 1
+        },
+        position: 0
+      }
+    ])
+    const after = match
+      .getState()
+      .players.find((candidate) => candidate.participantId === player.participantId)
+    expect(
+      after?.hand.some((candidate) => candidate.instanceId === card.instanceId)
+    ).toBe(false)
+    expect(after?.mana).toEqual({ available: 0, maximum: 1 })
+    const event = result.events[0]
+    if (!event || event.type !== 'minion-played')
+      throw new Error('Expected play event.')
+    expect(after?.board).toEqual([event.minion])
+  })
+
+  it('inserts minions at the requested position and appends at board.length', () => {
+    const match = createOpeningMatch(
+      makeSetup(),
+      [
+        makeDeck('human-deck', 'basic_murloc_raider'),
+        makeDeck('ai-deck', 'basic_murloc_raider')
+      ],
+      createSeededRng(42)
+    )
+    let state = startTurnsForMatch(match)
+    const firstPlayer = state.players.find(
+      (candidate) => candidate.participantId === state.activePlayerId
+    )
+    if (!firstPlayer) throw new Error('Expected an active player.')
+
+    const playFromHand = (position: number) => {
+      const current = match.getState()
+      const active = current.players.find(
+        (candidate) => candidate.participantId === current.activePlayerId
+      )
+      if (!active) throw new Error('Expected an active player.')
+      const card = active.hand.find(
+        (candidate) => candidate.cardId === 'basic_murloc_raider'
+      )
+      if (!card) throw new Error('Expected a minion in hand.')
+      const result = match.dispatch({
+        type: 'play-minion',
+        participantId: active.participantId,
+        cardInstanceId: card.instanceId,
+        position
+      })
+      if (!result.accepted) throw new Error(result.message)
+      return card.instanceId
+    }
+
+    const first = playFromHand(0)
+    const firstEnd = match.dispatch({
+      type: 'end-turn',
+      participantId: state.activePlayerId
+    })
+    if (!firstEnd.accepted) throw new Error(firstEnd.message)
+    state = match.getState()
+    const secondEnd = match.dispatch({
+      type: 'end-turn',
+      participantId: state.activePlayerId
+    })
+    if (!secondEnd.accepted) throw new Error(secondEnd.message)
+    const second = playFromHand(1)
+    const third = playFromHand(1)
+
+    const board = match
+      .getState()
+      .players.find(
+        (candidate) => candidate.participantId === firstPlayer.participantId
+      )?.board
+    expect(board?.map((minion) => minion.instanceId)).toEqual([first, third, second])
+  })
+
+  it('rejects invalid play attempts without mutating the match', () => {
+    const wrongPhaseMatch = createOpeningMatch(
+      makeSetup(),
+      [
+        makeDeck('human-deck', 'basic_murloc_raider'),
+        makeDeck('ai-deck', 'basic_murloc_raider')
+      ],
+      createSeededRng(42)
+    )
+    const wrongPhaseState = wrongPhaseMatch.getState()
+    const wrongPhase = wrongPhaseMatch.dispatch({
+      type: 'play-minion',
+      participantId: wrongPhaseState.players[0].participantId,
+      cardInstanceId: 'missing',
+      position: 0
+    })
+    expectRejectedWithoutMutation(
+      wrongPhaseMatch,
+      wrongPhase,
+      'wrong-phase',
+      wrongPhaseState
+    )
+
+    const notActiveMatch = createOpeningMatch(
+      makeSetup(),
+      [
+        makeDeck('human-deck', 'basic_murloc_raider'),
+        makeDeck('ai-deck', 'basic_murloc_raider')
+      ],
+      createSeededRng(42)
+    )
+    const notActiveState = startTurnsForMatch(notActiveMatch)
+    const inactive = notActiveState.players.find(
+      (candidate) => candidate.participantId !== notActiveState.activePlayerId
+    )
+    if (!inactive) throw new Error('Expected an inactive player.')
+    const inactiveCard = inactive.hand[0]
+    if (!inactiveCard) throw new Error('Expected a card in the inactive hand.')
+    const beforeInactive = notActiveMatch.getState()
+    const notActive = notActiveMatch.dispatch({
+      type: 'play-minion',
+      participantId: inactive.participantId,
+      cardInstanceId: inactiveCard.instanceId,
+      position: 0
+    })
+    expectRejectedWithoutMutation(
+      notActiveMatch,
+      notActive,
+      'not-active-player',
+      beforeInactive
+    )
+
+    const invalidCardMatch = createStartedMinionMatch()
+    expectPlayRejection(invalidCardMatch, 'invalid-card-selection', {
+      cardInstanceId: 'not-in-hand',
+      position: 0
+    })
+
+    const spellMatch = createOpeningMatch(
+      makeSetup(),
+      [makeDeck('human-deck', 'basic_fireball'), makeDeck('ai-deck', 'basic_fireball')],
+      createSeededRng(42)
+    )
+    startTurnsForMatch(spellMatch)
+    const spellPlayer = spellMatch
+      .getState()
+      .players.find(
+        (candidate) => candidate.participantId === spellMatch.getState().activePlayerId
+      )
+    if (!spellPlayer || !spellPlayer.hand[0])
+      throw new Error('Expected a spell in hand.')
+    expectPlayRejection(spellMatch, 'not-a-minion', {
+      cardInstanceId: spellPlayer.hand[0].instanceId,
+      position: 0
+    })
+
+    const expensiveMatch = createOpeningMatch(
+      makeSetup(),
+      [
+        makeDeck('human-deck', 'classic_leeroy_jenkins'),
+        makeDeck('ai-deck', 'classic_leeroy_jenkins')
+      ],
+      createSeededRng(42)
+    )
+    startTurnsForMatch(expensiveMatch)
+    const expensivePlayer = expensiveMatch
+      .getState()
+      .players.find(
+        (candidate) =>
+          candidate.participantId === expensiveMatch.getState().activePlayerId
+      )
+    if (!expensivePlayer || !expensivePlayer.hand[0])
+      throw new Error('Expected an expensive minion in hand.')
+    expectPlayRejection(expensiveMatch, 'insufficient-mana', {
+      cardInstanceId: expensivePlayer.hand[0].instanceId,
+      position: 0
+    })
+
+    const invalidPositionMatch = createStartedMinionMatch()
+    const invalidPositionPlayer = invalidPositionMatch
+      .getState()
+      .players.find(
+        (candidate) =>
+          candidate.participantId === invalidPositionMatch.getState().activePlayerId
+      )
+    if (!invalidPositionPlayer || !invalidPositionPlayer.hand[0])
+      throw new Error('Expected a minion in hand.')
+    expectPlayRejection(invalidPositionMatch, 'invalid-position', {
+      cardInstanceId: invalidPositionPlayer.hand[0].instanceId,
+      position: -1
+    })
+    expectPlayRejection(invalidPositionMatch, 'invalid-position', {
+      cardInstanceId: invalidPositionPlayer.hand[0].instanceId,
+      position: invalidPositionPlayer.board.length + 1
+    })
+  })
+
+  it('rejects the eighth minion when the board is full', () => {
+    const match = createOpeningMatch(
+      makeSetup(),
+      [
+        makeDeck('human-deck', 'basic_murloc_raider'),
+        makeDeck('ai-deck', 'basic_murloc_raider')
+      ],
+      createSeededRng(42)
+    )
+    startTurnsForMatch(match)
+
+    const targetParticipantId = match.getState().activePlayerId
+    if (!targetParticipantId) throw new Error('Expected an active participant.')
+    while (
+      (match
+        .getState()
+        .players.find((player) => player.participantId === targetParticipantId)?.board
+        .length ?? 0) < MAX_BOARD_SIZE
+    ) {
+      const state = match.getState()
+      if (state.activePlayerId !== targetParticipantId) {
+        const end = match.dispatch({
+          type: 'end-turn',
+          participantId: state.activePlayerId
+        })
+        if (!end.accepted) throw new Error(end.message)
+        continue
+      }
+      const active = state.players.find(
+        (candidate) => candidate.participantId === state.activePlayerId
+      )
+      if (!active || !active.hand[0]) throw new Error('Expected an active hand card.')
+      const result = match.dispatch({
+        type: 'play-minion',
+        participantId: active.participantId,
+        cardInstanceId: active.hand[0].instanceId,
+        position: active.board.length
+      })
+      if (!result.accepted) throw new Error(result.message)
+      const targetBoardLength = result.state.players.find(
+        (player) => player.participantId === targetParticipantId
+      )?.board.length
+      if (targetBoardLength !== MAX_BOARD_SIZE) {
+        const end = match.dispatch({
+          type: 'end-turn',
+          participantId: active.participantId
+        })
+        if (!end.accepted) throw new Error(end.message)
+      }
+    }
+
+    const state = match.getState()
+    const active = state.players.find(
+      (candidate) => candidate.participantId === state.activePlayerId
+    )
+    if (!active || !active.hand[0]) throw new Error('Expected an active hand card.')
+    const before = match.getState()
+    const result = match.dispatch({
+      type: 'play-minion',
+      participantId: active.participantId,
+      cardInstanceId: active.hand[0].instanceId,
+      position: 0
+    })
+    expectRejectedWithoutMutation(match, result, 'board-full', before)
+    expect(active.board).toHaveLength(MAX_BOARD_SIZE)
+  })
+})
+
+function startTurnsForMatch(
+  match: ReturnType<typeof createOpeningMatch>
+): OpeningMatchState {
+  const initial = match.getState()
+  for (const player of initial.players) {
+    const result = match.dispatch({
+      type: 'confirm-mulligan',
+      participantId: player.participantId,
+      replaceInstanceIds: []
+    })
+    if (!result.accepted) throw new Error(result.message)
+  }
+  return match.getState()
+}
+
+function createStartedMinionMatch() {
+  const match = createOpeningMatch(
+    makeSetup(),
+    [
+      makeDeck('human-deck', 'basic_murloc_raider'),
+      makeDeck('ai-deck', 'basic_murloc_raider')
+    ],
+    createSeededRng(42)
+  )
+  startTurnsForMatch(match)
+  return match
+}
+
+function expectPlayRejection(
+  match: ReturnType<typeof createOpeningMatch>,
+  code:
+    | 'invalid-card-selection'
+    | 'not-a-minion'
+    | 'insufficient-mana'
+    | 'invalid-position',
+  values: { readonly cardInstanceId: string; readonly position: number }
+): void {
+  const before = match.getState()
+  const player = before.players.find(
+    (candidate) => candidate.participantId === before.activePlayerId
+  )
+  if (!player) throw new Error('Expected an active player.')
+  const result = match.dispatch({
+    type: 'play-minion',
+    participantId: player.participantId,
+    ...values
+  })
+  expectRejectedWithoutMutation(match, result, code, before)
+}
+
+function expectRejectedWithoutMutation(
+  match: ReturnType<typeof createOpeningMatch>,
+  result: ReturnType<ReturnType<typeof createOpeningMatch>['dispatch']>,
+  code: string,
+  before: OpeningMatchState
+): void {
+  expect(result.accepted).toBe(false)
+  if (result.accepted) throw new Error('Expected a rejected command.')
+  expect(result.code).toBe(code)
+  expect(result.state).toEqual(before)
+  expect(match.getState()).toEqual(before)
+}

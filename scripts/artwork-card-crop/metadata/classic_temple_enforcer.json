@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_temple_enforcer.jpg",
+  "source_name": "classic_temple_enforcer.jpg",
+  "crop_box": [
+    0,
+    0,
+    956,
+    956
+  ],
+  "scale": 0.5230125523012552,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:24:49.223068",
+  "card_id": "classic_temple_enforcer",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

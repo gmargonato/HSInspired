@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_vanish.jpg",
+  "source_name": "basic_vanish.jpg",
+  "crop_box": [
+    125,
+    0,
+    1153,
+    1028
+  ],
+  "scale": 0.48638132295719844,
+  "offset_x": -61.02963184675242,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:20:21.305827",
+  "card_id": "basic_vanish",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_dunemaul_shaman.jpg",
+  "source_name": "goblins_vs_gnomes_dunemaul_shaman.jpg",
+  "crop_box": [
+    108,
+    0,
+    785,
+    677
+  ],
+  "scale": 0.7385524372230429,
+  "offset_x": -79.68639927280992,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:33:11.054853",
+  "card_id": "goblins_vs_gnomes_dunemaul_shaman",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

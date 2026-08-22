@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_imp_losion.jpg",
+  "source_name": "goblins_vs_gnomes_imp_losion.jpg",
+  "crop_box": [
+    41,
+    0,
+    811,
+    770
+  ],
+  "scale": 0.6493506493506493,
+  "offset_x": -26.55344655344657,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:33:43.096867",
+  "card_id": "goblins_vs_gnomes_imp_losion",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,8 +1,8 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
   "include": [
-    "src/renderer/src/env.d.ts",
-    "src/renderer/src/**/*",
+    "src/renderer/env.d.ts",
+    "src/renderer/**/*",
     "src/game/**/*",
     "src/preload/index.d.ts",
     "src/shared/**/*"
@@ -11,12 +11,10 @@
     "composite": true,
     "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["src/renderer/src/*"],
+      "@renderer/*": ["src/renderer/*"],
       "@assets/*": ["assets/*"],
-      "@dev-inspector": ["src/renderer/src/scenes/dev/CardInspectorScene.ts"],
-      "@dev-layout-inspector": [
-        "src/renderer/src/features/dev/layout-inspector/index.ts"
-      ]
+      "@dev-inspector": ["src/renderer/scenes/dev/card-inspector-scene.ts"],
+      "@dev-layout-inspector": ["src/renderer/features/dev/layout-inspector/index.ts"]
     }
   },
   "exclude": ["src/renderer/**/*.test.ts", "src/game/**/*.test.ts"]

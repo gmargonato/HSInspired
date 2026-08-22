@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_assassins_blade.jpg",
+  "source_name": "basic_assassins_blade.jpg",
+  "crop_box": [
+    34,
+    0,
+    950,
+    916
+  ],
+  "scale": 0.5458515283842795,
+  "offset_x": -18.562311051394033,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T15:18:13.163490",
+  "card_id": "basic_assassins_blade",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

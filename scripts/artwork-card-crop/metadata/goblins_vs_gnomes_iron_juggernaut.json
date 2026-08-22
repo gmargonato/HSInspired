@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_iron_juggernaut.jpg",
+  "source_name": "goblins_vs_gnomes_iron_juggernaut.jpg",
+  "crop_box": [
+    0,
+    70,
+    357,
+    427
+  ],
+  "scale": 1.4005602240896358,
+  "offset_x": 0.0,
+  "offset_y": -97.77418659771593,
+  "timestamp": "2026-08-22T16:33:53.510708",
+  "card_id": "goblins_vs_gnomes_iron_juggernaut",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

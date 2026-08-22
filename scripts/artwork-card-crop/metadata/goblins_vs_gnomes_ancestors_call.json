@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_ancestors_call.jpg",
+  "source_name": "goblins_vs_gnomes_ancestors_call.jpg",
+  "crop_box": [
+    59,
+    0,
+    541,
+    482
+  ],
+  "scale": 1.037344398340249,
+  "offset_x": -61.20331950207469,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:32:20.311546",
+  "card_id": "goblins_vs_gnomes_ancestors_call",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

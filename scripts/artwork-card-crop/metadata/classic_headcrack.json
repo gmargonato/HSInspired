@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_headcrack.jpg",
+  "source_name": "classic_headcrack.jpg",
+  "crop_box": [
+    241,
+    0,
+    1280,
+    1039
+  ],
+  "scale": 0.48123195380173245,
+  "offset_x": -115.97690086621753,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:32:13.730675",
+  "card_id": "classic_headcrack",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

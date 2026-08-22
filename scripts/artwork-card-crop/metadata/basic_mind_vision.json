@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_mind_vision.jpg",
+  "source_name": "basic_mind_vision.jpg",
+  "crop_box": [
+    71,
+    0,
+    936,
+    865
+  ],
+  "scale": 0.5780346820809249,
+  "offset_x": -40.880391285015605,
+  "offset_y": -5.684341886080802e-14,
+  "timestamp": "2026-08-22T15:19:31.112318",
+  "card_id": "basic_mind_vision",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}
