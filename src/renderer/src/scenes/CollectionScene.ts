@@ -1,5 +1,6 @@
 import {
   AlphaFilter,
+  BlurFilter,
   ColorMatrixFilter,
   Container,
   Graphics,
@@ -13,6 +14,7 @@ import type { FederatedPointerEvent, FederatedWheelEvent } from 'pixi.js'
 import { CARD_CATALOG, type CardDefinition } from '../../../game/content/cards'
 import { CardAssetResolver } from '../ui/asset-registry/card-asset-resolver'
 import { CardView } from '../rendering/cards/card-view'
+import { createManaHighlightFilter } from '../rendering/filters/highlight'
 import { applyAnchoredPlacement } from '../rendering/layout'
 import { Scene } from './Scene'
 import {
@@ -33,6 +35,7 @@ import {
 import type { CursorContextVariant } from '../ui/components/cursor'
 import type { DeckStore } from '../features/deck-builder/deck-store'
 import { NewDeckView } from '../features/deck-builder/NewDeckView'
+import { DeleteDeckView } from '../features/collection/DeleteDeckView'
 import {
   DECK_FRAME_ASSET_KEYS,
   type DeckFrameAssetKey
@@ -43,7 +46,6 @@ import {
   updateHingedDoor
 } from '../features/collection/choreography/hinged-door'
 import { HERO_CATALOG } from '../../../game/content/heroes'
-import type { AudioService, SoundEffectId } from '../app/audio'
 import type { AppLogger, DialogService } from '../app/services'
 import { Button } from '../ui/components/Button'
 import {
@@ -78,15 +80,6 @@ import {
   type Deck
 } from '../../../game/decks'
 import type { DeckClass } from '../../../game/content/cards'
-
-const COLLECTION_PAGE_FLIP_FORWARD_SOUNDS = [
-  'collection-page-flip-forward',
-  'collection-page-flip-forward-3'
-] as const
-const COLLECTION_PAGE_FLIP_BACK_SOUNDS = [
-  'collection-page-flip-back',
-  'collection-page-flip-back-3'
-] as const
 
 const DECK_EDITOR_CARD_ROW_HEIGHT = 34
 const DECK_EDITOR_CARD_ROW_GAP = 1
@@ -151,7 +144,7 @@ const DECK_EDITOR_PREVIEW = {
 const COMPLETED_COLLECTION_CARD_ALPHA = 0.25
 const DECK_EDITOR_COUNT_FILL = 0xffffff
 const DECK_EDITOR_ERROR_FILL = 0xff9a9a
-const MANA_FILTER_SELECTED_BRIGHTNESS = 2
+const COLLECTION_PREVIEW_BLUR_STRENGTH = 4
 const FULL_VIEWPORT = {
   x: 0,
   y: 0,
@@ -172,6 +165,7 @@ export class CollectionScene extends Scene {
   private previousCollectionClassFilter: DeckClass | null = null
   private readonly cardResolver = new CardAssetResolver()
   private completedCollectionCardAlphaFilter: AlphaFilter | null = null
+  private collectionPreviewBlurFilter: BlurFilter | null = null
 
   private background!: Sprite
   private pageContent!: Container
@@ -190,6 +184,7 @@ export class CollectionScene extends Scene {
   private deckListCount!: Text
   private collectionBackButton!: Button
   private newDeckScene!: NewDeckView
+  private deleteDeckView!: DeleteDeckView
   private readonly deckEntries: Container[] = []
   private readonly deckButtons: Button[] = []
   private newDeckButton: Button | null = null
@@ -243,7 +238,6 @@ export class CollectionScene extends Scene {
   constructor(
     deckStore: DeckStore,
     private readonly router?: SceneRouter,
-    private readonly audio?: AudioService,
     private readonly dialogs: DialogService = {
       confirm: () => true,
       error: () => undefined
@@ -255,8 +249,8 @@ export class CollectionScene extends Scene {
     }
   ) {
     super()
-    this.deckController = new CollectionDeckController(deckStore, (message) =>
-      this.dialogs.confirm(message)
+    this.deckController = new CollectionDeckController(deckStore, () =>
+      this.deleteDeckView.confirmDeletion()
     )
   }
 
@@ -395,11 +389,14 @@ export class CollectionScene extends Scene {
         onCancelled: () => this.handleNewDeckCreationCancelled(),
         onDeckCreated: (deck) => this.handleNewDeckCreated(deck)
       },
-      this.audio,
-      this.logger
+      this.logger,
+      { newDeckFrames: true }
     )
     await this.newDeckScene.mount()
     this.root.addChild(this.newDeckScene)
+    this.deleteDeckView = new DeleteDeckView()
+    await this.deleteDeckView.mount()
+    this.root.addChild(this.deleteDeckView)
     await this.renderPage(0)
     this.unsubscribeDeckStore = this.deckController.subscribe(
       this.handleDeckStoreChanged
@@ -423,7 +420,6 @@ export class CollectionScene extends Scene {
     this.cover.visible = true
     this.coverLock.visible = true
 
-    this.audio?.play('collection-latch')
     await animateHingedDoor(
       (vars) => this.timeline(vars),
       this.coverLock,
@@ -433,7 +429,6 @@ export class CollectionScene extends Scene {
     )
     this.coverLock.visible = false
 
-    this.audio?.play('collection-cover-open')
     await animateHingedDoor(
       (vars) => this.timeline(vars),
       this.cover,
@@ -485,6 +480,12 @@ export class CollectionScene extends Scene {
       applyAnchoredPlacement(crystal, COLLECTION_LAYOUT.collectionFilters.mana.crystal)
       crystal.eventMode = 'none'
       control.addChild(crystal)
+      control.on('pointerover', () => {
+        crystal.filters = [this.getManaFilterHighlightFilter()]
+      })
+      control.on('pointerout', () => {
+        this.updateManaFilterAppearance()
+      })
 
       const label = new Text({
         text: formatManaFilterLabel(value),
@@ -580,12 +581,7 @@ export class CollectionScene extends Scene {
   }
 
   private handleManaFilterTap(value: ManaFilterValue): void {
-    if (
-      !this.navigationReady ||
-      !this.navigationEnabled ||
-      this.activeDeckId !== null ||
-      this.newDeckScene?.isOpen
-    ) {
+    if (!this.navigationReady || !this.navigationEnabled || this.newDeckScene?.isOpen) {
       return
     }
 
@@ -613,9 +609,7 @@ export class CollectionScene extends Scene {
 
   private getManaFilterHighlightFilter(): ColorMatrixFilter {
     if (!this.manaFilterHighlightFilter) {
-      const filter = new ColorMatrixFilter()
-      filter.brightness(MANA_FILTER_SELECTED_BRIGHTNESS, false)
-      this.manaFilterHighlightFilter = filter
+      this.manaFilterHighlightFilter = createManaHighlightFilter()
     }
 
     return this.manaFilterHighlightFilter
@@ -826,7 +820,6 @@ export class CollectionScene extends Scene {
     this.deckEditorLayer = new Container()
 
     this.deckEditorButton = new Button(assets.loadDeckButton, {
-      audio: this.audio,
       onClick: () => undefined
     })
     this.deckEditorButton.position.set(
@@ -834,10 +827,6 @@ export class CollectionScene extends Scene {
       DECK_EDITOR_LAYOUT.header.y
     )
     this.deckEditorButton.setBaseY(DECK_EDITOR_LAYOUT.header.y)
-    this.deckEditorButton.on('rightclick', (event: FederatedPointerEvent) => {
-      event.stopPropagation()
-      void this.deleteActiveDeck()
-    })
     this.deckEditorLayer.addChild(this.deckEditorButton)
 
     this.deckEditorCount = new Text({
@@ -908,7 +897,6 @@ export class CollectionScene extends Scene {
     this.deckEditorLayer.addChild(this.deckEditorCardViewport)
 
     this.deckEditorDoneButton = new Button(sharedAssets.doneButton, {
-      audio: this.audio,
       onClick: () => this.exitDeckEditor()
     })
     this.deckEditorDoneButton.position.set(
@@ -926,8 +914,6 @@ export class CollectionScene extends Scene {
 
   private createCollectionBackButton(sharedAssets: SharedUIAssets): void {
     this.collectionBackButton = new Button(sharedAssets.backButton, {
-      clickSound: 'back-click',
-      audio: this.audio,
       onClick: () => this.leaveCollection()
     })
     this.collectionBackButton.position.set(
@@ -956,8 +942,7 @@ export class CollectionScene extends Scene {
         this.getDeckFrameTexture(deck),
         () => this.enterDeck(deck.id),
         index,
-        () => this.deleteDeck(deck.id),
-        'collection-new-deck-edge-flips'
+        () => this.deleteDeck(deck.id)
       )
     }
 
@@ -965,8 +950,7 @@ export class CollectionScene extends Scene {
       this.deckAssets.newDeckButton,
       () => this.beginNewDeckCreation(),
       decks.length,
-      undefined,
-      'collection-new-deck-edge-flips'
+      undefined
     )
 
     const itemCount = decks.length + 1
@@ -981,8 +965,7 @@ export class CollectionScene extends Scene {
     texture: Texture,
     onClick: () => void | Promise<void>,
     index: number,
-    onDelete?: () => void | Promise<void>,
-    pressSound?: SoundEffectId
+    onDelete?: () => void | Promise<void>
   ): Button {
     const entry = new Container()
     entry.position.set(
@@ -990,7 +973,7 @@ export class CollectionScene extends Scene {
       index * (DECK_BUTTON_HEIGHT + DECK_BUTTON_GAP) + DECK_BUTTON_HEIGHT / 2
     )
 
-    const button = new Button(texture, { pressSound, audio: this.audio, onClick })
+    const button = new Button(texture, { onClick })
     button.setBaseY(0)
     if (onDelete) {
       button.on('rightclick', (event: FederatedPointerEvent) => {
@@ -1983,10 +1966,6 @@ export class CollectionScene extends Scene {
       return
     }
 
-    this.audio?.play('collection-card-add')
-    if (getDeckCardCount(result.deck, card.id) === getCardCopyLimit(card)) {
-      this.audio?.play('card-limit-lock')
-    }
     this.updateDeckEditor()
   }
 
@@ -2104,7 +2083,6 @@ export class CollectionScene extends Scene {
     if (this.cardPreviewOpening) return
 
     this.cardPreviewOpening = true
-    this.audio?.play('collection-card-preview')
     const bounds = view.getBounds()
     const topLeft = this.root.toLocal({ x: bounds.x, y: bounds.y })
     const bottomRight = this.root.toLocal({
@@ -2191,18 +2169,13 @@ export class CollectionScene extends Scene {
   private async deleteDeck(deckId: string): Promise<void> {
     const deck = this.deckController.getDeck(deckId)
     if (!deck) return
-    if (!this.deckController.confirmDeckDeletion(deck)) return
+    if (!(await this.deckController.confirmDeckDeletion(deck))) return
 
     try {
       await this.deckController.deleteDeck(deckId)
     } catch (error) {
       this.reportError(`Failed to delete ${deck.name}.`, error)
     }
-  }
-
-  private async deleteActiveDeck(): Promise<void> {
-    if (!this.activeDeckId) return
-    await this.deleteDeck(this.activeDeckId)
   }
 
   private createPageZone(
@@ -2295,10 +2268,6 @@ export class CollectionScene extends Scene {
     const nextIndex = this.pageIndex + delta
     if (nextIndex < 0 || nextIndex >= this.pages.length) return
 
-    const pageFlipSounds =
-      delta > 0 ? COLLECTION_PAGE_FLIP_FORWARD_SOUNDS : COLLECTION_PAGE_FLIP_BACK_SOUNDS
-    void pageFlipSounds
-    this.audio?.playRandom(pageFlipSounds)
     void this.renderPage(nextIndex).catch((error: unknown) => {
       this.reportError(`Failed to render collection page ${nextIndex}.`, error)
     })
@@ -2306,6 +2275,7 @@ export class CollectionScene extends Scene {
 
   protected onExit(): void {
     this.disposed = true
+    this.setCollectionPreviewBlurred(false)
     this.cancelDeckEditorTransition()
     this.renderSequence += 1
     this.pageLoading = false
@@ -2335,9 +2305,11 @@ export class CollectionScene extends Scene {
     this.searchInput = null
     this.sceneManager.cursor?.setContextVariant(null)
     void this.newDeckScene?.dispose()
+    void this.deleteDeckView?.dispose()
   }
 
   protected onPause(): void {
+    this.setCollectionPreviewBlurred(true)
     this.setSearchInputVisible(false)
     for (const control of this.manaFilterControls) {
       control.eventMode = 'none'
@@ -2345,7 +2317,33 @@ export class CollectionScene extends Scene {
   }
 
   protected onResume(): void {
+    this.setCollectionPreviewBlurred(false)
     this.updateCollectionFilterModes()
+  }
+
+  private setCollectionPreviewBlurred(blurred: boolean): void {
+    if (blurred) {
+      if (this.collectionPreviewBlurFilter) return
+
+      const filter = new BlurFilter({
+        strength: COLLECTION_PREVIEW_BLUR_STRENGTH,
+        quality: 2,
+        resolution: 'inherit',
+        antialias: 'inherit'
+      })
+      this.collectionPreviewBlurFilter = filter
+      this.root.filters = [...(this.root.filters ?? []), filter]
+      return
+    }
+
+    const filter = this.collectionPreviewBlurFilter
+    if (!filter) return
+
+    this.root.filters = (this.root.filters ?? []).filter(
+      (candidate) => candidate !== filter
+    )
+    this.collectionPreviewBlurFilter = null
+    filter.destroy()
   }
 
   update(_deltaMS: number): void {}

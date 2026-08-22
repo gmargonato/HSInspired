@@ -38,15 +38,28 @@ import mulliganCoinAnnouncementImage from '@assets/images/ui/mulligan-coin-annou
 import manaCrystalImage from '@assets/images/cards/mana.png'
 import searchClearImage from '@assets/images/cards/silence.png'
 import searchNoResultsImage from '@assets/images/ui/search-no-results.png'
+import deleteDeckContainerImage from '@assets/images/ui/delete-deck-container.png'
+import actionButtonConfirmImage from '@assets/images/ui/action-button-confirm.png'
+import actionButtonCancelImage from '@assets/images/ui/action-button-cancel.png'
+import cardPreviewDetailContainerImage from '@assets/images/ui/card-preview-detail-container.png'
+import druidNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-druid.png'
 import druidDeckFrameImage from '@assets/images/heroes/frames/druid-deck-frame.png'
 import hunterDeckFrameImage from '@assets/images/heroes/frames/hunter-deck-frame.png'
+import hunterNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-hunter.png'
 import mageDeckFrameImage from '@assets/images/heroes/frames/mage-deck-frame.png'
+import mageNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-mage.png'
 import paladinDeckFrameImage from '@assets/images/heroes/frames/paladin-deck-frame.png'
+import paladinNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-paladin.png'
 import priestDeckFrameImage from '@assets/images/heroes/frames/priest-deck-frame.png'
+import priestNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-priest.png'
 import rogueDeckFrameImage from '@assets/images/heroes/frames/rogue-deck-frame.png'
+import rogueNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-rogue.png'
 import shamanDeckFrameImage from '@assets/images/heroes/frames/shaman-deck-frame.png'
+import shamanNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-shaman.png'
 import warlockDeckFrameImage from '@assets/images/heroes/frames/warlock-deck-frame.png'
+import warlockNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-warlock.png'
 import warriorDeckFrameImage from '@assets/images/heroes/frames/warrior-deck-frame.png'
+import warriorNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-warrior.png'
 import { HERO_ASSET_SOURCES, type HeroAssetKey } from './hero-assets'
 import { CARD_ASSET_DEFINITIONS, type CardAssetDefinition } from './card-assets'
 import { registerAssetBundle } from './asset-scope'
@@ -63,6 +76,7 @@ export const ASSET_BUNDLE_IDS = {
   menuSettings: 'menu-settings',
   gameSettings: 'game-settings',
   collection: 'collection',
+  cardPreview: 'card-preview',
   sharedUI: 'shared-ui',
   cardRendering: 'card-rendering'
 } as const
@@ -461,6 +475,42 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'collection'
   ),
   asset(
+    'scene.collection.delete-deck-container',
+    ASSET_BUNDLE_IDS.collection,
+    'deleteDeckContainer',
+    deleteDeckContainerImage,
+    1920,
+    1080,
+    'collection'
+  ),
+  asset(
+    'scene.collection.delete-deck-confirm',
+    ASSET_BUNDLE_IDS.collection,
+    'deleteDeckConfirm',
+    actionButtonConfirmImage,
+    232,
+    67,
+    'collection'
+  ),
+  asset(
+    'scene.collection.delete-deck-cancel',
+    ASSET_BUNDLE_IDS.collection,
+    'deleteDeckCancel',
+    actionButtonCancelImage,
+    230,
+    65,
+    'collection'
+  ),
+  asset(
+    'scene.card-preview.detail-container',
+    ASSET_BUNDLE_IDS.cardPreview,
+    'detailContainer',
+    cardPreviewDetailContainerImage,
+    447,
+    678,
+    'card-preview'
+  ),
+  asset(
     'deck-presentation.druid-deck-frame',
     ASSET_BUNDLE_IDS.deckPresentation,
     'druidDeckFrame',
@@ -539,6 +589,87 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     warriorDeckFrameImage,
     239,
     107,
+    'deck-presentation'
+  ),
+  asset(
+    'deck-presentation.druid-new-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'druidNewDeckFrame',
+    druidNewDeckFrameImage,
+    246,
+    266,
+    'deck-presentation'
+  ),
+  asset(
+    'deck-presentation.hunter-new-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'hunterNewDeckFrame',
+    hunterNewDeckFrameImage,
+    246,
+    266,
+    'deck-presentation'
+  ),
+  asset(
+    'deck-presentation.mage-new-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'mageNewDeckFrame',
+    mageNewDeckFrameImage,
+    246,
+    266,
+    'deck-presentation'
+  ),
+  asset(
+    'deck-presentation.paladin-new-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'paladinNewDeckFrame',
+    paladinNewDeckFrameImage,
+    246,
+    266,
+    'deck-presentation'
+  ),
+  asset(
+    'deck-presentation.priest-new-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'priestNewDeckFrame',
+    priestNewDeckFrameImage,
+    246,
+    266,
+    'deck-presentation'
+  ),
+  asset(
+    'deck-presentation.rogue-new-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'rogueNewDeckFrame',
+    rogueNewDeckFrameImage,
+    246,
+    266,
+    'deck-presentation'
+  ),
+  asset(
+    'deck-presentation.shaman-new-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'shamanNewDeckFrame',
+    shamanNewDeckFrameImage,
+    246,
+    266,
+    'deck-presentation'
+  ),
+  asset(
+    'deck-presentation.warlock-new-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'warlockNewDeckFrame',
+    warlockNewDeckFrameImage,
+    246,
+    266,
+    'deck-presentation'
+  ),
+  asset(
+    'deck-presentation.warrior-new-deck-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'warriorNewDeckFrame',
+    warriorNewDeckFrameImage,
+    246,
+    266,
     'deck-presentation'
   ),
   asset(
@@ -648,6 +779,15 @@ export interface DeckPresentationAssets extends Record<HeroAssetKey, Texture> {
   shamanDeckFrame: Texture
   warlockDeckFrame: Texture
   warriorDeckFrame: Texture
+  druidNewDeckFrame: Texture
+  hunterNewDeckFrame: Texture
+  mageNewDeckFrame: Texture
+  paladinNewDeckFrame: Texture
+  priestNewDeckFrame: Texture
+  rogueNewDeckFrame: Texture
+  shamanNewDeckFrame: Texture
+  warlockNewDeckFrame: Texture
+  warriorNewDeckFrame: Texture
 }
 
 export interface GameAssets {
@@ -689,4 +829,11 @@ export interface CollectionAssets {
   manaCrystal: Texture
   searchClear: Texture
   searchNoResults: Texture
+  deleteDeckContainer: Texture
+  deleteDeckConfirm: Texture
+  deleteDeckCancel: Texture
+}
+
+export interface CardPreviewAssets {
+  detailContainer: Texture
 }

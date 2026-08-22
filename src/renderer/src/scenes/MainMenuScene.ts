@@ -5,7 +5,6 @@ import { FlipCard } from '../ui/components/FlipCard'
 import { Button } from '../ui/components/Button'
 import { ASSET_BUNDLE_IDS } from '../ui/asset-registry'
 import type { AppRoute, SceneRouter } from '../app/router'
-import type { AudioService } from '../app/audio'
 import type { AppLogger } from '../app/services'
 import type { MainMenuAssets } from '../ui/asset-registry'
 import type { SceneTransitionOptions } from './SceneManager'
@@ -48,7 +47,6 @@ export class MainMenuScene extends Scene {
   constructor(
     private readonly router?: SceneRouter,
     private readonly entryMode: MainMenuEntryMode = 'closed',
-    private readonly audio?: AudioService,
     private readonly logger: AppLogger = {
       info: () => undefined,
       warn: () => undefined,
@@ -140,9 +138,6 @@ export class MainMenuScene extends Scene {
     }
 
     this.buttonPlay = new Button(assets.buttonPlay, {
-      pressSound: 'box-hub-button-press',
-      hoverSound: 'hub-mouseover',
-      audio: this.audio,
       onClick: () => this.onPlayPressed()
     })
     applyPlacement(this.buttonPlay, menuButtons.play)
@@ -153,9 +148,6 @@ export class MainMenuScene extends Scene {
     this.menuGroup.addChild(this.buttonPlay)
 
     this.buttonCollection = new Button(assets.buttonCollection, {
-      pressSound: 'box-hub-button-press',
-      hoverSound: 'hub-mouseover',
-      audio: this.audio,
       onClick: () => this.onCollectionPressed()
     })
     applyPlacement(this.buttonCollection, menuButtons.collection)

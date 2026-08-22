@@ -1,5 +1,4 @@
 import { Container, Sprite, Text } from 'pixi.js'
-import type { AudioService } from '../../app/audio'
 import type { AppLogger } from '../../app/services'
 import {
   ASSET_BUNDLE_IDS,
@@ -45,7 +44,6 @@ export class DeckSelectionView extends Container {
   constructor(
     private readonly deckStore: DeckStore,
     private readonly callbacks: DeckSelectionViewCallbacks = {},
-    private readonly audio?: AudioService,
     private readonly logger: AppLogger = {
       info: () => undefined,
       warn: () => undefined,
@@ -115,7 +113,6 @@ export class DeckSelectionView extends Container {
     this.addChild(this.playOutlineTarget)
 
     this.playButton = new Button(assets.playButton, {
-      audio: this.audio,
       onClick: () => {
         if (!this.selectedDeck) return
         return this.navigate(
@@ -143,8 +140,6 @@ export class DeckSelectionView extends Container {
       const hero = HERO_CATALOG.require(entry.deck.heroId)
       const texture = assets[DECK_FRAME_ASSET_KEYS[hero.classId]]
       const button = new Button(texture, {
-        pressSound: 'collection-deck-select',
-        audio: this.audio,
         onClick: () => this.selectDeck(entry.deck, assets)
       })
       button.position.set(
@@ -181,7 +176,6 @@ export class DeckSelectionView extends Container {
     sharedAssets: SharedUIAssets
   ): void {
     this.toCollectionButton = new Button(assets.toCollectionButton, {
-      audio: this.audio,
       onClick: () => this.navigate(this.callbacks.onCollectionPressed, 'collection')
     })
     applyPlacement(this.toCollectionButton, DECK_SELECTION_LAYOUT.toCollectionButton)
@@ -191,8 +185,6 @@ export class DeckSelectionView extends Container {
     this.addChild(this.toCollectionButton)
 
     this.backButton = new Button(sharedAssets.backButton, {
-      clickSound: 'back-click',
-      audio: this.audio,
       onClick: () => this.navigate(this.callbacks.onBackPressed, 'main menu')
     })
     applyPlacement(this.backButton, DECK_SELECTION_LAYOUT.backButton)

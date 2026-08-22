@@ -1,4 +1,3 @@
-import type { AudioService } from '../app/audio'
 import type { SceneRouter } from '../app/router'
 import type { AppLogger } from '../app/services'
 import type { DeckStore } from '../features/deck-builder/deck-store'
@@ -17,12 +16,7 @@ export class DeckSelectionScene extends Scene {
   private readonly deckStore: DeckStore
   private readonly router?: SceneRouter
 
-  constructor(
-    deckStore: DeckStore,
-    router?: SceneRouter,
-    audio?: AudioService,
-    logger?: AppLogger
-  ) {
+  constructor(deckStore: DeckStore, router?: SceneRouter, logger?: AppLogger) {
     super()
     this.deckStore = deckStore
     this.router = router
@@ -37,7 +31,6 @@ export class DeckSelectionScene extends Scene {
           Promise.reject(new Error('Deck selection router is not configured')),
         onPlayPressed: (deck) => this.onPlayPressed(deck)
       },
-      audio,
       logger
     )
   }

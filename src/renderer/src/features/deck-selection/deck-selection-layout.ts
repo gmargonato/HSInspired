@@ -7,7 +7,7 @@
  * `DeckSelectionView.createDeckGrid` and `buildDeckSelectionEntries`.
  */
 
-import type { LayoutPoint, LayoutSize } from '../../rendering/layout'
+import type { LayoutPoint } from '../../rendering/layout'
 import { CENTER, placement } from '../../rendering/layout'
 import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
 
@@ -23,9 +23,8 @@ export const DECK_SELECTION_LAYOUT = {
 
   /** Class deck grid. Buttons are centered in their cells. */
   deckGrid: {
-    frameStart: { x: 360, y: 300 } satisfies LayoutPoint,
-    frameGap: { x: 25, y: 100 } satisfies LayoutPoint,
-    frameSize: { width: 239, height: 107 } satisfies LayoutSize
+    frameStart: { x: 377, y: 300 } satisfies LayoutPoint,
+    frameGap: { x: 10, y: 100 } satisfies LayoutPoint
   },
 
   /** Selected hero portrait, widened slightly to fit its frame. */
@@ -33,8 +32,7 @@ export const DECK_SELECTION_LAYOUT = {
     { x: 1470, y: 490 },
     { width: 345, height: 433 },
     {
-      anchor: CENTER,
-      scale: { x: 0.85 * 1.1, y: 0.85 * 1.05 }
+      anchor: CENTER
     }
   ),
 

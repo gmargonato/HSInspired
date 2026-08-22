@@ -70,8 +70,6 @@ async function bootstrap(): Promise<void> {
   app.canvas.addEventListener('contextmenu', preventContextMenu)
 
   const services = createAppServices()
-  const audio = services.audio
-  const unlockAudio = (): void => audio.unlock()
   let cursor: CursorManager | null = null
   let sceneNavigator: SceneNavigator | null = null
   let removeSettingsShortcut = (): void => undefined
@@ -90,7 +88,7 @@ async function bootstrap(): Promise<void> {
     })
   }
 
-  // Register before audio and scene loading so native menu requests are not
+  // Register before scene loading so native menu requests are not
   // lost while the renderer is becoming ready.
   const unsubscribeFromSceneMenu = subscribeToSceneMenu(
     navigateSceneRequest,
@@ -98,8 +96,6 @@ async function bootstrap(): Promise<void> {
   )
 
   try {
-    await audio.preload()
-    app.canvas.addEventListener('pointerdown', unlockAudio, { capture: true })
     app.ticker.maxFPS = 60
 
     cursor = new CursorManager(container)
@@ -158,8 +154,6 @@ async function bootstrap(): Promise<void> {
         removeSettingsShortcut()
         unsubscribeFromSceneMenu()
         app.canvas.removeEventListener('contextmenu', preventContextMenu)
-        app.canvas.removeEventListener('pointerdown', unlockAudio, { capture: true })
-        void audio.dispose()
         cursor?.destroy()
       },
       { once: true }
@@ -167,7 +161,6 @@ async function bootstrap(): Promise<void> {
   } catch (error) {
     removeSettingsShortcut()
     unsubscribeFromSceneMenu()
-    void audio.dispose()
     cursor?.destroy()
     throw error
   }

@@ -13,6 +13,7 @@ import {
   CardParallaxEffect,
   resolveParallaxTarget
 } from '../rendering/cards/card-parallax'
+import { ASSET_BUNDLE_IDS, type CardPreviewAssets } from '../ui/asset-registry'
 import { Scene } from './Scene'
 
 export { cardDetailRows }
@@ -34,6 +35,13 @@ export interface CardViewSceneOptions {
 const COLORS = {
   backdrop: 0x080b12
 } as const
+
+const RARITY_GEM_ASSET_FILES: Partial<Record<CardDefinition['rarity'], string>> = {
+  Common: 'rarity-common.png',
+  Rare: 'rarity-rare.png',
+  Epic: 'rarity-epic.png',
+  Legendary: 'rarity-legendary.png'
+}
 
 const PREVIEW = {
   cardCenter: { x: 1080, y: GAME_HEIGHT / 2 },
@@ -68,6 +76,9 @@ export class CardViewScene extends Scene {
   }
 
   async init(): Promise<void> {
+    const assets = await this.assetScope.acquire<CardPreviewAssets>(
+      ASSET_BUNDLE_IDS.cardPreview
+    )
     await this.waitForFonts()
 
     this.backdrop = new Graphics()
@@ -80,7 +91,15 @@ export class CardViewScene extends Scene {
     this.backdrop.on('pointertap', this.handleBackdropTap)
     this.root.addChild(this.backdrop)
 
-    this.detailsPanel = createCardDetailPanel(this.card)
+    const rarityGemAsset = RARITY_GEM_ASSET_FILES[this.card.rarity]
+    const rarityGem = rarityGemAsset
+      ? await this.resolver.load(rarityGemAsset)
+      : undefined
+    this.detailsPanel = createCardDetailPanel(
+      this.card,
+      assets.detailContainer,
+      rarityGem
+    )
     this.detailsPanel.alpha = 0
     this.root.addChild(this.detailsPanel)
 
@@ -127,9 +146,8 @@ export class CardViewScene extends Scene {
     if (!document.fonts) return
 
     await Promise.all([
-      document.fonts.load('28px Belwe'),
-      document.fonts.load('400 22px "Franklin Gothic Condensed"'),
-      document.fonts.load('700 22px "Franklin Gothic Condensed"')
+      document.fonts.load('24px Belwe'),
+      document.fonts.load('16px Belwe')
     ])
   }
 

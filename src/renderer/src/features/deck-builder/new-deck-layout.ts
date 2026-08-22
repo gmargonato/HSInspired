@@ -7,7 +7,7 @@
  * one unit without re-deriving each control's position.
  */
 
-import type { LayoutPoint, LayoutSize } from '../../rendering/layout'
+import type { LayoutPoint } from '../../rendering/layout'
 import { CENTER, placement } from '../../rendering/layout'
 
 export const NEW_DECK_LAYOUT = {
@@ -23,18 +23,17 @@ export const NEW_DECK_LAYOUT = {
 
   /** Class hero grid (3 columns). Buttons are centered in their cells. */
   classGrid: {
-    frameStart: { x: 360, y: 300 } satisfies LayoutPoint,
-    frameGap: { x: 25, y: 100 } satisfies LayoutPoint,
-    frameSize: { width: 239, height: 107 } satisfies LayoutSize
+    frameStart: { x: 360, y: 190 } satisfies LayoutPoint,
+    frameGap: { x: 25, y: -20 } satisfies LayoutPoint
   },
 
-  /** Selected hero portrait, widened slightly to fit its frame. */
+  /** Selected hero portrait */
   heroPortrait: placement(
     { x: 1470, y: 490 },
     { width: 345, height: 433 },
     {
       anchor: CENTER,
-      scale: { x: 0.85 * 1.1, y: 0.85 * 1.05 }
+      scale: { x: 1, y: 1 }
     }
   ),
 

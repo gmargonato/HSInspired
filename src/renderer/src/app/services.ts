@@ -1,4 +1,3 @@
-import { AudioService } from './audio'
 import {
   PersistentDeckStore,
   type DeckStore
@@ -50,7 +49,6 @@ class BrowserDialogService implements DialogService {
 
 /** Renderer-lifetime dependencies assembled once by the application root. */
 export interface AppServices {
-  readonly audio: AudioService
   readonly deckStore: DeckStore
   readonly dialogs: DialogService
   readonly logger: AppLogger
@@ -59,7 +57,6 @@ export interface AppServices {
 export function createAppServices(overrides: Partial<AppServices> = {}): AppServices {
   const logger = overrides.logger ?? createAppLogger()
   return {
-    audio: overrides.audio ?? new AudioService({ logger }),
     deckStore: overrides.deckStore ?? new PersistentDeckStore(undefined, logger),
     dialogs: overrides.dialogs ?? new BrowserDialogService(),
     logger,

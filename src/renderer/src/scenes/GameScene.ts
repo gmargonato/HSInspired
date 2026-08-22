@@ -1,4 +1,3 @@
-import type { AudioService } from '../app/audio'
 import type { AppLogger } from '../app/services'
 import type { GameRoute } from '../app/router'
 import type { DeckStore } from '../features/deck-builder/deck-store'
@@ -14,20 +13,13 @@ import { Scene } from './Scene'
 export class GameScene extends Scene {
   private readonly deckStore: DeckStore
   private readonly route: GameRoute
-  private readonly audio?: AudioService
   private readonly logger?: AppLogger
   private view: GameBoardView | null = null
 
-  constructor(
-    route: GameRoute,
-    deckStore: DeckStore,
-    audio?: AudioService,
-    logger?: AppLogger
-  ) {
+  constructor(route: GameRoute, deckStore: DeckStore, logger?: AppLogger) {
     super()
     this.route = route
     this.deckStore = deckStore
-    this.audio = audio
     this.logger = logger
   }
 
@@ -55,7 +47,6 @@ export class GameScene extends Scene {
       heroAssets,
       renderer: this.appInstance.renderer,
       cursor: this.sceneManager.cursor,
-      audio: this.audio,
       logger: this.logger
     })
     try {

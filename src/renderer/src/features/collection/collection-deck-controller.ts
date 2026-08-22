@@ -21,7 +21,7 @@ export interface CollectionDeckPort {
 export class CollectionDeckController implements CollectionDeckPort {
   constructor(
     private readonly store: CollectionDeckPort,
-    private readonly confirm: (message: string) => boolean
+    private readonly confirm: (message: string) => Promise<boolean>
   ) {}
 
   load(): Promise<void> {
@@ -60,7 +60,7 @@ export class CollectionDeckController implements CollectionDeckPort {
     return this.store.subscribe(listener)
   }
 
-  confirmDeckDeletion(deck: Pick<Deck, 'name'>): boolean {
+  confirmDeckDeletion(deck: Pick<Deck, 'name'>): Promise<boolean> {
     return this.confirm(`Delete ${deck.name}? This cannot be undone.`)
   }
 }

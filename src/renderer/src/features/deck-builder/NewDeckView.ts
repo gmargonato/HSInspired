@@ -7,12 +7,11 @@ import {
   type DeckPresentationAssets
 } from '../../ui/asset-registry'
 import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
-import type { AudioService } from '../../app/audio'
 import type { AppLogger } from '../../app/services'
 import { AnimationScope } from '../../animation/animations'
 import { AssetScope } from '../../ui/asset-registry/asset-scope'
 import type { DeckStore } from './deck-store'
-import { DECK_FRAME_ASSET_KEYS } from './deck-frames'
+import { DECK_FRAME_ASSET_KEYS, NEW_DECK_FRAME_ASSET_KEYS } from './deck-frames'
 import { NEW_DECK_LAYOUT } from './new-deck-layout'
 import { HERO_CATALOG, type HeroDefinition } from '../../../../game/content/heroes'
 import { PLAYABLE_CLASSES, type DeckClass } from '../../../../game/content/cards'
@@ -23,6 +22,11 @@ export interface NewDeckViewCallbacks {
   onClassSelected?: (hero: HeroDefinition) => void | Promise<void>
   onCancelled?: () => void | Promise<void>
   onDeckCreated?: (deck: Deck, hero: HeroDefinition) => void | Promise<void>
+}
+
+export interface NewDeckViewOptions {
+  /** Use the 'new-deck-frame-<class>.png' family for the class grid. */
+  newDeckFrames?: boolean
 }
 
 /** Nested deck-creation overlay presented by CollectionScene. */
@@ -50,12 +54,12 @@ export class NewDeckView extends Container {
   constructor(
     deckStore: DeckStore,
     callbacks: NewDeckViewCallbacks = {},
-    private readonly audio?: AudioService,
     private readonly logger: AppLogger = {
       info: () => undefined,
       warn: () => undefined,
       error: () => undefined
-    }
+    },
+    private readonly options: NewDeckViewOptions = {}
   ) {
     super()
     this.deckStore = deckStore
@@ -130,11 +134,13 @@ export class NewDeckView extends Container {
     this.heroName.eventMode = 'none'
     this.selectionContent.addChild(this.heroName)
 
+    const frameKeys = this.options.newDeckFrames
+      ? NEW_DECK_FRAME_ASSET_KEYS
+      : DECK_FRAME_ASSET_KEYS
+
     for (const [index, heroClass] of PLAYABLE_CLASSES.entries()) {
-      const texture = this.deckPresentationAssets[DECK_FRAME_ASSET_KEYS[heroClass]]
+      const texture = this.deckPresentationAssets[frameKeys[heroClass]]
       const button = new Button(texture, {
-        pressSound: 'collection-select-hero',
-        audio: this.audio,
         onClick: () => this.selectClass(heroClass)
       })
       const column = index % 3
@@ -154,7 +160,6 @@ export class NewDeckView extends Container {
     }
 
     this.selectButton = new Button(assets.selectClassButton, {
-      audio: this.audio,
       onClick: () => this.confirmClass()
     })
     applyPlacement(this.selectButton, NEW_DECK_LAYOUT.selectClassButton)
@@ -164,7 +169,6 @@ export class NewDeckView extends Container {
     this.selectionContent.addChild(this.selectButton)
 
     this.cancelButton = new Button(assets.cancelButton, {
-      audio: this.audio,
       onClick: () => this.cancel()
     })
     applyPlacement(this.cancelButton, NEW_DECK_LAYOUT.cancelButton)

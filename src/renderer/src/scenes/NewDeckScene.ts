@@ -1,4 +1,3 @@
-import type { AudioService } from '../app/audio'
 import type { AppLogger } from '../app/services'
 import { NewDeckView } from '../features/deck-builder/NewDeckView'
 import type { DeckStore } from '../features/deck-builder/deck-store'
@@ -8,9 +7,9 @@ import { Scene } from './Scene'
 export class NewDeckScene extends Scene {
   private readonly view: NewDeckView
 
-  constructor(deckStore: DeckStore, audio?: AudioService, logger?: AppLogger) {
+  constructor(deckStore: DeckStore, logger?: AppLogger) {
     super()
-    this.view = new NewDeckView(deckStore, {}, audio, logger)
+    this.view = new NewDeckView(deckStore, {}, logger, { newDeckFrames: true })
   }
 
   async init(): Promise<void> {

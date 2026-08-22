@@ -166,7 +166,29 @@ export const GAME_BOARD_LAYOUT = {
       {
         anchor: CENTER
       }
-    )
+    ),
+    /**
+     * Local mana crystal tray: one crystal per maximum crystal point, laid out
+     * left to right. NOT a single placement — it is a parameterized spread:
+     * only `firstCrystalCenter`, `gap`, and the local `crystal` placement are
+     * edited here; the per-crystal math lives in `mana-tray.ts`. The tray
+     * shares the local label's Y and starts just right of it.
+     */
+    crystals: {
+      firstCrystalCenter: { x: 1350, y: 1010 },
+      /** Center-to-center spacing between crystals. */
+      gap: 43,
+      /** Native crystal size with a uniform scale, local to each crystal. */
+      crystal: placement(
+        { x: 0, y: 0 },
+        { width: 171, height: 165 },
+        {
+          anchor: CENTER,
+          scale: 0.224,
+          note: 'Native mana asset dimensions; placement is local to each crystal.'
+        }
+      )
+    }
   },
 
   /** "Start of game" versus plate, centered behind the intro heroes. */

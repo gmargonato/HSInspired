@@ -10,10 +10,6 @@ export interface ButtonOptions {
   hoverBrightness?: number
   pressedBrightness?: number
   sinkPx?: number
-  pressSound?: string
-  clickSound?: string
-  hoverSound?: string
-  audio?: { play(effectId: string): void }
   onClick?: () => void | Promise<void>
   onError?: (error: unknown) => void
 }
@@ -32,10 +28,6 @@ export class Button extends Actor {
   private hovered = false
   private pressed = false
   private enabled = true
-  private readonly pressSound?: string
-  private readonly clickSound?: string
-  private readonly hoverSound?: string
-  private readonly audio?: { play(effectId: string): void }
   private readonly onClick?: () => void | Promise<void>
   private readonly onError?: (error: unknown) => void
 
@@ -47,10 +39,6 @@ export class Button extends Actor {
     this.hoverBrightness = options.hoverBrightness ?? DEFAULT_HOVER_BRIGHTNESS
     this.pressedBrightness = options.pressedBrightness ?? 0.8
     this.sinkPx = options.sinkPx ?? 6
-    this.pressSound = options.pressSound
-    this.clickSound = options.clickSound
-    this.hoverSound = options.hoverSound
-    this.audio = options.audio
     this.onClick = options.onClick
     this.onError = options.onError
     this.brightnessState.value = this.idleBrightness
@@ -116,9 +104,6 @@ export class Button extends Actor {
   private onHoverStart = (): void => {
     if (!this.enabled) return
     this.hovered = true
-    if (this.hoverSound) {
-      this.audio?.play(this.hoverSound)
-    }
     if (!this.pressed) this.tweenBrightness(this.hoverBrightness, 0.15)
   }
 
@@ -130,9 +115,6 @@ export class Button extends Actor {
 
   private onPressStart = (event: FederatedPointerEvent): void => {
     if (!this.enabled || event.button !== 0) return
-    if (this.pressSound) {
-      this.audio?.play(this.pressSound)
-    }
     this.pressed = true
     this.killTweensOf(this.sprite.scale)
     this.killTweensOf(this)
@@ -186,9 +168,6 @@ export class Button extends Actor {
     // Buttons with a right-click action must not also run their left-click action.
     if (!this.enabled || event.button !== 0) return
 
-    if (this.clickSound) {
-      this.audio?.play(this.clickSound)
-    }
     const result = this.onClick?.()
     if (result) {
       void Promise.resolve(result).catch((error: unknown) => {

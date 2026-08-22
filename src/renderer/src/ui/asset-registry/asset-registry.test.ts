@@ -69,4 +69,14 @@ describe('runtime asset registry', () => {
       authoredHeight: 1080
     })
   })
+
+  it('registers the card preview detail container in its lazy bundle', () => {
+    expect(resolveAssetDefinition('scene.card-preview.detail-container')).toMatchObject(
+      {
+        bundle: 'card-preview',
+        authoredWidth: 447,
+        authoredHeight: 678
+      }
+    )
+  })
 })

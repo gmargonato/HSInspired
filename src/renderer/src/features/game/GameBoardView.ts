@@ -20,7 +20,6 @@ import {
   type OpeningMatchState
 } from '../../../../game/match'
 import type { PlayerId } from '../../../../game/match'
-import type { AudioService } from '../../app/audio'
 import type { GameRoute } from '../../app/router'
 import type { AppLogger } from '../../app/services'
 import { CardView } from '../../rendering/cards/card-view'
@@ -50,6 +49,7 @@ import {
   type HandDragState
 } from './hand-drag'
 import { HandCardPerspective } from './hand-card-perspective'
+import { ManaTray, resolveManaCrystalStates } from './mana-tray'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import {
   applyAnchoredPlacement,
@@ -64,7 +64,6 @@ export interface GameBoardViewOptions {
   readonly heroAssets: DeckPresentationAssets
   readonly renderer: Renderer
   readonly cursor?: CursorManager | null
-  readonly audio?: AudioService
   readonly logger?: AppLogger
 }
 
@@ -249,6 +248,7 @@ export class GameBoardView extends Actor {
   private endTurnButton!: Button
   private deckCountLabels: { local: Text; remote: Text } | null = null
   private manaLabels: { local: Text; remote: Text } | null = null
+  private manaLocalTray: ManaTray | null = null
   private yourTurnFlag: Sprite | null = null
   /**
    * True while a turn is being processed (a local end-turn or the AI's pass).
@@ -364,7 +364,6 @@ export class GameBoardView extends Actor {
     this.ensureRemoteBacks(this.remoteBackCount)
 
     this.confirmButton = new Button(this.options.gameAssets.confirmMulliganButton, {
-      audio: this.options.audio,
       onClick: () => void this.confirmMulligan()
     })
     applyPlacement(this.confirmButton, GAME_BOARD_LAYOUT.mulligan.confirmButton)
@@ -439,7 +438,6 @@ export class GameBoardView extends Actor {
   /** Builds the end turn button and the deck card-count labels (hidden for now). */
   private createTurnControls(state: OpeningMatchState): void {
     this.endTurnButton = new Button(this.options.gameAssets.endTurn, {
-      audio: this.options.audio,
       onClick: () => void this.endTurn()
     })
     applyPlacement(this.endTurnButton, GAME_BOARD_LAYOUT.endTurnButton)
@@ -456,6 +454,12 @@ export class GameBoardView extends Actor {
     const remoteManaLabel = this.createHudLabel(GAME_BOARD_LAYOUT.mana.remoteLabel, 26)
     this.manaLabels = { local: localManaLabel, remote: remoteManaLabel }
     this.turnLayer.addChild(localManaLabel, remoteManaLabel)
+
+    this.manaLocalTray = new ManaTray(
+      this.options.gameAssets.manaCrystal,
+      GAME_BOARD_LAYOUT.mana.crystals
+    )
+    this.turnLayer.addChild(this.manaLocalTray)
 
     this.syncTurnHud(state)
     this.turnLayer.visible = false
@@ -495,6 +499,39 @@ export class GameBoardView extends Actor {
     const remote = this.findPlayer(state, this.remoteParticipantId).mana
     this.manaLabels.local.text = `${local.available}/${local.maximum}`
     this.manaLabels.remote.text = `${remote.available}/${remote.maximum}`
+    this.syncManaTray(state)
+  }
+
+  /**
+   * Refreshes the local mana crystal tray: full crystals cover `available`,
+   * the tail up to `maximum` is consumed, and the first `localManaHighlightCost`
+   * full crystals light up while a playable hand card is hovered or dragged.
+   */
+  private syncManaTray(state: OpeningMatchState): void {
+    if (!this.manaLocalTray) return
+    const local = this.findPlayer(state, this.localParticipantId).mana
+    this.manaLocalTray.sync(
+      resolveManaCrystalStates(local, this.localManaHighlightCost())
+    )
+  }
+
+  /**
+   * Cost of the hand card currently dragged or hovered, or null when no card
+   * is selected — or when it is not the local turn / the card is not
+   * affordable (an unaffordable card never lights the tray, like the "no"
+   * shake it gets on pickup).
+   */
+  private localManaHighlightCost(): number | null {
+    if (!this.isLocalTurn()) return null
+    const draggingEntry =
+      this.draggingIndex === null ? undefined : this.handEntries[this.draggingIndex]
+    const hoveredEntry = this.localHoveredSlot
+      ? this.handEntries.find((entry) => entry.slot === this.localHoveredSlot)
+      : undefined
+    const entry = draggingEntry ?? hoveredEntry
+    if (!entry) return null
+    const cost = cardDefinition(entry.card).cost
+    return cost <= this.localManaAvailable() ? cost : null
   }
 
   /** Refreshes every turn HUD element (deck counts and mana labels). */
@@ -643,6 +680,7 @@ export class GameBoardView extends Actor {
           if (selected) this.selectedIds.add(slot.instanceId)
           else this.selectedIds.delete(slot.instanceId)
           slot.setSelected(selected)
+          slot.setPlayableOutlineEnabled(!selected)
         })
         this.mulliganLayer.addChild(slot)
         return { card, slot, restTransform: undefined, displaced: false } as const
@@ -729,6 +767,7 @@ export class GameBoardView extends Actor {
     }
     this.confirmButton.visible = true
     this.confirmButton.setEnabled(true)
+    for (const slot of this.initialSlots) slot.setPlayableOutlineEnabled(true)
   }
 
   private async presentPlayerTwoAnnouncement(): Promise<void> {
@@ -790,7 +829,10 @@ export class GameBoardView extends Actor {
     if (this.confirmationLocked) return
     this.confirmationLocked = true
     this.confirmButton.setEnabled(false)
-    for (const entry of this.handEntries) entry.slot.eventMode = 'none'
+    for (const entry of this.handEntries) {
+      entry.slot.eventMode = 'none'
+      entry.slot.setPlayableOutlineEnabled(false)
+    }
     await this.wait(OPENING_TIMING.confirmationPause)
     const result = this.match.dispatch({
       type: 'confirm-mulligan',
@@ -1324,6 +1366,7 @@ export class GameBoardView extends Actor {
     const tick = (_time: number, deltaMS: number): void => this.stepDragFrame(deltaMS)
     this.dragTick = tick
     gsap.ticker.add(tick)
+    this.syncManaTray(this.match.getState())
   }
 
   /** One ticker frame: advance the resistance lerp and apply it to the slot. */
@@ -1397,6 +1440,7 @@ export class GameBoardView extends Actor {
       entry.slot.suppressPlayableOutline(false)
       entry.displaced = false
     }
+    this.syncManaTray(this.match.getState())
   }
 
   /** A quick horizontal wobble for an unaffordable card, settling back at rest. */
@@ -1443,6 +1487,8 @@ export class GameBoardView extends Actor {
     for (const entry of this.handEntries) {
       entry.slot.playableOutline.dispose()
     }
+    this.manaLocalTray?.dispose()
+    this.manaLocalTray = null
     super.dispose()
   }
 
@@ -1502,6 +1548,7 @@ export class GameBoardView extends Actor {
       this.animateHoverTarget(entry.slot, target)
       entry.displaced = shouldDisplace
     })
+    this.syncManaTray(this.match.getState())
   }
 
   /**

@@ -302,7 +302,6 @@ describe('Application route transitions', () => {
       pop
     } as unknown as SceneManager
     const services = {
-      audio: {},
       deckStore: {},
       dialogs: { confirm: () => true, error: () => undefined },
       logger: { info: () => undefined, warn: () => undefined, error: () => undefined }

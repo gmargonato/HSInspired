@@ -1,4 +1,4 @@
-import { Container, Graphics, Rectangle, Text } from 'pixi.js'
+import { Container, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
 import {
   formatExpansionName,
@@ -10,49 +10,70 @@ export interface CardDetailRow {
   readonly value: string
 }
 
-const COLORS = {
-  panel: 0x161d2b,
-  panelBorder: 0xb08a4e,
-  heading: 0xf1e4c8,
-  label: 0xb8a781,
-  value: 0xffffff,
-  effect: 0xe6d9bd,
-  muted: 0x8f9bb0
-} as const
+const DETAIL_TEXT_COLOR = 0x1b130d
 
 const PANEL = {
   x: 150,
-  y: 128,
-  width: 500,
-  height: 824,
-  padding: 28,
-  headingY: 26,
-  rowStartY: 92,
-  rowStep: 42,
-  effectHeadingGap: 24
+  y: 201,
+  width: 447,
+  height: 678,
+  contentCenterX: 223.5,
+  contentWidth: 372,
+  descriptionWidth: 320,
+  headingY: 52,
+  rowStartY: 91,
+  rowGap: 12,
+  effectHeadingGap: 14,
+  plaqueY: 532,
+  rarityGemY: 615,
+  rarityGemHeight: 58,
+  rarityLabelGap: 4,
+  typeY: 650
 } as const
 
-const DETAIL_LABEL_STYLE = {
-  fontFamily: 'Franklin Gothic Condensed',
-  fontSize: 18,
-  fill: COLORS.label
+const DETAIL_HEADING_STYLE = {
+  fontFamily: 'Belwe',
+  fontSize: 24,
+  fill: DETAIL_TEXT_COLOR,
+  align: 'center'
 } as const
 
-const DETAIL_VALUE_STYLE = {
-  fontFamily: 'Franklin Gothic Condensed',
-  fontSize: 21,
-  fill: COLORS.value,
+const DETAIL_ROW_STYLE = {
+  fontFamily: 'Belwe',
+  fontSize: 15,
+  fill: DETAIL_TEXT_COLOR,
+  align: 'center',
   wordWrap: true,
-  breakWords: true
+  breakWords: true,
+  wordWrapWidth: PANEL.contentWidth,
+  lineHeight: 18
 } as const
 
 const EFFECT_STYLE = {
-  fontFamily: 'Franklin Gothic Condensed',
-  fontSize: 22,
-  fill: COLORS.effect,
+  fontFamily: 'Belwe',
+  fontSize: 16,
+  fill: DETAIL_TEXT_COLOR,
+  align: 'center',
   wordWrap: true,
   breakWords: true,
-  lineHeight: 27
+  wordWrapWidth: PANEL.descriptionWidth,
+  lineHeight: 19
+} as const
+
+const PLAQUE_STYLE = {
+  fontFamily: 'Belwe',
+  fontSize: 15,
+  fill: 0xffffff,
+  stroke: { color: 0x000000, width: 3 },
+  align: 'center'
+} as const
+
+const TYPE_STYLE = {
+  fontFamily: 'Belwe',
+  fontSize: 20,
+  fill: 0xffffff,
+  stroke: { color: 0x000000, width: 4 },
+  align: 'center'
 } as const
 
 /** Builds the metadata rows shown beside an enlarged card. */
@@ -83,16 +104,15 @@ export function cardDetailRows(card: CardDefinition): readonly CardDetailRow[] {
 }
 
 /** Creates the reusable feature-owned card metadata panel. */
-export function createCardDetailPanel(card: CardDefinition): Container {
+export function createCardDetailPanel(
+  card: CardDefinition,
+  detailContainerTexture: Texture,
+  rarityGemTexture?: Texture
+): Container {
   const panel = new Container()
   panel.position.set(PANEL.x, PANEL.y)
 
-  const background = new Graphics()
-    .roundRect(0, 0, PANEL.width, PANEL.height, 14)
-    .fill({ color: COLORS.panel, alpha: 0.96 })
-  background
-    .roundRect(0, 0, PANEL.width, PANEL.height, 14)
-    .stroke({ color: COLORS.panelBorder, width: 2, alpha: 0.9 })
+  const background = new Sprite(detailContainerTexture)
   background.eventMode = 'none'
   panel.addChild(background)
   panel.eventMode = 'static'
@@ -103,72 +123,93 @@ export function createCardDetailPanel(card: CardDefinition): Container {
 
   const heading = new Text({
     text: 'CARD DETAILS',
-    style: {
-      fontFamily: 'Belwe',
-      fontSize: 28,
-      fill: COLORS.heading
-    }
+    style: DETAIL_HEADING_STYLE
   })
-  heading.position.set(PANEL.padding, PANEL.headingY)
+  heading.anchor.set(0.5, 0)
+  heading.position.set(PANEL.contentCenterX, PANEL.headingY)
   panel.addChild(heading)
 
-  const rows = cardDetailRows(card)
-  for (const [index, row] of rows.entries()) {
-    const y = PANEL.rowStartY + index * PANEL.rowStep
-    const label = new Text({
-      text: row.label.toUpperCase(),
-      style: DETAIL_LABEL_STYLE
+  const rows = cardDetailRows(card).filter(
+    (row) =>
+      row.label !== 'Type' &&
+      row.label !== 'Class' &&
+      row.label !== 'Collection' &&
+      row.label !== 'Rarity'
+  )
+  let rowY = PANEL.rowStartY
+  for (const row of rows) {
+    const detail = new Text({
+      text: `${row.label.toUpperCase()}\n${row.value}`,
+      style: DETAIL_ROW_STYLE
     })
-    label.position.set(PANEL.padding, y)
-    label.anchor.set(0, 0.5)
-    label.eventMode = 'none'
-    panel.addChild(label)
-
-    const value = new Text({
-      text: row.value,
-      style: {
-        ...DETAIL_VALUE_STYLE,
-        wordWrapWidth: PANEL.width - PANEL.padding * 2 - 140
-      }
-    })
-    value.position.set(PANEL.width - PANEL.padding, y)
-    value.anchor.set(1, 0.5)
-    value.eventMode = 'none'
-    panel.addChild(value)
+    detail.anchor.set(0.5, 0)
+    detail.position.set(PANEL.contentCenterX, rowY)
+    detail.eventMode = 'none'
+    panel.addChild(detail)
+    rowY += detail.height + PANEL.rowGap
   }
 
-  const effectY = PANEL.rowStartY + rows.length * PANEL.rowStep + PANEL.effectHeadingGap
+  const effectY = rowY + PANEL.effectHeadingGap
   const effectHeading = new Text({
     text: 'EFFECT',
-    style: DETAIL_LABEL_STYLE
+    style: {
+      ...DETAIL_HEADING_STYLE,
+      fontSize: 18
+    }
   })
-  effectHeading.position.set(PANEL.padding, effectY)
+  effectHeading.anchor.set(0.5, 0)
+  effectHeading.position.set(PANEL.contentCenterX, effectY)
   effectHeading.eventMode = 'none'
   panel.addChild(effectHeading)
 
   const effect = new Text({
     text: card.rulesText || 'No effect',
-    style: {
-      ...EFFECT_STYLE,
-      wordWrapWidth: PANEL.width - PANEL.padding * 2
-    }
+    style: EFFECT_STYLE
   })
-  effect.position.set(PANEL.padding, effectY + 28)
+  effect.anchor.set(0.5, 0)
+  effect.position.set(PANEL.contentCenterX, effectY + effectHeading.height + 5)
   effect.eventMode = 'none'
   panel.addChild(effect)
 
-  const hint = new Text({
-    text: 'Click outside the card or press Escape to close',
-    style: {
-      fontFamily: 'Franklin Gothic Condensed',
-      fontSize: 16,
-      fill: COLORS.muted
-    }
+  const collection = new Text({
+    text: formatExpansionName(card.expansionId),
+    style: PLAQUE_STYLE
   })
-  hint.position.set(PANEL.padding, PANEL.height - 30)
-  hint.anchor.set(0, 0.5)
-  hint.eventMode = 'none'
-  panel.addChild(hint)
+  collection.position.set(PANEL.contentCenterX, PANEL.plaqueY)
+  collection.anchor.set(0.5)
+  collection.eventMode = 'none'
+  panel.addChild(collection)
+
+  if (rarityGemTexture) {
+    const rarityLabel = new Text({
+      text: card.rarity,
+      style: PLAQUE_STYLE
+    })
+    rarityLabel.anchor.set(0.5, 1)
+    rarityLabel.position.set(
+      PANEL.contentCenterX,
+      PANEL.rarityGemY - PANEL.rarityGemHeight / 2 - PANEL.rarityLabelGap
+    )
+    rarityLabel.eventMode = 'none'
+    panel.addChild(rarityLabel)
+
+    const rarityGem = new Sprite(rarityGemTexture)
+    rarityGem.anchor.set(0.5)
+    rarityGem.position.set(PANEL.contentCenterX, PANEL.rarityGemY)
+    rarityGem.width = 42
+    rarityGem.height = PANEL.rarityGemHeight
+    rarityGem.eventMode = 'none'
+    panel.addChild(rarityGem)
+  }
+
+  const type = new Text({
+    text: card.type,
+    style: TYPE_STYLE
+  })
+  type.position.set(PANEL.contentCenterX, PANEL.typeY)
+  type.anchor.set(0.5)
+  type.eventMode = 'none'
+  panel.addChild(type)
 
   return panel
 }

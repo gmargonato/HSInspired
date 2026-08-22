@@ -39,33 +39,22 @@ type SceneFactory = (
 
 const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
   'main-menu': (_request, dependencies) =>
-    new MainMenuScene(
-      dependencies.router,
-      'closed',
-      dependencies.services.audio,
-      dependencies.services.logger
-    ),
+    new MainMenuScene(dependencies.router, 'closed', dependencies.services.logger),
   'deck-selection': (_request, dependencies) =>
     new DeckSelectionScene(
       dependencies.services.deckStore,
       dependencies.router,
-      dependencies.services.audio,
       dependencies.services.logger
     ),
   collection: (_request, dependencies) =>
     new CollectionScene(
       dependencies.services.deckStore,
       dependencies.router,
-      dependencies.services.audio,
       dependencies.services.dialogs,
       dependencies.services.logger
     ),
   'new-deck': (_request, dependencies) =>
-    new NewDeckScene(
-      dependencies.services.deckStore,
-      dependencies.services.audio,
-      dependencies.services.logger
-    )
+    new NewDeckScene(dependencies.services.deckStore, dependencies.services.logger)
 }
 
 /** Creates a fresh scene instance for a native-menu request. */
@@ -225,37 +214,25 @@ export class SceneNavigator implements SceneRouter {
         return new MainMenuScene(
           this,
           route.entryMode ?? 'closed',
-          this.services.audio,
           this.services.logger
         )
       case 'deck-selection':
         return new DeckSelectionScene(
           this.services.deckStore,
           this,
-          this.services.audio,
           this.services.logger
         )
       case 'collection':
         return new CollectionScene(
           this.services.deckStore,
           this,
-          this.services.audio,
           this.services.dialogs,
           this.services.logger
         )
       case 'new-deck':
-        return new NewDeckScene(
-          this.services.deckStore,
-          this.services.audio,
-          this.services.logger
-        )
+        return new NewDeckScene(this.services.deckStore, this.services.logger)
       case 'game':
-        return new GameScene(
-          route,
-          this.services.deckStore,
-          this.services.audio,
-          this.services.logger
-        )
+        return new GameScene(route, this.services.deckStore, this.services.logger)
       case 'card-preview':
         return new CardViewScene({
           card: CARD_CATALOG.require(route.cardId),
