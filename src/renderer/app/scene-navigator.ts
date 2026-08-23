@@ -1,7 +1,8 @@
 import { GAME_HEIGHT, GAME_WIDTH } from './config'
 import { createAppServices, type AppServices } from './services'
 import type { AppRoute, SceneRouter } from './router'
-import { CARD_CATALOG } from '../../game/content/cards'
+import { CARD_CATALOG, asHeroId } from '../../game/content/cards'
+import { asPlayerId } from '../../game/match'
 import { CardAssetResolver } from '../ui/asset-registry/card-asset-resolver'
 import { CollectionScene } from '../scenes/collection-scene'
 import { DeckSelectionScene } from '../scenes/deck-selection-scene'
@@ -15,6 +16,12 @@ import { SceneManager } from '../scenes/scene-manager'
 import type { SceneId, SceneRequest } from '../../shared/scene-navigation'
 import type { SceneTransitionOptions } from '../scenes/scene-manager'
 import { SCENE_SELECTION_GAP } from '../scenes/main-menu-scene'
+import { MAX_DECK_CARDS, countDeckCards } from '../../game/decks'
+import {
+  chooseOpponentDeck,
+  createMatchSeed
+} from '../features/deck-selection/deck-selection-model'
+import { createHumanVsAiGameRoute } from './router'
 
 const FULL_VIEWPORT = {
   x: 0,
@@ -37,6 +44,47 @@ type SceneFactory = (
   dependencies: RendererSceneDependencies
 ) => Scene
 
+function resolveGameDeckId(
+  request: SceneRequest,
+  dependencies: RendererSceneDependencies
+): string | undefined {
+  if (request.id !== 'game') return undefined
+  const requested = (request as { params?: { deckId?: string } }).params?.deckId
+  if (requested) return requested
+
+  const decks = dependencies.services.deckStore.getDecks()
+  const complete = decks.filter((deck) => countDeckCards(deck) === MAX_DECK_CARDS)
+  return complete[0]?.id ?? decks[0]?.id
+}
+
+function createFallbackGameRoute(
+  deckId: string | undefined,
+  opponentId: string | undefined
+) {
+  const humanDeckId = deckId ?? 'dev-fallback-deck'
+  const aiDeckId = opponentId ?? humanDeckId
+  return {
+    id: 'game' as const,
+    setup: {
+      seed: 1,
+      participants: [
+        {
+          participantId: asPlayerId('human-player'),
+          controllerKind: 'human' as const,
+          heroId: asHeroId('jaina'),
+          deckId: humanDeckId
+        },
+        {
+          participantId: asPlayerId('ai-player'),
+          controllerKind: 'ai' as const,
+          heroId: asHeroId('guldan'),
+          deckId: aiDeckId
+        }
+      ] as const
+    }
+  }
+}
+
 const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
   'main-menu': (_request, dependencies) =>
     new MainMenuScene(dependencies.router, 'closed', dependencies.services.logger),
@@ -54,7 +102,44 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
       dependencies.services.logger
     ),
   'new-deck': (_request, dependencies) =>
-    new NewDeckScene(dependencies.services.deckStore, dependencies.services.logger)
+    new NewDeckScene(dependencies.services.deckStore, dependencies.services.logger),
+  game: (request, dependencies) => {
+    const requestedDeckId = resolveGameDeckId(request, dependencies)
+    const decks = dependencies.services.deckStore.getDecks()
+    const deck = requestedDeckId
+      ? decks.find((candidate) => candidate.id === requestedDeckId)
+      : undefined
+    const seed = createMatchSeed()
+    const opponent = requestedDeckId
+      ? chooseOpponentDeck(decks, requestedDeckId, seed)
+      : undefined
+
+    if (deck && opponent) {
+      return new GameScene(
+        createHumanVsAiGameRoute(
+          {
+            humanDeck: { id: deck.id, heroId: deck.heroId },
+            aiDeck: { id: opponent.id, heroId: opponent.heroId }
+          },
+          seed
+        ),
+        dependencies.services.deckStore,
+        dependencies.services.logger
+      )
+    }
+
+    // Fallback for tests / empty stores where deckStore has no complete decks.
+    // Production navigateRequest will reject with a clear error before reaching here.
+    const fallbackRoute = createFallbackGameRoute(
+      deck?.id ?? requestedDeckId,
+      opponent?.id
+    )
+    return new GameScene(
+      fallbackRoute as unknown as ConstructorParameters<typeof GameScene>[0],
+      dependencies.services.deckStore,
+      dependencies.services.logger
+    )
+  }
 }
 
 /** Creates a fresh scene instance for a native-menu request. */
@@ -97,6 +182,56 @@ export class SceneNavigator implements SceneRouter {
   }
 
   async navigateRequest(request: SceneRequest): Promise<void> {
+    this.services.logger.info('[SceneNavigator] navigateRequest', request)
+    if (request.id === 'game') {
+      this.services.logger.info('[SceneNavigator] game request start')
+      await this.services.deckStore.load()
+      const decks = this.services.deckStore.getDecks()
+      this.services.logger.info(
+        '[SceneNavigator] decks loaded',
+        decks.map((d) => `${d.id} — ${d.heroId} — ${countDeckCards(d)}`)
+      )
+      const requestedDeckId = (request as { params?: { deckId?: string } }).params
+        ?.deckId
+      const targetDeckId =
+        requestedDeckId ??
+        decks.filter((deck) => countDeckCards(deck) === MAX_DECK_CARDS)[0]?.id
+
+      if (!targetDeckId) {
+        throw new Error(
+          'No complete deck is available for the dev Match. Create a 30-card deck in Collection first.'
+        )
+      }
+
+      const deck = decks.find((candidate) => candidate.id === targetDeckId)
+      if (!deck) {
+        throw new Error(`The selected deck ${targetDeckId} is unavailable.`)
+      }
+
+      const seed = createMatchSeed()
+      const opponent = chooseOpponentDeck(decks, targetDeckId, seed)
+      if (!opponent) {
+        throw new Error('At least one complete deck is required to start a game.')
+      }
+      this.services.logger.info('[SceneNavigator] navigating to game', {
+        human: deck.id,
+        opponent: opponent.id,
+        seed
+      })
+
+      await this.navigate(
+        createHumanVsAiGameRoute(
+          {
+            humanDeck: { id: deck.id, heroId: deck.heroId },
+            aiDeck: { id: opponent.id, heroId: opponent.heroId }
+          },
+          seed
+        )
+      )
+      this.services.logger.info('[SceneNavigator] game navigate done')
+      return
+    }
+
     const route: AppRoute =
       request.id === 'main-menu'
         ? {
@@ -151,13 +286,32 @@ export class SceneNavigator implements SceneRouter {
     scene: Scene
   ): SceneTransitionOptions {
     const previous = this.sceneManager.current
+    this.services.logger.info('[SceneNavigator] createTransitionOptions', {
+      previous: previous?.constructor.name ?? 'null',
+      route: route.id
+    })
     const afterTransition =
       scene instanceof CollectionScene
-        ? () => scene.playCoverReveal()
+        ? () => {
+            this.services.logger.info(
+              '[SceneNavigator] afterTransition: Collection playCoverReveal'
+            )
+            return scene.playCoverReveal()
+          }
         : scene instanceof NewDeckScene
-          ? () => scene.open()
+          ? () => {
+              this.services.logger.info(
+                '[SceneNavigator] afterTransition: NewDeck open'
+              )
+              return scene.open()
+            }
           : scene instanceof GameScene
-            ? () => scene.playOpeningReveal()
+            ? () => {
+                this.services.logger.info(
+                  '[SceneNavigator] afterTransition: Game playOpeningReveal'
+                )
+                return scene.playOpeningReveal()
+              }
             : undefined
 
     if (
@@ -191,6 +345,15 @@ export class SceneNavigator implements SceneRouter {
       previous instanceof DeckSelectionScene &&
       (route.id === 'collection' || route.id === 'game')
     ) {
+      return {
+        inset: FULL_VIEWPORT,
+        mode: 'fade',
+        duration: 0.6,
+        afterTransition
+      }
+    }
+
+    if (route.id === 'game') {
       return {
         inset: FULL_VIEWPORT,
         mode: 'fade',

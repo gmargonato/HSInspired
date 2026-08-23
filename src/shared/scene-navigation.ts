@@ -10,19 +10,26 @@ export const SCENE_REQUEST_CHANNEL = 'debug:scene-request'
  * Parameters accepted by each scene request. Adding a parameterized scene
  * here makes the request type require its data everywhere it is constructed.
  * For example: `game: { deckId: string }`.
+ *
+ * `game` supports both auto selection (no params) and explicit deck selection
+ * via `deckId` - the native menu sends one or the other depending on whether
+ * the user picked a specific deck. Keep the union so both forms validate.
  */
 export interface SceneParamsById {
   'main-menu': undefined
   'deck-selection': undefined
   collection: undefined
   'new-deck': undefined
+  game: { deckId: string } | undefined
 }
 
 export type SceneId = keyof SceneParamsById
 
 type SceneRequestFor<Id extends SceneId> = [SceneParamsById[Id]] extends [undefined]
   ? { id: Id }
-  : { id: Id; params: SceneParamsById[Id] }
+  : [undefined] extends [SceneParamsById[Id]]
+    ? { id: Id } | { id: Id; params: NonNullable<SceneParamsById[Id]> }
+    : { id: Id; params: SceneParamsById[Id] }
 
 export type SceneRequest = {
   [Id in SceneId]: SceneRequestFor<Id>
@@ -51,7 +58,8 @@ export const SCENE_MENU_ENTRIES = {
     request: { id: 'deck-selection' }
   },
   collection: { label: 'Collection', request: { id: 'collection' } },
-  'new-deck': { label: 'New Deck', request: { id: 'new-deck' } }
+  'new-deck': { label: 'New Deck', request: { id: 'new-deck' } },
+  game: { label: 'Match (First Complete Deck)', request: { id: 'game' } }
 } as const satisfies SceneMenuCatalog
 
 const knownSceneIds = new Set<string>(
@@ -62,6 +70,14 @@ const knownSceneIds = new Set<string>(
 export function isSceneRequest(value: unknown): value is SceneRequest {
   if (typeof value !== 'object' || value === null) return false
 
-  const request = value as { id?: unknown }
-  return typeof request.id === 'string' && knownSceneIds.has(request.id)
+  const request = value as { id?: unknown; params?: unknown }
+  if (typeof request.id !== 'string' || !knownSceneIds.has(request.id)) return false
+
+  if (request.id === 'game' && request.params !== undefined) {
+    if (typeof request.params !== 'object' || request.params === null) return false
+    const params = request.params as { deckId?: unknown }
+    if (typeof params.deckId !== 'string' || params.deckId.length === 0) return false
+  }
+
+  return true
 }

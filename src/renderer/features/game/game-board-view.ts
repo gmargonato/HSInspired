@@ -9,12 +9,19 @@ import {
   type FederatedPointerEvent
 } from 'pixi.js'
 import type { Deck } from '../../../game/decks'
-import { CARD_CATALOG, type CardDefinition } from '../../../game/content/cards'
+import {
+  CARD_CATALOG,
+  asCardId,
+  type CardDefinition
+} from '../../../game/content/cards'
 import { HERO_CATALOG } from '../../../game/content/heroes'
 import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
 import {
-  MAX_BOARD_SIZE,
+  canBoardMinionAttack,
   createOpeningMatch,
+  hasSummoningSickness,
+  MAX_BOARD_SIZE,
+  type BoardMinion,
   type MulliganResolvedEvent,
   type OpeningCard,
   type OpeningMatchEvent,
@@ -67,12 +74,16 @@ import {
   resolveBoardInsertionIndex,
   type BoardRowConfig
 } from './board-layout'
+import { AttackLine } from './attack-line'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
+import { MINION_CANVAS } from '../../rendering/minions/minion-layout'
 import {
   applyAnchoredPlacement,
   applyPlacement,
   type LayoutPlacement
 } from '../../rendering/layout'
+// Deck tracker temporarily disabled to isolate crash - will re-enable after root cause found
+// import { DeckTrackerView } from './deck-tracker-view'
 
 export interface GameBoardViewOptions {
   readonly route: GameRoute
@@ -307,7 +318,11 @@ export class GameBoardView extends Actor {
   private readonly remoteMinionLayer = new Container()
   private readonly summonLayer = new Container()
   private readonly localMinionViews: MinionView[] = []
+  private readonly remoteMinionViews: MinionView[] = []
   private readonly activeSummonSlots = new Set<GameCardSlot>()
+  private readonly attackLineLayer = new Container()
+  private readonly attackLine = new AttackLine()
+  private selectedMinionView: MinionView | null = null
   /**
    * Hero power cards sit in their own layer immediately above the board but
    * BELOW the opening/intro layer, so the pre-match black overlay covers them
@@ -388,6 +403,11 @@ export class GameBoardView extends Actor {
   private readonly handleWindowPointerDown = (event: PointerEvent): void => {
     if (event.button === 2) {
       this.endDrag()
+      if (this.selectedMinionView) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      this.deselectAttacker()
       return
     }
     if (event.button === 0 && this.draggingIndex !== null && !this.dragReturning) {
@@ -410,6 +430,11 @@ export class GameBoardView extends Actor {
     if (pointer) this.resolveCardDrop(pointer)
   }
   private readonly handleWindowBlur = (): void => this.endDrag()
+  private readonly handleWindowKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && this.selectedMinionView) {
+      this.deselectAttacker()
+    }
+  }
 
   constructor(private readonly options: GameBoardViewOptions) {
     super()
@@ -421,8 +446,10 @@ export class GameBoardView extends Actor {
     this.addChild(this.boardLayer)
     this.localMinionLayer.label = 'game.board-minions-local'
     this.remoteMinionLayer.label = 'game.board-minions-remote'
-    this.localMinionLayer.eventMode = 'none'
-    this.remoteMinionLayer.eventMode = 'none'
+    this.localMinionLayer.eventMode = 'passive'
+    this.remoteMinionLayer.eventMode = 'passive'
+    this.localMinionLayer.sortableChildren = true
+    this.remoteMinionLayer.sortableChildren = true
     this.addChild(this.localMinionLayer)
     this.addChild(this.remoteMinionLayer)
     this.addChild(this.heroPowerLayer)
@@ -440,6 +467,10 @@ export class GameBoardView extends Actor {
     this.summonLayer.eventMode = 'none'
     this.summonLayer.sortableChildren = true
     this.addChild(this.summonLayer)
+    this.attackLineLayer.label = 'game.attack-line-layer'
+    this.attackLineLayer.eventMode = 'none'
+    this.attackLineLayer.addChild(this.attackLine)
+    this.addChild(this.attackLineLayer)
     this.deckLayer.visible = false
     this.remoteHandLayer.visible = false
     this.handLayer.eventMode = 'none'
@@ -447,9 +478,36 @@ export class GameBoardView extends Actor {
     this.deckLayer.sortableChildren = true
     this.mulliganLayer.sortableChildren = true
     this.handLayer.sortableChildren = true
+    this.eventMode = 'static'
+    this.hitArea = new Rectangle(0, 0, 1920, 1080)
+    this.on('pointermove', (event: FederatedPointerEvent) =>
+      this.handleBoardPointerMove(event)
+    )
+    this.on('globalpointermove', (event: FederatedPointerEvent) =>
+      this.handleBoardPointerMove(event)
+    )
+    this.on('pointerdown', (event: FederatedPointerEvent) => {
+      if (event.button === 2) this.deselectAttacker()
+    })
+    this.on('pointertap', (event: FederatedPointerEvent) => {
+      if (!this.selectedMinionView) return
+      if (event.button !== 0) return
+      const target = event.target
+      if (target instanceof Container && target.label?.startsWith('minion:')) return
+      // Click on empty board or hand background while targeting cancels.
+      // Minion clicks are handled by wireMinionView already.
+      if (
+        target === this ||
+        target.label === 'game.board-minions-local' ||
+        target.label === 'game.board-minions-remote'
+      ) {
+        this.deselectAttacker()
+      }
+    })
   }
 
   async mount(): Promise<void> {
+    this.logger.info('[GameBoardView] mount start', this.options.route)
     const human = this.options.route.setup.participants.find(
       (participant) => participant.controllerKind === 'human'
     )
@@ -461,7 +519,13 @@ export class GameBoardView extends Actor {
 
     this.localParticipantId = human.participantId
     this.remoteParticipantId = remote.participantId
+    this.logger.info(
+      '[GameBoardView] participants',
+      this.localParticipantId,
+      this.remoteParticipantId
+    )
     this.match = createOpeningMatch(this.options.route.setup, this.options.decks)
+    this.logger.info('[GameBoardView] match created', this.match.getState())
     const initialState = this.match.getState()
     this.localPlayerNumber = this.findPlayer(
       initialState,
@@ -472,16 +536,34 @@ export class GameBoardView extends Actor {
       this.remoteParticipantId
     ).playerNumber
 
+    this.logger.info('[GameBoardView] creating board')
     this.createBoard()
+    this.logger.info('[GameBoardView] creating heroes')
     this.createHeroes(initialState)
+    this.logger.info('[GameBoardView] creating hero powers')
     this.createHeroPowers(initialState)
+    this.logger.info('[GameBoardView] creating decks')
     this.createDecks()
+    this.logger.info('[GameBoardView] creating opening layer')
     this.createOpeningLayer(initialState)
+    this.logger.info('[GameBoardView] creating mulligan layer')
     this.createMulliganLayer()
+    this.logger.info('[GameBoardView] creating turn controls')
     this.createTurnControls(initialState)
+    this.logger.info('[GameBoardView] turn controls created')
+
+    if (this.options.gameAssets.arrowBody) {
+      this.attackLine.setBodyTexture(this.options.gameAssets.arrowBody)
+    }
+    window.addEventListener('keydown', this.handleWindowKeyDown)
 
     const localPlayer = this.findPlayer(initialState, this.localParticipantId)
+    this.logger.info(
+      '[GameBoardView] creating initial local cards',
+      localPlayer.hand.length
+    )
     await this.createInitialLocalCards(localPlayer.hand.map(cloneCard))
+    this.logger.info('[GameBoardView] initial local cards created')
 
     const aiResult = this.match.dispatch({
       type: 'confirm-mulligan',
@@ -508,7 +590,9 @@ export class GameBoardView extends Actor {
   async playOpeningReveal(): Promise<void> {
     if (this.openingRevealStarted) return
     this.openingRevealStarted = true
+    this.logger.info('[GameBoardView] playOpeningReveal start')
     await this.wait(OPENING_TIMING.versusHold)
+    this.logger.info('[GameBoardView] versusHold done')
     await Promise.all([
       ...[...this.heroSprites.entries()].map(([participantId, sprite]) =>
         this.animateHeroToBoard(
@@ -520,11 +604,14 @@ export class GameBoardView extends Actor {
       ),
       this.fadeTo(this.openingLayer, 0, OPENING_TIMING.heroSettle)
     ])
+    this.logger.info('[GameBoardView] hero settle done')
     this.openingLayer.visible = false
     this.deckLayer.visible = true
     this.remoteHandLayer.visible = true
     await this.wait(OPENING_TIMING.boardPause)
+    this.logger.info('[GameBoardView] boardPause done, presenting mulligan')
     await this.presentMulligan()
+    this.logger.info('[GameBoardView] presentMulligan done')
   }
 
   private createBoard(): void {
@@ -705,6 +792,8 @@ export class GameBoardView extends Actor {
     this.syncMana(state)
     this.syncPlayableCardOutlines(state)
     this.syncHeroPowerViews(state)
+    this.syncBoardAttackability(state)
+    this.updateDeckTracker()
   }
 
   /**
@@ -780,6 +869,109 @@ export class GameBoardView extends Actor {
     this.endTurnButton.setEnabled(isLocalTurn && !this.turnInProgress)
   }
 
+  /** Green outline when canAttack, Zzz when summoning sick; also wires board click. */
+  private syncBoardAttackability(state: OpeningMatchState): void {
+    this.syncMinionRowAttackability(
+      this.localMinionViews,
+      state,
+      this.localParticipantId
+    )
+    this.syncMinionRowAttackability(
+      this.remoteMinionViews,
+      state,
+      this.remoteParticipantId
+    )
+  }
+
+  private syncMinionRowAttackability(
+    views: readonly MinionView[],
+    state: OpeningMatchState,
+    ownerId: PlayerId
+  ): void {
+    for (const view of views) {
+      const instanceId = view.instanceId
+      if (!instanceId) continue
+      const player = this.findPlayer(state, ownerId)
+      const minion = player.board.find(
+        (candidate) => candidate.instanceId === instanceId
+      )
+      if (!minion) continue
+      const canAttack = canBoardMinionAttack(minion as BoardMinion, state, ownerId)
+      const sleeping = hasSummoningSickness(minion as BoardMinion, state.turnNumber)
+      // Local player never sees the opponent's attack-ready outline.
+      const showCanAttack = canAttack && ownerId === this.localParticipantId
+      view.setCanAttack(showCanAttack)
+      view.setSleeping(sleeping && state.phase === 'turns')
+      if (sleeping || !showCanAttack) {
+        if (this.selectedMinionView === view) this.deselectAttacker()
+      }
+    }
+  }
+
+  private selectAttacker(view: MinionView): void {
+    if (!view.isCanAttack()) return
+    if (this.selectedMinionView === view) {
+      this.deselectAttacker()
+      return
+    }
+    if (this.selectedMinionView) {
+      const previous = this.selectedMinionView
+      previous.setSelected(false)
+      this.tweenTo(previous, {
+        y: previous.y + 12,
+        duration: 0.18,
+        ease: 'power2.inOut',
+        overwrite: 'auto'
+      })
+      previous.zIndex = 0
+    }
+    this.selectedMinionView = view
+    view.setSelected(true)
+    this.tweenTo(view, {
+      y: view.y - 12,
+      duration: 0.22,
+      ease: 'back.out(1.4)',
+      overwrite: 'auto'
+    })
+    this.options.cursor?.setTargeting(true)
+    // Ensure body texture is bound before the first pointermove.
+    if (this.options.gameAssets.arrowBody) {
+      this.attackLine.setBodyTexture(this.options.gameAssets.arrowBody)
+    }
+    view.zIndex = 100
+  }
+
+  private deselectAttacker(): void {
+    if (this.selectedMinionView) {
+      const view = this.selectedMinionView
+      view.setSelected(false)
+      this.tweenTo(view, {
+        y: view.y + 12,
+        duration: 0.18,
+        ease: 'power2.inOut',
+        overwrite: 'auto'
+      })
+      view.zIndex = 0
+    }
+    this.selectedMinionView = null
+    this.attackLine.clear()
+    this.options.cursor?.setTargeting(false)
+  }
+
+  private handleBoardPointerMove(event: FederatedPointerEvent): void {
+    if (!this.selectedMinionView) return
+    const parent = this.selectedMinionView.parent
+    const from = parent
+      ? parent.toGlobal(this.selectedMinionView.position)
+      : this.selectedMinionView.getGlobalPosition()
+    const to = { x: event.globalX, y: event.globalY }
+    const localFrom = this.attackLineLayer.toLocal(from)
+    const localTo = this.attackLineLayer.toLocal(to)
+    this.attackLine.setEndpoints(localFrom, localTo)
+    const angle = Math.atan2(to.y - from.y, to.x - from.x)
+    this.options.cursor?.setTargetingAngle(angle)
+  }
+
   /**
    * Local player clicked End Turn: hand the turn to the remote participant and
    * present the remote's draw. The button stays disabled until the AI passes
@@ -804,10 +996,40 @@ export class GameBoardView extends Actor {
     for (const event of result.events) await this.presentEvent(event)
   }
 
-  /** Waits, then the remote (AI) passes the turn back to the local player. */
+  /** AI plays random minions (cost ignored) then passes. */
+  private async playAiRandomMinions(): Promise<void> {
+    const state = this.match.getState()
+    if (state.phase !== 'turns') return
+    if (state.activePlayerId !== this.remoteParticipantId) return
+    const remote = this.findPlayer(state, this.remoteParticipantId)
+    if (remote.board.length >= MAX_BOARD_SIZE) return
+    // TODO: AI currently ignores mana cost and plays any minion — replace with cost/mana-aware logic later.
+    const minionCards = remote.hand.filter((card) => {
+      const def = CARD_CATALOG.get(card.cardId)
+      return def?.type === 'Minion'
+    })
+    if (minionCards.length === 0) return
+    const pick = minionCards[Math.floor(Math.random() * minionCards.length)]
+    if (!pick) return
+    const position = Math.floor(Math.random() * (remote.board.length + 1))
+    const result = this.match.dispatch({
+      type: 'play-minion',
+      participantId: this.remoteParticipantId,
+      cardInstanceId: pick.instanceId,
+      position
+    })
+    if (!result.accepted) return
+    for (const event of result.events) await this.presentEvent(event)
+    await this.wait(0.35)
+    await this.playAiRandomMinions()
+  }
+
+  /** Waits, then the remote (AI) plays random minions and passes the turn back. */
   private async scheduleAiPass(): Promise<void> {
     await this.wait(TURN_TIMING.aiTurnDelay)
     if (!this.turnLayer.visible) return
+    if (this.match.getState().activePlayerId !== this.remoteParticipantId) return
+    await this.playAiRandomMinions()
     if (this.match.getState().activePlayerId !== this.remoteParticipantId) return
     const result = this.match.dispatch({
       type: 'end-turn',
@@ -902,19 +1124,34 @@ export class GameBoardView extends Actor {
   }
 
   private async createSlot(card: OpeningCard): Promise<GameCardSlot> {
-    const view = await CardView.create(cardDefinition(card), this.resolver, {
-      artwork: await this.resolver.loadArtwork(card.cardId)
-    })
+    this.logger.info('[GameBoardView] createSlot start', card.cardId, card.instanceId)
+    const definition = cardDefinition(card)
+    this.logger.info('[GameBoardView] card definition', definition.id, definition.type)
+    const artwork = await this.resolver.loadArtwork(card.cardId)
+    this.logger.info(
+      '[GameBoardView] artwork loaded',
+      card.cardId,
+      artwork ? 'ok' : 'null'
+    )
+    const view = await CardView.create(definition, this.resolver, { artwork })
+    this.logger.info('[GameBoardView] CardView created', card.cardId, view.label)
     const outlineTexture = await this.resolver.load(
       CARD_PROFILES[view.plan.template].frame
     )
-    return new GameCardSlot(
+    this.logger.info(
+      '[GameBoardView] outline texture loaded',
+      CARD_PROFILES[view.plan.template].frame,
+      outlineTexture ? `${outlineTexture.width}x${outlineTexture.height}` : 'null'
+    )
+    const slot = new GameCardSlot(
       view,
       card.instanceId,
       this.options.gameAssets.mulliganReplaceCross,
       this.options.gameAssets.mulliganReplacedLabel,
       outlineTexture
     )
+    this.logger.info('[GameBoardView] GameCardSlot created', slot.label)
+    return slot
   }
 
   private findPlayer(state: OpeningMatchState, participantId: string) {
@@ -1093,7 +1330,60 @@ export class GameBoardView extends Actor {
       case 'minion-played':
         await this.presentMinionPlayed(event)
         return
+      case 'dev-card-added':
+        await this.presentDevCardAdded(event)
+        return
+      case 'dev-mana-set':
+        this.syncTurnHud(this.match.getState())
+        return
     }
+  }
+
+  async devAddCard(cardId: string): Promise<void> {
+    if (!this.handModeActive)
+      throw new Error('Dev add-card is only available after the opening sequence.')
+    const definition = CARD_CATALOG.get(asCardId(cardId))
+    if (!definition) throw new Error(`Unknown card ${cardId}`)
+    const result = this.match.dispatch({
+      type: 'dev-add-card',
+      participantId: this.localParticipantId,
+      cardId: definition.id
+    })
+    if (!result.accepted) throw new Error(result.message)
+    for (const event of result.events) await this.presentEvent(event)
+    this.syncTurnHud(result.state)
+  }
+
+  async devSetMana(available: number, maximum: number): Promise<void> {
+    const result = this.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: this.localParticipantId,
+      available,
+      maximum
+    })
+    if (!result.accepted) throw new Error(result.message)
+    for (const event of result.events) await this.presentEvent(event)
+    this.syncTurnHud(result.state)
+  }
+
+  private async presentDevCardAdded(
+    event: Extract<OpeningMatchEvent, { type: 'dev-card-added' }>
+  ): Promise<void> {
+    if (event.participantId === this.localParticipantId) {
+      await this.addLocalCard(event.card)
+      this.syncTurnHud(this.match.getState())
+    } else {
+      // Remote dev add (not used via menu) - treat like draw
+      await this.presentDraw(event.participantId, event.card)
+    }
+  }
+
+  toggleDeckTracker(): void {
+    this.logger.info('[GameBoardView] deck tracker toggle (disabled for debugging)')
+  }
+
+  private updateDeckTracker(): void {
+    // Deck tracker disabled for debugging - see toggleDeckTracker
   }
 
   /**
@@ -1142,7 +1432,9 @@ export class GameBoardView extends Actor {
     event: Extract<OpeningMatchEvent, { type: 'minion-played' }>,
     summonSlot?: GameCardSlot
   ): Promise<void> {
-    if (event.participantId !== this.localParticipantId) return
+    const isLocal = event.participantId === this.localParticipantId
+    const isRemote = event.participantId === this.remoteParticipantId
+    if (!isLocal && !isRemote) return
 
     const definition = CARD_CATALOG.require(event.minion.cardId)
     const textures: MinionViewTextures = {
@@ -1170,17 +1462,50 @@ export class GameBoardView extends Actor {
 
     if (!summonSlot) {
       const view = await viewPromise
-      this.insertLocalMinionView(event.position, view)
+      view.instanceId = event.minion.instanceId
+      view.ownerId = event.participantId
+      if (isLocal) {
+        this.insertLocalMinionView(event.position, view)
+        const resting = layoutBoardRow(
+          this.localMinionViews.length,
+          this.localBoardRowConfig()
+        )[event.position]
+        if (resting) {
+          view.position.set(resting.x, resting.y)
+          view.scale.set(resting.scale * 1.25)
+          view.setBaseScale(resting.scale)
+        }
+        view.alpha = 0
+        this.applyLocalBoardLayout()
+        this.wireMinionView(view)
+        this.syncBoardAttackability(this.match.getState())
+        await this.completeTimeline(
+          this.timeline().to(view, {
+            alpha: 1,
+            duration: BOARD_TIMING.minionSettle,
+            ease: 'power2.out',
+            overwrite: 'auto'
+          })
+        )
+        return
+      }
+      // Remote (AI) board: same fade but on the top row.
+      this.insertRemoteMinionView(event.position, view)
       const resting = layoutBoardRow(
-        this.localMinionViews.length,
-        this.localBoardRowConfig()
+        this.remoteMinionViews.length,
+        this.remoteBoardRowConfig()
       )[event.position]
       if (resting) {
         view.position.set(resting.x, resting.y)
         view.scale.set(resting.scale * 1.25)
+        view.setBaseScale(resting.scale)
       }
       view.alpha = 0
-      this.applyLocalBoardLayout()
+      this.applyRemoteBoardLayout()
+      // Keep remote backs in sync: AI hand shrinks by one.
+      this.remoteBackCount = Math.max(0, this.remoteBackCount - 1)
+      this.layoutRemoteHand()
+      this.syncBoardAttackability(this.match.getState())
       await this.completeTimeline(
         this.timeline().to(view, {
           alpha: 1,
@@ -1369,10 +1694,15 @@ export class GameBoardView extends Actor {
       await this.completeTimeline(impact)
 
       view.removeFromParent()
+      view.instanceId = event.minion.instanceId
+      view.ownerId = event.participantId
+      view.setBaseScale(resting.scale)
       this.insertLocalMinionView(event.position, view)
       view.position.set(resting.x, resting.y)
       view.scale.set(resting.scale)
       view.alpha = 1
+      this.wireMinionView(view)
+      this.syncBoardAttackability(this.match.getState())
       view = null
     } finally {
       if (rays && !rays.destroyed) rays.destroy()
@@ -1392,6 +1722,56 @@ export class GameBoardView extends Actor {
       view,
       Math.min(position, this.localMinionLayer.children.length)
     )
+  }
+
+  private insertRemoteMinionView(position: number, view: MinionView): void {
+    this.remoteMinionViews.splice(position, 0, view)
+    this.remoteMinionLayer.addChildAt(
+      view,
+      Math.min(position, this.remoteMinionLayer.children.length)
+    )
+  }
+
+  private wireMinionView(view: MinionView): void {
+    view.on('pointertap', (event: FederatedPointerEvent) => {
+      if (event.button !== 0) return
+      // Only local attackable minions are selectable for now (no combat vs remote yet).
+      if (view.ownerId !== this.localParticipantId) return
+      if (!view.isCanAttack()) return
+      this.selectAttacker(view)
+      const parent = view.parent
+      const from = parent ? parent.toGlobal(view.position) : view.getGlobalPosition()
+      const localFrom = this.attackLineLayer.toLocal(from)
+      const localTo = this.attackLineLayer.toLocal({
+        x: event.globalX,
+        y: event.globalY
+      })
+      const angle = Math.atan2(localTo.y - localFrom.y, localTo.x - localFrom.x)
+      this.options.cursor?.setTargetingAngle(angle)
+      this.attackLine.setEndpoints(localFrom, localTo)
+    })
+  }
+
+  private remoteBoardRowConfig(): BoardRowConfig {
+    return GAME_BOARD_LAYOUT.boardMinions.remote
+  }
+
+  private applyRemoteBoardLayout(): void {
+    const config = this.remoteBoardRowConfig()
+    const targets = layoutBoardRow(this.remoteMinionViews.length, config)
+    this.remoteMinionViews.forEach((view, index) => {
+      const target = targets[index]
+      if (!target) return
+      view.setBaseScale(target.scale)
+      const liftedY = view.isSelected() ? target.y - 12 : target.y
+      this.tweenTo(view, {
+        x: target.x,
+        y: liftedY,
+        duration: BOARD_TIMING.rowShift,
+        ease: 'power2.out',
+        overwrite: 'auto'
+      })
+    })
   }
 
   private prepareSummonGhost(card: CardView): void {
@@ -1724,16 +2104,11 @@ export class GameBoardView extends Actor {
         previewIndex === null || index < previewIndex ? index : index + 1
       const target = targets[targetIndex]
       if (!target) return
+      view.setBaseScale(target.scale)
+      const liftedY = view.isSelected() ? target.y - 12 : target.y
       this.tweenTo(view, {
         x: target.x,
-        y: target.y,
-        duration: BOARD_TIMING.rowShift,
-        ease: 'power2.out',
-        overwrite: 'auto'
-      })
-      this.tweenTo(view.scale, {
-        x: target.scale,
-        y: target.scale,
+        y: liftedY,
         duration: BOARD_TIMING.rowShift,
         ease: 'power2.out',
         overwrite: 'auto'
@@ -1906,12 +2281,26 @@ export class GameBoardView extends Actor {
     window.addEventListener('pointerup', this.handleWindowPointerUp, true)
     window.addEventListener('blur', this.handleWindowBlur)
     const bounds = handHoverHitBounds(DEFAULT_HAND_LAYOUT)
-    this.handLayer.hitArea = new Rectangle(
-      bounds.x,
-      bounds.y,
-      bounds.width,
-      bounds.height
-    )
+    const handRect = new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
+    // Custom hitArea that excludes board minions to avoid blocking clicks.
+    // Hand lies at the bottom; minions at y~415/610 should receive pointer events first.
+    this.handLayer.hitArea = {
+      contains: (x: number, y: number): boolean => {
+        if (!handRect.contains(x, y)) return false
+        // Exclude any point that is inside a local or remote minion bounds.
+        for (const view of this.localMinionViews) {
+          const halfW = (MINION_CANVAS.width * view.scale.x) / 2
+          const halfH = (MINION_CANVAS.height * view.scale.y) / 2
+          if (Math.abs(x - view.x) < halfW && Math.abs(y - view.y) < halfH) return false
+        }
+        for (const view of this.remoteMinionViews) {
+          const halfW = (MINION_CANVAS.width * view.scale.x) / 2
+          const halfH = (MINION_CANVAS.height * view.scale.y) / 2
+          if (Math.abs(x - view.x) < halfW && Math.abs(y - view.y) < halfH) return false
+        }
+        return true
+      }
+    } as unknown as Rectangle
     this.handLayer.on('pointermove', (event: FederatedPointerEvent) => {
       if (!this.handModeActive || this.reflowing) return
       const local = event.getLocalPosition(this.handLayer)
@@ -1979,6 +2368,10 @@ export class GameBoardView extends Actor {
    * it a small "no" shake. Clicks on the opponent's turn are ignored.
    */
   private onHandPointerDown(event: FederatedPointerEvent): void {
+    if (this.selectedMinionView) {
+      this.deselectAttacker()
+      return
+    }
     if (this.reflowing || event.button !== 0) return
     if (this.draggingIndex !== null) return
     const local = event.getLocalPosition(this.handLayer)
@@ -2175,7 +2568,7 @@ export class GameBoardView extends Actor {
     const slot = entry.slot
     const { shakeDistance, shakeDuration } = DEFAULT_HAND_DRAG
     const baseX = slot.x
-    const steps = 5
+    const steps = 2
     const stepDuration = shakeDuration / (steps * 2)
     const timeline = this.timeline()
     for (let i = 0; i < steps; i += 1) {
@@ -2198,7 +2591,10 @@ export class GameBoardView extends Actor {
     window.removeEventListener('pointerdown', this.handleWindowPointerDown, true)
     window.removeEventListener('pointerup', this.handleWindowPointerUp, true)
     window.removeEventListener('blur', this.handleWindowBlur)
+    window.removeEventListener('keydown', this.handleWindowKeyDown)
     this.options.cursor?.setContextVariant(null)
+    this.options.cursor?.setTargeting(false)
+    this.attackLine.clear()
     if (this.draggingIndex !== null) {
       this.handEntries[this.draggingIndex]?.slot.suppressPlayableOutline(false)
       if (this.dragTick) gsap.ticker.remove(this.dragTick)

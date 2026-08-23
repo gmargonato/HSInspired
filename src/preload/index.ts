@@ -2,6 +2,20 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { isSceneRequest, SCENE_REQUEST_CHANNEL } from '../shared/scene-navigation'
 import type { SceneRequest } from '../shared/scene-navigation'
 import {
+  DEV_COLLECTIBLE_SYNC_CHANNEL,
+  DEV_COMMAND_CHANNEL,
+  DEV_DECK_SYNC_CHANNEL,
+  DEV_SCENE_CHANGED_CHANNEL,
+  isCollectibleMode,
+  isDevCommand,
+  isDevDeckSyncPayload,
+  isDevSceneId,
+  type CollectibleMode,
+  type DevCommand,
+  type DevDeckEntry,
+  type DevSceneId
+} from '../shared/dev-menu'
+import {
   DECK_IPC_CHANNELS,
   parseDeckCreateRequest,
   parseDeckId,
@@ -35,6 +49,41 @@ const api = {
     ipcRenderer.on(SCENE_REQUEST_CHANNEL, handleSceneRequest)
     trace('listener registered')
     return () => ipcRenderer.removeListener(SCENE_REQUEST_CHANNEL, handleSceneRequest)
+  },
+
+  devMenu: {
+    syncDecks(entries: readonly DevDeckEntry[]): void {
+      if (process.env.NODE_ENV !== 'production' && !isDevDeckSyncPayload(entries)) {
+        console.warn('[DevMenu][preload] rejected deck sync payload', entries)
+        return
+      }
+      ipcRenderer.send(DEV_DECK_SYNC_CHANNEL, entries)
+    },
+    notifySceneChanged(sceneId: DevSceneId): void {
+      if (process.env.NODE_ENV !== 'production' && !isDevSceneId(sceneId)) {
+        console.warn('[DevMenu][preload] rejected scene id', sceneId)
+        return
+      }
+      ipcRenderer.send(DEV_SCENE_CHANGED_CHANNEL, sceneId)
+    },
+    onDevCommand(listener: (command: DevCommand) => void): () => void {
+      const handleDevCommand = (_event: IpcRendererEvent, command: unknown): void => {
+        if (isDevCommand(command)) {
+          listener(command)
+        } else if (process.env.NODE_ENV !== 'production') {
+          console.warn('[DevMenu][preload] rejected dev command', command)
+        }
+      }
+      ipcRenderer.on(DEV_COMMAND_CHANNEL, handleDevCommand)
+      return () => ipcRenderer.removeListener(DEV_COMMAND_CHANNEL, handleDevCommand)
+    },
+    notifyCollectibleMode(mode: CollectibleMode): void {
+      if (process.env.NODE_ENV !== 'production' && !isCollectibleMode(mode)) {
+        console.warn('[DevMenu][preload] rejected collectible mode', mode)
+        return
+      }
+      ipcRenderer.send(DEV_COLLECTIBLE_SYNC_CHANNEL, mode)
+    }
   },
 
   decks: {

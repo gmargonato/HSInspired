@@ -23,7 +23,7 @@ export const MINION_LAYOUT = {
     }
   ),
   legendaryFrame: placement(
-    { x: 80, y: 90 },
+    { x: 95, y: 45 },
     { width: 136, height: 99 },
     {
       anchor: CENTER,
@@ -47,7 +47,7 @@ export const MINION_LAYOUT = {
     }
   ),
   attackBadge: placement(
-    { x: 27, y: 145 },
+    { x: 35, y: 130 },
     { width: 44, height: 51 },
     {
       anchor: CENTER,
@@ -55,7 +55,7 @@ export const MINION_LAYOUT = {
     }
   ),
   healthBadge: placement(
-    { x: 133, y: 145 },
+    { x: 125, y: 130 },
     { width: 38, height: 54 },
     {
       anchor: CENTER,
@@ -73,5 +73,21 @@ export const MINION_LAYOUT = {
     fill: 0xffffff,
     stroke: { color: 0x17120f, width: 5 },
     align: 'center' as const
-  }
+  },
+  /** Sleeping Zzz origin inside the artwork (towards center) drifting diagonally up-right. */
+  sleepingZ: {
+    origin: { x: 114, y: 42 },
+    baseFontSize: 38,
+    spawnIntervalMs: 950,
+    driftX: 34,
+    driftY: -30,
+    duration: 2.9,
+    startScale: 0.72,
+    endScale: 1.32
+  },
+  canAttackOutline: {
+    color: 0x3cff3c,
+    profile: 'card' as const
+  },
+  selectionScale: 1.15
 } as const

@@ -1,6 +1,9 @@
 import { Sprite, Texture, type ColorMatrixFilter } from 'pixi.js'
 import { MAX_MANA, type PlayerMana } from '../../../game/match'
-import { createManaHighlightFilter } from '../../rendering/filters/highlight'
+import {
+  createManaConsumedFilter,
+  createManaHighlightFilter
+} from '../../rendering/filters/highlight'
 import {
   applyAnchoredPlacement,
   type LayoutPlacement,
@@ -56,8 +59,6 @@ export function resolveManaCrystalStates(
   }))
 }
 
-/** Opacity of a consumed (spent) crystal. */
-const MANA_TRAY_CONSUMED_ALPHA = 0.35
 /** Scale multiplier for the brief pop a crystal makes when it becomes full. */
 const MANA_TRAY_POP_SCALE = 1.5
 const MANA_TRAY_POP_DURATION = 0.5
@@ -71,6 +72,7 @@ const MANA_TRAY_POP_DURATION = 0.5
 export class ManaTray extends Actor {
   private readonly crystals: Sprite[]
   private readonly highlightFilter: ColorMatrixFilter
+  private readonly consumedFilter: ColorMatrixFilter
   private previousStates: ManaCrystalState[] = []
 
   constructor(
@@ -81,6 +83,7 @@ export class ManaTray extends Actor {
     this.label = 'mana-tray'
     this.eventMode = 'none'
     this.highlightFilter = createManaHighlightFilter()
+    this.consumedFilter = createManaConsumedFilter()
     this.crystals = Array.from({ length: MAX_MANA }, (_, index) => {
       const crystal = new Sprite(texture)
       applyAnchoredPlacement(crystal, layout.crystal)
@@ -103,13 +106,20 @@ export class ManaTray extends Actor {
       const state = states[index]
       if (!state) {
         crystal.visible = false
+        crystal.filters = null
+        crystal.tint = 0xffffff
         return
       }
-      crystal.visible = state.phase === 'full'
+      crystal.visible = true
       crystal.alpha = 1
-      crystal.filters = state.highlighted ? [this.highlightFilter] : null
-      if (state.phase === 'full' && this.previousStates[index]?.phase !== 'full') {
-        this.popCrystal(crystal)
+      crystal.tint = 0xffffff
+      if (state.phase === 'consumed') {
+        crystal.filters = [this.consumedFilter]
+      } else {
+        crystal.filters = state.highlighted ? [this.highlightFilter] : null
+        if (this.previousStates[index]?.phase !== 'full') {
+          this.popCrystal(crystal)
+        }
       }
     })
     this.previousStates = [...states]

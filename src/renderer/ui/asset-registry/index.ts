@@ -55,6 +55,8 @@ import actionButtonConfirmImage from '@assets/images/ui/deck-builder/action-butt
 import actionButtonCancelImage from '@assets/images/ui/deck-builder/action-button-cancel.png'
 import cardPreviewDetailContainerImage from '@assets/images/ui/card-preview/card-preview-detail-container.png'
 import cardAddAuraImage from '@assets/images/effects/aura-01.png'
+import arrowBodyImage from '@assets/images/match/arrow-body.png'
+import arrowHeadImage from '@assets/images/match/arrow-head.png'
 import druidNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-druid.png'
 import druidDeckFrameImage from '@assets/images/heroes/frames/druid-deck-frame.png'
 import hunterDeckFrameImage from '@assets/images/heroes/frames/hunter-deck-frame.png'
@@ -481,6 +483,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
       150,
       'game-scene'
     )
+  ),
+  asset(
+    'scene.game.arrow-body',
+    ASSET_BUNDLE_IDS.game,
+    'arrowBody',
+    arrowBodyImage,
+    77,
+    124,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.arrow-head',
+    ASSET_BUNDLE_IDS.game,
+    'arrowHead',
+    arrowHeadImage,
+    119,
+    57,
+    'game-scene'
   ),
   asset(
     'scene.collection.cover',
@@ -966,6 +986,8 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   mulliganCoinAnnouncement: Texture
   heroPowerBack: Texture
   heroPowerMana: Texture
+  arrowBody: Texture
+  arrowHead: Texture
 }
 
 export interface SettingsBackgroundAssets {

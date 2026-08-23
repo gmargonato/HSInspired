@@ -3,13 +3,18 @@ import type {
   DeckClass,
   ExpansionId
 } from '../../../game/content/cards'
-import { filterCollectionCards, type ManaFilterValue } from './collection-filters'
+import {
+  filterCollectionCards,
+  type CollectibleMode,
+  type ManaFilterValue
+} from './collection-filters'
 
 export interface CollectionQueryState {
   readonly classFilter: DeckClass | null
   readonly searchQuery: string
   readonly manaFilter: ManaFilterValue | null
   readonly hiddenExpansionIds: readonly ExpansionId[]
+  readonly collectibleMode: CollectibleMode
 }
 
 /** Applies collection-owned query state before the scene builds display pages. */
@@ -24,7 +29,8 @@ export function queryCollectionCards(
   const filtered = filterCollectionCards(cards, {
     query: state.searchQuery,
     manaCost: state.manaFilter,
-    hiddenExpansionIds: state.hiddenExpansionIds
+    hiddenExpansionIds: state.hiddenExpansionIds,
+    collectibleMode: state.collectibleMode
   })
 
   return allowedClasses

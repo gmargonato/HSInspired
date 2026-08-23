@@ -43,7 +43,7 @@ export const GAME_BOARD_LAYOUT = {
     /** Local row, raised toward the board center and aligned with its drop zone. */
     local: {
       centerX: 980,
-      baselineY: 625,
+      baselineY: 610,
       maxSpan: 900,
       maxStep: 150,
       minionScale: 1
@@ -51,17 +51,17 @@ export const GAME_BOARD_LAYOUT = {
     /** Remote (top) minion row; presentation stays empty in this phase. */
     remote: {
       centerX: 980,
-      baselineY: 425,
+      baselineY: 415,
       maxSpan: 900,
       maxStep: 150,
       minionScale: 1
     },
     /** Local design-canvas rectangle accepting carried minion cards. */
     localDropZone: {
-      x: 174,
-      y: 540,
-      width: 1572,
-      height: 170
+      x: 350,
+      y: 290,
+      width: 1230,
+      height: 530
     },
     /** Dynamic card-to-minion materialization, centred on the reserved row slot. */
     summon: {

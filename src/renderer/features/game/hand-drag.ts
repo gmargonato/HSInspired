@@ -28,8 +28,8 @@ export const DEFAULT_HAND_DRAG: HandDragConfig = {
   followResponseMS: 65,
   velocityForFullTilt: 1400,
   dragScale: 0.25,
-  shakeDistance: 8,
-  shakeDuration: 0.4
+  shakeDistance: 4,
+  shakeDuration: 0.1
 }
 
 /** The drag is contained to the 1920x1080 design canvas. */

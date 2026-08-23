@@ -47,10 +47,14 @@ describe('MinionView', () => {
     )
     expect(
       view.children.findIndex((child) => child.label === 'minion.stat-health')
-    ).toBe(view.children.length - 1)
+    ).toBeGreaterThan(
+      view.children.findIndex((child) => child.label === 'minion.stat-attack')
+    )
     expect(childWithLabel(view, 'minion.frame-legendary').visible).toBe(true)
     expect(view.eventMode).toBe('none')
     expect(view.children.every((child) => child.eventMode === 'none')).toBe(true)
+    expect(childWithLabel(view, 'minion.attack-outline-proxy')).toBeDefined()
+    expect(childWithLabel(view, 'minion.sleeping-zs-root')).toBeDefined()
 
     view.destroy({ children: true })
   })

@@ -70,6 +70,17 @@ async function bootstrap(): Promise<void> {
   app.canvas.addEventListener('contextmenu', preventContextMenu)
 
   const services = createAppServices()
+  // Global error tracing for dev menu crashes
+  window.addEventListener('error', (event) => {
+    services.logger.error(
+      '[Global] uncaught error',
+      event.error ?? event.message,
+      event
+    )
+  })
+  window.addEventListener('unhandledrejection', (event) => {
+    services.logger.error('[Global] unhandled rejection', event.reason)
+  })
   let cursor: CursorManager | null = null
   let sceneNavigator: SceneNavigator | null = null
   let removeSettingsShortcut = (): void => undefined
@@ -95,6 +106,17 @@ async function bootstrap(): Promise<void> {
     services.logger
   )
 
+  // Keep the native `Scenes > Match` submenu in sync (Deck ID — Class).
+  // Renderer is the source of truth for completeness and class mapping.
+  let unsubscribeDevDeckSync = (): void => undefined
+  if (import.meta.env.DEV) {
+    const { installDevDeckSync } = await import('./app/dev-deck-sync')
+    unsubscribeDevDeckSync = installDevDeckSync(services.deckStore, services.logger)
+  }
+
+  let unsubscribeDevSceneSync = (): void => undefined
+  let unsubscribeDevCommandHandler = (): void => undefined
+
   try {
     app.ticker.maxFPS = 60
 
@@ -107,6 +129,14 @@ async function bootstrap(): Promise<void> {
     })
     const navigator = new SceneNavigator(game, services)
     sceneNavigator = navigator
+
+    if (import.meta.env.DEV) {
+      const [{ installDevSceneSync }, { installDevCommandHandler }] = await Promise.all(
+        [import('./app/dev-scene-sync'), import('./app/dev-command-handler')]
+      )
+      unsubscribeDevSceneSync = installDevSceneSync(game, services.logger)
+      unsubscribeDevCommandHandler = installDevCommandHandler(game, services.logger)
+    }
 
     const directInspectorStart =
       import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'card-inspector'
@@ -153,6 +183,9 @@ async function bootstrap(): Promise<void> {
       () => {
         removeSettingsShortcut()
         unsubscribeFromSceneMenu()
+        unsubscribeDevDeckSync()
+        unsubscribeDevSceneSync()
+        unsubscribeDevCommandHandler()
         app.canvas.removeEventListener('contextmenu', preventContextMenu)
         cursor?.destroy()
       },
@@ -161,6 +194,9 @@ async function bootstrap(): Promise<void> {
   } catch (error) {
     removeSettingsShortcut()
     unsubscribeFromSceneMenu()
+    unsubscribeDevDeckSync()
+    unsubscribeDevSceneSync()
+    unsubscribeDevCommandHandler()
     cursor?.destroy()
     throw error
   }

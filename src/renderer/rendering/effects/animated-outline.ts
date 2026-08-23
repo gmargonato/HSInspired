@@ -7,8 +7,8 @@ import {
 } from './animated-outline-shader'
 
 export const OUTLINE_COLORS = {
-  blue: 0x2383fc,
-  green: 0x57fc38,
+  blue: 0x1d4a8c,
+  green: 0x509c29,
   orange: 0xff8c00,
   red: 0xff2b2b,
   white: 0xffffff
@@ -16,7 +16,7 @@ export const OUTLINE_COLORS = {
 
 export type OutlineColorName = keyof typeof OUTLINE_COLORS
 
-const OUTLINE_INTENSITY = 2.2
+const OUTLINE_INTENSITY = 2.5
 export interface OutlineProfile {
   /** Width of the ribbon in logical screen pixels. */
   readonly thickness: number
@@ -37,20 +37,20 @@ export interface OutlineProfile {
 /** Separate visual budgets keep small cards from inheriting the button's halo. */
 export const OUTLINE_PROFILES = {
   card: {
-    thickness: 6,
-    edgeSoftness: 2,
-    coreWidth: 2,
-    lipWidth: 2,
-    blobExpansion: 3,
-    blurStrength: 0.5,
+    thickness: 10,
+    edgeSoftness: 0.5,
+    coreWidth: 1,
+    lipWidth: 3,
+    blobExpansion: 5,
+    blurStrength: 1,
     blurQuality: 2
   },
   button: {
     thickness: 10,
-    edgeSoftness: 10,
-    coreWidth: 3,
+    edgeSoftness: 2,
+    coreWidth: 1,
     lipWidth: 3,
-    blobExpansion: 9,
+    blobExpansion: 4,
     blurStrength: 1,
     blurQuality: 2
   }
@@ -113,7 +113,7 @@ export class AnimatedOutline extends Actor {
         type: 'vec4<f32>'
       },
       uAtmosphere: {
-        value: [1, profile.blobExpansion, 0, 0],
+        value: [1.2, profile.blobExpansion, 0, 0],
         type: 'vec4<f32>'
       },
       uSurface: {

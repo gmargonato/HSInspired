@@ -1,6 +1,9 @@
-import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js'
+import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
+import { AnimatedOutline, OUTLINE_PROFILES } from '../effects/animated-outline'
 import { MINION_CANVAS, MINION_LAYOUT } from './minion-layout'
+import { SleepingZs } from './sleeping-zs'
+import { AnimationScope } from '../../animation/animations'
 
 export interface MinionViewModel {
   readonly label: string
@@ -67,6 +70,16 @@ export class MinionView extends Container {
   private readonly divineShield: Sprite
   private readonly attackLabel: Text
   private readonly healthLabel: Text
+  private readonly outlineProxy: Graphics
+  private readonly attackOutline: AnimatedOutline
+  private readonly sleepingZs: SleepingZs
+  private readonly animationScope = new AnimationScope()
+  private canAttackEnabled = false
+  private selected = false
+  private baseScale = 1
+  /** External owner id for attack checks (set by feature). */
+  public ownerId: string | null = null
+  public instanceId: string | null = null
 
   private constructor(
     model: MinionViewModel,
@@ -151,7 +164,33 @@ export class MinionView extends Container {
     this.healthLabel = health.value
     this.addChild(health.group)
 
+    // Green attack-ready outline: solid oval proxy so the hollow frame does not create an inner glow.
+    // The filter draws only the exterior glow; the white interior is discarded by the shader.
+    this.outlineProxy = new Graphics()
+    this.outlineProxy.label = 'minion.attack-outline-proxy'
+    this.outlineProxy.eventMode = 'none'
+    this.outlineProxy.ellipse(80, 90, 58, 79).fill({ color: 0xffffff })
+    this.outlineProxy.visible = false
+    // Place behind the frame so the glow appears outside the oval, not covering badges.
+    this.addChildAt(this.outlineProxy, 1)
+    this.attackOutline = new AnimatedOutline(
+      this.outlineProxy,
+      MINION_LAYOUT.canAttackOutline.color,
+      OUTLINE_PROFILES.card
+    )
+    this.attackOutline.setEnabled(false)
+
+    this.sleepingZs = new SleepingZs()
+    this.sleepingZs.label = 'minion.sleeping-zs-root'
+    this.addChild(this.sleepingZs)
+
+    this.hitArea = new Rectangle(0, 0, MINION_CANVAS.width, MINION_CANVAS.height)
+    this.cursor = 'pointer'
+
     setEventModeNone(this)
+    // Restore interactivity host after children were forced to none.
+    this.eventMode = 'none'
+    this.baseScale = 1
   }
 
   static async create(
@@ -173,5 +212,72 @@ export class MinionView extends Container {
 
   setDivineShield(visible: boolean): void {
     this.divineShield.visible = visible
+  }
+
+  setCanAttack(enabled: boolean): void {
+    this.canAttackEnabled = enabled
+    this.attackOutline.setEnabled(enabled)
+    this.outlineProxy.visible = enabled
+    this.eventMode = enabled ? 'static' : 'none'
+    this.cursor = enabled ? 'pointer' : 'default'
+    if (!enabled && this.selected) this.setSelected(false)
+  }
+
+  isCanAttack(): boolean {
+    return this.canAttackEnabled
+  }
+
+  isSelected(): boolean {
+    return this.selected
+  }
+
+  setSelected(selected: boolean): void {
+    if (this.selected === selected) return
+    this.selected = selected
+    const targetScale = this.baseScale * (selected ? MINION_LAYOUT.selectionScale : 1)
+    this.animationScope.kill(this.scale)
+    if (selected) {
+      this.animationScope.to(this.scale, {
+        x: targetScale,
+        y: targetScale,
+        duration: 0.22,
+        ease: 'back.out(1.4)',
+        overwrite: 'auto'
+      })
+    } else {
+      this.animationScope.to(this.scale, {
+        x: targetScale,
+        y: targetScale,
+        duration: 0.18,
+        ease: 'power2.inOut',
+        overwrite: 'auto'
+      })
+    }
+  }
+
+  setBaseScale(scale: number): void {
+    this.baseScale = scale
+    const targetScale = this.selected ? scale * MINION_LAYOUT.selectionScale : scale
+    // Board reflow should feel snappy; selected keeps its lift via scale.
+    this.animationScope.kill(this.scale)
+    this.animationScope.to(this.scale, {
+      x: targetScale,
+      y: targetScale,
+      duration: 0.25,
+      ease: 'power2.out',
+      overwrite: 'auto'
+    })
+  }
+
+  setSleeping(sleeping: boolean): void {
+    if (sleeping) this.sleepingZs.start()
+    else this.sleepingZs.stop()
+  }
+
+  override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.animationScope.kill()
+    this.attackOutline.dispose()
+    this.sleepingZs.dispose()
+    super.destroy(options)
   }
 }

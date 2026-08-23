@@ -1,6 +1,7 @@
 import defaultCursorImage from '@assets/images/cursor/cursor-base.png'
 import grabCursorImage from '@assets/images/cursor/cursor-grab.png'
 import collectionNewPageImage from '@assets/images/cursor/cursor-pass-page.png'
+import arrowHeadImage from '@assets/images/match/arrow-head.png'
 
 export type CursorVariant =
   'default' | 'grab' | 'collection-next-page' | 'collection-previous-page'
@@ -104,6 +105,7 @@ export function shouldRestoreCursor(
 export class CursorManager {
   private readonly host: HTMLElement
   private readonly element: HTMLImageElement
+  private readonly arrowHeadElement: HTMLImageElement
   private scale = DEFAULT_CURSOR_SCALE
   private variant: CursorVariant = 'default'
   private contextVariant: CursorContextVariant | null = null
@@ -112,6 +114,8 @@ export class CursorManager {
   private pointerY: number | null = null
   private pointerInsideHost = false
   private mounted = false
+  private targeting = false
+  private targetingAngle = 0
 
   constructor(host: HTMLElement) {
     this.host = host
@@ -121,9 +125,29 @@ export class CursorManager {
     this.element.setAttribute('aria-hidden', 'true')
     this.element.draggable = false
     this.element.style.visibility = 'hidden'
+    this.element.style.transformOrigin = '0 0'
+
+    this.arrowHeadElement = document.createElement('img')
+    this.arrowHeadElement.className = 'game-cursor-arrow-head'
+    this.arrowHeadElement.alt = ''
+    this.arrowHeadElement.setAttribute('aria-hidden', 'true')
+    this.arrowHeadElement.draggable = false
+    this.arrowHeadElement.src = arrowHeadImage
+    this.arrowHeadElement.style.position = 'fixed'
+    this.arrowHeadElement.style.left = '0'
+    this.arrowHeadElement.style.top = '0'
+    this.arrowHeadElement.style.pointerEvents = 'none'
+    this.arrowHeadElement.style.visibility = 'hidden'
+    // Tip of the arrow head image is at the top-center (58,0) in the 119x57 source.
+    // Keep native 1× scale per spec: 119×57.
+    this.arrowHeadElement.style.transformOrigin = '60px 6px'
+    this.arrowHeadElement.style.width = '119px'
+    this.arrowHeadElement.style.height = '57px'
+    this.arrowHeadElement.style.zIndex = '9999'
 
     this.applyVariant()
     this.applyScale()
+    this.updateArrowHeadPosition()
   }
 
   mount(): void {
@@ -132,6 +156,7 @@ export class CursorManager {
     this.mounted = true
     this.host.classList.add(CUSTOM_CURSOR_CLASS)
     this.host.appendChild(this.element)
+    this.host.appendChild(this.arrowHeadElement)
 
     // Capture at the window level so Pixi's own event handling cannot prevent
     // the global cursor state from receiving a release outside an actor.
@@ -157,10 +182,13 @@ export class CursorManager {
 
     this.host.classList.remove(CUSTOM_CURSOR_CLASS)
     this.element.remove()
+    this.arrowHeadElement.remove()
     this.element.style.visibility = 'hidden'
+    this.arrowHeadElement.style.visibility = 'hidden'
     this.contextVariant = null
     this.leftButtonDown = false
     this.pointerInsideHost = false
+    this.targeting = false
     this.setVariant(resolveCursorVariant(this.contextVariant))
     this.mounted = false
   }
@@ -184,6 +212,34 @@ export class CursorManager {
   setContextVariant(variant: CursorContextVariant | null): void {
     this.contextVariant = variant
     this.setVariant(resolveCursorVariant(this.contextVariant))
+  }
+
+  setTargeting(active: boolean): void {
+    if (this.targeting === active) return
+    this.targeting = active
+    if (active) {
+      this.element.style.visibility = 'hidden'
+      this.arrowHeadElement.style.visibility =
+        this.pointerInsideHost && this.pointerX !== null ? 'visible' : 'hidden'
+      this.updateArrowHeadPosition()
+    } else {
+      this.arrowHeadElement.style.visibility = 'hidden'
+      if (this.pointerInsideHost && this.pointerX !== null) this.show()
+      else this.hide()
+    }
+  }
+
+  isTargeting(): boolean {
+    return this.targeting
+  }
+
+  setTargetingAngle(angleRad: number): void {
+    this.targetingAngle = angleRad
+    this.updateArrowHeadPosition()
+  }
+
+  getTargetingAngle(): number {
+    return this.targetingAngle
   }
 
   private onPointerMove = (event: PointerEvent): void => {
@@ -233,6 +289,7 @@ export class CursorManager {
 
   private onWindowBlur = (): void => {
     this.setContextVariant(null)
+    this.setTargeting(false)
     this.releaseLeftButton()
     this.hide()
   }
@@ -244,6 +301,7 @@ export class CursorManager {
   private onVisibilityChange = (): void => {
     if (document.visibilityState !== 'visible') {
       this.setContextVariant(null)
+      this.setTargeting(false)
       this.releaseLeftButton()
       this.hide()
       return
@@ -285,6 +343,7 @@ export class CursorManager {
     this.applyVariant()
     this.applyScale()
     this.updatePosition()
+    this.updateArrowHeadPosition()
   }
 
   private applyVariant(): void {
@@ -309,6 +368,7 @@ export class CursorManager {
     this.pointerX = clientX
     this.pointerY = clientY
     this.updatePosition()
+    this.updateArrowHeadPosition()
   }
 
   private updatePosition(): void {
@@ -320,11 +380,29 @@ export class CursorManager {
     this.element.style.top = `${this.pointerY - asset.hotspotY * assetScale}px`
   }
 
+  private updateArrowHeadPosition(): void {
+    if (this.pointerX === null || this.pointerY === null) return
+    // Tip at top-center (60,6) in the native 119×57 head – keep the tip glued to the pointer
+    // and rotate so the head points toward the mouse direction.
+    this.arrowHeadElement.style.left = `${this.pointerX - 60}px`
+    this.arrowHeadElement.style.top = `${this.pointerY - 6}px`
+    // Source image points up (-Y). Vector angle 0 = east, so add 90° to align.
+    const degrees = ((this.targetingAngle + Math.PI / 2) * 180) / Math.PI
+    this.arrowHeadElement.style.transform = `rotate(${degrees}deg)`
+  }
+
   private show(): void {
+    if (this.targeting) {
+      this.element.style.visibility = 'hidden'
+      this.arrowHeadElement.style.visibility = 'visible'
+      return
+    }
     this.element.style.visibility = 'visible'
+    this.arrowHeadElement.style.visibility = 'hidden'
   }
 
   private hide(): void {
     this.element.style.visibility = 'hidden'
+    this.arrowHeadElement.style.visibility = 'hidden'
   }
 }

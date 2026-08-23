@@ -12,10 +12,13 @@ export function formatManaFilterLabel(value: ManaFilterValue): string {
   return value === '7+' ? '7' : String(value)
 }
 
+export type CollectibleMode = 'all' | 'collectible' | 'uncollectible'
+
 export interface CollectionFilterState {
   readonly query?: string
   readonly manaCost?: ManaFilterValue | null
   readonly hiddenExpansionIds?: readonly ExpansionId[]
+  readonly collectibleMode?: CollectibleMode
 }
 
 interface NumericConstraint {
@@ -40,6 +43,7 @@ export function filterCollectionCards(
   const parsedQuery = parseCollectionQuery(state.query ?? '')
   const manaCost = state.manaCost ?? null
   const hiddenExpansionIds = new Set(state.hiddenExpansionIds ?? [])
+  const collectibleMode = state.collectibleMode ?? 'all'
 
   if (
     parsedQuery.hasInvalidConstraint ||
@@ -50,6 +54,8 @@ export function filterCollectionCards(
 
   return cards.filter((card) => {
     if (hiddenExpansionIds.has(card.expansionId)) return false
+    if (collectibleMode === 'collectible' && !card.collectible) return false
+    if (collectibleMode === 'uncollectible' && card.collectible) return false
     if (manaCost !== null && !matchesCost(card.cost, manaCost)) return false
 
     if (

@@ -32,6 +32,10 @@ export interface BoardMinion {
   readonly cardId: CardId
   readonly attack: number
   readonly health: number
+  /** Turn on which the minion entered play; it cannot attack the same turn (summoning sickness). */
+  readonly summonedOnTurn: number
+  /** True while summoning sickness prevents attacking (derived helper available). */
+  readonly hasSummoningSickness?: boolean
 }
 
 /** A player's mana crystals: available spendable mana and the grown maximum. */
@@ -97,8 +101,26 @@ export interface PlayMinionCommand {
   readonly position: number
 }
 
+export interface DevAddCardCommand {
+  readonly type: 'dev-add-card'
+  readonly participantId: PlayerId
+  readonly cardId: CardId
+}
+
+export interface DevSetManaCommand {
+  readonly type: 'dev-set-mana'
+  readonly participantId: PlayerId
+  readonly available: number
+  readonly maximum: number
+}
+
 export type OpeningMatchCommand =
-  ConfirmMulliganCommand | EndTurnCommand | UseHeroPowerCommand | PlayMinionCommand
+  | ConfirmMulliganCommand
+  | EndTurnCommand
+  | UseHeroPowerCommand
+  | PlayMinionCommand
+  | DevAddCardCommand
+  | DevSetManaCommand
 
 export interface MulliganResolvedEvent {
   readonly type: 'mulligan-resolved'
@@ -159,6 +181,18 @@ export interface MinionPlayedEvent {
   readonly position: number
 }
 
+export interface DevCardAddedEvent {
+  readonly type: 'dev-card-added'
+  readonly participantId: PlayerId
+  readonly card: OpeningCard
+}
+
+export interface DevManaSetEvent {
+  readonly type: 'dev-mana-set'
+  readonly participantId: PlayerId
+  readonly mana: PlayerMana
+}
+
 export type OpeningMatchEvent =
   | MulliganResolvedEvent
   | CoinGrantedEvent
@@ -169,6 +203,8 @@ export type OpeningMatchEvent =
   | CardBurnedEvent
   | HeroPowerUsedEvent
   | MinionPlayedEvent
+  | DevCardAddedEvent
+  | DevManaSetEvent
 
 export interface OpeningAcceptedResult {
   readonly accepted: true
@@ -188,6 +224,9 @@ export type OpeningRejectionCode =
   | 'not-a-minion'
   | 'board-full'
   | 'invalid-position'
+  | 'hand-full'
+  | 'unknown-card'
+  | 'invalid-mana'
 
 export interface OpeningRejectedResult {
   readonly accepted: false
@@ -213,6 +252,23 @@ function cloneCard(card: OpeningCard): OpeningCard {
 
 function cloneBoardMinion(minion: BoardMinion): BoardMinion {
   return { ...minion }
+}
+
+export function hasSummoningSickness(
+  minion: BoardMinion,
+  currentTurn: number
+): boolean {
+  return minion.summonedOnTurn >= currentTurn
+}
+
+export function canBoardMinionAttack(
+  minion: BoardMinion,
+  state: OpeningMatchState,
+  ownerId: PlayerId
+): boolean {
+  if (state.phase !== 'turns') return false
+  if (state.activePlayerId !== ownerId) return false
+  return !hasSummoningSickness(minion, state.turnNumber)
 }
 
 function clonePlayer(player: OpeningPlayerState): OpeningPlayerState {
@@ -271,6 +327,28 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
       participantId: value.participantId as PlayerId,
       cardInstanceId: value.cardInstanceId,
       position: value.position
+    }
+  }
+
+  if (value.type === 'dev-add-card') {
+    if (typeof value.cardId !== 'string') return null
+    return {
+      type: 'dev-add-card',
+      participantId: value.participantId as PlayerId,
+      cardId: value.cardId as CardId
+    }
+  }
+
+  if (value.type === 'dev-set-mana') {
+    if (typeof value.available !== 'number' || !Number.isInteger(value.available))
+      return null
+    if (typeof value.maximum !== 'number' || !Number.isInteger(value.maximum))
+      return null
+    return {
+      type: 'dev-set-mana',
+      participantId: value.participantId as PlayerId,
+      available: value.available,
+      maximum: value.maximum
     }
   }
 
@@ -535,7 +613,9 @@ function applyPlayMinion(
   if (!definition || definition.type !== 'Minion') {
     return reject(state, 'not-a-minion', 'Only minion cards can be played here.')
   }
-  if (player.mana.available < definition.cost) {
+  // TODO: AI plays any minion regardless of cost — cost check is bypassed for AI participants; remove when mana enforcement is generic.
+  const isAi = player.controllerKind === 'ai'
+  if (!isAi && player.mana.available < definition.cost) {
     return reject(state, 'insufficient-mana', 'Not enough mana to play that minion.')
   }
   if (player.board.length >= MAX_BOARD_SIZE) {
@@ -553,7 +633,8 @@ function applyPlayMinion(
     instanceId: card.instanceId,
     cardId: card.cardId,
     attack: definition.attack,
-    health: definition.health
+    health: definition.health,
+    summonedOnTurn: state.turnNumber
   }
   const nextBoard = player.board.map(cloneBoardMinion)
   nextBoard.splice(command.position, 0, minion)
@@ -563,10 +644,12 @@ function applyPlayMinion(
       (candidate) => candidate.instanceId !== command.cardInstanceId
     ),
     board: nextBoard,
-    mana: {
-      ...player.mana,
-      available: player.mana.available - definition.cost
-    }
+    mana: isAi
+      ? player.mana
+      : {
+          ...player.mana,
+          available: player.mana.available - definition.cost
+        }
   }
   const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
   nextPlayers[playerIndex] = nextPlayer
@@ -586,6 +669,99 @@ function applyPlayMinion(
         minion: cloneBoardMinion(minion),
         position: command.position
       }
+    ]
+  }
+}
+
+function applyDevAddCard(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1,
+  command: DevAddCardCommand,
+  counter: number
+): OpeningCommandResult & { nextCounter?: number } {
+  const player = state.players[playerIndex]
+  if (player.hand.length >= MAX_HAND_SIZE) {
+    return reject(state, 'hand-full', 'The hand is full.')
+  }
+
+  const definition = CARD_CATALOG.get(command.cardId)
+  if (!definition) {
+    return reject(state, 'unknown-card', `Unknown card ${command.cardId}.`)
+  }
+
+  const card: OpeningCard = {
+    instanceId: `${player.participantId}:dev:${counter}`,
+    cardId: definition.id
+  }
+
+  const nextPlayer: OpeningPlayerState = {
+    ...player,
+    hand: [...player.hand, card]
+  }
+  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+  nextPlayers[playerIndex] = nextPlayer
+  const nextState: OpeningMatchState = {
+    ...state,
+    players: nextPlayers,
+    revision: state.revision + 1
+  }
+
+  return {
+    accepted: true,
+    state: cloneOpeningMatchState(nextState),
+    events: [
+      {
+        type: 'dev-card-added',
+        participantId: player.participantId,
+        card: cloneCard(card)
+      }
+    ],
+    nextCounter: counter + 1
+  }
+}
+
+function applyDevSetMana(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1,
+  command: DevSetManaCommand
+): OpeningCommandResult {
+  if (
+    !Number.isInteger(command.available) ||
+    command.available < 0 ||
+    command.available > MAX_MANA
+  ) {
+    return reject(state, 'invalid-mana', 'Available mana must be between 0 and 10.')
+  }
+  if (
+    !Number.isInteger(command.maximum) ||
+    command.maximum < 0 ||
+    command.maximum > MAX_MANA
+  ) {
+    return reject(state, 'invalid-mana', 'Maximum mana must be between 0 and 10.')
+  }
+  if (command.available > command.maximum) {
+    return reject(state, 'invalid-mana', 'Available mana cannot exceed maximum.')
+  }
+
+  const player = state.players[playerIndex]
+  const nextMana: PlayerMana = {
+    available: command.available,
+    maximum: command.maximum
+  }
+  const nextPlayer: OpeningPlayerState = { ...player, mana: nextMana }
+  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+  nextPlayers[playerIndex] = nextPlayer
+  const nextState: OpeningMatchState = {
+    ...state,
+    players: nextPlayers,
+    revision: state.revision + 1
+  }
+
+  return {
+    accepted: true,
+    state: cloneOpeningMatchState(nextState),
+    events: [
+      { type: 'dev-mana-set', participantId: player.participantId, mana: nextMana }
     ]
   }
 }
@@ -645,6 +821,7 @@ export function createOpeningMatch(
     players,
     revision: 0
   }
+  let devCardCounter = 10000
 
   return {
     setup,
@@ -679,6 +856,21 @@ export function createOpeningMatch(
 
       if (command.type === 'play-minion') {
         const result = applyPlayMinion(state, playerIndex, command)
+        if (result.accepted) state = result.state
+        return result
+      }
+
+      if (command.type === 'dev-add-card') {
+        const result = applyDevAddCard(state, playerIndex, command, devCardCounter)
+        if (result.accepted) {
+          state = result.state
+          if (result.nextCounter !== undefined) devCardCounter = result.nextCounter
+        }
+        return result
+      }
+
+      if (command.type === 'dev-set-mana') {
+        const result = applyDevSetMana(state, playerIndex, command)
         if (result.accepted) state = result.state
         return result
       }

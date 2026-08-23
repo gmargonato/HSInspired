@@ -266,6 +266,18 @@ export class CollectionView extends Actor {
     return this.collectionQuery.classFilter
   }
 
+  get collectibleMode(): string {
+    return this.collectionQuery.collectibleMode
+  }
+
+  async setCollectibleMode(
+    mode: import('./collection-filters').CollectibleMode
+  ): Promise<void> {
+    if (this.collectionQuery.collectibleMode === mode) return
+    this.collectionQuery.setCollectibleMode(mode)
+    await this.applyCollectionFilters()
+  }
+
   /** Re-applies deck copy-limit dimming to the current page. */
   refreshCompletionState(): void {
     this.updateCollectionCardCompletionState()

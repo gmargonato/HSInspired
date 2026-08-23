@@ -68,7 +68,7 @@ describe('canonical card catalog', () => {
       'Mistress of Pain'
     )
     expect(CARD_CATALOG.require('goblins_vs_gnomes_imp_losion').rulesText).toBe(
-      'Deal 2-4 damage to a minion. Summon a 1/1 Imp for each damage dealt.'
+      'Deal 2-4 damage. Summon 4 Imps, minus one for each damage dealt.'
     )
   })
 

@@ -9,3 +9,10 @@ export function createManaHighlightFilter(): ColorMatrixFilter {
   filter.brightness(MANA_HIGHLIGHT_BRIGHTNESS, false)
   return filter
 }
+
+/** Darkens a spent mana crystal without touching its opacity. */
+export function createManaConsumedFilter(): ColorMatrixFilter {
+  const filter = new ColorMatrixFilter()
+  filter.brightness(0.38, false)
+  return filter
+}

@@ -9,7 +9,8 @@ describe('collection query', () => {
       classFilter: 'Mage',
       searchQuery: '',
       manaFilter: null,
-      hiddenExpansionIds: [asExpansionId('naxxramas')]
+      hiddenExpansionIds: [asExpansionId('naxxramas')],
+      collectibleMode: 'all'
     })
 
     expect(cards.length).toBeGreaterThan(0)

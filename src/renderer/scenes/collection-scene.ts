@@ -27,6 +27,7 @@ import type { AppLogger, DialogService } from '../app/services'
 import type { CardDefinition, DeckClass } from '../../game/content/cards'
 import { MAX_DECKS, type Deck } from '../../game/decks'
 import type { CardPreviewRouteBounds, SceneRouter } from '../app/router'
+import type { CollectibleMode } from '../features/collection/collection-filters'
 
 /** Full-viewport collection scene presented through the main menu transition. */
 export class CollectionScene extends Scene {
@@ -148,6 +149,7 @@ export class CollectionScene extends Scene {
     this.unsubscribeDeckStore = this.deckController.subscribe(
       this.handleDeckStoreChanged
     )
+    this.notifyCollectibleMode(this.collectionView.collectibleMode as CollectibleMode)
   }
 
   playCoverReveal(): Promise<void> {
@@ -174,9 +176,50 @@ export class CollectionScene extends Scene {
     this.collectionView.onPause()
   }
 
+  get collectibleMode(): CollectibleMode {
+    return (
+      (this.collectionView?.collectibleMode as CollectibleMode | undefined) ?? 'all'
+    )
+  }
+
+  async setCollectibleMode(mode: CollectibleMode): Promise<void> {
+    if (this.disposed || !this.collectionView) return
+    const current = this.collectionView.collectibleMode as CollectibleMode
+    if (current === mode) {
+      this.notifyCollectibleMode(mode)
+      return
+    }
+
+    try {
+      await this.collectionView.setCollectibleMode(mode)
+      this.notifyCollectibleMode(mode)
+    } catch (error) {
+      this.reportError(
+        `Failed to filter the collection for collectible mode ${mode}.`,
+        error
+      )
+      throw error
+    }
+  }
+
+  private notifyCollectibleMode(mode: CollectibleMode): void {
+    try {
+      const bridge = (
+        window as unknown as {
+          api?: { devMenu?: { notifyCollectibleMode?: (mode: string) => void } }
+        }
+      ).api?.devMenu
+      bridge?.notifyCollectibleMode?.(mode)
+    } catch {
+      // Dev bridge unavailable in tests/headless
+    }
+  }
+
   protected onResume(): void {
     this.setCollectionPreviewBlurred(false)
     this.collectionView.onResume()
+    // Re-sync native menu checked state when returning from preview/settings
+    this.notifyCollectibleMode(this.collectibleMode)
   }
 
   private createDeckPanelCallbacks(): DeckPanelViewCallbacks {
