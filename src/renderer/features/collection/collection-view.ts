@@ -7,7 +7,7 @@ import {
   Sprite,
   Text
 } from 'pixi.js'
-import type { FederatedPointerEvent } from 'pixi.js'
+import type { FederatedPointerEvent, Renderer } from 'pixi.js'
 import {
   CARD_CATALOG,
   type CardDefinition,
@@ -86,6 +86,7 @@ export interface CollectionCardAddSource {
 export interface CollectionViewOptions {
   readonly assets: CollectionAssets
   readonly canvas: HTMLCanvasElement
+  readonly renderer: Renderer
   readonly cursor: CursorManager | null
   readonly state: CollectionViewStateProvider
   readonly callbacks?: CollectionViewCallbacks
@@ -96,8 +97,8 @@ export interface CollectionViewOptions {
  * grid, mana/search/expansion filters, page zones, and the hinged cover reveal.
  */
 export class CollectionView extends Actor {
-  private pages: readonly CollectionPage[] = buildCollectionPages(CARD_CATALOG.all)
   private readonly collectionQuery = new CollectionQueryController()
+  private pages: readonly CollectionPage[] = []
   private readonly cardResolver = new CardAssetResolver()
   private completedCollectionCardAlphaFilter: AlphaFilter | null = null
 
@@ -226,6 +227,7 @@ export class CollectionView extends Actor {
       DOOR_MIN_WIDTH
     )
 
+    this.pages = this.buildFilteredPages()
     if (this.pages.length === 0) {
       throw new Error('Collection has no cards to display')
     }
@@ -414,7 +416,16 @@ export class CollectionView extends Actor {
       COLLECTION_LAYOUT.collectionFilters.searchClear.size.width
     this.searchClearButton.height =
       COLLECTION_LAYOUT.collectionFilters.searchClear.size.height
-    this.searchClearButton.hitArea = new Rectangle(-26, -26, 52, 52)
+    const searchClearHitWidth = 52
+    const searchClearHitHeight = 52
+    const localHitWidth = searchClearHitWidth / this.searchClearButton.scale.x
+    const localHitHeight = searchClearHitHeight / this.searchClearButton.scale.y
+    this.searchClearButton.hitArea = new Rectangle(
+      -localHitWidth / 2,
+      -localHitHeight / 2,
+      localHitWidth,
+      localHitHeight
+    )
     this.searchClearButton.eventMode = 'static'
     this.searchClearButton.cursor = 'pointer'
     this.searchClearButton.visible = false
@@ -460,6 +471,7 @@ export class CollectionView extends Actor {
 
     this.searchInput = new CollectionSearchInput({
       canvas: this.options.canvas,
+      renderer: this.options.renderer,
       parent,
       bounds: {
         x: COLLECTION_LAYOUT.collectionFilters.searchInput.position.x,
@@ -557,11 +569,7 @@ export class CollectionView extends Actor {
   }
 
   private async applyCollectionFilters(): Promise<void> {
-    const filteredCards = queryCollectionCards(
-      CARD_CATALOG.all,
-      this.collectionQuery.snapshot()
-    )
-    const pages = buildCollectionPages(filteredCards)
+    const pages = this.buildFilteredPages()
 
     this.pages = pages
     this.pageIndex = 0
@@ -588,6 +596,14 @@ export class CollectionView extends Actor {
     this.pageLabel.text = ''
     this.emptyStateImage.visible = true
     this.updatePageZoneModes()
+  }
+
+  private buildFilteredPages(): readonly CollectionPage[] {
+    const filteredCards = queryCollectionCards(
+      CARD_CATALOG.all,
+      this.collectionQuery.snapshot()
+    )
+    return buildCollectionPages(filteredCards)
   }
 
   async renderPage(index: number): Promise<void> {

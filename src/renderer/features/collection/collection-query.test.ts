@@ -4,6 +4,15 @@ import { CollectionQueryController } from './collection-query-controller'
 import { queryCollectionCards } from './collection-query'
 
 describe('collection query', () => {
+  it('defaults to collectible cards', () => {
+    const controller = new CollectionQueryController()
+    const cards = queryCollectionCards(CARD_CATALOG.all, controller.snapshot())
+
+    expect(controller.collectibleMode).toBe('collectible')
+    expect(cards.length).toBeGreaterThan(0)
+    expect(cards.every((card) => card.collectible)).toBe(true)
+  })
+
   it('applies class and expansion filters together', () => {
     const cards = queryCollectionCards(CARD_CATALOG.all, {
       classFilter: 'Mage',

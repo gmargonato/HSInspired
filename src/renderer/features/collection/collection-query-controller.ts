@@ -9,7 +9,7 @@ export class CollectionQueryController {
     searchQuery: '',
     manaFilter: null,
     hiddenExpansionIds: [],
-    collectibleMode: 'all'
+    collectibleMode: 'collectible'
   }
 
   get classFilter(): DeckClass | null {

@@ -7,6 +7,7 @@ const DEFAULT_HOVER_BRIGHTNESS = 1.5
 export interface ButtonOptions {
   pressedScale?: number
   idleBrightness?: number
+  highlightOnHover?: boolean
   hoverBrightness?: number
   pressedBrightness?: number
   sinkPx?: number
@@ -19,6 +20,7 @@ export class Button extends Actor {
   readonly sprite: Sprite
   private readonly pressedScale: number
   private readonly idleBrightness: number
+  private readonly highlightOnHover: boolean
   private readonly hoverBrightness: number
   private readonly pressedBrightness: number
   private readonly sinkPx: number
@@ -34,11 +36,12 @@ export class Button extends Actor {
   constructor(texture: Texture, options: ButtonOptions = {}) {
     super()
 
-    this.pressedScale = options.pressedScale ?? 0.95
+    this.pressedScale = options.pressedScale ?? 0.90
     this.idleBrightness = options.idleBrightness ?? 1
+    this.highlightOnHover = options.highlightOnHover ?? true
     this.hoverBrightness = options.hoverBrightness ?? DEFAULT_HOVER_BRIGHTNESS
     this.pressedBrightness = options.pressedBrightness ?? 0.8
-    this.sinkPx = options.sinkPx ?? 6
+    this.sinkPx = options.sinkPx ?? 0
     this.onClick = options.onClick
     this.onError = options.onError
     this.brightnessState.value = this.idleBrightness
@@ -104,13 +107,17 @@ export class Button extends Actor {
   private onHoverStart = (): void => {
     if (!this.enabled) return
     this.hovered = true
-    if (!this.pressed) this.tweenBrightness(this.hoverBrightness, 0.15)
+    if (!this.pressed && this.highlightOnHover) {
+      this.tweenBrightness(this.hoverBrightness, 0.15)
+    }
   }
 
   private onHoverEnd = (): void => {
     if (!this.enabled) return
     this.hovered = false
-    if (!this.pressed) this.tweenBrightness(this.idleBrightness, 0.15)
+    if (!this.pressed && this.highlightOnHover) {
+      this.tweenBrightness(this.idleBrightness, 0.15)
+    }
   }
 
   private onPressStart = (event: FederatedPointerEvent): void => {
@@ -153,7 +160,9 @@ export class Button extends Actor {
       ease: 'power2.out'
     })
     this.tweenBrightness(
-      this.hovered ? this.hoverBrightness : this.idleBrightness,
+      this.highlightOnHover && this.hovered
+        ? this.hoverBrightness
+        : this.idleBrightness,
       0.12
     )
     this.tweenTo(this, {

@@ -21,7 +21,7 @@ import {
 let cachedDevDecks: readonly DevDeckEntry[] = []
 let cachedMainWindow: BrowserWindow | null = null
 let cachedCurrentSceneId: DevSceneId = 'unknown'
-let cachedCollectibleMode: CollectibleMode = 'all'
+let cachedCollectibleMode: CollectibleMode = 'collectible'
 let devDeckSyncHandlerInstalled = false
 let devSceneChangedHandlerInstalled = false
 let devCollectibleSyncHandlerInstalled = false
@@ -93,69 +93,77 @@ function buildScenesMenu(mainWindow: BrowserWindow): MenuItem {
 function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
   const isCollection = cachedCurrentSceneId === 'collection'
   const isGame = cachedCurrentSceneId === 'game'
+
+  const collectionSubmenu: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'Show Collectible Only',
+      type: 'radio',
+      enabled: isCollection,
+      checked: cachedCollectibleMode === 'collectible',
+      click: () =>
+        sendDevCommand(mainWindow, {
+          type: 'collection:set-collectible',
+          mode: 'collectible'
+        })
+    },
+    {
+      label: 'Show Uncollectible Only',
+      type: 'radio',
+      enabled: isCollection,
+      checked: cachedCollectibleMode === 'uncollectible',
+      click: () =>
+        sendDevCommand(mainWindow, {
+          type: 'collection:set-collectible',
+          mode: 'uncollectible'
+        })
+    },
+    {
+      label: 'Show All',
+      type: 'radio',
+      enabled: isCollection,
+      checked: cachedCollectibleMode === 'all',
+      click: () =>
+        sendDevCommand(mainWindow, {
+          type: 'collection:set-collectible',
+          mode: 'all'
+        })
+    }
+  ]
+
+  const matchSubmenu: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'Add Card to Hand…',
+      enabled: isGame,
+      click: () => sendDevCommand(mainWindow, { type: 'game:open-add-card-picker' })
+    },
+    {
+      label: 'Set Mana',
+      enabled: isGame,
+      submenu: Array.from({ length: 11 }, (_, value) => ({
+        label: `${value}/10`,
+        click: () =>
+          sendDevCommand(mainWindow, {
+            type: 'game:set-mana',
+            available: value,
+            maximum: value
+          })
+      }))
+    },
+    {
+      label: 'Deck Tracker',
+      type: 'checkbox',
+      enabled: isGame,
+      checked: false,
+      click: () => sendDevCommand(mainWindow, { type: 'game:toggle-tracker' })
+    }
+  ]
+
   return new MenuItem({
     id: 'debug-options-menu',
     label: 'Options',
     submenu: [
-      {
-        label: 'Show Collectible Only',
-        type: 'radio',
-        enabled: isCollection,
-        checked: cachedCollectibleMode === 'collectible',
-        click: () =>
-          sendDevCommand(mainWindow, {
-            type: 'collection:set-collectible',
-            mode: 'collectible'
-          })
-      },
-      {
-        label: 'Show Uncollectible Only',
-        type: 'radio',
-        enabled: isCollection,
-        checked: cachedCollectibleMode === 'uncollectible',
-        click: () =>
-          sendDevCommand(mainWindow, {
-            type: 'collection:set-collectible',
-            mode: 'uncollectible'
-          })
-      },
-      {
-        label: 'Show All',
-        type: 'radio',
-        enabled: isCollection,
-        checked: cachedCollectibleMode === 'all',
-        click: () =>
-          sendDevCommand(mainWindow, {
-            type: 'collection:set-collectible',
-            mode: 'all'
-          })
-      },
-      { type: 'separator' },
-      {
-        label: 'Add Card to Hand…',
-        enabled: isGame,
-        click: () => sendDevCommand(mainWindow, { type: 'game:open-add-card-picker' })
-      },
-      {
-        label: 'Set Mana',
-        enabled: isGame,
-        submenu: Array.from({ length: 11 }, (_, value) => ({
-          label: `${value}/10`,
-          click: () =>
-            sendDevCommand(mainWindow, {
-              type: 'game:set-mana',
-              available: value,
-              maximum: value
-            })
-        }))
-      },
-      {
-        label: 'Deck Tracker',
-        type: 'checkbox',
-        enabled: isGame,
-        checked: false,
-        click: () => sendDevCommand(mainWindow, { type: 'game:toggle-tracker' })
-      }
+      { label: 'Collection', submenu: collectionSubmenu },
+      { label: 'Match', submenu: matchSubmenu }
     ]
   })
 }
@@ -174,9 +182,17 @@ function rebuildAllDevMenus(): void {
     return
   }
 
-  // Collect non-debug items to preserve Edit/View/Window/Help etc.
+  // Keep useful native items while omitting the unused File, Edit, and Help menus.
   const nonDebugItems = [...oldMenu.items].filter(
-    (item) => item.id !== 'debug-scenes-menu' && item.id !== 'debug-options-menu'
+    (item) =>
+      item.id !== 'debug-scenes-menu' &&
+      item.id !== 'debug-options-menu' &&
+      item.role !== 'fileMenu' &&
+      item.role !== 'editMenu' &&
+      item.role !== 'help' &&
+      item.label !== 'File' &&
+      item.label !== 'Edit' &&
+      item.label !== 'Help'
   )
   const helpIndex = nonDebugItems.findIndex(
     (item) => item.role === 'help' || item.label === 'Help'

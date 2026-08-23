@@ -66,6 +66,241 @@ body {
   cursor: default;
 }
 
+.add-card-picker {
+  --add-card-picker-scale: 1;
+  --add-card-picker-row-cost-width: 54px;
+  --add-card-picker-row-metadata-width: 390px;
+  position: absolute;
+  z-index: 50;
+  box-sizing: border-box;
+  color: #f7ead4;
+  font-family: 'Franklin Gothic Condensed', Arial, sans-serif;
+  pointer-events: auto;
+}
+
+.add-card-picker[hidden] {
+  display: none !important;
+}
+
+.add-card-picker__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.add-card-picker__panel {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: calc(2px * var(--add-card-picker-scale)) solid #765238;
+  border-radius: calc(8px * var(--add-card-picker-scale));
+  background: #151c2c;
+  box-shadow: 0 calc(14px * var(--add-card-picker-scale))
+    calc(30px * var(--add-card-picker-scale)) rgba(0, 0, 0, 0.5);
+}
+
+.add-card-picker__title {
+  position: absolute;
+  box-sizing: border-box;
+  margin: 0;
+  color: #ffe6b8;
+  font-family: Belwe, Georgia, serif;
+  font-size: calc(32px * var(--add-card-picker-scale));
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 calc(2px * var(--add-card-picker-scale))
+    calc(2px * var(--add-card-picker-scale)) rgba(0, 0, 0, 0.6);
+}
+
+.add-card-picker__close {
+  position: absolute;
+  box-sizing: border-box;
+  border: calc(1px * var(--add-card-picker-scale)) solid #a3734f;
+  border-radius: calc(5px * var(--add-card-picker-scale));
+  background: #2b2232;
+  color: #ffe6b8;
+  font-family: Arial, sans-serif;
+  font-size: calc(27px * var(--add-card-picker-scale));
+  line-height: 1;
+}
+
+.add-card-picker__close:hover:not(:disabled),
+.add-card-picker__close:focus-visible {
+  background: #56384a;
+  outline: calc(2px * var(--add-card-picker-scale)) solid #e3ad62;
+  outline-offset: calc(2px * var(--add-card-picker-scale));
+}
+
+.add-card-picker__close:disabled {
+  opacity: 0.55;
+}
+
+.add-card-picker__search,
+.add-card-picker__select {
+  position: absolute;
+  box-sizing: border-box;
+  border: calc(1px * var(--add-card-picker-scale)) solid #765238;
+  border-radius: calc(4px * var(--add-card-picker-scale));
+  outline: none;
+  background: #252c3d;
+  color: #fff1d2;
+  font-family: 'Franklin Gothic Condensed', Arial, sans-serif;
+  font-size: calc(20px * var(--add-card-picker-scale));
+  line-height: 1;
+}
+
+.add-card-picker__search {
+  padding: 0 calc(14px * var(--add-card-picker-scale));
+}
+
+.add-card-picker__select {
+  padding: 0 calc(8px * var(--add-card-picker-scale));
+}
+
+.add-card-picker__search::placeholder {
+  color: #b6ad9f;
+}
+
+.add-card-picker__search:focus,
+.add-card-picker__select:focus {
+  border-color: #e3ad62;
+  box-shadow: 0 0 calc(8px * var(--add-card-picker-scale)) rgba(227, 173, 98, 0.28);
+}
+
+.add-card-picker__select option {
+  background: #252c3d;
+  color: #fff1d2;
+}
+
+.add-card-picker__collectible-label {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--add-card-picker-scale));
+  color: #d9c9ae;
+  font-size: calc(18px * var(--add-card-picker-scale));
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.add-card-picker__collectible-label input {
+  width: calc(18px * var(--add-card-picker-scale));
+  height: calc(18px * var(--add-card-picker-scale));
+  margin: 0;
+  accent-color: #d39a50;
+}
+
+.add-card-picker__status,
+.add-card-picker__count {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: #bdb9b0;
+  font-size: calc(18px * var(--add-card-picker-scale));
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-card-picker__status.is-error {
+  color: #ff9d8e;
+}
+
+.add-card-picker__count {
+  color: #d9c9ae;
+  text-align: right;
+}
+
+.add-card-picker__results {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: calc(4px * var(--add-card-picker-scale));
+  border: calc(1px * var(--add-card-picker-scale)) solid #3f4d64;
+  border-radius: calc(4px * var(--add-card-picker-scale));
+  background: #0e1421;
+  scrollbar-color: #6d4a38 #1b2332;
+}
+
+.add-card-picker__row {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns:
+    var(--add-card-picker-row-cost-width) minmax(0, 1fr)
+    var(--add-card-picker-row-metadata-width);
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 calc(14px * var(--add-card-picker-scale));
+  gap: calc(12px * var(--add-card-picker-scale));
+  border: calc(1px * var(--add-card-picker-scale)) solid #4e3e3c;
+  border-radius: calc(3px * var(--add-card-picker-scale));
+  background: #222a3a;
+  color: #fff1d2;
+  font-family: 'Franklin Gothic Condensed', Arial, sans-serif;
+  text-align: left;
+}
+
+.add-card-picker__row:hover,
+.add-card-picker__row:focus-visible {
+  border-color: #e3ad62;
+  background: #354158;
+  outline: none;
+}
+
+.add-card-picker__row:disabled {
+  opacity: 0.65;
+}
+
+.add-card-picker__cost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(38px * var(--add-card-picker-scale));
+  height: calc(38px * var(--add-card-picker-scale));
+  border: calc(1px * var(--add-card-picker-scale)) solid #8fb5e6;
+  border-radius: 50%;
+  background: #31527c;
+  color: #ffffff;
+  font-family: Belwe, Georgia, serif;
+  font-size: calc(22px * var(--add-card-picker-scale));
+  line-height: 1;
+  text-align: center;
+}
+
+.add-card-picker__card-name {
+  overflow: hidden;
+  font-family: Belwe, Georgia, serif;
+  font-size: calc(21px * var(--add-card-picker-scale));
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-card-picker__metadata {
+  overflow: hidden;
+  color: #c9c3b8;
+  font-size: calc(17px * var(--add-card-picker-scale));
+  line-height: 1;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-card-picker__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #bdb9b0;
+  font-size: calc(20px * var(--add-card-picker-scale));
+}
+
 #game-container.custom-cursor-enabled,
 #game-container.custom-cursor-enabled * {
   /* Pixi may set an inline pointer cursor on interactive actors. */

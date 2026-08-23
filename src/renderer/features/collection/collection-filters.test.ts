@@ -7,6 +7,13 @@ import {
 } from './collection-filters'
 
 describe('Collection filters', () => {
+  it('shows collectible cards by default', () => {
+    const cards = filterCollectionCards(CARD_CATALOG.all)
+
+    expect(cards.length).toBeGreaterThan(0)
+    expect(cards.every((card) => card.collectible)).toBe(true)
+  })
+
   it('keeps the seven-plus filter value while displaying the background plus', () => {
     expect(formatManaFilterLabel('7+')).toBe('7')
     expect(formatManaFilterLabel(4)).toBe('4')

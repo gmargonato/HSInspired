@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CARD_CANVAS } from '../../rendering/cards/card-layout'
 import {
   DEFAULT_HAND_LAYOUT,
   handHoverHitBounds,
@@ -64,6 +65,28 @@ describe('dynamic hand layout', () => {
     expect((ten[9]?.x ?? 0) - (ten[0]?.x ?? 0)).toBeCloseTo(span)
     expect(step(ten)).toBeLessThan(step(eight))
     expect(step(ten)).toBeLessThan(maxCardStep)
+  })
+
+  it('keeps small hands centred and shifts wider hands left at the safe boundary', () => {
+    const five = layoutHand(5)
+    const six = layoutHand(6)
+    const seven = layoutHand(7)
+    const fiveCenter = ((five[0]?.x ?? 0) + (five[4]?.x ?? 0)) / 2
+    const sixCenter = ((six[0]?.x ?? 0) + (six[5]?.x ?? 0)) / 2
+    const restingRightExtent =
+      ((CARD_CANVAS.width * DEFAULT_HAND_LAYOUT.cardScale) / 2) *
+        Math.cos(DEFAULT_HAND_LAYOUT.maxRotation) +
+      CARD_CANVAS.height *
+        DEFAULT_HAND_LAYOUT.cardScale *
+        Math.sin(DEFAULT_HAND_LAYOUT.maxRotation)
+
+    expect(fiveCenter).toBeCloseTo(DEFAULT_HAND_LAYOUT.centerX)
+    expect(sixCenter).toBeLessThan(fiveCenter)
+    expect((six[5]?.x ?? 0) + restingRightExtent).toBeLessThanOrEqual(
+      DEFAULT_HAND_LAYOUT.safeRightBoundaryX + 0.001
+    )
+    expect(seven[6]?.x).toBeCloseTo(six[5]?.x ?? 0)
+    expect(six[0]?.x).toBeLessThan(five[0]?.x ?? Number.POSITIVE_INFINITY)
   })
 
   it('keeps every card on a single shared baseline', () => {

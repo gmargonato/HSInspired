@@ -83,6 +83,7 @@ export class CollectionScene extends Scene {
     this.collectionView = new CollectionView({
       assets,
       canvas: this.appInstance.canvas,
+      renderer: this.appInstance.renderer,
       cursor: this.sceneManager.cursor,
       state: {
         isNavigationReady: () => this.navigationReady,

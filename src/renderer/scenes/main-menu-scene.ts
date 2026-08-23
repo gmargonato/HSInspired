@@ -138,6 +138,7 @@ export class MainMenuScene extends Scene {
     }
 
     this.buttonPlay = new Button(assets.buttonPlay, {
+      sinkPx: 6,
       onClick: () => this.onPlayPressed()
     })
     applyPlacement(this.buttonPlay, menuButtons.play)
@@ -148,6 +149,7 @@ export class MainMenuScene extends Scene {
     this.menuGroup.addChild(this.buttonPlay)
 
     this.buttonCollection = new Button(assets.buttonCollection, {
+      sinkPx: 6,
       onClick: () => this.onCollectionPressed()
     })
     applyPlacement(this.buttonCollection, menuButtons.collection)

@@ -43,7 +43,7 @@ export function filterCollectionCards(
   const parsedQuery = parseCollectionQuery(state.query ?? '')
   const manaCost = state.manaCost ?? null
   const hiddenExpansionIds = new Set(state.hiddenExpansionIds ?? [])
-  const collectibleMode = state.collectibleMode ?? 'all'
+  const collectibleMode = state.collectibleMode ?? 'collectible'
 
   if (
     parsedQuery.hasInvalidConstraint ||

@@ -19,6 +19,11 @@ export interface HandLayoutConfig {
   readonly hoverLift: number
   /** Scale of a hovered (lifted) card. */
   readonly hoverScale: number
+  /**
+   * Maximum x-coordinate for the painted right edge of the resting hand.
+   * Wider hands shift left to stay inside this HUD-safe boundary.
+   */
+  readonly safeRightBoundaryX: number
   /** Horizontal push applied to neighbours when another card is hovered. */
   readonly hoverSpread: number
   /** Vertical grace in px above a resting card's top edge for hover entry. */
@@ -41,26 +46,32 @@ export interface HandPointer {
 }
 
 export const DEFAULT_HAND_LAYOUT: HandLayoutConfig = {
-  centerX: 930,
+  centerX: 960,
   // The card origin is its bottom centre. Keep the hand mostly below the
   // viewport, leaving only its upper portion visible until hover.
   baselineY: 1140,
   // Cards overlap at rest: `maxCardStep` steps on ~155px-wide cards leave
   // about 55px of each card exposed. The fan compresses to this maximum width
   // once the natural spacing would exceed it (a ten-card hand ends up ~55px
-  // apart, like Hearthstone's full hand).
+  // apart, like Hearthstone's full hand). The right edge is clamped just
+  // inside the local hero power, before the mana label begins.
   span: 500,
   maxCardStep: 100,
   maxRotation: 0.2,
   cardScale: 0.2,
   hoverScale: 0.5,
+  safeRightBoundaryX: 1227,
   hoverLift: 120,
   hoverSpread: 45,
   hoverEntryMargin: 15,
   hoverKeepMargin: 10
 }
 
-/** Computes a symmetric fan for any hand size from zero to ten cards. */
+/**
+ * Computes a symmetric fan for any hand size from zero to ten cards. Small
+ * hands stay centred; once the fan would cross the HUD-safe right boundary,
+ * its centre shifts left while the rightmost card remains anchored.
+ */
 export function layoutHand(
   count: number,
   config: HandLayoutConfig = DEFAULT_HAND_LAYOUT,
@@ -76,6 +87,7 @@ export function layoutHand(
   const midpoint = (cardCount - 1) / 2
   const handSpan =
     cardCount === 1 ? 0 : Math.min(config.span, (cardCount - 1) * config.maxCardStep)
+  const centerX = resolveHandCenterX(handSpan, config)
   const positions =
     cardCount === 1
       ? [0]
@@ -93,13 +105,32 @@ export function layoutHand(
         : Math.sign(index - normalizedHover) * config.hoverSpread
 
     return {
-      x: config.centerX + xOffset + neighborOffset,
+      x: centerX + xOffset + neighborOffset,
       y: config.baselineY - (isHovered ? config.hoverLift : 0),
       rotation: isHovered ? 0 : normalized * config.maxRotation,
       scale: isHovered ? config.hoverScale : config.cardScale,
       zIndex: isHovered ? 1000 : index
     }
   })
+}
+
+/**
+ * Returns the centre of the fan after accounting for the rotated outer card's
+ * full painted bounds.
+ */
+function resolveHandCenterX(handSpan: number, config: HandLayoutConfig): number {
+  const rightExtent = rotatedCardRightExtent(config.cardScale, config.maxRotation)
+  const maxCenterX = config.safeRightBoundaryX - rightExtent - handSpan / 2
+  return Math.min(config.centerX, maxCenterX)
+}
+
+/** Horizontal extent from a card's bottom-center origin to its rotated right edge. */
+function rotatedCardRightExtent(scale: number, rotation: number): number {
+  const width = CARD_CANVAS.width * scale
+  const height = CARD_CANVAS.height * scale
+  return (
+    (width / 2) * Math.abs(Math.cos(rotation)) + height * Math.abs(Math.sin(rotation))
+  )
 }
 
 /** Screen-space bounds of the hand layer's pointer hit zone. */
@@ -131,9 +162,9 @@ export function handHoverHitBounds(config: HandLayoutConfig): HandHoverHitBounds
  * Resolves which hand card (if any) is hovered, or null for none.
  *
  * Hit-testing is decoupled from the card sprites: the fan is divided into
- * equal-width logical slots across its horizontal span and the pointer's x
- * maps directly to a slot, so overlapping art or the wide body of a lifted
- * card can never steal the selection. Which rule applies depends on the
+ * logical slots using the actual resting x positions and the pointer's x maps
+ * directly to a slot, so overlapping art or the wide body of a lifted card
+ * can never steal the selection. Which rule applies depends on the
  * pointer's height:
  *
  * - In the *entry strip* (at or below a resting card's top edge plus a small
@@ -154,7 +185,7 @@ export function resolveHandHover(
   const cardCount = transforms.length
   if (cardCount === 0) return null
 
-  const slotIndex = resolveSlotIndex(pointer.x, cardCount, config)
+  const slotIndex = resolveSlotIndex(pointer.x, transforms, config)
   if (slotIndex !== null) {
     const rest = transforms[slotIndex]
     if (rest) {
@@ -177,23 +208,39 @@ export function resolveHandHover(
 
 /**
  * Maps a pointer x to the fan's logical slot, or null when the pointer is
- * outside the hand's horizontal reach. The fan's outer span is split into
- * `cardCount - 1` equal steps, matching the x positions `layoutHand` produces,
- * so the boundary between neighbours is always their exact midpoint.
+ * outside the hand's horizontal reach. Boundaries are derived from the actual
+ * resting transforms so count-dependent hand shifts and any future spread
+ * adjustments are shared by rendering and hit testing.
  */
 function resolveSlotIndex(
   pointerX: number,
-  cardCount: number,
+  transforms: readonly (HandCardTransform | undefined)[],
   config: HandLayoutConfig
 ): number | null {
+  const cardCount = transforms.length
   if (cardCount === 1) {
-    return Math.abs(pointerX - config.centerX) <= config.maxCardStep / 2 ? 0 : null
+    const onlyCard = transforms[0]
+    if (!onlyCard) return null
+    return Math.abs(pointerX - onlyCard.x) <= config.maxCardStep / 2 ? 0 : null
   }
-  const handSpan = Math.min(config.span, (cardCount - 1) * config.maxCardStep)
-  const spacing = handSpan / (cardCount - 1)
-  const leftEdge = config.centerX - handSpan / 2
-  const slot = Math.round((pointerX - leftEdge) / spacing)
-  return slot >= 0 && slot < cardCount ? slot : null
+
+  const first = transforms[0]
+  const second = transforms[1]
+  const last = transforms[cardCount - 1]
+  const penultimate = transforms[cardCount - 2]
+  if (!first || !second || !last || !penultimate) return null
+
+  const leftReach = first.x - (second.x - first.x) / 2
+  const rightReach = last.x + (last.x - penultimate.x) / 2
+  if (pointerX < leftReach || pointerX > rightReach) return null
+
+  for (let index = 0; index < cardCount - 1; index += 1) {
+    const current = transforms[index]
+    const next = transforms[index + 1]
+    if (!current || !next) return null
+    if (pointerX < (current.x + next.x) / 2) return index
+  }
+  return cardCount - 1
 }
 
 function isPointerOverLiftedCard(

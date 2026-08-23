@@ -121,6 +121,11 @@ export class GameScene extends Scene {
     await this.view.devAddCard(cardId)
   }
 
+  openAddCardPicker(): void {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    this.view.openAddCardPicker()
+  }
+
   async devSetMana(available: number, maximum: number): Promise<void> {
     if (!this.view) throw new Error('Game view is not ready for dev commands.')
     await this.view.devSetMana(available, maximum)

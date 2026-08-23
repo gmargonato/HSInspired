@@ -148,7 +148,7 @@ export class DeckPanelView extends Actor {
   private deckListCount!: Text
   private deckEditorLayer!: Container
   private deckEditorCardViewport!: Container
-  private deckEditorButton!: Button
+  private deckEditorFrame!: Sprite
   private deckEditorCount!: Text
   private deckFullWarning!: Text
   private deckEditorDoneButton!: Button
@@ -311,14 +311,6 @@ export class DeckPanelView extends Actor {
       this.deckSlider.cursor = sliderEnabled ? 'pointer' : 'default'
     }
 
-    if (this.deckEditorButton) {
-      this.deckEditorButton.setEnabled(
-        enabled &&
-          this.activeDeckId !== null &&
-          !this.deckEditorTransitioning &&
-          !this.deckEditorCardMutationInProgress
-      )
-    }
     if (this.deckEditorDoneButton) {
       this.deckEditorDoneButton.setEnabled(
         enabled &&
@@ -352,10 +344,8 @@ export class DeckPanelView extends Actor {
     this.deckSlider.visible = false
     this.deckEditorLayer.visible = true
     this.deckEditorLayer.alpha = 1
-    this.deckEditorButton.scale.set(1)
-    this.deckEditorButton.position.set(origin.x, origin.y)
-    this.deckEditorButton.setBaseY(origin.y)
-    this.deckEditorButton.setEnabled(false)
+    this.deckEditorFrame.scale.set(1)
+    this.deckEditorFrame.position.set(origin.x, origin.y)
     this.deckEditorCardContent.alpha = 0
     this.deckEditorCount.alpha = 0
     this.deckEditorDoneButton.alpha = 0
@@ -370,7 +360,6 @@ export class DeckPanelView extends Actor {
       return
     }
 
-    this.deckEditorButton.setBaseY(DECK_EDITOR_LAYOUT.header.y)
     this.deckEditorTransitioning = false
     this.updateDeckSliderPosition()
   }
@@ -382,7 +371,7 @@ export class DeckPanelView extends Actor {
     ++this.deckEditorTransitionSequence
     this.clearDeckEditorCardPreview()
     this.deckEditorCardMutationInProgress = false
-    this.killTweensOf(this.deckEditorButton)
+    this.killTweensOf(this.deckEditorFrame)
     this.killTweensOf(this.deckEditorCardContent)
     this.killTweensOf(this.deckEditorCount)
     this.killTweensOf(this.deckEditorDoneButton)
@@ -406,8 +395,7 @@ export class DeckPanelView extends Actor {
     this.deckEditorCardScrollOffset = 0
     this.deckEditorCardMaxScroll = 0
     this.deckEditorCardContent.y = 0
-    this.deckEditorButton.scale.set(1)
-    this.deckEditorButton.setBaseY(DECK_EDITOR_LAYOUT.header.y)
+    this.deckEditorFrame.scale.set(1)
     this.deckViewport.visible = true
     this.updateDeckSliderPosition()
 
@@ -416,7 +404,7 @@ export class DeckPanelView extends Actor {
   }
 
   updateEditor(deck: Deck): void {
-    this.deckEditorButton.sprite.texture = this.getDeckFrameTexture(deck)
+    this.deckEditorFrame.texture = this.getDeckFrameTexture(deck)
     this.clearDeckFullWarning()
     this.clearDeckEditorCountFeedback()
     this.deckEditorCount.text = `${countDeckCards(deck)} / ${MAX_DECK_CARDS} Cards`
@@ -962,15 +950,14 @@ export class DeckPanelView extends Actor {
   private createDeckEditor(): void {
     this.deckEditorLayer = new Container()
 
-    this.deckEditorButton = new Button(this.options.assets.loadDeckButton, {
-      onClick: () => undefined
-    })
-    this.deckEditorButton.position.set(
+    this.deckEditorFrame = new Sprite(this.options.assets.loadDeckButton)
+    this.deckEditorFrame.anchor.set(0.5)
+    this.deckEditorFrame.eventMode = 'none'
+    this.deckEditorFrame.position.set(
       DECK_EDITOR_LAYOUT.header.x,
       DECK_EDITOR_LAYOUT.header.y
     )
-    this.deckEditorButton.setBaseY(DECK_EDITOR_LAYOUT.header.y)
-    this.deckEditorLayer.addChild(this.deckEditorButton)
+    this.deckEditorLayer.addChild(this.deckEditorFrame)
 
     this.deckEditorCount = new Text({
       text: '',
@@ -1220,7 +1207,7 @@ export class DeckPanelView extends Actor {
   }
 
   private getDeckEditorFrameTargetScale(): number {
-    const texture = this.deckEditorButton.sprite.texture
+    const texture = this.deckEditorFrame.texture
     if (texture === Texture.EMPTY || texture.width <= 0 || texture.height <= 0) {
       return 1
     }
@@ -1261,7 +1248,7 @@ export class DeckPanelView extends Actor {
       this.deckEditorTransitionResolve = finish
 
       timeline.to(
-        this.deckEditorButton,
+        this.deckEditorFrame,
         {
           x: origin.x,
           y: targetY,
@@ -1271,7 +1258,7 @@ export class DeckPanelView extends Actor {
         0
       )
       timeline.to(
-        this.deckEditorButton.scale,
+        this.deckEditorFrame.scale,
         {
           x: targetScale,
           y: targetScale,

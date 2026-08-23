@@ -13,10 +13,7 @@ function getDevMenuBridge(): DevMenuBridge | null {
   return api?.devMenu ?? null
 }
 
-/**
- * Forwards native `Options`/`Dev` menu commands to the current scene.
- * Phase 3 only logs; Phase 4/5 will wire to collection/game controllers.
- */
+/** Forwards native `Options`/`Dev` menu commands to the current scene. */
 export function installDevCommandHandler(
   sceneManager: SceneManager,
   logger: AppLogger
@@ -44,16 +41,10 @@ export function installDevCommandHandler(
 
     if (command.type === 'game:open-add-card-picker') {
       if (current instanceof GameScene) {
-        const cardId = window.prompt(
-          'Enter CardId to add to hand (e.g. classic_abomination):'
-        )
-        if (cardId && cardId.trim().length > 0) {
-          void current.devAddCard(cardId.trim()).catch((error: unknown) => {
-            logger.error('[DevMenu] failed to add card', error)
-            window.alert(
-              `Failed to add card: ${String((error as Error)?.message ?? error)}`
-            )
-          })
+        try {
+          current.openAddCardPicker()
+        } catch (error) {
+          logger.error('[DevMenu] failed to open add-card picker', error)
         }
         return
       }

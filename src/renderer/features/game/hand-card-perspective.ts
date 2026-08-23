@@ -29,8 +29,8 @@ export interface HandCardPerspectiveOptions {
   readonly outlineProfile?: OutlineProfile
 }
 
-const MAX_TILT_X = (14 * Math.PI) / 180
-const MAX_TILT_Y = (18 * Math.PI) / 180
+const MAX_TILT_X = (22 * Math.PI) / 180
+const MAX_TILT_Y = (28 * Math.PI) / 180
 const PERSPECTIVE_DEPTH = 950
 /** Leaves room for the playable-card outline and its blur when snapshotting. */
 const SNAPSHOT_PADDING = 40

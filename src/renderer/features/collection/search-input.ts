@@ -1,4 +1,5 @@
 import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
+import type { Renderer } from 'pixi.js'
 
 export interface CollectionSearchInputBounds {
   readonly x: number
@@ -9,6 +10,7 @@ export interface CollectionSearchInputBounds {
 
 export interface CollectionSearchInputOptions {
   readonly canvas: HTMLCanvasElement
+  readonly renderer: Renderer
   readonly parent: HTMLElement
   readonly bounds: CollectionSearchInputBounds
   readonly onInput: (value: string) => void
@@ -35,7 +37,7 @@ export class CollectionSearchInput {
     this.options.parent.appendChild(input)
 
     this.input = input
-    window.addEventListener('resize', this.resizeHandler)
+    this.options.renderer.on('resize', this.resizeHandler)
     this.updatePosition()
   }
 
@@ -65,7 +67,7 @@ export class CollectionSearchInput {
     const input = this.input
     if (!input) return
 
-    window.removeEventListener('resize', this.resizeHandler)
+    this.options.renderer.off('resize', this.resizeHandler)
     input.removeEventListener('input', this.handleInput)
     input.remove()
     this.input = null

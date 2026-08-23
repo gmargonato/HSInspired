@@ -144,6 +144,8 @@ export class NewDeckView extends Container {
     for (const [index, heroClass] of PLAYABLE_CLASSES.entries()) {
       const texture = this.deckPresentationAssets[frameKeys[heroClass]]
       const button = new Button(texture, {
+        highlightOnHover: false,
+        pressedBrightness: 1,
         onClick: () => this.selectClass(heroClass)
       })
       const column = index % 3

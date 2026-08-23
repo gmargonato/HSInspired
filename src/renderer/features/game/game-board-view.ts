@@ -68,6 +68,7 @@ import {
   MinionView,
   type MinionViewTextures
 } from '../../rendering/minions/minion-view'
+import { AddCardPickerView } from './add-card-picker-view'
 import {
   isInDropZone,
   layoutBoardRow,
@@ -82,8 +83,7 @@ import {
   applyPlacement,
   type LayoutPlacement
 } from '../../rendering/layout'
-// Deck tracker temporarily disabled to isolate crash - will re-enable after root cause found
-// import { DeckTrackerView } from './deck-tracker-view'
+import { DeckTrackerView } from './deck-tracker-view'
 
 export interface GameBoardViewOptions {
   readonly route: GameRoute
@@ -187,8 +187,7 @@ class GameCardSlot extends Container {
     this.card = card
     this.instanceId = instanceId
     this.playableOutlineTexture = outlineTexture
-    this.eventMode = 'static'
-    this.cursor = 'pointer'
+    this.setMulliganInteractionEnabled(false)
     const slotLayout = GAME_BOARD_LAYOUT.mulligan.slot
     this.hitArea = new Rectangle(
       slotLayout.hitArea.x,
@@ -246,6 +245,11 @@ class GameCardSlot extends Container {
     this.replacedLabel.visible = selected
   }
 
+  setMulliganInteractionEnabled(enabled: boolean): void {
+    this.eventMode = enabled ? 'static' : 'none'
+    this.cursor = enabled ? 'pointer' : 'default'
+  }
+
   setPlayableOutlineEnabled(enabled: boolean): void {
     this.playableOutlineRequested = enabled
     this.syncPlayableOutline()
@@ -261,7 +265,7 @@ class GameCardSlot extends Container {
   }
 
   beginSummonGhost(): void {
-    this.eventMode = 'none'
+    this.setMulliganInteractionEnabled(false)
     this.replaceCross.visible = false
     this.replacedLabel.visible = false
     this.disposePlayableOutline()
@@ -320,6 +324,8 @@ export class GameBoardView extends Actor {
   private readonly localMinionViews: MinionView[] = []
   private readonly remoteMinionViews: MinionView[] = []
   private readonly activeSummonSlots = new Set<GameCardSlot>()
+  private readonly deckTracker = new DeckTrackerView(this.resolver)
+  private readonly addCardPicker: AddCardPickerView | null
   private readonly attackLineLayer = new Container()
   private readonly attackLine = new AttackLine()
   private selectedMinionView: MinionView | null = null
@@ -364,6 +370,8 @@ export class GameBoardView extends Actor {
    */
   private turnInProgress = false
   private confirmationLocked = false
+  /** True only after every opening card has arrived and its mulligan outline is ready. */
+  private mulliganInputReady = false
   private remoteBackCount = 0
   private openingRevealStarted = false
   /**
@@ -435,6 +443,16 @@ export class GameBoardView extends Actor {
       this.deselectAttacker()
     }
   }
+  private readonly handleAddCardPickerSelect = async (
+    cardId: string
+  ): Promise<void> => {
+    try {
+      await this.devAddCard(cardId)
+    } catch (error) {
+      this.logger.error('[DevMenu] failed to add card from picker', error)
+      throw error
+    }
+  }
 
   constructor(private readonly options: GameBoardViewOptions) {
     super()
@@ -443,6 +461,16 @@ export class GameBoardView extends Actor {
       warn: () => undefined,
       error: () => undefined
     }
+    const canvas = options.renderer.canvas
+    const parent = canvas.parentElement
+    this.addCardPicker =
+      typeof document !== 'undefined' && parent
+        ? new AddCardPickerView({
+            canvas,
+            parent,
+            onSelect: this.handleAddCardPickerSelect
+          })
+        : null
     this.addChild(this.boardLayer)
     this.localMinionLayer.label = 'game.board-minions-local'
     this.remoteMinionLayer.label = 'game.board-minions-remote'
@@ -471,6 +499,7 @@ export class GameBoardView extends Actor {
     this.attackLineLayer.eventMode = 'none'
     this.attackLineLayer.addChild(this.attackLine)
     this.addChild(this.attackLineLayer)
+    this.addChild(this.deckTracker)
     this.deckLayer.visible = false
     this.remoteHandLayer.visible = false
     this.handLayer.eventMode = 'none'
@@ -690,6 +719,7 @@ export class GameBoardView extends Actor {
   /** Builds the end turn button and the deck card-count labels (hidden for now). */
   private createTurnControls(state: OpeningMatchState): void {
     this.endTurnButton = new Button(this.options.gameAssets.endTurn, {
+      highlightOnHover: false,
       onClick: () => void this.endTurn()
     })
     applyPlacement(this.endTurnButton, GAME_BOARD_LAYOUT.endTurnButton)
@@ -793,7 +823,7 @@ export class GameBoardView extends Actor {
     this.syncPlayableCardOutlines(state)
     this.syncHeroPowerViews(state)
     this.syncBoardAttackability(state)
-    this.updateDeckTracker()
+    this.updateDeckTracker(state)
   }
 
   /**
@@ -1106,7 +1136,8 @@ export class GameBoardView extends Actor {
         const slot = await this.createSlot(card)
         slot.alpha = 0
         slot.on('pointertap', (event: FederatedPointerEvent) => {
-          if (this.confirmationLocked || event.button !== 0) return
+          if (this.confirmationLocked || !this.mulliganInputReady || event.button !== 0)
+            return
           const selected = !this.selectedIds.has(slot.instanceId)
           if (selected) this.selectedIds.add(slot.instanceId)
           else this.selectedIds.delete(slot.instanceId)
@@ -1120,6 +1151,23 @@ export class GameBoardView extends Actor {
     for (const entry of entries) {
       this.handEntries.push(entry)
       this.initialSlots.push(entry.slot)
+    }
+  }
+
+  /** Keeps mulligan input locked until the complete opening presentation is ready. */
+  private setMulliganInputEnabled(enabled: boolean): void {
+    this.mulliganInputReady = enabled
+    for (const slot of this.initialSlots) {
+      slot.setMulliganInteractionEnabled(enabled)
+    }
+  }
+
+  /** Keeps the selected overlay and the unselected-card outline mutually exclusive. */
+  private syncMulliganSelectionVisuals(): void {
+    for (const slot of this.initialSlots) {
+      const selected = this.selectedIds.has(slot.instanceId)
+      slot.setSelected(selected)
+      slot.setPlayableOutlineEnabled(!selected)
     }
   }
 
@@ -1211,9 +1259,10 @@ export class GameBoardView extends Actor {
     } else {
       await this.dealRemoteCards(3, 4, OPENING_TIMING.playerTwoFourthCard)
     }
+    this.syncMulliganSelectionVisuals()
+    this.setMulliganInputEnabled(true)
     this.confirmButton.visible = true
     this.confirmButton.setEnabled(true)
-    for (const slot of this.initialSlots) slot.setPlayableOutlineEnabled(true)
   }
 
   private async presentPlayerTwoAnnouncement(): Promise<void> {
@@ -1274,9 +1323,10 @@ export class GameBoardView extends Actor {
   private async confirmMulligan(): Promise<void> {
     if (this.confirmationLocked) return
     this.confirmationLocked = true
+    this.setMulliganInputEnabled(false)
     this.confirmButton.setEnabled(false)
     for (const entry of this.handEntries) {
-      entry.slot.eventMode = 'none'
+      entry.slot.setMulliganInteractionEnabled(false)
       entry.slot.setPlayableOutlineEnabled(false)
     }
     await this.wait(OPENING_TIMING.confirmationPause)
@@ -1288,6 +1338,8 @@ export class GameBoardView extends Actor {
     if (!result.accepted) {
       this.logger.error(result.message)
       this.confirmationLocked = false
+      this.syncMulliganSelectionVisuals()
+      this.setMulliganInputEnabled(true)
       this.confirmButton.setEnabled(true)
       return
     }
@@ -1354,6 +1406,20 @@ export class GameBoardView extends Actor {
     this.syncTurnHud(result.state)
   }
 
+  openAddCardPicker(): void {
+    if (!this.addCardPicker) {
+      throw new Error('The add-card picker is unavailable in this environment.')
+    }
+
+    this.addCardPicker.open()
+    if (!this.handModeActive) {
+      this.addCardPicker.setStatus(
+        'The match must finish its opening sequence before a card can be added.',
+        'error'
+      )
+    }
+  }
+
   async devSetMana(available: number, maximum: number): Promise<void> {
     const result = this.match.dispatch({
       type: 'dev-set-mana',
@@ -1379,11 +1445,16 @@ export class GameBoardView extends Actor {
   }
 
   toggleDeckTracker(): void {
-    this.logger.info('[GameBoardView] deck tracker toggle (disabled for debugging)')
+    const visible = !this.deckTracker.visible
+    this.deckTracker.setVisible(visible)
+    if (visible && this.match) this.updateDeckTracker(this.match.getState())
+    this.logger.info('[GameBoardView] deck tracker', visible ? 'shown' : 'hidden')
   }
 
-  private updateDeckTracker(): void {
-    // Deck tracker disabled for debugging - see toggleDeckTracker
+  private updateDeckTracker(state: OpeningMatchState): void {
+    if (!this.deckTracker.visible) return
+    const localPlayer = this.findPlayer(state, this.localParticipantId)
+    this.deckTracker.update(localPlayer.deck)
   }
 
   /**
@@ -1904,7 +1975,7 @@ export class GameBoardView extends Actor {
     const allSlots = this.handEntries.map((entry) => entry.slot)
     allSlots.forEach((slot, index) => {
       slot.setSelected(false)
-      slot.eventMode = 'none'
+      slot.setMulliganInteractionEnabled(false)
       if (!replacementSlots.includes(slot)) return
       this.prepareSlotAtDeck(slot, GAME_BOARD_LAYOUT.decks.local, index)
       this.travelLayer.addChild(slot)
@@ -1973,7 +2044,7 @@ export class GameBoardView extends Actor {
     deck: LayoutPlacement,
     sequence: number
   ): void {
-    slot.eventMode = 'none'
+    slot.setMulliganInteractionEnabled(false)
     slot.position.set(deck.position.x, deck.position.y)
     slot.scale.set(
       GAME_BOARD_LAYOUT.cardTravel.slotScale.x,
@@ -2043,7 +2114,6 @@ export class GameBoardView extends Actor {
     )
     return this.completeTimeline(timeline, () => {
       this.mulliganLayer.addChild(slot)
-      slot.eventMode = 'static'
     })
   }
 
@@ -2619,6 +2689,8 @@ export class GameBoardView extends Actor {
       view.dispose()
     }
     this.heroPowerViews.clear()
+    this.addCardPicker?.dispose()
+    this.deckTracker.dispose()
     this.manaLocalTray?.dispose()
     this.manaLocalTray = null
     for (const view of this.localMinionViews) {
@@ -2742,7 +2814,7 @@ export class GameBoardView extends Actor {
     sequence: number
   ): Promise<void> {
     this.travelLayer.addChild(slot)
-    slot.eventMode = 'none'
+    slot.setMulliganInteractionEnabled(false)
     const direction = slot.x < deck.position.x ? -1 : 1
     const timeline = this.timeline()
     timeline.to(slot, {
@@ -2841,7 +2913,7 @@ export class GameBoardView extends Actor {
    * pointer events — a moving hit area on the animated slot causes oscillation.
    */
   private configureHandSlot(slot: GameCardSlot): void {
-    slot.eventMode = 'none'
+    slot.setMulliganInteractionEnabled(false)
     slot.removeAllListeners('pointertap')
     slot.removeAllListeners('pointerover')
     slot.removeAllListeners('pointerout')
