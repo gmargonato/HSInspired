@@ -4,9 +4,10 @@ import type { Deck } from '../decks'
 import {
   MAX_BOARD_SIZE,
   createOpeningMatch,
+  previewMinionCombat,
   type OpeningMatchState
 } from './opening-match'
-import { createSeededRng } from './rng'
+import { createSeededRng, type DeterministicRng } from './rng'
 import { asPlayerId, type MatchSetup } from './match-types'
 
 function makeDeck(id: string, cardId = 'basic_fireball'): Deck {
@@ -864,6 +865,366 @@ describe('playing minions', () => {
   })
 })
 
+describe('playing weapons', () => {
+  it('equips a weapon, spends mana, removes it from hand, and emits its stats', () => {
+    const match = createOpeningMatch(
+      makeSetup(),
+      [makeDeck('human-deck'), makeDeck('ai-deck')],
+      createFixedOpeningRng(0)
+    )
+    const state = startTurnsForMatch(match)
+    const participantId = state.activePlayerId
+    if (!participantId) throw new Error('Expected an active player.')
+
+    const added = match.dispatch({
+      type: 'dev-add-card',
+      participantId,
+      cardId: 'basic_fiery_war_axe'
+    })
+    if (!added.accepted) throw new Error(added.message)
+    const card = added.events.find((event) => event.type === 'dev-card-added')
+    if (!card || card.type !== 'dev-card-added')
+      throw new Error('Expected a weapon card to be added.')
+
+    const funded = match.dispatch({
+      type: 'dev-set-mana',
+      participantId,
+      available: 10,
+      maximum: 10
+    })
+    if (!funded.accepted) throw new Error(funded.message)
+
+    const result = match.dispatch({
+      type: 'play-weapon',
+      participantId,
+      cardInstanceId: card.card.instanceId
+    })
+
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    expect(result.events).toEqual([
+      {
+        type: 'weapon-equipped',
+        participantId,
+        weapon: {
+          instanceId: card.card.instanceId,
+          cardId: 'basic_fiery_war_axe',
+          attack: 3,
+          durability: 2,
+          maxDurability: 2
+        },
+        replacedWeapon: null
+      }
+    ])
+
+    const player = result.state.players.find(
+      (candidate) => candidate.participantId === participantId
+    )
+    expect(player?.weapon).toEqual(
+      result.events[0]?.type === 'weapon-equipped' ? result.events[0].weapon : undefined
+    )
+    expect(
+      player?.hand.some((candidate) => candidate.instanceId === card.card.instanceId)
+    ).toBe(false)
+    expect(player?.mana).toEqual({ available: 8, maximum: 10 })
+  })
+
+  it('replaces the equipped weapon and reports the previous weapon', () => {
+    const match = createOpeningMatch(
+      makeSetup(),
+      [makeDeck('human-deck'), makeDeck('ai-deck')],
+      createFixedOpeningRng(0)
+    )
+    startTurnsForMatch(match)
+    const participantId = match.getState().activePlayerId
+    if (!participantId) throw new Error('Expected an active player.')
+
+    const addWeapon = (cardId: 'basic_fiery_war_axe' | 'classic_eaglehorn_bow') => {
+      const result = match.dispatch({ type: 'dev-add-card', participantId, cardId })
+      if (!result.accepted) throw new Error(result.message)
+      const event = result.events.find(
+        (candidate) => candidate.type === 'dev-card-added'
+      )
+      if (!event || event.type !== 'dev-card-added')
+        throw new Error('Expected a card-added event.')
+      return event.card
+    }
+
+    const firstCard = addWeapon('basic_fiery_war_axe')
+    const secondCard = addWeapon('classic_eaglehorn_bow')
+    const funded = match.dispatch({
+      type: 'dev-set-mana',
+      participantId,
+      available: 10,
+      maximum: 10
+    })
+    if (!funded.accepted) throw new Error(funded.message)
+
+    const first = match.dispatch({
+      type: 'play-weapon',
+      participantId,
+      cardInstanceId: firstCard.instanceId
+    })
+    if (!first.accepted) throw new Error(first.message)
+    const second = match.dispatch({
+      type: 'play-weapon',
+      participantId,
+      cardInstanceId: secondCard.instanceId
+    })
+
+    expect(second.accepted).toBe(true)
+    if (!second.accepted) throw new Error(second.message)
+    const event = second.events[0]
+    expect(event).toMatchObject({
+      type: 'weapon-equipped',
+      participantId,
+      replacedWeapon: {
+        instanceId: firstCard.instanceId,
+        cardId: 'basic_fiery_war_axe',
+        attack: 3,
+        durability: 2,
+        maxDurability: 2
+      }
+    })
+    expect(
+      match.getState().players.find((p) => p.participantId === participantId)?.weapon
+    ).toEqual({
+      instanceId: secondCard.instanceId,
+      cardId: 'classic_eaglehorn_bow',
+      attack: 3,
+      durability: 2,
+      maxDurability: 2
+    })
+  })
+
+  it('rejects wrong card types, insufficient mana, and wrong-phase plays without mutation', () => {
+    const wrongPhase = createOpeningMatch(
+      makeSetup(),
+      [makeDeck('human-deck'), makeDeck('ai-deck')],
+      createFixedOpeningRng(0)
+    )
+    const before = wrongPhase.getState()
+    const wrongPhaseResult = wrongPhase.dispatch({
+      type: 'play-weapon',
+      participantId: before.players[0].participantId,
+      cardInstanceId: 'missing'
+    })
+    expectRejectedWithoutMutation(wrongPhase, wrongPhaseResult, 'wrong-phase', before)
+
+    const match = createOpeningMatch(
+      makeSetup(),
+      [makeDeck('human-deck'), makeDeck('ai-deck')],
+      createFixedOpeningRng(0)
+    )
+    startTurnsForMatch(match)
+    const participantId = match.getState().activePlayerId
+    if (!participantId) throw new Error('Expected an active player.')
+    const added = match.dispatch({
+      type: 'dev-add-card',
+      participantId,
+      cardId: 'basic_fiery_war_axe'
+    })
+    if (!added.accepted) throw new Error(added.message)
+    const card = added.events.find((event) => event.type === 'dev-card-added')
+    if (!card || card.type !== 'dev-card-added') throw new Error('Expected added card.')
+
+    const beforeMana = match.getState()
+    const insufficient = match.dispatch({
+      type: 'play-weapon',
+      participantId,
+      cardInstanceId: card.card.instanceId
+    })
+    expectRejectedWithoutMutation(match, insufficient, 'insufficient-mana', beforeMana)
+
+    const spell = match
+      .getState()
+      .players.find((p) => p.participantId === participantId)?.hand[0]
+    if (!spell) throw new Error('Expected a card in hand.')
+    const invalidType = match.dispatch({
+      type: 'play-weapon',
+      participantId,
+      cardInstanceId: spell.instanceId
+    })
+    expectRejectedWithoutMutation(match, invalidType, 'not-a-weapon', beforeMana)
+  })
+})
+
+describe('minion combat', () => {
+  it('calculates the same lethal preview used by stat combat', () => {
+    expect(
+      previewMinionCombat({ attack: 4, health: 2 }, { attack: 3, health: 4 })
+    ).toEqual({
+      attackerHealthAfter: 0,
+      defenderHealthAfter: 0,
+      attackerDestroyed: true,
+      defenderDestroyed: true
+    })
+  })
+
+  it('deals simultaneous damage and keeps surviving minions with current health', () => {
+    const { match, attackerId, defenderId } = createCombatMatch(
+      'basic_dalaran_mage',
+      'basic_bloodfen_raptor'
+    )
+    const participantId = match.getState().activePlayerId
+    if (!participantId) throw new Error('Expected an active participant.')
+
+    const result = match.dispatch({
+      type: 'attack-minion',
+      participantId,
+      attackerInstanceId: attackerId,
+      defenderInstanceId: defenderId
+    })
+
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    expect(result.events).toEqual([
+      {
+        type: 'minion-combat-resolved',
+        attacker: {
+          participantId: match.getState().playerOneId,
+          instanceId: attackerId,
+          attack: 1,
+          damageDealt: 1,
+          healthBefore: 4,
+          healthAfter: 1,
+          destroyed: false
+        },
+        defender: {
+          participantId: match.getState().playerTwoId,
+          instanceId: defenderId,
+          attack: 3,
+          damageDealt: 3,
+          healthBefore: 2,
+          healthAfter: 1,
+          destroyed: false
+        }
+      }
+    ])
+
+    const state = match.getState()
+    expect(state.players[0].board[0]?.health).toBe(1)
+    expect(state.players[1].board[0]?.health).toBe(1)
+    expect(state.players[0].board[0]?.lastAttackedOnTurn).toBe(state.turnNumber)
+  })
+
+  it('removes a destroyed defender while preserving the attacker', () => {
+    const { match, attackerId, defenderId } = createCombatMatch(
+      'basic_boulderfist_ogre',
+      'basic_murloc_raider'
+    )
+    const participantId = match.getState().activePlayerId
+    if (!participantId) throw new Error('Expected an active participant.')
+    const result = match.dispatch({
+      type: 'attack-minion',
+      participantId,
+      attackerInstanceId: attackerId,
+      defenderInstanceId: defenderId
+    })
+
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    const event = result.events[0]
+    expect(event?.type).toBe('minion-combat-resolved')
+    if (!event || event.type !== 'minion-combat-resolved')
+      throw new Error('Expected combat event.')
+    expect(event.attacker.destroyed).toBe(false)
+    expect(event.defender.destroyed).toBe(true)
+    expect(match.getState().players[0].board).toHaveLength(1)
+    expect(match.getState().players[1].board).toHaveLength(0)
+  })
+
+  it('removes both minions when simultaneous damage is lethal', () => {
+    const { match, attackerId, defenderId } = createCombatMatch(
+      'basic_murloc_raider',
+      'basic_murloc_raider'
+    )
+    const participantId = match.getState().activePlayerId
+    if (!participantId) throw new Error('Expected an active participant.')
+    const result = match.dispatch({
+      type: 'attack-minion',
+      participantId,
+      attackerInstanceId: attackerId,
+      defenderInstanceId: defenderId
+    })
+
+    expect(result.accepted).toBe(true)
+    expect(match.getState().players[0].board).toHaveLength(0)
+    expect(match.getState().players[1].board).toHaveLength(0)
+  })
+
+  it('allows one attack per turn and refreshes the minion on its next turn', () => {
+    const { match, attackerId, defenderId } = createCombatMatch(
+      'basic_dalaran_mage',
+      'basic_dalaran_mage'
+    )
+    const participantId = match.getState().activePlayerId
+    if (!participantId) throw new Error('Expected an active participant.')
+    const first = match.dispatch({
+      type: 'attack-minion',
+      participantId,
+      attackerInstanceId: attackerId,
+      defenderInstanceId: defenderId
+    })
+    expect(first.accepted).toBe(true)
+
+    const repeated = match.dispatch({
+      type: 'attack-minion',
+      participantId,
+      attackerInstanceId: attackerId,
+      defenderInstanceId: defenderId
+    })
+    expect(repeated.accepted).toBe(false)
+    if (repeated.accepted) throw new Error('Expected repeated attack rejection.')
+    expect(repeated.code).toBe('minion-cannot-attack')
+
+    const passOne = match.dispatch({ type: 'end-turn', participantId })
+    expect(passOne.accepted).toBe(true)
+    if (!passOne.accepted) throw new Error(passOne.message)
+    const secondParticipantId = match.getState().activePlayerId
+    if (!secondParticipantId) throw new Error('Expected the second active participant.')
+    const passTwo = match.dispatch({
+      type: 'end-turn',
+      participantId: secondParticipantId
+    })
+    expect(passTwo.accepted).toBe(true)
+
+    const refreshed = match.dispatch({
+      type: 'attack-minion',
+      participantId,
+      attackerInstanceId: attackerId,
+      defenderInstanceId: defenderId
+    })
+    expect(refreshed.accepted).toBe(true)
+  })
+
+  it('rejects non-opposing targets and invalid attackers without mutation', () => {
+    const { match, attackerId, defenderId } = createCombatMatch(
+      'basic_dalaran_mage',
+      'basic_dalaran_mage'
+    )
+    const participantId = match.getState().activePlayerId
+    if (!participantId) throw new Error('Expected an active participant.')
+    const before = match.getState()
+
+    const ownTarget = match.dispatch({
+      type: 'attack-minion',
+      participantId,
+      attackerInstanceId: attackerId,
+      defenderInstanceId: attackerId
+    })
+    expectRejectedWithoutMutation(match, ownTarget, 'invalid-target', before)
+
+    const missingAttacker = match.dispatch({
+      type: 'attack-minion',
+      participantId,
+      attackerInstanceId: 'missing',
+      defenderInstanceId: defenderId
+    })
+    expectRejectedWithoutMutation(match, missingAttacker, 'invalid-attacker', before)
+  })
+})
+
 function startTurnsForMatch(
   match: ReturnType<typeof createOpeningMatch>
 ): OpeningMatchState {
@@ -890,6 +1251,81 @@ function createStartedMinionMatch() {
   )
   startTurnsForMatch(match)
   return match
+}
+
+function createFixedOpeningRng(firstParticipantIndex: 0 | 1): DeterministicRng {
+  let first = true
+  return {
+    next(): number {
+      if (first) {
+        first = false
+        return firstParticipantIndex === 0 ? 0 : 1
+      }
+      return 0.5
+    }
+  }
+}
+
+function createCombatMatch(
+  humanCardId: string,
+  aiCardId: string
+): {
+  match: ReturnType<typeof createOpeningMatch>
+  attackerId: string
+  defenderId: string
+} {
+  const match = createOpeningMatch(
+    makeSetup(),
+    [makeDeck('human-deck', humanCardId), makeDeck('ai-deck', aiCardId)],
+    createFixedOpeningRng(0)
+  )
+  startTurnsForMatch(match)
+
+  const playActiveMinion = (): string => {
+    const state = match.getState()
+    const participantId = state.activePlayerId
+    if (!participantId) throw new Error('Expected an active player.')
+    const player = state.players.find(
+      (candidate) => candidate.participantId === participantId
+    )
+    if (!player) throw new Error('Expected the active player state.')
+    const card = player.hand.find((candidate) => candidate.cardId !== 'basic_the_coin')
+    if (!card) throw new Error('Expected a minion in the active hand.')
+    const mana = match.dispatch({
+      type: 'dev-set-mana',
+      participantId,
+      available: 10,
+      maximum: 10
+    })
+    if (!mana.accepted) throw new Error(mana.message)
+    const result = match.dispatch({
+      type: 'play-minion',
+      participantId,
+      cardInstanceId: card.instanceId,
+      position: 0
+    })
+    if (!result.accepted) throw new Error(result.message)
+    return card.instanceId
+  }
+
+  const attackerId = playActiveMinion()
+  const firstParticipantId = match.getState().activePlayerId
+  if (!firstParticipantId) throw new Error('Expected the first active participant.')
+  const firstEnd = match.dispatch({
+    type: 'end-turn',
+    participantId: firstParticipantId
+  })
+  if (!firstEnd.accepted) throw new Error(firstEnd.message)
+  const defenderId = playActiveMinion()
+  const secondParticipantId = match.getState().activePlayerId
+  if (!secondParticipantId) throw new Error('Expected the second active participant.')
+  const secondEnd = match.dispatch({
+    type: 'end-turn',
+    participantId: secondParticipantId
+  })
+  if (!secondEnd.accepted) throw new Error(secondEnd.message)
+
+  return { match, attackerId, defenderId }
 }
 
 function expectPlayRejection(

@@ -1,4 +1,4 @@
-﻿[
+[
   {
     "id": "classic_abomination",
     "name": "Abomination",
@@ -9,7 +9,24 @@
     "cost": 5,
     "attack": 4,
     "health": 4,
-    "rulesText": "Taunt. Deathrattle: deal 2 damage to all characters"
+    "rulesText": "Taunt. Deathrattle: deal 2 damage to all characters",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_abusive_sergeant",
@@ -21,7 +38,25 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "Battlecry: Give a minion 2 Attack this turn."
+    "rulesText": "Battlecry: Give a minion 2 Attack this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 2,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_acolyte_of_pain",
@@ -33,7 +68,26 @@
     "cost": 3,
     "attack": 1,
     "health": 3,
-    "rulesText": "Whenever this minion takes damage, draw a card."
+    "rulesText": "Whenever this minion takes damage, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "target": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_alakir_the_windlord",
@@ -45,7 +99,9 @@
     "cost": 8,
     "attack": 3,
     "health": 5,
-    "rulesText": "Windfury, Charge, Divine Shield, Taunt."
+    "rulesText": "Windfury, Charge, Divine Shield, Taunt.",
+    "keywords": ["windfury", "charge", "divine-shield", "taunt"],
+    "effects": []
   },
   {
     "id": "classic_alarm_o_bot",
@@ -57,7 +113,28 @@
     "cost": 3,
     "attack": 0,
     "health": 3,
-    "rulesText": "At the start of your turn swap this minion with a random one in your hand"
+    "rulesText": "At the start of your turn swap this minion with a random one in your hand",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "swap",
+            "source": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_aldor_peacekeeper",
@@ -69,7 +146,27 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Change an enemy minion's attack to 1."
+    "rulesText": "Battlecry: Change an enemy minion's attack to 1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": {
+              "operation": "set",
+              "value": 1
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_alexstrasza",
@@ -81,7 +178,25 @@
     "cost": 9,
     "attack": 8,
     "health": 8,
-    "rulesText": "Battlecry: Set a hero's remaining Health to 15."
+    "rulesText": "Battlecry: Set a hero's remaining Health to 15.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "set-health",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 15,
+            "preserveMaximum": true
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_amani_berserker",
@@ -93,7 +208,26 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Enrage: 3 attack"
+    "rulesText": "Enrage: 3 attack",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "source-damaged"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ancestral_spirit",
@@ -105,7 +239,32 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Choose a minion. When that minion is destroyed, return it to the battlefield."
+    "rulesText": "Choose a minion. When that minion is destroyed, return it to the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-deathrattle",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "actions": [
+              {
+                "action": "return-to-play",
+                "target": {
+                  "type": "minion",
+                  "selection": "event-source"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ancient_brewmaster",
@@ -117,7 +276,23 @@
     "cost": 4,
     "attack": 5,
     "health": 4,
-    "rulesText": "Battlecry: Return a friendly minion from the battlefield to your hand."
+    "rulesText": "Battlecry: Return a friendly minion from the battlefield to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ancient_mage",
@@ -129,7 +304,25 @@
     "cost": 4,
     "attack": 2,
     "health": 5,
-    "rulesText": "Battlecry: Give adjacent minions Spell Damage +1."
+    "rulesText": "Battlecry: Give adjacent minions Spell Damage +1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "adjacent"
+            },
+            "keyword": "spell-damage",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ancient_of_lore",
@@ -141,7 +334,39 @@
     "cost": 7,
     "attack": 5,
     "health": 5,
-    "rulesText": "Choose One - Draw 2 cards; or Restore 5 Health."
+    "rulesText": "Choose One - Draw 2 cards; or Restore 5 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "draw",
+                  "player": "self",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "restore",
+                  "target": {
+                    "controller": "self",
+                    "type": "character",
+                    "selection": "chosen"
+                  },
+                  "amount": 5
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_ancient_of_war",
@@ -153,7 +378,49 @@
     "cost": 7,
     "attack": 5,
     "health": 5,
-    "rulesText": "Choose One - Taunt and +5 Health; or +5 Attack."
+    "rulesText": "Choose One - Taunt and +5 Health; or +5 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "grant-keyword",
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "keyword": "taunt"
+                },
+                {
+                  "action": "modify",
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "health": 5
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "attack": 5
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_ancient_secrets",
@@ -166,7 +433,24 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Restore 5 Health."
+    "rulesText": "Restore 5 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ancient_teachings",
@@ -179,7 +463,20 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Draw 2 cards."
+    "rulesText": "Draw 2 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ancient_watcher",
@@ -191,7 +488,9 @@
     "cost": 2,
     "attack": 4,
     "health": 5,
-    "rulesText": "Can't Attack."
+    "rulesText": "Can't Attack.",
+    "keywords": ["cannot-attack"],
+    "effects": []
   },
   {
     "id": "classic_angry_chicken",
@@ -203,7 +502,26 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": "Enrage: +5 Attack."
+    "rulesText": "Enrage: +5 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "source-damaged"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_animal_companion",
@@ -215,7 +533,20 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Summon a random Beast Companion."
+    "rulesText": "Summon a random Beast Companion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon-random",
+            "pool": ["basic_huffer", "basic_misha", "classic_leokk"],
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_arathi_weaponsmith",
@@ -227,7 +558,19 @@
     "cost": 4,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Equip a 2/2 weapon."
+    "rulesText": "Battlecry: Equip a 2/2 weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "equip",
+            "cardId": "classic_battle_axe"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_arcane_golem",
@@ -239,7 +582,21 @@
     "cost": 3,
     "attack": 4,
     "health": 2,
-    "rulesText": "Charge. Battlecry: Give your opponent a Mana Crystal."
+    "rulesText": "Charge. Battlecry: Give your opponent a Mana Crystal.",
+    "keywords": ["charge"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "gain-mana",
+            "player": "opponent",
+            "amount": 1,
+            "crystal": "empty"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_archmage_antonidas",
@@ -251,7 +608,24 @@
     "cost": 7,
     "attack": 5,
     "health": 7,
-    "rulesText": "Whenever you cast a spell, put a 'Fireball' spell into your hand."
+    "rulesText": "Whenever you cast a spell, put a 'Fireball' spell into your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "cardId": "basic_fireball",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_argent_commander",
@@ -263,7 +637,9 @@
     "cost": 6,
     "attack": 4,
     "health": 2,
-    "rulesText": "Charge, Divine Shield"
+    "rulesText": "Charge, Divine Shield",
+    "keywords": ["charge", "divine-shield"],
+    "effects": []
   },
   {
     "id": "classic_argent_protector",
@@ -275,7 +651,24 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry: Give a friendly minion Divine Shield."
+    "rulesText": "Battlecry: Give a friendly minion Divine Shield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "divine-shield"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_argent_squire",
@@ -287,7 +680,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": "Divine Shield"
+    "rulesText": "Divine Shield",
+    "keywords": ["divine-shield"],
+    "effects": []
   },
   {
     "id": "classic_armorsmith",
@@ -299,7 +694,31 @@
     "cost": 2,
     "attack": 1,
     "health": 4,
-    "rulesText": "Whenever a friendly minion takes damage, gain 1 Armor."
+    "rulesText": "Whenever a friendly minion takes damage, gain 1 Armor.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "target": {
+            "controller": "self",
+            "type": "minion"
+          }
+        },
+        "actions": [
+          {
+            "action": "gain-armor",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ashbringer",
@@ -312,7 +731,9 @@
     "cost": 5,
     "attack": 5,
     "health": 3,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_auchenai_soulpriest",
@@ -324,7 +745,20 @@
     "cost": 4,
     "attack": 3,
     "health": 5,
-    "rulesText": "Your cards and powers that restore Health now deal damage instead."
+    "rulesText": "Your cards and powers that restore Health now deal damage instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "replace-event",
+            "event": "health-restored",
+            "replacement": "damage"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_avenging_wrath",
@@ -336,7 +770,25 @@
     "cost": 6,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 8 damage randomly split among enemy characters."
+    "rulesText": "Deal 8 damage randomly split among enemy characters.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1,
+            "hits": 8
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_azure_drake",
@@ -348,7 +800,20 @@
     "cost": 5,
     "attack": 4,
     "health": 4,
-    "rulesText": "Spell Damage 1. Battlecry: Draw a card."
+    "rulesText": "Spell Damage 1. Battlecry: Draw a card.",
+    "keywords": ["spell-damage"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_baine_bloodhoof",
@@ -361,7 +826,9 @@
     "cost": 4,
     "attack": 4,
     "health": 5,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_bananas",
@@ -374,7 +841,25 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "This minion has +1/+1."
+    "rulesText": "This minion has +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_bane_of_doom",
@@ -386,7 +871,41 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to a character. If that kills it, summon a random Demon."
+    "rulesText": "Deal 2 damage to a character. If that kills it, summon a random Demon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "target-died"
+          },
+          "actions": [
+            {
+              "action": "summon-random",
+              "pool": {
+                "type": "minion",
+                "filter": {
+                  "tribe": "Demon"
+                }
+              },
+              "count": 1
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_baron_geddon",
@@ -398,7 +917,25 @@
     "cost": 7,
     "attack": 7,
     "health": 5,
-    "rulesText": "At the end of your turn, deal 2 damage to ALL other characters."
+    "rulesText": "At the end of your turn, deal 2 damage to ALL other characters.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_barrel",
@@ -411,7 +948,22 @@
     "cost": 0,
     "attack": 0,
     "health": 2,
-    "rulesText": "Deathrattle: Is something in this barrel?"
+    "rulesText": "Deathrattle: Is something in this barrel?",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "reveal",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_barrel_toss",
@@ -424,7 +976,24 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage."
+    "rulesText": "Deal 2 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_battle_axe",
@@ -437,7 +1006,9 @@
     "cost": 1,
     "attack": 2,
     "health": 2,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_battle_rage",
@@ -449,7 +1020,30 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Draw a card for each damaged friendly character."
+    "rulesText": "Draw a card for each damaged friendly character.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "self",
+                "type": "character",
+                "selection": "all",
+                "filter": {
+                  "damaged": true
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_bear_form",
@@ -462,7 +1056,33 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "+2 Health and Taunt."
+    "rulesText": "+2 Health and Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "health": 2
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_bestial_wrath",
@@ -474,7 +1094,41 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Give a Beast +2 Attack and Immune this turn."
+    "rulesText": "Give a Beast +2 Attack and Immune this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Beast"
+              }
+            },
+            "attack": 2,
+            "duration": "this-turn"
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Beast"
+              }
+            },
+            "keyword": "immune",
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_betrayal",
@@ -486,7 +1140,32 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "An enemy minion deals its damage to the minions next to it."
+    "rulesText": "An enemy minion deals its damage to the minions next to it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "redirect-damage",
+            "source": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "adjacent",
+              "adjacentTo": "event-target"
+            },
+            "amount": {
+              "reference": "source.attack"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_big_game_hunter",
@@ -498,7 +1177,28 @@
     "cost": 3,
     "attack": 4,
     "health": 2,
-    "rulesText": "Battlecry: Destroy a minion with an Attack of 7 or more."
+    "rulesText": "Battlecry: Destroy a minion with an Attack of 7 or more.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "stat": "attack",
+                "operator": "gte",
+                "value": 7
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_bite",
@@ -510,7 +1210,34 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Give your hero +4 Attack this turn and 4 Armor."
+    "rulesText": "Give your hero +4 Attack this turn and 4 Armor.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "attack": 4,
+            "duration": "this-turn"
+          },
+          {
+            "action": "gain-armor",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_blade_flurry",
@@ -522,7 +1249,34 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy your weapon and deal its damage to all enemies."
+    "rulesText": "Destroy your weapon and deal its damage to all enemies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            }
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": {
+              "reference": "source.weapon.attack"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_blessed_champion",
@@ -534,7 +1288,27 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Double a minion's Attack."
+    "rulesText": "Double a minion's Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": {
+              "operation": "multiply",
+              "value": 2
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_blessing_of_wisdom",
@@ -546,7 +1320,31 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Choose a minion. Whenever it attacks, draw a card."
+    "rulesText": "Choose a minion. Whenever it attacks, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-trigger",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "trigger": "on-attack",
+            "actions": [
+              {
+                "action": "draw",
+                "player": "self",
+                "count": 1
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_blizzard",
@@ -558,7 +1356,32 @@
     "cost": 6,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to all enemy minions and Freeze them."
+    "rulesText": "Deal 2 damage to all enemy minions and Freeze them.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 2
+          },
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_blood_fury",
@@ -571,7 +1394,9 @@
     "cost": 3,
     "attack": 3,
     "health": 8,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_blood_imp",
@@ -583,7 +1408,25 @@
     "cost": 1,
     "attack": 0,
     "health": 1,
-    "rulesText": "Stealth. At the end of your turn, give another random friendly minion +1 Health."
+    "rulesText": "Stealth. At the end of your turn, give another random friendly minion +1 Health.",
+    "keywords": ["stealth"],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "exclude": "source"
+            },
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_blood_knight",
@@ -595,7 +1438,39 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: All minions lose Divine Shield. Gain +3/+3 for each Shield lost."
+    "rulesText": "Battlecry: All minions lose Divine Shield. Gain +3/+3 for each Shield lost.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "remove-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "keyword": "divine-shield"
+          },
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "removed-keyword-count",
+              "keyword": "divine-shield"
+            },
+            "health": {
+              "reference": "removed-keyword-count",
+              "keyword": "divine-shield"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_bloodmage_thalnos",
@@ -607,7 +1482,20 @@
     "cost": 2,
     "attack": 1,
     "health": 1,
-    "rulesText": "Spell Damage +1. Deathrattle: Draw a card."
+    "rulesText": "Spell Damage +1. Deathrattle: Draw a card.",
+    "keywords": ["spell-damage"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_bloodsail_corsair",
@@ -619,7 +1507,24 @@
     "cost": 1,
     "attack": 1,
     "health": 2,
-    "rulesText": "Battlecry: Remove 1 Durability from your opponent's weapon."
+    "rulesText": "Battlecry: Remove 1 Durability from your opponent's weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "opponent",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "durability": -1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_bloodsail_raider",
@@ -631,7 +1536,25 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Battlecry: Gain Attack equal to the Attack of your weapon."
+    "rulesText": "Battlecry: Gain Attack equal to the Attack of your weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "source.weapon.attack"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_boar",
@@ -644,7 +1567,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_brawl",
@@ -656,7 +1581,27 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy all minions except one. (chosen randomly)"
+    "rulesText": "Destroy all minions except one. (chosen randomly)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "preserve": {
+                "selection": "random",
+                "count": 1
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_brewmaster",
@@ -669,7 +1614,9 @@
     "cost": 4,
     "attack": 4,
     "health": 4,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_cabal_shadow_priest",
@@ -681,7 +1628,28 @@
     "cost": 6,
     "attack": 4,
     "health": 5,
-    "rulesText": "Battlecry: Take control of an enemy minion that has 2 or less Attack."
+    "rulesText": "Battlecry: Take control of an enemy minion that has 2 or less Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "take-control",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "stat": "attack",
+                "operator": "lte",
+                "value": 2
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_cairne_bloodhoof",
@@ -693,7 +1661,20 @@
     "cost": 6,
     "attack": 4,
     "health": 5,
-    "rulesText": "Deathrattle: Summon a 4/5 Baine Bloodhoof."
+    "rulesText": "Deathrattle: Summon a 4/5 Baine Bloodhoof.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_baine_bloodhoof",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_captain_greenskin",
@@ -705,7 +1686,25 @@
     "cost": 5,
     "attack": 5,
     "health": 4,
-    "rulesText": "Battlecry: Give your weapon +1/+1."
+    "rulesText": "Battlecry: Give your weapon +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "attack": 1,
+            "durability": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_cenarius",
@@ -717,7 +1716,41 @@
     "cost": 9,
     "attack": 5,
     "health": 8,
-    "rulesText": "Choose One - Give your other minions +2/+2; or Summon two 2/2 Treants with Taunt."
+    "rulesText": "Choose One - Give your other minions +2/+2; or Summon two 2/2 Treants with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "all",
+                    "exclude": "source"
+                  },
+                  "attack": 2,
+                  "health": 2
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "summon",
+                  "cardId": "basic_treant_cenarius",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_chicken",
@@ -730,7 +1763,9 @@
     "cost": 0,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_circle_of_healing",
@@ -742,7 +1777,24 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Restore 4 Health to ALL minions."
+    "rulesText": "Restore 4 Health to ALL minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_cold_blood",
@@ -754,7 +1806,39 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Give a minion +2 Attack. Combo: +4 Attack instead."
+    "rulesText": "Give a minion +2 Attack. Combo: +4 Attack instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 2
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "combo"
+          },
+          "actions": [
+            {
+              "action": "modify",
+              "target": {
+                "selection": "event-target",
+                "type": "minion"
+              },
+              "attack": 2
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_coldlight_oracle",
@@ -766,7 +1850,25 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry: Each player draws 2 cards."
+    "rulesText": "Battlecry: Each player draws 2 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 2
+          },
+          {
+            "action": "draw",
+            "player": "opponent",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_coldlight_seer",
@@ -778,7 +1880,28 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Battlecry: Give ALL other Murlocs +2 Health."
+    "rulesText": "Battlecry: Give ALL other Murlocs +2 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "tribe": "Murloc"
+              },
+              "exclude": "source"
+            },
+            "health": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_commanding_shout",
@@ -790,7 +1913,25 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Your minions can't be reduced below 1 Health this turn."
+    "rulesText": "Your minions can't be reduced below 1 Health this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "minimumHealth": 1,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_conceal",
@@ -802,7 +1943,25 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Give your minions Stealth until your next turn."
+    "rulesText": "Give your minions Stealth until your next turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "keyword": "stealth",
+            "duration": "until-next-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_cone_of_cold",
@@ -814,7 +1973,32 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Freeze a minion and the minions next to it, and deal 1 damage to them."
+    "rulesText": "Freeze a minion and the minions next to it, and deal 1 damage to them.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen-and-adjacent"
+            },
+            "amount": 1
+          },
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen-and-adjacent"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_counterspell",
@@ -826,7 +2010,23 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When your opponent casts a spell, Counter it."
+    "rulesText": "Secret: When your opponent casts a spell, Counter it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "spell-cast",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "counter-event",
+            "event": "spell-cast"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_crazed_alchemist",
@@ -838,7 +2038,23 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry: Swap the Attack and Health of a minion."
+    "rulesText": "Battlecry: Swap the Attack and Health of a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "swap-stats",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_crazed_hunter",
@@ -851,7 +2067,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_crazy_monkey",
@@ -864,7 +2082,21 @@
     "cost": 1,
     "attack": 1,
     "health": 2,
-    "rulesText": "Battlecry: Throw Bananas."
+    "rulesText": "Battlecry: Throw Bananas.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "cardId": "classic_bananas",
+            "player": "opponent",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_cruel_taskmaster",
@@ -876,7 +2108,32 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry: Deal 1 damage to a minion and give it +2 Attack."
+    "rulesText": "Battlecry: Deal 1 damage to a minion and give it +2 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 1
+          },
+          {
+            "action": "modify",
+            "target": {
+              "selection": "event-target",
+              "type": "minion"
+            },
+            "attack": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_cult_master",
@@ -888,7 +2145,25 @@
     "cost": 4,
     "attack": 4,
     "health": 2,
-    "rulesText": "Whenever one of your other minions dies, draw a card."
+    "rulesText": "Whenever one of your other minions dies, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "event": {
+          "type": "minion-destroyed",
+          "controller": "self",
+          "exclude": "source"
+        },
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_damaged_golem",
@@ -901,7 +2176,9 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_dark_iron_dwarf",
@@ -913,7 +2190,25 @@
     "cost": 4,
     "attack": 4,
     "health": 4,
-    "rulesText": "Battlecry: Give a minion +2 Attack this turn."
+    "rulesText": "Battlecry: Give a minion +2 Attack this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 2,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_deadly_shot",
@@ -925,7 +2220,23 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a random enemy minion."
+    "rulesText": "Destroy a random enemy minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_deathwing",
@@ -937,7 +2248,33 @@
     "cost": 10,
     "attack": 12,
     "health": 12,
-    "rulesText": "Battlecry: Destroy all other minions and discard your hand."
+    "rulesText": "Battlecry: Destroy all other minions and discard your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            }
+          },
+          {
+            "action": "discard",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_defender",
@@ -950,7 +2287,9 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_defender_of_argus",
@@ -962,7 +2301,34 @@
     "cost": 4,
     "attack": 2,
     "health": 3,
-    "rulesText": "Battlecry: Give adjacent minions +1/+1 and Taunt."
+    "rulesText": "Battlecry: Give adjacent minions +1/+1 and Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "adjacent"
+            },
+            "attack": 1,
+            "health": 1
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "adjacent"
+            },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_defias_bandit",
@@ -975,7 +2341,9 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_defias_ringleader",
@@ -987,7 +2355,20 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Combo: Summon a 2/1 Defias Bandit."
+    "rulesText": "Combo: Summon a 2/1 Defias Bandit.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_defias_bandit",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_demolisher",
@@ -999,7 +2380,24 @@
     "cost": 3,
     "attack": 1,
     "health": 4,
-    "rulesText": "At the start of your turn, deal 2 damage to a random enemy."
+    "rulesText": "At the start of your turn, deal 2 damage to a random enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_demonfire",
@@ -1011,7 +2409,45 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to a minion. If it's a friendly Demon give it +2/+2 instead."
+    "rulesText": "Deal 2 damage to a minion. If it's a friendly Demon give it +2/+2 instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "target-is-friendly-demon"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "target-is-not-friendly-demon"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_devilsaur",
@@ -1024,7 +2460,9 @@
     "cost": 5,
     "attack": 5,
     "health": 5,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_dire_wolf_alpha",
@@ -1036,7 +2474,24 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Adjacent minions have +1 Attack."
+    "rulesText": "Adjacent minions have +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "adjacent"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_dispel",
@@ -1049,7 +2504,23 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Silence a minion."
+    "rulesText": "Silence a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_divine_favor",
@@ -1061,7 +2532,23 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Draw cards until you have as many in hand as your opponent."
+    "rulesText": "Draw cards until you have as many in hand as your opponent.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": {
+              "reference": "hand-size-difference",
+              "opponent": true
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_doomguard",
@@ -1073,7 +2560,25 @@
     "cost": 5,
     "attack": 5,
     "health": 7,
-    "rulesText": "Charge. Battlecry: Discard two random cards."
+    "rulesText": "Charge. Battlecry: Discard two random cards.",
+    "keywords": ["charge"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discard",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand",
+              "count": 2
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_doomhammer",
@@ -1085,7 +2590,19 @@
     "cost": 5,
     "attack": 2,
     "health": 8,
-    "rulesText": "Windfury, Overload: (2)"
+    "rulesText": "Windfury, Overload: (2)",
+    "keywords": ["windfury"],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "overload",
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_doomsayer",
@@ -1097,7 +2614,23 @@
     "cost": 2,
     "attack": 0,
     "health": 7,
-    "rulesText": "At the start of your turn, destroy ALL minions."
+    "rulesText": "At the start of your turn, destroy ALL minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_dread_corsair",
@@ -1109,7 +2642,26 @@
     "cost": 4,
     "attack": 3,
     "health": 3,
-    "rulesText": "Taunt. Costs (1) less per Attack of your weapon."
+    "rulesText": "Taunt. Costs (1) less per Attack of your weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "source.weapon.attack",
+              "operation": "subtract"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_druid_of_the_claw",
@@ -1121,7 +2673,49 @@
     "cost": 5,
     "attack": 4,
     "health": 4,
-    "rulesText": "Choose One - Charge; or +2 Health and Taunt."
+    "rulesText": "Choose One - Charge; or +2 Health and Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "grant-keyword",
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "keyword": "charge"
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "health": 2
+                },
+                {
+                  "action": "grant-keyword",
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "keyword": "taunt"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_dual_warglaives",
@@ -1134,7 +2728,9 @@
     "cost": 6,
     "attack": 4,
     "health": 2,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_dust_devil",
@@ -1146,7 +2742,19 @@
     "cost": 1,
     "attack": 3,
     "health": 1,
-    "rulesText": "Windfury. Overload: (2)"
+    "rulesText": "Windfury. Overload: (2)",
+    "keywords": ["windfury"],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "overload",
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_eaglehorn_bow",
@@ -1158,7 +2766,27 @@
     "cost": 3,
     "attack": 3,
     "health": 2,
-    "rulesText": "Whenever a Secret is revealed, gain +1 Durability."
+    "rulesText": "Whenever a Secret is revealed, gain +1 Durability.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-secret-revealed",
+        "event": {
+          "type": "secret-revealed",
+          "controller": "any"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "weapon",
+              "selection": "source"
+            },
+            "durability": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_earth_elemental",
@@ -1170,7 +2798,19 @@
     "cost": 5,
     "attack": 7,
     "health": 8,
-    "rulesText": "Taunt. Overload: (3)"
+    "rulesText": "Taunt. Overload: (3)",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "overload",
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_earth_shock",
@@ -1182,7 +2822,31 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Silence a minion, then deal 1 damage to it."
+    "rulesText": "Silence a minion, then deal 1 damage to it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "damage",
+            "target": {
+              "selection": "event-target",
+              "type": "minion"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_earthen_ring_farseer",
@@ -1194,7 +2858,24 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Restore 3 Health"
+    "rulesText": "Battlecry: Restore 3 Health",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_edwin_vancleef",
@@ -1206,7 +2887,31 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Combo: Gain +2/+2 for each card played earlier this turn."
+    "rulesText": "Combo: Gain +2/+2 for each card played earlier this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "combo"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "cards-played-earlier-this-turn"
+            },
+            "health": {
+              "reference": "cards-played-earlier-this-turn"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_emboldener_3000",
@@ -1219,7 +2924,25 @@
     "cost": 1,
     "attack": 0,
     "health": 4,
-    "rulesText": "At the end of your turn, give a random minion 1/ 1."
+    "rulesText": "At the end of your turn, give a random minion 1/ 1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_emerald_drake",
@@ -1232,7 +2955,9 @@
     "cost": 4,
     "attack": 7,
     "health": 6,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_emperor_cobra",
@@ -1244,7 +2969,28 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Destroy any minion damaged by this minion."
+    "rulesText": "Destroy any minion damaged by this minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "source": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_equality",
@@ -1256,7 +3002,27 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Change the Health of ALL minions to 1."
+    "rulesText": "Change the Health of ALL minions to 1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "health": {
+              "operation": "set",
+              "value": 1
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ethereal_arcanist",
@@ -1268,7 +3034,28 @@
     "cost": 4,
     "attack": 3,
     "health": 3,
-    "rulesText": "If you control a Secret at the end of your turn, gain +2/+2."
+    "rulesText": "If you control a Secret at the end of your turn, gain +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "condition": {
+          "type": "player-controls-secret",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_eviscerate",
@@ -1280,7 +3067,39 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage. Combo: Deal 4 damage instead."
+    "rulesText": "Deal 2 damage. Combo: Deal 4 damage instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "combo"
+          },
+          "actions": [
+            {
+              "action": "damage",
+              "target": {
+                "selection": "event-target",
+                "type": "character"
+              },
+              "amount": 2
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_explosive_shot",
@@ -1292,7 +3111,34 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 5 damage to a minion and 2 damage to adjacent ones."
+    "rulesText": "Deal 5 damage to a minion and 2 damage to adjacent ones.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 5
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "adjacent",
+              "adjacentTo": "event-target"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_explosive_trap",
@@ -1304,7 +3150,28 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When your hero is attacked, deal 2 damage to all enemies."
+    "rulesText": "Secret: When your hero is attacked, deal 2 damage to all enemies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "hero-attacked",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_eye_for_an_eye",
@@ -1316,7 +3183,30 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When your hero takes damage, deal that much damage to the enemy hero."
+    "rulesText": "Secret: When your hero takes damage, deal that much damage to the enemy hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "hero-damaged",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": {
+              "reference": "event.damage"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_faceless_manipulator",
@@ -1328,7 +3218,27 @@
     "cost": 5,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Choose a minion and become a copy of it."
+    "rulesText": "Battlecry: Choose a minion and become a copy of it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "destination": {
+              "type": "minion",
+              "selection": "source"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_faerie_dragon",
@@ -1340,7 +3250,9 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Can't be targeted by Spells or Hero Powers."
+    "rulesText": "Can't be targeted by Spells or Hero Powers.",
+    "keywords": ["spell-immune"],
+    "effects": []
   },
   {
     "id": "classic_far_sight",
@@ -1352,7 +3264,23 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Draw a card. That card costs (3) less."
+    "rulesText": "Draw a card. That card costs (3) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "modifyDrawnCard": {
+              "cost": -3
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_felguard",
@@ -1364,7 +3292,20 @@
     "cost": 3,
     "attack": 3,
     "health": 5,
-    "rulesText": "Taunt. Battlecry: Destroy one of your Mana Crystals."
+    "rulesText": "Taunt. Battlecry: Destroy one of your Mana Crystals.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy-mana-crystal",
+            "player": "self",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_fen_creeper",
@@ -1376,7 +3317,9 @@
     "cost": 5,
     "attack": 3,
     "health": 6,
-    "rulesText": "Taunt"
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "classic_feral_spirit",
@@ -1388,7 +3331,24 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Summon two 2/3 Spirit Wolves with Taunt. Overload: (2)"
+    "rulesText": "Summon two 2/3 Spirit Wolves with Taunt. Overload: (2)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_spirit_wolf",
+            "count": 2
+          },
+          {
+            "action": "overload",
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_finkle_einhorn",
@@ -1401,7 +3361,9 @@
     "cost": 2,
     "attack": 3,
     "health": 3,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_flame_burst",
@@ -1414,7 +3376,25 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Shoot 5 missiles at random enemies for 1 damage each."
+    "rulesText": "Shoot 5 missiles at random enemies for 1 damage each.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1,
+            "hits": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_flame_imp",
@@ -1426,7 +3406,24 @@
     "cost": 1,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry: Deal 3 damage to your hero."
+    "rulesText": "Battlecry: Deal 3 damage to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_flame_of_azzinoth",
@@ -1439,7 +3436,9 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_flare",
@@ -1451,7 +3450,33 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "All minions lose Stealth. Destroy all enemy Secrets. Draw a card."
+    "rulesText": "All minions lose Stealth. Destroy all enemy Secrets. Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "remove-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "keyword": "stealth"
+          },
+          {
+            "action": "destroy-secrets",
+            "player": "opponent"
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_flesheating_ghoul",
@@ -1463,7 +3488,27 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Whenever a minion dies, gain +1 Attack."
+    "rulesText": "Whenever a minion dies, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "event": {
+          "type": "minion-destroyed",
+          "controller": "any"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_force_of_nature",
@@ -1475,7 +3520,20 @@
     "cost": 6,
     "attack": null,
     "health": null,
-    "rulesText": "Summon three 2/2 Treants with Charge that die at the end of the turn."
+    "rulesText": "Summon three 2/2 Treants with Charge that die at the end of the turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_treant_force_of_nature",
+            "count": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_forked_lightning",
@@ -1487,7 +3545,29 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to 2 random enemy minions. Overload: (2)"
+    "rulesText": "Deal 2 damage to 2 random enemy minions. Overload: (2)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            },
+            "amount": 2,
+            "hits": 2
+          },
+          {
+            "action": "overload",
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_freezing_trap",
@@ -1499,7 +3579,27 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When an enemy minion attacks, return it to its owner's hand and it costs (2) more."
+    "rulesText": "Secret: When an enemy minion attacks, return it to its owner's hand and it costs (2) more.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-attacked",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "cost": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_frog",
@@ -1512,7 +3612,9 @@
     "cost": 0,
     "attack": 0,
     "health": 1,
-    "rulesText": "Taunt"
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "classic_frost_elemental",
@@ -1524,7 +3626,23 @@
     "cost": 6,
     "attack": 5,
     "health": 5,
-    "rulesText": "Battlecry: Freeze a character."
+    "rulesText": "Battlecry: Freeze a character.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_frothing_berserker",
@@ -1536,7 +3654,29 @@
     "cost": 3,
     "attack": 2,
     "health": 4,
-    "rulesText": "Whenever a minion takes damage, gain +1 Attack."
+    "rulesText": "Whenever a minion takes damage, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "target": {
+            "type": "minion"
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_gadgetzan_auctioneer",
@@ -1548,7 +3688,24 @@
     "cost": 6,
     "attack": 4,
     "health": 4,
-    "rulesText": "Whenever you cast a spell, draw a card."
+    "rulesText": "Whenever you cast a spell, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_gladiators_longbow",
@@ -1560,7 +3717,31 @@
     "cost": 7,
     "attack": 5,
     "health": 2,
-    "rulesText": "Your hero is Immune while attacking."
+    "rulesText": "Your hero is Immune while attacking.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "source": {
+            "selection": "hero",
+            "controller": "self"
+          }
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "keyword": "immune",
+            "duration": "this-attack"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_gnoll",
@@ -1573,7 +3754,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "classic_gorehowl",
@@ -1585,7 +3768,26 @@
     "cost": 7,
     "attack": 7,
     "health": 1,
-    "rulesText": "Attacking a minion costs 1 Attack instead of 1 Durability."
+    "rulesText": "Attacking a minion costs 1 Attack instead of 1 Durability.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "target": {
+            "type": "minion",
+            "controller": "opponent"
+          }
+        },
+        "actions": [
+          {
+            "action": "change-cost",
+            "resource": "weapon-durability",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_grommash_hellscream",
@@ -1597,7 +3799,26 @@
     "cost": 8,
     "attack": 4,
     "health": 9,
-    "rulesText": "Charge. Enrage: +6 Attack."
+    "rulesText": "Charge. Enrage: +6 Attack.",
+    "keywords": ["charge"],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "source-damaged"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 6
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_gruul",
@@ -1609,7 +3830,24 @@
     "cost": 8,
     "attack": 7,
     "health": 7,
-    "rulesText": "At the end of each turn, gain +1/+1."
+    "rulesText": "At the end of each turn, gain +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_harrison_jones",
@@ -1621,7 +3859,30 @@
     "cost": 5,
     "attack": 5,
     "health": 4,
-    "rulesText": "Battlecry: Destroy your opponent weapon and draw cards equal to its durability"
+    "rulesText": "Battlecry: Destroy your opponent weapon and draw cards equal to its durability",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "weapon",
+              "selection": "all"
+            }
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": {
+              "reference": "event-target.durability"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_harvest_golem",
@@ -1633,7 +3894,20 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Deathrattle: Summon a 2/1 Damaged Golem"
+    "rulesText": "Deathrattle: Summon a 2/1 Damaged Golem",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_damaged_golem",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_headcrack",
@@ -1645,7 +3919,44 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to the enemy hero. Combo: Return this card to your hand next turn."
+    "rulesText": "Deal 2 damage to the enemy hero. Combo: Return this card to your hand next turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "combo"
+          },
+          "actions": [
+            {
+              "action": "schedule",
+              "trigger": "start-of-turn",
+              "actions": [
+                {
+                  "action": "return-to-hand",
+                  "target": {
+                    "type": "card",
+                    "selection": "source"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_hidden_gnome",
@@ -1658,7 +3969,9 @@
     "cost": 2,
     "attack": 1,
     "health": 3,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_hogger",
@@ -1670,7 +3983,20 @@
     "cost": 6,
     "attack": 4,
     "health": 4,
-    "rulesText": "At the end of your turn, Summon a 2/2 Gnoll with Taunt"
+    "rulesText": "At the end of your turn, Summon a 2/2 Gnoll with Taunt",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_gnoll",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_hogger_smash",
@@ -1683,7 +4009,24 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 4 damage."
+    "rulesText": "Deal 4 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_holy_fire",
@@ -1695,7 +4038,33 @@
     "cost": 6,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 5 damage. Restore 5 Health to your hero."
+    "rulesText": "Deal 5 damage. Restore 5 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 5
+          },
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_holy_nova",
@@ -1707,7 +4076,33 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to all enemies. Restore 2 health to all friendly characters."
+    "rulesText": "Deal 2 damage to all enemies. Restore 2 health to all friendly characters.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 2
+          },
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_holy_wrath",
@@ -1719,7 +4114,32 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Draw a card and deal damage equal to its cost."
+    "rulesText": "Draw a card and deal damage equal to its cost.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "reveal": true
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": {
+              "reference": "drawn-card.cost"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_homing_chicken",
@@ -1732,7 +4152,27 @@
     "cost": 1,
     "attack": 0,
     "health": 1,
-    "rulesText": "At the start of your turn, destroy this minion and draw 3 cards."
+    "rulesText": "At the start of your turn, destroy this minion and draw 3 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            }
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_hungry_crab",
@@ -1744,7 +4184,35 @@
     "cost": 1,
     "attack": 1,
     "health": 2,
-    "rulesText": "Battlecry: Destroy a Murloc and gain +2/+2."
+    "rulesText": "Battlecry: Destroy a Murloc and gain +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Murloc"
+              }
+            }
+          },
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_hyena",
@@ -1757,7 +4225,9 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_ice_barrier",
@@ -1769,7 +4239,28 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: As soon as your hero is attacked, gain 8 Armor."
+    "rulesText": "Secret: As soon as your hero is attacked, gain 8 Armor.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "hero-attacked",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "gain-armor",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 8
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ice_block",
@@ -1781,7 +4272,37 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When your hero takes fatal damage, prevent it and become Immune this turn."
+    "rulesText": "Secret: When your hero takes fatal damage, prevent it and become Immune this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "hero-would-die",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "prevent-lethal",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            }
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "keyword": "immune",
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ice_lance",
@@ -1793,7 +4314,43 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Freeze a character. If it was already Frozen, deal 4 damage instead."
+    "rulesText": "Freeze a character. If it was already Frozen, deal 4 damage instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "target-frozen"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 4
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "target-not-frozen"
+        },
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_illidan_stormrage",
@@ -1805,7 +4362,24 @@
     "cost": 6,
     "attack": 7,
     "health": 5,
-    "rulesText": "Whenever you play a card, summon a 2/1 Flame of Azzinoth."
+    "rulesText": "Whenever you play a card, summon a 2/1 Flame of Azzinoth.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "card-played",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_flame_of_azzinoth",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_imp",
@@ -1818,7 +4392,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_imp_master",
@@ -1830,7 +4406,28 @@
     "cost": 3,
     "attack": 1,
     "health": 5,
-    "rulesText": "At the end of your turn, deal 1 damage to this minion and Summon a 1/1 Imp."
+    "rulesText": "At the end of your turn, deal 1 damage to this minion and Summon a 1/1 Imp.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "amount": 1
+          },
+          {
+            "action": "summon",
+            "cardId": "classic_imp",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_infernal",
@@ -1843,7 +4440,9 @@
     "cost": 6,
     "attack": 6,
     "health": 6,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_injured_blademaster",
@@ -1855,7 +4454,23 @@
     "cost": 3,
     "attack": 4,
     "health": 7,
-    "rulesText": "Battlecry:Deal 4 damage to HIMSELF."
+    "rulesText": "Battlecry:Deal 4 damage to HIMSELF.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_inner_fire",
@@ -1867,7 +4482,26 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Change a minions Attack to be equal to its Health."
+    "rulesText": "Change a minions Attack to be equal to its Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": {
+              "reference": "target.health"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_inner_rage",
@@ -1879,7 +4513,32 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 1 damage to a minion and give it +2 Attack."
+    "rulesText": "Deal 1 damage to a minion and give it +2 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 1
+          },
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "attack": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ironbark_protector",
@@ -1891,7 +4550,9 @@
     "cost": 8,
     "attack": 8,
     "health": 8,
-    "rulesText": "Taunt"
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "classic_ironbeak_owl",
@@ -1903,7 +4564,23 @@
     "cost": 2,
     "attack": 2,
     "health": 1,
-    "rulesText": "Battlecry:Silence a minion."
+    "rulesText": "Battlecry:Silence a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ironforge_rifleman",
@@ -1915,7 +4592,24 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry:Deal 1 damage."
+    "rulesText": "Battlecry:Deal 1 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_jungle_panther",
@@ -1927,7 +4621,9 @@
     "cost": 3,
     "attack": 4,
     "health": 2,
-    "rulesText": "Stealth"
+    "rulesText": "Stealth",
+    "keywords": ["stealth"],
+    "effects": []
   },
   {
     "id": "classic_keeper_of_the_grove",
@@ -1939,7 +4635,42 @@
     "cost": 4,
     "attack": 2,
     "health": 4,
-    "rulesText": "Choose One - Deal 2 damage; or Silence a minion."
+    "rulesText": "Choose One - Deal 2 damage; or Silence a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "damage",
+                  "target": {
+                    "controller": "opponent",
+                    "type": "character",
+                    "selection": "chosen"
+                  },
+                  "amount": 2
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "silence",
+                  "target": {
+                    "controller": "any",
+                    "type": "minion",
+                    "selection": "chosen"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_kidnapper",
@@ -1951,7 +4682,26 @@
     "cost": 6,
     "attack": 5,
     "health": 3,
-    "rulesText": "Combo: Return a minion to its owner's hand."
+    "rulesText": "Combo: Return a minion to its owner's hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "combo"
+        },
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_kill_command",
@@ -1963,7 +4713,52 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 3 damage. If you have a Beast, deal 5 damage instead."
+    "rulesText": "Deal 3 damage. If you have a Beast, deal 5 damage instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": {
+            "tribe": "Beast"
+          }
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 5
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "player-lacks-minion",
+          "player": "self",
+          "filter": {
+            "tribe": "Beast"
+          }
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_king_krush",
@@ -1975,7 +4770,9 @@
     "cost": 9,
     "attack": 8,
     "health": 8,
-    "rulesText": "Charge"
+    "rulesText": "Charge",
+    "keywords": ["charge"],
+    "effects": []
   },
   {
     "id": "classic_king_mukla",
@@ -1987,7 +4784,21 @@
     "cost": 3,
     "attack": 5,
     "health": 5,
-    "rulesText": "Battlecry: Give your opponent 2 Bananas"
+    "rulesText": "Battlecry: Give your opponent 2 Bananas",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "cardId": "classic_bananas",
+            "player": "opponent",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_kirin_tor_mage",
@@ -1999,7 +4810,28 @@
     "cost": 3,
     "attack": 4,
     "health": 3,
-    "rulesText": "Batttlecry: The next Secret you play this turn costs (0)."
+    "rulesText": "Batttlecry: The next Secret you play this turn costs (0).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "next",
+              "zone": "hand",
+              "filter": {
+                "card-type": "Secret"
+              }
+            },
+            "amount": -999
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_knife_juggler",
@@ -2011,7 +4843,28 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "After you summon a minion, deal 1 damage to a random enemy."
+    "rulesText": "After you summon a minion, deal 1 damage to a random enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "any"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_laughing_sister",
@@ -2024,7 +4877,9 @@
     "cost": 3,
     "attack": 3,
     "health": 5,
-    "rulesText": "Can't be targeted by Spells or Hero powers."
+    "rulesText": "Can't be targeted by Spells or Hero powers.",
+    "keywords": ["spell-immune"],
+    "effects": []
   },
   {
     "id": "classic_lava_burst",
@@ -2036,7 +4891,28 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 5 damage. Overload: (2)"
+    "rulesText": "Deal 5 damage. Overload: (2)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 5
+          },
+          {
+            "action": "overload",
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_lay_on_hands",
@@ -2048,7 +4924,29 @@
     "cost": 8,
     "attack": null,
     "health": null,
-    "rulesText": "Restore 8 Health. Draw 3 cards."
+    "rulesText": "Restore 8 Health. Draw 3 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 8
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_leeroy_jenkins",
@@ -2060,7 +4958,20 @@
     "cost": 5,
     "attack": 6,
     "health": 2,
-    "rulesText": "Charge. Battlecry: Summon two 1/1 Whelps for your opponent."
+    "rulesText": "Charge. Battlecry: Summon two 1/1 Whelps for your opponent.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_whelp",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_legacy_of_the_emperor",
@@ -2073,7 +4984,25 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Give your minions +2/+2."
+    "rulesText": "Give your minions +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_leokk",
@@ -2086,7 +5015,25 @@
     "cost": 3,
     "attack": 2,
     "health": 4,
-    "rulesText": "Other friendly minions have 1 Attack."
+    "rulesText": "Other friendly minions have 1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_leper_gnome",
@@ -2098,7 +5045,24 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "Deathrattle:Deal 2 damage to the enemy hero."
+    "rulesText": "Deathrattle:Deal 2 damage to the enemy hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_life_tap",
@@ -2111,7 +5075,29 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Draw a card and take 2 damage."
+    "rulesText": "Draw a card and take 2 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_lights_justice",
@@ -2123,7 +5109,9 @@
     "cost": 1,
     "attack": 1,
     "health": 4,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_lightning_bolt",
@@ -2135,7 +5123,28 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 3 damage. Overload: (1)"
+    "rulesText": "Deal 3 damage. Overload: (1)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          },
+          {
+            "action": "overload",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_lightning_storm",
@@ -2147,7 +5156,30 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2-3 damage to all enemy minions. Overload: (2)"
+    "rulesText": "Deal 2-3 damage to all enemy minions. Overload: (2)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": {
+              "random": [2, 3]
+            }
+          },
+          {
+            "action": "overload",
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_lightspawn",
@@ -2159,7 +5191,25 @@
     "cost": 4,
     "attack": 0,
     "health": 5,
-    "rulesText": "This minion's Attack is always equal to its Health."
+    "rulesText": "This minion's Attack is always equal to its Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "health"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_lightwarden",
@@ -2171,7 +5221,29 @@
     "cost": 1,
     "attack": 1,
     "health": 2,
-    "rulesText": "Whenever a character is healed, gain +2 Attack."
+    "rulesText": "Whenever a character is healed, gain +2 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-heal",
+        "event": {
+          "type": "health-restored",
+          "target": {
+            "type": "character"
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_lightwell",
@@ -2183,7 +5255,27 @@
     "cost": 2,
     "attack": 0,
     "health": 5,
-    "rulesText": "At the start of your turn, restore 3 Health to a damaged friendly character."
+    "rulesText": "At the start of your turn, restore 3 Health to a damaged friendly character.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "random",
+              "filter": {
+                "damaged": true
+              }
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_loot_hoarder",
@@ -2195,7 +5287,20 @@
     "cost": 2,
     "attack": 2,
     "health": 1,
-    "rulesText": "Deathrattle:Draw a card."
+    "rulesText": "Deathrattle:Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_lord_jaraxxus",
@@ -2207,7 +5312,19 @@
     "cost": 9,
     "attack": null,
     "armor": 5,
-    "rulesText": "Battlecry: Equip a 3/8 Blood Fury."
+    "rulesText": "Battlecry: Equip a 3/8 Blood Fury.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "equip",
+            "cardId": "classic_blood_fury"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_lord_of_the_arena",
@@ -2219,7 +5336,9 @@
     "cost": 6,
     "attack": 6,
     "health": 5,
-    "rulesText": "Taunt"
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "classic_lorewalker_cho",
@@ -2231,7 +5350,31 @@
     "cost": 2,
     "attack": 0,
     "health": 4,
-    "rulesText": "Whenever a player casts a spell, put a copy into the other player's hand."
+    "rulesText": "Whenever a player casts a spell, put a copy into the other player's hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "any"
+        },
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "type": "card",
+              "selection": "event-source"
+            },
+            "destination": {
+              "type": "card",
+              "selection": "other-player-hand",
+              "zone": "hand"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mad_bomber",
@@ -2243,7 +5386,26 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry:Deal 3 damage randomly split between all other characters."
+    "rulesText": "Battlecry:Deal 3 damage randomly split between all other characters.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "random",
+              "exclude": "source"
+            },
+            "amount": 1,
+            "hits": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_malygos",
@@ -2255,7 +5417,10 @@
     "cost": 9,
     "attack": 4,
     "health": 12,
-    "rulesText": "Spell Damage +5."
+    "rulesText": "Spell Damage +5.",
+    "keywords": ["spell-damage"],
+    "effects": [],
+    "spellDamage": 5
   },
   {
     "id": "classic_mana_addict",
@@ -2267,7 +5432,28 @@
     "cost": 2,
     "attack": 1,
     "health": 3,
-    "rulesText": "Whenever you cast a spell, gain +2 Attack this turn."
+    "rulesText": "Whenever you cast a spell, gain +2 Attack this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mana_tide_totem",
@@ -2279,7 +5465,20 @@
     "cost": 3,
     "attack": 0,
     "health": 3,
-    "rulesText": "At the end of your turn, draw a card."
+    "rulesText": "At the end of your turn, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mana_wraith",
@@ -2291,7 +5490,24 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "All minions cost (1) more."
+    "rulesText": "All minions cost (1) more.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mana_wyrm",
@@ -2303,7 +5519,27 @@
     "cost": 1,
     "attack": 1,
     "health": 3,
-    "rulesText": "Whenever you cast a spell, gain +1 Attack."
+    "rulesText": "Whenever you cast a spell, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mark_of_nature",
@@ -2315,7 +5551,52 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Choose One - Give a minion +4 Attack; or +4 Health and Taunt."
+    "rulesText": "Choose One - Give a minion +4 Attack; or +4 Health and Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "controller": "any",
+                    "type": "minion",
+                    "selection": "chosen"
+                  },
+                  "attack": 4
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "controller": "any",
+                    "type": "minion",
+                    "selection": "chosen"
+                  },
+                  "health": 4
+                },
+                {
+                  "action": "grant-keyword",
+                  "target": {
+                    "controller": "any",
+                    "type": "minion",
+                    "selection": "chosen"
+                  },
+                  "keyword": "taunt"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_mass_dispel",
@@ -2327,7 +5608,28 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Silence all enemy minions. Draw a card."
+    "rulesText": "Silence all enemy minions. Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            }
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_massive_gnoll",
@@ -2340,7 +5642,9 @@
     "cost": 4,
     "attack": 5,
     "health": 2,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_master_of_disguise",
@@ -2352,7 +5656,24 @@
     "cost": 4,
     "attack": 4,
     "health": 4,
-    "rulesText": "Battlecry: Give a friendly minion Stealth."
+    "rulesText": "Battlecry: Give a friendly minion Stealth.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "stealth"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_master_swordsmith",
@@ -2364,7 +5685,25 @@
     "cost": 2,
     "attack": 1,
     "health": 3,
-    "rulesText": "At the end of your turn,give another random friendly minion +1 Attack."
+    "rulesText": "At the end of your turn,give another random friendly minion +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "exclude": "source"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mechanical_dragonling",
@@ -2377,7 +5716,9 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_millhouse_manastorm",
@@ -2389,7 +5730,9 @@
     "cost": 0,
     "attack": 4,
     "health": 4,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_mind_control_tech",
@@ -2401,7 +5744,29 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry:If your opponent has 4 or more minions, take control of one of at random."
+    "rulesText": "Battlecry:If your opponent has 4 or more minions, take control of one of at random.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion-count",
+          "player": "opponent",
+          "operator": "gte",
+          "value": 4
+        },
+        "actions": [
+          {
+            "action": "take-control",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mindgames",
@@ -2413,7 +5778,28 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Put a copy of a random minion from your opponent's deck into the battlefield."
+    "rulesText": "Put a copy of a random minion from your opponent's deck into the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "source": {
+              "controller": "opponent",
+              "type": "card",
+              "selection": "random",
+              "zone": "deck",
+              "filter": {
+                "type": "minion"
+              }
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mirror_entity",
@@ -2425,7 +5811,27 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When your opponent plays a minion, summon a copy of it."
+    "rulesText": "Secret: When your opponent plays a minion, summon a copy of it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "summon-copy",
+            "source": {
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mogushan_warden",
@@ -2437,7 +5843,9 @@
     "cost": 4,
     "attack": 1,
     "health": 7,
-    "rulesText": "Taunt"
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "classic_molten_giant",
@@ -2449,7 +5857,26 @@
     "cost": 20,
     "attack": 8,
     "health": 8,
-    "rulesText": "Costs (1) less for each damage your hero has taken."
+    "rulesText": "Costs (1) less for each damage your hero has taken.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "hero-damage",
+              "operation": "subtract"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_moonfire",
@@ -2461,7 +5888,24 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 1 damage."
+    "rulesText": "Deal 1 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mortal_strike",
@@ -2473,7 +5917,48 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 4 damage.If your hero has 12 or less Health, deal 6 damage instead."
+    "rulesText": "Deal 4 damage.If your hero has 12 or less Health, deal 6 damage instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "player-health-lte",
+          "player": "self",
+          "value": 12
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 6
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "player-health-gt",
+          "player": "self",
+          "value": 12
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mountain_giant",
@@ -2485,7 +5970,26 @@
     "cost": 12,
     "attack": 8,
     "health": 8,
-    "rulesText": "Costs (1) less for each other card in your hand."
+    "rulesText": "Costs (1) less for each other card in your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "other-cards-in-hand",
+              "operation": "subtract"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_muklas_big_brother",
@@ -2498,7 +6002,9 @@
     "cost": 6,
     "attack": 10,
     "health": 10,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_murloc_tidecaller",
@@ -2510,7 +6016,30 @@
     "cost": 1,
     "attack": 1,
     "health": 2,
-    "rulesText": "Whenever a Murloc is summoned, gain +1 Attack."
+    "rulesText": "Whenever a Murloc is summoned, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "any",
+          "filter": {
+            "tribe": "Murloc"
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_murloc_warleader",
@@ -2522,7 +6051,29 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "ALL other Murlocs have +2/+1."
+    "rulesText": "ALL other Murlocs have +2/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "tribe": "Murloc"
+              },
+              "exclude": "source"
+            },
+            "attack": 2,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_naga_myrmidon",
@@ -2535,7 +6086,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_nat_pagle",
@@ -2547,7 +6100,21 @@
     "cost": 2,
     "attack": 0,
     "health": 4,
-    "rulesText": "At the end of your turn, you have a 50% chance to draw a card."
+    "rulesText": "At the end of your turn, you have a 50% chance to draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "chance": 0.5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_naturalize",
@@ -2559,7 +6126,28 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a minion. Your opponent draws 2 cards."
+    "rulesText": "Destroy a minion. Your opponent draws 2 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "draw",
+            "player": "opponent",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_noble_sacrifice",
@@ -2571,7 +6159,25 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When an enemy attacks, summon a 2/1 Defender as the new target."
+    "rulesText": "Secret: When an enemy attacks, summon a 2/1 Defender as the new target.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "character-attacked",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_defender",
+            "count": 1,
+            "asNewAttackTarget": true
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_nourish",
@@ -2583,7 +6189,36 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Choose One - Gain 2 Mana Crystals; or Draw 3 cards."
+    "rulesText": "Choose One - Gain 2 Mana Crystals; or Draw 3 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "gain-mana",
+                  "player": "self",
+                  "amount": 2,
+                  "crystal": "empty"
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "draw",
+                  "player": "self",
+                  "count": 3
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_nozdormu",
@@ -2595,7 +6230,19 @@
     "cost": 9,
     "attack": 8,
     "health": 8,
-    "rulesText": "Players only have 15 seconds to take their turns."
+    "rulesText": "Players only have 15 seconds to take their turns.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "set-turn-limit",
+            "seconds": 15
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_onyxia",
@@ -2607,7 +6254,23 @@
     "cost": 9,
     "attack": 8,
     "health": 8,
-    "rulesText": "Battlecry: Summon 1/1 Whelps until your side of the battlefield is full."
+    "rulesText": "Battlecry: Summon 1/1 Whelps until your side of the battlefield is full.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_whelp",
+            "count": {
+              "reference": "available-board-slots"
+            },
+            "until": "board-full"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_pandaren_scout",
@@ -2620,7 +6283,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_panther",
@@ -2633,7 +6298,9 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_patient_assassin",
@@ -2645,7 +6312,28 @@
     "cost": 2,
     "attack": 1,
     "health": 1,
-    "rulesText": "Stealth. Destroy any minion damaged by this minion."
+    "rulesText": "Stealth. Destroy any minion damaged by this minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "source": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_perditions_blade",
@@ -2657,7 +6345,44 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry: Deal 1 damage. Combo: Deal 2 damage instead."
+    "rulesText": "Battlecry: Deal 1 damage. Combo: Deal 2 damage instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "combo"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "not-combo"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_pint_sized_summoner",
@@ -2669,7 +6394,27 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "The first minion you play each turn costs (1) less."
+    "rulesText": "The first minion you play each turn costs (1) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "type": "first-minion-played-this-turn",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "event-target"
+            },
+            "amount": -1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_pit_lord",
@@ -2681,7 +6426,24 @@
     "cost": 4,
     "attack": 5,
     "health": 6,
-    "rulesText": "Battlecry: Deal 5 damage to your hero."
+    "rulesText": "Battlecry: Deal 5 damage to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_poultryizer",
@@ -2694,7 +6456,24 @@
     "cost": 1,
     "attack": 0,
     "health": 3,
-    "rulesText": "At the start of your turn, transform a random minion into a 1/1 Chicken."
+    "rulesText": "At the start of your turn, transform a random minion into a 1/1 Chicken.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "transform",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "random"
+            },
+            "cardId": "classic_chicken"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_power_of_the_wild",
@@ -2706,7 +6485,40 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Choose one - Give your minions +1/+1; or Summon a 3/2 Panther."
+    "rulesText": "Choose one - Give your minions +1/+1; or Summon a 3/2 Panther.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "all"
+                  },
+                  "attack": 1,
+                  "health": 1
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "summon",
+                  "cardId": "classic_panther",
+                  "count": 1
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_power_overwhelming",
@@ -2718,7 +6530,55 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Give a friendly minion +4/+4 until the end of turn. Then, it dies. Horribly."
+    "rulesText": "Give a friendly minion +4/+4 until the end of turn. Then, it dies. Horribly.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "schedule",
+            "trigger": "end-of-turn",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "actions": [
+              {
+                "action": "modify",
+                "target": {
+                  "type": "minion",
+                  "selection": "event-target"
+                },
+                "attack": 4,
+                "health": 4
+              },
+              {
+                "action": "destroy",
+                "target": {
+                  "type": "minion",
+                  "selection": "event-target"
+                }
+              }
+            ],
+            "immediate": [
+              {
+                "action": "modify",
+                "target": {
+                  "controller": "self",
+                  "type": "minion",
+                  "selection": "chosen"
+                },
+                "attack": 4,
+                "health": 4,
+                "duration": "this-turn"
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_preparation",
@@ -2730,7 +6590,29 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "The next spell you cast this turn costs (3) less."
+    "rulesText": "The next spell you cast this turn costs (3) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "next",
+              "zone": "hand",
+              "filter": {
+                "card-type": "Spell"
+              }
+            },
+            "amount": -3,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_priestess_of_elune",
@@ -2742,7 +6624,24 @@
     "cost": 6,
     "attack": 5,
     "health": 4,
-    "rulesText": "Battlecry: Restore 4 Health to your hero."
+    "rulesText": "Battlecry: Restore 4 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_prophet_velen",
@@ -2754,7 +6653,25 @@
     "cost": 7,
     "attack": 7,
     "health": 7,
-    "rulesText": "Double the damage and healing of your spells and Hero Power."
+    "rulesText": "Double the damage and healing of your spells and Hero Power.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "spellDamageMultiplier": 2,
+            "healingMultiplier": 2,
+            "heroPowerMultiplier": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_pyroblast",
@@ -2766,7 +6683,24 @@
     "cost": 10,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 10 damage."
+    "rulesText": "Deal 10 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 10
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_questing_adventurer",
@@ -2778,7 +6712,28 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Whenever you play a card, gain +1/+1."
+    "rulesText": "Whenever you play a card, gain +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "card-played",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_raging_worgen",
@@ -2790,7 +6745,34 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Enrage: Windfury and +1 Attack"
+    "rulesText": "Enrage: Windfury and +1 Attack",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "source-damaged"
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "windfury"
+          },
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ragnaros_the_firelord",
@@ -2802,7 +6784,24 @@
     "cost": 8,
     "attack": 8,
     "health": 8,
-    "rulesText": "Can't Attack. At the end of your turn, deal 8 damage to a random enemy."
+    "rulesText": "Can't Attack. At the end of your turn, deal 8 damage to a random enemy.",
+    "keywords": ["cannot-attack"],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 8
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_rampage",
@@ -2814,7 +6813,28 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Give a damaged minion +3/+3."
+    "rulesText": "Give a damaged minion +3/+3.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "damaged": true
+              }
+            },
+            "attack": 3,
+            "health": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ravenholdt_assassin",
@@ -2826,7 +6846,9 @@
     "cost": 7,
     "attack": 7,
     "health": 5,
-    "rulesText": "Stealth"
+    "rulesText": "Stealth",
+    "keywords": ["stealth"],
+    "effects": []
   },
   {
     "id": "classic_redemption",
@@ -2838,7 +6860,27 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When one of your minions dies, return it to life with 1 Health."
+    "rulesText": "Secret: When one of your minions dies, return it to life with 1 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-destroyed",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "resurrect",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_repentance",
@@ -2850,7 +6892,30 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When your opponent plays a minion, reduce its Health to 1."
+    "rulesText": "Secret: When your opponent plays a minion, reduce its Health to 1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "health": {
+              "operation": "set",
+              "value": 1
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_savagery",
@@ -2862,7 +6927,26 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Deal damage equal to your hero's Attack to a minion."
+    "rulesText": "Deal damage equal to your hero's Attack to a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": {
+              "reference": "self.hero.attack"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_savannah_highmane",
@@ -2874,7 +6958,20 @@
     "cost": 6,
     "attack": 6,
     "health": 5,
-    "rulesText": "Deathrattle: Summon two 2/2 Hyenas."
+    "rulesText": "Deathrattle: Summon two 2/2 Hyenas.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_hyena",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_scarlet_crusader",
@@ -2886,7 +6983,9 @@
     "cost": 3,
     "attack": 3,
     "health": 1,
-    "rulesText": "Divine Shield"
+    "rulesText": "Divine Shield",
+    "keywords": ["divine-shield"],
+    "effects": []
   },
   {
     "id": "classic_scavenging_hyena",
@@ -2898,7 +6997,31 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Whenever a friendly Beast dies, gain +2/+1."
+    "rulesText": "Whenever a friendly Beast dies, gain +2/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "event": {
+          "type": "minion-destroyed",
+          "controller": "self",
+          "filter": {
+            "tribe": "Beast"
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_sea_giant",
@@ -2910,7 +7033,26 @@
     "cost": 10,
     "attack": 8,
     "health": 8,
-    "rulesText": "Costs (1) less for each other minion on the battlefield."
+    "rulesText": "Costs (1) less for each other minion on the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "other-minions-on-board",
+              "operation": "subtract"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_secretkeeper",
@@ -2922,7 +7064,28 @@
     "cost": 1,
     "attack": 1,
     "health": 2,
-    "rulesText": "Whenever a Secret is played, gain +1/+1."
+    "rulesText": "Whenever a Secret is played, gain +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-secret-played",
+        "event": {
+          "type": "secret-played",
+          "controller": "any"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_sense_demons",
@@ -2934,7 +7097,28 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Put 2 random Demons from your deck into your hand."
+    "rulesText": "Put 2 random Demons from your deck into your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "source": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "deck",
+              "filter": {
+                "tribe": "Demon"
+              }
+            },
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_shado_pan_monk",
@@ -2947,7 +7131,9 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_shadow_madness",
@@ -2959,7 +7145,29 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Gain control of an enemy minion with 3 or less Attack until end of turn."
+    "rulesText": "Gain control of an enemy minion with 3 or less Attack until end of turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "take-control",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "stat": "attack",
+                "operator": "lte",
+                "value": 3
+              }
+            },
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_shadow_of_nothing",
@@ -2972,7 +7180,9 @@
     "cost": 0,
     "attack": 0,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_shadowflame",
@@ -2984,7 +7194,31 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a friendly minion and deal its Attack damage to all enemy minions."
+    "rulesText": "Destroy a friendly minion and deal its Attack damage to all enemy minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "sacrifice-and-damage",
+            "source": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": {
+              "reference": "source.attack"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_shadowform",
@@ -2996,7 +7230,25 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Your Hero Power becomes 'Deal 2 damage'. If already in Shadowform: 3 damage."
+    "rulesText": "Your Hero Power becomes 'Deal 2 damage'. If already in Shadowform: 3 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": {
+              "damage": 2
+            },
+            "upgradedPower": {
+              "damage": 3
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_shadowstep",
@@ -3008,7 +7260,24 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Return a friendly minion to your hand. It costs (2) less."
+    "rulesText": "Return a friendly minion to your hand. It costs (2) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "cost": -2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_shandos_lesson",
@@ -3021,7 +7290,20 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Summon two 2/2 Treants with Taunt."
+    "rulesText": "Summon two 2/2 Treants with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "basic_treant_cenarius",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_shield_block",
@@ -3033,7 +7315,29 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Gain 5 Armor. Draw a card."
+    "rulesText": "Gain 5 Armor. Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "gain-armor",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 5
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_shield_slam",
@@ -3045,7 +7349,26 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 1 damage to a minion for each Armor you have."
+    "rulesText": "Deal 1 damage to a minion for each Armor you have.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": {
+              "reference": "self.hero.armor"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_shieldbearer",
@@ -3057,7 +7380,9 @@
     "cost": 1,
     "attack": 0,
     "health": 4,
-    "rulesText": "Taunt"
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "classic_southsea_deckhand",
@@ -3069,7 +7394,27 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "Has Charge while you have a weapon equipped."
+    "rulesText": "Has Charge while you have a weapon equipped.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "player-has-weapon",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "charge"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_si_7_agent",
@@ -3081,7 +7426,27 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Combo: Deal 2 damage."
+    "rulesText": "Combo: Deal 2 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "combo"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_silence",
@@ -3093,7 +7458,23 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Silence a minion."
+    "rulesText": "Silence a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_silver_hand_knight",
@@ -3105,7 +7486,20 @@
     "cost": 5,
     "attack": 4,
     "health": 4,
-    "rulesText": "Battlecry:Summon a 2/2 Squire."
+    "rulesText": "Battlecry:Summon a 2/2 Squire.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_squire",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_silverback_patriarch",
@@ -3117,7 +7511,9 @@
     "cost": 3,
     "attack": 1,
     "health": 4,
-    "rulesText": "Taunt."
+    "rulesText": "Taunt.",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "classic_silvermoon_guardian",
@@ -3129,7 +7525,9 @@
     "cost": 4,
     "attack": 3,
     "health": 3,
-    "rulesText": "Divine Sheild"
+    "rulesText": "Divine Sheild",
+    "keywords": ["divine-shield"],
+    "effects": []
   },
   {
     "id": "classic_siphon_soul",
@@ -3141,7 +7539,32 @@
     "cost": 6,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a minion.Restore 3 Health to your hero."
+    "rulesText": "Destroy a minion.Restore 3 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_skeleton",
@@ -3154,7 +7577,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_slam",
@@ -3166,7 +7591,36 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to a minion.If it survives, draw a card."
+    "rulesText": "Deal 2 damage to a minion.If it survives, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "target-survived"
+          },
+          "actions": [
+            {
+              "action": "draw",
+              "player": "self",
+              "count": 1
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "classic_snake",
@@ -3179,7 +7633,9 @@
     "cost": 0,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_snake_trap",
@@ -3191,7 +7647,24 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When one of your minions is attacked, summon three 1/1 Snakes."
+    "rulesText": "Secret: When one of your minions is attacked, summon three 1/1 Snakes.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "friendly-minion-attacked",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_snake",
+            "count": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_snipe",
@@ -3203,7 +7676,27 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When your opponent plays a minion, deal 4 damage to it."
+    "rulesText": "Secret: When your opponent plays a minion, deal 4 damage to it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_sorcerers_apprentice",
@@ -3215,7 +7708,28 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Your spells cost (1) less."
+    "rulesText": "Your spells cost (1) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "card-type": "Spell"
+              }
+            },
+            "amount": -1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_soul_of_the_forest",
@@ -3227,7 +7741,30 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Give your minions \"Deathrattle: Summon a 2/2 Treant.\""
+    "rulesText": "Give your minions \"Deathrattle: Summon a 2/2 Treant.\"",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-deathrattle",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "actions": [
+              {
+                "action": "summon",
+                "cardId": "basic_treant_soul_of_the_forest",
+                "count": 1
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_southsea_captain",
@@ -3239,7 +7776,29 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Your other Pirates have +1/+1."
+    "rulesText": "Your other Pirates have +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "tribe": "Pirate"
+              },
+              "exclude": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_spellbender",
@@ -3251,7 +7810,24 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When an enemy casts a spell on a minion, summon a 1/3 as the new target."
+    "rulesText": "Secret: When an enemy casts a spell on a minion, summon a 1/3 as the new target.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "spell-targeted-minion",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_spellbender_minion",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_spellbender_minion",
@@ -3264,7 +7840,9 @@
     "cost": 0,
     "attack": 1,
     "health": 3,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_spellbreaker",
@@ -3276,7 +7854,23 @@
     "cost": 4,
     "attack": 4,
     "health": 3,
-    "rulesText": "Battlecry:Silence a minion."
+    "rulesText": "Battlecry:Silence a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_spirit_wolf",
@@ -3289,7 +7883,9 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Taunt."
+    "rulesText": "Taunt.",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "classic_spiteful_smith",
@@ -3301,7 +7897,27 @@
     "cost": 5,
     "attack": 4,
     "health": 6,
-    "rulesText": "Enrage: Your weapon has +2 attack."
+    "rulesText": "Enrage: Your weapon has +2 attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "source-damaged"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "attack": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_sprint",
@@ -3313,7 +7929,20 @@
     "cost": 7,
     "attack": null,
     "health": null,
-    "rulesText": "Draw 4 cards."
+    "rulesText": "Draw 4 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_squire",
@@ -3326,7 +7955,9 @@
     "cost": 1,
     "attack": 2,
     "health": 2,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_squirrel",
@@ -3339,7 +7970,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_stampeding_kodo",
@@ -3351,7 +7984,28 @@
     "cost": 5,
     "attack": 3,
     "health": 5,
-    "rulesText": "Battlecry:Destroy a random enemy minion with 2 or less Attack."
+    "rulesText": "Battlecry:Destroy a random enemy minion with 2 or less Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random",
+              "filter": {
+                "stat": "attack",
+                "operator": "lte",
+                "value": 2
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_starfall",
@@ -3363,7 +8017,24 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 5 damage to a minion."
+    "rulesText": "Deal 5 damage to a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_stomp",
@@ -3376,7 +8047,24 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to all enemies."
+    "rulesText": "Deal 2 damage to all enemies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_stormforged_axe",
@@ -3388,7 +8076,19 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Overload: (1)"
+    "rulesText": "Overload: (1)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "overload",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_stormwind_knight",
@@ -3400,7 +8100,9 @@
     "cost": 4,
     "attack": 2,
     "health": 5,
-    "rulesText": "Charge"
+    "rulesText": "Charge",
+    "keywords": ["charge"],
+    "effects": []
   },
   {
     "id": "classic_stranglethorn_tiger",
@@ -3412,7 +8114,9 @@
     "cost": 5,
     "attack": 5,
     "health": 5,
-    "rulesText": "Stealth."
+    "rulesText": "Stealth.",
+    "keywords": ["stealth"],
+    "effects": []
   },
   {
     "id": "classic_summon_a_panther",
@@ -3425,7 +8129,20 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Summon a 3/2 Panther."
+    "rulesText": "Summon a 3/2 Panther.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_panther",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_summoning_portal",
@@ -3437,7 +8154,25 @@
     "cost": 4,
     "attack": 0,
     "health": 4,
-    "rulesText": "Your minions cost (2) less, but not less than (1)."
+    "rulesText": "Your minions cost (2) less, but not less than (1).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": -2,
+            "minimum": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_sunfury_protector",
@@ -3449,7 +8184,24 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Battlecry:Give adjacent minions Taunt."
+    "rulesText": "Battlecry:Give adjacent minions Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "adjacent"
+            },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_sunwalker",
@@ -3461,7 +8213,9 @@
     "cost": 6,
     "attack": 4,
     "health": 5,
-    "rulesText": "Taunt. Divine Shield"
+    "rulesText": "Taunt. Divine Shield",
+    "keywords": ["taunt", "divine-shield"],
+    "effects": []
   },
   {
     "id": "classic_sword_of_justice",
@@ -3473,7 +8227,36 @@
     "cost": 3,
     "attack": 1,
     "health": 5,
-    "rulesText": "Whenever you summon a minion, give it +1/+1 and this loses 1 Durability."
+    "rulesText": "Whenever you summon a minion, give it +1/+1 and this loses 1 Durability.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "attack": 1,
+            "health": 1
+          },
+          {
+            "action": "modify",
+            "target": {
+              "type": "weapon",
+              "selection": "source"
+            },
+            "durability": -1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_sylvanas_windrunner",
@@ -3485,7 +8268,23 @@
     "cost": 6,
     "attack": 5,
     "health": 5,
-    "rulesText": "Deathrattle: Take control of a random enemy minion."
+    "rulesText": "Deathrattle: Take control of a random enemy minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "take-control",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_tauren_warrior",
@@ -3497,7 +8296,26 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Taunt.Enrage:+ 3 Attack"
+    "rulesText": "Taunt.Enrage:+ 3 Attack",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "source-damaged"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_temple_enforcer",
@@ -3509,7 +8327,24 @@
     "cost": 6,
     "attack": 6,
     "health": 6,
-    "rulesText": "Battlecry: Give a friendly minion +3 Health."
+    "rulesText": "Battlecry: Give a friendly minion +3 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "health": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_the_beast",
@@ -3521,7 +8356,21 @@
     "cost": 6,
     "attack": 9,
     "health": 7,
-    "rulesText": "Deathrattle:Summon a 3/3 Finkle Einhorn for your opponent."
+    "rulesText": "Deathrattle:Summon a 3/3 Finkle Einhorn for your opponent.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_finkle_einhorn",
+            "count": 1,
+            "controller": "opponent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_the_black_knight",
@@ -3533,7 +8382,26 @@
     "cost": 6,
     "attack": 4,
     "health": 5,
-    "rulesText": "Battlecry: Destroy an enemy minion with Taunt."
+    "rulesText": "Battlecry: Destroy an enemy minion with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "keyword": "taunt"
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_thoughtsteal",
@@ -3545,7 +8413,31 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Copy 2 cards from your opponent's deck and put them into your hand."
+    "rulesText": "Copy 2 cards from your opponent's deck and put them into your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "opponent",
+              "type": "card",
+              "selection": "random",
+              "zone": "deck",
+              "count": 2
+            },
+            "destination": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_thrallmar_farseer",
@@ -3557,7 +8449,9 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Windfury"
+    "rulesText": "Windfury",
+    "keywords": ["windfury"],
+    "effects": []
   },
   {
     "id": "classic_tinkmaster_overspark",
@@ -3569,7 +8463,24 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry: Transform a minion into a 5/5 Devilsaur or a 1/1 Squirrel at random."
+    "rulesText": "Battlecry: Transform a minion into a 5/5 Devilsaur or a 1/1 Squirrel at random.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "transform-random",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "pool": ["classic_devilsaur", "classic_squirrel"]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_tirion_fordring",
@@ -3581,7 +8492,19 @@
     "cost": 8,
     "attack": 6,
     "health": 6,
-    "rulesText": "Divine Shield. Taunt. Deathrattle: Equip a 5/3 Ashbringer."
+    "rulesText": "Divine Shield. Taunt. Deathrattle: Equip a 5/3 Ashbringer.",
+    "keywords": ["divine-shield", "taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "equip",
+            "cardId": "classic_ashbringer"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_treant_force_of_nature",
@@ -3594,7 +8517,22 @@
     "cost": 1,
     "attack": 2,
     "health": 2,
-    "rulesText": "Charge. At the end of this turn, destroy this minion."
+    "rulesText": "Charge. At the end of this turn, destroy this minion.",
+    "keywords": ["charge"],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_truesilver_champion",
@@ -3606,7 +8544,30 @@
     "cost": 4,
     "attack": 4,
     "health": 2,
-    "rulesText": "Whenever your hero attacks, restore 2 Health to it."
+    "rulesText": "Whenever your hero attacks, restore 2 Health to it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "source": {
+            "type": "hero",
+            "controller": "self"
+          }
+        },
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_tundra_rhino",
@@ -3618,7 +8579,28 @@
     "cost": 5,
     "attack": 2,
     "health": 5,
-    "rulesText": "Your other beasts have Charge."
+    "rulesText": "Your other beasts have Charge.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "tribe": "Beast"
+              },
+              "exclude": "source"
+            },
+            "keyword": "charge"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_twilight_drake",
@@ -3630,7 +8612,31 @@
     "cost": 4,
     "attack": 4,
     "health": 1,
-    "rulesText": "Battlecry: Gain +1 Health for each card in your hand."
+    "rulesText": "Battlecry: Gain +1 Health for each card in your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "health": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "self",
+                "type": "card",
+                "selection": "all",
+                "zone": "hand"
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_twisting_nether",
@@ -3642,7 +8648,23 @@
     "cost": 8,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy all minions."
+    "rulesText": "Destroy all minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_unbound_elemental",
@@ -3654,7 +8676,31 @@
     "cost": 3,
     "attack": 2,
     "health": 4,
-    "rulesText": "Whenever you play a card with Overload, gain +1/+1."
+    "rulesText": "Whenever you play a card with Overload, gain +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "card-played",
+          "controller": "self",
+          "filter": {
+            "overload": true
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_unleash_the_hounds",
@@ -3666,7 +8712,27 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "For each enemy minion, summon a 1/1 Hound with Charge."
+    "rulesText": "For each enemy minion, summon a 1/1 Hound with Charge.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_hound",
+            "count": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "opponent",
+                "type": "minion",
+                "selection": "all"
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_upgrade",
@@ -3678,7 +8744,42 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "If you have a weapon, give it +1/+1. Otherwise equip a 1/3 weapon."
+    "rulesText": "If you have a weapon, give it +1/+1. Otherwise equip a 1/3 weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "player-has-weapon",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "attack": 1,
+            "durability": 1
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "player-lacks-weapon",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "equip",
+            "cardId": "basic_heavy_axe"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_uproot",
@@ -3691,7 +8792,24 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "+5 Attack."
+    "rulesText": "+5 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_vaporize",
@@ -3703,7 +8821,26 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When a minion attacks your hero, destroy it."
+    "rulesText": "Secret: When a minion attacks your hero, destroy it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-attacks-hero",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_venture_co_mercenary",
@@ -3715,7 +8852,24 @@
     "cost": 5,
     "attack": 7,
     "health": 6,
-    "rulesText": "Your minions cost (3) more."
+    "rulesText": "Your minions cost (3) more.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_violet_apprentice",
@@ -3728,7 +8882,9 @@
     "cost": 0,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_violet_teacher",
@@ -3740,7 +8896,24 @@
     "cost": 4,
     "attack": 3,
     "health": 5,
-    "rulesText": "Whenever you cast a spell, summon a 1/1 Violet Apprentice."
+    "rulesText": "Whenever you cast a spell, summon a 1/1 Violet Apprentice.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_violet_apprentice",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_void_terror",
@@ -3752,7 +8925,28 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Destroy the minions on either side of this minion and gain their Attack and Health."
+    "rulesText": "Battlecry: Destroy the minions on either side of this minion and gain their Attack and Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy-and-gain-stats",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "adjacent",
+              "adjacentTo": "source"
+            },
+            "destination": {
+              "type": "minion",
+              "selection": "source"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_warglaive_of_azzinoth",
@@ -3765,7 +8959,9 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_whelp",
@@ -3778,7 +8974,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_wild_pyromancer",
@@ -3790,7 +8988,28 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "After you cast a spell, deal 1 damage to ALL minions."
+    "rulesText": "After you cast a spell, deal 1 damage to ALL minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "any"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_windfury_harpy",
@@ -3802,7 +9021,9 @@
     "cost": 6,
     "attack": 4,
     "health": 5,
-    "rulesText": "Windfury"
+    "rulesText": "Windfury",
+    "keywords": ["windfury"],
+    "effects": []
   },
   {
     "id": "classic_wisp",
@@ -3814,7 +9035,9 @@
     "cost": 0,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_worgen_infiltrator",
@@ -3826,7 +9049,9 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "Stealth"
+    "rulesText": "Stealth",
+    "keywords": ["stealth"],
+    "effects": []
   },
   {
     "id": "classic_worthless_imp",
@@ -3839,7 +9064,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "classic_wrath",
@@ -3851,7 +9078,29 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 1 damage to a minion. Draw a card."
+    "rulesText": "Deal 1 damage to a minion. Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 1
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_young_dragonhawk",
@@ -3863,7 +9112,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": "Windfury"
+    "rulesText": "Windfury",
+    "keywords": ["windfury"],
+    "effects": []
   },
   {
     "id": "classic_young_priestess",
@@ -3875,7 +9126,25 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "At the end of your turn, give another random friendly minion +1 health."
+    "rulesText": "At the end of your turn, give another random friendly minion +1 health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "exclude": "source"
+            },
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_youthful_brewmaster",
@@ -3887,7 +9156,23 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry: Return a friendly minion from the battlefield to your hand."
+    "rulesText": "Battlecry: Return a friendly minion from the battlefield to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ysera",
@@ -3899,7 +9184,20 @@
     "cost": 9,
     "attack": 4,
     "health": 12,
-    "rulesText": "At the end of your turn, draw a Dream Card."
+    "rulesText": "At the end of your turn, draw a Dream Card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "cardId": "classic_dream",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_ysera_awakens",
@@ -3912,6 +9210,68 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 5 damage to all characters except Ysera."
+    "rulesText": "Deal 5 damage to all characters except Ysera.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "all",
+              "excludeCardId": "classic_ysera"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "classic_hound",
+    "collectible": false,
+    "name": "Hound",
+    "rarity": "Summon",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Charge",
+    "keywords": ["charge"],
+    "effects": []
+  },
+  {
+    "id": "classic_dream",
+    "collectible": false,
+    "name": "Dream",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Return a minion to its owner's hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   }
 ]

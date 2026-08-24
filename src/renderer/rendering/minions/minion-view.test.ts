@@ -1,6 +1,6 @@
 import { Container, Text, Texture } from 'pixi.js'
 import { describe, expect, it } from 'vitest'
-import { MinionView } from './minion-view'
+import { MINION_HEALTH_COLORS, MinionView } from './minion-view'
 
 const textures = {
   frame: Texture.EMPTY,
@@ -115,6 +115,63 @@ describe('MinionView', () => {
     expect((attackValue as Text).text).toBe('12')
     expect((healthValue as Text).text).toBe('10')
 
+    view.destroy({ children: true })
+  })
+
+  it('tints current health relative to the original health', async () => {
+    const view = await MinionView.create(
+      {
+        label: 'minion:test',
+        attack: 3,
+        health: 2,
+        originalHealth: 3,
+        legendary: false,
+        taunt: false,
+        divineShield: false
+      },
+      textures,
+      undefined
+    )
+    const healthGroup = childWithLabel(view, 'minion.stat-health') as Container
+    const healthValue = healthGroup.children.find(
+      (child) => child.label === 'minion.stat-health-value'
+    ) as Text
+
+    expect(healthValue.style.fill).toBe(MINION_HEALTH_COLORS.damaged)
+    view.setStats(3, 1)
+    expect(healthValue.style.fill).toBe(MINION_HEALTH_COLORS.damaged)
+    view.setStats(3, 3)
+    expect(healthValue.style.fill).toBe(MINION_HEALTH_COLORS.normal)
+    view.setStats(3, 4)
+    expect(healthValue.style.fill).toBe(MINION_HEALTH_COLORS.increased)
+    view.setStats(3, 2)
+    expect(healthValue.style.fill).toBe(MINION_HEALTH_COLORS.damaged)
+
+    view.destroy({ children: true })
+  })
+
+  it('keeps target input independent from attacker readiness', async () => {
+    const view = await MinionView.create(
+      {
+        label: 'minion:test',
+        attack: 2,
+        health: 2,
+        legendary: false,
+        taunt: false,
+        divineShield: false
+      },
+      textures,
+      undefined
+    )
+
+    view.setCanAttack(false)
+    view.setTargetable(true)
+    expect(view.isCanAttack()).toBe(false)
+    expect(view.isTargetable()).toBe(true)
+    expect(view.eventMode).toBe('static')
+
+    view.setTargetable(false)
+    expect(view.eventMode).toBe('none')
     view.destroy({ children: true })
   })
 })

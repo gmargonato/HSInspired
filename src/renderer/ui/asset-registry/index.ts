@@ -44,6 +44,8 @@ import minionTauntImage from '@assets/images/board/minion-taunt.png'
 import minionDivineShieldImage from '@assets/images/board/minion-divine-shield.png'
 import minionAttackImage from '@assets/images/board/minion-attack.png'
 import minionHealthImage from '@assets/images/board/minion-health.png'
+import minionWillDieImage from '@assets/images/board/character-will-die.png'
+import weaponImage from '@assets/images/board/weapon.png'
 import searchClearImage from '@assets/images/cards/silence.png'
 import searchNoResultsImage from '@assets/images/ui/collection/search-no-results.png'
 import expansionButtonToggleImage from '@assets/images/ui/collection/expansion-button-toggle.png'
@@ -336,6 +338,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     minionHealthImage,
     38,
     54,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-will-die',
+    ASSET_BUNDLE_IDS.game,
+    'minionWillDie',
+    minionWillDieImage,
+    109,
+    114,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.weapon',
+    ASSET_BUNDLE_IDS.game,
+    'weapon',
+    weaponImage,
+    172,
+    146,
     'game-scene'
   ),
   asset(
@@ -971,6 +991,8 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   minionDivineShield: Texture
   minionAttack: Texture
   minionHealth: Texture
+  minionWillDie: Texture
+  weapon: Texture
   minionSummonRays: Texture
   deck: Texture
   manaCrystal: Texture

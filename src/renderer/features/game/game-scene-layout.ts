@@ -39,6 +39,16 @@ export const GAME_BOARD_LAYOUT = {
     }
   ),
 
+  cardPlay: {
+    /** Shared local design-canvas rectangle accepting any playable card. */
+    localDropZone: {
+      x: 350,
+      y: 290,
+      width: 1230,
+      height: 530
+    }
+  },
+
   boardMinions: {
     /** Local row, raised toward the board center and aligned with its drop zone. */
     local: {
@@ -55,13 +65,6 @@ export const GAME_BOARD_LAYOUT = {
       maxSpan: 900,
       maxStep: 150,
       minionScale: 1
-    },
-    /** Local design-canvas rectangle accepting carried minion cards. */
-    localDropZone: {
-      x: 350,
-      y: 290,
-      width: 1230,
-      height: 530
     },
     /** Dynamic card-to-minion materialization, centred on the reserved row slot. */
     summon: {
@@ -112,6 +115,27 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Vertical distance from an intro hero anchor to its name label, multiplied by hero scale. */
     introLabelOffset: 225
+  },
+
+  weapons: {
+    /** Local equipped weapon, screen-left of the local hero frame. */
+    local: placement(
+      { x: 800, y: 840 },
+      { width: 240, height: 210 },
+      {
+        anchor: CENTER,
+        note: 'Weapon is placed to the screen-left of the local hero.'
+      }
+    ),
+    /** Remote equipped weapon, screen-left of the remote hero frame. */
+    remote: placement(
+      { x: 800, y: 180 },
+      { width: 240, height: 210 },
+      {
+        anchor: CENTER,
+        note: 'Weapon is placed to the screen-left of the remote hero.'
+      }
+    )
   },
 
   decks: {

@@ -9,6 +9,8 @@ export interface MinionViewModel {
   readonly label: string
   readonly attack: number
   readonly health: number
+  /** Original card health used to tint current health after damage/healing. */
+  readonly originalHealth?: number
   readonly legendary: boolean
   readonly taunt: boolean
   readonly divineShield: boolean
@@ -27,6 +29,12 @@ interface StatGroup {
   readonly group: Container
   readonly value: Text
 }
+
+export const MINION_HEALTH_COLORS = {
+  normal: 0xffffff,
+  damaged: 0xff4a4a,
+  increased: 0x6cff47
+} as const
 
 function setEventModeNone(container: Container): void {
   container.eventMode = 'none'
@@ -74,7 +82,9 @@ export class MinionView extends Container {
   private readonly attackOutline: AnimatedOutline
   private readonly sleepingZs: SleepingZs
   private readonly animationScope = new AnimationScope()
+  private readonly originalHealth: number
   private canAttackEnabled = false
+  private targetableEnabled = false
   private selected = false
   private baseScale = 1
   /** External owner id for attack checks (set by feature). */
@@ -88,6 +98,7 @@ export class MinionView extends Container {
   ) {
     super()
     this.label = model.label
+    this.originalHealth = model.originalHealth ?? model.health
     this.eventMode = 'none'
     this.pivot.set(MINION_CANVAS.width / 2, MINION_CANVAS.height / 2)
 
@@ -163,6 +174,7 @@ export class MinionView extends Container {
     )
     this.healthLabel = health.value
     this.addChild(health.group)
+    this.setHealthColor(model.health)
 
     // Green attack-ready outline: solid oval proxy so the hollow frame does not create an inner glow.
     // The filter draws only the exterior glow; the white interior is discarded by the shader.
@@ -204,6 +216,16 @@ export class MinionView extends Container {
   setStats(attack: number, health: number): void {
     this.attackLabel.text = String(attack)
     this.healthLabel.text = String(health)
+    this.setHealthColor(health)
+  }
+
+  private setHealthColor(health: number): void {
+    this.healthLabel.style.fill =
+      health < this.originalHealth
+        ? MINION_HEALTH_COLORS.damaged
+        : health > this.originalHealth
+          ? MINION_HEALTH_COLORS.increased
+          : MINION_HEALTH_COLORS.normal
   }
 
   setTaunt(visible: boolean): void {
@@ -218,13 +240,22 @@ export class MinionView extends Container {
     this.canAttackEnabled = enabled
     this.attackOutline.setEnabled(enabled)
     this.outlineProxy.visible = enabled
-    this.eventMode = enabled ? 'static' : 'none'
-    this.cursor = enabled ? 'pointer' : 'default'
     if (!enabled && this.selected) this.setSelected(false)
   }
 
   isCanAttack(): boolean {
     return this.canAttackEnabled
+  }
+
+  /** Enables pointer input independently of the green attacker-ready state. */
+  setTargetable(enabled: boolean): void {
+    this.targetableEnabled = enabled
+    this.eventMode = enabled ? 'static' : 'none'
+    this.cursor = enabled ? 'pointer' : 'default'
+  }
+
+  isTargetable(): boolean {
+    return this.targetableEnabled
   }
 
   isSelected(): boolean {

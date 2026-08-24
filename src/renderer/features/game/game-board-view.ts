@@ -21,6 +21,7 @@ import {
   createOpeningMatch,
   hasSummoningSickness,
   MAX_BOARD_SIZE,
+  previewMinionCombat,
   type BoardMinion,
   type MulliganResolvedEvent,
   type OpeningCard,
@@ -68,6 +69,7 @@ import {
   MinionView,
   type MinionViewTextures
 } from '../../rendering/minions/minion-view'
+import { WeaponView } from '../../rendering/weapons/weapon-view'
 import { AddCardPickerView } from './add-card-picker-view'
 import {
   isInDropZone,
@@ -76,6 +78,7 @@ import {
   type BoardRowConfig
 } from './board-layout'
 import { AttackLine } from './attack-line'
+import { getCombatImpactProfile } from './combat-impact'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { MINION_CANVAS } from '../../rendering/minions/minion-layout'
 import {
@@ -128,10 +131,32 @@ const BOARD_TIMING = {
   summonSnap: 0.18,
   summonCharge: 0.27,
   summonCollapse: 0.16,
-  summonImpact: 0.32
+  summonImpact: 0.32,
+  combatWindup: 0.12,
+  combatWindupPause: 0.08,
+  combatWindupDistance: 28,
+  combatLunge: 0.18,
+  combatImpact: 0.12,
+  combatReturn: 0.2,
+  combatDeath: 0.28
 } as const
 
+const COMBAT_ATTACKER_Z_INDEX = 100
+
+interface MinionCombatPlacement {
+  readonly parent: Container
+  readonly index: number
+  readonly zIndex: number
+}
+
 const SUMMON_GHOST_COLOR = 0x79e9ff
+const COMBAT_SHAKE_DIRECTIONS = [
+  { x: 1, y: -0.25 },
+  { x: -0.75, y: 0.55 },
+  { x: 0.55, y: -0.75 },
+  { x: -0.35, y: 0.3 },
+  { x: 0.2, y: -0.15 }
+] as const
 const SUMMON_DETAIL_LAYERS = [
   'name',
   'rules',
@@ -320,15 +345,21 @@ export class GameBoardView extends Actor {
   private readonly boardLayer = new Container()
   private readonly localMinionLayer = new Container()
   private readonly remoteMinionLayer = new Container()
+  private readonly weaponLayer = new Container()
   private readonly summonLayer = new Container()
+  private readonly combatOverlayLayer = new Container()
   private readonly localMinionViews: MinionView[] = []
   private readonly remoteMinionViews: MinionView[] = []
+  private readonly weaponViews = new Map<PlayerId, WeaponView>()
   private readonly activeSummonSlots = new Set<GameCardSlot>()
   private readonly deckTracker = new DeckTrackerView(this.resolver)
   private readonly addCardPicker: AddCardPickerView | null
   private readonly attackLineLayer = new Container()
   private readonly attackLine = new AttackLine()
+  private readonly combatPreviewMarkers = new Map<MinionView, Sprite>()
   private selectedMinionView: MinionView | null = null
+  private combatInProgress = false
+  private cardPlayInProgress = false
   /**
    * Hero power cards sit in their own layer immediately above the board but
    * BELOW the opening/intro layer, so the pre-match black overlay covers them
@@ -480,6 +511,10 @@ export class GameBoardView extends Actor {
     this.remoteMinionLayer.sortableChildren = true
     this.addChild(this.localMinionLayer)
     this.addChild(this.remoteMinionLayer)
+    this.weaponLayer.label = 'game.equipped-weapons'
+    this.weaponLayer.eventMode = 'none'
+    this.weaponLayer.sortableChildren = true
+    this.addChild(this.weaponLayer)
     this.addChild(this.heroPowerLayer)
     this.addChild(this.openingLayer)
     this.addChild(this.heroLayer)
@@ -495,11 +530,19 @@ export class GameBoardView extends Actor {
     this.summonLayer.eventMode = 'none'
     this.summonLayer.sortableChildren = true
     this.addChild(this.summonLayer)
+    // Death previews stay above the minions, but below the complete targeting
+    // arrow so its body remains connected visually to the DOM cursor head.
+    this.combatOverlayLayer.label = 'game.combat-overlays'
+    this.combatOverlayLayer.eventMode = 'none'
+    this.combatOverlayLayer.sortableChildren = true
+    this.addChild(this.combatOverlayLayer)
+    this.addChild(this.deckTracker)
+    // Keep the Pixi arrow body above every other board layer. The cursor's
+    // arrow head is rendered in the DOM above the canvas.
     this.attackLineLayer.label = 'game.attack-line-layer'
     this.attackLineLayer.eventMode = 'none'
     this.attackLineLayer.addChild(this.attackLine)
     this.addChild(this.attackLineLayer)
-    this.addChild(this.deckTracker)
     this.deckLayer.visible = false
     this.remoteHandLayer.visible = false
     this.handLayer.eventMode = 'none'
@@ -521,14 +564,19 @@ export class GameBoardView extends Actor {
     this.on('pointertap', (event: FederatedPointerEvent) => {
       if (!this.selectedMinionView) return
       if (event.button !== 0) return
-      const target = event.target
-      if (target instanceof Container && target.label?.startsWith('minion:')) return
+      let target = event.target instanceof Container ? event.target : null
+      while (target && !target.label?.startsWith('minion:')) {
+        target = target.parent
+      }
+      if (target?.label?.startsWith('minion:')) return
+      const targetLabel = target?.label
       // Click on empty board or hand background while targeting cancels.
       // Minion clicks are handled by wireMinionView already.
       if (
         target === this ||
-        target.label === 'game.board-minions-local' ||
-        target.label === 'game.board-minions-remote'
+        targetLabel === 'game.board-minions-local' ||
+        targetLabel === 'game.board-minions-remote' ||
+        targetLabel === 'game.equipped-weapons'
       ) {
         this.deselectAttacker()
       }
@@ -822,8 +870,24 @@ export class GameBoardView extends Actor {
     this.syncMana(state)
     this.syncPlayableCardOutlines(state)
     this.syncHeroPowerViews(state)
+    this.syncWeaponViews(state)
     this.syncBoardAttackability(state)
     this.updateDeckTracker(state)
+  }
+
+  /** Keeps an equipped weapon view synchronized with authoritative match state. */
+  private syncWeaponViews(state: OpeningMatchState): void {
+    for (const player of state.players) {
+      const view = this.weaponViews.get(player.participantId)
+      if (player.weapon) {
+        view?.setStats(player.weapon.attack, player.weapon.durability)
+        continue
+      }
+      if (!view) continue
+      view.removeFromParent()
+      view.destroy({ children: true })
+      this.weaponViews.delete(player.participantId)
+    }
   }
 
   /**
@@ -855,7 +919,7 @@ export class GameBoardView extends Actor {
    * Rejections (e.g. mana changed under the cursor) only shake the card.
    */
   private async useHeroPower(): Promise<void> {
-    if (this.turnInProgress) return
+    if (this.turnInProgress || this.combatInProgress || this.cardPlayInProgress) return
     const result = this.match.dispatch({
       type: 'use-hero-power',
       participantId: this.localParticipantId
@@ -896,10 +960,15 @@ export class GameBoardView extends Actor {
     if (this.endTurnButton.sprite.texture !== localTurnTexture) {
       this.endTurnButton.sprite.texture = localTurnTexture
     }
-    this.endTurnButton.setEnabled(isLocalTurn && !this.turnInProgress)
+    this.endTurnButton.setEnabled(
+      isLocalTurn &&
+        !this.turnInProgress &&
+        !this.combatInProgress &&
+        !this.cardPlayInProgress
+    )
   }
 
-  /** Green outline when canAttack, Zzz when summoning sick; also wires board click. */
+  /** Updates attacker-ready visuals and target input from authoritative state. */
   private syncBoardAttackability(state: OpeningMatchState): void {
     this.syncMinionRowAttackability(
       this.localMinionViews,
@@ -931,6 +1000,11 @@ export class GameBoardView extends Actor {
       // Local player never sees the opponent's attack-ready outline.
       const showCanAttack = canAttack && ownerId === this.localParticipantId
       view.setCanAttack(showCanAttack)
+      view.setTargetable(
+        ownerId === this.localParticipantId
+          ? showCanAttack
+          : state.phase === 'turns' && this.selectedMinionView !== null
+      )
       view.setSleeping(sleeping && state.phase === 'turns')
       if (sleeping || !showCanAttack) {
         if (this.selectedMinionView === view) this.deselectAttacker()
@@ -939,11 +1013,13 @@ export class GameBoardView extends Actor {
   }
 
   private selectAttacker(view: MinionView): void {
+    if (this.combatInProgress) return
     if (!view.isCanAttack()) return
     if (this.selectedMinionView === view) {
       this.deselectAttacker()
       return
     }
+    this.clearCombatPreview()
     if (this.selectedMinionView) {
       const previous = this.selectedMinionView
       previous.setSelected(false)
@@ -969,27 +1045,38 @@ export class GameBoardView extends Actor {
       this.attackLine.setBodyTexture(this.options.gameAssets.arrowBody)
     }
     view.zIndex = 100
+    this.syncBoardAttackability(this.match.getState())
   }
 
-  private deselectAttacker(): void {
+  private deselectAttacker(animate = true, clearPreview = true): void {
+    if (clearPreview) this.clearCombatPreview()
     if (this.selectedMinionView) {
       const view = this.selectedMinionView
       view.setSelected(false)
-      this.tweenTo(view, {
-        y: view.y + 12,
-        duration: 0.18,
-        ease: 'power2.inOut',
-        overwrite: 'auto'
-      })
+      if (animate) {
+        this.tweenTo(view, {
+          y: view.y + 12,
+          duration: 0.18,
+          ease: 'power2.inOut',
+          overwrite: 'auto'
+        })
+      } else {
+        this.killTweensOf(view)
+        view.y += 12
+      }
       view.zIndex = 0
     }
     this.selectedMinionView = null
     this.attackLine.clear()
     this.options.cursor?.setTargeting(false)
+    if (!this.combatInProgress) this.syncBoardAttackability(this.match.getState())
   }
 
   private handleBoardPointerMove(event: FederatedPointerEvent): void {
-    if (!this.selectedMinionView) return
+    if (!this.selectedMinionView) {
+      if (!this.combatInProgress) this.clearCombatPreview()
+      return
+    }
     const parent = this.selectedMinionView.parent
     const from = parent
       ? parent.toGlobal(this.selectedMinionView.position)
@@ -1000,6 +1087,152 @@ export class GameBoardView extends Actor {
     this.attackLine.setEndpoints(localFrom, localTo)
     const angle = Math.atan2(to.y - from.y, to.x - from.x)
     this.options.cursor?.setTargetingAngle(angle)
+    this.updateCombatPreview(this.findTargetMinion(event))
+  }
+
+  /** Resolves the opposing minion currently beneath a targeting pointer. */
+  private findTargetMinion(event: FederatedPointerEvent): MinionView | null {
+    let target = event.target instanceof Container ? event.target : null
+    while (target) {
+      if (target instanceof MinionView) {
+        return target.ownerId === this.remoteParticipantId && target.isTargetable()
+          ? target
+          : null
+      }
+      target = target.parent
+    }
+
+    // Global pointer events may report the board as their target. Fall back to
+    // transformed bounds so the preview still follows the hovered minion.
+    return (
+      this.remoteMinionViews.find((view) => {
+        if (!view.isTargetable()) return false
+        const bounds = view.getBounds()
+        return (
+          event.globalX >= bounds.x &&
+          event.globalX <= bounds.x + bounds.width &&
+          event.globalY >= bounds.y &&
+          event.globalY <= bounds.y + bounds.height
+        )
+      }) ?? null
+    )
+  }
+
+  /** Shows the lethal marker(s) for the currently hovered combat target. */
+  private updateCombatPreview(target: MinionView | null): void {
+    const attacker = this.selectedMinionView
+    if (
+      !attacker ||
+      !attacker.instanceId ||
+      !target ||
+      !target.instanceId ||
+      target.ownerId !== this.remoteParticipantId
+    ) {
+      this.syncCombatPreviewMarkers([])
+      return
+    }
+
+    const state = this.match.getState()
+    const attackerState = this.findPlayer(state, this.localParticipantId).board.find(
+      (minion) => minion.instanceId === attacker.instanceId
+    )
+    const defenderState = this.findPlayer(state, this.remoteParticipantId).board.find(
+      (minion) => minion.instanceId === target.instanceId
+    )
+    if (!attackerState || !defenderState) {
+      this.syncCombatPreviewMarkers([])
+      return
+    }
+
+    const combat = previewMinionCombat(attackerState, defenderState)
+    const lethalViews: MinionView[] = []
+    if (combat.attackerDestroyed) lethalViews.push(attacker)
+    if (combat.defenderDestroyed) lethalViews.push(target)
+    this.syncCombatPreviewMarkers(lethalViews)
+  }
+
+  private syncCombatPreviewMarkers(lethalViews: readonly MinionView[]): void {
+    const desired = new Set(lethalViews)
+    for (const [view, marker] of this.combatPreviewMarkers) {
+      if (desired.has(view)) continue
+      if (!marker.destroyed) {
+        marker.removeFromParent()
+        marker.destroy()
+      }
+      this.combatPreviewMarkers.delete(view)
+    }
+    for (const view of desired) {
+      if (!this.combatPreviewMarkers.has(view)) {
+        this.combatPreviewMarkers.set(view, this.createDeathMarker(view))
+      }
+    }
+    this.updateCombatMarkerPositions()
+  }
+
+  private updateCombatMarkerPositions(): void {
+    for (const [view, marker] of this.combatPreviewMarkers) {
+      if (view.destroyed || !view.parent || marker.destroyed) {
+        if (!marker.destroyed) {
+          marker.removeFromParent()
+          marker.destroy()
+        }
+        this.combatPreviewMarkers.delete(view)
+        continue
+      }
+      this.positionDeathMarker(marker, view)
+    }
+  }
+
+  private clearCombatPreview(): void {
+    for (const marker of this.combatPreviewMarkers.values()) {
+      if (!marker.destroyed) {
+        marker.removeFromParent()
+        marker.destroy()
+      }
+    }
+    this.combatPreviewMarkers.clear()
+  }
+
+  /** Dispatches an attack against the clicked opposing minion. */
+  private async attackMinion(target: MinionView): Promise<void> {
+    const attacker = this.selectedMinionView
+    if (this.combatInProgress || !attacker) return
+    if (!attacker.instanceId || !target.instanceId) return
+    if (target.ownerId !== this.remoteParticipantId) return
+
+    // The target click can arrive before a pointermove in the same frame; make
+    // sure the lethal preview exists before committing the command.
+    this.updateCombatPreview(target)
+    this.combatInProgress = true
+    this.deselectAttacker(false, false)
+    const result = this.match.dispatch({
+      type: 'attack-minion',
+      participantId: this.localParticipantId,
+      attackerInstanceId: attacker.instanceId,
+      defenderInstanceId: target.instanceId
+    })
+    if (!result.accepted) {
+      this.logger.error(result.message)
+      this.combatInProgress = false
+      this.clearCombatPreview()
+      this.syncTurnHud(this.match.getState())
+      this.syncTurnControls(this.match.getState())
+      return
+    }
+
+    // The lethal marker is only a targeting preview. Remove it as soon as the
+    // attack commits, before the combat wind-up starts.
+    this.clearCombatPreview()
+    this.syncTurnHud(result.state)
+    this.syncTurnControls(result.state)
+    try {
+      for (const event of result.events) await this.presentEvent(event)
+    } finally {
+      this.combatInProgress = false
+      const state = this.match.getState()
+      this.syncTurnHud(state)
+      this.syncTurnControls(state)
+    }
   }
 
   /**
@@ -1008,7 +1241,7 @@ export class GameBoardView extends Actor {
    * the turn back.
    */
   private async endTurn(): Promise<void> {
-    if (this.turnInProgress) return
+    if (this.turnInProgress || this.combatInProgress || this.cardPlayInProgress) return
     this.turnInProgress = true
     this.endTurnButton.setEnabled(false)
     const result = this.match.dispatch({
@@ -1027,31 +1260,40 @@ export class GameBoardView extends Actor {
   }
 
   /** AI plays random minions (cost ignored) then passes. */
-  private async playAiRandomMinions(): Promise<void> {
+  private async playAiRandomCards(): Promise<void> {
     const state = this.match.getState()
     if (state.phase !== 'turns') return
     if (state.activePlayerId !== this.remoteParticipantId) return
     const remote = this.findPlayer(state, this.remoteParticipantId)
-    if (remote.board.length >= MAX_BOARD_SIZE) return
     // TODO: AI currently ignores mana cost and plays any minion — replace with cost/mana-aware logic later.
-    const minionCards = remote.hand.filter((card) => {
+    const playableCards = remote.hand.filter((card) => {
       const def = CARD_CATALOG.get(card.cardId)
-      return def?.type === 'Minion'
+      return (
+        def?.type === 'Weapon' ||
+        (def?.type === 'Minion' && remote.board.length < MAX_BOARD_SIZE)
+      )
     })
-    if (minionCards.length === 0) return
-    const pick = minionCards[Math.floor(Math.random() * minionCards.length)]
+    if (playableCards.length === 0) return
+    const pick = playableCards[Math.floor(Math.random() * playableCards.length)]
     if (!pick) return
-    const position = Math.floor(Math.random() * (remote.board.length + 1))
-    const result = this.match.dispatch({
-      type: 'play-minion',
-      participantId: this.remoteParticipantId,
-      cardInstanceId: pick.instanceId,
-      position
-    })
+    const definition = CARD_CATALOG.require(pick.cardId)
+    const result =
+      definition.type === 'Weapon'
+        ? this.match.dispatch({
+            type: 'play-weapon',
+            participantId: this.remoteParticipantId,
+            cardInstanceId: pick.instanceId
+          })
+        : this.match.dispatch({
+            type: 'play-minion',
+            participantId: this.remoteParticipantId,
+            cardInstanceId: pick.instanceId,
+            position: Math.floor(Math.random() * (remote.board.length + 1))
+          })
     if (!result.accepted) return
     for (const event of result.events) await this.presentEvent(event)
     await this.wait(0.35)
-    await this.playAiRandomMinions()
+    await this.playAiRandomCards()
   }
 
   /** Waits, then the remote (AI) plays random minions and passes the turn back. */
@@ -1059,7 +1301,7 @@ export class GameBoardView extends Actor {
     await this.wait(TURN_TIMING.aiTurnDelay)
     if (!this.turnLayer.visible) return
     if (this.match.getState().activePlayerId !== this.remoteParticipantId) return
-    await this.playAiRandomMinions()
+    await this.playAiRandomCards()
     if (this.match.getState().activePlayerId !== this.remoteParticipantId) return
     const result = this.match.dispatch({
       type: 'end-turn',
@@ -1382,6 +1624,12 @@ export class GameBoardView extends Actor {
       case 'minion-played':
         await this.presentMinionPlayed(event)
         return
+      case 'weapon-equipped':
+        await this.presentWeaponEquipped(event)
+        return
+      case 'minion-combat-resolved':
+        await this.presentMinionCombat(event)
+        return
       case 'dev-card-added':
         await this.presentDevCardAdded(event)
         return
@@ -1499,6 +1747,76 @@ export class GameBoardView extends Actor {
     await this.wait(OPENING_TIMING.replacementPause)
   }
 
+  private async presentWeaponEquipped(
+    event: Extract<OpeningMatchEvent, { type: 'weapon-equipped' }>
+  ): Promise<void> {
+    const isLocal = event.participantId === this.localParticipantId
+    const isRemote = event.participantId === this.remoteParticipantId
+    if (!isLocal && !isRemote) return
+
+    const layout = isLocal
+      ? GAME_BOARD_LAYOUT.weapons.local
+      : GAME_BOARD_LAYOUT.weapons.remote
+    const [artwork, attackTexture, durabilityTexture] = await Promise.all([
+      this.resolver.loadArtwork(event.weapon.cardId),
+      this.resolver.load('card.stat.weapon-attack'),
+      this.resolver.load('card.stat.weapon-durability')
+    ])
+    const view = await WeaponView.create(
+      {
+        label: `weapon:${event.weapon.instanceId}`,
+        attack: event.weapon.attack,
+        durability: event.weapon.durability
+      },
+      {
+        frame: this.options.gameAssets.weapon,
+        attack: attackTexture,
+        durability: durabilityTexture
+      },
+      artwork
+    )
+
+    const previous = this.weaponViews.get(event.participantId)
+    if (previous) {
+      previous.removeFromParent()
+      previous.destroy({ children: true })
+    }
+    this.weaponViews.set(event.participantId, view)
+    applyPlacement(view, layout)
+    view.alpha = 0
+    const targetScale = layout.scale ?? { x: 1, y: 1 }
+    view.scale.set(targetScale.x * 0.72, targetScale.y * 0.72)
+    view.eventMode = 'none'
+    this.weaponLayer.addChild(view)
+
+    if (isRemote) {
+      // The remote weapon card came from the hidden AI hand.
+      this.remoteBackCount = Math.max(0, this.remoteBackCount - 1)
+      this.layoutRemoteHand()
+    }
+
+    const reveal = this.timeline()
+    reveal.to(view, {
+      alpha: 1,
+      duration: BOARD_TIMING.minionSettle,
+      ease: 'power2.out',
+      overwrite: 'auto'
+    })
+    reveal.to(
+      view.scale,
+      {
+        x: targetScale.x,
+        y: targetScale.y,
+        duration: BOARD_TIMING.minionSettle,
+        ease: 'back.out(1.2)',
+        overwrite: 'auto'
+      },
+      0
+    )
+    await this.completeTimeline(reveal)
+    this.syncTurnHud(this.match.getState())
+  }
+
   private async presentMinionPlayed(
     event: Extract<OpeningMatchEvent, { type: 'minion-played' }>,
     summonSlot?: GameCardSlot
@@ -1522,6 +1840,8 @@ export class GameBoardView extends Actor {
           label: `minion:${event.minion.instanceId}`,
           attack: event.minion.attack,
           health: event.minion.health,
+          originalHealth:
+            definition.type === 'Minion' ? definition.health : event.minion.health,
           legendary: definition.rarity === 'Legendary',
           taunt: false,
           divineShield: false
@@ -1576,6 +1896,7 @@ export class GameBoardView extends Actor {
       // Keep remote backs in sync: AI hand shrinks by one.
       this.remoteBackCount = Math.max(0, this.remoteBackCount - 1)
       this.layoutRemoteHand()
+      this.wireMinionView(view)
       this.syncBoardAttackability(this.match.getState())
       await this.completeTimeline(
         this.timeline().to(view, {
@@ -1787,6 +2108,256 @@ export class GameBoardView extends Actor {
     }
   }
 
+  private async presentMinionCombat(
+    event: Extract<OpeningMatchEvent, { type: 'minion-combat-resolved' }>
+  ): Promise<void> {
+    const attacker = this.findMinionView(
+      event.attacker.participantId,
+      event.attacker.instanceId
+    )
+    const defender = this.findMinionView(
+      event.defender.participantId,
+      event.defender.instanceId
+    )
+    if (!attacker || !defender || !attacker.parent || !defender.parent) {
+      this.clearCombatPreview()
+      return
+    }
+
+    let attackerPlacement: MinionCombatPlacement | null = null
+    try {
+      const attackerOrigin = { x: attacker.x, y: attacker.y }
+      const defenderOrigin = { x: defender.x, y: defender.y }
+      const attackerGlobal = attacker.parent.toGlobal(attacker.position)
+      const defenderGlobal = defender.parent.toGlobal(defender.position)
+      attackerPlacement = this.promoteMinionForCombat(attacker)
+      const attackDistance = Math.hypot(
+        defenderGlobal.x - attackerGlobal.x,
+        defenderGlobal.y - attackerGlobal.y
+      )
+      const attackDirection =
+        attackDistance > 0
+          ? {
+              x: (defenderGlobal.x - attackerGlobal.x) / attackDistance,
+              y: (defenderGlobal.y - attackerGlobal.y) / attackDistance
+            }
+          : { x: 0, y: 1 }
+      const windupGlobal = {
+        x: attackerGlobal.x - attackDirection.x * BOARD_TIMING.combatWindupDistance,
+        y: attackerGlobal.y - attackDirection.y * BOARD_TIMING.combatWindupDistance
+      }
+      const contactGlobal = {
+        x: attackerGlobal.x + (defenderGlobal.x - attackerGlobal.x) * 0.62,
+        y: attackerGlobal.y + (defenderGlobal.y - attackerGlobal.y) * 0.62
+      }
+      const windup = attacker.parent.toLocal(windupGlobal)
+      const contact = attacker.parent.toLocal(contactGlobal)
+      const followDeathMarkers = (): void => this.updateCombatMarkerPositions()
+
+      this.updateCombatMarkerPositions()
+      const windupTimeline = this.timeline()
+      windupTimeline.to(attacker, {
+        x: windup.x,
+        y: windup.y,
+        duration: BOARD_TIMING.combatWindup,
+        ease: 'power2.out'
+      })
+      windupTimeline.eventCallback('onUpdate', followDeathMarkers)
+      await this.completeTimeline(windupTimeline)
+      await this.wait(BOARD_TIMING.combatWindupPause)
+
+      const lunge = this.timeline()
+      lunge.to(attacker, {
+        x: contact.x,
+        y: contact.y,
+        duration: BOARD_TIMING.combatLunge,
+        ease: 'power2.in'
+      })
+      lunge.eventCallback('onUpdate', followDeathMarkers)
+      // Only the attacker moves during the attack wind-up and lunge. The
+      // defender remains planted and is updated at impact instead.
+      await this.completeTimeline(lunge)
+
+      attacker.setStats(event.attacker.attack, event.attacker.healthAfter)
+      defender.setStats(event.defender.attack, event.defender.healthAfter)
+      followDeathMarkers()
+      const screenShake = this.runCombatScreenShake(event.attacker.attack)
+      await this.wait(BOARD_TIMING.combatImpact)
+
+      const settle = (
+        view: MinionView,
+        origin: { x: number; y: number }
+      ): Promise<void> => {
+        if (view.destroyed) return Promise.resolve()
+        const timeline = this.timeline()
+        if (
+          (view === attacker && event.attacker.destroyed) ||
+          (view === defender && event.defender.destroyed)
+        ) {
+          timeline
+            .to(view, {
+              alpha: 0,
+              duration: BOARD_TIMING.combatDeath,
+              ease: 'power2.in'
+            })
+            .to(
+              view.scale,
+              {
+                x: view.scale.x * 0.7,
+                y: view.scale.y * 0.7,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              0
+            )
+        } else {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        }
+        timeline.eventCallback('onUpdate', followDeathMarkers)
+        return this.completeTimeline(timeline)
+      }
+
+      await Promise.all([
+        settle(attacker, attackerOrigin),
+        settle(defender, defenderOrigin),
+        screenShake
+      ])
+
+      if (event.attacker.destroyed) this.removeMinionView(attacker)
+      else if (attackerPlacement) {
+        this.restoreMinionAfterCombat(attacker, attackerPlacement)
+      }
+      if (event.defender.destroyed) this.removeMinionView(defender)
+      this.applyLocalBoardLayout()
+      this.applyRemoteBoardLayout()
+    } finally {
+      if (!attacker.destroyed && attackerPlacement) {
+        this.restoreMinionAfterCombat(attacker, attackerPlacement)
+      }
+      this.clearCombatPreview()
+    }
+  }
+
+  /** Applies a short, attack-scaled board shake and always restores its origin. */
+  private async runCombatScreenShake(attack: number): Promise<void> {
+    const profile = getCombatImpactProfile(attack)
+    const baseX = this.x
+    const baseY = this.y
+    const stepDuration = profile.duration / (profile.pulses * 2)
+    const timeline = this.timeline()
+
+    for (let index = 0; index < profile.pulses; index += 1) {
+      const direction = COMBAT_SHAKE_DIRECTIONS[index % COMBAT_SHAKE_DIRECTIONS.length]
+      timeline.to(this, {
+        x: baseX + direction.x * profile.amplitude,
+        y: baseY + direction.y * profile.amplitude,
+        duration: stepDuration,
+        ease: 'power1.out'
+      })
+      timeline.to(this, {
+        x: baseX,
+        y: baseY,
+        duration: stepDuration,
+        ease: 'power1.in'
+      })
+    }
+
+    try {
+      await this.completeTimeline(timeline)
+    } finally {
+      this.position.set(baseX, baseY)
+    }
+  }
+
+  /** Places the authored 1x marker above a minion during lethal preview/combat. */
+  private createDeathMarker(view: MinionView): Sprite {
+    const marker = new Sprite(this.options.gameAssets.minionWillDie)
+    marker.anchor.set(0.5)
+    marker.scale.set(0.8)
+    this.positionDeathMarker(marker, view)
+    marker.zIndex = 1000
+    marker.eventMode = 'none'
+    marker.label = `game.minion-will-die:${view.instanceId ?? 'unknown'}`
+    this.combatOverlayLayer.addChild(marker)
+    return marker
+  }
+
+  private positionDeathMarker(marker: Sprite, view: MinionView): void {
+    const global = view.parent
+      ? view.parent.toGlobal(view.position)
+      : view.getGlobalPosition()
+    const local = this.combatOverlayLayer.toLocal(global)
+    marker.position.set(local.x, local.y - 15)
+  }
+
+  private findMinionView(
+    ownerId: PlayerId,
+    instanceId: string
+  ): MinionView | undefined {
+    const views =
+      ownerId === this.localParticipantId
+        ? this.localMinionViews
+        : this.remoteMinionViews
+    return views.find((view) => view.instanceId === instanceId)
+  }
+
+  /** Temporarily lifts the attacker above both board rows without changing its screen position. */
+  private promoteMinionForCombat(view: MinionView): MinionCombatPlacement {
+    const parent = view.parent
+    if (!parent) {
+      throw new Error('Cannot promote a minion without a board parent.')
+    }
+
+    const placement = {
+      parent,
+      index: parent.getChildIndex(view),
+      zIndex: view.zIndex
+    }
+    const global = view.getGlobalPosition()
+    this.combatOverlayLayer.addChild(view)
+    const local = this.combatOverlayLayer.toLocal(global)
+    view.position.set(local.x, local.y)
+    view.zIndex = COMBAT_ATTACKER_Z_INDEX
+    return placement
+  }
+
+  /** Returns a surviving attacker to its original row and draw order. */
+  private restoreMinionAfterCombat(
+    view: MinionView,
+    placement: MinionCombatPlacement
+  ): void {
+    if (view.destroyed || view.parent === placement.parent) {
+      if (!view.destroyed) view.zIndex = placement.zIndex
+      return
+    }
+
+    const global = view.getGlobalPosition()
+    placement.parent.addChildAt(
+      view,
+      Math.min(placement.index, placement.parent.children.length)
+    )
+    const local = placement.parent.toLocal(global)
+    view.position.set(local.x, local.y)
+    view.zIndex = placement.zIndex
+  }
+
+  private removeMinionView(view: MinionView): void {
+    const views =
+      view.ownerId === this.localParticipantId
+        ? this.localMinionViews
+        : this.remoteMinionViews
+    const index = views.indexOf(view)
+    if (index >= 0) views.splice(index, 1)
+    if (view.destroyed) return
+    view.removeFromParent()
+    view.destroy({ children: true })
+  }
+
   private insertLocalMinionView(position: number, view: MinionView): void {
     this.localMinionViews.splice(position, 0, view)
     this.localMinionLayer.addChildAt(
@@ -1806,20 +2377,16 @@ export class GameBoardView extends Actor {
   private wireMinionView(view: MinionView): void {
     view.on('pointertap', (event: FederatedPointerEvent) => {
       if (event.button !== 0) return
-      // Only local attackable minions are selectable for now (no combat vs remote yet).
-      if (view.ownerId !== this.localParticipantId) return
-      if (!view.isCanAttack()) return
-      this.selectAttacker(view)
-      const parent = view.parent
-      const from = parent ? parent.toGlobal(view.position) : view.getGlobalPosition()
-      const localFrom = this.attackLineLayer.toLocal(from)
-      const localTo = this.attackLineLayer.toLocal({
-        x: event.globalX,
-        y: event.globalY
-      })
-      const angle = Math.atan2(localTo.y - localFrom.y, localTo.x - localFrom.x)
-      this.options.cursor?.setTargetingAngle(angle)
-      this.attackLine.setEndpoints(localFrom, localTo)
+      if (this.combatInProgress || !view.isTargetable()) return
+      if (view.ownerId === this.localParticipantId) {
+        if (!view.isCanAttack()) return
+        this.selectAttacker(view)
+        this.handleBoardPointerMove(event)
+        return
+      }
+      if (view.ownerId === this.remoteParticipantId && this.selectedMinionView) {
+        void this.attackMinion(view)
+      }
     })
   }
 
@@ -2194,7 +2761,7 @@ export class GameBoardView extends Actor {
     const localPlayer = this.findPlayer(state, this.localParticipantId)
     if (
       localPlayer.board.length >= MAX_BOARD_SIZE ||
-      !isInDropZone(pointer, GAME_BOARD_LAYOUT.boardMinions.localDropZone)
+      !isInDropZone(pointer, GAME_BOARD_LAYOUT.cardPlay.localDropZone)
     ) {
       return null
     }
@@ -2220,7 +2787,8 @@ export class GameBoardView extends Actor {
 
   /** Resolves a carried card through the engine and presents an accepted play. */
   private resolveCardDrop(pointer: HandPointer): void {
-    if (this.draggingIndex === null || this.dragReturning) return
+    if (this.draggingIndex === null || this.dragReturning || this.cardPlayInProgress)
+      return
     const index = this.draggingIndex
     const entry = this.handEntries[index]
     if (!entry) {
@@ -2231,10 +2799,47 @@ export class GameBoardView extends Actor {
     const definition = cardDefinition(entry.card)
     const state = this.match.getState()
     const localPlayer = this.findPlayer(state, this.localParticipantId)
+
+    if (definition.type === 'Weapon') {
+      if (!isInDropZone(pointer, GAME_BOARD_LAYOUT.cardPlay.localDropZone)) {
+        this.endDrag()
+        return
+      }
+
+      const result = this.match.dispatch({
+        type: 'play-weapon',
+        participantId: this.localParticipantId,
+        cardInstanceId: entry.card.instanceId
+      })
+      if (!result.accepted) {
+        this.logger.error(result.message)
+        this.endDrag()
+        return
+      }
+
+      this.cardPlayInProgress = true
+      this.syncTurnHud(result.state)
+      this.dragReturning = true
+      this.reflowing = true
+      this.dragPointer = null
+      this.dragStartPointer = null
+      this.dragMovedBeyondThreshold = false
+      this.dragState = null
+      if (this.dragTick) gsap.ticker.remove(this.dragTick)
+      this.dragTick = null
+      this.dragPerspective?.destroy()
+      this.dragPerspective = null
+      this.options.cursor?.setContextVariant(null)
+      this.localHoveredSlot = null
+      this.draggingIndex = null
+
+      void this.presentAcceptedWeaponPlay(index, entry, result)
+      return
+    }
+
     if (
-      definition.type !== 'Minion' ||
       localPlayer.board.length >= MAX_BOARD_SIZE ||
-      !isInDropZone(pointer, GAME_BOARD_LAYOUT.boardMinions.localDropZone)
+      !isInDropZone(pointer, GAME_BOARD_LAYOUT.cardPlay.localDropZone)
     ) {
       this.endDrag()
       return
@@ -2257,6 +2862,10 @@ export class GameBoardView extends Actor {
       return
     }
 
+    // The engine has already committed the spend. Reflect it before any summon
+    // animation so the next pointer action cannot use stale mana/UI state.
+    this.cardPlayInProgress = true
+    this.syncTurnHud(result.state)
     this.localBoardPreviewIndex = position
     this.applyLocalBoardLayout(position)
 
@@ -2277,6 +2886,40 @@ export class GameBoardView extends Actor {
     this.draggingIndex = null
 
     void this.presentAcceptedMinionPlay(index, entry, result)
+  }
+
+  private async presentAcceptedWeaponPlay(
+    index: number,
+    entry: HandEntry,
+    result: Extract<ReturnType<OpeningMatchInstance['dispatch']>, { accepted: true }>
+  ): Promise<void> {
+    try {
+      this.handEntries.splice(index, 1)
+      entry.slot.disposePlayableOutline()
+      entry.slot.removeFromParent()
+      const handReflow = this.applyHandLayout({
+        positionDuration: OPENING_TIMING.cardDeal,
+        scaleDuration: OPENING_TIMING.cardDeal
+      })
+      const weaponEquipped = result.events.find(
+        (event): event is Extract<OpeningMatchEvent, { type: 'weapon-equipped' }> =>
+          event.type === 'weapon-equipped'
+      )
+      const equip = weaponEquipped
+        ? this.presentWeaponEquipped(weaponEquipped)
+        : Promise.resolve()
+      await Promise.all([handReflow, equip])
+      entry.slot.destroy({ children: true })
+      for (const event of result.events) {
+        if (event !== weaponEquipped) await this.presentEvent(event)
+      }
+    } finally {
+      this.cardPlayInProgress = false
+      this.reflowing = false
+      this.dragReturning = false
+      this.activateHandHover()
+      this.syncTurnHud(this.match.getState())
+    }
   }
 
   private async presentAcceptedMinionPlay(
@@ -2305,13 +2948,14 @@ export class GameBoardView extends Actor {
       for (const event of result.events) {
         if (event !== minionPlayed) await this.presentEvent(event)
       }
-      this.syncTurnHud(result.state)
     } finally {
+      this.cardPlayInProgress = false
       this.reflowing = false
       this.dragReturning = false
       this.localBoardPreviewIndex = null
       this.applyLocalBoardLayout()
       this.activateHandHover()
+      this.syncTurnHud(this.match.getState())
     }
   }
 
@@ -2438,6 +3082,7 @@ export class GameBoardView extends Actor {
    * it a small "no" shake. Clicks on the opponent's turn are ignored.
    */
   private onHandPointerDown(event: FederatedPointerEvent): void {
+    if (this.combatInProgress || this.cardPlayInProgress) return
     if (this.selectedMinionView) {
       this.deselectAttacker()
       return
@@ -2664,6 +3309,8 @@ export class GameBoardView extends Actor {
     window.removeEventListener('keydown', this.handleWindowKeyDown)
     this.options.cursor?.setContextVariant(null)
     this.options.cursor?.setTargeting(false)
+    this.clearCombatPreview()
+    this.cardPlayInProgress = false
     this.attackLine.clear()
     if (this.draggingIndex !== null) {
       this.handEntries[this.draggingIndex]?.slot.suppressPlayableOutline(false)
@@ -2698,6 +3345,16 @@ export class GameBoardView extends Actor {
       view.destroy({ children: true })
     }
     this.localMinionViews.length = 0
+    for (const view of this.remoteMinionViews) {
+      view.removeFromParent()
+      view.destroy({ children: true })
+    }
+    this.remoteMinionViews.length = 0
+    for (const view of this.weaponViews.values()) {
+      view.removeFromParent()
+      view.destroy({ children: true })
+    }
+    this.weaponViews.clear()
     super.dispose()
   }
 

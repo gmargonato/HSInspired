@@ -57,10 +57,28 @@ describe('runtime asset registry', () => {
       'scene.game.minion-taunt',
       'scene.game.minion-divine-shield',
       'scene.game.minion-attack',
-      'scene.game.minion-health'
+      'scene.game.minion-health',
+      'scene.game.minion-will-die',
+      'scene.game.weapon'
     ]) {
       expect(resolveAssetDefinition(key).bundle).toBe('game')
     }
+  })
+
+  it('registers the minion death marker at its authored 1x size', () => {
+    expect(resolveAssetDefinition('scene.game.minion-will-die')).toMatchObject({
+      bundle: 'game',
+      authoredWidth: 109,
+      authoredHeight: 114
+    })
+  })
+
+  it('registers the board weapon frame at its authored 1x size', () => {
+    expect(resolveAssetDefinition('scene.game.weapon')).toMatchObject({
+      bundle: 'game',
+      authoredWidth: 172,
+      authoredHeight: 146
+    })
   })
 
   it('registers both settings backgrounds in separate lazy bundles', () => {
