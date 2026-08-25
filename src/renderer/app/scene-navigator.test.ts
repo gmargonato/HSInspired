@@ -141,6 +141,20 @@ describe('Application route transitions', () => {
     })
   })
 
+  it('uses a black fade when returning to deck selection after a match', async () => {
+    const { navigator, transitionTo } = createNavigator(
+      new GameScene(gameRoute, {} as never)
+    )
+
+    await navigator.navigate({ id: 'deck-selection' })
+
+    expect(transitionTo.mock.calls[0]?.[1]).toMatchObject({
+      mode: 'fade',
+      duration: 0.6,
+      inset: { x: 0, y: 0, width: 1920, height: 1080 }
+    })
+  })
+
   it('uses the returning main-menu collapse for back navigation and menu requests', async () => {
     const { navigator, transitionTo } = createNavigator(
       new CollectionScene({} as never)

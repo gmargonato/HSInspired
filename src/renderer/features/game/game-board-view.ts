@@ -1,4 +1,6 @@
 import {
+  BlurFilter,
+  ColorMatrixFilter,
   Container,
   Graphics,
   Rectangle,
@@ -86,6 +88,7 @@ import {
 import { GameBoardSession } from './game-board-session'
 import { GameHudView } from './game-hud-view'
 import { GameCardSlot } from './game-card-slot'
+import { MatchResultOverlay, type MatchResult } from './match-result-overlay'
 
 export interface GameBoardViewOptions {
   readonly route: GameRoute
@@ -95,6 +98,7 @@ export interface GameBoardViewOptions {
   readonly renderer: Renderer
   readonly cursor?: CursorManager | null
   readonly logger?: RendererLogger
+  readonly onMatchComplete?: () => Promise<void> | void
 }
 
 /** Feature-local timings make the opening easy to tune without layout edits. */
@@ -216,6 +220,7 @@ export class GameBoardView extends Actor {
   private readonly initialSlots: GameCardSlot[] = []
   private readonly remoteBacks: Sprite[] = []
   private readonly boardLayer = new Container()
+  private readonly gameplayLayer = new Container()
   private readonly localMinionLayer = new Container()
   private readonly remoteMinionLayer = new Container()
   private readonly weaponLayer = new Container()
@@ -229,10 +234,14 @@ export class GameBoardView extends Actor {
   private readonly addCardPicker: AddCardPickerView | null
   private readonly attackLineLayer = new Container()
   private readonly attackLine = new AttackLine()
+  private readonly matchResultOverlay: MatchResultOverlay
   private readonly combatPreviewMarkers = new Map<CombatView, Sprite>()
   private selectedCombatView: CombatView | null = null
   private combatInProgress = false
   private cardPlayInProgress = false
+  private matchResultShown = false
+  private matchResultBlurFilter: BlurFilter | null = null
+  private matchResultGrayscaleFilter: ColorMatrixFilter | null = null
   /**
    * Hero power cards sit in their own layer immediately above the board but
    * BELOW the opening/intro layer, so the pre-match black overlay covers them
@@ -381,49 +390,57 @@ export class GameBoardView extends Actor {
             onSelect: this.handleAddCardPickerSelect
           })
         : null
-    this.addChild(this.boardLayer)
+    this.gameplayLayer.label = 'game.gameplay'
+    this.addChild(this.gameplayLayer)
+    this.gameplayLayer.addChild(this.boardLayer)
     this.localMinionLayer.label = 'game.board-minions-local'
     this.remoteMinionLayer.label = 'game.board-minions-remote'
     this.localMinionLayer.eventMode = 'passive'
     this.remoteMinionLayer.eventMode = 'passive'
     this.localMinionLayer.sortableChildren = true
     this.remoteMinionLayer.sortableChildren = true
-    this.addChild(this.localMinionLayer)
-    this.addChild(this.remoteMinionLayer)
+    this.gameplayLayer.addChild(this.localMinionLayer)
+    this.gameplayLayer.addChild(this.remoteMinionLayer)
     this.weaponLayer.label = 'game.equipped-weapons'
     this.weaponLayer.eventMode = 'none'
     this.weaponLayer.sortableChildren = true
-    this.addChild(this.weaponLayer)
-    this.addChild(this.heroPowerLayer)
+    this.gameplayLayer.addChild(this.weaponLayer)
+    this.gameplayLayer.addChild(this.heroPowerLayer)
     this.heroLayer.label = 'game.heroes'
     this.heroLayer.eventMode = 'passive'
     this.heroLayer.sortableChildren = true
-    this.addChild(this.openingLayer)
-    this.addChild(this.heroLayer)
-    this.addChild(this.deckLayer)
-    this.addChild(this.turnLayer)
-    this.addChild(this.mulliganLayer)
+    this.gameplayLayer.addChild(this.openingLayer)
+    this.gameplayLayer.addChild(this.heroLayer)
+    this.gameplayLayer.addChild(this.deckLayer)
+    this.gameplayLayer.addChild(this.turnLayer)
+    this.gameplayLayer.addChild(this.mulliganLayer)
     // Dealt cards must stay above the mulligan dimmer while they travel from
     // the deck; they are reparented to their final layers after the animation.
-    this.addChild(this.travelLayer)
-    this.addChild(this.remoteHandLayer)
-    this.addChild(this.handLayer)
+    this.gameplayLayer.addChild(this.travelLayer)
+    this.gameplayLayer.addChild(this.remoteHandLayer)
+    this.gameplayLayer.addChild(this.handLayer)
     this.summonLayer.label = 'game.minion-summons'
     this.summonLayer.eventMode = 'none'
     this.summonLayer.sortableChildren = true
-    this.addChild(this.summonLayer)
+    this.gameplayLayer.addChild(this.summonLayer)
     // Death previews stay above the minions, but below the complete targeting
     // arrow so its body remains connected visually to the DOM cursor head.
     this.combatOverlayLayer.label = 'game.combat-overlays'
     this.combatOverlayLayer.eventMode = 'none'
     this.combatOverlayLayer.sortableChildren = true
-    this.addChild(this.combatOverlayLayer)
+    this.gameplayLayer.addChild(this.combatOverlayLayer)
     // Keep the Pixi arrow body above every other board layer. The cursor's
     // arrow head is rendered in the DOM above the canvas.
     this.attackLineLayer.label = 'game.attack-line-layer'
     this.attackLineLayer.eventMode = 'none'
     this.attackLineLayer.addChild(this.attackLine)
-    this.addChild(this.attackLineLayer)
+    this.gameplayLayer.addChild(this.attackLineLayer)
+    this.matchResultOverlay = new MatchResultOverlay({
+      winScreen: options.gameAssets.winScreen,
+      defeatScreen: options.gameAssets.defeatScreen,
+      onContinue: () => options.onMatchComplete?.()
+    })
+    this.addChild(this.matchResultOverlay)
     this.deckLayer.visible = false
     this.remoteHandLayer.visible = false
     this.handLayer.eventMode = 'none'
@@ -808,6 +825,42 @@ export class GameBoardView extends Actor {
     )
   }
 
+  /** Freezes the concluded board and presents the local player's match result. */
+  private showMatchResult(winnerId: PlayerId): void {
+    if (this.matchResultShown) return
+    this.matchResultShown = true
+    this.turnInProgress = true
+    this.cardPlayInProgress = false
+    this.endDrag()
+    this.deselectAttacker()
+    this.setMulliganInputEnabled(false)
+    this.confirmButton?.setEnabled(false)
+    this.handLayer.eventMode = 'none'
+
+    const blur = new BlurFilter({
+      strength: GAME_BOARD_LAYOUT.matchResult.blurStrength,
+      quality: 2,
+      resolution: 'inherit',
+      antialias: 'inherit'
+    })
+    this.matchResultBlurFilter = blur
+    const filters: (BlurFilter | ColorMatrixFilter)[] = [blur]
+    const result: MatchResult = winnerId === this.localParticipantId ? 'win' : 'defeat'
+    if (result === 'defeat') {
+      const grayscale = new ColorMatrixFilter()
+      grayscale.desaturate()
+      this.matchResultGrayscaleFilter = grayscale
+      filters.push(grayscale)
+    }
+    this.gameplayLayer.filters = filters
+
+    const localHero = this.heroViews.get(this.localParticipantId)
+    if (!localHero) {
+      throw new Error('Cannot show a match result without the local hero view.')
+    }
+    this.matchResultOverlay.show(result, localHero)
+  }
+
   /** Updates attacker-ready visuals and target input from authoritative state. */
   private syncBoardAttackability(state: OpeningMatchState): void {
     this.syncMinionRowAttackability(
@@ -934,6 +987,7 @@ export class GameBoardView extends Actor {
   }
 
   private handleBoardPointerMove(event: FederatedPointerEvent): void {
+    if (this.matchResultShown) return
     if (!this.selectedCombatView) {
       if (!this.combatInProgress) this.clearCombatPreview()
       return
@@ -1531,6 +1585,7 @@ export class GameBoardView extends Actor {
         return
       case 'match-ended':
         this.syncTurnControls(this.match.getState())
+        this.showMatchResult(event.winnerId)
         return
       case 'dev-card-added':
         await this.presentDevCardAdded(event)
@@ -3390,6 +3445,10 @@ export class GameBoardView extends Actor {
     window.removeEventListener('keydown', this.handleWindowKeyDown)
     this.options.cursor?.setContextVariant(null)
     this.options.cursor?.setTargeting(false)
+    this.matchResultBlurFilter?.destroy()
+    this.matchResultBlurFilter = null
+    this.matchResultGrayscaleFilter?.destroy()
+    this.matchResultGrayscaleFilter = null
     this.clearCombatPreview()
     this.cardPlayInProgress = false
     this.attackLine.clear()

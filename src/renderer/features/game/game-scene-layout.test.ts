@@ -3,6 +3,24 @@ import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { WEAPON_LAYOUT } from '../../rendering/weapons/weapon-layout'
 
 describe('game weapon layout', () => {
+  it('keeps the match result frame, local hero, and prompt on the design canvas', () => {
+    expect(GAME_BOARD_LAYOUT.matchResult.frame).toMatchObject({
+      position: { x: 960, y: 485 },
+      size: { width: 1374, height: 1145 },
+      anchor: { x: 0.5, y: 0.5 },
+      scale: { x: 0.72, y: 0.72 }
+    })
+    expect(GAME_BOARD_LAYOUT.matchResult.localHero).toMatchObject({
+      position: { x: 960, y: 485 },
+      size: { width: 345, height: 433 },
+      anchor: { x: 0.5, y: 0.5 }
+    })
+    expect(GAME_BOARD_LAYOUT.matchResult.continuePrompt.position).toEqual({
+      x: 960,
+      y: 1015
+    })
+  })
+
   it('exposes one shared local drop zone for all playable cards', () => {
     expect(GAME_BOARD_LAYOUT.cardPlay.localDropZone).toEqual({
       x: 350,

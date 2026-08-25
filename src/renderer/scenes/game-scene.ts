@@ -1,5 +1,5 @@
 import type { AppLogger } from '../app/services'
-import type { GameRoute } from '../app/router'
+import type { GameRoute, SceneRouter } from '../app/router'
 import type { DeckStore } from '../ui/deck-store'
 import {
   ASSET_BUNDLE_IDS,
@@ -16,7 +16,12 @@ export class GameScene extends Scene {
   private readonly logger?: AppLogger
   private view: GameBoardView | null = null
 
-  constructor(route: GameRoute, deckStore: DeckStore, logger?: AppLogger) {
+  constructor(
+    route: GameRoute,
+    deckStore: DeckStore,
+    logger?: AppLogger,
+    private readonly router?: SceneRouter
+  ) {
     super()
     this.route = route
     this.deckStore = deckStore
@@ -60,7 +65,8 @@ export class GameScene extends Scene {
       heroAssets,
       renderer: this.appInstance.renderer,
       cursor: this.sceneManager.cursor,
-      logger: this.logger
+      logger: this.logger,
+      onMatchComplete: () => this.router?.navigate({ id: 'deck-selection' })
     })
     this.logger?.info('[GameScene] GameBoardView created')
     try {

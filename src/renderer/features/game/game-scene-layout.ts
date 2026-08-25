@@ -205,6 +205,37 @@ export const GAME_BOARD_LAYOUT = {
   ),
   yourTurnStartScale: 0.5,
 
+  /** End-of-match result frame, local hero portrait, and continuation prompt. */
+  matchResult: {
+    frame: placement(
+      { x: 960, y: 485 },
+      { width: 1374, height: 1145 },
+      {
+        anchor: CENTER,
+        scale: 0.72,
+        note: 'Win or defeat artwork centered over the blurred gameplay board.'
+      }
+    ),
+    localHero: placement(
+      { x: 960, y: 485 },
+      { width: 345, height: 433 },
+      {
+        anchor: CENTER,
+        scale: 1,
+        note: 'Existing local HeroView promoted in front of the result artwork.'
+      }
+    ),
+    continuePrompt: placement(
+      { x: 960, y: 1015 },
+      { width: 480, height: 56 },
+      {
+        anchor: CENTER,
+        note: 'Belwe continuation prompt at the bottom center.'
+      }
+    ),
+    blurStrength: 3
+  },
+
   /**
    * Mana crystal plus "available/maximum" label for each player. The local
    * display sits right of the local hero above the hand; the smaller remote

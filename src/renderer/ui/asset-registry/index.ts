@@ -59,6 +59,8 @@ import cardPreviewDetailContainerImage from '@assets/images/ui/card-preview/card
 import cardAddAuraImage from '@assets/images/effects/aura-01.png'
 import arrowBodyImage from '@assets/images/match/arrow-body.png'
 import arrowHeadImage from '@assets/images/match/arrow-head.png'
+import winScreenImage from '@assets/images/match/win-screen.png'
+import defeatScreenImage from '@assets/images/match/defeat-screen.png'
 import druidNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-druid.png'
 import druidDeckFrameImage from '@assets/images/heroes/frames/druid-deck-frame.png'
 import hunterDeckFrameImage from '@assets/images/heroes/frames/hunter-deck-frame.png'
@@ -472,6 +474,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     arrowHeadImage,
     119,
     57,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.win-screen',
+    ASSET_BUNDLE_IDS.game,
+    'winScreen',
+    winScreenImage,
+    1374,
+    1145,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.defeat-screen',
+    ASSET_BUNDLE_IDS.game,
+    'defeatScreen',
+    defeatScreenImage,
+    1374,
+    1145,
     'game-scene'
   ),
   asset(
@@ -962,6 +982,8 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   heroPowerMana: Texture
   arrowBody: Texture
   arrowHead: Texture
+  winScreen: Texture
+  defeatScreen: Texture
 }
 
 export interface SettingsBackgroundAssets {

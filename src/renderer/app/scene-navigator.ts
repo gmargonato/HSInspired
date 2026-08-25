@@ -124,7 +124,8 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
           seed
         ),
         dependencies.services.deckStore,
-        dependencies.services.logger
+        dependencies.services.logger,
+        dependencies.router
       )
     }
 
@@ -137,7 +138,8 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
     return new GameScene(
       fallbackRoute as unknown as ConstructorParameters<typeof GameScene>[0],
       dependencies.services.deckStore,
-      dependencies.services.logger
+      dependencies.services.logger,
+      dependencies.router
     )
   }
 }
@@ -351,6 +353,15 @@ export class SceneNavigator implements SceneRouter {
       }
     }
 
+    if (previous instanceof GameScene && route.id === 'deck-selection') {
+      return {
+        inset: FULL_VIEWPORT,
+        mode: 'fade',
+        duration: 0.6,
+        afterTransition
+      }
+    }
+
     if (route.id === 'game') {
       return {
         inset: FULL_VIEWPORT,
@@ -393,7 +404,7 @@ export class SceneNavigator implements SceneRouter {
       case 'new-deck':
         return new NewDeckScene(this.services.deckStore, this.services.logger)
       case 'game':
-        return new GameScene(route, this.services.deckStore, this.services.logger)
+        return new GameScene(route, this.services.deckStore, this.services.logger, this)
       case 'card-preview':
         return new CardViewScene({
           card: CARD_CATALOG.require(route.cardId),
