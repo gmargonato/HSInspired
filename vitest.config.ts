@@ -5,7 +5,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@assets': resolve('assets'),
-      '@renderer': resolve('src/renderer')
+      '@renderer': resolve('src/renderer'),
+      '@outline-directions': resolve(
+        'src/renderer/rendering/effects/outline-directions-placeholder.ts'
+      )
     }
   },
   test: {

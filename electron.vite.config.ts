@@ -36,10 +36,20 @@ export default defineConfig(({ mode }) => ({
             ? 'src/renderer/app/renderer-production-placeholder.ts'
             : 'src/renderer/scenes/dev/card-inspector-scene.ts'
         ),
+        '@outline-lab': resolve(
+          mode === 'production'
+            ? 'src/renderer/app/renderer-production-placeholder.ts'
+            : 'src/renderer/scenes/dev/outline-lab-scene.ts'
+        ),
         '@dev-layout-inspector': resolve(
           mode === 'production'
             ? 'src/renderer/app/renderer-production-placeholder.ts'
             : 'src/renderer/features/dev/layout-inspector/index.ts'
+        ),
+        '@outline-directions': resolve(
+          mode === 'production'
+            ? 'src/renderer/rendering/effects/outline-directions-placeholder.ts'
+            : 'src/renderer/rendering/effects/outline-directions-dev.ts'
         )
       }
     },

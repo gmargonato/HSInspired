@@ -7,10 +7,7 @@ import {
   type SharedUIAssets
 } from '../../ui/asset-registry'
 import { AssetScope } from '../../ui/asset-registry/asset-scope'
-import {
-  AnimatedOutline,
-  OUTLINE_PROFILES
-} from '../../rendering/effects/animated-outline'
+import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/button'
 import { HERO_CATALOG } from '../../../game/content/heroes'
@@ -129,11 +126,7 @@ export class DeckSelectionView extends Container {
     this.playButton.setEnabled(false)
     this.addChild(this.playButton)
 
-    this.playOutline = new AnimatedOutline(
-      this.playOutlineTarget,
-      'blue',
-      OUTLINE_PROFILES.button
-    )
+    this.playOutline = new AnimatedOutline(this.playOutlineTarget, 'blue', 'button')
     this.playOutline.setEnabled(false)
   }
 
@@ -161,11 +154,7 @@ export class DeckSelectionView extends Container {
       outlineTarget.label = `deck-selection.deck-outline:${entry.deck.id}`
       this.addChild(outlineTarget)
 
-      const outline = new AnimatedOutline(
-        outlineTarget,
-        'blue',
-        OUTLINE_PROFILES.button
-      )
+      const outline = new AnimatedOutline(outlineTarget, 'blue', 'button')
       outline.setEnabled(false)
       this.deckOutlines.push(outline)
 

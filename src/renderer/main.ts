@@ -140,9 +140,14 @@ async function bootstrap(): Promise<void> {
 
     const directInspectorStart =
       import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'card-inspector'
+    const directOutlineLabStart =
+      import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'outline-lab'
     if (directInspectorStart) {
       const { CardInspectorScene } = await import('@dev-inspector')
       await game.start(new CardInspectorScene())
+    } else if (directOutlineLabStart) {
+      const { OutlineLabScene } = await import('@outline-lab')
+      await game.start(new OutlineLabScene())
     } else {
       await game.start(navigator.createInitialScene())
     }

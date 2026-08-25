@@ -1,6 +1,6 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
-import { AnimatedOutline, OUTLINE_PROFILES } from '../effects/animated-outline'
+import { AnimatedOutline } from '../effects/animated-outline'
 import { AnimationScope } from '../../animation/animations'
 import { HERO_CANVAS, HERO_LAYOUT } from './hero-layout'
 
@@ -125,11 +125,7 @@ export class HeroView extends Container {
       .fill({ color: 0xffffff })
     this.outlineProxy.visible = false
     this.addChildAt(this.outlineProxy, 0)
-    this.attackOutline = new AnimatedOutline(
-      this.outlineProxy,
-      HERO_LAYOUT.attackOutline.color,
-      OUTLINE_PROFILES.card
-    )
+    this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'card')
     this.attackOutline.setEnabled(false)
 
     this.hitArea = new Rectangle(0, 0, HERO_CANVAS.width, HERO_CANVAS.height)

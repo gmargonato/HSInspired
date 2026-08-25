@@ -14,7 +14,11 @@
       "@renderer/*": ["src/renderer/*"],
       "@assets/*": ["assets/*"],
       "@dev-inspector": ["src/renderer/scenes/dev/card-inspector-scene.ts"],
-      "@dev-layout-inspector": ["src/renderer/features/dev/layout-inspector/index.ts"]
+      "@outline-lab": ["src/renderer/scenes/dev/outline-lab-scene.ts"],
+      "@dev-layout-inspector": ["src/renderer/features/dev/layout-inspector/index.ts"],
+      "@outline-directions": [
+        "src/renderer/rendering/effects/outline-directions-dev.ts"
+      ]
     }
   },
   "exclude": ["src/renderer/**/*.test.ts", "src/game/**/*.test.ts"]

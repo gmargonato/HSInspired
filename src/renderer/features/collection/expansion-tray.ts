@@ -3,10 +3,7 @@ import type { FederatedPointerEvent } from 'pixi.js'
 import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 import { EXPANSION_CATALOG } from '../../../game/content/expansions'
 import type { ExpansionId } from '../../../game/content/cards'
-import {
-  AnimatedOutline,
-  OUTLINE_PROFILES
-} from '../../rendering/effects/animated-outline'
+import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import {
   applyAnchoredPlacement,
   placement,
@@ -89,7 +86,7 @@ export class ExpansionTray extends Actor {
     this.toggleButton.label = 'collection.expansion-toggle'
     this.addChild(this.toggleButton)
 
-    this.outline = new AnimatedOutline(outlineTarget, 'blue', OUTLINE_PROFILES.button)
+    this.outline = new AnimatedOutline(outlineTarget, 'blue', 'button')
     this.outline.setEnabled(false)
     this.addChild(this.outline)
     this.on('globalpointerdown', this.handleGlobalPointerDown)

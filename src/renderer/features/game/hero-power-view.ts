@@ -4,10 +4,7 @@ import {
   type LayoutPlacement,
   type LayoutPoint
 } from '../../rendering/layout'
-import {
-  AnimatedOutline,
-  OUTLINE_PROFILES
-} from '../../rendering/effects/animated-outline'
+import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import { Actor } from '../../ui/components/actor'
 
 /** Feature-local flip timing for the hero power reveal/exhaust animations. */
@@ -121,11 +118,7 @@ export class HeroPowerView extends Actor {
     outlineTarget.eventMode = 'none'
     outlineTarget.label = 'hero-power-outline-target'
     this.addChild(outlineTarget)
-    this.playableOutline = new AnimatedOutline(
-      outlineTarget,
-      'green',
-      OUTLINE_PROFILES.card
-    )
+    this.playableOutline = new AnimatedOutline(outlineTarget, 'green', 'card')
     this.playableOutline.setEnabled(false)
 
     this.card = new Sprite(options.backTexture)

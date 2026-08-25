@@ -1,6 +1,6 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
-import { AnimatedOutline, OUTLINE_PROFILES } from '../effects/animated-outline'
+import { AnimatedOutline } from '../effects/animated-outline'
 import { MINION_CANVAS, MINION_LAYOUT } from './minion-layout'
 import { SleepingZs } from './sleeping-zs'
 import { AnimationScope } from '../../animation/animations'
@@ -185,11 +185,7 @@ export class MinionView extends Container {
     this.outlineProxy.visible = false
     // Place behind the frame so the glow appears outside the oval, not covering badges.
     this.addChildAt(this.outlineProxy, 1)
-    this.attackOutline = new AnimatedOutline(
-      this.outlineProxy,
-      MINION_LAYOUT.canAttackOutline.color,
-      OUTLINE_PROFILES.card
-    )
+    this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'card')
     this.attackOutline.setEnabled(false)
 
     this.sleepingZs = new SleepingZs()

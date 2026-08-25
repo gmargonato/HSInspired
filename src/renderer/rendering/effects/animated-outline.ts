@@ -1,127 +1,145 @@
-import { BlurFilter, Filter, UniformGroup } from 'pixi.js'
+import { Filter, UniformGroup } from 'pixi.js'
 import type { Container } from 'pixi.js'
 import { Actor } from '../../ui/components/actor'
 import {
   createAnimatedOutlineGlProgram,
   createAnimatedOutlineGpuProgram
 } from './animated-outline-shader'
+import {
+  OUTLINE_TUNINGS,
+  type OutlinePresetName,
+  type OutlineTuning
+} from './outline-tuning'
+import {
+  getExperimentalOutlineDirectionId,
+  resolveExperimentalOutlineTuning
+} from '@outline-directions'
 
-export const OUTLINE_COLORS = {
-  blue: 0x1d4a8c,
-  green: 0x509c29,
-  orange: 0xff8c00,
-  red: 0xff2b2b,
-  white: 0xffffff
-} as const
-
-export type OutlineColorName = keyof typeof OUTLINE_COLORS
-
-const OUTLINE_INTENSITY = 2.5
-export interface OutlineProfile {
-  /** Width of the ribbon in logical screen pixels. */
-  readonly thickness: number
-  /** Soft transition around the ribbon in logical screen pixels. */
-  readonly edgeSoftness: number
-  /** Width of the bright inner core in logical screen pixels. */
-  readonly coreWidth: number
-  /** Width of the colored outer lip in logical screen pixels. */
-  readonly lipWidth: number
-  /** Maximum animated expansion in logical screen pixels. */
-  readonly blobExpansion: number
-  /** Gaussian blur strength in logical screen pixels. */
-  readonly blurStrength: number
-  /** Number of blur passes. */
-  readonly blurQuality: number
+export interface OutlinePalette {
+  /** Dense inner energy body. */
+  readonly baseColor: number
+  /** Darker exterior body and the bloom cast from it. */
+  readonly outerColor: number
+  /** Hottest animated regions inside the energy body. */
+  readonly highlightColor: number
 }
 
-/** Separate visual budgets keep small cards from inheriting the button's halo. */
-export const OUTLINE_PROFILES = {
-  card: {
-    thickness: 10,
-    edgeSoftness: 0.5,
-    coreWidth: 1,
-    lipWidth: 3,
-    blobExpansion: 5,
-    blurStrength: 1,
-    blurQuality: 2
+export const OUTLINE_PALETTES = {
+  blue: {
+    baseColor: 0x6cffff,
+    outerColor: 0x188cff,
+    highlightColor: 0xffffff
   },
-  button: {
-    thickness: 10,
-    edgeSoftness: 2,
-    coreWidth: 1,
-    lipWidth: 3,
-    blobExpansion: 4,
-    blurStrength: 1,
-    blurQuality: 2
+  green: {
+    baseColor: 0x6cff46,
+    outerColor: 0x219618,
+    highlightColor: 0xbfffa1
+  },
+  orange: {
+    baseColor: 0xffff0a,
+    outerColor: 0xf9aa11,
+    highlightColor: 0xfffc10
+  },
+  red: {
+    baseColor: 0xfffb6b,
+    outerColor: 0xdb6c2f,
+    highlightColor: 0xffffa4
+  },
+  white: {
+    baseColor: 0xf5f5f5,
+    outerColor: 0x4e4e4e,
+    highlightColor: 0xffffff
   }
-} as const satisfies Record<'card' | 'button', OutlineProfile>
+} as const satisfies Record<string, OutlinePalette>
 
-function outlinePadding(profile: OutlineProfile): number {
-  return (
-    profile.thickness +
-    profile.edgeSoftness +
-    profile.blobExpansion +
-    profile.blurStrength * 2 +
-    4
-  )
-}
+export type OutlinePaletteName = keyof typeof OUTLINE_PALETTES
+export type OutlinePaletteInput = OutlinePaletteName | OutlinePalette
+export type { OutlinePresetName, OutlineTuning } from './outline-tuning'
+
+type Rgb = readonly [number, number, number]
 
 function toRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255]
 }
 
-/** Scattered light shows the hue fully saturated, so the halo strips the white component. */
-function deriveGlowRgb([r, g, b]: readonly number[]): [number, number, number] {
-  const maximum = Math.max(r, g, b)
-  const minimum = Math.min(r, g, b)
-  const chroma = maximum - minimum
+function resolvePalette(input: OutlinePaletteInput): OutlinePalette {
+  return typeof input === 'string' ? OUTLINE_PALETTES[input] : input
+}
 
-  if (chroma === 0 || maximum === 0) return [maximum, maximum, maximum]
-  const saturate = (channel: number): number => ((channel - minimum) / chroma) * maximum
+function writeColor(
+  uniforms: UniformGroup,
+  name: 'uBaseColor' | 'uRimColor' | 'uGlowColor' | 'uHotColor',
+  rgb: Rgb
+): void {
+  const value = uniforms.uniforms[name] as unknown as number[]
+  value[0] = rgb[0]
+  value[1] = rgb[1]
+  value[2] = rgb[2]
+  value[3] = 1
+}
 
-  return [saturate(r), saturate(g), saturate(b)]
+function outlinePadding(tuning: OutlineTuning): number {
+  return (
+    tuning.ribbonWidth +
+    tuning.rimWidth +
+    tuning.glowWidth +
+    tuning.edgeWobble * 1.5 +
+    4
+  )
+}
+
+function resolveTuning(preset: OutlinePresetName): OutlineTuning {
+  const base = OUTLINE_TUNINGS[preset]
+  const direction = import.meta.env.DEV
+    ? getExperimentalOutlineDirectionId()
+    : undefined
+  return resolveExperimentalOutlineTuning(direction, preset, base)
 }
 
 /** Asset-agnostic animated ribbon applied to the alpha silhouette of a display object. */
 export class AnimatedOutline extends Actor {
   private readonly target: Container
   private readonly filter: Filter
-  private readonly blurFilter: BlurFilter
   private readonly uniforms: UniformGroup
+  private readonly tuning: OutlineTuning
   private readonly timeState = { value: 0 }
   private timeTween?: gsap.core.Tween
   private enabled = true
 
   constructor(
     target: Container,
-    color: OutlineColorName | number,
-    profile: OutlineProfile = OUTLINE_PROFILES.button
+    palette: OutlinePaletteInput,
+    preset: OutlinePresetName = 'button'
   ) {
     super()
     this.target = target
+    this.tuning = resolveTuning(preset)
 
     this.uniforms = new UniformGroup({
       uBaseColor: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
-      uEdgeColor: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
-      uShape: {
+      uRimColor: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
+      uGlowColor: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
+      uHotColor: { value: [1, 1, 1, 1], type: 'vec4<f32>' },
+      uGeometry: {
         value: [
-          profile.thickness,
-          profile.edgeSoftness,
-          profile.coreWidth,
-          profile.lipWidth
+          this.tuning.ribbonWidth,
+          this.tuning.rimWidth,
+          this.tuning.glowWidth,
+          this.tuning.glowStrength
         ],
         type: 'vec4<f32>'
       },
-      uAtmosphere: {
-        value: [1.2, profile.blobExpansion, 0, 0],
-        type: 'vec4<f32>'
-      },
-      uSurface: {
-        value: [0.26, 32, 0.58, 3.2],
+      uDetail: {
+        value: [
+          this.tuning.highlightStrength,
+          this.tuning.hotspotScale,
+          this.tuning.hotspotDensity,
+          this.tuning.edgeWobble
+        ],
         type: 'vec4<f32>'
       },
       uMotion: {
-        value: [0.32, 34, 0.85, 1],
+        value: [this.tuning.motionSpeed, this.tuning.edgeSoftness, 0, 0],
         type: 'vec4<f32>'
       },
       uTime: { value: 0, type: 'f32' }
@@ -131,21 +149,14 @@ export class AnimatedOutline extends Actor {
       glProgram: createAnimatedOutlineGlProgram(),
       gpuProgram: createAnimatedOutlineGpuProgram(),
       resources: { outlineUniforms: this.uniforms },
-      padding: outlinePadding(profile),
+      padding: outlinePadding(this.tuning),
       resolution: 'inherit',
       antialias: 'inherit'
     })
-    this.blurFilter = new BlurFilter({
-      strength: profile.blurStrength,
-      quality: profile.blurQuality,
-      resolution: 'inherit',
-      antialias: 'inherit',
-      kernelSize: 5
-    })
     this.label = 'animated-outline'
-    target.filters = [...(target.filters ?? []), this.filter, this.blurFilter]
+    target.filters = [...(target.filters ?? []), this.filter]
 
-    this.setColor(color)
+    this.setPalette(palette)
 
     this.timeTween = this.tweenTo(this.timeState, {
       value: 1,
@@ -165,31 +176,20 @@ export class AnimatedOutline extends Actor {
     return this.enabled
   }
 
-  setColor(color: OutlineColorName | number): void {
-    const hex = typeof color === 'number' ? color : OUTLINE_COLORS[color]
-    const baseRgb = toRgb01(hex)
-    this.writeRgb('uBaseColor', baseRgb)
-    this.writeRgb('uEdgeColor', deriveGlowRgb(baseRgb))
+  setPalette(input: OutlinePaletteInput): void {
+    const palette = resolvePalette(input)
+    writeColor(this.uniforms, 'uBaseColor', toRgb01(palette.baseColor))
+    writeColor(this.uniforms, 'uRimColor', toRgb01(palette.outerColor))
+    writeColor(this.uniforms, 'uGlowColor', toRgb01(palette.outerColor))
+    writeColor(this.uniforms, 'uHotColor', toRgb01(palette.highlightColor))
   }
 
   override dispose(): void {
     this.target.filters = (this.target.filters ?? []).filter(
-      (filter) => filter !== this.filter && filter !== this.blurFilter
+      (filter) => filter !== this.filter
     )
-    this.blurFilter.destroy()
     this.filter.destroy()
     super.dispose()
-  }
-
-  private writeRgb(
-    uniformName: 'uBaseColor' | 'uEdgeColor',
-    [r, g, b]: readonly number[]
-  ): void {
-    const value = this.uniforms.uniforms[uniformName] as unknown as number[]
-    value[0] = r * OUTLINE_INTENSITY
-    value[1] = g * OUTLINE_INTENSITY
-    value[2] = b * OUTLINE_INTENSITY
-    value[3] = 1
   }
 
   private syncTime(): void {

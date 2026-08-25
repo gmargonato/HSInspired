@@ -85,9 +85,5 @@ export const MINION_LAYOUT = {
     startScale: 0.72,
     endScale: 1.32
   },
-  canAttackOutline: {
-    color: 0x3cff3c,
-    profile: 'card' as const
-  },
   selectionScale: 1.15
 } as const

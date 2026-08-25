@@ -47,8 +47,7 @@ export const HERO_LAYOUT = {
         anchor: CENTER,
         note: 'Exterior glow silhouette for a hero that can attack.'
       }
-    ),
-    color: 0x3cff3c
+    )
   },
   selectionScale: 1.08
 } as const

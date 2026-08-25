@@ -3,9 +3,8 @@ import type { CardView } from '../../rendering/cards/card-view'
 import { resolveParallaxSmoothing } from '../../rendering/cards/card-parallax'
 import {
   AnimatedOutline,
-  OUTLINE_PROFILES,
-  type OutlineColorName,
-  type OutlineProfile
+  type OutlinePaletteInput,
+  type OutlinePresetName
 } from '../../rendering/effects/animated-outline'
 import type { Texture } from 'pixi.js'
 
@@ -25,8 +24,8 @@ export interface HandCardPerspectiveOptions {
   /** Raw card-frame texture used to keep the outline outside the card snapshot. */
   readonly outlineTexture?: Texture
   readonly outlineEnabled?: boolean
-  readonly outlineColor?: OutlineColorName | number
-  readonly outlineProfile?: OutlineProfile
+  readonly outlinePalette?: OutlinePaletteInput
+  readonly outlinePreset?: OutlinePresetName
 }
 
 const MAX_TILT_X = (22 * Math.PI) / 180
@@ -159,8 +158,8 @@ export class HandCardPerspective {
       this.outlineMesh.eventMode = 'none'
       this.outlineEffect = new AnimatedOutline(
         this.outlineMesh,
-        options.outlineColor ?? 'green',
-        options.outlineProfile ?? OUTLINE_PROFILES.card
+        options.outlinePalette ?? 'green',
+        options.outlinePreset ?? 'card'
       )
       this.outlineEffect.setEnabled(options.outlineEnabled ?? true)
     } else {

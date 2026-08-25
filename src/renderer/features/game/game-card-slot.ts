@@ -1,9 +1,6 @@
 import { Container, Rectangle, Sprite, Texture } from 'pixi.js'
 import { CardView } from '../../rendering/cards/card-view'
-import {
-  AnimatedOutline,
-  OUTLINE_PROFILES
-} from '../../rendering/effects/animated-outline'
+import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 
 const SUMMON_GHOST_COLOR = 0x79e9ff
@@ -52,11 +49,7 @@ export class GameCardSlot extends Container {
     this.outlineTarget.eventMode = 'none'
     this.outlineTarget.label = `${card.label}.playable-outline-target`
     this.addChild(this.outlineTarget)
-    this.playableOutline = new AnimatedOutline(
-      this.outlineTarget,
-      'green',
-      OUTLINE_PROFILES.card
-    )
+    this.playableOutline = new AnimatedOutline(this.outlineTarget, 'green', 'card')
     this.setPlayableOutlineEnabled(false)
 
     this.addChild(card)

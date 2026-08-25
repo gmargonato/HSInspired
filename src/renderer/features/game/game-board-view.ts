@@ -35,7 +35,6 @@ import type { GameRoute } from './game-route'
 import type { RendererLogger } from '../../ui/logger'
 import { CardView } from '../../rendering/cards/card-view'
 import { CARD_CANVAS, CARD_PROFILES } from '../../rendering/cards/card-layout'
-import { OUTLINE_PROFILES } from '../../rendering/effects/animated-outline'
 import { gsap } from '../../animation/animations'
 import {
   type DeckPresentationAssets,
@@ -3246,8 +3245,8 @@ export class GameBoardView extends Actor {
           outlineEnabled,
           // In-hand playable cards wear the green outline; the card switches
           // to blue once it is selected and warps around under the cursor.
-          outlineColor: 'blue',
-          outlineProfile: OUTLINE_PROFILES.card
+          outlinePalette: 'blue',
+          outlinePreset: 'card'
         }
       )
     } catch (error) {
