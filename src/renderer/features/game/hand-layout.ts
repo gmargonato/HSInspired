@@ -60,7 +60,7 @@ export const DEFAULT_HAND_LAYOUT: HandLayoutConfig = {
   maxRotation: 0.2,
   cardScale: 0.2,
   hoverScale: 0.5,
-  safeRightBoundaryX: 1227,
+  safeRightBoundaryX: 1257,
   hoverLift: 120,
   hoverSpread: 45,
   hoverEntryMargin: 15,

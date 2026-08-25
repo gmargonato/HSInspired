@@ -1,7 +1,4 @@
-import {
-  PersistentDeckStore,
-  type DeckStore
-} from '../features/deck-builder/deck-store'
+import { PersistentDeckStore, type DeckStore } from './deck-store'
 import { createAppLogger, type AppLogger } from './logger'
 
 export type { AppLogger } from './logger'

@@ -1,4 +1,4 @@
-import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
+import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 import type { Renderer } from 'pixi.js'
 
 export interface CollectionSearchInputBounds {

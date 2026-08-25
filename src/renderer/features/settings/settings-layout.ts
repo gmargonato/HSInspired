@@ -4,7 +4,7 @@
  */
 
 import { TOP_LEFT, placement } from '../../rendering/layout'
-import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
+import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 
 export const SETTINGS_LAYOUT = {
   name: 'Settings overlay',

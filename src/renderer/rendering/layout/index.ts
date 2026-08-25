@@ -24,6 +24,12 @@
 
 import type { Container, ObservablePoint } from 'pixi.js'
 
+export * from './contract'
+
+/** Canonical design canvas used by all full-screen renderer layouts. */
+export const GAME_WIDTH = 1920
+export const GAME_HEIGHT = 1080
+
 /** A position on the 1920x1080 design canvas (or a documented local frame). */
 export interface LayoutPoint {
   readonly x: number

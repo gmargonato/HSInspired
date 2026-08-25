@@ -1,6 +1,6 @@
 import type { AppLogger } from '../app/services'
 import type { GameRoute } from '../app/router'
-import type { DeckStore } from '../features/deck-builder/deck-store'
+import type { DeckStore } from '../ui/deck-store'
 import {
   ASSET_BUNDLE_IDS,
   type DeckPresentationAssets,

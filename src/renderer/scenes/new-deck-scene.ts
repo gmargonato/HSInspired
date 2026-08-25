@@ -1,6 +1,6 @@
 import type { AppLogger } from '../app/services'
 import { NewDeckView } from '../features/deck-builder/new-deck-view'
-import type { DeckStore } from '../features/deck-builder/deck-store'
+import type { DeckStore } from '../ui/deck-store'
 import { Scene } from './scene'
 
 /** Route adapter that mounts the feature-owned deck-builder view. */

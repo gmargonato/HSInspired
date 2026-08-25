@@ -1,8 +1,6 @@
-export interface AppLogger {
-  info(message: string, ...details: readonly unknown[]): void
-  warn(message: string, ...details: readonly unknown[]): void
-  error(message: string, ...details: readonly unknown[]): void
-}
+import type { RendererLogger } from '../ui/logger'
+
+export type AppLogger = RendererLogger
 
 /** Development-visible logging without production debug noise. */
 export function createAppLogger(): AppLogger {

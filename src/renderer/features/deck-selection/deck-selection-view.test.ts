@@ -2,7 +2,7 @@ import { Sprite, Text, Texture } from 'pixi.js'
 import { describe, expect, it, vi } from 'vitest'
 import { asHeroId } from '../../../game/content/cards'
 import type { Deck } from '../../../game/decks'
-import type { DeckStore } from '../deck-builder/deck-store'
+import type { DeckStore } from '../../ui/deck-store'
 import type { Button } from '../../ui/components/button'
 import { DeckSelectionView } from './deck-selection-view'
 

@@ -87,59 +87,11 @@ export { CardAssetResolver } from './card-asset-resolver'
 export * from './card-assets'
 export type { HeroPowerAssetKey } from './hero-power-assets'
 
-export const ASSET_BUNDLE_IDS = {
-  mainMenu: 'main-menu',
-  deckSelection: 'deck-selection',
-  deckPresentation: 'deck-presentation',
-  game: 'game',
-  menuSettings: 'menu-settings',
-  gameSettings: 'game-settings',
-  collection: 'collection',
-  cardPreview: 'card-preview',
-  sharedUI: 'shared-ui',
-  cardRendering: 'card-rendering'
-} as const
-
-export type StandaloneAssetSource = {
-  readonly kind: 'standalone'
-  readonly src: string
-}
-
-export type AtlasFrameAssetSource = {
-  readonly kind: 'atlas-frame'
-  readonly src: string
-  readonly frame: string
-}
-
-export interface AssetDefinition {
-  readonly key: string
-  readonly alias: string
-  readonly bundle: string
-  readonly source: StandaloneAssetSource | AtlasFrameAssetSource
-  readonly authoredWidth: number
-  readonly authoredHeight: number
-  readonly owner: string
-}
-
-function asset(
-  key: string,
-  bundle: string,
-  alias: string,
-  source: string,
-  authoredWidth: number,
-  authoredHeight: number,
-  owner: string
-): AssetDefinition {
-  return {
-    key,
-    alias,
-    bundle,
-    source: { kind: 'standalone', src: source },
-    authoredWidth,
-    authoredHeight,
-    owner
-  }
-}
+export { ASSET_BUNDLE_IDS } from './asset-bundle-ids'
+export { asset, type AssetDefinition } from './asset-definition'
+export type { StandaloneAssetSource, AtlasFrameAssetSource } from './asset-definition'
+import { ASSET_BUNDLE_IDS } from './asset-bundle-ids'
+import { asset, type AssetDefinition } from './asset-definition'
 
 const bespokeAssetDefinitions: readonly AssetDefinition[] = [
   asset(

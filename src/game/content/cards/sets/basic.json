@@ -438,22 +438,7 @@
     "health": null,
     "rulesText": "Give a friendly minion +2 Attack and Charge.",
     "keywords": [],
-    "effects": [
-      {
-        "trigger": "cast",
-        "actions": [
-          {
-            "action": "grant-keyword",
-            "target": {
-              "controller": "self",
-              "type": "minion",
-              "selection": "chosen"
-            },
-            "keyword": "charge"
-          }
-        ]
-      }
-    ]
+    "effects": []
   },
   {
     "id": "basic_chillwind_yeti",

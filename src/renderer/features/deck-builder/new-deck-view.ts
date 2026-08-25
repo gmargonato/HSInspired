@@ -6,11 +6,11 @@ import {
   type CollectionAssets,
   type DeckPresentationAssets
 } from '../../ui/asset-registry'
-import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
-import type { AppLogger } from '../../app/services'
+import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
+import type { RendererLogger } from '../../ui/logger'
 import { AnimationScope } from '../../animation/animations'
 import { AssetScope } from '../../ui/asset-registry/asset-scope'
-import type { DeckStore } from './deck-store'
+import type { DeckStore } from '../../ui/deck-store'
 import {
   DECK_FRAME_ASSET_KEYS,
   NEW_DECK_FRAME_ASSET_KEYS
@@ -57,7 +57,7 @@ export class NewDeckView extends Container {
   constructor(
     deckStore: DeckStore,
     callbacks: NewDeckViewCallbacks = {},
-    private readonly logger: AppLogger = {
+    private readonly logger: RendererLogger = {
       info: () => undefined,
       warn: () => undefined,
       error: () => undefined

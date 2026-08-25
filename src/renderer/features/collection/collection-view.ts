@@ -1,5 +1,4 @@
 import {
-  AlphaFilter,
   ColorMatrixFilter,
   Container,
   PerspectiveMesh,
@@ -26,12 +25,10 @@ import {
   animateHingedDoor,
   createHingedDoorMesh,
   updateHingedDoor
-} from './choreography/hinged-door'
+} from '../../rendering/effects/hinged-door'
 import {
-  CARD_GRID_LAYOUT,
   COLLECTION_LAYOUT,
   COLLECTION_TIMING,
-  COMPLETED_COLLECTION_CARD_ALPHA,
   COVER_LOCK_OPEN_DURATION,
   COVER_LOCK_PERSPECTIVE_DEPTH,
   COVER_OPEN_DURATION,
@@ -52,11 +49,11 @@ import {
 } from './collection-filters'
 import { queryCollectionCards } from './collection-query'
 import { CollectionQueryController } from './collection-query-controller'
-import { getCollectionCardPlacement } from './collection-card-grid'
+import { CollectionPageView } from './collection-page-view'
 import { CollectionSearchInput } from './search-input'
 import { ExpansionTray } from './expansion-tray'
-import { getCardCopyLimit, getDeckCardCount, type Deck } from '../../../game/decks'
-import type { CardPreviewRouteBounds } from '../../app/router'
+import type { Deck } from '../../../game/decks'
+import type { CardPreviewRouteBounds } from '../card-preview/card-preview-route'
 
 export interface CollectionViewStateProvider {
   readonly isNavigationReady: () => boolean
@@ -100,13 +97,8 @@ export class CollectionView extends Actor {
   private readonly collectionQuery = new CollectionQueryController()
   private pages: readonly CollectionPage[] = []
   private readonly cardResolver = new CardAssetResolver()
-  private completedCollectionCardAlphaFilter: AlphaFilter | null = null
 
-  private pageContent!: Container
-  private cardLayer!: Container
-  private classLabel!: Text
-  private pageLabel!: Text
-  private emptyStateImage!: Sprite
+  private readonly pageView: CollectionPageView
   private previousPageZone!: Container
   private nextPageZone!: Container
   private cover!: PerspectiveMesh
@@ -125,63 +117,22 @@ export class CollectionView extends Actor {
   private pageLoading = false
   private hoveredPageZone: CursorContextVariant | null = null
   private pageHoverSequence = 0
-  private cardPreviewOpening = false
   private disposed = false
 
   constructor(private readonly options: CollectionViewOptions) {
     super()
+    this.pageView = new CollectionPageView({
+      assets: options.assets,
+      resolver: this.cardResolver,
+      state: options.state,
+      getCardBounds: (view) => this.getCardBounds(view),
+      onCardTap: (card, source) => options.callbacks?.onCardTap?.(card, source),
+      onCardPreview: (card, bounds) => options.callbacks?.onCardPreview?.(card, bounds)
+    })
   }
 
   init(): void {
-    this.pageContent = new Container()
-    this.addChild(this.pageContent)
-
-    this.cardLayer = new Container()
-    this.pageContent.addChild(this.cardLayer)
-
-    this.classLabel = new Text({
-      text: '',
-      style: {
-        fontFamily: 'Belwe',
-        fontSize: 38,
-        fill: 0x19130e,
-        align: 'center'
-      }
-    })
-    this.classLabel.anchor.set(0.5)
-    this.classLabel.position.set(
-      COLLECTION_LAYOUT.classLabel.position.x,
-      COLLECTION_LAYOUT.classLabel.position.y
-    )
-    this.classLabel.eventMode = 'none'
-    this.pageContent.addChild(this.classLabel)
-
-    this.pageLabel = new Text({
-      text: '',
-      style: {
-        fontFamily: 'Belwe',
-        fontSize: 28,
-        fill: 0x806d4f,
-        align: 'center'
-      }
-    })
-    this.pageLabel.anchor.set(0.5)
-    this.pageLabel.position.set(
-      COLLECTION_LAYOUT.pageLabel.position.x,
-      COLLECTION_LAYOUT.pageLabel.position.y
-    )
-    this.pageLabel.eventMode = 'none'
-    this.pageContent.addChild(this.pageLabel)
-
-    this.emptyStateImage = new Sprite(this.options.assets.searchNoResults)
-    this.emptyStateImage.anchor.set(0.5)
-    this.emptyStateImage.position.set(
-      COLLECTION_LAYOUT.collectionFilters.noResults.position.x,
-      COLLECTION_LAYOUT.collectionFilters.noResults.position.y
-    )
-    this.emptyStateImage.eventMode = 'none'
-    this.emptyStateImage.visible = false
-    this.pageContent.addChild(this.emptyStateImage)
+    this.addChild(this.pageView)
 
     this.previousPageZone = this.createPageZone(
       PAGE_LEFT,
@@ -195,8 +146,7 @@ export class CollectionView extends Actor {
       'collection-next-page',
       () => this.changePage(1)
     )
-    this.pageContent.addChild(this.previousPageZone)
-    this.pageContent.addChild(this.nextPageZone)
+    this.pageView.addChild(this.previousPageZone, this.nextPageZone)
 
     // The cover is hinged on its left edge. The separate lock is hinged on
     // its right edge, matching the direction shown in the reference images.
@@ -231,6 +181,7 @@ export class CollectionView extends Actor {
     if (this.pages.length === 0) {
       throw new Error('Collection has no cards to display')
     }
+    this.pageView.setPages(this.pages)
 
     this.setNavigationEnabled(false)
     this.createCollectionFilters()
@@ -310,7 +261,6 @@ export class CollectionView extends Actor {
     this.pageLoading = false
     this.navigationEnabled = false
     this.hoveredPageZone = null
-    this.cardPreviewOpening = false
     this.previousPageZone.eventMode = 'none'
     this.nextPageZone.eventMode = 'none'
     for (const control of this.manaFilterControls) {
@@ -321,6 +271,7 @@ export class CollectionView extends Actor {
     this.searchInput = null
     this.expansionTray?.dispose()
     this.expansionTray = null
+    this.pageView.dispose()
     this.options.cursor?.setContextVariant(null)
   }
 
@@ -354,7 +305,7 @@ export class CollectionView extends Actor {
 
   private createCollectionFilters(): void {
     const collectionFilterLayer = new Container()
-    this.pageContent.addChild(collectionFilterLayer)
+    this.pageView.addChild(collectionFilterLayer)
 
     for (const [index, value] of MANA_FILTER_VALUES.entries()) {
       const control = new Container()
@@ -462,7 +413,7 @@ export class CollectionView extends Actor {
       onError: (error) =>
         this.options.callbacks?.onError?.('Failed to filter the collection.', error)
     })
-    this.pageContent.addChild(this.expansionTray)
+    this.pageView.addChild(this.expansionTray)
   }
 
   private createSearchInput(): void {
@@ -572,29 +523,19 @@ export class CollectionView extends Actor {
     const pages = this.buildFilteredPages()
 
     this.pages = pages
+    this.pageView.setPages(pages)
     this.pageIndex = 0
     if (pages.length === 0) {
       this.renderEmptyCollectionState()
       return
     }
 
-    this.emptyStateImage.visible = false
+    this.pageView.showContent()
     await this.renderPage(0)
   }
 
   private renderEmptyCollectionState(): void {
-    this.renderSequence += 1
-    this.pageLoading = false
-
-    const previousCardLayer = this.cardLayer
-    this.cardLayer = new Container()
-    this.pageContent.removeChild(previousCardLayer)
-    this.pageContent.addChildAt(this.cardLayer, 0)
-    previousCardLayer.destroy({ children: true })
-
-    this.classLabel.text = ''
-    this.pageLabel.text = ''
-    this.emptyStateImage.visible = true
+    this.pageView.renderEmpty()
     this.updatePageZoneModes()
   }
 
@@ -608,140 +549,15 @@ export class CollectionView extends Actor {
 
   async renderPage(index: number): Promise<void> {
     const page = this.pages[index]
-    if (!page) throw new Error(`Collection page does not exist: ${index}`)
-
-    const sequence = ++this.renderSequence
-    this.pageLoading = true
-    // Keep the page zones interactive while the card artwork is loading. The
-    // page-loading guard still rejects duplicate taps, while leaving the
-    // zones mounted preserves their hover state when the pointer is stationary.
-
-    const nextCardLayer = new Container()
-    try {
-      const results = await Promise.allSettled(
-        page.cards.map(async (card) => {
-          const artwork = await this.cardResolver.loadArtwork(card.id)
-          return CardView.create(card, this.cardResolver, { artwork })
-        })
-      )
-      const views = results.flatMap((result) =>
-        result.status === 'fulfilled' ? [result.value] : []
-      )
-      const failedResult = results.find((result) => result.status === 'rejected')
-
-      if (failedResult && failedResult.status === 'rejected') {
-        this.destroyCardViews(views)
-        throw failedResult.reason
-      }
-
-      if (this.disposed || sequence !== this.renderSequence) {
-        this.destroyCardViews(views)
-        return
-      }
-
-      for (const [cardIndex, view] of views.entries()) {
-        const card = page.cards[cardIndex]
-        if (card) {
-          view.on('pointertapcapture', (event: FederatedPointerEvent) =>
-            this.handleCollectionCardTap(event, card, view)
-          )
-          view.on('rightclick', (event: FederatedPointerEvent) =>
-            this.handleCollectionCardPreview(event, card, view)
-          )
-        }
-        this.layoutCard(view, cardIndex)
-        nextCardLayer.addChild(view)
-      }
-
-      const previousCardLayer = this.cardLayer
-      this.pageContent.removeChild(previousCardLayer)
-      this.cardLayer = nextCardLayer
-      this.pageContent.addChildAt(nextCardLayer, 0)
-      previousCardLayer.destroy({ children: true })
-
-      this.pageIndex = index
-      this.updatePageLabels(page)
-      this.updateCollectionCardCompletionState()
-    } finally {
-      if (sequence === this.renderSequence) {
-        this.pageLoading = false
-        if (!this.disposed) this.updatePageZoneModes()
-      }
-    }
-  }
-
-  private layoutCard(view: CardView, cardIndex: number): void {
-    const placement = getCollectionCardPlacement(
-      cardIndex,
-      view.plan.width,
-      view.renderedHeight,
-      CARD_GRID_LAYOUT
-    )
-    view.scale.set(placement.scale)
-    view.position.set(placement.x, placement.y)
-  }
-
-  private destroyCardViews(views: readonly CardView[]): void {
-    for (const view of views) {
-      view.destroy({ children: true })
-    }
-  }
-
-  private updatePageLabels(page: CollectionPage): void {
-    this.classLabel.text = page.cardClass
-    this.pageLabel.text = `Page ${page.pageNumber}`
+    if (!page) throw new Error('Collection page does not exist: ' + index)
+    await this.pageView.renderPage(page, index)
+    this.pageIndex = index
+    if (!this.disposed) this.updatePageZoneModes()
   }
 
   private updateCollectionCardCompletionState(): void {
-    const page = this.pages[this.pageIndex]
-    const deck = this.options.state.getActiveDeck()
-    if (!this.cardLayer || !page) return
-
-    for (const [cardIndex, child] of this.cardLayer.children.entries()) {
-      if (!(child instanceof CardView)) continue
-
-      const card = page.cards[cardIndex]
-      const isAtCopyLimit = Boolean(
-        deck && card && getDeckCardCount(deck, card.id) >= getCardCopyLimit(card)
-      )
-      child.filters = isAtCopyLimit
-        ? [this.getCompletedCollectionCardAlphaFilter()]
-        : null
-      child.alpha = 1
-    }
+    this.pageView.updateCompletionState()
   }
-
-  private getCompletedCollectionCardAlphaFilter(): AlphaFilter {
-    if (!this.completedCollectionCardAlphaFilter) {
-      this.completedCollectionCardAlphaFilter = new AlphaFilter({
-        alpha: COMPLETED_COLLECTION_CARD_ALPHA,
-        resolution: 'inherit',
-        antialias: 'inherit'
-      })
-    }
-    return this.completedCollectionCardAlphaFilter
-  }
-
-  private readonly handleCollectionCardTap = (
-    event: FederatedPointerEvent,
-    card: CardDefinition,
-    view: CardView
-  ): void => {
-    if (
-      event.button !== 0 ||
-      !this.options.state.getActiveDeck() ||
-      this.options.state.isEditorTransitioning()
-    ) {
-      return
-    }
-
-    event.stopPropagation()
-    this.options.callbacks?.onCardTap?.(card, {
-      view,
-      bounds: this.getCardBounds(view)
-    })
-  }
-
   private getCardBounds(view: CardView): CardPreviewRouteBounds {
     const bounds = view.getBounds()
     const topLeft = this.toLocal({ x: bounds.x, y: bounds.y })
@@ -754,39 +570,6 @@ export class CollectionView extends Actor {
       y: topLeft.y,
       width: bottomRight.x - topLeft.x,
       height: bottomRight.y - topLeft.y
-    }
-  }
-
-  private readonly handleCollectionCardPreview = (
-    event: FederatedPointerEvent,
-    card: CardDefinition,
-    view: CardView
-  ): void => {
-    if (
-      event.button !== 2 ||
-      this.disposed ||
-      !this.options.state.isNavigationReady() ||
-      this.options.state.isEditorTransitioning() ||
-      this.options.state.isEditorMutating()
-    ) {
-      return
-    }
-
-    event.stopPropagation()
-    if (this.cardPreviewOpening) return
-
-    this.cardPreviewOpening = true
-    const sourceBounds = this.getCardBounds(view)
-
-    const result = this.options.callbacks?.onCardPreview?.(card, sourceBounds)
-    if (result instanceof Promise) {
-      void result
-        .catch(() => undefined)
-        .finally(() => {
-          this.cardPreviewOpening = false
-        })
-    } else {
-      this.cardPreviewOpening = false
     }
   }
 

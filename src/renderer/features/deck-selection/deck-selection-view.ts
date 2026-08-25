@@ -1,5 +1,5 @@
 import { Container, Sprite, Text } from 'pixi.js'
-import type { AppLogger } from '../../app/services'
+import type { RendererLogger } from '../../ui/logger'
 import {
   ASSET_BUNDLE_IDS,
   type DeckPresentationAssets,
@@ -14,7 +14,7 @@ import {
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/button'
 import { HERO_CATALOG } from '../../../game/content/heroes'
-import type { DeckStore } from '../deck-builder/deck-store'
+import type { DeckStore } from '../../ui/deck-store'
 import { DECK_FRAME_ASSET_KEYS } from '../../ui/asset-registry/deck-frames'
 import { buildDeckSelectionEntries } from './deck-selection-model'
 import { DECK_SELECTION_LAYOUT } from './deck-selection-layout'
@@ -46,7 +46,7 @@ export class DeckSelectionView extends Container {
   constructor(
     private readonly deckStore: DeckStore,
     private readonly callbacks: DeckSelectionViewCallbacks = {},
-    private readonly logger: AppLogger = {
+    private readonly logger: RendererLogger = {
       info: () => undefined,
       warn: () => undefined,
       error: () => undefined

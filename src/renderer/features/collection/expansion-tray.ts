@@ -1,6 +1,6 @@
 import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
-import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
+import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 import { EXPANSION_CATALOG } from '../../../game/content/expansions'
 import type { ExpansionId } from '../../../game/content/cards'
 import {

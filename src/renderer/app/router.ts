@@ -1,16 +1,13 @@
 import type { CardId } from '../../game/content/cards'
 import {
   createHumanVsAiMatchSetup,
-  type HumanVsAiDeckSelection,
-  type MatchSetup
+  type HumanVsAiDeckSelection
 } from '../../game/match'
+import type { CardPreviewRouteBounds } from '../features/card-preview/card-preview-route'
+import type { GameRoute } from '../features/game/game-route'
 
-export interface CardPreviewRouteBounds {
-  readonly x: number
-  readonly y: number
-  readonly width: number
-  readonly height: number
-}
+export type { CardPreviewRouteBounds } from '../features/card-preview/card-preview-route'
+export type { GameRoute } from '../features/game/game-route'
 
 export type AppRoute =
   | { readonly id: 'main-menu'; readonly entryMode?: 'closed' | 'returning' }
@@ -18,14 +15,12 @@ export type AppRoute =
   | { readonly id: 'collection' }
   | { readonly id: 'new-deck' }
   /** Complete match setup handed directly to GameScene; setup is never global state. */
-  | { readonly id: 'game'; readonly setup: MatchSetup }
+  | GameRoute
   | {
       readonly id: 'card-preview'
       readonly cardId: CardId
       readonly sourceBounds: CardPreviewRouteBounds
     }
-
-export type GameRoute = Extract<AppRoute, { readonly id: 'game' }>
 
 /** Adapter used by deck selection to hand a complete setup to GameScene. */
 export function createHumanVsAiGameRoute(

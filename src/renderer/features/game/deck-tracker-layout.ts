@@ -1,4 +1,4 @@
-import { GAME_HEIGHT } from '../../app/config'
+import { GAME_HEIGHT } from '../../rendering/layout'
 import { TOP_LEFT, placement } from '../../rendering/layout'
 
 /**

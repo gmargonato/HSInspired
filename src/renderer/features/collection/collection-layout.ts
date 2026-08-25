@@ -9,7 +9,7 @@
  * following the layout contract.
  */
 
-import { GAME_HEIGHT } from '../../app/config'
+import { GAME_HEIGHT } from '../../rendering/layout'
 import {
   CENTER,
   TOP_LEFT,

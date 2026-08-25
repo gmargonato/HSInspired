@@ -8,7 +8,7 @@ export const WEAPON_LAYOUT = {
   name: 'Equipped board weapon',
   artwork: placement(
     { x: WEAPON_CANVAS.width / 2, y: 88 },
-    { width: 130, height: 130 },
+    { width: 122, height: 112 },
     {
       anchor: CENTER,
       note: 'Artwork aperture centered inside the board weapon frame.'
@@ -23,7 +23,7 @@ export const WEAPON_LAYOUT = {
     }
   ),
   attackBadge: placement(
-    { x: 65, y: 140 },
+    { x: 65, y: 153 },
     { width: 171, height: 180 },
     {
       anchor: CENTER,
@@ -32,7 +32,7 @@ export const WEAPON_LAYOUT = {
     }
   ),
   durabilityBadge: placement(
-    { x: 175, y: 140 },
+    { x: 175, y: 153 },
     { width: 164, height: 179 },
     {
       anchor: CENTER,
@@ -43,7 +43,7 @@ export const WEAPON_LAYOUT = {
   artworkOval: {
     center: { x: 0, y: 0 },
     radiusX: 65,
-    radiusY: 65
+    radiusY: 56
   },
   statText: {
     fontFamily: 'Belwe',

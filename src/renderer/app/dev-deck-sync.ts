@@ -1,6 +1,6 @@
 import { HERO_CATALOG } from '../../game/content/heroes'
 import { MAX_DECK_CARDS, countDeckCards, type Deck } from '../../game/decks'
-import type { DeckStore } from '../features/deck-builder/deck-store'
+import type { DeckStore } from '../ui/deck-store'
 import type { AppLogger } from './logger'
 import type { DevDeckEntry } from '../../shared/dev-menu'
 

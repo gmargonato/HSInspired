@@ -90,8 +90,8 @@ describe('Application route transitions', () => {
       inset: { x: 415, y: 172.5, width: 1090, height: 735 },
       scaleMode: 'cover',
       duration: 0.45,
-      hostParent: mainMenu.root,
-      hostIndex: 2,
+      hostParent: mainMenu.destinationTransitionHost,
+      hostIndex: 0,
       beforeExpand: expect.any(Function)
     })
 
@@ -101,8 +101,8 @@ describe('Application route transitions', () => {
     expect(collectionNavigator.transitionTo.mock.calls[0]?.[1]).toMatchObject({
       inset: { x: 415, y: 172.5, width: 1090, height: 735 },
       duration: 0.45,
-      hostParent: mainMenu.root,
-      hostIndex: 2
+      hostParent: mainMenu.destinationTransitionHost,
+      hostIndex: 0
     })
     expect(collectionNavigator.transitionTo.mock.calls[0]?.[1].afterTransition).toEqual(
       expect.any(Function)
@@ -151,8 +151,14 @@ describe('Application route transitions', () => {
     expect(transitionTo.mock.calls[0]?.[1]).toMatchObject({
       mode: 'collapse',
       duration: 0.45,
-      hostIndex: 2,
+      hostIndex: 0,
       inset: { x: 415, y: 172.5, width: 1090, height: 735 }
+    })
+
+    const returningMenu = new MainMenuScene(undefined, 'returning')
+    expect(returningMenu.createReturnTransitionOptions()).toMatchObject({
+      hostParent: returningMenu.destinationTransitionHost,
+      hostIndex: 0
     })
   })
 

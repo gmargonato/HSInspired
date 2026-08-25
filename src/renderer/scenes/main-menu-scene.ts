@@ -1,48 +1,25 @@
-import { Container, PerspectiveMesh, Sprite, Texture } from 'pixi.js'
 import { Scene } from './scene'
-import { GAME_HEIGHT, GAME_WIDTH } from '../app/config'
-import { FlipCard } from '../ui/components/flip-card'
-import { Button } from '../ui/components/button'
-import { ASSET_BUNDLE_IDS } from '../ui/asset-registry'
-import type { AppRoute, SceneRouter } from '../app/router'
+import type { SceneRouter } from '../app/router'
 import type { AppLogger } from '../app/services'
-import type { MainMenuAssets } from '../ui/asset-registry'
 import type { SceneTransitionOptions } from './scene-manager'
 import {
-  createHingedDoorMesh,
-  updateHingedDoor,
-  type HingeSide
-} from '../features/collection/choreography/hinged-door'
-import {
-  MAIN_MENU_HINGE,
-  MAIN_MENU_LAYOUT,
-  MAIN_MENU_TIMING,
-  SCENE_SELECTION_GAP
-} from '../features/main-menu/main-menu-layout'
-import { applyAnchoredPlacement, applyPlacement } from '../rendering/layout'
+  MainMenuView,
+  type MainMenuEntryMode,
+  type MainMenuRoute
+} from '../features/main-menu/main-menu-view'
+import { SCENE_SELECTION_GAP } from '../features/main-menu/main-menu-layout'
 
 export { SCENE_SELECTION_GAP }
 
-const { chest, menuButtons } = MAIN_MENU_LAYOUT
-
-type LidSide = HingeSide
-type MainMenuEntryMode = 'closed' | 'returning'
-
+/**
+ * Full-screen lifecycle adapter for the main-menu feature. The chest, lids,
+ * buttons, and their choreography live in MainMenuView; this class only
+ * connects that view to SceneManager's transition protocol.
+ */
 export class MainMenuScene extends Scene {
-  private table!: Sprite
-  private boxLayer!: Container
-  private menuGroup!: Container
-  private chestBox!: Sprite
-  private lidLeft!: PerspectiveMesh
-  private lidRight!: PerspectiveMesh
-  private centerPartMount!: Container
-  private centerCard!: FlipCard
-  private buttonPlay!: Button
-  private buttonCollection!: Button
+  private readonly view: MainMenuView
+  /** Compatibility state for pre-load transition tests and dev hooks. */
   private transitionOpened = false
-  private destinationPreparation: Promise<void> | null = null
-  private returnClosePromise: Promise<void> | null = null
-  private returnRevealPromise: Promise<void> | null = null
 
   constructor(
     private readonly router?: SceneRouter,
@@ -54,35 +31,31 @@ export class MainMenuScene extends Scene {
     }
   ) {
     super()
+
+    const viewRouter = this.router
+      ? {
+          navigate: (route: MainMenuRoute) => this.router!.navigate(route)
+        }
+      : undefined
+    this.view = new MainMenuView({
+      assetScope: this.assetScope,
+      router: viewRouter,
+      entryMode: this.entryMode,
+      logger: this.logger
+    })
   }
 
-  /** True while a button-initiated destination transition is being prepared. */
   get isDestinationTransitionOpen(): boolean {
-    return this.transitionOpened
+    return this.transitionOpened || this.view.isDestinationTransitionOpen
   }
 
-  /**
-   * Starts the chest choreography that gates the destination expansion.
-   * SceneManager calls this after the destination has been loaded into its
-   * inset host, so the destination is already visible, small, and dark while
-   * the lids open.
-   */
+  /** Parent slot used by SceneManager for menu destination previews. */
+  get destinationTransitionHost(): MainMenuView['transitionHost'] {
+    return this.view.transitionHost
+  }
+
   prepareDestinationTransition(): Promise<void> {
-    if (!this.destinationPreparation) {
-      const centerFlip = this.centerCard.flip()
-      this.destinationPreparation = (async () => {
-        await centerFlip
-        await this.openChest()
-
-        this.lidLeft.visible = false
-        this.lidRight.visible = false
-        this.centerCard.visible = false
-        this.buttonPlay.visible = false
-        this.buttonCollection.visible = false
-      })()
-    }
-
-    return this.destinationPreparation
+    return this.view.prepareDestinationTransition()
   }
 
   createReturnTransitionOptions(): SceneTransitionOptions {
@@ -95,268 +68,19 @@ export class MainMenuScene extends Scene {
       mode: 'collapse',
       scaleMode: 'cover',
       duration: 0.45,
-      hostParent: this.root,
-      hostIndex: 2,
-      afterCollapse: () => this.closeReturningChest(),
-      afterTransition: () => this.revealReturnedMenu()
+      hostParent: this.destinationTransitionHost,
+      hostIndex: 0,
+      afterCollapse: () => this.view.closeReturningChest(),
+      afterTransition: () => this.view.revealReturnedMenu()
     }
   }
 
   async init(): Promise<void> {
-    const assets = await this.assetScope.acquire<MainMenuAssets>(
-      ASSET_BUNDLE_IDS.mainMenu
-    )
-
-    this.table = new Sprite(assets.table)
-    applyAnchoredPlacement(this.table, MAIN_MENU_LAYOUT.screen.table)
-    this.table.width = GAME_WIDTH
-    this.table.height = GAME_HEIGHT
-    this.root.addChild(this.table)
-
-    this.buildChest(assets.box, assets.leftLid, assets.rightLid)
-
-    // The menu face is the initial face. The game-room face is revealed when
-    // a destination is selected, immediately before the chest opens.
-    this.centerCard = new FlipCard(assets.centerPartMenu, assets.centerPart, {
-      initialFace: this.entryMode === 'returning' ? 'back' : 'front',
-      oneShot: true
-    })
-    this.centerCard.eventMode = 'none'
-
-    // Keep the center part mounted to the right lid so it follows the lid's
-    // free edge while the chest opens.
-    this.centerPartMount = new Container()
-    this.centerPartMount.addChild(this.centerCard)
-    this.lidRight.addChild(this.centerPartMount)
-    this.updateLidMeshes(this.entryMode === 'returning' ? 1 : 0)
-    if (this.entryMode === 'returning') {
-      // At the fully open angle the meshes retain a one-pixel minimum width.
-      // Keep that edge hidden until the outgoing scene has finished shrinking.
-      this.lidLeft.visible = false
-      this.lidRight.visible = false
-      this.centerCard.visible = false
-    }
-
-    this.buttonPlay = new Button(assets.buttonPlay, {
-      sinkPx: 6,
-      onClick: () => this.onPlayPressed()
-    })
-    applyPlacement(this.buttonPlay, menuButtons.play)
-    this.buttonPlay.setBaseY(menuButtons.play.position.y)
-    this.buttonPlay.visible = true
-    this.buttonPlay.alpha = this.entryMode === 'returning' ? 0 : 1
-    this.buttonPlay.setEnabled(this.entryMode !== 'returning')
-    this.menuGroup.addChild(this.buttonPlay)
-
-    this.buttonCollection = new Button(assets.buttonCollection, {
-      sinkPx: 6,
-      onClick: () => this.onCollectionPressed()
-    })
-    applyPlacement(this.buttonCollection, menuButtons.collection)
-    this.buttonCollection.setBaseY(menuButtons.collection.position.y)
-    this.buttonCollection.visible = true
-    this.buttonCollection.alpha = this.entryMode === 'returning' ? 0 : 1
-    this.buttonCollection.setEnabled(this.entryMode !== 'returning')
-    this.menuGroup.addChild(this.buttonCollection)
+    this.root.addChild(this.view)
+    await this.view.init()
   }
 
-  private closeReturningChest(): Promise<void> {
-    if (this.returnClosePromise) return this.returnClosePromise
-
-    this.lidLeft.visible = true
-    this.lidRight.visible = true
-    this.centerCard.visible = true
-    this.returnClosePromise = this.animateChest(1, 0, 'power2.out')
-    return this.returnClosePromise
+  update(deltaMS: number): void {
+    this.view?.update(deltaMS)
   }
-
-  private revealReturnedMenu(): Promise<void> {
-    if (this.returnRevealPromise) return this.returnRevealPromise
-
-    this.returnRevealPromise = this.finishReturnReveal()
-    return this.returnRevealPromise
-  }
-
-  private async finishReturnReveal(): Promise<void> {
-    await this.centerCard.flipToFront()
-    this.centerCard.eventMode = 'none'
-    await this.fadeMenuButtonsIn()
-    this.transitionOpened = false
-    this.buttonPlay.setEnabled(true)
-    this.buttonCollection.setEnabled(true)
-  }
-
-  private fadeMenuButtonsIn(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const timeline = this.timeline({
-        onComplete: resolve,
-        onInterrupt: resolve
-      })
-
-      timeline.to(
-        [this.buttonPlay, this.buttonCollection],
-        {
-          alpha: 1,
-          duration: MAIN_MENU_TIMING.menuReveal,
-          ease: 'power2.out'
-        },
-        0
-      )
-    })
-  }
-
-  private buildChest(box: Texture, leftLid: Texture, rightLid: Texture): void {
-    this.boxLayer = new Container()
-    this.boxLayer.position.set(GAME_WIDTH / 2, GAME_HEIGHT / 2)
-    this.root.addChild(this.boxLayer)
-
-    this.menuGroup = new Container()
-    this.menuGroup.position.set(GAME_WIDTH / 2, GAME_HEIGHT / 2)
-    this.root.addChild(this.menuGroup)
-
-    this.chestBox = new Sprite(box)
-    applyAnchoredPlacement(this.chestBox, chest.box)
-    this.boxLayer.addChild(this.chestBox)
-
-    this.lidLeft = this.createLidMesh(leftLid, 'left')
-    this.menuGroup.addChild(this.lidLeft)
-
-    this.lidRight = this.createLidMesh(rightLid, 'right')
-    this.menuGroup.addChild(this.lidRight)
-  }
-
-  private createLidMesh(texture: Texture, side: LidSide): PerspectiveMesh {
-    const height = texture.height
-    const hingeOnLeft = side === 'left'
-    const topLeft = hingeOnLeft
-      ? {
-          x: chest.leftLidInnerEdge.x - texture.width,
-          y: chest.leftLidInnerEdge.y - height / 2
-        }
-      : {
-          x: chest.rightLidInnerEdge.x,
-          y: chest.rightLidInnerEdge.y - height / 2
-        }
-
-    return createHingedDoorMesh(texture, side, topLeft)
-  }
-
-  private onPlayPressed(): Promise<void> {
-    return this.openDestination({ id: 'deck-selection' }, 'deck selection')
-  }
-
-  private onCollectionPressed(): Promise<void> {
-    return this.openDestination({ id: 'collection' }, 'collection')
-  }
-
-  private async openDestination(
-    route: AppRoute,
-    destinationName: string
-  ): Promise<void> {
-    if (this.transitionOpened) return
-    this.transitionOpened = true
-
-    // Hide the menu buttons while the chest transitions.
-    this.killTweensOf(this.buttonPlay)
-    this.killTweensOf(this.buttonCollection)
-    this.buttonPlay.setEnabled(false)
-    this.buttonCollection.setEnabled(false)
-    this.tweenTo(this.buttonPlay, { alpha: 0, duration: 0.15 })
-    this.tweenTo(this.buttonCollection, { alpha: 0, duration: 0.15 })
-
-    // Start the chest choreography before navigation. SceneManager waits for
-    // this promise after it has loaded the destination into its inset host.
-    const destinationPreparation = this.prepareDestinationTransition()
-
-    try {
-      if (!this.router) throw new Error('Main menu router is not configured')
-      await this.router.navigate(route)
-    } catch (error) {
-      this.logger.error(`Failed to open ${destinationName}.`, error)
-      await destinationPreparation.catch(() => undefined)
-      await this.centerCard.flipToFront()
-      this.transitionOpened = false
-      this.destinationPreparation = null
-      this.killTweensOf(this.buttonPlay)
-      this.killTweensOf(this.buttonCollection)
-      this.buttonPlay.visible = true
-      this.buttonCollection.visible = true
-      this.buttonPlay.setEnabled(true)
-      this.buttonCollection.setEnabled(true)
-      this.buttonPlay.alpha = 1
-      this.buttonCollection.alpha = 1
-      this.buttonPlay.y = menuButtons.play.position.y
-      this.buttonCollection.y = menuButtons.collection.position.y
-      this.centerCard.visible = true
-      this.centerCard.eventMode = 'none'
-      this.lidLeft.visible = true
-      this.lidRight.visible = true
-      this.updateLidMeshes(0)
-    }
-  }
-
-  private openChest(): Promise<void> {
-    return this.animateChest(0, 1, 'power2.in')
-  }
-
-  private animateChest(
-    fromProgress: number,
-    toProgress: number,
-    ease: string
-  ): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const state = { progress: fromProgress }
-      const timeline = this.timeline({
-        onComplete: resolve,
-        onInterrupt: resolve
-      })
-
-      timeline.to(
-        state,
-        {
-          progress: toProgress,
-          duration: MAIN_MENU_TIMING.lidOpen,
-          ease,
-          onUpdate: () => this.updateLidMeshes(state.progress)
-        },
-        0
-      )
-    })
-  }
-
-  private updateLidMeshes(progress: number): void {
-    const clampedProgress = Math.max(0, Math.min(1, progress))
-    const widthScale = Math.cos(clampedProgress * (Math.PI / 2))
-
-    updateHingedDoor(
-      this.lidLeft,
-      'left',
-      clampedProgress,
-      MAIN_MENU_HINGE.perspectiveDepth,
-      MAIN_MENU_HINGE.minWidth
-    )
-    updateHingedDoor(
-      this.lidRight,
-      'right',
-      clampedProgress,
-      MAIN_MENU_HINGE.perspectiveDepth,
-      MAIN_MENU_HINGE.minWidth
-    )
-    this.updateCenterPartMount(widthScale)
-  }
-
-  private updateCenterPartMount(widthScale: number): void {
-    const width = this.lidRight.texture.width
-    const height = this.lidRight.texture.height
-    const visibleWidth = Math.max(MAIN_MENU_HINGE.minWidth, width * widthScale)
-    const freeEdgeX = -visibleWidth
-
-    this.centerPartMount.position.set(
-      chest.centerPartOffset.x - chest.rightLidInnerEdge.x + freeEdgeX,
-      height / 2 + chest.centerPartOffset.y - chest.rightLidInnerEdge.y
-    )
-    this.centerPartMount.scale.set(widthScale, 1)
-  }
-
-  update(_deltaMS: number): void {}
 }

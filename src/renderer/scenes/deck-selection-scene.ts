@@ -1,6 +1,6 @@
 import type { SceneRouter } from '../app/router'
 import type { AppLogger } from '../app/services'
-import type { DeckStore } from '../features/deck-builder/deck-store'
+import type { DeckStore } from '../ui/deck-store'
 import { DeckSelectionView } from '../features/deck-selection/deck-selection-view'
 import {
   chooseOpponentDeck,

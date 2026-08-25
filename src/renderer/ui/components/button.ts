@@ -36,7 +36,7 @@ export class Button extends Actor {
   constructor(texture: Texture, options: ButtonOptions = {}) {
     super()
 
-    this.pressedScale = options.pressedScale ?? 0.90
+    this.pressedScale = options.pressedScale ?? 0.95
     this.idleBrightness = options.idleBrightness ?? 1
     this.highlightOnHover = options.highlightOnHover ?? true
     this.hoverBrightness = options.hoverBrightness ?? DEFAULT_HOVER_BRIGHTNESS

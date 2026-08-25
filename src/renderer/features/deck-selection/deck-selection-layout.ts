@@ -9,7 +9,7 @@
 
 import type { LayoutPoint } from '../../rendering/layout'
 import { CENTER, placement } from '../../rendering/layout'
-import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
+import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 
 export const DECK_SELECTION_LAYOUT = {
   name: 'Deck selection',

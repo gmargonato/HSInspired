@@ -330,10 +330,8 @@ export class SceneNavigator implements SceneRouter {
         inset: SCENE_SELECTION_GAP,
         scaleMode: 'cover',
         duration: 0.45,
-        hostParent: previous.root,
-        hostIndex: previous.isDestinationTransitionOpen
-          ? 2
-          : previous.root.children.length,
+        hostParent: previous.destinationTransitionHost,
+        hostIndex: 0,
         beforeExpand: previous.isDestinationTransitionOpen
           ? () => previous.prepareDestinationTransition()
           : undefined,

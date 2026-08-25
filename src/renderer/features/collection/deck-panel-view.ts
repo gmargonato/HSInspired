@@ -27,12 +27,10 @@ import {
   buildDeckEditorEntries,
   shouldAnimateDeckRowRemoval
 } from './deck-editor-model'
-import { buildCollectionDeckListEntries } from './deck-list-model'
+import { DeckListView } from './deck-list-view'
 import { CollectionDeckController } from './collection-deck-controller'
 import { COLLECTION_LAYOUT } from './collection-layout'
 import {
-  DECK_BUTTON_GAP,
-  DECK_BUTTON_HEIGHT,
   DECK_EDITOR_CONTENT_FADE_DURATION,
   DECK_EDITOR_COPIES_WIDTH,
   DECK_EDITOR_COST_WIDTH,
@@ -63,7 +61,7 @@ import {
   type Deck,
   type DeckMutationFailure
 } from '../../../game/decks'
-import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
+import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 import type { CollectionCardAddSource } from './collection-view'
 import {
   createCardAddFlightPath,
@@ -138,14 +136,7 @@ export class DeckPanelView extends Actor {
   private readonly cardResolver = new CardAssetResolver()
   private readonly deckEditorRows = new Map<string, DeckCardRow>()
   private readonly cardAddQueue: PendingCardAddition[] = []
-  private readonly deckEntries: Container[] = []
-  private readonly deckButtons: Button[] = []
-  private newDeckButton: Button | null = null
-  private deckViewport!: Container
-  private deckContent!: Container
-  private deckMask!: Graphics
-  private deckSlider!: Sprite
-  private deckListCount!: Text
+  private readonly deckList: DeckListView
   private deckEditorLayer!: Container
   private deckEditorCardViewport!: Container
   private deckEditorFrame!: Sprite
@@ -181,6 +172,19 @@ export class DeckPanelView extends Actor {
   constructor(private readonly options: DeckPanelViewOptions) {
     super()
     this.deckController = options.deckController
+    this.deckList = new DeckListView({
+      maxDecks: MAX_DECKS,
+      newDeckButton: options.assets.newDeckButton,
+      verticalSlider: options.assets.verticalSlider,
+      onDeckTap: options.callbacks?.onDeckTap,
+      onNewDeck: options.callbacks?.onNewDeck,
+      onDeleteDeck: options.callbacks?.onDeleteDeck,
+      onWheel: this.handleDeckWheel,
+      onSliderDown: this.startDeckSliderDrag,
+      onSliderMove: this.handleDeckSliderMove,
+      onSliderUp: this.stopDeckSliderDrag,
+      frameForDeck: (deck) => this.getDeckFrameTexture(deck)
+    })
   }
 
   init(): void {
@@ -232,52 +236,14 @@ export class DeckPanelView extends Actor {
     const deckIndex = this.deckController
       .getDecks()
       .findIndex((deck) => deck.id === deckId)
-    const entry = deckIndex === -1 ? undefined : this.deckEntries[deckIndex]
-    if (!entry) return null
-
-    const bounds = entry.getBounds()
-    const center = this.deckEditorLayer.toLocal({
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2
-    })
-    return { x: center.x, y: center.y }
+    return deckIndex === -1
+      ? null
+      : this.deckList.getEntryOrigin(deckIndex, this.deckEditorLayer)
   }
 
   renderDeckList(): void {
-    const oldEntries = this.deckContent.removeChildren()
-    for (const entry of oldEntries) {
-      entry.destroy({ children: true })
-    }
-
-    this.deckEntries.length = 0
-    this.deckButtons.length = 0
-    this.newDeckButton = null
-
     const decks = this.deckController.getDecks()
-    this.deckListCount.text = `${decks.length} / ${MAX_DECKS} Decks`
-    for (const { deck, index } of buildCollectionDeckListEntries(decks)) {
-      this.addDeckEntry(
-        this.getDeckFrameTexture(deck),
-        () => this.options.callbacks?.onDeckTap?.(deck.id),
-        index,
-        () => this.options.callbacks?.onDeleteDeck?.(deck.id)
-      )
-    }
-
-    this.newDeckButton = this.addDeckEntry(
-      this.options.assets.newDeckButton,
-      () => this.options.callbacks?.onNewDeck?.(),
-      decks.length,
-      undefined
-    )
-
-    const itemCount = decks.length + 1
-    const contentHeight =
-      itemCount * DECK_BUTTON_HEIGHT + Math.max(0, itemCount - 1) * DECK_BUTTON_GAP
-    this.deckMaxScroll = Math.max(
-      0,
-      contentHeight - COLLECTION_LAYOUT.deckList.size.height
-    )
+    this.deckMaxScroll = this.deckList.render(decks)
     this.setDeckScroll(this.deckScrollOffset)
     this.setInteractionEnabled(this.options.state.isNavigationReady() && !this.disposed)
   }
@@ -293,11 +259,8 @@ export class DeckPanelView extends Actor {
       !this.deckEditorCardMutationInProgress
     const editorScrollEnabled = editorContentEnabled && this.deckEditorCardMaxScroll > 0
     const sliderEnabled = listEnabled || editorScrollEnabled
-    this.deckViewport.eventMode = listEnabled ? 'static' : 'none'
     const canCreateDeck = this.deckController.getDecks().length < MAX_DECKS
-    for (const button of this.deckButtons) {
-      button.setEnabled(listEnabled && (button !== this.newDeckButton || canCreateDeck))
-    }
+    this.deckList.setInteractionEnabled(listEnabled, canCreateDeck)
 
     if (this.deckEditorCardViewport) {
       this.deckEditorCardViewport.eventMode = editorContentEnabled ? 'static' : 'none'
@@ -306,9 +269,9 @@ export class DeckPanelView extends Actor {
       deckCardRow.row.eventMode = editorContentEnabled ? 'static' : 'none'
     }
 
-    if (this.deckSlider.visible) {
-      this.deckSlider.eventMode = sliderEnabled ? 'static' : 'none'
-      this.deckSlider.cursor = sliderEnabled ? 'pointer' : 'default'
+    if (this.deckList.slider.visible) {
+      this.deckList.slider.eventMode = sliderEnabled ? 'static' : 'none'
+      this.deckList.slider.cursor = sliderEnabled ? 'pointer' : 'default'
     }
 
     if (this.deckEditorDoneButton) {
@@ -320,9 +283,7 @@ export class DeckPanelView extends Actor {
       )
     }
 
-    if (this.deckListCount) {
-      this.deckListCount.visible = this.activeDeckId === null
-    }
+    this.deckList.countLabel.visible = this.activeDeckId === null
 
     if (!sliderEnabled) {
       this.stopDeckSliderDrag()
@@ -340,8 +301,8 @@ export class DeckPanelView extends Actor {
     this.deckEditorTransitioning = true
     const transitionSequence = ++this.deckEditorTransitionSequence
     this.setInteractionEnabled(false)
-    this.deckViewport.visible = false
-    this.deckSlider.visible = false
+    this.deckList.viewport.visible = false
+    this.deckList.slider.visible = false
     this.deckEditorLayer.visible = true
     this.deckEditorLayer.alpha = 1
     this.deckEditorFrame.scale.set(1)
@@ -376,7 +337,7 @@ export class DeckPanelView extends Actor {
     this.killTweensOf(this.deckEditorCount)
     this.killTweensOf(this.deckEditorDoneButton)
     this.deckEditorTransitioning = true
-    this.deckSlider.visible = false
+    this.deckList.slider.visible = false
 
     const origin = this.deckEditorOrigin
     if (origin && this.deckEditorLayer.visible) {
@@ -396,7 +357,7 @@ export class DeckPanelView extends Actor {
     this.deckEditorCardMaxScroll = 0
     this.deckEditorCardContent.y = 0
     this.deckEditorFrame.scale.set(1)
-    this.deckViewport.visible = true
+    this.deckList.viewport.visible = true
     this.updateDeckSliderPosition()
 
     this.deckEditorTransitioning = false
@@ -592,7 +553,7 @@ export class DeckPanelView extends Actor {
 
     const count = request.predictedDeck.cards[request.card.id] ?? 1
     const row = this.createDeckCardRow(request.card.id, request.card, count, 0)
-    const rowWidth = DECK_EDITOR_LAYOUT.cardList.width - DECK_EDITOR_ROW_INSET * 2
+    const rowWidth = DECK_EDITOR_LAYOUT.cardList.size.width - DECK_EDITOR_ROW_INSET * 2
     const rowHeight = DECK_EDITOR_CARD_ROW_HEIGHT - DECK_EDITOR_CARD_ROW_GAP
     row.row.label = 'collection.card-add-row'
     row.row.eventMode = 'none'
@@ -654,8 +615,8 @@ export class DeckPanelView extends Actor {
 
   private scrollAddedDeckRowIntoView(row: Container): void {
     const targetOffset = resolveCardAddScrollOffset({
-      viewportTop: DECK_EDITOR_LAYOUT.cardList.y,
-      viewportHeight: DECK_EDITOR_LAYOUT.cardList.height,
+      viewportTop: DECK_EDITOR_LAYOUT.cardList.position.y,
+      viewportHeight: DECK_EDITOR_LAYOUT.cardList.size.height,
       contentOffset: this.deckEditorCardScrollOffset,
       maxScroll: this.deckEditorCardMaxScroll,
       rowTop: row.y,
@@ -879,72 +840,7 @@ export class DeckPanelView extends Actor {
   }
 
   private createDeckList(): void {
-    this.deckMask = new Graphics()
-      .rect(
-        0,
-        0,
-        COLLECTION_LAYOUT.deckList.size.width,
-        COLLECTION_LAYOUT.deckList.size.height
-      )
-      .fill({ color: 0xffffff })
-    this.deckMask.position.set(
-      COLLECTION_LAYOUT.deckList.position.x,
-      COLLECTION_LAYOUT.deckList.position.y
-    )
-    this.deckMask.eventMode = 'none'
-    this.addChild(this.deckMask)
-
-    this.deckViewport = new Container()
-    this.deckViewport.position.set(
-      COLLECTION_LAYOUT.deckList.position.x,
-      COLLECTION_LAYOUT.deckList.position.y
-    )
-    this.deckViewport.hitArea = new Rectangle(
-      0,
-      0,
-      COLLECTION_LAYOUT.deckList.size.width,
-      COLLECTION_LAYOUT.deckList.size.height
-    )
-    this.deckViewport.eventMode = 'none'
-    this.deckViewport.on('wheel', this.handleDeckWheel)
-
-    this.deckContent = new Container()
-    this.deckViewport.addChild(this.deckContent)
-    this.deckViewport.mask = this.deckMask
-    this.addChild(this.deckViewport)
-
-    this.deckSlider = new Sprite(this.options.assets.verticalSlider)
-    this.deckSlider.position.set(
-      COLLECTION_LAYOUT.deckSlider.x,
-      COLLECTION_LAYOUT.deckSlider.minY
-    )
-    this.deckSlider.eventMode = 'none'
-    this.deckSlider.cursor = 'pointer'
-    this.deckSlider.on('pointerdown', this.startDeckSliderDrag)
-    this.deckSlider.on('globalpointermove', this.handleDeckSliderMove)
-    this.deckSlider.on('pointerup', this.stopDeckSliderDrag)
-    this.deckSlider.on('pointerupoutside', this.stopDeckSliderDrag)
-    this.deckSlider.on('pointercancel', this.stopDeckSliderDrag)
-    this.addChild(this.deckSlider)
-
-    this.deckListCount = new Text({
-      text: '',
-      style: {
-        fontFamily: 'Belwe',
-        fontSize: 24,
-        fill: DECK_EDITOR_COUNT_FILL,
-        stroke: { color: 0x000000, width: 4 },
-        letterSpacing: -1,
-        align: 'center'
-      }
-    })
-    this.deckListCount.anchor.set(0.5)
-    this.deckListCount.eventMode = 'none'
-    this.deckListCount.position.set(
-      DECK_EDITOR_LAYOUT.count.x,
-      DECK_EDITOR_LAYOUT.count.y
-    )
-    this.addChild(this.deckListCount)
+    this.deckList.mount(this)
   }
 
   private createDeckEditor(): void {
@@ -954,8 +850,8 @@ export class DeckPanelView extends Actor {
     this.deckEditorFrame.anchor.set(0.5)
     this.deckEditorFrame.eventMode = 'none'
     this.deckEditorFrame.position.set(
-      DECK_EDITOR_LAYOUT.header.x,
-      DECK_EDITOR_LAYOUT.header.y
+      DECK_EDITOR_LAYOUT.header.position.x,
+      DECK_EDITOR_LAYOUT.header.position.y
     )
     this.deckEditorLayer.addChild(this.deckEditorFrame)
 
@@ -973,8 +869,8 @@ export class DeckPanelView extends Actor {
     this.deckEditorCount.anchor.set(0.5)
     this.deckEditorCount.eventMode = 'none'
     this.deckEditorCount.position.set(
-      DECK_EDITOR_LAYOUT.count.x,
-      DECK_EDITOR_LAYOUT.count.y
+      DECK_EDITOR_LAYOUT.count.position.x,
+      DECK_EDITOR_LAYOUT.count.position.y
     )
     this.deckEditorLayer.addChild(this.deckEditorCount)
 
@@ -1002,20 +898,20 @@ export class DeckPanelView extends Actor {
 
     const deckEditorCardMask = new Graphics()
       .rect(
-        DECK_EDITOR_LAYOUT.cardList.x,
-        DECK_EDITOR_LAYOUT.cardList.y,
-        DECK_EDITOR_LAYOUT.cardList.width,
-        DECK_EDITOR_LAYOUT.cardList.height
+        DECK_EDITOR_LAYOUT.cardList.position.x,
+        DECK_EDITOR_LAYOUT.cardList.position.y,
+        DECK_EDITOR_LAYOUT.cardList.size.width,
+        DECK_EDITOR_LAYOUT.cardList.size.height
       )
       .fill(0xffffff)
     deckEditorCardMask.eventMode = 'none'
 
     this.deckEditorCardViewport = new Container()
     this.deckEditorCardViewport.hitArea = new Rectangle(
-      DECK_EDITOR_LAYOUT.cardList.x,
-      DECK_EDITOR_LAYOUT.cardList.y,
-      DECK_EDITOR_LAYOUT.cardList.width,
-      DECK_EDITOR_LAYOUT.cardList.height
+      DECK_EDITOR_LAYOUT.cardList.position.x,
+      DECK_EDITOR_LAYOUT.cardList.position.y,
+      DECK_EDITOR_LAYOUT.cardList.size.width,
+      DECK_EDITOR_LAYOUT.cardList.size.height
     )
     this.deckEditorCardViewport.eventMode = 'none'
     this.deckEditorCardViewport.on('wheel', this.handleDeckEditorCardWheel)
@@ -1030,44 +926,16 @@ export class DeckPanelView extends Actor {
       onClick: () => this.options.callbacks?.onEditorDone?.()
     })
     this.deckEditorDoneButton.position.set(
-      DECK_EDITOR_LAYOUT.footerButton.x,
-      DECK_EDITOR_LAYOUT.footerButton.y
+      DECK_EDITOR_LAYOUT.footerButton.position.x,
+      DECK_EDITOR_LAYOUT.footerButton.position.y
     )
-    this.deckEditorDoneButton.setBaseY(DECK_EDITOR_LAYOUT.footerButton.y)
+    this.deckEditorDoneButton.setBaseY(DECK_EDITOR_LAYOUT.footerButton.position.y)
     this.deckEditorLayer.addChild(this.deckEditorDoneButton)
 
     this.deckEditorLayer.visible = false
     this.deckEditorLayer.alpha = 0
     this.addChild(this.deckEditorLayer)
     this.addChild(this.deckFullWarning)
-  }
-
-  private addDeckEntry(
-    texture: Texture,
-    onClick: () => void,
-    index: number,
-    onDelete?: () => void
-  ): Button {
-    const entry = new Container()
-    entry.position.set(
-      COLLECTION_LAYOUT.deckList.size.width / 2,
-      index * (DECK_BUTTON_HEIGHT + DECK_BUTTON_GAP) + DECK_BUTTON_HEIGHT / 2
-    )
-
-    const button = new Button(texture, { onClick })
-    button.setBaseY(0)
-    if (onDelete) {
-      button.on('rightclick', (event: FederatedPointerEvent) => {
-        event.stopPropagation()
-        onDelete()
-      })
-    }
-    entry.addChild(button)
-    this.deckButtons.push(button)
-
-    this.deckEntries.push(entry)
-    this.deckContent.addChild(entry)
-    return button
   }
 
   private getDeckFrameTexture(deck: Deck): Texture {
@@ -1081,8 +949,10 @@ export class DeckPanelView extends Actor {
 
   private setDeckScroll(offset: number): void {
     this.deckScrollOffset = Math.max(-this.deckMaxScroll, Math.min(0, offset))
-    this.deckContent.y = this.deckScrollOffset
-    this.updateDeckEntryVisibility()
+    this.deckScrollOffset = this.deckList.setScroll(
+      this.deckScrollOffset,
+      this.deckMaxScroll
+    )
     this.updateDeckSliderPosition()
   }
 
@@ -1101,15 +971,6 @@ export class DeckPanelView extends Actor {
       : this.deckMaxScroll
   }
 
-  private updateDeckEntryVisibility(): void {
-    for (const entry of this.deckEntries) {
-      const entryTop = entry.y - DECK_BUTTON_HEIGHT / 2 + this.deckScrollOffset
-      const entryBottom = entryTop + DECK_BUTTON_HEIGHT
-      entry.visible =
-        entryBottom > 0 && entryTop < COLLECTION_LAYOUT.deckList.size.height
-    }
-  }
-
   private updateDeckSliderPosition(): void {
     const editorContext = this.activeDeckId !== null
     const maxScroll = editorContext ? this.deckEditorCardMaxScroll : this.deckMaxScroll
@@ -1121,8 +982,8 @@ export class DeckPanelView extends Actor {
       maxScroll === 0 ||
       (editorContext && (this.deckEditorTransitioning || this.deckEditorClosing))
     ) {
-      this.deckSlider.visible = false
-      this.deckSlider.eventMode = 'none'
+      this.deckList.slider.visible = false
+      this.deckList.slider.eventMode = 'none'
       this.deckSliderDragging = false
       return
     }
@@ -1133,8 +994,8 @@ export class DeckPanelView extends Actor {
       scrollRatio *
         (COLLECTION_LAYOUT.deckSlider.maxY - COLLECTION_LAYOUT.deckSlider.minY)
 
-    this.deckSlider.visible = true
-    this.deckSlider.position.set(COLLECTION_LAYOUT.deckSlider.x, sliderY)
+    this.deckList.slider.visible = true
+    this.deckList.slider.position.set(COLLECTION_LAYOUT.deckSlider.x, sliderY)
   }
 
   private readonly handleDeckWheel = (event: FederatedWheelEvent): void => {
@@ -1174,7 +1035,7 @@ export class DeckPanelView extends Actor {
     }
 
     this.deckSliderDragging = true
-    this.deckSliderDragOffset = event.global.y - this.deckSlider.y
+    this.deckSliderDragOffset = event.global.y - this.deckList.slider.y
     event.stopPropagation()
   }
 
@@ -1215,8 +1076,8 @@ export class DeckPanelView extends Actor {
     const widthScale = DECK_EDITOR_FRAME_TARGET_WIDTH / texture.width
     const maxHeightScale =
       (2 *
-        (DECK_EDITOR_LAYOUT.cardList.y -
-          DECK_EDITOR_LAYOUT.header.y -
+        (DECK_EDITOR_LAYOUT.cardList.position.y -
+          DECK_EDITOR_LAYOUT.header.position.y -
           DECK_EDITOR_FRAME_CARD_LIST_GAP)) /
       texture.height
 
@@ -1230,7 +1091,7 @@ export class DeckPanelView extends Actor {
     this.cancelDeckEditorTransition()
 
     return new Promise<void>((resolve) => {
-      const targetY = opening ? DECK_EDITOR_LAYOUT.header.y : origin.y
+      const targetY = opening ? DECK_EDITOR_LAYOUT.header.position.y : origin.y
       const targetScale = opening ? this.getDeckEditorFrameTargetScale() : 1
       const targetAlpha = opening ? 1 : 0
       const finish = (): void => {
@@ -1312,7 +1173,7 @@ export class DeckPanelView extends Actor {
     this.deckEditorCardMaxScroll = Math.max(
       0,
       this.getDeckEditorCardContentHeight(entries.length) -
-        DECK_EDITOR_LAYOUT.cardList.height
+        DECK_EDITOR_LAYOUT.cardList.size.height
     )
     this.setDeckEditorCardScroll(this.deckEditorCardScrollOffset)
 
@@ -1350,13 +1211,13 @@ export class DeckPanelView extends Actor {
     count: number,
     index: number
   ): DeckCardRow {
-    const rowWidth = DECK_EDITOR_LAYOUT.cardList.width - DECK_EDITOR_ROW_INSET * 2
+    const rowWidth = DECK_EDITOR_LAYOUT.cardList.size.width - DECK_EDITOR_ROW_INSET * 2
     const rowHeight = DECK_EDITOR_CARD_ROW_HEIGHT - DECK_EDITOR_CARD_ROW_GAP
     const row = new Container()
     row.label = `collection.deck-card.${cardId}`
     row.position.set(
-      DECK_EDITOR_LAYOUT.cardList.x + DECK_EDITOR_ROW_INSET,
-      DECK_EDITOR_LAYOUT.cardList.y +
+      DECK_EDITOR_LAYOUT.cardList.position.x + DECK_EDITOR_ROW_INSET,
+      DECK_EDITOR_LAYOUT.cardList.position.y +
         index * DECK_EDITOR_CARD_ROW_HEIGHT +
         DECK_EDITOR_ROW_INSET
     )

@@ -1,4 +1,5 @@
 import { Application, Container, Graphics, Text, type ContainerChild } from 'pixi.js'
+import { isLayoutLabel } from '../../../rendering/layout'
 
 export interface LayoutInspectorOptions {
   /** Returns the root container of the currently active scene, if any. */
@@ -89,7 +90,7 @@ export class LayoutInspector {
       .stroke({ color: 0xff5d5d, width: 2, alpha: 0.9 })
 
     const label = new Text({
-      text: `${target.label} · (${Math.round(anchor.x)}, ${Math.round(anchor.y)}) · ${target.scale.x.toFixed(2)}x`,
+      text: `${target.label}${isLayoutLabel(target.label) ? '' : ' [invalid label]'} · (${Math.round(anchor.x)}, ${Math.round(anchor.y)}) · ${target.scale.x.toFixed(2)}x`,
       style: {
         fontFamily: 'Arial',
         fontSize: 11,

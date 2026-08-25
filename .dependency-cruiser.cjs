@@ -52,6 +52,12 @@ module.exports = {
       to: { path: '^src/renderer/scenes' }
     },
     {
+      name: 'no-feature-to-app',
+      severity: 'error',
+      from: { path: '^src/renderer/features' },
+      to: { path: '^src/renderer/app' }
+    },
+    {
       name: 'no-deck-builder-to-collection-internals',
       severity: 'error',
       from: { path: '^src/renderer/features/deck-builder' },

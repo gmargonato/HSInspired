@@ -6,7 +6,7 @@ import {
   type CardId
 } from '../../../game/content/cards'
 import { EXPANSION_CATALOG } from '../../../game/content/expansions'
-import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
+import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 import type { LayoutPlacement } from '../../rendering/layout'
 import {
   ADD_CARD_PICKER_LAYOUT,

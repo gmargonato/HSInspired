@@ -3,7 +3,8 @@
  * Collection scene. All values are 1920x1080 design-canvas pixels at 1x.
  */
 
-import { GAME_HEIGHT, GAME_WIDTH } from '../../app/config'
+import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
+import { CENTER, placement } from '../../rendering/layout'
 import { COLLECTION_LAYOUT } from './collection-layout'
 
 /** Height of one deck entry button, including its transparent padding. */
@@ -21,19 +22,37 @@ export const DECK_EDITOR_CARD_LIST_HEIGHT =
   DECK_EDITOR_ROW_INSET
 
 export const DECK_EDITOR_LAYOUT = {
-  header: {
-    x:
-      COLLECTION_LAYOUT.deckList.position.x + COLLECTION_LAYOUT.deckList.size.width / 2,
-    y: 64
-  },
-  count: { x: 1495, y: 1038 },
-  cardList: {
-    x: COLLECTION_LAYOUT.deckList.position.x + 10,
-    y: 132,
-    width: COLLECTION_LAYOUT.deckList.size.width - 20,
-    height: DECK_EDITOR_CARD_LIST_HEIGHT
-  },
-  footerButton: { x: 1660, y: 1038 }
+  header: placement(
+    {
+      x:
+        COLLECTION_LAYOUT.deckList.position.x +
+        COLLECTION_LAYOUT.deckList.size.width / 2,
+      y: 64
+    },
+    { width: COLLECTION_LAYOUT.deckList.size.width, height: DECK_BUTTON_HEIGHT },
+    { anchor: CENTER, note: 'Deck frame preview in the editor header.' }
+  ),
+  count: placement(
+    { x: 1495, y: 1038 },
+    { width: 180, height: 40 },
+    { anchor: CENTER, note: 'Deck card-count label.' }
+  ),
+  cardList: placement(
+    {
+      x: COLLECTION_LAYOUT.deckList.position.x + 10,
+      y: 132
+    },
+    {
+      width: COLLECTION_LAYOUT.deckList.size.width - 20,
+      height: DECK_EDITOR_CARD_LIST_HEIGHT
+    },
+    { note: 'Scrollable deck-card rows.' }
+  ),
+  footerButton: placement(
+    { x: 1660, y: 1038 },
+    { width: 220, height: 70 },
+    { anchor: CENTER, note: 'Finish editing the selected deck.' }
+  )
 } as const
 
 export const DECK_EDITOR_COST_WIDTH = 27

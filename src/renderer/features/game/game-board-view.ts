@@ -4,7 +4,6 @@ import {
   Rectangle,
   Sprite,
   Text,
-  Texture,
   type Renderer,
   type FederatedPointerEvent
 } from 'pixi.js'
@@ -18,7 +17,6 @@ import { HERO_CATALOG } from '../../../game/content/heroes'
 import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
 import {
   canBoardMinionAttack,
-  createOpeningMatch,
   hasSummoningSickness,
   MAX_BOARD_SIZE,
   previewMinionCombat,
@@ -30,14 +28,11 @@ import {
   type OpeningMatchState
 } from '../../../game/match'
 import type { PlayerId } from '../../../game/match'
-import type { GameRoute } from '../../app/router'
-import type { AppLogger } from '../../app/services'
+import type { GameRoute } from './game-route'
+import type { RendererLogger } from '../../ui/logger'
 import { CardView } from '../../rendering/cards/card-view'
 import { CARD_CANVAS, CARD_PROFILES } from '../../rendering/cards/card-layout'
-import {
-  AnimatedOutline,
-  OUTLINE_PROFILES
-} from '../../rendering/effects/animated-outline'
+import { OUTLINE_PROFILES } from '../../rendering/effects/animated-outline'
 import { gsap } from '../../animation/animations'
 import {
   type DeckPresentationAssets,
@@ -63,7 +58,6 @@ import {
   type HandDragState
 } from './hand-drag'
 import { HandCardPerspective } from './hand-card-perspective'
-import { ManaTray, resolveManaCrystalStates } from './mana-tray'
 import { HeroPowerView, type HeroPowerLayout } from './hero-power-view'
 import {
   MinionView,
@@ -86,7 +80,9 @@ import {
   applyPlacement,
   type LayoutPlacement
 } from '../../rendering/layout'
-import { DeckTrackerView } from './deck-tracker-view'
+import { GameBoardSession } from './game-board-session'
+import { GameHudView } from './game-hud-view'
+import { GameCardSlot } from './game-card-slot'
 
 export interface GameBoardViewOptions {
   readonly route: GameRoute
@@ -95,7 +91,7 @@ export interface GameBoardViewOptions {
   readonly heroAssets: DeckPresentationAssets
   readonly renderer: Renderer
   readonly cursor?: CursorManager | null
-  readonly logger?: AppLogger
+  readonly logger?: RendererLogger
 }
 
 /** Feature-local timings make the opening easy to tune without layout edits. */
@@ -189,134 +185,6 @@ function cloneCard(card: OpeningCard): OpeningCard {
   return { ...card }
 }
 
-class GameCardSlot extends Container {
-  readonly card: CardView
-  readonly instanceId: string
-  readonly playableOutlineTexture: Texture
-  readonly playableOutline: AnimatedOutline
-  private readonly outlineTarget: Sprite
-  private playableOutlineDisposed = false
-  private readonly replaceCross: Sprite
-  private readonly replacedLabel: Sprite
-  private playableOutlineRequested = false
-  private playableOutlineSuppressed = false
-
-  constructor(
-    card: CardView,
-    instanceId: string,
-    replaceCrossTexture: Texture,
-    replacedLabelTexture: Texture,
-    outlineTexture: Texture
-  ) {
-    super()
-    this.card = card
-    this.instanceId = instanceId
-    this.playableOutlineTexture = outlineTexture
-    this.setMulliganInteractionEnabled(false)
-    const slotLayout = GAME_BOARD_LAYOUT.mulligan.slot
-    this.hitArea = new Rectangle(
-      slotLayout.hitArea.x,
-      slotLayout.hitArea.y,
-      slotLayout.hitArea.width,
-      slotLayout.hitArea.height
-    )
-    this.label = `game-card:${instanceId}`
-
-    card.eventMode = 'none'
-    card.position.set(slotLayout.cardOffset.x, slotLayout.cardOffset.y)
-
-    this.outlineTarget = new Sprite(outlineTexture)
-    this.outlineTarget.width = card.plan.width
-    this.outlineTarget.height = card.renderedHeight
-    this.outlineTarget.position.set(slotLayout.cardOffset.x, slotLayout.cardOffset.y)
-    this.outlineTarget.zIndex = -1
-    this.outlineTarget.eventMode = 'none'
-    this.outlineTarget.label = `${card.label}:playable-outline-target`
-    this.addChild(this.outlineTarget)
-    this.playableOutline = new AnimatedOutline(
-      this.outlineTarget,
-      'green',
-      OUTLINE_PROFILES.card
-    )
-    this.setPlayableOutlineEnabled(false)
-
-    this.addChild(card)
-
-    this.replaceCross = new Sprite(replaceCrossTexture)
-    this.replaceCross.anchor.set(0.5)
-    this.replaceCross.position.set(
-      slotLayout.replaceCrossOffset.x,
-      slotLayout.replaceCrossOffset.y
-    )
-    this.replaceCross.scale.set(slotLayout.overlayScale)
-    this.replaceCross.visible = false
-    this.replaceCross.eventMode = 'none'
-    this.addChild(this.replaceCross)
-
-    this.replacedLabel = new Sprite(replacedLabelTexture)
-    this.replacedLabel.anchor.set(0.5, 0)
-    this.replacedLabel.position.set(
-      slotLayout.replacedLabelOffset.x,
-      slotLayout.replacedLabelOffset.y
-    )
-    this.replacedLabel.scale.set(slotLayout.overlayScale)
-    this.replacedLabel.visible = false
-    this.replacedLabel.eventMode = 'none'
-    this.addChild(this.replacedLabel)
-  }
-
-  setSelected(selected: boolean): void {
-    this.replaceCross.visible = selected
-    this.replacedLabel.visible = selected
-  }
-
-  setMulliganInteractionEnabled(enabled: boolean): void {
-    this.eventMode = enabled ? 'static' : 'none'
-    this.cursor = enabled ? 'pointer' : 'default'
-  }
-
-  setPlayableOutlineEnabled(enabled: boolean): void {
-    this.playableOutlineRequested = enabled
-    this.syncPlayableOutline()
-  }
-
-  isPlayableOutlineEnabled(): boolean {
-    return this.playableOutlineRequested
-  }
-
-  suppressPlayableOutline(suppressed: boolean): void {
-    this.playableOutlineSuppressed = suppressed
-    this.syncPlayableOutline()
-  }
-
-  beginSummonGhost(): void {
-    this.setMulliganInteractionEnabled(false)
-    this.replaceCross.visible = false
-    this.replacedLabel.visible = false
-    this.disposePlayableOutline()
-    this.outlineTarget.visible = true
-    this.outlineTarget.tint = SUMMON_GHOST_COLOR
-    this.outlineTarget.alpha = 0.24
-    this.outlineTarget.blendMode = 'add'
-  }
-
-  setSummonGlowStrength(alpha: number): void {
-    this.outlineTarget.alpha = alpha
-  }
-
-  disposePlayableOutline(): void {
-    if (this.playableOutlineDisposed) return
-    this.playableOutlineDisposed = true
-    this.playableOutline.dispose()
-  }
-
-  private syncPlayableOutline(): void {
-    this.playableOutline.setEnabled(
-      this.playableOutlineRequested && !this.playableOutlineSuppressed
-    )
-  }
-}
-
 /** Ordered pair of a hand card and its interactive slot — single source of truth. */
 interface HandEntry {
   card: OpeningCard
@@ -352,7 +220,7 @@ export class GameBoardView extends Actor {
   private readonly remoteMinionViews: MinionView[] = []
   private readonly weaponViews = new Map<PlayerId, WeaponView>()
   private readonly activeSummonSlots = new Set<GameCardSlot>()
-  private readonly deckTracker = new DeckTrackerView(this.resolver)
+  private readonly hud = new GameHudView(this.resolver)
   private readonly addCardPicker: AddCardPickerView | null
   private readonly attackLineLayer = new Container()
   private readonly attackLine = new AttackLine()
@@ -370,7 +238,7 @@ export class GameBoardView extends Actor {
   private readonly openingLayer = new Container()
   private readonly travelLayer = new Container()
   private readonly deckLayer = new Container()
-  private readonly turnLayer = new Container()
+  private readonly turnLayer = this.hud.turnLayer
   private readonly mulliganLayer = new Container()
   private readonly handLayer = new Container()
   private readonly remoteHandLayer = new Container()
@@ -380,19 +248,25 @@ export class GameBoardView extends Actor {
    * hero portraits, and flip up when the first turn starts.
    */
   private readonly heroPowerViews = new Map<PlayerId, HeroPowerView>()
-  private readonly logger: AppLogger
-  private match!: OpeningMatchInstance
-  private localParticipantId!: PlayerId
-  private remoteParticipantId!: PlayerId
-  private localPlayerNumber!: 1 | 2
-  private remotePlayerNumber!: 1 | 2
+  private readonly logger: RendererLogger
+  private session!: GameBoardSession
+  private get match(): OpeningMatchInstance {
+    return this.session.match
+  }
+  private get localParticipantId(): PlayerId {
+    return this.session.localParticipantId
+  }
+  private get remoteParticipantId(): PlayerId {
+    return this.session.remoteParticipantId
+  }
+  private get localPlayerNumber(): 1 | 2 {
+    return this.session.localPlayerNumber
+  }
+  private get remotePlayerNumber(): 1 | 2 {
+    return this.session.remotePlayerNumber
+  }
   private localHoveredSlot: GameCardSlot | null = null
   private confirmButton!: Button
-  private endTurnButton!: Button
-  private deckCountLabels: { local: Text; remote: Text } | null = null
-  private manaLabels: { local: Text; remote: Text } | null = null
-  private manaLocalTray: ManaTray | null = null
-  private yourTurnFlag: Sprite | null = null
   /** True once the first turn has flipped both hero powers to their fronts. */
   private heroPowerRevealed = false
   /**
@@ -536,7 +410,6 @@ export class GameBoardView extends Actor {
     this.combatOverlayLayer.eventMode = 'none'
     this.combatOverlayLayer.sortableChildren = true
     this.addChild(this.combatOverlayLayer)
-    this.addChild(this.deckTracker)
     // Keep the Pixi arrow body above every other board layer. The cursor's
     // arrow head is rendered in the DOM above the canvas.
     this.attackLineLayer.label = 'game.attack-line-layer'
@@ -565,10 +438,10 @@ export class GameBoardView extends Actor {
       if (!this.selectedMinionView) return
       if (event.button !== 0) return
       let target = event.target instanceof Container ? event.target : null
-      while (target && !target.label?.startsWith('minion:')) {
+      while (target && !target.label?.startsWith('game.minion.')) {
         target = target.parent
       }
-      if (target?.label?.startsWith('minion:')) return
+      if (target?.label?.startsWith('game.minion.')) return
       const targetLabel = target?.label
       // Click on empty board or hand background while targeting cancels.
       // Minion clicks are handled by wireMinionView already.
@@ -585,33 +458,17 @@ export class GameBoardView extends Actor {
 
   async mount(): Promise<void> {
     this.logger.info('[GameBoardView] mount start', this.options.route)
-    const human = this.options.route.setup.participants.find(
-      (participant) => participant.controllerKind === 'human'
-    )
-    const remote = this.options.route.setup.participants.find(
-      (participant) => participant.controllerKind === 'ai'
-    )
-    if (!human || !remote)
-      throw new Error('GameScene requires one human and one AI participant.')
-
-    this.localParticipantId = human.participantId
-    this.remoteParticipantId = remote.participantId
+    this.session = new GameBoardSession({
+      setup: this.options.route.setup,
+      decks: this.options.decks
+    })
     this.logger.info(
       '[GameBoardView] participants',
       this.localParticipantId,
       this.remoteParticipantId
     )
-    this.match = createOpeningMatch(this.options.route.setup, this.options.decks)
     this.logger.info('[GameBoardView] match created', this.match.getState())
     const initialState = this.match.getState()
-    this.localPlayerNumber = this.findPlayer(
-      initialState,
-      this.localParticipantId
-    ).playerNumber
-    this.remotePlayerNumber = this.findPlayer(
-      initialState,
-      this.remoteParticipantId
-    ).playerNumber
 
     this.logger.info('[GameBoardView] creating board')
     this.createBoard()
@@ -746,7 +603,7 @@ export class GameBoardView extends Actor {
         cost: player.heroPower.cost,
         onClick: isLocal ? () => void this.useHeroPower() : undefined
       })
-      view.label = `hero-power:${player.participantId}`
+      view.label = `game.hero-power.${player.participantId}`
       this.heroPowerViews.set(player.participantId, view)
       this.heroPowerLayer.addChild(view)
     }
@@ -766,83 +623,33 @@ export class GameBoardView extends Actor {
 
   /** Builds the end turn button and the deck card-count labels (hidden for now). */
   private createTurnControls(state: OpeningMatchState): void {
-    this.endTurnButton = new Button(this.options.gameAssets.endTurn, {
-      highlightOnHover: false,
-      onClick: () => void this.endTurn()
-    })
-    applyPlacement(this.endTurnButton, GAME_BOARD_LAYOUT.endTurnButton)
-    this.endTurnButton.setBaseY(GAME_BOARD_LAYOUT.endTurnButton.position.y)
-    this.endTurnButton.setEnabled(false)
-    this.turnLayer.addChild(this.endTurnButton)
-
-    const localCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.localCount, 34)
-    const remoteCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.remoteCount, 34)
-    this.deckCountLabels = { local: localCount, remote: remoteCount }
-    this.turnLayer.addChild(localCount, remoteCount)
-
-    const localManaLabel = this.createHudLabel(GAME_BOARD_LAYOUT.mana.localLabel, 34)
-    const remoteManaLabel = this.createHudLabel(GAME_BOARD_LAYOUT.mana.remoteLabel, 26)
-    this.manaLabels = { local: localManaLabel, remote: remoteManaLabel }
-    this.turnLayer.addChild(localManaLabel, remoteManaLabel)
-
-    this.manaLocalTray = new ManaTray(
-      this.options.gameAssets.manaCrystal,
-      GAME_BOARD_LAYOUT.mana.crystals
-    )
-    this.turnLayer.addChild(this.manaLocalTray)
-
+    this.hud.mount(this.options.gameAssets, () => void this.endTurn())
+    this.addChild(this.hud.deckTracker)
     this.syncTurnHud(state)
-    this.turnLayer.visible = false
-  }
-
-  private createHudLabel(placement: LayoutPlacement, fontSize: number): Text {
-    const label = new Text({
-      text: '',
-      style: {
-        fontFamily: 'Belwe',
-        fontSize,
-        fill: 0xffffff,
-        stroke: { color: 0x17120f, width: 6 },
-        align: 'center'
-      }
-    })
-    applyAnchoredPlacement(label, placement)
-    label.eventMode = 'none'
-    return label
   }
 
   /** Refreshes both deck card-count labels from the engine state. */
   private syncDeckCounts(state: OpeningMatchState): void {
-    if (!this.deckCountLabels) return
-    this.deckCountLabels.local.text = String(
-      this.findPlayer(state, this.localParticipantId).deck.length
-    )
-    this.deckCountLabels.remote.text = String(
-      this.findPlayer(state, this.remoteParticipantId).deck.length
+    this.hud.sync(
+      state,
+      (snapshot, participantId) => this.findPlayer(snapshot, participantId),
+      { local: this.localParticipantId, remote: this.remoteParticipantId },
+      this.localManaHighlightCost()
     )
   }
 
   /** Refreshes both "available/maximum" mana labels from the engine state. */
   private syncMana(state: OpeningMatchState): void {
-    if (!this.manaLabels) return
-    const local = this.findPlayer(state, this.localParticipantId).mana
-    const remote = this.findPlayer(state, this.remoteParticipantId).mana
-    this.manaLabels.local.text = `${local.available}/${local.maximum}`
-    this.manaLabels.remote.text = `${remote.available}/${remote.maximum}`
-    this.syncManaTray(state)
+    this.hud.sync(
+      state,
+      (snapshot, participantId) => this.findPlayer(snapshot, participantId),
+      { local: this.localParticipantId, remote: this.remoteParticipantId },
+      this.localManaHighlightCost()
+    )
   }
 
-  /**
-   * Refreshes the local mana crystal tray: full crystals cover `available`,
-   * the tail up to `maximum` is consumed, and the first `localManaHighlightCost`
-   * full crystals light up while a playable hand card is hovered or dragged.
-   */
   private syncManaTray(state: OpeningMatchState): void {
-    if (!this.manaLocalTray) return
-    const local = this.findPlayer(state, this.localParticipantId).mana
-    this.manaLocalTray.sync(
-      resolveManaCrystalStates(local, this.localManaHighlightCost())
-    )
+    this.syncMana(state)
   }
 
   /**
@@ -952,15 +759,16 @@ export class GameBoardView extends Actor {
 
   /** Reflects whose turn it is in the end turn button's texture and enabled state. */
   private syncTurnControls(state: OpeningMatchState): void {
-    if (!this.endTurnButton) return
+    const endTurnButton = this.hud.endTurnButton
+    if (!endTurnButton) return
     const isLocalTurn = state.activePlayerId === this.localParticipantId
     const localTurnTexture = isLocalTurn
       ? this.options.gameAssets.endTurn
       : this.options.gameAssets.enemyTurn
-    if (this.endTurnButton.sprite.texture !== localTurnTexture) {
-      this.endTurnButton.sprite.texture = localTurnTexture
+    if (endTurnButton.sprite.texture !== localTurnTexture) {
+      endTurnButton.sprite.texture = localTurnTexture
     }
-    this.endTurnButton.setEnabled(
+    endTurnButton.setEnabled(
       isLocalTurn &&
         !this.turnInProgress &&
         !this.combatInProgress &&
@@ -1243,7 +1051,7 @@ export class GameBoardView extends Actor {
   private async endTurn(): Promise<void> {
     if (this.turnInProgress || this.combatInProgress || this.cardPlayInProgress) return
     this.turnInProgress = true
-    this.endTurnButton.setEnabled(false)
+    this.hud.endTurnButton?.setEnabled(false)
     const result = this.match.dispatch({
       type: 'end-turn',
       participantId: this.localParticipantId
@@ -1352,13 +1160,13 @@ export class GameBoardView extends Actor {
 
   private createMulliganLayer(): void {
     const overlay = this.createDarkOverlay()
-    overlay.label = 'mulligan-dark-overlay'
+    overlay.label = 'game.mulligan.dark-overlay'
     overlay.alpha = 0
     this.mulliganLayer.addChild(overlay)
 
     const announcement = new Sprite(this.options.gameAssets.mulliganAnnouncement)
     applyAnchoredPlacement(announcement, GAME_BOARD_LAYOUT.mulligan.announcement)
-    announcement.label = 'mulligan-announcement'
+    announcement.label = 'game.mulligan.announcement'
     announcement.alpha = 0
     announcement.eventMode = 'none'
     this.mulliganLayer.addChild(announcement)
@@ -1481,8 +1289,10 @@ export class GameBoardView extends Actor {
   }
 
   private async presentMulligan(): Promise<void> {
-    const announcement = this.mulliganLayer.getChildByLabel('mulligan-announcement')
-    const overlay = this.mulliganLayer.getChildByLabel('mulligan-dark-overlay')
+    const announcement = this.mulliganLayer.getChildByLabel(
+      'game.mulligan.announcement'
+    )
+    const overlay = this.mulliganLayer.getChildByLabel('game.mulligan.dark-overlay')
     if (!announcement || !overlay)
       throw new Error('Mulligan presentation is unavailable.')
     await Promise.all([
@@ -1693,16 +1503,16 @@ export class GameBoardView extends Actor {
   }
 
   toggleDeckTracker(): void {
-    const visible = !this.deckTracker.visible
-    this.deckTracker.setVisible(visible)
+    const visible = !this.hud.deckTracker.visible
+    this.hud.deckTracker.setVisible(visible)
     if (visible && this.match) this.updateDeckTracker(this.match.getState())
     this.logger.info('[GameBoardView] deck tracker', visible ? 'shown' : 'hidden')
   }
 
   private updateDeckTracker(state: OpeningMatchState): void {
-    if (!this.deckTracker.visible) return
+    if (!this.hud.deckTracker.visible) return
     const localPlayer = this.findPlayer(state, this.localParticipantId)
-    this.deckTracker.update(localPlayer.deck)
+    this.hud.deckTracker.update(localPlayer.deck)
   }
 
   /**
@@ -1764,7 +1574,7 @@ export class GameBoardView extends Actor {
     ])
     const view = await WeaponView.create(
       {
-        label: `weapon:${event.weapon.instanceId}`,
+        label: `game.weapon.${event.weapon.instanceId}`,
         attack: event.weapon.attack,
         durability: event.weapon.durability
       },
@@ -1837,7 +1647,7 @@ export class GameBoardView extends Actor {
     const viewPromise = this.resolver.loadArtwork(event.minion.cardId).then((artwork) =>
       MinionView.create(
         {
-          label: `minion:${event.minion.instanceId}`,
+          label: `game.minion.${event.minion.instanceId}`,
           attack: event.minion.attack,
           health: event.minion.health,
           originalHealth:
@@ -2282,7 +2092,7 @@ export class GameBoardView extends Actor {
     this.positionDeathMarker(marker, view)
     marker.zIndex = 1000
     marker.eventMode = 'none'
-    marker.label = `game.minion-will-die:${view.instanceId ?? 'unknown'}`
+    marker.label = `game.minion.will-die.${view.instanceId ?? 'unknown'}`
     this.combatOverlayLayer.addChild(marker)
     return marker
   }
@@ -2462,20 +2272,20 @@ export class GameBoardView extends Actor {
    * it. No sound.
    */
   private presentYourTurnFlag(): void {
-    if (this.yourTurnFlag) {
-      this.killTweensOf(this.yourTurnFlag)
-      this.yourTurnFlag.destroy({ children: true })
-      this.yourTurnFlag = null
+    if (this.hud.yourTurnFlag) {
+      this.killTweensOf(this.hud.yourTurnFlag)
+      this.hud.yourTurnFlag.destroy({ children: true })
+      this.hud.yourTurnFlag = null
     }
     const layout = GAME_BOARD_LAYOUT.yourTurnFlag
     const flag = new Sprite(this.options.gameAssets.yourTurn)
     applyAnchoredPlacement(flag, layout)
     flag.scale.set(GAME_BOARD_LAYOUT.yourTurnStartScale)
     flag.alpha = 0
-    flag.label = 'your-turn-flag'
+    flag.label = 'game.your-turn-flag'
     flag.eventMode = 'none'
     this.turnLayer.addChild(flag)
-    this.yourTurnFlag = flag
+    this.hud.yourTurnFlag = flag
 
     const finalScale = layout.scale ?? { x: 1, y: 1 }
     const timeline = this.timeline()
@@ -2504,8 +2314,8 @@ export class GameBoardView extends Actor {
       TURN_TIMING.yourTurnGrow + TURN_TIMING.yourTurnHold
     )
     void this.completeTimeline(timeline).then(() => {
-      if (this.yourTurnFlag !== flag || flag.destroyed) return
-      this.yourTurnFlag = null
+      if (this.hud.yourTurnFlag !== flag || flag.destroyed) return
+      this.hud.yourTurnFlag = null
       flag.destroy({ children: true })
     })
   }
@@ -2573,8 +2383,10 @@ export class GameBoardView extends Actor {
   }
 
   private async dismissMulliganPresentation(): Promise<void> {
-    const announcement = this.mulliganLayer.getChildByLabel('mulligan-announcement')
-    const overlay = this.mulliganLayer.getChildByLabel('mulligan-dark-overlay')
+    const announcement = this.mulliganLayer.getChildByLabel(
+      'game.mulligan.announcement'
+    )
+    const overlay = this.mulliganLayer.getChildByLabel('game.mulligan.dark-overlay')
     if (!announcement || !overlay)
       throw new Error('Mulligan presentation is unavailable.')
     await Promise.all([
@@ -3337,9 +3149,7 @@ export class GameBoardView extends Actor {
     }
     this.heroPowerViews.clear()
     this.addCardPicker?.dispose()
-    this.deckTracker.dispose()
-    this.manaLocalTray?.dispose()
-    this.manaLocalTray = null
+    this.hud.dispose()
     for (const view of this.localMinionViews) {
       view.removeFromParent()
       view.destroy({ children: true })

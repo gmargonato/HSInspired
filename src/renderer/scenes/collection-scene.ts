@@ -9,7 +9,7 @@ import { Button } from '../ui/components/button'
 import { Scene } from './scene'
 import { GAME_HEIGHT, GAME_WIDTH } from '../app/config'
 import { NewDeckView } from '../features/deck-builder/new-deck-view'
-import type { DeckStore } from '../features/deck-builder/deck-store'
+import type { DeckStore } from '../ui/deck-store'
 import { DeleteDeckView } from '../features/collection/delete-deck-view'
 import {
   CollectionView,
@@ -76,6 +76,7 @@ export class CollectionScene extends Scene {
       )
 
     this.background = new Sprite(assets.background)
+    this.background.label = 'collection.background'
     this.background.width = GAME_WIDTH
     this.background.height = GAME_HEIGHT
     this.root.addChild(this.background)
@@ -102,6 +103,7 @@ export class CollectionScene extends Scene {
         onWarning: (message, error) => this.reportWarning(message, error)
       }
     })
+    this.collectionView.label = 'collection.content'
     this.collectionView.init()
     this.root.addChild(this.collectionView)
 
@@ -123,6 +125,7 @@ export class CollectionScene extends Scene {
       },
       callbacks: this.createDeckPanelCallbacks()
     })
+    this.deckPanel.label = 'collection.deck-panel'
     this.deckPanel.init()
     this.root.addChild(this.deckPanel)
 
@@ -238,11 +241,12 @@ export class CollectionScene extends Scene {
     this.collectionBackButton = new Button(sharedAssets.backButton, {
       onClick: () => void this.leaveCollection()
     })
+    this.collectionBackButton.label = 'collection.back-button'
     this.collectionBackButton.position.set(
-      DECK_EDITOR_LAYOUT.footerButton.x,
-      DECK_EDITOR_LAYOUT.footerButton.y
+      DECK_EDITOR_LAYOUT.footerButton.position.x,
+      DECK_EDITOR_LAYOUT.footerButton.position.y
     )
-    this.collectionBackButton.setBaseY(DECK_EDITOR_LAYOUT.footerButton.y)
+    this.collectionBackButton.setBaseY(DECK_EDITOR_LAYOUT.footerButton.position.y)
     this.collectionBackButton.visible = true
     this.root.addChild(this.collectionBackButton)
   }
@@ -308,8 +312,8 @@ export class CollectionScene extends Scene {
     if (!deck) return
 
     const origin = this.deckPanel.getDeckEntryOrigin(deckId) ?? {
-      x: DECK_EDITOR_LAYOUT.header.x,
-      y: DECK_EDITOR_LAYOUT.header.y
+      x: DECK_EDITOR_LAYOUT.header.position.x,
+      y: DECK_EDITOR_LAYOUT.header.position.y
     }
 
     this.setDeckInteractionEnabled(false)
