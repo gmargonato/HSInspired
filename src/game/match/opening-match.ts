@@ -10,7 +10,7 @@ import type {
   PlayerId
 } from './match-types'
 
-export type OpeningPhase = 'mulligan' | 'turns'
+export type OpeningPhase = 'mulligan' | 'turns' | 'ended'
 
 /** Maximum number of cards a player may hold in hand. */
 export const MAX_HAND_SIZE = 10
@@ -47,6 +47,18 @@ export interface BoardWeapon {
   readonly maxDurability: number
 }
 
+/**
+ * A hero's own combat state. `attack` deliberately excludes weapon Attack;
+ * `getHeroAttack` combines the two at the point where combat is resolved.
+ * This keeps temporary/inherent hero Attack distinct from an equipped weapon.
+ */
+export interface PlayerHeroState {
+  readonly health: number
+  readonly maxHealth: number
+  readonly attack: number
+  readonly lastAttackedOnTurn: number | null
+}
+
 /** A player's mana crystals: available spendable mana and the grown maximum. */
 export interface PlayerMana {
   readonly available: number
@@ -67,6 +79,7 @@ export interface OpeningPlayerState {
   readonly participantId: PlayerId
   readonly controllerKind: ControllerKind
   readonly heroId: HeroId
+  readonly hero: PlayerHeroState
   readonly playerNumber: 1 | 2
   readonly deck: readonly OpeningCard[]
   readonly hand: readonly OpeningCard[]
@@ -83,6 +96,8 @@ export interface OpeningMatchState {
   readonly playerTwoId: PlayerId
   readonly activePlayerId: PlayerId | null
   readonly turnNumber: number
+  readonly winnerId: PlayerId | null
+  readonly loserId: PlayerId | null
   readonly players: readonly [OpeningPlayerState, OpeningPlayerState]
   readonly revision: number
 }
@@ -124,6 +139,17 @@ export interface AttackMinionCommand {
   readonly defenderInstanceId: string
 }
 
+export type AttackCharacterRef =
+  { readonly kind: 'hero' } | { readonly kind: 'minion'; readonly instanceId: string }
+
+/** General direct-attack command. References are relative to the command owner. */
+export interface AttackCharacterCommand {
+  readonly type: 'attack-character'
+  readonly participantId: PlayerId
+  readonly attacker: AttackCharacterRef
+  readonly defender: AttackCharacterRef
+}
+
 export interface DevAddCardCommand {
   readonly type: 'dev-add-card'
   readonly participantId: PlayerId
@@ -144,6 +170,7 @@ export type OpeningMatchCommand =
   | PlayMinionCommand
   | PlayWeaponCommand
   | AttackMinionCommand
+  | AttackCharacterCommand
   | DevAddCardCommand
   | DevSetManaCommand
 
@@ -236,6 +263,35 @@ export interface MinionCombatResolvedEvent {
   readonly defender: MinionCombatantResult
 }
 
+export interface CharacterCombatantResult {
+  readonly participantId: PlayerId
+  readonly character: AttackCharacterRef
+  readonly attack: number
+  readonly damageDealt: number
+  readonly healthBefore: number
+  readonly healthAfter: number
+  readonly destroyed: boolean
+}
+
+export interface CharacterCombatResolvedEvent {
+  readonly type: 'character-combat-resolved'
+  readonly attacker: CharacterCombatantResult
+  readonly defender: CharacterCombatantResult
+  readonly weapon: {
+    readonly participantId: PlayerId
+    readonly durabilityBefore: number
+    readonly durabilityAfter: number
+    readonly destroyed: boolean
+  } | null
+}
+
+export interface MatchEndedEvent {
+  readonly type: 'match-ended'
+  readonly winnerId: PlayerId
+  readonly loserId: PlayerId
+  readonly reason: 'hero-health-depleted'
+}
+
 export interface DevCardAddedEvent {
   readonly type: 'dev-card-added'
   readonly participantId: PlayerId
@@ -260,6 +316,8 @@ export type OpeningMatchEvent =
   | MinionPlayedEvent
   | WeaponEquippedEvent
   | MinionCombatResolvedEvent
+  | CharacterCombatResolvedEvent
+  | MatchEndedEvent
   | DevCardAddedEvent
   | DevManaSetEvent
 
@@ -285,6 +343,8 @@ export type OpeningRejectionCode =
   | 'invalid-attacker'
   | 'invalid-target'
   | 'minion-cannot-attack'
+  | 'hero-cannot-attack'
+  | 'match-ended'
   | 'hand-full'
   | 'unknown-card'
   | 'invalid-mana'
@@ -319,6 +379,10 @@ function cloneBoardWeapon(weapon: BoardWeapon): BoardWeapon {
   return { ...weapon }
 }
 
+function cloneHero(hero: PlayerHeroState): PlayerHeroState {
+  return { ...hero }
+}
+
 export function hasSummoningSickness(
   minion: BoardMinion,
   currentTurn: number
@@ -336,6 +400,24 @@ export function canBoardMinionAttack(
   if (minion.attack <= 0 || minion.health <= 0) return false
   if (hasSummoningSickness(minion, state.turnNumber)) return false
   return minion.lastAttackedOnTurn !== state.turnNumber
+}
+
+/** Effective Attack shown on a hero during that hero's own turn. */
+export function getHeroAttack(
+  player: Pick<OpeningPlayerState, 'hero' | 'weapon'>
+): number {
+  return Math.max(0, player.hero.attack) + (player.weapon?.attack ?? 0)
+}
+
+export function canHeroAttack(
+  player: Pick<OpeningPlayerState, 'hero' | 'weapon'>,
+  state: OpeningMatchState,
+  ownerId: PlayerId
+): boolean {
+  if (state.phase !== 'turns') return false
+  if (state.activePlayerId !== ownerId) return false
+  if (player.hero.health <= 0 || getHeroAttack(player) <= 0) return false
+  return player.hero.lastAttackedOnTurn !== state.turnNumber
 }
 
 /** Resolves the stat-only result used both by targeting previews and combat. */
@@ -356,6 +438,7 @@ export function previewMinionCombat(
 function clonePlayer(player: OpeningPlayerState): OpeningPlayerState {
   return {
     ...player,
+    hero: cloneHero(player.hero),
     deck: player.deck.map(cloneCard),
     hand: player.hand.map(cloneCard),
     board: player.board.map(cloneBoardMinion),
@@ -434,6 +517,26 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
       participantId: value.participantId as PlayerId,
       attackerInstanceId: value.attackerInstanceId,
       defenderInstanceId: value.defenderInstanceId
+    }
+  }
+
+  if (value.type === 'attack-character') {
+    const parseRef = (ref: unknown): AttackCharacterRef | null => {
+      if (!isRecord(ref) || typeof ref.kind !== 'string') return null
+      if (ref.kind === 'hero') return { kind: 'hero' }
+      if (ref.kind === 'minion' && typeof ref.instanceId === 'string') {
+        return { kind: 'minion', instanceId: ref.instanceId }
+      }
+      return null
+    }
+    const attacker = parseRef(value.attacker)
+    const defender = parseRef(value.defender)
+    if (!attacker || !defender) return null
+    return {
+      type: 'attack-character',
+      participantId: value.participantId as PlayerId,
+      attacker,
+      defender
     }
   }
 
@@ -576,6 +679,13 @@ function applyEndTurn(
   const events: OpeningMatchEvent[] = []
 
   const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+
+  // Non-weapon hero Attack is temporary in this phase's combat model. Any
+  // future effect that grants it must be cleared when its owner's turn ends.
+  nextPlayers[playerIndex] = {
+    ...nextPlayers[playerIndex],
+    hero: { ...nextPlayers[playerIndex].hero, attack: 0 }
+  }
 
   const card = nextPlayer.deck[0]
   if (card && nextPlayer.hand.length >= MAX_HAND_SIZE) {
@@ -864,15 +974,39 @@ function applyPlayWeapon(
   }
 }
 
-/**
- * Resolves a basic minion-versus-minion attack. Damage is simultaneous and
- * minions that reach zero health are removed from their board atomically.
- * Traits, effects, and hero targets intentionally do not participate here.
- */
+/** Resolves direct combat between any two opposing characters. */
+function applyAttackCharacter(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1,
+  command: AttackCharacterCommand
+): OpeningCommandResult {
+  return resolveAttackCharacter(state, playerIndex, command, false)
+}
+
+/** Compatibility adapter for the original minion-only command contract. */
 function applyAttackMinion(
   state: OpeningMatchState,
   playerIndex: 0 | 1,
   command: AttackMinionCommand
+): OpeningCommandResult {
+  return resolveAttackCharacter(
+    state,
+    playerIndex,
+    {
+      type: 'attack-character',
+      participantId: command.participantId,
+      attacker: { kind: 'minion', instanceId: command.attackerInstanceId },
+      defender: { kind: 'minion', instanceId: command.defenderInstanceId }
+    },
+    true
+  )
+}
+
+function resolveAttackCharacter(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1,
+  command: AttackCharacterCommand,
+  legacyMinionEvent: boolean
 ): OpeningCommandResult {
   if (state.phase !== 'turns') {
     return reject(state, 'wrong-phase', 'Turns have not started yet.')
@@ -880,33 +1014,46 @@ function applyAttackMinion(
 
   const attackerPlayer = state.players[playerIndex]
   if (state.activePlayerId !== attackerPlayer.participantId) {
-    return reject(
-      state,
-      'not-active-player',
-      'Only the active player can attack with a minion.'
-    )
+    return reject(state, 'not-active-player', 'Only the active player can attack.')
   }
 
-  const attacker = attackerPlayer.board.find(
-    (candidate) => candidate.instanceId === command.attackerInstanceId
-  )
-  if (!attacker) {
+  const attackerLookupId =
+    command.attacker.kind === 'minion' ? command.attacker.instanceId : null
+  const attackerMinion =
+    attackerLookupId === null
+      ? undefined
+      : attackerPlayer.board.find(
+          (candidate) => candidate.instanceId === attackerLookupId
+        )
+  if (command.attacker.kind === 'minion' && !attackerMinion) {
     return reject(
       state,
       'invalid-attacker',
       'The selected attacker is not on your board.'
     )
   }
-  if (!canBoardMinionAttack(attacker, state, attackerPlayer.participantId)) {
+  if (command.attacker.kind === 'hero') {
+    if (!canHeroAttack(attackerPlayer, state, attackerPlayer.participantId)) {
+      return reject(state, 'hero-cannot-attack', 'Your hero cannot attack right now.')
+    }
+  } else if (
+    attackerMinion &&
+    !canBoardMinionAttack(attackerMinion, state, attackerPlayer.participantId)
+  ) {
     return reject(state, 'minion-cannot-attack', 'That minion cannot attack right now.')
   }
 
   const defenderIndex: 0 | 1 = playerIndex === 0 ? 1 : 0
   const defenderPlayer = state.players[defenderIndex]
-  const defender = defenderPlayer.board.find(
-    (candidate) => candidate.instanceId === command.defenderInstanceId
-  )
-  if (!defender) {
+  const defenderLookupId =
+    command.defender.kind === 'minion' ? command.defender.instanceId : null
+  const defenderMinion =
+    defenderLookupId === null
+      ? undefined
+      : defenderPlayer.board.find(
+          (candidate) => candidate.instanceId === defenderLookupId
+        )
+  if (command.defender.kind === 'minion' && !defenderMinion) {
     return reject(
       state,
       'invalid-target',
@@ -914,68 +1061,195 @@ function applyAttackMinion(
     )
   }
 
-  const combat = previewMinionCombat(attacker, defender)
+  const attackerAttack =
+    command.attacker.kind === 'hero'
+      ? getHeroAttack(attackerPlayer)
+      : (attackerMinion?.attack ?? 0)
+  const defenderAttack =
+    command.defender.kind === 'minion' ? (defenderMinion?.attack ?? 0) : 0
+  const attackerHealth =
+    command.attacker.kind === 'hero'
+      ? attackerPlayer.hero.health
+      : (attackerMinion?.health ?? 0)
+  const defenderHealth =
+    command.defender.kind === 'hero'
+      ? defenderPlayer.hero.health
+      : (defenderMinion?.health ?? 0)
+  const attackerHealthAfter = Math.max(0, attackerHealth - defenderAttack)
+  const defenderHealthAfter = Math.max(0, defenderHealth - attackerAttack)
+  const attackerDestroyed = attackerHealthAfter === 0
+  const defenderDestroyed = defenderHealthAfter === 0
 
+  let weaponResult: CharacterCombatResolvedEvent['weapon'] = null
+  let nextAttackerWeapon = attackerPlayer.weapon
+  if (command.attacker.kind === 'hero' && attackerPlayer.weapon) {
+    const weapon = attackerPlayer.weapon
+    const durabilityAfter = Math.max(0, weapon.durability - 1)
+    weaponResult = {
+      participantId: attackerPlayer.participantId,
+      durabilityBefore: weapon.durability,
+      durabilityAfter,
+      destroyed: durabilityAfter === 0
+    }
+    nextAttackerWeapon =
+      durabilityAfter > 0 ? { ...weapon, durability: durabilityAfter } : null
+  }
+
+  const attackerInstanceId =
+    command.attacker.kind === 'minion' ? command.attacker.instanceId : null
+  const defenderInstanceId =
+    command.defender.kind === 'minion' ? command.defender.instanceId : null
   const nextAttackerBoard = attackerPlayer.board
     .map((candidate) => {
-      if (candidate.instanceId !== attacker.instanceId)
+      if (attackerInstanceId === null || candidate.instanceId !== attackerInstanceId) {
         return cloneBoardMinion(candidate)
-      if (combat.attackerDestroyed) return null
+      }
+      if (attackerDestroyed) return null
       return {
         ...cloneBoardMinion(candidate),
-        health: combat.attackerHealthAfter,
+        health: attackerHealthAfter,
         lastAttackedOnTurn: state.turnNumber
       }
     })
     .filter((candidate): candidate is BoardMinion => candidate !== null)
   const nextDefenderBoard = defenderPlayer.board
     .map((candidate) => {
-      if (candidate.instanceId !== defender.instanceId)
+      if (defenderInstanceId === null || candidate.instanceId !== defenderInstanceId) {
         return cloneBoardMinion(candidate)
-      if (combat.defenderDestroyed) return null
-      return {
-        ...cloneBoardMinion(candidate),
-        health: combat.defenderHealthAfter
       }
+      if (defenderDestroyed) return null
+      return { ...cloneBoardMinion(candidate), health: defenderHealthAfter }
     })
     .filter((candidate): candidate is BoardMinion => candidate !== null)
 
+  const nextAttackerHero =
+    command.attacker.kind === 'hero'
+      ? {
+          ...attackerPlayer.hero,
+          health: attackerHealthAfter,
+          lastAttackedOnTurn: state.turnNumber
+        }
+      : attackerPlayer.hero
+  const nextDefenderHero =
+    command.defender.kind === 'hero'
+      ? { ...defenderPlayer.hero, health: defenderHealthAfter }
+      : defenderPlayer.hero
   const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
-  nextPlayers[playerIndex] = { ...attackerPlayer, board: nextAttackerBoard }
-  nextPlayers[defenderIndex] = { ...defenderPlayer, board: nextDefenderBoard }
+  nextPlayers[playerIndex] = {
+    ...attackerPlayer,
+    hero: nextAttackerHero,
+    board: nextAttackerBoard,
+    weapon: nextAttackerWeapon
+  }
+  nextPlayers[defenderIndex] = {
+    ...defenderPlayer,
+    hero: nextDefenderHero,
+    board: nextDefenderBoard
+  }
+
+  const attackerHeroDead = nextAttackerHero.health <= 0
+  const defenderHeroDead = nextDefenderHero.health <= 0
+  const matchEnded = attackerHeroDead || defenderHeroDead
+  const winnerId = matchEnded
+    ? attackerHeroDead
+      ? defenderPlayer.participantId
+      : attackerPlayer.participantId
+    : null
+  const loserId = matchEnded
+    ? attackerHeroDead
+      ? attackerPlayer.participantId
+      : defenderPlayer.participantId
+    : null
   const nextState: OpeningMatchState = {
     ...state,
+    phase: matchEnded ? 'ended' : state.phase,
+    activePlayerId: matchEnded ? null : state.activePlayerId,
+    winnerId,
+    loserId,
     players: nextPlayers,
     revision: state.revision + 1
   }
 
-  return {
-    accepted: true,
-    state: cloneOpeningMatchState(nextState),
-    events: [
-      {
-        type: 'minion-combat-resolved',
-        attacker: {
-          participantId: attackerPlayer.participantId,
-          instanceId: attacker.instanceId,
-          attack: attacker.attack,
-          damageDealt: attacker.attack,
-          healthBefore: attacker.health,
-          healthAfter: combat.attackerHealthAfter,
-          destroyed: combat.attackerDestroyed
-        },
-        defender: {
-          participantId: defenderPlayer.participantId,
-          instanceId: defender.instanceId,
-          attack: defender.attack,
-          damageDealt: defender.attack,
-          healthBefore: defender.health,
-          healthAfter: combat.defenderHealthAfter,
-          destroyed: combat.defenderDestroyed
+  const attackerResult = {
+    participantId: attackerPlayer.participantId,
+    character: command.attacker,
+    attack: attackerAttack,
+    damageDealt: attackerAttack,
+    healthBefore: attackerHealth,
+    healthAfter: attackerHealthAfter,
+    destroyed: attackerDestroyed
+  } satisfies CharacterCombatantResult
+  const defenderResult = {
+    participantId: defenderPlayer.participantId,
+    character: command.defender,
+    attack: defenderAttack,
+    damageDealt: defenderAttack,
+    healthBefore: defenderHealth,
+    healthAfter: defenderHealthAfter,
+    destroyed: defenderDestroyed
+  } satisfies CharacterCombatantResult
+
+  if (legacyMinionEvent) {
+    const attacker = attackerMinion
+    const defender = defenderMinion
+    if (!attacker || !defender) {
+      return reject(
+        state,
+        'invalid-target',
+        'The selected target is not an opposing minion.'
+      )
+    }
+    const legacyState: OpeningMatchState = {
+      ...nextState,
+      winnerId: null,
+      loserId: null
+    }
+    return {
+      accepted: true,
+      state: cloneOpeningMatchState(legacyState),
+      events: [
+        {
+          type: 'minion-combat-resolved',
+          attacker: {
+            participantId: attackerPlayer.participantId,
+            instanceId: attacker.instanceId,
+            attack: attacker.attack,
+            damageDealt: attacker.attack,
+            healthBefore: attacker.health,
+            healthAfter: attackerHealthAfter,
+            destroyed: attackerDestroyed
+          },
+          defender: {
+            participantId: defenderPlayer.participantId,
+            instanceId: defender.instanceId,
+            attack: defender.attack,
+            damageDealt: defender.attack,
+            healthBefore: defender.health,
+            healthAfter: defenderHealthAfter,
+            destroyed: defenderDestroyed
+          }
         }
-      }
-    ]
+      ]
+    }
   }
+
+  const events: OpeningMatchEvent[] = [
+    {
+      type: 'character-combat-resolved',
+      attacker: attackerResult,
+      defender: defenderResult,
+      weapon: weaponResult
+    }
+  ]
+  if (winnerId && loserId) {
+    events.push({
+      type: 'match-ended',
+      winnerId,
+      loserId,
+      reason: 'hero-health-depleted'
+    })
+  }
+  return { accepted: true, state: cloneOpeningMatchState(nextState), events }
 }
 
 function applyDevAddCard(
@@ -1103,6 +1377,12 @@ export function createOpeningMatch(
       participantId: participant.participantId,
       controllerKind: participant.controllerKind,
       heroId: participant.heroId,
+      hero: {
+        health: hero.startingHealth,
+        maxHealth: hero.startingHealth,
+        attack: 0,
+        lastAttackedOnTurn: null
+      },
       playerNumber: (seatIndex + 1) as 1 | 2,
       deck: shuffled.slice(initialCount),
       hand: initialCards,
@@ -1124,6 +1404,8 @@ export function createOpeningMatch(
     playerTwoId: players[1].participantId,
     activePlayerId: null,
     turnNumber: 0,
+    winnerId: null,
+    loserId: null,
     players,
     revision: 0
   }
@@ -1146,6 +1428,10 @@ export function createOpeningMatch(
           'unknown-participant',
           `Unknown participant: ${command.participantId}`
         )
+      }
+
+      if (state.phase === 'ended') {
+        return reject(state, 'match-ended', 'The match has already ended.')
       }
 
       if (command.type === 'end-turn') {
@@ -1174,6 +1460,12 @@ export function createOpeningMatch(
 
       if (command.type === 'attack-minion') {
         const result = applyAttackMinion(state, playerIndex, command)
+        if (result.accepted) state = result.state
+        return result
+      }
+
+      if (command.type === 'attack-character') {
+        const result = applyAttackCharacter(state, playerIndex, command)
         if (result.accepted) state = result.state
         return result
       }

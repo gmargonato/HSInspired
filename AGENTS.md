@@ -1,3 +1,8 @@
+# Commiting and Pushing to GitHub
+
+You have access to GitHub CLI. Please make sure that we are using account 'gmargonato' email 'gabriel-merida@hotmail.com', and not another account in the machine. If you detect another account (for example gmargonato-arctiq, or gmargonato-mohawk) please make sure to switch to the correct one.
+Make sure to never use a command that could possibly pull and overwrite a local, uncommited code.
+
 # Agent Invariants & Engineering Guide
 
 This file is the single authoritative source of truth for repository architecture,

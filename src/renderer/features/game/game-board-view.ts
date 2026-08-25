@@ -17,10 +17,13 @@ import { HERO_CATALOG } from '../../../game/content/heroes'
 import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
 import {
   canBoardMinionAttack,
+  canHeroAttack,
+  getHeroAttack,
   hasSummoningSickness,
   MAX_BOARD_SIZE,
-  previewMinionCombat,
+  type AttackCharacterRef,
   type BoardMinion,
+  type CharacterCombatResolvedEvent,
   type MulliganResolvedEvent,
   type OpeningCard,
   type OpeningMatchEvent,
@@ -63,6 +66,7 @@ import {
   MinionView,
   type MinionViewTextures
 } from '../../rendering/minions/minion-view'
+import { HeroView } from '../../rendering/heroes/hero-view'
 import { WeaponView } from '../../rendering/weapons/weapon-view'
 import { AddCardPickerView } from './add-card-picker-view'
 import {
@@ -139,11 +143,13 @@ const BOARD_TIMING = {
 
 const COMBAT_ATTACKER_Z_INDEX = 100
 
-interface MinionCombatPlacement {
+interface CombatViewPlacement {
   readonly parent: Container
   readonly index: number
   readonly zIndex: number
 }
+
+type CombatView = MinionView | HeroView
 
 const SUMMON_GHOST_COLOR = 0x79e9ff
 const COMBAT_SHAKE_DIRECTIONS = [
@@ -224,8 +230,8 @@ export class GameBoardView extends Actor {
   private readonly addCardPicker: AddCardPickerView | null
   private readonly attackLineLayer = new Container()
   private readonly attackLine = new AttackLine()
-  private readonly combatPreviewMarkers = new Map<MinionView, Sprite>()
-  private selectedMinionView: MinionView | null = null
+  private readonly combatPreviewMarkers = new Map<CombatView, Sprite>()
+  private selectedCombatView: CombatView | null = null
   private combatInProgress = false
   private cardPlayInProgress = false
   /**
@@ -242,7 +248,7 @@ export class GameBoardView extends Actor {
   private readonly mulliganLayer = new Container()
   private readonly handLayer = new Container()
   private readonly remoteHandLayer = new Container()
-  private readonly heroSprites = new Map<PlayerId, Sprite>()
+  private readonly heroViews = new Map<PlayerId, HeroView>()
   /**
    * One hero power card per player. Both start on the back face, right of the
    * hero portraits, and flip up when the first turn starts.
@@ -316,7 +322,7 @@ export class GameBoardView extends Actor {
   private readonly handleWindowPointerDown = (event: PointerEvent): void => {
     if (event.button === 2) {
       this.endDrag()
-      if (this.selectedMinionView) {
+      if (this.selectedCombatView) {
         event.preventDefault()
         event.stopPropagation()
       }
@@ -344,7 +350,7 @@ export class GameBoardView extends Actor {
   }
   private readonly handleWindowBlur = (): void => this.endDrag()
   private readonly handleWindowKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.selectedMinionView) {
+    if (event.key === 'Escape' && this.selectedCombatView) {
       this.deselectAttacker()
     }
   }
@@ -390,6 +396,9 @@ export class GameBoardView extends Actor {
     this.weaponLayer.sortableChildren = true
     this.addChild(this.weaponLayer)
     this.addChild(this.heroPowerLayer)
+    this.heroLayer.label = 'game.heroes'
+    this.heroLayer.eventMode = 'passive'
+    this.heroLayer.sortableChildren = true
     this.addChild(this.openingLayer)
     this.addChild(this.heroLayer)
     this.addChild(this.deckLayer)
@@ -435,13 +444,22 @@ export class GameBoardView extends Actor {
       if (event.button === 2) this.deselectAttacker()
     })
     this.on('pointertap', (event: FederatedPointerEvent) => {
-      if (!this.selectedMinionView) return
+      if (!this.selectedCombatView) return
       if (event.button !== 0) return
       let target = event.target instanceof Container ? event.target : null
-      while (target && !target.label?.startsWith('game.minion.')) {
+      while (
+        target &&
+        !target.label?.startsWith('game.minion.') &&
+        !target.label?.startsWith('game.hero.') &&
+        target.label !== 'game.heroes'
+      ) {
         target = target.parent
       }
-      if (target?.label?.startsWith('game.minion.')) return
+      if (
+        target?.label?.startsWith('game.minion.') ||
+        target?.label?.startsWith('game.hero.')
+      )
+        return
       const targetLabel = target?.label
       // Click on empty board or hand background while targeting cancels.
       // Minion clicks are handled by wireMinionView already.
@@ -449,7 +467,8 @@ export class GameBoardView extends Actor {
         target === this ||
         targetLabel === 'game.board-minions-local' ||
         targetLabel === 'game.board-minions-remote' ||
-        targetLabel === 'game.equipped-weapons'
+        targetLabel === 'game.equipped-weapons' ||
+        targetLabel === 'game.heroes'
       ) {
         this.deselectAttacker()
       }
@@ -528,9 +547,9 @@ export class GameBoardView extends Actor {
     await this.wait(OPENING_TIMING.versusHold)
     this.logger.info('[GameBoardView] versusHold done')
     await Promise.all([
-      ...[...this.heroSprites.entries()].map(([participantId, sprite]) =>
+      ...[...this.heroViews.entries()].map(([participantId, view]) =>
         this.animateHeroToBoard(
-          sprite,
+          view,
           participantId === this.localParticipantId
             ? GAME_BOARD_LAYOUT.heroes.local
             : GAME_BOARD_LAYOUT.heroes.remote
@@ -568,11 +587,25 @@ export class GameBoardView extends Actor {
         player.participantId === this.localParticipantId
           ? GAME_BOARD_LAYOUT.heroes.localIntro
           : GAME_BOARD_LAYOUT.heroes.remoteIntro
-      const sprite = new Sprite(texture)
-      applyAnchoredPlacement(sprite, intro)
-      sprite.eventMode = 'none'
-      this.heroSprites.set(player.participantId, sprite)
-      this.heroLayer.addChild(sprite)
+      const view = HeroView.create(
+        {
+          label: `game.hero.${player.participantId}`,
+          attack: getHeroAttack(player),
+          health: player.hero.health,
+          maxHealth: player.hero.maxHealth
+        },
+        {
+          frame: texture,
+          attack: this.options.gameAssets.minionAttack,
+          health: this.options.gameAssets.minionHealth
+        }
+      )
+      applyPlacement(view, intro)
+      view.ownerId = player.participantId
+      view.eventMode = 'none'
+      this.wireHeroView(view)
+      this.heroViews.set(player.participantId, view)
+      this.heroLayer.addChild(view)
     }
   }
 
@@ -788,6 +821,27 @@ export class GameBoardView extends Actor {
       state,
       this.remoteParticipantId
     )
+    this.syncHeroAttackability(state, this.localParticipantId)
+    this.syncHeroAttackability(state, this.remoteParticipantId)
+  }
+
+  private syncHeroAttackability(state: OpeningMatchState, ownerId: PlayerId): void {
+    const player = this.findPlayer(state, ownerId)
+    const view = this.heroViews.get(ownerId)
+    if (!view) return
+    const displayedAttack = state.activePlayerId === ownerId ? getHeroAttack(player) : 0
+    view.setStats(displayedAttack, player.hero.health)
+    const canAttack = canHeroAttack(player, state, ownerId)
+    const showCanAttack = canAttack && ownerId === this.localParticipantId
+    view.setCanAttack(showCanAttack)
+    view.setTargetable(
+      ownerId === this.localParticipantId
+        ? showCanAttack
+        : state.phase === 'turns' && this.selectedCombatView !== null
+    )
+    if (!showCanAttack && this.selectedCombatView === view) {
+      this.deselectAttacker()
+    }
   }
 
   private syncMinionRowAttackability(
@@ -811,25 +865,25 @@ export class GameBoardView extends Actor {
       view.setTargetable(
         ownerId === this.localParticipantId
           ? showCanAttack
-          : state.phase === 'turns' && this.selectedMinionView !== null
+          : state.phase === 'turns' && this.selectedCombatView !== null
       )
       view.setSleeping(sleeping && state.phase === 'turns')
       if (sleeping || !showCanAttack) {
-        if (this.selectedMinionView === view) this.deselectAttacker()
+        if (this.selectedCombatView === view) this.deselectAttacker()
       }
     }
   }
 
-  private selectAttacker(view: MinionView): void {
+  private selectAttacker(view: CombatView): void {
     if (this.combatInProgress) return
     if (!view.isCanAttack()) return
-    if (this.selectedMinionView === view) {
+    if (this.selectedCombatView === view) {
       this.deselectAttacker()
       return
     }
     this.clearCombatPreview()
-    if (this.selectedMinionView) {
-      const previous = this.selectedMinionView
+    if (this.selectedCombatView) {
+      const previous = this.selectedCombatView
       previous.setSelected(false)
       this.tweenTo(previous, {
         y: previous.y + 12,
@@ -839,7 +893,7 @@ export class GameBoardView extends Actor {
       })
       previous.zIndex = 0
     }
-    this.selectedMinionView = view
+    this.selectedCombatView = view
     view.setSelected(true)
     this.tweenTo(view, {
       y: view.y - 12,
@@ -858,8 +912,8 @@ export class GameBoardView extends Actor {
 
   private deselectAttacker(animate = true, clearPreview = true): void {
     if (clearPreview) this.clearCombatPreview()
-    if (this.selectedMinionView) {
-      const view = this.selectedMinionView
+    if (this.selectedCombatView) {
+      const view = this.selectedCombatView
       view.setSelected(false)
       if (animate) {
         this.tweenTo(view, {
@@ -874,35 +928,35 @@ export class GameBoardView extends Actor {
       }
       view.zIndex = 0
     }
-    this.selectedMinionView = null
+    this.selectedCombatView = null
     this.attackLine.clear()
     this.options.cursor?.setTargeting(false)
     if (!this.combatInProgress) this.syncBoardAttackability(this.match.getState())
   }
 
   private handleBoardPointerMove(event: FederatedPointerEvent): void {
-    if (!this.selectedMinionView) {
+    if (!this.selectedCombatView) {
       if (!this.combatInProgress) this.clearCombatPreview()
       return
     }
-    const parent = this.selectedMinionView.parent
+    const parent = this.selectedCombatView.parent
     const from = parent
-      ? parent.toGlobal(this.selectedMinionView.position)
-      : this.selectedMinionView.getGlobalPosition()
+      ? parent.toGlobal(this.selectedCombatView.position)
+      : this.selectedCombatView.getGlobalPosition()
     const to = { x: event.globalX, y: event.globalY }
     const localFrom = this.attackLineLayer.toLocal(from)
     const localTo = this.attackLineLayer.toLocal(to)
     this.attackLine.setEndpoints(localFrom, localTo)
     const angle = Math.atan2(to.y - from.y, to.x - from.x)
     this.options.cursor?.setTargetingAngle(angle)
-    this.updateCombatPreview(this.findTargetMinion(event))
+    this.updateCombatPreview(this.findTargetCharacter(event))
   }
 
-  /** Resolves the opposing minion currently beneath a targeting pointer. */
-  private findTargetMinion(event: FederatedPointerEvent): MinionView | null {
+  /** Resolves the opposing character currently beneath a targeting pointer. */
+  private findTargetCharacter(event: FederatedPointerEvent): CombatView | null {
     let target = event.target instanceof Container ? event.target : null
     while (target) {
-      if (target instanceof MinionView) {
+      if (target instanceof MinionView || target instanceof HeroView) {
         return target.ownerId === this.remoteParticipantId && target.isTargetable()
           ? target
           : null
@@ -911,9 +965,15 @@ export class GameBoardView extends Actor {
     }
 
     // Global pointer events may report the board as their target. Fall back to
-    // transformed bounds so the preview still follows the hovered minion.
+    // transformed bounds so the preview still follows the hovered character.
+    const remoteViews: readonly CombatView[] = [
+      ...this.remoteMinionViews,
+      ...(this.heroViews.get(this.remoteParticipantId)
+        ? [this.heroViews.get(this.remoteParticipantId)!]
+        : [])
+    ]
     return (
-      this.remoteMinionViews.find((view) => {
+      remoteViews.find((view) => {
         if (!view.isTargetable()) return false
         const bounds = view.getBounds()
         return (
@@ -927,39 +987,58 @@ export class GameBoardView extends Actor {
   }
 
   /** Shows the lethal marker(s) for the currently hovered combat target. */
-  private updateCombatPreview(target: MinionView | null): void {
-    const attacker = this.selectedMinionView
-    if (
-      !attacker ||
-      !attacker.instanceId ||
-      !target ||
-      !target.instanceId ||
-      target.ownerId !== this.remoteParticipantId
-    ) {
+  private updateCombatPreview(target: CombatView | null): void {
+    const attacker = this.selectedCombatView
+    if (!attacker || !target || target.ownerId !== this.remoteParticipantId) {
       this.syncCombatPreviewMarkers([])
       return
     }
 
     const state = this.match.getState()
-    const attackerState = this.findPlayer(state, this.localParticipantId).board.find(
-      (minion) => minion.instanceId === attacker.instanceId
-    )
-    const defenderState = this.findPlayer(state, this.remoteParticipantId).board.find(
-      (minion) => minion.instanceId === target.instanceId
-    )
-    if (!attackerState || !defenderState) {
+    const attackerPlayer = this.findPlayer(state, this.localParticipantId)
+    const defenderPlayer = this.findPlayer(state, this.remoteParticipantId)
+    const attackerMinion =
+      attacker instanceof MinionView && attacker.instanceId
+        ? attackerPlayer.board.find(
+            (minion) => minion.instanceId === attacker.instanceId
+          )
+        : undefined
+    const defenderMinion =
+      target instanceof MinionView && target.instanceId
+        ? defenderPlayer.board.find((minion) => minion.instanceId === target.instanceId)
+        : undefined
+    if (attacker instanceof MinionView && !attackerMinion) {
+      this.syncCombatPreviewMarkers([])
+      return
+    }
+    if (target instanceof MinionView && !defenderMinion) {
       this.syncCombatPreviewMarkers([])
       return
     }
 
-    const combat = previewMinionCombat(attackerState, defenderState)
-    const lethalViews: MinionView[] = []
-    if (combat.attackerDestroyed) lethalViews.push(attacker)
-    if (combat.defenderDestroyed) lethalViews.push(target)
+    const attackerAttack =
+      attacker instanceof HeroView
+        ? getHeroAttack(attackerPlayer)
+        : (attackerMinion?.attack ?? 0)
+    const defenderAttack =
+      target instanceof MinionView ? (defenderMinion?.attack ?? 0) : 0
+    const attackerHealth =
+      attacker instanceof HeroView
+        ? attackerPlayer.hero.health
+        : (attackerMinion?.health ?? 0)
+    const defenderHealth =
+      target instanceof HeroView
+        ? defenderPlayer.hero.health
+        : (defenderMinion?.health ?? 0)
+    const attackerHealthAfter = Math.max(0, attackerHealth - defenderAttack)
+    const defenderHealthAfter = Math.max(0, defenderHealth - attackerAttack)
+    const lethalViews: CombatView[] = []
+    if (attackerHealthAfter === 0) lethalViews.push(attacker)
+    if (defenderHealthAfter === 0) lethalViews.push(target)
     this.syncCombatPreviewMarkers(lethalViews)
   }
 
-  private syncCombatPreviewMarkers(lethalViews: readonly MinionView[]): void {
+  private syncCombatPreviewMarkers(lethalViews: readonly CombatView[]): void {
     const desired = new Set(lethalViews)
     for (const [view, marker] of this.combatPreviewMarkers) {
       if (desired.has(view)) continue
@@ -1001,12 +1080,20 @@ export class GameBoardView extends Actor {
     this.combatPreviewMarkers.clear()
   }
 
-  /** Dispatches an attack against the clicked opposing minion. */
-  private async attackMinion(target: MinionView): Promise<void> {
-    const attacker = this.selectedMinionView
+  private characterRef(view: CombatView): AttackCharacterRef | null {
+    if (view instanceof HeroView) return { kind: 'hero' }
+    return view.instanceId ? { kind: 'minion', instanceId: view.instanceId } : null
+  }
+
+  /** Dispatches an attack against the clicked opposing character. */
+  private async attackCharacter(target: CombatView): Promise<void> {
+    const attacker = this.selectedCombatView
     if (this.combatInProgress || !attacker) return
-    if (!attacker.instanceId || !target.instanceId) return
     if (target.ownerId !== this.remoteParticipantId) return
+
+    const attackerRef = this.characterRef(attacker)
+    const defenderRef = this.characterRef(target)
+    if (!attackerRef || !defenderRef) return
 
     // The target click can arrive before a pointermove in the same frame; make
     // sure the lethal preview exists before committing the command.
@@ -1014,10 +1101,10 @@ export class GameBoardView extends Actor {
     this.combatInProgress = true
     this.deselectAttacker(false, false)
     const result = this.match.dispatch({
-      type: 'attack-minion',
+      type: 'attack-character',
       participantId: this.localParticipantId,
-      attackerInstanceId: attacker.instanceId,
-      defenderInstanceId: target.instanceId
+      attacker: attackerRef,
+      defender: defenderRef
     })
     if (!result.accepted) {
       this.logger.error(result.message)
@@ -1439,6 +1526,12 @@ export class GameBoardView extends Actor {
         return
       case 'minion-combat-resolved':
         await this.presentMinionCombat(event)
+        return
+      case 'character-combat-resolved':
+        await this.presentCharacterCombat(event)
+        return
+      case 'match-ended':
+        this.syncTurnControls(this.match.getState())
         return
       case 'dev-card-added':
         await this.presentDevCardAdded(event)
@@ -1934,13 +2027,13 @@ export class GameBoardView extends Actor {
       return
     }
 
-    let attackerPlacement: MinionCombatPlacement | null = null
+    let attackerPlacement: CombatViewPlacement | null = null
     try {
       const attackerOrigin = { x: attacker.x, y: attacker.y }
       const defenderOrigin = { x: defender.x, y: defender.y }
       const attackerGlobal = attacker.parent.toGlobal(attacker.position)
       const defenderGlobal = defender.parent.toGlobal(defender.position)
-      attackerPlacement = this.promoteMinionForCombat(attacker)
+      attackerPlacement = this.promoteCombatViewForCombat(attacker)
       const attackDistance = Math.hypot(
         defenderGlobal.x - attackerGlobal.x,
         defenderGlobal.y - attackerGlobal.y
@@ -2040,14 +2133,150 @@ export class GameBoardView extends Actor {
 
       if (event.attacker.destroyed) this.removeMinionView(attacker)
       else if (attackerPlacement) {
-        this.restoreMinionAfterCombat(attacker, attackerPlacement)
+        this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
       }
       if (event.defender.destroyed) this.removeMinionView(defender)
       this.applyLocalBoardLayout()
       this.applyRemoteBoardLayout()
     } finally {
       if (!attacker.destroyed && attackerPlacement) {
-        this.restoreMinionAfterCombat(attacker, attackerPlacement)
+        this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
+      }
+      this.clearCombatPreview()
+    }
+  }
+
+  private async presentCharacterCombat(
+    event: CharacterCombatResolvedEvent
+  ): Promise<void> {
+    const attacker = this.findCombatView(
+      event.attacker.participantId,
+      event.attacker.character
+    )
+    const defender = this.findCombatView(
+      event.defender.participantId,
+      event.defender.character
+    )
+    if (!attacker || !defender || !attacker.parent || !defender.parent) {
+      this.clearCombatPreview()
+      return
+    }
+
+    let attackerPlacement: CombatViewPlacement | null = null
+    try {
+      const attackerOrigin = { x: attacker.x, y: attacker.y }
+      const defenderOrigin = { x: defender.x, y: defender.y }
+      const attackerGlobal = attacker.parent.toGlobal(attacker.position)
+      const defenderGlobal = defender.parent.toGlobal(defender.position)
+      attackerPlacement = this.promoteCombatViewForCombat(attacker)
+      const attackDistance = Math.hypot(
+        defenderGlobal.x - attackerGlobal.x,
+        defenderGlobal.y - attackerGlobal.y
+      )
+      const attackDirection =
+        attackDistance > 0
+          ? {
+              x: (defenderGlobal.x - attackerGlobal.x) / attackDistance,
+              y: (defenderGlobal.y - attackerGlobal.y) / attackDistance
+            }
+          : { x: 0, y: 1 }
+      const windupGlobal = {
+        x: attackerGlobal.x - attackDirection.x * BOARD_TIMING.combatWindupDistance,
+        y: attackerGlobal.y - attackDirection.y * BOARD_TIMING.combatWindupDistance
+      }
+      const contactGlobal = {
+        x: attackerGlobal.x + (defenderGlobal.x - attackerGlobal.x) * 0.62,
+        y: attackerGlobal.y + (defenderGlobal.y - attackerGlobal.y) * 0.62
+      }
+      const windup = attacker.parent.toLocal(windupGlobal)
+      const contact = attacker.parent.toLocal(contactGlobal)
+      const followDeathMarkers = (): void => this.updateCombatMarkerPositions()
+
+      this.updateCombatMarkerPositions()
+      const windupTimeline = this.timeline()
+      windupTimeline.to(attacker, {
+        x: windup.x,
+        y: windup.y,
+        duration: BOARD_TIMING.combatWindup,
+        ease: 'power2.out'
+      })
+      windupTimeline.eventCallback('onUpdate', followDeathMarkers)
+      await this.completeTimeline(windupTimeline)
+      await this.wait(BOARD_TIMING.combatWindupPause)
+
+      const lunge = this.timeline()
+      lunge.to(attacker, {
+        x: contact.x,
+        y: contact.y,
+        duration: BOARD_TIMING.combatLunge,
+        ease: 'power2.in'
+      })
+      lunge.eventCallback('onUpdate', followDeathMarkers)
+      await this.completeTimeline(lunge)
+
+      attacker.setStats(event.attacker.attack, event.attacker.healthAfter)
+      defender.setStats(event.defender.attack, event.defender.healthAfter)
+      followDeathMarkers()
+      const screenShake = this.runCombatScreenShake(event.attacker.attack)
+      await this.wait(BOARD_TIMING.combatImpact)
+
+      const settle = (
+        view: CombatView,
+        origin: { x: number; y: number },
+        destroyed: boolean
+      ): Promise<void> => {
+        if (view.destroyed) return Promise.resolve()
+        const timeline = this.timeline()
+        // Heroes remain visible at zero Health so the terminal state is clear;
+        // minions retain the existing death collapse presentation.
+        if (destroyed && view instanceof MinionView) {
+          timeline
+            .to(view, {
+              alpha: 0,
+              duration: BOARD_TIMING.combatDeath,
+              ease: 'power2.in'
+            })
+            .to(
+              view.scale,
+              {
+                x: view.scale.x * 0.7,
+                y: view.scale.y * 0.7,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              0
+            )
+        } else {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        }
+        timeline.eventCallback('onUpdate', followDeathMarkers)
+        return this.completeTimeline(timeline)
+      }
+
+      await Promise.all([
+        settle(attacker, attackerOrigin, event.attacker.destroyed),
+        settle(defender, defenderOrigin, event.defender.destroyed),
+        screenShake
+      ])
+
+      if (event.attacker.destroyed && attacker instanceof MinionView) {
+        this.removeMinionView(attacker)
+      } else if (attackerPlacement) {
+        this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
+      }
+      if (event.defender.destroyed && defender instanceof MinionView) {
+        this.removeMinionView(defender)
+      }
+      this.applyLocalBoardLayout()
+      this.applyRemoteBoardLayout()
+    } finally {
+      if (!attacker.destroyed && attackerPlacement) {
+        this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
       }
       this.clearCombatPreview()
     }
@@ -2084,20 +2313,21 @@ export class GameBoardView extends Actor {
     }
   }
 
-  /** Places the authored 1x marker above a minion during lethal preview/combat. */
-  private createDeathMarker(view: MinionView): Sprite {
+  /** Places the authored 1x marker above a character during lethal preview/combat. */
+  private createDeathMarker(view: CombatView): Sprite {
     const marker = new Sprite(this.options.gameAssets.minionWillDie)
     marker.anchor.set(0.5)
     marker.scale.set(0.8)
     this.positionDeathMarker(marker, view)
     marker.zIndex = 1000
     marker.eventMode = 'none'
-    marker.label = `game.minion.will-die.${view.instanceId ?? 'unknown'}`
+    const ref = view instanceof HeroView ? 'hero' : (view.instanceId ?? 'unknown')
+    marker.label = `game.character.will-die.${ref}`
     this.combatOverlayLayer.addChild(marker)
     return marker
   }
 
-  private positionDeathMarker(marker: Sprite, view: MinionView): void {
+  private positionDeathMarker(marker: Sprite, view: CombatView): void {
     const global = view.parent
       ? view.parent.toGlobal(view.position)
       : view.getGlobalPosition()
@@ -2116,11 +2346,19 @@ export class GameBoardView extends Actor {
     return views.find((view) => view.instanceId === instanceId)
   }
 
+  private findCombatView(
+    ownerId: PlayerId,
+    character: AttackCharacterRef
+  ): CombatView | undefined {
+    if (character.kind === 'hero') return this.heroViews.get(ownerId)
+    return this.findMinionView(ownerId, character.instanceId)
+  }
+
   /** Temporarily lifts the attacker above both board rows without changing its screen position. */
-  private promoteMinionForCombat(view: MinionView): MinionCombatPlacement {
+  private promoteCombatViewForCombat(view: CombatView): CombatViewPlacement {
     const parent = view.parent
     if (!parent) {
-      throw new Error('Cannot promote a minion without a board parent.')
+      throw new Error('Cannot promote a combat character without a board parent.')
     }
 
     const placement = {
@@ -2137,9 +2375,9 @@ export class GameBoardView extends Actor {
   }
 
   /** Returns a surviving attacker to its original row and draw order. */
-  private restoreMinionAfterCombat(
-    view: MinionView,
-    placement: MinionCombatPlacement
+  private restoreCombatViewAfterCombat(
+    view: CombatView,
+    placement: CombatViewPlacement
   ): void {
     if (view.destroyed || view.parent === placement.parent) {
       if (!view.destroyed) view.zIndex = placement.zIndex
@@ -2194,8 +2432,24 @@ export class GameBoardView extends Actor {
         this.handleBoardPointerMove(event)
         return
       }
-      if (view.ownerId === this.remoteParticipantId && this.selectedMinionView) {
-        void this.attackMinion(view)
+      if (view.ownerId === this.remoteParticipantId && this.selectedCombatView) {
+        void this.attackCharacter(view)
+      }
+    })
+  }
+
+  private wireHeroView(view: HeroView): void {
+    view.on('pointertap', (event: FederatedPointerEvent) => {
+      if (event.button !== 0) return
+      if (this.combatInProgress || !view.isTargetable()) return
+      if (view.ownerId === this.localParticipantId) {
+        if (!view.isCanAttack()) return
+        this.selectAttacker(view)
+        this.handleBoardPointerMove(event)
+        return
+      }
+      if (view.ownerId === this.remoteParticipantId && this.selectedCombatView) {
+        void this.attackCharacter(view)
       }
     })
   }
@@ -2824,6 +3078,22 @@ export class GameBoardView extends Actor {
           const halfH = (MINION_CANVAS.height * view.scale.y) / 2
           if (Math.abs(x - view.x) < halfW && Math.abs(y - view.y) < halfH) return false
         }
+        for (const view of this.heroViews.values()) {
+          const bounds = view.getBounds()
+          const topLeft = this.handLayer.toLocal({ x: bounds.x, y: bounds.y })
+          const bottomRight = this.handLayer.toLocal({
+            x: bounds.x + bounds.width,
+            y: bounds.y + bounds.height
+          })
+          if (
+            x >= topLeft.x &&
+            x <= bottomRight.x &&
+            y >= topLeft.y &&
+            y <= bottomRight.y
+          ) {
+            return false
+          }
+        }
         return true
       }
     } as unknown as Rectangle
@@ -2895,7 +3165,7 @@ export class GameBoardView extends Actor {
    */
   private onHandPointerDown(event: FederatedPointerEvent): void {
     if (this.combatInProgress || this.cardPlayInProgress) return
-    if (this.selectedMinionView) {
+    if (this.selectedCombatView) {
       this.deselectAttacker()
       return
     }
@@ -3148,6 +3418,11 @@ export class GameBoardView extends Actor {
       view.dispose()
     }
     this.heroPowerViews.clear()
+    for (const view of this.heroViews.values()) {
+      view.removeFromParent()
+      view.destroy({ children: true })
+    }
+    this.heroViews.clear()
     this.addCardPicker?.dispose()
     this.hud.dispose()
     for (const view of this.localMinionViews) {
@@ -3305,16 +3580,19 @@ export class GameBoardView extends Actor {
     return this.completeTimeline(timeline)
   }
 
-  private animateHeroToBoard(sprite: Sprite, target: LayoutPlacement): Promise<void> {
+  private async animateHeroToBoard(
+    view: HeroView,
+    target: LayoutPlacement
+  ): Promise<void> {
     const timeline = this.timeline()
-    timeline.to(sprite, {
+    timeline.to(view, {
       x: target.position.x,
       y: target.position.y,
       duration: OPENING_TIMING.heroSettle,
       ease: 'power2.inOut'
     })
     timeline.to(
-      sprite.scale,
+      view.scale,
       {
         x: target.scale?.x ?? 1,
         y: target.scale?.y ?? 1,
@@ -3323,7 +3601,10 @@ export class GameBoardView extends Actor {
       },
       0
     )
-    return this.completeTimeline(timeline)
+    await this.completeTimeline(timeline)
+    // Keep selection/hover animation targets aligned with the settled board
+    // scale rather than the larger versus-intro scale.
+    if (!view.destroyed) view.setBaseScale(target.scale?.x ?? 1)
   }
 
   private animateSlotToHand(

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { asHeroId } from '../content/cards'
+import { asCardId, asHeroId } from '../content/cards'
 import type { Deck } from '../decks'
 import {
+  canHeroAttack,
+  getHeroAttack,
   MAX_BOARD_SIZE,
   createOpeningMatch,
   previewMinionCombat,
@@ -980,7 +982,7 @@ describe('playing weapons', () => {
       participantId,
       replacedWeapon: {
         instanceId: firstCard.instanceId,
-        cardId: 'basic_fiery_war_axe',
+        cardId: asCardId('basic_fiery_war_axe'),
         attack: 3,
         durability: 2,
         maxDurability: 2
@@ -1046,6 +1048,208 @@ describe('playing weapons', () => {
       cardInstanceId: spell.instanceId
     })
     expectRejectedWithoutMutation(match, invalidType, 'not-a-weapon', beforeMana)
+  })
+})
+
+describe('hero combat', () => {
+  it('initializes hero Health and keeps hero Attack separate from weapons', () => {
+    const { state } = startTurns()
+    for (const player of state.players) {
+      expect(player.hero).toEqual({
+        health: 30,
+        maxHealth: 30,
+        attack: 0,
+        lastAttackedOnTurn: null
+      })
+      expect(getHeroAttack(player)).toBe(0)
+    }
+
+    const syntheticPlayer = {
+      hero: { health: 30, maxHealth: 30, attack: 2, lastAttackedOnTurn: null },
+      weapon: {
+        instanceId: 'synthetic-weapon',
+        cardId: asCardId('basic_fiery_war_axe'),
+        attack: 3,
+        durability: 2,
+        maxDurability: 2
+      }
+    }
+    expect(getHeroAttack(syntheticPlayer)).toBe(5)
+    expect(
+      canHeroAttack(
+        syntheticPlayer,
+        { ...state, phase: 'turns', activePlayerId: state.players[0].participantId },
+        state.players[0].participantId
+      )
+    ).toBe(true)
+  })
+
+  it('allows a minion to attack the enemy hero without retaliation', () => {
+    const { match, attackerId } = createCombatMatch(
+      'basic_dalaran_mage',
+      'basic_bloodfen_raptor'
+    )
+    const participantId = match.getState().activePlayerId
+    if (!participantId) throw new Error('Expected an active participant.')
+
+    const result = match.dispatch({
+      type: 'attack-character',
+      participantId,
+      attacker: { kind: 'minion', instanceId: attackerId },
+      defender: { kind: 'hero' }
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    expect(result.events.map((event) => event.type)).toEqual([
+      'character-combat-resolved'
+    ])
+
+    const state = match.getState()
+    const attacker = state.players.find(
+      (player) => player.participantId === participantId
+    )
+    const defender = state.players.find(
+      (player) => player.participantId !== participantId
+    )
+    expect(attacker?.hero.health).toBe(30)
+    expect(attacker?.board[0]?.lastAttackedOnTurn).toBe(state.turnNumber)
+    expect(defender?.hero.health).toBe(29)
+  })
+
+  it('lets an armed hero attack a minion, take retaliation, and spend durability', () => {
+    const { match, defenderId } = createCombatMatch(
+      'basic_dalaran_mage',
+      'basic_bloodfen_raptor'
+    )
+    const participantId = match.getState().activePlayerId
+    if (!participantId) throw new Error('Expected an active participant.')
+    const added = match.dispatch({
+      type: 'dev-add-card',
+      participantId,
+      cardId: 'basic_fiery_war_axe'
+    })
+    expect(added.accepted).toBe(true)
+    if (!added.accepted) throw new Error(added.message)
+    const card = added.events.find((event) => event.type === 'dev-card-added')
+    if (!card || card.type !== 'dev-card-added')
+      throw new Error('Expected weapon card.')
+    const mana = match.dispatch({
+      type: 'dev-set-mana',
+      participantId,
+      available: 10,
+      maximum: 10
+    })
+    expect(mana.accepted).toBe(true)
+    const equipped = match.dispatch({
+      type: 'play-weapon',
+      participantId,
+      cardInstanceId: card.card.instanceId
+    })
+    expect(equipped.accepted).toBe(true)
+
+    const result = match.dispatch({
+      type: 'attack-character',
+      participantId,
+      attacker: { kind: 'hero' },
+      defender: { kind: 'minion', instanceId: defenderId }
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    const combat = result.events.find(
+      (event) => event.type === 'character-combat-resolved'
+    )
+    if (!combat || combat.type !== 'character-combat-resolved') {
+      throw new Error('Expected character combat event.')
+    }
+    expect(combat.weapon).toMatchObject({ durabilityBefore: 2, durabilityAfter: 1 })
+    const state = match.getState()
+    const attacker = state.players.find(
+      (player) => player.participantId === participantId
+    )
+    expect(attacker?.hero.health).toBe(27)
+    expect(attacker?.hero.lastAttackedOnTurn).toBe(state.turnNumber)
+    expect(attacker?.weapon?.durability).toBe(1)
+    expect(
+      state.players.find((player) => player.participantId !== participantId)?.board
+    ).toHaveLength(0)
+
+    const repeated = match.dispatch({
+      type: 'attack-character',
+      participantId,
+      attacker: { kind: 'hero' },
+      defender: { kind: 'hero' }
+    })
+    expect(repeated.accepted).toBe(false)
+    if (repeated.accepted) throw new Error('Expected repeated hero attack rejection.')
+    expect(repeated.code).toBe('hero-cannot-attack')
+  })
+
+  it('ends the match at zero hero Health and rejects later commands', () => {
+    const match = createOpeningMatch(
+      makeSetup(),
+      [makeDeck('human-deck', 'basic_fiery_war_axe'), makeDeck('ai-deck')],
+      createFixedOpeningRng(0)
+    )
+    startTurnsForMatch(match)
+    let attackerId = match.getState().activePlayerId
+    if (!attackerId) throw new Error('Expected an active participant.')
+
+    for (let attack = 0; attack < 10; attack += 1) {
+      const card = match
+        .getState()
+        .players.find((player) => player.participantId === attackerId)
+        ?.hand.find((candidate) => candidate.cardId === 'basic_fiery_war_axe')
+      if (!card) throw new Error('Expected weapon card.')
+      const mana = match.dispatch({
+        type: 'dev-set-mana',
+        participantId: attackerId,
+        available: 10,
+        maximum: 10
+      })
+      expect(mana.accepted).toBe(true)
+      const equipped = match.dispatch({
+        type: 'play-weapon',
+        participantId: attackerId,
+        cardInstanceId: card.instanceId
+      })
+      expect(equipped.accepted).toBe(true)
+      const attacked = match.dispatch({
+        type: 'attack-character',
+        participantId: attackerId,
+        attacker: { kind: 'hero' },
+        defender: { kind: 'hero' }
+      })
+      expect(attacked.accepted).toBe(true)
+      if (!attacked.accepted) throw new Error(attacked.message)
+      if (attack === 9) {
+        expect(attacked.state.phase).toBe('ended')
+        expect(attacked.events.map((event) => event.type)).toEqual([
+          'character-combat-resolved',
+          'match-ended'
+        ])
+        break
+      }
+      const end = match.dispatch({ type: 'end-turn', participantId: attackerId })
+      expect(end.accepted).toBe(true)
+      const opponentTurn = match.getState().activePlayerId
+      if (!opponentTurn) throw new Error('Expected opponent turn.')
+      const pass = match.dispatch({ type: 'end-turn', participantId: opponentTurn })
+      expect(pass.accepted).toBe(true)
+      attackerId = match.getState().activePlayerId
+      if (!attackerId) throw new Error('Expected next attacker turn.')
+    }
+
+    const ended = match.getState()
+    expect(ended.phase).toBe('ended')
+    expect(ended.activePlayerId).toBeNull()
+    expect(ended.players.some((player) => player.hero.health === 0)).toBe(true)
+    const rejected = match.dispatch({
+      type: 'end-turn',
+      participantId: ended.playerOneId
+    })
+    expect(rejected.accepted).toBe(false)
+    if (rejected.accepted) throw new Error('Expected terminal command rejection.')
+    expect(rejected.code).toBe('match-ended')
   })
 })
 
