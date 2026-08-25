@@ -208,16 +208,16 @@ export const GAME_BOARD_LAYOUT = {
   /** End-of-match result frame, local hero portrait, and continuation prompt. */
   matchResult: {
     frame: placement(
-      { x: 960, y: 485 },
+      { x: 960, y: 540 },
       { width: 1374, height: 1145 },
       {
         anchor: CENTER,
-        scale: 0.72,
+        scale: 1,
         note: 'Win or defeat artwork centered over the blurred gameplay board.'
       }
     ),
     localHero: placement(
-      { x: 960, y: 485 },
+      { x: 960, y: 430 },
       { width: 345, height: 433 },
       {
         anchor: CENTER,

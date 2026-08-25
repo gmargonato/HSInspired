@@ -15,11 +15,11 @@ export const HERO_LAYOUT = {
     }
   ),
   attackBadge: placement(
-    { x: 78, y: 382 },
+    { x: 50, y: 360 },
     { width: 44, height: 51 },
     {
       anchor: CENTER,
-      scale: 0.9,
+      scale: 2,
       note: 'Effective hero Attack; hidden while zero.'
     }
   ),

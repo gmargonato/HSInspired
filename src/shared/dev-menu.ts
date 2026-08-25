@@ -29,12 +29,19 @@ export interface DevDeckEntry {
 }
 
 export type CollectibleMode = 'all' | 'collectible' | 'uncollectible'
+export type DevMatchTarget = 'local' | 'remote'
+export type DevCardPickerAction = 'add-to-hand' | 'summon'
 
 export type DevCommand =
   | { readonly type: 'collection:set-collectible'; readonly mode: CollectibleMode }
   | { readonly type: 'game:toggle-tracker' }
-  | { readonly type: 'game:open-add-card-picker' }
+  | {
+      readonly type: 'game:open-card-picker'
+      readonly target: DevMatchTarget
+      readonly action: DevCardPickerAction
+    }
   | { readonly type: 'game:add-card'; readonly cardId: string }
+  | { readonly type: 'game:end-match'; readonly outcome: 'win' | 'lose' }
   | {
       readonly type: 'game:set-mana'
       readonly available: number
@@ -82,6 +89,14 @@ export function isCollectibleMode(value: unknown): value is CollectibleMode {
   return value === 'all' || value === 'collectible' || value === 'uncollectible'
 }
 
+function isDevMatchTarget(value: unknown): value is DevMatchTarget {
+  return value === 'local' || value === 'remote'
+}
+
+function isDevCardPickerAction(value: unknown): value is DevCardPickerAction {
+  return value === 'add-to-hand' || value === 'summon'
+}
+
 export function isDevCommand(value: unknown): value is DevCommand {
   if (!isRecord(value) || typeof value.type !== 'string') return false
   if (value.type === 'collection:set-collectible') {
@@ -89,10 +104,19 @@ export function isDevCommand(value: unknown): value is DevCommand {
     return isCollectibleMode(mode)
   }
   if (value.type === 'game:toggle-tracker') return true
-  if (value.type === 'game:open-add-card-picker') return true
+  if (value.type === 'game:open-card-picker') {
+    return (
+      isDevMatchTarget((value as { target?: unknown }).target) &&
+      isDevCardPickerAction((value as { action?: unknown }).action)
+    )
+  }
   if (value.type === 'game:add-card') {
     const cardId = (value as { cardId?: unknown }).cardId
     return typeof cardId === 'string' && cardId.length > 0
+  }
+  if (value.type === 'game:end-match') {
+    const outcome = (value as { outcome?: unknown }).outcome
+    return outcome === 'win' || outcome === 'lose'
   }
   if (value.type === 'game:set-mana') {
     const available = (value as { available?: unknown }).available

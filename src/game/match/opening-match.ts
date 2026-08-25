@@ -163,6 +163,18 @@ export interface DevSetManaCommand {
   readonly maximum: number
 }
 
+export interface DevSummonMinionCommand {
+  readonly type: 'dev-summon-minion'
+  readonly participantId: PlayerId
+  readonly cardId: CardId
+}
+
+export interface DevEndMatchCommand {
+  readonly type: 'dev-end-match'
+  readonly participantId: PlayerId
+  readonly winnerId: PlayerId
+}
+
 export type OpeningMatchCommand =
   | ConfirmMulliganCommand
   | EndTurnCommand
@@ -173,6 +185,8 @@ export type OpeningMatchCommand =
   | AttackCharacterCommand
   | DevAddCardCommand
   | DevSetManaCommand
+  | DevSummonMinionCommand
+  | DevEndMatchCommand
 
 export interface MulliganResolvedEvent {
   readonly type: 'mulligan-resolved'
@@ -289,7 +303,7 @@ export interface MatchEndedEvent {
   readonly type: 'match-ended'
   readonly winnerId: PlayerId
   readonly loserId: PlayerId
-  readonly reason: 'hero-health-depleted'
+  readonly reason: 'hero-health-depleted' | 'dev-forced'
 }
 
 export interface DevCardAddedEvent {
@@ -302,6 +316,13 @@ export interface DevManaSetEvent {
   readonly type: 'dev-mana-set'
   readonly participantId: PlayerId
   readonly mana: PlayerMana
+}
+
+export interface DevMinionSummonedEvent {
+  readonly type: 'dev-minion-summoned'
+  readonly participantId: PlayerId
+  readonly minion: BoardMinion
+  readonly position: number
 }
 
 export type OpeningMatchEvent =
@@ -320,6 +341,7 @@ export type OpeningMatchEvent =
   | MatchEndedEvent
   | DevCardAddedEvent
   | DevManaSetEvent
+  | DevMinionSummonedEvent
 
 export interface OpeningAcceptedResult {
   readonly accepted: true
@@ -559,6 +581,24 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
       participantId: value.participantId as PlayerId,
       available: value.available,
       maximum: value.maximum
+    }
+  }
+
+  if (value.type === 'dev-summon-minion') {
+    if (typeof value.cardId !== 'string') return null
+    return {
+      type: 'dev-summon-minion',
+      participantId: value.participantId as PlayerId,
+      cardId: value.cardId as CardId
+    }
+  }
+
+  if (value.type === 'dev-end-match') {
+    if (typeof value.winnerId !== 'string') return null
+    return {
+      type: 'dev-end-match',
+      participantId: value.participantId as PlayerId,
+      winnerId: value.winnerId as PlayerId
     }
   }
 
@@ -1258,6 +1298,9 @@ function applyDevAddCard(
   command: DevAddCardCommand,
   counter: number
 ): OpeningCommandResult & { nextCounter?: number } {
+  if (state.phase !== 'turns') {
+    return reject(state, 'wrong-phase', 'Turns have not started yet.')
+  }
   const player = state.players[playerIndex]
   if (player.hand.length >= MAX_HAND_SIZE) {
     return reject(state, 'hand-full', 'The hand is full.')
@@ -1296,6 +1339,96 @@ function applyDevAddCard(
       }
     ],
     nextCounter: counter + 1
+  }
+}
+
+function applyDevSummonMinion(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1,
+  command: DevSummonMinionCommand,
+  counter: number
+): OpeningCommandResult & { nextCounter?: number } {
+  if (state.phase !== 'turns') {
+    return reject(state, 'wrong-phase', 'Turns have not started yet.')
+  }
+
+  const player = state.players[playerIndex]
+  if (player.board.length >= MAX_BOARD_SIZE) {
+    return reject(state, 'board-full', 'The board is full.')
+  }
+  const definition = CARD_CATALOG.get(command.cardId)
+  if (!definition) {
+    return reject(state, 'unknown-card', `Unknown card ${command.cardId}.`)
+  }
+  if (definition.type !== 'Minion') {
+    return reject(state, 'not-a-minion', 'Only minion cards can be summoned.')
+  }
+
+  const minion: BoardMinion = {
+    instanceId: `${player.participantId}:dev:${counter}`,
+    cardId: definition.id,
+    attack: definition.attack,
+    health: definition.health,
+    summonedOnTurn: state.turnNumber,
+    lastAttackedOnTurn: null
+  }
+  const position = player.board.length
+  const nextPlayer: OpeningPlayerState = {
+    ...player,
+    board: [...player.board.map(cloneBoardMinion), minion]
+  }
+  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+  nextPlayers[playerIndex] = nextPlayer
+  const nextState: OpeningMatchState = {
+    ...state,
+    players: nextPlayers,
+    revision: state.revision + 1
+  }
+  return {
+    accepted: true,
+    state: cloneOpeningMatchState(nextState),
+    events: [
+      {
+        type: 'dev-minion-summoned',
+        participantId: player.participantId,
+        minion: cloneBoardMinion(minion),
+        position
+      }
+    ],
+    nextCounter: counter + 1
+  }
+}
+
+function applyDevEndMatch(
+  state: OpeningMatchState,
+  command: DevEndMatchCommand
+): OpeningCommandResult {
+  if (state.phase !== 'turns') {
+    return reject(state, 'wrong-phase', 'Turns have not started yet.')
+  }
+  const winnerIndex = findPlayerIndex(state.players, command.winnerId)
+  if (winnerIndex === -1) {
+    return reject(
+      state,
+      'unknown-participant',
+      `Unknown participant: ${command.winnerId}`
+    )
+  }
+  const loserIndex: 0 | 1 = winnerIndex === 0 ? 1 : 0
+  const winnerId = state.players[winnerIndex].participantId
+  const loserId = state.players[loserIndex].participantId
+  const nextState: OpeningMatchState = {
+    ...state,
+    phase: 'ended',
+    activePlayerId: null,
+    winnerId,
+    loserId,
+    revision: state.revision + 1
+  }
+  return {
+    accepted: true,
+    state: cloneOpeningMatchState(nextState),
+    events: [{ type: 'match-ended', winnerId, loserId, reason: 'dev-forced' }]
   }
 }
 
@@ -1481,6 +1614,21 @@ export function createOpeningMatch(
 
       if (command.type === 'dev-set-mana') {
         const result = applyDevSetMana(state, playerIndex, command)
+        if (result.accepted) state = result.state
+        return result
+      }
+
+      if (command.type === 'dev-summon-minion') {
+        const result = applyDevSummonMinion(state, playerIndex, command, devCardCounter)
+        if (result.accepted) {
+          state = result.state
+          if (result.nextCounter !== undefined) devCardCounter = result.nextCounter
+        }
+        return result
+      }
+
+      if (command.type === 'dev-end-match') {
+        const result = applyDevEndMatch(state, command)
         if (result.accepted) state = result.state
         return result
       }

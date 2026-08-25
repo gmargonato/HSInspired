@@ -24,6 +24,12 @@ export interface AddCardPickerViewOptions {
   readonly onSelect: (cardId: CardId) => Promise<void>
 }
 
+export interface AddCardPickerOpenOptions {
+  readonly title: string
+  readonly successMessage: string
+  readonly cards?: readonly CardDefinition[]
+}
+
 type StatusKind = 'info' | 'error'
 
 /** CSS/HTML card picker presented above the active match canvas. */
@@ -41,6 +47,8 @@ export class AddCardPickerView {
   private readonly resultCount: HTMLDivElement
   private readonly resultsViewport: HTMLDivElement
   private readonly cards: readonly CardDefinition[]
+  private visibleCards: readonly CardDefinition[]
+  private successMessage = 'Card added.'
   private filters: AddCardPickerFilters = {
     query: '',
     cardClass: ALL_ADD_CARD_FILTER_VALUE,
@@ -56,6 +64,7 @@ export class AddCardPickerView {
     cards: readonly CardDefinition[] = CARD_CATALOG.all
   ) {
     this.cards = cards
+    this.visibleCards = cards
     this.root = document.createElement('div')
     this.root.className = 'add-card-picker'
     this.root.setAttribute('aria-hidden', 'true')
@@ -149,10 +158,17 @@ export class AddCardPickerView {
     return this.isOpen
   }
 
-  open(): void {
+  open(options: AddCardPickerOpenOptions): void {
     if (this.disposed) return
 
+    this.title.textContent = options.title
+    this.successMessage = options.successMessage
+    this.visibleCards = options.cards ?? this.cards
+
     if (this.isOpen) {
+      this.setStatus('', 'info')
+      this.renderResults()
+      this.updateLayout()
       this.searchInput.focus()
       return
     }
@@ -225,7 +241,7 @@ export class AddCardPickerView {
   }
 
   private renderResults(): void {
-    const cards = filterAddCardCards(this.cards, this.filters)
+    const cards = filterAddCardCards(this.visibleCards, this.filters)
     this.resultCount.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'}`
     this.resultsViewport.replaceChildren()
 
@@ -285,7 +301,8 @@ export class AddCardPickerView {
       await this.options.onSelect(cardId)
       this.isSubmitting = false
       this.updateSubmissionState()
-      this.closeInternal()
+      this.setStatus(this.successMessage, 'info')
+      this.searchInput.focus()
     } catch (error) {
       this.isSubmitting = false
       this.updateSubmissionState()

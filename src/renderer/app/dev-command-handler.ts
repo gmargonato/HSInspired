@@ -39,16 +39,27 @@ export function installDevCommandHandler(
       return
     }
 
-    if (command.type === 'game:open-add-card-picker') {
+    if (command.type === 'game:open-card-picker') {
       if (current instanceof GameScene) {
         try {
-          current.openAddCardPicker()
+          current.openCardPicker(command.target, command.action)
         } catch (error) {
           logger.error('[DevMenu] failed to open add-card picker', error)
         }
         return
       }
       logger.warn('[DevMenu] game add-card picker ignored outside Game', command)
+      return
+    }
+
+    if (command.type === 'game:end-match') {
+      if (current instanceof GameScene) {
+        void current.devEndMatch(command.outcome).catch((error: unknown) => {
+          logger.error('[DevMenu] failed to end match', error)
+        })
+        return
+      }
+      logger.warn('[DevMenu] game end-match ignored outside Game', command)
       return
     }
 

@@ -67,6 +67,7 @@ function setEventModeNone(container: Container): void {
 export class HeroView extends Container {
   private readonly attackGroup: Container
   private readonly attackLabel: Text
+  private readonly healthGroup: Container
   private readonly healthLabel: Text
   private readonly outlineProxy: Graphics
   private readonly attackOutline: AnimatedOutline
@@ -108,8 +109,10 @@ export class HeroView extends Container {
       HERO_LAYOUT.healthBadge,
       model.health
     )
+    this.healthGroup = health.group
     this.healthLabel = health.value
-    this.addChild(health.group)
+    this.healthGroup.visible = false
+    this.addChild(this.healthGroup)
     this.setHealthColor(model.health)
 
     this.outlineProxy = new Graphics()
@@ -144,6 +147,11 @@ export class HeroView extends Container {
     this.attackGroup.visible = attack > 0
     this.healthLabel.text = String(health)
     this.setHealthColor(health)
+  }
+
+  /** Controls whether the health badge is shown independently of its value. */
+  setHealthVisible(visible: boolean): void {
+    this.healthGroup.visible = visible
   }
 
   private setHealthColor(health: number): void {

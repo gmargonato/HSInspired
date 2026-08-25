@@ -29,6 +29,7 @@ describe('HeroView', () => {
     expect(healthLayoutGroup.position).toMatchObject(HERO_LAYOUT.healthBadge.position)
     expect(healthLayoutGroup.scale.x).toBe(HERO_LAYOUT.healthBadge.scale?.x)
     expect(healthLayoutGroup.scale.y).toBe(HERO_LAYOUT.healthBadge.scale?.y)
+    expect(healthLayoutGroup.visible).toBe(false)
     expect(childWithLabel(view, 'hero.stat-attack').visible).toBe(false)
     expect(view.eventMode).toBe('none')
     expect(view.children.every((child) => child.eventMode === 'none')).toBe(true)
@@ -53,6 +54,27 @@ describe('HeroView', () => {
       ).text
     ).toBe('27')
 
+    view.destroy({ children: true })
+  })
+
+  it('keeps health visibility independent from stat updates', () => {
+    const view = HeroView.create(
+      { label: 'hero:test', attack: 1, health: 30, maxHealth: 30 },
+      textures
+    )
+    const healthGroup = childWithLabel(view, 'hero.stat-health') as Container
+
+    view.setStats(1, 29)
+    expect(healthGroup.visible).toBe(false)
+
+    view.setHealthVisible(true)
+    expect(healthGroup.visible).toBe(true)
+
+    view.setStats(1, 28)
+    expect(healthGroup.visible).toBe(true)
+
+    view.setHealthVisible(false)
+    expect(healthGroup.visible).toBe(false)
     view.destroy({ children: true })
   })
 

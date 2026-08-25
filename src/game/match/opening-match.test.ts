@@ -162,6 +162,140 @@ function startTurns(seed = 42) {
   return { match, state }
 }
 
+describe('developer match commands', () => {
+  it('adds a selected card to either player hand', () => {
+    const { match, state } = startTurns()
+    const [local, remote] = state.players
+
+    const localResult = match.dispatch({
+      type: 'dev-add-card',
+      participantId: local.participantId,
+      cardId: 'basic_murloc_raider'
+    })
+    expect(localResult).toMatchObject({ accepted: true })
+    expect(
+      localResult.events.find((event) => event.type === 'dev-card-added')
+    ).toMatchObject({
+      participantId: local.participantId,
+      card: { cardId: 'basic_murloc_raider' }
+    })
+
+    const remoteResult = match.dispatch({
+      type: 'dev-add-card',
+      participantId: remote.participantId,
+      cardId: 'basic_fireball'
+    })
+    expect(remoteResult).toMatchObject({ accepted: true })
+    expect(
+      match
+        .getState()
+        .players.find((player) => player.participantId === remote.participantId)
+        ?.hand.at(-1)
+    ).toMatchObject({ cardId: 'basic_fireball' })
+  })
+
+  it('summons a minion to either board without spending mana or changing hands', () => {
+    const { match, state } = startTurns()
+    const [local, remote] = state.players
+    const localBefore = local.hand.length
+    const remoteBefore = remote.hand.length
+
+    const localResult = match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: local.participantId,
+      cardId: 'basic_murloc_raider'
+    })
+    expect(localResult).toMatchObject({ accepted: true })
+    expect(localResult.events).toMatchObject([
+      { type: 'dev-minion-summoned', participantId: local.participantId, position: 0 }
+    ])
+
+    const remoteResult = match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: remote.participantId,
+      cardId: 'basic_murloc_raider'
+    })
+    expect(remoteResult).toMatchObject({ accepted: true })
+    const after = match.getState()
+    expect(
+      after.players.find((player) => player.participantId === local.participantId)
+    ).toMatchObject({
+      hand: expect.any(Array),
+      board: [{ cardId: 'basic_murloc_raider' }]
+    })
+    expect(
+      after.players.find((player) => player.participantId === local.participantId)?.hand
+    ).toHaveLength(localBefore)
+    expect(
+      after.players.find((player) => player.participantId === remote.participantId)
+        ?.hand
+    ).toHaveLength(remoteBefore)
+  })
+
+  it('rejects non-minions and full boards without mutation', () => {
+    const { match, state } = startTurns()
+    const participantId = state.players[0].participantId
+    const beforeSpell = match.getState()
+    const spell = match.dispatch({
+      type: 'dev-summon-minion',
+      participantId,
+      cardId: 'basic_fireball'
+    })
+    expect(spell).toMatchObject({ accepted: false, code: 'not-a-minion' })
+    expect(match.getState()).toEqual(beforeSpell)
+
+    for (let index = 0; index < MAX_BOARD_SIZE; index += 1) {
+      const result = match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: 'basic_murloc_raider'
+      })
+      expect(result).toMatchObject({ accepted: true })
+    }
+    const beforeFull = match.getState()
+    const full = match.dispatch({
+      type: 'dev-summon-minion',
+      participantId,
+      cardId: 'basic_murloc_raider'
+    })
+    expect(full).toMatchObject({ accepted: false, code: 'board-full' })
+    expect(match.getState()).toEqual(beforeFull)
+  })
+
+  it('forces a selected winner and rejects subsequent commands', () => {
+    const { match, state } = startTurns()
+    const winnerId = state.players[1].participantId
+    const result = match.dispatch({
+      type: 'dev-end-match',
+      participantId: state.players[0].participantId,
+      winnerId
+    })
+    expect(result).toMatchObject({ accepted: true })
+    expect(result.events).toEqual([
+      {
+        type: 'match-ended',
+        winnerId,
+        loserId: state.players[0].participantId,
+        reason: 'dev-forced'
+      }
+    ])
+    expect(match.getState()).toMatchObject({
+      phase: 'ended',
+      activePlayerId: null,
+      winnerId,
+      loserId: state.players[0].participantId
+    })
+    expect(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: winnerId,
+        available: 10,
+        maximum: 10
+      })
+    ).toMatchObject({ accepted: false, code: 'match-ended' })
+  })
+})
+
 describe('turn passing', () => {
   it('ends the turn for the active player and draws a card for the next player', () => {
     const { match, state } = startTurns()

@@ -132,9 +132,68 @@ function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
 
   const matchSubmenu: Electron.MenuItemConstructorOptions[] = [
     {
-      label: 'Add Card to Hand…',
+      label: 'End Match',
       enabled: isGame,
-      click: () => sendDevCommand(mainWindow, { type: 'game:open-add-card-picker' })
+      submenu: [
+        {
+          label: 'Win',
+          click: () =>
+            sendDevCommand(mainWindow, { type: 'game:end-match', outcome: 'win' })
+        },
+        {
+          label: 'Lose',
+          click: () =>
+            sendDevCommand(mainWindow, { type: 'game:end-match', outcome: 'lose' })
+        }
+      ]
+    },
+    {
+      label: 'Summon',
+      enabled: isGame,
+      submenu: [
+        {
+          label: 'Local Player…',
+          click: () =>
+            sendDevCommand(mainWindow, {
+              type: 'game:open-card-picker',
+              target: 'local',
+              action: 'summon'
+            })
+        },
+        {
+          label: 'Remote Player…',
+          click: () =>
+            sendDevCommand(mainWindow, {
+              type: 'game:open-card-picker',
+              target: 'remote',
+              action: 'summon'
+            })
+        }
+      ]
+    },
+    {
+      label: 'Add Card to Hand',
+      enabled: isGame,
+      submenu: [
+        {
+          label: 'Local Player…',
+          click: () =>
+            sendDevCommand(mainWindow, {
+              type: 'game:open-card-picker',
+              target: 'local',
+              action: 'add-to-hand'
+            })
+        },
+        {
+          label: 'Remote Player…',
+          click: () =>
+            sendDevCommand(mainWindow, {
+              type: 'game:open-card-picker',
+              target: 'remote',
+              action: 'add-to-hand'
+            })
+        }
+      ]
     },
     {
       label: 'Set Mana',

@@ -7,6 +7,7 @@ import {
   type GameAssets
 } from '../ui/asset-registry'
 import { GameBoardView } from '../features/game/game-board-view'
+import type { DevCardPickerAction, DevMatchTarget } from '../../shared/dev-menu'
 import { Scene } from './scene'
 
 /** Full-screen route adapter for the first playable opening sequence. */
@@ -127,9 +128,14 @@ export class GameScene extends Scene {
     await this.view.devAddCard(cardId)
   }
 
-  openAddCardPicker(): void {
+  openCardPicker(target: DevMatchTarget, action: DevCardPickerAction): void {
     if (!this.view) throw new Error('Game view is not ready for dev commands.')
-    this.view.openAddCardPicker()
+    this.view.openCardPicker(target, action)
+  }
+
+  async devEndMatch(outcome: 'win' | 'lose'): Promise<void> {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    await this.view.devEndMatch(outcome)
   }
 
   async devSetMana(available: number, maximum: number): Promise<void> {

@@ -33,6 +33,7 @@ import {
   type OpeningMatchState
 } from '../../../game/match'
 import type { PlayerId } from '../../../game/match'
+import type { DevCardPickerAction, DevMatchTarget } from '../../../shared/dev-menu'
 import type { GameRoute } from './game-route'
 import type { RendererLogger } from '../../ui/logger'
 import { CardView } from '../../rendering/cards/card-view'
@@ -78,6 +79,7 @@ import {
 } from './board-layout'
 import { AttackLine } from './attack-line'
 import { getCombatImpactProfile } from './combat-impact'
+import { canCommitCombatAttack, canSelectCombatAttacker } from './combat-input-window'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { MINION_CANVAS } from '../../rendering/minions/minion-layout'
 import {
@@ -232,12 +234,15 @@ export class GameBoardView extends Actor {
   private readonly activeSummonSlots = new Set<GameCardSlot>()
   private readonly hud = new GameHudView(this.resolver)
   private readonly addCardPicker: AddCardPickerView | null
+  private pickerTarget: DevMatchTarget = 'local'
+  private pickerAction: DevCardPickerAction = 'add-to-hand'
   private readonly attackLineLayer = new Container()
   private readonly attackLine = new AttackLine()
   private readonly matchResultOverlay: MatchResultOverlay
   private readonly combatPreviewMarkers = new Map<CombatView, Sprite>()
   private selectedCombatView: CombatView | null = null
   private combatInProgress = false
+  private combatAttackerSelectionUnlocked = false
   private cardPlayInProgress = false
   private matchResultShown = false
   private matchResultBlurFilter: BlurFilter | null = null
@@ -366,7 +371,11 @@ export class GameBoardView extends Actor {
     cardId: string
   ): Promise<void> => {
     try {
-      await this.devAddCard(cardId)
+      if (this.pickerAction === 'summon') {
+        await this.devSummonMinion(cardId, this.pickerTarget)
+      } else {
+        await this.devAddCard(cardId, this.pickerTarget)
+      }
     } catch (error) {
       this.logger.error('[DevMenu] failed to add card from picker', error)
       throw error
@@ -575,6 +584,7 @@ export class GameBoardView extends Actor {
     ])
     this.logger.info('[GameBoardView] hero settle done')
     this.openingLayer.visible = false
+    this.setHeroHealthVisible(true)
     this.deckLayer.visible = true
     this.remoteHandLayer.visible = true
     await this.wait(OPENING_TIMING.boardPause)
@@ -836,6 +846,7 @@ export class GameBoardView extends Actor {
     this.setMulliganInputEnabled(false)
     this.confirmButton?.setEnabled(false)
     this.handLayer.eventMode = 'none'
+    this.setHeroHealthVisible(false)
 
     const blur = new BlurFilter({
       strength: GAME_BOARD_LAYOUT.matchResult.blurStrength,
@@ -859,6 +870,10 @@ export class GameBoardView extends Actor {
       throw new Error('Cannot show a match result without the local hero view.')
     }
     this.matchResultOverlay.show(result, localHero)
+  }
+
+  private setHeroHealthVisible(visible: boolean): void {
+    for (const hero of this.heroViews.values()) hero.setHealthVisible(visible)
   }
 
   /** Updates attacker-ready visuals and target input from authoritative state. */
@@ -926,8 +941,21 @@ export class GameBoardView extends Actor {
     }
   }
 
+  /** Opens only friendly attacker selection once the current attack visibly lands. */
+  private unlockCombatAttackerSelection(): void {
+    if (!this.combatInProgress) return
+    this.combatAttackerSelectionUnlocked = true
+    this.syncBoardAttackability(this.match.getState())
+  }
+
   private selectAttacker(view: CombatView): void {
-    if (this.combatInProgress) return
+    if (
+      !canSelectCombatAttacker(
+        this.combatInProgress,
+        this.combatAttackerSelectionUnlocked
+      )
+    )
+      return
     if (!view.isCanAttack()) return
     if (this.selectedCombatView === view) {
       this.deselectAttacker()
@@ -1141,7 +1169,7 @@ export class GameBoardView extends Actor {
   /** Dispatches an attack against the clicked opposing character. */
   private async attackCharacter(target: CombatView): Promise<void> {
     const attacker = this.selectedCombatView
-    if (this.combatInProgress || !attacker) return
+    if (!canCommitCombatAttack(this.combatInProgress) || !attacker) return
     if (target.ownerId !== this.remoteParticipantId) return
 
     const attackerRef = this.characterRef(attacker)
@@ -1152,6 +1180,7 @@ export class GameBoardView extends Actor {
     // sure the lethal preview exists before committing the command.
     this.updateCombatPreview(target)
     this.combatInProgress = true
+    this.combatAttackerSelectionUnlocked = false
     this.deselectAttacker(false, false)
     const result = this.match.dispatch({
       type: 'attack-character',
@@ -1162,6 +1191,7 @@ export class GameBoardView extends Actor {
     if (!result.accepted) {
       this.logger.error(result.message)
       this.combatInProgress = false
+      this.combatAttackerSelectionUnlocked = false
       this.clearCombatPreview()
       this.syncTurnHud(this.match.getState())
       this.syncTurnControls(this.match.getState())
@@ -1177,6 +1207,7 @@ export class GameBoardView extends Actor {
       for (const event of result.events) await this.presentEvent(event)
     } finally {
       this.combatInProgress = false
+      this.combatAttackerSelectionUnlocked = false
       const state = this.match.getState()
       this.syncTurnHud(state)
       this.syncTurnControls(state)
@@ -1593,17 +1624,20 @@ export class GameBoardView extends Actor {
       case 'dev-mana-set':
         this.syncTurnHud(this.match.getState())
         return
+      case 'dev-minion-summoned':
+        await this.presentDevMinionSummoned(event)
+        return
     }
   }
 
-  async devAddCard(cardId: string): Promise<void> {
+  async devAddCard(cardId: string, target: DevMatchTarget = 'local'): Promise<void> {
     if (!this.handModeActive)
       throw new Error('Dev add-card is only available after the opening sequence.')
     const definition = CARD_CATALOG.get(asCardId(cardId))
     if (!definition) throw new Error(`Unknown card ${cardId}`)
     const result = this.match.dispatch({
       type: 'dev-add-card',
-      participantId: this.localParticipantId,
+      participantId: this.participantIdForTarget(target),
       cardId: definition.id
     })
     if (!result.accepted) throw new Error(result.message)
@@ -1611,18 +1645,57 @@ export class GameBoardView extends Actor {
     this.syncTurnHud(result.state)
   }
 
-  openAddCardPicker(): void {
+  openCardPicker(target: DevMatchTarget, action: DevCardPickerAction): void {
     if (!this.addCardPicker) {
       throw new Error('The add-card picker is unavailable in this environment.')
     }
 
-    this.addCardPicker.open()
+    this.pickerTarget = target
+    this.pickerAction = action
+    const playerName = target === 'local' ? 'Local Player' : 'Remote Player'
+    const isSummon = action === 'summon'
+    this.addCardPicker.open({
+      title: `${isSummon ? 'Summon Minion' : 'Add Card to Hand'} — ${playerName}`,
+      successMessage: isSummon ? 'Minion summoned.' : 'Card added to hand.',
+      cards: isSummon
+        ? CARD_CATALOG.all.filter((card) => card.type === 'Minion')
+        : undefined
+    })
     if (!this.handModeActive) {
       this.addCardPicker.setStatus(
-        'The match must finish its opening sequence before a card can be added.',
+        'The match must finish its opening sequence before this dev tool can be used.',
         'error'
       )
     }
+  }
+
+  async devEndMatch(outcome: 'win' | 'lose'): Promise<void> {
+    if (!this.handModeActive)
+      throw new Error('Dev end-match is only available after the opening sequence.')
+    const winnerId =
+      outcome === 'win' ? this.localParticipantId : this.remoteParticipantId
+    const result = this.match.dispatch({
+      type: 'dev-end-match',
+      participantId: this.localParticipantId,
+      winnerId
+    })
+    if (!result.accepted) throw new Error(result.message)
+    for (const event of result.events) await this.presentEvent(event)
+  }
+
+  async devSummonMinion(cardId: string, target: DevMatchTarget): Promise<void> {
+    if (!this.handModeActive)
+      throw new Error('Dev summon is only available after the opening sequence.')
+    const definition = CARD_CATALOG.get(asCardId(cardId))
+    if (!definition) throw new Error(`Unknown card ${cardId}`)
+    const result = this.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: this.participantIdForTarget(target),
+      cardId: definition.id
+    })
+    if (!result.accepted) throw new Error(result.message)
+    for (const event of result.events) await this.presentEvent(event)
+    this.syncTurnHud(result.state)
   }
 
   async devSetMana(available: number, maximum: number): Promise<void> {
@@ -1647,6 +1720,16 @@ export class GameBoardView extends Actor {
       // Remote dev add (not used via menu) - treat like draw
       await this.presentDraw(event.participantId, event.card)
     }
+  }
+
+  private async presentDevMinionSummoned(
+    event: Extract<OpeningMatchEvent, { type: 'dev-minion-summoned' }>
+  ): Promise<void> {
+    await this.presentMinionPlayed(event, undefined, false)
+  }
+
+  private participantIdForTarget(target: DevMatchTarget): PlayerId {
+    return target === 'local' ? this.localParticipantId : this.remoteParticipantId
   }
 
   toggleDeckTracker(): void {
@@ -1775,8 +1858,12 @@ export class GameBoardView extends Actor {
   }
 
   private async presentMinionPlayed(
-    event: Extract<OpeningMatchEvent, { type: 'minion-played' }>,
-    summonSlot?: GameCardSlot
+    event: Extract<
+      OpeningMatchEvent,
+      { type: 'minion-played' | 'dev-minion-summoned' }
+    >,
+    summonSlot?: GameCardSlot,
+    removedFromHand = true
   ): Promise<void> {
     const isLocal = event.participantId === this.localParticipantId
     const isRemote = event.participantId === this.remoteParticipantId
@@ -1850,9 +1937,11 @@ export class GameBoardView extends Actor {
       }
       view.alpha = 0
       this.applyRemoteBoardLayout()
-      // Keep remote backs in sync: AI hand shrinks by one.
-      this.remoteBackCount = Math.max(0, this.remoteBackCount - 1)
-      this.layoutRemoteHand()
+      if (removedFromHand) {
+        // Keep remote backs in sync when a hidden remote hand card was played.
+        this.remoteBackCount = Math.max(0, this.remoteBackCount - 1)
+        this.layoutRemoteHand()
+      }
       this.wireMinionView(view)
       this.syncBoardAttackability(this.match.getState())
       await this.completeTimeline(
@@ -2139,6 +2228,7 @@ export class GameBoardView extends Actor {
       defender.setStats(event.defender.attack, event.defender.healthAfter)
       followDeathMarkers()
       const screenShake = this.runCombatScreenShake(event.attacker.attack)
+      this.unlockCombatAttackerSelection()
       await this.wait(BOARD_TIMING.combatImpact)
 
       const settle = (
@@ -2272,6 +2362,7 @@ export class GameBoardView extends Actor {
       defender.setStats(event.defender.attack, event.defender.healthAfter)
       followDeathMarkers()
       const screenShake = this.runCombatScreenShake(event.attacker.attack)
+      this.unlockCombatAttackerSelection()
       await this.wait(BOARD_TIMING.combatImpact)
 
       const settle = (
@@ -2479,14 +2570,22 @@ export class GameBoardView extends Actor {
   private wireMinionView(view: MinionView): void {
     view.on('pointertap', (event: FederatedPointerEvent) => {
       if (event.button !== 0) return
-      if (this.combatInProgress || !view.isTargetable()) return
+      if (!view.isTargetable()) return
       if (view.ownerId === this.localParticipantId) {
+        if (
+          !canSelectCombatAttacker(
+            this.combatInProgress,
+            this.combatAttackerSelectionUnlocked
+          )
+        )
+          return
         if (!view.isCanAttack()) return
         this.selectAttacker(view)
         this.handleBoardPointerMove(event)
         return
       }
       if (view.ownerId === this.remoteParticipantId && this.selectedCombatView) {
+        if (!canCommitCombatAttack(this.combatInProgress)) return
         void this.attackCharacter(view)
       }
     })
@@ -2495,14 +2594,22 @@ export class GameBoardView extends Actor {
   private wireHeroView(view: HeroView): void {
     view.on('pointertap', (event: FederatedPointerEvent) => {
       if (event.button !== 0) return
-      if (this.combatInProgress || !view.isTargetable()) return
+      if (!view.isTargetable()) return
       if (view.ownerId === this.localParticipantId) {
+        if (
+          !canSelectCombatAttacker(
+            this.combatInProgress,
+            this.combatAttackerSelectionUnlocked
+          )
+        )
+          return
         if (!view.isCanAttack()) return
         this.selectAttacker(view)
         this.handleBoardPointerMove(event)
         return
       }
       if (view.ownerId === this.remoteParticipantId && this.selectedCombatView) {
+        if (!canCommitCombatAttack(this.combatInProgress)) return
         void this.attackCharacter(view)
       }
     })
@@ -3450,6 +3557,8 @@ export class GameBoardView extends Actor {
     this.matchResultGrayscaleFilter?.destroy()
     this.matchResultGrayscaleFilter = null
     this.clearCombatPreview()
+    this.combatInProgress = false
+    this.combatAttackerSelectionUnlocked = false
     this.cardPlayInProgress = false
     this.attackLine.clear()
     if (this.draggingIndex !== null) {
