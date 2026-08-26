@@ -127,7 +127,7 @@
             },
             "target": {
               "controller": "self",
-              "type": "card",
+              "type": "minion-card",
               "selection": "random",
               "zone": "hand"
             }
@@ -188,7 +188,7 @@
             "action": "set-health",
             "target": {
               "controller": "any",
-              "type": "character",
+              "type": "hero",
               "selection": "chosen"
             },
             "amount": 15,
@@ -223,7 +223,8 @@
               "type": "minion",
               "selection": "source"
             },
-            "attack": 3
+            "attack": 3,
+            "duration": "while-damaged"
           }
         ]
       }
@@ -338,7 +339,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "battlecry",
         "choice": {
           "options": [
             {
@@ -382,7 +383,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "battlecry",
         "choice": {
           "options": [
             {
@@ -517,7 +518,8 @@
               "type": "minion",
               "selection": "source"
             },
-            "attack": 5
+            "attack": 5,
+            "duration": "while-damaged"
           }
         ]
       }
@@ -620,6 +622,7 @@
         "actions": [
           {
             "action": "add-to-hand",
+            "player": "self",
             "cardId": "basic_fireball",
             "count": 1
           }
@@ -880,7 +883,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -1157,7 +1160,7 @@
               "controller": "any",
               "type": "minion",
               "selection": "adjacent",
-              "adjacentTo": "event-target"
+              "adjacentTo": "source"
             },
             "amount": {
               "reference": "source.attack"
@@ -1271,7 +1274,7 @@
               "selection": "all"
             },
             "amount": {
-              "reference": "source.weapon.attack"
+              "reference": "event-target.attack"
             }
           }
         ]
@@ -1461,11 +1464,13 @@
             },
             "attack": {
               "reference": "removed-keyword-count",
-              "keyword": "divine-shield"
+              "keyword": "divine-shield",
+              "multiplier": 3
             },
             "health": {
               "reference": "removed-keyword-count",
-              "keyword": "divine-shield"
+              "keyword": "divine-shield",
+              "multiplier": 3
             }
           }
         ]
@@ -1720,7 +1725,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "battlecry",
         "choice": {
           "options": [
             {
@@ -2011,7 +2016,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When your opponent casts a spell, Counter it.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -2151,7 +2156,7 @@
       {
         "trigger": "on-death",
         "event": {
-          "type": "minion-destroyed",
+          "type": "minion-died",
           "controller": "self",
           "exclude": "source"
         },
@@ -2360,6 +2365,9 @@
     "effects": [
       {
         "trigger": "battlecry",
+        "condition": {
+          "type": "combo"
+        },
         "actions": [
           {
             "action": "summon",
@@ -2594,7 +2602,11 @@
     "keywords": ["windfury"],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "on-card-played",
+        "event": {
+          "type": "card-played",
+          "controller": "self"
+        },
         "actions": [
           {
             "action": "overload",
@@ -2643,7 +2655,7 @@
     "attack": 3,
     "health": 3,
     "rulesText": "Taunt. Costs (1) less per Attack of your weapon.",
-    "keywords": [],
+    "keywords": ["taunt"],
     "effects": [
       {
         "trigger": "while-in-hand",
@@ -2677,7 +2689,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "battlecry",
         "choice": {
           "options": [
             {
@@ -2746,7 +2758,11 @@
     "keywords": ["windfury"],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "on-card-played",
+        "event": {
+          "type": "card-played",
+          "controller": "self"
+        },
         "actions": [
           {
             "action": "overload",
@@ -2802,7 +2818,11 @@
     "keywords": ["taunt"],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "on-card-played",
+        "event": {
+          "type": "card-played",
+          "controller": "self"
+        },
         "actions": [
           {
             "action": "overload",
@@ -2903,10 +2923,12 @@
               "selection": "source"
             },
             "attack": {
-              "reference": "cards-played-earlier-this-turn"
+              "reference": "cards-played-earlier-this-turn",
+              "multiplier": 2
             },
             "health": {
-              "reference": "cards-played-earlier-this-turn"
+              "reference": "cards-played-earlier-this-turn",
+              "multiplier": 2
             }
           }
         ]
@@ -3151,7 +3173,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When your hero is attacked, deal 2 damage to all enemies.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -3184,7 +3206,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When your hero takes damage, deal that much damage to the enemy hero.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -3293,7 +3315,7 @@
     "attack": 3,
     "health": 5,
     "rulesText": "Taunt. Battlecry: Destroy one of your Mana Crystals.",
-    "keywords": [],
+    "keywords": ["taunt"],
     "effects": [
       {
         "trigger": "battlecry",
@@ -3494,7 +3516,7 @@
       {
         "trigger": "on-death",
         "event": {
-          "type": "minion-destroyed",
+          "type": "minion-died",
           "controller": "any"
         },
         "actions": [
@@ -3580,7 +3602,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When an enemy minion attacks, return it to its owner's hand and it costs (2) more.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -3594,8 +3616,17 @@
             "target": {
               "type": "minion",
               "selection": "event-target"
+            }
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "event-target",
+              "zone": "hand"
             },
-            "cost": 2
+            "amount": 2,
+            "duration": "while-in-hand"
           }
         ]
       }
@@ -3781,9 +3812,13 @@
         },
         "actions": [
           {
-            "action": "change-cost",
-            "resource": "weapon-durability",
-            "amount": 1
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "source"
+            },
+            "attack": -1
           }
         ]
       }
@@ -3814,7 +3849,8 @@
               "type": "minion",
               "selection": "source"
             },
-            "attack": 6
+            "attack": 6,
+            "duration": "while-damaged"
           }
         ]
       }
@@ -4240,7 +4276,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: As soon as your hero is attacked, gain 8 Armor.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -4273,7 +4309,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When your hero takes fatal damage, prevent it and become Immune this turn.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -4366,7 +4402,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "on-cast",
+        "trigger": "on-card-played",
         "event": {
           "type": "card-played",
           "controller": "self"
@@ -4639,7 +4675,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "battlecry",
         "choice": {
           "options": [
             {
@@ -4824,10 +4860,12 @@
               "selection": "next",
               "zone": "hand",
               "filter": {
-                "card-type": "Secret"
+                "cardType": "Secret"
               }
             },
-            "amount": -999
+            "amount": -999,
+            "minimum": 0,
+            "duration": "this-turn"
           }
         ]
       }
@@ -4850,7 +4888,7 @@
         "trigger": "on-summon",
         "event": {
           "type": "minion-summoned",
-          "controller": "any"
+          "controller": "self"
         },
         "actions": [
           {
@@ -4959,7 +4997,7 @@
     "attack": 6,
     "health": 2,
     "rulesText": "Charge. Battlecry: Summon two 1/1 Whelps for your opponent.",
-    "keywords": [],
+    "keywords": ["charge"],
     "effects": [
       {
         "trigger": "battlecry",
@@ -4967,7 +5005,8 @@
           {
             "action": "summon",
             "cardId": "classic_whelp",
-            "count": 2
+            "count": 2,
+            "controller": "opponent"
           }
         ]
       }
@@ -5204,7 +5243,7 @@
               "selection": "source"
             },
             "attack": {
-              "reference": "health"
+              "reference": "source.health"
             }
           }
         ]
@@ -5500,7 +5539,8 @@
             "action": "change-cost",
             "target": {
               "controller": "any",
-              "type": "minion",
+              "type": "minion-card",
+              "zone": "hand",
               "selection": "all"
             },
             "amount": 1
@@ -5535,7 +5575,8 @@
               "type": "minion",
               "selection": "source"
             },
-            "attack": 1
+            "attack": 1,
+            "duration": "permanent"
           }
         ]
       }
@@ -5792,7 +5833,7 @@
               "selection": "random",
               "zone": "deck",
               "filter": {
-                "type": "minion"
+                "cardType": "Minion"
               }
             },
             "count": 1
@@ -5812,12 +5853,12 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When your opponent plays a minion, summon a copy of it.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
         "event": {
-          "type": "minion-summoned",
+          "type": "minion-played",
           "controller": "opponent"
         },
         "actions": [
@@ -6160,7 +6201,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When an enemy attacks, summon a 2/1 Defender as the new target.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -6265,8 +6306,7 @@
             "cardId": "classic_whelp",
             "count": {
               "reference": "available-board-slots"
-            },
-            "until": "board-full"
+            }
           }
         ]
       }
@@ -6313,7 +6353,7 @@
     "attack": 1,
     "health": 1,
     "rulesText": "Stealth. Destroy any minion damaged by this minion.",
-    "keywords": [],
+    "keywords": ["stealth"],
     "effects": [
       {
         "trigger": "on-damage",
@@ -6398,7 +6438,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "on-summon",
+        "trigger": "on-card-played",
         "event": {
           "type": "first-minion-played-this-turn",
           "controller": "self"
@@ -6537,6 +6577,17 @@
         "trigger": "cast",
         "actions": [
           {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 4,
+            "health": 4,
+            "duration": "this-turn"
+          },
+          {
             "action": "schedule",
             "trigger": "end-of-turn",
             "target": {
@@ -6546,33 +6597,11 @@
             },
             "actions": [
               {
-                "action": "modify",
-                "target": {
-                  "type": "minion",
-                  "selection": "event-target"
-                },
-                "attack": 4,
-                "health": 4
-              },
-              {
                 "action": "destroy",
                 "target": {
                   "type": "minion",
                   "selection": "event-target"
                 }
-              }
-            ],
-            "immediate": [
-              {
-                "action": "modify",
-                "target": {
-                  "controller": "self",
-                  "type": "minion",
-                  "selection": "chosen"
-                },
-                "attack": 4,
-                "health": 4,
-                "duration": "this-turn"
               }
             ]
           }
@@ -6604,7 +6633,7 @@
               "selection": "next",
               "zone": "hand",
               "filter": {
-                "card-type": "Spell"
+                "cardType": "Spell"
               }
             },
             "amount": -3,
@@ -6716,7 +6745,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "on-cast",
+        "trigger": "on-card-played",
         "event": {
           "type": "card-played",
           "controller": "self"
@@ -6760,7 +6789,8 @@
               "type": "minion",
               "selection": "source"
             },
-            "keyword": "windfury"
+            "keyword": "windfury",
+            "duration": "while-damaged"
           },
           {
             "action": "modify",
@@ -6768,7 +6798,8 @@
               "type": "minion",
               "selection": "source"
             },
-            "attack": 1
+            "attack": 1,
+            "duration": "while-damaged"
           }
         ]
       }
@@ -6861,12 +6892,12 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When one of your minions dies, return it to life with 1 Health.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
         "event": {
-          "type": "minion-destroyed",
+          "type": "minion-died",
           "controller": "self"
         },
         "actions": [
@@ -6893,12 +6924,12 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When your opponent plays a minion, reduce its Health to 1.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
         "event": {
-          "type": "minion-summoned",
+          "type": "minion-played",
           "controller": "opponent"
         },
         "actions": [
@@ -6936,7 +6967,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "minion",
               "selection": "chosen"
             },
@@ -7003,7 +7034,7 @@
       {
         "trigger": "on-death",
         "event": {
-          "type": "minion-destroyed",
+          "type": "minion-died",
           "controller": "self",
           "filter": {
             "tribe": "Beast"
@@ -7105,6 +7136,7 @@
         "actions": [
           {
             "action": "add-to-hand",
+            "player": "self",
             "source": {
               "controller": "self",
               "type": "card",
@@ -7272,8 +7304,17 @@
               "controller": "self",
               "type": "minion",
               "selection": "chosen"
+            }
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "event-target",
+              "zone": "hand"
             },
-            "cost": -2
+            "amount": -2,
+            "duration": "while-in-hand"
           }
         ]
       }
@@ -7648,7 +7689,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When one of your minions is attacked, summon three 1/1 Snakes.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -7677,12 +7718,12 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When your opponent plays a minion, deal 4 damage to it.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
         "event": {
-          "type": "minion-summoned",
+          "type": "minion-played",
           "controller": "opponent"
         },
         "actions": [
@@ -7722,7 +7763,7 @@
               "selection": "all",
               "zone": "hand",
               "filter": {
-                "card-type": "Spell"
+                "cardType": "Spell"
               }
             },
             "amount": -1
@@ -7811,7 +7852,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When an enemy casts a spell on a minion, summon a 1/3 as the new target.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -7823,7 +7864,8 @@
           {
             "action": "summon",
             "cardId": "classic_spellbender_minion",
-            "count": 1
+            "count": 1,
+            "asNewSpellTarget": true
           }
         ]
       }
@@ -7913,7 +7955,8 @@
               "type": "weapon",
               "selection": "all"
             },
-            "attack": 2
+            "attack": 2,
+            "duration": "while-damaged"
           }
         ]
       }
@@ -8080,7 +8123,11 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "on-card-played",
+        "event": {
+          "type": "card-played",
+          "controller": "self"
+        },
         "actions": [
           {
             "action": "overload",
@@ -8164,7 +8211,8 @@
             "action": "change-cost",
             "target": {
               "controller": "self",
-              "type": "minion",
+              "type": "minion-card",
+              "zone": "hand",
               "selection": "all"
             },
             "amount": -2,
@@ -8297,7 +8345,7 @@
     "attack": 2,
     "health": 3,
     "rulesText": "Taunt.Enrage:+ 3 Attack",
-    "keywords": [],
+    "keywords": ["taunt"],
     "effects": [
       {
         "trigger": "aura",
@@ -8311,7 +8359,8 @@
               "type": "minion",
               "selection": "source"
             },
-            "attack": 3
+            "attack": 3,
+            "duration": "while-damaged"
           }
         ]
       }
@@ -8680,7 +8729,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "on-cast",
+        "trigger": "on-card-played",
         "event": {
           "type": "card-played",
           "controller": "self",
@@ -8822,7 +8871,7 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When a minion attacks your hero, destroy it.",
-    "keywords": [],
+    "keywords": ["secret"],
     "effects": [
       {
         "trigger": "secret",
@@ -8862,7 +8911,8 @@
             "action": "change-cost",
             "target": {
               "controller": "self",
-              "type": "minion",
+              "type": "minion-card",
+              "zone": "hand",
               "selection": "all"
             },
             "amount": 3
@@ -8995,7 +9045,7 @@
         "trigger": "on-cast",
         "event": {
           "type": "spell-cast",
-          "controller": "any"
+          "controller": "self"
         },
         "actions": [
           {
@@ -9192,6 +9242,7 @@
         "actions": [
           {
             "action": "add-to-hand",
+            "player": "self",
             "cardId": "classic_dream",
             "count": 1
           }

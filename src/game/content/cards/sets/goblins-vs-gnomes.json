@@ -1,4 +1,4 @@
-﻿[
+[
   {
     "id": "goblins_vs_gnomes_anodized_robo_cub",
     "name": "Anodized Robo Cub",
@@ -9,7 +9,45 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Taunt. Choose One - +1 Attack; or +1 Health."
+    "rulesText": "Taunt. Choose One - +1 Attack; or +1 Health.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "attack": 1,
+                  "duration": "permanent"
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "health": 1,
+                  "duration": "permanent"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_grove_tender",
@@ -21,7 +59,36 @@
     "cost": 3,
     "attack": 2,
     "health": 4,
-    "rulesText": "Choose One - Give each player a Mana Crystal; or Each player draws a card."
+    "rulesText": "Choose One - Give each player a Mana Crystal; or Each player draws a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "gain-mana",
+                  "player": "each",
+                  "amount": 1,
+                  "crystal": "empty"
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "draw",
+                  "player": "each",
+                  "count": 1
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_druid_of_the_fang",
@@ -33,7 +100,31 @@
     "cost": 5,
     "attack": 4,
     "health": 4,
-    "rulesText": "Battlecry: If you have a Beast, transform this minion into a 7/7."
+    "rulesText": "Battlecry: If you have a Beast, transform this minion into a 7/7.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "transform",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "cardId": "goblins_vs_gnomes_druid_of_the_fang_7_7"
+          }
+        ],
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": {
+            "tribe": "Beast"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_dark_wispers",
@@ -45,7 +136,50 @@
     "cost": 6,
     "attack": null,
     "health": null,
-    "rulesText": "Choose One - Summon 5 Wisps; or Give a minion +5/+5 and Taunt."
+    "rulesText": "Choose One - Summon 5 Wisps; or Give a minion +5/+5 and Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "summon",
+                  "cardId": "goblins_vs_gnomes_wisp",
+                  "count": 5
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "controller": "any",
+                    "type": "minion",
+                    "selection": "chosen"
+                  },
+                  "attack": 5,
+                  "health": 5,
+                  "duration": "permanent"
+                },
+                {
+                  "action": "grant-keyword",
+                  "target": {
+                    "controller": "any",
+                    "type": "minion",
+                    "selection": "chosen"
+                  },
+                  "keyword": "taunt"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_mech_bear_cat",
@@ -57,7 +191,31 @@
     "cost": 6,
     "attack": 7,
     "health": 6,
-    "rulesText": "Whenever this minion takes damage, add a Spare Part card to your hand."
+    "rulesText": "Whenever this minion takes damage, add a Spare Part card to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "sparePart": true
+            }
+          }
+        ],
+        "event": {
+          "type": "damage-dealt",
+          "target": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_recycle",
@@ -69,7 +227,23 @@
     "cost": 6,
     "attack": null,
     "health": null,
-    "rulesText": "Shuffle an enemy minion into your opponent's deck."
+    "rulesText": "Shuffle an enemy minion into your opponent's deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_malorne",
@@ -81,7 +255,24 @@
     "cost": 7,
     "attack": 9,
     "health": 7,
-    "rulesText": "Deathrattle: Shuffle this minion into your deck."
+    "rulesText": "Deathrattle: Shuffle this minion into your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "player": "self"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_tree_of_life",
@@ -93,7 +284,24 @@
     "cost": 9,
     "attack": null,
     "health": null,
-    "rulesText": "Restore all characters to full Health."
+    "rulesText": "Restore all characters to full Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": "full"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_call_pet",
@@ -105,7 +313,38 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Draw a card. If it's a Beast, it costs (4) less."
+    "rulesText": "Draw a card. If it's a Beast, it costs (4) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "drawn-card-matches",
+            "filter": {
+              "tribe": "Beast"
+            }
+          },
+          "actions": [
+            {
+              "action": "change-cost",
+              "target": {
+                "type": "drawn-card"
+              },
+              "amount": -4,
+              "duration": "permanent"
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_feign_death",
@@ -117,7 +356,23 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Trigger all Deathrattles on your minions."
+    "rulesText": "Trigger all Deathrattles on your minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "trigger-deathrattle",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_glaivezooka",
@@ -129,7 +384,25 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry: Give a random friendly minion +1 Attack."
+    "rulesText": "Battlecry: Give a random friendly minion +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random"
+            },
+            "attack": 1,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_steamwheedle_sniper",
@@ -141,7 +414,24 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Your Hero Power can target minions."
+    "rulesText": "Your Hero Power can target minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "grant-targeting",
+            "target": {
+              "controller": "self",
+              "type": "hero-power"
+            },
+            "targetType": "minion",
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_metaltooth_leaper",
@@ -153,7 +443,29 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Give your other Mechs +2 Attack."
+    "rulesText": "Battlecry: Give your other Mechs +2 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source",
+              "filter": {
+                "tribe": "Mech"
+              }
+            },
+            "attack": 2,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_cobra_shot",
@@ -165,7 +477,33 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 3 damage to a minion and the enemy hero."
+    "rulesText": "Deal 3 damage to a minion and the enemy hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 3
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_king_of_beasts",
@@ -177,7 +515,36 @@
     "cost": 5,
     "attack": 2,
     "health": 6,
-    "rulesText": "Taunt. Battlecry: Gain +1 Attack for each other Beast you have."
+    "rulesText": "Taunt. Battlecry: Gain +1 Attack for each other Beast you have.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "self",
+                "type": "minion",
+                "selection": "all",
+                "filter": {
+                  "tribe": "Beast"
+                },
+                "exclude": "source"
+              }
+            },
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_gahzrilla",
@@ -189,7 +556,36 @@
     "cost": 7,
     "attack": 6,
     "health": 9,
-    "rulesText": "Whenever this minion takes damage, double its Attack."
+    "rulesText": "Whenever this minion takes damage, double its Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "operation": "multiply",
+              "value": 2
+            },
+            "duration": "permanent"
+          }
+        ],
+        "event": {
+          "type": "damage-dealt",
+          "target": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_flamecannon",
@@ -201,7 +597,24 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 4 damage to a random enemy minion."
+    "rulesText": "Deal 4 damage to a random enemy minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_snowchugger",
@@ -213,7 +626,31 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Freeze any character damaged by this minion."
+    "rulesText": "Freeze any character damaged by this minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "event-target"
+            }
+          }
+        ],
+        "event": {
+          "type": "damage-dealt",
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_unstable_portal",
@@ -225,7 +662,35 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Add a random minion to your hand. It costs (3) less."
+    "rulesText": "Add a random minion to your hand. It costs (3) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "cardType": "Minion"
+            }
+          }
+        ],
+        "then": {
+          "actions": [
+            {
+              "action": "change-cost",
+              "target": {
+                "type": "added-card"
+              },
+              "amount": -3,
+              "duration": "permanent"
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_soot_spewer",
@@ -237,7 +702,9 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Spell Damage +1."
+    "rulesText": "Spell Damage +1.",
+    "keywords": ["spell-damage"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_echo_of_medivh",
@@ -249,7 +716,25 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Put a copy of each friendly minion into your hand."
+    "rulesText": "Put a copy of each friendly minion into your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "destination": "hand",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_goblin_blastmage",
@@ -261,7 +746,32 @@
     "cost": 4,
     "attack": 5,
     "health": 4,
-    "rulesText": "Battlecry: If you have a Mech, deal 4 damage randomly split among all enemies."
+    "rulesText": "Battlecry: If you have a Mech, deal 4 damage randomly split among all enemies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1,
+            "hits": 4
+          }
+        ],
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": {
+            "tribe": "Mech"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_wee_spellstopper",
@@ -273,7 +783,26 @@
     "cost": 4,
     "attack": 2,
     "health": 5,
-    "rulesText": "Adjacent minions can't be targeted by spells or Hero Powers."
+    "rulesText": "Adjacent minions can't be targeted by spells or Hero Powers.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "adjacent",
+              "exclude": "source"
+            },
+            "keyword": "spell-immune",
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_flame_leviathan",
@@ -285,7 +814,24 @@
     "cost": 7,
     "attack": 7,
     "health": 7,
-    "rulesText": "When you draw this, deal 2 damage to all characters."
+    "rulesText": "When you draw this, deal 2 damage to all characters.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-draw",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_seal_of_light",
@@ -297,7 +843,34 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Restore 4 Health to your hero and gain +2 Attack this turn."
+    "rulesText": "Restore 4 Health to your hero and gain +2 Attack this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 4
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "attack": 2,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_shielded_minibot",
@@ -309,7 +882,9 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Divine Shield."
+    "rulesText": "Divine Shield.",
+    "keywords": ["divine-shield"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_coghammer",
@@ -321,7 +896,24 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Battlecry: Give a random friendly minion Divine Shield and Taunt."
+    "rulesText": "Battlecry: Give a random friendly minion Divine Shield and Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keywords",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random"
+            },
+            "keywords": ["divine-shield", "taunt"]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_muster_for_battle",
@@ -333,7 +925,24 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Summon three 1/1 Silver Hand Recruits. Equip a 1/4 Weapon."
+    "rulesText": "Summon three 1/1 Silver Hand Recruits. Equip a 1/4 Weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "basic_silver_hand_recruit",
+            "count": 3
+          },
+          {
+            "action": "equip",
+            "cardId": "goblins_vs_gnomes_lights_justice"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_scarlet_purifier",
@@ -345,7 +954,27 @@
     "cost": 3,
     "attack": 4,
     "health": 3,
-    "rulesText": "Battlecry: Deal 2 damage to all minions with Deathrattle."
+    "rulesText": "Battlecry: Deal 2 damage to all minions with Deathrattle.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "hasDeathrattle": true
+              }
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_bolvar_fordragon",
@@ -357,7 +986,29 @@
     "cost": 5,
     "attack": 1,
     "health": 7,
-    "rulesText": "Whenever a friendly minion dies while this is in your hand, gain +1 Attack."
+    "rulesText": "Whenever a friendly minion dies while this is in your hand, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            },
+            "attack": 1,
+            "duration": "permanent"
+          }
+        ],
+        "event": {
+          "type": "minion-died",
+          "controller": "self"
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_cobalt_guardian",
@@ -369,7 +1020,31 @@
     "cost": 5,
     "attack": 6,
     "health": 3,
-    "rulesText": "Whenever you summon a Mech, gain Divine Shield."
+    "rulesText": "Whenever you summon a Mech, gain Divine Shield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "divine-shield"
+          }
+        ],
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "filter": {
+            "tribe": "Mech"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_quartermaster",
@@ -381,7 +1056,29 @@
     "cost": 5,
     "attack": 2,
     "health": 5,
-    "rulesText": "Battlecry: Give your Silver Hand Recruits +2/+2."
+    "rulesText": "Battlecry: Give your Silver Hand Recruits +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "cardId": "basic_silver_hand_recruit"
+              }
+            },
+            "attack": 2,
+            "health": 2,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_light_of_the_naaru",
@@ -393,7 +1090,36 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Restore 3 Health. If the target is still damaged, summon a Lightwarden."
+    "rulesText": "Restore 3 Health. If the target is still damaged, summon a Lightwarden.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "target-damaged"
+          },
+          "actions": [
+            {
+              "action": "summon",
+              "cardId": "classic_lightwarden",
+              "count": 1
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_shadowbomber",
@@ -405,7 +1131,24 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "Battlecry: Deal 3 damage to each hero."
+    "rulesText": "Battlecry: Deal 3 damage to each hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_shadowboxer",
@@ -417,7 +1160,27 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Whenever a character is healed, deal 1 damage to a random enemy."
+    "rulesText": "Whenever a character is healed, deal 1 damage to a random enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-heal",
+        "event": {
+          "type": "health-restored"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_shrinkmeister",
@@ -429,7 +1192,25 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry: Give a minion -2 Attack this turn."
+    "rulesText": "Battlecry: Give a minion -2 Attack this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": -2,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_velens_chosen",
@@ -441,7 +1222,36 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Give a minion +2/+4 and Spell Damage +1."
+    "rulesText": "Give a minion +2/+4 and Spell Damage +1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 2,
+            "health": 4,
+            "duration": "permanent"
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "spell-damage",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_upgraded_repair_bot",
@@ -453,7 +1263,28 @@
     "cost": 5,
     "attack": 5,
     "health": 5,
-    "rulesText": "Battlecry: Give a friendly Mech +4 Health."
+    "rulesText": "Battlecry: Give a friendly Mech +4 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Mech"
+              }
+            },
+            "health": 4,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_voljin",
@@ -465,7 +1296,30 @@
     "cost": 5,
     "attack": 6,
     "health": 2,
-    "rulesText": "Battlecry: Swap Health with another minion."
+    "rulesText": "Battlecry: Swap Health with another minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "swap",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen",
+              "exclude": "source"
+            },
+            "source": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "field": "health"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_lightbomb",
@@ -477,7 +1331,24 @@
     "cost": 6,
     "attack": null,
     "health": null,
-    "rulesText": "Deal damage to each minion equal to its Attack."
+    "rulesText": "Deal damage to each minion equal to its Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": { "reference": "target.attack" }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_goblin_auto_barber",
@@ -489,7 +1360,25 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry: Give your weapon +1 Attack."
+    "rulesText": "Battlecry: Give your weapon +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "attack": 1,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_one_eyed_cheat",
@@ -501,7 +1390,31 @@
     "cost": 2,
     "attack": 4,
     "health": 1,
-    "rulesText": "Whenever you summon a Pirate, gain Stealth."
+    "rulesText": "Whenever you summon a Pirate, gain Stealth.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "stealth"
+          }
+        ],
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "filter": {
+            "tribe": "Pirate"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_cogmasters_wrench",
@@ -513,7 +1426,32 @@
     "cost": 3,
     "attack": 1,
     "health": 3,
-    "rulesText": "Has +2 Attack while you have a Mech."
+    "rulesText": "Has +2 Attack while you have a Mech.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "source"
+            },
+            "attack": 2,
+            "duration": "while-condition"
+          }
+        ],
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": {
+            "tribe": "Mech"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_iron_sensei",
@@ -525,7 +1463,30 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "At the end of your turn, give another friendly Mech +2/+2."
+    "rulesText": "At the end of your turn, give another friendly Mech +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "exclude": "source",
+              "filter": {
+                "tribe": "Mech"
+              }
+            },
+            "attack": 2,
+            "health": 2,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_sabotage",
@@ -537,7 +1498,38 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a random enemy minion. Combo: And your opponent's weapon."
+    "rulesText": "Destroy a random enemy minion. Combo: And your opponent's weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            }
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "combo-active"
+          },
+          "actions": [
+            {
+              "action": "destroy",
+              "target": {
+                "controller": "opponent",
+                "type": "weapon",
+                "selection": "all"
+              }
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_tinkers_sharpsword_oil",
@@ -549,7 +1541,42 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Give your weapon +3 Attack. Combo: Give a random friendly minion +3 Attack."
+    "rulesText": "Give your weapon +3 Attack. Combo: Give a random friendly minion +3 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "attack": 3,
+            "duration": "permanent"
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "combo-active"
+          },
+          "actions": [
+            {
+              "action": "modify",
+              "target": {
+                "controller": "self",
+                "type": "minion",
+                "selection": "random"
+              },
+              "attack": 3,
+              "duration": "permanent"
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_ogre_ninja",
@@ -561,7 +1588,9 @@
     "cost": 5,
     "attack": 6,
     "health": 6,
-    "rulesText": "Stealth. 50% chance to attack the wrong enemy."
+    "rulesText": "Stealth. 50% chance to attack the wrong enemy.",
+    "keywords": ["stealth", "attack-wrong-enemy-chance-50"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_trade_prince_gallywix",
@@ -573,7 +1602,34 @@
     "cost": 6,
     "attack": 5,
     "health": 8,
-    "rulesText": "Whenever your opponent casts a spell, gain a copy of it and give them a Coin."
+    "rulesText": "Whenever your opponent casts a spell, gain a copy of it and give them a Coin.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "type": "event-card"
+            },
+            "destination": "hand",
+            "player": "self",
+            "count": 1
+          },
+          {
+            "action": "add-to-hand",
+            "player": "opponent",
+            "cardId": "goblins_vs_gnomes_the_coin",
+            "count": 1
+          }
+        ],
+        "event": {
+          "type": "spell-cast",
+          "controller": "opponent"
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_crackle",
@@ -585,7 +1641,28 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 3-6 damage. Overload: (1)"
+    "rulesText": "Deal 3-6 damage. Overload: (1)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": { "random": [3, 4, 5, 6] }
+          },
+          {
+            "action": "overload",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_vitality_totem",
@@ -597,7 +1674,24 @@
     "cost": 2,
     "attack": 0,
     "health": 3,
-    "rulesText": "At the end of your turn, restore 4 Health to your hero."
+    "rulesText": "At the end of your turn, restore 4 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_whirling_zap_o_matic",
@@ -609,7 +1703,9 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Windfury."
+    "rulesText": "Windfury.",
+    "keywords": ["windfury"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_powermace",
@@ -621,7 +1717,29 @@
     "cost": 3,
     "attack": 3,
     "health": 2,
-    "rulesText": "Deathrattle: Give a random friendly Mech +2/+2."
+    "rulesText": "Deathrattle: Give a random friendly Mech +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "filter": {
+                "tribe": "Mech"
+              }
+            },
+            "attack": 2,
+            "health": 2,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_ancestors_call",
@@ -633,7 +1751,24 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Put a random minion from each player's hand into the battlefield."
+    "rulesText": "Put a random minion from each player's hand into the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "source": "hand",
+            "player": "each",
+            "filter": {
+              "cardType": "Minion"
+            },
+            "selection": "random"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_dunemaul_shaman",
@@ -645,7 +1780,23 @@
     "cost": 4,
     "attack": 5,
     "health": 4,
-    "rulesText": "Windfury. Overload: (1). 50% chance to attack the wrong enemy."
+    "rulesText": "Windfury. Overload: (1). 50% chance to attack the wrong enemy.",
+    "keywords": ["windfury", "attack-wrong-enemy-chance-50"],
+    "effects": [
+      {
+        "trigger": "on-card-played",
+        "event": {
+          "type": "card-played",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "overload",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_siltfin_spiritwalker",
@@ -657,7 +1808,40 @@
     "cost": 4,
     "attack": 2,
     "health": 5,
-    "rulesText": "Whenever another Murloc dies, draw a card. Overload: (1)"
+    "rulesText": "Whenever another Murloc dies, draw a card. Overload: (1)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ],
+        "event": {
+          "type": "minion-died",
+          "filter": {
+            "tribe": "Murloc"
+          },
+          "exclude": "source"
+        }
+      },
+      {
+        "trigger": "on-card-played",
+        "event": {
+          "type": "card-played",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "overload",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_neptulon",
@@ -669,7 +1853,28 @@
     "cost": 7,
     "attack": 7,
     "health": 7,
-    "rulesText": "Battlecry: Add 4 random Murlocs to your hand. Overload: (3)"
+    "rulesText": "Battlecry: Add 4 random Murlocs to your hand. Overload: (3)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "tribe": "Murloc"
+            },
+            "count": 4
+          },
+          {
+            "action": "overload",
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_darkbomb",
@@ -681,7 +1886,24 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 3 damage."
+    "rulesText": "Deal 3 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_mistress_of_pain",
@@ -693,7 +1915,32 @@
     "cost": 2,
     "attack": 1,
     "health": 4,
-    "rulesText": "Whenever this minion deals damage, restore that much Health to your hero."
+    "rulesText": "Whenever this minion deals damage, restore that much Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": { "reference": "event.damage" }
+          }
+        ],
+        "event": {
+          "type": "damage-dealt",
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_fel_cannon",
@@ -705,7 +1952,28 @@
     "cost": 4,
     "attack": 3,
     "health": 5,
-    "rulesText": "At the end of your turn, deal 2 damage to a non-Mech minion."
+    "rulesText": "At the end of your turn, deal 2 damage to a non-Mech minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "random",
+              "filter": {
+                "tribe": "Mech",
+                "negate": true
+              }
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_imp_losion",
@@ -717,7 +1985,37 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2-4 damage. Summon 4 Imps, minus one for each damage dealt."
+    "rulesText": "Deal 2-4 damage. Summon 4 Imps, minus one for each damage dealt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": { "random": [2, 3, 4] }
+          }
+        ],
+        "then": {
+          "actions": [
+            {
+              "action": "summon",
+              "cardId": "classic_imp",
+              "count": {
+                "operation": "subtract",
+                "value": 4,
+                "reference": "damage-dealt"
+              }
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_demonheart",
@@ -729,7 +2027,46 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 5 damage to a minion. If it's a friendly Demon, give it +5/+5 instead."
+    "rulesText": "Deal 5 damage to a minion. If it's a friendly Demon, give it +5/+5 instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "target-is-friendly-demon"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 5,
+            "health": 5,
+            "duration": "permanent"
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "target-is-not-friendly-demon"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_floating_watcher",
@@ -741,7 +2078,35 @@
     "cost": 5,
     "attack": 4,
     "health": 4,
-    "rulesText": "Whenever your hero takes damage on your turn, gain +2/+2."
+    "rulesText": "Whenever your hero takes damage on your turn, gain +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "health": 2,
+            "duration": "permanent"
+          }
+        ],
+        "event": {
+          "type": "damage-dealt",
+          "target": {
+            "controller": "self",
+            "type": "hero",
+            "selection": "all"
+          },
+          "turnPlayer": "self"
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_anima_golem",
@@ -753,7 +2118,29 @@
     "cost": 6,
     "attack": 9,
     "health": 9,
-    "rulesText": "At the end of each turn, destroy this minion if it's your only one."
+    "rulesText": "At the end of each turn, destroy this minion if it's your only one.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            }
+          }
+        ],
+        "condition": {
+          "type": "player-has-minion-count",
+          "player": "self",
+          "operator": "eq",
+          "value": 1
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_malganis",
@@ -765,7 +2152,40 @@
     "cost": 9,
     "attack": 9,
     "health": 7,
-    "rulesText": "Your other Demons have +2/+2. Your hero is Immune."
+    "rulesText": "Your other Demons have +2/+2. Your hero is Immune.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source",
+              "filter": {
+                "tribe": "Demon"
+              }
+            },
+            "attack": 2,
+            "health": 2,
+            "duration": "while-source-in-play"
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "keyword": "immune",
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_warbot",
@@ -777,7 +2197,28 @@
     "cost": 1,
     "attack": 1,
     "health": 3,
-    "rulesText": "Enrage: +1 Attack."
+    "rulesText": "Enrage: +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "source-damaged"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "duration": "while-damaged"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_bouncing_blade",
@@ -789,7 +2230,27 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 1 damage to a random minion. Repeat until a minion dies."
+    "rulesText": "Deal 1 damage to a random minion. Repeat until a minion dies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "repeat": {
+          "until": "target-died",
+          "actions": [
+            {
+              "action": "damage",
+              "target": {
+                "controller": "any",
+                "type": "minion",
+                "selection": "random"
+              },
+              "amount": 1
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_ogre_warmaul",
@@ -801,7 +2262,9 @@
     "cost": 3,
     "attack": 4,
     "health": 2,
-    "rulesText": "50% chance to attack the wrong enemy."
+    "rulesText": "50% chance to attack the wrong enemy.",
+    "keywords": ["attack-wrong-enemy-chance-50"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_screwjank_clunker",
@@ -813,7 +2276,29 @@
     "cost": 4,
     "attack": 2,
     "health": 5,
-    "rulesText": "Battlecry: Give a friendly Mech +2/+2."
+    "rulesText": "Battlecry: Give a friendly Mech +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Mech"
+              }
+            },
+            "attack": 2,
+            "health": 2,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_siege_engine",
@@ -825,7 +2310,25 @@
     "cost": 5,
     "attack": 5,
     "health": 5,
-    "rulesText": "Whenever you gain Armor, give this minion +1 Attack."
+    "rulesText": "Whenever you gain Armor, give this minion +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-gain-armor",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_iron_juggernaut",
@@ -837,7 +2340,32 @@
     "cost": 6,
     "attack": 6,
     "health": 5,
-    "rulesText": "Battlecry: Shuffle a Mine into your opponent's deck. When drawn, it explodes for 10 damage."
+    "rulesText": "Battlecry and Deathrattle: Shuffle a Mine into your opponent's deck. When drawn, it explodes for 10 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "opponent",
+            "cardId": "goblins_vs_gnomes_burrowing_mine",
+            "count": 1
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "opponent",
+            "cardId": "goblins_vs_gnomes_burrowing_mine",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_shieldmaiden",
@@ -849,7 +2377,20 @@
     "cost": 6,
     "attack": 5,
     "health": 5,
-    "rulesText": "Battlecry: Gain 5 Armor."
+    "rulesText": "Battlecry: Gain 5 Armor.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "gain-armor",
+            "player": "self",
+            "amount": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_crush",
@@ -861,7 +2402,38 @@
     "cost": 7,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a minion. If you have a damaged minion, this costs (4) less."
+    "rulesText": "Destroy a minion. If you have a damaged minion, this costs (4) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "condition": {
+          "type": "player-has-damaged-minion",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": { "type": "card", "selection": "source" },
+            "amount": -4,
+            "duration": "while-condition"
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_target_dummy",
@@ -873,7 +2445,9 @@
     "cost": 0,
     "attack": 0,
     "health": 2,
-    "rulesText": "Taunt."
+    "rulesText": "Taunt.",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_clockwork_gnome",
@@ -885,7 +2459,23 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "Deathrattle: Add a Spare Part card to your hand."
+    "rulesText": "Deathrattle: Add a Spare Part card to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "sparePart": true
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_cogmaster",
@@ -897,7 +2487,32 @@
     "cost": 1,
     "attack": 1,
     "health": 2,
-    "rulesText": "Has +2 Attack while you have a Mech."
+    "rulesText": "Has +2 Attack while you have a Mech.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "duration": "while-condition"
+          }
+        ],
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": {
+            "tribe": "Mech"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_annoy_o_tron",
@@ -909,7 +2524,9 @@
     "cost": 2,
     "attack": 1,
     "health": 2,
-    "rulesText": "Taunt. Divine Shield."
+    "rulesText": "Taunt. Divine Shield.",
+    "keywords": ["taunt", "divine-shield"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_explosive_sheep",
@@ -921,7 +2538,24 @@
     "cost": 2,
     "attack": 1,
     "health": 1,
-    "rulesText": "Deathrattle: Deal 2 damage to all minions."
+    "rulesText": "Deathrattle: Deal 2 damage to all minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_gilblin_stalker",
@@ -933,7 +2567,9 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Stealth."
+    "rulesText": "Stealth.",
+    "keywords": ["stealth"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_mechwarper",
@@ -945,7 +2581,28 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Your Mechs cost (1) less."
+    "rulesText": "Your Mechs cost (1) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Mech"
+              }
+            },
+            "amount": -1,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_micro_machine",
@@ -957,7 +2614,25 @@
     "cost": 2,
     "attack": 1,
     "health": 2,
-    "rulesText": "At the start of each turn, gain +1 Attack."
+    "rulesText": "At the start of each turn, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_puddlestomper",
@@ -969,7 +2644,9 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_recombobulator",
@@ -981,7 +2658,27 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry: Transform a friendly minion into a random minion with the same Cost."
+    "rulesText": "Battlecry: Transform a friendly minion into a random minion with the same Cost.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "transform-random",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "filter": {
+              "cardType": "Minion",
+              "cost": "target-cost"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_ships_cannon",
@@ -993,7 +2690,31 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Whenever you summon a Pirate, deal 2 damage to a random enemy."
+    "rulesText": "Whenever you summon a Pirate, deal 2 damage to a random enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 2
+          }
+        ],
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "filter": {
+            "tribe": "Pirate"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_stonesplinter_trogg",
@@ -1005,7 +2726,29 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Whenever your opponent casts a spell, gain +1 Attack."
+    "rulesText": "Whenever your opponent casts a spell, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "duration": "permanent"
+          }
+        ],
+        "event": {
+          "type": "spell-cast",
+          "controller": "opponent"
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_flying_machine",
@@ -1017,7 +2760,9 @@
     "cost": 3,
     "attack": 1,
     "health": 4,
-    "rulesText": "Windfury."
+    "rulesText": "Windfury.",
+    "keywords": ["windfury"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_gnomeregan_infantry",
@@ -1029,7 +2774,9 @@
     "cost": 3,
     "attack": 1,
     "health": 4,
-    "rulesText": "Charge. Taunt."
+    "rulesText": "Charge. Taunt.",
+    "keywords": ["charge", "taunt"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_gnomish_experimenter",
@@ -1041,7 +2788,37 @@
     "cost": 3,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry: Draw a card. If it's a minion, transform it into a Chicken."
+    "rulesText": "Battlecry: Draw a card. If it's a minion, transform it into a Chicken.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "drawn-card-matches",
+            "filter": {
+              "cardType": "Minion"
+            }
+          },
+          "actions": [
+            {
+              "action": "transform",
+              "target": {
+                "type": "drawn-card"
+              },
+              "cardId": "goblins_vs_gnomes_chicken"
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_goblin_sapper",
@@ -1053,7 +2830,31 @@
     "cost": 3,
     "attack": 2,
     "health": 4,
-    "rulesText": "Has +4 Attack while your opponent has 6 or more cards in hand."
+    "rulesText": "Has +4 Attack while your opponent has 6 or more cards in hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 4,
+            "duration": "while-condition"
+          }
+        ],
+        "condition": {
+          "type": "player-has-hand-count",
+          "player": "opponent",
+          "operator": "gte",
+          "value": 6
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_hobgoblin",
@@ -1065,7 +2866,35 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Whenever you play a 1-Attack minion, give it +2/+2."
+    "rulesText": "Whenever you play a 1-Attack minion, give it +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-card-played",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "event-source"
+            },
+            "attack": 2,
+            "health": 2,
+            "duration": "permanent"
+          }
+        ],
+        "event": {
+          "type": "minion-played",
+          "controller": "self",
+          "filter": {
+            "stat": "attack",
+            "operator": "eq",
+            "value": 1
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_illuminator",
@@ -1077,7 +2906,28 @@
     "cost": 3,
     "attack": 2,
     "health": 4,
-    "rulesText": "If you control a Secret at the end of your turn, restore 4 Health to your hero."
+    "rulesText": "If you control a Secret at the end of your turn, restore 4 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 4
+          }
+        ],
+        "condition": {
+          "type": "player-has-secret",
+          "player": "self"
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_lil_exorcist",
@@ -1089,7 +2939,46 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Taunt. Battlecry: Gain +1/+1 for each enemy Deathrattle minion."
+    "rulesText": "Taunt. Battlecry: Gain +1/+1 for each enemy Deathrattle minion.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "opponent",
+                "type": "minion",
+                "selection": "all",
+                "filter": {
+                  "hasDeathrattle": true
+                }
+              }
+            },
+            "health": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "opponent",
+                "type": "minion",
+                "selection": "all",
+                "filter": {
+                  "hasDeathrattle": true
+                }
+              }
+            },
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_ogre_brute",
@@ -1101,7 +2990,9 @@
     "cost": 3,
     "attack": 4,
     "health": 4,
-    "rulesText": "50% chance to attack the wrong enemy."
+    "rulesText": "50% chance to attack the wrong enemy.",
+    "keywords": ["attack-wrong-enemy-chance-50"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_spider_tank",
@@ -1113,7 +3004,9 @@
     "cost": 3,
     "attack": 3,
     "health": 4,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_tinkertown_technician",
@@ -1125,7 +3018,41 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: If you have a Mech, gain +1/+1 and add a Spare Part to your hand."
+    "rulesText": "Battlecry: If you have a Mech, gain +1/+1 and add a Spare Part to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1,
+            "duration": "permanent"
+          },
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "sparePart": true
+            }
+          }
+        ],
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": {
+            "tribe": "Mech"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_arcane_nullifier_x_21",
@@ -1137,7 +3064,9 @@
     "cost": 4,
     "attack": 2,
     "health": 5,
-    "rulesText": "Taunt. Can't be targeted by spells or Hero Powers."
+    "rulesText": "Taunt. Can't be targeted by spells or Hero Powers.",
+    "keywords": ["taunt", "spell-immune"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_burly_rockjaw_trogg",
@@ -1149,7 +3078,29 @@
     "cost": 4,
     "attack": 3,
     "health": 5,
-    "rulesText": "Whenever your opponent casts a spell, gain +2 Attack."
+    "rulesText": "Whenever your opponent casts a spell, gain +2 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "duration": "permanent"
+          }
+        ],
+        "event": {
+          "type": "spell-cast",
+          "controller": "opponent"
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_enhance_o_mechano",
@@ -1161,7 +3112,25 @@
     "cost": 4,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry: Give your other minions Windfury, Taunt, or Divine Shield at random."
+    "rulesText": "Battlecry: Give your other minions Windfury, Taunt, or Divine Shield at random.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-random-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "keywords": ["windfury", "taunt", "divine-shield"]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_jeeves",
@@ -1173,7 +3142,20 @@
     "cost": 4,
     "attack": 1,
     "health": 4,
-    "rulesText": "At the end of each player's turn, that player draws until they have 3 cards."
+    "rulesText": "At the end of each player's turn, that player draws until they have 3 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "draw-until",
+            "player": "turn-player",
+            "handSize": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_kezan_mystic",
@@ -1185,7 +3167,23 @@
     "cost": 4,
     "attack": 4,
     "health": 3,
-    "rulesText": "Battlecry: Take control of a random enemy Secret."
+    "rulesText": "Battlecry: Take control of a random enemy Secret.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "take-control",
+            "target": {
+              "controller": "opponent",
+              "type": "secret",
+              "selection": "random"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_lost_tallstrider",
@@ -1197,7 +3195,9 @@
     "cost": 4,
     "attack": 5,
     "health": 4,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_mechanical_yeti",
@@ -1209,7 +3209,23 @@
     "cost": 4,
     "attack": 4,
     "health": 5,
-    "rulesText": "Deathrattle: Give each player a Spare Part."
+    "rulesText": "Deathrattle: Give each player a Spare Part.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "each",
+            "source": "random-card",
+            "filter": {
+              "sparePart": true
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_mini_mage",
@@ -1221,7 +3237,9 @@
     "cost": 4,
     "attack": 4,
     "health": 1,
-    "rulesText": "Stealth. Spell Damage +1."
+    "rulesText": "Stealth. Spell Damage +1.",
+    "keywords": ["stealth", "spell-damage"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_piloted_shredder",
@@ -1233,7 +3251,23 @@
     "cost": 4,
     "attack": 4,
     "health": 3,
-    "rulesText": "Deathrattle: Summon a random 2-Cost minion."
+    "rulesText": "Deathrattle: Summon a random 2-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": 2
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_antique_healbot",
@@ -1245,7 +3279,24 @@
     "cost": 5,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Restore 8 Health to your hero."
+    "rulesText": "Battlecry: Restore 8 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 8
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_blingtron_3000",
@@ -1257,7 +3308,22 @@
     "cost": 5,
     "attack": 3,
     "health": 4,
-    "rulesText": "Battlecry: Equip a random weapon for each player."
+    "rulesText": "Battlecry: Equip a random weapon for each player.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "equip-random",
+            "player": "each",
+            "filter": {
+              "cardType": "Weapon"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_bomb_lobber",
@@ -1269,7 +3335,24 @@
     "cost": 5,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Deal 4 damage to a random enemy minion."
+    "rulesText": "Battlecry: Deal 4 damage to a random enemy minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_fel_reaver",
@@ -1281,7 +3364,25 @@
     "cost": 5,
     "attack": 8,
     "health": 8,
-    "rulesText": "Whenever your opponent plays a card, discard the top 3 cards of your deck."
+    "rulesText": "Whenever your opponent plays a card, discard the top 3 cards of your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-card-played",
+        "actions": [
+          {
+            "action": "discard",
+            "player": "self",
+            "source": "deck-top",
+            "count": 3
+          }
+        ],
+        "event": {
+          "type": "card-played",
+          "controller": "opponent"
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_hemet_nesingwary",
@@ -1293,7 +3394,26 @@
     "cost": 5,
     "attack": 6,
     "health": 3,
-    "rulesText": "Battlecry: Destroy a Beast."
+    "rulesText": "Battlecry: Destroy a Beast.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Beast"
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_junkbot",
@@ -1305,7 +3425,33 @@
     "cost": 5,
     "attack": 1,
     "health": 5,
-    "rulesText": "Whenever a friendly Mech dies, gain +2/+2."
+    "rulesText": "Whenever a friendly Mech dies, gain +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "health": 2,
+            "duration": "permanent"
+          }
+        ],
+        "event": {
+          "type": "minion-died",
+          "controller": "self",
+          "filter": {
+            "tribe": "Mech"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_madder_bomber",
@@ -1317,7 +3463,26 @@
     "cost": 5,
     "attack": 5,
     "health": 4,
-    "rulesText": "Battlecry: Deal 6 damage randomly split between all other characters."
+    "rulesText": "Battlecry: Deal 6 damage randomly split between all other characters.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "random",
+              "exclude": "source"
+            },
+            "amount": 1,
+            "hits": 6
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_mimirons_head",
@@ -1329,7 +3494,40 @@
     "cost": 5,
     "attack": 4,
     "health": 5,
-    "rulesText": "At the start of your turn, if you have at least 3 Mechs, destroy them all and form V-07-TR-0N."
+    "rulesText": "At the start of your turn, if you have at least 3 Mechs, destroy them all and form V-07-TR-0N.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "tribe": "Mech"
+              }
+            }
+          },
+          {
+            "action": "summon",
+            "cardId": "goblins_vs_gnomes_v_07_tr_0n",
+            "count": 1
+          }
+        ],
+        "condition": {
+          "type": "player-has-minion-count",
+          "player": "self",
+          "filter": {
+            "tribe": "Mech"
+          },
+          "operator": "gte",
+          "value": 3
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_salty_dog",
@@ -1341,7 +3539,9 @@
     "cost": 5,
     "attack": 7,
     "health": 4,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_gazlowe",
@@ -1353,7 +3553,30 @@
     "cost": 6,
     "attack": 3,
     "health": 6,
-    "rulesText": "Whenever you cast a 1-Cost spell, add a random Mech to your hand."
+    "rulesText": "Whenever you cast a 1-Cost spell, add a random Mech to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "tribe": "Mech"
+            }
+          }
+        ],
+        "event": {
+          "type": "spell-cast",
+          "controller": "self",
+          "filter": {
+            "cost": 1
+          }
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_mogor_the_ogre",
@@ -1365,7 +3588,25 @@
     "cost": 6,
     "attack": 7,
     "health": 6,
-    "rulesText": "All minions have a 50% chance to attack the wrong enemy."
+    "rulesText": "All minions have a 50% chance to attack the wrong enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "keyword": "attack-wrong-enemy-chance-50",
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_piloted_sky_golem",
@@ -1377,7 +3618,23 @@
     "cost": 6,
     "attack": 6,
     "health": 4,
-    "rulesText": "Deathrattle: Summon a random 4-Cost minion."
+    "rulesText": "Deathrattle: Summon a random 4-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": 4
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_toshley",
@@ -1389,7 +3646,36 @@
     "cost": 6,
     "attack": 5,
     "health": 7,
-    "rulesText": "Battlecry and Deathrattle: Add a Spare Part card to your hand."
+    "rulesText": "Battlecry and Deathrattle: Add a Spare Part card to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "sparePart": true
+            }
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "sparePart": true
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_dr_boom",
@@ -1401,7 +3687,20 @@
     "cost": 7,
     "attack": 7,
     "health": 7,
-    "rulesText": "Battlecry: Summon two 1/1 Boom Bots."
+    "rulesText": "Battlecry: Summon two 1/1 Boom Bots.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "goblins_vs_gnomes_boom_bot",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_troggzor_the_earthinator",
@@ -1413,7 +3712,24 @@
     "cost": 7,
     "attack": 6,
     "health": 6,
-    "rulesText": "Whenever your opponent casts a spell, summon a Burly Rockjaw Trogg."
+    "rulesText": "Whenever your opponent casts a spell, summon a Burly Rockjaw Trogg.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "goblins_vs_gnomes_burly_rockjaw_trogg",
+            "count": 1
+          }
+        ],
+        "event": {
+          "type": "spell-cast",
+          "controller": "opponent"
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_foe_reaper_4000",
@@ -1425,7 +3741,25 @@
     "cost": 8,
     "attack": 6,
     "health": 9,
-    "rulesText": "Also damages the minions next to whomever it attacks."
+    "rulesText": "Also damages the minions next to whomever it attacks.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "adjacent",
+              "adjacentTo": "event-target"
+            },
+            "amount": { "reference": "source.attack" }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_force_tank_max",
@@ -1437,7 +3771,9 @@
     "cost": 8,
     "attack": 7,
     "health": 7,
-    "rulesText": "Divine Shield."
+    "rulesText": "Divine Shield.",
+    "keywords": ["divine-shield"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_sneeds_old_shredder",
@@ -1449,7 +3785,23 @@
     "cost": 8,
     "attack": 5,
     "health": 7,
-    "rulesText": "Deathrattle: Summon a random Legendary minion."
+    "rulesText": "Deathrattle: Summon a random Legendary minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "rarity": "Legendary"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_mekgineer_thermaplugg",
@@ -1461,7 +3813,24 @@
     "cost": 9,
     "attack": 9,
     "health": 7,
-    "rulesText": "Whenever an enemy minion dies, summon a Leper Gnome."
+    "rulesText": "Whenever an enemy minion dies, summon a Leper Gnome.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "classic_leper_gnome",
+            "count": 1
+          }
+        ],
+        "event": {
+          "type": "minion-died",
+          "controller": "opponent"
+        }
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_clockwork_giant",
@@ -1473,6 +3842,195 @@
     "cost": 12,
     "attack": 8,
     "health": 8,
-    "rulesText": "Costs (1) less for each card in your opponent's hand."
+    "rulesText": "Costs (1) less for each card in your opponent's hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "opponent",
+                "type": "card",
+                "selection": "all",
+                "zone": "hand"
+              },
+              "operation": "subtract"
+            },
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "goblins_vs_gnomes_wisp",
+    "collectible": false,
+    "name": "Wisp",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 0,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_the_coin",
+    "collectible": false,
+    "name": "The Coin",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Gain 1 Mana Crystal this turn only.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "gain-mana",
+            "player": "self",
+            "duration": "this-turn",
+            "amount": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "goblins_vs_gnomes_boom_bot",
+    "collectible": false,
+    "name": "Boom Bot",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Deal 1-4 damage to a random enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": { "random": [1, 2, 3, 4] }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "goblins_vs_gnomes_burrowing_mine",
+    "collectible": false,
+    "name": "Burrowing Mine",
+    "rarity": "Summon",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "When drawn, explode for 10 damage to the enemy hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-draw",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 10
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "goblins_vs_gnomes_chicken",
+    "collectible": false,
+    "name": "Chicken",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_druid_of_the_fang_7_7",
+    "collectible": false,
+    "name": "Druid of the Fang",
+    "rarity": "Summon",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 5,
+    "attack": 7,
+    "health": 7,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_lights_justice",
+    "collectible": false,
+    "name": "Light's Justice",
+    "rarity": "Summon",
+    "cardClass": "Paladin",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 4,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_v_07_tr_0n",
+    "collectible": false,
+    "name": "V-07-TR-0N",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 8,
+    "attack": 4,
+    "health": 8,
+    "rulesText": "Mega-Windfury",
+    "keywords": ["mega-windfury"],
+    "effects": []
   }
 ]

@@ -1,3 +1,5 @@
+import type { CardEffectBlock, CardKeyword } from './card-effects'
+
 /** Stable identifiers shared by authored content and platform-neutral systems. */
 export type CardId = string & { readonly __cardId: unique symbol }
 export type ClassId = string & { readonly __classId: unique symbol }
@@ -80,6 +82,8 @@ export interface CardMetadata {
   readonly spellSchool: string | null
   readonly cost: number
   readonly rulesText: string
+  readonly keywords: readonly CardKeyword[]
+  readonly effects: readonly CardEffectBlock[]
   readonly collectible: boolean
   readonly deckLegal: boolean
 }

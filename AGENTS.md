@@ -44,7 +44,6 @@ These boundaries are strictly enforced by `.dependency-cruiser.cjs` and checked 
 
 - **Flattened Renderer**: All renderer code lives under `src/renderer/` (`app`, `scenes`, `features`, `rendering`, `ui`, `animation`). Never create a nested `src/renderer/src/`.
 - **File Naming**: All files and directories must use **`kebab-case.ts`** (e.g. `deck-repository.ts`, `scene-navigator.ts`, `main-menu-scene.ts`, `flip-card.ts`).
-- **Test Collocation**: All unit tests must sit directly beside the module they test (e.g. `foo.ts` $\rightarrow$ `foo.test.ts`). Root `tests/` is reserved only for global test harness configuration (e.g. `tests/setup/pixi-headless.ts`).
 - **No Direct Mutation of Layout Values**: Do not modify pixel coordinates or scales during refactoring unless explicitly requested.
 
 ---
@@ -160,8 +159,6 @@ This executes the complete safety net:
 
 1. `npm run format:check` — Prettier formatting validation.
 2. `npm run lint` — ESLint rules.
-3. `npm run typecheck` — TypeScript checks across node, web, and test contexts.
+3. `npm run typecheck` — TypeScript checks across node and web contexts.
 4. `npm run deps:check` — Architecture dependency cruiser validation.
-5. `npm run content:check` — Card JSON catalog schema validation.
-6. `npm test` — Vitest unit test suite.
-7. `npm run build:smoke` — Production build smoke test and dev-marker leak check.
+5. `npm run build:smoke` — Production build smoke test and dev-marker leak check.

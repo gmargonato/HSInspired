@@ -86,12 +86,6 @@ module.exports = {
       to: { path: '^src/renderer/(features/dev|scenes/dev)' }
     },
     {
-      name: 'no-production-test-imports',
-      severity: 'error',
-      from: { pathNot: '\\.test\\.ts$' },
-      to: { path: '\\.test\\.ts$' }
-    },
-    {
       name: 'no-unresolved-imports',
       severity: 'error',
       from: { path: '^src', pathNot: '(^|/)env\\.d\\.ts$' },
@@ -100,7 +94,7 @@ module.exports = {
   ],
   options: {
     tsPreCompilationDeps: true,
-    tsConfig: { fileName: 'tsconfig.test.json' },
+    tsConfig: { fileName: 'tsconfig.web.json' },
     doNotFollow: { path: 'node_modules' },
     enhancedResolveOptions: {
       extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json']

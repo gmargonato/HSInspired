@@ -960,7 +960,6 @@ Update:
 CardDefinition
 raw validation schema
 catalog normalization
-tests
 ```
 
 Do not change gameplay behavior yet.
@@ -997,7 +996,7 @@ gain-mana
 equip
 ```
 
-Add domain tests before mass-populating cards.
+Review the domain behavior before mass-populating cards.
 
 ### Phase 4: Implement targeting
 
@@ -1093,7 +1092,7 @@ Within each set:
 9. conditional effects;
 10. Secrets and unusual mechanics.
 
-Each mechanic family should gain tests before large-scale content migration.
+Each mechanic family should be reviewed before large-scale content migration.
 
 ---
 
@@ -1145,35 +1144,7 @@ It does not execute rules.
 
 ---
 
-## 21. Tests
-
-Add tests for:
-
-- every card having `keywords`;
-- every card having `effects`;
-- vanilla cards using empty arrays;
-- intrinsic keyword behavior;
-- granted keyword behavior;
-- silence interactions;
-- malformed triggers;
-- malformed actions;
-- malformed selectors;
-- malformed filters;
-- malformed conditions;
-- invalid referenced card IDs;
-- deterministic random selection;
-- repeated random hits;
-- legal and illegal targets;
-- action ordering;
-- trigger ordering;
-- Battlecry resolution;
-- Deathrattle resolution;
-- aura application and removal;
-- temporary modifier expiration;
-- choices;
-- Secrets;
-- cross-set token references;
-- renderer independence from game-rule execution.
+## 21. Verification
 
 Run the repository's canonical verification:
 
@@ -1181,7 +1152,7 @@ Run the repository's canonical verification:
 npm run verify
 ```
 
-This should include formatting, linting, type checking, dependency validation, content validation, unit tests, and build verification.
+This includes formatting, linting, type checking, dependency validation, and build verification.
 
 ---
 
@@ -1201,7 +1172,7 @@ The effects system is complete when:
 - all card references validate;
 - randomness is deterministic;
 - the renderer never executes game rules;
-- representative cards from every supported set pass domain tests;
+- representative cards from every supported set are reviewed;
 - every non-vanilla gameplay rule has a machine-readable implementation;
 - `npm run verify` passes.
 

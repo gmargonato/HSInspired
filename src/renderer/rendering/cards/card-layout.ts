@@ -11,6 +11,7 @@ import type {
   CardTextStyle
 } from './card-render-tree'
 import { markHearthstoneKeywords } from './card-text-markup'
+import { isClassFrameClass, shouldRenderClassFrameColors } from './class-frame-colors'
 
 export { markHearthstoneKeywords } from './card-text-markup'
 
@@ -72,8 +73,57 @@ const RACE_TEXT_BOX = { x: 105, y: 795, width: 410, height: 62 } as const
 const RACE_BANNER_Z_INDEX = 230
 const RACE_TEXT_Z_INDEX = 231
 const LEGENDARY_FRAME_Z_INDEX = 105
+const CLASS_FRAME_MASK_Z_INDEX = 102
 const MANA_SHADOW_Z_INDEX = 290
 const LEGENDARY_FRAME_OFFSET = { x: 60, y: -35 } as const
+
+/** The source frame is 620x905 but the shared render canvas is 620x900. */
+const FRAME_SOURCE_TO_CANVAS_Y = CARD_CANVAS.height / 905
+
+/**
+ * Per-template crop coordinates in the 620x905 source-frame space. Every
+ * mask gets independent X/Y controls; add a new template here when its masks
+ * are available. Rendering converts only vertical coordinates to the 900px
+ * card canvas.
+ */
+export const CLASS_FRAME_MASK_SOURCE_LAYOUTS = {
+  minion: {
+    primary: { x: 13, y: 20, width: 594, height: 866 },
+    accent: { x: 31, y: 34, width: 557, height: 538 }
+  },
+  spell: {
+    primary: { x: 7, y: 11, width: 606, height: 883 },
+    accent: { x: 35, y: 10, width: 549, height: 473 }
+  }
+} as const
+
+function classFrameMaskPlacements(
+  source: (typeof CLASS_FRAME_MASK_SOURCE_LAYOUTS)[keyof typeof CLASS_FRAME_MASK_SOURCE_LAYOUTS]
+) {
+  return {
+    primary: {
+      position: { x: source.primary.x, y: source.primary.y * FRAME_SOURCE_TO_CANVAS_Y },
+      size: {
+        width: source.primary.width,
+        height: source.primary.height * FRAME_SOURCE_TO_CANVAS_Y
+      }
+    },
+    accent: {
+      position: { x: source.accent.x, y: source.accent.y * FRAME_SOURCE_TO_CANVAS_Y },
+      size: {
+        width: source.accent.width,
+        height: source.accent.height * FRAME_SOURCE_TO_CANVAS_Y
+      }
+    }
+  }
+}
+
+export const MINION_CLASS_FRAME_MASK_PLACEMENTS = classFrameMaskPlacements(
+  CLASS_FRAME_MASK_SOURCE_LAYOUTS.minion
+)
+export const SPELL_CLASS_FRAME_MASK_PLACEMENTS = classFrameMaskPlacements(
+  CLASS_FRAME_MASK_SOURCE_LAYOUTS.spell
+)
 const SHARED_STATS = {
   mana: { x: 60, y: 50 },
   attack: { x: 40, y: 810 },
@@ -180,6 +230,42 @@ function image(
     alphaMask,
     zIndex
   }
+}
+
+function classFrameMasks(
+  card: CardDefinition,
+  options: CardRenderOptions
+): readonly CardRenderNode[] {
+  if (
+    (card.type !== 'Minion' && card.type !== 'Spell') ||
+    !shouldRenderClassFrameColors(options.classFrameColors) ||
+    !isClassFrameClass(card.cardClass)
+  ) {
+    return []
+  }
+
+  const template = card.type === 'Minion' ? 'minion' : 'spell'
+  const placements =
+    template === 'minion'
+      ? MINION_CLASS_FRAME_MASK_PLACEMENTS
+      : SPELL_CLASS_FRAME_MASK_PLACEMENTS
+
+  return [
+    image(
+      'class-frame-mask-1',
+      `card.frame.${template}.class-mask-1`,
+      placements.primary.position,
+      CLASS_FRAME_MASK_Z_INDEX,
+      { size: placements.primary.size }
+    ),
+    image(
+      'class-frame-mask-2',
+      `card.frame.${template}.class-mask-2`,
+      placements.accent.position,
+      CLASS_FRAME_MASK_Z_INDEX + 1,
+      { size: placements.accent.size }
+    )
+  ]
 }
 
 function text(
@@ -438,6 +524,7 @@ export function buildCardRenderTree(
   const children: CardRenderNode[] = [
     artwork(profile),
     image('frame', profile.frame, { x: 0, y: 0 }, 100, { size: CARD_CANVAS }),
+    ...classFrameMasks(card, options),
     ...(legendaryFrameNode ? [legendaryFrameNode] : []),
     image('mana-shadow', 'card.shadow.mana', { x: 0, y: 0 }, MANA_SHADOW_Z_INDEX, {
       alphaMask: {
@@ -496,6 +583,8 @@ export interface CardRenderOptions {
   readonly debug?: boolean
   readonly elite?: boolean
   readonly silenced?: boolean
+  /** Optional per-view override for the minion and spell class-frame experiment. */
+  readonly classFrameColors?: boolean
 }
 
 export interface CardLayout {
@@ -518,7 +607,7 @@ export function buildCardLayout(
   const diagnostics = [
     `Uses the ${template} profile on the canonical ${CARD_CANVAS.width} × ${CARD_CANVAS.height} canvas.`,
     'Frame, name, rules, stats, and rarity are rendered as semantic nodes.',
-    'Card class does not affect visual asset selection.'
+    'Playable minion classes use the shared editable white-mask colors; Neutral remains uncolored.'
   ]
 
   if (card.type === 'Hero')

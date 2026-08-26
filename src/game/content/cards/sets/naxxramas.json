@@ -1,4 +1,4 @@
-﻿[
+[
   {
     "id": "naxxramas_zombie_chow",
     "name": "Zombie Chow",
@@ -9,7 +9,24 @@
     "cost": 1,
     "attack": 2,
     "health": 3,
-    "rulesText": "Deathrattle: Restore 5 Health to the enemy hero."
+    "rulesText": "Deathrattle: Restore 5 Health to the enemy hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "opponent",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_haunted_creeper",
@@ -21,7 +38,20 @@
     "cost": 2,
     "attack": 1,
     "health": 2,
-    "rulesText": "Deathrattle: Summon two 1/1 Spectral Spiders."
+    "rulesText": "Deathrattle: Summon two 1/1 Spectral Spiders.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "naxxramas_spectral_spider",
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_echoing_ooze",
@@ -33,7 +63,29 @@
     "cost": 2,
     "attack": 1,
     "health": 2,
-    "rulesText": "Battlecry: Summon an exact copy of this minion at the end of the turn."
+    "rulesText": "Battlecry: Summon an exact copy of this minion at the end of the turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "schedule",
+            "trigger": "end-of-turn",
+            "actions": [
+              {
+                "action": "summon-copy",
+                "target": {
+                  "controller": "self",
+                  "type": "minion",
+                  "selection": "source"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_mad_scientist",
@@ -45,7 +97,25 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Deathrattle: Put a Secret from your deck into the battlefield."
+    "rulesText": "Deathrattle: Put a Secret from your deck into the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "source": "deck",
+            "player": "self",
+            "filter": {
+              "cardType": "Spell",
+              "keyword": "secret"
+            },
+            "selection": "random"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_shade_of_naxxramas",
@@ -57,7 +127,26 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Stealth. At the start of your turn, gain +1/+1."
+    "rulesText": "Stealth. At the start of your turn, gain +1/+1.",
+    "keywords": ["stealth"],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_nerubian_egg",
@@ -69,7 +158,20 @@
     "cost": 2,
     "attack": 0,
     "health": 2,
-    "rulesText": "Deathrattle: Summon a 4/4 Nerubian."
+    "rulesText": "Deathrattle: Summon a 4/4 Nerubian.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "naxxramas_nerubian",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_spectral_knight",
@@ -81,7 +183,9 @@
     "cost": 5,
     "attack": 4,
     "health": 6,
-    "rulesText": "Can't be targeted by Spells or Hero Powers."
+    "rulesText": "Can't be targeted by Spells or Hero Powers.",
+    "keywords": ["spell-immune"],
+    "effects": []
   },
   {
     "id": "naxxramas_deathlord",
@@ -93,7 +197,24 @@
     "cost": 3,
     "attack": 2,
     "health": 8,
-    "rulesText": "Taunt. Deathrattle: Your opponent puts a minion from their deck into the battlefield."
+    "rulesText": "Taunt. Deathrattle: Your opponent puts a minion from their deck into the battlefield.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "source": "deck",
+            "player": "opponent",
+            "filter": {
+              "cardType": "Minion"
+            },
+            "selection": "random"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_maexxna",
@@ -105,7 +226,31 @@
     "cost": 6,
     "attack": 2,
     "health": 8,
-    "rulesText": "Destroy any minion damaged by this minion."
+    "rulesText": "Destroy any minion damaged by this minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "event-target"
+            }
+          }
+        ],
+        "event": {
+          "type": "damage-dealt",
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        }
+      }
+    ]
   },
   {
     "id": "naxxramas_webspinner",
@@ -117,7 +262,23 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": "Deathrattle: Add a random Beast to your hand."
+    "rulesText": "Deathrattle: Add a random Beast to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "tribe": "Beast"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_sludge_belcher",
@@ -129,7 +290,20 @@
     "cost": 5,
     "attack": 3,
     "health": 5,
-    "rulesText": "Taunt. Deathrattle: Summon a 1/2 Slime with Taunt."
+    "rulesText": "Taunt. Deathrattle: Summon a 1/2 Slime with Taunt.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "naxxramas_slime",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_kelthuzad",
@@ -141,7 +315,21 @@
     "cost": 8,
     "attack": 6,
     "health": 8,
-    "rulesText": "At the end of each turn, summon all friendly minions that died this turn."
+    "rulesText": "At the end of each turn, summon all friendly minions that died this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "resurrect",
+            "player": "self",
+            "source": "friendly-minions-died-this-turn",
+            "selection": "all"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_stalagg",
@@ -153,7 +341,24 @@
     "cost": 5,
     "attack": 7,
     "health": 4,
-    "rulesText": "Deathrattle: If Feugen also died this game, summon Thaddius."
+    "rulesText": "Deathrattle: If Feugen also died this game, summon Thaddius.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "naxxramas_thaddius",
+            "count": 1
+          }
+        ],
+        "condition": {
+          "type": "card-died-this-game",
+          "cardId": "naxxramas_feugen"
+        }
+      }
+    ]
   },
   {
     "id": "naxxramas_feugen",
@@ -165,7 +370,24 @@
     "cost": 5,
     "attack": 4,
     "health": 7,
-    "rulesText": "Deathrattle: If Stalagg also died this game, summon Thaddius."
+    "rulesText": "Deathrattle: If Stalagg also died this game, summon Thaddius.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "naxxramas_thaddius",
+            "count": 1
+          }
+        ],
+        "condition": {
+          "type": "card-died-this-game",
+          "cardId": "naxxramas_stalagg"
+        }
+      }
+    ]
   },
   {
     "id": "naxxramas_wailing_soul",
@@ -177,7 +399,24 @@
     "cost": 4,
     "attack": 3,
     "health": 5,
-    "rulesText": "Battlecry: Silence your other minions."
+    "rulesText": "Battlecry: Silence your other minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_nerubar_weblord",
@@ -189,7 +428,28 @@
     "cost": 2,
     "attack": 1,
     "health": 4,
-    "rulesText": "Minions with Battlecry cost (2) more."
+    "rulesText": "Minions with Battlecry cost (2) more.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "any",
+              "type": "minion-card",
+              "zone": "hand",
+              "filter": {
+                "hasBattlecry": true
+              }
+            },
+            "amount": 2,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_duplicate",
@@ -201,7 +461,32 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When a friendly minion dies, put 2 copies of it into your hand."
+    "rulesText": "Secret: When a friendly minion dies, put 2 copies of it into your hand.",
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "event-source"
+            },
+            "destination": "hand",
+            "count": 2
+          },
+          {
+            "action": "reveal"
+          }
+        ],
+        "event": {
+          "type": "minion-died",
+          "controller": "self"
+        }
+      }
+    ]
   },
   {
     "id": "naxxramas_poison_seeds",
@@ -213,7 +498,28 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy all minions and summon 2/2 Treants to replace them."
+    "rulesText": "Destroy all minions and summon 2/2 Treants to replace them.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            }
+          },
+          {
+            "action": "summon-for-each",
+            "cardId": "naxxramas_treant",
+            "source": "destroyed-minions"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_avenge",
@@ -225,7 +531,33 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When one of your minions dies, give a random friendly minion +3/+2."
+    "rulesText": "Secret: When one of your minions dies, give a random friendly minion +3/+2.",
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random"
+            },
+            "attack": 3,
+            "health": 2,
+            "duration": "permanent"
+          },
+          {
+            "action": "reveal"
+          }
+        ],
+        "event": {
+          "type": "minion-died",
+          "controller": "self"
+        }
+      }
+    ]
   },
   {
     "id": "naxxramas_deaths_bite",
@@ -237,7 +569,24 @@
     "cost": 4,
     "attack": 4,
     "health": 2,
-    "rulesText": "Deathrattle: Deal 1 damage to all minions."
+    "rulesText": "Deathrattle: Deal 1 damage to all minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_voidcaller",
@@ -249,7 +598,24 @@
     "cost": 4,
     "attack": 3,
     "health": 4,
-    "rulesText": "Deathrattle: Put a random Demon from your hand into the battlefield."
+    "rulesText": "Deathrattle: Put a random Demon from your hand into the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "source": "hand",
+            "player": "self",
+            "filter": {
+              "tribe": "Demon"
+            },
+            "selection": "random"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_dark_cultist",
@@ -261,7 +627,25 @@
     "cost": 3,
     "attack": 3,
     "health": 4,
-    "rulesText": "Deathrattle: Give a random friendly minion +3 Health."
+    "rulesText": "Deathrattle: Give a random friendly minion +3 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random"
+            },
+            "health": 3,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_unstable_ghoul",
@@ -273,7 +657,24 @@
     "cost": 2,
     "attack": 1,
     "health": 3,
-    "rulesText": "Taunt. Deathrattle: Deal 1 damage to all minions."
+    "rulesText": "Taunt. Deathrattle: Deal 1 damage to all minions.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_reincarnate",
@@ -285,7 +686,28 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a minion, then return it to life with full Health."
+    "rulesText": "Destroy a minion, then return it to life with full Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "resurrect",
+            "target": { "type": "minion", "selection": "event-target" },
+            "health": "full"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_anubar_ambusher",
@@ -297,7 +719,23 @@
     "cost": 4,
     "attack": 5,
     "health": 5,
-    "rulesText": "Deathrattle: Return a random friendly minion to your hand."
+    "rulesText": "Deathrattle: Return a random friendly minion to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_stoneskin_gargoyle",
@@ -309,7 +747,24 @@
     "cost": 3,
     "attack": 1,
     "health": 4,
-    "rulesText": "At the start of your turn, restore this minion to full Health."
+    "rulesText": "At the start of your turn, restore this minion to full Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "amount": "full"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_undertaker",
@@ -321,7 +776,33 @@
     "cost": 1,
     "attack": 1,
     "health": 2,
-    "rulesText": "Whenever you summon a minion with Deathrattle, gain +1/+1."
+    "rulesText": "Whenever you summon a minion with Deathrattle, gain +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1,
+            "duration": "permanent"
+          }
+        ],
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "filter": {
+            "hasDeathrattle": true
+          }
+        }
+      }
+    ]
   },
   {
     "id": "naxxramas_dancing_swords",
@@ -333,7 +814,20 @@
     "cost": 3,
     "attack": 4,
     "health": 4,
-    "rulesText": "Deathrattle: Your opponent draws a card."
+    "rulesText": "Deathrattle: Your opponent draws a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "opponent",
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_loatheb",
@@ -345,7 +839,25 @@
     "cost": 5,
     "attack": 5,
     "health": 5,
-    "rulesText": "Battlecry: Enemy spells cost (5) more next turn."
+    "rulesText": "Battlecry: Enemy spells cost (5) more next turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "opponent",
+              "type": "spell-card",
+              "zone": "hand"
+            },
+            "amount": 5,
+            "duration": "next-turn"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_baron_rivendare",
@@ -357,7 +869,28 @@
     "cost": 4,
     "attack": 1,
     "health": 7,
-    "rulesText": "Your minions trigger their Deathrattles twice."
+    "rulesText": "Your minions trigger their Deathrattles twice.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "multiply-trigger",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "filter": {
+                "hasDeathrattle": true
+              }
+            },
+            "trigger": "deathrattle",
+            "multiplier": 2,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "naxxramas_putrid_slime",
@@ -370,7 +903,9 @@
     "cost": 1,
     "attack": 1,
     "health": 2,
-    "rulesText": "Taunt"
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
   },
   {
     "id": "naxxramas_nerubian",
@@ -383,7 +918,9 @@
     "cost": 4,
     "attack": 4,
     "health": 4,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "naxxramas_spectral_spider",
@@ -396,7 +933,9 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   },
   {
     "id": "naxxramas_thaddius",
@@ -409,6 +948,38 @@
     "cost": 10,
     "attack": 11,
     "health": 11,
-    "rulesText": ""
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "naxxramas_slime",
+    "collectible": false,
+    "name": "Slime",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 2,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
+  },
+  {
+    "id": "naxxramas_treant",
+    "collectible": false,
+    "name": "Treant",
+    "rarity": "Summon",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
   }
 ]

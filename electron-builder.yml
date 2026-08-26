@@ -9,12 +9,9 @@ files:
   # Vite emits imported runtime assets under out/renderer/assets.
   - '!assets/**'
   - '!.github/**'
-  - '!tests/**'
   - '!scripts/**'
-  - '!**/*.test.*'
   - '!**/*.psd'
   - '!eslint.config.*'
-  - '!vitest.config.*'
   - '!tsconfig*.json'
   - '!.prettier*'
   - '!package-lock.json'

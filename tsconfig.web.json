@@ -20,6 +20,5 @@
         "src/renderer/rendering/effects/outline-directions-dev.ts"
       ]
     }
-  },
-  "exclude": ["src/renderer/**/*.test.ts", "src/game/**/*.test.ts"]
+  }
 }

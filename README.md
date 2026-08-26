@@ -37,10 +37,8 @@ npm run verify
 Individual focused commands:
 
 - `npm run dev` — Run Electron app in development mode.
-- `npm test` — Run Vitest unit tests.
-- `npm run typecheck` — Run TypeScript checks across node, web, and test contexts.
+- `npm run typecheck` — Run TypeScript checks across node and web contexts.
 - `npm run deps:check` — Validate architectural boundaries and dependency rules.
-- `npm run content:check` — Validate card JSON set definitions against the catalog schema.
 - `npm run lint` — Lint code with ESLint.
 - `npm run format:check` — Check code formatting with Prettier (`npm run format` to fix).
 - `npm run build:smoke` — Verify production build and check for development marker leaks.

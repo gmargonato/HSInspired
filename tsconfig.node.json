@@ -15,6 +15,5 @@
       "@renderer/*": ["src/renderer/*"],
       "@assets/*": ["assets/*"]
     }
-  },
-  "exclude": ["src/**/*.test.ts"]
+  }
 }

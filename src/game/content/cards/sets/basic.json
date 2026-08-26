@@ -438,7 +438,32 @@
     "health": null,
     "rulesText": "Give a friendly minion +2 Attack and Charge.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 2,
+            "duration": "permanent"
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "charge"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "basic_chillwind_yeti",
@@ -661,9 +686,9 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "on-summon",
+        "trigger": "on-card-played",
         "event": {
-          "type": "minion-summoned",
+          "type": "minion-played",
           "controller": "self",
           "filter": {
             "tribe": "Beast"
@@ -2078,7 +2103,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "minion",
               "selection": "chosen"
             },
@@ -2707,7 +2732,24 @@
     "health": 2,
     "rulesText": "Battlecry: Give a friendly minion +1/1.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 1,
+            "health": 1,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "basic_sheep",
@@ -2976,7 +3018,25 @@
     "health": 6,
     "rulesText": "Your other minions have +1/1.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "attack": 1,
+            "health": 1,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "basic_succubus",
@@ -3307,7 +3367,31 @@
     "health": 3,
     "rulesText": "Whenever you summon a minion with 3 or less Attack, give it Charge.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "event-source"
+            },
+            "keyword": "charge"
+          }
+        ],
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "filter": {
+            "stat": "attack",
+            "operator": "lte",
+            "value": 3
+          }
+        }
+      }
+    ]
   },
   {
     "id": "basic_water_elemental",

@@ -11,6 +11,12 @@ import {
   type CardTextLayer
 } from './card-layout'
 import { resolveCardTitleFit } from './card-title-fit'
+import {
+  classFrameAppearanceFor,
+  type ClassFrameAppearanceControls,
+  type ClassFrameBlendMode,
+  shouldRenderClassFrameColors
+} from './class-frame-colors'
 
 export interface CardViewOptions extends CardRenderOptions {
   readonly artwork?: Texture
@@ -19,7 +25,7 @@ export interface CardViewOptions extends CardRenderOptions {
 export interface CardLayerAppearance {
   readonly alpha?: number
   readonly tint?: number
-  readonly blendMode?: 'normal' | 'add' | 'screen'
+  readonly blendMode?: ClassFrameBlendMode
 }
 
 /** Read-only production diagnostics for a semantic card node. */
@@ -264,11 +270,36 @@ export class CardView extends Container {
     const view = new CardView(buildCardLayout(card, options))
     try {
       await view.build(resolver, options.artwork)
+      if (
+        shouldRenderClassFrameColors(options.classFrameColors) &&
+        (card.type === 'Minion' || card.type === 'Spell')
+      ) {
+        view.setClassFrameAppearance(card.cardClass)
+      }
     } catch (error) {
       view.destroy({ children: true })
       throw error
     }
     return view
+  }
+
+  setClassFrameAppearance(
+    classId: string,
+    controls: ClassFrameAppearanceControls = {}
+  ): void {
+    const appearance = classFrameAppearanceFor(classId, controls)
+    if (!appearance || !this.hasLayer('card.class-frame-mask-1')) return
+
+    this.setLayerAppearance('card.class-frame-mask-1', {
+      alpha: appearance.primaryAlpha,
+      tint: appearance.primary,
+      blendMode: appearance.primaryBlendMode
+    })
+    this.setLayerAppearance('card.class-frame-mask-2', {
+      alpha: appearance.accentAlpha,
+      tint: appearance.accent,
+      blendMode: appearance.accentBlendMode
+    })
   }
 
   setLayerVisible(layerId: string, visible: boolean): void {

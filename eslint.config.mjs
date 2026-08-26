@@ -19,7 +19,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/renderer/**/*.ts', 'tests/**/*.ts'],
+    files: ['src/renderer/**/*.ts'],
     languageOptions: {
       globals: globals.browser
     }

@@ -4,6 +4,26 @@ import { GOBLINS_VS_GNOMES_CARD_SOURCE } from './sets/goblins-vs-gnomes'
 import { NAXXRAMAS_CARD_SOURCE } from './sets/naxxramas'
 import type { CardDefinition, CardId } from './card-definition'
 
+function referencedCardIds(value: unknown): readonly string[] {
+  if (Array.isArray(value)) return value.flatMap(referencedCardIds)
+  if (typeof value !== 'object' || value === null) return []
+
+  const record = value as Record<string, unknown>
+  const nested = Object.entries(record).flatMap(([key, nestedValue]) => {
+    if (key === 'pool' && Array.isArray(nestedValue)) {
+      return nestedValue.flatMap((entry) =>
+        typeof entry === 'string' ? [entry] : referencedCardIds(entry)
+      )
+    }
+    return referencedCardIds(nestedValue)
+  })
+  const references = [
+    typeof record['cardId'] === 'string' ? record['cardId'] : null,
+    typeof record['excludeCardId'] === 'string' ? record['excludeCardId'] : null
+  ].filter((reference): reference is string => reference !== null)
+  return [...references, ...nested]
+}
+
 export class CardCatalog {
   private readonly cardsById: ReadonlyMap<CardId, CardDefinition>
 
@@ -14,6 +34,15 @@ export class CardCatalog {
         throw new Error(`Duplicate card id: ${card.id}`)
       }
       cardsById.set(card.id, card)
+    }
+    for (const card of cards) {
+      for (const referencedCardId of referencedCardIds(card.effects ?? [])) {
+        if (!cardsById.has(referencedCardId as CardId)) {
+          throw new Error(
+            `Unknown card id ${referencedCardId} referenced by ${card.id}`
+          )
+        }
+      }
     }
     this.cardsById = cardsById
   }

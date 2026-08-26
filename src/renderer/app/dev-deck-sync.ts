@@ -30,7 +30,7 @@ function buildCompleteDeckEntries(decks: readonly Deck[]): readonly DevDeckEntry
  * `Scenes > Match` submenu. The renderer is the source of truth for
  * completeness (MAX_DECK_CARDS) and class mapping.
  *
- * No-op in production or when the preload bridge is unavailable (tests/headless).
+ * No-op in production or when the preload bridge is unavailable.
  */
 export function installDevDeckSync(
   deckStore: DeckStore,

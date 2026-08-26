@@ -24,7 +24,7 @@ export const DECK_SELECTION_LAYOUT = {
   /** Class deck grid. Buttons are centered in their cells. */
   deckGrid: {
     frameStart: { x: 377, y: 300 } satisfies LayoutPoint,
-    frameGap: { x: 10, y: 100 } satisfies LayoutPoint
+    frameGap: { x: 10, y: 110 } satisfies LayoutPoint
   },
 
   /** Selected hero portrait, widened slightly to fit its frame. */

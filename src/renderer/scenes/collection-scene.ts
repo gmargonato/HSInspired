@@ -215,7 +215,7 @@ export class CollectionScene extends Scene {
       ).api?.devMenu
       bridge?.notifyCollectibleMode?.(mode)
     } catch {
-      // Dev bridge unavailable in tests/headless
+      // Dev bridge unavailable outside the Electron renderer
     }
   }
 

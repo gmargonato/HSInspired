@@ -1,6 +1,10 @@
 import armorImage from '@assets/images/cards/armor.png'
 import attackImage from '@assets/images/cards/attack.png'
 import cardNameImage from '@assets/images/cards/card-name.png'
+import colorMask1FrameMinionImage from '@assets/images/cards/color-mask-1-frame-minion.png'
+import colorMask1FrameSpellImage from '@assets/images/cards/color-mask-1-frame-spell.png'
+import colorMask2FrameMinionImage from '@assets/images/cards/color-mask-2-frame-minion.png'
+import colorMask2FrameSpellImage from '@assets/images/cards/color-mask-2-frame-spell.png'
 import frameHeroImage from '@assets/images/cards/frame-hero.png'
 import frameMinionImage from '@assets/images/cards/frame-minion.png'
 import frameSpellImage from '@assets/images/cards/frame-spell.png'
@@ -43,7 +47,35 @@ export const CARD_ASSET_DEFINITIONS = [
   cardAsset('card.name', 'card-name.png', cardNameImage, 665, 198),
   cardAsset('card.frame.hero', 'frame-hero.png', frameHeroImage, 620, 905),
   cardAsset('card.frame.minion', 'frame-minion.png', frameMinionImage, 620, 905),
+  cardAsset(
+    'card.frame.minion.class-mask-1',
+    'color-mask-1-frame-minion.png',
+    colorMask1FrameMinionImage,
+    594,
+    866
+  ),
+  cardAsset(
+    'card.frame.minion.class-mask-2',
+    'color-mask-2-frame-minion.png',
+    colorMask2FrameMinionImage,
+    557,
+    538
+  ),
   cardAsset('card.frame.spell', 'frame-spell.png', frameSpellImage, 620, 905),
+  cardAsset(
+    'card.frame.spell.class-mask-1',
+    'color-mask-1-frame-spell.png',
+    colorMask1FrameSpellImage,
+    606,
+    883
+  ),
+  cardAsset(
+    'card.frame.spell.class-mask-2',
+    'color-mask-2-frame-spell.png',
+    colorMask2FrameSpellImage,
+    549,
+    473
+  ),
   cardAsset('card.frame.weapon', 'frame-weapon.png', frameWeaponImage, 620, 905),
   cardAsset('card.stat.health', 'health.png', healthImage, 136, 192),
   cardAsset('card.frame.legendary', 'legendary.png', legendaryImage, 436, 317),
