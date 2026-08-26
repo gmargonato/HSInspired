@@ -32,6 +32,19 @@ export const PAGE_NAV_ZONE_WIDTH = 90
 export const COLLECTION_LAYOUT = {
   name: 'Collection',
 
+  /** Asset-free class selector markers along the top of the book page. */
+  classFilters: {
+    first: placement(
+      { x: 258, y: 24 },
+      { width: 82, height: 42 },
+      {
+        anchor: TOP_LEFT,
+        note: 'First class filter marker; later markers use the shared gap.'
+      }
+    ),
+    gap: 7
+  },
+
   /** The card page area, in canvas coordinates. */
   page: placement(
     { x: PAGE_LEFT, y: PAGE_TOP },

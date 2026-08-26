@@ -32,16 +32,49 @@ export type CollectibleMode = 'all' | 'collectible' | 'uncollectible'
 export type DevMatchTarget = 'local' | 'remote'
 export type DevCardPickerAction = 'add-to-hand' | 'summon'
 export type DevDeckAction = 'destroy' | 'refill'
+export type DevZone = 'hand' | 'board'
+export type DevHeroPowerAction = 'reset' | 'consume'
+export type DevDeckTrackerVisibility = 'hidden' | 'local' | 'both' | 'remote'
+export type DevDeckTrackerSortMode = 'cost' | 'alphabetical' | 'draw-order'
 
 export type DevCommand =
   | { readonly type: 'collection:set-collectible'; readonly mode: CollectibleMode }
   | { readonly type: 'game:toggle-tracker' }
   | {
+      readonly type: 'game:set-deck-tracker'
+      readonly visibility: DevDeckTrackerVisibility
+      readonly sortMode: DevDeckTrackerSortMode
+    }
+  | { readonly type: 'game:draw'; readonly target: DevMatchTarget }
+  | {
+      readonly type: 'game:clear-zone'
+      readonly target: DevMatchTarget
+      readonly zone: DevZone
+    }
+  | {
+      readonly type: 'game:set-fatigue'
+      readonly target: DevMatchTarget
+      readonly nextDamage: number
+    }
+  | {
+      readonly type: 'game:set-hero'
+      readonly target: DevMatchTarget
+      readonly health?: number
+      readonly armor?: number
+      readonly attack?: number
+    }
+  | {
+      readonly type: 'game:set-hero-power'
+      readonly target: DevMatchTarget
+      readonly cost?: number
+      readonly action?: DevHeroPowerAction
+    }
+  | { readonly type: 'game:remove-weapon'; readonly target: DevMatchTarget }
+  | {
       readonly type: 'game:open-card-picker'
       readonly target: DevMatchTarget
       readonly action: DevCardPickerAction
     }
-  | { readonly type: 'game:add-card'; readonly cardId: string }
   | {
       readonly type: 'game:modify-deck'
       readonly target: DevMatchTarget
@@ -50,6 +83,7 @@ export type DevCommand =
   | { readonly type: 'game:end-match'; readonly outcome: 'win' | 'lose' }
   | {
       readonly type: 'game:set-mana'
+      readonly target: DevMatchTarget
       readonly available: number
       readonly maximum: number
     }
@@ -114,15 +148,23 @@ export function isDevCommand(value: unknown): value is DevCommand {
     return isCollectibleMode(mode)
   }
   if (value.type === 'game:toggle-tracker') return true
+  if (value.type === 'game:set-deck-tracker') {
+    const command = value as { visibility?: unknown; sortMode?: unknown }
+    return (
+      (command.visibility === 'hidden' ||
+        command.visibility === 'local' ||
+        command.visibility === 'both' ||
+        command.visibility === 'remote') &&
+      (command.sortMode === 'cost' ||
+        command.sortMode === 'alphabetical' ||
+        command.sortMode === 'draw-order')
+    )
+  }
   if (value.type === 'game:open-card-picker') {
     return (
       isDevMatchTarget((value as { target?: unknown }).target) &&
       isDevCardPickerAction((value as { action?: unknown }).action)
     )
-  }
-  if (value.type === 'game:add-card') {
-    const cardId = (value as { cardId?: unknown }).cardId
-    return typeof cardId === 'string' && cardId.length > 0
   }
   if (value.type === 'game:modify-deck') {
     return (
@@ -138,6 +180,7 @@ export function isDevCommand(value: unknown): value is DevCommand {
     const available = (value as { available?: unknown }).available
     const maximum = (value as { maximum?: unknown }).maximum
     return (
+      isDevMatchTarget((value as { target?: unknown }).target) &&
       typeof available === 'number' &&
       Number.isInteger(available) &&
       available >= 0 &&
@@ -146,6 +189,36 @@ export function isDevCommand(value: unknown): value is DevCommand {
       Number.isInteger(maximum) &&
       maximum >= 0 &&
       maximum <= 10
+    )
+  }
+  if (value.type === 'game:draw' || value.type === 'game:remove-weapon')
+    return isDevMatchTarget((value as { target?: unknown }).target)
+  if (value.type === 'game:clear-zone')
+    return (
+      isDevMatchTarget((value as { target?: unknown }).target) &&
+      ((value as { zone?: unknown }).zone === 'hand' ||
+        (value as { zone?: unknown }).zone === 'board')
+    )
+  if (value.type === 'game:set-fatigue')
+    return (
+      isDevMatchTarget((value as { target?: unknown }).target) &&
+      Number.isInteger((value as { nextDamage?: unknown }).nextDamage) &&
+      (value as { nextDamage: number }).nextDamage >= 1
+    )
+  if (value.type === 'game:set-hero') {
+    if (!isDevMatchTarget((value as { target?: unknown }).target)) return false
+    const command = value as { health?: unknown; armor?: unknown; attack?: unknown }
+    return [command.health, command.armor, command.attack].some(
+      (entry) => Number.isInteger(entry) && (entry as number) >= 0
+    )
+  }
+  if (value.type === 'game:set-hero-power') {
+    if (!isDevMatchTarget((value as { target?: unknown }).target)) return false
+    const command = value as { cost?: unknown; action?: unknown }
+    return (
+      (Number.isInteger(command.cost) && (command.cost as number) >= 0) ||
+      command.action === 'reset' ||
+      command.action === 'consume'
     )
   }
   return false

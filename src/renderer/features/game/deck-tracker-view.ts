@@ -3,9 +3,13 @@ import type { FederatedWheelEvent } from 'pixi.js'
 import type { OpeningCard } from '../../../game/match'
 import { Actor } from '../../ui/components/actor'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
-import { applyPlacement } from '../../rendering/layout'
+import { applyPlacement, type LayoutPlacement } from '../../rendering/layout'
 import { DECK_TRACKER_LAYOUT, DECK_TRACKER_ROW_LAYOUT } from './deck-tracker-layout'
-import { buildDeckTrackerEntries, type DeckTrackerEntry } from './deck-tracker-model'
+import {
+  buildDeckTrackerEntries,
+  type DeckTrackerEntry,
+  type DeckTrackerSortMode
+} from './deck-tracker-model'
 
 interface DeckTrackerRowView {
   readonly row: Container
@@ -29,15 +33,22 @@ export class DeckTrackerView extends Actor {
   private centerOffset = 0
   private maxScroll = 0
   private disposed = false
+  private sortMode: DeckTrackerSortMode = 'cost'
 
-  constructor(private readonly cardResolver = new CardAssetResolver()) {
+  constructor(
+    private readonly cardResolver = new CardAssetResolver(),
+    layout: {
+      readonly panel: LayoutPlacement
+      readonly viewport: LayoutPlacement
+    } = DECK_TRACKER_LAYOUT
+  ) {
     super()
-    applyPlacement(this, DECK_TRACKER_LAYOUT.panel)
+    applyPlacement(this, layout.panel)
     this.label = 'game.deck-tracker'
     this.visible = false
     this.eventMode = 'none'
 
-    const { viewport } = DECK_TRACKER_LAYOUT
+    const { viewport } = layout
     const { height: viewportHeight, width: viewportWidth } = viewport.size
 
     this.maskGraphics = new Graphics()
@@ -61,7 +72,7 @@ export class DeckTrackerView extends Actor {
 
   update(deck: readonly OpeningCard[]): void {
     const sequence = ++this.renderSequence
-    const entries = buildDeckTrackerEntries(deck)
+    const entries = buildDeckTrackerEntries(deck, this.sortMode)
     const oldRows = this.content.removeChildren()
     for (const row of oldRows) row.destroy({ children: true })
 
@@ -104,6 +115,10 @@ export class DeckTrackerView extends Actor {
     this.visible = visible
     this.eventMode = visible ? 'static' : 'none'
     this.viewport.eventMode = visible ? 'static' : 'none'
+  }
+
+  setSortMode(sortMode: DeckTrackerSortMode): void {
+    this.sortMode = sortMode
   }
 
   private createRow(entry: DeckTrackerEntry, index: number): DeckTrackerRowView {
@@ -197,7 +212,7 @@ export class DeckTrackerView extends Actor {
     row.addChild(copiesBackground)
 
     const copies = new Text({
-      text: String(entry.count),
+      text: entry.drawPosition ? `#${entry.drawPosition}` : String(entry.count),
       style: {
         fontFamily: 'Belwe',
         fontSize: 18,

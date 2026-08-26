@@ -1,6 +1,6 @@
 import type {
+  CardClass,
   CardDefinition,
-  DeckClass,
   ExpansionId
 } from '../../../game/content/cards'
 import {
@@ -10,21 +10,27 @@ import {
 } from './collection-filters'
 
 export interface CollectionQueryState {
-  readonly classFilter: DeckClass | null
+  readonly classFilter: CollectionClassFilter
   readonly searchQuery: string
   readonly manaFilter: ManaFilterValue | null
   readonly hiddenExpansionIds: readonly ExpansionId[]
   readonly collectibleMode: CollectibleMode
 }
 
+/** A collection marker selection; `null` represents the unfiltered collection. */
+export type CollectionClassFilter = CardClass | null
+
 /** Applies collection-owned query state before the scene builds display pages. */
 export function queryCollectionCards(
   cards: readonly CardDefinition[],
   state: CollectionQueryState
 ): readonly CardDefinition[] {
-  const allowedClasses: readonly string[] | undefined = state.classFilter
-    ? ['Neutral', state.classFilter]
-    : undefined
+  const allowedClasses: readonly string[] | undefined =
+    state.classFilter === 'Neutral'
+      ? ['Neutral']
+      : state.classFilter
+        ? [state.classFilter, 'Neutral']
+        : undefined
 
   const filtered = filterCollectionCards(cards, {
     query: state.searchQuery,

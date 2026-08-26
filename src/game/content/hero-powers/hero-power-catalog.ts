@@ -129,6 +129,16 @@ const HERO_POWER_DATA = [
     { kind: 'draw-and-self-damage', count: 1, amount: 2 }
   ],
   [
+    'jaraxxus-inferno',
+    'Warlock',
+    'Inferno!',
+    2,
+    'Summon a 6/6 Infernal.',
+    'hero-power-jaraxxus',
+    'none',
+    { kind: 'summon', cardId: 'classic_infernal' }
+  ],
+  [
     'warrior-armor-up',
     'Warrior',
     'Armor Up!',

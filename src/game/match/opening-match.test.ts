@@ -303,3 +303,42 @@ describe('classic hero powers', () => {
     expect(match.getState().players[0].hero).toMatchObject({ health: 30, armor: 1 })
   })
 })
+
+describe('Hero cards', () => {
+  it('Jaraxxus preserves Health, gains Armor, replaces the hero power, and equips Blood Fury', () => {
+    const match = startMatch('guldan')
+    usePower(match)
+    cycleBackToHuman(match)
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: HUMAN_ID,
+        cardId: 'classic_lord_jaraxxus'
+      })
+    )
+    const jaraxxus = match
+      .getState()
+      .players[0].hand.find((card) => card.cardId === 'classic_lord_jaraxxus')
+    expect(jaraxxus).toBeDefined()
+
+    const result = accept(
+      match.dispatch({
+        type: 'play-hero',
+        participantId: HUMAN_ID,
+        cardInstanceId: jaraxxus!.instanceId
+      })
+    )
+    const player = match.getState().players[0]
+    expect(player.heroId).toBe('jaraxxus')
+    expect(player.hero).toMatchObject({ health: 28, maxHealth: 30, armor: 5 })
+    expect(player.heroPower).toMatchObject({ id: 'jaraxxus-inferno', available: true })
+    expect(player.weapon).toMatchObject({
+      cardId: 'classic_blood_fury',
+      attack: 3,
+      durability: 8
+    })
+    expect(result.events).toContainEqual(
+      expect.objectContaining({ type: 'hero-replaced', armorGained: 5 })
+    )
+  })
+})

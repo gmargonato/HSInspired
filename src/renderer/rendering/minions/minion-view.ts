@@ -1,7 +1,12 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
 import { AnimatedOutline } from '../effects/animated-outline'
-import { MINION_CANVAS, MINION_LAYOUT } from './minion-layout'
+import { createTemporaryAbilityBadge } from '../temporary-ability-badge'
+import {
+  MINION_CANVAS,
+  MINION_LAYOUT,
+  minionTemporaryAbilityBadgePlacement
+} from './minion-layout'
 import { SleepingZs } from './sleeping-zs'
 import { AnimationScope } from '../../animation/animations'
 
@@ -14,6 +19,9 @@ export interface MinionViewModel {
   readonly legendary: boolean
   readonly taunt: boolean
   readonly divineShield: boolean
+  readonly deathrattle: boolean
+  readonly trigger: boolean
+  readonly temporaryAbilityLabels: readonly string[]
 }
 
 export interface MinionViewTextures {
@@ -21,6 +29,8 @@ export interface MinionViewTextures {
   readonly legendaryFrame: Texture
   readonly taunt: Texture
   readonly divineShield: Texture
+  readonly trigger: Texture
+  readonly deathrattle: Texture
   readonly attack: Texture
   readonly health: Texture
 }
@@ -159,6 +169,33 @@ export class MinionView extends Container {
     this.divineShield.visible = model.divineShield
     this.divineShield.label = 'minion.divine-shield'
     this.addChild(this.divineShield)
+
+    // Pixi renders later children on top: add the large Deathrattle badge first.
+    if (model.deathrattle) {
+      const deathrattle = new Sprite(textures.deathrattle)
+      applyAnchoredPlacement(deathrattle, MINION_LAYOUT.deathrattle)
+      deathrattle.label = 'minion.deathrattle'
+      this.addChild(deathrattle)
+    }
+
+    if (model.trigger) {
+      const trigger = new Sprite(textures.trigger)
+      applyAnchoredPlacement(trigger, MINION_LAYOUT.trigger)
+      trigger.label = 'minion.trigger'
+      this.addChild(trigger)
+    }
+
+    model.temporaryAbilityLabels.forEach((text, index) => {
+      const badge = createTemporaryAbilityBadge(
+        text,
+        minionTemporaryAbilityBadgePlacement(
+          index,
+          model.temporaryAbilityLabels.length
+        ),
+        `minion.temporary-ability-${index}`
+      )
+      this.addChild(badge)
+    })
 
     const attack = createStatGroup(
       'minion.stat-attack',

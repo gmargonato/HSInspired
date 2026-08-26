@@ -68,6 +68,7 @@ function setEventModeNone(container: Container): void {
 
 /** Feature-agnostic board hero presentation. The feature owns its position. */
 export class HeroView extends Container {
+  private readonly frame: Sprite
   private readonly attackGroup: Container
   private readonly attackLabel: Text
   private readonly healthGroup: Container
@@ -96,10 +97,10 @@ export class HeroView extends Container {
     this.eventMode = 'none'
     this.pivot.set(HERO_CANVAS.width / 2, HERO_CANVAS.height / 2)
 
-    const frame = new Sprite(textures.frame)
-    applyAnchoredPlacement(frame, HERO_LAYOUT.frame)
-    frame.label = 'hero.frame'
-    this.addChild(frame)
+    this.frame = new Sprite(textures.frame)
+    applyAnchoredPlacement(this.frame, HERO_LAYOUT.frame)
+    this.frame.label = 'hero.frame'
+    this.addChild(this.frame)
 
     const attack = createStatGroup(
       'hero.stat-attack',
@@ -190,6 +191,11 @@ export class HeroView extends Container {
     this.setHealthColor(health)
     this.armorLabel.text = String(armor)
     this.armorGroup.visible = this.healthVisible && armor > 0
+  }
+
+  /** Replaces the portrait frame while preserving the hero's board state. */
+  setFrame(texture: Texture): void {
+    this.frame.texture = texture
   }
 
   /** Controls whether the health badge is shown independently of its value. */

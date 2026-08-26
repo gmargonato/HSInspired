@@ -1784,7 +1784,7 @@
     "keywords": ["windfury", "attack-wrong-enemy-chance-50"],
     "effects": [
       {
-        "trigger": "on-card-played",
+        "trigger": "on-play",
         "event": {
           "type": "card-played",
           "controller": "self"
@@ -1829,7 +1829,7 @@
         }
       },
       {
-        "trigger": "on-card-played",
+        "trigger": "on-play",
         "event": {
           "type": "card-played",
           "controller": "self"
@@ -2340,22 +2340,11 @@
     "cost": 6,
     "attack": 6,
     "health": 5,
-    "rulesText": "Battlecry and Deathrattle: Shuffle a Mine into your opponent's deck. When drawn, it explodes for 10 damage.",
+    "rulesText": "Battlecry: Shuffle a Mine into your opponent's deck. When drawn, it explodes for 10 damage.",
     "keywords": [],
     "effects": [
       {
         "trigger": "battlecry",
-        "actions": [
-          {
-            "action": "shuffle-into-deck",
-            "player": "opponent",
-            "cardId": "goblins_vs_gnomes_burrowing_mine",
-            "count": 1
-          }
-        ]
-      },
-      {
-        "trigger": "deathrattle",
         "actions": [
           {
             "action": "shuffle-into-deck",

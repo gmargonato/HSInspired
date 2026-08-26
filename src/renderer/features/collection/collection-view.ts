@@ -1,6 +1,7 @@
 import {
   ColorMatrixFilter,
   Container,
+  Graphics,
   PerspectiveMesh,
   Rectangle,
   Sprite,
@@ -9,8 +10,8 @@ import {
 import type { FederatedPointerEvent, Renderer } from 'pixi.js'
 import {
   CARD_CATALOG,
+  CARD_CLASSES,
   type CardDefinition,
-  type DeckClass,
   type ExpansionId
 } from '../../../game/content/cards'
 import { EXPANSION_CATALOG } from '../../../game/content/expansions'
@@ -47,7 +48,7 @@ import {
   MANA_FILTER_VALUES,
   type ManaFilterValue
 } from './collection-filters'
-import { queryCollectionCards } from './collection-query'
+import { queryCollectionCards, type CollectionClassFilter } from './collection-query'
 import { CollectionQueryController } from './collection-query-controller'
 import { CollectionPageView } from './collection-page-view'
 import { CollectionSearchInput } from './search-input'
@@ -89,6 +90,14 @@ export interface CollectionViewOptions {
   readonly callbacks?: CollectionViewCallbacks
 }
 
+interface ClassFilterControl {
+  readonly cardClass: Exclude<CollectionClassFilter, null>
+  readonly control: Container
+  readonly background: Graphics
+  readonly label: Text
+  hovered: boolean
+}
+
 /**
  * Feature-owned presentation for the collection page browsing area: the card
  * grid, mana/search/expansion filters, page zones, and the hinged cover reveal.
@@ -108,6 +117,7 @@ export class CollectionView extends Actor {
   private readonly manaFilterControls: Container[] = []
   private readonly manaFilterCrystals: Sprite[] = []
   private readonly manaFilterLabels: Text[] = []
+  private readonly classFilterControls: ClassFilterControl[] = []
   private searchInput: CollectionSearchInput | null = null
   private searchClearButton!: Sprite
   private expansionTray: ExpansionTray | null = null
@@ -215,7 +225,7 @@ export class CollectionView extends Actor {
     this.searchInput?.setVisible(visible)
   }
 
-  get classFilter(): DeckClass | null {
+  get classFilter(): CollectionClassFilter {
     return this.collectionQuery.classFilter
   }
 
@@ -236,16 +246,26 @@ export class CollectionView extends Actor {
     this.updateCollectionCardCompletionState()
   }
 
-  async applyClassFilter(heroClass: DeckClass | null): Promise<void> {
-    if (this.collectionQuery.classFilter === heroClass && this.pages.length > 0) return
+  async applyClassFilter(classFilter: CollectionClassFilter): Promise<void> {
+    if (this.collectionQuery.classFilter === classFilter && this.pages.length > 0)
+      return
 
-    this.collectionQuery.setClassFilter(heroClass)
+    this.collectionQuery.setClassFilter(classFilter)
+    this.updateClassFilterAppearance()
     await this.applyCollectionFilters()
+  }
+
+  /** Re-evaluates controls after the deck editor changes open/closed state. */
+  refreshFilterInteractionState(): void {
+    this.updateCollectionFilterModes()
   }
 
   onPause(): void {
     this.setSearchInputVisible(false)
     for (const control of this.manaFilterControls) {
+      control.eventMode = 'none'
+    }
+    for (const { control } of this.classFilterControls) {
       control.eventMode = 'none'
     }
     this.expansionTray?.setEnabled(false)
@@ -264,6 +284,9 @@ export class CollectionView extends Actor {
     this.previousPageZone.eventMode = 'none'
     this.nextPageZone.eventMode = 'none'
     for (const control of this.manaFilterControls) {
+      control.eventMode = 'none'
+    }
+    for (const { control } of this.classFilterControls) {
       control.eventMode = 'none'
     }
     this.setSearchInputVisible(false)
@@ -388,6 +411,72 @@ export class CollectionView extends Actor {
 
     this.updateManaFilterAppearance()
     this.createSearchInput()
+    this.createClassFilters()
+  }
+
+  private createClassFilters(): void {
+    const markerLayout = COLLECTION_LAYOUT.classFilters
+    const { width, height } = markerLayout.first.size
+    const markerClasses = [
+      ...CARD_CLASSES.filter((cardClass) => cardClass !== 'Neutral'),
+      'Neutral'
+    ] as const
+    const markerLayer = new Container()
+    markerLayer.label = 'collection.class-filters'
+    this.pageView.addChild(markerLayer)
+
+    for (const [index, cardClass] of markerClasses.entries()) {
+      const control = new Container()
+      control.label = `collection.class-filter.${cardClass.toLowerCase()}`
+      control.position.set(
+        markerLayout.first.position.x + index * (width + markerLayout.gap),
+        markerLayout.first.position.y
+      )
+      control.hitArea = new Rectangle(0, 0, width, height)
+      control.cursor = 'pointer'
+      control.on('pointertap', (event: FederatedPointerEvent) => {
+        event.stopPropagation()
+        this.handleClassFilterTap(cardClass)
+      })
+
+      const background = new Graphics()
+      background.eventMode = 'none'
+      control.addChild(background)
+
+      const label = new Text({
+        text: cardClass,
+        style: {
+          fontFamily: 'Belwe',
+          fontSize: 13,
+          fill: 0xf5e6bc,
+          align: 'center'
+        }
+      })
+      label.anchor.set(0.5)
+      label.position.set(width / 2, height / 2)
+      label.eventMode = 'none'
+      control.addChild(label)
+
+      const classControl: ClassFilterControl = {
+        cardClass,
+        control,
+        background,
+        label,
+        hovered: false
+      }
+      control.on('pointerover', () => {
+        classControl.hovered = true
+        this.drawClassFilterControl(classControl)
+      })
+      control.on('pointerout', () => {
+        classControl.hovered = false
+        this.drawClassFilterControl(classControl)
+      })
+      this.classFilterControls.push(classControl)
+      markerLayer.addChild(control)
+    }
+
+    this.updateClassFilterAppearance()
   }
 
   private createExpansionFilter(): void {
@@ -494,6 +583,79 @@ export class CollectionView extends Actor {
     void this.applyCollectionFilters().catch((error: unknown) => {
       this.options.callbacks?.onError?.('Failed to filter the collection.', error)
     })
+  }
+
+  private handleClassFilterTap(cardClass: Exclude<CollectionClassFilter, null>): void {
+    if (
+      !this.options.state.isNavigationReady() ||
+      !this.navigationEnabled ||
+      this.options.state.isNewDeckOpen() ||
+      this.options.state.getActiveDeck() !== null
+    ) {
+      return
+    }
+
+    const nextFilter = this.collectionQuery.classFilter === cardClass ? null : cardClass
+    void this.applyClassFilter(nextFilter).catch((error: unknown) => {
+      this.options.callbacks?.onError?.('Failed to filter the collection.', error)
+    })
+  }
+
+  private updateClassFilterAppearance(): void {
+    const isDeckEditing = this.options.state.getActiveDeck() !== null
+    const selectedClass = this.collectionQuery.classFilter
+    const visibleControls =
+      isDeckEditing && selectedClass !== null
+        ? this.classFilterControls.filter(
+            ({ cardClass }) => cardClass === selectedClass || cardClass === 'Neutral'
+          )
+        : this.classFilterControls
+    const { width } = COLLECTION_LAYOUT.classFilters.first.size
+    const { first, gap } = COLLECTION_LAYOUT.classFilters
+
+    for (const [index, classControl] of visibleControls.entries()) {
+      classControl.control.visible = true
+      classControl.control.position.set(
+        first.position.x + index * (width + gap),
+        first.position.y
+      )
+      this.drawClassFilterControl(classControl)
+    }
+    for (const classControl of this.classFilterControls) {
+      if (!visibleControls.includes(classControl)) classControl.control.visible = false
+    }
+  }
+
+  private drawClassFilterControl(classControl: ClassFilterControl): void {
+    const { background, cardClass, control, label } = classControl
+    const { width, height } = COLLECTION_LAYOUT.classFilters.first.size
+    const isSelected = this.collectionQuery.classFilter === cardClass
+    const isLocked = this.options.state.getActiveDeck() !== null
+    const isInteractive =
+      this.navigationEnabled &&
+      this.options.state.isNavigationReady() &&
+      !this.options.state.isNewDeckOpen() &&
+      !this.options.state.isEditorTransitioning() &&
+      !this.options.state.isEditorClosing() &&
+      !isLocked
+
+    background.clear()
+    background.roundRect(0, 0, width, height, 6)
+    background.fill({
+      color: isSelected
+        ? 0x7a5923
+        : classControl.hovered && isInteractive
+          ? 0x41392d
+          : 0x211d1a,
+      alpha: 0.92
+    })
+    background.stroke({
+      color: isSelected ? 0xf2cd65 : 0x987c4b,
+      width: isSelected ? 3 : 1,
+      alpha: 0.9
+    })
+    label.alpha = 1
+    control.cursor = isInteractive ? 'pointer' : 'default'
   }
 
   private updateManaFilterAppearance(): void {
@@ -620,6 +782,12 @@ export class CollectionView extends Actor {
     for (const control of this.manaFilterControls) {
       control.eventMode = filtersEnabled ? 'static' : 'none'
     }
+    const classFiltersEnabled =
+      filtersEnabled && this.options.state.getActiveDeck() === null
+    for (const { control } of this.classFilterControls) {
+      control.eventMode = classFiltersEnabled ? 'static' : 'none'
+    }
+    this.updateClassFilterAppearance()
     if (this.searchClearButton) {
       this.searchClearButton.eventMode = filtersEnabled ? 'static' : 'none'
     }

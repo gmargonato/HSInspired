@@ -1,4 +1,4 @@
-import { CENTER, placement } from '../layout'
+import { CENTER, placement, type LayoutPlacement } from '../layout'
 
 /** The local design space for one board minion. Its pivot is the canvas center. */
 export const MINION_CANVAS = { width: 160, height: 210 } as const
@@ -31,21 +31,46 @@ export const MINION_LAYOUT = {
     }
   ),
   taunt: placement(
-    { x: 80, y: 90 },
+    { x: 80, y: 97 },
     { width: 136, height: 183 },
     {
       anchor: CENTER,
-      note: 'Taunt ring hook, hidden until a future trait phase.'
+      note: 'Taunt ring surrounding the board minion.'
     }
   ),
   divineShield: placement(
-    { x: 80, y: 90 },
+    { x: 80, y: 85 },
     { width: 125, height: 167 },
     {
       anchor: CENTER,
-      note: 'Divine shield hook, hidden until a future trait phase.'
+      note: 'Divine Shield cocoon surrounding the portrait.'
     }
   ),
+  trigger: placement(
+    { x: 80, y: 160 },
+    { width: 41, height: 44 },
+    {
+      anchor: CENTER,
+	  scale: 0.75,
+      note: 'Bottom-center Trigger badge, layered above Deathrattle.'
+    }
+  ),
+  deathrattle: placement(
+    { x: 75, y: 160 },
+    { width: 80, height: 53 },
+    {
+      anchor: CENTER,
+	  scale: 0.75,
+      note: 'Bottom-center Deathrattle badge, layered below Trigger.'
+    }
+  ),
+  temporaryAbilityBadges: {
+    centerX: 80,
+    centerY: 190,
+    size: { width: 36, height: 36 },
+    gap: 4,
+    note: 'Centered row of temporary text badges below the authored ability art.'
+  },
   attackBadge: placement(
     { x: 35, y: 130 },
     { width: 44, height: 51 },
@@ -87,3 +112,20 @@ export const MINION_LAYOUT = {
   },
   selectionScale: 1.15
 } as const
+
+/** Parameterized bottom row so cards with multiple missing visuals remain readable. */
+export function minionTemporaryAbilityBadgePlacement(
+  index: number,
+  count: number
+): LayoutPlacement {
+  const row = MINION_LAYOUT.temporaryAbilityBadges
+  const step = row.size.width + row.gap
+  return placement(
+    {
+      x: row.centerX + (index - (count - 1) / 2) * step,
+      y: row.centerY
+    },
+    row.size,
+    { anchor: CENTER, note: row.note }
+  )
+}

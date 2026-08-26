@@ -36,7 +36,10 @@ export function parseDeck(value: unknown, path = 'deck'): Deck {
   }
 
   const heroId = asHeroId(value.heroId)
-  HERO_CATALOG.require(heroId)
+  const hero = HERO_CATALOG.require(heroId)
+  if (!hero.deckSelectable) {
+    throw new Error(`${path}.heroId cannot be used as a deck hero`)
+  }
 
   return {
     id: value.id,

@@ -62,18 +62,18 @@ const CURSOR_ASSETS: Record<CursorVariant, CursorAsset> = {
   },
   'collection-next-page': {
     image: collectionNewPageImage,
-    width: 87,
-    height: 81,
-    hotspotX: 43.5,
-    hotspotY: 40.5,
+    width: 59,
+    height: 55,
+    hotspotX: 29.5,
+    hotspotY: 27.5,
     scaleWithCursor: false
   },
   'collection-previous-page': {
     image: collectionNewPageImage,
-    width: 87,
-    height: 81,
-    hotspotX: 43.5,
-    hotspotY: 40.5,
+    width: 59,
+    height: 55,
+    hotspotX: 29.5,
+    hotspotY: 27.5,
     flipX: true,
     scaleWithCursor: false
   }
@@ -135,7 +135,7 @@ export class CursorManager {
     this.element.setAttribute('aria-hidden', 'true')
     this.element.draggable = false
     this.element.style.visibility = 'hidden'
-    this.element.style.transformOrigin = '0 0'
+    this.element.style.transformOrigin = '50% 50%'
 
     this.arrowHeadElement = document.createElement('img')
     this.arrowHeadElement.className = 'game-cursor-arrow-head'
@@ -395,8 +395,8 @@ export class CursorManager {
   private applyScale(): void {
     const asset = CURSOR_ASSETS[this.variant]
     if (asset.scaleWithCursor === false) {
-      this.element.style.width = ''
-      this.element.style.height = ''
+      this.element.style.width = `${asset.width}px`
+      this.element.style.height = `${asset.height}px`
       return
     }
 

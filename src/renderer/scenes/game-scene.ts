@@ -8,6 +8,7 @@ import {
 } from '../ui/asset-registry'
 import { GameBoardView } from '../features/game/game-board-view'
 import type {
+  DevCommand,
   DevCardPickerAction,
   DevDeckAction,
   DevMatchTarget
@@ -127,11 +128,6 @@ export class GameScene extends Scene {
     return this.view?.playOpeningReveal() ?? Promise.resolve()
   }
 
-  async devAddCard(cardId: string): Promise<void> {
-    if (!this.view) throw new Error('Game view is not ready for dev commands.')
-    await this.view.devAddCard(cardId)
-  }
-
   openCardPicker(target: DevMatchTarget, action: DevCardPickerAction): void {
     if (!this.view) throw new Error('Game view is not ready for dev commands.')
     this.view.openCardPicker(target, action)
@@ -142,11 +138,6 @@ export class GameScene extends Scene {
     await this.view.devEndMatch(outcome)
   }
 
-  async devSetMana(available: number, maximum: number): Promise<void> {
-    if (!this.view) throw new Error('Game view is not ready for dev commands.')
-    await this.view.devSetMana(available, maximum)
-  }
-
   async devModifyDeck(target: DevMatchTarget, action: DevDeckAction): Promise<void> {
     if (!this.view) throw new Error('Game view is not ready for dev commands.')
     await this.view.devModifyDeck(target, action)
@@ -155,6 +146,19 @@ export class GameScene extends Scene {
   toggleDeckTracker(): void {
     if (!this.view) throw new Error('Game view is not ready for dev commands.')
     this.view.toggleDeckTracker()
+  }
+
+  setDeckTracker(
+    visibility: 'hidden' | 'local' | 'both' | 'remote',
+    sortMode: 'cost' | 'alphabetical' | 'draw-order'
+  ): void {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    this.view.setDeckTracker(visibility, sortMode)
+  }
+
+  async runDevCommand(command: DevCommand): Promise<void> {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    await this.view.runDevCommand(command)
   }
 
   protected onExit(): void {

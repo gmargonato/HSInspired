@@ -81,7 +81,8 @@ export class HeroPowerView extends Actor {
   private readonly manaCrystal: Sprite
   private readonly costLabel: Text
   private readonly playableOutline: AnimatedOutline
-  private readonly frontTexture: Texture
+  private readonly outlineTarget: Sprite
+  private frontTexture: Texture
   private readonly backTexture: Texture
   private readonly baseScaleX: number
   private readonly interactionRect: Rectangle
@@ -113,12 +114,12 @@ export class HeroPowerView extends Actor {
 
     // The playable-outline silhouette: a static copy of the front face behind
     // the flipping card, exactly like the hand cards' playable outlines.
-    const outlineTarget = new Sprite(options.frontTexture)
-    applyAnchoredPlacement(outlineTarget, cardPlacement)
-    outlineTarget.eventMode = 'none'
-    outlineTarget.label = 'hero-power-outline-target'
-    this.addChild(outlineTarget)
-    this.playableOutline = new AnimatedOutline(outlineTarget, 'green', 'card')
+    this.outlineTarget = new Sprite(options.frontTexture)
+    applyAnchoredPlacement(this.outlineTarget, cardPlacement)
+    this.outlineTarget.eventMode = 'none'
+    this.outlineTarget.label = 'hero-power-outline-target'
+    this.addChild(this.outlineTarget)
+    this.playableOutline = new AnimatedOutline(this.outlineTarget, 'green', 'card')
     this.playableOutline.setEnabled(false)
 
     this.card = new Sprite(options.backTexture)
@@ -158,6 +159,13 @@ export class HeroPowerView extends Actor {
   /** Refreshes the displayed cost; the future home of cost-changing effects. */
   setCost(cost: number): void {
     this.costLabel.text = String(cost)
+  }
+
+  /** Replaces the visible hero-power face without changing its used/up state. */
+  setFrontTexture(texture: Texture): void {
+    this.frontTexture = texture
+    this.outlineTarget.texture = texture
+    if (this.facingUp) this.card.texture = texture
   }
 
   /**

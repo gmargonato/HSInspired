@@ -28,6 +28,7 @@ import type { CardDefinition, DeckClass } from '../../game/content/cards'
 import { MAX_DECKS, type Deck } from '../../game/decks'
 import type { CardPreviewRouteBounds, SceneRouter } from '../app/router'
 import type { CollectibleMode } from '../features/collection/collection-filters'
+import type { CollectionClassFilter } from '../features/collection/collection-query'
 
 /** Full-viewport collection scene presented through the main menu transition. */
 export class CollectionScene extends Scene {
@@ -38,7 +39,7 @@ export class CollectionScene extends Scene {
   private newDeckScene!: NewDeckView
   private deleteDeckView!: DeleteDeckView
   private collectionBackButton!: Button
-  private previousCollectionClassFilter: DeckClass | null = null
+  private previousCollectionClassFilter: CollectionClassFilter = null
   private collectionPreviewBlurFilter: BlurFilter | null = null
   private navigationReady = false
   private unsubscribeDeckStore: (() => void) | null = null
@@ -330,6 +331,7 @@ export class CollectionScene extends Scene {
     await this.deckPanel.enterEditor(deck, origin)
     if (this.disposed) return
 
+    this.collectionView.refreshFilterInteractionState()
     this.collectionView.refreshCompletionState()
     this.setDeckInteractionEnabled(true)
   }

@@ -567,6 +567,10 @@
         "trigger": "battlecry",
         "actions": [
           {
+            "action": "replace-hero",
+            "heroId": "jaraxxus"
+          },
+          {
             "action": "equip",
             "cardId": "classic_battle_axe"
           }
@@ -2602,7 +2606,7 @@
     "keywords": ["windfury"],
     "effects": [
       {
-        "trigger": "on-card-played",
+        "trigger": "on-play",
         "event": {
           "type": "card-played",
           "controller": "self"
@@ -2758,7 +2762,7 @@
     "keywords": ["windfury"],
     "effects": [
       {
-        "trigger": "on-card-played",
+        "trigger": "on-play",
         "event": {
           "type": "card-played",
           "controller": "self"
@@ -2818,7 +2822,7 @@
     "keywords": ["taunt"],
     "effects": [
       {
-        "trigger": "on-card-played",
+        "trigger": "on-play",
         "event": {
           "type": "card-played",
           "controller": "self"
@@ -5347,6 +5351,7 @@
     "rarity": "Legendary",
     "cardClass": "Warlock",
     "type": "Hero",
+    "replacementHeroId": "jaraxxus",
     "subtype": "Demon",
     "cost": 9,
     "attack": null,
@@ -8123,7 +8128,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "on-card-played",
+        "trigger": "on-play",
         "event": {
           "type": "card-played",
           "controller": "self"

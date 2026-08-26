@@ -107,6 +107,8 @@ export interface WeaponCardDefinition extends CardMetadata {
 export interface HeroCardDefinition extends CardMetadata {
   readonly type: 'Hero'
   readonly armor: number
+  /** The in-match hero identity that replaces the player's current hero. */
+  readonly replacementHeroId: HeroId
 }
 
 export type CardDefinition =

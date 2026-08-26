@@ -8,6 +8,11 @@ import { installSceneMenu } from './menu/dev-menu'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
+/**
+ * Keep the native menu bar visible for development and testing.
+ * Set this to false for the release build to restore Alt-to-reveal behavior.
+ */
+const KEEP_NATIVE_MENU_BAR_VISIBLE = true
 
 function isAllowedExternalUrl(url: string): boolean {
   try {
@@ -35,7 +40,7 @@ function createWindow(): BrowserWindow {
     fullscreenable: false,
     minimizable: true,
     show: false,
-    autoHideMenuBar: true,
+    autoHideMenuBar: !KEEP_NATIVE_MENU_BAR_VISIBLE,
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -49,6 +54,8 @@ function createWindow(): BrowserWindow {
       webSecurity: true
     }
   })
+
+  mainWindow.setMenuBarVisibility(KEEP_NATIVE_MENU_BAR_VISIBLE)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()

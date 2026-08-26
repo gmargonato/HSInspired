@@ -6,6 +6,7 @@ import {
   type HeroPowerId
 } from '../content/cards'
 import { HERO_CATALOG } from '../content/heroes'
+import type { HeroDefinition } from '../content/heroes'
 import { HERO_POWER_CATALOG } from '../content/hero-powers'
 import { countDeckCards, type Deck } from '../decks'
 import { createSeededRng, type DeterministicRng } from './rng'
@@ -152,6 +153,12 @@ export interface PlayWeaponCommand {
   readonly cardInstanceId: string
 }
 
+export interface PlayHeroCommand {
+  readonly type: 'play-hero'
+  readonly participantId: PlayerId
+  readonly cardInstanceId: string
+}
+
 export interface AttackMinionCommand {
   readonly type: 'attack-minion'
   readonly participantId: PlayerId
@@ -203,12 +210,45 @@ export interface DevEndMatchCommand {
   readonly winnerId: PlayerId
 }
 
+export interface DevSetHeroCommand {
+  readonly type: 'dev-set-hero'
+  readonly participantId: PlayerId
+  readonly health?: number
+  readonly armor?: number
+  readonly attack?: number
+}
+export interface DevSetHeroPowerCommand {
+  readonly type: 'dev-set-hero-power'
+  readonly participantId: PlayerId
+  readonly cost?: number
+  readonly available?: boolean
+}
+export interface DevClearZoneCommand {
+  readonly type: 'dev-clear-zone'
+  readonly participantId: PlayerId
+  readonly zone: 'hand' | 'board'
+}
+export interface DevSetFatigueCommand {
+  readonly type: 'dev-set-fatigue'
+  readonly participantId: PlayerId
+  readonly nextDamage: number
+}
+export interface DevRemoveWeaponCommand {
+  readonly type: 'dev-remove-weapon'
+  readonly participantId: PlayerId
+}
+export interface DevDrawCommand {
+  readonly type: 'dev-draw'
+  readonly participantId: PlayerId
+}
+
 export type OpeningMatchCommand =
   | ConfirmMulliganCommand
   | EndTurnCommand
   | UseHeroPowerCommand
   | PlayMinionCommand
   | PlayWeaponCommand
+  | PlayHeroCommand
   | AttackMinionCommand
   | AttackCharacterCommand
   | DevAddCardCommand
@@ -216,6 +256,12 @@ export type OpeningMatchCommand =
   | DevModifyDeckCommand
   | DevSummonMinionCommand
   | DevEndMatchCommand
+  | DevSetHeroCommand
+  | DevSetHeroPowerCommand
+  | DevClearZoneCommand
+  | DevSetFatigueCommand
+  | DevRemoveWeaponCommand
+  | DevDrawCommand
 
 export interface MulliganResolvedEvent {
   readonly type: 'mulligan-resolved'
@@ -331,6 +377,14 @@ export interface WeaponEquippedEvent {
   readonly replacedWeapon: BoardWeapon | null
 }
 
+export interface HeroReplacedEvent {
+  readonly type: 'hero-replaced'
+  readonly participantId: PlayerId
+  readonly previousHeroId: HeroId
+  readonly heroId: HeroId
+  readonly armorGained: number
+}
+
 export interface MinionCombatantResult {
   readonly participantId: PlayerId
   readonly instanceId: string
@@ -411,6 +465,11 @@ export interface DevMinionSummonedEvent {
   readonly position: number
 }
 
+export interface DevStateChangedEvent {
+  readonly type: 'dev-state-changed'
+  readonly participantId: PlayerId
+}
+
 export type OpeningMatchEvent =
   | MulliganResolvedEvent
   | CoinGrantedEvent
@@ -427,6 +486,7 @@ export type OpeningMatchEvent =
   | FatigueEvent
   | MinionPlayedEvent
   | WeaponEquippedEvent
+  | HeroReplacedEvent
   | MinionCombatResolvedEvent
   | CharacterCombatResolvedEvent
   | MatchEndedEvent
@@ -434,6 +494,7 @@ export type OpeningMatchEvent =
   | DevManaSetEvent
   | DevDeckModifiedEvent
   | DevMinionSummonedEvent
+  | DevStateChangedEvent
 
 export interface OpeningAcceptedResult {
   readonly accepted: true
@@ -452,6 +513,7 @@ export type OpeningRejectionCode =
   | 'insufficient-mana'
   | 'not-a-minion'
   | 'not-a-weapon'
+  | 'not-a-hero'
   | 'board-full'
   | 'invalid-position'
   | 'invalid-attacker'
@@ -638,6 +700,15 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
     }
   }
 
+  if (value.type === 'play-hero') {
+    if (typeof value.cardInstanceId !== 'string') return null
+    return {
+      type: 'play-hero',
+      participantId: value.participantId as PlayerId,
+      cardInstanceId: value.cardInstanceId
+    }
+  }
+
   if (value.type === 'attack-minion') {
     if (
       typeof value.attackerInstanceId !== 'string' ||
@@ -721,6 +792,59 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
       winnerId: value.winnerId as PlayerId
     }
   }
+
+  if (value.type === 'dev-set-hero') {
+    const health = value.health
+    const armor = value.armor
+    const attack = value.attack
+    if (
+      ![health, armor, attack].some(
+        (entry) => typeof entry === 'number' && Number.isInteger(entry)
+      )
+    )
+      return null
+    return {
+      type: 'dev-set-hero',
+      participantId: value.participantId as PlayerId,
+      ...(typeof health === 'number' ? { health } : {}),
+      ...(typeof armor === 'number' ? { armor } : {}),
+      ...(typeof attack === 'number' ? { attack } : {})
+    }
+  }
+  if (value.type === 'dev-set-hero-power') {
+    const cost = value.cost
+    const available = value.available
+    if (typeof cost !== 'number' && typeof available !== 'boolean') return null
+    return {
+      type: 'dev-set-hero-power',
+      participantId: value.participantId as PlayerId,
+      ...(typeof cost === 'number' ? { cost } : {}),
+      ...(typeof available === 'boolean' ? { available } : {})
+    }
+  }
+  if (
+    value.type === 'dev-clear-zone' &&
+    (value.zone === 'hand' || value.zone === 'board')
+  )
+    return {
+      type: 'dev-clear-zone',
+      participantId: value.participantId as PlayerId,
+      zone: value.zone
+    }
+  if (
+    value.type === 'dev-set-fatigue' &&
+    typeof value.nextDamage === 'number' &&
+    Number.isInteger(value.nextDamage)
+  )
+    return {
+      type: 'dev-set-fatigue',
+      participantId: value.participantId as PlayerId,
+      nextDamage: value.nextDamage
+    }
+  if (value.type === 'dev-remove-weapon')
+    return { type: 'dev-remove-weapon', participantId: value.participantId as PlayerId }
+  if (value.type === 'dev-draw')
+    return { type: 'dev-draw', participantId: value.participantId as PlayerId }
 
   return null
 }
@@ -1501,6 +1625,136 @@ function applyPlayWeapon(
   }
 }
 
+/**
+ * Replaces the active in-match hero while retaining only the persistent combat
+ * state requested by the replacement effect. Temporary Attack never carries
+ * over to a new hero identity.
+ */
+function replaceHero(
+  player: OpeningPlayerState,
+  replacementHero: HeroDefinition,
+  armorGained: number
+): { readonly player: OpeningPlayerState; readonly event: HeroReplacedEvent } {
+  const heroPower = HERO_POWER_CATALOG.require(replacementHero.heroPowerId)
+  return {
+    player: {
+      ...player,
+      heroId: replacementHero.id,
+      hero: {
+        ...player.hero,
+        armor: player.hero.armor + armorGained,
+        attack: 0,
+        lastAttackedOnTurn: null
+      },
+      heroPower: {
+        id: heroPower.id,
+        cost: heroPower.cost,
+        available: player.heroPower.available
+      }
+    },
+    event: {
+      type: 'hero-replaced',
+      participantId: player.participantId,
+      previousHeroId: player.heroId,
+      heroId: replacementHero.id,
+      armorGained
+    }
+  }
+}
+
+/** Plays a Hero card, replacing the player's in-match hero identity and power. */
+function applyPlayHero(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1,
+  command: PlayHeroCommand
+): OpeningCommandResult {
+  if (state.phase !== 'turns') {
+    return reject(state, 'wrong-phase', 'Turns have not started yet.')
+  }
+
+  const player = state.players[playerIndex]
+  if (state.activePlayerId !== player.participantId) {
+    return reject(state, 'not-active-player', 'Only the active player can play a hero.')
+  }
+
+  const card = player.hand.find(
+    (candidate) => candidate.instanceId === command.cardInstanceId
+  )
+  if (!card) {
+    return reject(
+      state,
+      'invalid-card-selection',
+      'The selected card is not in the player hand.'
+    )
+  }
+
+  const definition = CARD_CATALOG.get(card.cardId)
+  if (!definition || definition.type !== 'Hero') {
+    return reject(state, 'not-a-hero', 'Only hero cards can be played here.')
+  }
+  if (player.mana.available < definition.cost) {
+    return reject(state, 'insufficient-mana', 'Not enough mana to play that hero.')
+  }
+
+  const replaceHeroAction = definition.effects
+    .filter((effect) => effect.trigger === 'battlecry')
+    .flatMap((effect) => effect.actions ?? [])
+    .find((action) => action.action === 'replace-hero')
+  const replacementHeroId = replaceHeroAction?.heroId
+  if (replacementHeroId !== definition.replacementHeroId) {
+    throw new Error(`Hero card ${definition.id} has no matching replacement action.`)
+  }
+  const replacementHero = HERO_CATALOG.get(replacementHeroId)
+  if (!replacementHero || replacementHero.classId !== definition.cardClass) {
+    throw new Error(`Hero card ${definition.id} has an invalid replacement hero.`)
+  }
+  const replacement = replaceHero(player, replacementHero, definition.armor)
+  const nextPlayer: OpeningPlayerState = {
+    ...replacement.player,
+    hand: player.hand.filter((candidate) => candidate.instanceId !== card.instanceId),
+    mana: { ...player.mana, available: player.mana.available - definition.cost }
+  }
+  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+  nextPlayers[playerIndex] = nextPlayer
+  const events: OpeningMatchEvent[] = [replacement.event]
+
+  const equipAction = definition.effects
+    .filter((effect) => effect.trigger === 'battlecry')
+    .flatMap((effect) => effect.actions ?? [])
+    .find((action) => action.action === 'equip')
+  const equippedCardId = equipAction?.cardId
+  if (typeof equippedCardId === 'string') {
+    const weaponDefinition = CARD_CATALOG.require(equippedCardId)
+    if (weaponDefinition.type !== 'Weapon') {
+      throw new Error(`${equippedCardId} is not a weapon.`)
+    }
+    const weapon: BoardWeapon = {
+      instanceId: `${card.instanceId}:battlecry-weapon`,
+      cardId: weaponDefinition.id,
+      attack: weaponDefinition.attack,
+      durability: weaponDefinition.durability,
+      maxDurability: weaponDefinition.durability
+    }
+    nextPlayers[playerIndex] = { ...nextPlayer, weapon }
+    events.push({
+      type: 'weapon-equipped',
+      participantId: player.participantId,
+      weapon: cloneBoardWeapon(weapon),
+      replacedWeapon: player.weapon ? cloneBoardWeapon(player.weapon) : null
+    })
+  }
+
+  return {
+    accepted: true,
+    state: cloneOpeningMatchState({
+      ...state,
+      players: nextPlayers,
+      revision: state.revision + 1
+    }),
+    events
+  }
+}
+
 /** Resolves direct combat between any two opposing characters. */
 function applyAttackCharacter(
   state: OpeningMatchState,
@@ -2020,6 +2274,21 @@ function applyDevModifyDeck(
   }
 }
 
+function applyDevStateChange(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1,
+  player: OpeningPlayerState
+): OpeningAcceptedResult {
+  const players = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+  players[playerIndex] = player
+  const nextState = { ...state, players, revision: state.revision + 1 }
+  return {
+    accepted: true,
+    state: cloneOpeningMatchState(nextState),
+    events: [{ type: 'dev-state-changed', participantId: player.participantId }]
+  }
+}
+
 /**
  * Creates the platform-neutral opening sequence used by GameScene.
  *
@@ -2160,6 +2429,12 @@ export function createOpeningMatch(
         return result
       }
 
+      if (command.type === 'play-hero') {
+        const result = applyPlayHero(state, playerIndex, command)
+        if (result.accepted) state = result.state
+        return result
+      }
+
       if (command.type === 'attack-minion') {
         const result = applyAttackMinion(state, playerIndex, command)
         if (result.accepted) state = result.state
@@ -2185,6 +2460,125 @@ export function createOpeningMatch(
         const result = applyDevSetMana(state, playerIndex, command)
         if (result.accepted) state = result.state
         return result
+      }
+
+      if (command.type === 'dev-set-hero') {
+        if (state.phase !== 'turns')
+          return reject(state, 'wrong-phase', 'Turns have not started yet.')
+        const player = state.players[playerIndex]
+        const health =
+          command.health === undefined ? player.hero.health : command.health
+        const armor = command.armor === undefined ? player.hero.armor : command.armor
+        const attack =
+          command.attack === undefined ? player.hero.attack : command.attack
+        if (
+          !Number.isInteger(health) ||
+          health < 1 ||
+          health > player.hero.maxHealth ||
+          !Number.isInteger(armor) ||
+          armor < 0 ||
+          !Number.isInteger(attack) ||
+          attack < 0
+        )
+          return reject(state, 'invalid-command', 'Invalid hero state.')
+        const result = applyDevStateChange(state, playerIndex, {
+          ...player,
+          hero: { ...player.hero, health, armor, attack }
+        })
+        state = result.state
+        return result
+      }
+      if (command.type === 'dev-set-hero-power') {
+        if (state.phase !== 'turns')
+          return reject(state, 'wrong-phase', 'Turns have not started yet.')
+        const player = state.players[playerIndex]
+        const cost = command.cost === undefined ? player.heroPower.cost : command.cost
+        const available =
+          command.available === undefined
+            ? player.heroPower.available
+            : command.available
+        if (!Number.isInteger(cost) || cost < 0 || cost > MAX_MANA)
+          return reject(state, 'invalid-command', 'Invalid hero power cost.')
+        const result = applyDevStateChange(state, playerIndex, {
+          ...player,
+          heroPower: { ...player.heroPower, cost, available }
+        })
+        state = result.state
+        return result
+      }
+      if (command.type === 'dev-clear-zone') {
+        if (state.phase !== 'turns')
+          return reject(state, 'wrong-phase', 'Turns have not started yet.')
+        const player = state.players[playerIndex]
+        const result = applyDevStateChange(
+          state,
+          playerIndex,
+          command.zone === 'hand' ? { ...player, hand: [] } : { ...player, board: [] }
+        )
+        state = result.state
+        return result
+      }
+      if (command.type === 'dev-set-fatigue') {
+        if (state.phase !== 'turns' || command.nextDamage < 1)
+          return reject(state, 'invalid-command', 'Invalid fatigue damage.')
+        const player = state.players[playerIndex]
+        const result = applyDevStateChange(state, playerIndex, {
+          ...player,
+          fatigueDamage: command.nextDamage
+        })
+        state = result.state
+        return result
+      }
+      if (command.type === 'dev-remove-weapon') {
+        if (state.phase !== 'turns')
+          return reject(state, 'wrong-phase', 'Turns have not started yet.')
+        const result = applyDevStateChange(state, playerIndex, {
+          ...state.players[playerIndex],
+          weapon: null
+        })
+        state = result.state
+        return result
+      }
+      if (command.type === 'dev-draw') {
+        if (state.phase !== 'turns')
+          return reject(state, 'wrong-phase', 'Turns have not started yet.')
+        const player = state.players[playerIndex]
+        if (player.deck.length === 0) {
+          const damaged = damageHero(player, player.fatigueDamage, 'fatigue')
+          const result = applyDevStateChange(state, playerIndex, {
+            ...player,
+            hero: damaged.hero,
+            fatigueDamage: player.fatigueDamage + 1
+          })
+          state = result.state
+          return {
+            ...result,
+            events: [
+              {
+                type: 'fatigue',
+                participantId: player.participantId,
+                amount: player.fatigueDamage,
+                nextDamage: player.fatigueDamage + 1
+              },
+              damaged.event
+            ]
+          }
+        }
+        const card = cloneCard(player.deck[0]!)
+        const nextPlayer =
+          player.hand.length >= MAX_HAND_SIZE
+            ? { ...player, deck: player.deck.slice(1) }
+            : drawCards(player, 1).player
+        const result = applyDevStateChange(state, playerIndex, nextPlayer)
+        state = result.state
+        return {
+          ...result,
+          events: [
+            player.hand.length >= MAX_HAND_SIZE
+              ? { type: 'card-burned', participantId: player.participantId, card }
+              : { type: 'card-drawn', participantId: player.participantId, card }
+          ]
+        }
       }
 
       if (command.type === 'dev-modify-deck') {

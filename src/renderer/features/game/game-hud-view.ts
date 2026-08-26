@@ -4,6 +4,8 @@ import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { applyPlacement, type LayoutPlacement } from '../../rendering/layout'
 import { ManaTray, resolveManaCrystalStates } from './mana-tray'
 import { DeckTrackerView } from './deck-tracker-view'
+import type { DeckTrackerSortMode } from './deck-tracker-model'
+import { REMOTE_DECK_TRACKER_LAYOUT } from './deck-tracker-layout'
 import { Button } from '../../ui/components/button'
 import type { GameAssets } from '../../ui/asset-registry'
 import type { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
@@ -14,6 +16,7 @@ type Player = OpeningMatchState['players'][number]
 export class GameHudView {
   readonly turnLayer = new Container()
   readonly deckTracker: DeckTrackerView
+  readonly remoteDeckTracker: DeckTrackerView
   endTurnButton: Button | null = null
   deckCountLabels: { local: Text; remote: Text } | null = null
   manaLabels: { local: Text; remote: Text } | null = null
@@ -22,6 +25,7 @@ export class GameHudView {
 
   constructor(resolver: CardAssetResolver) {
     this.deckTracker = new DeckTrackerView(resolver)
+    this.remoteDeckTracker = new DeckTrackerView(resolver, REMOTE_DECK_TRACKER_LAYOUT)
     this.turnLayer.label = 'game.turn-hud'
     // Keep the HUD container passive so its interactive children (notably the
     // End Turn button) still participate in Pixi hit testing. `none` skips the
@@ -80,6 +84,7 @@ export class GameHudView {
     }
     this.manaLocalTray?.sync(resolveManaCrystalStates(local.mana, highlightCost))
     if (this.deckTracker.visible) this.deckTracker.update(local.deck)
+    if (this.remoteDeckTracker.visible) this.remoteDeckTracker.update(remote.deck)
   }
 
   toggleDeckTracker(deck: readonly OpeningCard[]): boolean {
@@ -89,8 +94,23 @@ export class GameHudView {
     return visible
   }
 
+  setDeckTracker(
+    visibility: 'hidden' | 'local' | 'both' | 'remote',
+    sortMode: DeckTrackerSortMode,
+    localDeck: readonly OpeningCard[],
+    remoteDeck: readonly OpeningCard[]
+  ): void {
+    this.deckTracker.setSortMode(sortMode)
+    this.remoteDeckTracker.setSortMode(sortMode)
+    this.deckTracker.setVisible(visibility === 'local' || visibility === 'both')
+    this.remoteDeckTracker.setVisible(visibility === 'remote' || visibility === 'both')
+    if (this.deckTracker.visible) this.deckTracker.update(localDeck)
+    if (this.remoteDeckTracker.visible) this.remoteDeckTracker.update(remoteDeck)
+  }
+
   dispose(): void {
     this.deckTracker.dispose()
+    this.remoteDeckTracker.dispose()
     this.manaLocalTray?.dispose()
     this.manaLocalTray = null
     this.yourTurnFlag?.destroy({ children: true })

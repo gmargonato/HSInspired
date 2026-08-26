@@ -63,17 +63,6 @@ export function installDevCommandHandler(
       return
     }
 
-    if (command.type === 'game:add-card') {
-      if (current instanceof GameScene) {
-        void current.devAddCard(command.cardId).catch((error: unknown) => {
-          logger.error('[DevMenu] failed to add card', error)
-        })
-        return
-      }
-      logger.warn('[DevMenu] game add-card ignored outside Game', command)
-      return
-    }
-
     if (command.type === 'game:modify-deck') {
       if (current instanceof GameScene) {
         void current
@@ -89,14 +78,30 @@ export function installDevCommandHandler(
 
     if (command.type === 'game:set-mana') {
       if (current instanceof GameScene) {
-        void current
-          .devSetMana(command.available, command.maximum)
-          .catch((error: unknown) => {
-            logger.error('[DevMenu] failed to set mana', error)
-          })
+        void current.runDevCommand(command).catch((error: unknown) => {
+          logger.error('[DevMenu] failed to set mana', error)
+        })
         return
       }
       logger.warn('[DevMenu] game set-mana ignored outside Game', command)
+      return
+    }
+
+    if (
+      command.type === 'game:set-hero' ||
+      command.type === 'game:draw' ||
+      command.type === 'game:set-hero-power' ||
+      command.type === 'game:set-fatigue' ||
+      command.type === 'game:clear-zone' ||
+      command.type === 'game:remove-weapon'
+    ) {
+      if (current instanceof GameScene) {
+        void current.runDevCommand(command).catch((error: unknown) => {
+          logger.error('[DevMenu] failed to update game state', error)
+        })
+        return
+      }
+      logger.warn('[DevMenu] game state command ignored outside Game', command)
       return
     }
 
@@ -112,6 +117,18 @@ export function installDevCommandHandler(
       }
       logger.warn('[DevMenu] game command ignored outside Game', command)
       return
+    }
+
+    if (command.type === 'game:set-deck-tracker') {
+      if (current instanceof GameScene) {
+        try {
+          current.setDeckTracker(command.visibility, command.sortMode)
+        } catch (error) {
+          logger.error('[DevMenu] failed to configure deck tracker', error)
+        }
+        return
+      }
+      logger.warn('[DevMenu] deck tracker command ignored outside Game', command)
     }
   }
 

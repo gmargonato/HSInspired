@@ -1,15 +1,25 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
-import { WEAPON_CANVAS, WEAPON_LAYOUT } from './weapon-layout'
+import { createTemporaryAbilityBadge } from '../temporary-ability-badge'
+import {
+  WEAPON_CANVAS,
+  WEAPON_LAYOUT,
+  weaponTemporaryAbilityBadgePlacement
+} from './weapon-layout'
 
 export interface WeaponViewModel {
   readonly label: string
   readonly attack: number
   readonly durability: number
+  readonly deathrattle: boolean
+  readonly trigger: boolean
+  readonly temporaryAbilityLabels: readonly string[]
 }
 
 export interface WeaponViewTextures {
   readonly frame: Texture
+  readonly trigger: Texture
+  readonly deathrattle: Texture
   readonly attack: Texture
   readonly durability: Texture
 }
@@ -105,6 +115,33 @@ export class WeaponView extends Container {
     applyAnchoredPlacement(frame, WEAPON_LAYOUT.frame)
     frame.label = 'weapon.frame'
     this.addChild(frame)
+
+    // Pixi renders later children on top: add the large Deathrattle badge first.
+    if (model.deathrattle) {
+      const deathrattle = new Sprite(textures.deathrattle)
+      applyAnchoredPlacement(deathrattle, WEAPON_LAYOUT.deathrattle)
+      deathrattle.label = 'weapon.deathrattle'
+      this.addChild(deathrattle)
+    }
+
+    if (model.trigger) {
+      const trigger = new Sprite(textures.trigger)
+      applyAnchoredPlacement(trigger, WEAPON_LAYOUT.trigger)
+      trigger.label = 'weapon.trigger'
+      this.addChild(trigger)
+    }
+
+    model.temporaryAbilityLabels.forEach((text, index) => {
+      const badge = createTemporaryAbilityBadge(
+        text,
+        weaponTemporaryAbilityBadgePlacement(
+          index,
+          model.temporaryAbilityLabels.length
+        ),
+        `weapon.temporary-ability-${index}`
+      )
+      this.addChild(badge)
+    })
 
     const attack = createStatGroup(
       'weapon.stat-attack',

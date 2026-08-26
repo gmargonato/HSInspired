@@ -14,6 +14,8 @@ export interface HeroDefinition {
   readonly startingHealth: number
   readonly heroPowerId: HeroPowerId
   readonly presentationAssetKey: HeroPresentationAssetKey
+  /** Whether this hero may be chosen as a deck's starting hero. */
+  readonly deckSelectable: boolean
 }
 
 export type HeroPresentationAssetKey =
@@ -26,27 +28,51 @@ export type HeroPresentationAssetKey =
   | 'hero-anduin'
   | 'hero-jaina'
   | 'hero-thrall'
+  | 'hero-jaraxxus'
 
 const HERO_DATA = [
-  ['guldan', 'Warlock', "Gul'dan", 'warlock-life-tap', 'hero-guldan'],
-  ['rexxar', 'Hunter', 'Rexxar', 'hunter-steady-shot', 'hero-rexxar'],
-  ['valeera', 'Rogue', 'Valeera Sanguinar', 'rogue-dagger-mastery', 'hero-valeera'],
-  ['garrosh', 'Warrior', 'Garrosh Hellscream', 'warrior-armor-up', 'hero-garrosh'],
-  ['malfurion', 'Druid', 'Malfurion Stormrage', 'druid-shapeshift', 'hero-malfurion'],
-  ['uther', 'Paladin', 'Uther Lightbringer', 'paladin-reinforce', 'hero-uther'],
-  ['anduin', 'Priest', 'Anduin Wrynn', 'priest-lesser-heal', 'hero-anduin'],
-  ['jaina', 'Mage', 'Jaina Proudmoore', 'mage-fireblast', 'hero-jaina'],
-  ['thrall', 'Shaman', 'Thrall', 'shaman-totemic-call', 'hero-thrall']
+  ['guldan', 'Warlock', "Gul'dan", 'warlock-life-tap', 'hero-guldan', true],
+  ['rexxar', 'Hunter', 'Rexxar', 'hunter-steady-shot', 'hero-rexxar', true],
+  [
+    'valeera',
+    'Rogue',
+    'Valeera Sanguinar',
+    'rogue-dagger-mastery',
+    'hero-valeera',
+    true
+  ],
+  [
+    'garrosh',
+    'Warrior',
+    'Garrosh Hellscream',
+    'warrior-armor-up',
+    'hero-garrosh',
+    true
+  ],
+  [
+    'malfurion',
+    'Druid',
+    'Malfurion Stormrage',
+    'druid-shapeshift',
+    'hero-malfurion',
+    true
+  ],
+  ['uther', 'Paladin', 'Uther Lightbringer', 'paladin-reinforce', 'hero-uther', true],
+  ['anduin', 'Priest', 'Anduin Wrynn', 'priest-lesser-heal', 'hero-anduin', true],
+  ['jaina', 'Mage', 'Jaina Proudmoore', 'mage-fireblast', 'hero-jaina', true],
+  ['thrall', 'Shaman', 'Thrall', 'shaman-totemic-call', 'hero-thrall', true],
+  ['jaraxxus', 'Warlock', 'Lord Jaraxxus', 'jaraxxus-inferno', 'hero-jaraxxus', false]
 ] as const
 
 export const HERO_DEFINITIONS: readonly HeroDefinition[] = HERO_DATA.map(
-  ([id, classId, displayName, heroPowerId, presentationAssetKey]) => ({
+  ([id, classId, displayName, heroPowerId, presentationAssetKey, deckSelectable]) => ({
     id: asHeroId(id),
     classId: asClassId(classId),
     displayName,
     startingHealth: 30,
     heroPowerId: asHeroPowerId(heroPowerId),
-    presentationAssetKey
+    presentationAssetKey,
+    deckSelectable
   })
 )
 
@@ -82,7 +108,7 @@ export class HeroCatalog {
   }
 
   getPrimaryForClass(classId: ClassId | string): HeroDefinition | undefined {
-    return this.all.find((hero) => hero.classId === classId)
+    return this.all.find((hero) => hero.classId === classId && hero.deckSelectable)
   }
 }
 

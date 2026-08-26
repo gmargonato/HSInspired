@@ -2,6 +2,7 @@ import {
   asCardId,
   asClassId,
   asExpansionId,
+  asHeroId,
   CARD_CLASSES,
   CARD_RARITIES,
   CARD_TYPES,
@@ -10,6 +11,7 @@ import {
   type CardType,
   type ExpansionId
 } from './card-definition'
+import { HERO_CATALOG } from '../heroes'
 import {
   CARD_ACTIONS,
   CARD_ACTION_DESTINATIONS,
@@ -50,6 +52,7 @@ export interface RawCardRecord {
   readonly attack?: unknown
   readonly health?: unknown
   readonly armor?: unknown
+  readonly replacementHeroId?: unknown
   readonly rulesText?: unknown
   readonly keywords?: unknown
   readonly effects?: unknown
@@ -171,6 +174,7 @@ const ACTION_FIELDS = new Set([
   'filter',
   'handSize',
   'health',
+  'heroId',
   'hits',
   'healingMultiplier',
   'heroPowerMultiplier',
@@ -225,6 +229,7 @@ const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>>
   'prevent-lethal': ['target'],
   'put-into-play': ['source'],
   'redirect-damage': ['source', 'target', 'amount'],
+  'replace-hero': ['heroId'],
   'remove-keyword': ['target', 'keyword'],
   'replace-event': ['event', 'replacement'],
   'return-to-hand': ['target'],
@@ -682,6 +687,12 @@ function actionsValue(value: unknown, path: string): void {
     if (record['crystal'] !== undefined) {
       enumValue(record['crystal'], CARD_CRYSTAL_MODES, `${actionPath}.crystal`)
     }
+    if (record['heroId'] !== undefined) {
+      const heroId = stringValue(record['heroId'], `${actionPath}.heroId`)
+      if (actionName === 'replace-hero' && !HERO_CATALOG.get(heroId)) {
+        return fail(`${actionPath}.heroId`, 'references an unknown hero')
+      }
+    }
     if (record['selection'] !== undefined) {
       enumValue(
         record['selection'],
@@ -815,17 +826,10 @@ export function validateCardRecord(
     `${indexOrPath}.collectible`,
     defaultCollectible(type, rarity)
   )
-  const deckLegal = booleanValue(
-    raw.deckLegal,
-    `${indexOrPath}.deckLegal`,
-    type !== 'Hero' && collectible
-  )
+  const deckLegal = booleanValue(raw.deckLegal, `${indexOrPath}.deckLegal`, collectible)
 
   if (deckLegal && !collectible) {
     return fail(`${indexOrPath}.deckLegal`, 'cannot be true for a non-collectible card')
-  }
-  if (type === 'Hero' && deckLegal) {
-    return fail(`${indexOrPath}.deckLegal`, 'hero cards are not deck cards')
   }
 
   const metadata = {
@@ -882,13 +886,24 @@ export function validateCardRecord(
 
   const armor = statistic(raw.armor, `${indexOrPath}.armor`, true)
   if (armor === null) return fail(indexOrPath, 'invalid hero stats')
+  const replacementHeroId = stringValue(
+    raw.replacementHeroId,
+    `${indexOrPath}.replacementHeroId`
+  )
+  const replacementHero = HERO_CATALOG.get(replacementHeroId)
+  if (!replacementHero) {
+    return fail(`${indexOrPath}.replacementHeroId`, 'references an unknown hero')
+  }
+  if (replacementHero.classId !== cardClass) {
+    return fail(`${indexOrPath}.replacementHeroId`, 'must match the card class')
+  }
   if (raw.attack !== undefined && raw.attack !== null) {
     return fail(`${indexOrPath}.attack`, 'is not valid for heroes')
   }
   if (raw.health !== undefined && raw.health !== null) {
     return fail(`${indexOrPath}.health`, 'is not valid for heroes')
   }
-  return { ...metadata, type, armor }
+  return { ...metadata, type, armor, replacementHeroId: asHeroId(replacementHeroId) }
 }
 
 /** Validates one non-card record so hero powers cannot silently enter CardCatalog. */

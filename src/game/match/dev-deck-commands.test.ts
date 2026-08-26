@@ -156,4 +156,60 @@ describe('dev deck commands', () => {
       })
     ).toMatchObject({ accepted: false, code: 'wrong-phase' })
   })
+
+  it('updates hero, power, fatigue, and zones for the selected player', () => {
+    const match = createStartedMatch()
+    accept(
+      match.dispatch({
+        type: 'dev-set-hero',
+        participantId: HUMAN_ID,
+        health: 12,
+        armor: 5,
+        attack: 2
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-set-hero-power',
+        participantId: HUMAN_ID,
+        cost: 0,
+        available: false
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-set-fatigue',
+        participantId: HUMAN_ID,
+        nextDamage: 5
+      })
+    )
+    accept(
+      match.dispatch({ type: 'dev-clear-zone', participantId: HUMAN_ID, zone: 'hand' })
+    )
+
+    const player = match.getState().players[0]
+    expect(player.hero).toMatchObject({ health: 12, armor: 5, attack: 2 })
+    expect(player.heroPower).toMatchObject({ cost: 0, available: false })
+    expect(player.fatigueDamage).toBe(5)
+    expect(player.hand).toHaveLength(0)
+  })
+
+  it('draws for the selected player and turns an empty-deck draw into fatigue', () => {
+    const match = createStartedMatch()
+    const before = match.getState().players[1]
+    const draw = match.dispatch({ type: 'dev-draw', participantId: OPPONENT_ID })
+    accept(draw)
+    expect(match.getState().players[1].hand).toHaveLength(before.hand.length + 1)
+
+    accept(
+      match.dispatch({
+        type: 'dev-modify-deck',
+        participantId: OPPONENT_ID,
+        action: 'destroy'
+      })
+    )
+    const fatigue = match.dispatch({ type: 'dev-draw', participantId: OPPONENT_ID })
+    accept(fatigue)
+    expect(fatigue.events).toContainEqual(expect.objectContaining({ type: 'fatigue' }))
+  })
 })

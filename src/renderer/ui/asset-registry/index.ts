@@ -43,6 +43,8 @@ import minionFrameImage from '@assets/images/board/minion-frame.png'
 import minionFrameLegendaryImage from '@assets/images/board/minion-frame-legendary.png'
 import minionTauntImage from '@assets/images/board/minion-taunt.png'
 import minionDivineShieldImage from '@assets/images/board/minion-divine-shield.png'
+import minionTriggerImage from '@assets/images/board/minion-trigger.png'
+import minionDeathrattleImage from '@assets/images/board/minion-deathrattle.png'
 import minionAttackImage from '@assets/images/board/minion-attack.png'
 import minionHealthImage from '@assets/images/board/minion-health.png'
 import heroArmorImage from '@assets/images/cards/armor.png'
@@ -286,6 +288,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     minionDivineShieldImage,
     125,
     167,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-trigger',
+    ASSET_BUNDLE_IDS.game,
+    'boardTrigger',
+    minionTriggerImage,
+    41,
+    44,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-deathrattle',
+    ASSET_BUNDLE_IDS.game,
+    'boardDeathrattle',
+    minionDeathrattleImage,
+    80,
+    53,
     'game-scene'
   ),
   asset(
@@ -992,6 +1012,8 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   minionFrameLegendary: Texture
   minionTaunt: Texture
   minionDivineShield: Texture
+  boardTrigger: Texture
+  boardDeathrattle: Texture
   minionAttack: Texture
   minionHealth: Texture
   heroArmor: Texture

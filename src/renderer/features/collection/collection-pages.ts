@@ -9,6 +9,10 @@ export const COLLECTION_PAGE_SIZE = 8
 export const COLLECTION_CARD_TYPES = ['Spell', 'Minion', 'Weapon', 'Hero'] as const
 
 const COLLECTION_CARD_TYPE_SET = new Set<CardType>(COLLECTION_CARD_TYPES)
+const COLLECTION_CLASS_ORDER: readonly CardClass[] = [
+  ...CARD_CLASSES.filter((cardClass) => cardClass !== 'Neutral'),
+  'Neutral'
+]
 
 export interface CollectionPage {
   readonly cardClass: CardClass
@@ -25,7 +29,7 @@ export function buildCollectionPages(
   const pages: CollectionPage[] = []
   const allowedClassSet = allowedClasses ? new Set(allowedClasses) : null
 
-  for (const cardClass of CARD_CLASSES) {
+  for (const cardClass of COLLECTION_CLASS_ORDER) {
     if (allowedClassSet && !allowedClassSet.has(cardClass)) continue
 
     const classCards = cards

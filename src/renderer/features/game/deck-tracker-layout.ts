@@ -25,6 +25,25 @@ export const DECK_TRACKER_LAYOUT = {
   )
 } as const
 
+export const REMOTE_DECK_TRACKER_LAYOUT = {
+  panel: placement(
+    { x: 1600, y: 0 },
+    { width: 320, height: GAME_HEIGHT },
+    {
+      anchor: TOP_LEFT,
+      note: 'Remote deck tracker anchored to the right edge of the board.'
+    }
+  ),
+  viewport: placement(
+    { x: 1600, y: 0 },
+    { width: 320, height: GAME_HEIGHT },
+    {
+      anchor: TOP_LEFT,
+      note: 'Full-height remote deck tracker viewport.'
+    }
+  )
+} as const
+
 /** Row geometry intentionally matches the collection deck-editor rows. */
 export const DECK_TRACKER_ROW_LAYOUT = {
   height: 34,

@@ -1,6 +1,6 @@
-import type { DeckClass, ExpansionId } from '../../../game/content/cards'
+import type { ExpansionId } from '../../../game/content/cards'
 import type { CollectibleMode, ManaFilterValue } from './collection-filters'
-import type { CollectionQueryState } from './collection-query'
+import type { CollectionClassFilter, CollectionQueryState } from './collection-query'
 
 /** Owns mutable collection query state independently of Pixi controls. */
 export class CollectionQueryController {
@@ -12,7 +12,7 @@ export class CollectionQueryController {
     collectibleMode: 'collectible'
   }
 
-  get classFilter(): DeckClass | null {
+  get classFilter(): CollectionClassFilter {
     return this.state.classFilter
   }
 
@@ -32,7 +32,7 @@ export class CollectionQueryController {
     return this.state.collectibleMode
   }
 
-  setClassFilter(classFilter: DeckClass | null): void {
+  setClassFilter(classFilter: CollectionClassFilter): void {
     this.state = { ...this.state, classFilter }
   }
 

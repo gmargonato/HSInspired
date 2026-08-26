@@ -32,7 +32,9 @@ function validateDeckForPersistence(deck: Deck): void {
 function findHero(value: unknown, property: 'id' | 'classId') {
   if (typeof value !== 'string') return undefined
   const normalized = value.trim().toLowerCase()
-  return HERO_CATALOG.all.find((hero) => hero[property].toLowerCase() === normalized)
+  return HERO_CATALOG.all.find(
+    (hero) => hero.deckSelectable && hero[property].toLowerCase() === normalized
+  )
 }
 
 function migrateLegacyDeckFile(value: unknown): Deck[] | null {
@@ -102,7 +104,9 @@ export class DeckRepository implements DeckRepositoryPort {
 
       const validatedRequest = validateCreateRequest(request)
       const heroId = validatedRequest.heroId ?? HERO_CATALOG.require('guldan').id
-      HERO_CATALOG.require(heroId)
+      if (!HERO_CATALOG.require(heroId).deckSelectable) {
+        throw new Error('The selected hero cannot be used as a deck hero.')
+      }
       const now = new Date().toISOString()
       const deck: Deck = {
         id: randomUUID(),
@@ -122,7 +126,9 @@ export class DeckRepository implements DeckRepositoryPort {
     return this.enqueueMutation(async () => {
       await this.ensureLoaded()
       const validatedDeck = parseDeck(deck)
-      HERO_CATALOG.require(validatedDeck.heroId)
+      if (!HERO_CATALOG.require(validatedDeck.heroId).deckSelectable) {
+        throw new Error('The selected hero cannot be used as a deck hero.')
+      }
       validateDeckForPersistence(validatedDeck)
       const index = this.decks.findIndex(
         (candidate) => candidate.id === validatedDeck.id
