@@ -5363,6 +5363,10 @@
         "trigger": "battlecry",
         "actions": [
           {
+            "action": "replace-hero",
+            "heroId": "jaraxxus"
+          },
+          {
             "action": "equip",
             "cardId": "classic_blood_fury"
           }
