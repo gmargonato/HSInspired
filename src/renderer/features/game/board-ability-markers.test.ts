@@ -70,18 +70,20 @@ describe('board ability markers', () => {
     expect(markers('classic_emperor_cobra').trigger).toBe(false)
   })
 
-  it('uses temporary labels for persistent abilities without authored board art', () => {
-    expect(markers('classic_emperor_cobra').temporaryAbilityLabels).toEqual([
-      'Poisonous'
-    ])
-    expect(markers('classic_patient_assassin').temporaryAbilityLabels).toEqual([
-      'Poisonous',
-      'Stealth'
-    ])
+  it('uses authored Poisonous and Stealth indicators instead of temporary labels', () => {
+    expect(markers('classic_emperor_cobra')).toMatchObject({
+      poisonous: true,
+      temporaryAbilityLabels: []
+    })
+    expect(markers('classic_patient_assassin')).toMatchObject({
+      poisonous: true,
+      stealth: true,
+      temporaryAbilityLabels: []
+    })
     expect(markers('goblins_vs_gnomes_mini_mage').temporaryAbilityLabels).toEqual([
-      'Stealth',
       'Spell Damage'
     ])
+    expect(markers('goblins_vs_gnomes_mini_mage').stealth).toBe(true)
     expect(markers('classic_doomhammer').temporaryAbilityLabels).toEqual(['Windfury'])
     expect(markers('goblins_vs_gnomes_v_07_tr_0n').temporaryAbilityLabels).toEqual([
       'Mega Windfury'

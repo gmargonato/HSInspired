@@ -53,7 +53,7 @@ import {
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { Actor } from '../../ui/components/actor'
 import { Button } from '../../ui/components/button'
-import type { CursorManager } from '../../ui/components/cursor'
+import { TARGETING_ARROW_HEAD, type CursorManager } from '../../ui/components/cursor'
 import {
   DEFAULT_HAND_LAYOUT,
   HandCardTransform,
@@ -99,6 +99,7 @@ import { GameCardSlot } from './game-card-slot'
 import { MatchResultOverlay, type MatchResult } from './match-result-overlay'
 import { FatigueView } from './fatigue-view'
 import { boardAbilityMarkers } from './board-ability-markers'
+import { DamageIndicatorView } from './damage-indicator-view'
 
 export interface GameBoardViewOptions {
   readonly route: GameRoute
@@ -151,10 +152,14 @@ const BOARD_TIMING = {
   combatLunge: 0.18,
   combatImpact: 0.12,
   combatReturn: 0.2,
-  combatDeath: 0.28
+  combatDeath: 0.28,
+  damageIndicatorGrow: 0.16,
+  damageIndicatorHold: 1,
+  damageIndicatorFade: 0.2
 } as const
 
 const COMBAT_ATTACKER_Z_INDEX = 100
+const COMBAT_DRAG_MOVE_THRESHOLD_PX = 10
 
 interface CombatViewPlacement {
   readonly parent: Container
@@ -163,6 +168,13 @@ interface CombatViewPlacement {
 }
 
 type CombatView = MinionView | HeroView
+
+interface CombatDragState {
+  readonly attacker: CombatView
+  readonly pointerId: number
+  readonly start: { x: number; y: number }
+  active: boolean
+}
 
 const SUMMON_GHOST_COLOR = 0x79e9ff
 const COMBAT_SHAKE_DIRECTIONS = [
@@ -253,6 +265,8 @@ export class GameBoardView extends Actor {
   private heroPowerTargeting = false
   private combatInProgress = false
   private combatAttackerSelectionUnlocked = false
+  private combatDrag: CombatDragState | null = null
+  private suppressCombatTapPointerId: number | null = null
   private cardPlayInProgress = false
   private matchResultShown = false
   private matchResultBlurFilter: BlurFilter | null = null
@@ -373,8 +387,27 @@ export class GameBoardView extends Actor {
     const pointer = this.dragPointer
     if (pointer) this.resolveCardDrop(pointer)
   }
+  private readonly handleWindowCombatPointerUp = (event: PointerEvent): void => {
+    const drag = this.combatDrag
+    if (!drag || event.button !== 0 || event.pointerId !== drag.pointerId) return
+
+    this.combatDrag = null
+    if (!drag.active) return
+    this.suppressCombatTapPointerId = event.pointerId
+    window.setTimeout(() => {
+      if (this.suppressCombatTapPointerId === event.pointerId) {
+        this.suppressCombatTapPointerId = null
+      }
+    }, 0)
+
+    if (this.selectedCombatView !== drag.attacker) return
+    const release = this.toRendererPoint(event.clientX, event.clientY)
+    const target = this.findRemoteCombatTargetAt(release.x, release.y)
+    if (target) void this.attackCharacter(target)
+  }
   private readonly handleWindowBlur = (): void => {
     this.endDrag()
+    this.cancelCombatDrag()
     this.cancelHeroPowerTargeting()
   }
   private readonly handleWindowKeyDown = (event: KeyboardEvent): void => {
@@ -493,6 +526,7 @@ export class GameBoardView extends Actor {
       }
     })
     this.on('pointertap', (event: FederatedPointerEvent) => {
+      if (this.consumeCombatDragTap(event)) return
       if (!this.selectedCombatView && !this.heroPowerTargeting) return
       if (event.button !== 0) return
       let target = event.target instanceof Container ? event.target : null
@@ -911,15 +945,58 @@ export class GameBoardView extends Actor {
     const localTurnTexture = isLocalTurn
       ? this.options.gameAssets.endTurn
       : this.options.gameAssets.enemyTurn
-    if (endTurnButton.sprite.texture !== localTurnTexture) {
-      endTurnButton.sprite.texture = localTurnTexture
-    }
-    endTurnButton.setEnabled(
+    const inputEnabled =
       isLocalTurn &&
-        !this.turnInProgress &&
-        !this.combatInProgress &&
-        !this.cardPlayInProgress &&
-        !this.heroPowerTargeting
+      !this.turnInProgress &&
+      !this.combatInProgress &&
+      !this.cardPlayInProgress &&
+      !this.heroPowerTargeting
+    this.hud.syncEndTurnButton(
+      localTurnTexture,
+      inputEnabled,
+      inputEnabled && !this.localPlayerHasAvailableAction(state)
+    )
+  }
+
+  /** Whether the local player has a legal card, hero-power, or attack action. */
+  private localPlayerHasAvailableAction(state: OpeningMatchState): boolean {
+    if (state.phase !== 'turns' || state.activePlayerId !== this.localParticipantId) {
+      return false
+    }
+
+    const local = this.findPlayer(state, this.localParticipantId)
+    const hasPlayableCard = local.hand.some((card) => {
+      const definition = cardDefinition(card)
+      if (definition.cost > local.mana.available) return false
+      if (definition.type === 'Minion') return local.board.length < MAX_BOARD_SIZE
+      return definition.type === 'Weapon' || definition.type === 'Hero'
+    })
+    if (hasPlayableCard) return true
+
+    const heroPower = HERO_POWER_CATALOG.require(local.heroPower.id)
+    const heroPowerSummonBlocked =
+      (heroPower.effect.kind === 'summon' ||
+        heroPower.effect.kind === 'summon-random-totem') &&
+      local.board.length >= MAX_BOARD_SIZE
+    const allTotemsPresent =
+      heroPower.effect.kind === 'summon-random-totem' &&
+      heroPower.effect.cardIds.every((cardId) =>
+        local.board.some((minion) => minion.cardId === cardId)
+      )
+    if (
+      local.heroPower.available &&
+      local.mana.available >= local.heroPower.cost &&
+      !heroPowerSummonBlocked &&
+      !allTotemsPresent
+    ) {
+      return true
+    }
+
+    return (
+      canHeroAttack(local, state, this.localParticipantId) ||
+      local.board.some((minion) =>
+        canBoardMinionAttack(minion, state, this.localParticipantId)
+      )
     )
   }
 
@@ -1092,6 +1169,7 @@ export class GameBoardView extends Actor {
   }
 
   private deselectAttacker(animate = true, clearPreview = true): void {
+    this.cancelCombatDrag()
     if (clearPreview) this.clearCombatPreview()
     if (this.selectedCombatView) {
       const view = this.selectedCombatView
@@ -1117,6 +1195,7 @@ export class GameBoardView extends Actor {
 
   private handleBoardPointerMove(event: FederatedPointerEvent): void {
     if (this.matchResultShown) return
+    this.updateCombatDrag(event)
     if (this.heroPowerTargeting) {
       const power = this.heroPowerViews.get(this.localParticipantId)
       if (!power) return
@@ -1124,11 +1203,10 @@ export class GameBoardView extends Actor {
       // positioned within that view. Use the card's center, not the view root.
       const from = power.card.getGlobalPosition()
       const localFrom = this.attackLineLayer.toLocal(from)
-      const localTo = this.attackLineLayer.toLocal({
-        x: event.globalX,
-        y: event.globalY
-      })
-      this.attackLine.setEndpoints(localFrom, localTo)
+      this.attackLine.setEndpoints(
+        localFrom,
+        this.resolveAttackLineEnd(from, { x: event.globalX, y: event.globalY })
+      )
       const angle = Math.atan2(event.globalY - from.y, event.globalX - from.x)
       this.options.cursor?.setTargetingAngle(angle)
       const target = this.findTargetCharacter(event)
@@ -1148,8 +1226,7 @@ export class GameBoardView extends Actor {
       : this.selectedCombatView.getGlobalPosition()
     const to = { x: event.globalX, y: event.globalY }
     const localFrom = this.attackLineLayer.toLocal(from)
-    const localTo = this.attackLineLayer.toLocal(to)
-    this.attackLine.setEndpoints(localFrom, localTo)
+    this.attackLine.setEndpoints(localFrom, this.resolveAttackLineEnd(from, to))
     const angle = Math.atan2(to.y - from.y, to.x - from.x)
     this.options.cursor?.setTargetingAngle(angle)
     const target = this.findTargetCharacter(event)
@@ -1170,8 +1247,11 @@ export class GameBoardView extends Actor {
       target = target.parent
     }
 
-    // Global pointer events may report the board as their target. Fall back to
-    // transformed bounds so the preview still follows the hovered character.
+    return this.findRemoteCombatTargetAt(event.globalX, event.globalY)
+  }
+
+  /** Finds a valid remote character at a renderer-space point. */
+  private findRemoteCombatTargetAt(x: number, y: number): CombatView | null {
     const remoteViews: readonly CombatView[] = [
       ...this.remoteMinionViews,
       ...(this.heroViews.get(this.remoteParticipantId)
@@ -1183,13 +1263,64 @@ export class GameBoardView extends Actor {
         if (!view.isTargetable()) return false
         const bounds = view.getBounds()
         return (
-          event.globalX >= bounds.x &&
-          event.globalX <= bounds.x + bounds.width &&
-          event.globalY >= bounds.y &&
-          event.globalY <= bounds.y + bounds.height
+          x >= bounds.x &&
+          x <= bounds.x + bounds.width &&
+          y >= bounds.y &&
+          y <= bounds.y + bounds.height
         )
       }) ?? null
     )
+  }
+
+  /** Records a possible drag without changing ordinary click selection. */
+  private beginCombatDrag(view: CombatView, event: FederatedPointerEvent): void {
+    if (event.button !== 0) return
+    if (
+      this.heroPowerTargeting ||
+      this.cardPlayInProgress ||
+      !canSelectCombatAttacker(
+        this.combatInProgress,
+        this.combatAttackerSelectionUnlocked
+      ) ||
+      !view.isCanAttack()
+    ) {
+      return
+    }
+    this.combatDrag = {
+      attacker: view,
+      pointerId: event.pointerId,
+      start: this.toCursorTargetPoint(event.globalX, event.globalY),
+      active: false
+    }
+  }
+
+  /** Activates the normal targeting system after a deliberate drag motion. */
+  private updateCombatDrag(event: FederatedPointerEvent): void {
+    const drag = this.combatDrag
+    if (!drag || drag.active || event.pointerId !== drag.pointerId) return
+    const point = this.toCursorTargetPoint(event.globalX, event.globalY)
+    if (
+      Math.hypot(point.x - drag.start.x, point.y - drag.start.y) <
+      COMBAT_DRAG_MOVE_THRESHOLD_PX
+    ) {
+      return
+    }
+    if (!drag.attacker.isCanAttack()) {
+      this.cancelCombatDrag()
+      return
+    }
+    drag.active = true
+    this.selectAttacker(drag.attacker)
+  }
+
+  private cancelCombatDrag(): void {
+    this.combatDrag = null
+  }
+
+  private consumeCombatDragTap(event: FederatedPointerEvent): boolean {
+    if (event.pointerId !== this.suppressCombatTapPointerId) return false
+    this.suppressCombatTapPointerId = null
+    return true
   }
 
   /** Converts a Pixi canvas point into the fixed-position cursor layer's coordinates. */
@@ -1200,6 +1331,40 @@ export class GameBoardView extends Actor {
       x: bounds.left + (x / this.options.renderer.width) * bounds.width,
       y: bounds.top + (y / this.options.renderer.height) * bounds.height
     }
+  }
+
+  /** Converts a fixed-position CSS point back into the renderer coordinate space. */
+  private toRendererPoint(x: number, y: number): { x: number; y: number } {
+    const canvas = this.options.renderer.canvas
+    const bounds = canvas.getBoundingClientRect()
+    return {
+      x: ((x - bounds.left) / bounds.width) * this.options.renderer.width,
+      y: ((y - bounds.top) / bounds.height) * this.options.renderer.height
+    }
+  }
+
+  /**
+   * Stops the Pixi body beneath the DOM arrow head. The inset is measured in
+   * CSS pixels because the head is a fixed-size DOM image while the board
+   * itself can scale with the viewport.
+   */
+  private resolveAttackLineEnd(
+    from: { x: number; y: number },
+    cursor: { x: number; y: number }
+  ): { x: number; y: number } {
+    const source = this.toCursorTargetPoint(from.x, from.y)
+    const pointer = this.toCursorTargetPoint(cursor.x, cursor.y)
+    const dx = pointer.x - source.x
+    const dy = pointer.y - source.y
+    const length = Math.hypot(dx, dy)
+    if (length < 1) return this.attackLineLayer.toLocal(cursor)
+
+    const inset = TARGETING_ARROW_HEAD.bodyEndInset
+    const bodyEnd = this.toRendererPoint(
+      pointer.x - (dx / length) * inset,
+      pointer.y - (dy / length) * inset
+    )
+    return this.attackLineLayer.toLocal(bodyEnd)
   }
 
   /** Predicts whether the local hero power will lethally damage a hovered target. */
@@ -1781,6 +1946,13 @@ export class GameBoardView extends Actor {
         await this.presentHeroPowerFlip(event.participantId, false)
         return
       case 'character-damaged':
+        this.showDamageIndicatorForCharacter(
+          event.participantId,
+          event.character,
+          event.amount
+        )
+        this.presentCharacterStateChange(event)
+        return
       case 'character-healed':
         this.presentCharacterStateChange(event)
         return
@@ -2238,8 +2410,10 @@ export class GameBoardView extends Actor {
       legendaryFrame: this.options.gameAssets.minionFrameLegendary,
       taunt: this.options.gameAssets.minionTaunt,
       divineShield: this.options.gameAssets.minionDivineShield,
+      stealth: this.options.gameAssets.minionStealth,
       trigger: this.options.gameAssets.boardTrigger,
       deathrattle: this.options.gameAssets.boardDeathrattle,
+      poisonous: this.options.gameAssets.boardPoisonous,
       attack: this.options.gameAssets.minionAttack,
       health: this.options.gameAssets.minionHealth
     }
@@ -2254,7 +2428,9 @@ export class GameBoardView extends Actor {
           legendary: definition.rarity === 'Legendary',
           taunt: markers.taunt,
           divineShield: markers.divineShield,
+          stealth: markers.stealth,
           deathrattle: markers.deathrattle,
+          poisonous: markers.poisonous,
           trigger: markers.trigger,
           temporaryAbilityLabels: markers.temporaryAbilityLabels
         },
@@ -2599,22 +2775,47 @@ export class GameBoardView extends Actor {
       this.unlockCombatAttackerSelection()
       await this.wait(BOARD_TIMING.combatImpact)
 
+      const attackerDamageIndicator = this.showDamageIndicator(
+        attacker,
+        event.defender.damageDealt
+      )
+      this.showDamageIndicator(defender, event.attacker.damageDealt)
+      const followSettleOverlays = (): void => {
+        followDeathMarkers()
+        if (attackerDamageIndicator && !attackerDamageIndicator.destroyed) {
+          this.positionDamageIndicator(attackerDamageIndicator, attacker)
+        }
+      }
+
       const settle = (
         view: MinionView,
         origin: { x: number; y: number }
       ): Promise<void> => {
         if (view.destroyed) return Promise.resolve()
         const timeline = this.timeline()
-        if (
-          (view === attacker && event.attacker.destroyed) ||
-          (view === defender && event.defender.destroyed)
-        ) {
+        const destroyed =
+          view === attacker ? event.attacker.destroyed : event.defender.destroyed
+
+        if (view === attacker) {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        }
+        if (destroyed) {
+          const deathStart = view === attacker ? BOARD_TIMING.combatReturn : 0
           timeline
-            .to(view, {
-              alpha: 0,
-              duration: BOARD_TIMING.combatDeath,
-              ease: 'power2.in'
-            })
+            .to(
+              view,
+              {
+                alpha: 0,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              deathStart
+            )
             .to(
               view.scale,
               {
@@ -2623,9 +2824,9 @@ export class GameBoardView extends Actor {
                 duration: BOARD_TIMING.combatDeath,
                 ease: 'power2.in'
               },
-              0
+              deathStart
             )
-        } else {
+        } else if (view !== attacker) {
           timeline.to(view, {
             x: origin.x,
             y: origin.y,
@@ -2633,7 +2834,7 @@ export class GameBoardView extends Actor {
             ease: 'power2.out'
           })
         }
-        timeline.eventCallback('onUpdate', followDeathMarkers)
+        timeline.eventCallback('onUpdate', followSettleOverlays)
         return this.completeTimeline(timeline)
       }
 
@@ -2733,6 +2934,18 @@ export class GameBoardView extends Actor {
       this.unlockCombatAttackerSelection()
       await this.wait(BOARD_TIMING.combatImpact)
 
+      const attackerDamageIndicator = this.showDamageIndicator(
+        attacker,
+        event.defender.damageDealt
+      )
+      this.showDamageIndicator(defender, event.attacker.damageDealt)
+      const followSettleOverlays = (): void => {
+        followDeathMarkers()
+        if (attackerDamageIndicator && !attackerDamageIndicator.destroyed) {
+          this.positionDamageIndicator(attackerDamageIndicator, attacker)
+        }
+      }
+
       const settle = (
         view: CombatView,
         origin: { x: number; y: number },
@@ -2741,14 +2954,27 @@ export class GameBoardView extends Actor {
         if (view.destroyed) return Promise.resolve()
         const timeline = this.timeline()
         // Heroes remain visible at zero Health so the terminal state is clear;
-        // minions retain the existing death collapse presentation.
+        // attacking minions return home before their death collapse.
+        if (view === attacker) {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        }
         if (destroyed && view instanceof MinionView) {
+          const deathStart = view === attacker ? BOARD_TIMING.combatReturn : 0
           timeline
-            .to(view, {
-              alpha: 0,
-              duration: BOARD_TIMING.combatDeath,
-              ease: 'power2.in'
-            })
+            .to(
+              view,
+              {
+                alpha: 0,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              deathStart
+            )
             .to(
               view.scale,
               {
@@ -2757,9 +2983,9 @@ export class GameBoardView extends Actor {
                 duration: BOARD_TIMING.combatDeath,
                 ease: 'power2.in'
               },
-              0
+              deathStart
             )
-        } else {
+        } else if (view !== attacker) {
           timeline.to(view, {
             x: origin.x,
             y: origin.y,
@@ -2767,7 +2993,7 @@ export class GameBoardView extends Actor {
             ease: 'power2.out'
           })
         }
-        timeline.eventCallback('onUpdate', followDeathMarkers)
+        timeline.eventCallback('onUpdate', followSettleOverlays)
         return this.completeTimeline(timeline)
       }
 
@@ -2846,6 +3072,65 @@ export class GameBoardView extends Actor {
       : view.getGlobalPosition()
     const local = this.combatOverlayLayer.toLocal(global)
     marker.position.set(local.x, local.y - 15)
+  }
+
+  private showDamageIndicatorForCharacter(
+    ownerId: PlayerId,
+    character: AttackCharacterRef,
+    amount: number
+  ): void {
+    const view = this.findCombatView(ownerId, character)
+    if (view) this.showDamageIndicator(view, amount)
+  }
+
+  /** Pops a transient damage burst at the character's current board position. */
+  private showDamageIndicator(
+    view: CombatView,
+    amount: number
+  ): DamageIndicatorView | null {
+    if (amount <= 0) return null
+
+    const indicator = new DamageIndicatorView(
+      this.options.gameAssets.damageIndicator,
+      amount
+    )
+    this.positionDamageIndicator(indicator, view)
+    indicator.scale.set(0)
+    indicator.zIndex = 1100
+    this.combatOverlayLayer.addChild(indicator)
+
+    const timeline = this.timeline()
+    timeline.to(indicator.scale, {
+      x: 1,
+      y: 1,
+      duration: BOARD_TIMING.damageIndicatorGrow,
+      ease: 'back.out(1.7)'
+    })
+    timeline.to(indicator, {
+      alpha: 1,
+      duration: BOARD_TIMING.damageIndicatorHold
+    })
+    timeline.to(indicator, {
+      alpha: 0,
+      duration: BOARD_TIMING.damageIndicatorFade,
+      ease: 'power2.in'
+    })
+    timeline.eventCallback('onComplete', () => {
+      indicator.removeFromParent()
+      indicator.destroy({ children: true })
+    })
+    return indicator
+  }
+
+  private positionDamageIndicator(
+    indicator: DamageIndicatorView,
+    view: CombatView
+  ): void {
+    const global = view.parent
+      ? view.parent.toGlobal(view.position)
+      : view.getGlobalPosition()
+    const local = this.combatOverlayLayer.toLocal(global)
+    indicator.position.set(local.x, local.y - 15)
   }
 
   private findMinionView(
@@ -2951,7 +3236,12 @@ export class GameBoardView extends Actor {
   }
 
   private wireMinionView(view: MinionView): void {
+    view.on('pointerdown', (event: FederatedPointerEvent) => {
+      if (view.ownerId !== this.localParticipantId) return
+      this.beginCombatDrag(view, event)
+    })
     view.on('pointertap', (event: FederatedPointerEvent) => {
+      if (this.consumeCombatDragTap(event)) return
       if (event.button !== 0) return
       if (!view.isTargetable()) return
       if (this.heroPowerTargeting && view.ownerId && view.instanceId) {
@@ -2983,7 +3273,12 @@ export class GameBoardView extends Actor {
   }
 
   private wireHeroView(view: HeroView): void {
+    view.on('pointerdown', (event: FederatedPointerEvent) => {
+      if (view.ownerId !== this.localParticipantId) return
+      this.beginCombatDrag(view, event)
+    })
     view.on('pointertap', (event: FederatedPointerEvent) => {
+      if (this.consumeCombatDragTap(event)) return
       if (event.button !== 0) return
       if (!view.isTargetable()) return
       if (this.heroPowerTargeting && view.ownerId) {
@@ -3680,6 +3975,7 @@ export class GameBoardView extends Actor {
     this.handLayer.eventMode = 'static'
     window.addEventListener('pointerdown', this.handleWindowPointerDown, true)
     window.addEventListener('pointerup', this.handleWindowPointerUp, true)
+    window.addEventListener('pointerup', this.handleWindowCombatPointerUp, true)
     window.addEventListener('blur', this.handleWindowBlur)
     const bounds = handHoverHitBounds(DEFAULT_HAND_LAYOUT)
     const handRect = new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
@@ -4009,6 +4305,7 @@ export class GameBoardView extends Actor {
   override dispose(): void {
     window.removeEventListener('pointerdown', this.handleWindowPointerDown, true)
     window.removeEventListener('pointerup', this.handleWindowPointerUp, true)
+    window.removeEventListener('pointerup', this.handleWindowCombatPointerUp, true)
     window.removeEventListener('blur', this.handleWindowBlur)
     window.removeEventListener('keydown', this.handleWindowKeyDown)
     this.options.cursor?.setContextVariant(null)
@@ -4021,6 +4318,7 @@ export class GameBoardView extends Actor {
     this.heroPowerTargeting = false
     this.combatInProgress = false
     this.combatAttackerSelectionUnlocked = false
+    this.cancelCombatDrag()
     this.cardPlayInProgress = false
     this.attackLine.clear()
     if (this.draggingIndex !== null) {

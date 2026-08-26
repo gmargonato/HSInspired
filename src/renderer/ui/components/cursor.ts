@@ -16,6 +16,16 @@ export const CURSOR_SCALE_LIMITS = {
   max: 4
 } as const
 
+/** Native geometry of the DOM targeting head, whose tip is glued to the pointer. */
+export const TARGETING_ARROW_HEAD = {
+  width: 119,
+  height: 57,
+  tipX: 60,
+  tipY: 6,
+  /** Body terminates beneath the head, concealing the masked edge and tile gap. */
+  bodyEndInset: 24
+} as const
+
 const LEFT_BUTTON = 0
 const LEFT_BUTTON_MASK = 1
 const CUSTOM_CURSOR_CLASS = 'custom-cursor-enabled'
@@ -148,11 +158,11 @@ export class CursorManager {
     this.arrowHeadElement.style.top = '0'
     this.arrowHeadElement.style.pointerEvents = 'none'
     this.arrowHeadElement.style.visibility = 'hidden'
-    // Tip of the arrow head image is at the top-center (58,0) in the 119x57 source.
+    // Tip of the arrow head image is at (60,6) in the 119×57 source.
     // Keep native 1× scale per spec: 119×57.
-    this.arrowHeadElement.style.transformOrigin = '60px 6px'
-    this.arrowHeadElement.style.width = '119px'
-    this.arrowHeadElement.style.height = '57px'
+    this.arrowHeadElement.style.transformOrigin = `${TARGETING_ARROW_HEAD.tipX}px ${TARGETING_ARROW_HEAD.tipY}px`
+    this.arrowHeadElement.style.width = `${TARGETING_ARROW_HEAD.width}px`
+    this.arrowHeadElement.style.height = `${TARGETING_ARROW_HEAD.height}px`
     this.arrowHeadElement.style.zIndex = '9999'
 
     this.targetCircleElement = document.createElement('img')
@@ -424,8 +434,8 @@ export class CursorManager {
     if (this.pointerX === null || this.pointerY === null) return
     // Tip at top-center (60,6) in the native 119×57 head – keep the tip glued to the pointer
     // and rotate so the head points toward the mouse direction.
-    this.arrowHeadElement.style.left = `${this.pointerX - 60}px`
-    this.arrowHeadElement.style.top = `${this.pointerY - 6}px`
+    this.arrowHeadElement.style.left = `${this.pointerX - TARGETING_ARROW_HEAD.tipX}px`
+    this.arrowHeadElement.style.top = `${this.pointerY - TARGETING_ARROW_HEAD.tipY}px`
     // Source image points up (-Y). Vector angle 0 = east, so add 90° to align.
     const degrees = ((this.targetingAngle + Math.PI / 2) * 180) / Math.PI
     this.arrowHeadElement.style.transform = `rotate(${degrees}deg)`

@@ -1,4 +1,4 @@
-import { Container, Sprite, Text } from 'pixi.js'
+import { Container, Sprite, Text, type Texture } from 'pixi.js'
 import type { PlayerId, OpeningCard, OpeningMatchState } from '../../../game/match'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { applyPlacement, type LayoutPlacement } from '../../rendering/layout'
@@ -7,10 +7,13 @@ import { DeckTrackerView } from './deck-tracker-view'
 import type { DeckTrackerSortMode } from './deck-tracker-model'
 import { REMOTE_DECK_TRACKER_LAYOUT } from './deck-tracker-layout'
 import { Button } from '../../ui/components/button'
+import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import type { GameAssets } from '../../ui/asset-registry'
 import type { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 
 type Player = OpeningMatchState['players'][number]
+
+const END_TURN_FLIP_DURATION = 0.32
 
 /** Owned HUD composition for turn controls, mana, deck counts, and tracker. */
 export class GameHudView {
@@ -18,6 +21,11 @@ export class GameHudView {
   readonly deckTracker: DeckTrackerView
   readonly remoteDeckTracker: DeckTrackerView
   endTurnButton: Button | null = null
+  private endTurnOutlineTarget: Sprite | null = null
+  private endTurnOutline: AnimatedOutline | null = null
+  private endTurnTexture: Texture | null = null
+  private endTurnEnabled = false
+  private endTurnExhausted = false
   deckCountLabels: { local: Text; remote: Text } | null = null
   manaLabels: { local: Text; remote: Text } | null = null
   manaLocalTray: ManaTray | null = null
@@ -38,6 +46,22 @@ export class GameHudView {
     assets: Pick<GameAssets, 'endTurn' | 'manaCrystal'>,
     onEndTurn: () => void
   ): void {
+    this.endTurnOutlineTarget = new Sprite(assets.endTurn)
+    applyPlacement(this.endTurnOutlineTarget, GAME_BOARD_LAYOUT.endTurnButton)
+    this.endTurnOutlineTarget.anchor.set(
+      GAME_BOARD_LAYOUT.endTurnButton.anchor.x,
+      GAME_BOARD_LAYOUT.endTurnButton.anchor.y
+    )
+    this.endTurnOutlineTarget.eventMode = 'none'
+    this.endTurnOutlineTarget.label = 'game.end-turn-exhausted-outline-target'
+    this.endTurnOutline = new AnimatedOutline(
+      this.endTurnOutlineTarget,
+      'green',
+      'button'
+    )
+    this.endTurnOutline.setEnabled(false)
+    this.turnLayer.addChild(this.endTurnOutlineTarget)
+
     this.endTurnButton = new Button(assets.endTurn, {
       highlightOnHover: false,
       onClick: onEndTurn
@@ -46,6 +70,7 @@ export class GameHudView {
     this.endTurnButton.setBaseY(GAME_BOARD_LAYOUT.endTurnButton.position.y)
     this.endTurnButton.setEnabled(false)
     this.turnLayer.addChild(this.endTurnButton)
+    this.endTurnTexture = assets.endTurn
 
     const localCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.localCount, 34)
     const remoteCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.remoteCount, 34)
@@ -63,6 +88,27 @@ export class GameHudView {
     )
     this.turnLayer.addChild(this.manaLocalTray)
     this.turnLayer.visible = false
+  }
+
+  syncEndTurnButton(texture: Texture, enabled: boolean, exhausted: boolean): void {
+    this.endTurnTexture = texture
+    this.endTurnEnabled = enabled
+    this.endTurnExhausted = exhausted
+    const button = this.endTurnButton
+    if (!button) return
+
+    if (button.sprite.texture === texture && !button.isTextureFlipping()) {
+      this.syncEndTurnVisualState()
+      return
+    }
+
+    // The outline is hidden throughout the flip, so its texture can safely
+    // advance to the next face before the button reaches its midpoint.
+    this.endTurnOutline?.setEnabled(false)
+    if (this.endTurnOutlineTarget) this.endTurnOutlineTarget.texture = texture
+    void button.flipTextureVertically(texture, END_TURN_FLIP_DURATION).then(() => {
+      this.syncEndTurnVisualState()
+    })
   }
 
   sync(
@@ -109,6 +155,10 @@ export class GameHudView {
   }
 
   dispose(): void {
+    this.endTurnOutline?.dispose()
+    this.endTurnOutline = null
+    this.endTurnOutlineTarget = null
+    this.endTurnTexture = null
     this.deckTracker.dispose()
     this.remoteDeckTracker.dispose()
     this.manaLocalTray?.dispose()
@@ -133,5 +183,19 @@ export class GameHudView {
     label.anchor.set(placement.anchor.x, placement.anchor.y)
     label.eventMode = 'none'
     return label
+  }
+
+  private syncEndTurnVisualState(): void {
+    const button = this.endTurnButton
+    if (!button) return
+    button.setEnabled(this.endTurnEnabled)
+    if (this.endTurnOutlineTarget) {
+      this.endTurnOutlineTarget.texture = button.sprite.texture
+    }
+    this.endTurnOutline?.setEnabled(
+      this.endTurnExhausted &&
+        button.sprite.texture === this.endTurnTexture &&
+        !button.isTextureFlipping()
+    )
   }
 }

@@ -4,6 +4,7 @@ import { AnimatedOutline } from '../effects/animated-outline'
 import { createTemporaryAbilityBadge } from '../temporary-ability-badge'
 import {
   MINION_CANVAS,
+  MINION_HIT_AREA,
   MINION_LAYOUT,
   minionTemporaryAbilityBadgePlacement
 } from './minion-layout'
@@ -19,7 +20,9 @@ export interface MinionViewModel {
   readonly legendary: boolean
   readonly taunt: boolean
   readonly divineShield: boolean
+  readonly stealth: boolean
   readonly deathrattle: boolean
+  readonly poisonous: boolean
   readonly trigger: boolean
   readonly temporaryAbilityLabels: readonly string[]
 }
@@ -29,8 +32,10 @@ export interface MinionViewTextures {
   readonly legendaryFrame: Texture
   readonly taunt: Texture
   readonly divineShield: Texture
+  readonly stealth: Texture
   readonly trigger: Texture
   readonly deathrattle: Texture
+  readonly poisonous: Texture
   readonly attack: Texture
   readonly health: Texture
 }
@@ -86,6 +91,7 @@ export class MinionView extends Container {
   private readonly legendaryFrame: Sprite
   private readonly taunt: Sprite
   private readonly divineShield: Sprite
+  private readonly stealth: Sprite
   private readonly attackLabel: Text
   private readonly healthLabel: Text
   private readonly outlineProxy: Graphics
@@ -147,6 +153,12 @@ export class MinionView extends Container {
     artworkLayer.addChild(mask)
     this.addChild(artworkLayer)
 
+    this.taunt = new Sprite(textures.taunt)
+    applyAnchoredPlacement(this.taunt, MINION_LAYOUT.taunt)
+    this.taunt.visible = model.taunt
+    this.taunt.label = 'minion.taunt'
+    this.addChild(this.taunt)
+
     const frame = new Sprite(textures.frame)
     applyAnchoredPlacement(frame, MINION_LAYOUT.frame)
     frame.label = 'minion.frame'
@@ -158,11 +170,11 @@ export class MinionView extends Container {
     this.legendaryFrame.label = 'minion.frame-legendary'
     this.addChild(this.legendaryFrame)
 
-    this.taunt = new Sprite(textures.taunt)
-    applyAnchoredPlacement(this.taunt, MINION_LAYOUT.taunt)
-    this.taunt.visible = model.taunt
-    this.taunt.label = 'minion.taunt'
-    this.addChild(this.taunt)
+    this.stealth = new Sprite(textures.stealth)
+    applyAnchoredPlacement(this.stealth, MINION_LAYOUT.stealth)
+    this.stealth.visible = model.stealth
+    this.stealth.label = 'minion.stealth'
+    this.addChild(this.stealth)
 
     this.divineShield = new Sprite(textures.divineShield)
     applyAnchoredPlacement(this.divineShield, MINION_LAYOUT.divineShield)
@@ -176,6 +188,13 @@ export class MinionView extends Container {
       applyAnchoredPlacement(deathrattle, MINION_LAYOUT.deathrattle)
       deathrattle.label = 'minion.deathrattle'
       this.addChild(deathrattle)
+    }
+
+    if (model.poisonous) {
+      const poisonous = new Sprite(textures.poisonous)
+      applyAnchoredPlacement(poisonous, MINION_LAYOUT.poisonous)
+      poisonous.label = 'minion.poisonous'
+      this.addChild(poisonous)
     }
 
     if (model.trigger) {
@@ -245,7 +264,12 @@ export class MinionView extends Container {
     this.sleepingZs.label = 'minion.sleeping-zs-root'
     this.addChild(this.sleepingZs)
 
-    this.hitArea = new Rectangle(0, 0, MINION_CANVAS.width, MINION_CANVAS.height)
+    this.hitArea = new Rectangle(
+      MINION_HIT_AREA.x,
+      MINION_HIT_AREA.y,
+      MINION_HIT_AREA.width,
+      MINION_HIT_AREA.height
+    )
     this.cursor = 'pointer'
 
     setEventModeNone(this)
@@ -283,6 +307,10 @@ export class MinionView extends Container {
 
   setDivineShield(visible: boolean): void {
     this.divineShield.visible = visible
+  }
+
+  setStealth(visible: boolean): void {
+    this.stealth.visible = visible
   }
 
   private syncOutlineState(): void {

@@ -29,6 +29,7 @@ import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
 import gameEnemyTurnImage from '@assets/images/match/button-enemy-turn.png'
 import gameYourTurnImage from '@assets/images/match/flag-your-turn.png'
 import fatigueImage from '@assets/images/match/fatigue.png'
+import damageIndicatorImage from '@assets/images/match/damage-indicator.png'
 import cardBackImage from '@assets/images/cards/card-back.png'
 import startOfGameVsImage from '@assets/images/match/start-of-game-vs.png'
 import mulliganAnnouncementImage from '@assets/images/match/mulligan-announcement.png'
@@ -43,8 +44,10 @@ import minionFrameImage from '@assets/images/board/minion-frame.png'
 import minionFrameLegendaryImage from '@assets/images/board/minion-frame-legendary.png'
 import minionTauntImage from '@assets/images/board/minion-taunt.png'
 import minionDivineShieldImage from '@assets/images/board/minion-divine-shield.png'
+import minionStealthImage from '@assets/images/board/minion-stealth.png'
 import minionTriggerImage from '@assets/images/board/minion-trigger.png'
 import minionDeathrattleImage from '@assets/images/board/minion-deathrattle.png'
+import minionPoisonousImage from '@assets/images/board/minion-poisonous.png'
 import minionAttackImage from '@assets/images/board/minion-attack.png'
 import minionHealthImage from '@assets/images/board/minion-health.png'
 import heroArmorImage from '@assets/images/cards/armor.png'
@@ -264,6 +267,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.damage-indicator',
+    ASSET_BUNDLE_IDS.game,
+    'damageIndicator',
+    damageIndicatorImage,
+    159,
+    163,
+    'game-scene'
+  ),
+  asset(
     'scene.game.minion-frame-legendary',
     ASSET_BUNDLE_IDS.game,
     'minionFrameLegendary',
@@ -291,6 +303,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.minion-stealth',
+    ASSET_BUNDLE_IDS.game,
+    'minionStealth',
+    minionStealthImage,
+    113,
+    153,
+    'game-scene'
+  ),
+  asset(
     'scene.game.board-trigger',
     ASSET_BUNDLE_IDS.game,
     'boardTrigger',
@@ -306,6 +327,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     minionDeathrattleImage,
     80,
     53,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-poisonous',
+    ASSET_BUNDLE_IDS.game,
+    'boardPoisonous',
+    minionPoisonousImage,
+    39,
+    55,
     'game-scene'
   ),
   asset(
@@ -1008,12 +1038,15 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   table: Texture
   board: Texture
   fatigue: Texture
+  damageIndicator: Texture
   minionFrame: Texture
   minionFrameLegendary: Texture
   minionTaunt: Texture
   minionDivineShield: Texture
+  minionStealth: Texture
   boardTrigger: Texture
   boardDeathrattle: Texture
+  boardPoisonous: Texture
   minionAttack: Texture
   minionHealth: Texture
   heroArmor: Texture

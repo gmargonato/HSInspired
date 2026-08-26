@@ -3,6 +3,7 @@ import type { FederatedPointerEvent } from 'pixi.js'
 import { Actor } from './actor'
 
 const DEFAULT_HOVER_BRIGHTNESS = 1.5
+const DEFAULT_VERTICAL_FLIP_DURATION = 0.32
 
 export interface ButtonOptions {
   pressedScale?: number
@@ -30,6 +31,10 @@ export class Button extends Actor {
   private hovered = false
   private pressed = false
   private enabled = true
+  private interactionEnabled = true
+  private flippingTexture = false
+  private pendingTexture: Texture | null = null
+  private textureFlipPromise: Promise<void> | null = null
   private readonly onClick?: () => void | Promise<void>
   private readonly onError?: (error: unknown) => void
 
@@ -75,6 +80,41 @@ export class Button extends Actor {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled
+    this.syncInteractionState()
+  }
+
+  /** True while a texture face is collapsing or opening vertically. */
+  isTextureFlipping(): boolean {
+    return this.flippingTexture
+  }
+
+  /**
+   * Swaps to a new texture through a top-to-bottom card flip. Requests received
+   * mid-flip are coalesced so the last requested face is the one that settles.
+   */
+  flipTextureVertically(
+    texture: Texture,
+    duration: number = DEFAULT_VERTICAL_FLIP_DURATION
+  ): Promise<void> {
+    this.pendingTexture = texture
+    if (this.textureFlipPromise) return this.textureFlipPromise
+    if (this.sprite.texture === texture) {
+      this.pendingTexture = null
+      return Promise.resolve()
+    }
+
+    const promise = this.runTextureFlip(Math.max(0, duration))
+    this.textureFlipPromise = promise
+    void promise.finally(() => {
+      if (this.textureFlipPromise === promise) this.textureFlipPromise = null
+    })
+    return promise
+  }
+
+  private syncInteractionState(): void {
+    const enabled = this.enabled && !this.flippingTexture
+    if (this.interactionEnabled === enabled) return
+    this.interactionEnabled = enabled
     this.eventMode = enabled ? 'static' : 'none'
     this.cursor = enabled ? 'pointer' : 'default'
 
@@ -88,6 +128,53 @@ export class Button extends Actor {
       this.y = this.baseY
       this.setBrightness(this.idleBrightness)
     }
+  }
+
+  private async runTextureFlip(duration: number): Promise<void> {
+    this.flippingTexture = true
+    this.syncInteractionState()
+    try {
+      while (this.pendingTexture && this.pendingTexture !== this.sprite.texture) {
+        const target = this.pendingTexture
+        this.pendingTexture = null
+        await this.flipToTexture(target, duration)
+      }
+    } finally {
+      this.flippingTexture = false
+      this.pendingTexture = null
+      this.sprite.scale.y = 1
+      this.syncInteractionState()
+    }
+  }
+
+  private flipToTexture(texture: Texture, duration: number): Promise<void> {
+    const halfDuration = duration / 2
+    return new Promise((resolve) => {
+      let completed = false
+      const finish = (): void => {
+        if (completed) return
+        completed = true
+        this.sprite.scale.y = 1
+        resolve()
+      }
+
+      this.tweenTo(this.sprite.scale, {
+        y: 0,
+        duration: halfDuration,
+        ease: 'power2.in',
+        onComplete: () => {
+          this.sprite.texture = texture
+          this.tweenTo(this.sprite.scale, {
+            y: 1,
+            duration: halfDuration,
+            ease: 'power2.out',
+            onComplete: finish,
+            onInterrupt: finish
+          })
+        },
+        onInterrupt: finish
+      })
+    })
   }
 
   private setBrightness(brightness: number): void {
@@ -105,7 +192,7 @@ export class Button extends Actor {
   }
 
   private onHoverStart = (): void => {
-    if (!this.enabled) return
+    if (!this.interactionEnabled) return
     this.hovered = true
     if (!this.pressed && this.highlightOnHover) {
       this.tweenBrightness(this.hoverBrightness, 0.15)
@@ -113,7 +200,7 @@ export class Button extends Actor {
   }
 
   private onHoverEnd = (): void => {
-    if (!this.enabled) return
+    if (!this.interactionEnabled) return
     this.hovered = false
     if (!this.pressed && this.highlightOnHover) {
       this.tweenBrightness(this.idleBrightness, 0.15)
@@ -121,7 +208,7 @@ export class Button extends Actor {
   }
 
   private onPressStart = (event: FederatedPointerEvent): void => {
-    if (!this.enabled || event.button !== 0) return
+    if (!this.interactionEnabled || event.button !== 0) return
     this.pressed = true
     this.killTweensOf(this.sprite.scale)
     this.killTweensOf(this)
@@ -149,7 +236,7 @@ export class Button extends Actor {
   }
 
   private endPress(): void {
-    if (!this.enabled) return
+    if (!this.interactionEnabled) return
     this.pressed = false
     this.killTweensOf(this.sprite.scale)
     this.killTweensOf(this)
@@ -175,7 +262,7 @@ export class Button extends Actor {
   private handleClick = (event: FederatedPointerEvent): void => {
     // Pixi dispatches pointertap for right mouse clicks as well as rightclick.
     // Buttons with a right-click action must not also run their left-click action.
-    if (!this.enabled || event.button !== 0) return
+    if (!this.interactionEnabled || event.button !== 0) return
 
     const result = this.onClick?.()
     if (result) {

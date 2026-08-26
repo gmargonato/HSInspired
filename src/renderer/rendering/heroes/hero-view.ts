@@ -1,4 +1,4 @@
-import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
+import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
 import { AnimatedOutline } from '../effects/animated-outline'
 import { AnimationScope } from '../../animation/animations'
@@ -75,9 +75,9 @@ export class HeroView extends Container {
   private readonly healthLabel: Text
   private readonly armorGroup: Container
   private readonly armorLabel: Text
-  private readonly outlineProxy: Graphics
+  private readonly outlineProxy: Sprite
   private readonly attackOutline: AnimatedOutline
-  private readonly targetingOutlineProxy: Graphics
+  private readonly targetingOutlineProxy: Sprite
   private readonly targetingOutline: AnimatedOutline
   private readonly animationScope = new AnimationScope()
   private readonly maxHealth: number
@@ -137,33 +137,22 @@ export class HeroView extends Container {
     this.armorGroup.visible = false
     this.addChild(this.armorGroup)
 
-    this.outlineProxy = new Graphics()
+    // Use the hero-frame alpha as the outline silhouette. A generic oval makes
+    // heroes read like minions, while this preserves the portrait's arched top
+    // and squared base.
+    this.outlineProxy = new Sprite(textures.frame)
+    applyAnchoredPlacement(this.outlineProxy, HERO_LAYOUT.frame)
     this.outlineProxy.label = 'hero.attack-outline-proxy'
     this.outlineProxy.eventMode = 'none'
-    this.outlineProxy
-      .ellipse(
-        HERO_LAYOUT.attackOutline.position.x,
-        HERO_LAYOUT.attackOutline.position.y,
-        HERO_LAYOUT.attackOutline.size.width / 2,
-        HERO_LAYOUT.attackOutline.size.height / 2
-      )
-      .fill({ color: 0xffffff })
     this.outlineProxy.visible = false
     this.addChildAt(this.outlineProxy, 0)
     this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'card')
     this.attackOutline.setEnabled(false)
 
-    this.targetingOutlineProxy = new Graphics()
+    this.targetingOutlineProxy = new Sprite(textures.frame)
+    applyAnchoredPlacement(this.targetingOutlineProxy, HERO_LAYOUT.frame)
     this.targetingOutlineProxy.label = 'hero.targeting-outline-proxy'
     this.targetingOutlineProxy.eventMode = 'none'
-    this.targetingOutlineProxy
-      .ellipse(
-        HERO_LAYOUT.attackOutline.position.x,
-        HERO_LAYOUT.attackOutline.position.y,
-        HERO_LAYOUT.attackOutline.size.width / 2,
-        HERO_LAYOUT.attackOutline.size.height / 2
-      )
-      .fill({ color: 0xffffff })
     this.targetingOutlineProxy.visible = false
     this.addChildAt(this.targetingOutlineProxy, 0)
     this.targetingOutline = new AnimatedOutline(
@@ -196,6 +185,8 @@ export class HeroView extends Container {
   /** Replaces the portrait frame while preserving the hero's board state. */
   setFrame(texture: Texture): void {
     this.frame.texture = texture
+    this.outlineProxy.texture = texture
+    this.targetingOutlineProxy.texture = texture
   }
 
   /** Controls whether the health badge is shown independently of its value. */

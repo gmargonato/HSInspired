@@ -7,7 +7,9 @@ import type {
 export interface BoardAbilityMarkers {
   readonly taunt: boolean
   readonly divineShield: boolean
+  readonly stealth: boolean
   readonly deathrattle: boolean
+  readonly poisonous: boolean
   readonly trigger: boolean
   /** Text-only placeholders for board visuals whose authored assets do not exist yet. */
   readonly temporaryAbilityLabels: readonly TemporaryBoardAbilityLabel[]
@@ -17,10 +19,8 @@ export type TemporaryBoardAbilityLabel =
   | 'Cannot Attack'
   | 'Immune'
   | 'Mega Windfury'
-  | 'Poisonous'
   | 'Spell Damage'
   | 'Spell Immune'
-  | 'Stealth'
   | 'Windfury'
 
 const IN_PLAY_TRIGGER_TYPES: ReadonlySet<CardTrigger> = new Set([
@@ -61,8 +61,6 @@ export function boardAbilityMarkers(
     ) || keywords.has('attack-wrong-enemy-chance-50')
 
   const temporaryAbilityLabels: TemporaryBoardAbilityLabel[] = []
-  if (poisonous) temporaryAbilityLabels.push('Poisonous')
-  if (keywords.has('stealth')) temporaryAbilityLabels.push('Stealth')
   if (keywords.has('mega-windfury')) {
     temporaryAbilityLabels.push('Mega Windfury')
   } else if (keywords.has('windfury')) {
@@ -76,7 +74,9 @@ export function boardAbilityMarkers(
   return {
     taunt: keywords.has('taunt'),
     divineShield: keywords.has('divine-shield'),
+    stealth: keywords.has('stealth'),
     deathrattle,
+    poisonous,
     trigger,
     temporaryAbilityLabels
   }

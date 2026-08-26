@@ -3,6 +3,13 @@ import { CENTER, placement, type LayoutPlacement } from '../layout'
 /** The local design space for one board minion. Its pivot is the canvas center. */
 export const MINION_CANVAS = { width: 160, height: 210 } as const
 
+/**
+ * Interactive footprint, inset to the widest intended visual (the Taunt ring).
+ * Keeping this narrower than the canvas prevents adjacent minion targets from
+ * overlapping when their board slots are at the minimum spacing.
+ */
+export const MINION_HIT_AREA = { x: 12, y: 5, width: 136, height: 184 } as const
+
 /** Fixed geometry for the feature-agnostic minion render stack. */
 export const MINION_LAYOUT = {
   name: 'Board minion',
@@ -46,12 +53,20 @@ export const MINION_LAYOUT = {
       note: 'Divine Shield cocoon surrounding the portrait.'
     }
   ),
+  stealth: placement(
+    { x: 80, y: 85 },
+    { width: 113, height: 153 },
+    {
+      anchor: CENTER,
+      note: 'Stealth veil surrounding the portrait, below Divine Shield.'
+    }
+  ),
   trigger: placement(
     { x: 80, y: 160 },
     { width: 41, height: 44 },
     {
       anchor: CENTER,
-	  scale: 0.75,
+      scale: 0.75,
       note: 'Bottom-center Trigger badge, layered above Deathrattle.'
     }
   ),
@@ -60,8 +75,17 @@ export const MINION_LAYOUT = {
     { width: 80, height: 53 },
     {
       anchor: CENTER,
-	  scale: 0.75,
+      scale: 0.75,
       note: 'Bottom-center Deathrattle badge, layered below Trigger.'
+    }
+  ),
+  poisonous: placement(
+    { x: 80, y: 160 },
+    { width: 39, height: 55 },
+    {
+      anchor: CENTER,
+      scale: 0.75,
+      note: 'Bottom-center Poisonous flask, layered above Deathrattle and below Trigger.'
     }
   ),
   temporaryAbilityBadges: {

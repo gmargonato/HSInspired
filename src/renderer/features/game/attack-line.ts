@@ -1,4 +1,4 @@
-import { Container, Sprite, Texture } from 'pixi.js'
+import { Container, Graphics, Sprite, Texture } from 'pixi.js'
 import { gsap } from '../../animation/animations'
 
 export interface LinePoint {
@@ -9,12 +9,13 @@ export interface LinePoint {
 const SEGMENT_SCALE = 1
 const SEGMENT_GAP = 22
 const START_OFFSET = 32
-const END_OFFSET = 48
 const FLOW_SPEED_PX_PER_SEC = 145
 
 /** Repeating textured arrow body from a selected minion to the cursor, flowing toward the head. */
 export class AttackLine extends Container {
   private bodyTexture: Texture | null = null
+  private readonly bodyLayer = new Container()
+  private readonly bodyMask = new Graphics()
   private readonly segmentPool: Sprite[] = []
   private from: LinePoint | null = null
   private to: LinePoint | null = null
@@ -38,6 +39,13 @@ export class AttackLine extends Container {
     this.label = 'game.attack-line'
     this.eventMode = 'none'
     this.visible = false
+
+    this.bodyLayer.label = 'game.attack-line-body'
+    this.bodyLayer.eventMode = 'none'
+    this.bodyMask.label = 'game.attack-line-body-mask'
+    this.bodyMask.eventMode = 'none'
+    this.bodyLayer.mask = this.bodyMask
+    this.addChild(this.bodyMask, this.bodyLayer)
   }
 
   setBodyTexture(texture: Texture): void {
@@ -50,20 +58,22 @@ export class AttackLine extends Container {
     this.from = from
     this.to = to
     if (!this.bodyTexture) {
+      this.clearMask()
       this.visible = false
       return
     }
     const dx = to.x - from.x
     const dy = to.y - from.y
     const length = Math.hypot(dx, dy)
-    if (length < START_OFFSET + END_OFFSET + 12) {
+    if (length < START_OFFSET + 12) {
       this.setActiveSegments(0)
+      this.clearMask()
       this.visible = false
       this.stopTick()
       return
     }
     this.visible = true
-    const usableLength = length - START_OFFSET - END_OFFSET
+    const usableLength = length - START_OFFSET
     const step = this.stepSize
     const count = Math.max(0, Math.floor(usableLength / step) + 1)
     this.setActiveSegments(count)
@@ -71,6 +81,7 @@ export class AttackLine extends Container {
       this.stopTick()
       return
     }
+    this.updateMask(from, dx / length, dy / length, length)
     this.startTick()
     this.layoutWithPhase()
   }
@@ -80,6 +91,7 @@ export class AttackLine extends Container {
     this.to = null
     this.phase = 0
     this.setActiveSegments(0)
+    this.clearMask()
     this.visible = false
     this.stopTick()
   }
@@ -98,7 +110,7 @@ export class AttackLine extends Container {
     const length = Math.hypot(dx, dy)
     if (length < 1) return
     const angle = Math.atan2(dy, dx)
-    const usableLength = length - START_OFFSET - END_OFFSET
+    const usableLength = length - START_OFFSET
     const step = this.stepSize
     const segmentHeight = this.bodyTexture.height * SEGMENT_SCALE
     const nx = dx / length
@@ -165,7 +177,7 @@ export class AttackLine extends Container {
       sprite.label = `game.attack-segment:${this.segmentPool.length}`
       sprite.scale.set(SEGMENT_SCALE)
       this.segmentPool.push(sprite)
-      this.addChild(sprite)
+      this.bodyLayer.addChild(sprite)
     }
     for (let index = 0; index < this.segmentPool.length; index += 1) {
       const sprite = this.segmentPool[index]
@@ -185,5 +197,35 @@ export class AttackLine extends Container {
     if (!this.ticking) return
     this.ticking = false
     gsap.ticker.remove(this.onTick)
+  }
+
+  /** Clips animated tiles at the caller-provided body endpoint. */
+  private updateMask(from: LinePoint, nx: number, ny: number, endT: number): void {
+    if (!this.bodyTexture) return
+    const halfWidth = (this.bodyTexture.width * SEGMENT_SCALE) / 2 + 2
+    const px = -ny * halfWidth
+    const py = nx * halfWidth
+    const startX = from.x + nx * START_OFFSET
+    const startY = from.y + ny * START_OFFSET
+    const endX = from.x + nx * endT
+    const endY = from.y + ny * endT
+
+    this.bodyMask.clear()
+    this.bodyMask
+      .poly([
+        startX + px,
+        startY + py,
+        endX + px,
+        endY + py,
+        endX - px,
+        endY - py,
+        startX - px,
+        startY - py
+      ])
+      .fill({ color: 0xffffff })
+  }
+
+  private clearMask(): void {
+    this.bodyMask.clear()
   }
 }
