@@ -120,7 +120,7 @@ export const GAME_BOARD_LAYOUT = {
   weapons: {
     /** Local equipped weapon, screen-left of the local hero frame. */
     local: placement(
-      { x: 800, y: 825 },
+      { x: 800, y: 835 },
       { width: 240, height: 210 },
       {
         anchor: CENTER,
@@ -129,7 +129,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote equipped weapon, screen-left of the remote hero frame. */
     remote: placement(
-      { x: 800, y: 180 },
+      { x: 800, y: 200 },
       { width: 240, height: 210 },
       {
         anchor: CENTER,

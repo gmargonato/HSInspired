@@ -2,6 +2,7 @@ import defaultCursorImage from '@assets/images/cursor/cursor-base.png'
 import grabCursorImage from '@assets/images/cursor/cursor-grab.png'
 import collectionNewPageImage from '@assets/images/cursor/cursor-pass-page.png'
 import arrowHeadImage from '@assets/images/match/arrow-head.png'
+import arrowCircleImage from '@assets/images/match/arrow-circle.png'
 
 export type CursorVariant =
   'default' | 'grab' | 'collection-next-page' | 'collection-previous-page'
@@ -18,6 +19,8 @@ export const CURSOR_SCALE_LIMITS = {
 const LEFT_BUTTON = 0
 const LEFT_BUTTON_MASK = 1
 const CUSTOM_CURSOR_CLASS = 'custom-cursor-enabled'
+const TARGET_CIRCLE_SIZE = 112
+const TARGET_CIRCLE_OFFSET_Y = -10
 
 interface CursorAsset {
   image: string
@@ -27,6 +30,11 @@ interface CursorAsset {
   hotspotY: number
   flipX?: boolean
   scaleWithCursor?: boolean
+}
+
+export interface CursorTargetPoint {
+  readonly x: number
+  readonly y: number
 }
 
 /**
@@ -106,6 +114,7 @@ export class CursorManager {
   private readonly host: HTMLElement
   private readonly element: HTMLImageElement
   private readonly arrowHeadElement: HTMLImageElement
+  private readonly targetCircleElement: HTMLImageElement
   private scale = DEFAULT_CURSOR_SCALE
   private variant: CursorVariant = 'default'
   private contextVariant: CursorContextVariant | null = null
@@ -115,6 +124,7 @@ export class CursorManager {
   private pointerInsideHost = false
   private mounted = false
   private targeting = false
+  private targetingTargetPoint: CursorTargetPoint | null = null
   private targetingAngle = 0
 
   constructor(host: HTMLElement) {
@@ -145,9 +155,25 @@ export class CursorManager {
     this.arrowHeadElement.style.height = '57px'
     this.arrowHeadElement.style.zIndex = '9999'
 
+    this.targetCircleElement = document.createElement('img')
+    this.targetCircleElement.className = 'game-cursor-target-circle'
+    this.targetCircleElement.alt = ''
+    this.targetCircleElement.setAttribute('aria-hidden', 'true')
+    this.targetCircleElement.draggable = false
+    this.targetCircleElement.src = arrowCircleImage
+    this.targetCircleElement.style.position = 'fixed'
+    this.targetCircleElement.style.left = '0'
+    this.targetCircleElement.style.top = '0'
+    this.targetCircleElement.style.width = `${TARGET_CIRCLE_SIZE}px`
+    this.targetCircleElement.style.height = `${TARGET_CIRCLE_SIZE}px`
+    this.targetCircleElement.style.pointerEvents = 'none'
+    this.targetCircleElement.style.visibility = 'hidden'
+    this.targetCircleElement.style.zIndex = '9998'
+
     this.applyVariant()
     this.applyScale()
     this.updateArrowHeadPosition()
+    this.updateTargetCirclePosition()
   }
 
   mount(): void {
@@ -156,6 +182,7 @@ export class CursorManager {
     this.mounted = true
     this.host.classList.add(CUSTOM_CURSOR_CLASS)
     this.host.appendChild(this.element)
+    this.host.appendChild(this.targetCircleElement)
     this.host.appendChild(this.arrowHeadElement)
 
     // Capture at the window level so Pixi's own event handling cannot prevent
@@ -182,13 +209,16 @@ export class CursorManager {
 
     this.host.classList.remove(CUSTOM_CURSOR_CLASS)
     this.element.remove()
+    this.targetCircleElement.remove()
     this.arrowHeadElement.remove()
     this.element.style.visibility = 'hidden'
     this.arrowHeadElement.style.visibility = 'hidden'
+    this.targetCircleElement.style.visibility = 'hidden'
     this.contextVariant = null
     this.leftButtonDown = false
     this.pointerInsideHost = false
     this.targeting = false
+    this.targetingTargetPoint = null
     this.setVariant(resolveCursorVariant(this.contextVariant))
     this.mounted = false
   }
@@ -219,11 +249,13 @@ export class CursorManager {
     this.targeting = active
     if (active) {
       this.element.style.visibility = 'hidden'
-      this.arrowHeadElement.style.visibility =
-        this.pointerInsideHost && this.pointerX !== null ? 'visible' : 'hidden'
+      this.syncTargetingVisibility()
       this.updateArrowHeadPosition()
+      this.updateTargetCirclePosition()
     } else {
+      this.targetingTargetPoint = null
       this.arrowHeadElement.style.visibility = 'hidden'
+      this.targetCircleElement.style.visibility = 'hidden'
       if (this.pointerInsideHost && this.pointerX !== null) this.show()
       else this.hide()
     }
@@ -231,6 +263,13 @@ export class CursorManager {
 
   isTargeting(): boolean {
     return this.targeting
+  }
+
+  /** Positions the target indicator at the current valid character hover point. */
+  setTargetingTarget(point: CursorTargetPoint | null): void {
+    this.targetingTargetPoint = point
+    this.updateTargetCirclePosition()
+    this.syncTargetingVisibility()
   }
 
   setTargetingAngle(angleRad: number): void {
@@ -344,6 +383,7 @@ export class CursorManager {
     this.applyScale()
     this.updatePosition()
     this.updateArrowHeadPosition()
+    this.updateTargetCirclePosition()
   }
 
   private applyVariant(): void {
@@ -391,18 +431,37 @@ export class CursorManager {
     this.arrowHeadElement.style.transform = `rotate(${degrees}deg)`
   }
 
+  private updateTargetCirclePosition(): void {
+    const point = this.targetingTargetPoint
+    if (!point) return
+    this.targetCircleElement.style.left = `${point.x - TARGET_CIRCLE_SIZE / 2}px`
+    this.targetCircleElement.style.top = `${
+      point.y + TARGET_CIRCLE_OFFSET_Y - TARGET_CIRCLE_SIZE / 2
+    }px`
+  }
+
+  private syncTargetingVisibility(): void {
+    const showArrowHead =
+      this.targeting && this.pointerInsideHost && this.pointerX !== null
+    this.arrowHeadElement.style.visibility = showArrowHead ? 'visible' : 'hidden'
+    this.targetCircleElement.style.visibility =
+      showArrowHead && this.targetingTargetPoint ? 'visible' : 'hidden'
+  }
+
   private show(): void {
     if (this.targeting) {
       this.element.style.visibility = 'hidden'
-      this.arrowHeadElement.style.visibility = 'visible'
+      this.syncTargetingVisibility()
       return
     }
     this.element.style.visibility = 'visible'
     this.arrowHeadElement.style.visibility = 'hidden'
+    this.targetCircleElement.style.visibility = 'hidden'
   }
 
   private hide(): void {
     this.element.style.visibility = 'hidden'
     this.arrowHeadElement.style.visibility = 'hidden'
+    this.targetCircleElement.style.visibility = 'hidden'
   }
 }

@@ -43,7 +43,7 @@ export const WEAPON_LAYOUT = {
   artworkOval: {
     center: { x: 0, y: 0 },
     radiusX: 65,
-    radiusY: 56
+    radiusY: 65
   },
   statText: {
     fontFamily: 'Belwe',

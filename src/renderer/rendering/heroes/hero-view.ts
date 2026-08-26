@@ -9,12 +9,14 @@ export interface HeroViewModel {
   readonly attack: number
   readonly health: number
   readonly maxHealth: number
+  readonly armor: number
 }
 
 export interface HeroViewTextures {
   readonly frame: Texture
   readonly attack: Texture
   readonly health: Texture
+  readonly armor: Texture
 }
 
 export const HERO_HEALTH_COLORS = {
@@ -32,7 +34,8 @@ function createStatGroup(
   label: string,
   texture: Texture,
   placement: typeof HERO_LAYOUT.attackBadge,
-  value: number
+  value: number,
+  fontSize: number = HERO_LAYOUT.statText.fontSize
 ): StatGroup {
   const group = new Container()
   applyPlacement(group, placement)
@@ -46,7 +49,7 @@ function createStatGroup(
 
   const valueLabel = new Text({
     text: String(value),
-    style: HERO_LAYOUT.statText,
+    style: { ...HERO_LAYOUT.statText, fontSize },
     anchor: 0.5
   })
   valueLabel.position.set(0, 0)
@@ -69,14 +72,20 @@ export class HeroView extends Container {
   private readonly attackLabel: Text
   private readonly healthGroup: Container
   private readonly healthLabel: Text
+  private readonly armorGroup: Container
+  private readonly armorLabel: Text
   private readonly outlineProxy: Graphics
   private readonly attackOutline: AnimatedOutline
+  private readonly targetingOutlineProxy: Graphics
+  private readonly targetingOutline: AnimatedOutline
   private readonly animationScope = new AnimationScope()
   private readonly maxHealth: number
   private canAttackEnabled = false
+  private targetingOutlineEnabled = false
   private targetableEnabled = false
   private selected = false
   private baseScale = 1
+  private healthVisible = false
 
   public ownerId: string | null = null
 
@@ -115,6 +124,18 @@ export class HeroView extends Container {
     this.addChild(this.healthGroup)
     this.setHealthColor(model.health)
 
+    const armor = createStatGroup(
+      'hero.stat-armor',
+      textures.armor,
+      HERO_LAYOUT.armorBadge,
+      model.armor,
+      HERO_LAYOUT.armorLabelFontSize
+    )
+    this.armorGroup = armor.group
+    this.armorLabel = armor.value
+    this.armorGroup.visible = false
+    this.addChild(this.armorGroup)
+
     this.outlineProxy = new Graphics()
     this.outlineProxy.label = 'hero.attack-outline-proxy'
     this.outlineProxy.eventMode = 'none'
@@ -131,6 +152,26 @@ export class HeroView extends Container {
     this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'card')
     this.attackOutline.setEnabled(false)
 
+    this.targetingOutlineProxy = new Graphics()
+    this.targetingOutlineProxy.label = 'hero.targeting-outline-proxy'
+    this.targetingOutlineProxy.eventMode = 'none'
+    this.targetingOutlineProxy
+      .ellipse(
+        HERO_LAYOUT.attackOutline.position.x,
+        HERO_LAYOUT.attackOutline.position.y,
+        HERO_LAYOUT.attackOutline.size.width / 2,
+        HERO_LAYOUT.attackOutline.size.height / 2
+      )
+      .fill({ color: 0xffffff })
+    this.targetingOutlineProxy.visible = false
+    this.addChildAt(this.targetingOutlineProxy, 0)
+    this.targetingOutline = new AnimatedOutline(
+      this.targetingOutlineProxy,
+      'red',
+      'card'
+    )
+    this.targetingOutline.setEnabled(false)
+
     this.hitArea = new Rectangle(0, 0, HERO_CANVAS.width, HERO_CANVAS.height)
     this.cursor = 'pointer'
     setEventModeNone(this)
@@ -142,16 +183,20 @@ export class HeroView extends Container {
     return new HeroView(model, textures)
   }
 
-  setStats(attack: number, health: number): void {
+  setStats(attack: number, health: number, armor: number): void {
     this.attackLabel.text = String(attack)
     this.attackGroup.visible = attack > 0
     this.healthLabel.text = String(health)
     this.setHealthColor(health)
+    this.armorLabel.text = String(armor)
+    this.armorGroup.visible = this.healthVisible && armor > 0
   }
 
   /** Controls whether the health badge is shown independently of its value. */
   setHealthVisible(visible: boolean): void {
+    this.healthVisible = visible
     this.healthGroup.visible = visible
+    this.armorGroup.visible = visible && Number(this.armorLabel.text) > 0
   }
 
   private setHealthColor(health: number): void {
@@ -163,11 +208,24 @@ export class HeroView extends Container {
           : HERO_HEALTH_COLORS.normal
   }
 
+  private syncOutlineState(): void {
+    const showAttackOutline = this.canAttackEnabled && !this.targetingOutlineEnabled
+    this.attackOutline.setEnabled(showAttackOutline)
+    this.outlineProxy.visible = showAttackOutline
+    this.targetingOutline.setEnabled(this.targetingOutlineEnabled)
+    this.targetingOutlineProxy.visible = this.targetingOutlineEnabled
+  }
+
   setCanAttack(enabled: boolean): void {
     this.canAttackEnabled = enabled
-    this.attackOutline.setEnabled(enabled)
-    this.outlineProxy.visible = enabled
+    this.syncOutlineState()
     if (!enabled && this.selected) this.setSelected(false)
+  }
+
+  /** Shows the red outline while this hero is a valid targeting destination. */
+  setTargetingOutline(enabled: boolean): void {
+    this.targetingOutlineEnabled = enabled
+    this.syncOutlineState()
   }
 
   isCanAttack(): boolean {
@@ -209,6 +267,7 @@ export class HeroView extends Container {
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     this.attackOutline.dispose()
+    this.targetingOutline.dispose()
     this.animationScope.kill()
     super.destroy(options)
   }

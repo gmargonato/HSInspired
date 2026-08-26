@@ -18,11 +18,11 @@ export interface OutlineTuning {
 /** Approved Arcane Filament material used by every production outline. */
 export const OUTLINE_TUNINGS: Record<OutlinePresetName, OutlineTuning> = {
   card: {
-    ribbonWidth: 10,
+    ribbonWidth: 6,
     edgeSoftness: 2,
-    rimWidth: 3,
-    glowWidth: 10,
-    glowStrength: 0.6,
+    rimWidth: 2,
+    glowWidth: 5,
+    glowStrength: 1,
     highlightStrength: 2,
     hotspotScale: 50,
     hotspotDensity: 1,

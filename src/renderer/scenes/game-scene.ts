@@ -7,7 +7,11 @@ import {
   type GameAssets
 } from '../ui/asset-registry'
 import { GameBoardView } from '../features/game/game-board-view'
-import type { DevCardPickerAction, DevMatchTarget } from '../../shared/dev-menu'
+import type {
+  DevCardPickerAction,
+  DevDeckAction,
+  DevMatchTarget
+} from '../../shared/dev-menu'
 import { Scene } from './scene'
 
 /** Full-screen route adapter for the first playable opening sequence. */
@@ -141,6 +145,11 @@ export class GameScene extends Scene {
   async devSetMana(available: number, maximum: number): Promise<void> {
     if (!this.view) throw new Error('Game view is not ready for dev commands.')
     await this.view.devSetMana(available, maximum)
+  }
+
+  async devModifyDeck(target: DevMatchTarget, action: DevDeckAction): Promise<void> {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    await this.view.devModifyDeck(target, action)
   }
 
   toggleDeckTracker(): void {

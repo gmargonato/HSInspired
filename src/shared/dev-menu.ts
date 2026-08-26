@@ -31,6 +31,7 @@ export interface DevDeckEntry {
 export type CollectibleMode = 'all' | 'collectible' | 'uncollectible'
 export type DevMatchTarget = 'local' | 'remote'
 export type DevCardPickerAction = 'add-to-hand' | 'summon'
+export type DevDeckAction = 'destroy' | 'refill'
 
 export type DevCommand =
   | { readonly type: 'collection:set-collectible'; readonly mode: CollectibleMode }
@@ -41,6 +42,11 @@ export type DevCommand =
       readonly action: DevCardPickerAction
     }
   | { readonly type: 'game:add-card'; readonly cardId: string }
+  | {
+      readonly type: 'game:modify-deck'
+      readonly target: DevMatchTarget
+      readonly action: DevDeckAction
+    }
   | { readonly type: 'game:end-match'; readonly outcome: 'win' | 'lose' }
   | {
       readonly type: 'game:set-mana'
@@ -97,6 +103,10 @@ function isDevCardPickerAction(value: unknown): value is DevCardPickerAction {
   return value === 'add-to-hand' || value === 'summon'
 }
 
+function isDevDeckAction(value: unknown): value is DevDeckAction {
+  return value === 'destroy' || value === 'refill'
+}
+
 export function isDevCommand(value: unknown): value is DevCommand {
   if (!isRecord(value) || typeof value.type !== 'string') return false
   if (value.type === 'collection:set-collectible') {
@@ -113,6 +123,12 @@ export function isDevCommand(value: unknown): value is DevCommand {
   if (value.type === 'game:add-card') {
     const cardId = (value as { cardId?: unknown }).cardId
     return typeof cardId === 'string' && cardId.length > 0
+  }
+  if (value.type === 'game:modify-deck') {
+    return (
+      isDevMatchTarget((value as { target?: unknown }).target) &&
+      isDevDeckAction((value as { action?: unknown }).action)
+    )
   }
   if (value.type === 'game:end-match') {
     const outcome = (value as { outcome?: unknown }).outcome

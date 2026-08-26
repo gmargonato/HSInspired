@@ -26,6 +26,7 @@ import {
   type AttackCharacterRef,
   type BoardMinion,
   type CharacterCombatResolvedEvent,
+  type HeroPowerTargetRef,
   type MulliganResolvedEvent,
   type OpeningCard,
   type OpeningMatchEvent,
@@ -33,7 +34,11 @@ import {
   type OpeningMatchState
 } from '../../../game/match'
 import type { PlayerId } from '../../../game/match'
-import type { DevCardPickerAction, DevMatchTarget } from '../../../shared/dev-menu'
+import type {
+  DevCardPickerAction,
+  DevDeckAction,
+  DevMatchTarget
+} from '../../../shared/dev-menu'
 import type { GameRoute } from './game-route'
 import type { RendererLogger } from '../../ui/logger'
 import { CardView } from '../../rendering/cards/card-view'
@@ -91,6 +96,7 @@ import { GameBoardSession } from './game-board-session'
 import { GameHudView } from './game-hud-view'
 import { GameCardSlot } from './game-card-slot'
 import { MatchResultOverlay, type MatchResult } from './match-result-overlay'
+import { FatigueView } from './fatigue-view'
 
 export interface GameBoardViewOptions {
   readonly route: GameRoute
@@ -239,8 +245,10 @@ export class GameBoardView extends Actor {
   private readonly attackLineLayer = new Container()
   private readonly attackLine = new AttackLine()
   private readonly matchResultOverlay: MatchResultOverlay
+  private readonly fatigueView: FatigueView
   private readonly combatPreviewMarkers = new Map<CombatView, Sprite>()
   private selectedCombatView: CombatView | null = null
+  private heroPowerTargeting = false
   private combatInProgress = false
   private combatAttackerSelectionUnlocked = false
   private cardPlayInProgress = false
@@ -257,6 +265,7 @@ export class GameBoardView extends Actor {
   private readonly openingLayer = new Container()
   private readonly travelLayer = new Container()
   private readonly deckLayer = new Container()
+  private readonly deckViews = new Map<PlayerId, Sprite>()
   private readonly turnLayer = this.hud.turnLayer
   private readonly mulliganLayer = new Container()
   private readonly handLayer = new Container()
@@ -335,10 +344,11 @@ export class GameBoardView extends Actor {
   private readonly handleWindowPointerDown = (event: PointerEvent): void => {
     if (event.button === 2) {
       this.endDrag()
-      if (this.selectedCombatView) {
+      if (this.selectedCombatView || this.heroPowerTargeting) {
         event.preventDefault()
         event.stopPropagation()
       }
+      this.cancelHeroPowerTargeting()
       this.deselectAttacker()
       return
     }
@@ -361,9 +371,16 @@ export class GameBoardView extends Actor {
     const pointer = this.dragPointer
     if (pointer) this.resolveCardDrop(pointer)
   }
-  private readonly handleWindowBlur = (): void => this.endDrag()
+  private readonly handleWindowBlur = (): void => {
+    this.endDrag()
+    this.cancelHeroPowerTargeting()
+  }
   private readonly handleWindowKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.selectedCombatView) {
+    if (
+      event.key === 'Escape' &&
+      (this.selectedCombatView || this.heroPowerTargeting)
+    ) {
+      this.cancelHeroPowerTargeting()
       this.deselectAttacker()
     }
   }
@@ -444,6 +461,8 @@ export class GameBoardView extends Actor {
     this.attackLineLayer.eventMode = 'none'
     this.attackLineLayer.addChild(this.attackLine)
     this.gameplayLayer.addChild(this.attackLineLayer)
+    this.fatigueView = new FatigueView(options.gameAssets.fatigue)
+    this.addChild(this.fatigueView)
     this.matchResultOverlay = new MatchResultOverlay({
       winScreen: options.gameAssets.winScreen,
       defeatScreen: options.gameAssets.defeatScreen,
@@ -466,10 +485,13 @@ export class GameBoardView extends Actor {
       this.handleBoardPointerMove(event)
     )
     this.on('pointerdown', (event: FederatedPointerEvent) => {
-      if (event.button === 2) this.deselectAttacker()
+      if (event.button === 2) {
+        this.cancelHeroPowerTargeting()
+        this.deselectAttacker()
+      }
     })
     this.on('pointertap', (event: FederatedPointerEvent) => {
-      if (!this.selectedCombatView) return
+      if (!this.selectedCombatView && !this.heroPowerTargeting) return
       if (event.button !== 0) return
       let target = event.target instanceof Container ? event.target : null
       while (
@@ -495,6 +517,7 @@ export class GameBoardView extends Actor {
         targetLabel === 'game.equipped-weapons' ||
         targetLabel === 'game.heroes'
       ) {
+        this.cancelHeroPowerTargeting()
         this.deselectAttacker()
       }
     })
@@ -618,12 +641,14 @@ export class GameBoardView extends Actor {
           label: `game.hero.${player.participantId}`,
           attack: getHeroAttack(player),
           health: player.hero.health,
-          maxHealth: player.hero.maxHealth
+          maxHealth: player.hero.maxHealth,
+          armor: player.hero.armor
         },
         {
           frame: texture,
           attack: this.options.gameAssets.minionAttack,
-          health: this.options.gameAssets.minionHealth
+          health: this.options.gameAssets.minionHealth,
+          armor: this.options.gameAssets.heroArmor
         }
       )
       applyPlacement(view, intro)
@@ -669,13 +694,15 @@ export class GameBoardView extends Actor {
   }
 
   private createDecks(): void {
-    for (const position of [
-      GAME_BOARD_LAYOUT.decks.local,
-      GAME_BOARD_LAYOUT.decks.remote
+    for (const [participantId, position] of [
+      [this.localParticipantId, GAME_BOARD_LAYOUT.decks.local],
+      [this.remoteParticipantId, GAME_BOARD_LAYOUT.decks.remote]
     ] as const) {
       const deck = new Sprite(this.options.gameAssets.deck)
       applyAnchoredPlacement(deck, position)
+      deck.label = `game.deck.${participantId}`
       deck.eventMode = 'none'
+      this.deckViews.set(participantId, deck)
       this.deckLayer.addChild(deck)
     }
   }
@@ -689,6 +716,10 @@ export class GameBoardView extends Actor {
 
   /** Refreshes both deck card-count labels from the engine state. */
   private syncDeckCounts(state: OpeningMatchState): void {
+    for (const player of state.players) {
+      const deck = this.deckViews.get(player.participantId)
+      if (deck) deck.visible = player.deck.length > 0
+    }
     this.hud.sync(
       state,
       (snapshot, participantId) => this.findPlayer(snapshot, participantId),
@@ -770,33 +801,83 @@ export class GameBoardView extends Actor {
       // The cost label stays white today; future cost-changing effects will
       // tint it reduced (green) or increased (red) through `setCostColor`.
       view.setCostColor('normal')
+      const definition = HERO_POWER_CATALOG.require(player.heroPower.id)
+      const summonBlocked =
+        (definition.effect.kind === 'summon' ||
+          definition.effect.kind === 'summon-random-totem') &&
+        player.board.length >= MAX_BOARD_SIZE
+      const allTotemsPresent =
+        definition.effect.kind === 'summon-random-totem' &&
+        definition.effect.cardIds.every((cardId) =>
+          player.board.some((minion) => minion.cardId === cardId)
+        )
       view.setEnabled(
         player.participantId === this.localParticipantId &&
           state.activePlayerId === this.localParticipantId &&
           player.heroPower.available &&
-          player.mana.available >= player.heroPower.cost
+          player.mana.available >= player.heroPower.cost &&
+          !summonBlocked &&
+          !allTotemsPresent
       )
     }
   }
 
-  /**
-   * Local player clicked their hero power: the engine spends the mana and
-   * exhausts the power (a future card effect will be presented alongside).
-   * Rejections (e.g. mana changed under the cursor) only shake the card.
-   */
   private async useHeroPower(): Promise<void> {
     if (this.turnInProgress || this.combatInProgress || this.cardPlayInProgress) return
+    const local = this.findPlayer(this.match.getState(), this.localParticipantId)
+    const definition = HERO_POWER_CATALOG.require(local.heroPower.id)
+    if (definition.targeting === 'any-character') {
+      if (this.heroPowerTargeting) {
+        this.cancelHeroPowerTargeting()
+        return
+      }
+      this.deselectAttacker()
+      this.heroPowerTargeting = true
+      this.options.cursor?.setTargeting(true)
+      if (this.options.gameAssets.arrowBody) {
+        this.attackLine.setBodyTexture(this.options.gameAssets.arrowBody)
+      }
+      this.syncTurnControls(this.match.getState())
+      this.syncBoardAttackability(this.match.getState())
+      return
+    }
+    await this.commitHeroPower()
+  }
+
+  private async commitHeroPower(target?: HeroPowerTargetRef): Promise<void> {
+    if (this.cardPlayInProgress) return
+    this.cardPlayInProgress = true
     const result = this.match.dispatch({
       type: 'use-hero-power',
-      participantId: this.localParticipantId
+      participantId: this.localParticipantId,
+      ...(target ? { target } : {})
     })
     if (!result.accepted) {
       this.logger.error(result.message)
       this.heroPowerViews.get(this.localParticipantId)?.playUnavailable()
+      this.cardPlayInProgress = false
       return
     }
+    this.cancelHeroPowerTargeting()
     this.syncTurnHud(result.state)
-    for (const event of result.events) await this.presentEvent(event)
+    try {
+      for (const event of result.events) await this.presentEvent(event)
+    } finally {
+      this.cardPlayInProgress = false
+      this.syncTurnHud(this.match.getState())
+      this.syncTurnControls(this.match.getState())
+    }
+  }
+
+  private cancelHeroPowerTargeting(): void {
+    if (!this.heroPowerTargeting) return
+    this.heroPowerTargeting = false
+    this.attackLine.clear()
+    this.options.cursor?.setTargeting(false)
+    if (this.session) {
+      this.syncBoardAttackability(this.match.getState())
+      this.syncTurnControls(this.match.getState())
+    }
   }
 
   /** Shows the green outline only on cards the local player can currently afford. */
@@ -831,7 +912,8 @@ export class GameBoardView extends Actor {
       isLocalTurn &&
         !this.turnInProgress &&
         !this.combatInProgress &&
-        !this.cardPlayInProgress
+        !this.cardPlayInProgress &&
+        !this.heroPowerTargeting
     )
   }
 
@@ -842,6 +924,7 @@ export class GameBoardView extends Actor {
     this.turnInProgress = true
     this.cardPlayInProgress = false
     this.endDrag()
+    this.cancelHeroPowerTargeting()
     this.deselectAttacker()
     this.setMulliganInputEnabled(false)
     this.confirmButton?.setEnabled(false)
@@ -897,15 +980,18 @@ export class GameBoardView extends Actor {
     const view = this.heroViews.get(ownerId)
     if (!view) return
     const displayedAttack = state.activePlayerId === ownerId ? getHeroAttack(player) : 0
-    view.setStats(displayedAttack, player.hero.health)
+    view.setStats(displayedAttack, player.hero.health, player.hero.armor)
     const canAttack = canHeroAttack(player, state, ownerId)
     const showCanAttack = canAttack && ownerId === this.localParticipantId
     view.setCanAttack(showCanAttack)
     view.setTargetable(
-      ownerId === this.localParticipantId
-        ? showCanAttack
-        : state.phase === 'turns' && this.selectedCombatView !== null
+      this.heroPowerTargeting
+        ? true
+        : ownerId === this.localParticipantId
+          ? showCanAttack
+          : state.phase === 'turns' && this.selectedCombatView !== null
     )
+    view.setTargetingOutline(this.isValidCharacterTarget(ownerId))
     if (!showCanAttack && this.selectedCombatView === view) {
       this.deselectAttacker()
     }
@@ -930,15 +1016,24 @@ export class GameBoardView extends Actor {
       const showCanAttack = canAttack && ownerId === this.localParticipantId
       view.setCanAttack(showCanAttack)
       view.setTargetable(
-        ownerId === this.localParticipantId
-          ? showCanAttack
-          : state.phase === 'turns' && this.selectedCombatView !== null
+        this.heroPowerTargeting
+          ? true
+          : ownerId === this.localParticipantId
+            ? showCanAttack
+            : state.phase === 'turns' && this.selectedCombatView !== null
       )
+      view.setTargetingOutline(this.isValidCharacterTarget(ownerId))
       view.setSleeping(sleeping && state.phase === 'turns')
       if (sleeping || !showCanAttack) {
         if (this.selectedCombatView === view) this.deselectAttacker()
       }
     }
+  }
+
+  /** Keeps target eligibility independent from the green attacker-ready state. */
+  private isValidCharacterTarget(ownerId: PlayerId): boolean {
+    if (this.heroPowerTargeting) return true
+    return this.selectedCombatView !== null && ownerId === this.remoteParticipantId
   }
 
   /** Opens only friendly attacker selection once the current attack visibly lands. */
@@ -1016,6 +1111,27 @@ export class GameBoardView extends Actor {
 
   private handleBoardPointerMove(event: FederatedPointerEvent): void {
     if (this.matchResultShown) return
+    if (this.heroPowerTargeting) {
+      const power = this.heroPowerViews.get(this.localParticipantId)
+      if (!power) return
+      // HeroPowerView itself is positioned at the canvas origin; its card is
+      // positioned within that view. Use the card's center, not the view root.
+      const from = power.card.getGlobalPosition()
+      const localFrom = this.attackLineLayer.toLocal(from)
+      const localTo = this.attackLineLayer.toLocal({
+        x: event.globalX,
+        y: event.globalY
+      })
+      this.attackLine.setEndpoints(localFrom, localTo)
+      const angle = Math.atan2(event.globalY - from.y, event.globalX - from.x)
+      this.options.cursor?.setTargetingAngle(angle)
+      const target = this.findTargetCharacter(event)
+      this.options.cursor?.setTargetingTarget(
+        target ? this.toCursorTargetPoint(event.globalX, event.globalY) : null
+      )
+      this.updateHeroPowerPreview(target)
+      return
+    }
     if (!this.selectedCombatView) {
       if (!this.combatInProgress) this.clearCombatPreview()
       return
@@ -1030,17 +1146,20 @@ export class GameBoardView extends Actor {
     this.attackLine.setEndpoints(localFrom, localTo)
     const angle = Math.atan2(to.y - from.y, to.x - from.x)
     this.options.cursor?.setTargetingAngle(angle)
-    this.updateCombatPreview(this.findTargetCharacter(event))
+    const target = this.findTargetCharacter(event)
+    const combatTarget = target?.ownerId === this.remoteParticipantId ? target : null
+    this.options.cursor?.setTargetingTarget(
+      combatTarget ? this.toCursorTargetPoint(event.globalX, event.globalY) : null
+    )
+    this.updateCombatPreview(combatTarget)
   }
 
-  /** Resolves the opposing character currently beneath a targeting pointer. */
+  /** Resolves the interactive character currently beneath a targeting pointer. */
   private findTargetCharacter(event: FederatedPointerEvent): CombatView | null {
     let target = event.target instanceof Container ? event.target : null
     while (target) {
       if (target instanceof MinionView || target instanceof HeroView) {
-        return target.ownerId === this.remoteParticipantId && target.isTargetable()
-          ? target
-          : null
+        return target.isTargetable() ? target : null
       }
       target = target.parent
     }
@@ -1064,6 +1183,46 @@ export class GameBoardView extends Actor {
           event.globalY <= bounds.y + bounds.height
         )
       }) ?? null
+    )
+  }
+
+  /** Converts a Pixi canvas point into the fixed-position cursor layer's coordinates. */
+  private toCursorTargetPoint(x: number, y: number): { x: number; y: number } {
+    const canvas = this.options.renderer.canvas
+    const bounds = canvas.getBoundingClientRect()
+    return {
+      x: bounds.left + (x / this.options.renderer.width) * bounds.width,
+      y: bounds.top + (y / this.options.renderer.height) * bounds.height
+    }
+  }
+
+  /** Predicts whether the local hero power will lethally damage a hovered target. */
+  private updateHeroPowerPreview(target: CombatView | null): void {
+    const localPlayer = this.findPlayer(this.match.getState(), this.localParticipantId)
+    const effect = HERO_POWER_CATALOG.require(localPlayer.heroPower.id).effect
+    this.updateDamagePreview(
+      target,
+      effect.kind === 'damage-character' ? effect.amount : null
+    )
+  }
+
+  /** Reuses the will-die marker for any direct-damage targeting source. */
+  private updateDamagePreview(target: CombatView | null, damage: number | null): void {
+    if (!target || damage === null || damage <= 0 || !target.ownerId) {
+      this.syncCombatPreviewMarkers([])
+      return
+    }
+
+    const player = this.findPlayer(this.match.getState(), target.ownerId as PlayerId)
+    const health =
+      target instanceof HeroView
+        ? player.hero.health + player.hero.armor
+        : target.instanceId
+          ? player.board.find((minion) => minion.instanceId === target.instanceId)
+              ?.health
+          : undefined
+    this.syncCombatPreviewMarkers(
+      health !== undefined && health <= damage ? [target] : []
     )
   }
 
@@ -1105,11 +1264,11 @@ export class GameBoardView extends Actor {
       target instanceof MinionView ? (defenderMinion?.attack ?? 0) : 0
     const attackerHealth =
       attacker instanceof HeroView
-        ? attackerPlayer.hero.health
+        ? attackerPlayer.hero.health + attackerPlayer.hero.armor
         : (attackerMinion?.health ?? 0)
     const defenderHealth =
       target instanceof HeroView
-        ? defenderPlayer.hero.health
+        ? defenderPlayer.hero.health + defenderPlayer.hero.armor
         : (defenderMinion?.health ?? 0)
     const attackerHealthAfter = Math.max(0, attackerHealth - defenderAttack)
     const defenderHealthAfter = Math.max(0, defenderHealth - attackerAttack)
@@ -1220,7 +1379,13 @@ export class GameBoardView extends Actor {
    * the turn back.
    */
   private async endTurn(): Promise<void> {
-    if (this.turnInProgress || this.combatInProgress || this.cardPlayInProgress) return
+    if (
+      this.turnInProgress ||
+      this.combatInProgress ||
+      this.cardPlayInProgress ||
+      this.heroPowerTargeting
+    )
+      return
     this.turnInProgress = true
     this.hud.endTurnButton?.setEnabled(false)
     const result = this.match.dispatch({
@@ -1602,6 +1767,25 @@ export class GameBoardView extends Actor {
         this.syncTurnHud(this.match.getState())
         await this.presentHeroPowerFlip(event.participantId, false)
         return
+      case 'character-damaged':
+      case 'character-healed':
+        this.presentCharacterStateChange(event)
+        return
+      case 'armor-gained': {
+        const player = this.findPlayer(this.match.getState(), event.participantId)
+        const view = this.heroViews.get(event.participantId)
+        view?.setStats(getHeroAttack(player), player.hero.health, event.armorAfter)
+        return
+      }
+      case 'fatigue':
+        await this.fatigueView.present(
+          event.amount,
+          event.participantId === this.localParticipantId ? 'local' : 'remote'
+        )
+        return
+      case 'hero-power-minion-summoned':
+        await this.presentMinionPlayed(event, undefined, false)
+        return
       case 'minion-played':
         await this.presentMinionPlayed(event)
         return
@@ -1624,10 +1808,47 @@ export class GameBoardView extends Actor {
       case 'dev-mana-set':
         this.syncTurnHud(this.match.getState())
         return
+      case 'dev-deck-modified':
+        this.syncTurnHud(this.match.getState())
+        return
       case 'dev-minion-summoned':
         await this.presentDevMinionSummoned(event)
         return
     }
+  }
+
+  private presentCharacterStateChange(
+    event: Extract<
+      OpeningMatchEvent,
+      { type: 'character-damaged' | 'character-healed' }
+    >
+  ): void {
+    if (event.character.kind === 'hero') {
+      const player = this.findPlayer(this.match.getState(), event.participantId)
+      this.heroViews
+        .get(event.participantId)
+        ?.setStats(
+          getHeroAttack(player),
+          event.healthAfter,
+          event.type === 'character-damaged' ? event.armorAfter : player.hero.armor
+        )
+      return
+    }
+    const character = event.character
+    if (character.kind !== 'minion') return
+    const view = this.findMinionView(event.participantId, character.instanceId)
+    if (!view) return
+    if (event.type === 'character-damaged' && event.destroyed) {
+      this.removeMinionView(view)
+      if (event.participantId === this.localParticipantId) this.applyLocalBoardLayout()
+      else this.applyRemoteBoardLayout()
+      return
+    }
+    const player = this.findPlayer(this.match.getState(), event.participantId)
+    const minion = player.board.find(
+      (candidate) => candidate.instanceId === character.instanceId
+    )
+    if (minion) view.setStats(minion.attack, event.healthAfter)
   }
 
   async devAddCard(cardId: string, target: DevMatchTarget = 'local'): Promise<void> {
@@ -1704,6 +1925,17 @@ export class GameBoardView extends Actor {
       participantId: this.localParticipantId,
       available,
       maximum
+    })
+    if (!result.accepted) throw new Error(result.message)
+    for (const event of result.events) await this.presentEvent(event)
+    this.syncTurnHud(result.state)
+  }
+
+  async devModifyDeck(target: DevMatchTarget, action: DevDeckAction): Promise<void> {
+    const result = this.match.dispatch({
+      type: 'dev-modify-deck',
+      participantId: this.participantIdForTarget(target),
+      action
     })
     if (!result.accepted) throw new Error(result.message)
     for (const event of result.events) await this.presentEvent(event)
@@ -1860,7 +2092,9 @@ export class GameBoardView extends Actor {
   private async presentMinionPlayed(
     event: Extract<
       OpeningMatchEvent,
-      { type: 'minion-played' | 'dev-minion-summoned' }
+      {
+        type: 'minion-played' | 'dev-minion-summoned' | 'hero-power-minion-summoned'
+      }
     >,
     summonSlot?: GameCardSlot,
     removedFromHand = true
@@ -2224,8 +2458,8 @@ export class GameBoardView extends Actor {
       // defender remains planted and is updated at impact instead.
       await this.completeTimeline(lunge)
 
-      attacker.setStats(event.attacker.attack, event.attacker.healthAfter)
-      defender.setStats(event.defender.attack, event.defender.healthAfter)
+      this.setCombatViewStats(attacker, event.attacker)
+      this.setCombatViewStats(defender, event.defender)
       followDeathMarkers()
       const screenShake = this.runCombatScreenShake(event.attacker.attack)
       this.unlockCombatAttackerSelection()
@@ -2358,8 +2592,8 @@ export class GameBoardView extends Actor {
       lunge.eventCallback('onUpdate', followDeathMarkers)
       await this.completeTimeline(lunge)
 
-      attacker.setStats(event.attacker.attack, event.attacker.healthAfter)
-      defender.setStats(event.defender.attack, event.defender.healthAfter)
+      this.setCombatViewStats(attacker, event.attacker)
+      this.setCombatViewStats(defender, event.defender)
       followDeathMarkers()
       const screenShake = this.runCombatScreenShake(event.attacker.attack)
       this.unlockCombatAttackerSelection()
@@ -2499,6 +2733,21 @@ export class GameBoardView extends Actor {
     return this.findMinionView(ownerId, character.instanceId)
   }
 
+  private setCombatViewStats(
+    view: CombatView,
+    result: {
+      readonly attack: number
+      readonly healthAfter: number
+      readonly armorAfter?: number
+    }
+  ): void {
+    if (view instanceof HeroView) {
+      view.setStats(result.attack, result.healthAfter, result.armorAfter ?? 0)
+    } else {
+      view.setStats(result.attack, result.healthAfter)
+    }
+  }
+
   /** Temporarily lifts the attacker above both board rows without changing its screen position. */
   private promoteCombatViewForCombat(view: CombatView): CombatViewPlacement {
     const parent = view.parent
@@ -2571,6 +2820,14 @@ export class GameBoardView extends Actor {
     view.on('pointertap', (event: FederatedPointerEvent) => {
       if (event.button !== 0) return
       if (!view.isTargetable()) return
+      if (this.heroPowerTargeting && view.ownerId && view.instanceId) {
+        void this.commitHeroPower({
+          kind: 'minion',
+          participantId: view.ownerId as PlayerId,
+          instanceId: view.instanceId
+        })
+        return
+      }
       if (view.ownerId === this.localParticipantId) {
         if (
           !canSelectCombatAttacker(
@@ -2595,6 +2852,13 @@ export class GameBoardView extends Actor {
     view.on('pointertap', (event: FederatedPointerEvent) => {
       if (event.button !== 0) return
       if (!view.isTargetable()) return
+      if (this.heroPowerTargeting && view.ownerId) {
+        void this.commitHeroPower({
+          kind: 'hero',
+          participantId: view.ownerId as PlayerId
+        })
+        return
+      }
       if (view.ownerId === this.localParticipantId) {
         if (
           !canSelectCombatAttacker(
@@ -2669,6 +2933,7 @@ export class GameBoardView extends Actor {
 
   /** Reveals the turn controls and reflects the new active player's turn. */
   private handleTurnStarted(participantId: PlayerId): void {
+    this.cancelHeroPowerTargeting()
     if (!this.turnLayer.visible) this.turnLayer.visible = true
     if (participantId === this.localParticipantId) {
       this.turnInProgress = false
@@ -3325,7 +3590,8 @@ export class GameBoardView extends Actor {
    * it a small "no" shake. Clicks on the opponent's turn are ignored.
    */
   private onHandPointerDown(event: FederatedPointerEvent): void {
-    if (this.combatInProgress || this.cardPlayInProgress) return
+    if (this.combatInProgress || this.cardPlayInProgress || this.heroPowerTargeting)
+      return
     if (this.selectedCombatView) {
       this.deselectAttacker()
       return
@@ -3557,6 +3823,7 @@ export class GameBoardView extends Actor {
     this.matchResultGrayscaleFilter?.destroy()
     this.matchResultGrayscaleFilter = null
     this.clearCombatPreview()
+    this.heroPowerTargeting = false
     this.combatInProgress = false
     this.combatAttackerSelectionUnlocked = false
     this.cardPlayInProgress = false
@@ -3591,6 +3858,7 @@ export class GameBoardView extends Actor {
     }
     this.heroViews.clear()
     this.addCardPicker?.dispose()
+    this.fatigueView.destroy({ children: true })
     this.hud.dispose()
     for (const view of this.localMinionViews) {
       view.removeFromParent()

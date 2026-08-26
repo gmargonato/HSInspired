@@ -196,6 +196,58 @@ function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
       ]
     },
     {
+      label: 'Deck',
+      enabled: isGame,
+      submenu: [
+        {
+          label: 'Local Player',
+          submenu: [
+            {
+              label: 'Destroy Deck',
+              click: () =>
+                sendDevCommand(mainWindow, {
+                  type: 'game:modify-deck',
+                  target: 'local',
+                  action: 'destroy'
+                })
+            },
+            {
+              label: 'Refill Deck',
+              click: () =>
+                sendDevCommand(mainWindow, {
+                  type: 'game:modify-deck',
+                  target: 'local',
+                  action: 'refill'
+                })
+            }
+          ]
+        },
+        {
+          label: 'Remote Player',
+          submenu: [
+            {
+              label: 'Destroy Deck',
+              click: () =>
+                sendDevCommand(mainWindow, {
+                  type: 'game:modify-deck',
+                  target: 'remote',
+                  action: 'destroy'
+                })
+            },
+            {
+              label: 'Refill Deck',
+              click: () =>
+                sendDevCommand(mainWindow, {
+                  type: 'game:modify-deck',
+                  target: 'remote',
+                  action: 'refill'
+                })
+            }
+          ]
+        }
+      ]
+    },
+    {
       label: 'Set Mana',
       enabled: isGame,
       submenu: Array.from({ length: 11 }, (_, value) => ({

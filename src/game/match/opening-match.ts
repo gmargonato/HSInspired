@@ -1,4 +1,10 @@
-import { CARD_CATALOG, asCardId, type CardId, type HeroId } from '../content/cards'
+import {
+  CARD_CATALOG,
+  asCardId,
+  type CardId,
+  type HeroId,
+  type HeroPowerId
+} from '../content/cards'
 import { HERO_CATALOG } from '../content/heroes'
 import { HERO_POWER_CATALOG } from '../content/hero-powers'
 import { countDeckCards, type Deck } from '../decks'
@@ -32,6 +38,7 @@ export interface BoardMinion {
   readonly cardId: CardId
   readonly attack: number
   readonly health: number
+  readonly maxHealth: number
   /** Turn on which the minion entered play; it cannot attack the same turn (summoning sickness). */
   readonly summonedOnTurn: number
   /** Global turn number on which this minion last attacked, or null if it has not attacked. */
@@ -55,6 +62,7 @@ export interface BoardWeapon {
 export interface PlayerHeroState {
   readonly health: number
   readonly maxHealth: number
+  readonly armor: number
   readonly attack: number
   readonly lastAttackedOnTurn: number | null
 }
@@ -71,6 +79,7 @@ export interface PlayerMana {
  * accordingly). `available` is reset at the start of the owner's turn.
  */
 export interface PlayerHeroPower {
+  readonly id: HeroPowerId
   readonly cost: number
   readonly available: boolean
 }
@@ -87,6 +96,8 @@ export interface OpeningPlayerState {
   readonly weapon: BoardWeapon | null
   readonly mana: PlayerMana
   readonly heroPower: PlayerHeroPower
+  /** Damage dealt by the next failed draw; starts at 1 and rises after each fatigue hit. */
+  readonly fatigueDamage: number
   readonly mulliganConfirmed: boolean
 }
 
@@ -116,7 +127,16 @@ export interface EndTurnCommand {
 export interface UseHeroPowerCommand {
   readonly type: 'use-hero-power'
   readonly participantId: PlayerId
+  readonly target?: HeroPowerTargetRef
 }
+
+export type HeroPowerTargetRef =
+  | { readonly kind: 'hero'; readonly participantId: PlayerId }
+  | {
+      readonly kind: 'minion'
+      readonly participantId: PlayerId
+      readonly instanceId: string
+    }
 
 export interface PlayMinionCommand {
   readonly type: 'play-minion'
@@ -163,6 +183,14 @@ export interface DevSetManaCommand {
   readonly maximum: number
 }
 
+export type DevDeckAction = 'destroy' | 'refill'
+
+export interface DevModifyDeckCommand {
+  readonly type: 'dev-modify-deck'
+  readonly participantId: PlayerId
+  readonly action: DevDeckAction
+}
+
 export interface DevSummonMinionCommand {
   readonly type: 'dev-summon-minion'
   readonly participantId: PlayerId
@@ -185,6 +213,7 @@ export type OpeningMatchCommand =
   | AttackCharacterCommand
   | DevAddCardCommand
   | DevSetManaCommand
+  | DevModifyDeckCommand
   | DevSummonMinionCommand
   | DevEndMatchCommand
 
@@ -236,8 +265,56 @@ export interface CardBurnedEvent {
 export interface HeroPowerUsedEvent {
   readonly type: 'hero-power-used'
   readonly participantId: PlayerId
+  readonly heroPowerId: HeroPowerId
+  readonly target?: HeroPowerTargetRef
   readonly cost: number
   readonly mana: PlayerMana
+}
+
+export interface CharacterDamagedEvent {
+  readonly type: 'character-damaged'
+  readonly source: 'hero-power' | 'fatigue'
+  readonly participantId: PlayerId
+  readonly character:
+    { readonly kind: 'hero' } | { readonly kind: 'minion'; readonly instanceId: string }
+  readonly amount: number
+  readonly healthBefore: number
+  readonly healthAfter: number
+  readonly armorBefore: number
+  readonly armorAfter: number
+  readonly destroyed: boolean
+}
+
+export interface CharacterHealedEvent {
+  readonly type: 'character-healed'
+  readonly participantId: PlayerId
+  readonly character:
+    { readonly kind: 'hero' } | { readonly kind: 'minion'; readonly instanceId: string }
+  readonly amount: number
+  readonly healthBefore: number
+  readonly healthAfter: number
+}
+
+export interface ArmorGainedEvent {
+  readonly type: 'armor-gained'
+  readonly participantId: PlayerId
+  readonly amount: number
+  readonly armorBefore: number
+  readonly armorAfter: number
+}
+
+export interface HeroPowerMinionSummonedEvent {
+  readonly type: 'hero-power-minion-summoned'
+  readonly participantId: PlayerId
+  readonly minion: BoardMinion
+  readonly position: number
+}
+
+export interface FatigueEvent {
+  readonly type: 'fatigue'
+  readonly participantId: PlayerId
+  readonly amount: number
+  readonly nextDamage: number
 }
 
 export interface MinionPlayedEvent {
@@ -284,6 +361,8 @@ export interface CharacterCombatantResult {
   readonly damageDealt: number
   readonly healthBefore: number
   readonly healthAfter: number
+  readonly armorBefore: number
+  readonly armorAfter: number
   readonly destroyed: boolean
 }
 
@@ -318,6 +397,13 @@ export interface DevManaSetEvent {
   readonly mana: PlayerMana
 }
 
+export interface DevDeckModifiedEvent {
+  readonly type: 'dev-deck-modified'
+  readonly participantId: PlayerId
+  readonly action: DevDeckAction
+  readonly deckCount: number
+}
+
 export interface DevMinionSummonedEvent {
   readonly type: 'dev-minion-summoned'
   readonly participantId: PlayerId
@@ -334,6 +420,11 @@ export type OpeningMatchEvent =
   | CardDrawnEvent
   | CardBurnedEvent
   | HeroPowerUsedEvent
+  | CharacterDamagedEvent
+  | CharacterHealedEvent
+  | ArmorGainedEvent
+  | HeroPowerMinionSummonedEvent
+  | FatigueEvent
   | MinionPlayedEvent
   | WeaponEquippedEvent
   | MinionCombatResolvedEvent
@@ -341,6 +432,7 @@ export type OpeningMatchEvent =
   | MatchEndedEvent
   | DevCardAddedEvent
   | DevManaSetEvent
+  | DevDeckModifiedEvent
   | DevMinionSummonedEvent
 
 export interface OpeningAcceptedResult {
@@ -481,6 +573,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function parseHeroPowerTarget(value: unknown): HeroPowerTargetRef | null {
+  if (!isRecord(value) || typeof value.participantId !== 'string') return null
+  if (value.kind === 'hero') {
+    return { kind: 'hero', participantId: value.participantId as PlayerId }
+  }
+  if (value.kind === 'minion' && typeof value.instanceId === 'string') {
+    return {
+      kind: 'minion',
+      participantId: value.participantId as PlayerId,
+      instanceId: value.instanceId
+    }
+  }
+  return null
+}
+
 function parseCommand(value: unknown): OpeningMatchCommand | null {
   if (!isRecord(value) || typeof value.participantId !== 'string') return null
 
@@ -499,9 +606,13 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
   }
 
   if (value.type === 'use-hero-power') {
+    const target =
+      value.target === undefined ? undefined : parseHeroPowerTarget(value.target)
+    if (value.target !== undefined && !target) return null
     return {
       type: 'use-hero-power',
-      participantId: value.participantId as PlayerId
+      participantId: value.participantId as PlayerId,
+      ...(target ? { target } : {})
     }
   }
 
@@ -581,6 +692,15 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
       participantId: value.participantId as PlayerId,
       available: value.available,
       maximum: value.maximum
+    }
+  }
+
+  if (value.type === 'dev-modify-deck') {
+    if (value.action !== 'destroy' && value.action !== 'refill') return null
+    return {
+      type: 'dev-modify-deck',
+      participantId: value.participantId as PlayerId,
+      action: value.action
     }
   }
 
@@ -668,6 +788,85 @@ function drawCards(
   }
 }
 
+interface HeroDamageResult {
+  readonly hero: PlayerHeroState
+  readonly event: CharacterDamagedEvent
+}
+
+function damageHero(
+  player: OpeningPlayerState,
+  amount: number,
+  source: CharacterDamagedEvent['source']
+): HeroDamageResult {
+  const armorDamage = Math.min(player.hero.armor, amount)
+  const healthDamage = Math.max(0, amount - armorDamage)
+  const hero = {
+    ...player.hero,
+    armor: player.hero.armor - armorDamage,
+    health: Math.max(0, player.hero.health - healthDamage)
+  }
+  return {
+    hero,
+    event: {
+      type: 'character-damaged',
+      source,
+      participantId: player.participantId,
+      character: { kind: 'hero' },
+      amount,
+      healthBefore: player.hero.health,
+      healthAfter: hero.health,
+      armorBefore: player.hero.armor,
+      armorAfter: hero.armor,
+      destroyed: hero.health === 0
+    }
+  }
+}
+
+function withLethalResult(
+  state: OpeningMatchState,
+  events: OpeningMatchEvent[]
+): OpeningAcceptedResult {
+  const loserIndex = state.players.findIndex((player) => player.hero.health <= 0)
+  if (loserIndex < 0) {
+    return { accepted: true, state: cloneOpeningMatchState(state), events }
+  }
+  const winnerIndex: 0 | 1 = loserIndex === 0 ? 1 : 0
+  const winnerId = state.players[winnerIndex].participantId
+  const loserId = state.players[loserIndex as 0 | 1].participantId
+  const endedState: OpeningMatchState = {
+    ...state,
+    phase: 'ended',
+    activePlayerId: null,
+    winnerId,
+    loserId
+  }
+  events.push({
+    type: 'match-ended',
+    winnerId,
+    loserId,
+    reason: 'hero-health-depleted'
+  })
+  return { accepted: true, state: cloneOpeningMatchState(endedState), events }
+}
+
+function createBoardMinion(
+  cardId: CardId,
+  instanceId: string,
+  turnNumber: number
+): BoardMinion {
+  const definition = CARD_CATALOG.require(cardId)
+  if (definition.type !== 'Minion') throw new Error(`${cardId} is not a minion.`)
+  return {
+    instanceId,
+    cardId: definition.id,
+    attack: definition.attack,
+    health: definition.health,
+    maxHealth: definition.health,
+    summonedOnTurn: turnNumber,
+    lastAttackedOnTurn: null
+  }
+}
+
 function reject(
   state: OpeningMatchState,
   code: OpeningRejectionCode,
@@ -694,8 +893,8 @@ function growMana(mana: PlayerMana): PlayerMana {
 /**
  * Ends the active player's turn: passes play to the other player, increments
  * the turn counter, and draws one card for the new active player. The draw is
- * skipped when the deck is empty; when the hand is already full the drawn card
- * is burned (removed from the deck) per the Hearthstone rule. The new active
+ * becomes escalating fatigue damage when the deck is empty; when the hand is
+ * already full the drawn card is burned (removed from the deck). The new active
  * player's mana grows and refills at the start of their turn.
  */
 function applyEndTurn(
@@ -750,6 +949,20 @@ function applyEndTurn(
         card: cloneCard(drawnCard)
       })
     }
+  } else {
+    const damaged = damageHero(nextPlayer, nextPlayer.fatigueDamage, 'fatigue')
+    nextPlayers[nextPlayerIndex] = {
+      ...nextPlayer,
+      hero: damaged.hero,
+      fatigueDamage: nextPlayer.fatigueDamage + 1
+    }
+    events.push({
+      type: 'fatigue',
+      participantId: nextPlayer.participantId,
+      amount: nextPlayer.fatigueDamage,
+      nextDamage: nextPlayer.fatigueDamage + 1
+    })
+    events.push(damaged.event)
   }
   nextPlayers[nextPlayerIndex] = {
     ...nextPlayers[nextPlayerIndex],
@@ -772,19 +985,16 @@ function applyEndTurn(
     mana: nextMana
   })
 
-  return { accepted: true, state: cloneOpeningMatchState(nextState), events }
+  return withLethalResult(nextState, events)
 }
 
-/**
- * Uses the active player's hero power: spends its cost from the available mana
- * pool and exhausts it until the owner's next turn start. The effects of the
- * power itself arrive with future gameplay; for now the command only consumes
- * mana and flips the card to its exhausted state.
- */
 function applyUseHeroPower(
   state: OpeningMatchState,
-  playerIndex: 0 | 1
-): OpeningCommandResult {
+  playerIndex: 0 | 1,
+  command: UseHeroPowerCommand,
+  rng: DeterministicRng,
+  counter: number
+): OpeningCommandResult & { nextCounter?: number } {
   if (state.phase !== 'turns') {
     return reject(state, 'wrong-phase', 'Turns have not started yet.')
   }
@@ -806,34 +1016,310 @@ function applyUseHeroPower(
   if (player.mana.available < player.heroPower.cost) {
     return reject(state, 'insufficient-mana', 'Not enough mana to use the hero power.')
   }
+  const definition = HERO_POWER_CATALOG.require(player.heroPower.id)
+  if (definition.targeting === 'any-character' && !command.target) {
+    return reject(state, 'invalid-target', 'This hero power requires a target.')
+  }
+  if (definition.targeting === 'none' && command.target) {
+    return reject(state, 'invalid-target', 'This hero power does not accept a target.')
+  }
 
-  const nextPlayer: OpeningPlayerState = {
+  let targetIndex: 0 | 1 | null = null
+  if (command.target) {
+    const found = findPlayerIndex(state.players, command.target.participantId)
+    if (found === -1) {
+      return reject(
+        state,
+        'invalid-target',
+        'The selected hero power target is invalid.'
+      )
+    }
+    targetIndex = found
+    const targetPlayer = state.players[found]
+    if (command.target.kind === 'hero') {
+      if (targetPlayer.hero.health <= 0) {
+        return reject(state, 'invalid-target', 'The selected hero is not alive.')
+      }
+    } else {
+      const instanceId = command.target.instanceId
+      const minion = targetPlayer.board.find(
+        (candidate) => candidate.instanceId === instanceId
+      )
+      if (!minion || minion.health <= 0) {
+        return reject(state, 'invalid-target', 'The selected minion is not in play.')
+      }
+    }
+  }
+
+  if (
+    (definition.effect.kind === 'summon' ||
+      definition.effect.kind === 'summon-random-totem') &&
+    player.board.length >= MAX_BOARD_SIZE
+  ) {
+    return reject(state, 'board-full', 'The board is full.')
+  }
+
+  let selectedTotem: CardId | null = null
+  if (definition.effect.kind === 'summon-random-totem') {
+    const controlled = new Set(player.board.map((minion) => minion.cardId))
+    const eligible = definition.effect.cardIds.filter(
+      (cardId) => !controlled.has(cardId)
+    )
+    if (eligible.length === 0) {
+      return reject(
+        state,
+        'hero-power-unavailable',
+        'All four basic Totems are in play.'
+      )
+    }
+    selectedTotem =
+      eligible[Math.floor(rng.next() * eligible.length)] ?? eligible[0] ?? null
+  }
+
+  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+  nextPlayers[playerIndex] = {
     ...player,
-    mana: {
-      ...player.mana,
-      available: player.mana.available - player.heroPower.cost
-    },
+    mana: { ...player.mana, available: player.mana.available - player.heroPower.cost },
     heroPower: { ...player.heroPower, available: false }
   }
-  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
-  nextPlayers[playerIndex] = nextPlayer
+  const events: OpeningMatchEvent[] = [
+    {
+      type: 'hero-power-used',
+      participantId: player.participantId,
+      heroPowerId: definition.id,
+      ...(command.target ? { target: command.target } : {}),
+      cost: player.heroPower.cost,
+      mana: nextPlayers[playerIndex].mana
+    }
+  ]
+
+  const gainArmor = (amount: number): void => {
+    const current = nextPlayers[playerIndex]
+    const armorBefore = current.hero.armor
+    nextPlayers[playerIndex] = {
+      ...current,
+      hero: { ...current.hero, armor: armorBefore + amount }
+    }
+    events.push({
+      type: 'armor-gained',
+      participantId: current.participantId,
+      amount,
+      armorBefore,
+      armorAfter: armorBefore + amount
+    })
+  }
+
+  switch (definition.effect.kind) {
+    case 'gain-attack-and-armor': {
+      const current = nextPlayers[playerIndex]
+      nextPlayers[playerIndex] = {
+        ...current,
+        hero: {
+          ...current.hero,
+          attack: current.hero.attack + definition.effect.attack
+        }
+      }
+      gainArmor(definition.effect.armor)
+      break
+    }
+    case 'gain-armor':
+      gainArmor(definition.effect.amount)
+      break
+    case 'damage-enemy-hero': {
+      const opponentIndex: 0 | 1 = playerIndex === 0 ? 1 : 0
+      const opponent = nextPlayers[opponentIndex]
+      const damaged = damageHero(opponent, definition.effect.amount, 'hero-power')
+      nextPlayers[opponentIndex] = { ...opponent, hero: damaged.hero }
+      events.push(damaged.event)
+      break
+    }
+    case 'damage-character': {
+      if (targetIndex === null || !command.target) break
+      const targetPlayer = nextPlayers[targetIndex]
+      if (command.target.kind === 'hero') {
+        const damaged = damageHero(targetPlayer, definition.effect.amount, 'hero-power')
+        nextPlayers[targetIndex] = { ...targetPlayer, hero: damaged.hero }
+        events.push(damaged.event)
+      } else {
+        const instanceId = command.target.instanceId
+        const minion = targetPlayer.board.find(
+          (candidate) => candidate.instanceId === instanceId
+        )!
+        const healthAfter = Math.max(0, minion.health - definition.effect.amount)
+        nextPlayers[targetIndex] = {
+          ...targetPlayer,
+          board: targetPlayer.board
+            .map((candidate) =>
+              candidate.instanceId === minion.instanceId
+                ? { ...candidate, health: healthAfter }
+                : cloneBoardMinion(candidate)
+            )
+            .filter((candidate) => candidate.health > 0)
+        }
+        events.push({
+          type: 'character-damaged',
+          source: 'hero-power',
+          participantId: targetPlayer.participantId,
+          character: { kind: 'minion', instanceId: minion.instanceId },
+          amount: definition.effect.amount,
+          healthBefore: minion.health,
+          healthAfter,
+          armorBefore: 0,
+          armorAfter: 0,
+          destroyed: healthAfter === 0
+        })
+      }
+      break
+    }
+    case 'restore-character': {
+      if (targetIndex === null || !command.target) break
+      const targetPlayer = nextPlayers[targetIndex]
+      if (command.target.kind === 'hero') {
+        const healthAfter = Math.min(
+          targetPlayer.hero.maxHealth,
+          targetPlayer.hero.health + definition.effect.amount
+        )
+        nextPlayers[targetIndex] = {
+          ...targetPlayer,
+          hero: { ...targetPlayer.hero, health: healthAfter }
+        }
+        events.push({
+          type: 'character-healed',
+          participantId: targetPlayer.participantId,
+          character: { kind: 'hero' },
+          amount: healthAfter - targetPlayer.hero.health,
+          healthBefore: targetPlayer.hero.health,
+          healthAfter
+        })
+      } else {
+        const instanceId = command.target.instanceId
+        const minion = targetPlayer.board.find(
+          (candidate) => candidate.instanceId === instanceId
+        )!
+        const healthAfter = Math.min(
+          minion.maxHealth,
+          minion.health + definition.effect.amount
+        )
+        nextPlayers[targetIndex] = {
+          ...targetPlayer,
+          board: targetPlayer.board.map((candidate) =>
+            candidate.instanceId === minion.instanceId
+              ? { ...candidate, health: healthAfter }
+              : cloneBoardMinion(candidate)
+          )
+        }
+        events.push({
+          type: 'character-healed',
+          participantId: targetPlayer.participantId,
+          character: { kind: 'minion', instanceId: minion.instanceId },
+          amount: healthAfter - minion.health,
+          healthBefore: minion.health,
+          healthAfter
+        })
+      }
+      break
+    }
+    case 'summon':
+    case 'summon-random-totem': {
+      const cardId =
+        definition.effect.kind === 'summon' ? definition.effect.cardId : selectedTotem
+      if (!cardId) break
+      const current = nextPlayers[playerIndex]
+      const minion = createBoardMinion(
+        cardId,
+        `${current.participantId}:hero-power:${counter}`,
+        state.turnNumber
+      )
+      const position = current.board.length
+      nextPlayers[playerIndex] = {
+        ...current,
+        board: [...current.board.map(cloneBoardMinion), minion]
+      }
+      events.push({
+        type: 'hero-power-minion-summoned',
+        participantId: current.participantId,
+        minion: cloneBoardMinion(minion),
+        position
+      })
+      counter += 1
+      break
+    }
+    case 'equip-weapon': {
+      const current = nextPlayers[playerIndex]
+      const weaponDefinition = CARD_CATALOG.require(definition.effect.cardId)
+      if (weaponDefinition.type !== 'Weapon') {
+        throw new Error(`${definition.effect.cardId} is not a weapon.`)
+      }
+      const weapon: BoardWeapon = {
+        instanceId: `${current.participantId}:hero-power:${counter}`,
+        cardId: weaponDefinition.id,
+        attack: weaponDefinition.attack,
+        durability: weaponDefinition.durability,
+        maxDurability: weaponDefinition.durability
+      }
+      nextPlayers[playerIndex] = { ...current, weapon }
+      events.push({
+        type: 'weapon-equipped',
+        participantId: current.participantId,
+        weapon: cloneBoardWeapon(weapon),
+        replacedWeapon: current.weapon ? cloneBoardWeapon(current.weapon) : null
+      })
+      counter += 1
+      break
+    }
+    case 'draw-and-self-damage': {
+      for (let draw = 0; draw < definition.effect.count; draw += 1) {
+        let current = nextPlayers[playerIndex]
+        const card = current.deck[0]
+        if (card) {
+          current = { ...current, deck: current.deck.slice(1) }
+          if (current.hand.length >= MAX_HAND_SIZE) {
+            events.push({
+              type: 'card-burned',
+              participantId: current.participantId,
+              card: cloneCard(card)
+            })
+          } else {
+            current = { ...current, hand: [...current.hand, cloneCard(card)] }
+            events.push({
+              type: 'card-drawn',
+              participantId: current.participantId,
+              card: cloneCard(card)
+            })
+          }
+          nextPlayers[playerIndex] = current
+        } else {
+          const damaged = damageHero(current, current.fatigueDamage, 'fatigue')
+          nextPlayers[playerIndex] = {
+            ...current,
+            hero: damaged.hero,
+            fatigueDamage: current.fatigueDamage + 1
+          }
+          events.push({
+            type: 'fatigue',
+            participantId: current.participantId,
+            amount: current.fatigueDamage,
+            nextDamage: current.fatigueDamage + 1
+          })
+          events.push(damaged.event)
+        }
+      }
+      const current = nextPlayers[playerIndex]
+      const damaged = damageHero(current, definition.effect.amount, 'hero-power')
+      nextPlayers[playerIndex] = { ...current, hero: damaged.hero }
+      events.push(damaged.event)
+      break
+    }
+  }
+
   const nextState: OpeningMatchState = {
     ...state,
     players: nextPlayers,
     revision: state.revision + 1
   }
-
   return {
-    accepted: true,
-    state: cloneOpeningMatchState(nextState),
-    events: [
-      {
-        type: 'hero-power-used',
-        participantId: player.participantId,
-        cost: player.heroPower.cost,
-        mana: nextPlayer.mana
-      }
-    ]
+    ...withLethalResult(nextState, events),
+    nextCounter: counter
   }
 }
 
@@ -891,6 +1377,7 @@ function applyPlayMinion(
     cardId: card.cardId,
     attack: definition.attack,
     health: definition.health,
+    maxHealth: definition.health,
     summonedOnTurn: state.turnNumber,
     lastAttackedOnTurn: null
   }
@@ -1115,8 +1602,18 @@ function resolveAttackCharacter(
     command.defender.kind === 'hero'
       ? defenderPlayer.hero.health
       : (defenderMinion?.health ?? 0)
-  const attackerHealthAfter = Math.max(0, attackerHealth - defenderAttack)
-  const defenderHealthAfter = Math.max(0, defenderHealth - attackerAttack)
+  const attackerArmor = command.attacker.kind === 'hero' ? attackerPlayer.hero.armor : 0
+  const defenderArmor = command.defender.kind === 'hero' ? defenderPlayer.hero.armor : 0
+  const attackerArmorAfter = Math.max(0, attackerArmor - defenderAttack)
+  const defenderArmorAfter = Math.max(0, defenderArmor - attackerAttack)
+  const attackerHealthAfter = Math.max(
+    0,
+    attackerHealth - Math.max(0, defenderAttack - attackerArmor)
+  )
+  const defenderHealthAfter = Math.max(
+    0,
+    defenderHealth - Math.max(0, attackerAttack - defenderArmor)
+  )
   const attackerDestroyed = attackerHealthAfter === 0
   const defenderDestroyed = defenderHealthAfter === 0
 
@@ -1167,12 +1664,17 @@ function resolveAttackCharacter(
       ? {
           ...attackerPlayer.hero,
           health: attackerHealthAfter,
+          armor: attackerArmorAfter,
           lastAttackedOnTurn: state.turnNumber
         }
       : attackerPlayer.hero
   const nextDefenderHero =
     command.defender.kind === 'hero'
-      ? { ...defenderPlayer.hero, health: defenderHealthAfter }
+      ? {
+          ...defenderPlayer.hero,
+          health: defenderHealthAfter,
+          armor: defenderArmorAfter
+        }
       : defenderPlayer.hero
   const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
   nextPlayers[playerIndex] = {
@@ -1217,6 +1719,8 @@ function resolveAttackCharacter(
     damageDealt: attackerAttack,
     healthBefore: attackerHealth,
     healthAfter: attackerHealthAfter,
+    armorBefore: attackerArmor,
+    armorAfter: attackerArmorAfter,
     destroyed: attackerDestroyed
   } satisfies CharacterCombatantResult
   const defenderResult = {
@@ -1226,6 +1730,8 @@ function resolveAttackCharacter(
     damageDealt: defenderAttack,
     healthBefore: defenderHealth,
     healthAfter: defenderHealthAfter,
+    armorBefore: defenderArmor,
+    armorAfter: defenderArmorAfter,
     destroyed: defenderDestroyed
   } satisfies CharacterCombatantResult
 
@@ -1369,6 +1875,7 @@ function applyDevSummonMinion(
     cardId: definition.id,
     attack: definition.attack,
     health: definition.health,
+    maxHealth: definition.health,
     summonedOnTurn: state.turnNumber,
     lastAttackedOnTurn: null
   }
@@ -1478,6 +1985,41 @@ function applyDevSetMana(
   }
 }
 
+function applyDevModifyDeck(
+  state: OpeningMatchState,
+  playerIndex: 0 | 1,
+  command: DevModifyDeckCommand,
+  refillDeck: () => readonly OpeningCard[]
+): OpeningCommandResult {
+  if (state.phase !== 'turns') {
+    return reject(state, 'wrong-phase', 'Turns have not started yet.')
+  }
+
+  const player = state.players[playerIndex]
+  const deck = command.action === 'destroy' ? [] : refillDeck()
+  const nextPlayer: OpeningPlayerState = { ...player, deck }
+  const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+  nextPlayers[playerIndex] = nextPlayer
+  const nextState: OpeningMatchState = {
+    ...state,
+    players: nextPlayers,
+    revision: state.revision + 1
+  }
+
+  return {
+    accepted: true,
+    state: cloneOpeningMatchState(nextState),
+    events: [
+      {
+        type: 'dev-deck-modified',
+        participantId: player.participantId,
+        action: command.action,
+        deckCount: deck.length
+      }
+    ]
+  }
+}
+
 /**
  * Creates the platform-neutral opening sequence used by GameScene.
  *
@@ -1513,6 +2055,7 @@ export function createOpeningMatch(
       hero: {
         health: hero.startingHealth,
         maxHealth: hero.startingHealth,
+        armor: 0,
         attack: 0,
         lastAttackedOnTurn: null
       },
@@ -1522,7 +2065,8 @@ export function createOpeningMatch(
       board: [],
       weapon: null,
       mana: { available: 0, maximum: 0 },
-      heroPower: { cost: heroPower.cost, available: false },
+      heroPower: { id: heroPower.id, cost: heroPower.cost, available: false },
+      fatigueDamage: 1,
       mulliganConfirmed: false
     } satisfies OpeningPlayerState
   }
@@ -1543,6 +2087,22 @@ export function createOpeningMatch(
     revision: 0
   }
   let devCardCounter = 10000
+  let devDeckRefillCounter = 0
+
+  const refillDeckFor = (participantId: PlayerId): readonly OpeningCard[] => {
+    const participant = setup.participants.find(
+      (candidate) => candidate.participantId === participantId
+    )
+    if (!participant) throw new Error(`Unknown participant: ${participantId}`)
+    const deck = decksById.get(participant.deckId)
+    if (!deck) throw new Error(`Deck ${participant.deckId} is not available.`)
+    const refillId = devDeckRefillCounter
+    devDeckRefillCounter += 1
+    return shuffle(expandDeck(deck, participant), rng).map((card, ordinal) => ({
+      ...card,
+      instanceId: `${participant.participantId}:dev-refill:${refillId}:${ordinal}`
+    }))
+  }
 
   return {
     setup,
@@ -1574,8 +2134,17 @@ export function createOpeningMatch(
       }
 
       if (command.type === 'use-hero-power') {
-        const result = applyUseHeroPower(state, playerIndex)
-        if (result.accepted) state = result.state
+        const result = applyUseHeroPower(
+          state,
+          playerIndex,
+          command,
+          rng,
+          devCardCounter
+        )
+        if (result.accepted) {
+          state = result.state
+          if (result.nextCounter !== undefined) devCardCounter = result.nextCounter
+        }
         return result
       }
 
@@ -1614,6 +2183,14 @@ export function createOpeningMatch(
 
       if (command.type === 'dev-set-mana') {
         const result = applyDevSetMana(state, playerIndex, command)
+        if (result.accepted) state = result.state
+        return result
+      }
+
+      if (command.type === 'dev-modify-deck') {
+        const result = applyDevModifyDeck(state, playerIndex, command, () =>
+          refillDeckFor(command.participantId)
+        )
         if (result.accepted) state = result.state
         return result
       }

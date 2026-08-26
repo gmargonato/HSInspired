@@ -32,6 +32,15 @@ export const HERO_LAYOUT = {
       note: 'Current hero Health, enlarged into the lower-right corner.'
     }
   ),
+  armorBadge: placement(
+    { x: 307, y: 260 },
+    { width: 163, height: 200 },
+    {
+      anchor: CENTER,
+      scale: 0.55,
+      note: 'Current hero Armor, enlarged and raised well above the health position while Armor is present.'
+    }
+  ),
   statText: {
     fontFamily: 'Belwe',
     fontSize: 30,
@@ -39,6 +48,7 @@ export const HERO_LAYOUT = {
     stroke: { color: 0x17120f, width: 5 },
     align: 'center' as const
   },
+  armorLabelFontSize: 120,
   attackOutline: {
     ...placement(
       { x: HERO_CANVAS.width / 2, y: HERO_CANVAS.height / 2 },

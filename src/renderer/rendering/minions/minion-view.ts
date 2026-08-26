@@ -80,10 +80,13 @@ export class MinionView extends Container {
   private readonly healthLabel: Text
   private readonly outlineProxy: Graphics
   private readonly attackOutline: AnimatedOutline
+  private readonly targetingOutlineProxy: Graphics
+  private readonly targetingOutline: AnimatedOutline
   private readonly sleepingZs: SleepingZs
   private readonly animationScope = new AnimationScope()
   private readonly originalHealth: number
   private canAttackEnabled = false
+  private targetingOutlineEnabled = false
   private targetableEnabled = false
   private selected = false
   private baseScale = 1
@@ -188,6 +191,19 @@ export class MinionView extends Container {
     this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'card')
     this.attackOutline.setEnabled(false)
 
+    this.targetingOutlineProxy = new Graphics()
+    this.targetingOutlineProxy.label = 'minion.targeting-outline-proxy'
+    this.targetingOutlineProxy.eventMode = 'none'
+    this.targetingOutlineProxy.ellipse(80, 90, 58, 79).fill({ color: 0xffffff })
+    this.targetingOutlineProxy.visible = false
+    this.addChildAt(this.targetingOutlineProxy, 1)
+    this.targetingOutline = new AnimatedOutline(
+      this.targetingOutlineProxy,
+      'red',
+      'card'
+    )
+    this.targetingOutline.setEnabled(false)
+
     this.sleepingZs = new SleepingZs()
     this.sleepingZs.label = 'minion.sleeping-zs-root'
     this.addChild(this.sleepingZs)
@@ -232,11 +248,24 @@ export class MinionView extends Container {
     this.divineShield.visible = visible
   }
 
+  private syncOutlineState(): void {
+    const showAttackOutline = this.canAttackEnabled && !this.targetingOutlineEnabled
+    this.attackOutline.setEnabled(showAttackOutline)
+    this.outlineProxy.visible = showAttackOutline
+    this.targetingOutline.setEnabled(this.targetingOutlineEnabled)
+    this.targetingOutlineProxy.visible = this.targetingOutlineEnabled
+  }
+
   setCanAttack(enabled: boolean): void {
     this.canAttackEnabled = enabled
-    this.attackOutline.setEnabled(enabled)
-    this.outlineProxy.visible = enabled
+    this.syncOutlineState()
     if (!enabled && this.selected) this.setSelected(false)
+  }
+
+  /** Shows the red outline while this minion is a valid targeting destination. */
+  setTargetingOutline(enabled: boolean): void {
+    this.targetingOutlineEnabled = enabled
+    this.syncOutlineState()
   }
 
   isCanAttack(): boolean {
@@ -304,6 +333,7 @@ export class MinionView extends Container {
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     this.animationScope.kill()
     this.attackOutline.dispose()
+    this.targetingOutline.dispose()
     this.sleepingZs.dispose()
     super.destroy(options)
   }

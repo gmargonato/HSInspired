@@ -28,6 +28,7 @@ import gameDeckImage from '@assets/images/match/deck.png'
 import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
 import gameEnemyTurnImage from '@assets/images/match/button-enemy-turn.png'
 import gameYourTurnImage from '@assets/images/match/flag-your-turn.png'
+import fatigueImage from '@assets/images/match/fatigue.png'
 import cardBackImage from '@assets/images/cards/card-back.png'
 import startOfGameVsImage from '@assets/images/match/start-of-game-vs.png'
 import mulliganAnnouncementImage from '@assets/images/match/mulligan-announcement.png'
@@ -44,6 +45,7 @@ import minionTauntImage from '@assets/images/board/minion-taunt.png'
 import minionDivineShieldImage from '@assets/images/board/minion-divine-shield.png'
 import minionAttackImage from '@assets/images/board/minion-attack.png'
 import minionHealthImage from '@assets/images/board/minion-health.png'
+import heroArmorImage from '@assets/images/cards/armor.png'
 import minionWillDieImage from '@assets/images/board/character-will-die.png'
 import weaponImage from '@assets/images/board/weapon.png'
 import searchClearImage from '@assets/images/cards/silence.png'
@@ -59,6 +61,7 @@ import cardPreviewDetailContainerImage from '@assets/images/ui/card-preview/card
 import cardAddAuraImage from '@assets/images/effects/aura-01.png'
 import arrowBodyImage from '@assets/images/match/arrow-body.png'
 import arrowHeadImage from '@assets/images/match/arrow-head.png'
+import arrowCircleImage from '@assets/images/match/arrow-circle.png'
 import winScreenImage from '@assets/images/match/win-screen.png'
 import defeatScreenImage from '@assets/images/match/defeat-screen.png'
 import druidNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-druid.png'
@@ -250,6 +253,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.fatigue',
+    ASSET_BUNDLE_IDS.game,
+    'fatigue',
+    fatigueImage,
+    420,
+    727,
+    'game-scene'
+  ),
+  asset(
     'scene.game.minion-frame-legendary',
     ASSET_BUNDLE_IDS.game,
     'minionFrameLegendary',
@@ -301,6 +313,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     minionWillDieImage,
     109,
     114,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.hero-armor',
+    ASSET_BUNDLE_IDS.game,
+    'heroArmor',
+    heroArmorImage,
+    163,
+    200,
     'game-scene'
   ),
   asset(
@@ -474,6 +495,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     arrowHeadImage,
     119,
     57,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.arrow-circle',
+    ASSET_BUNDLE_IDS.game,
+    'arrowCircle',
+    arrowCircleImage,
+    112,
+    112,
     'game-scene'
   ),
   asset(
@@ -957,12 +987,14 @@ export interface DeckPresentationAssets extends Record<HeroAssetKey, Texture> {
 export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   table: Texture
   board: Texture
+  fatigue: Texture
   minionFrame: Texture
   minionFrameLegendary: Texture
   minionTaunt: Texture
   minionDivineShield: Texture
   minionAttack: Texture
   minionHealth: Texture
+  heroArmor: Texture
   minionWillDie: Texture
   weapon: Texture
   minionSummonRays: Texture
@@ -982,6 +1014,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   heroPowerMana: Texture
   arrowBody: Texture
   arrowHead: Texture
+  arrowCircle: Texture
   winScreen: Texture
   defeatScreen: Texture
 }

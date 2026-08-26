@@ -74,6 +74,19 @@ export function installDevCommandHandler(
       return
     }
 
+    if (command.type === 'game:modify-deck') {
+      if (current instanceof GameScene) {
+        void current
+          .devModifyDeck(command.target, command.action)
+          .catch((error: unknown) => {
+            logger.error('[DevMenu] failed to modify deck', error)
+          })
+        return
+      }
+      logger.warn('[DevMenu] game deck command ignored outside Game', command)
+      return
+    }
+
     if (command.type === 'game:set-mana') {
       if (current instanceof GameScene) {
         void current
