@@ -3875,6 +3875,9 @@
     "effects": [
       {
         "trigger": "end-of-turn",
+        "event": {
+          "turnPlayer": "any"
+        },
         "actions": [
           {
             "action": "modify",

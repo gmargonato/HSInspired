@@ -4,13 +4,13 @@
   "crop_box": [
     0,
     0,
-    500,
-    500
+    264,
+    264
   ],
-  "scale": 1.0,
+  "scale": 1.893939393939394,
   "offset_x": 0.0,
   "offset_y": 0.0,
-  "timestamp": "2026-08-19T20:04:22.276415",
+  "timestamp": "2026-08-27T11:17:24.947012",
   "card_id": "classic_millhouse_manastorm",
   "card_type": "Minion",
   "frame_file": "frame-minion.png"

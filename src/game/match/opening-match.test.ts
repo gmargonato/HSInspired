@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { asHeroId } from '../content/cards'
+import { asCardId, asHeroId } from '../content/cards'
 import type { Deck } from '../decks'
 import { asPlayerId, type MatchSetup, type PlayerId } from './match-types'
 import {
   createOpeningMatch,
   type OpeningAcceptedResult,
   type OpeningCommandResult,
-  type OpeningMatchInstance
+  type OpeningMatchEvent,
+  type OpeningMatchInstance,
+  type HistoryActionResolvedEvent
 } from './opening-match'
 
 const HUMAN_ID = asPlayerId('human-player')
@@ -50,7 +52,7 @@ function startMatch(heroId: string, opponentHeroId = 'jaina'): OpeningMatchInsta
   const match = createOpeningMatch(
     setup,
     [deck('human-deck', heroId), deck('opponent-deck', opponentHeroId)],
-    { next: () => 0.1 }
+    { next: () => 0.1, snapshot: () => 0, restore: () => undefined }
   )
   accept(
     match.dispatch({
@@ -97,6 +99,49 @@ function cycleBackToHuman(match: OpeningMatchInstance): void {
   setMana(match, HUMAN_ID)
 }
 
+describe('retired command boundary', () => {
+  it('rejects legacy play and attack command names without changing state', () => {
+    const match = startMatch('jaina')
+    const before = match.getState()
+    const legacyCommands: readonly unknown[] = [
+      {
+        type: 'play-minion',
+        participantId: HUMAN_ID,
+        cardInstanceId: 'missing',
+        position: 0
+      },
+      {
+        type: 'play-weapon',
+        participantId: HUMAN_ID,
+        cardInstanceId: 'missing'
+      },
+      { type: 'play-hero', participantId: HUMAN_ID, cardInstanceId: 'missing' },
+      {
+        type: 'attack-minion',
+        participantId: HUMAN_ID,
+        attackerInstanceId: 'missing',
+        defenderInstanceId: 'missing'
+      }
+    ]
+    for (const command of legacyCommands) {
+      expect(match.dispatch(command)).toMatchObject({
+        accepted: false,
+        code: 'invalid-command'
+      })
+      expect(match.getState()).toEqual(before)
+    }
+  })
+})
+
+describe('effect trace retention', () => {
+  it('keeps effect traces out of normal matches', () => {
+    const match = startMatch('rexxar')
+    usePower(match)
+    expect(match.getState()).not.toHaveProperty('effectTrace')
+    expect(match.getEffectTrace?.()).toEqual([])
+  })
+})
+
 describe('classic hero powers', () => {
   it('Shapeshift grants temporary Attack and persistent Armor', () => {
     const match = startMatch('malfurion')
@@ -124,7 +169,10 @@ describe('classic hero powers', () => {
       type: 'use-hero-power',
       participantId: HUMAN_ID
     })
-    expect(missingTarget).toMatchObject({ accepted: false, code: 'invalid-target' })
+    expect(missingTarget).toMatchObject({
+      accepted: false,
+      code: 'invalid-target'
+    })
     expect(match.getState().players[0].mana.available).toBe(10)
 
     accept(
@@ -175,10 +223,20 @@ describe('classic hero powers', () => {
 
   it('Lesser Heal targets either side and caps Health at maximum', () => {
     const match = startMatch('anduin')
-    const result = usePower(match, { kind: 'hero', participantId: OPPONENT_ID })
+    const result = usePower(match, {
+      kind: 'hero',
+      participantId: OPPONENT_ID
+    })
     expect(match.getState().players[1].hero.health).toBe(30)
     expect(result.events).toContainEqual(
       expect.objectContaining({ type: 'character-healed', amount: 0 })
+    )
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'history-action-resolved',
+        action: 'hero-power',
+        source: expect.objectContaining({ heroPowerId: 'priest-lesser-heal' })
+      })
     )
   })
 
@@ -199,7 +257,9 @@ describe('classic hero powers', () => {
     expect(result.events).toContainEqual(
       expect.objectContaining({
         type: 'weapon-equipped',
-        replacedWeapon: expect.objectContaining({ cardId: 'basic_wicked_knife' })
+        replacedWeapon: expect.objectContaining({
+          cardId: 'basic_wicked_knife'
+        })
       })
     )
   })
@@ -268,7 +328,9 @@ describe('classic hero powers', () => {
       'hero-power-used',
       'fatigue',
       'character-damaged',
-      'character-damaged'
+      'character-damaged',
+      'history-action-resolved',
+      'history-action-resolved'
     ])
     cycleBackToHuman(match)
     expect(match.getState().players[0]).toMatchObject({
@@ -292,7 +354,7 @@ describe('classic hero powers', () => {
     accept(match.dispatch({ type: 'end-turn', participantId: HUMAN_ID }))
     const attacker = match.getState().players[1].board[0]
     expect(attacker).toBeDefined()
-    accept(
+    const attackResult = accept(
       match.dispatch({
         type: 'attack-character',
         participantId: OPPONENT_ID,
@@ -300,7 +362,202 @@ describe('classic hero powers', () => {
         defender: { kind: 'hero' }
       })
     )
-    expect(match.getState().players[0].hero).toMatchObject({ health: 30, armor: 1 })
+    expect(match.getState().players[0].hero).toMatchObject({
+      health: 30,
+      armor: 1
+    })
+    const history = attackResult.events.find(
+      (
+        event
+      ): event is Extract<OpeningMatchEvent, { type: 'history-action-resolved' }> =>
+        event.type === 'history-action-resolved'
+    )
+    expect(history).toMatchObject({
+      action: 'combat',
+      source: {
+        kind: 'minion',
+        cardId: 'basic_acidic_swamp_ooze',
+        participantId: OPPONENT_ID
+      },
+      outcomes: [
+        {
+          kind: 'damage',
+          amount: 3,
+          target: {
+            kind: 'hero',
+            participantId: HUMAN_ID,
+            heroId: 'garrosh'
+          }
+        }
+      ]
+    })
+  })
+})
+
+describe('match history', () => {
+  function latestHistory(result: OpeningAcceptedResult): HistoryActionResolvedEvent {
+    const history = result.events.find(
+      (event): event is HistoryActionResolvedEvent =>
+        event.type === 'history-action-resolved'
+    )
+    expect(history).toBeDefined()
+    if (!history) throw new Error('Expected a history action event.')
+    return history
+  }
+
+  it('captures effect-runtime spell targets for Fireball and Ice Lance', () => {
+    const match = startMatch('jaina', 'garrosh')
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: HUMAN_ID,
+        cardId: 'basic_fireball'
+      })
+    )
+    const fireball = match
+      .getState()
+      .players[0]!.hand.find((card) => card.cardId === 'basic_fireball')
+    expect(fireball).toBeDefined()
+    const fireballHistory = latestHistory(
+      accept(
+        match.dispatch({
+          type: 'play-card',
+          participantId: HUMAN_ID,
+          cardInstanceId: fireball!.instanceId,
+          targets: [{ kind: 'hero', participantId: OPPONENT_ID }]
+        })
+      )
+    )
+    expect(fireballHistory.outcomes).toContainEqual(
+      expect.objectContaining({
+        kind: 'damage',
+        amount: 6,
+        target: expect.objectContaining({
+          kind: 'hero',
+          participantId: OPPONENT_ID,
+          heroId: 'garrosh'
+        })
+      })
+    )
+
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: HUMAN_ID,
+        cardId: 'classic_ice_lance'
+      })
+    )
+    const iceLance = match
+      .getState()
+      .players[0]!.hand.find((card) => card.cardId === 'classic_ice_lance')
+    expect(iceLance).toBeDefined()
+    const iceLanceHistory = latestHistory(
+      accept(
+        match.dispatch({
+          type: 'play-card',
+          participantId: HUMAN_ID,
+          cardInstanceId: iceLance!.instanceId,
+          targets: [{ kind: 'hero', participantId: OPPONENT_ID }]
+        })
+      )
+    )
+    expect(iceLanceHistory.outcomes).toContainEqual(
+      expect.objectContaining({
+        kind: 'freeze',
+        target: expect.objectContaining({
+          kind: 'hero',
+          participantId: OPPONENT_ID
+        })
+      })
+    )
+  })
+
+  it('records Baron Geddon and Doomsayer turn triggers', () => {
+    const match = startMatch('jaina', 'garrosh')
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: HUMAN_ID,
+        cardId: 'classic_baron_geddon'
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: OPPONENT_ID,
+        cardId: 'basic_acidic_swamp_ooze'
+      })
+    )
+    const geddonTurn = accept(
+      match.dispatch({ type: 'end-turn', participantId: HUMAN_ID })
+    )
+    const geddonHistory = geddonTurn.events.find(
+      (event): event is HistoryActionResolvedEvent =>
+        event.type === 'history-action-resolved' &&
+        event.source.cardId === 'classic_baron_geddon'
+    )
+    expect(geddonHistory?.action).toBe('trigger')
+    expect(geddonHistory?.outcomes).toContainEqual(
+      expect.objectContaining({ kind: 'damage', amount: 2 })
+    )
+
+    const geddonOpponentTurn = accept(
+      match.dispatch({ type: 'end-turn', participantId: OPPONENT_ID })
+    )
+    expect(
+      geddonOpponentTurn.events.some(
+        (event) =>
+          event.type === 'history-action-resolved' &&
+          event.source.cardId === 'classic_baron_geddon'
+      )
+    ).toBe(false)
+
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: HUMAN_ID,
+        cardId: 'classic_doomsayer'
+      })
+    )
+    const doomsayerOpponentTurn = accept(
+      match.dispatch({ type: 'end-turn', participantId: HUMAN_ID })
+    )
+    expect(
+      doomsayerOpponentTurn.events.some(
+        (event) =>
+          event.type === 'history-action-resolved' &&
+          event.source.cardId === 'classic_doomsayer'
+      )
+    ).toBe(false)
+    const doomsayerTurn = accept(
+      match.dispatch({ type: 'end-turn', participantId: OPPONENT_ID })
+    )
+    const doomsayerHistory = doomsayerTurn.events.find(
+      (event): event is HistoryActionResolvedEvent =>
+        event.type === 'history-action-resolved' &&
+        event.source.cardId === 'classic_doomsayer'
+    )
+    expect(doomsayerHistory?.action).toBe('trigger')
+    expect(doomsayerHistory?.outcomes).toContainEqual(
+      expect.objectContaining({ kind: 'destroy' })
+    )
+  })
+
+  it('keeps explicitly global turn triggers active on either turn', () => {
+    const match = startMatch('jaina', 'garrosh')
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: HUMAN_ID,
+        cardId: 'classic_gruul'
+      })
+    )
+
+    accept(match.dispatch({ type: 'end-turn', participantId: HUMAN_ID }))
+    expect(match.getState().players[0].board[0]?.attack).toBe(8)
+
+    accept(match.dispatch({ type: 'end-turn', participantId: OPPONENT_ID }))
+    expect(match.getState().players[0].board[0]?.attack).toBe(9)
   })
 })
 
@@ -323,7 +580,7 @@ describe('Hero cards', () => {
 
     const result = accept(
       match.dispatch({
-        type: 'play-hero',
+        type: 'play-card',
         participantId: HUMAN_ID,
         cardInstanceId: jaraxxus!.instanceId
       })
@@ -331,7 +588,10 @@ describe('Hero cards', () => {
     const player = match.getState().players[0]
     expect(player.heroId).toBe('jaraxxus')
     expect(player.hero).toMatchObject({ health: 28, maxHealth: 30, armor: 5 })
-    expect(player.heroPower).toMatchObject({ id: 'jaraxxus-inferno', available: true })
+    expect(player.heroPower).toMatchObject({
+      id: 'jaraxxus-inferno',
+      available: true
+    })
     expect(player.weapon).toMatchObject({
       cardId: 'classic_blood_fury',
       attack: 3,
@@ -340,5 +600,83 @@ describe('Hero cards', () => {
     expect(result.events).toContainEqual(
       expect.objectContaining({ type: 'hero-replaced', armorGained: 5 })
     )
+  })
+})
+
+describe('public match projections', () => {
+  it('masks private card identities while preserving the viewer hand', () => {
+    const match = startMatch('jaina')
+    const publicState = match.getPublicState!(HUMAN_ID)
+    const ownPlayer = publicState.players.find(
+      (player) => player.participantId === HUMAN_ID
+    )!
+    const opponentPlayer = publicState.players.find(
+      (player) => player.participantId === OPPONENT_ID
+    )!
+
+    expect(ownPlayer.deck.every((card) => card.cardId === null)).toBe(true)
+    expect(opponentPlayer.deck.every((card) => card.cardId === null)).toBe(true)
+    expect(ownPlayer.hand.every((card) => card.cardId !== null)).toBe(true)
+    expect(opponentPlayer.hand.every((card) => card.cardId === null)).toBe(true)
+    expect(ownPlayer.hand[0]).not.toHaveProperty('knownTo')
+  })
+
+  it('masks opponent card-bearing events but reveals the viewer event', () => {
+    const match = startMatch('jaina')
+    const card = match.getState().players[1].hand[0]!
+    const opponentEvent = {
+      type: 'card-drawn' as const,
+      participantId: OPPONENT_ID,
+      card
+    }
+    const ownEvent = { ...opponentEvent, participantId: HUMAN_ID }
+    const projected = match.getPublicEvents!(HUMAN_ID, [
+      opponentEvent,
+      ownEvent
+    ] as OpeningMatchEvent[])
+
+    expect(projected[0]).toMatchObject({ card: { cardId: null } })
+    expect(projected[1]).toMatchObject({ card: { cardId: card.cardId } })
+  })
+
+  it('reveals a burned opponent card to every viewer', () => {
+    const match = startMatch('jaina')
+    const card = match.getState().players[1].hand[0]!
+    const projected = match.getPublicEvents!(HUMAN_ID, [
+      {
+        type: 'card-burned',
+        participantId: OPPONENT_ID,
+        card
+      }
+    ] as OpeningMatchEvent[])
+
+    expect(projected[0]).toMatchObject({ card: { cardId: card.cardId } })
+  })
+
+  it('masks opponent effect source and nested card payload identities', () => {
+    const match = startMatch('jaina')
+    const effectEvent: OpeningMatchEvent = {
+      type: 'effect-resolved',
+      revision: 1,
+      sourceInstanceId: `${OPPONENT_ID}:secret:1`,
+      sourceCardId: asCardId('basic_fireball'),
+      controllerId: OPPONENT_ID,
+      action: 'add-to-hand',
+      actionPath: '.effects[0].actions[0]',
+      data: {
+        cardId: 'basic_fireball',
+        nested: { cardId: 'basic_fireball' },
+        card: { instanceId: 'hidden-card', cardId: asCardId('basic_fireball') }
+      }
+    }
+    const projected = match.getPublicEvents!(HUMAN_ID, [effectEvent])
+    expect(projected[0]).toMatchObject({
+      sourceCardId: null,
+      data: {
+        cardId: null,
+        nested: { cardId: null },
+        card: { cardId: null }
+      }
+    })
   })
 })

@@ -43,7 +43,7 @@ function createStartedMatch() {
   const match = createOpeningMatch(
     setup,
     [deck('human-deck', 'rexxar'), deck('opponent-deck', 'jaina')],
-    { next: () => 0.1 }
+    { next: () => 0.1, snapshot: () => 0, restore: () => undefined }
   )
   accept(
     match.dispatch({
@@ -157,7 +157,7 @@ describe('dev deck commands', () => {
     ).toMatchObject({ accepted: false, code: 'wrong-phase' })
   })
 
-  it('updates hero, power, fatigue, and zones for the selected player', () => {
+  it('updates hero, power, mana, fatigue, zones, and weapons for the selected player', () => {
     const match = createStartedMatch()
     accept(
       match.dispatch({
@@ -186,12 +186,52 @@ describe('dev deck commands', () => {
     accept(
       match.dispatch({ type: 'dev-clear-zone', participantId: HUMAN_ID, zone: 'hand' })
     )
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: HUMAN_ID,
+        available: 10,
+        maximum: 10
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: HUMAN_ID,
+        cardId: 'basic_acidic_swamp_ooze'
+      })
+    )
+    accept(
+      match.dispatch({ type: 'dev-clear-zone', participantId: HUMAN_ID, zone: 'board' })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: HUMAN_ID,
+        cardId: 'basic_wicked_knife'
+      })
+    )
+    const weapon = match.getState().players[0].hand[0]!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: HUMAN_ID,
+        cardInstanceId: weapon.instanceId
+      })
+    )
+    expect(match.getState().players[0].weapon).toMatchObject({
+      cardId: 'basic_wicked_knife'
+    })
+    accept(match.dispatch({ type: 'dev-remove-weapon', participantId: HUMAN_ID }))
 
     const player = match.getState().players[0]
     expect(player.hero).toMatchObject({ health: 12, armor: 5, attack: 2 })
     expect(player.heroPower).toMatchObject({ cost: 0, available: false })
     expect(player.fatigueDamage).toBe(5)
     expect(player.hand).toHaveLength(0)
+    expect(player.board).toHaveLength(0)
+    expect(player.mana).toMatchObject({ available: 9, maximum: 10 })
+    expect(player.weapon).toBeNull()
   })
 
   it('draws for the selected player and turns an empty-deck draw into fatigue', () => {

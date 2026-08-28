@@ -10,7 +10,7 @@ import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { HeroView } from '../../rendering/heroes/hero-view'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 
-export type MatchResult = 'win' | 'defeat'
+export type MatchResult = 'win' | 'defeat' | 'draw'
 
 export interface MatchResultOverlayOptions {
   readonly winScreen: Texture
@@ -67,6 +67,8 @@ export class MatchResultOverlay extends Container {
   show(result: MatchResult, hero: HeroView): void {
     this.frame.texture =
       result === 'win' ? this.options.winScreen : this.options.defeatScreen
+    this.continuePrompt.text =
+      result === 'draw' ? 'Draw � Click to continue' : 'Click to continue'
     hero.removeFromParent()
     applyPlacement(hero, GAME_BOARD_LAYOUT.matchResult.localHero)
     hero.label = 'game.match-result.hero'

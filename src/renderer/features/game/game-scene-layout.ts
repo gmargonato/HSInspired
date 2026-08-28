@@ -48,6 +48,17 @@ export const GAME_BOARD_LAYOUT = {
       height: 530
     }
   },
+  cardChoice: {
+    /** Dynamic choice panel is centered over the play surface while input is collected. */
+    centerX: 960,
+    centerY: 430,
+    panelWidth: 650,
+    panelPadding: 24,
+    headingHeight: 48,
+    optionWidth: 590,
+    optionHeight: 62,
+    optionGap: 12
+  },
 
   boardMinions: {
     /** Local row, raised toward the board center and aligned with its drop zone. */

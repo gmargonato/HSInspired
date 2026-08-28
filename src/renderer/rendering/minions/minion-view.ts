@@ -10,11 +10,14 @@ import {
 } from './minion-layout'
 import { SleepingZs } from './sleeping-zs'
 import { AnimationScope } from '../../animation/animations'
+import { minionStatColor } from './minion-stat-presentation'
 
 export interface MinionViewModel {
   readonly label: string
   readonly attack: number
   readonly health: number
+  /** Original card attack used to tint current attack after buffs/debuffs. */
+  readonly originalAttack?: number
   /** Original card health used to tint current health after damage/healing. */
   readonly originalHealth?: number
   readonly legendary: boolean
@@ -44,12 +47,6 @@ interface StatGroup {
   readonly group: Container
   readonly value: Text
 }
-
-export const MINION_HEALTH_COLORS = {
-  normal: 0xffffff,
-  damaged: 0xff4a4a,
-  increased: 0x6cff47
-} as const
 
 function setEventModeNone(container: Container): void {
   container.eventMode = 'none'
@@ -100,6 +97,7 @@ export class MinionView extends Container {
   private readonly targetingOutline: AnimatedOutline
   private readonly sleepingZs: SleepingZs
   private readonly animationScope = new AnimationScope()
+  private readonly originalAttack: number
   private readonly originalHealth: number
   private canAttackEnabled = false
   private targetingOutlineEnabled = false
@@ -117,6 +115,7 @@ export class MinionView extends Container {
   ) {
     super()
     this.label = model.label
+    this.originalAttack = model.originalAttack ?? model.attack
     this.originalHealth = model.originalHealth ?? model.health
     this.eventMode = 'none'
     this.pivot.set(MINION_CANVAS.width / 2, MINION_CANVAS.height / 2)
@@ -233,6 +232,7 @@ export class MinionView extends Container {
     )
     this.healthLabel = health.value
     this.addChild(health.group)
+    this.setAttackColor(model.attack)
     this.setHealthColor(model.health)
 
     // Green attack-ready outline: solid oval proxy so the hollow frame does not create an inner glow.
@@ -289,16 +289,16 @@ export class MinionView extends Container {
   setStats(attack: number, health: number): void {
     this.attackLabel.text = String(attack)
     this.healthLabel.text = String(health)
+    this.setAttackColor(attack)
     this.setHealthColor(health)
   }
 
+  private setAttackColor(attack: number): void {
+    this.attackLabel.style.fill = minionStatColor(attack, this.originalAttack)
+  }
+
   private setHealthColor(health: number): void {
-    this.healthLabel.style.fill =
-      health < this.originalHealth
-        ? MINION_HEALTH_COLORS.damaged
-        : health > this.originalHealth
-          ? MINION_HEALTH_COLORS.increased
-          : MINION_HEALTH_COLORS.normal
+    this.healthLabel.style.fill = minionStatColor(health, this.originalHealth)
   }
 
   setTaunt(visible: boolean): void {

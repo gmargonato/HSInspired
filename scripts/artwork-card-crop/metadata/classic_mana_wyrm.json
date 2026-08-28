@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_mana_wyrm.jpg",
+  "source_name": "classic_mana_wyrm.jpg",
+  "crop_box": [
+    0,
+    39,
+    732,
+    771
+  ],
+  "scale": 0.6830601092896175,
+  "offset_x": 0.0,
+  "offset_y": -26.57342657342658,
+  "timestamp": "2026-08-27T11:17:14.156541",
+  "card_id": "classic_mana_wyrm",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

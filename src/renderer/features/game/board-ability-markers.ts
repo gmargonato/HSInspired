@@ -3,6 +3,7 @@ import type {
   CardEffectBlock,
   CardTrigger
 } from '../../../game/content/cards'
+import type { BoardMinion } from '../../../game/match'
 
 export interface BoardAbilityMarkers {
   readonly taunt: boolean
@@ -79,5 +80,37 @@ export function boardAbilityMarkers(
     poisonous,
     trigger,
     temporaryAbilityLabels
+  }
+}
+
+/**
+ * Derives the runtime-only markers that cannot be read from a card definition.
+ * Permanent and delayed keyword enchantments stay on the board minion snapshot;
+ * the match runtime has already removed expired/source-dependent enchantments.
+ */
+export function boardMinionRuntimeMarkers(
+  minion: BoardMinion,
+  turnNumber: number
+): Pick<BoardAbilityMarkers, 'taunt' | 'divineShield' | 'stealth'> {
+  if (minion.silenced) {
+    return { taunt: false, divineShield: false, stealth: false }
+  }
+
+  const keywords = new Set(minion.keywords ?? [])
+  for (const enchantment of minion.enchantments ?? []) {
+    if (
+      (enchantment.startsOnTurn !== undefined &&
+        enchantment.startsOnTurn > turnNumber) ||
+      (enchantment.duration === 'while-damaged' && minion.health >= minion.maxHealth)
+    )
+      continue
+    for (const keyword of enchantment.keywords ?? []) keywords.add(keyword)
+    for (const keyword of enchantment.removedKeywords ?? []) keywords.delete(keyword)
+  }
+
+  return {
+    taunt: keywords.has('taunt'),
+    divineShield: minion.divineShield === true,
+    stealth: minion.stealth === true
   }
 }

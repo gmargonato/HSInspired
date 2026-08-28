@@ -28,6 +28,14 @@ export interface CardLayerAppearance {
   readonly blendMode?: ClassFrameBlendMode
 }
 
+export type CardCostColor = 'normal' | 'reduced' | 'increased'
+
+const CARD_COST_COLORS: Record<CardCostColor, number> = {
+  normal: 0xffffff,
+  reduced: 0x6cff47,
+  increased: 0xff4a4a
+}
+
 /** Read-only production diagnostics for a semantic card node. */
 export interface CardNodeMetadata {
   readonly path: string
@@ -327,6 +335,20 @@ export class CardView extends Container {
       if (appearance.tint !== undefined) object.tint = appearance.tint
       if (appearance.blendMode !== undefined) object.blendMode = appearance.blendMode
     }
+  }
+
+  /** Refreshes the visible mana value without rebuilding the card tree. */
+  setManaCost(cost: number): void {
+    const entry = this.treeObjects.get('card.stats.mana.label')
+    if (!entry || !(entry.object instanceof Text)) return
+    entry.object.text = String(Math.max(0, Math.floor(cost)))
+  }
+
+  /** Tints the mana value according to its derived cost relative to printed cost. */
+  setManaCostColor(color: CardCostColor): void {
+    const entry = this.treeObjects.get('card.stats.mana.label')
+    if (!entry || !(entry.object instanceof Text)) return
+    entry.object.style.fill = CARD_COST_COLORS[color]
   }
 
   /** Returns the authored semantic nodes for diagnostics and dev tooling. */

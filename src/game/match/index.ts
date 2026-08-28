@@ -6,3 +6,13 @@ export * from './proof'
 export * from './rng'
 export * from './opening-match'
 export * from './turn-match'
+export {
+  captureDeathBatch,
+  compareRuntimeOrder,
+  isRejectedWithoutMutation
+} from './contracts'
+export type { ResolutionCorrelation, TriggerEventContract } from './contracts'
+export * from './testing/match-scenario-builder'
+export * from './effects/capability'
+export * from './effects/effect-runtime'
+export * from './rules'

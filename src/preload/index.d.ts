@@ -1,14 +1,16 @@
 import type { SceneRequest } from '../shared/scene-navigation'
 import type { DecksApi } from '../shared/ipc/decks'
+import type { WindowSettingsApi } from '../shared/ipc/window-settings'
 
-interface SceneNavigationAPI {
+interface AppAPI {
   onSceneRequest(listener: (request: SceneRequest) => void): () => void
   decks: DecksApi
+  windowSettings: WindowSettingsApi
 }
 
 declare global {
   interface Window {
-    api: SceneNavigationAPI
+    api: AppAPI
   }
 }
 

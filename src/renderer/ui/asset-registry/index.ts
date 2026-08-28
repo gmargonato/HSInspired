@@ -23,6 +23,8 @@ import uiCancelButtonImage from '@assets/images/ui/common/ui-cancel-button.png'
 import verticalSliderImage from '@assets/images/ui/common/vertical-slider.png'
 import menuSettingsBackgroundImage from '@assets/images/ui/settings/menu-settings-background.png'
 import gameSettingsBackgroundImage from '@assets/images/ui/settings/game-settings-background.png'
+import settingsDropDownListImage from '@assets/images/ui/settings/settings-drop-down-list.png'
+import settingsDropDownButtonImage from '@assets/images/ui/settings/settings-drop-down-button.png'
 import gameBoardImage from '@assets/images/match/BOARD.png'
 import gameDeckImage from '@assets/images/match/deck.png'
 import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
@@ -30,6 +32,8 @@ import gameEnemyTurnImage from '@assets/images/match/button-enemy-turn.png'
 import gameYourTurnImage from '@assets/images/match/flag-your-turn.png'
 import fatigueImage from '@assets/images/match/fatigue.png'
 import damageIndicatorImage from '@assets/images/match/damage-indicator.png'
+import secretImage from '@assets/images/match/secret.png'
+import secretRevealedScreenImage from '@assets/images/match/secret-revealed-screen.png'
 import cardBackImage from '@assets/images/cards/card-back.png'
 import startOfGameVsImage from '@assets/images/match/start-of-game-vs.png'
 import mulliganAnnouncementImage from '@assets/images/match/mulligan-announcement.png'
@@ -37,7 +41,16 @@ import mulliganReplaceCrossImage from '@assets/images/match/mulligan-replace-cro
 import mulliganReplacedLabelImage from '@assets/images/match/mulligan-replaced-label.png'
 import confirmMulliganButtonImage from '@assets/images/match/confirm-mulligan-button.png'
 import mulliganCoinAnnouncementImage from '@assets/images/match/mulligan-coin-announcement.png'
+import historyLocalImage from '@assets/images/match/history-local.png'
+import historyRemoteImage from '@assets/images/match/history-remote.png'
+import historyArrowImage from '@assets/images/match/history-arrow.png'
+import historyBurnCardImage from '@assets/images/match/burn.png'
+import historyBurnThumbImage from '@assets/images/match/history-burn-thumb.png'
+import historyFatigueCardImage from '@assets/images/match/history-fatigue-card.png'
+import historyFatigueThumbImage from '@assets/images/match/history-fatigue-thumb.png'
 import manaCrystalImage from '@assets/images/cards/mana.png'
+import historySecretCardImage from '@assets/images/match/history-secret-card.png'
+import historySecretThumbImage from '@assets/images/match/history-secret-thumb.png'
 import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
 import heroPowerManaImage from '@assets/images/heroes/hero-power/hero-power-mana.png'
 import minionFrameImage from '@assets/images/board/minion-frame.png'
@@ -222,12 +235,48 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'menu-settings'
   ),
   asset(
+    'scene.menu-settings.resolution-field',
+    ASSET_BUNDLE_IDS.menuSettings,
+    'resolutionField',
+    settingsDropDownListImage,
+    344,
+    76,
+    'menu-settings'
+  ),
+  asset(
+    'scene.menu-settings.resolution-button',
+    ASSET_BUNDLE_IDS.menuSettings,
+    'resolutionButton',
+    settingsDropDownButtonImage,
+    62,
+    42,
+    'menu-settings'
+  ),
+  asset(
     'scene.game-settings.background',
     ASSET_BUNDLE_IDS.gameSettings,
     'background',
     gameSettingsBackgroundImage,
     1920,
     1080,
+    'game-settings'
+  ),
+  asset(
+    'scene.game-settings.resolution-field',
+    ASSET_BUNDLE_IDS.gameSettings,
+    'resolutionField',
+    settingsDropDownListImage,
+    344,
+    76,
+    'game-settings'
+  ),
+  asset(
+    'scene.game-settings.resolution-button',
+    ASSET_BUNDLE_IDS.gameSettings,
+    'resolutionButton',
+    settingsDropDownButtonImage,
+    62,
+    42,
     'game-settings'
   ),
   asset(
@@ -273,6 +322,105 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     damageIndicatorImage,
     159,
     163,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-local',
+    ASSET_BUNDLE_IDS.game,
+    'historyLocal',
+    historyLocalImage,
+    75,
+    75,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-remote',
+    ASSET_BUNDLE_IDS.game,
+    'historyRemote',
+    historyRemoteImage,
+    75,
+    75,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-arrow',
+    ASSET_BUNDLE_IDS.game,
+    'historyArrow',
+    historyArrowImage,
+    91,
+    92,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-burn-card',
+    ASSET_BUNDLE_IDS.game,
+    'historyBurnCard',
+    historyBurnCardImage,
+    417,
+    656,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-burn-thumb',
+    ASSET_BUNDLE_IDS.game,
+    'historyBurnThumb',
+    historyBurnThumbImage,
+    100,
+    100,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-secret-card',
+    ASSET_BUNDLE_IDS.game,
+    'historySecretCard',
+    historySecretCardImage,
+    288,
+    392,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-secret-thumb',
+    ASSET_BUNDLE_IDS.game,
+    'historySecretThumb',
+    historySecretThumbImage,
+    100,
+    100,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-fatigue-card',
+    ASSET_BUNDLE_IDS.game,
+    'historyFatigueCard',
+    historyFatigueCardImage,
+    288,
+    392,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-fatigue-thumb',
+    ASSET_BUNDLE_IDS.game,
+    'historyFatigueThumb',
+    historyFatigueThumbImage,
+    100,
+    100,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.secret',
+    ASSET_BUNDLE_IDS.game,
+    'secret',
+    secretImage,
+    112,
+    112,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.secret-revealed-screen',
+    ASSET_BUNDLE_IDS.game,
+    'secretRevealedScreen',
+    secretRevealedScreenImage,
+    1920,
+    1080,
     'game-scene'
   ),
   asset(
@@ -984,7 +1132,10 @@ const manifestBundles = [
   name: bundleName,
   assets: ASSET_DEFINITIONS.filter(
     (definition) => definition.bundle === bundleName
-  ).map((definition) => ({ alias: definition.alias, src: definition.source.src }))
+  ).map((definition) => ({
+    alias: definition.alias,
+    src: definition.source.src
+  }))
 }))
 
 export const ASSETS_MANIFEST: AssetsManifest = { bundles: manifestBundles }
@@ -1039,6 +1190,17 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   board: Texture
   fatigue: Texture
   damageIndicator: Texture
+  historyLocal: Texture
+  historyRemote: Texture
+  historyArrow: Texture
+  historyBurnCard: Texture
+  historyBurnThumb: Texture
+  historySecretCard: Texture
+  historySecretThumb: Texture
+  historyFatigueCard: Texture
+  historyFatigueThumb: Texture
+  secret: Texture
+  secretRevealedScreen: Texture
   minionFrame: Texture
   minionFrameLegendary: Texture
   minionTaunt: Texture
@@ -1074,8 +1236,10 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   defeatScreen: Texture
 }
 
-export interface SettingsBackgroundAssets {
+export interface SettingsAssets {
   background: Texture
+  resolutionField: Texture
+  resolutionButton: Texture
 }
 
 export interface SharedUIAssets {

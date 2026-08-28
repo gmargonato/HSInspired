@@ -1,6 +1,9 @@
 import { Container, Rectangle, Sprite, Texture } from 'pixi.js'
 import { CardView } from '../../rendering/cards/card-view'
-import { AnimatedOutline } from '../../rendering/effects/animated-outline'
+import {
+  AnimatedOutline,
+  type OutlinePaletteName
+} from '../../rendering/effects/animated-outline'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 
 const SUMMON_GHOST_COLOR = 0x79e9ff
@@ -90,6 +93,11 @@ export class GameCardSlot extends Container {
   setPlayableOutlineEnabled(enabled: boolean): void {
     this.playableOutlineRequested = enabled
     this.syncPlayableOutline()
+  }
+
+  /** Marks a currently playable card whose conditional effect is enhanced. */
+  setPlayableOutlinePalette(palette: OutlinePaletteName): void {
+    this.playableOutline.setPalette(palette)
   }
 
   isPlayableOutlineEnabled(): boolean {

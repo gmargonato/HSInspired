@@ -162,3 +162,5 @@ This executes the complete safety net:
 3. `npm run typecheck` — TypeScript checks across node and web contexts.
 4. `npm run deps:check` — Architecture dependency cruiser validation.
 5. `npm run build:smoke` — Production build smoke test and dev-marker leak check.
+
+IMPORTANT: If any test fails because of the live-numbers are different from the test files, assume that the human made manual adjustments and those are the correct values he wants.

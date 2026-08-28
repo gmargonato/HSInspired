@@ -31,7 +31,6 @@ const LEFT_BUTTON_MASK = 1
 const CUSTOM_CURSOR_CLASS = 'custom-cursor-enabled'
 const TARGET_CIRCLE_SIZE = 112
 const TARGET_CIRCLE_OFFSET_Y = -10
-
 interface CursorAsset {
   image: string
   width: number
@@ -125,6 +124,7 @@ export class CursorManager {
   private readonly element: HTMLImageElement
   private readonly arrowHeadElement: HTMLImageElement
   private readonly targetCircleElement: HTMLImageElement
+  private readonly targetingEffectLabelElement: HTMLDivElement
   private scale = DEFAULT_CURSOR_SCALE
   private variant: CursorVariant = 'default'
   private contextVariant: CursorContextVariant | null = null
@@ -136,6 +136,8 @@ export class CursorManager {
   private targeting = false
   private targetingTargetPoint: CursorTargetPoint | null = null
   private targetingAngle = 0
+  /** CSS pixels per Pixi design-space pixel for DOM targeting overlays. */
+  private targetingVisualScale = 1
 
   constructor(host: HTMLElement) {
     this.host = host
@@ -160,9 +162,6 @@ export class CursorManager {
     this.arrowHeadElement.style.visibility = 'hidden'
     // Tip of the arrow head image is at (60,6) in the 119×57 source.
     // Keep native 1× scale per spec: 119×57.
-    this.arrowHeadElement.style.transformOrigin = `${TARGETING_ARROW_HEAD.tipX}px ${TARGETING_ARROW_HEAD.tipY}px`
-    this.arrowHeadElement.style.width = `${TARGETING_ARROW_HEAD.width}px`
-    this.arrowHeadElement.style.height = `${TARGETING_ARROW_HEAD.height}px`
     this.arrowHeadElement.style.zIndex = '9999'
 
     this.targetCircleElement = document.createElement('img')
@@ -174,14 +173,29 @@ export class CursorManager {
     this.targetCircleElement.style.position = 'fixed'
     this.targetCircleElement.style.left = '0'
     this.targetCircleElement.style.top = '0'
-    this.targetCircleElement.style.width = `${TARGET_CIRCLE_SIZE}px`
-    this.targetCircleElement.style.height = `${TARGET_CIRCLE_SIZE}px`
     this.targetCircleElement.style.pointerEvents = 'none'
     this.targetCircleElement.style.visibility = 'hidden'
     this.targetCircleElement.style.zIndex = '9998'
 
+    this.targetingEffectLabelElement = document.createElement('div')
+    this.targetingEffectLabelElement.className = 'game-cursor-targeting-label'
+    this.targetingEffectLabelElement.setAttribute('aria-hidden', 'true')
+    this.targetingEffectLabelElement.style.position = 'fixed'
+    this.targetingEffectLabelElement.style.pointerEvents = 'none'
+    this.targetingEffectLabelElement.style.visibility = 'hidden'
+    this.targetingEffectLabelElement.style.zIndex = '10000'
+    this.targetingEffectLabelElement.style.transform = 'translate(-50%, -50%)'
+    this.targetingEffectLabelElement.style.color = '#ffffff'
+    this.targetingEffectLabelElement.style.fontFamily = 'Belwe'
+    this.targetingEffectLabelElement.style.fontSize = '24px'
+    this.targetingEffectLabelElement.style.fontWeight = 'normal'
+    this.targetingEffectLabelElement.style.webkitTextStroke = '2px #000000'
+    this.targetingEffectLabelElement.style.textAlign = 'center'
+    this.targetingEffectLabelElement.style.whiteSpace = 'nowrap'
+
     this.applyVariant()
     this.applyScale()
+    this.applyTargetingVisualScale()
     this.updateArrowHeadPosition()
     this.updateTargetCirclePosition()
   }
@@ -194,6 +208,7 @@ export class CursorManager {
     this.host.appendChild(this.element)
     this.host.appendChild(this.targetCircleElement)
     this.host.appendChild(this.arrowHeadElement)
+    this.host.appendChild(this.targetingEffectLabelElement)
 
     // Capture at the window level so Pixi's own event handling cannot prevent
     // the global cursor state from receiving a release outside an actor.
@@ -221,9 +236,11 @@ export class CursorManager {
     this.element.remove()
     this.targetCircleElement.remove()
     this.arrowHeadElement.remove()
+    this.targetingEffectLabelElement.remove()
     this.element.style.visibility = 'hidden'
     this.arrowHeadElement.style.visibility = 'hidden'
     this.targetCircleElement.style.visibility = 'hidden'
+    this.targetingEffectLabelElement.style.visibility = 'hidden'
     this.contextVariant = null
     this.leftButtonDown = false
     this.pointerInsideHost = false
@@ -266,6 +283,7 @@ export class CursorManager {
       this.targetingTargetPoint = null
       this.arrowHeadElement.style.visibility = 'hidden'
       this.targetCircleElement.style.visibility = 'hidden'
+      this.targetingEffectLabelElement.style.visibility = 'hidden'
       if (this.pointerInsideHost && this.pointerX !== null) this.show()
       else this.hide()
     }
@@ -275,10 +293,29 @@ export class CursorManager {
     return this.targeting
   }
 
+  /** Keeps DOM targeting artwork at 1× relative to Pixi design space. */
+  setTargetingVisualScale(scale: number): void {
+    const next = Number.isFinite(scale) && scale > 0 ? scale : 1
+    if (Math.abs(next - this.targetingVisualScale) < 0.0001) return
+    this.targetingVisualScale = next
+    this.applyTargetingVisualScale()
+    this.updateArrowHeadPosition()
+    this.updateTargetCirclePosition()
+    this.updateTargetingEffectLabelPosition()
+  }
+
   /** Positions the target indicator at the current valid character hover point. */
   setTargetingTarget(point: CursorTargetPoint | null): void {
     this.targetingTargetPoint = point
     this.updateTargetCirclePosition()
+    this.updateTargetingEffectLabelPosition()
+    this.syncTargetingVisibility()
+  }
+
+  /** Shows action feedback above the DOM target circle, never behind it in Pixi. */
+  setTargetingEffectLabel(text: string | null): void {
+    this.targetingEffectLabelElement.textContent = text ?? ''
+    this.updateTargetingEffectLabelPosition()
     this.syncTargetingVisibility()
   }
 
@@ -434,8 +471,9 @@ export class CursorManager {
     if (this.pointerX === null || this.pointerY === null) return
     // Tip at top-center (60,6) in the native 119×57 head – keep the tip glued to the pointer
     // and rotate so the head points toward the mouse direction.
-    this.arrowHeadElement.style.left = `${this.pointerX - TARGETING_ARROW_HEAD.tipX}px`
-    this.arrowHeadElement.style.top = `${this.pointerY - TARGETING_ARROW_HEAD.tipY}px`
+    const scale = this.targetingVisualScale
+    this.arrowHeadElement.style.left = `${this.pointerX - TARGETING_ARROW_HEAD.tipX * scale}px`
+    this.arrowHeadElement.style.top = `${this.pointerY - TARGETING_ARROW_HEAD.tipY * scale}px`
     // Source image points up (-Y). Vector angle 0 = east, so add 90° to align.
     const degrees = ((this.targetingAngle + Math.PI / 2) * 180) / Math.PI
     this.arrowHeadElement.style.transform = `rotate(${degrees}deg)`
@@ -444,10 +482,31 @@ export class CursorManager {
   private updateTargetCirclePosition(): void {
     const point = this.targetingTargetPoint
     if (!point) return
-    this.targetCircleElement.style.left = `${point.x - TARGET_CIRCLE_SIZE / 2}px`
+    const scale = this.targetingVisualScale
+    const size = TARGET_CIRCLE_SIZE * scale
+    this.targetCircleElement.style.left = `${point.x - size / 2}px`
     this.targetCircleElement.style.top = `${
-      point.y + TARGET_CIRCLE_OFFSET_Y - TARGET_CIRCLE_SIZE / 2
+      point.y + TARGET_CIRCLE_OFFSET_Y * scale - size / 2
     }px`
+  }
+
+  private updateTargetingEffectLabelPosition(): void {
+    const point = this.targetingTargetPoint
+    if (!point) return
+    const scale = this.targetingVisualScale
+    this.targetingEffectLabelElement.style.left = `${point.x}px`
+    this.targetingEffectLabelElement.style.top = `${
+      point.y + TARGET_CIRCLE_OFFSET_Y * scale - 5
+    }px`
+  }
+
+  private applyTargetingVisualScale(): void {
+    const scale = this.targetingVisualScale
+    this.arrowHeadElement.style.transformOrigin = `${TARGETING_ARROW_HEAD.tipX * scale}px ${TARGETING_ARROW_HEAD.tipY * scale}px`
+    this.arrowHeadElement.style.width = `${TARGETING_ARROW_HEAD.width * scale}px`
+    this.arrowHeadElement.style.height = `${TARGETING_ARROW_HEAD.height * scale}px`
+    this.targetCircleElement.style.width = `${TARGET_CIRCLE_SIZE * scale}px`
+    this.targetCircleElement.style.height = `${TARGET_CIRCLE_SIZE * scale}px`
   }
 
   private syncTargetingVisibility(): void {
@@ -456,6 +515,12 @@ export class CursorManager {
     this.arrowHeadElement.style.visibility = showArrowHead ? 'visible' : 'hidden'
     this.targetCircleElement.style.visibility =
       showArrowHead && this.targetingTargetPoint ? 'visible' : 'hidden'
+    this.targetingEffectLabelElement.style.visibility =
+      showArrowHead &&
+      this.targetingTargetPoint &&
+      this.targetingEffectLabelElement.textContent
+        ? 'visible'
+        : 'hidden'
   }
 
   private show(): void {
@@ -467,11 +532,13 @@ export class CursorManager {
     this.element.style.visibility = 'visible'
     this.arrowHeadElement.style.visibility = 'hidden'
     this.targetCircleElement.style.visibility = 'hidden'
+    this.targetingEffectLabelElement.style.visibility = 'hidden'
   }
 
   private hide(): void {
     this.element.style.visibility = 'hidden'
     this.arrowHeadElement.style.visibility = 'hidden'
     this.targetCircleElement.style.visibility = 'hidden'
+    this.targetingEffectLabelElement.style.visibility = 'hidden'
   }
 }

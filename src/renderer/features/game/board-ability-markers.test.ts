@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_CATALOG, type CardTrigger } from '../../../game/content/cards'
-import { boardAbilityMarkers } from './board-ability-markers'
+import type { BoardMinion } from '../../../game/match'
+import { boardAbilityMarkers, boardMinionRuntimeMarkers } from './board-ability-markers'
 
 function markers(cardId: string) {
   return boardAbilityMarkers(CARD_CATALOG.require(cardId))
@@ -14,6 +15,60 @@ function markersForTrigger(trigger: CardTrigger) {
 }
 
 describe('board ability markers', () => {
+  it('projects granted Taunt and consumed Divine Shield from runtime state', () => {
+    const annoyOTron = CARD_CATALOG.require('goblins_vs_gnomes_annoy_o_tron')
+    const sunfury = CARD_CATALOG.require('classic_sunfury_protector')
+    const minion = {
+      instanceId: 'minion-1',
+      cardId: annoyOTron.id,
+      attack: 1,
+      health: 2,
+      maxHealth: 2,
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null,
+      keywords: ['divine-shield'],
+      divineShield: false,
+      stealth: false,
+      enchantments: [
+        {
+          id: 'sunfury-keyword',
+          sourceInstanceId: 'sunfury',
+          sourceCardId: sunfury.id,
+          keywords: ['taunt']
+        }
+      ]
+    } as BoardMinion
+
+    expect(boardMinionRuntimeMarkers(minion, 1)).toEqual({
+      taunt: true,
+      divineShield: false,
+      stealth: false
+    })
+  })
+
+  it('does not show runtime keywords on a silenced minion', () => {
+    const footman = CARD_CATALOG.require('basic_goldshire_footman')
+    const minion = {
+      instanceId: 'minion-2',
+      cardId: footman.id,
+      attack: 1,
+      health: 2,
+      maxHealth: 2,
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null,
+      keywords: ['taunt'],
+      divineShield: true,
+      stealth: true,
+      silenced: true
+    } as BoardMinion
+
+    expect(boardMinionRuntimeMarkers(minion, 1)).toEqual({
+      taunt: false,
+      divineShield: false,
+      stealth: false
+    })
+  })
+
   it('maps intrinsic Taunt and Divine Shield keywords', () => {
     expect(markers('goblins_vs_gnomes_annoy_o_tron')).toMatchObject({
       taunt: true,

@@ -24,6 +24,13 @@ import {
   type Deck,
   type DeckCreateRequest
 } from '../shared/ipc/decks'
+import {
+  WINDOW_SETTINGS_IPC_CHANNELS,
+  parseWindowResolution,
+  parseWindowResolutionSettings,
+  type WindowResolution,
+  type WindowResolutionSettings
+} from '../shared/ipc/window-settings'
 
 const api = {
   /**
@@ -101,6 +108,22 @@ const api = {
     delete: async (deckId: string): Promise<void> => {
       await ipcRenderer.invoke(DECK_IPC_CHANNELS.delete, parseDeckId(deckId))
     }
+  },
+
+  windowSettings: {
+    get: async (): Promise<WindowResolutionSettings> =>
+      parseWindowResolutionSettings(
+        await ipcRenderer.invoke(WINDOW_SETTINGS_IPC_CHANNELS.get)
+      ),
+    setResolution: async (
+      resolution: WindowResolution
+    ): Promise<WindowResolutionSettings> =>
+      parseWindowResolutionSettings(
+        await ipcRenderer.invoke(
+          WINDOW_SETTINGS_IPC_CHANNELS.setResolution,
+          parseWindowResolution(resolution)
+        )
+      )
   }
 }
 

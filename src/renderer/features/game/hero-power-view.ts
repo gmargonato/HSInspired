@@ -67,9 +67,8 @@ export interface HeroPowerViewOptions {
 }
 
 /**
- * One player's hero power card on the board. It shows the back face until the
- * first turn starts, then flips to the class front. While facing up it renders
- * the cost gem: the mana crystal slightly above the card center plus a
+ * One player's hero power card on the board. It starts on the class front.
+ * While facing up it renders the cost gem: the mana crystal slightly above the card center plus a
  * labelled cost. While the local player's turn is active, the power is still
  * available, and the local mana can afford it, the card is clickable and
  * wears the green playable outline; clicking hands the action back to the
@@ -88,7 +87,7 @@ export class HeroPowerView extends Actor {
   private readonly interactionRect: Rectangle
   private readonly onClick?: () => void
   private interactivityEnabled = false
-  private facingUp = false
+  private facingUp = true
 
   constructor(options: HeroPowerViewOptions) {
     super()
@@ -122,7 +121,7 @@ export class HeroPowerView extends Actor {
     this.playableOutline = new AnimatedOutline(this.outlineTarget, 'green', 'card')
     this.playableOutline.setEnabled(false)
 
-    this.card = new Sprite(options.backTexture)
+    this.card = new Sprite(options.frontTexture)
     applyAnchoredPlacement(this.card, cardPlacement)
     this.card.eventMode = 'none'
     this.addChild(this.card)
@@ -134,7 +133,7 @@ export class HeroPowerView extends Actor {
       cardCenterX + options.layout.crystalOffset.x,
       cardCenterY + options.layout.crystalOffset.y - 10
     )
-    this.manaCrystal.visible = false
+    this.manaCrystal.visible = true
     this.manaCrystal.eventMode = 'none'
     this.manaCrystal.label = 'hero-power-mana'
     this.addChild(this.manaCrystal)
@@ -145,7 +144,7 @@ export class HeroPowerView extends Actor {
       cardCenterX + options.layout.crystalOffset.x + options.layout.costOffset.x,
       cardCenterY + options.layout.crystalOffset.y + options.layout.costOffset.y - 15
     )
-    this.costLabel.visible = false
+    this.costLabel.visible = true
     this.costLabel.eventMode = 'none'
     this.costLabel.label = 'hero-power-cost'
     this.addChild(this.costLabel)
@@ -217,11 +216,13 @@ export class HeroPowerView extends Actor {
 
   /** Flips the card to the class front face and reveals the cost gem. */
   flipUp(): Promise<void> {
+    if (this.facingUp) return Promise.resolve()
     return this.flipTo(this.frontTexture, true)
   }
 
   /** Flips the card to the back face and hides the cost gem. */
   flipDown(): Promise<void> {
+    if (!this.facingUp) return Promise.resolve()
     return this.flipTo(this.backTexture, false)
   }
 

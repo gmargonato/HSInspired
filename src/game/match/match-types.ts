@@ -17,6 +17,8 @@ export interface MatchParticipantSetup {
 export interface MatchSetup {
   readonly participants: readonly [MatchParticipantSetup, MatchParticipantSetup]
   readonly seed?: number
+  /** Development/test diagnostics only; normal matches do not retain effect traces. */
+  readonly recordEffectTrace?: boolean
 }
 
 export interface MatchState {

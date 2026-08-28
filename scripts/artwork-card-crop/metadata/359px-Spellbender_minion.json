@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\359px-Spellbender_minion.jpg",
+  "source_name": "359px-Spellbender_minion.jpg",
+  "crop_box": [
+    4,
+    1,
+    330,
+    327
+  ],
+  "scale": 1.5320334261838442,
+  "offset_x": -6.153846153846153,
+  "offset_y": -1.5384615384615383,
+  "timestamp": "2026-08-27T11:16:54.287064",
+  "card_id": "classic_spellbender_minion",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

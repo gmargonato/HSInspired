@@ -2123,6 +2123,9 @@
     "effects": [
       {
         "trigger": "end-of-turn",
+        "event": {
+          "turnPlayer": "any"
+        },
         "actions": [
           {
             "action": "destroy",
@@ -2608,6 +2611,9 @@
     "effects": [
       {
         "trigger": "start-of-turn",
+        "event": {
+          "turnPlayer": "any"
+        },
         "actions": [
           {
             "action": "modify",
@@ -3136,6 +3142,9 @@
     "effects": [
       {
         "trigger": "end-of-turn",
+        "event": {
+          "turnPlayer": "any"
+        },
         "actions": [
           {
             "action": "draw-until",

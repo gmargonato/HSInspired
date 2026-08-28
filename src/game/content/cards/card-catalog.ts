@@ -3,6 +3,7 @@ import { CLASSIC_CARD_SOURCE } from './sets/classic'
 import { GOBLINS_VS_GNOMES_CARD_SOURCE } from './sets/goblins-vs-gnomes'
 import { NAXXRAMAS_CARD_SOURCE } from './sets/naxxramas'
 import type { CardDefinition, CardId } from './card-definition'
+import { GENERATED_CARD_DEFINITIONS } from './generated-card-definitions'
 
 function referencedCardIds(value: unknown): readonly string[] {
   if (Array.isArray(value)) return value.flatMap(referencedCardIds)
@@ -86,7 +87,10 @@ export const CARD_SET_SOURCES = [
 ] as const
 
 export function createCardCatalog(
-  sources: readonly (readonly CardDefinition[])[] = CARD_SET_SOURCES
+  sources: readonly (readonly CardDefinition[])[] = [
+    ...CARD_SET_SOURCES,
+    GENERATED_CARD_DEFINITIONS
+  ]
 ): CardCatalog {
   return new CardCatalog(sources.flat())
 }

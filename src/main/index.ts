@@ -4,6 +4,11 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import icon from '../../assets/icon.png?asset'
 import { DeckRepository } from './services/deck-repository'
 import { registerDeckIpc } from './services/deck-ipc'
+import {
+  WindowSettingsService,
+  registerWindowSettingsIpc
+} from './services/window-settings-ipc'
+import { WindowSettingsRepository } from './services/window-settings-repository'
 import { installSceneMenu } from './menu/dev-menu'
 
 const WINDOW_WIDTH = 1920
@@ -30,7 +35,9 @@ function openExternalUrl(url: string): void {
   })
 }
 
-function createWindow(): BrowserWindow {
+async function createWindow(
+  windowSettingsRepository: WindowSettingsRepository
+): Promise<BrowserWindow> {
   const mainWindow = new BrowserWindow({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
@@ -57,6 +64,12 @@ function createWindow(): BrowserWindow {
 
   mainWindow.setMenuBarVisibility(KEEP_NATIVE_MENU_BAR_VISIBLE)
 
+  const windowSettings = await WindowSettingsService.create(
+    mainWindow,
+    windowSettingsRepository
+  )
+  registerWindowSettingsIpc(mainWindow, windowSettings)
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
@@ -82,20 +95,28 @@ function createWindow(): BrowserWindow {
 
 void app
   .whenReady()
-  .then(() => {
+  .then(async () => {
     electronApp.setAppUserModelId('com.hsinspired.app')
 
     registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))
+    const windowSettingsRepository = new WindowSettingsRepository(
+      join(app.getPath('userData'), 'window-settings.json')
+    )
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
     })
 
-    const mainWindow = createWindow()
+    const mainWindow = await createWindow(windowSettingsRepository)
     installSceneMenu(mainWindow)
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      if (BrowserWindow.getAllWindows().length !== 0) return
+      void createWindow(windowSettingsRepository)
+        .then(installSceneMenu)
+        .catch((error: unknown) => {
+          console.error('Failed to recreate the main window:', error)
+        })
     })
   })
   .catch((error: unknown) => {

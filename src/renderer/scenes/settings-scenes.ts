@@ -1,14 +1,17 @@
 import { Rectangle, Sprite } from 'pixi.js'
 import { SETTINGS_LAYOUT } from '../features/settings/settings-layout'
+import { ResolutionSelector } from '../features/settings/resolution-selector'
 import { applyAnchoredPlacement } from '../rendering/layout'
-import { ASSET_BUNDLE_IDS, type SettingsBackgroundAssets } from '../ui/asset-registry'
+import { ASSET_BUNDLE_IDS, type SettingsAssets } from '../ui/asset-registry'
 import { Scene } from './scene'
 
 type SettingsBundleId =
   typeof ASSET_BUNDLE_IDS.menuSettings | typeof ASSET_BUNDLE_IDS.gameSettings
 
-/** Shared presentation for the background-only settings overlays. */
+/** Shared presentation for the menu and match settings overlays. */
 abstract class SettingsScene extends Scene {
+  private resolutionSelector: ResolutionSelector | null = null
+
   protected constructor(
     private readonly bundleId: SettingsBundleId,
     private readonly label: string
@@ -17,9 +20,8 @@ abstract class SettingsScene extends Scene {
   }
 
   async init(): Promise<void> {
-    const assets = await this.assetScope.acquire<SettingsBackgroundAssets>(
-      this.bundleId
-    )
+    const assets = await this.assetScope.acquire<SettingsAssets>(this.bundleId)
+    await this.waitForFonts()
     const background = new Sprite(assets.background)
     background.label = this.label
     background.eventMode = 'static'
@@ -34,9 +36,24 @@ abstract class SettingsScene extends Scene {
     background.width = SETTINGS_LAYOUT.background.size.width
     background.height = SETTINGS_LAYOUT.background.size.height
     this.root.addChild(background)
+
+    const selector = new ResolutionSelector(assets, window.api.windowSettings)
+    await selector.init()
+    this.resolutionSelector = selector
+    this.root.addChild(selector)
   }
 
   update(_deltaMS: number): void {}
+
+  private async waitForFonts(): Promise<void> {
+    if (typeof document === 'undefined' || !document.fonts) return
+    await document.fonts.load('42px Belwe')
+  }
+
+  protected override onExit(): void {
+    this.resolutionSelector?.dispose()
+    this.resolutionSelector = null
+  }
 }
 
 /** Settings overlay used throughout the non-match menu flow. */
