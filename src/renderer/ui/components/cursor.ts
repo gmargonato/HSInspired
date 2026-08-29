@@ -124,7 +124,6 @@ export class CursorManager {
   private readonly element: HTMLImageElement
   private readonly arrowHeadElement: HTMLImageElement
   private readonly targetCircleElement: HTMLImageElement
-  private readonly targetingEffectLabelElement: HTMLDivElement
   private scale = DEFAULT_CURSOR_SCALE
   private variant: CursorVariant = 'default'
   private contextVariant: CursorContextVariant | null = null
@@ -177,22 +176,6 @@ export class CursorManager {
     this.targetCircleElement.style.visibility = 'hidden'
     this.targetCircleElement.style.zIndex = '9998'
 
-    this.targetingEffectLabelElement = document.createElement('div')
-    this.targetingEffectLabelElement.className = 'game-cursor-targeting-label'
-    this.targetingEffectLabelElement.setAttribute('aria-hidden', 'true')
-    this.targetingEffectLabelElement.style.position = 'fixed'
-    this.targetingEffectLabelElement.style.pointerEvents = 'none'
-    this.targetingEffectLabelElement.style.visibility = 'hidden'
-    this.targetingEffectLabelElement.style.zIndex = '10000'
-    this.targetingEffectLabelElement.style.transform = 'translate(-50%, -50%)'
-    this.targetingEffectLabelElement.style.color = '#ffffff'
-    this.targetingEffectLabelElement.style.fontFamily = 'Belwe'
-    this.targetingEffectLabelElement.style.fontSize = '24px'
-    this.targetingEffectLabelElement.style.fontWeight = 'normal'
-    this.targetingEffectLabelElement.style.webkitTextStroke = '2px #000000'
-    this.targetingEffectLabelElement.style.textAlign = 'center'
-    this.targetingEffectLabelElement.style.whiteSpace = 'nowrap'
-
     this.applyVariant()
     this.applyScale()
     this.applyTargetingVisualScale()
@@ -208,7 +191,6 @@ export class CursorManager {
     this.host.appendChild(this.element)
     this.host.appendChild(this.targetCircleElement)
     this.host.appendChild(this.arrowHeadElement)
-    this.host.appendChild(this.targetingEffectLabelElement)
 
     // Capture at the window level so Pixi's own event handling cannot prevent
     // the global cursor state from receiving a release outside an actor.
@@ -236,11 +218,9 @@ export class CursorManager {
     this.element.remove()
     this.targetCircleElement.remove()
     this.arrowHeadElement.remove()
-    this.targetingEffectLabelElement.remove()
     this.element.style.visibility = 'hidden'
     this.arrowHeadElement.style.visibility = 'hidden'
     this.targetCircleElement.style.visibility = 'hidden'
-    this.targetingEffectLabelElement.style.visibility = 'hidden'
     this.contextVariant = null
     this.leftButtonDown = false
     this.pointerInsideHost = false
@@ -283,7 +263,6 @@ export class CursorManager {
       this.targetingTargetPoint = null
       this.arrowHeadElement.style.visibility = 'hidden'
       this.targetCircleElement.style.visibility = 'hidden'
-      this.targetingEffectLabelElement.style.visibility = 'hidden'
       if (this.pointerInsideHost && this.pointerX !== null) this.show()
       else this.hide()
     }
@@ -301,21 +280,12 @@ export class CursorManager {
     this.applyTargetingVisualScale()
     this.updateArrowHeadPosition()
     this.updateTargetCirclePosition()
-    this.updateTargetingEffectLabelPosition()
   }
 
   /** Positions the target indicator at the current valid character hover point. */
   setTargetingTarget(point: CursorTargetPoint | null): void {
     this.targetingTargetPoint = point
     this.updateTargetCirclePosition()
-    this.updateTargetingEffectLabelPosition()
-    this.syncTargetingVisibility()
-  }
-
-  /** Shows action feedback above the DOM target circle, never behind it in Pixi. */
-  setTargetingEffectLabel(text: string | null): void {
-    this.targetingEffectLabelElement.textContent = text ?? ''
-    this.updateTargetingEffectLabelPosition()
     this.syncTargetingVisibility()
   }
 
@@ -490,16 +460,6 @@ export class CursorManager {
     }px`
   }
 
-  private updateTargetingEffectLabelPosition(): void {
-    const point = this.targetingTargetPoint
-    if (!point) return
-    const scale = this.targetingVisualScale
-    this.targetingEffectLabelElement.style.left = `${point.x}px`
-    this.targetingEffectLabelElement.style.top = `${
-      point.y + TARGET_CIRCLE_OFFSET_Y * scale - 5
-    }px`
-  }
-
   private applyTargetingVisualScale(): void {
     const scale = this.targetingVisualScale
     this.arrowHeadElement.style.transformOrigin = `${TARGETING_ARROW_HEAD.tipX * scale}px ${TARGETING_ARROW_HEAD.tipY * scale}px`
@@ -515,12 +475,6 @@ export class CursorManager {
     this.arrowHeadElement.style.visibility = showArrowHead ? 'visible' : 'hidden'
     this.targetCircleElement.style.visibility =
       showArrowHead && this.targetingTargetPoint ? 'visible' : 'hidden'
-    this.targetingEffectLabelElement.style.visibility =
-      showArrowHead &&
-      this.targetingTargetPoint &&
-      this.targetingEffectLabelElement.textContent
-        ? 'visible'
-        : 'hidden'
   }
 
   private show(): void {
@@ -532,13 +486,11 @@ export class CursorManager {
     this.element.style.visibility = 'visible'
     this.arrowHeadElement.style.visibility = 'hidden'
     this.targetCircleElement.style.visibility = 'hidden'
-    this.targetingEffectLabelElement.style.visibility = 'hidden'
   }
 
   private hide(): void {
     this.element.style.visibility = 'hidden'
     this.arrowHeadElement.style.visibility = 'hidden'
     this.targetCircleElement.style.visibility = 'hidden'
-    this.targetingEffectLabelElement.style.visibility = 'hidden'
   }
 }

@@ -169,7 +169,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -268,7 +268,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "minion",
               "selection": "chosen",
               "filter": {
@@ -813,7 +813,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -1044,7 +1044,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -1197,7 +1197,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -1206,7 +1206,7 @@
           {
             "action": "freeze",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             }
@@ -1428,7 +1428,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -1682,7 +1682,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -2644,7 +2644,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "minion",
               "selection": "chosen"
             },
@@ -2785,7 +2785,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -2863,7 +2863,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -2901,7 +2901,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },

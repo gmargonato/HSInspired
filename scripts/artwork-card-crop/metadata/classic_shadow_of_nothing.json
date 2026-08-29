@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_shadow_of_nothing.jpg",
+  "source_name": "classic_shadow_of_nothing.jpg",
+  "crop_box": [
+    0,
+    0,
+    1024,
+    1024
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:14:50.866807",
+  "card_id": "classic_shadow_of_nothing",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

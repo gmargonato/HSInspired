@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\blackrock_mountain_gang_up.jpg",
+  "source_name": "blackrock_mountain_gang_up.jpg",
+  "crop_box": [
+    26,
+    25,
+    491,
+    490
+  ],
+  "scale": 1.07421875,
+  "offset_x": -27.69230769230768,
+  "offset_y": -26.461538461538453,
+  "timestamp": "2026-08-29T08:11:38.413587",
+  "card_id": "blackrock_mountain_gang_up",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

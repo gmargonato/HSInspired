@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_nightmare.jpg",
+  "source_name": "classic_nightmare.jpg",
+  "crop_box": [
+    0,
+    0,
+    836,
+    836
+  ],
+  "scale": 0.5980861244019139,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:14:41.267246",
+  "card_id": "classic_nightmare",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

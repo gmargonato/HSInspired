@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\blackrock_mountain_demonwrath.jpg",
+  "source_name": "blackrock_mountain_demonwrath.jpg",
+  "crop_box": [
+    33,
+    20,
+    498,
+    485
+  ],
+  "scale": 1.07421875,
+  "offset_x": -35.230769230769226,
+  "offset_y": -22.0,
+  "timestamp": "2026-08-29T08:10:59.186354",
+  "card_id": "blackrock_mountain_demonwrath",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

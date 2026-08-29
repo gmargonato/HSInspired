@@ -40,6 +40,7 @@ import type {
   CoinGrantedEvent,
   OpeningCardDrawnEvent,
   CardDrawnEvent,
+  CardGeneratedEvent,
   CardBurnedEvent,
   CharacterDamagedEvent,
   MinionCombatPreview,
@@ -708,6 +709,7 @@ function cardForEvent(
     | CoinGrantedEvent
     | OpeningCardDrawnEvent
     | CardDrawnEvent
+    | CardGeneratedEvent
     | CardBurnedEvent
     | DevCardAddedEvent
 ): OpeningCard {
@@ -1889,6 +1891,7 @@ function applyDevSummonMinion(
     ownerId: player.participantId,
     controllerId: player.participantId,
     creationOrdinal: counter,
+    playOrder: counter,
     baseAttack: definition.attack,
     baseHealth: definition.health,
     keywords: [...definition.keywords],

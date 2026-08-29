@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_clockwork_giant.jpg",
+  "source_name": "goblins_vs_gnomes_clockwork_giant.jpg",
+  "crop_box": [
+    0,
+    48,
+    720,
+    768
+  ],
+  "scale": 0.6944444444444444,
+  "offset_x": 0.0,
+  "offset_y": -33.05555555555564,
+  "timestamp": "2026-08-28T18:49:00.790615",
+  "card_id": "goblins_vs_gnomes_clockwork_giant",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

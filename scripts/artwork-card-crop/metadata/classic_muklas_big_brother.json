@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_muklas_big_brother.jpg",
+  "source_name": "classic_muklas_big_brother.jpg",
+  "crop_box": [
+    89,
+    0,
+    647,
+    558
+  ],
+  "scale": 0.8960573476702509,
+  "offset_x": -79.63054866280675,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:14:10.292058",
+  "card_id": "classic_muklas_big_brother",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

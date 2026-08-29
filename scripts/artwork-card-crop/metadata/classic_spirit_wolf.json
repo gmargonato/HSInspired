@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_spirit_wolf.jpg",
+  "source_name": "classic_spirit_wolf.jpg",
+  "crop_box": [
+    0,
+    0,
+    1024,
+    1024
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:14:54.259626",
+  "card_id": "classic_spirit_wolf",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

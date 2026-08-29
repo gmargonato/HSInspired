@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_pip_quickwit.jpg",
+  "source_name": "classic_pip_quickwit.jpg",
+  "crop_box": [
+    505,
+    271,
+    1015,
+    781
+  ],
+  "scale": 0.9812271399798596,
+  "offset_x": -495.8411243857779,
+  "offset_y": -265.6084500000002,
+  "timestamp": "2026-08-29T08:14:47.599762",
+  "card_id": "classic_pip_quickwit",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -20,6 +20,148 @@ describe('shared effect runtime', () => {
     ] as const
   }
 
+  it("draws each of Ysera's five Dream cards, including Nightmare", () => {
+    const dreamIds = new Set([
+      'classic_dream',
+      'classic_emerald_drake',
+      'classic_laughing_sister',
+      'classic_nightmare',
+      'classic_ysera_awakens'
+    ])
+    const drawnDreamIds = new Set<string>()
+
+    for (let seed = 1; seed <= 128 && drawnDreamIds.size < dreamIds.size; seed += 1) {
+      const scenario = createMatchScenario({ seed, cardId: 'classic_ysera' })
+      scenario.confirmBothMulligans()
+      const participantId = scenario.match.getState().activePlayerId!
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-clear-zone',
+          participantId,
+          zone: 'hand'
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId,
+          cardId: 'classic_ysera'
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-mana',
+          participantId,
+          available: 10,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+      const ysera = player(scenario, participantId).hand[0]!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId,
+          cardInstanceId: ysera.instanceId,
+          position: 0
+        }).accepted
+      ).toBe(true)
+      const endTurn = scenario.match.dispatch({ type: 'end-turn', participantId })
+      expect(endTurn.accepted).toBe(true)
+      if (!endTurn.accepted) return
+      expect(endTurn.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'card-generated',
+            participantId,
+            origin: { kind: 'minion', instanceId: ysera.instanceId }
+          })
+        ])
+      )
+
+      const dream = player(scenario, participantId).hand.find((card) =>
+        dreamIds.has(card.cardId)
+      )
+      expect(dream).toBeDefined()
+      if (dream) drawnDreamIds.add(dream.cardId)
+    }
+
+    expect(drawnDreamIds).toEqual(dreamIds)
+  })
+
+  it("summons Pip Quickwit when The Beast's Deathrattle resolves", () => {
+    const scenario = createMatchScenario({ seed: 129, cardId: 'classic_the_beast' })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'classic_the_beast'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'basic_shadow_word_death'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+
+    const beast = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_the_beast'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: beast.instanceId,
+        position: 0
+      }).accepted
+    ).toBe(true)
+    const beastOnBoard = player(scenario, participantId).board[0]!
+    const deathSpell = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'basic_shadow_word_death'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: deathSpell.instanceId,
+        targets: [
+          {
+            kind: 'minion',
+            participantId,
+            instanceId: beastOnBoard.instanceId
+          }
+        ]
+      }).accepted
+    ).toBe(true)
+
+    expect(player(scenario, opponentId).board).toContainEqual(
+      expect.objectContaining({
+        cardId: 'classic_pip_quickwit',
+        attack: 3,
+        health: 3,
+        maxHealth: 3
+      })
+    )
+  })
+
   it('resolves a real targeted spell through the canonical play-card command', () => {
     const scenario = createMatchScenario({ seed: 41, cardId: 'basic_arcane_shot' })
     scenario.confirmBothMulligans()
@@ -66,6 +208,72 @@ describe('shared effect runtime', () => {
     expect(result.events.some((event) => event.type === 'effect-resolved')).toBe(true)
   })
 
+  it('allows unsided damage to target a friendly character', () => {
+    const scenario = createMatchScenario({ seed: 411, cardId: 'basic_arcane_shot' })
+    scenario.confirmBothMulligans()
+    const playerId = scenario.match.getState().activePlayerId!
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: playerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+
+    const beforeHealth = player(scenario, playerId).hero.health
+    const card = player(scenario, playerId).hand[0]!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: playerId,
+      cardInstanceId: card.instanceId,
+      targets: [{ kind: 'hero', participantId: playerId }]
+    })
+
+    expect(result.accepted).toBe(true)
+    expect(player(scenario, playerId).hero.health).toBe(beforeHealth - 2)
+  })
+
+  it('allows an unsided restore to target an enemy character', () => {
+    const scenario = createMatchScenario({
+      seed: 412,
+      cardId: 'goblins_vs_gnomes_light_of_the_naaru'
+    })
+    scenario.confirmBothMulligans()
+    const playerId = scenario.match.getState().activePlayerId!
+    const opponentId = scenario.participants.find(
+      (participantId) => participantId !== playerId
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: playerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+
+    const card = player(scenario, playerId).hand[0]!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: playerId,
+      cardInstanceId: card.instanceId,
+      targets: [{ kind: 'hero', participantId: opponentId }]
+    })
+
+    expect(result.accepted).toBe(true)
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'effect-resolved',
+        action: 'restore',
+        data: expect.objectContaining({
+          amount: 0,
+          target: `${opponentId}:hero`
+        })
+      })
+    )
+  })
+
   it('projects a conditional spell preview from the current board state', () => {
     const scenario = createMatchScenario({
       seed: 42,
@@ -78,7 +286,6 @@ describe('shared effect runtime', () => {
     expect(
       scenario.match.getPlayInput?.(playerId, killCommand.instanceId)?.effectPreview
     ).toEqual({
-      summary: 'Deal 3 damage',
       conditionallyEnhanced: false
     })
     expect(
@@ -91,7 +298,6 @@ describe('shared effect runtime', () => {
     expect(
       scenario.match.getPlayInput?.(playerId, killCommand.instanceId)?.effectPreview
     ).toEqual({
-      summary: 'Deal 5 damage',
       conditionallyEnhanced: true
     })
   })
@@ -969,7 +1175,10 @@ describe('shared effect runtime', () => {
     })
     expect(firstInput?.targetSelectors).toHaveLength(1)
     expect(firstInput?.legalTargetOptions).toEqual([
-      [{ kind: 'hero', participantId: firstOpponentId }]
+      [
+        { kind: 'hero', participantId: firstPlayerId },
+        { kind: 'hero', participantId: firstOpponentId }
+      ]
     ])
     const firstSecondChoiceInput = first.match.getPlayInput?.(
       firstPlayerId,
@@ -1056,10 +1265,10 @@ describe('shared effect runtime', () => {
   })
 
   it('returns stable target rejection codes without mutating the match', () => {
-    const setup = (seed: number) => {
+    const setup = (seed: number, cardId = 'basic_arcane_shot') => {
       const scenario = createMatchScenario({
         seed,
-        cardId: 'basic_arcane_shot'
+        cardId
       })
       scenario.confirmBothMulligans()
       const playerId = scenario.match.getState().activePlayerId!
@@ -1074,18 +1283,18 @@ describe('shared effect runtime', () => {
           maximum: 10
         }).accepted
       ).toBe(true)
-      return { scenario, playerId, opponentId }
+      return { scenario, playerId, opponentId, cardId }
     }
     const assertRejected = (
       seed: number,
       target: unknown,
       expectedCode: string
     ): void => {
-      const { scenario, playerId } = setup(seed)
+      const { scenario, playerId, cardId } = setup(seed)
       const before = scenario.match.getState()
       const card = before.players
         .find((player) => player.participantId === playerId)!
-        .hand.find((entry) => entry.cardId === 'basic_arcane_shot')!
+        .hand.find((entry) => entry.cardId === cardId)!
       const result = scenario.match.dispatch({
         type: 'play-card',
         participantId: playerId,
@@ -1098,11 +1307,11 @@ describe('shared effect runtime', () => {
       expect(result.state).toEqual(before)
     }
 
-    const wrongController = setup(62)
+    const wrongController = setup(62, 'basic_frost_shock')
     const wrongControllerBefore = wrongController.scenario.match.getState()
     const wrongControllerCard = wrongControllerBefore.players
       .find((player) => player.participantId === wrongController.playerId)!
-      .hand.find((entry) => entry.cardId === 'basic_arcane_shot')!
+      .hand.find((entry) => entry.cardId === wrongController.cardId)!
     const wrongControllerResult = wrongController.scenario.match.dispatch({
       type: 'play-card',
       participantId: wrongController.playerId,

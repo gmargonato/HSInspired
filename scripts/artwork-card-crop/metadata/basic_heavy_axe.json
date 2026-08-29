@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_heavy_axe.jpg",
+  "source_name": "basic_heavy_axe.jpg",
+  "crop_box": [
+    27,
+    0,
+    485,
+    458
+  ],
+  "scale": 1.091703056768559,
+  "offset_x": -29.475982532751118,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:09:56.327430",
+  "card_id": "basic_heavy_axe",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

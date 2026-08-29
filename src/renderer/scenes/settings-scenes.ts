@@ -1,29 +1,28 @@
-import { Rectangle, Sprite } from 'pixi.js'
+import { Rectangle, Sprite, type Texture } from 'pixi.js'
 import { SETTINGS_LAYOUT } from '../features/settings/settings-layout'
 import { ResolutionSelector } from '../features/settings/resolution-selector'
-import { applyAnchoredPlacement } from '../rendering/layout'
-import { ASSET_BUNDLE_IDS, type SettingsAssets } from '../ui/asset-registry'
+import { applyAnchoredPlacement, applyPlacement } from '../rendering/layout'
+import {
+  ASSET_BUNDLE_IDS,
+  type GameSettingsAssets,
+  type MenuSettingsAssets
+} from '../ui/asset-registry'
+import { Button } from '../ui/components/button'
 import { Scene } from './scene'
 
-type SettingsBundleId =
-  typeof ASSET_BUNDLE_IDS.menuSettings | typeof ASSET_BUNDLE_IDS.gameSettings
+export interface GameSettingsCallbacks {
+  readonly onConcede: () => void | Promise<void>
+  readonly onRestart: () => void | Promise<void>
+  readonly onQuit: () => void | Promise<void>
+}
 
-/** Shared presentation for the menu and match settings overlays. */
+/** Shared presentation plumbing for the menu and match settings overlays. */
 abstract class SettingsScene extends Scene {
   private resolutionSelector: ResolutionSelector | null = null
 
-  protected constructor(
-    private readonly bundleId: SettingsBundleId,
-    private readonly label: string
-  ) {
-    super()
-  }
-
-  async init(): Promise<void> {
-    const assets = await this.assetScope.acquire<SettingsAssets>(this.bundleId)
-    await this.waitForFonts()
-    const background = new Sprite(assets.background)
-    background.label = this.label
+  protected createBackground(texture: Texture, label: string): void {
+    const background = new Sprite(texture)
+    background.label = label
     background.eventMode = 'static'
     background.cursor = 'default'
     background.hitArea = new Rectangle(
@@ -36,7 +35,12 @@ abstract class SettingsScene extends Scene {
     background.width = SETTINGS_LAYOUT.background.size.width
     background.height = SETTINGS_LAYOUT.background.size.height
     this.root.addChild(background)
+  }
 
+  protected async createResolutionSelector(
+    assets: Pick<MenuSettingsAssets, 'resolutionField' | 'resolutionButton'>
+  ): Promise<void> {
+    await this.waitForFonts()
     const selector = new ResolutionSelector(assets, window.api.windowSettings)
     await selector.init()
     this.resolutionSelector = selector
@@ -45,9 +49,9 @@ abstract class SettingsScene extends Scene {
 
   update(_deltaMS: number): void {}
 
-  private async waitForFonts(): Promise<void> {
+  protected async waitForFonts(): Promise<void> {
     if (typeof document === 'undefined' || !document.fonts) return
-    await document.fonts.load('42px Belwe')
+    await document.fonts.load('700 42px Belwe')
   }
 
   protected override onExit(): void {
@@ -58,14 +62,102 @@ abstract class SettingsScene extends Scene {
 
 /** Settings overlay used throughout the non-match menu flow. */
 export class MenuSettingsScene extends SettingsScene {
-  constructor() {
-    super(ASSET_BUNDLE_IDS.menuSettings, 'menu-settings-background')
+  async init(): Promise<void> {
+    const assets = await this.assetScope.acquire<MenuSettingsAssets>(
+      ASSET_BUNDLE_IDS.menuSettings
+    )
+    this.createBackground(assets.background, 'menu-settings-background')
+    await this.createResolutionSelector(assets)
   }
+
+  update(_deltaMS: number): void {}
 }
 
 /** Settings overlay used while a match is active. */
 export class GameSettingsScene extends SettingsScene {
-  constructor() {
-    super(ASSET_BUNDLE_IDS.gameSettings, 'game-settings-background')
+  private readonly actionButtons: Button[] = []
+  private actionPending = false
+
+  constructor(private readonly callbacks: GameSettingsCallbacks) {
+    super()
+  }
+
+  async init(): Promise<void> {
+    const assets = await this.assetScope.acquire<GameSettingsAssets>(
+      ASSET_BUNDLE_IDS.gameSettings
+    )
+    this.createBackground(assets.background, 'game-settings-background')
+
+    this.addAction(
+      assets.baseFrameLarge,
+      assets.concedeButton,
+      SETTINGS_LAYOUT.gameActions.concedeFrame,
+      SETTINGS_LAYOUT.gameActions.concedeButton,
+      'game-settings.concede',
+      this.callbacks.onConcede
+    )
+    this.addAction(
+      assets.baseFrameLarge,
+      assets.restartButton,
+      SETTINGS_LAYOUT.gameActions.restartFrame,
+      SETTINGS_LAYOUT.gameActions.restartButton,
+      'game-settings.restart',
+      this.callbacks.onRestart
+    )
+    this.addAction(
+      assets.baseFrameLarge,
+      assets.quitButton,
+      SETTINGS_LAYOUT.gameActions.quitFrame,
+      SETTINGS_LAYOUT.gameActions.quitButton,
+      'game-settings.quit',
+      this.callbacks.onQuit
+    )
+  }
+
+  update(_deltaMS: number): void {}
+
+  protected override onExit(): void {
+    super.onExit()
+    for (const button of this.actionButtons) button.setEnabled(false)
+    this.actionButtons.length = 0
+  }
+
+  private addAction(
+    frameTexture: Texture,
+    buttonTexture: Texture,
+    framePlacement: Parameters<typeof applyAnchoredPlacement>[1],
+    buttonPlacement: Parameters<typeof applyPlacement>[1],
+    label: string,
+    callback: () => void | Promise<void>
+  ): void {
+    const frame = new Sprite(frameTexture)
+    frame.label = `${label}.frame`
+    frame.eventMode = 'none'
+    applyAnchoredPlacement(frame, framePlacement)
+    this.root.addChild(frame)
+
+    const button = new Button(buttonTexture, {
+      sinkPx: 3,
+      onClick: () => this.runAction(callback)
+    })
+    button.label = `${label}.button`
+    applyPlacement(button, buttonPlacement)
+    button.setBaseY(buttonPlacement.position.y)
+    this.actionButtons.push(button)
+    this.root.addChild(button)
+  }
+
+  private runAction(callback: () => void | Promise<void>): void {
+    if (this.actionPending) return
+    this.actionPending = true
+    for (const button of this.actionButtons) button.setEnabled(false)
+
+    void Promise.resolve()
+      .then(callback)
+      .catch((error: unknown) => {
+        console.error('Failed to execute a game settings action.', error)
+        this.actionPending = false
+        for (const button of this.actionButtons) button.setEnabled(true)
+      })
   }
 }

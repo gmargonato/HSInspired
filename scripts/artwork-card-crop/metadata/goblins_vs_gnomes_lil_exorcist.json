@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_lil_exorcist.jpg",
+  "source_name": "goblins_vs_gnomes_lil_exorcist.jpg",
+  "crop_box": [
+    0,
+    0,
+    794,
+    794
+  ],
+  "scale": 0.6297229219143576,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-28T18:50:39.604584",
+  "card_id": "goblins_vs_gnomes_lil_exorcist",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

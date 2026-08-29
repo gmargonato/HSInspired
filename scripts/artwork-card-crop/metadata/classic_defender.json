@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_defender.jpg",
+  "source_name": "classic_defender.jpg",
+  "crop_box": [
+    71,
+    0,
+    634,
+    563
+  ],
+  "scale": 0.8880994671403197,
+  "offset_x": -63.366580133898026,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:13:20.891642",
+  "card_id": "classic_defender",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

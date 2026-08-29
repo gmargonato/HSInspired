@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_warglaive_of_azzinoth.jpg",
+  "source_name": "classic_warglaive_of_azzinoth.jpg",
+  "crop_box": [
+    1321,
+    113,
+    1920,
+    712
+  ],
+  "scale": 0.8340812490272379,
+  "offset_x": -1101.4359981322968,
+  "offset_y": -94.41534773846195,
+  "timestamp": "2026-08-29T08:15:04.691273",
+  "card_id": "classic_warglaive_of_azzinoth",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

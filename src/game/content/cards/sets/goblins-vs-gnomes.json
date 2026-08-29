@@ -1650,7 +1650,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -1895,7 +1895,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -1994,7 +1994,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "minion",
               "selection": "chosen"
             },
@@ -2343,21 +2343,9 @@
     "cost": 6,
     "attack": 6,
     "health": 5,
-    "rulesText": "Battlecry: Shuffle a Mine into your opponent's deck. When drawn, it explodes for 10 damage.",
+    "rulesText": "Battlecry and Deathrattle: Shuffle a Mine into your opponent's deck. When drawn, it explodes for 10 damage.",
     "keywords": [],
-    "effects": [
-      {
-        "trigger": "battlecry",
-        "actions": [
-          {
-            "action": "shuffle-into-deck",
-            "player": "opponent",
-            "cardId": "goblins_vs_gnomes_burrowing_mine",
-            "count": 1
-          }
-        ]
-      }
-    ]
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_shieldmaiden",
@@ -3694,7 +3682,8 @@
           {
             "action": "summon",
             "cardId": "goblins_vs_gnomes_boom_bot",
-            "count": 2
+            "count": 2,
+            "placement": "alternating-around-source"
           }
         ]
       }
@@ -3952,24 +3941,9 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "When drawn, explode for 10 damage to the enemy hero.",
+    "rulesText": "Casts When drawn. You take 10 damage.",
     "keywords": [],
-    "effects": [
-      {
-        "trigger": "on-draw",
-        "actions": [
-          {
-            "action": "damage",
-            "target": {
-              "controller": "opponent",
-              "type": "hero",
-              "selection": "all"
-            },
-            "amount": 10
-          }
-        ]
-      }
-    ]
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_chicken",

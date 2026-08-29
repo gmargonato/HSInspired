@@ -12,7 +12,7 @@ import type {
   WindowSettingsApi
 } from '../../../shared/ipc/window-settings'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
-import type { SettingsAssets } from '../../ui/asset-registry'
+import type { MenuSettingsAssets } from '../../ui/asset-registry'
 import { Button } from '../../ui/components/button'
 import { SETTINGS_LAYOUT } from './settings-layout'
 
@@ -40,7 +40,7 @@ export class ResolutionSelector extends Container {
   private applying = false
 
   constructor(
-    assets: Pick<SettingsAssets, 'resolutionField' | 'resolutionButton'>,
+    assets: Pick<MenuSettingsAssets, 'resolutionField' | 'resolutionButton'>,
     private readonly api: WindowSettingsApi,
     private readonly onError: (error: unknown) => void = console.error
   ) {

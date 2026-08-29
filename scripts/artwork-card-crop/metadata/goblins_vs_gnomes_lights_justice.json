@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_lights_justice.jpg",
+  "source_name": "goblins_vs_gnomes_lights_justice.jpg",
+  "crop_box": [
+    325,
+    328,
+    1024,
+    1027
+  ],
+  "scale": 0.7148925781250002,
+  "offset_x": -232.05000000000018,
+  "offset_y": -234.21545552884623,
+  "timestamp": "2026-08-29T08:15:20.056701",
+  "card_id": "goblins_vs_gnomes_lights_justice",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

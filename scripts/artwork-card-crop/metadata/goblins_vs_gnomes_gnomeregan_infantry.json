@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_gnomeregan_infantry.jpg",
+  "source_name": "goblins_vs_gnomes_gnomeregan_infantry.jpg",
+  "crop_box": [
+    0,
+    0,
+    884,
+    884
+  ],
+  "scale": 0.5656108597285068,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-28T18:49:59.101573",
+  "card_id": "goblins_vs_gnomes_gnomeregan_infantry",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -423,6 +423,16 @@ describe('Phase 5/6 real-card integration', () => {
     )
     expect(generated).toBeDefined()
     expect(generated?.currentCost).toBe(Math.max(0, (generated?.baseCost ?? 0) - 3))
+    expect(portalResult.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'card-generated',
+          participantId,
+          card: expect.objectContaining({ instanceId: generated?.instanceId }),
+          origin: { kind: 'screen-center' }
+        })
+      ])
+    )
     expect(generated?.costAdjustments).toEqual(
       expect.arrayContaining([expect.objectContaining({ amount: -3 })])
     )

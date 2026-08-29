@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_madder_bomber.jpg",
+  "source_name": "goblins_vs_gnomes_madder_bomber.jpg",
+  "crop_box": [
+    0,
+    70,
+    550,
+    620
+  ],
+  "scale": 0.9090909090909091,
+  "offset_x": 0.0,
+  "offset_y": -63.636363636363626,
+  "timestamp": "2026-08-28T18:50:43.907983",
+  "card_id": "goblins_vs_gnomes_madder_bomber",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

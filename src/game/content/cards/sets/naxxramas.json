@@ -973,7 +973,7 @@
   {
     "id": "naxxramas_treant",
     "collectible": false,
-    "name": "Treant",
+    "name": "Treant (Naxxramas)",
     "rarity": "Summon",
     "cardClass": "Druid",
     "type": "Minion",
@@ -981,7 +981,7 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "",
+    "rulesText": "Make it a tribe, you cowards",
     "keywords": [],
     "effects": []
   }

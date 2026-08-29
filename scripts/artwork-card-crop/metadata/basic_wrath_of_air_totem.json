@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_wrath_of_air_totem.jpg",
+  "source_name": "basic_wrath_of_air_totem.jpg",
+  "crop_box": [
+    161,
+    0,
+    1155,
+    994
+  ],
+  "scale": 0.5030181086519114,
+  "offset_x": -81.0524686581025,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:10:25.901928",
+  "card_id": "basic_wrath_of_air_totem",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

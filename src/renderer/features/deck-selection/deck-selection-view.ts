@@ -239,7 +239,7 @@ export class DeckSelectionView extends Container {
 
   private async waitForFonts(): Promise<void> {
     if (typeof document === 'undefined' || !document.fonts) return
-    await document.fonts.load('30px Belwe')
+    await document.fonts.load('700 30px Belwe')
   }
 
   async dispose(): Promise<void> {

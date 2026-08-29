@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_sneeds_old_shredder.jpg",
+  "source_name": "goblins_vs_gnomes_sneeds_old_shredder.jpg",
+  "crop_box": [
+    0,
+    21,
+    466,
+    487
+  ],
+  "scale": 1.0729613733905579,
+  "offset_x": 0.0,
+  "offset_y": -23.06866952789693,
+  "timestamp": "2026-08-28T18:51:35.200850",
+  "card_id": "goblins_vs_gnomes_sneeds_old_shredder",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

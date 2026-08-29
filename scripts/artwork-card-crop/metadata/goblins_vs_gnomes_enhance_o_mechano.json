@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_enhance_o_mechano.jpg",
+  "source_name": "goblins_vs_gnomes_enhance_o_mechano.jpg",
+  "crop_box": [
+    0,
+    58,
+    724,
+    782
+  ],
+  "scale": 0.6906077348066298,
+  "offset_x": 0.0,
+  "offset_y": -39.927751806204874,
+  "timestamp": "2026-08-28T18:49:18.698230",
+  "card_id": "goblins_vs_gnomes_enhance_o_mechano",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

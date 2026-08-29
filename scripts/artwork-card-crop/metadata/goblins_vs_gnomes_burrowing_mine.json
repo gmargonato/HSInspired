@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_burrowing_mine.jpg",
+  "source_name": "goblins_vs_gnomes_burrowing_mine.jpg",
+  "crop_box": [
+    60,
+    0,
+    449,
+    389
+  ],
+  "scale": 1.2853470437017995,
+  "offset_x": -76.4781491002571,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-22T16:32:03.637119",
+  "card_id": "goblins_vs_gnomes_burrowing_mine",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

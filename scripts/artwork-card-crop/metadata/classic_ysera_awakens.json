@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_ysera_awakens.jpg",
+  "source_name": "classic_ysera_awakens.jpg",
+  "crop_box": [
+    47,
+    0,
+    465,
+    418
+  ],
+  "scale": 1.1961722488038278,
+  "offset_x": -56.22009569377991,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:15:07.261442",
+  "card_id": "classic_ysera_awakens",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

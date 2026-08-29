@@ -139,7 +139,7 @@ const SHARED_STATS = {
  */
 export const CARD_STAT_LABEL_OFFSETS = {
   mana: { x: 0, y: -10 },
-  attack: { x: 10, y: 10 },
+  attack: { x: 15, y: 10 },
   weaponAttack: { x: 0, y: -5 },
   health: { x: 0, y: 10 },
   armor: { x: 0, y: -5 },

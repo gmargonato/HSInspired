@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_tinkertown_technician.jpg",
+  "source_name": "goblins_vs_gnomes_tinkertown_technician.jpg",
+  "crop_box": [
+    0,
+    84,
+    750,
+    834
+  ],
+  "scale": 0.6666666666666666,
+  "offset_x": 0.0,
+  "offset_y": -55.99999999999994,
+  "timestamp": "2026-08-28T18:51:49.014761",
+  "card_id": "goblins_vs_gnomes_tinkertown_technician",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

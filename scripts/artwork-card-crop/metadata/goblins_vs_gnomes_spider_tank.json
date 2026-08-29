@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_spider_tank.jpg",
+  "source_name": "goblins_vs_gnomes_spider_tank.jpg",
+  "crop_box": [
+    0,
+    100,
+    720,
+    820
+  ],
+  "scale": 0.6944444444444444,
+  "offset_x": 0.0,
+  "offset_y": -69.51923076923083,
+  "timestamp": "2026-08-28T18:51:38.138185",
+  "card_id": "goblins_vs_gnomes_spider_tank",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

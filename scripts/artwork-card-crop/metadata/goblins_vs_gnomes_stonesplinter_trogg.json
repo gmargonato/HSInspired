@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_stonesplinter_trogg.jpg",
+  "source_name": "goblins_vs_gnomes_stonesplinter_trogg.jpg",
+  "crop_box": [
+    151,
+    0,
+    1154,
+    1003
+  ],
+  "scale": 0.4985044865403789,
+  "offset_x": -75.04213068486852,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-28T18:51:41.933253",
+  "card_id": "goblins_vs_gnomes_stonesplinter_trogg",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -101,6 +101,8 @@ export function boardMinionRuntimeMarkers(
     if (
       (enchantment.startsOnTurn !== undefined &&
         enchantment.startsOnTurn > turnNumber) ||
+      (enchantment.expiresOnTurn !== undefined &&
+        enchantment.expiresOnTurn < turnNumber) ||
       (enchantment.duration === 'while-damaged' && minion.health >= minion.maxHealth)
     )
       continue
@@ -112,5 +114,55 @@ export function boardMinionRuntimeMarkers(
     taunt: keywords.has('taunt'),
     divineShield: minion.divineShield === true,
     stealth: minion.stealth === true
+  }
+}
+
+/**
+ * Combines authored card markers with runtime-only granted abilities.  This is
+ * intentionally derived from the committed minion snapshot so a pulse can
+ * still find a marker for effects granted by another card (and silencing can
+ * hide authored markers without changing the card catalog).
+ */
+export function boardMinionAbilityMarkers(
+  minion: BoardMinion,
+  definition: Pick<CardDefinition, 'keywords' | 'effects'>,
+  turnNumber: number
+): BoardAbilityMarkers {
+  const authored = boardAbilityMarkers(definition)
+  const runtime = boardMinionRuntimeMarkers(minion, turnNumber)
+  if (minion.silenced) {
+    return {
+      taunt: false,
+      divineShield: false,
+      stealth: false,
+      deathrattle: false,
+      poisonous: false,
+      trigger: false,
+      temporaryAbilityLabels: []
+    }
+  }
+
+  const active = (startsOnTurn?: number, expiresOnTurn?: number): boolean =>
+    (startsOnTurn === undefined || startsOnTurn <= turnNumber) &&
+    (expiresOnTurn === undefined || expiresOnTurn >= turnNumber)
+  const grantedTrigger = (minion.grantedTriggers ?? []).some(
+    (entry) =>
+      entry.trigger !== 'deathrattle' && active(entry.startsOnTurn, entry.expiresOnTurn)
+  )
+  const grantedDeathrattle = (minion.grantedTriggers ?? []).some(
+    (entry) =>
+      entry.trigger === 'deathrattle' && active(entry.startsOnTurn, entry.expiresOnTurn)
+  )
+
+  return {
+    ...authored,
+    taunt: runtime.taunt,
+    divineShield: runtime.divineShield,
+    stealth: runtime.stealth,
+    trigger: authored.trigger || grantedTrigger,
+    deathrattle:
+      authored.deathrattle ||
+      grantedDeathrattle ||
+      (minion.deathrattles?.length ?? 0) > 0
   }
 }

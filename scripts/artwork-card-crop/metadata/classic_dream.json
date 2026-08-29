@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_dream.jpg",
+  "source_name": "classic_dream.jpg",
+  "crop_box": [
+    37,
+    0,
+    489,
+    452
+  ],
+  "scale": 1.1061946902654867,
+  "offset_x": -40.87814840027228,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:13:52.254295",
+  "card_id": "classic_dream",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

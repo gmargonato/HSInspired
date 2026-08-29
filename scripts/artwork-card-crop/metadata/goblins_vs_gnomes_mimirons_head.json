@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_mimirons_head.jpg",
+  "source_name": "goblins_vs_gnomes_mimirons_head.jpg",
+  "crop_box": [
+    0,
+    157,
+    758,
+    915
+  ],
+  "scale": 0.6596306068601583,
+  "offset_x": 0.0,
+  "offset_y": -103.41587172721728,
+  "timestamp": "2026-08-28T18:51:01.049486",
+  "card_id": "goblins_vs_gnomes_mimirons_head",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

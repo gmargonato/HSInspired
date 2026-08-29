@@ -29,6 +29,7 @@ import { MAX_DECKS, type Deck } from '../../game/decks'
 import type { CardPreviewRouteBounds, SceneRouter } from '../app/router'
 import type { CollectibleMode } from '../features/collection/collection-filters'
 import type { CollectionClassFilter } from '../features/collection/collection-query'
+import { setCollectionPreviewCached } from '../features/collection/collection-preview-cache'
 
 /** Full-viewport collection scene presented through the main menu transition. */
 export class CollectionScene extends Scene {
@@ -165,6 +166,7 @@ export class CollectionScene extends Scene {
 
   protected onExit(): void {
     this.disposed = true
+    setCollectionPreviewCached(this.root, false)
     this.setCollectionPreviewBlurred(false)
     this.navigationReady = false
     this.unsubscribeDeckStore?.()
@@ -178,6 +180,7 @@ export class CollectionScene extends Scene {
 
   protected onPause(): void {
     this.setCollectionPreviewBlurred(true)
+    setCollectionPreviewCached(this.root, true)
     this.collectionView.onPause()
   }
 
@@ -221,6 +224,7 @@ export class CollectionScene extends Scene {
   }
 
   protected onResume(): void {
+    setCollectionPreviewCached(this.root, false)
     this.setCollectionPreviewBlurred(false)
     this.collectionView.onResume()
     // Re-sync native menu checked state when returning from preview/settings
@@ -488,7 +492,7 @@ export class CollectionScene extends Scene {
     if (typeof document === 'undefined' || !document.fonts) return
 
     await Promise.all([
-      document.fonts.load('38px Belwe'),
+      document.fonts.load('700 38px Belwe'),
       document.fonts.load('38px "Arial Narrow"'),
       document.fonts.load('400 27px "Franklin Gothic Condensed"'),
       document.fonts.load('700 27px "Franklin Gothic Condensed"')

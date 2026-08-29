@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_wicked_knife.jpg",
+  "source_name": "basic_wicked_knife.jpg",
+  "crop_box": [
+    19,
+    0,
+    1024,
+    1005
+  ],
+  "scale": 0.4975124378109453,
+  "offset_x": -9.452736318407972,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:10:22.472957",
+  "card_id": "basic_wicked_knife",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

@@ -408,6 +408,9 @@ export const GAME_BOARD_LAYOUT = {
    */
   cardTravel: {
     slotScale: { x: 0.08, y: 0.24 } satisfies LayoutPoint,
-    backScale: { x: 0.08, y: 0.12 } satisfies LayoutPoint
+    backScale: { x: 0.08, y: 0.12 } satisfies LayoutPoint,
+    /** Small, upright pose used when an effect generates a hand card. */
+    generatedSlotScale: 0.12,
+    generatedBackScale: 0.1
   }
 } as const

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_devilsaur.jpg",
+  "source_name": "classic_devilsaur.jpg",
+  "crop_box": [
+    139,
+    192,
+    800,
+    853
+  ],
+  "scale": 0.7562500000000001,
+  "offset_x": -105.00000000000011,
+  "offset_y": -144.94423076923076,
+  "timestamp": "2026-08-29T08:13:48.784194",
+  "card_id": "classic_devilsaur",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

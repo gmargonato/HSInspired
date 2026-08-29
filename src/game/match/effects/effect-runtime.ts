@@ -9,6 +9,7 @@ import {
   type CardEventType,
   type CardId,
   type CardKeyword,
+  type CardSummonPlacement,
   type CardTrigger
 } from '../../content/cards'
 import { HERO_CATALOG } from '../../content/heroes'
@@ -18,11 +19,15 @@ import type {
   CardPlayTargetRef,
   CardPlayEffectPreview,
   AttackCharacterRef,
+  CombatStartedEvent,
+  DeathBatchCompletedEvent,
+  DeathBatchStartedEvent,
   EffectDomainEvent,
   EffectTraceEntry,
   GraveyardMinion,
   MatchHistory,
   MatchLegality,
+  MinionSummonedEvent,
   OpeningCard,
   OpeningMatchEvent,
   OpeningMatchState,
@@ -36,7 +41,8 @@ import type {
   RuntimeGrantedTrigger,
   RuntimeZone,
   ScheduledEffect,
-  SecretState
+  SecretState,
+  TriggerActivatedEvent
 } from '../opening-match-types'
 import type {
   PlayerHeroState,
@@ -102,6 +108,7 @@ interface SemanticEvent {
   readonly kind?:
     | 'play'
     | 'cast'
+    | 'discard'
     | 'draw'
     | 'armor'
     | 'heal'
@@ -136,6 +143,7 @@ interface EffectFrame {
   readonly addedCards: EntityRef[]
   readonly drawnCards: EntityRef[]
   readonly destroyedMinions: EntityRef[]
+  randomDamageExcluded: Set<string>
   readonly continuous?: boolean
   readonly isHeroPower?: boolean
 }
@@ -401,6 +409,8 @@ function triggerEventType(trigger: CardTrigger): CardEventType | null {
       return 'minion-died'
     case 'on-draw':
       return null
+    case 'on-discard':
+      return 'card-discarded'
     case 'on-gain-armor':
       return null
     case 'on-heal':
@@ -438,6 +448,7 @@ function cloneFrame(frame: EffectFrame, actionPath: string): EffectFrame {
     removedKeywordCount: 0,
     addedCards: [],
     drawnCards: [],
+    randomDamageExcluded: new Set(),
     continuous: frame.continuous
   }
 }
@@ -560,13 +571,31 @@ export class EffectRuntime {
   private readonly firedTriggers = new Set<string>()
   private readonly deadSources = new Map<
     string,
-    { readonly source: EntityRef; readonly blocks: readonly CardEffectBlock[] }
+    {
+      readonly source: EntityRef
+      readonly blocks: readonly CardEffectBlock[]
+      readonly position?: number
+      readonly playOrder?: number
+    }
+  >()
+  private readonly pendingWeaponDeaths = new Map<
+    string,
+    {
+      readonly source: EntityRef
+      readonly blocks: readonly CardEffectBlock[]
+      readonly playOrder?: number
+    }
   >()
   private readonly rng: DeterministicRng
   private readonly rngSnapshot: unknown
   private nextEntityOrdinal: number
   private semanticSequence = 0
+  private presentationSequence = 0
+  private combatSequence = 0
   private activeFrame: EffectFrame | null = null
+  private readonly activeTriggerIds: string[] = []
+  private deathBatchSequence = 0
+  private deathResolutionDepth = 0
   private deriving = false
 
   constructor(
@@ -668,6 +697,39 @@ export class EffectRuntime {
         ...(frame.event ? { eventType: frame.event.type } : {}),
         publicEventType: 'effect-resolved'
       })
+  }
+
+  /** Records one concrete trigger frame before any of its consequences run. */
+  private emitTriggerActivated(
+    frame: EffectFrame,
+    trigger: CardTrigger
+  ): TriggerActivatedEvent | null {
+    const event = frame.event
+    if (!event) return null
+    const activationId = `${this.resolutionId}:trigger:${this.presentationSequence++}`
+    const activation: TriggerActivatedEvent = {
+      type: 'trigger-activated',
+      activationId,
+      parentActivationId:
+        this.activeTriggerIds[this.activeTriggerIds.length - 1] ?? null,
+      eventSequence: event.sequence,
+      eventType: event.type,
+      participantId: frame.controllerId,
+      source: {
+        instanceId: frame.source.instanceId,
+        kind: frame.source.kind,
+        // Hand cards and Secrets can still be hidden from the opponent. The
+        // activation cue preserves queue parentage, but never leaks their id.
+        cardId:
+          frame.source.kind === 'secret' || frame.source.kind === 'card'
+            ? null
+            : frame.sourceCardId
+      },
+      trigger,
+      correlation: frame.correlation
+    }
+    this.events.push(activation)
+    return activation
   }
 
   private historyUpdate(update: (history: Mutable<MatchHistory>) => void): void {
@@ -797,6 +859,36 @@ export class EffectRuntime {
       (entry) => entry.minion.instanceId === ref.instanceId
     )
     return graveyard?.minion ? (graveyard.minion as DraftMinion) : null
+  }
+
+  /** Returns the timestamp used to order simultaneous trigger queues. */
+  private playOrderFor(ref: EntityRef): number | null {
+    const dead = this.deadSources.get(ref.instanceId)
+    if (dead?.source.kind === ref.kind) return dead.playOrder ?? null
+    const pendingWeapon = this.pendingWeaponDeaths.get(ref.instanceId)
+    if (pendingWeapon?.source.kind === ref.kind) return pendingWeapon.playOrder ?? null
+
+    if (ref.kind === 'card') {
+      const card = this.currentCard(ref)
+      return card?.playOrder ?? card?.creationOrdinal ?? null
+    }
+    if (ref.kind === 'minion') {
+      const minion = this.currentMinion(ref)
+      return minion?.playOrder ?? minion?.creationOrdinal ?? null
+    }
+    if (ref.kind === 'weapon') {
+      const weapon = this.player(ref.participantId).weapon
+      return weapon?.instanceId === ref.instanceId
+        ? (weapon.playOrder ?? weapon.creationOrdinal ?? null)
+        : null
+    }
+    if (ref.kind === 'secret') {
+      const secret = this.player(ref.participantId).secrets?.find(
+        (candidate) => candidate.instanceId === ref.instanceId
+      )
+      return secret?.playOrder ?? secret?.creationOrdinal ?? null
+    }
+    return null
   }
 
   private entityCard(ref: EntityRef): CardDefinition | undefined {
@@ -1328,6 +1420,18 @@ export class EffectRuntime {
         ? clamp(selector.count, 0, candidates.length)
         : undefined
     if (selection === 'random') {
+      if (frame.randomDamageExcluded.size > 0)
+        candidates = candidates.filter((candidate) => {
+          const key = entityKey(candidate)
+          if (!frame.randomDamageExcluded.has(key)) return true
+          const minion =
+            candidate.kind === 'minion' ? this.currentMinion(candidate) : null
+          if (minion && minion.health > 0) {
+            frame.randomDamageExcluded.delete(key)
+            return true
+          }
+          return false
+        })
       const chosen: EntityRef[] = []
       const pool = [...candidates]
       const amount = count ?? 1
@@ -1595,6 +1699,39 @@ export class EffectRuntime {
     return insertion
   }
 
+  /**
+   * Resolves Hearthstone-style placement for minions created by summon actions.
+   * A minion source can place its own summons beside itself; all other sources
+   * use the far-right insertion point unless the action supplies an override.
+   * A default Deathrattle summon uses its source's remembered death position.
+   */
+  private summonPosition(
+    frame: EffectFrame,
+    participantId: PlayerId,
+    placement: CardSummonPlacement | undefined,
+    summonIndex: number
+  ): number {
+    const player = this.player(participantId)
+    if (placement === 'far-right') return player.board.length
+    const sourceIndex =
+      frame.source.kind === 'minion' && frame.source.participantId === participantId
+        ? player.board.findIndex(
+            (minion) => minion.instanceId === frame.source.instanceId
+          )
+        : -1
+    if (sourceIndex >= 0) {
+      if (placement === 'alternating-around-source')
+        return summonIndex % 2 === 0 ? sourceIndex + 1 : sourceIndex
+      return sourceIndex + 1
+    }
+    if (placement === undefined && frame.source.kind === 'minion') {
+      const deathPosition = this.deadSources.get(frame.source.instanceId)?.position
+      if (deathPosition !== undefined)
+        return clamp(deathPosition, 0, player.board.length)
+    }
+    return player.board.length
+  }
+
   private takeBoardMinion(
     player: DraftPlayer,
     instanceId: string
@@ -1644,7 +1781,8 @@ export class EffectRuntime {
     cardId: CardId,
     frame: EffectFrame,
     path: string,
-    preferredInstanceId?: string
+    preferredInstanceId?: string,
+    emitGeneratedPresentation = true
   ): EntityRef | null {
     const targetPlayer = this.player(participantId)
     const definition = cardDefinition(cardId)
@@ -1689,6 +1827,17 @@ export class EffectRuntime {
       'hand'
     )
     this.applyCardZones(targetPlayer, updatedPlayer)
+    if (emitGeneratedPresentation) {
+      this.events.push({
+        type: 'card-generated',
+        participantId,
+        card: clonePlain(card) as OpeningCard,
+        origin:
+          frame.source.kind === 'minion'
+            ? { kind: 'minion', instanceId: frame.source.instanceId }
+            : { kind: 'screen-center' }
+      })
+    }
     const ref: EntityRef = {
       instanceId,
       kind: 'card',
@@ -1866,6 +2015,13 @@ export class EffectRuntime {
     const granted =
       minion?.grantedTriggers
         ?.filter(() => !minion.silenced)
+        ?.filter(
+          (entry) =>
+            (entry.startsOnTurn === undefined ||
+              entry.startsOnTurn <= this.draft.turnNumber) &&
+            (entry.expiresOnTurn === undefined ||
+              entry.expiresOnTurn >= this.draft.turnNumber)
+        )
         ?.filter((entry) => entry.trigger === trigger)
         .map(
           (entry) =>
@@ -1927,21 +2083,21 @@ export class EffectRuntime {
     source: EntityRef
   ): boolean {
     const eventSpec = block.event
-    if (!eventSpec) return true
-    const spec = asRecord(eventSpec)
-    // Minion plays are also card plays.  The semantic event keeps the more
-    // specific `minion-played` fact so minion-specific listeners can inspect it,
-    // while generic card-played listeners still observe the same command once.
-    if (spec.type === 'hero-damaged' && event.kind === 'armor') return false
     if (
-      spec.type !== undefined &&
-      !(
-        spec.type === 'card-played' &&
-        (event.type === 'minion-played' || event.type === 'secret-played')
-      ) &&
-      spec.type !== event.type
+      event.kind === 'play' &&
+      event.type !== 'card-played' &&
+      block.trigger === 'on-card-played' &&
+      eventSpec === undefined
     )
       return false
+    if (!eventSpec) return true
+    const spec = asRecord(eventSpec)
+    // A minion's early card-play event is represented by `card-played` while
+    // after-play listeners receive the later `minion-played` fact.  Generic
+    // on-card-played blocks only observe the early fact; an explicit event
+    // constraint can opt into the later phase.
+    if (spec.type === 'hero-damaged' && event.kind === 'armor') return false
+    if (spec.type !== undefined && spec.type !== event.type) return false
     const controllerValue = spec.controller
     if (!this.controllerMatches(event, source, controllerValue)) return false
     if (!this.turnPlayerMatches(source, spec.turnPlayer)) return false
@@ -2015,6 +2171,7 @@ export class EffectRuntime {
       addedCards: [],
       drawnCards: [],
       destroyedMinions: [],
+      randomDamageExcluded: new Set(),
       continuous: undefined
     }
   }
@@ -2025,6 +2182,7 @@ export class EffectRuntime {
     if (event.kind === 'turn-start' || event.kind === 'turn-end') {
       return trigger === (event.kind === 'turn-start' ? 'start-of-turn' : 'end-of-turn')
     }
+    if (event.kind === 'discard') return trigger === 'on-discard'
     if (event.kind === 'draw') return trigger === 'on-draw'
     if (event.kind === 'armor') return trigger === 'on-gain-armor'
     if (event.kind === 'heal') return trigger === 'on-heal'
@@ -2032,12 +2190,19 @@ export class EffectRuntime {
     if (event.kind === 'damage')
       return trigger === 'on-damage' && event.type === 'damage-dealt'
     if (event.kind === 'cast') return trigger === 'on-cast'
-    if (trigger === 'deathrattle') return event.type === 'minion-died'
+    if (trigger === 'deathrattle' || trigger === 'on-death')
+      return event.type === 'minion-died' || event.type === 'weapon-died'
     if (event.kind === 'play') {
       if (event.type === 'secret-played') {
-        return trigger === 'on-secret-played' || trigger === 'on-card-played'
+        return trigger === 'on-secret-played'
       }
-      if (event.type === 'card-played' || event.type === 'minion-played') {
+      if (event.type === 'card-played') {
+        return trigger === 'on-card-played'
+      }
+      if (
+        event.type === 'minion-played' ||
+        event.type === 'first-minion-played-this-turn'
+      ) {
         return trigger === 'on-card-played'
       }
       return false
@@ -2073,14 +2238,22 @@ export class EffectRuntime {
         const definitionBlocks = minion.silenced
           ? []
           : (cardDefinition(minion.cardId)?.effects ?? [])
-        const granted = (minion.grantedTriggers ?? []).map(
-          (entry) =>
-            ({
-              trigger: entry.trigger,
-              actions: entry.actions as unknown as readonly CardAction[],
-              event: undefined
-            }) as unknown as CardEffectBlock
-        )
+        const granted = (minion.silenced ? [] : (minion.grantedTriggers ?? []))
+          .filter(
+            (entry) =>
+              (entry.startsOnTurn === undefined ||
+                entry.startsOnTurn <= this.draft.turnNumber) &&
+              (entry.expiresOnTurn === undefined ||
+                entry.expiresOnTurn >= this.draft.turnNumber)
+          )
+          .map(
+            (entry) =>
+              ({
+                trigger: entry.trigger,
+                actions: entry.actions as unknown as readonly CardAction[],
+                event: undefined
+              }) as unknown as CardEffectBlock
+          )
         for (const block of [...definitionBlocks, ...granted]) {
           // Deathrattles are emitted only from the captured dead source below.
           // A living minion must not treat another minion's death as its own.
@@ -2118,6 +2291,10 @@ export class EffectRuntime {
           cardId: player.weapon.cardId
         }
         for (const block of cardDefinition(player.weapon.cardId)?.effects ?? []) {
+          // A weapon's Deathrattle belongs only to the captured weapon that
+          // entered the death queue. The newly equipped weapon must not replay
+          // its own Deathrattle when the replaced weapon dies.
+          if (block.trigger === 'deathrattle') continue
           if (
             this.triggerMatches(block.trigger, event) &&
             this.matchesEvent(block, event, source)
@@ -2167,6 +2344,19 @@ export class EffectRuntime {
         }
       }
     }
+    if (event.kind === 'discard' && event.target?.kind === 'card') {
+      const source = event.target
+      for (const block of source.cardId
+        ? (cardDefinition(source.cardId)?.effects ?? [])
+        : []) {
+        if (
+          block.trigger === 'on-discard' &&
+          this.triggerMatches(block.trigger, event) &&
+          this.matchesEvent(block, event, source)
+        )
+          result.push({ source, block, order: order++ })
+      }
+    }
     for (const entry of this.deadSources.values()) {
       for (const block of entry.blocks) {
         // A death batch keeps all dead sources available while each
@@ -2183,12 +2373,29 @@ export class EffectRuntime {
         }
       }
     }
-    return result.sort((left, right) => left.order - right.order)
+    return result.sort((left, right) => {
+      const leftPlayOrder = this.playOrderFor(left.source)
+      const rightPlayOrder = this.playOrderFor(right.source)
+      if (leftPlayOrder !== null && rightPlayOrder !== null)
+        return leftPlayOrder - rightPlayOrder || left.order - right.order
+      if (leftPlayOrder !== null) return -1
+      if (rightPlayOrder !== null) return 1
+      return left.order - right.order
+    })
   }
 
   private resolveEvent(event: SemanticEvent): void {
     this.step(`trigger.dispatch:${event.type}:${event.sequence}`, 'trigger')
     const frames = this.collectTriggerFrames(event)
+    const deathEvent = event.type === 'minion-died' || event.type === 'weapon-died'
+    if (deathEvent) {
+      // Deathrattles, death triggers, and Secrets share one queue. Deathrattle
+      // is not a privileged trigger type; the entity play timestamp decides
+      // their order. Secret consumption is handled inline so Duplicate can
+      // resolve before or after the dead source's own Deathrattle.
+      for (const entry of frames) this.runTriggerFrame(event, entry, true)
+      return
+    }
     // Secret/replacement effects are an interrupt window.  They must inspect
     // the pending fact before ordinary listeners (such as on-cast) observe it.
     // A canceled event does not dispatch its ordinary trigger frames, but the
@@ -2196,45 +2403,48 @@ export class EffectRuntime {
     const interrupts = frames.filter((entry) => entry.block.trigger === 'secret')
     const ordinary = frames.filter((entry) => entry.block.trigger !== 'secret')
     for (const entry of interrupts) {
-      const key = `${event.sequence}:${entry.order}:${entry.source.instanceId}:${entry.block.trigger}:${JSON.stringify(entry.block.event ?? null)}`
-      if (this.firedTriggers.has(key)) continue
-      this.firedTriggers.add(key)
-      const frame = this.frameFor(entry.source, event, [])
-      if (event.kind === 'draw' && event.target?.kind === 'card')
-        frame.drawnCards.push(event.target)
-      // A matching Secret remains hidden when no action can change the current
-      // state (for example, Mirror Entity with a full board). Its target can
-      // also disappear after an earlier Secret in this same interrupt window.
-      if (
-        entry.source.kind === 'secret' &&
-        !this.secretCanTakeEffect(entry.block, frame)
-      )
-        continue
-      const consumedSecret =
-        entry.source.kind === 'secret' && entry.block.trigger === 'secret'
-          ? this.takeSecret(entry.source)
-          : null
-      if (entry.source.kind === 'secret' && !consumedSecret) continue
-      this.runBlock(entry.block, frame, `trigger.${entry.block.trigger}`)
-      if (consumedSecret)
-        this.revealConsumedSecret(
-          entry.source,
-          consumedSecret,
-          frame,
-          `trigger.${entry.block.trigger}`
-        )
+      this.runTriggerFrame(event, entry, true)
       if (event.cancelled || event.prevented) break
     }
     if (event.cancelled || event.prevented) return
-    for (const entry of ordinary) {
-      const key = `${event.sequence}:${entry.order}:${entry.source.instanceId}:${entry.block.trigger}:${JSON.stringify(entry.block.event ?? null)}`
-      if (this.firedTriggers.has(key)) continue
-      this.firedTriggers.add(key)
-      const frame = this.frameFor(entry.source, event, [])
-      if (event.kind === 'draw' && event.target?.kind === 'card')
-        frame.drawnCards.push(event.target)
-      this.runBlock(entry.block, frame, `trigger.${entry.block.trigger}`)
-    }
+    for (const entry of ordinary) this.runTriggerFrame(event, entry, false)
+  }
+
+  private runTriggerFrame(
+    event: SemanticEvent,
+    entry: {
+      readonly source: EntityRef
+      readonly block: CardEffectBlock
+      readonly order: number
+    },
+    consumeSecrets: boolean
+  ): void {
+    const key = `${event.sequence}:${entry.order}:${entry.source.instanceId}:${entry.block.trigger}:${JSON.stringify(entry.block.event ?? null)}`
+    if (this.firedTriggers.has(key)) return
+    this.firedTriggers.add(key)
+    const frame = this.frameFor(entry.source, event, [])
+    if (event.kind === 'draw' && event.target?.kind === 'card')
+      frame.drawnCards.push(event.target)
+    // A matching Secret remains hidden when no action can change the current
+    // state (for example, Mirror Entity with a full board). Its target can
+    // also disappear after an earlier Secret in this same interrupt window.
+    if (entry.source.kind === 'secret' && !this.secretCanTakeEffect(entry.block, frame))
+      return
+    const consumedSecret =
+      consumeSecrets &&
+      entry.source.kind === 'secret' &&
+      entry.block.trigger === 'secret'
+        ? this.takeSecret(entry.source)
+        : null
+    if (entry.source.kind === 'secret' && !consumedSecret) return
+    this.runBlock(entry.block, frame, `trigger.${entry.block.trigger}`, true)
+    if (consumedSecret)
+      this.revealConsumedSecret(
+        entry.source,
+        consumedSecret,
+        frame,
+        `trigger.${entry.block.trigger}`
+      )
   }
 
   /** Whether this Secret has at least one action that can affect the live state. */
@@ -2307,7 +2517,12 @@ export class EffectRuntime {
     )
   }
 
-  private runBlock(block: CardEffectBlock, frame: EffectFrame, path: string): void {
+  private runBlock(
+    block: CardEffectBlock,
+    frame: EffectFrame,
+    path: string,
+    emitTriggerPresentation = false
+  ): void {
     const kind: ResolutionQueueKind = path.startsWith('trigger.')
       ? 'trigger'
       : path.includes('.repeat')
@@ -2320,47 +2535,55 @@ export class EffectRuntime {
         this.activeFrame = frame
         try {
           if (block.condition && !this.conditionMatches(block.condition, frame)) return
-          if (block.choice) {
-            const options = asArray(asRecord(block.choice).options)
-            const choice = frame === this.activeFrame ? this.choiceForFrame(frame) : 0
-            const option = options[choice]
-            if (isRecord(option))
-              this.runActions(
-                asArray(option.actions),
-                frame,
-                `${path}.choice[${choice}]`
-              )
-          } else if (block.actions) {
-            this.runActions(block.actions, frame, `${path}.actions`)
-          }
-          if (block.then) {
-            const branch = asRecord(block.then)
-            if (!branch.condition || this.conditionMatches(branch.condition, frame))
-              this.runActions(asArray(branch.actions), frame, `${path}.then`)
-          }
-          if (block.repeat) {
-            const repeat = asRecord(block.repeat)
-            let count = 0
-            while (
-              count < MAX_RESOLUTION_STEPS &&
-              !this.conditionMatches(repeat.until, frame)
-            ) {
-              const priorEventSequence = frame.lastEvent?.sequence
-              this.runActions(
-                asArray(repeat.actions),
-                frame,
-                `${path}.repeat[${count}]`
-              )
-              count += 1
-              // A repeat whose action has no legal target is a completed empty
-              // resolution, not an invitation to spin until the global budget.
-              if (frame.lastEvent?.sequence === priorEventSequence) break
+          const activation = emitTriggerPresentation
+            ? this.emitTriggerActivated(frame, block.trigger)
+            : null
+          if (activation) this.activeTriggerIds.push(activation.activationId)
+          try {
+            if (block.choice) {
+              const options = asArray(asRecord(block.choice).options)
+              const choice = frame === this.activeFrame ? this.choiceForFrame(frame) : 0
+              const option = options[choice]
+              if (isRecord(option))
+                this.runActions(
+                  asArray(option.actions),
+                  frame,
+                  `${path}.choice[${choice}]`
+                )
+            } else if (block.actions) {
+              this.runActions(block.actions, frame, `${path}.actions`)
             }
-            if (count >= MAX_RESOLUTION_STEPS)
-              throw new ResolutionBudgetError(
-                'Repeat exceeded the resolution budget.',
-                frame
-              )
+            if (block.then) {
+              const branch = asRecord(block.then)
+              if (!branch.condition || this.conditionMatches(branch.condition, frame))
+                this.runActions(asArray(branch.actions), frame, `${path}.then`)
+            }
+            if (block.repeat) {
+              const repeat = asRecord(block.repeat)
+              let count = 0
+              while (
+                count < MAX_RESOLUTION_STEPS &&
+                !this.conditionMatches(repeat.until, frame)
+              ) {
+                const priorEventSequence = frame.lastEvent?.sequence
+                this.runActions(
+                  asArray(repeat.actions),
+                  frame,
+                  `${path}.repeat[${count}]`
+                )
+                count += 1
+                // A repeat whose action has no legal target is a completed empty
+                // resolution, not an invitation to spin until the global budget.
+                if (frame.lastEvent?.sequence === priorEventSequence) break
+              }
+              if (count >= MAX_RESOLUTION_STEPS)
+                throw new ResolutionBudgetError(
+                  'Repeat exceeded the resolution budget.',
+                  frame
+                )
+            }
+          } finally {
+            if (activation) this.activeTriggerIds.pop()
           }
         } finally {
           this.activeFrame = prior
@@ -2609,6 +2832,17 @@ export class EffectRuntime {
     frame: EffectFrame,
     path: string
   ): void {
+    const attackBefore = this.readAttack(ref)
+    const maximumHealthBefore = this.readMaximumHealth(ref)
+    const healthBefore =
+      ref.kind === 'minion'
+        ? (this.currentMinion(ref)?.health ?? maximumHealthBefore)
+        : ref.kind === 'hero'
+          ? this.player(ref.participantId).hero.health
+          : ref.kind === 'card'
+            ? (this.currentCard(ref)?.health ?? maximumHealthBefore)
+            : maximumHealthBefore
+    const durabilityBefore = this.readDurability(ref)
     const duration = stringValue(action.duration) ?? 'permanent'
     const enchantmentId = frame.continuous
       ? `${frame.source.instanceId}:continuous-enchantment:${ref.instanceId}:${path}`
@@ -2728,14 +2962,29 @@ export class EffectRuntime {
     }
     if (ref.kind === 'weapon' && action.durability !== undefined)
       this.recomputeContinuousEffects()
-    if (
-      duration === 'this-turn' ||
-      duration === 'next-turn' ||
-      duration === 'until-next-turn' ||
-      duration === 'this-attack'
-    ) {
-      this.emit(frame, 'modify', path, { target: ref.instanceId, duration })
-    }
+    const attackAfter = this.readAttack(ref)
+    const maximumHealthAfter = this.readMaximumHealth(ref)
+    const healthAfter =
+      ref.kind === 'minion'
+        ? (this.currentMinion(ref)?.health ?? maximumHealthAfter)
+        : ref.kind === 'hero'
+          ? this.player(ref.participantId).hero.health
+          : ref.kind === 'card'
+            ? (this.currentCard(ref)?.health ?? maximumHealthAfter)
+            : maximumHealthAfter
+    const durabilityAfter = this.readDurability(ref)
+    this.emit(frame, 'modify', path, {
+      target: ref.instanceId,
+      duration,
+      attackBefore,
+      attackAfter,
+      healthBefore,
+      healthAfter,
+      maximumHealthBefore,
+      maximumHealthAfter,
+      durabilityBefore,
+      durabilityAfter
+    })
   }
 
   private readAttack(ref: EntityRef): number {
@@ -3028,7 +3277,8 @@ export class EffectRuntime {
         amount: scaledDamage,
         actualDamage,
         armorDamage: effectiveArmorDamage,
-        healthAfter: player.hero.health
+        healthAfter: player.hero.health,
+        armorAfter: player.hero.armor
       })
       effectiveDamage = totalDamage
     } else if (ref.kind === 'minion') {
@@ -3183,92 +3433,177 @@ export class EffectRuntime {
   }
 
   private processDeaths(): void {
-    const dead: {
+    // Death effects can create new lethal minions, but those deaths are not
+    // checked until the current death event has finished resolving.
+    if (this.deathResolutionDepth > 0) return
+
+    type DeadMinionEntry = {
       readonly player: DraftPlayer
       readonly minion: DraftMinion
       readonly index: number
       readonly playerIndex: number
-    }[] = []
-    for (const [playerIndex, player] of this.draft.players.entries()) {
-      player.board.forEach((minion, index) => {
-        if (minion.health <= 0)
-          dead.push({
-            player,
-            minion: minion as DraftMinion,
-            index,
-            playerIndex
+    }
+    type DeathEntry = {
+      readonly source: EntityRef
+      readonly playOrder?: number
+      readonly fallbackOrder: number
+    }
+
+    while (true) {
+      const dead: DeadMinionEntry[] = []
+      for (const [playerIndex, player] of this.draft.players.entries()) {
+        player.board.forEach((minion, index) => {
+          if (minion.health <= 0)
+            dead.push({
+              player,
+              minion: minion as DraftMinion,
+              index,
+              playerIndex
+            })
+        })
+      }
+      const weapons = [...this.pendingWeaponDeaths.values()]
+      if (dead.length === 0 && weapons.length === 0) return
+      this.step('checkpoint.death-batch', 'death-batch')
+
+      // A death batch is captured before any Deathrattle runs. The timestamp
+      // records the entity's most recent entry into play; older fixtures fall
+      // back to their stable creation ordinal and then board order.
+      dead.sort((left, right) => {
+        const leftOrdinal = left.minion.playOrder ?? left.minion.creationOrdinal
+        const rightOrdinal = right.minion.playOrder ?? right.minion.creationOrdinal
+        if (
+          leftOrdinal !== undefined &&
+          rightOrdinal !== undefined &&
+          leftOrdinal !== rightOrdinal
+        )
+          return leftOrdinal - rightOrdinal
+        if (leftOrdinal !== undefined && rightOrdinal === undefined) return -1
+        if (leftOrdinal === undefined && rightOrdinal !== undefined) return 1
+        return left.playerIndex - right.playerIndex || left.index - right.index
+      })
+      const deadKeys = new Set(dead.map((entry) => entry.minion.instanceId))
+      const deathEntries: DeathEntry[] = []
+
+      for (const entry of dead) {
+        this.replaceBoard(
+          entry.player,
+          entry.player.board.filter((minion) => !deadKeys.has(minion.instanceId))
+        )
+        const snapshot = clonePlain(entry.minion) as DraftMinion
+        const graveyardEntry: Mutable<GraveyardMinion> = {
+          minion: snapshot,
+          ownerId: entry.minion.ownerId ?? entry.player.participantId,
+          controllerId: entry.minion.controllerId ?? entry.player.participantId,
+          diedOnTurn: this.draft.turnNumber,
+          deathOrdinal: this.nextEntityOrdinal
+        }
+        this.nextEntityOrdinal += 1
+        this.appendGraveyard(entry.player, graveyardEntry)
+        const source: EntityRef = {
+          instanceId: entry.minion.instanceId,
+          kind: 'minion',
+          participantId: entry.player.participantId,
+          zone: 'graveyard',
+          cardId: entry.minion.cardId
+        }
+        const rememberedPosition = Math.max(
+          0,
+          entry.index -
+            dead
+              .slice(0, dead.indexOf(entry))
+              .filter(
+                (previous) =>
+                  previous.playerIndex === entry.playerIndex &&
+                  previous.index < entry.index
+              ).length
+        )
+        this.deadSources.set(source.instanceId, {
+          source,
+          blocks: this.actionBlocksFor(source, 'deathrattle'),
+          position: rememberedPosition,
+          playOrder: entry.minion.playOrder ?? entry.minion.creationOrdinal
+        })
+        deathEntries.push({
+          source,
+          playOrder: entry.minion.playOrder ?? entry.minion.creationOrdinal,
+          fallbackOrder: entry.playerIndex * 1000 + entry.index
+        })
+        this.historyUpdate((history) => {
+          history.minionsDiedThisTurn = [
+            ...history.minionsDiedThisTurn,
+            entry.minion.cardId
+          ]
+          history.cardsDiedThisGame = [
+            ...history.cardsDiedThisGame,
+            entry.minion.cardId
+          ]
+        })
+      }
+
+      for (const weapon of weapons) {
+        this.pendingWeaponDeaths.delete(weapon.source.instanceId)
+        this.deadSources.set(weapon.source.instanceId, {
+          source: weapon.source,
+          blocks: weapon.blocks,
+          playOrder: weapon.playOrder ?? undefined
+        })
+        deathEntries.push({
+          source: weapon.source,
+          playOrder: weapon.playOrder,
+          fallbackOrder: 2000 + deathEntries.length
+        })
+      }
+
+      deathEntries.sort((left, right) => {
+        if (
+          left.playOrder !== undefined &&
+          right.playOrder !== undefined &&
+          left.playOrder !== right.playOrder
+        )
+          return left.playOrder - right.playOrder
+        if (left.playOrder !== undefined && right.playOrder === undefined) return -1
+        if (left.playOrder === undefined && right.playOrder !== undefined) return 1
+        return left.fallbackOrder - right.fallbackOrder
+      })
+      const batchId = `${this.resolutionId}:death-batch:${this.deathBatchSequence++}`
+      const batchEvent: DeathBatchStartedEvent = {
+        type: 'death-batch-started',
+        batchId,
+        deaths: deathEntries.map((entry) => {
+          const dead = this.deadSources.get(entry.source.instanceId)
+          return {
+            instanceId: entry.source.instanceId,
+            participantId: entry.source.participantId,
+            kind: entry.source.kind as DeathBatchStartedEvent['deaths'][number]['kind'],
+            cardId: entry.source.cardId!,
+            ...(dead?.position === undefined ? {} : { position: dead.position }),
+            hasDeathrattle: (dead?.blocks.length ?? 0) > 0
+          }
+        })
+      }
+      this.events.push(batchEvent)
+      for (const entry of deathEntries) {
+        this.deathResolutionDepth += 1
+        try {
+          this.emitSemantic({
+            type: entry.source.kind === 'weapon' ? 'weapon-died' : 'minion-died',
+            source: entry.source,
+            target: entry.source,
+            controllerId: entry.source.participantId,
+            targetControllerId: entry.source.participantId,
+            cardId: entry.source.cardId
           })
-      })
-    }
-    if (dead.length === 0) return
-    this.step('checkpoint.death-batch', 'death-batch')
-    // A death batch is captured before any deathrattle runs.  Creation order is
-    // the stable play-order key; legacy fixtures without it fall back to the
-    // captured board position and participant order.
-    dead.sort((left, right) => {
-      const leftOrdinal = left.minion.creationOrdinal
-      const rightOrdinal = right.minion.creationOrdinal
-      if (
-        leftOrdinal !== undefined &&
-        rightOrdinal !== undefined &&
-        leftOrdinal !== rightOrdinal
-      )
-        return leftOrdinal - rightOrdinal
-      if (leftOrdinal !== undefined && rightOrdinal === undefined) return -1
-      if (leftOrdinal === undefined && rightOrdinal !== undefined) return 1
-      return left.playerIndex - right.playerIndex || left.index - right.index
-    })
-    const deadKeys = new Set(dead.map((entry) => entry.minion.instanceId))
-    for (const entry of dead) {
-      this.replaceBoard(
-        entry.player,
-        entry.player.board.filter((minion) => !deadKeys.has(minion.instanceId))
-      )
-      const snapshot = clonePlain(entry.minion) as DraftMinion
-      const graveyardEntry: Mutable<GraveyardMinion> = {
-        minion: snapshot,
-        ownerId: entry.minion.ownerId ?? entry.player.participantId,
-        controllerId: entry.minion.controllerId ?? entry.player.participantId,
-        diedOnTurn: this.draft.turnNumber,
-        deathOrdinal: this.nextEntityOrdinal
+        } finally {
+          this.deathResolutionDepth -= 1
+        }
+        this.deadSources.delete(entry.source.instanceId)
       }
-      this.nextEntityOrdinal += 1
-      this.appendGraveyard(entry.player, graveyardEntry)
-      const source: EntityRef = {
-        instanceId: entry.minion.instanceId,
-        kind: 'minion',
-        participantId: entry.player.participantId,
-        zone: 'graveyard',
-        cardId: entry.minion.cardId
+      const completed: DeathBatchCompletedEvent = {
+        type: 'death-batch-completed',
+        batchId
       }
-      this.deadSources.set(source.instanceId, {
-        source,
-        blocks: this.actionBlocksFor(source, 'deathrattle')
-      })
-      this.historyUpdate((history) => {
-        history.minionsDiedThisTurn = [
-          ...history.minionsDiedThisTurn,
-          entry.minion.cardId
-        ]
-        history.cardsDiedThisGame = [...history.cardsDiedThisGame, entry.minion.cardId]
-      })
-    }
-    for (const entry of dead) {
-      const source = this.deadSources.get(entry.minion.instanceId)?.source ?? {
-        instanceId: entry.minion.instanceId,
-        kind: 'minion' as const,
-        participantId: entry.player.participantId,
-        zone: 'graveyard' as const,
-        cardId: entry.minion.cardId
-      }
-      this.emitSemantic({
-        type: 'minion-died',
-        source,
-        target: source,
-        controllerId: source.participantId,
-        targetControllerId: source.participantId
-      })
-      this.deadSources.delete(entry.minion.instanceId)
+      this.events.push(completed)
     }
   }
 
@@ -3345,7 +3680,8 @@ export class EffectRuntime {
           card.cardId,
           frame,
           path,
-          card.instanceId
+          card.instanceId,
+          false
         )
         if (returned) this.replaceEventReference(frame, ref, returned)
       }
@@ -3361,7 +3697,8 @@ export class EffectRuntime {
     sourceInstanceId?: string,
     position?: number,
     copyFrom?: DraftMinion,
-    cardState?: DraftCard
+    cardState?: DraftCard,
+    deferSummonTriggers = false
   ): EntityRef | null {
     const player = this.player(participantId)
     if (player.board.length >= MAX_BOARD_SIZE) return null
@@ -3379,6 +3716,7 @@ export class EffectRuntime {
       ownerId: cardState?.ownerId ?? participantId,
       controllerId: participantId,
       creationOrdinal: cardState?.creationOrdinal ?? this.nextEntityOrdinal++,
+      playOrder: this.nextEntityOrdinal++,
       baseAttack: copyFrom?.baseAttack ?? definition.attack,
       baseHealth: copyFrom?.baseHealth ?? definition.health,
       keywords: copyFrom?.keywords
@@ -3438,16 +3776,34 @@ export class EffectRuntime {
       instanceId,
       position: insertion
     })
+    if (!deferSummonTriggers) {
+      this.events.push({
+        type: 'minion-summoned',
+        participantId,
+        minion: clonePlain(minion) as BoardMinion,
+        position: insertion
+      } satisfies MinionSummonedEvent)
+      this.emitMinionSummoned(frame, ref, participantId, cardId, instanceId)
+    }
+    return ref
+  }
+
+  private emitMinionSummoned(
+    frame: EffectFrame,
+    target: EntityRef,
+    participantId: PlayerId,
+    cardId: CardId,
+    instanceId: string
+  ): void {
     this.emitSemantic({
       type: 'minion-summoned',
       source: frame.source,
-      target: ref,
+      target,
       controllerId: participantId,
       targetControllerId: participantId,
       cardId,
       cardInstanceId: instanceId
     })
-    return ref
   }
 
   private equip(
@@ -3462,6 +3818,14 @@ export class EffectRuntime {
     if (!definition || definition.type !== 'Weapon') return
     const player = this.player(participantId)
     const replaced = player.weapon
+    if (replaced)
+      this.queueWeaponDeath({
+        instanceId: replaced.instanceId,
+        kind: 'weapon',
+        participantId,
+        zone: 'weapon',
+        cardId: replaced.cardId
+      })
     player.weapon = {
       instanceId: preferredInstanceId ?? this.allocateId(`${participantId}:weapon`),
       cardId,
@@ -3471,6 +3835,7 @@ export class EffectRuntime {
       ownerId: participantId,
       controllerId: participantId,
       creationOrdinal: preferredCreationOrdinal ?? this.nextEntityOrdinal++,
+      playOrder: this.nextEntityOrdinal++,
       enchantments: []
     }
     this.emit(frame, 'equip', path, {
@@ -3674,16 +4039,21 @@ export class EffectRuntime {
     if (action.source === undefined) return []
     const sourceSelector = isRecord(action.source) ? action.source : null
     if (action.source === 'random-card') {
-      const candidates = [
-        ...CARD_CATALOG.all.filter((card) => card.collectible),
-        ...GENERATED_CARD_DEFINITIONS
-      ]
-        .map((card) => ({
-          instanceId: `${frame.controllerId}:pool:${card.id}`,
+      const randomCardIds = Array.isArray(action.pool)
+        ? action.pool.filter((entry): entry is string => typeof entry === 'string')
+        : [
+            ...CARD_CATALOG.all
+              .filter((card) => card.collectible)
+              .map((card) => card.id),
+            ...GENERATED_CARD_DEFINITIONS.map((card) => card.id)
+          ]
+      const candidates = randomCardIds
+        .map((cardId) => ({
+          instanceId: `${frame.controllerId}:pool:${cardId}`,
           kind: 'card' as const,
           participantId: frame.controllerId,
           zone: 'revealed' as const,
-          cardId: card.id
+          cardId: cardId as CardId
         }))
         .filter((candidate) => this.matchesFilter(candidate, action.filter, frame))
       const count =
@@ -3845,6 +4215,31 @@ export class EffectRuntime {
     )
   }
 
+  private queueWeaponDeath(ref: EntityRef): boolean {
+    if (ref.kind !== 'weapon' || this.pendingWeaponDeaths.has(ref.instanceId))
+      return false
+    const player = this.player(ref.participantId)
+    const weapon = player.weapon
+    if (!weapon || weapon.instanceId !== ref.instanceId) return false
+    const source: EntityRef = {
+      instanceId: weapon.instanceId,
+      kind: 'weapon',
+      participantId: player.participantId,
+      zone: 'graveyard',
+      cardId: weapon.cardId
+    }
+    this.pendingWeaponDeaths.set(source.instanceId, {
+      source,
+      blocks:
+        cardDefinition(weapon.cardId)?.effects.filter(
+          (effect) => effect.trigger === 'deathrattle'
+        ) ?? [],
+      playOrder: weapon.playOrder ?? weapon.creationOrdinal
+    })
+    player.weapon = null
+    return true
+  }
+
   private directDestroy(ref: EntityRef, frame: EffectFrame, path: string): void {
     if (ref.kind === 'minion') {
       const minion = this.currentMinion(ref)
@@ -3869,8 +4264,7 @@ export class EffectRuntime {
       this.setHealth(ref, 0)
       this.emit(frame, 'destroy', path, { target: ref.instanceId })
     } else if (ref.kind === 'weapon') {
-      const player = this.player(ref.participantId)
-      if (player.weapon?.instanceId === ref.instanceId) player.weapon = null
+      this.queueWeaponDeath(ref)
       this.emit(frame, 'destroy', path, { target: ref.instanceId })
     } else if (ref.kind === 'secret') {
       this.removeSecret(ref)
@@ -4212,16 +4606,15 @@ export class EffectRuntime {
         this.emit(frame, name, path, { eventType: frame.event?.type ?? null })
         return
       case 'damage': {
-        const targets = this.actionTargets(action, frame)
         const baseHits =
           action.hits === undefined
             ? 1
             : Math.max(1, Math.floor(this.evaluate(action.hits, frame)))
+        const randomTarget =
+          isRecord(action.target) && action.target.selection === 'random'
+        const targets = randomTarget ? [] : this.actionTargets(action, frame)
         const randomSplitSpell =
-          this.sourceIsSpell(frame) &&
-          isRecord(action.target) &&
-          action.target.selection === 'random' &&
-          action.amount === 1
+          this.sourceIsSpell(frame) && randomTarget && action.amount === 1
         const hits = randomSplitSpell
           ? Math.max(
               1,
@@ -4231,23 +4624,32 @@ export class EffectRuntime {
               )
             )
           : baseHits
-        for (let hit = 0; hit < hits; hit += 1) {
-          const selectedTargets =
-            action.target &&
-            isRecord(action.target) &&
-            action.target.selection === 'random'
+        const tracksMortallyWoundedRandomTargets =
+          randomTarget && (action.hits !== undefined || randomSplitSpell)
+        const previousRandomDamageExcluded = frame.randomDamageExcluded
+        if (tracksMortallyWoundedRandomTargets) frame.randomDamageExcluded = new Set()
+        try {
+          for (let hit = 0; hit < hits; hit += 1) {
+            const selectedTargets = randomTarget
               ? this.actionTargets(action, frame)
               : targets
-          for (const target of selectedTargets) {
-            this.withTarget(frame, target, () => {
-              const amount = this.evaluate(action.amount, frame)
-              this.applyDamage(target, amount, frame, path + '.hit' + hit, {
-                skipSpellScaling: randomSplitSpell
+            for (const target of selectedTargets) {
+              this.withTarget(frame, target, () => {
+                const amount = this.evaluate(action.amount, frame)
+                this.applyDamage(target, amount, frame, path + '.hit' + hit, {
+                  skipSpellScaling: randomSplitSpell
+                })
               })
-            })
-            frame.lastActionTarget = target
+              const minion =
+                target.kind === 'minion' ? this.currentMinion(target) : null
+              if (tracksMortallyWoundedRandomTargets && minion && minion.health <= 0)
+                frame.randomDamageExcluded.add(entityKey(target))
+              frame.lastActionTarget = target
+            }
           }
-          if (action.hits !== undefined) this.processDeaths()
+        } finally {
+          if (tracksMortallyWoundedRandomTargets)
+            frame.randomDamageExcluded = previousRandomDamageExcluded
         }
         return
       }
@@ -4304,9 +4706,26 @@ export class EffectRuntime {
           const card = this.removeCard(target)
           if (card) {
             this.addToDiscardedCards(this.player(target.participantId), card)
+            const discarded: EntityRef = {
+              instanceId: card.instanceId,
+              kind: 'card',
+              participantId: target.participantId,
+              zone: 'discarded',
+              cardId: card.cardId
+            }
             this.emit(frame, name, path, {
               target: card.instanceId,
               cardId: card.cardId
+            })
+            this.emitSemantic({
+              type: 'card-discarded',
+              source: frame.source,
+              target: discarded,
+              controllerId: target.participantId,
+              targetControllerId: target.participantId,
+              cardId: card.cardId,
+              cardInstanceId: card.instanceId,
+              kind: 'discard'
             })
           }
         }
@@ -4499,7 +4918,7 @@ export class EffectRuntime {
           const blocks = this.actionBlocksFor(target, 'deathrattle')
           const deathEvent: SemanticEvent = {
             sequence: this.semanticSequence++,
-            type: 'minion-died',
+            type: target.kind === 'weapon' ? 'weapon-died' : 'minion-died',
             source: target,
             target,
             controllerId: target.participantId,
@@ -4510,7 +4929,7 @@ export class EffectRuntime {
             choiceIndex: frame.choiceIndex
           }
           for (const block of blocks)
-            this.runBlock(block, triggerFrame, path + '.deathrattle')
+            this.runBlock(block, triggerFrame, path + '.deathrattle', true)
         }
         return
       }
@@ -4781,6 +5200,7 @@ export class EffectRuntime {
                 ownerId: card.ownerId ?? participantId,
                 controllerId: participantId,
                 creationOrdinal: card.creationOrdinal ?? this.nextEntityOrdinal++,
+                playOrder: this.nextEntityOrdinal++,
                 revealed: false
               }
               this.appendSecret(targetPlayer, secret)
@@ -5014,12 +5434,20 @@ export class EffectRuntime {
         if (!trigger || !CARD_TRIGGERS.includes(trigger)) return
         const selectedTarget =
           action.target === undefined ? undefined : this.select(action.target, frame)[0]
+        // A start-of-turn schedule without an explicit turn is authored as
+        // the source controller's next turn. If the source is acting now,
+        // the opponent's turn is one boundary away and the source's turn is
+        // two boundaries away.
+        const startOfTurnOffset =
+          this.draft.activePlayerId === frame.controllerId ? 2 : 1
         const executeOnTurn =
           typeof action.executeOnTurn === 'number'
             ? Math.max(0, Math.floor(action.executeOnTurn))
             : trigger === 'end-of-turn'
               ? this.draft.turnNumber
-              : this.draft.turnNumber + 1
+              : trigger === 'start-of-turn'
+                ? this.draft.turnNumber + startOfTurnOffset
+                : this.draft.turnNumber + 1
         const scheduled: ScheduledEffect = {
           id: this.allocateId(frame.source.instanceId + ':schedule'),
           sourceInstanceId: frame.source.instanceId,
@@ -5212,13 +5640,21 @@ export class EffectRuntime {
           typeof action.controller === 'string' && action.controller === 'opponent'
             ? this.otherPlayer(frame.controllerId)
             : frame.controllerId
+        const placement =
+          typeof action.placement === 'string'
+            ? (action.placement as CardSummonPlacement)
+            : undefined
+        let summonIndex = 0
         for (let index = 0; index < count; index += 1) {
           const summoned = this.createMinion(
             controller,
             cardId,
             frame,
-            `${path}.${index}`
+            `${path}.${index}`,
+            undefined,
+            this.summonPosition(frame, controller, placement, summonIndex)
           )
+          if (summoned) summonIndex += 1
           if (
             summoned &&
             frame.event &&
@@ -5235,26 +5671,54 @@ export class EffectRuntime {
             ? this.actionTargets(action, frame)
             : this.sourceEntities(action, frame)
         const count = Math.max(1, this.evaluate(action.count ?? 1, frame))
+        const placement =
+          typeof action.placement === 'string'
+            ? (action.placement as CardSummonPlacement)
+            : undefined
+        let summonIndex = 0
         for (const target of targets)
           for (let index = 0; index < count; index += 1)
             if (target.cardId)
-              this.createMinion(
-                frame.controllerId,
-                target.cardId,
-                frame,
-                path,
-                undefined,
-                undefined,
-                this.currentMinion(target) ?? undefined
+              if (
+                this.createMinion(
+                  frame.controllerId,
+                  target.cardId,
+                  frame,
+                  path,
+                  undefined,
+                  this.summonPosition(
+                    frame,
+                    frame.controllerId,
+                    placement,
+                    summonIndex
+                  ),
+                  this.currentMinion(target) ?? undefined
+                )
               )
+                summonIndex += 1
         return
       }
       case 'summon-for-each': {
         const cardId = this.actionCardId(action)
         if (!cardId) return
         const sources = this.sourceEntities(action, frame)
+        const placement =
+          typeof action.placement === 'string'
+            ? (action.placement as CardSummonPlacement)
+            : undefined
+        let summonIndex = 0
         for (let index = 0; index < sources.length; index += 1)
-          this.createMinion(frame.controllerId, cardId, frame, `${path}.${index}`)
+          if (
+            this.createMinion(
+              frame.controllerId,
+              cardId,
+              frame,
+              `${path}.${index}`,
+              undefined,
+              this.summonPosition(frame, frame.controllerId, placement, summonIndex)
+            )
+          )
+            summonIndex += 1
         return
       }
       case 'summon-random': {
@@ -5278,11 +5742,26 @@ export class EffectRuntime {
                   )
               )
               .map((card) => card.id)
+        const placement =
+          typeof action.placement === 'string'
+            ? (action.placement as CardSummonPlacement)
+            : undefined
+        let summonIndex = 0
         for (let index = 0; index < count; index += 1) {
           const cardId = pool[Math.floor(this.rng.next() * pool.length)] as
             CardId | undefined
           if (cardId)
-            this.createMinion(frame.controllerId, cardId, frame, `${path}.${index}`)
+            if (
+              this.createMinion(
+                frame.controllerId,
+                cardId,
+                frame,
+                `${path}.${index}`,
+                undefined,
+                this.summonPosition(frame, frame.controllerId, placement, summonIndex)
+              )
+            )
+              summonIndex += 1
         }
         return
       }
@@ -5826,11 +6305,7 @@ export class EffectRuntime {
     })
   }
 
-  /**
-   * Reduces the currently resolvable targeted action to a small player-facing
-   * message. This deliberately lives with effect evaluation so presentation
-   * never has to reimplement conditional card rules.
-   */
+  /** Determines whether the current effect branch is conditionally enhanced. */
   private playEffectPreview(
     card: CardDefinition,
     frame: EffectFrame
@@ -5840,39 +6315,12 @@ export class EffectRuntime {
         (block.trigger === 'cast' || block.trigger === 'battlecry') &&
         (!block.condition || this.conditionMatches(block.condition, frame))
     )
-    const summaries = activeBlocks
-      .flatMap((block) => block.actions ?? [])
-      .map((action) => this.actionPreviewSummary(action))
-      .filter((summary): summary is string => summary !== null)
     if (activeBlocks.length === 0) return null
     return {
-      summary: summaries[0] ?? 'Choose a target',
       conditionallyEnhanced: activeBlocks.some(
         (block) =>
           block.condition !== undefined && this.isPositivePlayCondition(block.condition)
       )
-    }
-  }
-
-  private actionPreviewSummary(action: CardAction): string | null {
-    const amount = typeof action.amount === 'number' ? action.amount : null
-    switch (action.action) {
-      case 'damage':
-        return amount === null ? null : `Deal ${amount} damage`
-      case 'restore':
-        return amount === null ? null : `Restore ${amount} Health`
-      case 'destroy':
-        return 'Destroy target'
-      case 'freeze':
-        return 'Freeze target'
-      case 'return-to-hand':
-        return 'Return target to hand'
-      case 'silence':
-        return 'Silence target'
-      case 'take-control':
-        return 'Take control of target'
-      default:
-        return null
     }
   }
 
@@ -6919,6 +7367,32 @@ export class EffectRuntime {
             }
           : actualDefender
       const defenderFrame = this.frameFor(defenderFrameSource, resolvedAttack, [])
+      const combatId = `${this.resolutionId}:combat:${this.combatSequence++}`
+      const combatStarted: CombatStartedEvent = {
+        type: 'combat-started',
+        combatId,
+        attacker: {
+          participantId: attacker.participantId,
+          character:
+            attacker.kind === 'hero'
+              ? { kind: 'hero' }
+              : { kind: 'minion', instanceId: attacker.instanceId },
+          attack: attackerAttack,
+          healthBefore: attackerHealthBefore,
+          armorBefore: attackerArmorBefore
+        },
+        defender: {
+          participantId: actualDefender.participantId,
+          character:
+            actualDefender.kind === 'hero'
+              ? { kind: 'hero' }
+              : { kind: 'minion', instanceId: actualDefender.instanceId },
+          attack: defenderAttack,
+          healthBefore: defenderHealthBefore,
+          armorBefore: defenderArmorBefore
+        }
+      }
+      this.events.push(combatStarted)
       const attackerDamage = this.applyDamage(
         actualDefender,
         attackerAttack,
@@ -6931,7 +7405,6 @@ export class EffectRuntime {
         defenderFrame,
         'combat.defender'
       )
-      this.processDeaths()
 
       if (attacker.kind === 'minion') {
         const minion = this.currentMinion(attacker)
@@ -6946,10 +7419,18 @@ export class EffectRuntime {
         const weapon = this.player(attacker.participantId).weapon
         if (weapon) {
           weapon.durability = Math.max(0, weapon.durability - 1)
-          if (weapon.durability === 0) this.player(attacker.participantId).weapon = null
+          if (weapon.durability === 0)
+            this.queueWeaponDeath({
+              instanceId: weapon.instanceId,
+              kind: 'weapon',
+              participantId: attacker.participantId,
+              zone: 'weapon',
+              cardId: weapon.cardId
+            })
         }
       }
       this.expireAttackEnchantments(attacker)
+      this.processDeaths()
       const attackerResult = this.combatResult(
         attacker,
         options.attacker,
@@ -6960,7 +7441,9 @@ export class EffectRuntime {
       )
       const defenderResult = this.combatResult(
         actualDefender,
-        options.defender,
+        actualDefender.kind === 'hero'
+          ? { kind: 'hero' }
+          : { kind: 'minion', instanceId: actualDefender.instanceId },
         defenderAttack,
         defenderHealthBefore,
         defenderArmorBefore,
@@ -6973,6 +7456,7 @@ export class EffectRuntime {
       ) {
         this.events.push({
           type: 'minion-combat-resolved',
+          combatId,
           attacker: {
             participantId: attacker.participantId,
             instanceId: attacker.instanceId,
@@ -6995,6 +7479,7 @@ export class EffectRuntime {
       } else {
         this.events.push({
           type: 'character-combat-resolved',
+          combatId,
           attacker: attackerResult,
           defender: defenderResult,
           weapon: weaponBeforeAttack
@@ -7698,6 +8183,7 @@ export class EffectRuntime {
       choiceIndex: options.choice
     }
     if (validated.definition.type === 'Minion') {
+      const summonFrame = frame
       const minion = this.createMinion(
         options.participantId,
         card.cardId,
@@ -7706,23 +8192,13 @@ export class EffectRuntime {
         card.instanceId,
         options.position,
         undefined,
-        card
+        card,
+        true
       )
       if (!minion) throw new ResolutionInputError('board-full', 'The board is full.')
       frame = {
         ...this.frameFor(minion, null, validated.chosenTargets),
         choiceIndex: options.choice
-      }
-      this.runCardBlocks(validated.definition, 'on-play', frame, 'play-card')
-      this.runCardBlocks(validated.definition, 'battlecry', frame, 'play-card')
-      const currentMinion = this.currentMinion(minion)
-      if (currentMinion) {
-        this.events.push({
-          type: 'minion-played',
-          participantId: options.participantId,
-          minion: clonePlain(currentMinion) as BoardMinion,
-          position: options.position ?? player.board.length - 1
-        })
       }
       const playedMinionsThisTurn = (this.draft.history?.cardsPlayedThisTurn ?? [])
         .map((cardId) => cardDefinition(cardId as CardId))
@@ -7735,7 +8211,37 @@ export class EffectRuntime {
           'first-minion-played-this-turn'
         )
       }
-      this.emitCardPlayedSemantic(minion, minion, card, 'minion-played')
+      this.emitCardPlayedSemantic(minion, minion, card, 'card-played')
+      this.runCardBlocks(validated.definition, 'on-play', frame, 'play-card')
+      this.runCardBlocks(validated.definition, 'battlecry', frame, 'play-card')
+      if (this.currentMinion(minion))
+        this.emitCardPlayedSemantic(minion, minion, card, 'minion-played')
+      if (this.currentMinion(minion)) {
+        this.events.push({
+          type: 'minion-summoned',
+          participantId: options.participantId,
+          minion: clonePlain(this.currentMinion(minion)!) as BoardMinion,
+          position: player.board.findIndex(
+            (candidate) => candidate.instanceId === card.instanceId
+          )
+        } satisfies MinionSummonedEvent)
+        this.emitMinionSummoned(
+          summonFrame,
+          minion,
+          options.participantId,
+          card.cardId,
+          card.instanceId
+        )
+      }
+      const currentMinion = this.currentMinion(minion)
+      if (currentMinion) {
+        this.events.push({
+          type: 'minion-played',
+          participantId: options.participantId,
+          minion: clonePlain(currentMinion) as BoardMinion,
+          position: options.position ?? player.board.length - 1
+        })
+      }
     } else if (validated.definition.type === 'Weapon') {
       const replacedWeapon = player.weapon
         ? (clonePlain(player.weapon) as BoardWeapon)
@@ -7765,6 +8271,7 @@ export class EffectRuntime {
         ...this.frameFor(target, null, validated.chosenTargets),
         choiceIndex: options.choice
       }
+      this.emitCardPlayedSemantic(target, target, card, 'card-played')
       this.runCardBlocks(validated.definition, 'on-play', frame, 'play-card')
       this.events.push({
         type: 'weapon-equipped',
@@ -7772,7 +8279,6 @@ export class EffectRuntime {
         weapon: clonePlain(weapon) as BoardWeapon,
         replacedWeapon
       })
-      this.emitCardPlayedSemantic(target, target, card, 'card-played')
     } else if (validated.definition.type === 'Hero') {
       const target: EntityRef = {
         instanceId: `${options.participantId}:hero`,
@@ -7785,9 +8291,9 @@ export class EffectRuntime {
         sourceCardId: card.cardId,
         choiceIndex: options.choice
       }
+      this.emitCardPlayedSemantic(validated.source, target, card, 'card-played')
       this.runCardBlocks(validated.definition, 'on-play', frame, 'play-card')
       this.runCardBlocks(validated.definition, 'battlecry', frame, 'play-card')
-      this.emitCardPlayedSemantic(validated.source, target, card, 'card-played')
     } else if (validated.definition.keywords.includes('secret')) {
       if ((player.secrets ?? []).length >= 5)
         throw new ResolutionInputError('resolution-failed', 'The secret zone is full.')
@@ -7802,8 +8308,15 @@ export class EffectRuntime {
         ownerId: options.participantId,
         controllerId: options.participantId,
         creationOrdinal: card.creationOrdinal ?? this.nextEntityOrdinal++,
+        playOrder: this.nextEntityOrdinal++,
         revealed: false
       }
+      this.emitCardPlayedSemantic(
+        validated.source,
+        validated.source,
+        card,
+        'card-played'
+      )
       this.appendSecret(player, secret)
       const target: EntityRef = {
         instanceId: secret.instanceId,
@@ -7815,6 +8328,12 @@ export class EffectRuntime {
       this.emitCardPlayedSemantic(target, target, card, 'secret-played')
       this.runCardBlocks(validated.definition, 'on-secret-played', frame, 'play-card')
     } else {
+      this.emitCardPlayedSemantic(
+        validated.source,
+        validated.source,
+        card,
+        'card-played'
+      )
       this.runCardBlocks(validated.definition, 'on-play', frame, 'play-card')
       const resolvedTargets = [...validated.chosenTargets]
       for (let index = 0; index < resolvedTargets.length; index += 1) {
@@ -7841,12 +8360,6 @@ export class EffectRuntime {
       )
       if (!castEvent.cancelled)
         this.runCardBlocks(validated.definition, 'cast', castFrame, 'play-card')
-      this.emitCardPlayedSemantic(
-        validated.source,
-        resolvedTargets[0] ?? validated.source,
-        card,
-        'card-played'
-      )
     }
     this.processDeaths()
   }

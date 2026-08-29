@@ -217,6 +217,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'on-cast',
       'on-damage',
       'on-death',
+      'on-discard',
       'on-draw',
       'on-gain-armor',
       'on-heal',
@@ -230,6 +231,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
     ],
     event: [
       'card-played',
+      'card-discarded',
       'character-attacked',
       'damage-dealt',
       'first-minion-played-this-turn',
@@ -244,6 +246,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'minion-died',
       'minion-played',
       'minion-summoned',
+      'weapon-died',
       'secret-played',
       'secret-revealed',
       'spell-cast',

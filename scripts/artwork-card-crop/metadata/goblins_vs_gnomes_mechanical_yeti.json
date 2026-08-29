@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_mechanical_yeti.jpg",
+  "source_name": "goblins_vs_gnomes_mechanical_yeti.jpg",
+  "crop_box": [
+    0,
+    59,
+    800,
+    859
+  ],
+  "scale": 0.625,
+  "offset_x": 0.0,
+  "offset_y": -36.99519230769231,
+  "timestamp": "2026-08-28T18:50:49.389553",
+  "card_id": "goblins_vs_gnomes_mechanical_yeti",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_boom_bot.jpg",
+  "source_name": "goblins_vs_gnomes_boom_bot.jpg",
+  "crop_box": [
+    0,
+    372,
+    800,
+    1172
+  ],
+  "scale": 0.6246160409556316,
+  "offset_x": 0.0,
+  "offset_y": -232.0500000000003,
+  "timestamp": "2026-08-28T18:48:49.037460",
+  "card_id": "goblins_vs_gnomes_boom_bot",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

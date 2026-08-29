@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\blackrock_mountain_druid_of_the_flame.jpg",
+  "source_name": "blackrock_mountain_druid_of_the_flame.jpg",
+  "crop_box": [
+    21,
+    27,
+    486,
+    492
+  ],
+  "scale": 1.07421875,
+  "offset_x": -22.769230769230745,
+  "offset_y": -29.538461538461547,
+  "timestamp": "2026-08-29T08:11:15.693081",
+  "card_id": "blackrock_mountain_druid_of_the_flame",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

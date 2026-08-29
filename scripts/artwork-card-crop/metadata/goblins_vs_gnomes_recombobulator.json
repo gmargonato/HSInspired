@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_recombobulator.jpg",
+  "source_name": "goblins_vs_gnomes_recombobulator.jpg",
+  "crop_box": [
+    0,
+    138,
+    488,
+    626
+  ],
+  "scale": 1.0245901639344261,
+  "offset_x": 0.0,
+  "offset_y": -140.9142496847415,
+  "timestamp": "2026-08-28T18:51:26.898053",
+  "card_id": "goblins_vs_gnomes_recombobulator",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_ships_cannon.jpg",
+  "source_name": "goblins_vs_gnomes_ships_cannon.jpg",
+  "crop_box": [
+    0,
+    0,
+    1024,
+    1024
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-28T18:51:33.289521",
+  "card_id": "goblins_vs_gnomes_ships_cannon",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

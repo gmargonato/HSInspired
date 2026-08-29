@@ -18,6 +18,7 @@ import {
   CARD_ACTION_FIELDS,
   CARD_ACTION_PLAYERS,
   CARD_ACTION_RESOURCES,
+  CARD_SUMMON_PLACEMENTS,
   CARD_ACTION_SOURCES,
   CARD_CONDITIONS,
   CARD_CRYSTAL_MODES,
@@ -186,6 +187,7 @@ const ACTION_FIELDS = new Set([
   'multiplier',
   'player',
   'pool',
+  'placement',
   'power',
   'preserveMaximum',
   'replacement',
@@ -249,6 +251,13 @@ const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>>
   'transform-random': ['target'],
   'trigger-deathrattle': ['target']
 }
+
+const SUMMON_ACTIONS = new Set<CardActionName>([
+  'summon',
+  'summon-copy',
+  'summon-for-each',
+  'summon-random'
+])
 
 const MODIFY_FIELDS = [
   'attack',
@@ -427,6 +436,12 @@ function validateActionShape(
     record['resource'] === undefined
   ) {
     fail(path, 'requires target or resource')
+  }
+  if (record['placement'] !== undefined) {
+    if (!SUMMON_ACTIONS.has(actionName)) {
+      fail(`${path}.placement`, 'is only supported for summon actions')
+    }
+    enumValue(record['placement'], CARD_SUMMON_PLACEMENTS, `${path}.placement`)
   }
 }
 

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\blackrock_mountain_lava_shock.jpg",
+  "source_name": "blackrock_mountain_lava_shock.jpg",
+  "crop_box": [
+    29,
+    26,
+    484,
+    481
+  ],
+  "scale": 1.1,
+  "offset_x": -32.13846153846157,
+  "offset_y": -28.446153846153862,
+  "timestamp": "2026-08-29T08:12:41.495712",
+  "card_id": "blackrock_mountain_lava_shock",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

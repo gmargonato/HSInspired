@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_fel_reaver.jpg",
+  "source_name": "goblins_vs_gnomes_fel_reaver.jpg",
+  "crop_box": [
+    0,
+    170,
+    700,
+    870
+  ],
+  "scale": 0.7142857142857143,
+  "offset_x": 0.0,
+  "offset_y": -121.53846153846155,
+  "timestamp": "2026-08-28T18:49:24.056391",
+  "card_id": "goblins_vs_gnomes_fel_reaver",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

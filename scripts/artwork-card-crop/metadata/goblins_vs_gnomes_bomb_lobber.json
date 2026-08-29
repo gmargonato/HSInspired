@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_bomb_lobber.jpg",
+  "source_name": "goblins_vs_gnomes_bomb_lobber.jpg",
+  "crop_box": [
+    0,
+    69,
+    756,
+    825
+  ],
+  "scale": 0.6613756613756614,
+  "offset_x": 0.0,
+  "offset_y": -45.57183557183568,
+  "timestamp": "2026-08-28T18:48:38.672675",
+  "card_id": "goblins_vs_gnomes_bomb_lobber",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

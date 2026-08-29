@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_king_of_beasts.jpg",
+  "source_name": "goblins_vs_gnomes_king_of_beasts.jpg",
+  "crop_box": [
+    149,
+    0,
+    943,
+    794
+  ],
+  "scale": 0.6297229219143576,
+  "offset_x": -93.86940515403998,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-27T11:17:32.726835",
+  "card_id": "goblins_vs_gnomes_king_of_beasts",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -4,6 +4,6 @@ import { EVENT_PRESENTATION_POLICY } from './event-presentation-policy'
 describe('event presentation policy', () => {
   it('assigns an intentional policy to every public event', () => {
     expect(Object.values(EVENT_PRESENTATION_POLICY)).not.toContain(undefined)
-    expect(Object.keys(EVENT_PRESENTATION_POLICY)).toHaveLength(26)
+    expect(Object.keys(EVENT_PRESENTATION_POLICY)).toHaveLength(32)
   })
 })

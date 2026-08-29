@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_jeeves.jpg",
+  "source_name": "goblins_vs_gnomes_jeeves.jpg",
+  "crop_box": [
+    0,
+    80,
+    760,
+    840
+  ],
+  "scale": 0.6578947368421054,
+  "offset_x": -1.1368683772161603e-13,
+  "offset_y": -52.427309532572735,
+  "timestamp": "2026-08-28T18:50:27.504480",
+  "card_id": "goblins_vs_gnomes_jeeves",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

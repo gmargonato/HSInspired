@@ -153,8 +153,8 @@ export class CardPreviewView extends Actor {
     if (!document.fonts) return
 
     await Promise.all([
-      document.fonts.load('24px Belwe'),
-      document.fonts.load('16px Belwe')
+      document.fonts.load('700 24px Belwe'),
+      document.fonts.load('700 16px Belwe')
     ])
   }
 

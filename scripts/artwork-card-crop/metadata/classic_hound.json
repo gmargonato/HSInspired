@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_hound.jpg",
+  "source_name": "classic_hound.jpg",
+  "crop_box": [
+    54,
+    0,
+    604,
+    550
+  ],
+  "scale": 0.9090909090909091,
+  "offset_x": -49.33566433566432,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:14:02.199214",
+  "card_id": "classic_hound",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

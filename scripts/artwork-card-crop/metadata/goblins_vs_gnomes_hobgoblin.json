@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_hobgoblin.jpg",
+  "source_name": "goblins_vs_gnomes_hobgoblin.jpg",
+  "crop_box": [
+    125,
+    0,
+    908,
+    783
+  ],
+  "scale": 0.6385696040868455,
+  "offset_x": -79.80548187444737,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-28T18:50:14.657911",
+  "card_id": "goblins_vs_gnomes_hobgoblin",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

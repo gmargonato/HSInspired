@@ -11,6 +11,8 @@ body {
 @font-face {
   font-family: 'Belwe';
   src: url('../../assets/fonts/belwe_bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
   font-display: block;
 }
 

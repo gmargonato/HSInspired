@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_gazlowe.jpg",
+  "source_name": "goblins_vs_gnomes_gazlowe.jpg",
+  "crop_box": [
+    0,
+    0,
+    1024,
+    1024
+  ],
+  "scale": 0.48828125,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-28T18:49:51.145470",
+  "card_id": "goblins_vs_gnomes_gazlowe",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

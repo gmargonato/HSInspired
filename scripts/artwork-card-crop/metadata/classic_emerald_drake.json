@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_emerald_drake.jpg",
+  "source_name": "classic_emerald_drake.jpg",
+  "crop_box": [
+    26,
+    0,
+    486,
+    460
+  ],
+  "scale": 1.0869565217391304,
+  "offset_x": -28.26086956521732,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-29T08:13:57.916346",
+  "card_id": "classic_emerald_drake",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

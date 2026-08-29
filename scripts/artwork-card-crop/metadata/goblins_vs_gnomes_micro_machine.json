@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_micro_machine.jpg",
+  "source_name": "goblins_vs_gnomes_micro_machine.jpg",
+  "crop_box": [
+    75,
+    0,
+    780,
+    705
+  ],
+  "scale": 0.7092198581560284,
+  "offset_x": -53.03873431533003,
+  "offset_y": 0.0,
+  "timestamp": "2026-08-28T18:50:57.059841",
+  "card_id": "goblins_vs_gnomes_micro_machine",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

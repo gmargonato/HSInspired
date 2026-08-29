@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_explosive_sheep.jpg",
+  "source_name": "goblins_vs_gnomes_explosive_sheep.jpg",
+  "crop_box": [
+    0,
+    111,
+    787,
+    898
+  ],
+  "scale": 0.6353240152477764,
+  "offset_x": 0.0,
+  "offset_y": -70.71645000488724,
+  "timestamp": "2026-08-28T18:49:21.052148",
+  "card_id": "goblins_vs_gnomes_explosive_sheep",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

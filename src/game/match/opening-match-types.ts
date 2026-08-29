@@ -19,6 +19,8 @@ export interface OpeningCard {
   readonly ownerId?: PlayerId
   readonly controllerId?: PlayerId
   readonly creationOrdinal?: number
+  /** Timestamp for the entity's most recent entry into the play zone. */
+  readonly playOrder?: number
   readonly baseCost?: number
   readonly currentCost?: number
   readonly zone?: 'deck' | 'hand' | 'revealed' | 'discarded'
@@ -109,6 +111,8 @@ export interface SecretState {
   readonly ownerId: PlayerId
   readonly controllerId: PlayerId
   readonly creationOrdinal: number
+  /** Timestamp for the secret's most recent entry into the play zone. */
+  readonly playOrder?: number
   readonly revealed: boolean
 }
 
@@ -173,6 +177,59 @@ export interface EffectDomainEvent {
   readonly correlation?: ResolutionCorrelation
 }
 
+/**
+ * One concrete trigger frame that passed its runtime checks and is about to
+ * resolve.  This is deliberately emitted from the resolver's trigger frame,
+ * rather than reconstructed from the final state, so nested queues and repeat
+ * activations retain their exact execution order.
+ */
+export interface TriggerActivatedEvent {
+  readonly type: 'trigger-activated'
+  readonly activationId: string
+  readonly parentActivationId: string | null
+  readonly eventSequence: number
+  readonly eventType: CardEventType
+  readonly participantId: PlayerId
+  readonly source: {
+    readonly instanceId: string
+    readonly kind: RuntimeEntityKind
+    readonly cardId: CardId | null
+  }
+  readonly trigger: CardTrigger
+  readonly correlation: ResolutionCorrelation
+}
+
+/** An entity captured during one simultaneous death creation step. */
+export interface DeathBatchEntry {
+  readonly instanceId: string
+  readonly participantId: PlayerId
+  readonly kind: 'minion' | 'weapon'
+  readonly cardId: CardId
+  readonly position?: number
+  readonly hasDeathrattle: boolean
+}
+
+/** Emitted after a death batch is captured and before its death events resolve. */
+export interface DeathBatchStartedEvent {
+  readonly type: 'death-batch-started'
+  readonly batchId: string
+  readonly deaths: readonly DeathBatchEntry[]
+}
+
+/** Emitted after all triggers and nested consequences for one death batch. */
+export interface DeathBatchCompletedEvent {
+  readonly type: 'death-batch-completed'
+  readonly batchId: string
+}
+
+/** A generated minion entering play before its summon-trigger phase begins. */
+export interface MinionSummonedEvent {
+  readonly type: 'minion-summoned'
+  readonly participantId: PlayerId
+  readonly minion: BoardMinion
+  readonly position: number
+}
+
 export interface ResolutionDiagnostic {
   readonly code:
     'unsupported-capability' | 'resolution-budget-exhausted' | 'resolution-failed'
@@ -196,6 +253,8 @@ export interface BoardMinion {
   readonly ownerId?: PlayerId
   readonly controllerId?: PlayerId
   readonly creationOrdinal?: number
+  /** Timestamp for the minion's most recent entry into the play zone. */
+  readonly playOrder?: number
   readonly baseAttack?: number
   readonly baseHealth?: number
   readonly keywords?: readonly CardKeyword[]
@@ -231,6 +290,8 @@ export interface BoardWeapon {
   readonly ownerId?: PlayerId
   readonly controllerId?: PlayerId
   readonly creationOrdinal?: number
+  /** Timestamp for the weapon's most recent entry into the play zone. */
+  readonly playOrder?: number
   readonly enchantments?: readonly RuntimeEnchantment[]
 }
 
@@ -533,6 +594,16 @@ export interface CardDrawnEvent {
   readonly card: OpeningCard
 }
 
+/** A newly-created card entering a hand as the result of an effect, not a deck draw. */
+export interface CardGeneratedEvent {
+  readonly type: 'card-generated'
+  readonly participantId: PlayerId
+  readonly card: OpeningCard
+  readonly origin:
+    | { readonly kind: 'minion'; readonly instanceId: string }
+    | { readonly kind: 'screen-center' }
+}
+
 export interface CardBurnedEvent {
   readonly type: 'card-burned'
   readonly participantId: PlayerId
@@ -616,6 +687,27 @@ export interface HeroReplacedEvent {
   readonly armorGained: number
 }
 
+/**
+ * Cue emitted once an attack has passed its redirect/cancellation windows and
+ * immediately before combat damage is applied.  Keeping this separate from
+ * the resolved result lets the renderer begin the attack motion while damage,
+ * reactive triggers, and deaths continue to resolve in their authored order.
+ */
+export interface CombatStartedCombatant {
+  readonly participantId: PlayerId
+  readonly character: AttackCharacterRef
+  readonly attack: number
+  readonly healthBefore: number
+  readonly armorBefore: number
+}
+
+export interface CombatStartedEvent {
+  readonly type: 'combat-started'
+  readonly combatId: string
+  readonly attacker: CombatStartedCombatant
+  readonly defender: CombatStartedCombatant
+}
+
 export interface MinionCombatantResult {
   readonly participantId: PlayerId
   readonly instanceId: string
@@ -635,6 +727,7 @@ export interface MinionCombatPreview {
 
 export interface MinionCombatResolvedEvent {
   readonly type: 'minion-combat-resolved'
+  readonly combatId?: string
   readonly attacker: MinionCombatantResult
   readonly defender: MinionCombatantResult
 }
@@ -653,6 +746,7 @@ export interface CharacterCombatantResult {
 
 export interface CharacterCombatResolvedEvent {
   readonly type: 'character-combat-resolved'
+  readonly combatId?: string
   readonly attacker: CharacterCombatantResult
   readonly defender: CharacterCombatantResult
   readonly weapon: {
@@ -756,6 +850,7 @@ export type OpeningMatchEvent =
   | OpeningCardDrawnEvent
   | TurnStartedEvent
   | CardDrawnEvent
+  | CardGeneratedEvent
   | CardBurnedEvent
   | HeroPowerUsedEvent
   | CharacterDamagedEvent
@@ -766,6 +861,7 @@ export type OpeningMatchEvent =
   | MinionPlayedEvent
   | WeaponEquippedEvent
   | HeroReplacedEvent
+  | CombatStartedEvent
   | MinionCombatResolvedEvent
   | CharacterCombatResolvedEvent
   | MatchEndedEvent
@@ -775,6 +871,10 @@ export type OpeningMatchEvent =
   | DevMinionSummonedEvent
   | DevStateChangedEvent
   | HistoryActionResolvedEvent
+  | TriggerActivatedEvent
+  | DeathBatchStartedEvent
+  | DeathBatchCompletedEvent
+  | MinionSummonedEvent
   | EffectDomainEvent
 
 export interface OpeningAcceptedResult {
@@ -861,6 +961,7 @@ export type PublicizeOpeningMatchEvent<E> = E extends EffectDomainEvent
           | CoinGrantedEvent
           | OpeningCardDrawnEvent
           | CardDrawnEvent
+          | CardGeneratedEvent
           | CardBurnedEvent
           | DevCardAddedEvent
       ? Omit<E, 'card'> & { readonly card: OpeningPublicCard }
@@ -922,13 +1023,12 @@ export interface PlayCardInput {
   readonly legalChoices: readonly number[]
   /** Stable, presentation-ready labels aligned with legalChoices. */
   readonly choiceLabels: readonly string[]
-  /** Resolved cast action text and whether the current condition enhances it. */
+  /** Whether the current condition enhances the card's active effect. */
   readonly effectPreview: CardPlayEffectPreview | null
 }
 
-/** Domain-derived, concise presentation data for a card about to be played. */
+/** Domain-derived presentation data for a card about to be played. */
 export interface CardPlayEffectPreview {
-  readonly summary: string
   /** True when an active conditional branch is stronger than an alternative branch. */
   readonly conditionallyEnhanced: boolean
 }

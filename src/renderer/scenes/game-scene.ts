@@ -1,6 +1,8 @@
 import type { AppLogger } from '../app/services'
 import type { GameRoute, SceneRouter } from '../app/router'
 import type { DeckStore } from '../ui/deck-store'
+import { createMatchSeed } from '../features/deck-selection/deck-selection-model'
+import { createRestartGameRoute } from '../features/game/game-route'
 import {
   ASSET_BUNDLE_IDS,
   type DeckPresentationAssets,
@@ -92,7 +94,7 @@ export class GameScene extends Scene {
     if (typeof document === 'undefined' || !document.fonts) return
 
     const fontLoads = Promise.all([
-      document.fonts.load('47px Belwe'),
+      document.fonts.load('700 47px Belwe'),
       document.fonts.load('normal 44px "Franklin Gothic Condensed"'),
       document.fonts.load('bold 44px "Franklin Gothic Condensed"')
     ])
@@ -126,6 +128,19 @@ export class GameScene extends Scene {
 
   playOpeningReveal(): Promise<void> {
     return this.view?.playOpeningReveal() ?? Promise.resolve()
+  }
+
+  concede(): void {
+    if (!this.view) throw new Error('Game view is not ready for match actions.')
+    this.view.concede()
+  }
+
+  createRestartRoute(): GameRoute {
+    let seed = createMatchSeed()
+    if (this.route.setup.seed !== undefined && seed === this.route.setup.seed) {
+      seed = (seed + 1) >>> 0
+    }
+    return createRestartGameRoute(this.route, seed)
   }
 
   openCardPicker(target: DevMatchTarget, action: DevCardPickerAction): void {

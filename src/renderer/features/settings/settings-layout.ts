@@ -71,5 +71,57 @@ export const SETTINGS_LAYOUT = {
       anchor: CENTER,
       note: 'Local placement for a text row inside the expanded options menu.'
     }
-  )
+  ),
+
+  /** Match-only action frames and buttons, centered inside the game settings panel. */
+  gameActions: {
+    concedeFrame: placement(
+      { x: 960, y: 400 },
+      { width: 398, height: 109 },
+      {
+        anchor: CENTER,
+        note: 'Large base frame behind the Concede action.'
+      }
+    ),
+    concedeButton: placement(
+      { x: 960, y: 400 },
+      { width: 294, height: 97 },
+      {
+        anchor: CENTER,
+        note: 'Match settings Concede button centered over its base frame.'
+      }
+    ),
+    restartFrame: placement(
+      { x: 960, y: 540 },
+      { width: 398, height: 109 },
+      {
+        anchor: CENTER,
+        note: 'Large base frame behind the Restart action.'
+      }
+    ),
+    restartButton: placement(
+      { x: 960, y: 540 },
+      { width: 294, height: 97 },
+      {
+        anchor: CENTER,
+        note: 'Match settings Restart button centered over its base frame.'
+      }
+    ),
+    quitFrame: placement(
+      { x: 960, y: 680 },
+      { width: 398, height: 109 },
+      {
+        anchor: CENTER,
+        note: 'Large base frame behind the Quit action.'
+      }
+    ),
+    quitButton: placement(
+      { x: 960, y: 680 },
+      { width: 294, height: 97 },
+      {
+        anchor: CENTER,
+        note: 'Match settings Quit button centered over its base frame.'
+      }
+    )
+  }
 } as const

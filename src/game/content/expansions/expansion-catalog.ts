@@ -5,6 +5,7 @@ import {
 } from '../cards/card-definition'
 import {
   BASIC_CARD_SOURCE,
+  BLACKROCK_MOUNTAIN_CARD_SOURCE,
   CLASSIC_CARD_SOURCE,
   GOBLINS_VS_GNOMES_CARD_SOURCE,
   NAXXRAMAS_CARD_SOURCE
@@ -46,7 +47,13 @@ export const EXPANSION_DEFINITIONS: readonly ExpansionDefinition[] = [
   expansion('basic', 'Basic', 0, BASIC_CARD_SOURCE),
   expansion('classic', 'Classic', 1, CLASSIC_CARD_SOURCE),
   expansion('goblins-vs-gnomes', 'Goblins vs Gnomes', 2, GOBLINS_VS_GNOMES_CARD_SOURCE),
-  expansion('naxxramas', 'Curse of Naxxramas', 3, NAXXRAMAS_CARD_SOURCE)
+  expansion('naxxramas', 'Curse of Naxxramas', 3, NAXXRAMAS_CARD_SOURCE),
+  expansion(
+    'blackrock-mountain',
+    'Blackrock Mountain',
+    4,
+    BLACKROCK_MOUNTAIN_CARD_SOURCE
+  )
 ]
 
 export class ExpansionCatalog {

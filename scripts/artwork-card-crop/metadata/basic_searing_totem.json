@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_searing_totem.jpg",
+  "source_name": "basic_searing_totem.jpg",
+  "crop_box": [
+    0,
+    298,
+    364,
+    662
+  ],
+  "scale": 1.3733031007751946,
+  "offset_x": 0.0,
+  "offset_y": -409.89273262969635,
+  "timestamp": "2026-08-29T08:10:07.881902",
+  "card_id": "basic_searing_totem",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -43,6 +43,14 @@ export interface MinionViewTextures {
   readonly health: Texture
 }
 
+export type MinionAbilityMarkerKind = 'trigger' | 'deathrattle'
+
+export interface AbilityMarkerSnapshot {
+  readonly texture: Texture
+  readonly globalPosition: { readonly x: number; readonly y: number }
+  readonly worldScale: number
+}
+
 interface StatGroup {
   readonly group: Container
   readonly value: Text
@@ -89,6 +97,8 @@ export class MinionView extends Container {
   private readonly taunt: Sprite
   private readonly divineShield: Sprite
   private readonly stealth: Sprite
+  private readonly deathrattle: Sprite
+  private readonly trigger: Sprite
   private readonly attackLabel: Text
   private readonly healthLabel: Text
   private readonly outlineProxy: Graphics
@@ -97,6 +107,7 @@ export class MinionView extends Container {
   private readonly targetingOutline: AnimatedOutline
   private readonly sleepingZs: SleepingZs
   private readonly animationScope = new AnimationScope()
+  private readonly activeAbilityPulses = new Set<Sprite>()
   private readonly originalAttack: number
   private readonly originalHealth: number
   private canAttackEnabled = false
@@ -182,12 +193,14 @@ export class MinionView extends Container {
     this.addChild(this.divineShield)
 
     // Pixi renders later children on top: add the large Deathrattle badge first.
-    if (model.deathrattle) {
-      const deathrattle = new Sprite(textures.deathrattle)
-      applyAnchoredPlacement(deathrattle, MINION_LAYOUT.deathrattle)
-      deathrattle.label = 'minion.deathrattle'
-      this.addChild(deathrattle)
-    }
+    // Keep both ability sprites mounted even when hidden so runtime-granted
+    // triggers/deathrattles can reveal the same marker without rebuilding the
+    // minion view.
+    this.deathrattle = new Sprite(textures.deathrattle)
+    applyAnchoredPlacement(this.deathrattle, MINION_LAYOUT.deathrattle)
+    this.deathrattle.visible = model.deathrattle
+    this.deathrattle.label = 'minion.deathrattle'
+    this.addChild(this.deathrattle)
 
     if (model.poisonous) {
       const poisonous = new Sprite(textures.poisonous)
@@ -196,12 +209,11 @@ export class MinionView extends Container {
       this.addChild(poisonous)
     }
 
-    if (model.trigger) {
-      const trigger = new Sprite(textures.trigger)
-      applyAnchoredPlacement(trigger, MINION_LAYOUT.trigger)
-      trigger.label = 'minion.trigger'
-      this.addChild(trigger)
-    }
+    this.trigger = new Sprite(textures.trigger)
+    applyAnchoredPlacement(this.trigger, MINION_LAYOUT.trigger)
+    this.trigger.visible = model.trigger
+    this.trigger.label = 'minion.trigger'
+    this.addChild(this.trigger)
 
     model.temporaryAbilityLabels.forEach((text, index) => {
       const badge = createTemporaryAbilityBadge(
@@ -293,6 +305,16 @@ export class MinionView extends Container {
     this.setHealthColor(health)
   }
 
+  setAttack(attack: number): void {
+    this.attackLabel.text = String(attack)
+    this.setAttackColor(attack)
+  }
+
+  setHealth(health: number): void {
+    this.healthLabel.text = String(health)
+    this.setHealthColor(health)
+  }
+
   private setAttackColor(attack: number): void {
     this.attackLabel.style.fill = minionStatColor(attack, this.originalAttack)
   }
@@ -311,6 +333,86 @@ export class MinionView extends Container {
 
   setStealth(visible: boolean): void {
     this.stealth.visible = visible
+  }
+
+  setDeathrattle(visible: boolean): void {
+    this.deathrattle.visible = visible
+  }
+
+  setTrigger(visible: boolean): void {
+    this.trigger.visible = visible
+  }
+
+  getAbilityMarkerSnapshot(
+    kind: MinionAbilityMarkerKind
+  ): AbilityMarkerSnapshot | null {
+    const marker = kind === 'trigger' ? this.trigger : this.deathrattle
+    if (marker.destroyed) return null
+    const global = marker.getGlobalPosition()
+    return {
+      texture: marker.texture,
+      globalPosition: { x: global.x, y: global.y },
+      worldScale: Math.max(
+        0.001,
+        Math.hypot(marker.worldTransform.a, marker.worldTransform.b)
+      )
+    }
+  }
+
+  /** Pulses the existing board ability icon without introducing a new asset. */
+  presentAbilityPulse(kind: MinionAbilityMarkerKind, duration: number): Promise<void> {
+    const marker = kind === 'trigger' ? this.trigger : this.deathrattle
+    if (marker.destroyed) return Promise.resolve()
+    const pulse = new Sprite(marker.texture)
+    pulse.anchor.set(marker.anchor.x, marker.anchor.y)
+    pulse.position.set(marker.x, marker.y)
+    pulse.scale.set(marker.scale.x * 0.82, marker.scale.y * 0.82)
+    pulse.alpha = 0
+    pulse.tint = 0xffffff
+    pulse.blendMode = 'add'
+    pulse.zIndex = marker.zIndex + 1
+    pulse.label = `minion.${kind}.pulse`
+    pulse.eventMode = 'none'
+    this.addChild(pulse)
+    this.activeAbilityPulses.add(pulse)
+
+    const cleanup = (): void => {
+      this.activeAbilityPulses.delete(pulse)
+      if (!pulse.destroyed) pulse.destroy({ children: true })
+    }
+    const timeline = this.animationScope.timeline()
+    const half = Math.max(0.01, duration / 2)
+    timeline.to(pulse, {
+      alpha: 1,
+      duration: half,
+      ease: 'sine.inOut'
+    })
+    timeline.to(
+      pulse.scale,
+      {
+        x: marker.scale.x * 1.18,
+        y: marker.scale.y * 1.18,
+        duration: duration,
+        ease: 'sine.inOut'
+      },
+      0
+    )
+    timeline.to(pulse, {
+      alpha: 0,
+      duration: half,
+      ease: 'sine.inOut',
+      onComplete: cleanup
+    })
+    return new Promise((resolve) => {
+      timeline.eventCallback('onComplete', () => {
+        cleanup()
+        resolve()
+      })
+      timeline.eventCallback('onInterrupt', () => {
+        cleanup()
+        resolve()
+      })
+    })
   }
 
   private syncOutlineState(): void {
@@ -397,6 +499,10 @@ export class MinionView extends Container {
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     this.animationScope.kill()
+    for (const pulse of this.activeAbilityPulses) {
+      if (!pulse.destroyed) pulse.destroy({ children: true })
+    }
+    this.activeAbilityPulses.clear()
     this.attackOutline.dispose()
     this.targetingOutline.dispose()
     this.sleepingZs.dispose()

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_salty_dog.jpg",
+  "source_name": "goblins_vs_gnomes_salty_dog.jpg",
+  "crop_box": [
+    0,
+    87,
+    600,
+    687
+  ],
+  "scale": 0.8333333333333334,
+  "offset_x": 0.0,
+  "offset_y": -72.69230769230779,
+  "timestamp": "2026-08-28T18:51:30.380027",
+  "card_id": "goblins_vs_gnomes_salty_dog",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

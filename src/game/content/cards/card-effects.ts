@@ -30,6 +30,7 @@ export const CARD_TRIGGERS = [
   'on-cast',
   'on-damage',
   'on-death',
+  'on-discard',
   'on-draw',
   'on-gain-armor',
   'on-heal',
@@ -43,8 +44,17 @@ export const CARD_TRIGGERS = [
 ] as const
 export type CardTrigger = (typeof CARD_TRIGGERS)[number]
 
+/** Placement policies for minions created by summon actions. */
+export const CARD_SUMMON_PLACEMENTS = [
+  'right-of-source',
+  'far-right',
+  'alternating-around-source'
+] as const
+export type CardSummonPlacement = (typeof CARD_SUMMON_PLACEMENTS)[number]
+
 export const CARD_EVENT_TYPES = [
   'card-played',
+  'card-discarded',
   'character-attacked',
   'damage-dealt',
   'first-minion-played-this-turn',
@@ -59,6 +69,7 @@ export const CARD_EVENT_TYPES = [
   'minion-died',
   'minion-played',
   'minion-summoned',
+  'weapon-died',
   'secret-played',
   'secret-revealed',
   'spell-cast',

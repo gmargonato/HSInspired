@@ -25,6 +25,10 @@ import menuSettingsBackgroundImage from '@assets/images/ui/settings/menu-setting
 import gameSettingsBackgroundImage from '@assets/images/ui/settings/game-settings-background.png'
 import settingsDropDownListImage from '@assets/images/ui/settings/settings-drop-down-list.png'
 import settingsDropDownButtonImage from '@assets/images/ui/settings/settings-drop-down-button.png'
+import settingsBaseFrameLargeImage from '@assets/images/ui/settings/settings-base-frame-large.png'
+import settingsConcedeImage from '@assets/images/ui/settings/settings-concede.png'
+import settingsRestartImage from '@assets/images/ui/settings/settings-restart.png'
+import settingsQuitImage from '@assets/images/ui/settings/settings-quit.png'
 import gameBoardImage from '@assets/images/match/BOARD.png'
 import gameDeckImage from '@assets/images/match/deck.png'
 import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
@@ -262,21 +266,39 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-settings'
   ),
   asset(
-    'scene.game-settings.resolution-field',
+    'scene.game-settings.base-frame-large',
     ASSET_BUNDLE_IDS.gameSettings,
-    'resolutionField',
-    settingsDropDownListImage,
-    344,
-    76,
+    'baseFrameLarge',
+    settingsBaseFrameLargeImage,
+    398,
+    109,
     'game-settings'
   ),
   asset(
-    'scene.game-settings.resolution-button',
+    'scene.game-settings.concede-button',
     ASSET_BUNDLE_IDS.gameSettings,
-    'resolutionButton',
-    settingsDropDownButtonImage,
-    62,
-    42,
+    'concedeButton',
+    settingsConcedeImage,
+    294,
+    97,
+    'game-settings'
+  ),
+  asset(
+    'scene.game-settings.restart-button',
+    ASSET_BUNDLE_IDS.gameSettings,
+    'restartButton',
+    settingsRestartImage,
+    294,
+    97,
+    'game-settings'
+  ),
+  asset(
+    'scene.game-settings.quit-button',
+    ASSET_BUNDLE_IDS.gameSettings,
+    'quitButton',
+    settingsQuitImage,
+    294,
+    97,
     'game-settings'
   ),
   asset(
@@ -1236,10 +1258,18 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   defeatScreen: Texture
 }
 
-export interface SettingsAssets {
+export interface MenuSettingsAssets {
   background: Texture
   resolutionField: Texture
   resolutionButton: Texture
+}
+
+export interface GameSettingsAssets {
+  background: Texture
+  baseFrameLarge: Texture
+  concedeButton: Texture
+  restartButton: Texture
+  quitButton: Texture
 }
 
 export interface SharedUIAssets {

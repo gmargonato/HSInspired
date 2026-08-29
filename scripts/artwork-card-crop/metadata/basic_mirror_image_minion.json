@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\basic_mirror_image_minion.jpg",
+  "source_name": "basic_mirror_image_minion.jpg",
+  "crop_box": [
+    28,
+    0,
+    222,
+    194
+  ],
+  "scale": 2.577319587628866,
+  "offset_x": -72.16494845360825,
+  "offset_y": -5.684341886080802e-14,
+  "timestamp": "2026-08-27T11:17:40.749466",
+  "card_id": "basic_mirror_image_minion",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

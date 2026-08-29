@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_druid_of_the_fang_7_7.jpg",
+  "source_name": "goblins_vs_gnomes_druid_of_the_fang_7_7.jpg",
+  "crop_box": [
+    0,
+    34,
+    305,
+    339
+  ],
+  "scale": 1.639344262295082,
+  "offset_x": 0.0,
+  "offset_y": -56.55737704918033,
+  "timestamp": "2026-08-29T08:15:10.385286",
+  "card_id": "goblins_vs_gnomes_druid_of_the_fang_7_7",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

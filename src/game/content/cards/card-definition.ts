@@ -66,7 +66,8 @@ export const EXPANSION_IDS = [
   'basic',
   'classic',
   'goblins-vs-gnomes',
-  'naxxramas'
+  'naxxramas',
+  'blackrock-mountain'
 ] as const
 export type KnownExpansionId = (typeof EXPANSION_IDS)[number]
 
@@ -124,7 +125,8 @@ export function formatExpansionName(expansionId: ExpansionId | string): string {
     classic: 'Classic',
     'goblins-vs-gnomes': 'Goblins vs Gnomes',
     goblins_vs_gnomes: 'Goblins vs Gnomes',
-    naxxramas: 'Curse of Naxxramas'
+    naxxramas: 'Curse of Naxxramas',
+    'blackrock-mountain': 'Blackrock Mountain'
   }
   const knownLabel = labels[expansionId]
   if (knownLabel) return knownLabel

@@ -56,7 +56,7 @@ describe('reactive trigger timing', () => {
     })
   })
 
-  it('executes Corruption at the target controller next start-of-turn boundary', () => {
+  it("executes Corruption at its caster's next start-of-turn boundary", () => {
     const scenario = createMatchScenario({ seed: 1101, cardId: 'basic_corruption' })
     scenario.confirmBothMulligans()
     const [participantId, opponentId] = activePlayers(scenario)
@@ -82,6 +82,67 @@ describe('reactive trigger timing', () => {
     expect(scenario.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
       true
     )
+    expect(player(scenario, opponentId).board).toHaveLength(1)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: opponentId }).accepted
+    ).toBe(true)
+    expect(player(scenario, opponentId).board).toHaveLength(0)
+  })
+
+  it("keeps Nightmare's buff through the opponent's turn and destroys the target on the caster's next turn", () => {
+    const scenario = createMatchScenario({ seed: 1104, cardId: 'classic_nightmare' })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+    const target = player(scenario, opponentId).board[0]!
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'classic_nightmare'
+      }).accepted
+    ).toBe(true)
+    setMana(scenario, participantId)
+    const nightmare = player(scenario, participantId).hand[0]!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: nightmare.instanceId,
+        targets: [
+          { kind: 'minion', participantId: opponentId, instanceId: target.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, opponentId).board[0]).toMatchObject({
+      attack: 8,
+      health: 7,
+      maxHealth: 7
+    })
+    expect(scenario.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
+      true
+    )
+    expect(player(scenario, opponentId).board[0]).toMatchObject({
+      attack: 8,
+      health: 7,
+      maxHealth: 7
+    })
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: opponentId }).accepted
+    ).toBe(true)
     expect(player(scenario, opponentId).board).toHaveLength(0)
   })
 

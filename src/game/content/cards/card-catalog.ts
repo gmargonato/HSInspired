@@ -1,4 +1,5 @@
 import { BASIC_CARD_SOURCE } from './sets/basic'
+import { BLACKROCK_MOUNTAIN_CARD_SOURCE } from './sets/blackrock-mountain'
 import { CLASSIC_CARD_SOURCE } from './sets/classic'
 import { GOBLINS_VS_GNOMES_CARD_SOURCE } from './sets/goblins-vs-gnomes'
 import { NAXXRAMAS_CARD_SOURCE } from './sets/naxxramas'
@@ -83,7 +84,8 @@ export const CARD_SET_SOURCES = [
   BASIC_CARD_SOURCE,
   CLASSIC_CARD_SOURCE,
   GOBLINS_VS_GNOMES_CARD_SOURCE,
-  NAXXRAMAS_CARD_SOURCE
+  NAXXRAMAS_CARD_SOURCE,
+  BLACKROCK_MOUNTAIN_CARD_SOURCE
 ] as const
 
 export function createCardCatalog(

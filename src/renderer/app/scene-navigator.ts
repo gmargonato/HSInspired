@@ -259,7 +259,24 @@ export class SceneNavigator implements SceneRouter {
     if (current instanceof MenuSettingsScene || current instanceof GameSettingsScene) {
       operation = () => this.sceneManager.pop()
     } else if (current instanceof GameScene) {
-      operation = () => this.sceneManager.push(new GameSettingsScene())
+      const gameScene = current
+      operation = () =>
+        this.sceneManager.push(
+          new GameSettingsScene({
+            onConcede: async () => {
+              await this.sceneManager.pop()
+              gameScene.concede()
+            },
+            onRestart: async () => {
+              await this.sceneManager.pop()
+              await this.navigate(gameScene.createRestartRoute())
+            },
+            onQuit: async () => {
+              await this.sceneManager.pop()
+              await this.navigate({ id: 'deck-selection' })
+            }
+          })
+        )
     } else if (
       current instanceof MainMenuScene ||
       current instanceof DeckSelectionScene ||

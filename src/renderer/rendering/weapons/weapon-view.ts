@@ -6,6 +6,7 @@ import {
   WEAPON_LAYOUT,
   weaponTemporaryAbilityBadgePlacement
 } from './weapon-layout'
+import { AnimationScope } from '../../animation/animations'
 
 export interface WeaponViewModel {
   readonly label: string
@@ -22,6 +23,14 @@ export interface WeaponViewTextures {
   readonly deathrattle: Texture
   readonly attack: Texture
   readonly durability: Texture
+}
+
+export type WeaponAbilityMarkerKind = 'trigger' | 'deathrattle'
+
+export interface WeaponAbilityMarkerSnapshot {
+  readonly texture: Texture
+  readonly globalPosition: { readonly x: number; readonly y: number }
+  readonly worldScale: number
 }
 
 interface StatGroup {
@@ -68,6 +77,12 @@ function createStatGroup(
 export class WeaponView extends Container {
   private readonly attackLabel: Text
   private readonly durabilityLabel: Text
+  private readonly deathrattle: Sprite
+  private readonly trigger: Sprite
+  private readonly animationScope = new AnimationScope()
+  private readonly activeAbilityPulses = new Set<Sprite>()
+  public instanceId: string | null = null
+  public ownerId: string | null = null
 
   private constructor(
     model: WeaponViewModel,
@@ -117,19 +132,19 @@ export class WeaponView extends Container {
     this.addChild(frame)
 
     // Pixi renders later children on top: add the large Deathrattle badge first.
-    if (model.deathrattle) {
-      const deathrattle = new Sprite(textures.deathrattle)
-      applyAnchoredPlacement(deathrattle, WEAPON_LAYOUT.deathrattle)
-      deathrattle.label = 'weapon.deathrattle'
-      this.addChild(deathrattle)
-    }
+    // Keep hidden markers mounted so a runtime trigger can pulse the same
+    // artwork without rebuilding the equipped weapon.
+    this.deathrattle = new Sprite(textures.deathrattle)
+    applyAnchoredPlacement(this.deathrattle, WEAPON_LAYOUT.deathrattle)
+    this.deathrattle.visible = model.deathrattle
+    this.deathrattle.label = 'weapon.deathrattle'
+    this.addChild(this.deathrattle)
 
-    if (model.trigger) {
-      const trigger = new Sprite(textures.trigger)
-      applyAnchoredPlacement(trigger, WEAPON_LAYOUT.trigger)
-      trigger.label = 'weapon.trigger'
-      this.addChild(trigger)
-    }
+    this.trigger = new Sprite(textures.trigger)
+    applyAnchoredPlacement(this.trigger, WEAPON_LAYOUT.trigger)
+    this.trigger.visible = model.trigger
+    this.trigger.label = 'weapon.trigger'
+    this.addChild(this.trigger)
 
     model.temporaryAbilityLabels.forEach((text, index) => {
       const badge = createTemporaryAbilityBadge(
@@ -176,5 +191,102 @@ export class WeaponView extends Container {
   setStats(attack: number, durability: number): void {
     this.attackLabel.text = String(attack)
     this.durabilityLabel.text = String(durability)
+  }
+
+  setAttack(attack: number): void {
+    this.attackLabel.text = String(attack)
+  }
+
+  setDurability(durability: number): void {
+    this.durabilityLabel.text = String(durability)
+  }
+
+  setDeathrattle(visible: boolean): void {
+    this.deathrattle.visible = visible
+  }
+
+  setTrigger(visible: boolean): void {
+    this.trigger.visible = visible
+  }
+
+  getAbilityMarkerSnapshot(
+    kind: WeaponAbilityMarkerKind
+  ): WeaponAbilityMarkerSnapshot | null {
+    const marker = kind === 'trigger' ? this.trigger : this.deathrattle
+    if (marker.destroyed) return null
+    const global = marker.getGlobalPosition()
+    return {
+      texture: marker.texture,
+      globalPosition: { x: global.x, y: global.y },
+      worldScale: Math.max(
+        0.001,
+        Math.hypot(marker.worldTransform.a, marker.worldTransform.b)
+      )
+    }
+  }
+
+  /** Pulses the existing board ability icon without introducing a new asset. */
+  presentAbilityPulse(kind: WeaponAbilityMarkerKind, duration: number): Promise<void> {
+    const marker = kind === 'trigger' ? this.trigger : this.deathrattle
+    if (marker.destroyed) return Promise.resolve()
+    const pulse = new Sprite(marker.texture)
+    pulse.anchor.set(marker.anchor.x, marker.anchor.y)
+    pulse.position.set(marker.x, marker.y)
+    pulse.scale.set(marker.scale.x * 0.82, marker.scale.y * 0.82)
+    pulse.alpha = 0
+    pulse.tint = 0xffffff
+    pulse.blendMode = 'add'
+    pulse.zIndex = marker.zIndex + 1
+    pulse.label = `weapon.${kind}.pulse`
+    pulse.eventMode = 'none'
+    this.addChild(pulse)
+    this.activeAbilityPulses.add(pulse)
+
+    const cleanup = (): void => {
+      this.activeAbilityPulses.delete(pulse)
+      if (!pulse.destroyed) pulse.destroy({ children: true })
+    }
+    const timeline = this.animationScope.timeline()
+    const half = Math.max(0.01, duration / 2)
+    timeline.to(pulse, {
+      alpha: 1,
+      duration: half,
+      ease: 'sine.inOut'
+    })
+    timeline.to(
+      pulse.scale,
+      {
+        x: marker.scale.x * 1.18,
+        y: marker.scale.y * 1.18,
+        duration,
+        ease: 'sine.inOut'
+      },
+      0
+    )
+    timeline.to(pulse, {
+      alpha: 0,
+      duration: half,
+      ease: 'sine.inOut',
+      onComplete: cleanup
+    })
+    return new Promise((resolve) => {
+      timeline.eventCallback('onComplete', () => {
+        cleanup()
+        resolve()
+      })
+      timeline.eventCallback('onInterrupt', () => {
+        cleanup()
+        resolve()
+      })
+    })
+  }
+
+  override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.animationScope.kill()
+    for (const pulse of this.activeAbilityPulses) {
+      if (!pulse.destroyed) pulse.destroy({ children: true })
+    }
+    this.activeAbilityPulses.clear()
+    super.destroy(options)
   }
 }
