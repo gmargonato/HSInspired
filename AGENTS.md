@@ -1,3 +1,56 @@
+# Notes by the human
+
+- Clean any .test files created after a test, keeping the codebase clean.
+- This is not a OneDrive folder, even though the path to this project makes you believe that. It is a left-over, and OneDrive is not installed.
+- If running tests, and any test fails because of the live-numbers are different from the test files, assume that the human made manual adjustments and those are the correct values he wants.
+
+## Windows Codex Sandbox ACL Failure
+
+  If `apply_patch` or normal `exec_command` fails before launching with:
+  
+  ```
+  helper_unknown_error: apply deny-read ACLs
+  windows sandbox failed: helper_unknown_error: apply deny-read ACLs
+  ```
+
+  inspect the Codex sandbox state before changing repository permissions or source files.
+
+  Check:
+
+  C:\Users\gabri\.codex\.sandbox\setup_error.json
+  C:\Users\gabri\.codex\.sandbox\deny_read_acl_state.json
+  C:\Users\gabri\.codex\.sandbox\sandbox*.log
+
+  The issue is confirmed when the log contains:
+
+  parse deny-read ACL state ...\deny_read_acl_state.json
+  expected value at line 1 column 1
+
+  and deny_read_acl_state.json contains NUL bytes instead of valid JSON. This is a corrupted Codex sandbox state file,
+  not necessarily a repository ACL problem.
+
+  Preserve the corrupt file and move it out of the active path so Codex can regenerate it:
+
+  $statePath = 'C:\Users\gabri\.codex\.sandbox\deny_read_acl_state.json'
+  $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+
+  if (Test-Path -LiteralPath $statePath) {
+      Move-Item -LiteralPath $statePath `
+          -Destination ($statePath + '.corrupt-' + $stamp)
+  }
+
+  This may require elevated permission because the file is outside the repository. Do not manually guess a replacement
+  schema; let Codex regenerate the state. Verify using normal, non-elevated commands:
+
+  ```
+  Get-Location
+  git status --short
+  ```
+
+  Then confirm that deny_read_acl_state.json has been recreated as valid JSON. If the error persists, restart/recreate
+  the Codex sandbox and inspect the newest sandbox log. Do not modify .git ACLs unless separate evidence proves they are
+  the cause.
+
 # Commiting and Pushing to GitHub
 
 You have access to GitHub CLI. Please make sure that we are using account 'gmargonato' email 'gabriel-merida@hotmail.com', and not another account in the machine. If you detect another account (for example gmargonato-arctiq, or gmargonato-mohawk) please make sure to switch to the correct one.
@@ -146,21 +199,3 @@ export const MY_FEATURE_LAYOUT = {
 npm run dev                                      # Start game at Main Menu
 VITE_DEV_START_ROUTE=card-inspector npm run dev # Open development Card Inspector directly
 ```
-
-### Canonical Verification (Mandatory Before Handoff)
-
-Always run the full verification suite before concluding any task:
-
-```bash
-npm run verify
-```
-
-This executes the complete safety net:
-
-1. `npm run format:check` — Prettier formatting validation.
-2. `npm run lint` — ESLint rules.
-3. `npm run typecheck` — TypeScript checks across node and web contexts.
-4. `npm run deps:check` — Architecture dependency cruiser validation.
-5. `npm run build:smoke` — Production build smoke test and dev-marker leak check.
-
-IMPORTANT: If any test fails because of the live-numbers are different from the test files, assume that the human made manual adjustments and those are the correct values he wants.

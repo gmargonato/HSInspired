@@ -68,7 +68,7 @@ export class MatchResultOverlay extends Container {
     this.frame.texture =
       result === 'win' ? this.options.winScreen : this.options.defeatScreen
     this.continuePrompt.text =
-      result === 'draw' ? 'Draw � Click to continue' : 'Click to continue'
+      result === 'draw' ? 'Draw — Click to continue' : 'Click to continue'
     hero.removeFromParent()
     applyPlacement(hero, GAME_BOARD_LAYOUT.matchResult.localHero)
     hero.label = 'game.match-result.hero'

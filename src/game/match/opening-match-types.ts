@@ -105,6 +105,21 @@ export interface RuntimeGrantedTrigger {
   readonly expiresOnTurn?: number
 }
 
+/**
+ * A delayed effect attached to a minion rather than to the match timeline.
+ * It follows that minion through control changes, is removed by Silence or a
+ * definition-reset transform, and is duplicated by exact board-copy effects.
+ */
+export interface RuntimeAttachedEffect {
+  readonly id: string
+  readonly sourceInstanceId: string
+  readonly sourceCardId: CardId | null
+  readonly controllerId: PlayerId
+  readonly trigger: 'start-of-turn' | 'end-of-turn'
+  readonly actions: readonly Record<string, unknown>[]
+  readonly executeOnTurn: number
+}
+
 export interface SecretState {
   readonly instanceId: string
   readonly cardId: CardId
@@ -260,6 +275,7 @@ export interface BoardMinion {
   readonly keywords?: readonly CardKeyword[]
   readonly enchantments?: readonly RuntimeEnchantment[]
   readonly grantedTriggers?: readonly RuntimeGrantedTrigger[]
+  readonly attachedEffects?: readonly RuntimeAttachedEffect[]
   readonly deathrattles?: readonly CardEffectBlock[]
   readonly silenced?: boolean
   readonly frozenUntilTurn?: number | null
@@ -353,6 +369,13 @@ export interface PlayerHeroPower {
   readonly enchantments?: readonly RuntimeEnchantment[]
 }
 
+export interface PendingCostModifier {
+  readonly id: string
+  readonly sourceInstanceId: string
+  readonly amount: number
+  readonly filter: Readonly<Record<string, unknown>>
+}
+
 export interface OpeningPlayerState {
   readonly participantId: PlayerId
   readonly controllerKind: ControllerKind
@@ -374,6 +397,8 @@ export interface OpeningPlayerState {
   /** Cards that were discarded or burned and are no longer playable entities. */
   readonly discardedCards?: readonly OpeningCard[]
   readonly overload?: number
+  /** One-shot discounts that apply when the next matching card is played. */
+  readonly pendingCostModifiers?: readonly PendingCostModifier[]
 }
 
 export interface OpeningMatchState {
@@ -392,7 +417,15 @@ export interface OpeningMatchState {
   readonly turnLimitSeconds?: number | null
   readonly turnStartedAtRevision?: number | null
   readonly pendingResolution?: boolean
+  /** A private, blocking card choice created by a Discover effect. */
+  readonly pendingDiscover?: PendingDiscoverChoice
   readonly scheduledEffects?: readonly ScheduledEffect[]
+}
+
+export interface PendingDiscoverChoice {
+  readonly participantId: PlayerId
+  readonly sourceCardInstanceId: string
+  readonly candidates: readonly OpeningCard[]
 }
 
 export interface ConfirmMulliganCommand {
@@ -436,6 +469,9 @@ export type CardPlayTargetRef =
       readonly kind: 'card'
       readonly participantId: PlayerId
       readonly instanceId: string
+      /** Presentation metadata for card-choice interfaces such as Tracking. */
+      readonly cardId?: CardId
+      readonly zone?: 'deck' | 'hand' | 'revealed' | 'discarded'
     }
   | {
       readonly kind: 'secret'
@@ -451,6 +487,12 @@ export interface PlayCardCommand {
   readonly position?: number
   readonly targets?: readonly CardPlayTargetRef[]
   readonly choice?: number
+}
+
+export interface ChooseDiscoverCardCommand {
+  readonly type: 'choose-discover-card'
+  readonly participantId: PlayerId
+  readonly cardInstanceId: string
 }
 
 export interface TimeoutCommand {
@@ -541,6 +583,7 @@ export type OpeningMatchCommand =
   | EndTurnCommand
   | UseHeroPowerCommand
   | PlayCardCommand
+  | ChooseDiscoverCardCommand
   | TimeoutCommand
   | AttackCharacterCommand
   | DevAddCardCommand
@@ -595,6 +638,13 @@ export interface CardDrawnEvent {
 }
 
 /** A newly-created card entering a hand as the result of an effect, not a deck draw. */
+export interface DiscoverStartedEvent {
+  readonly type: 'discover-started'
+  readonly participantId: PlayerId
+  readonly sourceCardInstanceId: string
+  readonly candidates: readonly OpeningCard[]
+}
+
 export interface CardGeneratedEvent {
   readonly type: 'card-generated'
   readonly participantId: PlayerId
@@ -850,6 +900,7 @@ export type OpeningMatchEvent =
   | OpeningCardDrawnEvent
   | TurnStartedEvent
   | CardDrawnEvent
+  | DiscoverStartedEvent
   | CardGeneratedEvent
   | CardBurnedEvent
   | HeroPowerUsedEvent
@@ -917,6 +968,7 @@ export type OpeningRejectionCode =
   | 'resolution-failed'
   | 'resolution-budget-exhausted'
   | 'timeout-unavailable'
+  | 'discover-pending'
 
 export interface OpeningRejectedResult {
   readonly accepted: false
@@ -957,22 +1009,27 @@ export type PublicizeOpeningMatchEvent<E> = E extends EffectDomainEvent
         readonly returnedCards: readonly OpeningPublicCard[]
         readonly replacementCards: readonly OpeningPublicCard[]
       }
-    : E extends
-          | CoinGrantedEvent
-          | OpeningCardDrawnEvent
-          | CardDrawnEvent
-          | CardGeneratedEvent
-          | CardBurnedEvent
-          | DevCardAddedEvent
-      ? Omit<E, 'card'> & { readonly card: OpeningPublicCard }
-      : E
+    : E extends DiscoverStartedEvent
+      ? Omit<E, 'candidates'> & { readonly candidates: readonly OpeningPublicCard[] }
+      : E extends
+            | CoinGrantedEvent
+            | OpeningCardDrawnEvent
+            | CardDrawnEvent
+            | CardGeneratedEvent
+            | CardBurnedEvent
+            | DevCardAddedEvent
+        ? Omit<E, 'card'> & { readonly card: OpeningPublicCard }
+        : E
 
 export type OpeningMatchPublicEvent = PublicizeOpeningMatchEvent<OpeningMatchEvent>
 export interface OpeningMatchPublicState extends Omit<
   OpeningMatchState,
-  'players' | 'history' | 'effectTrace' | 'scheduledEffects'
+  'players' | 'history' | 'effectTrace' | 'pendingDiscover' | 'scheduledEffects'
 > {
   readonly players: readonly [OpeningPublicPlayerState, OpeningPublicPlayerState]
+  readonly pendingDiscover?: Omit<PendingDiscoverChoice, 'candidates'> & {
+    readonly candidates: readonly OpeningPublicCard[]
+  }
 }
 
 export type OpeningPublicCard = Omit<
@@ -997,7 +1054,12 @@ export type OpeningPublicCard = Omit<
 
 export type OpeningPublicPlayerState = Omit<
   OpeningPlayerState,
-  'secrets' | 'deck' | 'hand' | 'revealedCards' | 'discardedCards'
+  | 'secrets'
+  | 'deck'
+  | 'hand'
+  | 'revealedCards'
+  | 'discardedCards'
+  | 'pendingCostModifiers'
 > & {
   readonly deck: readonly OpeningPublicCard[]
   readonly hand: readonly OpeningPublicCard[]
@@ -1019,6 +1081,7 @@ export interface PlayCardInput {
   /** Candidate references for each selector, in selector order, after immunity filtering. */
   readonly legalTargetOptions: readonly (readonly CardPlayTargetRef[])[]
   readonly choiceCount: number
+  readonly skipTargetedBattlecry: boolean
   /** Zero-based choices accepted by the command, exposed for renderer input. */
   readonly legalChoices: readonly number[]
   /** Stable, presentation-ready labels aligned with legalChoices. */

@@ -185,7 +185,7 @@ describe('Phase 5/6 real-card integration', () => {
     expect(nextPlayer.overload).toBe(2)
   })
 
-  it('rejects a choice with no legal target and a full-board play atomically', () => {
+  it('skips a targetless Battlecry choice and rejects a full-board play atomically', () => {
     const choice = createMatchScenario({
       seed: 504,
       cardId: 'classic_keeper_of_the_grove'
@@ -199,8 +199,9 @@ describe('Phase 5/6 real-card integration', () => {
       choiceCard.instanceId,
       1
     )
-    expect(silenceInput?.legalTargetOptions).toEqual([[]])
-    const choiceBefore = choice.match.getState()
+    expect(silenceInput?.targetSelectors).toEqual([])
+    expect(silenceInput?.legalTargetOptions).toEqual([])
+
     const choiceResult = choice.match.dispatch({
       type: 'play-card',
       participantId,
@@ -208,11 +209,7 @@ describe('Phase 5/6 real-card integration', () => {
       position: 0,
       choice: 1
     })
-    expect(choiceResult.accepted).toBe(false)
-    if (!choiceResult.accepted) {
-      expect(choiceResult.code).toBe('missing-input')
-      expect(choiceResult.state).toEqual(choiceBefore)
-    }
+    expect(choiceResult.accepted).toBe(true)
 
     const full = createMatchScenario({ seed: 505, cardId: 'basic_acidic_swamp_ooze' })
     full.confirmBothMulligans()
@@ -340,17 +337,25 @@ describe('Phase 5/6 real-card integration', () => {
     setMana(scenario, participantId)
     const card = handCard(scenario, participantId, 'basic_tracking')
     const input = scenario.match.getPlayInput?.(participantId, card.instanceId)
-    const selected = input?.legalTargetOptions[0]?.[0]
-    expect(input?.targetSelectors).toHaveLength(1)
-    expect(input?.legalTargetOptions[0]).toHaveLength(3)
-    expect(selected).toBeDefined()
+    expect(input?.targetSelectors).toHaveLength(0)
     const before = scenario.match.getState()
     const beforePlayer = player(before, participantId)
-    const result = scenario.match.dispatch({
+    const cast = scenario.match.dispatch({
       type: 'play-card',
       participantId,
-      cardInstanceId: card.instanceId,
-      targets: [selected!]
+      cardInstanceId: card.instanceId
+    })
+    expect(cast.accepted).toBe(true)
+    if (!cast.accepted) return
+    const pending = cast.state.pendingDiscover
+    expect(pending?.candidates).toHaveLength(3)
+    expect(cast.events.some((event) => event.type === 'discover-started')).toBe(true)
+    const selected = pending?.candidates[0]
+    expect(selected).toBeDefined()
+    const result = scenario.match.dispatch({
+      type: 'choose-discover-card',
+      participantId,
+      cardInstanceId: selected!.instanceId
     })
     expect(result.accepted).toBe(true)
     if (!result.accepted) return
@@ -360,9 +365,7 @@ describe('Phase 5/6 real-card integration', () => {
     expect(nextPlayer.revealedCards ?? []).toHaveLength(0)
     expect(nextPlayer.discardedCards).toHaveLength(3)
     expect(result.events.filter((event) => event.type === 'card-drawn')).toHaveLength(1)
-    expect(effectActions(result)).toEqual(
-      expect.arrayContaining(['reveal', 'draw', 'discard'])
-    )
+    expect(effectActions(cast)).toEqual(expect.arrayContaining(['reveal', 'discover']))
   })
 
   it('copies opponent deck cards, generates filtered cards, and preserves deterministic IDs', () => {
@@ -582,7 +585,7 @@ describe('Phase 5/6 real-card integration', () => {
     })
   })
 
-  it('shuffles generated Mine cards for Iron Juggernaut and draws to a turn-player hand target', () => {
+  it("shuffles generated Mine cards for Iron Juggernaut's Battlecry and Deathrattle", () => {
     const juggernaut = createMatchScenario({
       seed: 517,
       cardId: 'goblins_vs_gnomes_iron_juggernaut'
@@ -624,6 +627,51 @@ describe('Phase 5/6 real-card integration', () => {
       revealed: false
     })
     expect(effectActions(result)).toContain('shuffle-into-deck')
+
+    expect(
+      juggernaut.match.dispatch({
+        type: 'end-turn',
+        participantId: juggernautContext.participantId
+      }).accepted
+    ).toBe(true)
+    addCard(juggernaut, juggernautContext.opponentId, 'basic_whirlwind')
+    setMana(juggernaut, juggernautContext.opponentId)
+    const whirlwind = handCard(
+      juggernaut,
+      juggernautContext.opponentId,
+      'basic_whirlwind'
+    )
+    const damageResult = juggernaut.match.dispatch({
+      type: 'play-card',
+      participantId: juggernautContext.opponentId,
+      cardInstanceId: whirlwind.instanceId
+    })
+    expect(damageResult.accepted).toBe(true)
+    addCard(juggernaut, juggernautContext.opponentId, 'basic_execute')
+    const execute = handCard(juggernaut, juggernautContext.opponentId, 'basic_execute')
+    const deathrattleResult = juggernaut.match.dispatch({
+      type: 'play-card',
+      participantId: juggernautContext.opponentId,
+      cardInstanceId: execute.instanceId,
+      targets: [
+        {
+          kind: 'minion',
+          participantId: juggernautContext.participantId,
+          instanceId: player(
+            juggernaut.match.getState(),
+            juggernautContext.participantId
+          ).board[0]!.instanceId
+        }
+      ]
+    })
+    expect(deathrattleResult.accepted).toBe(true)
+    if (!deathrattleResult.accepted) return
+    expect(
+      player(deathrattleResult.state, juggernautContext.opponentId).deck.filter(
+        (entry) => entry.cardId === 'goblins_vs_gnomes_burrowing_mine'
+      )
+    ).toHaveLength(2)
+    expect(effectActions(deathrattleResult)).toContain('shuffle-into-deck')
 
     const jeeves = createMatchScenario({
       seed: 518,

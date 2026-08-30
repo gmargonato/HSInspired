@@ -35,6 +35,7 @@ import type {
   PlayCardInput,
   HeroPowerTargetRef,
   RuntimeCostAdjustment,
+  RuntimeAttachedEffect,
   RuntimeEnchantment,
   RuntimeEntityKind,
   RuntimeEntityReference,
@@ -361,6 +362,11 @@ function effectiveKeywords(
   return [...keywords]
 }
 
+function attacksPerTurnForKeywords(keywords: ReadonlySet<CardKeyword>): number {
+  if (keywords.has('mega-windfury')) return 4
+  return keywords.has('windfury') ? 2 : 1
+}
+
 function cardDefinition(cardId: CardId): CardDefinition | undefined {
   return CARD_CATALOG.get(cardId)
 }
@@ -471,7 +477,11 @@ function publicTarget(value: EntityRef): CardPlayTargetRef | null {
     return {
       kind: 'card',
       participantId: value.participantId,
-      instanceId: value.instanceId
+      instanceId: value.instanceId,
+      cardId: value.cardId,
+      zone: ['deck', 'hand', 'revealed', 'discarded'].includes(value.zone)
+        ? (value.zone as 'deck' | 'hand' | 'revealed' | 'discarded')
+        : undefined
     }
   if (value.kind === 'secret')
     return {
@@ -1112,7 +1122,14 @@ export class EffectRuntime {
       let condition = true
       if (key === 'cardId') condition = ref.cardId === value
       else if (key === 'cardType') condition = definition?.type === value
-      else if (key === 'cost') {
+      else if (key === 'cardClass') {
+        const expected =
+          value === 'opponent'
+            ? HERO_CATALOG.get(this.player(this.otherPlayer(frame.controllerId)).heroId)
+                ?.classId
+            : value
+        condition = definition?.cardClass === expected
+      } else if (key === 'cost') {
         const cost = card?.currentCost ?? card?.baseCost ?? definition?.cost
         const valueRecord = isRecord(value) ? value : null
         const rawExpected = valueRecord
@@ -1388,14 +1405,17 @@ export class EffectRuntime {
     const selection = selector.selection
     if (selection === 'source')
       return this.selectorMatches(frame.source, selector, frame) ? [frame.source] : []
-    if (selection === 'event-source' && frame.event?.source)
-      return this.selectorMatches(frame.event.source, selector, frame)
-        ? [frame.event.source]
+    if (selection === 'event-source') {
+      const eventSource = frame.event?.source
+      return eventSource && this.selectorMatches(eventSource, selector, frame)
+        ? [eventSource]
         : []
+    }
     if (selection === 'event-target') {
       const eventTarget = frame.event?.target ?? frame.lastActionTarget
-      if (eventTarget)
-        return this.selectorMatches(eventTarget, selector, frame) ? [eventTarget] : []
+      return eventTarget && this.selectorMatches(eventTarget, selector, frame)
+        ? [eventTarget]
+        : []
     }
     if (selection === 'chosen') return this.chosenTarget(frame, selector)
 
@@ -1511,6 +1531,8 @@ export class EffectRuntime {
         return sourceMinion?.health ?? owner.hero.health
       case 'hero-damage':
         return Math.max(0, owner.hero.maxHealth - owner.hero.health)
+      case 'minions-died-this-turn':
+        return this.draft.history?.minionsDiedThisTurn.length ?? 0
       case 'matching-entity-count':
         return isRecord(expression?.selector)
           ? this.select(expression.selector, frame).length
@@ -2083,6 +2105,18 @@ export class EffectRuntime {
     source: EntityRef
   ): boolean {
     const eventSpec = block.event
+    const isOwnEntryEvent =
+      source.kind === 'minion' &&
+      event.target !== null &&
+      entityKey(event.target) === entityKey(source) &&
+      (event.type === 'card-played' ||
+        event.type === 'minion-played' ||
+        event.type === 'first-minion-played-this-turn' ||
+        event.type === 'minion-summoned')
+    // A minion must already be in play to observe an enter-play event. This
+    // prevents summon and card-play listeners from triggering on themselves.
+    if (isOwnEntryEvent) return false
+
     if (
       event.kind === 'play' &&
       event.type !== 'card-played' &&
@@ -2258,6 +2292,10 @@ export class EffectRuntime {
           // Deathrattles are emitted only from the captured dead source below.
           // A living minion must not treat another minion's death as its own.
           if (block.trigger === 'deathrattle') continue
+          // Hand-only effects are evaluated by recomputeContinuousEffects()
+          // (or the hand-specific event path below). Once their source has
+          // become a board minion, they cannot listen to semantic events.
+          if (block.trigger === 'while-in-hand') continue
           // Turn triggers describe their controller's turn unless their
           // authored event explicitly widens the scope (for example, Gruul's
           // "At the end of each turn").
@@ -2682,6 +2720,20 @@ export class EffectRuntime {
         return (player.secrets ?? []).length > 0
       case 'player-has-damaged-minion':
         return player.board.some((minion) => minion.health < minion.maxHealth)
+      case 'player-has-card-in-hand':
+        return player.hand.some((card) =>
+          this.matchesFilter(
+            {
+              instanceId: card.instanceId,
+              kind: 'card',
+              participantId: player.participantId,
+              zone: 'hand',
+              cardId: card.cardId
+            },
+            condition.filter,
+            frame
+          )
+        )
       case 'player-has-hand-count':
         return this.compare(
           player.hand.length,
@@ -3723,14 +3775,23 @@ export class EffectRuntime {
         ? copyPlainArray(copyFrom.keywords)
         : [...definition.keywords],
       enchantments: copyFrom?.enchantments
-        ? copyPlainArray(copyFrom.enchantments)
+        ? (this.cloneCopiedEnchantments(
+            copyFrom.enchantments
+          ) as unknown as DraftMinion['enchantments'])
         : cardState?.enchantments
           ? copyPlainArray(
               cardState.enchantments.filter((enchantment) => !enchantment.continuous)
             )
           : [],
       grantedTriggers: copyFrom?.grantedTriggers
-        ? copyPlainArray(copyFrom.grantedTriggers)
+        ? (this.cloneCopiedGrantedTriggers(
+            copyFrom.grantedTriggers
+          ) as unknown as DraftMinion['grantedTriggers'])
+        : [],
+      attachedEffects: copyFrom?.attachedEffects
+        ? (this.cloneCopiedAttachedEffects(
+            copyFrom.attachedEffects
+          ) as unknown as DraftMinion['attachedEffects'])
         : [],
       deathrattles: copyFrom?.deathrattles ? copyPlainArray(copyFrom.deathrattles) : [],
       silenced: copyFrom?.silenced ?? false,
@@ -4335,6 +4396,7 @@ export class EffectRuntime {
     minion.keywords = [...definition.keywords]
     minion.enchantments = []
     minion.grantedTriggers = []
+    minion.attachedEffects = []
     minion.deathrattles = []
     minion.silenced = false
     minion.divineShield = definition.keywords.includes('divine-shield')
@@ -4346,6 +4408,82 @@ export class EffectRuntime {
     minion.frozenUntilTurn = null
     minion.damageTaken = 0
     this.emit(frame, 'transform', path, { target: ref.instanceId, cardId })
+  }
+
+  private cloneCopiedEnchantments(
+    enchantments: readonly RuntimeEnchantment[]
+  ): RuntimeEnchantment[] {
+    return enchantments
+      .filter((enchantment) => !enchantment.continuous)
+      .map((enchantment) => ({
+        ...clonePlain(enchantment),
+        id: this.allocateId(`${enchantment.sourceInstanceId}:copied-enchantment`)
+      }))
+  }
+
+  private cloneCopiedGrantedTriggers(
+    triggers: readonly RuntimeGrantedTrigger[]
+  ): RuntimeGrantedTrigger[] {
+    return triggers.map((trigger) => ({
+      ...clonePlain(trigger),
+      id: this.allocateId(`${trigger.sourceInstanceId}:copied-trigger`)
+    }))
+  }
+
+  private cloneCopiedAttachedEffects(
+    effects: readonly RuntimeAttachedEffect[]
+  ): RuntimeAttachedEffect[] {
+    return effects.map((effect) => ({
+      ...clonePlain(effect),
+      id: this.allocateId(`${effect.sourceInstanceId}:copied-attached-effect`)
+    }))
+  }
+
+  /**
+   * Replaces an existing board minion's visible form and attached state with
+   * an exact snapshot of another live minion. Runtime identity and entry/attack
+   * history belong to the destination and are deliberately not copied.
+   */
+  private transformMinionIntoCopy(
+    destinationRef: EntityRef,
+    sourceRef: EntityRef,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    if (destinationRef.kind !== 'minion' || sourceRef.kind !== 'minion') return
+    const destination = this.currentMinion(destinationRef)
+    const source = this.currentMinion(sourceRef)
+    if (!destination || !source) return
+
+    const sourceSnapshot = clonePlain(source) as DraftMinion
+    const destinationIdentity = {
+      instanceId: destination.instanceId,
+      ownerId: destination.ownerId,
+      controllerId: destination.controllerId,
+      creationOrdinal: destination.creationOrdinal,
+      playOrder: destination.playOrder,
+      summonedOnTurn: destination.summonedOnTurn,
+      lastAttackedOnTurn: destination.lastAttackedOnTurn,
+      attacksUsedThisTurn: destination.attacksUsedThisTurn,
+      scheduledReturnControllerId: destination.scheduledReturnControllerId
+    }
+
+    Object.assign(destination, sourceSnapshot, destinationIdentity, {
+      enchantments: this.cloneCopiedEnchantments(sourceSnapshot.enchantments ?? []),
+      grantedTriggers: this.cloneCopiedGrantedTriggers(
+        sourceSnapshot.grantedTriggers ?? []
+      ),
+      attachedEffects: this.cloneCopiedAttachedEffects(
+        sourceSnapshot.attachedEffects ?? []
+      )
+    })
+
+    this.recomputeContinuousEffects()
+    this.emit(frame, 'transform', path, {
+      target: destination.instanceId,
+      cardId: destination.cardId,
+      copiedFrom: source.instanceId
+    })
   }
 
   /**
@@ -4554,6 +4692,29 @@ export class EffectRuntime {
         return
       }
       case 'change-cost': {
+        if (action.deferUntil === 'next-matching-card-played') {
+          const target = isRecord(action.target) ? action.target : null
+          const filter = target && isRecord(target.filter) ? target.filter : {}
+          const participantId =
+            this.relativeController(target?.controller, frame) ?? frame.controllerId
+          const amount = this.evaluate(action.amount, frame)
+          const player = this.player(participantId)
+          player.pendingCostModifiers = [
+            ...(player.pendingCostModifiers ?? []),
+            {
+              id: this.allocateId(`${frame.source.instanceId}:pending-cost`),
+              sourceInstanceId: frame.source.instanceId,
+              amount,
+              filter
+            }
+          ]
+          this.emit(frame, name, path, {
+            participantId,
+            amount,
+            deferUntil: action.deferUntil
+          })
+          return
+        }
         const targets = this.actionTargets(action, frame)
         const minimum = typeof action.minimum === 'number' ? action.minimum : 0
         for (const target of targets) {
@@ -4583,7 +4744,7 @@ export class EffectRuntime {
             if (target.kind === 'minion' && isRecord(destination)) {
               const destinationTarget = this.select(destination, frame)[0]
               if (destinationTarget?.kind === 'minion')
-                this.transformMinion(destinationTarget, target.cardId!, frame, path)
+                this.transformMinionIntoCopy(destinationTarget, target, frame, path)
             } else if (target.cardId) {
               let destinationPlayer = frame.controllerId
               if (isRecord(destination)) {
@@ -4728,6 +4889,39 @@ export class EffectRuntime {
               kind: 'discard'
             })
           }
+        }
+        return
+      }
+      case 'discover': {
+        const count = Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+        for (const participantId of this.targetPlayers(action, frame)) {
+          const revealed = this.revealDeckTop(
+            participantId,
+            count,
+            frame,
+            `${path}.reveal`
+          )
+          const candidates = revealed
+            .map((ref) => this.currentCard(ref))
+            .filter((card): card is DraftCard => card !== null)
+            .map((card) => clonePlain(card) as DraftCard)
+          if (candidates.length === 0) continue
+          this.draft.pendingDiscover = {
+            participantId,
+            sourceCardInstanceId: frame.source.instanceId,
+            candidates
+          }
+          this.events.push({
+            type: 'discover-started',
+            participantId,
+            sourceCardInstanceId: frame.source.instanceId,
+            candidates: clonePlain(candidates) as unknown as OpeningCard[]
+          })
+          this.emit(frame, name, path, {
+            participantId,
+            cardIds: candidates.map((card) => card.cardId),
+            instanceIds: candidates.map((card) => card.instanceId)
+          })
         }
         return
       }
@@ -5146,6 +5340,20 @@ export class EffectRuntime {
         }
         return
       }
+      case 'unlock-overload': {
+        for (const participantId of this.targetPlayers(action, frame)) {
+          const player = this.player(participantId)
+          const locked = player.mana.overloadLocked ?? 0
+          player.mana = {
+            ...player.mana,
+            available: Math.min(player.mana.maximum, player.mana.available + locked),
+            overloadLocked: 0
+          }
+          player.overload = 0
+          this.emit(frame, name, path, { participantId, amount: locked })
+        }
+        return
+      }
       case 'prevent-lethal':
         if (frame.event) frame.event.prevented = true
         for (const target of this.actionTargets(action, frame))
@@ -5266,7 +5474,18 @@ export class EffectRuntime {
           ...previousHero,
           instanceId: frame.controllerId + ':hero',
           baseAttack: 0,
-          baseMaxHealth: previousHero.maxHealth,
+          baseMaxHealth:
+            definition.id === 'ragnaros'
+              ? definition.startingHealth
+              : previousHero.maxHealth,
+          maxHealth:
+            definition.id === 'ragnaros'
+              ? definition.startingHealth
+              : previousHero.maxHealth,
+          health:
+            definition.id === 'ragnaros'
+              ? definition.startingHealth
+              : previousHero.health,
           baseKeywords: previousHero.baseKeywords ?? previousHero.keywords ?? [],
           attack: 0,
           armor: previousHero.armor + armorGained,
@@ -5448,6 +5667,36 @@ export class EffectRuntime {
               : trigger === 'start-of-turn'
                 ? this.draft.turnNumber + startOfTurnOffset
                 : this.draft.turnNumber + 1
+        if (action.attachedToTarget === true) {
+          if (
+            selectedTarget?.kind !== 'minion' ||
+            (trigger !== 'start-of-turn' && trigger !== 'end-of-turn')
+          )
+            return
+          const minion = this.currentMinion(selectedTarget)
+          if (!minion) return
+          const attached: RuntimeAttachedEffect = {
+            id: this.allocateId(frame.source.instanceId + ':attached-effect'),
+            sourceInstanceId: frame.source.instanceId,
+            sourceCardId: frame.sourceCardId,
+            controllerId: frame.controllerId,
+            trigger,
+            actions: asArray(action.actions).filter(isRecord),
+            executeOnTurn
+          }
+          minion.attachedEffects = [
+            ...(minion.attachedEffects ?? []),
+            attached
+          ] as unknown as DraftMinion['attachedEffects']
+          this.emit(frame, name, path, {
+            scheduleId: attached.id,
+            target: selectedTarget.instanceId,
+            trigger,
+            executeOnTurn,
+            attached: true
+          })
+          return
+        }
         const scheduled: ScheduledEffect = {
           id: this.allocateId(frame.source.instanceId + ':schedule'),
           sourceInstanceId: frame.source.instanceId,
@@ -5898,6 +6147,7 @@ export class EffectRuntime {
           minion.keywords = []
           minion.enchantments = []
           minion.grantedTriggers = []
+          minion.attachedEffects = []
           minion.deathrattles = []
           minion.silenced = true
           minion.divineShield = false
@@ -5907,6 +6157,7 @@ export class EffectRuntime {
           minion.immune = false
           minion.spellImmune = false
           minion.frozenUntilTurn = null
+          frame.lastActionTarget = target
         }
         return
       default:
@@ -6010,11 +6261,31 @@ export class EffectRuntime {
         hero.keywords = [...heroKeywords]
         hero.immune = heroKeywords.has('immune')
         hero.spellImmune = heroKeywords.has('spell-immune')
-        hero.maxAttacksPerTurn = heroKeywords.has('mega-windfury')
-          ? 4
-          : heroKeywords.has('windfury')
-            ? 2
-            : 1
+        const heroCombatKeywords = new Set(heroKeywords)
+        if (player.weapon) {
+          const weaponDefinition = cardDefinition(player.weapon.cardId)
+          if (weaponDefinition?.type === 'Weapon') {
+            for (const keyword of weaponDefinition.keywords)
+              heroCombatKeywords.add(keyword)
+          }
+          for (const enchantment of player.weapon.enchantments ?? []) {
+            if (
+              (enchantment.expiresOnTurn !== undefined &&
+                enchantment.expiresOnTurn < this.draft.turnNumber) ||
+              (enchantment.startsOnTurn !== undefined &&
+                enchantment.startsOnTurn > this.draft.turnNumber) ||
+              enchantment.continuous ||
+              (enchantment.duration === 'while-source-in-play' &&
+                !this.sourceIsInPlay(enchantment.sourceInstanceId))
+            )
+              continue
+            for (const keyword of enchantment.keywords ?? [])
+              heroCombatKeywords.add(keyword)
+            for (const keyword of enchantment.removedKeywords ?? [])
+              heroCombatKeywords.delete(keyword)
+          }
+        }
+        hero.maxAttacksPerTurn = attacksPerTurnForKeywords(heroCombatKeywords)
         hero.spellDamage = heroKeywords.has('spell-damage') ? 1 : 0
         hero.spellDamageMultiplier = activeHeroEnchantments.reduce(
           (value, enchantment) => value * (enchantment.spellDamageMultiplier ?? 1),
@@ -6269,13 +6540,20 @@ export class EffectRuntime {
 
   private targetSelectorsFor(
     card: CardDefinition,
+    frame: EffectFrame,
     choiceIndex?: number
   ): readonly Readonly<Record<string, unknown>>[] {
     const selectors: {
       selector: Readonly<Record<string, unknown>>
       path: string
     }[] = []
-    collectTargetSelectors(card.effects, '.effects', selectors, choiceIndex)
+    const activeEffects = card.effects.filter((block) => {
+      if (!block.condition) return true
+      const type = isRecord(block.condition) ? block.condition.type : undefined
+      if (typeof type === 'string' && type.startsWith('target-')) return true
+      return this.conditionMatches(block.condition, frame)
+    })
+    collectTargetSelectors(activeEffects, '.effects', selectors, choiceIndex)
     const seen = new Set<string>()
     return selectors
       .map((entry) => entry.selector)
@@ -6286,7 +6564,6 @@ export class EffectRuntime {
         return true
       })
   }
-
   private choiceCountFor(card: CardDefinition): number {
     const options = collectChoiceOptions(card.effects)
     return options?.length ?? 0
@@ -6335,6 +6612,42 @@ export class EffectRuntime {
     )
   }
 
+  private pendingCostModifierAmount(
+    card: DraftCard,
+    participantId: PlayerId,
+    frame: EffectFrame
+  ): number {
+    const player = this.player(participantId)
+    const reference: EntityRef = {
+      instanceId: card.instanceId,
+      kind: 'card',
+      participantId,
+      zone: 'hand',
+      cardId: card.cardId
+    }
+    return (player.pendingCostModifiers ?? [])
+      .filter((modifier) => this.matchesFilter(reference, modifier.filter, frame))
+      .reduce((total, modifier) => total + modifier.amount, 0)
+  }
+
+  private consumePendingCostModifiers(
+    card: DraftCard,
+    participantId: PlayerId,
+    frame: EffectFrame
+  ): void {
+    const player = this.player(participantId)
+    const reference: EntityRef = {
+      instanceId: card.instanceId,
+      kind: 'card',
+      participantId,
+      zone: 'hand',
+      cardId: card.cardId
+    }
+    player.pendingCostModifiers = (player.pendingCostModifiers ?? []).filter(
+      (modifier) => !this.matchesFilter(reference, modifier.filter, frame)
+    )
+  }
+
   private playInput(
     participantId: PlayerId,
     cardInstanceId: string,
@@ -6361,7 +6674,6 @@ export class EffectRuntime {
     )
       return null
     const selectedChoice = choiceCount > 0 ? (choiceIndex ?? 0) : undefined
-    const targetSelectors = this.targetSelectorsFor(definition, selectedChoice)
     const source: EntityRef = {
       instanceId: card.instanceId,
       kind: 'card',
@@ -6370,20 +6682,37 @@ export class EffectRuntime {
       cardId: card.cardId
     }
     const targetFrame = this.frameFor(source, null, [])
+    const targetSelectors = this.targetSelectorsFor(
+      definition,
+      targetFrame,
+      selectedChoice
+    )
     const legalTargetOptions = targetSelectors.map((selector) =>
       this.legalInputCandidates(selector, targetFrame)
         .map((candidate) => publicTarget(candidate))
         .filter((candidate): candidate is CardPlayTargetRef => candidate !== null)
     )
+    // Hearthstone targeted Battlecries cannot target the minion being played.
+    // If any required target has no eligible board entity, the minion still
+    // enters play and its target-dependent Battlecry actions resolve as no-ops.
+    const skipTargetedBattlecry =
+      definition.type === 'Minion' &&
+      targetSelectors.length > 0 &&
+      legalTargetOptions.some((options) => options.length === 0)
     return {
       participantId,
       cardInstanceId,
       cardId: card.cardId,
-      currentCost: card.currentCost ?? card.baseCost ?? definition.cost,
+      currentCost: Math.max(
+        0,
+        (card.currentCost ?? card.baseCost ?? definition.cost) +
+          this.pendingCostModifierAmount(card, participantId, targetFrame)
+      ),
       requiresPosition,
       legalPositions,
-      targetSelectors,
-      legalTargetOptions,
+      targetSelectors: skipTargetedBattlecry ? [] : targetSelectors,
+      legalTargetOptions: skipTargetedBattlecry ? [] : legalTargetOptions,
+      skipTargetedBattlecry,
       choiceCount,
       legalChoices: Array.from({ length: choiceCount }, (_, index) => index),
       choiceLabels: this.choiceLabelsFor(definition),
@@ -6736,7 +7065,7 @@ export class EffectRuntime {
         'stale-target',
         'The selected card is no longer playable.'
       )
-    const currentCost = card.currentCost ?? card.baseCost ?? definition.cost
+    const currentCost = input.currentCost
     if (definition.type === 'Minion' && player.board.length >= MAX_BOARD_SIZE)
       throw new ResolutionInputError('board-full', 'The board is full.')
     if (definition.keywords.includes('secret')) {
@@ -7353,7 +7682,9 @@ export class EffectRuntime {
           ? this.player(actualDefender.participantId).hero.armor
           : 0
       const attackerAttack = this.combatAttack(attacker)
-      const defenderAttack = this.combatAttack(actualDefender)
+      // Defending heroes do not retaliate, even while armed or otherwise having Attack.
+      const defenderAttack =
+        actualDefender.kind === 'hero' ? 0 : this.combatAttack(actualDefender)
       const attackerFrame = this.frameFor(attackFrameSource, resolvedAttack, [])
       const defenderFrameSource =
         actualDefender.kind === 'hero' &&
@@ -7750,6 +8081,20 @@ export class EffectRuntime {
             'hero-power.damage'
           )
           break
+        case 'damage-random-enemy':
+          runHeroPowerAction(
+            {
+              action: 'damage',
+              target: {
+                controller: 'opponent',
+                type: 'character',
+                selection: 'random'
+              },
+              amount: effect.amount
+            },
+            'hero-power.random-damage'
+          )
+          break
         case 'restore-character':
           runHeroPowerAction(
             { action: 'restore', target: selected, amount: effect.amount },
@@ -7780,11 +8125,12 @@ export class EffectRuntime {
             'hero-power.equip'
           )
           break
-        case 'draw-and-self-damage':
-          runHeroPowerAction(
-            { action: 'draw', player: 'self', count: effect.count },
-            'hero-power.draw'
-          )
+        case 'draw-and-self-damage': {
+          // Life Tap's displayed text starts with drawing, but Hearthstone
+          // resolves its self-damage (and any resulting damage triggers)
+          // before it performs the draw.
+          const healthBefore = player.hero.health
+          const armorBefore = player.hero.armor
           runHeroPowerAction(
             {
               action: 'damage',
@@ -7793,7 +8139,28 @@ export class EffectRuntime {
             },
             'hero-power.damage'
           )
+          const healthAfter = player.hero.health
+          const armorAfter = player.hero.armor
+          this.events.push({
+            type: 'character-damaged',
+            source: 'hero-power',
+            participantId: player.participantId,
+            character: { kind: 'hero' },
+            amount:
+              Math.max(0, healthBefore - healthAfter) +
+              Math.max(0, armorBefore - armorAfter),
+            healthBefore,
+            healthAfter,
+            armorBefore,
+            armorAfter,
+            destroyed: healthAfter <= 0
+          })
+          runHeroPowerAction(
+            { action: 'draw', player: 'self', count: effect.count },
+            'hero-power.draw'
+          )
           break
+        }
       }
       this.processDeaths()
       if (player.hero.armor !== heroBefore.armor) {
@@ -7810,7 +8177,6 @@ export class EffectRuntime {
         reportedBefore &&
         (effect.kind === 'damage-character' ||
           effect.kind === 'damage-enemy-hero' ||
-          effect.kind === 'draw-and-self-damage' ||
           effect.kind === 'restore-character')
       ) {
         const currentTarget =
@@ -7960,6 +8326,64 @@ export class EffectRuntime {
     }
   }
 
+  private runAttachedEffects(
+    trigger: 'start-of-turn' | 'end-of-turn',
+    turnNumber: number
+  ): void {
+    const active = this.draft.activePlayerId
+    const playerOrder = active
+      ? [this.playerIndex(active), this.playerIndex(active) === 0 ? 1 : 0]
+      : [0, 1]
+    const due: { readonly host: EntityRef; readonly effect: RuntimeAttachedEffect }[] =
+      []
+
+    for (const playerIndex of playerOrder) {
+      const player = this.draft.players[playerIndex]
+      for (const minion of player.board) {
+        const matching = (minion.attachedEffects ?? []).filter(
+          (effect) => effect.trigger === trigger && effect.executeOnTurn === turnNumber
+        )
+        if (matching.length === 0) continue
+        const dueIds = new Set(matching.map((effect) => effect.id))
+        minion.attachedEffects = (minion.attachedEffects ?? []).filter(
+          (effect) => !dueIds.has(effect.id)
+        ) as DraftMinion['attachedEffects']
+        const host: EntityRef = {
+          instanceId: minion.instanceId,
+          kind: 'minion',
+          participantId: player.participantId,
+          zone: 'board',
+          cardId: minion.cardId
+        }
+        for (const effect of matching) due.push({ host, effect })
+      }
+    }
+
+    if (due.length === 0) return
+    this.step(`checkpoint.attached-effects:${trigger}:${turnNumber}`, 'expiration')
+    for (const { host, effect } of due) {
+      const queueSequence = this.step('attached-effect.' + effect.id, 'expiration')
+      const current = this.findEntity(host.instanceId, host.participantId)
+      const source = current?.kind === 'minion' ? current : host
+      const event: SemanticEvent = {
+        sequence: this.semanticSequence++,
+        type: 'card-played',
+        source,
+        target: source,
+        controllerId: effect.controllerId,
+        targetControllerId: source.participantId,
+        kind: trigger === 'start-of-turn' ? 'turn-start' : 'turn-end',
+        correlation: this.correlationFor(queueSequence)
+      }
+      const frame: EffectFrame = {
+        ...this.frameFor(source, event, [source]),
+        sourceCardId: effect.sourceCardId,
+        controllerId: effect.controllerId
+      }
+      this.runActions(effect.actions, frame, `attached.${effect.id}`)
+    }
+  }
+
   private resetTurnHistory(): void {
     const history = historyOf(this.draft)
     history.cardsPlayedThisTurn = []
@@ -8059,6 +8483,7 @@ export class EffectRuntime {
         kind: 'turn-end'
       })
       this.runScheduledEffects('end-of-turn', this.draft.turnNumber)
+      this.runAttachedEffects('end-of-turn', this.draft.turnNumber)
       this.processDeaths()
       this.returnTemporaryControl(options.participantId, 'turn-end.return-control')
       if (this.draft.players.some((player) => player.hero.health <= 0)) {
@@ -8104,6 +8529,7 @@ export class EffectRuntime {
         kind: 'turn-start'
       })
       this.runScheduledEffects('start-of-turn', nextTurnNumber)
+      this.runAttachedEffects('start-of-turn', nextTurnNumber)
       this.processDeaths()
       if (this.draft.players.every((player) => player.hero.health > 0)) {
         const drawFrame = this.frameFor(nextHero, null, [])
@@ -8170,8 +8596,12 @@ export class EffectRuntime {
     ) {
       this.addToDiscardedCards(player, card)
     }
-    player.mana.available -=
-      validated.card.currentCost ?? validated.card.baseCost ?? validated.definition.cost
+    player.mana.available -= validated.input.currentCost
+    this.consumePendingCostModifiers(
+      validated.card,
+      options.participantId,
+      this.frameFor(validated.source, null, [])
+    )
     this.historyUpdate((history) => {
       history.cardsPlayedThisTurn = [...history.cardsPlayedThisTurn, card.cardId]
       history.cardsPlayedThisGame = [...history.cardsPlayedThisGame, card.cardId]
@@ -8213,7 +8643,8 @@ export class EffectRuntime {
       }
       this.emitCardPlayedSemantic(minion, minion, card, 'card-played')
       this.runCardBlocks(validated.definition, 'on-play', frame, 'play-card')
-      this.runCardBlocks(validated.definition, 'battlecry', frame, 'play-card')
+      if (!validated.input.skipTargetedBattlecry)
+        this.runCardBlocks(validated.definition, 'battlecry', frame, 'play-card')
       if (this.currentMinion(minion))
         this.emitCardPlayedSemantic(minion, minion, card, 'minion-played')
       if (this.currentMinion(minion)) {

@@ -29,6 +29,7 @@ export type HeroPresentationAssetKey =
   | 'hero-jaina'
   | 'hero-thrall'
   | 'hero-jaraxxus'
+  | 'hero-ragnaros'
 
 const HERO_DATA = [
   ['guldan', 'Warlock', "Gul'dan", 'warlock-life-tap', 'hero-guldan', true],
@@ -61,7 +62,15 @@ const HERO_DATA = [
   ['anduin', 'Priest', 'Anduin Wrynn', 'priest-lesser-heal', 'hero-anduin', true],
   ['jaina', 'Mage', 'Jaina Proudmoore', 'mage-fireblast', 'hero-jaina', true],
   ['thrall', 'Shaman', 'Thrall', 'shaman-totemic-call', 'hero-thrall', true],
-  ['jaraxxus', 'Warlock', 'Lord Jaraxxus', 'jaraxxus-inferno', 'hero-jaraxxus', false]
+  ['jaraxxus', 'Warlock', 'Lord Jaraxxus', 'jaraxxus-inferno', 'hero-jaraxxus', false],
+  [
+    'ragnaros',
+    'Warrior',
+    'Ragnaros the Firelord',
+    'ragnaros-die-insects',
+    'hero-ragnaros',
+    false
+  ]
 ] as const
 
 export const HERO_DEFINITIONS: readonly HeroDefinition[] = HERO_DATA.map(
@@ -69,7 +78,7 @@ export const HERO_DEFINITIONS: readonly HeroDefinition[] = HERO_DATA.map(
     id: asHeroId(id),
     classId: asClassId(classId),
     displayName,
-    startingHealth: 30,
+    startingHealth: id === 'ragnaros' ? 8 : 30,
     heroPowerId: asHeroPowerId(heroPowerId),
     presentationAssetKey,
     deckSelectable

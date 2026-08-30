@@ -1,7 +1,11 @@
-import type { OpeningCommandResult, PlayerId } from '../../../game/match'
+import type {
+  OpeningCommandResult,
+  PlayerId,
+  TurnMatchCommand
+} from '../../../game/match'
 import type { DevCommand, DevMatchTarget } from '../../../shared/dev-menu'
 
-type Dispatch = (command: unknown) => OpeningCommandResult
+type Dispatch = (command: TurnMatchCommand) => OpeningCommandResult
 
 /**
  * Translates the development menu's renderer-safe commands into the canonical

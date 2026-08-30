@@ -1,0 +1,1 @@
+Paste only the Azure OpenAI API key in ai-key.local.txt in this directory.

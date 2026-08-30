@@ -17,6 +17,7 @@ export type HeroPowerEffect =
     }
   | { readonly kind: 'damage-enemy-hero'; readonly amount: number }
   | { readonly kind: 'damage-character'; readonly amount: number }
+  | { readonly kind: 'damage-random-enemy'; readonly amount: number }
   | { readonly kind: 'summon'; readonly cardId: CardId }
   | { readonly kind: 'restore-character'; readonly amount: number }
   | { readonly kind: 'equip-weapon'; readonly cardId: CardId }

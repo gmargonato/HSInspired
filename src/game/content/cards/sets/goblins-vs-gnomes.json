@@ -2345,7 +2345,28 @@
     "health": 5,
     "rulesText": "Battlecry and Deathrattle: Shuffle a Mine into your opponent's deck. When drawn, it explodes for 10 damage.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "cardId": "goblins_vs_gnomes_burrowing_mine",
+            "player": "opponent"
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "cardId": "goblins_vs_gnomes_burrowing_mine",
+            "player": "opponent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_shieldmaiden",

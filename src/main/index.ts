@@ -10,6 +10,9 @@ import {
 } from './services/window-settings-ipc'
 import { WindowSettingsRepository } from './services/window-settings-repository'
 import { installSceneMenu } from './menu/dev-menu'
+import { loadAzureOpenAiConfig } from './services/ai-config'
+import { registerAiIpc } from './services/ai-ipc'
+import { AzureOpenAiDecisionService } from './services/azure-openai-ai-service'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
@@ -98,6 +101,19 @@ void app
   .then(async () => {
     electronApp.setAppUserModelId('com.hsinspired.app')
 
+    const appPath = app.getAppPath()
+    registerAiIpc(
+      new AzureOpenAiDecisionService({
+        loadConfig: () =>
+          loadAzureOpenAiConfig({
+            configPath: join(appPath, 'config', 'ai.json'),
+            keyPaths: [
+              join(appPath, 'config', 'ai-key.local.txt'),
+              join(app.getPath('userData'), 'ai-key.local.txt')
+            ]
+          })
+      })
+    )
     registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))
     const windowSettingsRepository = new WindowSettingsRepository(
       join(app.getPath('userData'), 'window-settings.json')

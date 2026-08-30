@@ -34,7 +34,7 @@ export type DevCardPickerAction = 'add-to-hand' | 'summon'
 export type DevDeckAction = 'destroy' | 'refill'
 export type DevZone = 'hand' | 'board'
 export type DevHeroPowerAction = 'reset' | 'consume'
-export type DevDeckTrackerVisibility = 'hidden' | 'local' | 'both' | 'remote'
+export type DevDeckTrackerVisibility = 'hidden' | 'local'
 export type DevDeckTrackerSortMode = 'cost' | 'alphabetical' | 'draw-order'
 
 export type DevCommand =
@@ -151,10 +151,7 @@ export function isDevCommand(value: unknown): value is DevCommand {
   if (value.type === 'game:set-deck-tracker') {
     const command = value as { visibility?: unknown; sortMode?: unknown }
     return (
-      (command.visibility === 'hidden' ||
-        command.visibility === 'local' ||
-        command.visibility === 'both' ||
-        command.visibility === 'remote') &&
+      (command.visibility === 'hidden' || command.visibility === 'local') &&
       (command.sortMode === 'cost' ||
         command.sortMode === 'alphabetical' ||
         command.sortMode === 'draw-order')

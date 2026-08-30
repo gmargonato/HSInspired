@@ -208,6 +208,76 @@ describe('shared effect runtime', () => {
     expect(result.events.some((event) => event.type === 'effect-resolved')).toBe(true)
   })
 
+  it('silences and damages only the minion targeted by Earth Shock', () => {
+    const scenario = createMatchScenario({ seed: 421, cardId: 'classic_earth_shock' })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    for (const [controllerId, cardId] of [
+      [participantId, 'basic_acidic_swamp_ooze'],
+      [participantId, 'basic_chillwind_yeti'],
+      [opponentId, 'basic_acidic_swamp_ooze'],
+      [opponentId, 'basic_chillwind_yeti']
+    ] as const) {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: controllerId,
+          cardId
+        }).accepted
+      ).toBe(true)
+    }
+
+    const target = player(scenario, opponentId).board[0]!
+    const unaffectedBefore = [
+      ...player(scenario, participantId).board,
+      ...player(scenario, opponentId).board.slice(1)
+    ].map((minion) => ({
+      instanceId: minion.instanceId,
+      health: minion.health,
+      silenced: minion.silenced
+    }))
+    const earthShock = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_earth_shock'
+    )!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: earthShock.instanceId,
+      targets: [
+        {
+          kind: 'minion',
+          participantId: opponentId,
+          instanceId: target.instanceId
+        }
+      ]
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+
+    expect(
+      player(scenario, opponentId).board.find(
+        (minion) => minion.instanceId === target.instanceId
+      )
+    ).toMatchObject({ health: target.health - 1, silenced: true })
+    const unaffectedAfter = [
+      ...player(scenario, participantId).board,
+      ...player(scenario, opponentId).board
+    ]
+    for (const before of unaffectedBefore) {
+      expect(
+        unaffectedAfter.find((minion) => minion.instanceId === before.instanceId)
+      ).toMatchObject({ health: before.health, silenced: before.silenced })
+    }
+  })
+
   it('allows unsided damage to target a friendly character', () => {
     const scenario = createMatchScenario({ seed: 411, cardId: 'basic_arcane_shot' })
     scenario.confirmBothMulligans()
@@ -1185,12 +1255,8 @@ describe('shared effect runtime', () => {
       firstCard.instanceId,
       1
     )
-    expect(firstSecondChoiceInput?.targetSelectors).toHaveLength(1)
-    expect(firstSecondChoiceInput?.targetSelectors[0]).toMatchObject({
-      controller: 'any',
-      type: 'minion'
-    })
-    expect(firstSecondChoiceInput?.legalTargetOptions[0]).toEqual([])
+    expect(firstSecondChoiceInput?.targetSelectors).toEqual([])
+    expect(firstSecondChoiceInput?.legalTargetOptions).toEqual([])
     expect(first.match.getLegality?.(firstPlayerId).playableCardInstanceIds).toContain(
       firstCard.instanceId
     )
@@ -2761,5 +2827,55 @@ describe('shared effect runtime', () => {
     ).toEqual(
       expect.arrayContaining(['basic_acidic_swamp_ooze', 'basic_chillwind_yeti'])
     )
+  })
+  it("skips Cruel Taskmaster's Battlecry when it has no other minion target", () => {
+    const scenario = createMatchScenario({
+      seed: 420,
+      cardId: 'classic_cruel_taskmaster'
+    })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'classic_cruel_taskmaster'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const taskmaster = player(scenario, participantId).hand[0]!
+    expect(
+      scenario.match.getLegality?.(participantId).playableCardInstanceIds
+    ).toContain(taskmaster.instanceId)
+    expect(
+      scenario.match.getPlayInput?.(participantId, taskmaster.instanceId)
+        ?.targetSelectors
+    ).toEqual([])
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: taskmaster.instanceId,
+      position: 0
+    })
+    expect(result).toMatchObject({ accepted: true })
+    if (!result.accepted) return
+    expect(player(scenario, participantId).board[0]).toMatchObject({
+      attack: 2,
+      health: 2
+    })
   })
 })

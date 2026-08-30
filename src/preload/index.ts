@@ -16,6 +16,13 @@ import {
   type DevSceneId
 } from '../shared/dev-menu'
 import {
+  AI_IPC_CHANNELS,
+  parseAiDecisionRequest,
+  parseAiDecisionResponse,
+  type AiDecisionRequest,
+  type AiDecisionResponse
+} from '../shared/ipc/ai'
+import {
   DECK_IPC_CHANNELS,
   parseDeckCreateRequest,
   parseDeckId,
@@ -33,6 +40,16 @@ import {
 } from '../shared/ipc/window-settings'
 
 const api = {
+  ai: {
+    decide: async (request: AiDecisionRequest): Promise<AiDecisionResponse> =>
+      parseAiDecisionResponse(
+        await ipcRenderer.invoke(
+          AI_IPC_CHANNELS.decide,
+          parseAiDecisionRequest(request)
+        )
+      )
+  },
+
   /**
    * Listen for requests from the development-only native Scenes menu.
    * Returning an unsubscribe function keeps the bridge safe for hot reloads

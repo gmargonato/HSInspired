@@ -10,6 +10,7 @@ export interface HeroViewModel {
   readonly health: number
   readonly maxHealth: number
   readonly armor: number
+  readonly frozen: boolean
 }
 
 export interface HeroViewTextures {
@@ -17,6 +18,7 @@ export interface HeroViewTextures {
   readonly attack: Texture
   readonly health: Texture
   readonly armor: Texture
+  readonly frozen: Texture
 }
 
 export const HERO_HEALTH_COLORS = {
@@ -69,6 +71,7 @@ function setEventModeNone(container: Container): void {
 /** Feature-agnostic board hero presentation. The feature owns its position. */
 export class HeroView extends Container {
   private readonly frame: Sprite
+  private readonly frozen: Sprite
   private readonly attackGroup: Container
   private readonly attackLabel: Text
   private readonly healthGroup: Container
@@ -101,6 +104,12 @@ export class HeroView extends Container {
     applyAnchoredPlacement(this.frame, HERO_LAYOUT.frame)
     this.frame.label = 'hero.frame'
     this.addChild(this.frame)
+
+    this.frozen = new Sprite(textures.frozen)
+    applyAnchoredPlacement(this.frozen, HERO_LAYOUT.frozen)
+    this.frozen.visible = model.frozen
+    this.frozen.label = 'hero.frozen'
+    this.addChild(this.frozen)
 
     const attack = createStatGroup(
       'hero.stat-attack',
@@ -187,6 +196,10 @@ export class HeroView extends Container {
     this.frame.texture = texture
     this.outlineProxy.texture = texture
     this.targetingOutlineProxy.texture = texture
+  }
+
+  setFrozen(visible: boolean): void {
+    this.frozen.visible = visible
   }
 
   /** Controls whether the health badge is shown independently of its value. */

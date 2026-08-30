@@ -159,6 +159,7 @@ const ACTION_FIELDS = new Set([
   'action',
   'amount',
   'actions',
+  'attachedToTarget',
   'asNewAttackTarget',
   'asNewSpellTarget',
   'attack',
@@ -166,6 +167,7 @@ const ACTION_FIELDS = new Set([
   'chance',
   'count',
   'controller',
+  'deferUntil',
   'crystal',
   'destination',
   'durability',
@@ -177,6 +179,7 @@ const ACTION_FIELDS = new Set([
   'health',
   'heroId',
   'hits',
+  'heroDefinition',
   'healingMultiplier',
   'heroPowerMultiplier',
   'keyword',
@@ -213,6 +216,7 @@ const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>>
   'change-cost': ['amount'],
   copy: ['target'],
   draw: ['player', 'count'],
+  discover: ['player', 'count', 'source'],
   'draw-until': ['player', 'handSize'],
   equip: ['cardId'],
   'equip-random': ['player'],
@@ -442,6 +446,12 @@ function validateActionShape(
       fail(`${path}.placement`, 'is only supported for summon actions')
     }
     enumValue(record['placement'], CARD_SUMMON_PLACEMENTS, `${path}.placement`)
+  }
+  if (record['attachedToTarget'] !== undefined) {
+    if (actionName !== 'schedule') {
+      fail(`${path}.attachedToTarget`, 'is only supported for schedule actions')
+    }
+    booleanValue(record['attachedToTarget'], `${path}.attachedToTarget`, false)
   }
 }
 
@@ -704,7 +714,11 @@ function actionsValue(value: unknown, path: string): void {
     }
     if (record['heroId'] !== undefined) {
       const heroId = stringValue(record['heroId'], `${actionPath}.heroId`)
-      if (actionName === 'replace-hero' && !HERO_CATALOG.get(heroId)) {
+      if (
+        actionName === 'replace-hero' &&
+        !HERO_CATALOG.get(heroId) &&
+        record['heroDefinition'] === undefined
+      ) {
         return fail(`${actionPath}.heroId`, 'references an unknown hero')
       }
     }

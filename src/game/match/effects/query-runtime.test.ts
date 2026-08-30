@@ -239,7 +239,7 @@ describe('effect-runtime query language', () => {
     expect(transformed.cardId).toBe('goblins_vs_gnomes_clockwork_giant')
   })
 
-  it('limits chosen deck selectors to the declared top position range', () => {
+  it('limits Discover candidates to the declared top position range', () => {
     const scenario = createMatchScenario({ seed: 404, cardId: 'basic_tracking' })
     scenario.confirmBothMulligans()
     const [participantId] = activeParticipants(scenario)
@@ -253,20 +253,25 @@ describe('effect-runtime query language', () => {
       (entry) => entry.cardId === 'basic_tracking'
     )!
     const input = scenario.match.getPlayInput?.(participantId, tracking.instanceId)
-    expect(input?.targetSelectors).toMatchObject([
-      { zone: 'deck', position: 'top', count: 3 }
-    ])
-    expect(input?.legalTargetOptions[0]).toHaveLength(3)
+    expect(input?.targetSelectors).toEqual([])
     const topThree = participant.deck.slice(0, 3)
-    const selected = input!.legalTargetOptions[0]![0]!
-    if (selected.kind === 'hero') throw new Error('Expected a card target.')
-    expect(selected.instanceId).toBe(topThree[0]!.instanceId)
 
-    const result = scenario.match.dispatch({
+    const cast = scenario.match.dispatch({
       type: 'play-card',
       participantId,
-      cardInstanceId: tracking.instanceId,
-      targets: [selected]
+      cardInstanceId: tracking.instanceId
+    })
+    expect(cast.accepted).toBe(true)
+    if (!cast.accepted) return
+    expect(
+      cast.state.pendingDiscover?.candidates.map((card) => card.instanceId)
+    ).toEqual(topThree.map((card) => card.instanceId))
+    const selected = cast.state.pendingDiscover!.candidates[0]!
+
+    const result = scenario.match.dispatch({
+      type: 'choose-discover-card',
+      participantId,
+      cardInstanceId: selected.instanceId
     })
     expect(result.accepted).toBe(true)
     if (!result.accepted) return
@@ -698,6 +703,26 @@ describe('effect-runtime query language', () => {
         },
         event,
         assert: (actual, current) => expectKeys(actual, [current.opponentBoard[1]!])
+      },
+      {
+        name: 'missing event source',
+        selector: {
+          controller: 'any',
+          type: 'minion',
+          zone: 'board',
+          selection: 'event-source'
+        },
+        assert: (actual) => expect(actual).toEqual([])
+      },
+      {
+        name: 'missing event target',
+        selector: {
+          controller: 'any',
+          type: 'minion',
+          zone: 'board',
+          selection: 'event-target'
+        },
+        assert: (actual) => expect(actual).toEqual([])
       },
       {
         name: 'source string',

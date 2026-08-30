@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canBoardMinionAttack } from '../opening-match'
+import { canBoardMinionAttack, canHeroAttack, getHeroAttack } from '../opening-match'
 import { createMatchScenario } from '../testing/match-scenario-builder'
 
 type Scenario = ReturnType<typeof createMatchScenario>
@@ -93,6 +93,146 @@ describe('combat keyword matrix', () => {
         { kind: 'minion', instanceId: taunt.instanceId }
       ).accepted
     ).toBe(true)
+  })
+
+  it('keeps a Frozen armed hero out of attacker legality until Freeze expires', () => {
+    const scenario = createMatchScenario({
+      seed: 1008,
+      cardId: 'classic_ice_lance'
+    })
+    scenario.confirmBothMulligans()
+    const [freezingPlayerId, frozenPlayerId] = activePlayers(scenario)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: freezingPlayerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const iceLance = player(scenario, freezingPlayerId).hand.find(
+      (card) => card.cardId === 'classic_ice_lance'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: freezingPlayerId,
+        cardInstanceId: iceLance.instanceId,
+        targets: [{ kind: 'hero', participantId: frozenPlayerId }]
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'end-turn',
+        participantId: freezingPlayerId
+      }).accepted
+    ).toBe(true)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: frozenPlayerId,
+        cardId: 'basic_fiery_war_axe'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: frozenPlayerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const weapon = player(scenario, frozenPlayerId).hand.find(
+      (card) => card.cardId === 'basic_fiery_war_axe'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: frozenPlayerId,
+        cardInstanceId: weapon.instanceId
+      }).accepted
+    ).toBe(true)
+
+    const frozenPlayer = player(scenario, frozenPlayerId)
+    const frozenState = scenario.match.getState()
+    const heroAttackerId = `${frozenPlayerId}:hero`
+    expect(getHeroAttack(frozenPlayer)).toBeGreaterThan(0)
+    expect(frozenPlayer.hero.frozenUntilTurn).toBeGreaterThanOrEqual(
+      frozenState.turnNumber
+    )
+    expect(
+      scenario.match.getLegality?.(frozenPlayerId).legalAttackTargets[heroAttackerId]
+    ).toBeUndefined()
+    expect(canHeroAttack(frozenPlayer, frozenState, frozenPlayerId)).toBe(false)
+    expect(
+      attack(scenario, frozenPlayerId, { kind: 'hero' }, { kind: 'hero' })
+    ).toMatchObject({ accepted: false, code: 'hero-cannot-attack' })
+
+    beginNextTurn(scenario, frozenPlayerId, freezingPlayerId)
+    const thawedPlayer = player(scenario, frozenPlayerId)
+    const thawedState = scenario.match.getState()
+    expect(
+      scenario.match.getLegality?.(frozenPlayerId).legalAttackTargets[heroAttackerId]
+    ).toBeDefined()
+    expect(canHeroAttack(thawedPlayer, thawedState, frozenPlayerId)).toBe(true)
+  })
+
+  it('lets a hero with Doomhammer attack twice but not a third time', () => {
+    const scenario = createMatchScenario({
+      seed: 1009,
+      cardId: 'classic_doomhammer',
+      firstHeroId: 'thrall',
+      secondHeroId: 'thrall'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId] = activePlayers(scenario)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const doomhammer = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_doomhammer'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: doomhammer.instanceId
+      }).accepted
+    ).toBe(true)
+
+    const heroAttackerId = `${participantId}:hero`
+    expect(player(scenario, participantId).hero.maxAttacksPerTurn).toBe(2)
+    expect(
+      scenario.match.getLegality?.(participantId).legalAttackTargets[heroAttackerId]
+    ).toBeDefined()
+    expect(
+      attack(scenario, participantId, { kind: 'hero' }, { kind: 'hero' }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).weapon?.durability).toBe(7)
+    expect(
+      scenario.match.getLegality?.(participantId).legalAttackTargets[heroAttackerId]
+    ).toBeDefined()
+    expect(
+      attack(scenario, participantId, { kind: 'hero' }, { kind: 'hero' }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).weapon?.durability).toBe(6)
+    expect(
+      scenario.match.getLegality?.(participantId).legalAttackTargets[heroAttackerId]
+    ).toBeUndefined()
+    expect(
+      attack(scenario, participantId, { kind: 'hero' }, { kind: 'hero' })
+    ).toMatchObject({
+      accepted: false,
+      code: 'hero-cannot-attack'
+    })
   })
 
   it('consumes Divine Shield before health and permits Windfury but not a third attack', () => {

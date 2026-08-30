@@ -42,6 +42,7 @@ export function assertOpeningMatchInvariants(state: OpeningMatchState): void {
   )
 
   const ordinals: number[] = []
+  const activeAttachmentIds: string[] = []
   const recordOrdinal = (value: number | undefined, label: string): void => {
     if (value === undefined) return
     assert(
@@ -204,6 +205,17 @@ export function assertOpeningMatchInvariants(state: OpeningMatchState): void {
         `Minion ${minion.instanceId}`
       )
       recordOrdinal(minion.creationOrdinal, `Minion ${minion.instanceId}`)
+      for (const attachment of [
+        ...(minion.enchantments ?? []),
+        ...(minion.grantedTriggers ?? []),
+        ...(minion.attachedEffects ?? [])
+      ]) {
+        assert(
+          typeof attachment.id === 'string' && attachment.id.length > 0,
+          `Minion ${minion.instanceId} has an attachment without an id.`
+        )
+        activeAttachmentIds.push(attachment.id)
+      }
     }
     if (player.weapon) {
       assert(
@@ -260,6 +272,10 @@ export function assertOpeningMatchInvariants(state: OpeningMatchState): void {
   assert(
     ordinalSet.size === ordinals.length,
     'Creation ordinals must be globally unique.'
+  )
+  assert(
+    new Set(activeAttachmentIds).size === activeAttachmentIds.length,
+    'Active minion attachment ids must be globally unique.'
   )
   if (state.nextEntityOrdinal !== undefined) {
     assert(

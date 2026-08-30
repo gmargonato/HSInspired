@@ -193,7 +193,7 @@ export const GAME_BOARD_LAYOUT = {
    * the remote player's turn.
    */
   endTurnButton: placement(
-    { x: 1600, y: 500 },
+    { x: 1595, y: 495 },
     { width: 157, height: 86 },
     {
       anchor: CENTER,
@@ -389,6 +389,22 @@ export const GAME_BOARD_LAYOUT = {
       replacedLabelOffset: { x: 0, y: 24 } satisfies LayoutPoint,
       overlayScale: 2
     }
+  },
+
+  /** Reusable three-card selection surface used by Tracking and future Discover cards. */
+  cardSelection: {
+    cards: {
+      centerX: 960,
+      baselineY: 720,
+      gap: 300,
+      scale: 0.42,
+      anchor: BOTTOM_CENTER
+    },
+    toggleButton: placement(
+      { x: 550, y: 830 },
+      { width: 235, height: 127 },
+      { anchor: CENTER, note: 'Switches between the card picker and board inspection.' }
+    )
   },
 
   /** Fanned remote hand of card backs, anchored bottom-center. */

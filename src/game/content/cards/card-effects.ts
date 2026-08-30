@@ -101,7 +101,8 @@ export const CARD_CONDITIONS = [
   'target-is-friendly-demon',
   'target-is-not-friendly-demon',
   'target-not-frozen',
-  'target-survived'
+  'target-survived',
+  'player-has-card-in-hand'
 ] as const
 export type CardConditionType = (typeof CARD_CONDITIONS)[number]
 
@@ -174,6 +175,7 @@ export const CARD_SELECTOR_FIELDS = [
 
 export const CARD_FILTER_FIELDS = [
   'cardId',
+  'cardClass',
   'cardType',
   'cost',
   'damaged',
@@ -206,6 +208,7 @@ export const CARD_VALUE_REFERENCES = [
   'hand-size-difference',
   'health',
   'hero-damage',
+  'minions-died-this-turn',
   'matching-entity-count',
   'other-cards-in-hand',
   'other-minions-on-board',
@@ -247,6 +250,7 @@ export const CARD_ACTIONS = [
   'destroy-and-gain-stats',
   'destroy-mana-crystal',
   'destroy-secrets',
+  'discover',
   'discard',
   'draw',
   'draw-until',
@@ -291,7 +295,8 @@ export const CARD_ACTIONS = [
   'take-control',
   'transform',
   'transform-random',
-  'trigger-deathrattle'
+  'trigger-deathrattle',
+  'unlock-overload'
 ] as const
 export type CardActionName = (typeof CARD_ACTIONS)[number]
 

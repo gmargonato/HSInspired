@@ -130,6 +130,209 @@ function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
     }
   ]
 
+  const deckTrackerSubmenu: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'By Cost (Default)',
+      click: () =>
+        sendDevCommand(mainWindow, {
+          type: 'game:set-deck-tracker',
+          visibility: 'local',
+          sortMode: 'cost'
+        })
+    },
+    {
+      label: 'Alphabetically',
+      click: () =>
+        sendDevCommand(mainWindow, {
+          type: 'game:set-deck-tracker',
+          visibility: 'local',
+          sortMode: 'alphabetical'
+        })
+    },
+    {
+      label: 'Reveal Shuffle Order',
+      click: () =>
+        sendDevCommand(mainWindow, {
+          type: 'game:set-deck-tracker',
+          visibility: 'local',
+          sortMode: 'draw-order'
+        })
+    },
+    { type: 'separator' },
+    {
+      label: 'Hide',
+      click: () =>
+        sendDevCommand(mainWindow, {
+          type: 'game:set-deck-tracker',
+          visibility: 'hidden',
+          sortMode: 'cost'
+        })
+    }
+  ]
+
+  const playerSubmenu = (
+    target: 'local' | 'remote',
+    includeDeckTracker: boolean
+  ): Electron.MenuItemConstructorOptions[] => {
+    const submenu: Electron.MenuItemConstructorOptions[] = [
+      {
+        label: 'Destroy Deck',
+        click: () =>
+          sendDevCommand(mainWindow, {
+            type: 'game:modify-deck',
+            target,
+            action: 'destroy'
+          })
+      },
+      {
+        label: 'Refill Deck',
+        click: () =>
+          sendDevCommand(mainWindow, {
+            type: 'game:modify-deck',
+            target,
+            action: 'refill'
+          })
+      },
+      {
+        label: 'Draw Card',
+        click: () => sendDevCommand(mainWindow, { type: 'game:draw', target })
+      },
+      { type: 'separator' },
+      {
+        label: 'Mana',
+        submenu: Array.from({ length: 11 }, (_, value) => ({
+          label: `Full ${value}/${value}`,
+          click: () =>
+            sendDevCommand(mainWindow, {
+              type: 'game:set-mana',
+              target,
+              available: value,
+              maximum: value
+            })
+        }))
+      },
+      {
+        label: 'Hero Health',
+        submenu: [1, 5, 10, 15, 20, 25, 30].map((health) => ({
+          label: `${health}`,
+          click: () =>
+            sendDevCommand(mainWindow, { type: 'game:set-hero', target, health })
+        }))
+      },
+      {
+        label: 'Armor',
+        submenu: [0, 1, 5, 10, 20, 30].map((armor) => ({
+          label: `${armor}`,
+          click: () =>
+            sendDevCommand(mainWindow, { type: 'game:set-hero', target, armor })
+        }))
+      },
+      {
+        label: 'Hero Attack',
+        submenu: [0, 1, 2, 5, 10].map((attack) => ({
+          label: `${attack}`,
+          click: () =>
+            sendDevCommand(mainWindow, { type: 'game:set-hero', target, attack })
+        }))
+      },
+      {
+        label: 'Hero Power',
+        submenu: [
+          {
+            label: 'Reset Availability',
+            click: () =>
+              sendDevCommand(mainWindow, {
+                type: 'game:set-hero-power',
+                target,
+                action: 'reset'
+              })
+          },
+          {
+            label: 'Consume Availability',
+            click: () =>
+              sendDevCommand(mainWindow, {
+                type: 'game:set-hero-power',
+                target,
+                action: 'consume'
+              })
+          },
+          {
+            label: 'Set Cost',
+            submenu: Array.from({ length: 11 }, (_, cost) => ({
+              label: `${cost}`,
+              click: () =>
+                sendDevCommand(mainWindow, {
+                  type: 'game:set-hero-power',
+                  target,
+                  cost
+                })
+            }))
+          }
+        ]
+      },
+      {
+        label: 'Weapon',
+        submenu: [
+          {
+            label: 'Remove Weapon',
+            click: () =>
+              sendDevCommand(mainWindow, { type: 'game:remove-weapon', target })
+          }
+        ]
+      },
+      {
+        label: 'Set Next Fatigue',
+        submenu: [1, 2, 5, 10].map((nextDamage) => ({
+          label: `${nextDamage}`,
+          click: () =>
+            sendDevCommand(mainWindow, {
+              type: 'game:set-fatigue',
+              target,
+              nextDamage
+            })
+        }))
+      },
+      { type: 'separator' },
+      {
+        label: 'Add Card to Hand…',
+        click: () =>
+          sendDevCommand(mainWindow, {
+            type: 'game:open-card-picker',
+            target,
+            action: 'add-to-hand'
+          })
+      },
+      {
+        label: 'Summon Minion…',
+        click: () =>
+          sendDevCommand(mainWindow, {
+            type: 'game:open-card-picker',
+            target,
+            action: 'summon'
+          })
+      },
+      {
+        label: 'Clear Hand',
+        click: () =>
+          sendDevCommand(mainWindow, { type: 'game:clear-zone', target, zone: 'hand' })
+      },
+      {
+        label: 'Clear Board',
+        click: () =>
+          sendDevCommand(mainWindow, { type: 'game:clear-zone', target, zone: 'board' })
+      }
+    ]
+
+    if (includeDeckTracker) {
+      submenu.push(
+        { type: 'separator' },
+        { label: 'Deck Tracker', submenu: deckTrackerSubmenu }
+      )
+    }
+
+    return submenu
+  }
+
   const matchSubmenu: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'End Match',
@@ -148,326 +351,14 @@ function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
       ]
     },
     {
-      label: 'Deck',
+      label: 'Local Player',
       enabled: isGame,
-      submenu: [
-        {
-          label: 'Local Player',
-          submenu: [
-            {
-              label: 'Destroy Deck',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:modify-deck',
-                  target: 'local',
-                  action: 'destroy'
-                })
-            },
-            {
-              label: 'Refill Deck',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:modify-deck',
-                  target: 'local',
-                  action: 'refill'
-                })
-            },
-            {
-              label: 'Draw Card',
-              click: () =>
-                sendDevCommand(mainWindow, { type: 'game:draw', target: 'local' })
-            }
-          ]
-        },
-        {
-          label: 'Remote Player',
-          submenu: [
-            {
-              label: 'Destroy Deck',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:modify-deck',
-                  target: 'remote',
-                  action: 'destroy'
-                })
-            },
-            {
-              label: 'Refill Deck',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:modify-deck',
-                  target: 'remote',
-                  action: 'refill'
-                })
-            },
-            {
-              label: 'Draw Card',
-              click: () =>
-                sendDevCommand(mainWindow, { type: 'game:draw', target: 'remote' })
-            }
-          ]
-        }
-      ]
+      submenu: playerSubmenu('local', true)
     },
     {
-      label: 'Players',
+      label: 'Remote Player',
       enabled: isGame,
-      submenu: (['local', 'remote'] as const).map((target) => ({
-        label: target === 'local' ? 'Local Player' : 'Remote Player',
-        submenu: [
-          {
-            label: 'Mana',
-            submenu: Array.from({ length: 11 }, (_, value) => ({
-              label: `Full ${value}/${value}`,
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-mana',
-                  target,
-                  available: value,
-                  maximum: value
-                })
-            }))
-          },
-          {
-            label: 'Hero Health',
-            submenu: [1, 5, 10, 15, 20, 25, 30].map((health) => ({
-              label: `${health}`,
-              click: () =>
-                sendDevCommand(mainWindow, { type: 'game:set-hero', target, health })
-            }))
-          },
-          {
-            label: 'Armor',
-            submenu: [0, 1, 5, 10, 20, 30].map((armor) => ({
-              label: `${armor}`,
-              click: () =>
-                sendDevCommand(mainWindow, { type: 'game:set-hero', target, armor })
-            }))
-          },
-          {
-            label: 'Hero Attack',
-            submenu: [0, 1, 2, 5, 10].map((attack) => ({
-              label: `${attack}`,
-              click: () =>
-                sendDevCommand(mainWindow, { type: 'game:set-hero', target, attack })
-            }))
-          },
-          {
-            label: 'Hero Power',
-            submenu: [
-              {
-                label: 'Reset Availability',
-                click: () =>
-                  sendDevCommand(mainWindow, {
-                    type: 'game:set-hero-power',
-                    target,
-                    action: 'reset'
-                  })
-              },
-              {
-                label: 'Consume Availability',
-                click: () =>
-                  sendDevCommand(mainWindow, {
-                    type: 'game:set-hero-power',
-                    target,
-                    action: 'consume'
-                  })
-              },
-              {
-                label: 'Set Cost',
-                submenu: Array.from({ length: 11 }, (_, cost) => ({
-                  label: `${cost}`,
-                  click: () =>
-                    sendDevCommand(mainWindow, {
-                      type: 'game:set-hero-power',
-                      target,
-                      cost
-                    })
-                }))
-              }
-            ]
-          },
-          {
-            label: 'Weapon',
-            submenu: [
-              {
-                label: 'Remove Weapon',
-                click: () =>
-                  sendDevCommand(mainWindow, { type: 'game:remove-weapon', target })
-              }
-            ]
-          },
-          {
-            label: 'Set Next Fatigue',
-            submenu: [1, 2, 5, 10].map((nextDamage) => ({
-              label: `${nextDamage}`,
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-fatigue',
-                  target,
-                  nextDamage
-                })
-            }))
-          }
-        ]
-      }))
-    },
-    {
-      label: 'Hand n Board',
-      enabled: isGame,
-      submenu: (['local', 'remote'] as const).map((target) => ({
-        label: target === 'local' ? 'Local Player' : 'Remote Player',
-        submenu: [
-          {
-            label: 'Add Card to Hand…',
-            click: () =>
-              sendDevCommand(mainWindow, {
-                type: 'game:open-card-picker',
-                target,
-                action: 'add-to-hand'
-              })
-          },
-          {
-            label: 'Summon Minion…',
-            click: () =>
-              sendDevCommand(mainWindow, {
-                type: 'game:open-card-picker',
-                target,
-                action: 'summon'
-              })
-          },
-          {
-            label: 'Clear Hand',
-            click: () =>
-              sendDevCommand(mainWindow, {
-                type: 'game:clear-zone',
-                target,
-                zone: 'hand'
-              })
-          },
-          {
-            label: 'Clear Board',
-            click: () =>
-              sendDevCommand(mainWindow, {
-                type: 'game:clear-zone',
-                target,
-                zone: 'board'
-              })
-          }
-        ]
-      }))
-    },
-    {
-      label: 'Deck Tracker',
-      enabled: isGame,
-      submenu: [
-        {
-          label: 'Show Local Player',
-          submenu: [
-            {
-              label: 'By Cost (Default)',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-deck-tracker',
-                  visibility: 'local',
-                  sortMode: 'cost'
-                })
-            },
-            {
-              label: 'Alphabetically',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-deck-tracker',
-                  visibility: 'local',
-                  sortMode: 'alphabetical'
-                })
-            },
-            {
-              label: 'Reveal Shuffle Order',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-deck-tracker',
-                  visibility: 'local',
-                  sortMode: 'draw-order'
-                })
-            }
-          ]
-        },
-        {
-          label: 'Show Local and Remote',
-          submenu: [
-            {
-              label: 'By Cost (Default)',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-deck-tracker',
-                  visibility: 'both',
-                  sortMode: 'cost'
-                })
-            },
-            {
-              label: 'Alphabetically',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-deck-tracker',
-                  visibility: 'both',
-                  sortMode: 'alphabetical'
-                })
-            },
-            {
-              label: 'Reveal Shuffle Order',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-deck-tracker',
-                  visibility: 'both',
-                  sortMode: 'draw-order'
-                })
-            }
-          ]
-        },
-        {
-          label: 'Show Remote Player',
-          submenu: [
-            {
-              label: 'By Cost (Default)',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-deck-tracker',
-                  visibility: 'remote',
-                  sortMode: 'cost'
-                })
-            },
-            {
-              label: 'Alphabetically',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-deck-tracker',
-                  visibility: 'remote',
-                  sortMode: 'alphabetical'
-                })
-            },
-            {
-              label: 'Reveal Shuffle Order',
-              click: () =>
-                sendDevCommand(mainWindow, {
-                  type: 'game:set-deck-tracker',
-                  visibility: 'remote',
-                  sortMode: 'draw-order'
-                })
-            }
-          ]
-        },
-        { type: 'separator' },
-        {
-          label: 'Hide',
-          click: () =>
-            sendDevCommand(mainWindow, {
-              type: 'game:set-deck-tracker',
-              visibility: 'hidden',
-              sortMode: 'cost'
-            })
-        }
-      ]
+      submenu: playerSubmenu('remote', false)
     }
   ]
 

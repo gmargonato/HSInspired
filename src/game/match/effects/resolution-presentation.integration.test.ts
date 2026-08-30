@@ -73,6 +73,32 @@ function play(
 }
 
 describe('resolution presentation events', () => {
+  it.each(['classic_molten_giant', 'classic_mountain_giant'])(
+    'does not activate %s hand-only cost effect from the board',
+    (cardId) => {
+      const scenario = createMatchScenario({ seed: 1699 })
+      scenario.confirmBothMulligans()
+      const [participantId] = activePlayers(scenario)
+
+      const result = scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId
+      })
+
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) return
+      const giant = player(scenario, participantId).board[0]!
+      expect(
+        result.events.filter(
+          (event) =>
+            event.type === 'trigger-activated' &&
+            event.source.instanceId === giant.instanceId
+        )
+      ).toHaveLength(0)
+    }
+  )
+
   it('emits one trigger cue for every actual Acolyte damage trigger', () => {
     const scenario = createMatchScenario({ seed: 1700 })
     scenario.confirmBothMulligans()

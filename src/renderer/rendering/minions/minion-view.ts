@@ -23,6 +23,7 @@ export interface MinionViewModel {
   readonly legendary: boolean
   readonly taunt: boolean
   readonly divineShield: boolean
+  readonly frozen: boolean
   readonly stealth: boolean
   readonly deathrattle: boolean
   readonly poisonous: boolean
@@ -35,6 +36,7 @@ export interface MinionViewTextures {
   readonly legendaryFrame: Texture
   readonly taunt: Texture
   readonly divineShield: Texture
+  readonly frozen: Texture
   readonly stealth: Texture
   readonly trigger: Texture
   readonly deathrattle: Texture
@@ -96,6 +98,7 @@ export class MinionView extends Container {
   private readonly legendaryFrame: Sprite
   private readonly taunt: Sprite
   private readonly divineShield: Sprite
+  private readonly frozen: Sprite
   private readonly stealth: Sprite
   private readonly deathrattle: Sprite
   private readonly trigger: Sprite
@@ -180,6 +183,12 @@ export class MinionView extends Container {
     this.legendaryFrame.label = 'minion.frame-legendary'
     this.addChild(this.legendaryFrame)
 
+    this.frozen = new Sprite(textures.frozen)
+    applyAnchoredPlacement(this.frozen, MINION_LAYOUT.frozen)
+    this.frozen.visible = model.frozen
+    this.frozen.label = 'minion.frozen'
+    this.addChild(this.frozen)
+
     this.stealth = new Sprite(textures.stealth)
     applyAnchoredPlacement(this.stealth, MINION_LAYOUT.stealth)
     this.stealth.visible = model.stealth
@@ -254,8 +263,9 @@ export class MinionView extends Container {
     this.outlineProxy.eventMode = 'none'
     this.outlineProxy.ellipse(80, 90, 58, 79).fill({ color: 0xffffff })
     this.outlineProxy.visible = false
-    // Place behind the frame so the glow appears outside the oval, not covering badges.
-    this.addChildAt(this.outlineProxy, 1)
+    // Keep every outline above Taunt but below the minion frame. The Taunt ring
+    // is larger than the frame and would otherwise obscure the glow.
+    this.addChildAt(this.outlineProxy, this.getChildIndex(frame))
     this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'card')
     this.attackOutline.setEnabled(false)
 
@@ -264,7 +274,7 @@ export class MinionView extends Container {
     this.targetingOutlineProxy.eventMode = 'none'
     this.targetingOutlineProxy.ellipse(80, 90, 58, 79).fill({ color: 0xffffff })
     this.targetingOutlineProxy.visible = false
-    this.addChildAt(this.targetingOutlineProxy, 1)
+    this.addChildAt(this.targetingOutlineProxy, this.getChildIndex(frame))
     this.targetingOutline = new AnimatedOutline(
       this.targetingOutlineProxy,
       'red',
@@ -329,6 +339,10 @@ export class MinionView extends Container {
 
   setDivineShield(visible: boolean): void {
     this.divineShield.visible = visible
+  }
+
+  setFrozen(visible: boolean): void {
+    this.frozen.visible = visible
   }
 
   setStealth(visible: boolean): void {

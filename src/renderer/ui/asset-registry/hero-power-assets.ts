@@ -1,6 +1,7 @@
 import druidImage from '@assets/images/heroes/hero-power/hero-power-druid.png'
 import hunterImage from '@assets/images/heroes/hero-power/hero-power-hunter.png'
 import jaraxxusImage from '@assets/images/heroes/hero-power/hero-power-jaraxxus.png'
+import ragnarosImage from '@assets/images/heroes/hero-power/hero-power-ragnaros.png'
 import mageImage from '@assets/images/heroes/hero-power/hero-power-mage.png'
 import paladinImage from '@assets/images/heroes/hero-power/hero-power-paladin.png'
 import priestImage from '@assets/images/heroes/hero-power/hero-power-priest.png'
@@ -25,6 +26,7 @@ export type HeroPowerAssetKey =
   | 'hero-power-warlock'
   | 'hero-power-warrior'
   | 'hero-power-jaraxxus'
+  | 'hero-power-ragnaros'
 
 export const HERO_POWER_ASSET_SOURCES: Record<HeroPowerAssetKey, string> = {
   'hero-power-druid': druidImage,
@@ -36,5 +38,6 @@ export const HERO_POWER_ASSET_SOURCES: Record<HeroPowerAssetKey, string> = {
   'hero-power-shaman': shamanImage,
   'hero-power-warlock': warlockImage,
   'hero-power-warrior': warriorImage,
-  'hero-power-jaraxxus': jaraxxusImage
+  'hero-power-jaraxxus': jaraxxusImage,
+  'hero-power-ragnaros': ragnarosImage
 }

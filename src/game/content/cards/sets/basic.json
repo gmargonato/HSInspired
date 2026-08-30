@@ -609,6 +609,7 @@
         "actions": [
           {
             "action": "schedule",
+            "attachedToTarget": true,
             "trigger": "start-of-turn",
             "target": {
               "controller": "opponent",
@@ -2923,9 +2924,9 @@
     "cardClass": "Hunter",
     "type": "Minion",
     "subtype": "Beast",
-    "cost": 5,
-    "attack": 3,
-    "health": 2,
+    "cost": 2,
+    "attack": 2,
+    "health": 1,
     "rulesText": "Whenever you Summon a Beast, draw a card.",
     "keywords": [],
     "effects": [
@@ -3215,25 +3216,14 @@
         "trigger": "cast",
         "actions": [
           {
-            "action": "draw",
+            "action": "discover",
             "player": "self",
-            "count": 1,
+            "count": 3,
             "source": {
               "controller": "self",
               "type": "card",
-              "selection": "chosen",
               "zone": "deck",
-              "position": "top",
-              "count": 3
-            }
-          },
-          {
-            "action": "discard",
-            "target": {
-              "controller": "self",
-              "type": "card",
-              "selection": "all",
-              "zone": "revealed"
+              "position": "top"
             }
           }
         ]

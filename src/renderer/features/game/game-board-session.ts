@@ -1,7 +1,7 @@
 import type { Deck } from '../../../game/decks'
 import {
   createTurnMatch,
-  type TurnMatchCommand,
+  type TurnMatchEvent,
   type TurnMatchInstance,
   type TurnMatchResult,
   type TurnMatchState
@@ -24,9 +24,10 @@ export class GameBoardSession {
   readonly remoteParticipantId: PlayerId
   readonly localPlayerNumber: 1 | 2
   readonly remotePlayerNumber: 1 | 2
+  private readonly aiObservedEvents: TurnMatchEvent[] = []
 
   constructor(options: GameBoardSessionOptions) {
-    this.match = createTurnMatch(options.setup, options.decks)
+    const match = createTurnMatch(options.setup, options.decks)
     const human = options.setup.participants.find(
       (participant) => participant.controllerKind === 'human'
     )
@@ -39,7 +40,17 @@ export class GameBoardSession {
 
     this.localParticipantId = human.participantId
     this.remoteParticipantId = remote.participantId
-    const state = this.match.getState()
+    this.match = {
+      ...match,
+      dispatch: (command: unknown) => {
+        const result = match.dispatch(command)
+        if (result.accepted) {
+          this.aiObservedEvents.push(...result.events)
+        }
+        return result
+      }
+    }
+    const state = match.getState()
     this.localPlayerNumber = this.findPlayer(state, human.participantId).playerNumber
     this.remotePlayerNumber = this.findPlayer(state, remote.participantId).playerNumber
   }
@@ -48,8 +59,12 @@ export class GameBoardSession {
     return this.match.getState()
   }
 
-  dispatch(command: TurnMatchCommand): TurnMatchResult {
+  dispatch(command: unknown): TurnMatchResult {
     return this.match.dispatch(command)
+  }
+
+  getAiObservedEvents(limit = 80): readonly TurnMatchEvent[] {
+    return this.aiObservedEvents.slice(-Math.max(0, limit))
   }
 
   findPlayer(state: TurnMatchState, participantId: PlayerId) {

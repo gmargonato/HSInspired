@@ -11,7 +11,33 @@
     "health": 2,
     "rulesText": "Choose One - Transform into a 5/2 minion; or a 2/5 minion.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "transform",
+                  "target": { "type": "minion", "selection": "source" },
+                  "cardId": "blackrock_mountain_druid_of_the_flame_5_2"
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "transform",
+                  "target": { "type": "minion", "selection": "source" },
+                  "cardId": "blackrock_mountain_druid_of_the_flame_2_5"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_volcanic_lumberer",
@@ -25,7 +51,22 @@
     "health": 8,
     "rulesText": "Taunt. Costs (1) less for each minion that died this turn.",
     "keywords": ["taunt"],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": { "type": "card", "selection": "source" },
+            "amount": {
+              "reference": "minions-died-this-turn",
+              "operation": "subtract"
+            },
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_quick_shot",
@@ -37,7 +78,31 @@
     "cost": 2,
     "rulesText": "Deal 3 damage. If your hand is empty, draw a card.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "player-has-hand-count",
+            "player": "self",
+            "operator": "eq",
+            "value": 0
+          },
+          "actions": [{ "action": "draw", "player": "self", "count": 1 }]
+        }
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_core_rager",
@@ -51,7 +116,25 @@
     "health": 4,
     "rulesText": "Battlecry: If your hand is empty, gain +3/+3.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-hand-count",
+          "player": "self",
+          "operator": "eq",
+          "value": 0
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "type": "minion", "selection": "source" },
+            "attack": 3,
+            "health": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_flamewaker",
@@ -65,7 +148,24 @@
     "health": 4,
     "rulesText": "After you cast a spell, deal 2 damage randomly split among all enemies.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": { "type": "spell-cast", "controller": "self" },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1,
+            "hits": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_dragons_breath",
@@ -77,7 +177,36 @@
     "cost": 5,
     "rulesText": "Deal 4 damage. Costs (1) less for each minion that died this turn.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 4
+          }
+        ]
+      },
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": { "type": "card", "selection": "source" },
+            "amount": {
+              "reference": "minions-died-this-turn",
+              "operation": "subtract"
+            },
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_dragon_consort",
@@ -91,7 +220,25 @@
     "health": 5,
     "rulesText": "Battlecry: The next Dragon you play costs (2) less.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": { "tribe": "Dragon" }
+            },
+            "amount": -2,
+            "deferUntil": "next-matching-card-played"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_solemn_vigil",
@@ -103,7 +250,26 @@
     "cost": 5,
     "rulesText": "Draw 2 cards. Costs (1) less for each minion that died this turn.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [{ "action": "draw", "player": "self", "count": 2 }]
+      },
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": { "type": "card", "selection": "source" },
+            "amount": {
+              "reference": "minions-died-this-turn",
+              "operation": "subtract"
+            },
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_twilight_whelp",
@@ -117,7 +283,23 @@
     "health": 1,
     "rulesText": "Battlecry: If you're holding a Dragon, gain +2 Health.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": { "tribe": "Dragon" }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "type": "minion", "selection": "source" },
+            "health": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_resurrect",
@@ -129,7 +311,19 @@
     "cost": 2,
     "rulesText": "Summon a random friendly minion that died this game.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "resurrect",
+            "source": "destroyed-minions",
+            "selection": "random",
+            "filter": { "cardType": "Minion" }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_gang_up",
@@ -141,7 +335,18 @@
     "cost": 2,
     "rulesText": "Choose a minion. Shuffle 3 copies of it into your deck.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "count": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_dark_iron_skulker",
@@ -155,7 +360,23 @@
     "health": 3,
     "rulesText": "Battlecry: Deal 2 damage to all undamaged enemy minions.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all",
+              "filter": { "damaged": false }
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_lava_shock",
@@ -167,7 +388,23 @@
     "cost": 2,
     "rulesText": "Deal 2 damage. Unlock your Overloaded Mana Crystals.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          },
+          { "action": "unlock-overload", "player": "self" }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_fireguard_destroyer",
@@ -181,7 +418,19 @@
     "health": 6,
     "rulesText": "Battlecry: Gain 1-4 Attack. Overload: (1)",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "type": "minion", "selection": "source" },
+            "attack": { "random": [1, 2, 3, 4] }
+          },
+          { "action": "overload", "player": "self", "amount": 1 }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_demonwrath",
@@ -193,7 +442,23 @@
     "cost": 3,
     "rulesText": "Deal 2 damage to all non-Demon minions.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "filter": { "tribe": "Demon", "negate": true }
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_imp_gang_boss",
@@ -207,7 +472,20 @@
     "health": 4,
     "rulesText": "Whenever this minion takes damage, summon a 1/1 Imp.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": { "type": "damage-dealt", "target": { "selection": "source" } },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "blackrock_mountain_imp",
+            "count": 1,
+            "placement": "right-of-source"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_revenge",
@@ -219,7 +497,29 @@
     "cost": 2,
     "rulesText": "Deal 1 damage to all minions. If you have 12 or less Health, deal 3 damage instead.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "all" },
+            "amount": 1
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "condition": { "type": "player-health-lte", "player": "self", "value": 12 },
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "all" },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_axe_flinger",
@@ -233,7 +533,19 @@
     "health": 5,
     "rulesText": "Whenever this minion takes damage, deal 2 damage to the enemy hero.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": { "type": "damage-dealt", "target": { "selection": "source" } },
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "opponent", "type": "hero", "selection": "all" },
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_dragon_egg",
@@ -247,7 +559,20 @@
     "health": 2,
     "rulesText": "Whenever this minion takes damage, summon a 2/1 Whelp.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": { "type": "damage-dealt", "target": { "selection": "source" } },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "blackrock_mountain_black_whelp",
+            "count": 1,
+            "placement": "right-of-source"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_blackwing_technician",
@@ -261,7 +586,24 @@
     "health": 4,
     "rulesText": "Battlecry: If you're holding a Dragon, gain +1/+1.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": { "tribe": "Dragon" }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "type": "minion", "selection": "source" },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_dragonkin_sorcerer",
@@ -275,7 +617,24 @@
     "health": 5,
     "rulesText": "Whenever you target this minion with a spell, gain +1/+1.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-targeted-minion",
+          "controller": "self",
+          "target": { "selection": "source" }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "type": "minion", "selection": "source" },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_hungry_dragon",
@@ -289,7 +648,19 @@
     "health": 6,
     "rulesText": "Battlecry: Summon a random 1-Cost minion for your opponent.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-random",
+            "player": "opponent",
+            "filter": { "cardType": "Minion", "cost": 1 },
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_blackwing_corruptor",
@@ -303,7 +674,27 @@
     "health": 4,
     "rulesText": "Battlecry: If you're holding a Dragon, deal 3 damage.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": { "tribe": "Dragon" }
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_emperor_thaurissan",
@@ -317,7 +708,23 @@
     "health": 5,
     "rulesText": "At the end of your turn, reduce the Cost of cards in your hand by (1).",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "amount": -1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_grim_patron",
@@ -331,7 +738,21 @@
     "health": 3,
     "rulesText": "Whenever this minion survives damage, summon another Grim Patron.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": { "type": "damage-dealt", "target": { "selection": "source" } },
+        "condition": { "type": "target-survived" },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "blackrock_mountain_grim_patron",
+            "count": 1,
+            "placement": "right-of-source"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_drakonid_crusher",
@@ -345,7 +766,20 @@
     "health": 6,
     "rulesText": "Battlecry: If your opponent has 15 or less Health, gain +3/+3.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": { "type": "player-health-lte", "player": "opponent", "value": 15 },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "type": "minion", "selection": "source" },
+            "attack": 3,
+            "health": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_volcanic_drake",
@@ -359,7 +793,22 @@
     "health": 4,
     "rulesText": "Costs (1) less for each minion that died this turn.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": { "type": "card", "selection": "source" },
+            "amount": {
+              "reference": "minions-died-this-turn",
+              "operation": "subtract"
+            },
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_rend_blackhand",
@@ -373,7 +822,27 @@
     "health": 4,
     "rulesText": "Battlecry: If you're holding a Dragon, destroy a Legendary minion.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": { "tribe": "Dragon" }
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": { "rarity": "Legendary" }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_chromaggus",
@@ -387,7 +856,19 @@
     "health": 8,
     "rulesText": "Whenever you draw a card, put another copy into your hand.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "on-draw",
+        "event": { "controller": "self" },
+        "actions": [
+          {
+            "action": "copy",
+            "target": { "type": "drawn-card", "selection": "event-target" },
+            "destination": "hand"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_majordomo_executus",
@@ -401,7 +882,17 @@
     "health": 7,
     "rulesText": "Deathrattle: Replace your hero with Ragnaros, the Firelord.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "ragnaros"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_nefarian",
@@ -415,7 +906,20 @@
     "health": 8,
     "rulesText": "Battlecry: Add 2 random spells to your hand (from your opponent's class).",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": { "cardType": "Spell", "cardClass": "opponent" },
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blackrock_mountain_druid_of_the_flame_5_2",

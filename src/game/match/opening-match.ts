@@ -13,6 +13,7 @@ import {
   resolveTurnTransition
 } from './effects/effect-runtime'
 import { assertOpeningMatchInvariants } from './rules/invariants'
+import { moveCardForPlayer } from './rules/zone-state'
 import { StateTransaction } from './rules/runtime-state'
 import type { MatchParticipantSetup, MatchSetup, PlayerId } from './match-types'
 import type {
@@ -29,6 +30,7 @@ import type {
   HeroPowerTargetRef,
   CardPlayTargetRef,
   PlayCardCommand,
+  ChooseDiscoverCardCommand,
   AttackCharacterRef,
   AttackCharacterCommand,
   DevAddCardCommand,
@@ -530,14 +532,13 @@ export function getHeroAttack(
 }
 
 export function canHeroAttack(
-  player: Pick<OpeningPlayerState, 'hero' | 'weapon'>,
+  _player: Pick<OpeningPlayerState, 'hero' | 'weapon'>,
   state: OpeningMatchState,
   ownerId: PlayerId
 ): boolean {
-  if (state.phase !== 'turns') return false
-  if (state.activePlayerId !== ownerId) return false
-  if (player.hero.health <= 0 || getHeroAttack(player) <= 0) return false
-  return player.hero.lastAttackedOnTurn !== state.turnNumber
+  return (
+    getMatchLegality(state, ownerId).legalAttackTargets[`${ownerId}:hero`] !== undefined
+  )
 }
 
 /** Resolves the stat-only result used both by targeting previews and combat. */
@@ -621,7 +622,16 @@ export function getOpeningMatchPublicState(
   void _history
   void _effectTrace
   void _scheduledEffects
-  return { ...publicSnapshot, players }
+  const pendingDiscover =
+    snapshot.pendingDiscover?.participantId === viewerId
+      ? {
+          ...snapshot.pendingDiscover,
+          candidates: snapshot.pendingDiscover.candidates.map((card) =>
+            maskPublicCard(card, viewerId, true)
+          )
+        }
+      : undefined
+  return { ...publicSnapshot, players, ...(pendingDiscover ? { pendingDiscover } : {}) }
 }
 
 function maskPublicEffectData(value: unknown, viewerId: PlayerId): unknown {
@@ -678,6 +688,13 @@ export function getOpeningMatchPublicEvents(
             maskPublicCard(card, viewerId, event.participantId === viewerId)
           ),
           replacementCards: event.replacementCards.map((card) =>
+            maskPublicCard(card, viewerId, event.participantId === viewerId)
+          )
+        }
+      case 'discover-started':
+        return {
+          ...event,
+          candidates: event.candidates.map((card) =>
             maskPublicCard(card, viewerId, event.participantId === viewerId)
           )
         }
@@ -819,6 +836,14 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
     }
   }
 
+  if (value.type === 'choose-discover-card') {
+    if (typeof value.cardInstanceId !== 'string') return null
+    return {
+      type: 'choose-discover-card',
+      participantId: value.participantId as PlayerId,
+      cardInstanceId: value.cardInstanceId
+    }
+  }
   if (value.type === 'timeout') {
     if (
       value.elapsedSeconds !== undefined &&
@@ -1297,6 +1322,54 @@ function applyUseHeroPower(
       const damaged = damageHero(opponent, definition.effect.amount, 'hero-power')
       nextPlayers[opponentIndex] = { ...opponent, hero: damaged.hero }
       events.push(damaged.event)
+      break
+    }
+    case 'damage-random-enemy': {
+      const opponentIndex: 0 | 1 = playerIndex === 0 ? 1 : 0
+      const opponent = nextPlayers[opponentIndex]
+      const candidates: readonly HeroPowerTargetRef[] = [
+        { kind: 'hero', participantId: opponent.participantId },
+        ...opponent.board.map((minion) => ({
+          kind: 'minion' as const,
+          participantId: opponent.participantId,
+          instanceId: minion.instanceId
+        }))
+      ]
+      const target = candidates[Math.floor(rng.next() * candidates.length)]
+      if (!target) break
+      if (target.kind === 'hero') {
+        const damaged = damageHero(opponent, definition.effect.amount, 'hero-power')
+        nextPlayers[opponentIndex] = { ...opponent, hero: damaged.hero }
+        events.push(damaged.event)
+      } else {
+        const minion = opponent.board.find(
+          (entry) => entry.instanceId === target.instanceId
+        )
+        if (!minion) break
+        const healthAfter = Math.max(0, minion.health - definition.effect.amount)
+        nextPlayers[opponentIndex] = {
+          ...opponent,
+          board: opponent.board
+            .map((entry) =>
+              entry.instanceId === minion.instanceId
+                ? { ...entry, health: healthAfter }
+                : cloneBoardMinion(entry)
+            )
+            .filter((entry) => entry.health > 0)
+        }
+        events.push({
+          type: 'character-damaged',
+          source: 'hero-power',
+          participantId: opponent.participantId,
+          character: { kind: 'minion', instanceId: minion.instanceId },
+          amount: definition.effect.amount,
+          healthBefore: minion.health,
+          healthAfter,
+          armorBefore: 0,
+          armorAfter: 0,
+          destroyed: healthAfter === 0
+        })
+      }
       break
     }
     case 'damage-character': {
@@ -2264,6 +2337,61 @@ export function createOpeningMatch(
     }
   }
 
+  const dispatchDiscoverChoice = (
+    command: ChooseDiscoverCardCommand
+  ): OpeningCommandResult => {
+    const pending = state.pendingDiscover
+    if (!pending)
+      return reject(state, 'invalid-command', 'No Discover choice is pending.')
+    if (pending.participantId !== command.participantId)
+      return reject(
+        state,
+        'wrong-controller',
+        'Only the Discover owner may choose a card.'
+      )
+    if (!pending.candidates.some((card) => card.instanceId === command.cardInstanceId))
+      return reject(
+        state,
+        'invalid-target',
+        'The selected card is not a Discover candidate.'
+      )
+
+    const playerIndex = findPlayerIndex(state.players, command.participantId)
+    if (playerIndex === -1)
+      return reject(state, 'unknown-participant', 'Unknown participant.')
+    let player = state.players[playerIndex]
+    const events: OpeningMatchEvent[] = []
+    for (const candidate of pending.candidates) {
+      const destination =
+        candidate.instanceId === command.cardInstanceId ? 'hand' : 'discarded'
+      const moved = moveCardForPlayer(player, candidate.instanceId, destination)
+      if (!moved || moved.from !== 'revealed')
+        return reject(
+          state,
+          'stale-target',
+          'A Discover candidate is no longer available.'
+        )
+      player = moved.player
+      if (destination === 'hand') {
+        events.push({
+          type: 'card-drawn',
+          participantId: command.participantId,
+          card: moved.card
+        })
+      }
+    }
+    const players = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+    players[playerIndex] = player
+    const nextState: OpeningMatchState = {
+      ...state,
+      players,
+      pendingDiscover: undefined,
+      revision: state.revision + 1
+    }
+    assertOpeningMatchInvariants(nextState)
+    commitState(nextState)
+    return { accepted: true, state: cloneOpeningMatchState(state), events }
+  }
   const dispatchTurnTransition = (participantId: PlayerId): OpeningCommandResult => {
     const before = state
     const rngSnapshot = rng.snapshot()
@@ -2339,6 +2467,15 @@ export function createOpeningMatch(
         )
       }
 
+      if (state.pendingDiscover && command.type !== 'choose-discover-card') {
+        return reject(
+          state,
+          'discover-pending',
+          'Resolve the pending Discover choice first.'
+        )
+      }
+      if (command.type === 'choose-discover-card')
+        return dispatchDiscoverChoice(command)
       if (state.phase === 'ended') {
         return reject(state, 'match-ended', 'The match has already ended.')
       }

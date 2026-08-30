@@ -4972,7 +4972,7 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "General",
-    "cost": 5,
+    "cost": 4,
     "attack": 6,
     "health": 2,
     "rulesText": "Charge. Battlecry: Summon two 1/1 Whelps for your opponent.",
@@ -6574,6 +6574,7 @@
           },
           {
             "action": "schedule",
+            "attachedToTarget": true,
             "trigger": "end-of-turn",
             "target": {
               "controller": "self",
@@ -9346,6 +9347,7 @@
           },
           {
             "action": "schedule",
+            "attachedToTarget": true,
             "trigger": "start-of-turn",
             "target": {
               "controller": "any",

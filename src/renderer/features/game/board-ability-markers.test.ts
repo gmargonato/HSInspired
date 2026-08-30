@@ -166,8 +166,8 @@ describe('board ability markers', () => {
     expect(markers('basic_stonetusk_boar').temporaryAbilityLabels).toEqual([])
   })
 
-  it('uses original GvG Iron Juggernaut metadata', () => {
-    expect(markers('goblins_vs_gnomes_iron_juggernaut').deathrattle).toBe(false)
+  it("shows Iron Juggernaut's deathrattle marker", () => {
+    expect(markers('goblins_vs_gnomes_iron_juggernaut').deathrattle).toBe(true)
   })
 
   it('keeps Deathrattle and Trigger independently visible', () => {

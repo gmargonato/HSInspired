@@ -44,6 +44,7 @@ import mulliganAnnouncementImage from '@assets/images/match/mulligan-announcemen
 import mulliganReplaceCrossImage from '@assets/images/match/mulligan-replace-cross.png'
 import mulliganReplacedLabelImage from '@assets/images/match/mulligan-replaced-label.png'
 import confirmMulliganButtonImage from '@assets/images/match/confirm-mulligan-button.png'
+import toggleViewButtonImage from '@assets/images/match/toggle-view-button.png'
 import mulliganCoinAnnouncementImage from '@assets/images/match/mulligan-coin-announcement.png'
 import historyLocalImage from '@assets/images/match/history-local.png'
 import historyRemoteImage from '@assets/images/match/history-remote.png'
@@ -61,6 +62,8 @@ import minionFrameImage from '@assets/images/board/minion-frame.png'
 import minionFrameLegendaryImage from '@assets/images/board/minion-frame-legendary.png'
 import minionTauntImage from '@assets/images/board/minion-taunt.png'
 import minionDivineShieldImage from '@assets/images/board/minion-divine-shield.png'
+import heroFrozenImage from '@assets/images/board/hero-frozen.png'
+import minionFrozenImage from '@assets/images/board/minion-frozen.png'
 import minionStealthImage from '@assets/images/board/minion-stealth.png'
 import minionTriggerImage from '@assets/images/board/minion-trigger.png'
 import minionDeathrattleImage from '@assets/images/board/minion-deathrattle.png'
@@ -473,6 +476,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.hero-frozen',
+    ASSET_BUNDLE_IDS.game,
+    'heroFrozen',
+    heroFrozenImage,
+    345,
+    433,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-frozen',
+    ASSET_BUNDLE_IDS.game,
+    'minionFrozen',
+    minionFrozenImage,
+    160,
+    210,
+    'game-scene'
+  ),
+  asset(
     'scene.game.minion-stealth',
     ASSET_BUNDLE_IDS.game,
     'minionStealth',
@@ -657,6 +678,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'confirmMulliganButton',
     confirmMulliganButtonImage,
+    235,
+    127,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.toggle-view-button',
+    ASSET_BUNDLE_IDS.game,
+    'toggleViewButton',
+    toggleViewButtonImage,
     235,
     127,
     'game-scene'
@@ -1166,7 +1196,12 @@ for (const bundle of manifestBundles) {
   const entries = Object.fromEntries(
     bundle.assets.map((entry) => [entry.alias, entry.src])
   ) as Record<string, string>
-  registerAssetBundle(bundle.name, entries)
+  registerAssetBundle(bundle.name, entries, {
+    // Pixi pools alpha-mask filters across scenes. Destroying a card-frame
+    // TextureSource leaves those pooled filters with a dead WebGPU bind group,
+    // so card rendering assets live until the renderer itself is destroyed.
+    persistent: bundle.name === ASSET_BUNDLE_IDS.cardRendering
+  })
 }
 
 export interface MainMenuAssets {
@@ -1227,6 +1262,8 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   minionFrameLegendary: Texture
   minionTaunt: Texture
   minionDivineShield: Texture
+  heroFrozen: Texture
+  minionFrozen: Texture
   minionStealth: Texture
   boardTrigger: Texture
   boardDeathrattle: Texture
@@ -1240,6 +1277,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   deck: Texture
   manaCrystal: Texture
   endTurn: Texture
+  toggleViewButton: Texture
   enemyTurn: Texture
   yourTurn: Texture
   cardBack: Texture

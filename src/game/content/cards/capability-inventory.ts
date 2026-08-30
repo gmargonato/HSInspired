@@ -197,11 +197,13 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'change-cost',
       'copy',
       'discard',
+      'discover',
       'draw',
       'draw-until',
       'gain-mana',
       'destroy-mana-crystal',
       'overload',
+      'unlock-overload',
       'shuffle-into-deck'
     ].includes(name)
   )

@@ -93,7 +93,6 @@ export class SceneManager {
   }
 
   async start(scene: Scene): Promise<void> {
-    this.logger.info('[SceneManager] start', scene.constructor.name)
     return this.enqueue(async () => {
       if (this.started) return
 
@@ -101,7 +100,7 @@ export class SceneManager {
       this.started = true
       this.app.ticker.add(this.tick, this)
       this.fitToScreen()
-      this.logger.info('[SceneManager] start done', this.current?.constructor.name)
+      this.logger.info('[Scene] started', scene.constructor.name)
       this.notifySceneChanged()
     })
   }
@@ -364,7 +363,6 @@ export class SceneManager {
     scene: Scene,
     options: SceneTransitionOptions
   ): Promise<void> {
-    this.logger.info('[SceneManager] fadeImmediate start', scene.constructor.name)
     const previous = this.current
     if (!previous) {
       throw new Error('Cannot transition without a current scene')
@@ -378,19 +376,15 @@ export class SceneManager {
     this.transitioningScene = scene
 
     try {
-      this.logger.info('[SceneManager] fadeImmediate creating overlay')
       overlay = new Graphics()
       overlay.rect(0, 0, GAME_WIDTH, GAME_HEIGHT).fill({ color: 0x000000 })
       overlay.alpha = 0
       overlay.eventMode = 'static'
       this.world.addChild(overlay)
       this.fitToScreen()
-      this.logger.info('[SceneManager] fadeOverlay to 1')
       await this.fadeOverlay(overlay, 1, halfDuration)
-      this.logger.info('[SceneManager] fade to 1 done, loading scene')
       await scene.load(this.app, this)
       loaded = true
-      this.logger.info('[SceneManager] scene loaded', scene.constructor.name)
 
       this.world.addChild(scene.root)
       this.world.addChild(overlay)
@@ -398,17 +392,15 @@ export class SceneManager {
       this.transitioningScene = null
       committed = true
       await previous.unload()
-      this.logger.info('[SceneManager] previous unloaded', previous.constructor.name)
       this.fitToScreen()
 
-      this.logger.info('[SceneManager] fadeOverlay to 0')
       await this.fadeOverlay(overlay, 0, halfDuration)
-      this.logger.info('[SceneManager] fade to 0 done')
       this.removeFadeOverlay(overlay)
       overlay = null
-      this.logger.info('[SceneManager] runAfterTransition start')
       await this.runAfterTransition(options, previous, scene)
-      this.logger.info('[SceneManager] runAfterTransition done')
+      this.logger.info(
+        `[Scene] ${previous.constructor.name} → ${scene.constructor.name}`
+      )
     } catch (error) {
       this.transitioningScene = null
 

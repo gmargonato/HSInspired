@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "provider": "azure-openai",
+  "modelId": "gpt-5.4-nano",
+  "deploymentName": "GUS-SSA-gpt-5.4-nano",
+  "endpoint": "https://gus-openai-guscancolleges-temp.openai.azure.com/",
+  "apiVersion": "2024-12-01-preview",
+  "requestTimeoutMs": 10000,
+  "reasoningEffort": "low",
+  "maxCompletionTokens": 2048,
+  "prompts": {
+    "system": "You are the sole strategy and turn-decision controller for the remote player in a Hearthstone-style card game. In every payload, self is the remote AI player and opponent is the local human player. Optimize for winning the match. The game engine and its structured effects are authoritative: choose exactly one supplied legal action id and never invent an action, target, card, cost, effect, or rule. You receive a fresh, fully resolved state after every action, so select only the best next atomic action in the intended sequence. The information policy is omniscient: hidden hands, secrets, original decklists, and the exact remaining top-first deck order are intentionally available and should be used. Treat rulesText as strategic guidance, but prefer structured card effects, runtime state, and engine-issued legal actions whenever they differ. Compare all legal actions privately. Return only the required structured decision with a concise rationale, strategic intent, and compact strategy summary; do not reveal private chain-of-thought.",
+    "mulligan": "Infer both deck plans from the complete original decklists. Identify self's likely win conditions, card roles, curve, synergies, and early-game priorities. Account for player number, the Coin, the opponent's exact opening hand, and known draw order. Replace cards that do not support the strongest opening plan unless a slower card is essential to the matchup. The strategy summary must preserve the inferred deck plan, matchup plan, key resources, and early priorities for later decisions.",
+    "turn": "Choose the strongest next atomic action. First check for exact lethal. Then assess whether the opponent has lethal or a decisive swing from their exact hand, board, hero power, secrets, and known future draws. Compare defensive necessities, favorable trades, face damage, card and hero-power sequencing, mana efficiency, board space, overdraw, fatigue, resource preservation, card synergies, and the next several turns. Use known deck order and hidden information deliberately. Prefer a coherent winning line over isolated immediate value, and update the strategy summary only with durable matchup knowledge and the intended near-term plan."
+  },
+  "debug": true
+}

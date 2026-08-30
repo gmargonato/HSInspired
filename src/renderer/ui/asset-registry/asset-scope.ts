@@ -3,23 +3,65 @@ import { Assets } from 'pixi.js'
 type AssetBundle = Record<string, string>
 
 const registeredBundles = new Set<string>()
+const bundleSources = new Map<string, readonly string[]>()
+const persistentBundles = new Set<string>()
+const pinnedBundles = new Set<string>()
 const bundleReferences = new Map<string, number>()
+const sourceReferences = new Map<string, number>()
+const sourcePins = new Map<string, number>()
 const loadedBundles = new Map<string, unknown>()
 const pendingLoads = new Map<string, Promise<unknown>>()
 const pendingUnloads = new Map<string, Promise<void>>()
+const pendingSourceUnloads = new Map<string, Promise<void>>()
 
-export function registerAssetBundle(bundleId: string, assets: AssetBundle): void {
+export function registerAssetBundle(
+  bundleId: string,
+  assets: AssetBundle,
+  options: { readonly persistent?: boolean } = {}
+): void {
   if (registeredBundles.has(bundleId)) return
 
   Assets.addBundle(bundleId, assets)
   registeredBundles.add(bundleId)
+  bundleSources.set(bundleId, [...new Set(Object.values(assets))])
+  if (options.persistent) persistentBundles.add(bundleId)
+}
+
+function sourcesFor(bundleId: string): readonly string[] {
+  const sources = bundleSources.get(bundleId)
+  if (!sources) throw new Error(`Asset bundle ${bundleId} is not registered.`)
+  return sources
+}
+
+function pinPersistentBundle(bundleId: string): void {
+  if (!persistentBundles.has(bundleId) || pinnedBundles.has(bundleId)) return
+
+  pinnedBundles.add(bundleId)
+  for (const source of sourcesFor(bundleId)) {
+    sourcePins.set(source, (sourcePins.get(source) ?? 0) + 1)
+  }
+}
+
+function addSourceReferences(bundleId: string, count: number): void {
+  for (const source of sourcesFor(bundleId)) {
+    sourceReferences.set(source, (sourceReferences.get(source) ?? 0) + count)
+  }
+}
+
+function removeSourceReferences(bundleId: string, count: number): void {
+  for (const source of sourcesFor(bundleId)) {
+    const remaining = (sourceReferences.get(source) ?? 0) - count
+    if (remaining > 0) sourceReferences.set(source, remaining)
+    else sourceReferences.delete(source)
+  }
 }
 
 async function loadBundle(bundleId: string): Promise<unknown> {
-  const pendingUnload = pendingUnloads.get(bundleId)
-  if (pendingUnload) {
-    await pendingUnload
-  }
+  const unloads = [
+    pendingUnloads.get(bundleId),
+    ...sourcesFor(bundleId).map((source) => pendingSourceUnloads.get(source))
+  ].filter((pending): pending is Promise<void> => pending !== undefined)
+  if (unloads.length > 0) await Promise.all([...new Set(unloads)])
 
   if (loadedBundles.has(bundleId)) {
     return loadedBundles.get(bundleId)
@@ -34,6 +76,7 @@ async function loadBundle(bundleId: string): Promise<unknown> {
   try {
     const loaded = await pendingLoad
     loadedBundles.set(bundleId, loaded)
+    pinPersistentBundle(bundleId)
     return loaded
   } finally {
     pendingLoads.delete(bundleId)
@@ -41,13 +84,44 @@ async function loadBundle(bundleId: string): Promise<unknown> {
 }
 
 async function unloadBundle(bundleId: string): Promise<void> {
-  const pendingUnload = Assets.unloadBundle(bundleId)
+  if (persistentBundles.has(bundleId)) return
+
+  const unreferencedSources = sourcesFor(bundleId).filter(
+    (source) =>
+      !sourceReferences.has(source) &&
+      !sourcePins.has(source) &&
+      !pendingSourceUnloads.has(source)
+  )
+  const existingUnloads = sourcesFor(bundleId)
+    .map((source) => pendingSourceUnloads.get(source))
+    .filter((pending): pending is Promise<void> => pending !== undefined)
+  const sourceUnload =
+    unreferencedSources.length > 0 ? Assets.unload(unreferencedSources) : undefined
+  if (sourceUnload) {
+    for (const source of unreferencedSources) {
+      pendingSourceUnloads.set(source, sourceUnload)
+    }
+  }
+
+  const unloads = sourceUnload
+    ? [...new Set([...existingUnloads, sourceUnload])]
+    : [...new Set(existingUnloads)]
+  const pendingUnload = Promise.all(unloads).then(() => undefined)
   pendingUnloads.set(bundleId, pendingUnload)
 
   try {
     await pendingUnload
   } finally {
-    pendingUnloads.delete(bundleId)
+    if (pendingUnloads.get(bundleId) === pendingUnload) {
+      pendingUnloads.delete(bundleId)
+    }
+    if (sourceUnload) {
+      for (const source of unreferencedSources) {
+        if (pendingSourceUnloads.get(source) === sourceUnload) {
+          pendingSourceUnloads.delete(source)
+        }
+      }
+    }
     loadedBundles.delete(bundleId)
   }
 }
@@ -60,6 +134,7 @@ export class AssetScope {
     const loaded = await loadBundle(bundleId)
     bundleReferences.set(bundleId, (bundleReferences.get(bundleId) ?? 0) + 1)
     this.acquiredBundles.set(bundleId, (this.acquiredBundles.get(bundleId) ?? 0) + 1)
+    addSourceReferences(bundleId, 1)
     return loaded as T
   }
 
@@ -70,6 +145,7 @@ export class AssetScope {
     for (const [bundleId, acquiredCount] of bundlesToRelease) {
       const references = bundleReferences.get(bundleId) ?? 0
       const remainingReferences = references - acquiredCount
+      removeSourceReferences(bundleId, acquiredCount)
 
       if (remainingReferences > 0) {
         bundleReferences.set(bundleId, remainingReferences)

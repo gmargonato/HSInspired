@@ -19,7 +19,6 @@ import {
 import { HERO_CATALOG } from '../../../game/content/heroes'
 import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
 import {
-  canHeroAttack,
   getHeroAttack,
   hasSummoningSickness,
   MAX_BOARD_SIZE,
@@ -28,6 +27,7 @@ import {
   type CardPlayTargetRef,
   type CharacterCombatantResult,
   type CharacterCombatResolvedEvent,
+  type ConfirmMulliganCommand,
   type HeroPowerTargetRef,
   type MulliganResolvedEvent,
   type OpeningCard,
@@ -37,6 +37,7 @@ import {
   type OpeningMatchState
 } from '../../../game/match'
 import type { PlayerId } from '../../../game/match'
+import type { AiDecisionApi } from '../../../shared/ipc/ai'
 import type {
   DevCommand,
   DevCardPickerAction,
@@ -75,6 +76,12 @@ import {
   stepDrag,
   type HandDragState
 } from './hand-drag'
+import {
+  OneShotPointerTapGuard,
+  allowsDragTargetingFromHand,
+  isHandOwnedSlot,
+  requiresClickConfirmedMinionPlacement
+} from './hand-play-gesture'
 import { HandCardPerspective } from './hand-card-perspective'
 import { HeroPowerView, type HeroPowerLayout } from './hero-power-view'
 import {
@@ -85,6 +92,7 @@ import { HeroView } from '../../rendering/heroes/hero-view'
 import { WeaponView } from '../../rendering/weapons/weapon-view'
 import { AddCardPickerView } from './add-card-picker-view'
 import { describeCardChoices } from './card-choice-presentation'
+import { CardSelectionOverlay } from './card-selection-overlay'
 import {
   isInDropZone,
   layoutBoardRow,
@@ -94,6 +102,7 @@ import {
 import { AttackLine } from './attack-line'
 import { getCombatImpactProfile } from './combat-impact'
 import { canCommitCombatAttack, canSelectCombatAttacker } from './combat-input-window'
+import { hasAvailableTurnAction } from './turn-action-availability'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { MINION_CANVAS } from '../../rendering/minions/minion-layout'
 import {
@@ -110,6 +119,15 @@ import { boardAbilityMarkers, boardMinionAbilityMarkers } from './board-ability-
 import { DamageIndicatorView } from './damage-indicator-view'
 import { SecretRevealView, SecretZoneView } from './secret-view'
 import { MatchHistoryView } from './match-history-view'
+import { AiTurnController } from './ai-turn-controller'
+import { TargetGestureController } from './target-gesture'
+
+function isFrozen(
+  frozenUntilTurn: number | null | undefined,
+  turnNumber: number
+): boolean {
+  return (frozenUntilTurn ?? -1) >= turnNumber
+}
 
 export interface GameBoardViewOptions {
   readonly route: GameRoute
@@ -119,6 +137,7 @@ export interface GameBoardViewOptions {
   readonly renderer: Renderer
   readonly cursor?: CursorManager | null
   readonly logger?: RendererLogger
+  readonly ai?: AiDecisionApi
   readonly onMatchComplete?: () => Promise<void> | void
 }
 
@@ -142,7 +161,7 @@ const OPENING_TIMING = {
 /** Turn-control timings (end turn button, AI pass, your-turn flag). */
 const TURN_TIMING = {
   /** How long the AI "thinks" before passing the turn back. */
-  aiTurnDelay: 1.8,
+  aiTurnDelay: 0.15,
   yourTurnGrow: 0.35,
   yourTurnHold: 1,
   yourTurnFadeOut: 0.15
@@ -156,9 +175,7 @@ const BOARD_TIMING = {
   summonCharge: 0.27,
   summonCollapse: 0.16,
   summonImpact: 0.32,
-  combatWindup: 0.12,
   combatWindupPause: 0.08,
-  combatWindupDistance: 28,
   combatLunge: 0.18,
   combatImpact: 0.12,
   combatReturn: 0.2,
@@ -195,12 +212,10 @@ interface CombatViewPlacement {
 
 type CombatView = MinionView | HeroView
 
-interface CombatDragState {
-  readonly attacker: CombatView
-  readonly pointerId: number
-  readonly start: { x: number; y: number }
-  active: boolean
-}
+type BoardTargetGestureSource =
+  | { readonly kind: 'combat'; readonly attacker: CombatView }
+  | { readonly kind: 'hero-power' }
+  | { readonly kind: 'card'; readonly cardInstanceId: string }
 
 interface ActiveCombatPresentation {
   readonly combatId: string
@@ -210,6 +225,8 @@ interface ActiveCombatPresentation {
   readonly defenderOrigin: { readonly x: number; readonly y: number }
   readonly attackerPlacement: CombatViewPlacement
   readonly attackerAttack: number
+  readonly deferredAttackerDeathInstanceIds: Set<string>
+  readonly attackerDamageIndicators: Set<DamageIndicatorView>
   impactStarted: boolean
   screenShake: Promise<void> | null
 }
@@ -239,6 +256,8 @@ interface PendingMinionTargetPreview {
   presentation: MinionPreviewPresentation | null
   presentationPromise: Promise<MinionPreviewPresentation | null> | null
   reversePromise: Promise<void> | null
+  rays: Sprite | null
+  readonly activeTimelines: Set<gsap.core.Timeline>
 }
 
 interface CardPlayTargetingState {
@@ -342,6 +361,7 @@ export class GameBoardView extends Actor {
   private readonly attackLineLayer = new Container()
   private readonly attackLine = new AttackLine()
   private readonly cardChoiceLayer = new Container()
+  private readonly cardSelectionOverlay: CardSelectionOverlay
   private readonly matchResultOverlay: MatchResultOverlay
   private readonly fatigueView: FatigueView
   private readonly secretZoneView: SecretZoneView
@@ -354,8 +374,10 @@ export class GameBoardView extends Actor {
   private cardTargeting: CardPlayTargetingState | null = null
   private combatInProgress = false
   private combatAttackerSelectionUnlocked = false
-  private combatDrag: CombatDragState | null = null
-  private suppressCombatTapPointerId: number | null = null
+  private readonly targetGestures =
+    new TargetGestureController<BoardTargetGestureSource>()
+  /** Ignores the pointertap synthesized from a targeted minion's placement click. */
+  private readonly cardPlacementTapGuard = new OneShotPointerTapGuard()
   private cardPlayInProgress = false
   private resolutionPresentationDepth = 0
   private readonly resolutionIdleWaiters: Array<() => void> = []
@@ -382,6 +404,9 @@ export class GameBoardView extends Actor {
   private readonly heroPowerViews = new Map<PlayerId, HeroPowerView>()
   private readonly logger: RendererLogger
   private session!: GameBoardSession
+  private aiController!: AiTurnController
+  private aiMulliganResolution: Promise<boolean> | null = null
+  private aiTurnRunning = false
   private get match(): OpeningMatchInstance {
     return this.session.match
   }
@@ -456,54 +481,91 @@ export class GameBoardView extends Actor {
       this.cancelHeroPowerTargeting()
       this.cancelCardTargeting(pointer)
       this.deselectAttacker()
+      this.targetGestures.clear()
       return
     }
     if (event.button === 0 && this.draggingIndex !== null && !this.dragReturning) {
       event.preventDefault()
       event.stopPropagation()
+      const index = this.draggingIndex
+      const entry = this.handEntries[index]
+      const input = entry
+        ? this.match.getPlayInput?.(this.localParticipantId, entry.card.instanceId)
+        : null
+      if (
+        entry &&
+        cardDefinition(entry.card).type === 'Spell' &&
+        input &&
+        input.targetSelectors.length === 0 &&
+        input.choiceCount === 0
+      ) {
+        this.castSelectedTargetlessSpell(index, entry)
+        return
+      }
       const pointer = this.dragPointer
+      const cardInstanceId = entry?.card.instanceId
       if (pointer) this.resolveCardDrop(pointer)
+      if (
+        cardInstanceId &&
+        this.cardTargeting?.cardInstanceId === cardInstanceId &&
+        this.cardTargeting.origin === 'minion-preview'
+      ) {
+        this.cardPlacementTapGuard.arm(event.pointerId)
+      }
     }
   }
   private readonly handleWindowPointerUp = (event: PointerEvent): void => {
-    if (
-      event.button === 0 &&
-      this.cardTargeting?.origin === 'local-hero' &&
-      !this.cardPlayInProgress
-    ) {
-      this.commitCardTargetAt(this.toRendererPoint(event.clientX, event.clientY))
-      return
+    if (this.cardPlacementTapGuard.matches(event.pointerId)) {
+      window.setTimeout(() => {
+        this.cardPlacementTapGuard.release(event.pointerId)
+      }, 0)
     }
+    if (event.button !== 0) return
+    const releasePoint = this.toRendererPoint(event.clientX, event.clientY)
+    // Pixi normally releases the gesture first through handleBoardPointerUp.
+    // Keep this as a fallback for releases that occur outside the stage.
+    if (this.releaseTargetGesture(event.pointerId, releasePoint)) return
     if (
-      event.button !== 0 ||
       this.draggingIndex === null ||
       this.dragReturning ||
       !this.dragMovedBeyondThreshold
     ) {
       return
     }
+    const carriedEntry = this.handEntries[this.draggingIndex]
+    if (carriedEntry && this.requiresSeparatePlacementClick(carriedEntry)) return
     const pointer = this.dragPointer
     if (pointer) this.resolveCardDrop(pointer)
   }
-  private readonly handleWindowCombatPointerUp = (event: PointerEvent): void => {
-    const drag = this.combatDrag
-    if (!drag || event.button !== 0 || event.pointerId !== drag.pointerId) return
-
-    this.combatDrag = null
-    if (!drag.active) return
-    this.suppressCombatTapPointerId = event.pointerId
-    window.setTimeout(() => {
-      if (this.suppressCombatTapPointerId === event.pointerId) {
-        this.suppressCombatTapPointerId = null
+  private readonly handleBoardPointerUp = (event: FederatedPointerEvent): void => {
+    if (event.button !== 0) return
+    this.releaseTargetGesture(event.pointerId, {
+      x: event.globalX,
+      y: event.globalY
+    })
+  }
+  /**
+   * Resolves before Pixi synthesizes pointertap. A native window pointerup
+   * listener runs too late because Pixi registered its own listener first.
+   */
+  private releaseTargetGesture(pointerId: number, releasePoint: HandPointer): boolean {
+    const gesture = this.targetGestures.release(pointerId)
+    if (gesture) {
+      if (gesture.phase === 'dragging') {
+        window.setTimeout(() => this.targetGestures.releaseTap(pointerId), 0)
+        this.commitTargetGestureRelease(gesture.source, releasePoint)
+      } else if (gesture.source.kind === 'card') {
+        this.targetGestures.suppressTap(pointerId)
+        window.setTimeout(() => this.targetGestures.releaseTap(pointerId), 0)
+        this.beginClickedCardTargeting(gesture.source.cardInstanceId)
       }
-    }, 0)
-
-    if (this.selectedCombatView !== drag.attacker) return
-    const release = this.toRendererPoint(event.clientX, event.clientY)
-    const target = this.findRemoteCombatTargetAt(release.x, release.y)
-    if (target) void this.attackCharacter(target)
+      return true
+    }
+    return false
   }
   private readonly handleWindowBlur = (): void => {
+    this.cardPlacementTapGuard.clear()
+    this.targetGestures.clear()
     this.endDrag()
     this.cancelCombatDrag()
     this.cancelHeroPowerTargeting()
@@ -614,6 +676,14 @@ export class GameBoardView extends Actor {
     this.cardChoiceLayer.eventMode = 'passive'
     this.cardChoiceLayer.visible = false
     this.gameplayLayer.addChild(this.cardChoiceLayer)
+    this.cardSelectionOverlay = new CardSelectionOverlay({
+      toggleTexture: options.gameAssets.toggleViewButton,
+      createSlot: (card) => this.createSlot(card),
+      onSelect: (card) => this.chooseDiscoverCard(card)
+    })
+    this.cardSelectionOverlay.label = 'game.card-selection'
+    this.gameplayLayer.addChild(this.cardSelectionOverlay)
+
     this.fatigueView = new FatigueView(options.gameAssets.fatigue)
     this.addChild(this.fatigueView)
     this.secretRevealView = new SecretRevealView(
@@ -641,6 +711,8 @@ export class GameBoardView extends Actor {
     this.on('globalpointermove', (event: FederatedPointerEvent) =>
       this.handleBoardPointerMove(event)
     )
+    this.on('pointerup', this.handleBoardPointerUp)
+    this.on('pointerupoutside', this.handleBoardPointerUp)
     this.on('pointerdown', (event: FederatedPointerEvent) => {
       if (event.button === 2) {
         this.cancelHeroPowerTargeting()
@@ -649,7 +721,8 @@ export class GameBoardView extends Actor {
       }
     })
     this.on('pointertap', (event: FederatedPointerEvent) => {
-      if (this.consumeCombatDragTap(event)) return
+      if (this.consumeCardPlacementTap(event)) return
+      if (this.consumeTargetGestureTap(event)) return
       if (!this.selectedCombatView && !this.heroPowerTargeting && !this.cardTargeting)
         return
       if (event.button !== 0) return
@@ -691,18 +764,27 @@ export class GameBoardView extends Actor {
   }
 
   async mount(): Promise<void> {
-    this.logger.info('[GameBoardView] mount start', this.options.route)
     this.session = new GameBoardSession({
       setup: this.options.route.setup,
       decks: this.options.decks
     })
-    this.logger.info(
-      '[GameBoardView] participants',
-      this.localParticipantId,
-      this.remoteParticipantId
+    const remoteSetup = this.options.route.setup.participants.find(
+      (participant) => participant.participantId === this.remoteParticipantId
     )
-    this.logger.info('[GameBoardView] match created', this.match.getState())
+    const remoteDeck = this.options.decks.find(
+      (deck) => deck.id === remoteSetup?.deckId
+    )
+    if (!remoteDeck) throw new Error('The AI deck is unavailable.')
+    this.aiController = new AiTurnController({
+      api: this.options.ai,
+      session: this.session,
+      decks: this.options.decks,
+      logger: this.logger
+    })
     const initialState = this.match.getState()
+    this.aiMulliganResolution = this.resolveAiMulligan(
+      this.aiController.chooseMulligan()
+    )
 
     this.historyView = new MatchHistoryView(
       {
@@ -726,22 +808,14 @@ export class GameBoardView extends Actor {
     )
     this.addChildAt(this.historyView, 1)
 
-    this.logger.info('[GameBoardView] creating board')
     this.createBoard()
-    this.logger.info('[GameBoardView] creating heroes')
     this.createHeroes(initialState)
     this.syncSecrets(initialState)
-    this.logger.info('[GameBoardView] creating hero powers')
     this.createHeroPowers(initialState)
-    this.logger.info('[GameBoardView] creating decks')
     this.createDecks()
-    this.logger.info('[GameBoardView] creating opening layer')
     this.createOpeningLayer(initialState)
-    this.logger.info('[GameBoardView] creating mulligan layer')
     this.createMulliganLayer()
-    this.logger.info('[GameBoardView] creating turn controls')
     this.createTurnControls(initialState)
-    this.logger.info('[GameBoardView] turn controls created')
 
     if (this.options.gameAssets.arrowBody) {
       this.attackLine.setBodyTexture(this.options.gameAssets.arrowBody)
@@ -749,23 +823,9 @@ export class GameBoardView extends Actor {
     window.addEventListener('keydown', this.handleWindowKeyDown)
 
     const localPlayer = this.findPlayer(initialState, this.localParticipantId)
-    this.logger.info(
-      '[GameBoardView] creating initial local cards',
-      localPlayer.hand.length
-    )
+    const remotePlayer = this.findPlayer(initialState, this.remoteParticipantId)
     await this.createInitialLocalCards(localPlayer.hand.map(cloneCard))
-    this.logger.info('[GameBoardView] initial local cards created')
-
-    const aiResult = this.match.dispatch({
-      type: 'confirm-mulligan',
-      participantId: this.remoteParticipantId,
-      replaceInstanceIds: []
-    })
-    if (!aiResult.accepted) throw new Error(aiResult.message)
-    this.remoteBackCount = this.findPlayer(
-      aiResult.state,
-      this.remoteParticipantId
-    ).hand.length
+    this.remoteBackCount = remotePlayer.hand.length
     this.ensureRemoteBacks(this.remoteBackCount)
 
     this.confirmButton = new Button(this.options.gameAssets.confirmMulliganButton, {
@@ -781,9 +841,7 @@ export class GameBoardView extends Actor {
   async playOpeningReveal(): Promise<void> {
     if (this.openingRevealStarted) return
     this.openingRevealStarted = true
-    this.logger.info('[GameBoardView] playOpeningReveal start')
     await this.wait(OPENING_TIMING.versusHold)
-    this.logger.info('[GameBoardView] versusHold done')
     await Promise.all([
       ...[...this.heroViews.entries()].map(([participantId, view]) =>
         this.animateHeroToBoard(
@@ -795,15 +853,12 @@ export class GameBoardView extends Actor {
       ),
       this.fadeTo(this.openingLayer, 0, OPENING_TIMING.heroSettle)
     ])
-    this.logger.info('[GameBoardView] hero settle done')
     this.openingLayer.visible = false
     this.setHeroHealthVisible(true)
     this.deckLayer.visible = true
     this.remoteHandLayer.visible = true
     await this.wait(OPENING_TIMING.boardPause)
-    this.logger.info('[GameBoardView] boardPause done, presenting mulligan')
     await this.presentMulligan()
-    this.logger.info('[GameBoardView] presentMulligan done')
   }
 
   private createBoard(): void {
@@ -832,13 +887,15 @@ export class GameBoardView extends Actor {
           attack: getHeroAttack(player),
           health: player.hero.health,
           maxHealth: player.hero.maxHealth,
-          armor: player.hero.armor
+          armor: player.hero.armor,
+          frozen: isFrozen(player.hero.frozenUntilTurn, state.turnNumber)
         },
         {
           frame: texture,
           attack: this.options.gameAssets.minionAttack,
           health: this.options.gameAssets.minionHealth,
-          armor: this.options.gameAssets.heroArmor
+          armor: this.options.gameAssets.heroArmor,
+          frozen: this.options.gameAssets.heroFrozen
         }
       )
       applyPlacement(view, intro)
@@ -871,7 +928,13 @@ export class GameBoardView extends Actor {
         frontTexture,
         manaTexture: this.options.gameAssets.heroPowerMana,
         cost: player.heroPower.cost,
-        onClick: isLocal ? () => void this.useHeroPower() : undefined
+        onPointerDown: isLocal ? (event) => this.beginHeroPowerDrag(event) : undefined,
+        onClick: isLocal
+          ? (event) => {
+              if (this.consumeTargetGestureTap(event)) return
+              void this.useHeroPower()
+            }
+          : undefined
       })
       view.label = `game.hero-power.${player.participantId}`
       this.heroPowerViews.set(player.participantId, view)
@@ -897,7 +960,6 @@ export class GameBoardView extends Actor {
   private createTurnControls(state: OpeningMatchState): void {
     this.hud.mount(this.options.gameAssets, () => void this.endTurn())
     this.addChild(this.hud.deckTracker)
-    this.addChild(this.hud.remoteDeckTracker)
     this.syncTurnHud(state)
   }
 
@@ -1063,7 +1125,7 @@ export class GameBoardView extends Actor {
   private async commitHeroPower(target?: HeroPowerTargetRef): Promise<void> {
     if (this.cardPlayInProgress || this.cardTargeting) return
     this.cardPlayInProgress = true
-    const result = this.match.dispatch({
+    const result = this.session.dispatch({
       type: 'use-hero-power',
       participantId: this.localParticipantId,
       ...(target ? { target } : {})
@@ -1089,6 +1151,7 @@ export class GameBoardView extends Actor {
   }
 
   private cancelHeroPowerTargeting(): void {
+    this.targetGestures.cancel((source) => source.kind === 'hero-power')
     if (!this.heroPowerTargeting) return
     this.heroPowerTargeting = false
     this.attackLine.clear()
@@ -1115,6 +1178,65 @@ export class GameBoardView extends Actor {
       participantId: view.ownerId as PlayerId,
       instanceId: view.instanceId
     }
+  }
+
+  private beginClickedCardTargeting(cardInstanceId: string): void {
+    if (this.cardTargeting || this.cardPlayInProgress) return
+    const entry = this.handEntries.find(
+      (candidate) => candidate.card.instanceId === cardInstanceId
+    )
+    if (!entry || cardDefinition(entry.card).type === 'Minion') return
+    const input = this.match.getPlayInput?.(this.localParticipantId, cardInstanceId)
+    if (!input || input.targetSelectors.length === 0) return
+    this.beginCardTargeting(entry, input)
+  }
+
+  private commitTargetGestureRelease(
+    source: BoardTargetGestureSource,
+    pointer: HandPointer
+  ): void {
+    if (source.kind === 'combat') {
+      if (this.selectedCombatView !== source.attacker) return
+      const target = this.findRemoteCombatTargetAt(pointer.x, pointer.y)
+      if (target) void this.attackCharacter(target)
+      else this.deselectAttacker()
+      return
+    }
+    if (source.kind === 'hero-power') {
+      if (!this.heroPowerTargeting) return
+      const target = this.findTargetableCharacterAt(pointer.x, pointer.y)
+      if (target && this.isValidHeroPowerTarget(target)) {
+        if (target instanceof HeroView && target.ownerId) {
+          void this.commitHeroPower({
+            kind: 'hero',
+            participantId: target.ownerId as PlayerId
+          })
+          return
+        }
+        if (target instanceof MinionView && target.ownerId && target.instanceId) {
+          void this.commitHeroPower({
+            kind: 'minion',
+            participantId: target.ownerId as PlayerId,
+            instanceId: target.instanceId
+          })
+          return
+        }
+      }
+      this.cancelHeroPowerTargeting()
+      return
+    }
+    if (
+      !this.cardTargeting ||
+      this.cardTargeting.cardInstanceId !== source.cardInstanceId
+    )
+      return
+    if (this.commitCardTargetAt(pointer)) return
+    if (
+      this.cardTargeting.input.choiceCount > 0 &&
+      this.cardTargeting.choice === undefined
+    )
+      return
+    this.cancelCardTargeting(pointer)
   }
 
   private isValidCardTarget(view: CombatView): boolean {
@@ -1291,7 +1413,9 @@ export class GameBoardView extends Actor {
           ready: false,
           presentation: null,
           presentationPromise: null,
-          reversePromise: null
+          reversePromise: null,
+          rays: null,
+          activeTimelines: new Set()
         }
       : undefined
     const targeting: CardPlayTargetingState = {
@@ -1350,7 +1474,8 @@ export class GameBoardView extends Actor {
       previewEvent,
       preview.entry.slot,
       false,
-      true
+      true,
+      preview
     ).then((presentation) => {
       preview.presentation = presentation
       return presentation
@@ -1398,6 +1523,7 @@ export class GameBoardView extends Actor {
     this.dragMovedBeyondThreshold = false
     this.dragState = null
     this.localHoveredSlot = null
+    entry.displaced = false
     entry.slot.suppressPlayableOutline(true)
     this.options.cursor?.setContextVariant(null)
     this.clearLocalBoardPreview()
@@ -1464,6 +1590,7 @@ export class GameBoardView extends Actor {
   }
 
   private cancelCardTargeting(pointer?: HandPointer): void {
+    this.targetGestures.cancel((source) => source.kind === 'card')
     this.clearCardChoiceOverlay()
     const targeting = this.cardTargeting
     if (!targeting) return
@@ -1472,10 +1599,14 @@ export class GameBoardView extends Actor {
     if (targeting.origin === 'minion-preview' && targeting.minionPreview) {
       const preview = targeting.minionPreview
       preview.cancelled = true
+      this.cardTargeting = null
       this.cardPlayInProgress = true
       this.reflowing = true
       this.lastTargetingPointer = null
-      if (this.session) this.syncBoardAttackability(this.match.getState())
+      if (this.session) {
+        this.syncBoardAttackability(this.match.getState())
+        this.syncTurnControls(this.match.getState())
+      }
       void this.reverseMinionTargetPreview(preview).catch((error: unknown) => {
         this.logger.error(
           '[GameBoardView] minion target preview reversal failed',
@@ -1525,14 +1656,8 @@ export class GameBoardView extends Actor {
     if (preview.reversePromise) return preview.reversePromise
     preview.reversePromise = (async () => {
       try {
-        const presentation =
-          preview.presentation ??
-          (preview.presentationPromise ? await preview.presentationPromise : null)
-        if (presentation) {
-          await this.animateMinionPreviewBackToHand(preview, presentation)
-        } else {
-          await this.returnMinionTargetCardToHand(preview.entry)
-        }
+        this.stopMinionTargetPreviewPresentation(preview)
+        await this.returnMinionTargetCardToHand(preview.entry)
       } catch (error) {
         this.logger.error(
           '[GameBoardView] minion target preview reversal failed',
@@ -1551,73 +1676,35 @@ export class GameBoardView extends Actor {
         if (!this.destroyed) {
           this.activateHandHover()
           this.syncTurnHud(this.match.getState())
+          this.syncTurnControls(this.match.getState())
         }
       }
     })()
     return preview.reversePromise
   }
 
-  private async animateMinionPreviewBackToHand(
-    preview: PendingMinionTargetPreview,
-    presentation: MinionPreviewPresentation
-  ): Promise<void> {
-    const { view, slot } = presentation
-    if (view.destroyed) {
-      await this.returnMinionTargetCardToHand(preview.entry)
-      return
-    }
+  private stopMinionTargetPreviewPresentation(
+    preview: PendingMinionTargetPreview
+  ): void {
+    for (const timeline of preview.activeTimelines) timeline.kill()
+    preview.activeTimelines.clear()
 
-    this.resetSummonCardAppearance(slot.card)
-    slot.visible = true
-    const summon = GAME_BOARD_LAYOUT.boardMinions.summon
-    const reverse = this.timeline()
-    reverse.to(view, {
-      alpha: 0,
-      y: presentation.resting.y + summon.minionStartYOffset,
-      duration: BOARD_TIMING.summonImpact,
-      ease: 'power2.in'
-    })
-    reverse.to(
-      view.scale,
-      {
-        x: presentation.resting.scale * summon.minionStartScaleMultiplier,
-        y: presentation.resting.scale * summon.minionStartScaleMultiplier,
-        duration: BOARD_TIMING.summonImpact,
-        ease: 'power2.in'
-      },
-      0
-    )
-    reverse.to(
-      slot,
-      {
-        alpha: 1,
-        duration: BOARD_TIMING.summonImpact * 0.8,
-        ease: 'power2.out'
-      },
-      0
-    )
-    reverse.to(
-      slot.scale,
-      {
-        x: summon.cardScale,
-        y: summon.cardScale,
-        duration: BOARD_TIMING.summonImpact,
-        ease: 'power2.out'
-      },
-      0
-    )
-    await this.completeTimeline(reverse)
+    if (preview.rays && !preview.rays.destroyed) preview.rays.destroy()
+    preview.rays = null
 
-    if (!view.destroyed) {
-      view.removeFromParent()
-      view.destroy({ children: true })
+    const presentation = preview.presentation
+    preview.presentation = null
+    if (presentation && !presentation.view.destroyed) {
+      presentation.view.setTargetable(false)
+      presentation.view.setTargetingOutline(false)
+      presentation.view.removeFromParent()
+      presentation.view.destroy({ children: true })
     }
-    await this.returnMinionTargetCardToHand(preview.entry)
   }
 
-  private async returnMinionTargetCardToHand(entry: HandEntry): Promise<void> {
+  private returnMinionTargetCardToHand(entry: HandEntry): Promise<void> {
     const slot = entry.slot
-    if (slot.destroyed) return
+    if (slot.destroyed) return Promise.resolve()
     this.resetSummonCardAppearance(slot.card)
     slot.setSummonGlowStrength(1)
     slot.visible = true
@@ -1634,18 +1721,34 @@ export class GameBoardView extends Actor {
     slot.suppressPlayableOutline(false)
     entry.displaced = false
     if (entry.restTransform) {
-      await this.animateSlotToHand(
-        slot,
-        entry.restTransform,
-        0,
-        OPENING_TIMING.hover,
-        OPENING_TIMING.hover
-      )
+      gsap.killTweensOf(slot)
+      gsap.killTweensOf(slot.scale)
+      gsap.killTweensOf(slot.skew)
+      slot.position.set(entry.restTransform.x, entry.restTransform.y)
+      slot.rotation = entry.restTransform.rotation
+      slot.scale.set(entry.restTransform.scale)
+      slot.skew.set(0)
+      slot.alpha = 1
+      slot.zIndex = entry.restTransform.zIndex
     } else {
       slot.alpha = 1
     }
+    return Promise.resolve()
   }
 
+  private chooseDiscoverCard(card: OpeningCard): void {
+    const result = this.session.dispatch({
+      type: 'choose-discover-card',
+      participantId: this.localParticipantId,
+      cardInstanceId: card.instanceId
+    })
+    if (!result.accepted) {
+      this.logger.error(result.message)
+      this.cardSelectionOverlay.clear()
+      return
+    }
+    void this.presentResolutionEvents(result.events)
+  }
   private commitCardTarget(view: CombatView): void {
     if (!this.cardTargeting || !this.isValidCardTarget(view)) return
     const target = this.cardTargetRef(view)
@@ -1662,16 +1765,21 @@ export class GameBoardView extends Actor {
     this.syncBoardAttackability(this.match.getState())
   }
 
-  private commitCardTargetAt(pointer: HandPointer): void {
+  private commitCardTargetAt(pointer: HandPointer): boolean {
     this.lastTargetingPointer = pointer
     const target = this.findTargetableCharacterAt(pointer.x, pointer.y)
-    if (target) this.commitCardTarget(target)
+    if (!target || !this.isValidCardTarget(target)) return false
+    this.commitCardTarget(target)
+    return true
   }
 
   private findTargetableCharacterAt(x: number, y: number): CombatView | null {
     const candidates: readonly CombatView[] = [
       ...this.localMinionViews,
       ...this.remoteMinionViews,
+      ...(this.cardTargeting?.minionPreview?.presentation
+        ? [this.cardTargeting.minionPreview.presentation.view]
+        : []),
       ...this.heroViews.values()
     ]
     return (
@@ -1741,7 +1849,7 @@ export class GameBoardView extends Actor {
         ? (targeting.minionPreview?.presentation ?? undefined)
         : undefined
 
-    const result = this.match.dispatch({
+    const result = this.session.dispatch({
       type: 'play-card',
       participantId: this.localParticipantId,
       cardInstanceId: targeting.cardInstanceId,
@@ -1826,13 +1934,7 @@ export class GameBoardView extends Actor {
 
   /** Whether the local player has a legal card, hero-power, or attack action. */
   private localPlayerHasAvailableAction(): boolean {
-    const legality = this.match.getLegality?.(this.localParticipantId)
-    if (!legality) return false
-    return (
-      legality.playableCardInstanceIds.length > 0 ||
-      legality.legalHeroPower ||
-      legality.legalAttackerInstanceIds.length > 0
-    )
+    return hasAvailableTurnAction(this.match.getLegality?.(this.localParticipantId))
   }
 
   /** Freezes the concluded board and presents the local player's match result. */
@@ -1897,6 +1999,16 @@ export class GameBoardView extends Actor {
     )
     this.syncHeroAttackability(state, this.localParticipantId)
     this.syncHeroAttackability(state, this.remoteParticipantId)
+    this.syncPendingMinionTargetPreview()
+  }
+
+  /** Makes the summoned-but-uncommitted minion selectable when it is legal. */
+  private syncPendingMinionTargetPreview(): void {
+    const preview = this.cardTargeting?.minionPreview?.presentation
+    if (!preview) return
+    const targetable = this.isValidCardTarget(preview.view)
+    preview.view.setTargetable(targetable)
+    preview.view.setTargetingOutline(targetable)
   }
 
   private syncHeroAttackability(state: OpeningMatchState, ownerId: PlayerId): void {
@@ -1905,8 +2017,13 @@ export class GameBoardView extends Actor {
     if (!view) return
     const displayedAttack = state.activePlayerId === ownerId ? getHeroAttack(player) : 0
     view.setStats(displayedAttack, player.hero.health, player.hero.armor)
-    const canAttack = canHeroAttack(player, state, ownerId)
-    const showCanAttack = canAttack && ownerId === this.localParticipantId
+    view.setFrozen(isFrozen(player.hero.frozenUntilTurn, state.turnNumber))
+    const heroAttackerId = `${ownerId}:hero`
+    const showCanAttack =
+      ownerId === this.localParticipantId &&
+      this.match.getLegality?.(this.localParticipantId).legalAttackTargets[
+        heroAttackerId
+      ] !== undefined
     view.setCanAttack(showCanAttack)
     view.setTargetable(
       this.cardTargeting
@@ -1916,7 +2033,11 @@ export class GameBoardView extends Actor {
           : showCanAttack || this.isValidCombatTarget(view)
     )
     view.setTargetingOutline(
-      this.cardTargeting ? this.isValidCardTarget(view) : this.isValidCombatTarget(view)
+      this.cardTargeting
+        ? this.isValidCardTarget(view)
+        : this.heroPowerTargeting
+          ? this.isValidHeroPowerTarget(view)
+          : this.isValidCombatTarget(view)
     )
     if (!showCanAttack && this.selectedCombatView === view) {
       this.deselectAttacker()
@@ -1957,7 +2078,9 @@ export class GameBoardView extends Actor {
       view.setTargetingOutline(
         this.cardTargeting
           ? this.isValidCardTarget(view)
-          : this.isValidCombatTarget(view)
+          : this.heroPowerTargeting
+            ? this.isValidHeroPowerTarget(view)
+            : this.isValidCombatTarget(view)
       )
       view.setSleeping(sleeping && state.phase === 'turns')
       if (sleeping || !showCanAttack) {
@@ -2018,7 +2141,7 @@ export class GameBoardView extends Actor {
     this.syncBoardAttackability(this.match.getState())
   }
 
-  private selectAttacker(view: CombatView): void {
+  private selectAttacker(view: CombatView, toggleSelected = true): void {
     if (
       !canSelectCombatAttacker(
         this.combatInProgress,
@@ -2028,7 +2151,7 @@ export class GameBoardView extends Actor {
       return
     if (!view.isCanAttack()) return
     if (this.selectedCombatView === view) {
-      this.deselectAttacker()
+      if (toggleSelected) this.deselectAttacker()
       return
     }
     this.clearCombatPreview()
@@ -2091,7 +2214,7 @@ export class GameBoardView extends Actor {
     this.options.cursor?.setTargetingVisualScale(
       canvasBounds.width / this.options.renderer.width
     )
-    this.updateCombatDrag(event)
+    this.updateTargetGesture(event)
     if (this.heroPowerTargeting) {
       const power = this.heroPowerViews.get(this.localParticipantId)
       if (!power) return
@@ -2182,7 +2305,7 @@ export class GameBoardView extends Actor {
       target = target.parent
     }
 
-    return this.findRemoteCombatTargetAt(event.globalX, event.globalY)
+    return this.findTargetableCharacterAt(event.globalX, event.globalY)
   }
 
   /** Finds a valid remote character at a renderer-space point. */
@@ -2222,40 +2345,64 @@ export class GameBoardView extends Actor {
     ) {
       return
     }
-    this.combatDrag = {
-      attacker: view,
-      pointerId: event.pointerId,
-      start: this.toCursorTargetPoint(event.globalX, event.globalY),
-      active: false
-    }
+    this.targetGestures.begin({ kind: 'combat', attacker: view }, event.pointerId, {
+      x: event.globalX,
+      y: event.globalY
+    })
   }
 
-  /** Activates the normal targeting system after a deliberate drag motion. */
-  private updateCombatDrag(event: FederatedPointerEvent): void {
-    const drag = this.combatDrag
-    if (!drag || drag.active || event.pointerId !== drag.pointerId) return
-    const point = this.toCursorTargetPoint(event.globalX, event.globalY)
+  private beginHeroPowerDrag(event: FederatedPointerEvent): void {
+    const local = this.findPlayer(this.match.getState(), this.localParticipantId)
+    const targeting =
+      local.heroPower.targetingGranted ??
+      local.heroPower.targetType ??
+      HERO_POWER_CATALOG.require(local.heroPower.id).targeting
+    if (targeting === 'none') return
+    this.targetGestures.begin({ kind: 'hero-power' }, event.pointerId, {
+      x: event.globalX,
+      y: event.globalY
+    })
+  }
+
+  /** Activates a combat or hero-power drag after one shared movement threshold. */
+  private updateTargetGesture(event: FederatedPointerEvent): void {
+    const source = this.targetGestures.current?.source
+    if (!source || source.kind === 'card') return
     if (
-      Math.hypot(point.x - drag.start.x, point.y - drag.start.y) <
-      COMBAT_DRAG_MOVE_THRESHOLD_PX
-    ) {
+      !this.targetGestures.move(
+        event.pointerId,
+        { x: event.globalX, y: event.globalY },
+        COMBAT_DRAG_MOVE_THRESHOLD_PX
+      )
+    )
+      return
+    if (source.kind === 'combat') {
+      if (!source.attacker.isCanAttack()) {
+        this.cancelCombatDrag()
+        return
+      }
+      this.selectAttacker(source.attacker, false)
       return
     }
-    if (!drag.attacker.isCanAttack()) {
-      this.cancelCombatDrag()
-      return
+    void this.useHeroPower()
+    if (!this.heroPowerTargeting) {
+      this.targetGestures.cancel((candidate) => candidate.kind === 'hero-power')
     }
-    drag.active = true
-    this.selectAttacker(drag.attacker)
   }
 
   private cancelCombatDrag(): void {
-    this.combatDrag = null
+    this.targetGestures.cancel((source) => source.kind === 'combat')
   }
 
-  private consumeCombatDragTap(event: FederatedPointerEvent): boolean {
-    if (event.pointerId !== this.suppressCombatTapPointerId) return false
-    this.suppressCombatTapPointerId = null
+  private consumeTargetGestureTap(event: FederatedPointerEvent): boolean {
+    if (!this.targetGestures.consumeTap(event.pointerId)) return false
+    event.stopPropagation()
+    return true
+  }
+
+  private consumeCardPlacementTap(event: FederatedPointerEvent): boolean {
+    if (!this.cardPlacementTapGuard.consume(event.pointerId)) return false
+    event.stopPropagation()
     return true
   }
 
@@ -2451,7 +2598,7 @@ export class GameBoardView extends Actor {
     this.combatInProgress = true
     this.combatAttackerSelectionUnlocked = false
     this.deselectAttacker(false, false)
-    const result = this.match.dispatch({
+    const result = this.session.dispatch({
       type: 'attack-character',
       participantId: this.localParticipantId,
       attacker: attackerRef,
@@ -2499,7 +2646,7 @@ export class GameBoardView extends Actor {
       return
     this.turnInProgress = true
     this.hud.endTurnButton?.setEnabled(false)
-    const result = this.match.dispatch({
+    const result = this.session.dispatch({
       type: 'end-turn',
       participantId: this.localParticipantId
     })
@@ -2514,83 +2661,121 @@ export class GameBoardView extends Actor {
     await this.presentResolutionEvents(result.events)
   }
 
-  /** Plays the first domain-authorized card, without adding controller-specific rules. */
-  private async playAiRandomCards(): Promise<void> {
-    const state = this.match.getState()
-    if (state.phase !== 'turns') return
-    if (state.activePlayerId !== this.remoteParticipantId) return
+  /**
+   * Runs one model decision after each fully resolved engine command. The next
+   * request starts while the previous action is being presented, but its command
+   * is never dispatched until presentation is idle and its state revision still
+   * matches. This keeps random generation and trigger chains authoritative while
+   * hiding most endpoint latency behind animations.
+   */
+  private async scheduleAiTurn(): Promise<void> {
+    if (this.aiTurnRunning) return
+    this.aiTurnRunning = true
+    try {
+      await this.wait(TURN_TIMING.aiTurnDelay)
+      if (this.match.getState().activePlayerId !== this.remoteParticipantId) return
+      let decisionPromise = this.aiController.chooseTurnAction()
+      await this.waitForResolutionIdle()
+      if (!this.turnLayer.visible || this.destroyed) return
 
-    const legality = this.match.getLegality?.(this.remoteParticipantId)
-    const playableIds = new Set(legality?.playableCardInstanceIds ?? [])
-    const remote = this.findPlayer(state, this.remoteParticipantId)
-    const pick = remote.hand.find((card) => playableIds.has(card.instanceId))
-    if (!pick || !legality) return
+      let acceptedActions = 0
+      let rejectedActions = 0
+      while (!this.destroyed) {
+        const state = this.match.getState()
+        if (
+          state.phase !== 'turns' ||
+          state.activePlayerId !== this.remoteParticipantId
+        )
+          return
+        if (acceptedActions >= 64) {
+          this.logger.warn('[Game AI] action safety limit reached; ending turn')
+          const result = this.session.dispatch({
+            type: 'end-turn',
+            participantId: this.remoteParticipantId
+          })
+          if (result.accepted) {
+            this.syncTurnHud(result.state)
+            await this.presentResolutionEvents(result.events)
+          }
+          return
+        }
 
-    const input = this.match.getPlayInput?.(this.remoteParticipantId, pick.instanceId)
-    if (!input) return
+        const decision = await decisionPromise
+        if (this.destroyed) return
+        if (decision.expectedRevision !== this.match.getState().revision) {
+          this.logger.warn('[Game AI] discarded stale decision', decision)
+          decisionPromise = this.aiController.chooseTurnAction()
+          continue
+        }
 
-    let targets: readonly unknown[] | undefined
-    if (input.targetSelectors.length > 0) {
+        const remoteBackCountBefore = this.remoteBackCount
+        const result = this.session.dispatch(decision.command)
+        if (!result.accepted) {
+          rejectedActions += 1
+          this.logger.error('[Game AI] engine rejected selected action', {
+            decision,
+            code: result.code,
+            message: result.message
+          })
+          if (rejectedActions >= 2) {
+            const endResult = this.session.dispatch({
+              type: 'end-turn',
+              participantId: this.remoteParticipantId
+            })
+            if (endResult.accepted) {
+              this.syncTurnHud(endResult.state)
+              await this.presentResolutionEvents(endResult.events)
+            }
+            return
+          }
+          decisionPromise = this.aiController.chooseTurnAction()
+          continue
+        }
+
+        acceptedActions += 1
+        rejectedActions = 0
+        this.syncTurnHud(result.state)
+        this.syncTurnControls(result.state)
+        this.syncSecrets(result.state)
+
+        const remainsAiTurn =
+          result.state.phase === 'turns' &&
+          result.state.activePlayerId === this.remoteParticipantId
+        const nextDecisionPromise = remainsAiTurn
+          ? this.aiController.chooseTurnAction()
+          : null
+        await this.presentResolutionEvents(result.events)
+        this.syncSecrets(result.state)
+
+        if (
+          decision.command.type === 'play-card' &&
+          this.remoteBackCount === remoteBackCountBefore
+        ) {
+          this.remoteBackCount = Math.max(0, this.remoteBackCount - 1)
+          this.layoutRemoteHand()
+        }
+        if (!nextDecisionPromise) return
+        await this.wait(0.12)
+        decisionPromise = nextDecisionPromise
+      }
+    } catch (error) {
+      this.logger.error('[Game AI] turn loop failed', error)
       if (
-        input.legalTargetOptions.length !== input.targetSelectors.length ||
-        input.legalTargetOptions.some((options) => options.length === 0)
-      )
-        return
-      const selected = input.legalTargetOptions.map((options) => options[0]!)
-      const keys = selected.map((candidate) =>
-        candidate.kind === 'hero'
-          ? `hero:${candidate.participantId}`
-          : `${candidate.kind}:${candidate.instanceId}`
-      )
-      if (new Set(keys).size !== keys.length) return
-      targets = selected
+        !this.destroyed &&
+        this.match.getState().activePlayerId === this.remoteParticipantId
+      ) {
+        const result = this.session.dispatch({
+          type: 'end-turn',
+          participantId: this.remoteParticipantId
+        })
+        if (result.accepted) {
+          this.syncTurnHud(result.state)
+          await this.presentResolutionEvents(result.events)
+        }
+      }
+    } finally {
+      this.aiTurnRunning = false
     }
-
-    const result = this.match.dispatch({
-      type: 'play-card',
-      participantId: this.remoteParticipantId,
-      cardInstanceId: pick.instanceId,
-      ...(input.requiresPosition ? { position: input.legalPositions[0] } : {}),
-      ...(targets ? { targets } : {}),
-      ...(input.choiceCount > 0 ? { choice: input.legalChoices[0] ?? 0 } : {})
-    })
-    if (!result.accepted) return
-
-    const remoteBackCountBefore = this.remoteBackCount
-    this.syncTurnHud(result.state)
-    await this.presentResolutionEvents(result.events)
-    this.syncSecrets(result.state)
-    // Minion/weapon presentation consumes its hidden hand back. Spells and hero
-    // replacements have no such event, so account for those cards here.
-    if (this.remoteBackCount === remoteBackCountBefore) {
-      this.remoteBackCount = Math.max(0, this.remoteBackCount - 1)
-      this.layoutRemoteHand()
-    }
-    await this.wait(0.35)
-    await this.playAiRandomCards()
-  }
-
-  /** Waits, then the remote (AI) plays random minions and passes the turn back. */
-  private async scheduleAiPass(): Promise<void> {
-    await this.wait(TURN_TIMING.aiTurnDelay)
-    // Turn-start triggers are part of the same serialized resolution. Do not
-    // let the AI begin a new action while a long Deathrattle/trigger chain is
-    // still being presented on the board.
-    await this.waitForResolutionIdle()
-    if (!this.turnLayer.visible) return
-    if (this.match.getState().activePlayerId !== this.remoteParticipantId) return
-    await this.playAiRandomCards()
-    if (this.match.getState().activePlayerId !== this.remoteParticipantId) return
-    const result = this.match.dispatch({
-      type: 'end-turn',
-      participantId: this.remoteParticipantId
-    })
-    if (!result.accepted) {
-      this.logger.error(result.message)
-      return
-    }
-    this.syncTurnHud(result.state)
-    await this.presentResolutionEvents(result.events)
   }
 
   private createOpeningLayer(state: OpeningMatchState): void {
@@ -2697,28 +2882,15 @@ export class GameBoardView extends Actor {
   }
 
   private async createSlot(card: OpeningCard): Promise<GameCardSlot> {
-    this.logger.info('[GameBoardView] createSlot start', card.cardId, card.instanceId)
     const definition = cardDefinition(card)
-    this.logger.info('[GameBoardView] card definition', definition.id, definition.type)
     const artwork = await this.resolver.loadArtwork(card.cardId)
-    this.logger.info(
-      '[GameBoardView] artwork loaded',
-      card.cardId,
-      artwork ? 'ok' : 'null'
-    )
     const view = await CardView.create(definition, this.resolver, { artwork })
     const baseCost = card.baseCost ?? definition.cost
     const currentCost = card.currentCost ?? baseCost
     view.setManaCost(currentCost)
     view.setManaCostColor(cardCostColor(baseCost, currentCost))
-    this.logger.info('[GameBoardView] CardView created', card.cardId, view.label)
     const outlineTexture = await this.resolver.load(
       CARD_PROFILES[view.plan.template].frame
-    )
-    this.logger.info(
-      '[GameBoardView] outline texture loaded',
-      CARD_PROFILES[view.plan.template].frame,
-      outlineTexture ? `${outlineTexture.width}x${outlineTexture.height}` : 'null'
     )
     const slot = new GameCardSlot(
       view,
@@ -2727,7 +2899,6 @@ export class GameBoardView extends Actor {
       this.options.gameAssets.mulliganReplacedLabel,
       outlineTexture
     )
-    this.logger.info('[GameBoardView] GameCardSlot created', slot.label)
     return slot
   }
 
@@ -2861,7 +3032,17 @@ export class GameBoardView extends Actor {
       entry.slot.setPlayableOutlineEnabled(false)
     }
     await this.wait(OPENING_TIMING.confirmationPause)
-    const result = this.match.dispatch({
+    const aiMulliganReady = await (this.aiMulliganResolution ?? Promise.resolve(false))
+    if (this.destroyed) return
+    if (!aiMulliganReady) {
+      this.logger.error('[Game AI] could not confirm the remote mulligan.')
+      this.confirmationLocked = false
+      this.syncMulliganSelectionVisuals()
+      this.setMulliganInputEnabled(true)
+      this.confirmButton.setEnabled(true)
+      return
+    }
+    const result = this.session.dispatch({
       type: 'confirm-mulligan',
       participantId: this.localParticipantId,
       replaceInstanceIds: [...this.selectedIds]
@@ -2879,6 +3060,59 @@ export class GameBoardView extends Actor {
     await this.wait(OPENING_TIMING.handoffPause)
     await this.fadeTo(this.mulliganLayer, 0, OPENING_TIMING.mulliganFade)
     this.mulliganLayer.visible = false
+  }
+
+  private async resolveAiMulligan(
+    decisionPromise: ReturnType<AiTurnController['chooseMulligan']>
+  ): Promise<boolean> {
+    const keepHandCommand: ConfirmMulliganCommand = {
+      type: 'confirm-mulligan',
+      participantId: this.remoteParticipantId,
+      replaceInstanceIds: []
+    }
+    let command = keepHandCommand
+
+    try {
+      const decision = await decisionPromise
+      if (this.destroyed) return false
+
+      const state = this.match.getState()
+      const remotePlayer = this.findPlayer(state, this.remoteParticipantId)
+      if (remotePlayer.mulliganConfirmed) return true
+
+      if (
+        decision.expectedRevision === state.revision &&
+        decision.command.type === 'confirm-mulligan' &&
+        decision.command.participantId === this.remoteParticipantId
+      ) {
+        command = decision.command
+      } else {
+        this.logger.warn('[Game AI] mulligan decision became stale; keeping the hand')
+      }
+    } catch (error) {
+      if (this.destroyed) return false
+      this.logger.warn('[Game AI] mulligan decision failed; keeping the hand', error)
+    }
+
+    if (this.destroyed) return false
+    const currentRemotePlayer = this.findPlayer(
+      this.match.getState(),
+      this.remoteParticipantId
+    )
+    if (currentRemotePlayer.mulliganConfirmed) return true
+
+    let result = this.session.dispatch(command)
+    if (!result.accepted && command.replaceInstanceIds.length > 0) {
+      this.logger.warn(
+        `[Game AI] mulligan selection was rejected (${result.message}); keeping the hand`
+      )
+      result = this.session.dispatch(keepHandCommand)
+    }
+    if (!result.accepted) {
+      this.logger.error(`[Game AI] mulligan confirmation failed: ${result.message}`)
+      return false
+    }
+    return true
   }
 
   /**
@@ -2933,6 +3167,10 @@ export class GameBoardView extends Actor {
       case 'opening-card-drawn':
       case 'card-drawn':
         await this.presentDraw(event.participantId, event.card)
+        return
+      case 'discover-started':
+        if (event.participantId === this.localParticipantId)
+          await this.cardSelectionOverlay.show(event.candidates)
         return
       case 'card-generated':
         await this.presentGeneratedCard(event)
@@ -3098,45 +3336,22 @@ export class GameBoardView extends Actor {
       defenderOrigin,
       attackerPlacement,
       attackerAttack: event.attacker.attack,
+      deferredAttackerDeathInstanceIds: new Set(),
+      attackerDamageIndicators: new Set(),
       impactStarted: false,
       screenShake: null
     }
     this.activeCombatPresentations.set(event.combatId, active)
 
-    const attackDistance = Math.hypot(
-      defenderGlobal.x - attackerGlobal.x,
-      defenderGlobal.y - attackerGlobal.y
-    )
-    const attackDirection =
-      attackDistance > 0
-        ? {
-            x: (defenderGlobal.x - attackerGlobal.x) / attackDistance,
-            y: (defenderGlobal.y - attackerGlobal.y) / attackDistance
-          }
-        : { x: 0, y: 1 }
-    const windupGlobal = {
-      x: attackerGlobal.x - attackDirection.x * BOARD_TIMING.combatWindupDistance,
-      y: attackerGlobal.y - attackDirection.y * BOARD_TIMING.combatWindupDistance
-    }
     const contactGlobal = {
       x: attackerGlobal.x + (defenderGlobal.x - attackerGlobal.x) * 0.62,
       y: attackerGlobal.y + (defenderGlobal.y - attackerGlobal.y) * 0.62
     }
-    const windup = attacker.parent.toLocal(windupGlobal)
     const contact = attacker.parent.toLocal(contactGlobal)
     const followDeathMarkers = (): void => this.updateCombatMarkerPositions()
 
     try {
       this.updateCombatMarkerPositions()
-      const windupTimeline = this.timeline()
-      windupTimeline.to(attacker, {
-        x: windup.x,
-        y: windup.y,
-        duration: BOARD_TIMING.combatWindup,
-        ease: 'power2.out'
-      })
-      windupTimeline.eventCallback('onUpdate', followDeathMarkers)
-      await this.completeTimeline(windupTimeline)
       await this.wait(BOARD_TIMING.combatWindupPause)
 
       const lunge = this.timeline()
@@ -3231,7 +3446,10 @@ export class GameBoardView extends Actor {
               view === attacker ? BOARD_TIMING.combatReturn : 0
             )
         }
-        timeline.eventCallback('onUpdate', () => this.updateCombatMarkerPositions())
+        timeline.eventCallback('onUpdate', () => {
+          this.updateCombatMarkerPositions()
+          this.updateCombatDamageIndicators(active)
+        })
         return this.completeTimeline(timeline)
       }
 
@@ -3250,6 +3468,8 @@ export class GameBoardView extends Actor {
       this.applyLocalBoardLayout()
       this.applyRemoteBoardLayout()
     } finally {
+      active.attackerDamageIndicators.clear()
+      active.deferredAttackerDeathInstanceIds.clear()
       if (!attacker.destroyed)
         this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)
       this.clearCombatPreview()
@@ -3312,7 +3532,6 @@ export class GameBoardView extends Actor {
             ? this.weaponViews.get(death.participantId)
             : undefined
       if (!view || view.destroyed) continue
-      views.set(death.instanceId, view)
       if (death.hasDeathrattle && !this.deathGhostTemplates.has(death.instanceId)) {
         view.setDeathrattle(true)
         const snapshot = view.getAbilityMarkerSnapshot('deathrattle')
@@ -3322,6 +3541,16 @@ export class GameBoardView extends Actor {
             snapshot
           })
       }
+      // Combat damage resolves its death batch before the combat-resolved
+      // event. Keep a lethal attacker visible until that event can return it
+      // to its board position and play its collapse there.
+      const activeCombat =
+        view instanceof MinionView ? this.activeCombatForAttacker(view) : undefined
+      if (activeCombat) {
+        activeCombat.deferredAttackerDeathInstanceIds.add(death.instanceId)
+        continue
+      }
+      views.set(death.instanceId, view)
       const targetScale = view.scale.x * 0.72
       const timeline = this.timeline()
       timeline.to(view, {
@@ -3458,8 +3687,13 @@ export class GameBoardView extends Actor {
             )
           }
         }
-        if (target.view instanceof MinionView || target.view instanceof HeroView)
-          this.showDamageIndicator(target.view, totalDamage)
+        if (target.view instanceof MinionView || target.view instanceof HeroView) {
+          const indicator = this.showDamageIndicator(target.view, totalDamage)
+          if (indicator && event.actionPath.startsWith('combat.')) {
+            const activeCombat = this.activeCombatForAttacker(target.view)
+            activeCombat?.attackerDamageIndicators.add(indicator)
+          }
+        }
       }
       if (event.actionPath.startsWith('combat.')) {
         const active = this.latestActiveCombat()
@@ -3559,6 +3793,7 @@ export class GameBoardView extends Actor {
         view.setStats(minion.attack, minion.health)
         view.setTaunt(markers.taunt)
         view.setDivineShield(markers.divineShield)
+        view.setFrozen(isFrozen(minion.frozenUntilTurn, state.turnNumber))
         view.setStealth(markers.stealth)
         view.setTrigger(markers.trigger)
         view.setDeathrattle(markers.deathrattle)
@@ -3693,7 +3928,7 @@ export class GameBoardView extends Actor {
       throw new Error('Dev add-card is only available after the opening sequence.')
     const definition = CARD_CATALOG.get(asCardId(cardId))
     if (!definition) throw new Error(`Unknown card ${cardId}`)
-    const result = this.match.dispatch({
+    const result = this.session.dispatch({
       type: 'dev-add-card',
       participantId: this.participantIdForTarget(target),
       cardId: definition.id
@@ -3732,7 +3967,7 @@ export class GameBoardView extends Actor {
       throw new Error('Dev end-match is only available after the opening sequence.')
     const winnerId =
       outcome === 'win' ? this.localParticipantId : this.remoteParticipantId
-    const result = this.match.dispatch({
+    const result = this.session.dispatch({
       type: 'dev-end-match',
       participantId: this.localParticipantId,
       winnerId
@@ -3751,7 +3986,7 @@ export class GameBoardView extends Actor {
       throw new Error('Dev summon is only available after the opening sequence.')
     const definition = CARD_CATALOG.get(asCardId(cardId))
     if (!definition) throw new Error(`Unknown card ${cardId}`)
-    const result = this.match.dispatch({
+    const result = this.session.dispatch({
       type: 'dev-summon-minion',
       participantId: this.participantIdForTarget(target),
       cardId: definition.id
@@ -3762,7 +3997,7 @@ export class GameBoardView extends Actor {
   }
 
   async devModifyDeck(target: DevMatchTarget, action: DevDeckAction): Promise<void> {
-    const result = this.match.dispatch({
+    const result = this.session.dispatch({
       type: 'dev-modify-deck',
       participantId: this.participantIdForTarget(target),
       action
@@ -3776,7 +4011,7 @@ export class GameBoardView extends Actor {
     if (!this.handModeActive)
       throw new Error('Dev commands are only available after the opening sequence.')
     const result = dispatchDevMatchCommand(
-      (matchCommand) => this.match.dispatch(matchCommand),
+      (matchCommand) => this.session.dispatch(matchCommand),
       command,
       (target) => this.participantIdForTarget(target)
     )
@@ -3812,28 +4047,23 @@ export class GameBoardView extends Actor {
     const visible = !this.hud.deckTracker.visible
     this.hud.deckTracker.setVisible(visible)
     if (visible && this.match) this.updateDeckTracker(this.match.getState())
-    this.logger.info('[GameBoardView] deck tracker', visible ? 'shown' : 'hidden')
   }
 
   setDeckTracker(
-    visibility: 'hidden' | 'local' | 'both' | 'remote',
+    visibility: 'hidden' | 'local',
     sortMode: 'cost' | 'alphabetical' | 'draw-order'
   ): void {
     const state = this.match.getState()
     this.hud.setDeckTracker(
       visibility,
       sortMode,
-      this.findPlayer(state, this.localParticipantId).deck,
-      this.findPlayer(state, this.remoteParticipantId).deck
+      this.findPlayer(state, this.localParticipantId).deck
     )
   }
 
   private updateDeckTracker(state: OpeningMatchState): void {
     const localPlayer = this.findPlayer(state, this.localParticipantId)
-    const remotePlayer = this.findPlayer(state, this.remoteParticipantId)
     if (this.hud.deckTracker.visible) this.hud.deckTracker.update(localPlayer.deck)
-    if (this.hud.remoteDeckTracker.visible)
-      this.hud.remoteDeckTracker.update(remotePlayer.deck)
   }
 
   /** Keeps the opening event compatible with the normal turn presentation. */
@@ -3864,9 +4094,10 @@ export class GameBoardView extends Actor {
       // Effects may modify a generated card later in the same resolution (for
       // example, Unstable Portal reduces its cost). Build the slot from the
       // committed hand card, not the earlier event snapshot.
-      const card = this.findPlayer(this.match.getState(), event.participantId).hand.find(
-        (candidate) => candidate.instanceId === event.card.instanceId
-      )
+      const card = this.findPlayer(
+        this.match.getState(),
+        event.participantId
+      ).hand.find((candidate) => candidate.instanceId === event.card.instanceId)
       if (!card) return
       const slot = await this.createSlot(card)
       this.prepareSlotAtGeneratedOrigin(slot, origin)
@@ -4040,7 +4271,8 @@ export class GameBoardView extends Actor {
     >,
     summonSlot?: GameCardSlot,
     removedFromHand = true,
-    retainForTargeting = false
+    retainForTargeting = false,
+    targetPreview?: PendingMinionTargetPreview
   ): Promise<MinionPreviewPresentation | null> {
     const isLocal = event.participantId === this.localParticipantId
     const isRemote = event.participantId === this.remoteParticipantId
@@ -4059,6 +4291,9 @@ export class GameBoardView extends Actor {
       )
       existing.setTaunt(existingMarkers.taunt)
       existing.setDivineShield(existingMarkers.divineShield)
+      existing.setFrozen(
+        isFrozen(event.minion.frozenUntilTurn, this.match.getState().turnNumber)
+      )
       existing.setStealth(existingMarkers.stealth)
       existing.setTrigger(existingMarkers.trigger)
       existing.setDeathrattle(existingMarkers.deathrattle)
@@ -4076,6 +4311,7 @@ export class GameBoardView extends Actor {
       legendaryFrame: this.options.gameAssets.minionFrameLegendary,
       taunt: this.options.gameAssets.minionTaunt,
       divineShield: this.options.gameAssets.minionDivineShield,
+      frozen: this.options.gameAssets.minionFrozen,
       stealth: this.options.gameAssets.minionStealth,
       trigger: this.options.gameAssets.boardTrigger,
       deathrattle: this.options.gameAssets.boardDeathrattle,
@@ -4096,6 +4332,10 @@ export class GameBoardView extends Actor {
           legendary: definition.rarity === 'Legendary',
           taunt: markers.taunt,
           divineShield: markers.divineShield,
+          frozen: isFrozen(
+            event.minion.frozenUntilTurn,
+            this.match.getState().turnNumber
+          ),
           stealth: markers.stealth,
           deathrattle: markers.deathrattle,
           poisonous: markers.poisonous,
@@ -4182,6 +4422,7 @@ export class GameBoardView extends Actor {
 
     const chargeState = { glow: 0.24, artwork: 1 }
     const charge = this.timeline()
+    targetPreview?.activeTimelines.add(charge)
     charge.to(summonSlot, {
       x: resting.x,
       y: cardBottomY,
@@ -4231,11 +4472,17 @@ export class GameBoardView extends Actor {
 
     let view: MinionView | null = null
     let rays: Sprite | null = null
+    let retainedPresentation: MinionPreviewPresentation | null = null
     try {
       const [readyView] = await Promise.all([
         viewPromise,
         this.completeTimeline(charge)
       ])
+      targetPreview?.activeTimelines.delete(charge)
+      if (targetPreview?.cancelled) {
+        readyView.destroy({ children: true })
+        return null
+      }
       view = readyView
 
       rays = new Sprite(this.options.gameAssets.minionSummonRays)
@@ -4250,17 +4497,31 @@ export class GameBoardView extends Actor {
       rays.label = 'game.minion-summon-rays'
       rays.eventMode = 'none'
       this.summonLayer.addChild(rays)
+      if (targetPreview) targetPreview.rays = rays
 
       view.position.set(resting.x, resting.y + summon.minionStartYOffset)
       view.scale.set(resting.scale * summon.minionStartScaleMultiplier)
       view.alpha = 0
       view.zIndex = 1
       this.summonLayer.addChild(view)
+      if (retainForTargeting) {
+        view.instanceId = event.minion.instanceId
+        view.ownerId = event.participantId
+        this.wireMinionView(view)
+        retainedPresentation = {
+          view,
+          slot: summonSlot,
+          resting: { x: resting.x, y: resting.y, scale: resting.scale }
+        }
+        if (targetPreview) targetPreview.presentation = retainedPresentation
+        this.syncPendingMinionTargetPreview()
+      }
 
       const ghostState = { details: 1, structure: 1, labels: 1 }
       this.prepareSummonGhost(summonSlot.card)
       const syncGhost = (): void => this.syncSummonGhost(summonSlot.card, ghostState)
       const impact = this.timeline()
+      targetPreview?.activeTimelines.add(impact)
       impact.to(ghostState, {
         details: 0,
         duration: BOARD_TIMING.summonCollapse * 0.7,
@@ -4342,13 +4603,15 @@ export class GameBoardView extends Actor {
         BOARD_TIMING.summonCollapse + BOARD_TIMING.summonImpact * 0.3
       )
       await this.completeTimeline(impact)
+      targetPreview?.activeTimelines.delete(impact)
+      if (targetPreview?.cancelled) return null
 
       if (retainForTargeting) {
         view.setBaseScale(resting.scale)
         view.position.set(resting.x, resting.y)
         view.scale.set(resting.scale)
         view.alpha = 1
-        const presentation = {
+        const presentation = retainedPresentation ?? {
           view,
           slot: summonSlot,
           resting: { x: resting.x, y: resting.y, scale: resting.scale }
@@ -4370,6 +4633,8 @@ export class GameBoardView extends Actor {
       view = null
       return null
     } finally {
+      targetPreview?.activeTimelines.delete(charge)
+      if (targetPreview?.rays === rays) targetPreview.rays = null
       if (rays && !rays.destroyed) rays.destroy()
       if (view && !view.destroyed) view.destroy({ children: true })
       if (!summonSlot.destroyed && !retainForTargeting) {
@@ -4404,39 +4669,14 @@ export class GameBoardView extends Actor {
       const attackerGlobal = attacker.parent.toGlobal(attacker.position)
       const defenderGlobal = defender.parent.toGlobal(defender.position)
       attackerPlacement = this.promoteCombatViewForCombat(attacker)
-      const attackDistance = Math.hypot(
-        defenderGlobal.x - attackerGlobal.x,
-        defenderGlobal.y - attackerGlobal.y
-      )
-      const attackDirection =
-        attackDistance > 0
-          ? {
-              x: (defenderGlobal.x - attackerGlobal.x) / attackDistance,
-              y: (defenderGlobal.y - attackerGlobal.y) / attackDistance
-            }
-          : { x: 0, y: 1 }
-      const windupGlobal = {
-        x: attackerGlobal.x - attackDirection.x * BOARD_TIMING.combatWindupDistance,
-        y: attackerGlobal.y - attackDirection.y * BOARD_TIMING.combatWindupDistance
-      }
       const contactGlobal = {
         x: attackerGlobal.x + (defenderGlobal.x - attackerGlobal.x) * 0.62,
         y: attackerGlobal.y + (defenderGlobal.y - attackerGlobal.y) * 0.62
       }
-      const windup = attacker.parent.toLocal(windupGlobal)
       const contact = attacker.parent.toLocal(contactGlobal)
       const followDeathMarkers = (): void => this.updateCombatMarkerPositions()
 
       this.updateCombatMarkerPositions()
-      const windupTimeline = this.timeline()
-      windupTimeline.to(attacker, {
-        x: windup.x,
-        y: windup.y,
-        duration: BOARD_TIMING.combatWindup,
-        ease: 'power2.out'
-      })
-      windupTimeline.eventCallback('onUpdate', followDeathMarkers)
-      await this.completeTimeline(windupTimeline)
       await this.wait(BOARD_TIMING.combatWindupPause)
 
       const lunge = this.timeline()
@@ -4573,39 +4813,14 @@ export class GameBoardView extends Actor {
       const attackerGlobal = attacker.parent.toGlobal(attacker.position)
       const defenderGlobal = defender.parent.toGlobal(defender.position)
       attackerPlacement = this.promoteCombatViewForCombat(attacker)
-      const attackDistance = Math.hypot(
-        defenderGlobal.x - attackerGlobal.x,
-        defenderGlobal.y - attackerGlobal.y
-      )
-      const attackDirection =
-        attackDistance > 0
-          ? {
-              x: (defenderGlobal.x - attackerGlobal.x) / attackDistance,
-              y: (defenderGlobal.y - attackerGlobal.y) / attackDistance
-            }
-          : { x: 0, y: 1 }
-      const windupGlobal = {
-        x: attackerGlobal.x - attackDirection.x * BOARD_TIMING.combatWindupDistance,
-        y: attackerGlobal.y - attackDirection.y * BOARD_TIMING.combatWindupDistance
-      }
       const contactGlobal = {
         x: attackerGlobal.x + (defenderGlobal.x - attackerGlobal.x) * 0.62,
         y: attackerGlobal.y + (defenderGlobal.y - attackerGlobal.y) * 0.62
       }
-      const windup = attacker.parent.toLocal(windupGlobal)
       const contact = attacker.parent.toLocal(contactGlobal)
       const followDeathMarkers = (): void => this.updateCombatMarkerPositions()
 
       this.updateCombatMarkerPositions()
-      const windupTimeline = this.timeline()
-      windupTimeline.to(attacker, {
-        x: windup.x,
-        y: windup.y,
-        duration: BOARD_TIMING.combatWindup,
-        ease: 'power2.out'
-      })
-      windupTimeline.eventCallback('onUpdate', followDeathMarkers)
-      await this.completeTimeline(windupTimeline)
       await this.wait(BOARD_TIMING.combatWindupPause)
 
       const lunge = this.timeline()
@@ -4862,6 +5077,25 @@ export class GameBoardView extends Actor {
     return latest
   }
 
+  private activeCombatForAttacker(
+    view: CombatView
+  ): ActiveCombatPresentation | undefined {
+    for (const presentation of this.activeCombatPresentations.values()) {
+      if (presentation.attacker === view) return presentation
+    }
+    return undefined
+  }
+
+  private updateCombatDamageIndicators(active: ActiveCombatPresentation): void {
+    for (const indicator of active.attackerDamageIndicators) {
+      if (indicator.destroyed) {
+        active.attackerDamageIndicators.delete(indicator)
+        continue
+      }
+      this.positionDamageIndicator(indicator, active.attacker)
+    }
+  }
+
   private removeWeaponView(participantId: PlayerId, view?: WeaponView): void {
     const current = this.weaponViews.get(participantId)
     if (!current || (view && current !== view)) return
@@ -5000,13 +5234,18 @@ export class GameBoardView extends Actor {
       this.beginCombatDrag(view, event)
     })
     view.on('pointertap', (event: FederatedPointerEvent) => {
-      if (this.consumeCombatDragTap(event)) return
+      if (this.consumeCardPlacementTap(event)) return
+      if (this.consumeTargetGestureTap(event)) return
       if (event.button !== 0) return
-      if (!view.isTargetable()) return
       if (this.cardTargeting) {
-        this.commitCardTarget(view)
+        if (this.isValidCardTarget(view)) {
+          this.commitCardTarget(view)
+        } else {
+          this.cancelCardTargeting({ x: event.globalX, y: event.globalY })
+        }
         return
       }
+      if (!view.isTargetable()) return
       if (this.heroPowerTargeting && view.ownerId && view.instanceId) {
         void this.commitHeroPower({
           kind: 'minion',
@@ -5041,13 +5280,18 @@ export class GameBoardView extends Actor {
       this.beginCombatDrag(view, event)
     })
     view.on('pointertap', (event: FederatedPointerEvent) => {
-      if (this.consumeCombatDragTap(event)) return
+      if (this.consumeCardPlacementTap(event)) return
+      if (this.consumeTargetGestureTap(event)) return
       if (event.button !== 0) return
-      if (!view.isTargetable()) return
       if (this.cardTargeting) {
-        this.commitCardTarget(view)
+        if (this.isValidCardTarget(view)) {
+          this.commitCardTarget(view)
+        } else {
+          this.cancelCardTargeting({ x: event.globalX, y: event.globalY })
+        }
         return
       }
+      if (!view.isTargetable()) return
       if (this.heroPowerTargeting && view.ownerId) {
         void this.commitHeroPower({
           kind: 'hero',
@@ -5155,7 +5399,7 @@ export class GameBoardView extends Actor {
     }
     this.syncTurnControls(this.match.getState())
     if (participantId === this.remoteParticipantId) {
-      void this.scheduleAiPass()
+      void this.scheduleAiTurn()
     }
   }
 
@@ -5291,6 +5535,31 @@ export class GameBoardView extends Actor {
 
   private async addLocalCard(card: OpeningCard): Promise<void> {
     if (this.findEntry(card.instanceId)) return
+    const selected = this.cardSelectionOverlay.takeSelected(card.instanceId)
+    if (selected) {
+      const localPosition = this.travelLayer.toLocal(selected.globalPosition)
+      this.travelLayer.addChild(selected.slot)
+      selected.slot.position.set(localPosition.x, localPosition.y)
+      this.handEntries.push({
+        card: cloneCard(card),
+        slot: selected.slot,
+        restTransform: undefined,
+        displaced: false
+      })
+      this.localHoveredSlot = null
+      this.reflowing = true
+      this.cardSelectionOverlay.clear()
+      await this.applyHandLayout({
+        positionDuration: OPENING_TIMING.cardDeal,
+        scaleDuration: OPENING_TIMING.cardDeal,
+        delayedInstanceId: card.instanceId
+      })
+      this.reflowing = false
+      this.handLayer.addChild(selected.slot)
+      this.configureHandSlot(selected.slot)
+      return
+    }
+
     const slot = await this.createSlot(card)
     this.prepareSlotAtDeck(slot, GAME_BOARD_LAYOUT.decks.local, this.handEntries.length)
     this.travelLayer.addChild(slot)
@@ -5522,6 +5791,35 @@ export class GameBoardView extends Actor {
     this.applyLocalBoardLayout()
   }
 
+  /** Confirms an already-selected targetless spell (for example Coin or Tracking). */
+  private castSelectedTargetlessSpell(index: number, entry: HandEntry): void {
+    const result = this.session.dispatch({
+      type: 'play-card',
+      participantId: this.localParticipantId,
+      cardInstanceId: entry.card.instanceId
+    })
+    if (!result.accepted) {
+      this.logger.error(result.message)
+      this.endDrag()
+      return
+    }
+    this.cardPlayInProgress = true
+    this.syncTurnHud(result.state)
+    this.dragReturning = true
+    this.reflowing = true
+    this.dragPointer = null
+    this.dragStartPointer = null
+    this.dragMovedBeyondThreshold = false
+    this.dragState = null
+    if (this.dragTick) gsap.ticker.remove(this.dragTick)
+    this.dragTick = null
+    this.dragPerspective?.destroy()
+    this.dragPerspective = null
+    this.options.cursor?.setContextVariant(null)
+    this.localHoveredSlot = null
+    this.draggingIndex = null
+    void this.presentAcceptedSpellPlay(index, entry, result)
+  }
   /** Resolves a carried card through the engine and presents an accepted play. */
   private resolveCardDrop(pointer: HandPointer): void {
     if (this.draggingIndex === null || this.dragReturning || this.cardPlayInProgress)
@@ -5573,7 +5871,7 @@ export class GameBoardView extends Actor {
         return
       }
 
-      const result = this.match.dispatch({
+      const result = this.session.dispatch({
         type: 'play-card',
         participantId: this.localParticipantId,
         cardInstanceId: entry.card.instanceId
@@ -5610,7 +5908,7 @@ export class GameBoardView extends Actor {
         return
       }
 
-      const result = this.match.dispatch({
+      const result = this.session.dispatch({
         type: 'play-card',
         participantId: this.localParticipantId,
         cardInstanceId: entry.card.instanceId
@@ -5647,7 +5945,7 @@ export class GameBoardView extends Actor {
         return
       }
 
-      const result = this.match.dispatch({
+      const result = this.session.dispatch({
         type: 'play-card',
         participantId: this.localParticipantId,
         cardInstanceId: entry.card.instanceId
@@ -5691,7 +5989,7 @@ export class GameBoardView extends Actor {
       localPlayer.board.length,
       this.localBoardRowConfig()
     )
-    const result = this.match.dispatch({
+    const result = this.session.dispatch({
       type: 'play-card',
       participantId: this.localParticipantId,
       cardInstanceId: entry.card.instanceId,
@@ -5729,6 +6027,18 @@ export class GameBoardView extends Actor {
     void this.presentAcceptedMinionPlay(index, entry, result)
   }
 
+  private requiresSeparatePlacementClick(entry: HandEntry): boolean {
+    const input = this.match.getPlayInput?.(
+      this.localParticipantId,
+      entry.card.instanceId
+    )
+    return (
+      input !== null &&
+      input !== undefined &&
+      requiresClickConfirmedMinionPlacement(cardDefinition(entry.card).type, input)
+    )
+  }
+
   private async presentAcceptedWeaponPlay(
     index: number,
     entry: HandEntry,
@@ -5758,6 +6068,7 @@ export class GameBoardView extends Actor {
       this.dragReturning = false
       this.activateHandHover()
       this.syncTurnHud(this.match.getState())
+      this.syncTurnControls(this.match.getState())
     }
   }
 
@@ -5782,6 +6093,7 @@ export class GameBoardView extends Actor {
       this.dragReturning = false
       this.activateHandHover()
       this.syncTurnHud(this.match.getState())
+      this.syncTurnControls(this.match.getState())
     }
   }
 
@@ -5807,6 +6119,7 @@ export class GameBoardView extends Actor {
       this.dragReturning = false
       this.activateHandHover()
       this.syncTurnHud(this.match.getState())
+      this.syncTurnControls(this.match.getState())
     }
   }
 
@@ -5845,6 +6158,7 @@ export class GameBoardView extends Actor {
       this.applyLocalBoardLayout()
       this.activateHandHover()
       this.syncTurnHud(this.match.getState())
+      this.syncTurnControls(this.match.getState())
     }
   }
 
@@ -5865,6 +6179,9 @@ export class GameBoardView extends Actor {
       view.setStats(minionPlayed.minion.attack, minionPlayed.minion.health)
       view.setTaunt(markers.taunt)
       view.setDivineShield(markers.divineShield)
+      view.setFrozen(
+        isFrozen(minionPlayed.minion.frozenUntilTurn, this.match.getState().turnNumber)
+      )
       view.setStealth(markers.stealth)
       view.setTrigger(markers.trigger)
       view.setDeathrattle(markers.deathrattle)
@@ -5873,7 +6190,6 @@ export class GameBoardView extends Actor {
       view.position.set(resting.x, resting.y)
       view.scale.set(resting.scale)
       view.alpha = 1
-      this.wireMinionView(view)
       this.localBoardPreviewIndex = null
       this.applyLocalBoardLayout()
       this.syncBoardAttackability(this.match.getState())
@@ -5922,7 +6238,6 @@ export class GameBoardView extends Actor {
     this.handLayer.eventMode = 'static'
     window.addEventListener('pointerdown', this.handleWindowPointerDown, true)
     window.addEventListener('pointerup', this.handleWindowPointerUp, true)
-    window.addEventListener('pointerup', this.handleWindowCombatPointerUp, true)
     window.addEventListener('blur', this.handleWindowBlur)
     const bounds = handHoverHitBounds(DEFAULT_HAND_LAYOUT)
     const handRect = new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
@@ -5958,6 +6273,12 @@ export class GameBoardView extends Actor {
             return false
           }
         }
+        const heroPower = this.heroPowerViews.get(this.localParticipantId)
+        if (heroPower) {
+          const global = this.handLayer.toGlobal({ x, y })
+          const local = heroPower.toLocal(global)
+          if (heroPower.containsCanvasPoint(local.x, local.y)) return false
+        }
         return true
       }
     } as unknown as Rectangle
@@ -5965,7 +6286,9 @@ export class GameBoardView extends Actor {
       if (!this.handModeActive || this.reflowing) return
       const local = event.getLocalPosition(this.handLayer)
       if (this.draggingIndex !== null) return
-      const transforms = this.handEntries.map((entry) => entry.restTransform)
+      const transforms = this.handEntries.map((entry) =>
+        isHandOwnedSlot(entry.slot, this.handLayer) ? entry.restTransform : undefined
+      )
       const hoveredIndex = this.localHoveredSlot
         ? this.handEntries.findIndex((entry) => entry.slot === this.localHoveredSlot)
         : -1
@@ -6002,7 +6325,10 @@ export class GameBoardView extends Actor {
           ) > DRAG_MOVE_THRESHOLD
       }
       const entry = this.handEntries[this.draggingIndex]
-      if (entry && this.tryBeginDraggedSpellTargeting(entry, this.dragPointer)) {
+      if (
+        entry &&
+        this.tryActivateDraggedCardTargeting(entry, this.dragPointer, event.pointerId)
+      ) {
         return
       }
       this.updateLocalBoardPreview(this.dragPointer)
@@ -6012,35 +6338,27 @@ export class GameBoardView extends Actor {
     })
   }
 
-  private tryBeginDraggedSpellTargeting(
+  private tryActivateDraggedCardTargeting(
     entry: HandEntry,
-    pointer: HandPointer
+    pointer: HandPointer,
+    pointerId: number
   ): boolean {
-    const start = this.dragStartPointer
-    if (!start || cardDefinition(entry.card).type !== 'Spell') return false
-    if (
-      pointer.y > this.localHeroBottomEdge() ||
-      pointer.y >= start.y - DRAG_MOVE_THRESHOLD
-    )
-      return false
-
     const input = this.match.getPlayInput?.(
       this.localParticipantId,
       entry.card.instanceId
     )
     if (!input || input.targetSelectors.length === 0) return false
+    if (!this.targetGestures.move(pointerId, pointer, DRAG_MOVE_THRESHOLD)) return false
 
     this.lastTargetingPointer = { ...pointer }
     this.beginCardTargeting(entry, input, undefined, 'local-hero')
+    if (this.cardTargeting?.cardInstanceId !== entry.card.instanceId) {
+      this.targetGestures.cancel(
+        (source) =>
+          source.kind === 'card' && source.cardInstanceId === entry.card.instanceId
+      )
+    }
     return true
-  }
-
-  /** Bottom edge of the local hero's declared visual placement, in canvas space. */
-  private localHeroBottomEdge(): number {
-    const hero = GAME_BOARD_LAYOUT.heroes.local
-    return (
-      hero.position.y + (1 - hero.anchor.y) * hero.size.height * (hero.scale?.y ?? 1)
-    )
   }
 
   private isLocalTurn(): boolean {
@@ -6077,31 +6395,14 @@ export class GameBoardView extends Actor {
       DEFAULT_HAND_LAYOUT,
       hoveredIndex >= 0 ? hoveredIndex : null
     )
-    if (resolved === null) {
-      this.tryHeroPowerClick(local)
-      return
-    }
+    if (resolved === null) return
     const legality = this.match.getLegality?.(this.localParticipantId)
     const card = this.handEntries[resolved]?.card
     if (!card || !legality?.playableCardInstanceIds.includes(card.instanceId)) {
       this.shakeCard(resolved)
       return
     }
-    this.beginDrag(resolved, local)
-  }
-
-  /**
-   * The hand layer's pointer hit zone spans the whole bottom strip and sits
-   * above the hero power layer, so clicks over the local hero power land on
-   * handLayer instead of the hero power view. Route them here: when the
-   * pointer is over the currently interactive hero power, use it. The view's
-   * own pointertap remains as a fallback for layouts that stop covering it.
-   */
-  private tryHeroPowerClick(local: HandPointer): void {
-    const view = this.heroPowerViews.get(this.localParticipantId)
-    if (!view?.isClickable()) return
-    if (!view.containsCanvasPoint(local.x, local.y)) return
-    void this.useHeroPower()
+    this.beginDrag(resolved, local, event.pointerId)
   }
 
   /** Right-click cancels the current drag, mirroring Hearthstone. */
@@ -6117,7 +6418,7 @@ export class GameBoardView extends Actor {
    * pointer with resistance. Velocity drives a four-corner perspective mesh,
    * producing the visible trapezoidal warp of a rigid card tilting in 3D.
    */
-  private beginDrag(index: number, pointer: HandPointer): void {
+  private beginDrag(index: number, pointer: HandPointer, pointerId: number): void {
     const entry = this.handEntries[index]
     const rest = entry?.restTransform
     if (!entry || !rest) return
@@ -6126,6 +6427,17 @@ export class GameBoardView extends Actor {
     this.dragStartPointer = { ...pointer }
     this.dragMovedBeyondThreshold = false
     this.dragReturning = false
+    const input = this.match.getPlayInput?.(
+      this.localParticipantId,
+      entry.card.instanceId
+    )
+    if (input && allowsDragTargetingFromHand(cardDefinition(entry.card).type, input)) {
+      this.targetGestures.begin(
+        { kind: 'card', cardInstanceId: entry.card.instanceId },
+        pointerId,
+        pointer
+      )
+    }
     // Start from the card's current (hovered) position so the pickup glides up
     // toward the cursor instead of snapping back to the resting baseline.
     this.dragState = initialDragState(entry.slot.x, entry.slot.y)
@@ -6295,9 +6607,10 @@ export class GameBoardView extends Actor {
   override dispose(): void {
     window.removeEventListener('pointerdown', this.handleWindowPointerDown, true)
     window.removeEventListener('pointerup', this.handleWindowPointerUp, true)
-    window.removeEventListener('pointerup', this.handleWindowCombatPointerUp, true)
     window.removeEventListener('blur', this.handleWindowBlur)
     window.removeEventListener('keydown', this.handleWindowKeyDown)
+    this.cardPlacementTapGuard.clear()
+    this.targetGestures.clear()
     this.options.cursor?.setContextVariant(null)
     this.options.cursor?.setTargeting(false)
     this.matchResultBlurFilter?.destroy()
@@ -6424,6 +6737,10 @@ export class GameBoardView extends Actor {
       : -1
 
     this.handEntries.forEach((entry, index) => {
+      if (!isHandOwnedSlot(entry.slot, this.handLayer)) {
+        entry.displaced = false
+        return
+      }
       if (!entry.restTransform) return
       const shouldDisplace = hoveredIndex >= 0 && index === hoveredIndex
       if (!shouldDisplace && !entry.displaced) return

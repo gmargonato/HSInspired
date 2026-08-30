@@ -287,11 +287,21 @@ describe('classic hero powers', () => {
   it('Life Tap draws and damages its owner', () => {
     const match = startMatch('guldan')
     const before = match.getState().players[0]
-    usePower(match)
+    const result = usePower(match)
     const after = match.getState().players[0]
     expect(after.hand).toHaveLength(before.hand.length + 1)
     expect(after.deck).toHaveLength(before.deck.length - 1)
     expect(after.hero.health).toBe(28)
+    expect(
+      result.events
+        .filter(
+          (event) =>
+            event.type === 'hero-power-used' ||
+            event.type === 'character-damaged' ||
+            event.type === 'card-drawn'
+        )
+        .map((event) => event.type)
+    ).toEqual(['hero-power-used', 'character-damaged', 'card-drawn'])
   })
 
   it('Life Tap burns its draw when the hand is full', () => {
@@ -326,8 +336,8 @@ describe('classic hero powers', () => {
     expect(human.hero.health).toBe(27)
     expect(result.events.map((event) => event.type)).toEqual([
       'hero-power-used',
-      'fatigue',
       'character-damaged',
+      'fatigue',
       'character-damaged',
       'history-action-resolved',
       'history-action-resolved'
@@ -391,6 +401,64 @@ describe('classic hero powers', () => {
         }
       ]
     })
+  })
+})
+
+describe('combat rules', () => {
+  it('does not let an equipped defending hero retaliate against a minion', () => {
+    const match = startMatch('valeera')
+    usePower(match)
+    const weaponBefore = match.getState().players[0].weapon
+    expect(weaponBefore).toMatchObject({ attack: 1, durability: 2 })
+    if (!weaponBefore) throw new Error('Expected Dagger Mastery to equip a weapon.')
+
+    accept(match.dispatch({ type: 'end-turn', participantId: HUMAN_ID }))
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: OPPONENT_ID,
+        cardId: 'basic_stonetusk_boar'
+      })
+    )
+    const attackerBefore = match.getState().players[1].board[0]
+    expect(attackerBefore).toBeDefined()
+    if (!attackerBefore) throw new Error('Expected the attacking minion on the board.')
+
+    const result = accept(
+      match.dispatch({
+        type: 'attack-character',
+        participantId: OPPONENT_ID,
+        attacker: { kind: 'minion', instanceId: attackerBefore.instanceId },
+        defender: { kind: 'hero' }
+      })
+    )
+    const state = match.getState()
+    const attackerAfter = state.players[1].board.find(
+      (minion) => minion.instanceId === attackerBefore.instanceId
+    )
+
+    expect(state.players[0].hero.health).toBe(29)
+    expect(attackerAfter?.health).toBe(attackerBefore.health)
+    expect(state.players[0].weapon).toMatchObject({
+      instanceId: weaponBefore.instanceId,
+      durability: weaponBefore.durability
+    })
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'combat-started',
+        defender: expect.objectContaining({ attack: 0 })
+      })
+    )
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'character-combat-resolved',
+        attacker: expect.objectContaining({
+          healthBefore: attackerBefore.health,
+          healthAfter: attackerBefore.health
+        }),
+        defender: expect.objectContaining({ attack: 0 })
+      })
+    )
   })
 })
 

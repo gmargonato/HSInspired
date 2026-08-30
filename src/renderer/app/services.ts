@@ -1,5 +1,6 @@
 import { PersistentDeckStore, type DeckStore } from './deck-store'
 import { createAppLogger, type AppLogger } from './logger'
+import type { AiDecisionApi } from '../../shared/ipc/ai'
 
 export type { AppLogger } from './logger'
 
@@ -46,6 +47,7 @@ class BrowserDialogService implements DialogService {
 
 /** Renderer-lifetime dependencies assembled once by the application root. */
 export interface AppServices {
+  readonly ai: AiDecisionApi
   readonly deckStore: DeckStore
   readonly dialogs: DialogService
   readonly logger: AppLogger
@@ -53,7 +55,17 @@ export interface AppServices {
 
 export function createAppServices(overrides: Partial<AppServices> = {}): AppServices {
   const logger = overrides.logger ?? createAppLogger()
+  const ai =
+    overrides.ai ??
+    (typeof window !== 'undefined' && window.api?.ai
+      ? window.api.ai
+      : {
+          decide: async () => {
+            throw new Error('The AI decision bridge is unavailable.')
+          }
+        })
   return {
+    ai,
     deckStore: overrides.deckStore ?? new PersistentDeckStore(undefined, logger),
     dialogs: overrides.dialogs ?? new BrowserDialogService(),
     logger,

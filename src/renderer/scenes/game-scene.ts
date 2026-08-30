@@ -16,6 +16,7 @@ import type {
   DevMatchTarget
 } from '../../shared/dev-menu'
 import { Scene } from './scene'
+import type { AiDecisionApi } from '../../shared/ipc/ai'
 
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
@@ -28,7 +29,8 @@ export class GameScene extends Scene {
     route: GameRoute,
     deckStore: DeckStore,
     logger?: AppLogger,
-    private readonly router?: SceneRouter
+    private readonly router?: SceneRouter,
+    private readonly ai?: AiDecisionApi
   ) {
     super()
     this.route = route
@@ -74,6 +76,7 @@ export class GameScene extends Scene {
       renderer: this.appInstance.renderer,
       cursor: this.sceneManager.cursor,
       logger: this.logger,
+      ai: this.ai,
       onMatchComplete: () => this.router?.navigate({ id: 'deck-selection' })
     })
     this.logger?.info('[GameScene] GameBoardView created')
@@ -164,7 +167,7 @@ export class GameScene extends Scene {
   }
 
   setDeckTracker(
-    visibility: 'hidden' | 'local' | 'both' | 'remote',
+    visibility: 'hidden' | 'local',
     sortMode: 'cost' | 'alphabetical' | 'draw-order'
   ): void {
     if (!this.view) throw new Error('Game view is not ready for dev commands.')

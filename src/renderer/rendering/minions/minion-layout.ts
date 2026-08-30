@@ -37,6 +37,14 @@ export const MINION_LAYOUT = {
       note: 'Legendary frame overlay, hidden for non-legendary minions.'
     }
   ),
+  frozen: placement(
+    { x: 80, y: 105 },
+    { width: 160, height: 210 },
+    {
+      anchor: CENTER,
+      note: 'Frozen overlay above minion frames and below Stealth and Divine Shield.'
+    }
+  ),
   taunt: placement(
     { x: 80, y: 97 },
     { width: 136, height: 183 },

@@ -125,7 +125,8 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
         ),
         dependencies.services.deckStore,
         dependencies.services.logger,
-        dependencies.router
+        dependencies.router,
+        dependencies.services.ai
       )
     }
 
@@ -139,7 +140,8 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
       fallbackRoute as unknown as ConstructorParameters<typeof GameScene>[0],
       dependencies.services.deckStore,
       dependencies.services.logger,
-      dependencies.router
+      dependencies.router,
+      dependencies.services.ai
     )
   }
 }
@@ -184,15 +186,9 @@ export class SceneNavigator implements SceneRouter {
   }
 
   async navigateRequest(request: SceneRequest): Promise<void> {
-    this.services.logger.info('[SceneNavigator] navigateRequest', request)
     if (request.id === 'game') {
-      this.services.logger.info('[SceneNavigator] game request start')
       await this.services.deckStore.load()
       const decks = this.services.deckStore.getDecks()
-      this.services.logger.info(
-        '[SceneNavigator] decks loaded',
-        decks.map((d) => `${d.id} — ${d.heroId} — ${countDeckCards(d)}`)
-      )
       const requestedDeckId = (request as { params?: { deckId?: string } }).params
         ?.deckId
       const targetDeckId =
@@ -215,12 +211,6 @@ export class SceneNavigator implements SceneRouter {
       if (!opponent) {
         throw new Error('At least one complete deck is required to start a game.')
       }
-      this.services.logger.info('[SceneNavigator] navigating to game', {
-        human: deck.id,
-        opponent: opponent.id,
-        seed
-      })
-
       await this.navigate(
         createHumanVsAiGameRoute(
           {
@@ -230,7 +220,6 @@ export class SceneNavigator implements SceneRouter {
           seed
         )
       )
-      this.services.logger.info('[SceneNavigator] game navigate done')
       return
     }
 
@@ -305,32 +294,13 @@ export class SceneNavigator implements SceneRouter {
     scene: Scene
   ): SceneTransitionOptions {
     const previous = this.sceneManager.current
-    this.services.logger.info('[SceneNavigator] createTransitionOptions', {
-      previous: previous?.constructor.name ?? 'null',
-      route: route.id
-    })
     const afterTransition =
       scene instanceof CollectionScene
-        ? () => {
-            this.services.logger.info(
-              '[SceneNavigator] afterTransition: Collection playCoverReveal'
-            )
-            return scene.playCoverReveal()
-          }
+        ? () => scene.playCoverReveal()
         : scene instanceof NewDeckScene
-          ? () => {
-              this.services.logger.info(
-                '[SceneNavigator] afterTransition: NewDeck open'
-              )
-              return scene.open()
-            }
+          ? () => scene.open()
           : scene instanceof GameScene
-            ? () => {
-                this.services.logger.info(
-                  '[SceneNavigator] afterTransition: Game playOpeningReveal'
-                )
-                return scene.playOpeningReveal()
-              }
+            ? () => scene.playOpeningReveal()
             : undefined
 
     if (
@@ -421,7 +391,13 @@ export class SceneNavigator implements SceneRouter {
       case 'new-deck':
         return new NewDeckScene(this.services.deckStore, this.services.logger)
       case 'game':
-        return new GameScene(route, this.services.deckStore, this.services.logger, this)
+        return new GameScene(
+          route,
+          this.services.deckStore,
+          this.services.logger,
+          this,
+          this.services.ai
+        )
       case 'card-preview':
         return new CardViewScene({
           card: CARD_CATALOG.require(route.cardId),

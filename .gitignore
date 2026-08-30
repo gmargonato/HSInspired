@@ -8,3 +8,4 @@ dist
 dist-card-lab
 artifacts
 scripts/artwork-card-crop/__pycache__/
+config/ai-key.local.txt

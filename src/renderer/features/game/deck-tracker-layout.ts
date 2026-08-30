@@ -9,7 +9,7 @@ import { TOP_LEFT, placement } from '../../rendering/layout'
 export const DECK_TRACKER_LAYOUT = {
   panel: placement(
     { x: 0, y: 0 },
-    { width: 320, height: GAME_HEIGHT },
+    { width: 300, height: GAME_HEIGHT },
     {
       anchor: TOP_LEFT,
       note: 'Transparent row overlay anchored to the left edge of the board.'
@@ -17,29 +17,10 @@ export const DECK_TRACKER_LAYOUT = {
   ),
   viewport: placement(
     { x: 0, y: 0 },
-    { width: 320, height: GAME_HEIGHT },
+    { width: 300, height: GAME_HEIGHT },
     {
       anchor: TOP_LEFT,
       note: 'Full-height viewport for dynamic vertical centering and scrolling.'
-    }
-  )
-} as const
-
-export const REMOTE_DECK_TRACKER_LAYOUT = {
-  panel: placement(
-    { x: 1600, y: 0 },
-    { width: 320, height: GAME_HEIGHT },
-    {
-      anchor: TOP_LEFT,
-      note: 'Remote deck tracker anchored to the right edge of the board.'
-    }
-  ),
-  viewport: placement(
-    { x: 1600, y: 0 },
-    { width: 320, height: GAME_HEIGHT },
-    {
-      anchor: TOP_LEFT,
-      note: 'Full-height remote deck tracker viewport.'
     }
   )
 } as const

@@ -62,8 +62,10 @@ export interface HeroPowerViewOptions {
   readonly manaTexture: Texture
   /** Effective cost shown on the up face (the engine's `PlayerHeroPower.cost`). */
   readonly cost: number
+  /** Starts an optional drag-targeting gesture while the power is enabled. */
+  readonly onPointerDown?: (event: FederatedPointerEvent) => void
   /** Left-click action; the view only emits it while enabled. */
-  readonly onClick?: () => void
+  readonly onClick?: (event: FederatedPointerEvent) => void
 }
 
 /**
@@ -85,12 +87,14 @@ export class HeroPowerView extends Actor {
   private readonly backTexture: Texture
   private readonly baseScaleX: number
   private readonly interactionRect: Rectangle
-  private readonly onClick?: () => void
+  private readonly onPointerDown?: (event: FederatedPointerEvent) => void
+  private readonly onClick?: (event: FederatedPointerEvent) => void
   private interactivityEnabled = false
   private facingUp = true
 
   constructor(options: HeroPowerViewOptions) {
     super()
+    this.onPointerDown = options.onPointerDown
     this.onClick = options.onClick
     this.frontTexture = options.frontTexture
     this.backTexture = options.backTexture
@@ -152,6 +156,7 @@ export class HeroPowerView extends Actor {
     this.setCost(options.cost)
     this.setCostColor('normal')
     this.setEnabled(false)
+    this.on('pointerdown', this.handlePointerDown)
     this.on('pointertap', this.handleClick)
   }
 
@@ -191,19 +196,8 @@ export class HeroPowerView extends Actor {
   }
 
   /**
-   * True while the card accepts clicks (local turn active, power available,
-   * cost affordable). Note: after the mulligan the hand layer's hit zone
-   * covers this spot, so clicks normally arrive through
-   * `GameBoardView.tryHeroPowerClick` — `containsCanvasPoint` is the shared
-   * hit test for that route.
-   */
-  isClickable(): boolean {
-    return this.interactivityEnabled
-  }
-
-  /**
-   * True when a point in the 1920x1080 canvas (this view's local space, the
-   * view sits at the canvas origin) falls on the card face.
+   * True when a point in this view's local 1920x1080 canvas falls on the card
+   * face. The hand layer uses this to leave the hero power's hit area exposed.
    */
   containsCanvasPoint(x: number, y: number): boolean {
     return (
@@ -280,9 +274,16 @@ export class HeroPowerView extends Actor {
     this.playableOutline.setEnabled(this.interactivityEnabled && this.facingUp)
   }
 
+  private handlePointerDown = (event: FederatedPointerEvent): void => {
+    if (!this.interactivityEnabled || event.button !== 0 || !this.facingUp) return
+    event.stopPropagation()
+    this.onPointerDown?.(event)
+  }
+
   private handleClick = (event: FederatedPointerEvent): void => {
     if (!this.interactivityEnabled || event.button !== 0 || !this.facingUp) return
-    this.onClick?.()
+    event.stopPropagation()
+    this.onClick?.(event)
   }
 
   private completeTimeline(

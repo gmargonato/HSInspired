@@ -373,4 +373,92 @@ describe('wiki-aligned trigger and Deathrattle rules', () => {
       )
     ).toBe(true)
   })
+  it('prevents summon listeners from observing their own entry, but allows later summons', () => {
+    const buzzardScenario = createMatchScenario({
+      seed: 1507,
+      cardId: 'basic_starving_buzzard'
+    })
+    buzzardScenario.confirmBothMulligans()
+    const [buzzardPlayerId] = activePlayers(buzzardScenario)
+    setMana(buzzardScenario, buzzardPlayerId)
+    const handBeforeBuzzard = player(buzzardScenario, buzzardPlayerId).hand.length
+    playCard(buzzardScenario, buzzardPlayerId, 'basic_starving_buzzard', {
+      position: 0
+    })
+    expect(player(buzzardScenario, buzzardPlayerId).hand).toHaveLength(
+      handBeforeBuzzard - 1
+    )
+    addCard(buzzardScenario, buzzardPlayerId, 'basic_bloodfen_raptor')
+    playCard(buzzardScenario, buzzardPlayerId, 'basic_bloodfen_raptor', { position: 1 })
+    expect(player(buzzardScenario, buzzardPlayerId).hand).toHaveLength(
+      handBeforeBuzzard
+    )
+
+    const tidecallerScenario = createMatchScenario({
+      seed: 1508,
+      cardId: 'classic_murloc_tidecaller'
+    })
+    tidecallerScenario.confirmBothMulligans()
+    const [tidecallerPlayerId] = activePlayers(tidecallerScenario)
+    setMana(tidecallerScenario, tidecallerPlayerId)
+    playCard(tidecallerScenario, tidecallerPlayerId, 'classic_murloc_tidecaller', {
+      position: 0
+    })
+    expect(player(tidecallerScenario, tidecallerPlayerId).board[0]).toMatchObject({
+      attack: 1
+    })
+    addCard(tidecallerScenario, tidecallerPlayerId, 'basic_murloc_raider')
+    playCard(tidecallerScenario, tidecallerPlayerId, 'basic_murloc_raider', {
+      position: 1
+    })
+    expect(player(tidecallerScenario, tidecallerPlayerId).board[0]).toMatchObject({
+      attack: 2
+    })
+  })
+
+  it('prevents card-play listeners from observing their own entry, but allows later plays', () => {
+    const illidanScenario = createMatchScenario({
+      seed: 1509,
+      cardId: 'classic_illidan_stormrage'
+    })
+    illidanScenario.confirmBothMulligans()
+    const [illidanPlayerId] = activePlayers(illidanScenario)
+    setMana(illidanScenario, illidanPlayerId)
+    playCard(illidanScenario, illidanPlayerId, 'classic_illidan_stormrage', {
+      position: 0
+    })
+    expect(
+      player(illidanScenario, illidanPlayerId).board.filter(
+        (minion) => minion.cardId === 'classic_flame_of_azzinoth'
+      )
+    ).toHaveLength(0)
+    addCard(illidanScenario, illidanPlayerId, 'basic_arcane_intellect')
+    playCard(illidanScenario, illidanPlayerId, 'basic_arcane_intellect')
+    expect(
+      player(illidanScenario, illidanPlayerId).board.filter(
+        (minion) => minion.cardId === 'classic_flame_of_azzinoth'
+      )
+    ).toHaveLength(1)
+
+    const questingScenario = createMatchScenario({
+      seed: 1510,
+      cardId: 'classic_questing_adventurer'
+    })
+    questingScenario.confirmBothMulligans()
+    const [questingPlayerId] = activePlayers(questingScenario)
+    setMana(questingScenario, questingPlayerId)
+    playCard(questingScenario, questingPlayerId, 'classic_questing_adventurer', {
+      position: 0
+    })
+    expect(player(questingScenario, questingPlayerId).board[0]).toMatchObject({
+      attack: 2,
+      health: 2
+    })
+    addCard(questingScenario, questingPlayerId, 'basic_arcane_intellect')
+    playCard(questingScenario, questingPlayerId, 'basic_arcane_intellect')
+    expect(player(questingScenario, questingPlayerId).board[0]).toMatchObject({
+      attack: 3,
+      health: 3
+    })
+  })
 })

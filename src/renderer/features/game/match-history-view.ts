@@ -44,6 +44,33 @@ interface HistoryRailItem {
   readonly container: Container
 }
 
+export function historySourceTitle(
+  action: HistoryActionResolvedEvent['action']
+): string | null {
+  if (action === 'hero-power') return 'Hero Power'
+  if (action === 'trigger') return 'Triggered Effect'
+  if (action === 'combat') return null
+  return 'Hidden Action'
+}
+
+export function historyOutcomeText(
+  outcomes: readonly HistoryActionOutcome[]
+): string | null {
+  const labels = outcomes.flatMap((outcome) => {
+    if (
+      outcome.kind === 'damage' ||
+      outcome.kind === 'draw' ||
+      outcome.kind === 'create-hand'
+    )
+      return []
+    if (outcome.kind === 'buff') return ['BUFF']
+    if (outcome.kind === 'summon-board') return ['SUMMON']
+    if (outcome.kind === 'freeze') return ['FROZEN']
+    return [outcome.kind.toUpperCase()]
+  })
+  return labels.length > 0 ? labels.join(' / ') : null
+}
+
 /** Hover-driven action rail, kept outside the desaturated board layer. */
 export class MatchHistoryView extends Actor {
   private readonly model = new MatchHistoryModel(MATCH_HISTORY_LAYOUT.rail.capacity)
@@ -224,12 +251,12 @@ export class MatchHistoryView extends Actor {
       }
       source.label = 'game.history.source-card'
       source.eventMode = 'none'
-      applyPlacement(source, this.sourcePlacement(railIndex))
+      applyPlacement(source, this.sourcePlacement())
       this.preview.addChild(source)
     } else if (entry.source.kind === 'hero' && entry.source.heroId) {
-      this.preview.addChild(this.createHeroSource(entry.source.heroId, railIndex))
+      this.preview.addChild(this.createHeroSource(entry.source.heroId))
     } else {
-      this.preview.addChild(this.createFallbackSource(entry, railIndex))
+      this.preview.addChild(this.createFallbackSource(entry))
     }
     if (entry.action !== 'fatigue') this.addOutcomePreviews(entry, sequence)
   }
@@ -242,16 +269,8 @@ export class MatchHistoryView extends Actor {
     this.setBoardDesaturated(false)
   }
 
-  private sourcePlacement(railIndex: number) {
-    return {
-      ...MATCH_HISTORY_LAYOUT.preview.source,
-      position: {
-        ...MATCH_HISTORY_LAYOUT.preview.source.position,
-        y:
-          MATCH_HISTORY_LAYOUT.preview.source.position.y +
-          railIndex * MATCH_HISTORY_LAYOUT.rail.gap
-      }
-    }
+  private sourcePlacement() {
+    return MATCH_HISTORY_LAYOUT.preview.source
   }
 
   private isHiddenSecretEntry(entry: MatchHistoryActionEntry): boolean {
@@ -265,12 +284,12 @@ export class MatchHistoryView extends Actor {
   private createHistoryCard(
     texture: Texture,
     label: string,
-    railIndex: number,
+    _railIndex: number,
     scale = MATCH_HISTORY_LAYOUT.preview.historyCard.scale
   ): Container {
     const container = new Container()
     container.label = label
-    applyPlacement(container, this.sourcePlacement(railIndex))
+    applyPlacement(container, this.sourcePlacement())
     const card = new Sprite(texture)
     card.label = `${label}.artwork`
     card.scale.set(scale)
@@ -280,12 +299,12 @@ export class MatchHistoryView extends Actor {
 
   private createFatigueSource(
     entry: MatchHistoryActionEntry,
-    railIndex: number
+    _railIndex: number
   ): Container {
     const container = this.createHistoryCard(
       this.textures.fatigueCard,
       'game.history.source-fatigue',
-      railIndex
+      _railIndex
     )
     const amount = entry.outcomes.find((outcome) => outcome.kind === 'fatigue')?.amount
     if (amount === undefined) return container
@@ -300,11 +319,11 @@ export class MatchHistoryView extends Actor {
     return container
   }
 
-  private createBurnSource(railIndex: number): Container {
+  private createBurnSource(_railIndex: number): Container {
     const container = this.createHistoryCard(
       this.textures.burnCard,
       'game.history.source-burn',
-      railIndex,
+      _railIndex,
       MATCH_HISTORY_LAYOUT.preview.historyCard.burnScale
     )
     return container
@@ -348,29 +367,12 @@ export class MatchHistoryView extends Actor {
     this.preview.addChild(card)
   }
 
-  private createFallbackSource(
-    entry: MatchHistoryActionEntry,
-    railIndex: number
-  ): Container {
+  private createFallbackSource(entry: MatchHistoryActionEntry): Container {
     const container = new Container()
     container.label = 'game.history.fallback-source'
-    applyPlacement(container, {
-      ...MATCH_HISTORY_LAYOUT.preview.fallback,
-      position: {
-        ...MATCH_HISTORY_LAYOUT.preview.fallback.position,
-        y:
-          MATCH_HISTORY_LAYOUT.preview.fallback.position.y +
-          railIndex * MATCH_HISTORY_LAYOUT.rail.gap
-      }
-    })
-    const title =
-      entry.action === 'hero-power'
-        ? 'Hero Power'
-        : entry.action === 'combat'
-          ? 'Combat'
-          : entry.action === 'trigger'
-            ? 'Triggered Effect'
-            : 'Hidden Action'
+    applyPlacement(container, MATCH_HISTORY_LAYOUT.preview.fallback)
+    const title = historySourceTitle(entry.action)
+    if (!title) return container
     const text = new Text({
       text: title,
       style: {
@@ -388,19 +390,15 @@ export class MatchHistoryView extends Actor {
   }
 
   private createHeroSource(
-    heroId: NonNullable<HistoryActionOutcome['target']['heroId']>,
-    railIndex: number
-  ): Container {
-    const container = new Container()
-    container.label = 'game.history.source-hero'
-    applyPlacement(container, this.sourcePlacement(railIndex))
+    heroId: NonNullable<HistoryActionOutcome['target']['heroId']>
+  ): Sprite {
     const portrait = new Sprite(
       this.textures.heroFrames[HERO_CATALOG.require(heroId).presentationAssetKey]
     )
     portrait.label = 'game.history.source-hero-portrait'
-    portrait.scale.set(MATCH_HISTORY_LAYOUT.preview.heroSourceScale)
-    container.addChild(portrait)
-    return container
+    portrait.eventMode = 'none'
+    applyAnchoredPlacement(portrait, MATCH_HISTORY_LAYOUT.preview.heroSource)
+    return portrait
   }
 
   private heroPowerTexture(heroPowerId: string): Texture {
@@ -484,7 +482,9 @@ export class MatchHistoryView extends Actor {
         card.eventMode = 'none'
         card.position.set(position.x, position.y)
         card.scale.set(MATCH_HISTORY_LAYOUT.preview.targetGrid.scale)
-        this.preview.addChild(card, this.createOutcomeBadge(outcomes, index, position))
+        this.preview.addChild(card)
+        const badge = this.createOutcomeBadge(outcomes, index, position)
+        if (badge) this.preview.addChild(badge)
       }
       return
     }
@@ -514,7 +514,9 @@ export class MatchHistoryView extends Actor {
     }
     card.position.set(position.x, position.y)
     card.scale.set(MATCH_HISTORY_LAYOUT.preview.targetGrid.scale)
-    this.preview.addChild(card, this.createOutcomeBadge(outcomes, index, position))
+    this.preview.addChild(card)
+    const badge = this.createOutcomeBadge(outcomes, index, position)
+    if (badge) this.preview.addChild(badge)
     const death = this.createOutcomeDeath(outcomes, index, position)
     if (death) this.preview.addChild(death)
   }
@@ -537,8 +539,10 @@ export class MatchHistoryView extends Actor {
     const container = new Container()
     container.label = `game.history.outcome-fallback-${index}`
     container.position.set(position.x, position.y)
-    const text = new Text({
-      text: this.outcomeText(outcomes),
+    const text = historyOutcomeText(outcomes)
+    if (!text) return container
+    const label = new Text({
+      text,
       style: {
         fontFamily: 'Belwe',
         fontSize: 25,
@@ -550,8 +554,8 @@ export class MatchHistoryView extends Actor {
       },
       anchor: 0.5
     })
-    text.position.set(75, 46)
-    container.addChild(text)
+    label.position.set(75, 46)
+    container.addChild(label)
     return container
   }
 
@@ -559,29 +563,34 @@ export class MatchHistoryView extends Actor {
     outcomes: readonly HistoryActionOutcome[],
     index: number,
     position: { readonly x: number; readonly y: number }
-  ): Container {
-    const container = new Container()
-    container.label = `game.history.outcome-badge-${index}`
-    container.position.set(
-      position.x,
-      position.y + MATCH_HISTORY_LAYOUT.preview.outcomeBadge.offsetY
-    )
+  ): Container | null {
     const damage = outcomes.find(
       (outcome) => outcome.kind === 'damage' && (outcome.amount ?? 0) > 0
     )
+    const text = historyOutcomeText(outcomes)
+    if (!damage && !text) return null
+    const container = new Container()
+    container.label = `game.history.outcome-badge-${index}`
     if (damage) {
+      container.position.set(
+        position.x + MATCH_HISTORY_LAYOUT.preview.outcomeDamage.offsetX,
+        position.y + MATCH_HISTORY_LAYOUT.preview.outcomeDamage.offsetY
+      )
       const indicator = new DamageIndicatorView(
         this.textures.damageIndicator,
         damage.amount ?? 0
       )
       indicator.label = `game.history.damage-${index}`
-      indicator.position.set(75, 0)
-      indicator.scale.set(0.62)
+      indicator.scale.set(MATCH_HISTORY_LAYOUT.preview.outcomeDamage.scale)
       container.addChild(indicator)
       return container
     }
-    const text = new Text({
-      text: this.outcomeText(outcomes),
+    container.position.set(
+      position.x,
+      position.y + MATCH_HISTORY_LAYOUT.preview.outcomeBadge.offsetY
+    )
+    const label = new Text({
+      text: text!,
       style: {
         fontFamily: 'Belwe',
         fontSize: 22,
@@ -590,8 +599,8 @@ export class MatchHistoryView extends Actor {
       },
       anchor: 0.5
     })
-    text.position.set(75, 19)
-    container.addChild(text)
+    label.position.set(75, 19)
+    container.addChild(label)
     return container
   }
 
@@ -630,25 +639,17 @@ export class MatchHistoryView extends Actor {
       this.textures.heroFrames[HERO_CATALOG.require(heroId).presentationAssetKey]
     )
     frame.label = `game.history.hero-portrait-${index}`
-    frame.scale.set(0.45)
+    frame.anchor.set(0.5)
+    frame.position.set(
+      MATCH_HISTORY_LAYOUT.preview.targetGrid.cardSize.width / 2,
+      MATCH_HISTORY_LAYOUT.preview.targetGrid.cardSize.height / 2
+    )
+    frame.scale.set(MATCH_HISTORY_LAYOUT.preview.heroOutcome.scale)
     const badge = this.createOutcomeBadge(outcomes, index, { x: 0, y: 0 })
-    badge.position.set(0, 150)
-    container.addChild(frame, badge)
+    container.addChild(frame)
+    if (badge) container.addChild(badge)
     const death = this.createOutcomeDeath(outcomes, index, { x: 0, y: 0 })
     if (death) container.addChild(death)
     return container
-  }
-
-  private outcomeText(outcomes: readonly HistoryActionOutcome[]): string {
-    return outcomes
-      .map((outcome) => {
-        if (outcome.kind === 'damage') return `-${outcome.amount ?? 0}`
-        if (outcome.kind === 'buff') return 'BUFF'
-        if (outcome.kind === 'create-hand') return 'CREATED'
-        if (outcome.kind === 'summon-board') return 'SUMMON'
-        if (outcome.kind === 'freeze') return 'FROZEN'
-        return outcome.kind.toUpperCase()
-      })
-      .join(' • ')
   }
 }
