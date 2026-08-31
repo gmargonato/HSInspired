@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { isDevCommand } from './dev-menu'
+import { isDevCommand, isDevSceneId } from './dev-menu'
 
 describe('dev deck menu commands', () => {
+  it('accepts Arena as a development scene id', () => {
+    expect(isDevSceneId('arena')).toBe(true)
+  })
+
+  it('accepts Tavern Brawl as a development scene id', () => {
+    expect(isDevSceneId('tavern-brawl')).toBe(true)
+  })
+
   it.each([
     { type: 'game:modify-deck', target: 'local', action: 'destroy' },
     { type: 'game:modify-deck', target: 'remote', action: 'refill' }

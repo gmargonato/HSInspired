@@ -153,7 +153,7 @@ async function bootstrap(): Promise<void> {
     }
 
     const handleSettingsShortcut = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || event.repeat) return
+      if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) return
       if (!navigator.requestSettingsToggle()) return
 
       event.preventDefault()

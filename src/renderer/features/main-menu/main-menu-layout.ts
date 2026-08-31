@@ -77,6 +77,24 @@ export const MAIN_MENU_LAYOUT = {
         anchor: CENTER,
         note: 'Offsets are relative to screenCenter (960,540).'
       }
+    ),
+    /** Arena entry in the third menu slot. */
+    arena: placement(
+      { x: 0, y: 49 },
+      { width: 428, height: 73 },
+      {
+        anchor: CENTER,
+        note: 'Third slot on the center menu face.'
+      }
+    ),
+    /** Tavern Brawl entry in the bottom menu slot. */
+    tavern: placement(
+      { x: 0, y: 145 },
+      { width: 365, height: 72 },
+      {
+        anchor: CENTER,
+        note: 'Bottom slot on the center menu face.'
+      }
     )
   }
 } as const

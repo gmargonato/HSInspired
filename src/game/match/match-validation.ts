@@ -49,8 +49,15 @@ export function parseMatchSetup(value: unknown): MatchSetup {
   ) {
     throw new Error('MatchSetup.seed must be a safe integer')
   }
+  if (
+    value.modeId !== undefined &&
+    (typeof value.modeId !== 'string' || value.modeId.trim() === '')
+  ) {
+    throw new Error('MatchSetup.modeId must be a non-empty string')
+  }
   return {
     participants: [first, second],
+    ...(typeof value.modeId === 'string' ? { modeId: value.modeId.trim() } : {}),
     ...(value.seed === undefined ? {} : { seed: value.seed })
   }
 }

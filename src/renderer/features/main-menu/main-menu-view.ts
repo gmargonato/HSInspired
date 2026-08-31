@@ -21,7 +21,10 @@ type LidSide = HingeSide
 export type MainMenuEntryMode = 'closed' | 'returning'
 
 export type MainMenuRoute =
-  { readonly id: 'deck-selection' } | { readonly id: 'collection' }
+  | { readonly id: 'deck-selection' }
+  | { readonly id: 'collection' }
+  | { readonly id: 'arena' }
+  | { readonly id: 'tavern-brawl' }
 
 export interface MainMenuRouter {
   navigate(route: MainMenuRoute): Promise<void>
@@ -50,6 +53,9 @@ export class MainMenuView extends Actor {
   private centerCard!: FlipCard
   private buttonPlay!: Button
   private buttonCollection!: Button
+  private buttonArena!: Button
+  private buttonTavern!: Button
+  private readonly menuButtonActors: Button[] = []
   private transitionOpened = false
   private destinationPreparation: Promise<void> | null = null
   private returnClosePromise: Promise<void> | null = null
@@ -93,8 +99,7 @@ export class MainMenuView extends Actor {
         this.lidLeft.visible = false
         this.lidRight.visible = false
         this.centerCard.visible = false
-        this.buttonPlay.visible = false
-        this.buttonCollection.visible = false
+        for (const button of this.menuButtonActors) button.visible = false
       })()
     }
 
@@ -162,6 +167,37 @@ export class MainMenuView extends Actor {
     this.buttonCollection.alpha = this.entryMode === 'returning' ? 0 : 1
     this.buttonCollection.setEnabled(this.entryMode !== 'returning')
     this.menuGroup.addChild(this.buttonCollection)
+
+    this.buttonArena = new Button(assets.buttonArena, {
+      sinkPx: 6,
+      onClick: () => this.onArenaPressed()
+    })
+    this.buttonArena.label = 'main-menu.arena-button'
+    applyPlacement(this.buttonArena, menuButtons.arena)
+    this.buttonArena.setBaseY(menuButtons.arena.position.y)
+    this.buttonArena.visible = true
+    this.buttonArena.alpha = this.entryMode === 'returning' ? 0 : 1
+    this.buttonArena.setEnabled(this.entryMode !== 'returning')
+    this.menuGroup.addChild(this.buttonArena)
+
+    this.buttonTavern = new Button(assets.buttonTavern, {
+      sinkPx: 6,
+      onClick: () => this.onTavernPressed()
+    })
+    this.buttonTavern.label = 'main-menu.tavern-button'
+    applyPlacement(this.buttonTavern, menuButtons.tavern)
+    this.buttonTavern.setBaseY(menuButtons.tavern.position.y)
+    this.buttonTavern.visible = true
+    this.buttonTavern.alpha = this.entryMode === 'returning' ? 0 : 1
+    this.buttonTavern.setEnabled(this.entryMode !== 'returning')
+    this.menuGroup.addChild(this.buttonTavern)
+
+    this.menuButtonActors.push(
+      this.buttonPlay,
+      this.buttonCollection,
+      this.buttonArena,
+      this.buttonTavern
+    )
   }
 
   async closeReturningChest(): Promise<void> {
@@ -186,8 +222,7 @@ export class MainMenuView extends Actor {
     this.centerCard.eventMode = 'none'
     await this.fadeMenuButtonsIn()
     this.transitionOpened = false
-    this.buttonPlay.setEnabled(true)
-    this.buttonCollection.setEnabled(true)
+    for (const button of this.menuButtonActors) button.setEnabled(true)
   }
 
   private fadeMenuButtonsIn(): Promise<void> {
@@ -198,7 +233,7 @@ export class MainMenuView extends Actor {
       })
 
       timeline.to(
-        [this.buttonPlay, this.buttonCollection],
+        this.menuButtonActors,
         {
           alpha: 1,
           duration: MAIN_MENU_TIMING.menuReveal,
@@ -260,6 +295,14 @@ export class MainMenuView extends Actor {
     return this.openDestination({ id: 'collection' }, 'collection')
   }
 
+  private onArenaPressed(): Promise<void> {
+    return this.openDestination({ id: 'arena' }, 'Arena')
+  }
+
+  private onTavernPressed(): Promise<void> {
+    return this.openDestination({ id: 'tavern-brawl' }, 'Tavern Brawl')
+  }
+
   private async openDestination(
     route: MainMenuRoute,
     destinationName: string
@@ -268,12 +311,11 @@ export class MainMenuView extends Actor {
     this.transitionOpened = true
 
     // Hide the menu buttons while the chest transitions.
-    this.killTweensOf(this.buttonPlay)
-    this.killTweensOf(this.buttonCollection)
-    this.buttonPlay.setEnabled(false)
-    this.buttonCollection.setEnabled(false)
-    this.tweenTo(this.buttonPlay, { alpha: 0, duration: 0.15 })
-    this.tweenTo(this.buttonCollection, { alpha: 0, duration: 0.15 })
+    for (const button of this.menuButtonActors) {
+      this.killTweensOf(button)
+      button.setEnabled(false)
+      this.tweenTo(button, { alpha: 0, duration: 0.15 })
+    }
 
     // Start the chest choreography before navigation. SceneManager waits for
     // this promise after it has loaded the destination into its inset host.
@@ -288,16 +330,13 @@ export class MainMenuView extends Actor {
       await this.centerCard.flipToFront()
       this.transitionOpened = false
       this.destinationPreparation = null
-      this.killTweensOf(this.buttonPlay)
-      this.killTweensOf(this.buttonCollection)
-      this.buttonPlay.visible = true
-      this.buttonCollection.visible = true
-      this.buttonPlay.setEnabled(true)
-      this.buttonCollection.setEnabled(true)
-      this.buttonPlay.alpha = 1
-      this.buttonCollection.alpha = 1
-      this.buttonPlay.y = menuButtons.play.position.y
-      this.buttonCollection.y = menuButtons.collection.position.y
+      for (const button of this.menuButtonActors) {
+        this.killTweensOf(button)
+        button.visible = true
+        button.setEnabled(true)
+        button.alpha = 1
+        button.y = button.getBaseY()
+      }
       this.centerCard.visible = true
       this.centerCard.eventMode = 'none'
       this.lidLeft.visible = true

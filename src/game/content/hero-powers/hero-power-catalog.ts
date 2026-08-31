@@ -140,6 +140,16 @@ const HERO_POWER_DATA = [
     { kind: 'summon', cardId: 'classic_infernal' }
   ],
   [
+    'ragnaros-die-insects',
+    'Warrior',
+    'DIE, INSECT!',
+    2,
+    'Deal 8 damage to a random enemy.',
+    'hero-power-ragnaros',
+    'none',
+    { kind: 'damage-random-enemy', amount: 8 }
+  ],
+  [
     'warrior-armor-up',
     'Warrior',
     'Armor Up!',

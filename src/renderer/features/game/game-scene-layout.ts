@@ -410,12 +410,22 @@ export const GAME_BOARD_LAYOUT = {
   /** Fanned remote hand of card backs, anchored bottom-center. */
   remoteHand: {
     centerX: 960,
-    baselineY: 92,
-    gap: 52,
+    baselineY: 72,
+    gap: 82,
+    /** Compressed centre-to-centre step at a full hand. */
+    compactGap: 58,
     scale: 0.22,
+    /** Compressed card scale at a full hand. */
+    compactScale: 0.16,
+    /** Hand size at which the compact fan starts. */
+    compactStartCount: 4,
+    /** Hand size at which the compact fan reaches its maximum. */
+    compactFullCount: 10,
+    /** Upward tuck applied to the outer cards. */
+    edgeTuck: 26,
     anchor: BOTTOM_CENTER,
     /** Per-back rotation step around the fan (radians). */
-    rotationStep: 0.05
+    rotationStep: 0.11
   },
 
   /**

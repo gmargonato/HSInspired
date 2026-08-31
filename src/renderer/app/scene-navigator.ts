@@ -9,6 +9,8 @@ import { DeckSelectionScene } from '../scenes/deck-selection-scene'
 import { MainMenuScene } from '../scenes/main-menu-scene'
 import { NewDeckScene } from '../scenes/new-deck-scene'
 import { GameScene } from '../scenes/game-scene'
+import { TavernBrawlScene } from '../scenes/tavern-brawl-scene'
+import { ArenaScene } from '../scenes/arena-scene'
 import { GameSettingsScene, MenuSettingsScene } from '../scenes/settings-scenes'
 import { CardViewScene } from '../scenes/card-view-scene'
 import { Scene } from '../scenes/scene'
@@ -91,6 +93,7 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
   'deck-selection': (_request, dependencies) =>
     new DeckSelectionScene(
       dependencies.services.deckStore,
+      dependencies.services.playerStatsStore,
       dependencies.router,
       dependencies.services.logger
     ),
@@ -101,8 +104,21 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
       dependencies.services.dialogs,
       dependencies.services.logger
     ),
+  arena: (_request, dependencies) =>
+    new ArenaScene(
+      dependencies.services.arenaStore,
+      dependencies.router,
+      dependencies.services.dialogs,
+      dependencies.services.logger
+    ),
   'new-deck': (_request, dependencies) =>
     new NewDeckScene(dependencies.services.deckStore, dependencies.services.logger),
+  'tavern-brawl': (_request, dependencies) =>
+    new TavernBrawlScene(
+      dependencies.services.playerStatsStore,
+      dependencies.router,
+      dependencies.services.logger
+    ),
   game: (request, dependencies) => {
     const requestedDeckId = resolveGameDeckId(request, dependencies)
     const decks = dependencies.services.deckStore.getDecks()
@@ -124,6 +140,8 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
           seed
         ),
         dependencies.services.deckStore,
+        dependencies.services.playerStatsStore,
+        dependencies.services.arenaStore,
         dependencies.services.logger,
         dependencies.router,
         dependencies.services.ai
@@ -139,6 +157,8 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
     return new GameScene(
       fallbackRoute as unknown as ConstructorParameters<typeof GameScene>[0],
       dependencies.services.deckStore,
+      dependencies.services.playerStatsStore,
+      dependencies.services.arenaStore,
       dependencies.services.logger,
       dependencies.router,
       dependencies.services.ai
@@ -236,7 +256,11 @@ export class SceneNavigator implements SceneRouter {
           ? { id: 'deck-selection' }
           : request.id === 'collection'
             ? { id: 'collection' }
-            : { id: 'new-deck' }
+            : request.id === 'arena'
+              ? { id: 'arena' }
+              : request.id === 'tavern-brawl'
+                ? { id: 'tavern-brawl' }
+                : { id: 'new-deck' }
     await this.navigate(route)
   }
 
@@ -262,7 +286,7 @@ export class SceneNavigator implements SceneRouter {
             },
             onQuit: async () => {
               await this.sceneManager.pop()
-              await this.navigate({ id: 'deck-selection' })
+              await this.navigate(gameScene.createExitRoute())
             }
           })
         )
@@ -270,7 +294,9 @@ export class SceneNavigator implements SceneRouter {
       current instanceof MainMenuScene ||
       current instanceof DeckSelectionScene ||
       current instanceof CollectionScene ||
-      current instanceof NewDeckScene
+      current instanceof ArenaScene ||
+      current instanceof NewDeckScene ||
+      current instanceof TavernBrawlScene
     ) {
       operation = () => this.sceneManager.push(new MenuSettingsScene())
     }
@@ -313,7 +339,10 @@ export class SceneNavigator implements SceneRouter {
 
     if (
       previous instanceof MainMenuScene &&
-      (route.id === 'deck-selection' || route.id === 'collection')
+      (route.id === 'deck-selection' ||
+        route.id === 'collection' ||
+        route.id === 'arena' ||
+        route.id === 'tavern-brawl')
     ) {
       return {
         inset: SCENE_SELECTION_GAP,
@@ -340,7 +369,12 @@ export class SceneNavigator implements SceneRouter {
       }
     }
 
-    if (previous instanceof GameScene && route.id === 'deck-selection') {
+    if (
+      previous instanceof GameScene &&
+      (route.id === 'deck-selection' ||
+        route.id === 'tavern-brawl' ||
+        route.id === 'arena')
+    ) {
       return {
         inset: FULL_VIEWPORT,
         mode: 'fade',
@@ -378,6 +412,7 @@ export class SceneNavigator implements SceneRouter {
       case 'deck-selection':
         return new DeckSelectionScene(
           this.services.deckStore,
+          this.services.playerStatsStore,
           this,
           this.services.logger
         )
@@ -388,12 +423,27 @@ export class SceneNavigator implements SceneRouter {
           this.services.dialogs,
           this.services.logger
         )
+      case 'arena':
+        return new ArenaScene(
+          this.services.arenaStore,
+          this,
+          this.services.dialogs,
+          this.services.logger
+        )
       case 'new-deck':
         return new NewDeckScene(this.services.deckStore, this.services.logger)
+      case 'tavern-brawl':
+        return new TavernBrawlScene(
+          this.services.playerStatsStore,
+          this,
+          this.services.logger
+        )
       case 'game':
         return new GameScene(
           route,
           this.services.deckStore,
+          this.services.playerStatsStore,
+          this.services.arenaStore,
           this.services.logger,
           this,
           this.services.ai

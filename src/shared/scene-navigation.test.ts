@@ -1,0 +1,20 @@
+import { describe, expect, it } from 'vitest'
+import { isSceneRequest, SCENE_MENU_ENTRIES } from './scene-navigation'
+
+describe('scene navigation contract', () => {
+  it('exposes and accepts the Arena scene request', () => {
+    expect(SCENE_MENU_ENTRIES.arena).toEqual({
+      label: 'Arena',
+      request: { id: 'arena' }
+    })
+    expect(isSceneRequest({ id: 'arena' })).toBe(true)
+  })
+
+  it('exposes and accepts the Tavern Brawl scene request', () => {
+    expect(SCENE_MENU_ENTRIES['tavern-brawl']).toEqual({
+      label: 'Tavern Brawl',
+      request: { id: 'tavern-brawl' }
+    })
+    expect(isSceneRequest({ id: 'tavern-brawl' })).toBe(true)
+  })
+})

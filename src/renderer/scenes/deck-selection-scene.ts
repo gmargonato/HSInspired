@@ -8,6 +8,7 @@ import {
 } from '../features/deck-selection/deck-selection-model'
 import { createHumanVsAiGameRoute } from '../app/router'
 import type { Deck } from '../../game/decks'
+import type { PlayerStatsStore } from '../ui/player-stats-store'
 import { Scene } from './scene'
 
 /** Route adapter for the feature-owned complete-deck selection view. */
@@ -16,12 +17,18 @@ export class DeckSelectionScene extends Scene {
   private readonly deckStore: DeckStore
   private readonly router?: SceneRouter
 
-  constructor(deckStore: DeckStore, router?: SceneRouter, logger?: AppLogger) {
+  constructor(
+    deckStore: DeckStore,
+    playerStatsStore: PlayerStatsStore,
+    router?: SceneRouter,
+    logger?: AppLogger
+  ) {
     super()
     this.deckStore = deckStore
     this.router = router
     this.view = new DeckSelectionView(
       deckStore,
+      playerStatsStore,
       {
         onCollectionPressed: () =>
           router?.navigate({ id: 'collection' }) ??

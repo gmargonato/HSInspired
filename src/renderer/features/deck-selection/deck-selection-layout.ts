@@ -46,6 +46,16 @@ export const DECK_SELECTION_LAYOUT = {
     }
   ),
 
+  /** Persistent win total for the selected hero's class. */
+  classWins: placement(
+    { x: 1470, y: 780 },
+    { width: 0, height: 0 },
+    {
+      anchor: CENTER,
+      note: 'Small centered Belwe text between the hero name and Play button.'
+    }
+  ),
+
   /** Round play button, shown once a deck is selected. */
   playButton: placement(
     { x: 1470, y: 930 },

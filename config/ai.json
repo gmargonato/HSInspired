@@ -8,10 +8,33 @@
   "requestTimeoutMs": 10000,
   "reasoningEffort": "low",
   "maxCompletionTokens": 2048,
+  "decisionPolicies": {
+    "deckPlan": {
+      "requestTimeoutMs": 30000,
+      "reasoningEffort": "low",
+      "maxCompletionTokens": 3072
+    },
+    "mulligan": {
+      "requestTimeoutMs": 25000,
+      "reasoningEffort": "low",
+      "maxCompletionTokens": 2048
+    },
+    "discover": {
+      "requestTimeoutMs": 15000,
+      "reasoningEffort": "low",
+      "maxCompletionTokens": 1024
+    },
+    "turn": {
+      "requestTimeoutMs": 20000,
+      "reasoningEffort": "low",
+      "maxCompletionTokens": 2048
+    }
+  },
   "prompts": {
-    "system": "You are the sole strategy and turn-decision controller for the remote player in a Hearthstone-style card game. In every payload, self is the remote AI player and opponent is the local human player. Optimize for winning the match. The game engine and its structured effects are authoritative: choose exactly one supplied legal action id and never invent an action, target, card, cost, effect, or rule. You receive a fresh, fully resolved state after every action, so select only the best next atomic action in the intended sequence. The information policy is omniscient: hidden hands, secrets, original decklists, and the exact remaining top-first deck order are intentionally available and should be used. Treat rulesText as strategic guidance, but prefer structured card effects, runtime state, and engine-issued legal actions whenever they differ. Compare all legal actions privately. Return only the required structured decision with a concise rationale, strategic intent, and compact strategy summary; do not reveal private chain-of-thought.",
-    "mulligan": "Infer both deck plans from the complete original decklists. Identify self's likely win conditions, card roles, curve, synergies, and early-game priorities. Account for player number, the Coin, the opponent's exact opening hand, and known draw order. Replace cards that do not support the strongest opening plan unless a slower card is essential to the matchup. The strategy summary must preserve the inferred deck plan, matchup plan, key resources, and early priorities for later decisions.",
-    "turn": "Choose the strongest next atomic action. First check for exact lethal. Then assess whether the opponent has lethal or a decisive swing from their exact hand, board, hero power, secrets, and known future draws. Compare defensive necessities, favorable trades, face damage, card and hero-power sequencing, mana efficiency, board space, overdraw, fatigue, resource preservation, card synergies, and the next several turns. Use known deck order and hidden information deliberately. Prefer a coherent winning line over isolated immediate value, and update the strategy summary only with durable matchup knowledge and the intended near-term plan. Never perform an action that can drop your hero's life points to 0 or less."
+    "system": "You rank a closed shortlist of engine-issued actions for the remote AI player in a Hearthstone-style game. Optimize match win probability. The mode's visibility policy is authoritative: unknown opponent cards, secrets, deck order, and future random results are genuinely unknown and must never be assumed. Structured runtime state, the match-scoped deck plan, outcome annotations, and legal IDs are authoritative; never invent an action, target, card, cost, or rule. Apply this order: take guaranteed lethal, prevent forced defeat, then choose the highest expected-win line that advances the deck plan while preserving resources whose release conditions are not met. Uncertainty is a probability tradeoff, not a reason to stop making productive plays. Return exactly the structured response with a concise player-visible rationale and no private chain-of-thought.",
+    "deckPlan": "Analyze only the supplied AI deck and structured card relationships. Produce a compact match plan: identify its actual win conditions, game phases, card roles, combos and ordering, resources that must be preserved with explicit release conditions, and mulligan priorities. Reference only card IDs present in the supplied deck. Do not infer an opponent deck or invent rules. Frostbolt-like damage that enables a later combo should be protected when that combo is a real win condition, but every resource must be releasable for lethal, survival, or a superior winning line.",
+    "mulligan": "Choose the strongest supplied replacement candidate using the match-scoped deck plan, player number, Coin, exact self opening hand, and public opponent hero/class only. Do not assume opponent hand, decklist, or draw order. Select exactly one supplied candidate ID.",
+    "turn": "Select the strongest supplied action or candidate line for the deck's end goal, not the largest immediate stat change. Guaranteed lethal and forced survival come first. Otherwise compare expected outcome, worst case, plan progress, sequencing, board and hand value, and the opportunity cost of consuming reserved combo resources. Treat unknown secrets as a belief set: play around them only when the expected benefit exceeds the tempo and resource cost. A fresh authoritative state follows every dispatched action."
   },
   "debug": true
 }

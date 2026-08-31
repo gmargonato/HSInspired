@@ -19,7 +19,9 @@ export interface SceneParamsById {
   'main-menu': undefined
   'deck-selection': undefined
   collection: undefined
+  arena: undefined
   'new-deck': undefined
+  'tavern-brawl': undefined
   game: { deckId: string } | undefined
 }
 
@@ -58,7 +60,12 @@ export const SCENE_MENU_ENTRIES = {
     request: { id: 'deck-selection' }
   },
   collection: { label: 'Collection', request: { id: 'collection' } },
+  arena: { label: 'Arena', request: { id: 'arena' } },
   'new-deck': { label: 'New Deck', request: { id: 'new-deck' } },
+  'tavern-brawl': {
+    label: 'Tavern Brawl',
+    request: { id: 'tavern-brawl' }
+  },
   game: { label: 'Match (First Complete Deck)', request: { id: 'game' } }
 } as const satisfies SceneMenuCatalog
 

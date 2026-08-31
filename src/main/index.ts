@@ -13,6 +13,10 @@ import { installSceneMenu } from './menu/dev-menu'
 import { loadAzureOpenAiConfig } from './services/ai-config'
 import { registerAiIpc } from './services/ai-ipc'
 import { AzureOpenAiDecisionService } from './services/azure-openai-ai-service'
+import { registerPlayerStatsIpc } from './services/player-stats-ipc'
+import { PlayerStatsRepository } from './services/player-stats-repository'
+import { ArenaRepository } from './services/arena-repository'
+import { registerArenaIpc } from './services/arena-ipc'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
@@ -115,6 +119,10 @@ void app
       })
     )
     registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))
+    registerPlayerStatsIpc(
+      new PlayerStatsRepository(join(app.getPath('userData'), 'player-stats.json'))
+    )
+    registerArenaIpc(new ArenaRepository(join(app.getPath('userData'), 'arena.json')))
     const windowSettingsRepository = new WindowSettingsRepository(
       join(app.getPath('userData'), 'window-settings.json')
     )

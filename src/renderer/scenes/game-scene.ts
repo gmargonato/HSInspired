@@ -1,6 +1,8 @@
 import type { AppLogger } from '../app/services'
-import type { GameRoute, SceneRouter } from '../app/router'
+import type { AppRoute, GameRoute, SceneRouter } from '../app/router'
 import type { DeckStore } from '../ui/deck-store'
+import type { PlayerStatsStore } from '../ui/player-stats-store'
+import type { ArenaStore } from '../ui/arena-store'
 import { createMatchSeed } from '../features/deck-selection/deck-selection-model'
 import { createRestartGameRoute } from '../features/game/game-route'
 import {
@@ -17,6 +19,14 @@ import type {
 } from '../../shared/dev-menu'
 import { Scene } from './scene'
 import type { AiDecisionApi } from '../../shared/ipc/ai'
+import type { MatchEndedEvent } from '../../game/match'
+import { HERO_CATALOG } from '../../game/content/heroes'
+import {
+  classifyArenaMatchResult,
+  shouldRecordClassWin
+} from '../features/game/match-win-tracking'
+import { GameBoardSession } from '../features/game/game-board-session'
+import { AiTurnController } from '../features/game/ai-turn-controller'
 
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
@@ -28,6 +38,8 @@ export class GameScene extends Scene {
   constructor(
     route: GameRoute,
     deckStore: DeckStore,
+    private readonly playerStatsStore: PlayerStatsStore,
+    private readonly arenaStore: ArenaStore,
     logger?: AppLogger,
     private readonly router?: SceneRouter,
     private readonly ai?: AiDecisionApi
@@ -40,22 +52,19 @@ export class GameScene extends Scene {
 
   async init(): Promise<void> {
     this.logger?.info('[GameScene] init start', this.route)
-    const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
-    this.logger?.info('[GameScene] game assets acquired')
-    const heroAssets = await this.assetScope.acquire<DeckPresentationAssets>(
-      ASSET_BUNDLE_IDS.deckPresentation
-    )
-    this.logger?.info('[GameScene] hero assets acquired')
-    await this.assetScope.acquire(ASSET_BUNDLE_IDS.cardRendering)
-    this.logger?.info('[GameScene] card rendering bundle acquired')
-    await this.deckStore.load()
-    this.logger?.info(
-      '[GameScene] deckStore loaded',
-      this.deckStore.getDecks().map((d) => d.id)
-    )
+    if (!this.route.deckSnapshots) {
+      await this.deckStore.load()
+      this.logger?.info(
+        '[GameScene] deckStore loaded',
+        this.deckStore.getDecks().map((d) => d.id)
+      )
+    }
 
+    const deckCandidates = this.route.deckSnapshots ?? this.deckStore.getDecks()
     const decks = this.route.setup.participants.map((participant) => {
-      const deck = this.deckStore.getDeck(participant.deckId)
+      const deck = deckCandidates.find(
+        (candidate) => candidate.id === participant.deckId
+      )
       if (!deck)
         throw new Error(`The selected deck ${participant.deckId} is unavailable.`)
       return deck
@@ -64,6 +73,30 @@ export class GameScene extends Scene {
       '[GameScene] decks resolved',
       decks.map((d) => `${d.id} — ${d.heroId}`)
     )
+
+    const aiLogger = this.logger ?? {
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined
+    }
+    const aiSession = new GameBoardSession({ setup: this.route.setup, decks })
+    const aiController = new AiTurnController({
+      api: this.ai,
+      session: aiSession,
+      decks,
+      logger: aiLogger
+    })
+    aiController.prewarmDeckPlan()
+    this.logger?.info('[GameScene] AI deck planning started')
+
+    const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
+    this.logger?.info('[GameScene] game assets acquired')
+    const heroAssets = await this.assetScope.acquire<DeckPresentationAssets>(
+      ASSET_BUNDLE_IDS.deckPresentation
+    )
+    this.logger?.info('[GameScene] hero assets acquired')
+    await this.assetScope.acquire(ASSET_BUNDLE_IDS.cardRendering)
+    this.logger?.info('[GameScene] card rendering bundle acquired')
 
     await this.waitForFonts()
     this.logger?.info('[GameScene] fonts ready')
@@ -77,7 +110,9 @@ export class GameScene extends Scene {
       cursor: this.sceneManager.cursor,
       logger: this.logger,
       ai: this.ai,
-      onMatchComplete: () => this.router?.navigate({ id: 'deck-selection' })
+      aiRuntime: { session: aiSession, controller: aiController },
+      onMatchEnded: (event) => this.recordMatchResult(event),
+      onMatchComplete: () => this.router?.navigate(this.createExitRoute())
     })
     this.logger?.info('[GameScene] GameBoardView created')
     try {
@@ -127,6 +162,32 @@ export class GameScene extends Scene {
     }
   }
 
+  private async recordMatchResult(event: MatchEndedEvent): Promise<void> {
+    const human = this.route.setup.participants.find(
+      (participant) => participant.controllerKind === 'human'
+    )
+    if (!human) return
+
+    try {
+      if (this.route.mode === 'arena') {
+        const result = classifyArenaMatchResult(event, human.participantId)
+        if (result) await this.arenaStore.recordResult(result)
+        return
+      }
+
+      if (!shouldRecordClassWin(event, human.participantId)) return
+      if (this.route.mode === 'tavern-brawl') {
+        await this.playerStatsStore.recordTavernBrawlWin()
+        return
+      }
+
+      const classId = HERO_CATALOG.require(human.heroId).classId
+      await this.playerStatsStore.recordWin(classId)
+    } catch (error) {
+      this.logger?.warn('Failed to save the match result.', error)
+    }
+  }
+
   update(_deltaMS: number): void {}
 
   playOpeningReveal(): Promise<void> {
@@ -144,6 +205,14 @@ export class GameScene extends Scene {
       seed = (seed + 1) >>> 0
     }
     return createRestartGameRoute(this.route, seed)
+  }
+
+  createExitRoute(): AppRoute {
+    return this.route.mode === 'arena'
+      ? { id: 'arena' }
+      : this.route.mode === 'tavern-brawl'
+        ? { id: 'tavern-brawl' }
+        : { id: 'deck-selection' }
   }
 
   openCardPicker(target: DevMatchTarget, action: DevCardPickerAction): void {

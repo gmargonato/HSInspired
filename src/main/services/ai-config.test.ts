@@ -13,6 +13,7 @@ const validConfig = {
   maxCompletionTokens: 2048,
   prompts: {
     system: 'System instructions.',
+    deckPlan: 'Deck planning instructions.',
     mulligan: 'Mulligan instructions.',
     turn: 'Turn instructions.'
   },
@@ -26,6 +27,28 @@ describe('AI configuration', () => {
     expect(config.reasoningEffort).toBe('low')
     expect(config.maxCompletionTokens).toBe(2048)
     expect(config.prompts).toEqual(validConfig.prompts)
+    expect(config.decisionPolicies).toEqual({
+      deckPlan: {
+        requestTimeoutMs: 8000,
+        reasoningEffort: 'low',
+        maxCompletionTokens: 2048
+      },
+      mulligan: {
+        requestTimeoutMs: 8000,
+        reasoningEffort: 'low',
+        maxCompletionTokens: 2048
+      },
+      discover: {
+        requestTimeoutMs: 8000,
+        reasoningEffort: 'low',
+        maxCompletionTokens: 2048
+      },
+      turn: {
+        requestTimeoutMs: 8000,
+        reasoningEffort: 'low',
+        maxCompletionTokens: 2048
+      }
+    })
     expect(config.apiKey).toBe('secret-key')
   })
 

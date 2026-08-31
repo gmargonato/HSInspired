@@ -3,10 +3,11 @@ import {
   OneShotPointerTapGuard,
   allowsDragTargetingFromHand,
   isHandOwnedSlot,
+  resolveHandCardArrowOrigin,
   requiresClickConfirmedMinionPlacement
 } from './hand-play-gesture'
 
-describe('targeted minion hand-play gesture', () => {
+describe('hand-play gesture', () => {
   it('requires a separate placement click for a targeted minion', () => {
     expect(
       requiresClickConfirmedMinionPlacement('Minion', {
@@ -23,6 +24,16 @@ describe('targeted minion hand-play gesture', () => {
         choiceCount: 2
       })
     ).toBe(true)
+  })
+
+  it('allows a self-transform Choice minion to enter play before selecting its form', () => {
+    expect(
+      requiresClickConfirmedMinionPlacement('Minion', {
+        targetSelectors: [],
+        choiceCount: 2,
+        choiceTiming: 'after-placement'
+      })
+    ).toBe(false)
   })
 
   it('keeps release-to-play for ordinary minions and non-minion cards', () => {
@@ -53,6 +64,19 @@ describe('targeted minion hand-play gesture', () => {
         choiceCount: 0
       })
     ).toBe(false)
+  })
+
+  it('always renders targeted spells from the local hero', () => {
+    expect(resolveHandCardArrowOrigin('Spell', 'card')).toBe('local-hero')
+    expect(resolveHandCardArrowOrigin('Spell', 'local-hero')).toBe('local-hero')
+  })
+
+  it('preserves non-spell and minion-preview targeting origins', () => {
+    expect(resolveHandCardArrowOrigin('Weapon', 'card')).toBe('card')
+    expect(resolveHandCardArrowOrigin('Weapon', 'local-hero')).toBe('local-hero')
+    expect(resolveHandCardArrowOrigin('Minion', 'minion-preview')).toBe(
+      'minion-preview'
+    )
   })
 
   it('suppresses only the tap produced by the armed placement pointer', () => {

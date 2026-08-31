@@ -1,7 +1,9 @@
 import type { Deck } from '../../../game/decks'
 import {
   createTurnMatch,
-  type TurnMatchEvent,
+  type OpeningMatchAnalysis,
+  type OpeningMatchPublicEvent,
+  type OpeningMatchPublicState,
   type TurnMatchInstance,
   type TurnMatchResult,
   type TurnMatchState
@@ -24,7 +26,7 @@ export class GameBoardSession {
   readonly remoteParticipantId: PlayerId
   readonly localPlayerNumber: 1 | 2
   readonly remotePlayerNumber: 1 | 2
-  private readonly aiObservedEvents: TurnMatchEvent[] = []
+  private readonly aiObservedEvents: OpeningMatchPublicEvent[] = []
 
   constructor(options: GameBoardSessionOptions) {
     const match = createTurnMatch(options.setup, options.decks)
@@ -42,10 +44,19 @@ export class GameBoardSession {
     this.remoteParticipantId = remote.participantId
     this.match = {
       ...match,
+      // Bind previews to the underlying engine so simulations cannot pollute
+      // the renderer's authoritative-event history.
+      preview: (command: unknown) => match.preview(command),
+      previewSequence: (commands: readonly unknown[]) =>
+        match.previewSequence(commands),
+      analyze: <T>(operation: (fork: OpeningMatchAnalysis) => T) =>
+        match.analyze(operation),
       dispatch: (command: unknown) => {
         const result = match.dispatch(command)
         if (result.accepted) {
-          this.aiObservedEvents.push(...result.events)
+          this.aiObservedEvents.push(
+            ...(match.getPublicEvents?.(remote.participantId, result.events) ?? [])
+          )
         }
         return result
       }
@@ -63,7 +74,13 @@ export class GameBoardSession {
     return this.match.dispatch(command)
   }
 
-  getAiObservedEvents(limit = 80): readonly TurnMatchEvent[] {
+  getAiPublicState(): OpeningMatchPublicState {
+    const state = this.match.getPublicState?.(this.remoteParticipantId)
+    if (!state) throw new Error('The match engine does not expose public AI state.')
+    return state
+  }
+
+  getAiObservedEvents(limit = 24): readonly OpeningMatchPublicEvent[] {
     return this.aiObservedEvents.slice(-Math.max(0, limit))
   }
 

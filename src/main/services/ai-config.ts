@@ -4,8 +4,15 @@ export type AiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh'
 
 export interface AiPrompts {
   readonly system: string
+  readonly deckPlan: string
   readonly mulligan: string
   readonly turn: string
+}
+
+export interface AiDecisionPolicy {
+  readonly requestTimeoutMs: number
+  readonly reasoningEffort: AiReasoningEffort
+  readonly maxCompletionTokens: number
 }
 
 export interface AzureOpenAiConfig {
@@ -19,6 +26,12 @@ export interface AzureOpenAiConfig {
   readonly reasoningEffort: AiReasoningEffort
   readonly maxCompletionTokens: number
   readonly prompts: AiPrompts
+  readonly decisionPolicies: Readonly<{
+    readonly deckPlan: AiDecisionPolicy
+    readonly mulligan: AiDecisionPolicy
+    readonly discover: AiDecisionPolicy
+    readonly turn: AiDecisionPolicy
+  }>
   readonly debug: boolean
   readonly apiKey: string
 }
@@ -64,8 +77,70 @@ function parsePrompts(value: unknown): AiPrompts {
   }
   return {
     system: requiredString(value, 'system'),
+    deckPlan: requiredString(value, 'deckPlan'),
     mulligan: requiredString(value, 'mulligan'),
     turn: requiredString(value, 'turn')
+  }
+}
+
+function parseDecisionPolicy(
+  value: unknown,
+  fallback: AiDecisionPolicy,
+  label: string
+): AiDecisionPolicy {
+  if (value === undefined) return fallback
+  if (!isRecord(value)) throw new Error(`AI configuration ${label} must be an object.`)
+  const requestTimeoutMs = value['requestTimeoutMs']
+  const maxCompletionTokens = value['maxCompletionTokens']
+  if (
+    !Number.isSafeInteger(requestTimeoutMs) ||
+    (requestTimeoutMs as number) < 1000 ||
+    (requestTimeoutMs as number) > 120000
+  ) {
+    throw new Error(
+      `AI configuration ${label}.requestTimeoutMs must be between 1000 and 120000.`
+    )
+  }
+  if (
+    !Number.isSafeInteger(maxCompletionTokens) ||
+    (maxCompletionTokens as number) < 256 ||
+    (maxCompletionTokens as number) > 16384
+  ) {
+    throw new Error(
+      `AI configuration ${label}.maxCompletionTokens must be between 256 and 16384.`
+    )
+  }
+  return {
+    requestTimeoutMs: requestTimeoutMs as number,
+    reasoningEffort: parseReasoningEffort(value['reasoningEffort']),
+    maxCompletionTokens: maxCompletionTokens as number
+  }
+}
+
+function parseDecisionPolicies(
+  value: unknown,
+  fallback: AiDecisionPolicy
+): AzureOpenAiConfig['decisionPolicies'] {
+  if (value !== undefined && !isRecord(value)) {
+    throw new Error('AI configuration decisionPolicies must be an object.')
+  }
+  return {
+    deckPlan: parseDecisionPolicy(
+      value?.['deckPlan'],
+      fallback,
+      'decisionPolicies.deckPlan'
+    ),
+    mulligan: parseDecisionPolicy(
+      value?.['mulligan'],
+      fallback,
+      'decisionPolicies.mulligan'
+    ),
+    discover: parseDecisionPolicy(
+      value?.['discover'],
+      fallback,
+      'decisionPolicies.discover'
+    ),
+    turn: parseDecisionPolicy(value?.['turn'], fallback, 'decisionPolicies.turn')
   }
 }
 
@@ -113,6 +188,11 @@ export function parseAzureOpenAiConfig(
   if (endpointUrl.protocol !== 'https:') {
     throw new Error('AI configuration endpoint must use HTTPS.')
   }
+  const policyFallback = {
+    requestTimeoutMs: requestTimeoutMs as number,
+    reasoningEffort: parseReasoningEffort(value['reasoningEffort']),
+    maxCompletionTokens: maxCompletionTokens as number
+  }
   return {
     enabled: value['enabled'],
     provider: 'azure-openai',
@@ -121,9 +201,10 @@ export function parseAzureOpenAiConfig(
     endpoint: endpointUrl.toString(),
     apiVersion: requiredString(value, 'apiVersion'),
     requestTimeoutMs: requestTimeoutMs as number,
-    reasoningEffort: parseReasoningEffort(value['reasoningEffort']),
+    reasoningEffort: policyFallback.reasoningEffort,
     maxCompletionTokens: maxCompletionTokens as number,
     prompts: parsePrompts(value['prompts']),
+    decisionPolicies: parseDecisionPolicies(value['decisionPolicies'], policyFallback),
     debug: value['debug'],
     apiKey: apiKey.trim()
   }

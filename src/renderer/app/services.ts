@@ -1,6 +1,10 @@
 import { PersistentDeckStore, type DeckStore } from './deck-store'
 import { createAppLogger, type AppLogger } from './logger'
 import type { AiDecisionApi } from '../../shared/ipc/ai'
+import { PersistentPlayerStatsStore } from './player-stats-store'
+import type { PlayerStatsStore } from '../ui/player-stats-store'
+import { PersistentArenaStore } from './arena-store'
+import type { ArenaStore } from '../ui/arena-store'
 
 export type { AppLogger } from './logger'
 
@@ -48,7 +52,9 @@ class BrowserDialogService implements DialogService {
 /** Renderer-lifetime dependencies assembled once by the application root. */
 export interface AppServices {
   readonly ai: AiDecisionApi
+  readonly arenaStore: ArenaStore
   readonly deckStore: DeckStore
+  readonly playerStatsStore: PlayerStatsStore
   readonly dialogs: DialogService
   readonly logger: AppLogger
 }
@@ -66,7 +72,9 @@ export function createAppServices(overrides: Partial<AppServices> = {}): AppServ
         })
   return {
     ai,
+    arenaStore: overrides.arenaStore ?? new PersistentArenaStore(),
     deckStore: overrides.deckStore ?? new PersistentDeckStore(undefined, logger),
+    playerStatsStore: overrides.playerStatsStore ?? new PersistentPlayerStatsStore(),
     dialogs: overrides.dialogs ?? new BrowserDialogService(),
     logger,
     ...overrides

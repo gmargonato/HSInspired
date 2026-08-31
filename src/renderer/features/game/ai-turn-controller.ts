@@ -10,10 +10,14 @@ import type {
   PlayCardInput,
   PlayerId,
   TurnMatchCommand,
+  TurnMatchResult,
   TurnMatchState
 } from '../../../game/match'
 import type {
   AiActionKind,
+  AiActionAnalysis,
+  AiDeckPlan,
+  AiDecisionClass,
   AiDecisionApi,
   AiDecisionRequest,
   AiDecisionResponse,
@@ -21,11 +25,19 @@ import type {
   JsonObject
 } from '../../../shared/ipc/ai'
 import type { RendererLogger } from '../../ui/logger'
+import {
+  createDeckPlanRequest,
+  createFallbackDeckPlan,
+  reservedCardIds,
+  validateDeckPlanForDeck
+} from './ai-deck-strategy'
 import type { GameBoardSession } from './game-board-session'
 
 interface CandidateAction {
   readonly public: AiLegalAction
   readonly command: TurnMatchCommand
+  readonly previewCommands?: readonly TurnMatchCommand[]
+  readonly analysis?: AiActionAnalysis
 }
 
 export interface AiActionDecision {
@@ -35,17 +47,42 @@ export interface AiActionDecision {
   readonly source: 'model' | 'fallback'
 }
 
-interface AiTurnControllerOptions {
+export interface AiTurnControllerOptions {
   readonly api?: AiDecisionApi
   readonly session: GameBoardSession
   readonly decks: readonly Deck[]
   readonly logger: RendererLogger
 }
 
-const MAX_STRATEGY_SUMMARY_LENGTH = 4000
+const AI_PROMPT_VERSION = 'strategic-fair-ranker-v2'
+const AI_CONTEXT_VERSION = 4
+const AI_SCHEMA_VERSION = 3
+const MAX_PREVIEWED_CANDIDATES = 256
+const MAX_MODEL_CANDIDATES = 12
+const MAX_DECISION_TIME_MS = 20_000
+const MAX_DECK_PLAN_TIME_MS = 30_000
+const RESERVED_RESOURCE_PENALTY = 120
+const LINE_SEARCH_MAX_DEPTH = 12
+const LINE_SEARCH_BEAM_WIDTH = 32
+const LINE_SEARCH_NODE_LIMIT = 4_000
+const LINE_SEARCH_TIME_MS = 250
 
 function toJsonObject(value: unknown): JsonObject {
   return JSON.parse(JSON.stringify(value)) as JsonObject
+}
+
+/** Removes stable internal IDs from card backs so they cannot encode hidden order. */
+function sanitizePrivateIdentifiers(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizePrivateIdentifiers)
+  if (typeof value !== 'object' || value === null) return value
+  const record = value as Record<string, unknown>
+  const hiddenCard = 'cardId' in record && record['cardId'] === null
+  const result: Record<string, unknown> = {}
+  for (const [key, nested] of Object.entries(record)) {
+    if (hiddenCard && (key === 'id' || key === 'instanceId')) continue
+    result[key] = sanitizePrivateIdentifiers(nested)
+  }
+  return hiddenCard ? { ...result, hidden: true } : result
 }
 
 function compactCardDefinition(definition: CardDefinition): JsonObject {
@@ -293,19 +330,256 @@ function isPermanentProviderError(error: unknown): boolean {
   )
 }
 
+function errorDetails(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function participantSummary(state: TurnMatchState, participantId: PlayerId) {
+  const player = state.players.find(
+    (candidate) => candidate.participantId === participantId
+  )
+  if (!player) throw new Error(`Unknown preview participant ${participantId}.`)
+  return {
+    effectiveHealth: player.hero.health + player.hero.armor,
+    boardAttack: player.board.reduce((total, minion) => total + minion.attack, 0),
+    boardHealth: player.board.reduce((total, minion) => total + minion.health, 0),
+    mana: player.mana.available
+  }
+}
+
+function actionAnalysis(
+  result: TurnMatchResult,
+  before: TurnMatchState,
+  selfId: PlayerId,
+  opponentId: PlayerId,
+  planResourceCost: number
+): AiActionAnalysis {
+  const beforeSelf = participantSummary(before, selfId)
+  const beforeOpponent = participantSummary(before, opponentId)
+  const self = participantSummary(result.state, selfId)
+  const opponent = participantSummary(result.state, opponentId)
+  const terminal =
+    result.state.winnerId === selfId
+      ? 'win'
+      : result.state.loserId === selfId
+        ? 'loss'
+        : 'none'
+  const score =
+    (result.accepted ? 0 : -1_000_000) +
+    (terminal === 'win' ? 500_000 : terminal === 'loss' ? -500_000 : 0) +
+    (self.effectiveHealth - beforeSelf.effectiveHealth) * 12 -
+    (opponent.effectiveHealth - beforeOpponent.effectiveHealth) * 12 +
+    (self.boardAttack - beforeSelf.boardAttack) * 8 -
+    (opponent.boardAttack - beforeOpponent.boardAttack) * 8 +
+    (self.boardHealth - beforeSelf.boardHealth) * 2 -
+    (opponent.boardHealth - beforeOpponent.boardHealth) * 2 -
+    planResourceCost
+  return {
+    accepted: result.accepted,
+    terminal,
+    selfEffectiveHealth: self.effectiveHealth,
+    opponentEffectiveHealth: opponent.effectiveHealth,
+    selfBoardAttack: self.boardAttack,
+    opponentBoardAttack: opponent.boardAttack,
+    score,
+    ...(planResourceCost > 0 ? { planResourceCost } : {})
+  }
+}
+
+function candidateCardId(candidate: CandidateAction): string | null {
+  const card = candidate.public.details['card']
+  if (typeof card !== 'object' || card === null || Array.isArray(card)) return null
+  const cardId = (card as Record<string, unknown>)['cardId']
+  return typeof cardId === 'string' ? cardId : null
+}
+
+function candidatePlanResourceCost(
+  candidate: CandidateAction,
+  deckPlan: AiDeckPlan
+): number {
+  const cardId = candidateCardId(candidate)
+  if (!cardId || !reservedCardIds(deckPlan).has(cardId)) return 0
+  const plannedCardIdsValue = candidate.public.details['plannedCardIds']
+  const plannedCardIds = Array.isArray(plannedCardIdsValue)
+    ? plannedCardIdsValue.filter((entry): entry is string => typeof entry === 'string')
+    : [cardId]
+  const completesPackage = deckPlan.combos.some(
+    (combo) =>
+      combo.cardIds.includes(cardId) &&
+      combo.cardIds.every((comboCardId) => plannedCardIds.includes(comboCardId))
+  )
+  return completesPackage ? 0 : RESERVED_RESOURCE_PENALTY
+}
+
+function definitionMayUseUnknownRandomness(definition: CardDefinition): boolean {
+  const serialized = JSON.stringify(definition.effects ?? [])
+  return (
+    serialized.includes('"selection":"random"') ||
+    serialized.includes('"random"') ||
+    serialized.includes('"shuffle"') ||
+    serialized.includes('"discover"') ||
+    serialized.includes('"action":"draw') ||
+    serialized.includes('"action":"generate')
+  )
+}
+
+function candidateMayResolvePrivateInformation(
+  candidate: CandidateAction,
+  state: TurnMatchState,
+  opponentId: PlayerId
+): boolean {
+  const opponent = state.players.find((player) => player.participantId === opponentId)
+  if (opponent?.secrets?.some((secret) => !secret.revealed) ?? false) return true
+  const serializedDetails = JSON.stringify(candidate.public.details)
+  if (
+    serializedDetails.includes('"selection":"random"') ||
+    serializedDetails.includes('"random"') ||
+    serializedDetails.includes('"shuffle"') ||
+    serializedDetails.includes('"discover"') ||
+    serializedDetails.includes('"action":"draw') ||
+    serializedDetails.includes('"action":"generate')
+  ) {
+    return true
+  }
+  for (const player of state.players) {
+    const publicPermanentIds = [
+      ...player.board.map((minion) => minion.cardId),
+      ...(player.weapon ? [player.weapon.cardId] : [])
+    ]
+    if (
+      publicPermanentIds.some((cardId) => {
+        const definition = CARD_CATALOG.get(cardId)
+        return definition ? definitionMayUseUnknownRandomness(definition) : false
+      })
+    ) {
+      return true
+    }
+  }
+  const referenced = collectReferencedCardIds(candidate.public.details)
+  for (const cardId of referenced) {
+    const definition = CARD_CATALOG.get(cardId)
+    if (definition && definitionMayUseUnknownRandomness(definition)) return true
+  }
+  return false
+}
+
+function uncertainAnalysis(
+  state: TurnMatchState,
+  selfId: PlayerId,
+  opponentId: PlayerId,
+  planResourceCost: number
+): AiActionAnalysis {
+  const self = participantSummary(state, selfId)
+  const opponent = participantSummary(state, opponentId)
+  return {
+    accepted: true,
+    terminal: 'none',
+    selfEffectiveHealth: self.effectiveHealth,
+    opponentEffectiveHealth: opponent.effectiveHealth,
+    selfBoardAttack: self.boardAttack,
+    opponentBoardAttack: opponent.boardAttack,
+    score: -planResourceCost,
+    ...(planResourceCost > 0 ? { planResourceCost } : {}),
+    uncertain: true
+  }
+}
+
+function previewPriority(candidate: CandidateAction): number {
+  if (candidate.public.kind === 'end-turn') return 1
+  if (candidate.public.kind === 'attack-character') {
+    const defender = candidate.public.details['defender']
+    if (
+      typeof defender === 'object' &&
+      defender !== null &&
+      defender['kind'] === 'hero'
+    ) {
+      return 4
+    }
+  }
+  if (candidate.public.kind === 'play-card') return 3
+  if (candidate.public.kind === 'use-hero-power') return 2
+  return 0
+}
+
 export class AiTurnController {
-  private strategySummary = ''
   private decisionSequence = 0
   private providerDisabled = false
+  private deckPlan: AiDeckPlan | null = null
+  private deckPlanPromise: Promise<AiDeckPlan> | null = null
 
   constructor(private readonly options: AiTurnControllerOptions) {}
+
+  /** Starts the once-per-match strategy request without delaying scene setup. */
+  prewarmDeckPlan(): void {
+    void this.ensureDeckPlan().catch((error) => {
+      this.options.logger.warn(
+        '[Game AI] could not prewarm the deterministic deck strategy',
+        errorDetails(error)
+      )
+    })
+  }
 
   async chooseMulligan(): Promise<AiActionDecision> {
     return this.choose('mulligan', this.mulliganCandidates())
   }
 
   async chooseTurnAction(): Promise<AiActionDecision> {
-    return this.choose('turn', this.turnCandidates())
+    return this.choose('turn', this.turnLineCandidates())
+  }
+
+  private aiDeck(): Deck {
+    const participant = this.options.session.match.setup.participants.find(
+      (candidate) =>
+        candidate.participantId === this.options.session.remoteParticipantId
+    )
+    const deck = this.options.decks.find(
+      (candidate) => candidate.id === participant?.deckId
+    )
+    if (!deck) throw new Error('The AI deck is unavailable for strategic planning.')
+    return deck
+  }
+
+  private async ensureDeckPlan(): Promise<AiDeckPlan> {
+    if (this.deckPlan) return this.deckPlan
+    if (this.deckPlanPromise) return this.deckPlanPromise
+    const deck = this.aiDeck()
+    const fallback = createFallbackDeckPlan(deck)
+    this.deckPlanPromise = (async () => {
+      if (!this.options.api?.planDeck || this.providerDisabled) return fallback
+      try {
+        const response = await this.options.api.planDeck(
+          createDeckPlanRequest(deck, Date.now() + MAX_DECK_PLAN_TIME_MS)
+        )
+        const plan = validateDeckPlanForDeck(response.plan, deck)
+        this.options.logger.info('[Game AI] prepared match deck plan', {
+          archetype: plan.archetype,
+          primaryWinCondition: plan.primaryWinCondition,
+          rationale: response.rationale,
+          modelId: response.modelId
+        })
+        return plan
+      } catch (error) {
+        if (isPermanentProviderError(error)) this.providerDisabled = true
+        this.options.logger.warn(
+          '[Game AI] deck planning failed; using deterministic strategy',
+          errorDetails(error)
+        )
+        return fallback
+      }
+    })()
+    this.deckPlan = await this.deckPlanPromise
+    return this.deckPlan
+  }
+
+  private deckPlanForDecision(phase: 'mulligan' | 'turn'): Promise<AiDeckPlan> {
+    if (phase !== 'mulligan') return this.ensureDeckPlan()
+
+    // Mulligan ranking can run beside the richer remote analysis. The local plan
+    // already understands structured synergies, while later turns automatically
+    // inherit the remote plan as soon as the prewarmed promise completes.
+    this.prewarmDeckPlan()
+    return Promise.resolve(this.deckPlan ?? createFallbackDeckPlan(this.aiDeck()))
   }
 
   private mulliganCandidates(): readonly CandidateAction[] {
@@ -417,7 +691,7 @@ export class AiTurnController {
             const choiceIndex =
               choice === undefined ? -1 : input.legalChoices.indexOf(choice)
             const choiceLabel =
-              choiceIndex < 0 ? undefined : input.choiceLabels[choiceIndex]
+              choiceIndex < 0 ? undefined : input.choiceOptions[choiceIndex]?.label
             const targetLabels = targets.map((target) =>
               describeCardTarget(target, state)
             )
@@ -520,32 +794,185 @@ export class AiTurnController {
     return candidates
   }
 
-  private gameState(phase: 'mulligan' | 'turn'): JsonObject {
+  /**
+   * Builds short coherent lines on an isolated engine fork. Lines are disabled
+   * when their first action could reveal a private secret or future RNG result.
+   */
+  private turnLineCandidates(): readonly CandidateAction[] {
+    const atomic = this.turnCandidates()
     const state = this.options.session.getState()
-    const recentEvents = this.options.session.getAiObservedEvents()
+    const opponentId = this.options.session.localParticipantId
+    const immediateWins = atomic.filter((candidate) => {
+      if (candidateMayResolvePrivateInformation(candidate, state, opponentId)) {
+        return false
+      }
+      const result = this.options.session.match.preview(candidate.command)
+      return (
+        result.accepted &&
+        result.state.winnerId === this.options.session.remoteParticipantId
+      )
+    })
+    if (immediateWins.length > 0) {
+      return immediateWins.map((candidate, index) => ({
+        ...candidate,
+        previewCommands: [candidate.command],
+        public: { ...candidate.public, id: `lethal-${index}` }
+      }))
+    }
+    const firstActions = [...atomic]
+      .sort((left, right) => previewPriority(right) - previewPriority(left))
+      .slice(0, 96)
+    interface LineNode {
+      readonly actions: readonly CandidateAction[]
+    }
+    const materialize = (node: LineNode, id: string): CandidateAction => {
+      const first = node.actions[0]!
+      return {
+        command: first.command,
+        previewCommands: node.actions.map((action) => action.command),
+        public: {
+          id,
+          kind: first.public.kind,
+          description: node.actions
+            .map((action, index) =>
+              index === 0
+                ? action.public.description
+                : `Then: ${action.public.description}`
+            )
+            .join(' '),
+          details: toJsonObject({
+            ...first.public.details,
+            plannedActionKinds: node.actions.map((action) => action.public.kind),
+            plannedCardIds: node.actions
+              .map(candidateCardId)
+              .filter((cardId): cardId is string => cardId !== null)
+          })
+        }
+      }
+    }
+    const linePriority = (node: LineNode): number =>
+      node.actions.reduce(
+        (total, action, index) =>
+          total + previewPriority(action) * (index === 0 ? 10 : 1),
+        node.actions.length
+      )
+    const completed: LineNode[] = firstActions.map((first) => ({ actions: [first] }))
+    let frontier: LineNode[] = firstActions
+      .filter(
+        (first) =>
+          first.public.kind !== 'end-turn' &&
+          !candidateMayResolvePrivateInformation(first, state, opponentId)
+      )
+      .map((first) => ({ actions: [first] }))
+      .sort((left, right) => linePriority(right) - linePriority(left))
+      .slice(0, LINE_SEARCH_BEAM_WIDTH)
+    const startedAt = performance.now()
+    let exploredNodes = 0
+
+    for (
+      let depth = 1;
+      depth < LINE_SEARCH_MAX_DEPTH && frontier.length > 0;
+      depth += 1
+    ) {
+      if (
+        exploredNodes >= LINE_SEARCH_NODE_LIMIT ||
+        performance.now() - startedAt >= LINE_SEARCH_TIME_MS
+      )
+        break
+      const nextFrontier: LineNode[] = []
+      for (const node of frontier) {
+        if (
+          exploredNodes >= LINE_SEARCH_NODE_LIMIT ||
+          performance.now() - startedAt >= LINE_SEARCH_TIME_MS
+        )
+          break
+        exploredNodes += 1
+        const nextActions = this.options.session.match.analyze((fork) => {
+          let latest: TurnMatchResult | null = null
+          for (const action of node.actions) {
+            latest = fork.dispatch(action.command)
+            if (!latest.accepted) return [] as CandidateAction[]
+          }
+          if (
+            !latest ||
+            latest.state.activePlayerId !== this.options.session.remoteParticipantId ||
+            latest.state.phase !== 'turns'
+          ) {
+            return [] as CandidateAction[]
+          }
+          const candidates = [...this.turnCandidates()].filter(
+            (candidate) =>
+              !candidateMayResolvePrivateInformation(
+                candidate,
+                latest!.state,
+                opponentId
+              )
+          )
+          const productive = candidates
+            .filter((candidate) => candidate.public.kind !== 'end-turn')
+            .sort((left, right) => previewPriority(right) - previewPriority(left))
+            .slice(0, 3)
+          const endTurn = candidates.find(
+            (candidate) => candidate.public.kind === 'end-turn'
+          )
+          return endTurn ? [...productive, endTurn] : productive
+        })
+        if (nextActions.length === 0) {
+          completed.push(node)
+          continue
+        }
+        for (const next of nextActions) {
+          const expanded = { actions: [...node.actions, next] }
+          if (next.public.kind === 'end-turn') completed.push(expanded)
+          else nextFrontier.push(expanded)
+        }
+      }
+      frontier = nextFrontier
+        .sort((left, right) => linePriority(right) - linePriority(left))
+        .slice(0, LINE_SEARCH_BEAM_WIDTH)
+    }
+    completed.push(...frontier)
+
+    const lines: CandidateAction[] = []
+    let sequence = 0
+    const seen = new Set<string>()
+    for (const node of completed) {
+      const key = node.actions.map((action) => JSON.stringify(action.command)).join('|')
+      if (seen.has(key)) continue
+      seen.add(key)
+      lines.push(materialize(node, `line-${sequence++}`))
+    }
+    return lines.length > 0 ? lines : atomic
+  }
+
+  private gameState(phase: 'mulligan' | 'turn', deckPlan: AiDeckPlan): JsonObject {
+    const publicState = this.options.session.getAiPublicState()
+    const fairPublicState = toJsonObject(sanitizePrivateIdentifiers(publicState))
+    const recentEvents = toJsonObject(
+      sanitizePrivateIdentifiers(this.options.session.getAiObservedEvents())
+    )
     const selfId = this.options.session.remoteParticipantId
     const opponentId = this.options.session.localParticipantId
-    const {
-      history: _history,
-      effectTrace: _effectTrace,
-      nextEntityOrdinal: _nextEntityOrdinal,
-      pendingResolution: _pendingResolution,
-      scheduledEffects: _scheduledEffects,
-      turnStartedAtRevision: _turnStartedAtRevision,
-      ...gameplayState
-    } = state
-    void _history
-    void _effectTrace
-    void _nextEntityOrdinal
-    void _pendingResolution
-    void _scheduledEffects
-    void _turnStartedAtRevision
-
-    const referencedIds = collectReferencedCardIds(gameplayState)
+    const referencedIds = collectReferencedCardIds(fairPublicState)
     collectReferencedCardIds(recentEvents, referencedIds)
-    for (const deck of this.options.decks) {
-      for (const cardId of Object.keys(deck.cards)) referencedIds.add(cardId)
-    }
+    const selfDeck = this.aiDeck()
+    const opponentPublic = publicState.players.find(
+      (player) => player.participantId === opponentId
+    )
+    const opponentClass = opponentPublic
+      ? HERO_CATALOG.require(opponentPublic.heroId).classId
+      : null
+    const possibleOpponentSecrets =
+      (opponentPublic?.secrets.length ?? 0) > 0 && opponentClass
+        ? CARD_CATALOG.all
+            .filter(
+              (definition) =>
+                definition.cardClass === opponentClass &&
+                definition.keywords?.includes('secret')
+            )
+            .map((definition) => definition.id)
+        : []
+    for (const cardId of possibleOpponentSecrets) referencedIds.add(cardId)
     const cardDefinitions = Object.fromEntries(
       [...referencedIds]
         .map((cardId) => CARD_CATALOG.get(cardId))
@@ -553,7 +980,7 @@ export class AiTurnController {
         .map((definition) => [definition.id, compactCardDefinition(definition)])
     )
     const legality = this.options.session.match.getLegality?.(selfId)
-    const participants = state.players.map((player) => {
+    const participants = publicState.players.map((player) => {
       const role = player.participantId === selfId ? 'self' : 'opponent'
       const hero = HERO_CATALOG.require(player.heroId)
       const heroPower = HERO_POWER_CATALOG.require(player.heroPower.id)
@@ -597,73 +1024,192 @@ export class AiTurnController {
         }
       }
     })
-    const originalDecks = state.players.map((player) => {
-      const participant = this.options.session.match.setup.participants.find(
-        (candidate) => candidate.participantId === player.participantId
-      )
-      const deck = this.options.decks.find(
-        (candidate) => candidate.id === participant?.deckId
-      )
-      if (!deck) throw new Error(`Deck unavailable for ${player.participantId}.`)
-      return {
-        participantId: player.participantId,
-        role: player.participantId === selfId ? 'self' : 'opponent',
-        id: deck.id,
-        name: deck.name,
-        heroId: deck.heroId,
-        cards: Object.entries(deck.cards).map(([cardId, count]) => ({
-          cardId,
-          count
-        }))
-      }
-    })
     return toJsonObject({
-      contextVersion: 2,
-      informationPolicy: 'omniscient',
+      contextVersion: AI_CONTEXT_VERSION,
+      mode: {
+        id: this.options.session.match.setup.modeId ?? 'constructed',
+        objective: 'Defeat the opposing hero.'
+      },
+      informationPolicy: 'fair',
       perspective: {
         selfParticipantId: selfId,
         opponentParticipantId: opponentId,
         selfController: 'remote-ai',
         opponentController: 'local-human',
-        hiddenHandsKnown: true,
-        hiddenSecretsKnown: true,
-        exactRemainingDeckOrderKnown: true
+        hiddenHandsKnown: false,
+        hiddenSecretsKnown: false,
+        exactRemainingDeckOrderKnown: false
       },
       phase,
       stateConventions: {
         remainingDeckOrder:
-          'Each player.deck array is exact and top-first; index 0 is the next draw.',
+          'Deck arrays contain public card backs only. No remaining order or identity may be inferred.',
         actionGranularity:
           'Select one legal atomic action. A fresh resolved state follows.',
         authority:
           'Structured runtime state, card effects, and legal actions override display rulesText.'
       },
-      originalDecks,
+      deckPlan,
+      selfOriginalDeck: {
+        id: selfDeck.id,
+        name: selfDeck.name,
+        heroId: selfDeck.heroId,
+        cards: Object.entries(selfDeck.cards).map(([cardId, count]) => ({
+          cardId,
+          count
+        }))
+      },
+      opponentKnowledge: {
+        originalDeckKnown: false,
+        possibleSecretCardIds: possibleOpponentSecrets,
+        secretPrior:
+          possibleOpponentSecrets.length > 0 ? 'uniform-without-meta-prior' : 'none'
+      },
       participants,
       cardDefinitions,
-      currentState: gameplayState,
-      recentAuthoritativeEvents: recentEvents
+      currentState: fairPublicState,
+      recentPublicEvents: recentEvents
     })
   }
 
-  private fallback(candidates: readonly CandidateAction[]): CandidateAction {
-    const keep = candidates.find(
-      (candidate) =>
-        candidate.public.kind === 'confirm-mulligan' &&
-        Array.isArray(candidate.public.details['replaceInstanceIds']) &&
-        candidate.public.details['replaceInstanceIds'].length === 0
+  private decisionClass(phase: 'mulligan' | 'turn'): AiDecisionClass {
+    if (phase === 'mulligan') return 'mulligan'
+    return this.options.session.getState().pendingDiscover ? 'discover' : 'turn'
+  }
+
+  private deadlineAtMs(decisionClass: AiDecisionClass): number {
+    void decisionClass
+    return Date.now() + MAX_DECISION_TIME_MS
+  }
+
+  private analyzeAndShortlist(
+    candidates: readonly CandidateAction[],
+    phase: 'mulligan' | 'turn',
+    deckPlan: AiDeckPlan
+  ): readonly CandidateAction[] {
+    if (candidates.length === 0) return candidates
+    if (phase === 'mulligan') return candidates
+    const selfId = this.options.session.remoteParticipantId
+    const opponentId = this.options.session.localParticipantId
+    const state = this.options.session.getState()
+    const ordered = [...candidates].sort(
+      (left, right) => previewPriority(right) - previewPriority(left)
     )
-    if (keep) return keep
-    return (
-      candidates.find((candidate) => candidate.public.kind === 'play-card') ??
-      candidates.find(
-        (candidate) => candidate.public.kind === 'choose-discover-card'
-      ) ??
-      candidates.find((candidate) => candidate.public.kind === 'attack-character') ??
-      candidates.find((candidate) => candidate.public.kind === 'use-hero-power') ??
-      candidates.find((candidate) => candidate.public.kind === 'end-turn') ??
-      candidates[0]!
+    const previewable: CandidateAction[] = []
+    const addPreview = (candidate: CandidateAction | undefined): void => {
+      if (
+        candidate &&
+        previewable.length < MAX_PREVIEWED_CANDIDATES &&
+        !previewable.some((entry) => entry.public.id === candidate.public.id)
+      ) {
+        previewable.push(candidate)
+      }
+    }
+    for (const kind of [
+      'play-card',
+      'attack-character',
+      'use-hero-power',
+      'choose-discover-card',
+      'end-turn'
+    ] as const) {
+      addPreview(ordered.find((candidate) => candidate.public.kind === kind))
+    }
+    for (const candidate of ordered) addPreview(candidate)
+    const analyzed = previewable.map((candidate) => {
+      const planResourceCost = candidatePlanResourceCost(candidate, deckPlan)
+      const analysis = candidateMayResolvePrivateInformation(
+        candidate,
+        state,
+        opponentId
+      )
+        ? uncertainAnalysis(state, selfId, opponentId, planResourceCost)
+        : actionAnalysis(
+            candidate.previewCommands
+              ? this.options.session.match.previewSequence(candidate.previewCommands)
+              : this.options.session.match.preview(candidate.command),
+            state,
+            selfId,
+            opponentId,
+            planResourceCost
+          )
+      return {
+        ...candidate,
+        analysis,
+        public: {
+          ...candidate.public,
+          analysis
+        }
+      }
+    })
+    const wins = analyzed.filter((candidate) => candidate.analysis?.terminal === 'win')
+    const viable = wins.length > 0 ? wins : analyzed
+    const safe = viable.filter((candidate) => candidate.analysis?.terminal !== 'loss')
+    const protectedCandidates = safe.length > 0 ? safe : viable
+    const sorted = [...protectedCandidates].sort(
+      (left, right) =>
+        (right.analysis?.score ?? Number.NEGATIVE_INFINITY) -
+        (left.analysis?.score ?? Number.NEGATIVE_INFINITY)
     )
+    const selected: CandidateAction[] = []
+    const add = (candidate: CandidateAction | undefined): void => {
+      if (
+        candidate &&
+        !selected.some((entry) => entry.public.id === candidate.public.id)
+      ) {
+        selected.push(candidate)
+      }
+    }
+    for (const kind of [
+      'play-card',
+      'attack-character',
+      'use-hero-power',
+      'choose-discover-card',
+      'end-turn'
+    ] as const) {
+      add(sorted.find((candidate) => candidate.public.kind === kind))
+    }
+    for (const candidate of sorted) {
+      if (selected.length >= MAX_MODEL_CANDIDATES) break
+      add(candidate)
+    }
+    return selected
+  }
+
+  private fallback(
+    candidates: readonly CandidateAction[],
+    deckPlan: AiDeckPlan
+  ): CandidateAction {
+    if (candidates[0]?.public.kind === 'confirm-mulligan') {
+      const priority = new Set(deckPlan.mulliganPriorityCardIds)
+      return [...candidates].sort((left, right) => {
+        const replacementScore = (candidate: CandidateAction): number => {
+          const cards = candidate.public.details['cards']
+          if (!Array.isArray(cards)) return Number.NEGATIVE_INFINITY
+          return cards.reduce((score, card) => {
+            if (typeof card !== 'object' || card === null || Array.isArray(card)) {
+              return score
+            }
+            const cardId = (card as Record<string, unknown>)['cardId']
+            if (typeof cardId !== 'string') return score
+            if (priority.has(cardId)) return score - 100
+            return score + (CARD_CATALOG.get(cardId)?.cost ?? 0)
+          }, 0)
+        }
+        return replacementScore(right) - replacementScore(left)
+      })[0]!
+    }
+    const wins = candidates.filter(
+      (candidate) => candidate.analysis?.terminal === 'win'
+    )
+    const safe = candidates.filter(
+      (candidate) => candidate.analysis?.terminal !== 'loss'
+    )
+    const pool = wins.length > 0 ? wins : safe.length > 0 ? safe : candidates
+    return [...pool].sort(
+      (left, right) =>
+        (right.analysis?.score ?? Number.NEGATIVE_INFINITY) -
+        (left.analysis?.score ?? Number.NEGATIVE_INFINITY)
+    )[0]!
   }
 
   private logResponse(request: AiDecisionRequest, response: AiDecisionResponse): void {
@@ -671,9 +1217,8 @@ export class AiTurnController {
     if (!response.debug) {
       this.options.logger.info(`[Game AI] response ${request.decisionId}`, {
         actionId: response.actionId,
-        strategicIntent: response.strategicIntent,
         rationale: response.rationale,
-        strategySummary: response.strategySummary,
+        decisionClass: response.decisionClass,
         modelId: response.modelId
       })
       return
@@ -684,9 +1229,8 @@ export class AiTurnController {
     console.info('Game decision request', request)
     console.info('Model decision', {
       actionId: response.actionId,
-      strategicIntent: response.strategicIntent,
       rationale: response.rationale,
-      strategySummary: response.strategySummary,
+      decisionClass: response.decisionClass,
       modelId: response.modelId
     })
     console.info('Provider request', {
@@ -704,17 +1248,43 @@ export class AiTurnController {
   ): Promise<AiActionDecision> {
     if (candidates.length === 0)
       throw new Error(`No legal AI actions exist for ${phase}.`)
+    const deckPlan = await this.deckPlanForDecision(phase)
+    // Deck planning is a once-per-match prerequisite with its own deadline. Do not
+    // let its latency consume the budget for the mulligan or turn decision itself.
+    const totalDeadlineAtMs = Date.now() + MAX_DECISION_TIME_MS
     const expectedRevision = this.options.session.getState().revision
+    const decisionClass = this.decisionClass(phase)
+    const shortlisted = this.analyzeAndShortlist(candidates, phase, deckPlan)
     const request: AiDecisionRequest = {
       decisionId: `${phase}-${expectedRevision}-${this.decisionSequence++}`,
       phase,
+      decisionClass,
       matchRevision: expectedRevision,
-      strategySummary: this.strategySummary,
-      gameState: this.gameState(phase),
-      legalActions: candidates.map((candidate) => candidate.public)
+      promptVersion: AI_PROMPT_VERSION,
+      contextVersion: AI_CONTEXT_VERSION,
+      schemaVersion: AI_SCHEMA_VERSION,
+      deadlineAtMs: Math.min(this.deadlineAtMs(decisionClass), totalDeadlineAtMs),
+      gameState: this.gameState(phase, deckPlan),
+      legalActions: shortlisted.map((candidate) => candidate.public)
     }
-    const fallback = this.fallback(candidates)
-    if (!this.options.api || this.providerDisabled) {
+    const fallback = this.fallback(shortlisted, deckPlan)
+    const forced = shortlisted.find(
+      (candidate) => candidate.analysis?.terminal === 'win'
+    )
+    if (forced || shortlisted.length === 1) {
+      const selected = forced ?? shortlisted[0]!
+      return {
+        expectedRevision,
+        actionId: selected.public.id,
+        command: selected.command,
+        source: 'fallback'
+      }
+    }
+    if (
+      !this.options.api ||
+      this.providerDisabled ||
+      Date.now() + 250 >= request.deadlineAtMs
+    ) {
       return {
         expectedRevision,
         actionId: fallback.public.id,
@@ -723,36 +1293,52 @@ export class AiTurnController {
       }
     }
 
-    try {
-      const response = await this.options.api.decide(request)
-      this.logResponse(request, response)
-      const selected = candidates.find(
-        (candidate) => candidate.public.id === response.actionId
-      )
-      if (!selected)
-        throw new Error(`Model selected stale action ${response.actionId}.`)
-      this.strategySummary = response.strategySummary.slice(
-        0,
-        MAX_STRATEGY_SUMMARY_LENGTH
-      )
-      return {
-        expectedRevision,
-        actionId: selected.public.id,
-        command: selected.command,
-        source: 'model'
+    let lastError: unknown
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await this.options.api.decide(request)
+        this.logResponse(request, response)
+        if (response.decisionClass !== decisionClass) {
+          throw new Error(
+            `Model returned mismatched decision class ${response.decisionClass}.`
+          )
+        }
+        const selected = shortlisted.find(
+          (candidate) => candidate.public.id === response.actionId
+        )
+        if (!selected)
+          throw new Error(`Model selected stale action ${response.actionId}.`)
+        return {
+          expectedRevision,
+          actionId: selected.public.id,
+          command: selected.command,
+          source: 'model'
+        }
+      } catch (error) {
+        lastError = error
+        if (isPermanentProviderError(error)) {
+          this.providerDisabled = true
+          break
+        }
+        if (attempt === 0 && Date.now() + 500 < request.deadlineAtMs) {
+          this.options.logger.warn(
+            `[Game AI] ${request.decisionId} failed; retrying once`,
+            errorDetails(error)
+          )
+          continue
+        }
+        break
       }
-    } catch (error) {
-      if (isPermanentProviderError(error)) this.providerDisabled = true
-      this.options.logger.warn(
-        `[Game AI] ${request.decisionId} failed; using local fallback`,
-        error
-      )
-      return {
-        expectedRevision,
-        actionId: fallback.public.id,
-        command: fallback.command,
-        source: 'fallback'
-      }
+    }
+    this.options.logger.warn(
+      `[Game AI] ${request.decisionId} failed; using local fallback`,
+      errorDetails(lastError)
+    )
+    return {
+      expectedRevision,
+      actionId: fallback.public.id,
+      command: fallback.command,
+      source: 'fallback'
     }
   }
 }

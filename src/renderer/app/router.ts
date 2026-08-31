@@ -13,7 +13,9 @@ export type AppRoute =
   | { readonly id: 'main-menu'; readonly entryMode?: 'closed' | 'returning' }
   | { readonly id: 'deck-selection' }
   | { readonly id: 'collection' }
+  | { readonly id: 'arena' }
   | { readonly id: 'new-deck' }
+  | { readonly id: 'tavern-brawl' }
   /** Complete match setup handed directly to GameScene; setup is never global state. */
   | GameRoute
   | {

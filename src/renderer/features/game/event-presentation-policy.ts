@@ -17,6 +17,7 @@ export const EVENT_PRESENTATION_POLICY: Readonly<
   'opening-card-drawn': 'animation',
   'card-drawn': 'animation',
   'discover-started': 'animation',
+  'card-choice-started': 'animation',
   'card-generated': 'animation',
   'card-burned': 'state-refresh',
   'opening-turn-started': 'animation',

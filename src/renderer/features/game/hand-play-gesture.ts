@@ -1,6 +1,17 @@
 export interface HandPlayInputRequirement {
   readonly targetSelectors: readonly unknown[]
   readonly choiceCount: number
+  readonly choiceTiming?: 'before-play' | 'after-placement'
+}
+
+export type HandCardTargetingOrigin = 'card' | 'local-hero' | 'minion-preview'
+
+/** Targeted spells always aim from the local hero, independent of click or drag input. */
+export function resolveHandCardArrowOrigin(
+  cardType: string,
+  origin: HandCardTargetingOrigin
+): HandCardTargetingOrigin {
+  return cardType === 'Spell' && origin === 'card' ? 'local-hero' : origin
 }
 
 /** A hand hover transform may only own a slot that is currently in the hand layer. */
@@ -21,7 +32,9 @@ export function requiresClickConfirmedMinionPlacement(
   input: HandPlayInputRequirement
 ): boolean {
   return (
-    cardType === 'Minion' && (input.targetSelectors.length > 0 || input.choiceCount > 0)
+    cardType === 'Minion' &&
+    (input.targetSelectors.length > 0 ||
+      (input.choiceCount > 0 && input.choiceTiming !== 'after-placement'))
   )
 }
 

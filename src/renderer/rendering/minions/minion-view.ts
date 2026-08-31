@@ -104,6 +104,8 @@ export class MinionView extends Container {
   private readonly trigger: Sprite
   private readonly attackLabel: Text
   private readonly healthLabel: Text
+  private readonly artworkImage: Sprite
+  private readonly artworkPlaceholder: Graphics
   private readonly outlineProxy: Graphics
   private readonly attackOutline: AnimatedOutline
   private readonly targetingOutlineProxy: Graphics
@@ -111,8 +113,8 @@ export class MinionView extends Container {
   private readonly sleepingZs: SleepingZs
   private readonly animationScope = new AnimationScope()
   private readonly activeAbilityPulses = new Set<Sprite>()
-  private readonly originalAttack: number
-  private readonly originalHealth: number
+  private originalAttack: number
+  private originalHealth: number
   private canAttackEnabled = false
   private targetingOutlineEnabled = false
   private targetableEnabled = false
@@ -121,6 +123,7 @@ export class MinionView extends Container {
   /** External owner id for attack checks (set by feature). */
   public ownerId: string | null = null
   public instanceId: string | null = null
+  public cardId: string | null = null
 
   private constructor(
     model: MinionViewModel,
@@ -139,25 +142,26 @@ export class MinionView extends Container {
     artworkLayer.label = 'minion.artwork'
 
     const { radiusX, radiusY, center } = MINION_LAYOUT.artworkOval
+    this.artworkImage = new Sprite(artwork ?? Texture.EMPTY)
+    this.artworkImage.anchor.set(0.5)
+    this.artworkImage.position.set(center.x, center.y)
+    this.artworkImage.visible = artwork !== undefined
     if (artwork) {
-      const image = new Sprite(artwork)
-      image.anchor.set(0.5)
-      image.position.set(center.x, center.y)
       const artworkWidth = Math.max(1, artwork.width)
       const artworkHeight = Math.max(1, artwork.height)
       const coverScale = Math.max(
         (radiusX * 2) / artworkWidth,
         (radiusY * 2) / artworkHeight
       )
-      image.scale.set(coverScale)
-      image.label = 'minion.artwork-image'
-      artworkLayer.addChild(image)
-    } else {
-      const placeholder = new Graphics()
-      placeholder.ellipse(center.x, center.y, radiusX, radiusY).fill(0x535b65)
-      placeholder.label = 'minion.artwork-placeholder'
-      artworkLayer.addChild(placeholder)
+      this.artworkImage.scale.set(coverScale)
     }
+    this.artworkImage.label = 'minion.artwork-image'
+    artworkLayer.addChild(this.artworkImage)
+    this.artworkPlaceholder = new Graphics()
+    this.artworkPlaceholder.ellipse(center.x, center.y, radiusX, radiusY).fill(0x535b65)
+    this.artworkPlaceholder.label = 'minion.artwork-placeholder'
+    this.artworkPlaceholder.visible = artwork === undefined
+    artworkLayer.addChild(this.artworkPlaceholder)
 
     const mask = new Graphics()
     mask.ellipse(center.x, center.y, radiusX, radiusY).fill(0xffffff)
@@ -313,6 +317,24 @@ export class MinionView extends Container {
     this.healthLabel.text = String(health)
     this.setAttackColor(attack)
     this.setHealthColor(health)
+  }
+
+  setBaseStats(attack: number, health: number): void {
+    this.originalAttack = attack
+    this.originalHealth = health
+    this.setStats(attack, health)
+  }
+
+  setArtwork(texture: Texture): void {
+    this.artworkImage.texture = texture
+    const { radiusX, radiusY } = MINION_LAYOUT.artworkOval
+    const coverScale = Math.max(
+      (radiusX * 2) / Math.max(1, texture.width),
+      (radiusY * 2) / Math.max(1, texture.height)
+    )
+    this.artworkImage.scale.set(coverScale)
+    this.artworkImage.visible = true
+    this.artworkPlaceholder.visible = false
   }
 
   setAttack(attack: number): void {

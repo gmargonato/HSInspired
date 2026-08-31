@@ -1,5 +1,5 @@
 import { Container, Graphics, Text, type Texture } from 'pixi.js'
-import type { OpeningCard } from '../../../game/match'
+import type { CardChoiceOption, OpeningCard, PlayerId } from '../../../game/match'
 import { gsap } from '../../animation/animations'
 import { Button } from '../../ui/components/button'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
@@ -15,6 +15,7 @@ export interface CardSelectionOverlayOptions {
   readonly toggleTexture: Texture
   readonly createSlot: (card: OpeningCard) => Promise<GameCardSlot>
   readonly onSelect: (card: OpeningCard) => void
+  readonly onChooseOption: (choice: number) => void
 }
 
 /** A modal three-card selector for Tracking and future Discover-style effects. */
@@ -27,6 +28,7 @@ export class CardSelectionOverlay extends Container {
   private boardVisible = false
   private selecting = false
   private selected: SelectedCardSlot | null = null
+  private readonly choicesByInstanceId = new Map<string, CardChoiceOption>()
 
   constructor(private readonly options: CardSelectionOverlayOptions) {
     super()
@@ -64,7 +66,35 @@ export class CardSelectionOverlay extends Container {
   }
 
   async show(candidates: readonly OpeningCard[]): Promise<void> {
+    await this.showCards(candidates)
+  }
+
+  async showChoices(
+    participantId: PlayerId,
+    sourceCardInstanceId: string,
+    sourceCardId: OpeningCard['cardId'],
+    options: readonly CardChoiceOption[]
+  ): Promise<void> {
+    const cards = options.map((option) => ({
+      instanceId: `${sourceCardInstanceId}:choice:${option.choice}`,
+      cardId: option.presentationCardId ?? sourceCardId,
+      ownerId: participantId,
+      controllerId: participantId,
+      zone: 'revealed' as const,
+      revealed: true
+    }))
+    await this.showCards(cards, options)
+  }
+
+  private async showCards(
+    candidates: readonly OpeningCard[],
+    choiceOptions: readonly CardChoiceOption[] = []
+  ): Promise<void> {
     this.clear()
+    choiceOptions.forEach((option, index) => {
+      const card = candidates[index]
+      if (card) this.choicesByInstanceId.set(card.instanceId, option)
+    })
     this.visible = true
     this.boardVisible = false
     this.selecting = false
@@ -84,6 +114,26 @@ export class CardSelectionOverlay extends Container {
         slot.setMulliganInteractionEnabled(true)
         slot.on('pointertap', () => this.choose(card, slot))
         this.cardsLayer.addChild(slot)
+        const choice = this.choicesByInstanceId.get(card.instanceId)
+        if (choice) {
+          const label = new Text({
+            text: choice.label,
+            style: {
+              fontFamily: 'Belwe',
+              fontSize: 24,
+              fill: 0xffffff,
+              stroke: { color: 0x000000, width: 5 },
+              align: 'center',
+              wordWrap: true,
+              wordWrapWidth: 275
+            }
+          })
+          label.anchor.set(0.5, 0)
+          label.position.set(slot.x, slot.y + 18)
+          label.eventMode = 'none'
+          label.label = `game.card-selection.choice-label:${choice.choice}`
+          this.cardsLayer.addChild(label)
+        }
         this.entries.push({ card, slot })
         return slot
       })
@@ -104,8 +154,12 @@ export class CardSelectionOverlay extends Container {
   clear(): void {
     for (const entry of this.entries) entry.slot.destroy({ children: true })
     this.entries.length = 0
-    this.cardsLayer.removeChildren()
+    for (const child of this.cardsLayer.removeChildren()) {
+      if (!child.destroyed) child.destroy({ children: true })
+    }
+    this.choicesByInstanceId.clear()
     this.selected = null
+    this.toggle.setEnabled(true)
     this.visible = false
   }
 
@@ -125,7 +179,9 @@ export class CardSelectionOverlay extends Container {
       void gsap.to(entry.slot, { alpha: 0, scaleX: 0.2, scaleY: 0.2, duration: 0.2 })
     }
     this.selected = { card, slot, globalPosition: slot.getGlobalPosition() }
-    this.options.onSelect(card)
+    const choice = this.choicesByInstanceId.get(card.instanceId)
+    if (choice) this.options.onChooseOption(choice.choice)
+    else this.options.onSelect(card)
   }
 
   private toggleView(): void {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_CATALOG, type CardTrigger } from '../../../game/content/cards'
-import type { BoardMinion } from '../../../game/match'
+import {
+  isBoardMinionSleeping,
+  type BoardMinion,
+  type RuntimeEnchantment
+} from '../../../game/match'
 import { boardAbilityMarkers, boardMinionRuntimeMarkers } from './board-ability-markers'
 
 function markers(cardId: string) {
@@ -15,6 +19,46 @@ function markersForTrigger(trigger: CardTrigger) {
 }
 
 describe('board ability markers', () => {
+  it('uses controller-change exhaustion unless a current Charge effect overrides it', () => {
+    const boar = CARD_CATALOG.require('basic_stonetusk_boar')
+    const shadowMadness = CARD_CATALOG.require('classic_shadow_madness')
+    const temporaryControlCharge: RuntimeEnchantment = {
+      id: 'temporary-control-charge',
+      sourceInstanceId: 'shadow-madness',
+      sourceCardId: shadowMadness.id,
+      keywords: ['charge'],
+      startsOnTurn: 3,
+      expiresOnTurn: 3,
+      duration: 'this-turn'
+    }
+    const controlledMinion = {
+      instanceId: 'controlled-minion',
+      cardId: boar.id,
+      attack: 1,
+      health: 1,
+      maxHealth: 1,
+      summonedOnTurn: 1,
+      controllerChangedOnTurn: 3,
+      lastAttackedOnTurn: null,
+      keywords: [],
+      divineShield: false,
+      stealth: false,
+      enchantments: []
+    } as BoardMinion
+
+    expect(isBoardMinionSleeping(controlledMinion, 3)).toBe(true)
+
+    expect(
+      isBoardMinionSleeping(
+        {
+          ...controlledMinion,
+          enchantments: [temporaryControlCharge]
+        },
+        3
+      )
+    ).toBe(false)
+  })
+
   it('projects granted Taunt and consumed Divine Shield from runtime state', () => {
     const annoyOTron = CARD_CATALOG.require('goblins_vs_gnomes_annoy_o_tron')
     const sunfury = CARD_CATALOG.require('classic_sunfury_protector')

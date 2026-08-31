@@ -77,6 +77,8 @@ export interface RuntimeEnchantment {
   readonly minimumHealth?: number
   readonly keywords?: readonly CardKeyword[]
   readonly removedKeywords?: readonly CardKeyword[]
+  /** Controller restored when a temporary control enchantment ends or is silenced. */
+  readonly returnControllerId?: PlayerId
   readonly duration?: string
   readonly startsOnTurn?: number
   readonly expiresOnTurn?: number
@@ -263,6 +265,8 @@ export interface BoardMinion {
   readonly maxHealth: number
   /** Turn on which the minion entered play; it cannot attack the same turn (summoning sickness). */
   readonly summonedOnTurn: number
+  /** Most recent turn on which control changed; normal control changes also exhaust it. */
+  readonly controllerChangedOnTurn?: number
   /** Global turn number on which this minion last attacked, or null if it has not attacked. */
   readonly lastAttackedOnTurn: number | null
   readonly ownerId?: PlayerId
@@ -288,7 +292,6 @@ export interface BoardMinion {
   readonly attacksUsedThisTurn?: number
   readonly maxAttacksPerTurn?: number
   readonly damageTaken?: number
-  readonly scheduledReturnControllerId?: PlayerId
   readonly triggerMultipliers?: Readonly<Record<string, number>>
   readonly spellDamage?: number
   readonly spellDamageMultiplier?: number
@@ -419,6 +422,8 @@ export interface OpeningMatchState {
   readonly pendingResolution?: boolean
   /** A private, blocking card choice created by a Discover effect. */
   readonly pendingDiscover?: PendingDiscoverChoice
+  /** A blocking after-placement Choice owned by one participant. */
+  readonly pendingCardChoice?: PendingCardChoice
   readonly scheduledEffects?: readonly ScheduledEffect[]
 }
 
@@ -426,6 +431,20 @@ export interface PendingDiscoverChoice {
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
   readonly candidates: readonly OpeningCard[]
+}
+
+export interface CardChoiceOption {
+  readonly choice: number
+  readonly label: string
+  /** Existing card definition used to render a full-card option when available. */
+  readonly presentationCardId?: CardId
+}
+
+export interface PendingCardChoice {
+  readonly participantId: PlayerId
+  readonly sourceCardInstanceId: string
+  readonly sourceCardId: CardId
+  readonly options: readonly CardChoiceOption[]
 }
 
 export interface ConfirmMulliganCommand {
@@ -493,6 +512,13 @@ export interface ChooseDiscoverCardCommand {
   readonly type: 'choose-discover-card'
   readonly participantId: PlayerId
   readonly cardInstanceId: string
+}
+
+export interface ChooseCardOptionCommand {
+  readonly type: 'choose-card-option'
+  readonly participantId: PlayerId
+  readonly sourceCardInstanceId: string
+  readonly choice: number
 }
 
 export interface TimeoutCommand {
@@ -584,6 +610,7 @@ export type OpeningMatchCommand =
   | UseHeroPowerCommand
   | PlayCardCommand
   | ChooseDiscoverCardCommand
+  | ChooseCardOptionCommand
   | TimeoutCommand
   | AttackCharacterCommand
   | DevAddCardCommand
@@ -643,6 +670,14 @@ export interface DiscoverStartedEvent {
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
   readonly candidates: readonly OpeningCard[]
+}
+
+export interface CardChoiceStartedEvent {
+  readonly type: 'card-choice-started'
+  readonly participantId: PlayerId
+  readonly sourceCardInstanceId: string
+  readonly sourceCardId: CardId
+  readonly options: readonly CardChoiceOption[]
 }
 
 export interface CardGeneratedEvent {
@@ -901,6 +936,7 @@ export type OpeningMatchEvent =
   | TurnStartedEvent
   | CardDrawnEvent
   | DiscoverStartedEvent
+  | CardChoiceStartedEvent
   | CardGeneratedEvent
   | CardBurnedEvent
   | HeroPowerUsedEvent
@@ -981,10 +1017,31 @@ export interface OpeningRejectedResult {
 
 export type OpeningCommandResult = OpeningAcceptedResult | OpeningRejectedResult
 
+export interface OpeningMatchAnalysis {
+  getState(): OpeningMatchState
+  dispatch(command: unknown): OpeningCommandResult
+  getPlayInput(
+    participantId: PlayerId,
+    cardInstanceId: string,
+    choice?: number
+  ): PlayCardInput | null
+  getLegality(participantId: PlayerId): MatchLegality
+}
+
 export interface OpeningMatchInstance {
   readonly setup: MatchSetup
   getState(): OpeningMatchState
   dispatch(command: unknown): OpeningCommandResult
+  /**
+   * Executes a command against an isolated snapshot of the current match.
+   * The live state, entity sequence, development counters, and RNG are restored
+   * before this method returns.
+   */
+  preview(command: unknown): OpeningCommandResult
+  /** Executes a command sequence against one isolated fork and returns its final result. */
+  previewSequence(commands: readonly unknown[]): OpeningCommandResult
+  /** Runs bounded analysis against an isolated mutable fork, then restores all live state. */
+  analyze<T>(operation: (fork: OpeningMatchAnalysis) => T): T
   getPlayInput?(
     participantId: PlayerId,
     cardInstanceId: string,
@@ -1024,12 +1081,18 @@ export type PublicizeOpeningMatchEvent<E> = E extends EffectDomainEvent
 export type OpeningMatchPublicEvent = PublicizeOpeningMatchEvent<OpeningMatchEvent>
 export interface OpeningMatchPublicState extends Omit<
   OpeningMatchState,
-  'players' | 'history' | 'effectTrace' | 'pendingDiscover' | 'scheduledEffects'
+  | 'players'
+  | 'history'
+  | 'effectTrace'
+  | 'pendingDiscover'
+  | 'pendingCardChoice'
+  | 'scheduledEffects'
 > {
   readonly players: readonly [OpeningPublicPlayerState, OpeningPublicPlayerState]
   readonly pendingDiscover?: Omit<PendingDiscoverChoice, 'candidates'> & {
     readonly candidates: readonly OpeningPublicCard[]
   }
+  readonly pendingCardChoice?: PendingCardChoice
 }
 
 export type OpeningPublicCard = Omit<
@@ -1084,8 +1147,10 @@ export interface PlayCardInput {
   readonly skipTargetedBattlecry: boolean
   /** Zero-based choices accepted by the command, exposed for renderer input. */
   readonly legalChoices: readonly number[]
-  /** Stable, presentation-ready labels aligned with legalChoices. */
-  readonly choiceLabels: readonly string[]
+  /** Stable, presentation-ready descriptors aligned with legalChoices. */
+  readonly choiceOptions: readonly CardChoiceOption[]
+  /** Self-transforming minions enter play before asking the owning player. */
+  readonly choiceTiming: 'before-play' | 'after-placement'
   /** Whether the current condition enhances the card's active effect. */
   readonly effectPreview: CardPlayEffectPreview | null
 }

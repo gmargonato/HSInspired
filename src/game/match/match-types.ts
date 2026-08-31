@@ -16,6 +16,8 @@ export interface MatchParticipantSetup {
 
 export interface MatchSetup {
   readonly participants: readonly [MatchParticipantSetup, MatchParticipantSetup]
+  /** Extensible rules/profile identifier; omitted legacy setups use constructed. */
+  readonly modeId?: string
   readonly seed?: number
   /** Development/test diagnostics only; normal matches do not retain effect traces. */
   readonly recordEffectTrace?: boolean

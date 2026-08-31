@@ -3366,7 +3366,7 @@
             "target": {
               "controller": "self",
               "type": "minion",
-              "selection": "event-source"
+              "selection": "event-target"
             },
             "keyword": "charge"
           }

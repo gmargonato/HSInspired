@@ -7,6 +7,16 @@ import centerPartImage from '@assets/images/ui/main-menu/center-part.png'
 import centerPartMenuImage from '@assets/images/ui/main-menu/center-part-menu.png'
 import buttonPlayImage from '@assets/images/ui/main-menu/menu-button-play.png'
 import buttonCollectionImage from '@assets/images/ui/main-menu/menu-button-collection.png'
+import buttonArenaImage from '@assets/images/ui/main-menu/menu-button-arena.png'
+import buttonTavernImage from '@assets/images/ui/main-menu/menu-button-tavern.png'
+import arenaBackgroundImage from '@assets/images/ui/arena/arena-background.png'
+import arenaPlayButtonImage from '@assets/images/ui/arena/arena-play-button.png'
+import arenaRetireButtonImage from '@assets/images/ui/arena/arena-retire-button.png'
+import arenaRetireContainerImage from '@assets/images/ui/arena/retire-arena-container.png'
+import arenaConfirmImage from '@assets/images/ui/arena/action-button-confirm.png'
+import arenaCancelImage from '@assets/images/ui/arena/action-button-cancel.png'
+import tavernBrawlBackgroundImage from '@assets/images/ui/tavern-brawl/tavern-background.png'
+import tavernBrawlPlayButtonImage from '@assets/images/ui/tavern-brawl/brawl-play-buttom.png'
 import deckSelectionImage from '@assets/images/ui/deck-selection/deck-selection.png'
 import collectionBackgroundImage from '@assets/images/ui/collection/collection-background.png'
 import collectionCoverImage from '@assets/images/ui/collection/collection-cover.png'
@@ -195,6 +205,105 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     426,
     73,
     'main-menu'
+  ),
+  asset(
+    'scene.main-menu.arena-button',
+    ASSET_BUNDLE_IDS.mainMenu,
+    'buttonArena',
+    buttonArenaImage,
+    428,
+    73,
+    'main-menu'
+  ),
+  asset(
+    'scene.main-menu.tavern-button',
+    ASSET_BUNDLE_IDS.mainMenu,
+    'buttonTavern',
+    buttonTavernImage,
+    365,
+    72,
+    'main-menu'
+  ),
+  asset(
+    'scene.tavern-brawl.background',
+    ASSET_BUNDLE_IDS.tavernBrawl,
+    'background',
+    tavernBrawlBackgroundImage,
+    1920,
+    1080,
+    'tavern-brawl'
+  ),
+  asset(
+    'scene.arena.background',
+    ASSET_BUNDLE_IDS.arena,
+    'background',
+    arenaBackgroundImage,
+    1920,
+    1080,
+    'arena'
+  ),
+  asset(
+    'scene.arena.play-button',
+    ASSET_BUNDLE_IDS.arena,
+    'playButton',
+    arenaPlayButtonImage,
+    215,
+    215,
+    'arena'
+  ),
+  asset(
+    'scene.arena.retire-button',
+    ASSET_BUNDLE_IDS.arena,
+    'retireButton',
+    arenaRetireButtonImage,
+    107,
+    47,
+    'arena'
+  ),
+  asset(
+    'scene.arena.retire-container',
+    ASSET_BUNDLE_IDS.arena,
+    'retireContainer',
+    arenaRetireContainerImage,
+    1920,
+    1080,
+    'arena'
+  ),
+  asset(
+    'scene.arena.confirm',
+    ASSET_BUNDLE_IDS.arena,
+    'confirmButton',
+    arenaConfirmImage,
+    232,
+    67,
+    'arena'
+  ),
+  asset(
+    'scene.arena.cancel',
+    ASSET_BUNDLE_IDS.arena,
+    'cancelButton',
+    arenaCancelImage,
+    230,
+    65,
+    'arena'
+  ),
+  asset(
+    'scene.arena.vertical-slider',
+    ASSET_BUNDLE_IDS.arena,
+    'verticalSlider',
+    verticalSliderImage,
+    34,
+    94,
+    'arena'
+  ),
+  asset(
+    'scene.tavern-brawl.play-button',
+    ASSET_BUNDLE_IDS.tavernBrawl,
+    'playButton',
+    tavernBrawlPlayButtonImage,
+    259,
+    259,
+    'tavern-brawl'
   ),
   asset(
     'scene.deck-selection.background',
@@ -1213,6 +1322,23 @@ export interface MainMenuAssets {
   centerPartMenu: Texture
   buttonPlay: Texture
   buttonCollection: Texture
+  buttonArena: Texture
+  buttonTavern: Texture
+}
+
+export interface TavernBrawlAssets {
+  background: Texture
+  playButton: Texture
+}
+
+export interface ArenaAssets {
+  background: Texture
+  playButton: Texture
+  retireButton: Texture
+  retireContainer: Texture
+  confirmButton: Texture
+  cancelButton: Texture
+  verticalSlider: Texture
 }
 
 export interface DeckSelectionAssets {

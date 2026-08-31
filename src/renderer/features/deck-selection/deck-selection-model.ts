@@ -13,6 +13,10 @@ export interface DeckSelectionEntry {
   readonly row: number
 }
 
+export function formatClassWins(wins: number): string {
+  return `Wins: ${wins}`
+}
+
 /** Builds the stable 3x3 list of decks that are ready to play. */
 export function buildDeckSelectionEntries(
   decks: readonly Deck[]

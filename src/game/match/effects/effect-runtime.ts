@@ -17,6 +17,7 @@ import { HERO_POWER_CATALOG } from '../../content/hero-powers'
 import { createSeededRng, type DeterministicRng } from '../rng'
 import type {
   CardPlayTargetRef,
+  CardChoiceOption,
   CardPlayEffectPreview,
   AttackCharacterRef,
   CombatStartedEvent,
@@ -60,6 +61,11 @@ import {
 } from './capability'
 import { insertCardIntoPlayer, removeCardFromPlayer } from '../rules/zone-state'
 import { assertOpeningMatchInvariants } from '../rules/invariants'
+import {
+  boardMinionAttacksUsed,
+  effectiveBoardMinionKeywords,
+  hasBoardMinionEntryExhaustion
+} from '../rules/minion-attack-state'
 import type { ResolutionCorrelation, TriggerEventContract } from '../contracts'
 import {
   DEFAULT_RESOLUTION_BUDGET,
@@ -157,6 +163,18 @@ export interface EffectRuntimeOptions {
   readonly position?: number
   readonly targets?: readonly CardPlayTargetRef[]
   readonly choice?: number
+  /** Defers an explicitly after-placement Choice instead of selecting a branch now. */
+  readonly deferChoice?: boolean
+  readonly nextEntityOrdinal?: number
+  readonly recordTrace?: boolean
+}
+
+export interface PendingCardChoiceRuntimeOptions {
+  readonly state: OpeningMatchState
+  readonly rng?: DeterministicRng
+  readonly participantId: PlayerId
+  readonly sourceCardInstanceId: string
+  readonly choice: number
   readonly nextEntityOrdinal?: number
   readonly recordTrace?: boolean
 }
@@ -339,29 +357,6 @@ function historyOf(state: DraftState): Mutable<MatchHistory> {
   ) as Mutable<MatchHistory>
 }
 
-function effectiveKeywords(
-  minion: Pick<BoardMinion, 'keywords' | 'enchantments'> &
-    Partial<Pick<BoardMinion, 'health' | 'maxHealth'>>,
-  currentTurn?: number
-): readonly CardKeyword[] {
-  const keywords = new Set<CardKeyword>(minion.keywords ?? [])
-  for (const enchantment of minion.enchantments ?? []) {
-    if (
-      (enchantment.startsOnTurn !== undefined &&
-        currentTurn !== undefined &&
-        currentTurn < enchantment.startsOnTurn) ||
-      (enchantment.duration === 'while-damaged' &&
-        minion.health !== undefined &&
-        minion.maxHealth !== undefined &&
-        minion.health >= minion.maxHealth)
-    )
-      continue
-    for (const keyword of enchantment.keywords ?? []) keywords.add(keyword)
-    for (const keyword of enchantment.removedKeywords ?? []) keywords.delete(keyword)
-  }
-  return [...keywords]
-}
-
 function attacksPerTurnForKeywords(keywords: ReadonlySet<CardKeyword>): number {
   if (keywords.has('mega-windfury')) return 4
   return keywords.has('windfury') ? 2 : 1
@@ -373,6 +368,17 @@ function cardDefinition(cardId: CardId): CardDefinition | undefined {
 
 function cardHasTrigger(card: CardDefinition, trigger: CardTrigger): boolean {
   return card.effects.some((effect) => effect.trigger === trigger)
+}
+
+function isMindControlSpell(card: CardDefinition): boolean {
+  return (
+    card.type === 'Spell' &&
+    card.effects.some(
+      (effect) =>
+        effect.trigger === 'cast' &&
+        (effect.actions ?? []).some((action) => action.action === 'take-control')
+    )
+  )
 }
 
 function sourceCardId(source: EntityRef | null): CardId | null {
@@ -3117,7 +3123,7 @@ export class EffectRuntime {
     if (ref.kind === 'minion') {
       const minion = this.currentMinion(ref)
       if (!minion || minion.silenced) return false
-      const keywords = effectiveKeywords(minion, this.draft.turnNumber)
+      const keywords = effectiveBoardMinionKeywords(minion, this.draft.turnNumber)
       if (!keywords.includes(keyword)) return false
       if (keyword === 'divine-shield') return minion.divineShield === true
       if (keyword === 'stealth') return minion.stealth === true
@@ -4365,10 +4371,14 @@ export class EffectRuntime {
     if (!minion) return false
     const targetPlayer = this.player(controllerId)
     if (sourcePlayer.participantId === controllerId) return true
-    if (targetPlayer.board.length >= MAX_BOARD_SIZE) return false
+    if (targetPlayer.board.length >= MAX_BOARD_SIZE) {
+      this.directDestroy(ref, frame, `${path}.board-full`)
+      return false
+    }
     const taken = this.takeBoardMinion(sourcePlayer, ref.instanceId)
     if (!taken) return false
     taken.minion.controllerId = controllerId
+    taken.minion.controllerChangedOnTurn = this.draft.turnNumber
     this.insertBoardMinion(targetPlayer, taken.minion)
     this.emit(frame, 'take-control', path, {
       target: ref.instanceId,
@@ -4463,9 +4473,9 @@ export class EffectRuntime {
       creationOrdinal: destination.creationOrdinal,
       playOrder: destination.playOrder,
       summonedOnTurn: destination.summonedOnTurn,
+      controllerChangedOnTurn: destination.controllerChangedOnTurn,
       lastAttackedOnTurn: destination.lastAttackedOnTurn,
-      attacksUsedThisTurn: destination.attacksUsedThisTurn,
-      scheduledReturnControllerId: destination.scheduledReturnControllerId
+      attacksUsedThisTurn: destination.attacksUsedThisTurn
     }
 
     Object.assign(destination, sourceSnapshot, destinationIdentity, {
@@ -5491,15 +5501,15 @@ export class EffectRuntime {
           armor: previousHero.armor + armorGained,
           lastAttackedOnTurn: null
         }
-        const power = HERO_POWER_CATALOG.get(definition.heroPowerId)
+        const power = HERO_POWER_CATALOG.require(definition.heroPowerId)
         player.heroPower = {
           ...player.heroPower,
           id: definition.heroPowerId,
-          cost: power?.cost ?? 2,
-          baseCost: power?.cost ?? 2,
+          cost: power.cost,
+          baseCost: power.cost,
           available: player.heroPower.available,
-          targetType: power?.targeting ?? 'none',
-          targetingGranted: power?.targeting ?? 'none',
+          targetType: power.targeting,
+          targetingGranted: power.targeting,
           effectOverride: undefined,
           enchantments: []
         }
@@ -6094,7 +6104,20 @@ export class EffectRuntime {
             const minion = this.player(destination).board.find(
               (candidate) => candidate.instanceId === target.instanceId
             )
-            if (minion) minion.scheduledReturnControllerId = previousController
+            if (minion) {
+              this.addEnchantment(
+                { ...target, participantId: destination },
+                {
+                  id: this.allocateId(`${frame.source.instanceId}:temporary-control`),
+                  sourceInstanceId: frame.source.instanceId,
+                  sourceCardId: frame.sourceCardId,
+                  keywords: ['charge'],
+                  returnControllerId: previousController,
+                  duration: 'this-turn',
+                  expiresOnTurn: this.draft.turnNumber
+                }
+              )
+            }
           }
         }
         return
@@ -6139,6 +6162,10 @@ export class EffectRuntime {
           const minion = this.currentMinion(target)
           const definition = minion ? cardDefinition(minion.cardId) : undefined
           if (!minion || !definition || definition.type !== 'Minion') continue
+          const currentPlayer = this.player(target.participantId)
+          const temporaryControl = (minion.enchantments ?? []).find(
+            (enchantment) => enchantment.returnControllerId !== undefined
+          )
           minion.baseAttack = definition.attack
           minion.baseHealth = definition.health
           minion.attack = definition.attack
@@ -6157,7 +6184,14 @@ export class EffectRuntime {
           minion.immune = false
           minion.spellImmune = false
           minion.frozenUntilTurn = null
-          frame.lastActionTarget = target
+          frame.lastActionTarget = temporaryControl
+            ? this.returnTemporaryControlledMinion(
+                minion,
+                currentPlayer,
+                temporaryControl,
+                `${path}.return-control`
+              )
+            : target
         }
         return
       default:
@@ -6440,7 +6474,7 @@ export class EffectRuntime {
             clamp(maximumHealth - oldDamage, 0, maximumHealth)
           )
           minion.damageTaken = Math.max(0, maximumHealth - minion.health)
-          const keywords = effectiveKeywords({
+          const keywords = effectiveBoardMinionKeywords({
             ...minion,
             enchantments: activeEnchantments
           })
@@ -6571,6 +6605,10 @@ export class EffectRuntime {
 
   private choiceLabelsFor(card: CardDefinition): readonly string[] {
     const options = collectChoiceOptions(card.effects) ?? []
+    const authoredLabels = card.rulesText
+      .replace(/^.*?Choose One\s*-\s*/i, '')
+      .split(/\s*;\s*or\s+/i)
+      .map((label) => label.replace(/[.;]\s*$/, '').trim())
     return options.map((option, index) => {
       if (isRecord(option)) {
         for (const key of ['label', 'name', 'text']) {
@@ -6578,8 +6616,48 @@ export class EffectRuntime {
           if (typeof value === 'string' && value.trim().length > 0) return value.trim()
         }
       }
-      return `Choice ${index + 1}`
+      return authoredLabels.length === options.length && authoredLabels[index]
+        ? authoredLabels[index]!
+        : `Choice ${index + 1}`
     })
+  }
+
+  private choiceOptionsFor(card: CardDefinition): readonly CardChoiceOption[] {
+    const options = collectChoiceOptions(card.effects) ?? []
+    const labels = this.choiceLabelsFor(card)
+    return options.map((option, choice) => {
+      const actions = isRecord(option) ? asArray(option.actions) : []
+      const transform = actions.find(
+        (action) =>
+          isRecord(action) &&
+          action.action === 'transform' &&
+          typeof action.cardId === 'string' &&
+          CARD_CATALOG.get(action.cardId as CardId)
+      ) as Readonly<Record<string, unknown>> | undefined
+      return {
+        choice,
+        label: labels[choice] ?? `Choice ${choice + 1}`,
+        ...(typeof transform?.cardId === 'string'
+          ? { presentationCardId: transform.cardId as CardId }
+          : {})
+      }
+    })
+  }
+
+  private choiceTimingFor(card: CardDefinition): 'before-play' | 'after-placement' {
+    if (card.type !== 'Minion') return 'before-play'
+    const options = collectChoiceOptions(card.effects) ?? []
+    if (options.length === 0) return 'before-play'
+    const selfTransforms = options.every((option) => {
+      if (!isRecord(option)) return false
+      const actions = asArray(option.actions)
+      return actions.some((action) => {
+        if (!isRecord(action) || action.action !== 'transform') return false
+        const target = isRecord(action.target) ? action.target : null
+        return target?.type === 'minion' && target.selection === 'source'
+      })
+    })
+    return selfTransforms ? 'after-placement' : 'before-play'
   }
 
   /** Determines whether the current effect branch is conditionally enhanced. */
@@ -6662,12 +6740,16 @@ export class EffectRuntime {
     if (!card) return null
     const definition = cardDefinition(card.cardId)
     if (!definition) return null
+    if (isMindControlSpell(definition) && player.board.length >= MAX_BOARD_SIZE)
+      return null
     const requiresPosition = definition.type === 'Minion'
     const legalPositions =
       requiresPosition && player.board.length < MAX_BOARD_SIZE
         ? Array.from({ length: player.board.length + 1 }, (_, index) => index)
         : []
     const choiceCount = this.choiceCountFor(definition)
+    const choiceOptions = this.choiceOptionsFor(definition)
+    const choiceTiming = this.choiceTimingFor(definition)
     if (
       choiceIndex !== undefined &&
       (!Number.isInteger(choiceIndex) || choiceIndex < 0 || choiceIndex >= choiceCount)
@@ -6715,7 +6797,8 @@ export class EffectRuntime {
       skipTargetedBattlecry,
       choiceCount,
       legalChoices: Array.from({ length: choiceCount }, (_, index) => index),
-      choiceLabels: this.choiceLabelsFor(definition),
+      choiceOptions,
+      choiceTiming,
       effectPreview: this.playEffectPreview(definition, targetFrame)
     }
   }
@@ -6837,11 +6920,9 @@ export class EffectRuntime {
     const legalAttackerInstanceIds = active
       ? player.board
           .filter((minion) => {
-            const keywords = effectiveKeywords(minion, this.draft.turnNumber)
+            const keywords = effectiveBoardMinionKeywords(minion, this.draft.turnNumber)
             const frozen = (minion.frozenUntilTurn ?? -1) >= this.draft.turnNumber
-            const attacks =
-              minion.attacksUsedThisTurn ??
-              (minion.lastAttackedOnTurn === this.draft.turnNumber ? 1 : 0)
+            const attacks = boardMinionAttacksUsed(minion, this.draft.turnNumber)
             const maximum =
               minion.maxAttacksPerTurn ??
               (keywords.includes('mega-windfury')
@@ -6855,7 +6936,7 @@ export class EffectRuntime {
               !keywords.includes('cannot-attack') &&
               !frozen &&
               (keywords.includes('charge') ||
-                minion.summonedOnTurn < this.draft.turnNumber) &&
+                !hasBoardMinionEntryExhaustion(minion, this.draft.turnNumber)) &&
               attacks < maximum
             )
           })
@@ -7039,14 +7120,21 @@ export class EffectRuntime {
       throw new ResolutionInputError('stale-target', `Unknown card ${card.cardId}.`)
     const report = inspectCardCapabilities(definition, runtimeCapabilityKeys())
     if (!report.supported) throw new UnsupportedEffectCapabilityError(report)
+    if (isMindControlSpell(definition) && player.board.length >= MAX_BOARD_SIZE)
+      throw new ResolutionInputError('board-full', 'The board is full.')
     const choiceCount = this.choiceCountFor(definition)
+    const choiceTiming = this.choiceTimingFor(definition)
     if (choiceCount > 0) {
-      if (options.choice === undefined)
+      if (
+        options.choice === undefined &&
+        !(options.deferChoice === true && choiceTiming === 'after-placement')
+      )
         throw new ResolutionInputError('missing-input', 'The card requires a choice.')
       if (
-        !Number.isInteger(options.choice) ||
-        options.choice < 0 ||
-        options.choice >= choiceCount
+        options.choice !== undefined &&
+        (!Number.isInteger(options.choice) ||
+          options.choice < 0 ||
+          options.choice >= choiceCount)
       )
         throw new ResolutionInputError('extra-input', 'The selected choice is invalid.')
     } else if (options.choice !== undefined) {
@@ -7199,10 +7287,11 @@ export class EffectRuntime {
     card: CardDefinition,
     trigger: CardTrigger,
     frame: EffectFrame,
-    path: string
+    path: string,
+    skipChoice = false
   ): void {
     for (const [index, block] of card.effects.entries()) {
-      if (block.trigger === trigger)
+      if (block.trigger === trigger && !(skipChoice && block.choice))
         this.runBlock(block, frame, `${path}.${trigger}[${index}]`)
     }
   }
@@ -7377,7 +7466,7 @@ export class EffectRuntime {
     if (ref.kind === 'minion') {
       const minion = this.currentMinion(ref)
       if (!minion) return 0
-      const keywords = effectiveKeywords(minion, this.draft.turnNumber)
+      const keywords = effectiveBoardMinionKeywords(minion, this.draft.turnNumber)
       return (
         minion.maxAttacksPerTurn ??
         (keywords.includes('mega-windfury') ? 4 : keywords.includes('windfury') ? 2 : 1)
@@ -7396,10 +7485,7 @@ export class EffectRuntime {
     }
     if (ref.kind === 'minion') {
       const minion = this.currentMinion(ref)
-      return (
-        minion?.attacksUsedThisTurn ??
-        (minion?.lastAttackedOnTurn === this.draft.turnNumber ? 1 : 0)
-      )
+      return minion ? boardMinionAttacksUsed(minion, this.draft.turnNumber) : 0
     }
     return 0
   }
@@ -7416,8 +7502,10 @@ export class EffectRuntime {
       const minion = this.currentMinion(ref)
       if (!minion || minion.health <= 0) return false
       if (
-        !effectiveKeywords(minion, this.draft.turnNumber).includes('charge') &&
-        minion.summonedOnTurn >= this.draft.turnNumber
+        !effectiveBoardMinionKeywords(minion, this.draft.turnNumber).includes(
+          'charge'
+        ) &&
+        hasBoardMinionEntryExhaustion(minion, this.draft.turnNumber)
       )
         return false
     } else if (this.player(ref.participantId).hero.health <= 0) {
@@ -7575,7 +7663,7 @@ export class EffectRuntime {
       }
 
       if (
-        effectiveKeywords(
+        effectiveBoardMinionKeywords(
           attacker.kind === 'minion'
             ? this.currentMinion(attacker)!
             : {
@@ -8414,41 +8502,80 @@ export class EffectRuntime {
     for (const minion of player.board) minion.attacksUsedThisTurn = 0
   }
 
-  private returnTemporaryControl(participantId: PlayerId, path: string): void {
-    const candidates = this.draft.players.flatMap((player) =>
-      player.board
-        .filter(
-          (minion) =>
-            minion.scheduledReturnControllerId !== undefined &&
-            minion.controllerId === participantId
-        )
-        .map((minion) => ({
-          minion: minion as DraftMinion,
-          currentPlayer: player
-        }))
+  private returnTemporaryControlledMinion(
+    minion: DraftMinion,
+    currentPlayer: DraftPlayer,
+    controlEnchantment: RuntimeEnchantment,
+    path: string
+  ): EntityRef {
+    minion.enchantments = (minion.enchantments ?? []).filter(
+      (enchantment) => enchantment.id !== controlEnchantment.id
     )
-    for (const { minion, currentPlayer } of candidates) {
-      const returningPlayerId = minion.scheduledReturnControllerId
-      if (!returningPlayerId || currentPlayer.participantId !== minion.controllerId)
-        continue
-      const returningPlayer = this.player(returningPlayerId)
-      minion.scheduledReturnControllerId = undefined
-      if (returningPlayer.board.length >= MAX_BOARD_SIZE) continue
-      const moved = this.takeBoardMinion(currentPlayer, minion.instanceId)
-      if (!moved) continue
-      moved.minion.controllerId = returningPlayerId
-      this.insertBoardMinion(returningPlayer, moved.minion)
-      const source: EntityRef = {
-        instanceId: minion.instanceId,
-        kind: 'minion',
-        participantId: returningPlayerId,
-        zone: 'board',
-        cardId: minion.cardId
-      }
-      this.emit(this.frameFor(source, null, []), 'return-control', path, {
-        target: minion.instanceId,
-        controllerId: returningPlayerId
+    const returningPlayerId = controlEnchantment.returnControllerId
+    const currentRef: EntityRef = {
+      instanceId: minion.instanceId,
+      kind: 'minion',
+      participantId: currentPlayer.participantId,
+      zone: 'board',
+      cardId: minion.cardId
+    }
+    if (!returningPlayerId || currentPlayer.participantId === returningPlayerId)
+      return currentRef
+
+    const returningPlayer = this.player(returningPlayerId)
+    if (returningPlayer.board.length >= MAX_BOARD_SIZE) {
+      this.directDestroy(
+        currentRef,
+        this.frameFor(currentRef, null, []),
+        `${path}.board-full`
+      )
+      return currentRef
+    }
+
+    const moved = this.takeBoardMinion(currentPlayer, minion.instanceId)
+    if (!moved) return currentRef
+    moved.minion.controllerId = returningPlayerId
+    moved.minion.controllerChangedOnTurn = this.draft.turnNumber
+    this.insertBoardMinion(returningPlayer, moved.minion)
+    const returnedRef: EntityRef = {
+      ...currentRef,
+      participantId: returningPlayerId
+    }
+    this.emit(this.frameFor(returnedRef, null, []), 'return-control', path, {
+      target: minion.instanceId,
+      controllerId: returningPlayerId
+    })
+    return returnedRef
+  }
+
+  private returnTemporaryControl(path: string): void {
+    const candidates = this.draft.players.flatMap((player) =>
+      player.board.flatMap((minion) => {
+        const controlEnchantment = (minion.enchantments ?? []).find(
+          (enchantment) =>
+            enchantment.returnControllerId !== undefined &&
+            (enchantment.expiresOnTurn ?? this.draft.turnNumber) <=
+              this.draft.turnNumber
+        )
+        return controlEnchantment
+          ? [
+              {
+                minion: minion as DraftMinion,
+                currentPlayer: player,
+                controlEnchantment
+              }
+            ]
+          : []
       })
+    )
+    for (const { minion, currentPlayer, controlEnchantment } of candidates) {
+      if (minion.health <= 0) continue
+      this.returnTemporaryControlledMinion(
+        minion,
+        currentPlayer,
+        controlEnchantment,
+        path
+      )
     }
     this.recomputeContinuousEffects()
   }
@@ -8485,7 +8612,8 @@ export class EffectRuntime {
       this.runScheduledEffects('end-of-turn', this.draft.turnNumber)
       this.runAttachedEffects('end-of-turn', this.draft.turnNumber)
       this.processDeaths()
-      this.returnTemporaryControl(options.participantId, 'turn-end.return-control')
+      this.returnTemporaryControl('turn-end.return-control')
+      this.processDeaths()
       if (this.draft.players.some((player) => player.hero.health <= 0)) {
         const nextState = this.commitResolution()
         return {
@@ -8644,7 +8772,13 @@ export class EffectRuntime {
       this.emitCardPlayedSemantic(minion, minion, card, 'card-played')
       this.runCardBlocks(validated.definition, 'on-play', frame, 'play-card')
       if (!validated.input.skipTargetedBattlecry)
-        this.runCardBlocks(validated.definition, 'battlecry', frame, 'play-card')
+        this.runCardBlocks(
+          validated.definition,
+          'battlecry',
+          frame,
+          'play-card',
+          options.deferChoice === true
+        )
       if (this.currentMinion(minion))
         this.emitCardPlayedSemantic(minion, minion, card, 'minion-played')
       if (this.currentMinion(minion)) {
@@ -8800,6 +8934,22 @@ export class EffectRuntime {
       const validated = this.validatePlayInput(options)
       this.step('checkpoint.card-play', 'checkpoint')
       this.resolveValidatedPlay(options, validated)
+      if (options.deferChoice === true) {
+        const pendingOptions = this.choiceOptionsFor(validated.definition)
+        this.draft.pendingCardChoice = {
+          participantId: options.participantId,
+          sourceCardInstanceId: options.cardInstanceId,
+          sourceCardId: validated.card.cardId,
+          options: [...pendingOptions]
+        }
+        this.events.push({
+          type: 'card-choice-started',
+          participantId: options.participantId,
+          sourceCardInstanceId: options.cardInstanceId,
+          sourceCardId: validated.card.cardId,
+          options: pendingOptions
+        })
+      }
       this.recomputeContinuousEffects()
       const nextState = clonePlain(this.draft) as DraftState
       nextState.revision = this.draft.revision + 1
@@ -8857,6 +9007,62 @@ export class EffectRuntime {
       return this.resolutionFailure(error)
     }
   }
+
+  resolvePendingCardChoice(
+    options: PendingCardChoiceRuntimeOptions
+  ): EffectResolutionResult {
+    try {
+      const pending = this.draft.pendingCardChoice
+      if (!pending)
+        throw new ResolutionInputError('missing-input', 'No card choice is pending.')
+      if (
+        pending.participantId !== options.participantId ||
+        pending.sourceCardInstanceId !== options.sourceCardInstanceId
+      )
+        throw new ResolutionInputError(
+          'wrong-controller',
+          'Only the pending Choice owner may select this option.'
+        )
+      if (!pending.options.some((option) => option.choice === options.choice))
+        throw new ResolutionInputError('extra-input', 'The selected choice is invalid.')
+      const definition = cardDefinition(pending.sourceCardId)
+      if (!definition)
+        throw new ResolutionInputError(
+          'stale-target',
+          'The Choice source is unavailable.'
+        )
+      const source = this.findEntity(
+        options.sourceCardInstanceId,
+        options.participantId
+      )
+      if (!source || source.kind !== 'minion')
+        throw new ResolutionInputError(
+          'stale-target',
+          'The minion awaiting a Choice is no longer in play.'
+        )
+      this.draft.pendingCardChoice = undefined
+      const frame = {
+        ...this.frameFor(source, null, []),
+        choiceIndex: options.choice
+      }
+      for (const [index, block] of definition.effects.entries()) {
+        if (block.trigger === 'battlecry' && block.choice)
+          this.runBlock(block, frame, `pending-choice.battlecry[${index}]`)
+      }
+      this.processDeaths()
+      const nextState = this.commitResolution()
+      return {
+        accepted: true,
+        state: clonePlain(nextState) as OpeningMatchState,
+        events: clonePlain(this.events) as OpeningMatchEvent[],
+        trace: copyPlainArray(this.trace),
+        nextEntityOrdinal: this.nextEntityOrdinal,
+        triggerEvents: copyPlainArray(this.triggerEvents)
+      }
+    } catch (error) {
+      return this.resolutionFailure(error)
+    }
+  }
 }
 
 function findRequestedTarget(
@@ -8882,6 +9088,17 @@ export function resolveCardPlay(options: EffectRuntimeOptions): EffectResolution
     options.nextEntityOrdinal,
     options.recordTrace
   ).resolveCardPlay(options)
+}
+
+export function resolvePendingCardChoice(
+  options: PendingCardChoiceRuntimeOptions
+): EffectResolutionResult {
+  return new EffectRuntime(
+    options.state,
+    options.rng ?? createSeededRng(options.state.revision + 1),
+    options.nextEntityOrdinal,
+    options.recordTrace
+  ).resolvePendingCardChoice(options)
 }
 
 export function resolveAttack(options: AttackRuntimeOptions): EffectResolutionResult {

@@ -1,6 +1,11 @@
 import {
+  AI_DECK_PLAN_LIMITS,
+  parseAiDeckPlanRequest,
+  parseAiDeckPlanResponse,
   parseAiDecisionRequest,
   parseAiDecisionResponse,
+  type AiDeckPlanRequest,
+  type AiDeckPlanResponse,
   type AiDecisionRequest,
   type AiDecisionResponse,
   type JsonObject,
@@ -12,9 +17,13 @@ type FetchImplementation = typeof globalThis.fetch
 
 interface ModelDecision {
   readonly actionId: string
+  readonly decisionClass: AiDecisionRequest['decisionClass']
   readonly rationale: string
-  readonly strategicIntent: string
-  readonly strategySummary: string
+}
+
+interface ModelDeckPlan {
+  readonly plan: unknown
+  readonly rationale: string
 }
 
 interface AzureOpenAiDecisionServiceOptions {
@@ -53,9 +62,15 @@ function parseModelDecision(value: unknown, request: AiDecisionRequest): ModelDe
   }
   return {
     actionId,
-    rationale: requiredModelString(value, 'rationale'),
-    strategicIntent: requiredModelString(value, 'strategicIntent'),
-    strategySummary: requiredModelString(value, 'strategySummary')
+    decisionClass:
+      value['decisionClass'] === request.decisionClass
+        ? request.decisionClass
+        : (() => {
+            throw new Error(
+              'AI model response decisionClass does not match the request.'
+            )
+          })(),
+    rationale: requiredModelString(value, 'rationale')
   }
 }
 
@@ -72,6 +87,55 @@ function extractAssistantContent(response: JsonValue): string {
   return message['content']
 }
 
+function providerMetadata(response: JsonValue): {
+  readonly actualModelId?: string
+  readonly finishReason?: string
+  readonly usage?: JsonObject
+} {
+  if (!isRecord(response)) return {}
+  const choices = response['choices']
+  const firstChoice = Array.isArray(choices) && isRecord(choices[0]) ? choices[0] : null
+  const actualModelId =
+    typeof response['model'] === 'string' ? response['model'] : undefined
+  const finishReason =
+    firstChoice && typeof firstChoice['finish_reason'] === 'string'
+      ? firstChoice['finish_reason']
+      : undefined
+  const usage = isRecord(response['usage'])
+    ? (response['usage'] as JsonObject)
+    : undefined
+  return {
+    ...(actualModelId ? { actualModelId } : {}),
+    ...(finishReason ? { finishReason } : {}),
+    ...(usage ? { usage } : {})
+  }
+}
+
+function responseDiagnosticError(
+  config: AzureOpenAiConfig,
+  url: string,
+  response: Response,
+  responseText: string,
+  message: string,
+  assistantContent?: string,
+  cause?: unknown
+): Error {
+  if (!config.debug) return new Error(message, cause === undefined ? {} : { cause })
+  const diagnostic = [
+    '[Azure OpenAI diagnostic]',
+    `URL: ${url}`,
+    `HTTP status: ${response.status} ${response.statusText}`,
+    ...(assistantContent === undefined
+      ? []
+      : ['Raw assistant content:', assistantContent]),
+    'Raw Azure response body:',
+    responseText,
+    '[/Azure OpenAI diagnostic]'
+  ].join('\n')
+  console.error(diagnostic)
+  return new Error(`${message}\n${diagnostic}`, cause === undefined ? {} : { cause })
+}
+
 function buildRequestBody(
   request: AiDecisionRequest,
   config: AzureOpenAiConfig
@@ -79,6 +143,7 @@ function buildRequestBody(
   const actionIds = request.legalActions.map((action) => action.id)
   const phasePrompt =
     request.phase === 'mulligan' ? config.prompts.mulligan : config.prompts.turn
+  const policy = config.decisionPolicies[request.decisionClass]
   return {
     messages: [
       { role: 'system', content: config.prompts.system },
@@ -88,15 +153,18 @@ function buildRequestBody(
         content: JSON.stringify({
           decisionId: request.decisionId,
           phase: request.phase,
+          decisionClass: request.decisionClass,
           matchRevision: request.matchRevision,
-          strategySummary: request.strategySummary,
+          promptVersion: request.promptVersion,
+          contextVersion: request.contextVersion,
+          schemaVersion: request.schemaVersion,
           gameState: request.gameState,
           legalActions: request.legalActions
         })
       }
     ],
-    reasoning_effort: config.reasoningEffort,
-    max_completion_tokens: config.maxCompletionTokens,
+    reasoning_effort: policy.reasoningEffort,
+    max_completion_tokens: policy.maxCompletionTokens,
     response_format: {
       type: 'json_schema',
       json_schema: {
@@ -107,11 +175,205 @@ function buildRequestBody(
           additionalProperties: false,
           properties: {
             actionId: { type: 'string', enum: actionIds },
-            rationale: { type: 'string' },
-            strategicIntent: { type: 'string' },
-            strategySummary: { type: 'string' }
+            decisionClass: { type: 'string', enum: [request.decisionClass] },
+            rationale: { type: 'string' }
           },
-          required: ['actionId', 'rationale', 'strategicIntent', 'strategySummary']
+          required: ['actionId', 'decisionClass', 'rationale']
+        }
+      }
+    }
+  }
+}
+
+function buildDeckPlanRequestBody(
+  request: AiDeckPlanRequest,
+  config: AzureOpenAiConfig
+): JsonObject {
+  const cardRoleValues = [
+    'win-condition',
+    'combo-piece',
+    'enabler',
+    'draw',
+    'removal',
+    'survival',
+    'tempo',
+    'finisher',
+    'flex'
+  ]
+  return {
+    messages: [
+      { role: 'system', content: config.prompts.deckPlan },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          planId: request.planId,
+          promptVersion: request.promptVersion,
+          schemaVersion: request.schemaVersion,
+          mode: request.mode,
+          deck: request.deck
+        })
+      }
+    ],
+    reasoning_effort: config.decisionPolicies.deckPlan.reasoningEffort,
+    max_completion_tokens: config.decisionPolicies.deckPlan.maxCompletionTokens,
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'game_ai_deck_plan',
+        strict: true,
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            plan: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                planVersion: { type: 'integer', enum: [1] },
+                archetype: {
+                  type: 'string',
+                  enum: [
+                    'aggro',
+                    'tempo',
+                    'midrange',
+                    'control',
+                    'combo',
+                    'fatigue',
+                    'hybrid'
+                  ]
+                },
+                primaryWinCondition: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: AI_DECK_PLAN_LIMITS.strategyTextLength
+                },
+                secondaryWinCondition: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: AI_DECK_PLAN_LIMITS.strategyTextLength
+                },
+                earlyGamePriority: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: AI_DECK_PLAN_LIMITS.strategyTextLength
+                },
+                midGamePriority: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: AI_DECK_PLAN_LIMITS.strategyTextLength
+                },
+                lateGamePriority: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: AI_DECK_PLAN_LIMITS.strategyTextLength
+                },
+                cardRoles: {
+                  type: 'array',
+                  maxItems: AI_DECK_PLAN_LIMITS.cardRoles,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      cardId: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: AI_DECK_PLAN_LIMITS.cardIdLength
+                      },
+                      roles: {
+                        type: 'array',
+                        maxItems: AI_DECK_PLAN_LIMITS.rolesPerCard,
+                        items: { type: 'string', enum: cardRoleValues }
+                      }
+                    },
+                    required: ['cardId', 'roles']
+                  }
+                },
+                combos: {
+                  type: 'array',
+                  maxItems: AI_DECK_PLAN_LIMITS.combos,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      cardIds: {
+                        type: 'array',
+                        maxItems: AI_DECK_PLAN_LIMITS.cardIdsPerCombo,
+                        items: {
+                          type: 'string',
+                          minLength: 1,
+                          maxLength: AI_DECK_PLAN_LIMITS.cardIdLength
+                        }
+                      },
+                      purpose: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: AI_DECK_PLAN_LIMITS.comboPurposeLength
+                      }
+                    },
+                    required: ['cardIds', 'purpose']
+                  }
+                },
+                resourceRules: {
+                  type: 'array',
+                  maxItems: AI_DECK_PLAN_LIMITS.resourceRules,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      cardIds: {
+                        type: 'array',
+                        maxItems: AI_DECK_PLAN_LIMITS.cardIdsPerResourceRule,
+                        items: {
+                          type: 'string',
+                          minLength: 1,
+                          maxLength: AI_DECK_PLAN_LIMITS.cardIdLength
+                        }
+                      },
+                      preserveUntil: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: AI_DECK_PLAN_LIMITS.resourceRuleTextLength
+                      },
+                      releaseWhen: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: AI_DECK_PLAN_LIMITS.resourceRuleTextLength
+                      }
+                    },
+                    required: ['cardIds', 'preserveUntil', 'releaseWhen']
+                  }
+                },
+                mulliganPriorityCardIds: {
+                  type: 'array',
+                  maxItems: AI_DECK_PLAN_LIMITS.mulliganPriorityCards,
+                  items: {
+                    type: 'string',
+                    minLength: 1,
+                    maxLength: AI_DECK_PLAN_LIMITS.cardIdLength
+                  }
+                }
+              },
+              required: [
+                'planVersion',
+                'archetype',
+                'primaryWinCondition',
+                'secondaryWinCondition',
+                'earlyGamePriority',
+                'midGamePriority',
+                'lateGamePriority',
+                'cardRoles',
+                'combos',
+                'resourceRules',
+                'mulliganPriorityCardIds'
+              ]
+            },
+            rationale: {
+              type: 'string',
+              minLength: 1,
+              maxLength: AI_DECK_PLAN_LIMITS.rationaleLength
+            }
+          },
+          required: ['plan', 'rationale']
         }
       }
     }
@@ -134,6 +396,95 @@ export class AzureOpenAiDecisionService {
     this.fetch = options.fetch ?? globalThis.fetch
   }
 
+  async planDeck(value: unknown): Promise<AiDeckPlanResponse> {
+    const request = parseAiDeckPlanRequest(value)
+    const config = await this.options.loadConfig()
+    if (!config.enabled)
+      throw new Error('The external game AI is disabled in config/ai.json.')
+    if (!config.apiKey) {
+      throw new Error(
+        'The Azure OpenAI key is missing. Put only the key in config/ai-key.local.txt.'
+      )
+    }
+
+    const url = buildRequestUrl(config)
+    const requestBody = buildDeckPlanRequestBody(request, config)
+    const remainingDeadlineMs = request.deadlineAtMs - Date.now()
+    if (remainingDeadlineMs <= 0) {
+      throw new Error(
+        'AI deck-plan deadline elapsed before the provider request started.'
+      )
+    }
+    const timeoutMs = Math.max(
+      1,
+      Math.min(config.decisionPolicies.deckPlan.requestTimeoutMs, remainingDeadlineMs)
+    )
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    const startedAt = performance.now()
+    let response: Response
+    try {
+      response = await this.fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'api-key': config.apiKey },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      })
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`Azure OpenAI request timed out after ${timeoutMs}ms.`, {
+          cause: error
+        })
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Azure OpenAI request failed: ${message}`, { cause: error })
+    } finally {
+      clearTimeout(timeout)
+    }
+
+    const responseText = await response.text()
+    if (!response.ok) {
+      throw new Error(`Azure OpenAI returned HTTP ${response.status}: ${responseText}`)
+    }
+    let responseBody: JsonValue
+    try {
+      responseBody = parseJson(responseText, 'Azure OpenAI response')
+      const assistantContent = extractAssistantContent(responseBody)
+      const parsed = parseJson(assistantContent, 'AI assistant content')
+      if (!isRecord(parsed)) throw new Error('AI deck plan response must be an object.')
+      const modelPlan: ModelDeckPlan = {
+        plan: parsed['plan'],
+        rationale: requiredModelString(parsed, 'rationale')
+      }
+      const metadata = providerMetadata(responseBody)
+      return parseAiDeckPlanResponse({
+        ...modelPlan,
+        modelId: metadata.actualModelId ?? config.modelId,
+        ...(config.debug
+          ? {
+              debug: {
+                url,
+                durationMs: Math.round(performance.now() - startedAt),
+                ...metadata,
+                requestBody,
+                responseBody
+              }
+            }
+          : {})
+      })
+    } catch (error) {
+      throw responseDiagnosticError(
+        config,
+        url,
+        response,
+        responseText,
+        error instanceof Error ? error.message : String(error),
+        undefined,
+        error
+      )
+    }
+  }
+
   async decide(value: unknown): Promise<AiDecisionResponse> {
     const request = parseAiDecisionRequest(value)
     const config = await this.options.loadConfig()
@@ -147,8 +498,19 @@ export class AzureOpenAiDecisionService {
 
     const url = buildRequestUrl(config)
     const requestBody = buildRequestBody(request, config)
+    const policy = config.decisionPolicies[request.decisionClass]
+    const remainingDeadlineMs = request.deadlineAtMs - Date.now()
+    if (remainingDeadlineMs <= 0) {
+      throw new Error(
+        'AI decision deadline elapsed before the provider request started.'
+      )
+    }
+    const timeoutMs = Math.max(
+      1,
+      Math.min(policy.requestTimeoutMs, remainingDeadlineMs)
+    )
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs)
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
     const startedAt = performance.now()
     let response: Response
     try {
@@ -163,10 +525,9 @@ export class AzureOpenAiDecisionService {
       })
     } catch (error) {
       if (controller.signal.aborted) {
-        throw new Error(
-          `Azure OpenAI request timed out after ${config.requestTimeoutMs}ms.`,
-          { cause: error }
-        )
+        throw new Error(`Azure OpenAI request timed out after ${timeoutMs}ms.`, {
+          cause: error
+        })
       }
       const message = error instanceof Error ? error.message : String(error)
       throw new Error(`Azure OpenAI request failed: ${message}`, { cause: error })
@@ -175,27 +536,56 @@ export class AzureOpenAiDecisionService {
     }
 
     const responseText = await response.text()
-    const responseBody = parseJson(responseText, 'Azure OpenAI response')
     if (!response.ok) {
       throw new Error(`Azure OpenAI returned HTTP ${response.status}: ${responseText}`)
     }
-    const decision = parseModelDecision(
-      parseJson(extractAssistantContent(responseBody), 'AI assistant content'),
-      request
-    )
-    return parseAiDecisionResponse({
-      ...decision,
-      modelId: config.modelId,
-      ...(config.debug
-        ? {
-            debug: {
-              url,
-              durationMs: Math.round(performance.now() - startedAt),
-              requestBody,
-              responseBody
+    let responseBody: JsonValue
+    try {
+      responseBody = parseJson(responseText, 'Azure OpenAI response')
+    } catch (error) {
+      throw responseDiagnosticError(
+        config,
+        url,
+        response,
+        responseText,
+        'Azure OpenAI response did not contain valid JSON.',
+        undefined,
+        error
+      )
+    }
+    let assistantContent: string | undefined
+    try {
+      assistantContent = extractAssistantContent(responseBody)
+      const decision = parseModelDecision(
+        parseJson(assistantContent, 'AI assistant content'),
+        request
+      )
+      const metadata = providerMetadata(responseBody)
+      return parseAiDecisionResponse({
+        ...decision,
+        modelId: metadata.actualModelId ?? config.modelId,
+        ...(config.debug
+          ? {
+              debug: {
+                url,
+                durationMs: Math.round(performance.now() - startedAt),
+                ...metadata,
+                requestBody,
+                responseBody
+              }
             }
-          }
-        : {})
-    })
+          : {})
+      })
+    } catch (error) {
+      throw responseDiagnosticError(
+        config,
+        url,
+        response,
+        responseText,
+        error instanceof Error ? error.message : String(error),
+        assistantContent,
+        error
+      )
+    }
   }
 }

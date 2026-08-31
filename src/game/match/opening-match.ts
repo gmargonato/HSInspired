@@ -9,6 +9,7 @@ import {
   getPlayInput,
   resolveAttack,
   resolveCardPlay,
+  resolvePendingCardChoice,
   resolveHeroPower,
   resolveTurnTransition
 } from './effects/effect-runtime'
@@ -31,6 +32,7 @@ import type {
   CardPlayTargetRef,
   PlayCardCommand,
   ChooseDiscoverCardCommand,
+  ChooseCardOptionCommand,
   AttackCharacterRef,
   AttackCharacterCommand,
   DevAddCardCommand,
@@ -593,6 +595,8 @@ export function getOpeningMatchPublicState(
     history: _history,
     effectTrace: _effectTrace,
     scheduledEffects: _scheduledEffects,
+    pendingDiscover: _pendingDiscover,
+    pendingCardChoice: _pendingCardChoice,
     ...publicSnapshot
   } = snapshot
   const players = snapshot.players.map((player) => ({
@@ -622,6 +626,8 @@ export function getOpeningMatchPublicState(
   void _history
   void _effectTrace
   void _scheduledEffects
+  void _pendingDiscover
+  void _pendingCardChoice
   const pendingDiscover =
     snapshot.pendingDiscover?.participantId === viewerId
       ? {
@@ -631,7 +637,16 @@ export function getOpeningMatchPublicState(
           )
         }
       : undefined
-  return { ...publicSnapshot, players, ...(pendingDiscover ? { pendingDiscover } : {}) }
+  const pendingCardChoice =
+    snapshot.pendingCardChoice?.participantId === viewerId
+      ? snapshot.pendingCardChoice
+      : undefined
+  return {
+    ...publicSnapshot,
+    players,
+    ...(pendingDiscover ? { pendingDiscover } : {}),
+    ...(pendingCardChoice ? { pendingCardChoice } : {})
+  }
 }
 
 function maskPublicEffectData(value: unknown, viewerId: PlayerId): unknown {
@@ -698,6 +713,8 @@ export function getOpeningMatchPublicEvents(
             maskPublicCard(card, viewerId, event.participantId === viewerId)
           )
         }
+      case 'card-choice-started':
+        return event.participantId === viewerId ? event : { ...event, options: [] }
       case 'coin-granted':
       case 'opening-card-drawn':
       case 'card-drawn':
@@ -715,6 +732,18 @@ export function getOpeningMatchPublicEvents(
           ...event,
           card: maskPublicCard(cardForEvent(event), viewerId, true)
         }
+      case 'history-action-resolved': {
+        const sourceDefinition = event.source.cardId
+          ? CARD_CATALOG.get(event.source.cardId)
+          : undefined
+        const hidesPlayedSecret =
+          event.participantId !== viewerId &&
+          event.action === 'card' &&
+          sourceDefinition?.keywords?.includes('secret') === true
+        return hidesPlayedSecret
+          ? { ...event, source: { ...event.source, cardId: null } }
+          : event
+      }
       default:
         return event
     }
@@ -842,6 +871,20 @@ function parseCommand(value: unknown): OpeningMatchCommand | null {
       type: 'choose-discover-card',
       participantId: value.participantId as PlayerId,
       cardInstanceId: value.cardInstanceId
+    }
+  }
+  if (value.type === 'choose-card-option') {
+    if (
+      typeof value.sourceCardInstanceId !== 'string' ||
+      typeof value.choice !== 'number' ||
+      !Number.isInteger(value.choice)
+    )
+      return null
+    return {
+      type: 'choose-card-option',
+      participantId: value.participantId as PlayerId,
+      sourceCardInstanceId: value.sourceCardInstanceId,
+      choice: value.choice
     }
   }
   if (value.type === 'timeout') {
@@ -2301,6 +2344,14 @@ export function createOpeningMatch(
   const dispatchPlayCard = (command: PlayCardCommand): OpeningCommandResult => {
     const before = state
     const rngSnapshot = rng.snapshot()
+    const input = getPlayInput(
+      state,
+      command.participantId,
+      command.cardInstanceId,
+      command.choice
+    )
+    const deferChoice =
+      command.choice === undefined && input?.choiceTiming === 'after-placement'
     const result = resolveCardPlay({
       state,
       rng,
@@ -2309,6 +2360,7 @@ export function createOpeningMatch(
       ...(command.position === undefined ? {} : { position: command.position }),
       ...(command.targets === undefined ? {} : { targets: command.targets }),
       ...(command.choice === undefined ? {} : { choice: command.choice }),
+      ...(deferChoice ? { deferChoice: true } : {}),
       nextEntityOrdinal,
       recordTrace: recordEffectTrace
     })
@@ -2334,6 +2386,39 @@ export function createOpeningMatch(
         ...(history ? [history] : []),
         ...fatigueHistoryEvents(before, result.events)
       ]
+    }
+  }
+
+  const dispatchCardChoice = (
+    command: ChooseCardOptionCommand
+  ): OpeningCommandResult => {
+    const rngSnapshot = rng.snapshot()
+    const result = resolvePendingCardChoice({
+      state,
+      rng,
+      participantId: command.participantId,
+      sourceCardInstanceId: command.sourceCardInstanceId,
+      choice: command.choice,
+      nextEntityOrdinal,
+      recordTrace: recordEffectTrace
+    })
+    if (!result.accepted) {
+      rng.restore(rngSnapshot)
+      return {
+        accepted: false,
+        code: result.code as OpeningRejectionCode,
+        message: result.message,
+        state: cloneOpeningMatchState(result.state),
+        events: [],
+        diagnostic: result.diagnostic
+      }
+    }
+    commitState(result.state)
+    nextEntityOrdinal = result.nextEntityOrdinal
+    return {
+      accepted: true,
+      state: cloneOpeningMatchState(state),
+      events: result.events
     }
   }
 
@@ -2426,7 +2511,7 @@ export function createOpeningMatch(
     }
   }
 
-  return {
+  const instance: OpeningMatchInstance = {
     setup,
     getState(): OpeningMatchState {
       return cloneOpeningMatchState(getDerivedState(state))
@@ -2453,6 +2538,55 @@ export function createOpeningMatch(
     ): readonly OpeningMatchPublicEvent[] {
       return getOpeningMatchPublicEvents(events, participantId)
     },
+    preview(commandValue: unknown): OpeningCommandResult {
+      const stateSnapshot = cloneOpeningMatchState(state)
+      const rngSnapshot = rng.snapshot()
+      const nextEntityOrdinalSnapshot = nextEntityOrdinal
+      const devDeckRefillCounterSnapshot = devDeckRefillCounter
+      try {
+        return instance.dispatch(commandValue)
+      } finally {
+        state = stateSnapshot
+        rng.restore(rngSnapshot)
+        nextEntityOrdinal = nextEntityOrdinalSnapshot
+        devDeckRefillCounter = devDeckRefillCounterSnapshot
+      }
+    },
+    previewSequence(commandValues: readonly unknown[]): OpeningCommandResult {
+      return instance.analyze((fork) => {
+        let result: OpeningCommandResult | null = null
+        for (const command of commandValues) {
+          result = fork.dispatch(command)
+          if (!result.accepted) return result
+        }
+        return (
+          result ??
+          reject(state, 'invalid-command', 'A preview sequence must contain a command.')
+        )
+      })
+    },
+    analyze<T>(
+      operation: (fork: import('./opening-match-types').OpeningMatchAnalysis) => T
+    ): T {
+      const stateSnapshot = cloneOpeningMatchState(state)
+      const rngSnapshot = rng.snapshot()
+      const nextEntityOrdinalSnapshot = nextEntityOrdinal
+      const devDeckRefillCounterSnapshot = devDeckRefillCounter
+      try {
+        return operation({
+          getState: () => instance.getState(),
+          dispatch: (command: unknown) => instance.dispatch(command),
+          getPlayInput: (participantId, cardInstanceId, choice) =>
+            instance.getPlayInput!(participantId, cardInstanceId, choice),
+          getLegality: (participantId) => instance.getLegality!(participantId)
+        })
+      } finally {
+        state = stateSnapshot
+        rng.restore(rngSnapshot)
+        nextEntityOrdinal = nextEntityOrdinalSnapshot
+        devDeckRefillCounter = devDeckRefillCounterSnapshot
+      }
+    },
     dispatch(commandValue: unknown): OpeningCommandResult {
       const command = parseCommand(commandValue)
       if (!command)
@@ -2476,6 +2610,14 @@ export function createOpeningMatch(
       }
       if (command.type === 'choose-discover-card')
         return dispatchDiscoverChoice(command)
+      if (state.pendingCardChoice && command.type !== 'choose-card-option') {
+        return reject(
+          state,
+          'invalid-command',
+          'Resolve the pending card choice first.'
+        )
+      }
+      if (command.type === 'choose-card-option') return dispatchCardChoice(command)
       if (state.phase === 'ended') {
         return reject(state, 'match-ended', 'The match has already ended.')
       }
@@ -2901,4 +3043,5 @@ export function createOpeningMatch(
       return { accepted: true, state: cloneOpeningMatchState(state), events }
     }
   }
+  return instance
 }

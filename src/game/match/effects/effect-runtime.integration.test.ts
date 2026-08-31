@@ -573,7 +573,29 @@ describe('shared effect runtime', () => {
         ]
       }).accepted
     ).toBe(true)
-    expect(player(scenario, controllerId).board[0]?.instanceId).toBe(target.instanceId)
+    const controlled = player(scenario, controllerId).board[0]!
+    expect(controlled).toMatchObject({
+      instanceId: target.instanceId,
+      controllerChangedOnTurn: scenario.match.getState().turnNumber,
+      enchantments: [
+        expect.objectContaining({
+          keywords: ['charge'],
+          returnControllerId: ownerId,
+          duration: 'this-turn'
+        })
+      ]
+    })
+    expect(
+      getMatchLegality(scenario.match.getState(), controllerId).legalAttackerInstanceIds
+    ).toContain(target.instanceId)
+    expect(
+      scenario.match.dispatch({
+        type: 'attack-character',
+        participantId: controllerId,
+        attacker: { kind: 'minion', instanceId: target.instanceId },
+        defender: { kind: 'hero' }
+      }).accepted
+    ).toBe(true)
     expect(
       scenario.match.dispatch({ type: 'end-turn', participantId: controllerId })
         .accepted
@@ -581,8 +603,472 @@ describe('shared effect runtime', () => {
     expect(player(scenario, ownerId).board[0]).toMatchObject({
       instanceId: target.instanceId,
       controllerId: ownerId,
-      ownerId
+      ownerId,
+      enchantments: []
     })
+  })
+
+  it.each([
+    {
+      cardId: 'classic_cabal_shadow_priest' as const,
+      targetCardId: 'classic_wisp' as const,
+      targetCount: 1
+    },
+    {
+      cardId: 'classic_mind_control_tech' as const,
+      targetCardId: 'basic_acidic_swamp_ooze' as const,
+      targetCount: 4
+    },
+    {
+      cardId: 'classic_sylvanas_windrunner' as const,
+      targetCardId: 'basic_acidic_swamp_ooze' as const,
+      targetCount: 1
+    }
+  ])('$cardId gives a permanently stolen minion control exhaustion', (entry) => {
+    const scenario = createMatchScenario({ seed: 1220, cardId: entry.cardId })
+    scenario.confirmBothMulligans()
+    const [controllerId, ownerId] = activeParticipants(scenario)
+    for (let index = 0; index < entry.targetCount; index += 1)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: ownerId,
+          cardId: entry.targetCardId
+        }).accepted
+      ).toBe(true)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: controllerId })
+        .accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: ownerId }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: controllerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const targetIds = player(scenario, ownerId).board.map((minion) => minion.instanceId)
+
+    if (entry.cardId === 'classic_cabal_shadow_priest') {
+      const cabal = player(scenario, controllerId).hand.find(
+        (card) => card.cardId === entry.cardId
+      )!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: controllerId,
+          cardInstanceId: cabal.instanceId,
+          position: 0,
+          targets: [
+            {
+              kind: 'minion',
+              participantId: ownerId,
+              instanceId: targetIds[0]!
+            }
+          ]
+        }).accepted
+      ).toBe(true)
+    } else if (entry.cardId === 'classic_mind_control_tech') {
+      const tech = player(scenario, controllerId).hand.find(
+        (card) => card.cardId === entry.cardId
+      )!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: controllerId,
+          cardInstanceId: tech.instanceId,
+          position: 0
+        }).accepted
+      ).toBe(true)
+    } else {
+      const sylvanas = player(scenario, controllerId).hand.find(
+        (card) => card.cardId === entry.cardId
+      )!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: controllerId,
+          cardInstanceId: sylvanas.instanceId,
+          position: 0
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId: controllerId,
+          cardId: 'basic_shadow_word_death'
+        }).accepted
+      ).toBe(true)
+      const destroy = player(scenario, controllerId).hand.find(
+        (card) => card.cardId === 'basic_shadow_word_death'
+      )!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: controllerId,
+          cardInstanceId: destroy.instanceId,
+          targets: [
+            {
+              kind: 'minion',
+              participantId: controllerId,
+              instanceId: sylvanas.instanceId
+            }
+          ]
+        }).accepted
+      ).toBe(true)
+    }
+
+    const stolen = player(scenario, controllerId).board.find((minion) =>
+      targetIds.includes(minion.instanceId)
+    )!
+    expect(stolen.controllerChangedOnTurn).toBe(scenario.match.getState().turnNumber)
+    expect(
+      getMatchLegality(scenario.match.getState(), controllerId).legalAttackerInstanceIds
+    ).not.toContain(stolen.instanceId)
+  })
+
+  it('applies permanent control exhaustion unless the stolen minion has Charge', () => {
+    const normal = createMatchScenario({ seed: 1221, cardId: 'basic_mind_control' })
+    normal.confirmBothMulligans()
+    const [controllerId, ownerId] = activeParticipants(normal)
+    expect(
+      normal.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: ownerId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+    expect(
+      normal.match.dispatch({ type: 'end-turn', participantId: controllerId }).accepted
+    ).toBe(true)
+    expect(
+      normal.match.dispatch({ type: 'end-turn', participantId: ownerId }).accepted
+    ).toBe(true)
+    expect(
+      normal.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: controllerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const normalTarget = player(normal, ownerId).board[0]!
+    expect(
+      normal.match.dispatch({
+        type: 'play-card',
+        participantId: controllerId,
+        cardInstanceId: player(normal, controllerId).hand[0]!.instanceId,
+        targets: [
+          {
+            kind: 'minion',
+            participantId: ownerId,
+            instanceId: normalTarget.instanceId
+          }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(
+      getMatchLegality(normal.match.getState(), controllerId).legalAttackerInstanceIds
+    ).not.toContain(normalTarget.instanceId)
+    const rejectedAttack = normal.match.dispatch({
+      type: 'attack-character',
+      participantId: controllerId,
+      attacker: { kind: 'minion', instanceId: normalTarget.instanceId },
+      defender: { kind: 'hero' }
+    })
+    expect(rejectedAttack).toMatchObject({
+      accepted: false,
+      code: 'minion-cannot-attack'
+    })
+    expect(
+      normal.match.dispatch({ type: 'end-turn', participantId: controllerId }).accepted
+    ).toBe(true)
+    expect(
+      normal.match.dispatch({ type: 'end-turn', participantId: ownerId }).accepted
+    ).toBe(true)
+    expect(
+      getMatchLegality(normal.match.getState(), controllerId).legalAttackerInstanceIds
+    ).toContain(normalTarget.instanceId)
+
+    const charged = createMatchScenario({ seed: 1222, cardId: 'basic_mind_control' })
+    charged.confirmBothMulligans()
+    const [chargeControllerId, chargeOwnerId] = activeParticipants(charged)
+    expect(
+      charged.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: chargeOwnerId,
+        cardId: 'basic_stonetusk_boar'
+      }).accepted
+    ).toBe(true)
+    expect(
+      charged.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: chargeControllerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const chargedTarget = player(charged, chargeOwnerId).board[0]!
+    expect(
+      charged.match.dispatch({
+        type: 'play-card',
+        participantId: chargeControllerId,
+        cardInstanceId: player(charged, chargeControllerId).hand[0]!.instanceId,
+        targets: [
+          {
+            kind: 'minion',
+            participantId: chargeOwnerId,
+            instanceId: chargedTarget.instanceId
+          }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(
+      getMatchLegality(charged.match.getState(), chargeControllerId)
+        .legalAttackerInstanceIds
+    ).toContain(chargedTarget.instanceId)
+  })
+
+  it('lets Shadow Madness use a minion that attacked on the preceding turn', () => {
+    const scenario = createMatchScenario({
+      seed: 1223,
+      cardId: 'classic_shadow_madness'
+    })
+    scenario.confirmBothMulligans()
+    const [controllerId, ownerId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: ownerId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+    const target = player(scenario, ownerId).board[0]!
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: controllerId })
+        .accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'attack-character',
+        participantId: ownerId,
+        attacker: { kind: 'minion', instanceId: target.instanceId },
+        defender: { kind: 'hero' }
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: ownerId }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: controllerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: controllerId,
+        cardInstanceId: player(scenario, controllerId).hand[0]!.instanceId,
+        targets: [
+          { kind: 'minion', participantId: ownerId, instanceId: target.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(
+      getMatchLegality(scenario.match.getState(), controllerId).legalAttackerInstanceIds
+    ).toContain(target.instanceId)
+  })
+
+  it('does not let Shadow Madness bypass Freeze', () => {
+    const scenario = createMatchScenario({
+      seed: 12231,
+      cardId: 'classic_shadow_madness'
+    })
+    scenario.confirmBothMulligans()
+    const [controllerId, ownerId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: controllerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: ownerId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+    const target = player(scenario, ownerId).board[0]!
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: controllerId,
+        cardId: 'basic_frost_nova'
+      }).accepted
+    ).toBe(true)
+    const frostNova = player(scenario, controllerId).hand.find(
+      (card) => card.cardId === 'basic_frost_nova'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: controllerId,
+        cardInstanceId: frostNova.instanceId
+      }).accepted
+    ).toBe(true)
+    const shadowMadness = player(scenario, controllerId).hand.find(
+      (card) => card.cardId === 'classic_shadow_madness'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: controllerId,
+        cardInstanceId: shadowMadness.instanceId,
+        targets: [
+          { kind: 'minion', participantId: ownerId, instanceId: target.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(
+      getMatchLegality(scenario.match.getState(), controllerId).legalAttackerInstanceIds
+    ).not.toContain(target.instanceId)
+  })
+
+  it('returns a Shadow Madness target immediately when it is silenced', () => {
+    const scenario = createMatchScenario({
+      seed: 1224,
+      cardId: 'classic_shadow_madness'
+    })
+    scenario.confirmBothMulligans()
+    const [controllerId, ownerId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: controllerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: ownerId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+    const target = player(scenario, ownerId).board[0]!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: controllerId,
+        cardInstanceId: player(scenario, controllerId).hand[0]!.instanceId,
+        targets: [
+          { kind: 'minion', participantId: ownerId, instanceId: target.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: controllerId,
+        cardId: 'classic_silence'
+      }).accepted
+    ).toBe(true)
+    const silence = player(scenario, controllerId).hand.find(
+      (card) => card.cardId === 'classic_silence'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: controllerId,
+        cardInstanceId: silence.instanceId,
+        targets: [
+          { kind: 'minion', participantId: controllerId, instanceId: target.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, controllerId).board).toHaveLength(0)
+    expect(player(scenario, ownerId).board[0]).toMatchObject({
+      instanceId: target.instanceId,
+      controllerId: ownerId,
+      silenced: true,
+      enchantments: []
+    })
+  })
+
+  it('keeps a transformed Shadow Madness target permanently', () => {
+    const scenario = createMatchScenario({
+      seed: 1225,
+      cardId: 'classic_shadow_madness'
+    })
+    scenario.confirmBothMulligans()
+    const [controllerId, ownerId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: controllerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: ownerId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+    const target = player(scenario, ownerId).board[0]!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: controllerId,
+        cardInstanceId: player(scenario, controllerId).hand[0]!.instanceId,
+        targets: [
+          { kind: 'minion', participantId: ownerId, instanceId: target.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: controllerId,
+        cardId: 'basic_polymorph'
+      }).accepted
+    ).toBe(true)
+    const polymorph = player(scenario, controllerId).hand.find(
+      (card) => card.cardId === 'basic_polymorph'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: controllerId,
+        cardInstanceId: polymorph.instanceId,
+        targets: [
+          { kind: 'minion', participantId: controllerId, instanceId: target.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: controllerId })
+        .accepted
+    ).toBe(true)
+    expect(player(scenario, controllerId).board[0]).toMatchObject({
+      instanceId: target.instanceId,
+      cardId: 'basic_sheep',
+      controllerId
+    })
+    expect(player(scenario, ownerId).board).toHaveLength(0)
   })
 
   it('resurrects Reincarnate targets as fresh, full-health board instances', () => {
@@ -627,8 +1113,108 @@ describe('shared effect runtime', () => {
     expect(player(scenario, opponentId).graveyard ?? []).toHaveLength(0)
   })
 
-  it('keeps a minion with its controller when Mind Control has no board slot', () => {
-    const scenario = createMatchScenario({ seed: 123, cardId: 'basic_mind_control' })
+  it.each(['basic_mind_control', 'classic_shadow_madness'] as const)(
+    'rejects %s when its controller board is already full',
+    (cardId) => {
+      const scenario = createMatchScenario({ seed: 123, cardId })
+      scenario.confirmBothMulligans()
+      const [controllerId, ownerId] = activeParticipants(scenario)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-mana',
+          participantId: controllerId,
+          available: 10,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+      for (let index = 0; index < 7; index += 1)
+        expect(
+          scenario.match.dispatch({
+            type: 'dev-summon-minion',
+            participantId: controllerId,
+            cardId: 'basic_acidic_swamp_ooze'
+          }).accepted
+        ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: ownerId,
+          cardId: 'basic_acidic_swamp_ooze'
+        }).accepted
+      ).toBe(true)
+      const target = player(scenario, ownerId).board[0]!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: controllerId,
+          cardInstanceId: player(scenario, controllerId).hand[0]!.instanceId,
+          targets: [
+            { kind: 'minion', participantId: ownerId, instanceId: target.instanceId }
+          ]
+        })
+      ).toMatchObject({ accepted: false, code: 'board-full' })
+      expect(player(scenario, controllerId).board).toHaveLength(7)
+      expect(player(scenario, ownerId).board[0]).toMatchObject({
+        instanceId: target.instanceId,
+        controllerId: ownerId
+      })
+    }
+  )
+
+  it('destroys a Cabal Shadow Priest target when its Battlecry has no board slot', () => {
+    const scenario = createMatchScenario({
+      seed: 1231,
+      cardId: 'classic_cabal_shadow_priest'
+    })
+    scenario.confirmBothMulligans()
+    const [controllerId, ownerId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: controllerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    for (let index = 0; index < 6; index += 1)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: controllerId,
+          cardId: 'basic_acidic_swamp_ooze'
+        }).accepted
+      ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: ownerId,
+        cardId: 'classic_wisp'
+      }).accepted
+    ).toBe(true)
+    const target = player(scenario, ownerId).board[0]!
+    const cabal = player(scenario, controllerId).hand.find(
+      (card) => card.cardId === 'classic_cabal_shadow_priest'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: controllerId,
+        cardInstanceId: cabal.instanceId,
+        position: 6,
+        targets: [
+          { kind: 'minion', participantId: ownerId, instanceId: target.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, controllerId).board).toHaveLength(7)
+    expect(player(scenario, ownerId).board).toHaveLength(0)
+  })
+
+  it('destroys a Shadow Madness target when its original board fills before return', () => {
+    const scenario = createMatchScenario({
+      seed: 1232,
+      cardId: 'classic_shadow_madness'
+    })
     scenario.confirmBothMulligans()
     const [controllerId, ownerId] = activeParticipants(scenario)
     expect(
@@ -643,17 +1229,10 @@ describe('shared effect runtime', () => {
       expect(
         scenario.match.dispatch({
           type: 'dev-summon-minion',
-          participantId: controllerId,
+          participantId: ownerId,
           cardId: 'basic_acidic_swamp_ooze'
         }).accepted
       ).toBe(true)
-    expect(
-      scenario.match.dispatch({
-        type: 'dev-summon-minion',
-        participantId: ownerId,
-        cardId: 'basic_acidic_swamp_ooze'
-      }).accepted
-    ).toBe(true)
     const target = player(scenario, ownerId).board[0]!
     expect(
       scenario.match.dispatch({
@@ -665,11 +1244,24 @@ describe('shared effect runtime', () => {
         ]
       }).accepted
     ).toBe(true)
-    expect(player(scenario, controllerId).board).toHaveLength(7)
-    expect(player(scenario, ownerId).board[0]).toMatchObject({
-      instanceId: target.instanceId,
-      controllerId: ownerId
-    })
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: ownerId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, ownerId).board).toHaveLength(7)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: controllerId })
+        .accepted
+    ).toBe(true)
+    expect(player(scenario, controllerId).board).toHaveLength(0)
+    expect(
+      player(scenario, ownerId).board.some(
+        (minion) => minion.instanceId === target.instanceId
+      )
+    ).toBe(false)
   })
 
   it('burns a bounced minion when its owner hand is full', () => {
@@ -2877,5 +3469,170 @@ describe('shared effect runtime', () => {
       attack: 2,
       health: 2
     })
+  })
+
+  it('stages a self-transform Choice after the minion enters play', () => {
+    const scenario = createMatchScenario({ seed: 421 })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    for (const command of [
+      {
+        type: 'dev-add-card' as const,
+        participantId,
+        cardId: 'blackrock_mountain_druid_of_the_flame'
+      },
+      {
+        type: 'dev-set-mana' as const,
+        participantId,
+        available: 10,
+        maximum: 10
+      }
+    ])
+      expect(scenario.match.dispatch(command).accepted).toBe(true)
+
+    const card = player(scenario, participantId).hand.find(
+      (entry) => entry.cardId === 'blackrock_mountain_druid_of_the_flame'
+    )!
+    expect(scenario.match.getPlayInput?.(participantId, card.instanceId)).toMatchObject(
+      {
+        choiceTiming: 'after-placement',
+        choiceOptions: [
+          {
+            choice: 0,
+            presentationCardId: 'blackrock_mountain_druid_of_the_flame_5_2'
+          },
+          { choice: 1, presentationCardId: 'blackrock_mountain_druid_of_the_flame_2_5' }
+        ]
+      }
+    )
+
+    const play = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: card.instanceId,
+      position: 0
+    })
+    expect(play).toMatchObject({ accepted: true })
+    if (!play.accepted) return
+    expect(play.events.map((event) => event.type)).toEqual(
+      expect.arrayContaining(['minion-played', 'card-choice-started'])
+    )
+    expect(player(scenario, participantId)).toMatchObject({
+      mana: { available: 7 },
+      board: [
+        {
+          instanceId: card.instanceId,
+          cardId: 'blackrock_mountain_druid_of_the_flame',
+          attack: 2,
+          health: 2
+        }
+      ]
+    })
+    expect(scenario.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
+      false
+    )
+
+    const choice = scenario.match.dispatch({
+      type: 'choose-card-option',
+      participantId,
+      sourceCardInstanceId: card.instanceId,
+      choice: 1
+    })
+    expect(choice).toMatchObject({ accepted: true })
+    expect(player(scenario, participantId)).toMatchObject({
+      mana: { available: 7 },
+      board: [
+        {
+          instanceId: card.instanceId,
+          cardId: 'blackrock_mountain_druid_of_the_flame_2_5',
+          attack: 2,
+          health: 5
+        }
+      ]
+    })
+    expect(scenario.match.getState().pendingCardChoice).toBeUndefined()
+  })
+
+  it('resolves Naturalize into Majordomo hero replacement without stalling', () => {
+    const scenario = createMatchScenario({ seed: 422 })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activeParticipants(scenario)
+    for (const command of [
+      {
+        type: 'dev-summon-minion' as const,
+        participantId,
+        cardId: 'blackrock_mountain_majordomo_executus'
+      },
+      {
+        type: 'dev-add-card' as const,
+        participantId,
+        cardId: 'classic_naturalize'
+      },
+      {
+        type: 'dev-set-mana' as const,
+        participantId,
+        available: 10,
+        maximum: 10
+      }
+    ])
+      expect(scenario.match.dispatch(command).accepted).toBe(true)
+
+    const current = player(scenario, participantId)
+    const naturalize = current.hand.find(
+      (card) => card.cardId === 'classic_naturalize'
+    )!
+    const majordomo = current.board.find(
+      (minion) => minion.cardId === 'blackrock_mountain_majordomo_executus'
+    )!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: naturalize.instanceId,
+      targets: [{ kind: 'minion', participantId, instanceId: majordomo.instanceId }]
+    })
+    expect(result).toMatchObject({ accepted: true })
+    if (!result.accepted) return
+    const eventTypes = result.events.map((event) => event.type)
+    expect(eventTypes.indexOf('death-batch-started')).toBeLessThan(
+      eventTypes.indexOf('hero-replaced')
+    )
+    expect(eventTypes.indexOf('hero-replaced')).toBeLessThan(
+      eventTypes.indexOf('death-batch-completed')
+    )
+    expect(
+      result.events.filter((event) => event.type === 'hero-replaced')
+    ).toHaveLength(1)
+    expect(player(scenario, participantId)).toMatchObject({
+      heroId: 'ragnaros',
+      hero: { health: 8, maxHealth: 8 },
+      heroPower: {
+        id: 'ragnaros-die-insects',
+        cost: 2,
+        targetType: 'none'
+      }
+    })
+
+    const power = scenario.match.dispatch({
+      type: 'use-hero-power',
+      participantId
+    })
+    expect(power).toMatchObject({ accepted: true })
+    expect(player(scenario, opponentId).hero.health).toBe(22)
+
+    const ended = scenario.match.dispatch({
+      type: 'dev-end-match',
+      participantId,
+      winnerId: participantId
+    })
+    expect(ended).toMatchObject({ accepted: true, state: { phase: 'ended' } })
+    if (!ended.accepted) return
+    expect(ended.events.filter((event) => event.type === 'match-ended')).toHaveLength(1)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-end-match',
+        participantId,
+        winnerId: participantId
+      }).accepted
+    ).toBe(false)
   })
 })

@@ -133,6 +133,43 @@ describe('retired command boundary', () => {
   })
 })
 
+describe('non-mutating command preview', () => {
+  it('returns the same result as dispatch without changing the live match', () => {
+    const match = startMatch('rexxar')
+    const command = { type: 'use-hero-power' as const, participantId: HUMAN_ID }
+    const before = match.getState()
+
+    const preview = match.preview(command)
+
+    expect(match.getState()).toEqual(before)
+    const dispatched = match.dispatch(command)
+    expect(dispatched).toEqual(preview)
+  })
+
+  it('isolates multi-command sequences and mutable analysis forks', () => {
+    const match = startMatch('rexxar')
+    const before = match.getState()
+    const commands = [
+      { type: 'use-hero-power' as const, participantId: HUMAN_ID },
+      { type: 'end-turn' as const, participantId: HUMAN_ID }
+    ]
+
+    const preview = match.previewSequence(commands)
+    expect(preview.accepted).toBe(true)
+    expect(match.getState()).toEqual(before)
+
+    const analyzed = match.analyze((fork) => {
+      for (const command of commands) expect(fork.dispatch(command).accepted).toBe(true)
+      return fork.getState()
+    })
+    expect(analyzed).toEqual(preview.state)
+    expect(match.getState()).toEqual(before)
+
+    for (const command of commands) expect(match.dispatch(command).accepted).toBe(true)
+    expect(match.getState()).toEqual(preview.state)
+  })
+})
+
 describe('effect trace retention', () => {
   it('keeps effect traces out of normal matches', () => {
     const match = startMatch('rexxar')

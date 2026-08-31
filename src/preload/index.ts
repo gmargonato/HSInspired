@@ -17,8 +17,12 @@ import {
 } from '../shared/dev-menu'
 import {
   AI_IPC_CHANNELS,
+  parseAiDeckPlanRequest,
+  parseAiDeckPlanResponse,
   parseAiDecisionRequest,
   parseAiDecisionResponse,
+  type AiDeckPlanRequest,
+  type AiDeckPlanResponse,
   type AiDecisionRequest,
   type AiDecisionResponse
 } from '../shared/ipc/ai'
@@ -38,9 +42,63 @@ import {
   type WindowResolution,
   type WindowResolutionSettings
 } from '../shared/ipc/window-settings'
+import {
+  PLAYER_STATS_IPC_CHANNELS,
+  parsePlayableClassId,
+  parsePlayerStatsSnapshot,
+  type PlayerStatsApi,
+  type PlayerStatsSnapshot
+} from '../shared/ipc/player-stats'
+import {
+  ARENA_IPC_CHANNELS,
+  parseArenaCardId,
+  parseArenaHeroId,
+  parseArenaMatchResult,
+  parseArenaRunSnapshot,
+  type ArenaApi,
+  type ArenaRunSnapshot
+} from '../shared/ipc/arena'
 
 const api = {
+  arena: {
+    get: async (): Promise<ArenaRunSnapshot> =>
+      parseArenaRunSnapshot(await ipcRenderer.invoke(ARENA_IPC_CHANNELS.get)),
+    selectHero: async (
+      heroId: Parameters<ArenaApi['selectHero']>[0]
+    ): Promise<ArenaRunSnapshot> =>
+      parseArenaRunSnapshot(
+        await ipcRenderer.invoke(
+          ARENA_IPC_CHANNELS.selectHero,
+          parseArenaHeroId(heroId)
+        )
+      ),
+    pickCard: async (
+      cardId: Parameters<ArenaApi['pickCard']>[0]
+    ): Promise<ArenaRunSnapshot> =>
+      parseArenaRunSnapshot(
+        await ipcRenderer.invoke(ARENA_IPC_CHANNELS.pickCard, parseArenaCardId(cardId))
+      ),
+    retire: async (): Promise<ArenaRunSnapshot> =>
+      parseArenaRunSnapshot(await ipcRenderer.invoke(ARENA_IPC_CHANNELS.retire)),
+    recordResult: async (
+      result: Parameters<ArenaApi['recordResult']>[0]
+    ): Promise<ArenaRunSnapshot> =>
+      parseArenaRunSnapshot(
+        await ipcRenderer.invoke(
+          ARENA_IPC_CHANNELS.recordResult,
+          parseArenaMatchResult(result)
+        )
+      )
+  },
+
   ai: {
+    planDeck: async (request: AiDeckPlanRequest): Promise<AiDeckPlanResponse> =>
+      parseAiDeckPlanResponse(
+        await ipcRenderer.invoke(
+          AI_IPC_CHANNELS.planDeck,
+          parseAiDeckPlanRequest(request)
+        )
+      ),
     decide: async (request: AiDecisionRequest): Promise<AiDecisionResponse> =>
       parseAiDecisionResponse(
         await ipcRenderer.invoke(
@@ -125,6 +183,24 @@ const api = {
     delete: async (deckId: string): Promise<void> => {
       await ipcRenderer.invoke(DECK_IPC_CHANNELS.delete, parseDeckId(deckId))
     }
+  },
+
+  playerStats: {
+    get: async (): Promise<PlayerStatsSnapshot> =>
+      parsePlayerStatsSnapshot(await ipcRenderer.invoke(PLAYER_STATS_IPC_CHANNELS.get)),
+    recordWin: async (
+      classId: Parameters<PlayerStatsApi['recordWin']>[0]
+    ): Promise<PlayerStatsSnapshot> =>
+      parsePlayerStatsSnapshot(
+        await ipcRenderer.invoke(
+          PLAYER_STATS_IPC_CHANNELS.recordWin,
+          parsePlayableClassId(classId)
+        )
+      ),
+    recordTavernBrawlWin: async (): Promise<PlayerStatsSnapshot> =>
+      parsePlayerStatsSnapshot(
+        await ipcRenderer.invoke(PLAYER_STATS_IPC_CHANNELS.recordTavernBrawlWin)
+      )
   },
 
   windowSettings: {

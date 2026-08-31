@@ -12,8 +12,9 @@ import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/button'
 import { HERO_CATALOG } from '../../../game/content/heroes'
 import type { DeckStore } from '../../ui/deck-store'
+import type { PlayerStatsStore } from '../../ui/player-stats-store'
 import { DECK_FRAME_ASSET_KEYS } from '../../ui/asset-registry/deck-frames'
-import { buildDeckSelectionEntries } from './deck-selection-model'
+import { buildDeckSelectionEntries, formatClassWins } from './deck-selection-model'
 import { DECK_SELECTION_LAYOUT } from './deck-selection-layout'
 
 export interface DeckSelectionViewCallbacks {
@@ -33,6 +34,7 @@ export class DeckSelectionView extends Container {
   private backButton!: Button
   private heroPortrait!: Sprite
   private heroName!: Text
+  private classWins!: Text
   private playOutlineTarget!: Sprite
   private playButton!: Button
   private playOutline!: AnimatedOutline
@@ -42,6 +44,7 @@ export class DeckSelectionView extends Container {
 
   constructor(
     private readonly deckStore: DeckStore,
+    private readonly playerStatsStore: PlayerStatsStore,
     private readonly callbacks: DeckSelectionViewCallbacks = {},
     private readonly logger: RendererLogger = {
       info: () => undefined,
@@ -67,6 +70,11 @@ export class DeckSelectionView extends Container {
         )
 
       await this.deckStore.load()
+      try {
+        await this.playerStatsStore.load()
+      } catch (error) {
+        this.logger.warn('Failed to load player win totals; showing zero.', error)
+      }
 
       this.createBackground(assets)
       this.createSelectionDetails(assets)
@@ -105,6 +113,21 @@ export class DeckSelectionView extends Container {
     this.heroName.visible = false
     this.heroName.eventMode = 'none'
     this.addChild(this.heroName)
+
+    this.classWins = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 24,
+        fill: 0xffffff,
+        align: 'center'
+      }
+    })
+    applyAnchoredPlacement(this.classWins, DECK_SELECTION_LAYOUT.classWins)
+    this.classWins.label = 'deck-selection.class-wins'
+    this.classWins.visible = false
+    this.classWins.eventMode = 'none'
+    this.addChild(this.classWins)
 
     this.playOutlineTarget = new Sprite(assets.playButton)
     applyAnchoredPlacement(this.playOutlineTarget, DECK_SELECTION_LAYOUT.playButton)
@@ -182,6 +205,8 @@ export class DeckSelectionView extends Container {
     this.heroPortrait.visible = true
     this.heroName.text = hero.displayName
     this.heroName.visible = true
+    this.classWins.text = formatClassWins(this.playerStatsStore.getWins(hero.classId))
+    this.classWins.visible = true
     this.playButton.visible = true
     this.playButton.setEnabled(!this.navigationStarted)
     this.playOutline.setEnabled(!this.navigationStarted)
@@ -240,6 +265,7 @@ export class DeckSelectionView extends Container {
   private async waitForFonts(): Promise<void> {
     if (typeof document === 'undefined' || !document.fonts) return
     await document.fonts.load('700 30px Belwe')
+    await document.fonts.load('700 24px Belwe')
   }
 
   async dispose(): Promise<void> {

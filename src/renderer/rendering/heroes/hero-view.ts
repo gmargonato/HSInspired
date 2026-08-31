@@ -83,7 +83,7 @@ export class HeroView extends Container {
   private readonly targetingOutlineProxy: Sprite
   private readonly targetingOutline: AnimatedOutline
   private readonly animationScope = new AnimationScope()
-  private readonly maxHealth: number
+  private maxHealth: number
   private canAttackEnabled = false
   private targetingOutlineEnabled = false
   private targetableEnabled = false
@@ -182,7 +182,8 @@ export class HeroView extends Container {
     return new HeroView(model, textures)
   }
 
-  setStats(attack: number, health: number, armor: number): void {
+  setStats(attack: number, health: number, armor: number, maxHealth?: number): void {
+    if (maxHealth !== undefined) this.maxHealth = maxHealth
     this.attackLabel.text = String(attack)
     this.attackGroup.visible = attack > 0
     this.healthLabel.text = String(health)

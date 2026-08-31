@@ -422,6 +422,128 @@ describe('reactive trigger timing', () => {
     })
   })
 
+  it('grants Warsong Commander Charge only to summoned minions with 3 or less Attack', () => {
+    for (const [cardId, shouldCharge] of [
+      ['basic_goldshire_footman', true],
+      ['basic_ironfur_grizzly', true],
+      ['basic_magma_rager', false]
+    ] as const) {
+      const scenario = createMatchScenario({ seed: 1110 })
+      scenario.confirmBothMulligans()
+      const [participantId, opponentId] = activePlayers(scenario)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-clear-zone',
+          participantId,
+          zone: 'hand'
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId,
+          cardId: 'basic_warsong_commander'
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({ type: 'dev-add-card', participantId, cardId })
+          .accepted
+      ).toBe(true)
+      setMana(scenario, participantId)
+
+      const card = player(scenario, participantId).hand[0]!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId,
+          cardInstanceId: card.instanceId,
+          position: 1
+        }).accepted
+      ).toBe(true)
+
+      const summoned = player(scenario, participantId).board.find(
+        (minion) => minion.cardId === cardId
+      )!
+      expect(
+        summoned.enchantments?.some((enchantment) =>
+          enchantment.keywords?.includes('charge')
+        ) ?? false
+      ).toBe(shouldCharge)
+      const attack = scenario.match.dispatch({
+        type: 'attack-character',
+        participantId,
+        attacker: { kind: 'minion', instanceId: summoned.instanceId },
+        defender: { kind: 'hero', participantId: opponentId }
+      })
+      expect(attack.accepted).toBe(shouldCharge)
+      if (!shouldCharge && !attack.accepted)
+        expect(attack.code).toBe('minion-cannot-attack')
+    }
+  })
+
+  it('grants Warsong Commander Charge to both a played summoner and its token', () => {
+    const scenario = createMatchScenario({ seed: 1111 })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: 'basic_warsong_commander'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'basic_murloc_tidehunter'
+      }).accepted
+    ).toBe(true)
+    setMana(scenario, participantId)
+
+    const tidehunterCard = player(scenario, participantId).hand[0]!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: tidehunterCard.instanceId,
+        position: 1
+      }).accepted
+    ).toBe(true)
+
+    const board = player(scenario, participantId).board
+    const warsong = board.find((minion) => minion.cardId === 'basic_warsong_commander')!
+    const tidehunter = board.find(
+      (minion) => minion.cardId === 'basic_murloc_tidehunter'
+    )!
+    const scout = board.find((minion) => minion.cardId === 'basic_murloc_scout')!
+    const hasGrantedCharge = (minion: (typeof board)[number]) =>
+      minion.enchantments?.some((enchantment) =>
+        enchantment.keywords?.includes('charge')
+      ) ?? false
+
+    expect(hasGrantedCharge(warsong)).toBe(false)
+    expect(hasGrantedCharge(tidehunter)).toBe(true)
+    expect(hasGrantedCharge(scout)).toBe(true)
+    for (const minion of [tidehunter, scout]) {
+      expect(
+        scenario.match.dispatch({
+          type: 'attack-character',
+          participantId,
+          attacker: { kind: 'minion', instanceId: minion.instanceId },
+          defender: { kind: 'hero', participantId: opponentId }
+        }).accepted
+      ).toBe(true)
+    }
+  })
+
   it('removes an attached Power Overwhelming death with Silence or transform', () => {
     for (const removalCardId of ['classic_silence', 'basic_polymorph'] as const) {
       const scenario = createMatchScenario({
