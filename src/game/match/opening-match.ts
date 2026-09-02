@@ -14,8 +14,9 @@ import {
   resolveTurnTransition
 } from './effects/effect-runtime'
 import { assertOpeningMatchInvariants } from './rules/invariants'
-import { moveCardForPlayer } from './rules/zone-state'
+import { moveCardForPlayer, removeCardFromPlayer } from './rules/zone-state'
 import { StateTransaction } from './rules/runtime-state'
+import { createAiObservation } from './ai/observation'
 import type { MatchParticipantSetup, MatchSetup, PlayerId } from './match-types'
 import type {
   OpeningCard,
@@ -470,6 +471,9 @@ function heroPowerHistoryEvent(
   command: UseHeroPowerCommand,
   events: readonly OpeningMatchEvent[]
 ): HistoryActionResolvedEvent {
+  const playerBefore = before.players.find(
+    (player) => player.participantId === command.participantId
+  )
   return {
     type: 'history-action-resolved',
     participantId: command.participantId,
@@ -479,12 +483,10 @@ function heroPowerHistoryEvent(
       participantId: command.participantId,
       kind: 'hero',
       cardId: null,
-      heroPowerId: before.players.find(
-        (player) => player.participantId === command.participantId
-      )?.heroPower.id,
-      heroId: before.players.find(
-        (player) => player.participantId === command.participantId
-      )?.heroId
+      heroPowerId: playerBefore?.heroPower.id,
+      heroId: playerBefore?.heroId,
+      baseCost: playerBefore?.heroPower.baseCost ?? playerBefore?.heroPower.cost,
+      currentCost: playerBefore?.heroPower.cost
     },
     outcomes: historyOutcomes(before, after, events)
   }
@@ -1474,6 +1476,7 @@ function applyUseHeroPower(
           participantId: targetPlayer.participantId,
           character: { kind: 'hero' },
           amount: healthAfter - targetPlayer.hero.health,
+          attemptedAmount: definition.effect.amount,
           healthBefore: targetPlayer.hero.health,
           healthAfter
         })
@@ -1499,6 +1502,7 @@ function applyUseHeroPower(
           participantId: targetPlayer.participantId,
           character: { kind: 'minion', instanceId: minion.instanceId },
           amount: healthAfter - minion.health,
+          attemptedAmount: definition.effect.amount,
           healthBefore: minion.health,
           healthAfter
         })
@@ -1835,6 +1839,7 @@ function resolveAttackCharacter(
     character: command.attacker,
     attack: attackerAttack,
     damageDealt: attackerAttack,
+    attemptedDamage: defenderAttack,
     healthBefore: attackerHealth,
     healthAfter: attackerHealthAfter,
     armorBefore: attackerArmor,
@@ -1846,6 +1851,7 @@ function resolveAttackCharacter(
     character: command.defender,
     attack: defenderAttack,
     damageDealt: defenderAttack,
+    attemptedDamage: attackerAttack,
     healthBefore: defenderHealth,
     healthAfter: defenderHealthAfter,
     armorBefore: defenderArmor,
@@ -1879,6 +1885,7 @@ function resolveAttackCharacter(
             instanceId: attacker.instanceId,
             attack: attacker.attack,
             damageDealt: attacker.attack,
+            attemptedDamage: defender.attack,
             healthBefore: attacker.health,
             healthAfter: attackerHealthAfter,
             destroyed: attackerDestroyed
@@ -1888,6 +1895,7 @@ function resolveAttackCharacter(
             instanceId: defender.instanceId,
             attack: defender.attack,
             damageDealt: defender.attack,
+            attemptedDamage: attacker.attack,
             healthBefore: defender.health,
             healthAfter: defenderHealthAfter,
             destroyed: defenderDestroyed
@@ -2301,7 +2309,9 @@ export function createOpeningMatch(
       healingThisTurn: 0,
       armorGainedThisTurn: 0,
       cardsPlayedThisGame: [],
-      cardsDiedThisGame: []
+      cardsDiedThisGame: [],
+      beastsSummonedByPlayer: {},
+      heroPowersUsedByPlayer: {}
     },
     ...(recordEffectTrace ? { effectTrace: [] } : {}),
     nextEntityOrdinal: initialEntityOrdinal,
@@ -2447,6 +2457,20 @@ export function createOpeningMatch(
     let player = state.players[playerIndex]
     const events: OpeningMatchEvent[] = []
     for (const candidate of pending.candidates) {
+      if (
+        pending.origin === 'generated' &&
+        candidate.instanceId !== command.cardInstanceId
+      ) {
+        const removed = removeCardFromPlayer(player, candidate.instanceId)
+        if (!removed || removed.zone !== 'revealed')
+          return reject(
+            state,
+            'stale-target',
+            'A Discover candidate is no longer available.'
+          )
+        player = removed.player
+        continue
+      }
       const destination =
         candidate.instanceId === command.cardInstanceId ? 'hand' : 'discarded'
       const moved = moveCardForPlayer(player, candidate.instanceId, destination)
@@ -2467,10 +2491,24 @@ export function createOpeningMatch(
     }
     const players = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
     players[playerIndex] = player
+    const nextPending =
+      pending.queued && pending.queued.length > 0
+        ? {
+            ...pending.queued[0]!,
+            ...(pending.queued.length > 1 ? { queued: pending.queued.slice(1) } : {})
+          }
+        : undefined
+    if (nextPending)
+      events.push({
+        type: 'discover-started',
+        participantId: nextPending.participantId,
+        sourceCardInstanceId: nextPending.sourceCardInstanceId,
+        candidates: nextPending.candidates
+      })
     const nextState: OpeningMatchState = {
       ...state,
       players,
-      pendingDiscover: undefined,
+      pendingDiscover: nextPending,
       revision: state.revision + 1
     }
     assertOpeningMatchInvariants(nextState)
@@ -2531,6 +2569,17 @@ export function createOpeningMatch(
     },
     getPublicState(participantId: PlayerId): OpeningMatchPublicState {
       return getOpeningMatchPublicState(getDerivedState(state), participantId)
+    },
+    getAiObservation(participantId, policy) {
+      if (policy !== 'opponent-deck-and-hand') {
+        throw new Error(`Unsupported AI information policy: ${String(policy)}`)
+      }
+      return createAiObservation(
+        getDerivedState(state),
+        setup,
+        deckSnapshots,
+        participantId
+      )
     },
     getPublicEvents(
       participantId: PlayerId,

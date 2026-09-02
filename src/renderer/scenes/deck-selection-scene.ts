@@ -30,9 +30,6 @@ export class DeckSelectionScene extends Scene {
       deckStore,
       playerStatsStore,
       {
-        onCollectionPressed: () =>
-          router?.navigate({ id: 'collection' }) ??
-          Promise.reject(new Error('Deck selection router is not configured')),
         onBackPressed: () =>
           router?.navigate({ id: 'main-menu', entryMode: 'returning' }) ??
           Promise.reject(new Error('Deck selection router is not configured')),

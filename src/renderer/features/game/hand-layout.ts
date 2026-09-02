@@ -282,7 +282,8 @@ function resolveSlotIndex(
   return cardCount - 1
 }
 
-function isPointerOverLiftedCard(
+/** Whether the pointer is inside the stable target bounds of one lifted card. */
+export function isPointerOverLiftedCard(
   pointer: HandPointer,
   transform: HandCardTransform,
   config: HandLayoutConfig

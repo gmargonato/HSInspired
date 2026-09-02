@@ -10,16 +10,17 @@ import {
 } from './minion-layout'
 import { SleepingZs } from './sleeping-zs'
 import { AnimationScope } from '../../animation/animations'
-import { minionStatColor } from './minion-stat-presentation'
+import { minionAttackColor, minionHealthColor } from './minion-stat-presentation'
 
 export interface MinionViewModel {
   readonly label: string
   readonly attack: number
   readonly health: number
-  /** Original card attack used to tint current attack after buffs/debuffs. */
-  readonly originalAttack?: number
-  /** Original card health used to tint current health after damage/healing. */
-  readonly originalHealth?: number
+  readonly maxHealth: number
+  /** Printed Attack of the current card identity; Set and enchantments do not change it. */
+  readonly baseAttack?: number
+  /** Printed Health of the current card identity; Set and enchantments do not change it. */
+  readonly baseHealth?: number
   readonly legendary: boolean
   readonly taunt: boolean
   readonly divineShield: boolean
@@ -113,11 +114,13 @@ export class MinionView extends Container {
   private readonly sleepingZs: SleepingZs
   private readonly animationScope = new AnimationScope()
   private readonly activeAbilityPulses = new Set<Sprite>()
-  private originalAttack: number
-  private originalHealth: number
+  private baseAttack: number
+  private baseHealth: number
+  private maxHealth: number
   private canAttackEnabled = false
   private targetingOutlineEnabled = false
   private targetableEnabled = false
+  private hoverableEnabled = false
   private selected = false
   private baseScale = 1
   /** External owner id for attack checks (set by feature). */
@@ -132,8 +135,9 @@ export class MinionView extends Container {
   ) {
     super()
     this.label = model.label
-    this.originalAttack = model.originalAttack ?? model.attack
-    this.originalHealth = model.originalHealth ?? model.health
+    this.baseAttack = model.baseAttack ?? model.attack
+    this.baseHealth = model.baseHealth ?? model.maxHealth
+    this.maxHealth = model.maxHealth
     this.eventMode = 'none'
     this.pivot.set(MINION_CANVAS.width / 2, MINION_CANVAS.height / 2)
 
@@ -312,7 +316,8 @@ export class MinionView extends Container {
     return new MinionView(model, textures, artwork)
   }
 
-  setStats(attack: number, health: number): void {
+  setStats(attack: number, health: number, maxHealth = this.maxHealth): void {
+    this.maxHealth = maxHealth
     this.attackLabel.text = String(attack)
     this.healthLabel.text = String(health)
     this.setAttackColor(attack)
@@ -320,9 +325,9 @@ export class MinionView extends Container {
   }
 
   setBaseStats(attack: number, health: number): void {
-    this.originalAttack = attack
-    this.originalHealth = health
-    this.setStats(attack, health)
+    this.baseAttack = attack
+    this.baseHealth = health
+    this.setStats(attack, health, health)
   }
 
   setArtwork(texture: Texture): void {
@@ -342,17 +347,22 @@ export class MinionView extends Container {
     this.setAttackColor(attack)
   }
 
-  setHealth(health: number): void {
+  setHealth(health: number, maxHealth = this.maxHealth): void {
+    this.maxHealth = maxHealth
     this.healthLabel.text = String(health)
     this.setHealthColor(health)
   }
 
   private setAttackColor(attack: number): void {
-    this.attackLabel.style.fill = minionStatColor(attack, this.originalAttack)
+    this.attackLabel.style.fill = minionAttackColor(attack, this.baseAttack)
   }
 
   private setHealthColor(health: number): void {
-    this.healthLabel.style.fill = minionStatColor(health, this.originalHealth)
+    this.healthLabel.style.fill = minionHealthColor(
+      health,
+      this.maxHealth,
+      this.baseHealth
+    )
   }
 
   setTaunt(visible: boolean): void {
@@ -478,8 +488,18 @@ export class MinionView extends Container {
   /** Enables pointer input independently of the green attacker-ready state. */
   setTargetable(enabled: boolean): void {
     this.targetableEnabled = enabled
-    this.eventMode = enabled ? 'static' : 'none'
-    this.cursor = enabled ? 'pointer' : 'default'
+    this.syncPointerInputState()
+  }
+
+  /** Keeps pointer enter/leave available without granting click targetability. */
+  setHoverable(enabled: boolean): void {
+    this.hoverableEnabled = enabled
+    this.syncPointerInputState()
+  }
+
+  private syncPointerInputState(): void {
+    this.eventMode = this.targetableEnabled || this.hoverableEnabled ? 'static' : 'none'
+    this.cursor = this.targetableEnabled ? 'pointer' : 'default'
   }
 
   isTargetable(): boolean {

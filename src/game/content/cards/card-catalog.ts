@@ -2,7 +2,9 @@ import { BASIC_CARD_SOURCE } from './sets/basic'
 import { BLACKROCK_MOUNTAIN_CARD_SOURCE } from './sets/blackrock-mountain'
 import { CLASSIC_CARD_SOURCE } from './sets/classic'
 import { GOBLINS_VS_GNOMES_CARD_SOURCE } from './sets/goblins-vs-gnomes'
+import { LEAGUE_OF_EXPLORERS_CARD_SOURCE } from './sets/league-of-explorers'
 import { NAXXRAMAS_CARD_SOURCE } from './sets/naxxramas'
+import { THE_GRAND_TOURNAMENT_CARD_SOURCE } from './sets/the-grand-tournament'
 import type { CardDefinition, CardId } from './card-definition'
 import { GENERATED_CARD_DEFINITIONS } from './generated-card-definitions'
 
@@ -85,7 +87,9 @@ export const CARD_SET_SOURCES = [
   CLASSIC_CARD_SOURCE,
   GOBLINS_VS_GNOMES_CARD_SOURCE,
   NAXXRAMAS_CARD_SOURCE,
-  BLACKROCK_MOUNTAIN_CARD_SOURCE
+  BLACKROCK_MOUNTAIN_CARD_SOURCE,
+  LEAGUE_OF_EXPLORERS_CARD_SOURCE,
+  THE_GRAND_TOURNAMENT_CARD_SOURCE
 ] as const
 
 export function createCardCatalog(

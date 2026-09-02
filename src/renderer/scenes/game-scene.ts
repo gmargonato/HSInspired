@@ -26,7 +26,10 @@ import {
   shouldRecordClassWin
 } from '../features/game/match-win-tracking'
 import { GameBoardSession } from '../features/game/game-board-session'
-import { AiTurnController } from '../features/game/ai-turn-controller'
+import {
+  AiTurnController,
+  COMPETITIVE_AI_POLICY
+} from '../features/game/ai-turn-controller'
 
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
@@ -84,7 +87,8 @@ export class GameScene extends Scene {
       api: this.ai,
       session: aiSession,
       decks,
-      logger: aiLogger
+      logger: aiLogger,
+      policy: COMPETITIVE_AI_POLICY
     })
     aiController.prewarmDeckPlan()
     this.logger?.info('[GameScene] AI deck planning started')

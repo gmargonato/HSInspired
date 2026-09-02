@@ -33,6 +33,11 @@ describe('AI configuration', () => {
         reasoningEffort: 'low',
         maxCompletionTokens: 2048
       },
+      matchupPlan: {
+        requestTimeoutMs: 8000,
+        reasoningEffort: 'low',
+        maxCompletionTokens: 2048
+      },
       mulligan: {
         requestTimeoutMs: 8000,
         reasoningEffort: 'low',
@@ -44,6 +49,16 @@ describe('AI configuration', () => {
         maxCompletionTokens: 2048
       },
       turn: {
+        requestTimeoutMs: 8000,
+        reasoningEffort: 'low',
+        maxCompletionTokens: 2048
+      },
+      rank: {
+        requestTimeoutMs: 8000,
+        reasoningEffort: 'low',
+        maxCompletionTokens: 2048
+      },
+      critic: {
         requestTimeoutMs: 8000,
         reasoningEffort: 'low',
         maxCompletionTokens: 2048
@@ -68,5 +83,11 @@ describe('AI configuration', () => {
     expect(() =>
       parseAzureOpenAiConfig({ ...validConfig, reasoningEffort: 'maximum-ish' }, '')
     ).toThrow('reasoningEffort')
+  })
+
+  it('rejects every configured model except GPT-5.4-nano', () => {
+    expect(() =>
+      parseAzureOpenAiConfig({ ...validConfig, modelId: 'gpt-5.4-mini' }, '')
+    ).toThrow('must be GPT-5.4-nano')
   })
 })

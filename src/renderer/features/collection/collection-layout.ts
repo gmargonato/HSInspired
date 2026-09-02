@@ -174,6 +174,29 @@ export const COLLECTION_LAYOUT = {
         }
       ),
       gap: -10
+    },
+    /** Five expansion rows are visible before the list begins scrolling. */
+    viewport: placement(
+      { x: 235, y: 375 },
+      { width: 312, height: 540 },
+      {
+        anchor: TOP_LEFT,
+        note: 'Cropped expansion list window; five 116px rows at a -10px gap.'
+      }
+    ),
+    /** Scroll handle centered over the narrow rail baked into the tray art. */
+    slider: {
+      x: 572,
+      minY: 427,
+      maxY: 859,
+      handle: placement(
+        { x: 572, y: 427 },
+        { width: 34, height: 94 },
+        {
+          anchor: CENTER,
+          note: 'Expansion-list scrollbar handle; aligned to the tray rail.'
+        }
+      )
     }
   },
 

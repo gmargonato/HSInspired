@@ -7,6 +7,11 @@ export interface AiPrompts {
   readonly deckPlan: string
   readonly mulligan: string
   readonly turn: string
+  readonly competitiveSystem?: string
+  readonly matchupPlan?: string
+  readonly competitiveMulligan?: string
+  readonly competitiveTurn?: string
+  readonly critic?: string
 }
 
 export interface AiDecisionPolicy {
@@ -28,9 +33,12 @@ export interface AzureOpenAiConfig {
   readonly prompts: AiPrompts
   readonly decisionPolicies: Readonly<{
     readonly deckPlan: AiDecisionPolicy
+    readonly matchupPlan: AiDecisionPolicy
     readonly mulligan: AiDecisionPolicy
     readonly discover: AiDecisionPolicy
     readonly turn: AiDecisionPolicy
+    readonly rank: AiDecisionPolicy
+    readonly critic: AiDecisionPolicy
   }>
   readonly debug: boolean
   readonly apiKey: string
@@ -75,11 +83,25 @@ function parsePrompts(value: unknown): AiPrompts {
   if (!isRecord(value)) {
     throw new Error('AI configuration prompts must be an object.')
   }
+  const optionalPrompt = (key: string): string | undefined => {
+    if (value[key] === undefined) return undefined
+    return requiredString(value, key)
+  }
+  const competitiveSystem = optionalPrompt('competitiveSystem')
+  const matchupPlan = optionalPrompt('matchupPlan')
+  const competitiveMulligan = optionalPrompt('competitiveMulligan')
+  const competitiveTurn = optionalPrompt('competitiveTurn')
+  const critic = optionalPrompt('critic')
   return {
     system: requiredString(value, 'system'),
     deckPlan: requiredString(value, 'deckPlan'),
     mulligan: requiredString(value, 'mulligan'),
-    turn: requiredString(value, 'turn')
+    turn: requiredString(value, 'turn'),
+    ...(competitiveSystem ? { competitiveSystem } : {}),
+    ...(matchupPlan ? { matchupPlan } : {}),
+    ...(competitiveMulligan ? { competitiveMulligan } : {}),
+    ...(competitiveTurn ? { competitiveTurn } : {}),
+    ...(critic ? { critic } : {})
   }
 }
 
@@ -130,6 +152,11 @@ function parseDecisionPolicies(
       fallback,
       'decisionPolicies.deckPlan'
     ),
+    matchupPlan: parseDecisionPolicy(
+      value?.['matchupPlan'],
+      fallback,
+      'decisionPolicies.matchupPlan'
+    ),
     mulligan: parseDecisionPolicy(
       value?.['mulligan'],
       fallback,
@@ -140,7 +167,9 @@ function parseDecisionPolicies(
       fallback,
       'decisionPolicies.discover'
     ),
-    turn: parseDecisionPolicy(value?.['turn'], fallback, 'decisionPolicies.turn')
+    turn: parseDecisionPolicy(value?.['turn'], fallback, 'decisionPolicies.turn'),
+    rank: parseDecisionPolicy(value?.['rank'], fallback, 'decisionPolicies.rank'),
+    critic: parseDecisionPolicy(value?.['critic'], fallback, 'decisionPolicies.critic')
   }
 }
 
@@ -151,6 +180,18 @@ export function parseAzureOpenAiConfig(
   if (!isRecord(value)) throw new Error('AI configuration must be a JSON object.')
   if (value['provider'] !== 'azure-openai') {
     throw new Error('AI configuration provider must be azure-openai.')
+  }
+  if (requiredString(value, 'modelId').toLowerCase() !== 'gpt-5.4-nano') {
+    throw new Error('AI configuration modelId must be GPT-5.4-nano.')
+  }
+  const deploymentName = requiredString(value, 'deploymentName')
+  if (
+    deploymentName.toLowerCase().includes('gpt-') &&
+    !deploymentName.toLowerCase().includes('gpt-5.4-nano')
+  ) {
+    throw new Error(
+      'AI configuration deploymentName identifies a model other than GPT-5.4-nano.'
+    )
   }
   if (typeof value['enabled'] !== 'boolean') {
     throw new Error('AI configuration enabled must be a boolean.')
@@ -196,8 +237,8 @@ export function parseAzureOpenAiConfig(
   return {
     enabled: value['enabled'],
     provider: 'azure-openai',
-    modelId: requiredString(value, 'modelId'),
-    deploymentName: requiredString(value, 'deploymentName'),
+    modelId: 'gpt-5.4-nano',
+    deploymentName,
     endpoint: endpointUrl.toString(),
     apiVersion: requiredString(value, 'apiVersion'),
     requestTimeoutMs: requestTimeoutMs as number,

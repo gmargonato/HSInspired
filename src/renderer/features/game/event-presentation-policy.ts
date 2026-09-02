@@ -24,7 +24,7 @@ export const EVENT_PRESENTATION_POLICY: Readonly<
   'turn-started': 'animation',
   'hero-power-used': 'animation',
   'character-damaged': 'animation',
-  'character-healed': 'state-refresh',
+  'character-healed': 'animation',
   'armor-gained': 'state-refresh',
   'hero-replaced': 'animation',
   fatigue: 'animation',

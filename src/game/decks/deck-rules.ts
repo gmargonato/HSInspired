@@ -11,6 +11,7 @@ import {
   type DeckCardLike,
   type DeckMutationResult,
   MAX_DECK_CARDS,
+  MAX_DECK_NAME_LENGTH,
   getCardCopyLimit,
   getDeckCardCount
 } from './deck'
@@ -44,6 +45,9 @@ export class DeckRules {
   validate(deck: Deck): readonly string[] {
     const errors: string[] = []
     if (!deck.name.trim()) errors.push('Deck name cannot be empty.')
+    if (deck.name.trim().length > MAX_DECK_NAME_LENGTH) {
+      errors.push(`Deck name cannot exceed ${MAX_DECK_NAME_LENGTH} characters.`)
+    }
     if (
       deck.cards &&
       Object.values(deck.cards).some((count) => !Number.isInteger(count) || count < 1)

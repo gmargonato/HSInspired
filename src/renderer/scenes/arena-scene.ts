@@ -38,14 +38,22 @@ export class ArenaScene extends Scene {
     await this.assetScope.acquire(ASSET_BUNDLE_IDS.cardRendering)
     await this.waitForFonts()
 
-    this.view = new ArenaView(this.arenaStore, assets, heroAssets, sharedAssets, {
-      onBack: () => this.router?.navigate({ id: 'main-menu', entryMode: 'returning' }),
-      onPlay: (route) => this.router?.navigate(route),
-      onError: (message, error) => {
-        this.logger.error(message, error)
-        this.dialogs?.error(message)
+    this.view = new ArenaView(
+      this.arenaStore,
+      assets,
+      heroAssets,
+      sharedAssets,
+      this.appInstance.renderer,
+      {
+        onBack: () =>
+          this.router?.navigate({ id: 'main-menu', entryMode: 'returning' }),
+        onPlay: (route) => this.router?.navigate(route),
+        onError: (message, error) => {
+          this.logger.error(message, error)
+          this.dialogs?.error(message)
+        }
       }
-    })
+    )
     this.root.addChild(this.view)
     await this.view.mount(snapshot)
   }

@@ -84,6 +84,15 @@ export const GAME_BOARD_LAYOUT = {
       minionStartScaleMultiplier: 1.3,
       minionStartYOffset: -20,
       raysSize: 320
+    },
+    /** Full-card hover preview positioned relative to the live board minion. */
+    cardPreview: {
+      scale: 0.4,
+      gap: 18,
+      viewportPadding: 20,
+      viewportWidth: 1920,
+      viewportHeight: 1080,
+      fadeDuration: 0.12
     }
   },
 
@@ -437,6 +446,8 @@ export const GAME_BOARD_LAYOUT = {
     backScale: { x: 0.08, y: 0.12 } satisfies LayoutPoint,
     /** Small, upright pose used when an effect generates a hand card. */
     generatedSlotScale: 0.12,
-    generatedBackScale: 0.1
+    generatedBackScale: 0.1,
+    /** Fully clears a local hand card below the 1080p design canvas. */
+    handReplacementExitY: 1500
   }
 } as const

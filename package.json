@@ -18,6 +18,7 @@
     "deps:check": "depcruise --validate .dependency-cruiser.cjs src",
     "build:smoke": "node scripts/build-smoke.cjs",
     "test": "vitest run",
+    "ai:benchmark": "node scripts/run-ai-benchmark.cjs",
     "catalog:audit": "node scripts/catalog-audit.cjs",
     "verify": "npm run format:check && npm run lint && npm run test && npm run typecheck && npm run deps:check && npm run build:smoke",
     "dist": "electron-vite build && electron-builder",

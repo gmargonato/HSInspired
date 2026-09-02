@@ -4,10 +4,16 @@ import {
   parseAiDeckPlanResponse,
   parseAiDecisionRequest,
   parseAiDecisionResponse,
+  parseAiRankDecisionResponse,
+  parseAiCriticDecisionResponse,
+  parseAiMatchupPlanRequest,
+  parseAiMatchupPlanResponse,
   type AiDeckPlanRequest,
   type AiDeckPlanResponse,
   type AiDecisionRequest,
   type AiDecisionResponse,
+  type AiMatchupPlanRequest,
+  type AiMatchupPlanResponse,
   type JsonObject,
   type JsonValue
 } from '../../shared/ipc/ai'
@@ -56,6 +62,28 @@ function requiredModelString(
 
 function parseModelDecision(value: unknown, request: AiDecisionRequest): ModelDecision {
   if (!isRecord(value)) throw new Error('AI model response must be a JSON object.')
+  if (request.pass === 'rank') {
+    const ranking = parseAiRankDecisionResponse(
+      value,
+      new Set(request.legalActions.map((action) => action.id))
+    )
+    return {
+      actionId: ranking.preferredActionId,
+      decisionClass: request.decisionClass,
+      rationale: ranking.rationale
+    }
+  }
+  if (request.pass === 'critic') {
+    const criticism = parseAiCriticDecisionResponse(
+      value,
+      new Set(request.legalActions.map((action) => action.id))
+    )
+    return {
+      actionId: criticism.finalActionId,
+      decisionClass: request.decisionClass,
+      rationale: criticism.rationale
+    }
+  }
   const actionId = requiredModelString(value, 'actionId')
   if (!request.legalActions.some((action) => action.id === actionId)) {
     throw new Error(`AI model selected unknown or stale action id ${actionId}.`)
@@ -142,11 +170,87 @@ function buildRequestBody(
 ): JsonObject {
   const actionIds = request.legalActions.map((action) => action.id)
   const phasePrompt =
-    request.phase === 'mulligan' ? config.prompts.mulligan : config.prompts.turn
-  const policy = config.decisionPolicies[request.decisionClass]
+    request.pass === 'critic'
+      ? (config.prompts.critic ?? config.prompts.competitiveTurn ?? config.prompts.turn)
+      : request.pass
+        ? request.phase === 'mulligan'
+          ? (config.prompts.competitiveMulligan ?? config.prompts.mulligan)
+          : (config.prompts.competitiveTurn ?? config.prompts.turn)
+        : request.phase === 'mulligan'
+          ? config.prompts.mulligan
+          : config.prompts.turn
+  const systemPrompt = request.pass
+    ? (config.prompts.competitiveSystem ?? config.prompts.system)
+    : config.prompts.system
+  const policy =
+    request.pass === 'rank'
+      ? config.decisionPolicies.rank
+      : request.pass === 'critic'
+        ? config.decisionPolicies.critic
+        : config.decisionPolicies[request.decisionClass]
+  let responseSchema: JsonObject
+  if (request.pass === 'rank') {
+    responseSchema = {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        pass: { type: 'string', enum: ['rank'] },
+        preferredActionId: { type: 'string', enum: actionIds },
+        orderedActionIds: {
+          type: 'array',
+          items: { type: 'string', enum: actionIds },
+          minItems: actionIds.length,
+          maxItems: actionIds.length
+        },
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        rationale: { type: 'string', maxLength: 500 }
+      },
+      required: [
+        'pass',
+        'preferredActionId',
+        'orderedActionIds',
+        'confidence',
+        'rationale'
+      ]
+    } as JsonObject
+  } else if (request.pass === 'critic') {
+    responseSchema = {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        pass: { type: 'string', enum: ['critic'] },
+        finalActionId: { type: 'string', enum: actionIds },
+        retainedFirstChoice: { type: 'boolean' },
+        identifiedRisks: {
+          type: 'array',
+          items: { type: 'string', maxLength: 240 },
+          maxItems: 8
+        },
+        rationale: { type: 'string', maxLength: 500 }
+      },
+      required: [
+        'pass',
+        'finalActionId',
+        'retainedFirstChoice',
+        'identifiedRisks',
+        'rationale'
+      ]
+    } as JsonObject
+  } else {
+    responseSchema = {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        actionId: { type: 'string', enum: actionIds },
+        decisionClass: { type: 'string', enum: [request.decisionClass] },
+        rationale: { type: 'string' }
+      },
+      required: ['actionId', 'decisionClass', 'rationale']
+    } as JsonObject
+  }
   return {
     messages: [
-      { role: 'system', content: config.prompts.system },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: phasePrompt },
       {
         role: 'user',
@@ -159,7 +263,10 @@ function buildRequestBody(
           contextVersion: request.contextVersion,
           schemaVersion: request.schemaVersion,
           gameState: request.gameState,
-          legalActions: request.legalActions
+          legalActions: request.legalActions,
+          pass: request.pass ?? 'legacy',
+          candidateDossiers: request.candidateDossiers ?? [],
+          firstPassRanking: request.firstPassRanking ?? []
         })
       }
     ],
@@ -170,16 +277,7 @@ function buildRequestBody(
       json_schema: {
         name: 'game_ai_decision',
         strict: true,
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            actionId: { type: 'string', enum: actionIds },
-            decisionClass: { type: 'string', enum: [request.decisionClass] },
-            rationale: { type: 'string' }
-          },
-          required: ['actionId', 'decisionClass', 'rationale']
-        }
+        schema: responseSchema
       }
     }
   }
@@ -380,6 +478,140 @@ function buildDeckPlanRequestBody(
   }
 }
 
+function buildMatchupPlanRequestBody(
+  request: AiMatchupPlanRequest,
+  config: AzureOpenAiConfig
+): JsonObject {
+  const legacy = buildDeckPlanRequestBody(
+    {
+      planId: request.planId,
+      decisionClass: 'deck-plan',
+      promptVersion: request.promptVersion,
+      schemaVersion: 1,
+      deadlineAtMs: request.deadlineAtMs,
+      mode: request.mode,
+      deck: request.selfDeck
+    },
+    config
+  ) as unknown as {
+    response_format: {
+      json_schema: {
+        schema: {
+          properties: { plan: JsonObject }
+        }
+      }
+    }
+  }
+  const legacyPlanSchema = legacy.response_format.json_schema.schema.properties.plan
+  const selfStrategySchema = {
+    ...legacyPlanSchema,
+    properties: Object.fromEntries(
+      Object.entries(legacyPlanSchema['properties'] as JsonObject).filter(
+        ([key]) => key !== 'planVersion'
+      )
+    ),
+    required: (legacyPlanSchema['required'] as readonly JsonValue[]).filter(
+      (key) => key !== 'planVersion'
+    )
+  }
+  const archetypes = [
+    'aggro',
+    'tempo',
+    'midrange',
+    'control',
+    'combo',
+    'fatigue',
+    'hybrid'
+  ]
+  return {
+    messages: [
+      {
+        role: 'system',
+        content: config.prompts.matchupPlan ?? config.prompts.deckPlan
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          planId: request.planId,
+          promptVersion: request.promptVersion,
+          schemaVersion: request.schemaVersion,
+          informationPolicy: request.informationPolicy,
+          mode: request.mode,
+          selfDeck: request.selfDeck,
+          opponentDeck: request.opponentDeck
+        })
+      }
+    ],
+    reasoning_effort: config.decisionPolicies.matchupPlan.reasoningEffort,
+    max_completion_tokens: config.decisionPolicies.matchupPlan.maxCompletionTokens,
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'game_ai_matchup_plan',
+        strict: true,
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            plan: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                planVersion: { type: 'integer', enum: [2] },
+                selfStrategy: selfStrategySchema,
+                opponentArchetype: { type: 'string', enum: archetypes },
+                opponentWinConditions: {
+                  type: 'array',
+                  items: { type: 'string', maxLength: 500 },
+                  maxItems: 8
+                },
+                opponentThreatPriorities: {
+                  type: 'array',
+                  maxItems: 30,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      cardId: { type: 'string', maxLength: 120 },
+                      priority: {
+                        type: 'string',
+                        enum: ['low', 'medium', 'high', 'critical']
+                      },
+                      preferredResponse: { type: 'string', maxLength: 240 }
+                    },
+                    required: ['cardId', 'priority', 'preferredResponse']
+                  }
+                },
+                removalPriorityCardIds: {
+                  type: 'array',
+                  items: { type: 'string', maxLength: 120 },
+                  maxItems: 20
+                },
+                earlyGameStrategy: { type: 'string', maxLength: 500 },
+                midGameStrategy: { type: 'string', maxLength: 500 },
+                lateGameStrategy: { type: 'string', maxLength: 500 }
+              },
+              required: [
+                'planVersion',
+                'selfStrategy',
+                'opponentArchetype',
+                'opponentWinConditions',
+                'opponentThreatPriorities',
+                'removalPriorityCardIds',
+                'earlyGameStrategy',
+                'midGameStrategy',
+                'lateGameStrategy'
+              ]
+            },
+            rationale: { type: 'string', maxLength: 500 }
+          },
+          required: ['plan', 'rationale']
+        }
+      }
+    }
+  } as unknown as JsonObject
+}
+
 function buildRequestUrl(config: AzureOpenAiConfig): string {
   const url = new URL(
     `openai/deployments/${encodeURIComponent(config.deploymentName)}/chat/completions`,
@@ -457,6 +689,14 @@ export class AzureOpenAiDecisionService {
         rationale: requiredModelString(parsed, 'rationale')
       }
       const metadata = providerMetadata(responseBody)
+      if (
+        metadata.actualModelId &&
+        !metadata.actualModelId.toLowerCase().includes('gpt-5.4-nano')
+      ) {
+        throw new Error(
+          `Azure OpenAI returned disallowed model ${metadata.actualModelId}.`
+        )
+      }
       return parseAiDeckPlanResponse({
         ...modelPlan,
         modelId: metadata.actualModelId ?? config.modelId,
@@ -485,6 +725,101 @@ export class AzureOpenAiDecisionService {
     }
   }
 
+  async planMatchup(value: unknown): Promise<AiMatchupPlanResponse> {
+    const request = parseAiMatchupPlanRequest(value)
+    const config = await this.options.loadConfig()
+    if (!config.enabled)
+      throw new Error('The external game AI is disabled in config/ai.json.')
+    if (!config.apiKey) {
+      throw new Error(
+        'The Azure OpenAI key is missing. Put only the key in config/ai-key.local.txt.'
+      )
+    }
+    const url = buildRequestUrl(config)
+    const requestBody = buildMatchupPlanRequestBody(request, config)
+    const remainingDeadlineMs = request.deadlineAtMs - Date.now()
+    if (remainingDeadlineMs <= 0) {
+      throw new Error(
+        'AI matchup-plan deadline elapsed before the provider request started.'
+      )
+    }
+    const timeoutMs = Math.max(
+      1,
+      Math.min(
+        config.decisionPolicies.matchupPlan.requestTimeoutMs,
+        remainingDeadlineMs
+      )
+    )
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    const startedAt = performance.now()
+    let response: Response
+    try {
+      response = await this.fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'api-key': config.apiKey },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      })
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`Azure OpenAI request timed out after ${timeoutMs}ms.`, {
+          cause: error
+        })
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Azure OpenAI request failed: ${message}`, { cause: error })
+    } finally {
+      clearTimeout(timeout)
+    }
+    const responseText = await response.text()
+    if (!response.ok) {
+      throw new Error(`Azure OpenAI returned HTTP ${response.status}: ${responseText}`)
+    }
+    let assistantContent: string | undefined
+    try {
+      const responseBody = parseJson(responseText, 'Azure OpenAI response')
+      assistantContent = extractAssistantContent(responseBody)
+      const parsed = parseJson(assistantContent, 'AI assistant content')
+      if (!isRecord(parsed))
+        throw new Error('AI matchup plan response must be an object.')
+      const metadata = providerMetadata(responseBody)
+      if (
+        metadata.actualModelId &&
+        !metadata.actualModelId.toLowerCase().includes('gpt-5.4-nano')
+      )
+        throw new Error(
+          `Azure OpenAI returned disallowed model ${metadata.actualModelId}.`
+        )
+      return parseAiMatchupPlanResponse({
+        plan: parsed['plan'],
+        rationale: requiredModelString(parsed, 'rationale'),
+        modelId: metadata.actualModelId ?? config.modelId,
+        ...(config.debug
+          ? {
+              debug: {
+                url,
+                durationMs: Math.round(performance.now() - startedAt),
+                ...metadata,
+                requestBody,
+                responseBody
+              }
+            }
+          : {})
+      })
+    } catch (error) {
+      throw responseDiagnosticError(
+        config,
+        url,
+        response,
+        responseText,
+        error instanceof Error ? error.message : String(error),
+        assistantContent,
+        error
+      )
+    }
+  }
+
   async decide(value: unknown): Promise<AiDecisionResponse> {
     const request = parseAiDecisionRequest(value)
     const config = await this.options.loadConfig()
@@ -498,7 +833,12 @@ export class AzureOpenAiDecisionService {
 
     const url = buildRequestUrl(config)
     const requestBody = buildRequestBody(request, config)
-    const policy = config.decisionPolicies[request.decisionClass]
+    const policy =
+      request.pass === 'rank'
+        ? config.decisionPolicies.rank
+        : request.pass === 'critic'
+          ? config.decisionPolicies.critic
+          : config.decisionPolicies[request.decisionClass]
     const remainingDeadlineMs = request.deadlineAtMs - Date.now()
     if (remainingDeadlineMs <= 0) {
       throw new Error(
@@ -560,10 +900,33 @@ export class AzureOpenAiDecisionService {
         parseJson(assistantContent, 'AI assistant content'),
         request
       )
+      const rawDecision = parseJson(assistantContent, 'AI assistant content')
       const metadata = providerMetadata(responseBody)
+      if (
+        metadata.actualModelId &&
+        !metadata.actualModelId.toLowerCase().includes('gpt-5.4-nano')
+      ) {
+        throw new Error(
+          `Azure OpenAI returned disallowed model ${metadata.actualModelId}.`
+        )
+      }
       return parseAiDecisionResponse({
         ...decision,
         modelId: metadata.actualModelId ?? config.modelId,
+        ...(request.pass === 'rank' && isRecord(rawDecision)
+          ? {
+              pass: 'rank',
+              orderedActionIds: rawDecision['orderedActionIds'],
+              confidence: rawDecision['confidence']
+            }
+          : {}),
+        ...(request.pass === 'critic' && isRecord(rawDecision)
+          ? {
+              pass: 'critic',
+              retainedFirstChoice: rawDecision['retainedFirstChoice'],
+              identifiedRisks: rawDecision['identifiedRisks']
+            }
+          : {}),
         ...(config.debug
           ? {
               debug: {

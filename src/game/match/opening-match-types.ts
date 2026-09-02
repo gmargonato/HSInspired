@@ -9,6 +9,7 @@ import type {
 } from '../content/cards'
 import type { ResolutionCorrelation } from './contracts'
 import type { ControllerKind, MatchSetup, PlayerId } from './match-types'
+import type { AiInformationPolicy, AiObservation } from './ai/ai-types'
 
 export type OpeningPhase = 'mulligan' | 'turns' | 'ended'
 
@@ -75,6 +76,10 @@ export interface RuntimeEnchantment {
   readonly swapStats?: boolean
   readonly targetingGranted?: string | null
   readonly minimumHealth?: number
+  /** Caps one incoming damage event before damage-taken multipliers apply. */
+  readonly maximumDamageTaken?: number
+  /** Multiplies damage after per-event caps and before Armor absorbs it. */
+  readonly damageTakenMultiplier?: number
   readonly keywords?: readonly CardKeyword[]
   readonly removedKeywords?: readonly CardKeyword[]
   /** Controller restored when a temporary control enchantment ends or is silenced. */
@@ -83,6 +88,8 @@ export interface RuntimeEnchantment {
   readonly startsOnTurn?: number
   readonly expiresOnTurn?: number
   readonly expiresOnAttack?: number
+  /** Removes this Hero Power cost modifier immediately after one use. */
+  readonly consumeOnHeroPowerUse?: boolean
   readonly silenceable?: boolean
   readonly continuous?: boolean
 }
@@ -153,6 +160,8 @@ export interface MatchHistory {
   readonly armorGainedThisTurn: number
   readonly cardsPlayedThisGame: readonly string[]
   readonly cardsDiedThisGame: readonly string[]
+  readonly beastsSummonedByPlayer: Readonly<Record<string, number>>
+  readonly heroPowersUsedByPlayer: Readonly<Record<string, number>>
 }
 
 export interface ScheduledEffect {
@@ -343,6 +352,8 @@ export interface PlayerHeroState {
   readonly spellDamageMultiplier?: number
   readonly healingMultiplier?: number
   readonly heroPowerMultiplier?: number
+  readonly maximumDamageTaken?: number
+  readonly damageTakenMultiplier?: number
 }
 
 /** A player's mana crystals: available spendable mana and the grown maximum. */
@@ -365,6 +376,8 @@ export interface PlayerHeroPower {
   readonly creationOrdinal?: number
   readonly cost: number
   readonly available: boolean
+  /** Activations made during the current turn; supports effects such as Garrison Commander. */
+  readonly usesThisTurn?: number
   readonly baseCost?: number
   readonly targetType?: string
   readonly targetingGranted?: string | null
@@ -402,6 +415,9 @@ export interface OpeningPlayerState {
   readonly overload?: number
   /** One-shot discounts that apply when the next matching card is played. */
   readonly pendingCostModifiers?: readonly PendingCostModifier[]
+  /** Turn-scoped count of Lock and Load rewards. */
+  readonly lockAndLoadCount?: number
+  readonly lockAndLoadTurn?: number
 }
 
 export interface OpeningMatchState {
@@ -431,6 +447,8 @@ export interface PendingDiscoverChoice {
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
   readonly candidates: readonly OpeningCard[]
+  readonly origin?: 'deck' | 'generated'
+  readonly queued?: readonly Omit<PendingDiscoverChoice, 'queued'>[]
 }
 
 export interface CardChoiceOption {
@@ -438,6 +456,8 @@ export interface CardChoiceOption {
   readonly label: string
   /** Existing card definition used to render a full-card option when available. */
   readonly presentationCardId?: CardId
+  /** Hero power rendered as a constructed discovery option when present. */
+  readonly presentationHeroPowerId?: HeroPowerId
 }
 
 export interface PendingCardChoice {
@@ -445,6 +465,11 @@ export interface PendingCardChoice {
   readonly sourceCardInstanceId: string
   readonly sourceCardId: CardId
   readonly options: readonly CardChoiceOption[]
+  readonly resolution?: {
+    readonly type: 'hero-power'
+    readonly heroPowerIds: readonly HeroPowerId[]
+  }
+  readonly queued?: readonly Omit<PendingCardChoice, 'queued'>[]
 }
 
 export interface ConfirmMulliganCommand {
@@ -711,6 +736,8 @@ export interface CharacterDamagedEvent {
   readonly character:
     { readonly kind: 'hero' } | { readonly kind: 'minion'; readonly instanceId: string }
   readonly amount: number
+  /** Full resolved damage used by presentation before effective-loss caps. */
+  readonly attemptedAmount?: number
   readonly healthBefore: number
   readonly healthAfter: number
   readonly armorBefore: number
@@ -724,6 +751,8 @@ export interface CharacterHealedEvent {
   readonly character:
     { readonly kind: 'hero' } | { readonly kind: 'minion'; readonly instanceId: string }
   readonly amount: number
+  /** Full resolved healing used by presentation before over-healing caps. */
+  readonly attemptedAmount?: number
   readonly healthBefore: number
   readonly healthAfter: number
 }
@@ -798,9 +827,12 @@ export interface MinionCombatantResult {
   readonly instanceId: string
   readonly attack: number
   readonly damageDealt: number
+  /** Incoming damage selected for display before Health caps or prevention. */
+  readonly attemptedDamage: number
   readonly healthBefore: number
   readonly healthAfter: number
   readonly destroyed: boolean
+  readonly divineShieldConsumed?: boolean
 }
 
 export interface MinionCombatPreview {
@@ -822,11 +854,14 @@ export interface CharacterCombatantResult {
   readonly character: AttackCharacterRef
   readonly attack: number
   readonly damageDealt: number
+  /** Incoming damage selected for display before Health or Armor caps. */
+  readonly attemptedDamage: number
   readonly healthBefore: number
   readonly healthAfter: number
   readonly armorBefore: number
   readonly armorAfter: number
   readonly destroyed: boolean
+  readonly divineShieldConsumed?: boolean
 }
 
 export interface CharacterCombatResolvedEvent {
@@ -1050,6 +1085,7 @@ export interface OpeningMatchInstance {
   getLegality?(participantId: PlayerId): MatchLegality
   getEffectTrace?(): readonly EffectTraceEntry[]
   getPublicState?(participantId: PlayerId): OpeningMatchPublicState
+  getAiObservation?(participantId: PlayerId, policy: AiInformationPolicy): AiObservation
   getPublicEvents?(
     participantId: PlayerId,
     events: readonly OpeningMatchEvent[]

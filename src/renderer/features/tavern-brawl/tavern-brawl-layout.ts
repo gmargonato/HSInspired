@@ -25,7 +25,7 @@ export const TAVERN_BRAWL_LAYOUT = {
     }
   ),
   backButton: placement(
-    { x: 1670, y: 1044 },
+    { x: 1665, y: 1048 },
     { width: 107, height: 47 },
     { anchor: CENTER }
   )

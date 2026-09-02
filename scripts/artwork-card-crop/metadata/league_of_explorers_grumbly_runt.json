@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_grumbly_runt.jpg",
+  "source_name": "league_of_explorers_grumbly_runt.jpg",
+  "crop_box": [
+    29,
+    27,
+    484,
+    482
+  ],
+  "scale": 1.1,
+  "offset_x": -31.676923076923117,
+  "offset_y": -29.830769230769278,
+  "timestamp": "2026-09-01T11:38:23.846418",
+  "card_id": "league_of_explorers_grumbly_runt",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -169,7 +169,7 @@ export class MainMenuView extends Actor {
     this.menuGroup.addChild(this.buttonCollection)
 
     this.buttonArena = new Button(assets.buttonArena, {
-      sinkPx: 6,
+      sinkPx: -1,
       onClick: () => this.onArenaPressed()
     })
     this.buttonArena.label = 'main-menu.arena-button'
@@ -181,7 +181,7 @@ export class MainMenuView extends Actor {
     this.menuGroup.addChild(this.buttonArena)
 
     this.buttonTavern = new Button(assets.buttonTavern, {
-      sinkPx: 6,
+      sinkPx: -5,
       onClick: () => this.onTavernPressed()
     })
     this.buttonTavern.label = 'main-menu.tavern-button'

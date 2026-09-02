@@ -5,11 +5,15 @@ import type {
   AiDeckPlan,
   AiDeckPlanCombo,
   AiDeckPlanRequest,
+  AiMatchupPlan,
+  AiMatchupPlanRequest,
   JsonObject
 } from '../../../shared/ipc/ai'
 
 export const AI_DECK_PLAN_PROMPT_VERSION = 'automatic-deck-plan-v1'
 export const AI_DECK_PLAN_SCHEMA_VERSION = 1
+export const AI_MATCHUP_PLAN_PROMPT_VERSION = 'competitive-matchup-plan-v2'
+export const AI_MATCHUP_PLAN_SCHEMA_VERSION = 2
 
 interface CardSignals {
   readonly produces: readonly string[]
@@ -160,6 +164,43 @@ export function createDeckPlanRequest(
   }
 }
 
+function compactDeck(deck: Deck): JsonObject {
+  return toJsonObject({
+    id: deck.id,
+    name: deck.name,
+    heroId: deck.heroId,
+    cards: Object.entries(deck.cards).map(([cardId, count]) => ({
+      count,
+      definition: compactDefinition(CARD_CATALOG.require(cardId))
+    })),
+    structuredSynergies: deriveDeckSynergies(deck)
+  })
+}
+
+export function createMatchupPlanRequest(
+  selfDeck: Deck,
+  opponentDeck: Deck,
+  deadlineAtMs: number
+): AiMatchupPlanRequest {
+  return {
+    planId: `matchup-plan-${selfDeck.id}-${opponentDeck.id}-${Date.now()}`,
+    decisionClass: 'deck-plan',
+    promptVersion: AI_MATCHUP_PLAN_PROMPT_VERSION,
+    schemaVersion: AI_MATCHUP_PLAN_SCHEMA_VERSION,
+    deadlineAtMs,
+    informationPolicy: 'opponent-deck-and-hand',
+    mode: toJsonObject({
+      id: 'constructed',
+      objective: 'Defeat the opposing hero.',
+      informationPolicy: 'opponent-deck-and-hand',
+      deckSize: 30,
+      maximumBoardSize: 7
+    }),
+    selfDeck: compactDeck(selfDeck),
+    opponentDeck: compactDeck(opponentDeck)
+  }
+}
+
 function rolesFor(definition: CardDefinition): readonly AiCardRole[] {
   const signals = signalsFor(definition)
   const roles = new Set<AiCardRole>()
@@ -246,6 +287,55 @@ export function createFallbackDeckPlan(deck: Deck): AiDeckPlan {
   }
 }
 
+export function createFallbackMatchupPlan(
+  selfDeck: Deck,
+  opponentDeck: Deck
+): AiMatchupPlan {
+  const self = createFallbackDeckPlan(selfDeck)
+  const opponent = createFallbackDeckPlan(opponentDeck)
+  const opponentDefinitions = Object.keys(opponentDeck.cards).map((cardId) =>
+    CARD_CATALOG.require(cardId)
+  )
+  const threats = [...opponentDefinitions]
+    .sort((left, right) => {
+      const leftStats = left.type === 'Minion' ? left.attack + left.health : left.cost
+      const rightStats =
+        right.type === 'Minion' ? right.attack + right.health : right.cost
+      return rightStats - leftStats || String(left.id).localeCompare(String(right.id))
+    })
+    .slice(0, 12)
+  const { planVersion: _legacyVersion, ...selfStrategy } = self
+  return {
+    planVersion: 2,
+    selfStrategy,
+    opponentArchetype: opponent.archetype,
+    opponentWinConditions: [
+      opponent.primaryWinCondition,
+      opponent.secondaryWinCondition
+    ],
+    opponentThreatPriorities: threats.map((definition, index) => ({
+      cardId: definition.id,
+      priority: index < 3 ? 'critical' : index < 7 ? 'high' : 'medium',
+      preferredResponse:
+        definition.type === 'Minion'
+          ? 'Remove efficiently before it can compound board pressure.'
+          : 'Track copies and avoid exposing the highest-value target.'
+    })),
+    removalPriorityCardIds: threats
+      .filter((definition) => definition.type === 'Minion')
+      .map((definition) => definition.id),
+    earlyGameStrategy: `Execute the self plan while respecting the opponent's ${opponent.archetype} opening.`,
+    midGameStrategy:
+      'Contest priority threats without releasing reserved resources prematurely.',
+    lateGameStrategy:
+      'Convert the surviving win condition while accounting for remaining opposing reach.'
+  }
+}
+
+export function matchupSelfDeckPlan(plan: AiMatchupPlan): AiDeckPlan {
+  return { planVersion: 1, ...plan.selfStrategy }
+}
+
 export function validateDeckPlanForDeck(plan: AiDeckPlan, deck: Deck): AiDeckPlan {
   const available = new Set(Object.keys(deck.cards))
   const referenced = [
@@ -257,6 +347,25 @@ export function validateDeckPlanForDeck(plan: AiDeckPlan, deck: Deck): AiDeckPla
   const invalid = referenced.find((cardId) => !available.has(cardId))
   if (invalid)
     throw new Error(`AI deck plan references card ${invalid} outside its deck.`)
+  return plan
+}
+
+export function validateMatchupPlanForDecks(
+  plan: AiMatchupPlan,
+  selfDeck: Deck,
+  opponentDeck: Deck
+): AiMatchupPlan {
+  validateDeckPlanForDeck(matchupSelfDeckPlan(plan), selfDeck)
+  const opponentCardIds = new Set(Object.keys(opponentDeck.cards))
+  const invalidThreat = [
+    ...plan.opponentThreatPriorities.map((entry) => entry.cardId),
+    ...plan.removalPriorityCardIds
+  ].find((cardId) => !opponentCardIds.has(cardId))
+  if (invalidThreat) {
+    throw new Error(
+      `AI matchup plan references opponent card ${invalidThreat} outside the opponent deck.`
+    )
+  }
   return plan
 }
 

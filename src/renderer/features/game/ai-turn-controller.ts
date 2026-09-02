@@ -1,4 +1,13 @@
 import type { Deck } from '../../../game/decks'
+import {
+  AiStrategicTracker,
+  AiTranspositionCache,
+  COMPETITIVE_AI_SEARCH_LIMITS,
+  searchCompetitiveTurn,
+  type AiCandidateDossier,
+  type AiEvaluationComponents,
+  type AiStrategicPlanView
+} from '../../../game/match/ai'
 import { CARD_CATALOG, type CardDefinition } from '../../../game/content/cards'
 import { HERO_CATALOG } from '../../../game/content/heroes'
 import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
@@ -17,6 +26,7 @@ import type {
   AiActionKind,
   AiActionAnalysis,
   AiDeckPlan,
+  AiMatchupPlan,
   AiDecisionClass,
   AiDecisionApi,
   AiDecisionRequest,
@@ -27,10 +37,15 @@ import type {
 import type { RendererLogger } from '../../ui/logger'
 import {
   createDeckPlanRequest,
+  createFallbackMatchupPlan,
+  createMatchupPlanRequest,
   createFallbackDeckPlan,
+  matchupSelfDeckPlan,
   reservedCardIds,
-  validateDeckPlanForDeck
+  validateDeckPlanForDeck,
+  validateMatchupPlanForDecks
 } from './ai-deck-strategy'
+import { CompetitiveAiWorkerClient } from './competitive-ai-worker-client'
 import type { GameBoardSession } from './game-board-session'
 
 interface CandidateAction {
@@ -52,7 +67,11 @@ export interface AiTurnControllerOptions {
   readonly session: GameBoardSession
   readonly decks: readonly Deck[]
   readonly logger: RendererLogger
+  readonly policy?: 'legacy' | 'competitive-v2'
 }
+
+export const COMPETITIVE_AI_POLICY: 'legacy' | 'competitive-v2' =
+  import.meta.env.VITE_COMPETITIVE_AI_V2 === 'true' ? 'competitive-v2' : 'legacy'
 
 const AI_PROMPT_VERSION = 'strategic-fair-ranker-v2'
 const AI_CONTEXT_VERSION = 4
@@ -60,12 +79,41 @@ const AI_SCHEMA_VERSION = 3
 const MAX_PREVIEWED_CANDIDATES = 256
 const MAX_MODEL_CANDIDATES = 12
 const MAX_DECISION_TIME_MS = 20_000
+const COMPETITIVE_MAX_DECISION_TIME_MS = 30_000
+const COMPETITIVE_PROVIDER_PASS_MS = 10_000
+const COMPETITIVE_DISPATCH_RESERVE_MS = 2_000
 const MAX_DECK_PLAN_TIME_MS = 30_000
 const RESERVED_RESOURCE_PENALTY = 120
 const LINE_SEARCH_MAX_DEPTH = 12
 const LINE_SEARCH_BEAM_WIDTH = 32
 const LINE_SEARCH_NODE_LIMIT = 4_000
 const LINE_SEARCH_TIME_MS = 250
+
+const ZERO_EVALUATION: AiEvaluationComponents = {
+  terminal: 0,
+  lethalPressure: 0,
+  effectiveHealth: 0,
+  incomingReach: 0,
+  boardAttack: 0,
+  boardHealth: 0,
+  boardKeywords: 0,
+  initiative: 0,
+  boardSlots: 0,
+  handQuality: 0,
+  cardAdvantage: 0,
+  manaEfficiency: 0,
+  futureCurve: 0,
+  weapon: 0,
+  heroPower: 0,
+  removal: 0,
+  draw: 0,
+  fatigue: 0,
+  burnRisk: 0,
+  matchupProgress: 0,
+  comboProgress: 0,
+  threatExposure: 0,
+  reservedResourceCost: 0
+}
 
 function toJsonObject(value: unknown): JsonObject {
   return JSON.parse(JSON.stringify(value)) as JsonObject
@@ -330,6 +378,18 @@ function isPermanentProviderError(error: unknown): boolean {
   )
 }
 
+function isSharedPermanentProviderError(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
+  return (
+    message.includes('ai configuration') ||
+    message.includes('key is missing') ||
+    message.includes('external game ai is disabled') ||
+    message.includes('http 401') ||
+    message.includes('http 403') ||
+    message.includes('http 404')
+  )
+}
+
 function errorDetails(error: unknown): string {
   if (error instanceof Error) return error.message
   return String(error)
@@ -504,15 +564,41 @@ function previewPriority(candidate: CandidateAction): number {
 
 export class AiTurnController {
   private decisionSequence = 0
-  private providerDisabled = false
+  private planningProviderDisabled = false
+  private decisionProviderDisabled = false
   private deckPlan: AiDeckPlan | null = null
   private deckPlanPromise: Promise<AiDeckPlan> | null = null
+  private matchupPlan: AiMatchupPlan | null = null
+  private matchupPlanPromise: Promise<AiMatchupPlan> | null = null
+  private strategicTracker: AiStrategicTracker | null = null
+  private readonly transpositionCache = new AiTranspositionCache<
+    Readonly<{ readonly score: number }>
+  >(COMPETITIVE_AI_SEARCH_LIMITS.transpositionCapacity)
+  private workerClient: CompetitiveAiWorkerClient | null = null
 
   constructor(private readonly options: AiTurnControllerOptions) {}
 
+  private recordPermanentProviderFailure(
+    error: unknown,
+    capability: 'planning' | 'decision'
+  ): void {
+    if (!isPermanentProviderError(error)) return
+    if (isSharedPermanentProviderError(error)) {
+      this.planningProviderDisabled = true
+      this.decisionProviderDisabled = true
+      return
+    }
+    if (capability === 'planning') this.planningProviderDisabled = true
+    else this.decisionProviderDisabled = true
+  }
+
   /** Starts the once-per-match strategy request without delaying scene setup. */
   prewarmDeckPlan(): void {
-    void this.ensureDeckPlan().catch((error) => {
+    const planning =
+      this.options.policy === 'competitive-v2'
+        ? this.ensureMatchupPlan()
+        : this.ensureDeckPlan()
+    void planning.catch((error) => {
       this.options.logger.warn(
         '[Game AI] could not prewarm the deterministic deck strategy',
         errorDetails(error)
@@ -525,7 +611,12 @@ export class AiTurnController {
   }
 
   async chooseTurnAction(): Promise<AiActionDecision> {
-    return this.choose('turn', this.turnLineCandidates())
+    return this.choose(
+      'turn',
+      this.options.policy === 'competitive-v2'
+        ? this.turnCandidates()
+        : this.turnLineCandidates()
+    )
   }
 
   private aiDeck(): Deck {
@@ -540,13 +631,77 @@ export class AiTurnController {
     return deck
   }
 
+  private opponentDeck(): Deck {
+    const participant = this.options.session.match.setup.participants.find(
+      (candidate) => candidate.participantId === this.options.session.localParticipantId
+    )
+    const deck = this.options.decks.find(
+      (candidate) => candidate.id === participant?.deckId
+    )
+    if (!deck) throw new Error('The opponent deck is unavailable for matchup planning.')
+    return deck
+  }
+
+  private matchupPlanView(plan: AiMatchupPlan): AiStrategicPlanView {
+    return {
+      selfComboCardIds: [
+        ...new Set(plan.selfStrategy.combos.flatMap((combo) => combo.cardIds))
+      ],
+      reservedCardIds: [
+        ...new Set(plan.selfStrategy.resourceRules.flatMap((rule) => rule.cardIds))
+      ],
+      opponentThreatCardIds: plan.opponentThreatPriorities.map((entry) => entry.cardId)
+    }
+  }
+
+  private async ensureMatchupPlan(): Promise<AiMatchupPlan> {
+    if (this.matchupPlan) return this.matchupPlan
+    if (this.matchupPlanPromise) return this.matchupPlanPromise
+    const selfDeck = this.aiDeck()
+    const opponentDeck = this.opponentDeck()
+    const fallback = createFallbackMatchupPlan(selfDeck, opponentDeck)
+    this.matchupPlanPromise = (async () => {
+      if (!this.options.api?.planMatchup || this.planningProviderDisabled)
+        return fallback
+      try {
+        const response = await this.options.api.planMatchup(
+          createMatchupPlanRequest(
+            selfDeck,
+            opponentDeck,
+            Date.now() + MAX_DECK_PLAN_TIME_MS
+          )
+        )
+        if (!response.modelId.toLowerCase().includes('gpt-5.4-nano')) {
+          throw new Error(
+            `Matchup planner returned disallowed model ${response.modelId}.`
+          )
+        }
+        return validateMatchupPlanForDecks(response.plan, selfDeck, opponentDeck)
+      } catch (error) {
+        this.recordPermanentProviderFailure(error, 'planning')
+        this.options.logger.warn(
+          '[Game AI] matchup planning failed; using deterministic matchup strategy',
+          errorDetails(error)
+        )
+        return fallback
+      }
+    })()
+    this.matchupPlan = await this.matchupPlanPromise
+    this.strategicTracker = new AiStrategicTracker(
+      this.options.session.remoteParticipantId,
+      this.matchupPlanView(this.matchupPlan),
+      this.options.session.getState()
+    )
+    return this.matchupPlan
+  }
+
   private async ensureDeckPlan(): Promise<AiDeckPlan> {
     if (this.deckPlan) return this.deckPlan
     if (this.deckPlanPromise) return this.deckPlanPromise
     const deck = this.aiDeck()
     const fallback = createFallbackDeckPlan(deck)
     this.deckPlanPromise = (async () => {
-      if (!this.options.api?.planDeck || this.providerDisabled) return fallback
+      if (!this.options.api?.planDeck || this.planningProviderDisabled) return fallback
       try {
         const response = await this.options.api.planDeck(
           createDeckPlanRequest(deck, Date.now() + MAX_DECK_PLAN_TIME_MS)
@@ -560,7 +715,7 @@ export class AiTurnController {
         })
         return plan
       } catch (error) {
-        if (isPermanentProviderError(error)) this.providerDisabled = true
+        this.recordPermanentProviderFailure(error, 'planning')
         this.options.logger.warn(
           '[Game AI] deck planning failed; using deterministic strategy',
           errorDetails(error)
@@ -573,6 +728,9 @@ export class AiTurnController {
   }
 
   private deckPlanForDecision(phase: 'mulligan' | 'turn'): Promise<AiDeckPlan> {
+    if (this.options.policy === 'competitive-v2') {
+      return this.ensureMatchupPlan().then(matchupSelfDeckPlan)
+    }
     if (phase !== 'mulligan') return this.ensureDeckPlan()
 
     // Mulligan ranking can run beside the richer remote analysis. The local plan
@@ -946,6 +1104,23 @@ export class AiTurnController {
   }
 
   private gameState(phase: 'mulligan' | 'turn', deckPlan: AiDeckPlan): JsonObject {
+    if (this.options.policy === 'competitive-v2' && this.matchupPlan) {
+      this.strategicTracker?.update(this.options.session.getState())
+      return toJsonObject({
+        contextVersion: 5,
+        informationPolicy: 'opponent-deck-and-hand',
+        phase,
+        observation: this.options.session.getAiObservation(),
+        matchupPlan: this.matchupPlan,
+        strategicTracker: this.strategicTracker?.snapshot ?? null,
+        stateConventions: {
+          remainingDeckOrderKnown: false,
+          futureRandomValuesKnown: false,
+          facedownSecretIdentityKnown: false,
+          actionGranularity: 'Dispatch only the selected first command.'
+        }
+      })
+    }
     const publicState = this.options.session.getAiPublicState()
     const fairPublicState = toJsonObject(sanitizePrivateIdentifiers(publicState))
     const recentEvents = toJsonObject(
@@ -1242,10 +1417,332 @@ export class AiTurnController {
     console.groupEnd()
   }
 
+  private syntheticDossier(
+    candidate: CandidateAction,
+    score: number
+  ): AiCandidateDossier {
+    const state = this.options.session.getState()
+    const selfId = this.options.session.remoteParticipantId
+    const opponentId = this.options.session.localParticipantId
+    const self = participantSummary(state, selfId)
+    const opponent = participantSummary(state, opponentId)
+    return {
+      actionId: candidate.public.id,
+      firstCommand: candidate.command,
+      recommendedContinuation: [],
+      projectedSuccessor: {
+        revision: state.revision,
+        winnerId: state.winnerId,
+        selfEffectiveHealth: self.effectiveHealth,
+        opponentEffectiveHealth: opponent.effectiveHealth,
+        selfBoardAttack: self.boardAttack,
+        opponentBoardAttack: opponent.boardAttack
+      },
+      opponentStrongestResponse: [],
+      tacticalProofs: [],
+      evaluation: ZERO_EVALUATION,
+      score,
+      meanScenarioValue: score,
+      downsideScenarioValue: score,
+      worstCaseScenarioValue: score,
+      resourceUsage: {
+        manaSpent: 0,
+        cardsSpent: 0,
+        reservedResourceCost: 0
+      },
+      uncertainty: {
+        determinizations: 1,
+        randomOutcomeSamples: 1,
+        incomplete: true
+      },
+      matchupPlanProgress: 0
+    }
+  }
+
+  private mulliganScore(candidate: CandidateAction, deckPlan: AiDeckPlan): number {
+    const priority = new Set(deckPlan.mulliganPriorityCardIds)
+    const cards = candidate.public.details['cards']
+    if (!Array.isArray(cards)) return Number.NEGATIVE_INFINITY
+    return cards.reduce((score, card) => {
+      if (typeof card !== 'object' || card === null || Array.isArray(card)) return score
+      const cardId = (card as Record<string, unknown>)['cardId']
+      if (typeof cardId !== 'string') return score
+      return (
+        score + (priority.has(cardId) ? -100 : (CARD_CATALOG.get(cardId)?.cost ?? 0))
+      )
+    }, 0)
+  }
+
+  private async competitiveSearchDossiers(
+    candidates: readonly CandidateAction[],
+    matchupPlan: AiMatchupPlan,
+    totalDeadlineAtMs: number
+  ): Promise<readonly AiCandidateDossier[]> {
+    const roots = [...candidates]
+      .sort((left, right) => previewPriority(right) - previewPriority(left))
+      .slice(0, 128)
+      .map((candidate) => ({
+        actionId: candidate.public.id,
+        command: candidate.command
+      }))
+    const localDeadlineAtMs = Math.min(
+      Date.now() + COMPETITIVE_AI_SEARCH_LIMITS.timeBudgetMs,
+      totalDeadlineAtMs - 22_000
+    )
+    const dossiers = new Map<string, AiCandidateDossier>()
+    let remainingNodes = COMPETITIVE_AI_SEARCH_LIMITS.nodeLimit
+    const batchSize = 16
+    for (let index = 0; index < roots.length; index += batchSize) {
+      const remainingMs = localDeadlineAtMs - Date.now()
+      if (remainingMs <= 0 || remainingNodes <= 0) break
+      const search = searchCompetitiveTurn(
+        this.options.session.match,
+        this.options.session.remoteParticipantId,
+        roots.slice(index, index + batchSize),
+        {
+          ...COMPETITIVE_AI_SEARCH_LIMITS,
+          // Engine forks cannot cross the structured-clone worker boundary.
+          // Short slices yield between batches so Pixi can present frames while
+          // the persistent worker owns serializable aggregation and ranking.
+          timeBudgetMs: Math.min(50, remainingMs),
+          nodeLimit: Math.min(6_250, remainingNodes)
+        },
+        this.matchupPlanView(matchupPlan),
+        this.transpositionCache
+      )
+      remainingNodes -= search.exploredNodes
+      for (const dossier of search.dossiers) {
+        const current = dossiers.get(dossier.actionId)
+        if (!current || dossier.score > current.score) {
+          dossiers.set(dossier.actionId, dossier)
+        }
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    }
+    return [...dossiers.values()]
+  }
+
+  private async chooseCompetitive(
+    phase: 'mulligan' | 'turn',
+    candidates: readonly CandidateAction[]
+  ): Promise<AiActionDecision> {
+    if (candidates.length === 0)
+      throw new Error(`No legal AI actions exist for ${phase}.`)
+    const matchupPlan = await this.ensureMatchupPlan()
+    const deckPlan = matchupSelfDeckPlan(matchupPlan)
+    const expectedRevision = this.options.session.getState().revision
+    const totalDeadlineAtMs = Date.now() + COMPETITIVE_MAX_DECISION_TIME_MS
+    const decisionClass = this.decisionClass(phase)
+    let dossiers: readonly AiCandidateDossier[]
+    if (phase === 'turn') {
+      try {
+        dossiers = await this.competitiveSearchDossiers(
+          candidates,
+          matchupPlan,
+          totalDeadlineAtMs
+        )
+      } catch (error) {
+        this.options.logger.warn(
+          '[Game AI] competitive local search failed; using deterministic fallback',
+          errorDetails(error)
+        )
+        dossiers = []
+      }
+    } else {
+      dossiers = [...candidates]
+        .sort(
+          (left, right) =>
+            this.mulliganScore(right, deckPlan) - this.mulliganScore(left, deckPlan)
+        )
+        .slice(0, 8)
+        .map((candidate, index) =>
+          this.syntheticDossier(candidate, candidates.length - index)
+        )
+    }
+    if (dossiers.length === 0) {
+      const analyzed = this.analyzeAndShortlist(candidates, phase, deckPlan)
+      const fallback = this.fallback(analyzed, deckPlan)
+      return {
+        expectedRevision,
+        actionId: fallback.public.id,
+        command: fallback.command,
+        source: 'fallback'
+      }
+    }
+    this.workerClient ??= new CompetitiveAiWorkerClient()
+    const workerResult = await this.workerClient.rank({
+      type: 'search',
+      requestId: `search-${expectedRevision}-${this.decisionSequence}`,
+      observationRevision: expectedRevision,
+      limits: COMPETITIVE_AI_SEARCH_LIMITS,
+      candidateDossiers: dossiers,
+      deterministicSampleSeed: Math.imul(expectedRevision + 1, 0x9e3779b1) >>> 0
+    })
+    if (workerResult.observationRevision !== expectedRevision) {
+      throw new Error('Competitive AI worker returned a stale observation revision.')
+    }
+    const rankedDossiers = workerResult.candidateDossiers.slice(0, 8)
+    const shortlisted = rankedDossiers
+      .map((dossier) =>
+        candidates.find((candidate) => candidate.public.id === dossier.actionId)
+      )
+      .filter((candidate): candidate is CandidateAction => candidate !== undefined)
+    if (shortlisted.length === 0) {
+      const fallback = this.fallback(candidates, deckPlan)
+      return {
+        expectedRevision,
+        actionId: fallback.public.id,
+        command: fallback.command,
+        source: 'fallback'
+      }
+    }
+    const fallback = shortlisted[0]!
+    const forced = rankedDossiers.find((dossier) =>
+      dossier.tacticalProofs.some(
+        (proof) => proof.proven && proof.complete && proof.kind === 'guaranteed-lethal'
+      )
+    )
+    if (forced || shortlisted.length === 1) {
+      const selected = forced
+        ? (shortlisted.find((candidate) => candidate.public.id === forced.actionId) ??
+          fallback)
+        : fallback
+      return {
+        expectedRevision,
+        actionId: selected.public.id,
+        command: selected.command,
+        source: 'fallback'
+      }
+    }
+    if (!this.options.api || this.decisionProviderDisabled) {
+      return {
+        expectedRevision,
+        actionId: fallback.public.id,
+        command: fallback.command,
+        source: 'fallback'
+      }
+    }
+    const baseRequest = {
+      decisionId: `${phase}-${expectedRevision}-${this.decisionSequence++}`,
+      phase,
+      decisionClass,
+      matchRevision: expectedRevision,
+      promptVersion: 'competitive-rank-critic-v2',
+      contextVersion: 5,
+      schemaVersion: 4,
+      gameState: this.gameState(phase, deckPlan),
+      legalActions: shortlisted.map((candidate) => candidate.public),
+      candidateDossiers: rankedDossiers
+    } as const
+    const rankDeadlineAtMs = Math.min(
+      Date.now() + COMPETITIVE_PROVIDER_PASS_MS,
+      totalDeadlineAtMs - COMPETITIVE_PROVIDER_PASS_MS - COMPETITIVE_DISPATCH_RESERVE_MS
+    )
+    if (Date.now() >= rankDeadlineAtMs) {
+      return {
+        expectedRevision,
+        actionId: fallback.public.id,
+        command: fallback.command,
+        source: 'fallback'
+      }
+    }
+    let firstPass: CandidateAction
+    let ordering: readonly string[]
+    try {
+      const rankRequest: AiDecisionRequest = {
+        ...baseRequest,
+        pass: 'rank',
+        deadlineAtMs: rankDeadlineAtMs
+      }
+      const response = await this.options.api.decide(rankRequest)
+      this.logResponse(rankRequest, response)
+      if (!response.modelId.toLowerCase().includes('gpt-5.4-nano')) {
+        throw new Error(`Rank pass returned disallowed model ${response.modelId}.`)
+      }
+      ordering = response.orderedActionIds ?? []
+      const allowed = new Set(shortlisted.map((candidate) => candidate.public.id))
+      if (
+        ordering.length !== allowed.size ||
+        ordering[0] !== response.actionId ||
+        ordering.some((id) => !allowed.has(id))
+      )
+        throw new Error('Rank pass did not return a complete valid shortlist ordering.')
+      firstPass = shortlisted.find(
+        (candidate) => candidate.public.id === response.actionId
+      )!
+      if (!firstPass)
+        throw new Error(`Rank pass selected stale action ${response.actionId}.`)
+    } catch (error) {
+      this.recordPermanentProviderFailure(error, 'decision')
+      this.options.logger.warn(
+        '[Game AI] rank pass failed; using local search winner',
+        errorDetails(error)
+      )
+      return {
+        expectedRevision,
+        actionId: fallback.public.id,
+        command: fallback.command,
+        source: 'fallback'
+      }
+    }
+    const criticDeadlineAtMs = Math.min(
+      Date.now() + COMPETITIVE_PROVIDER_PASS_MS,
+      totalDeadlineAtMs - COMPETITIVE_DISPATCH_RESERVE_MS
+    )
+    if (Date.now() >= criticDeadlineAtMs) {
+      return {
+        expectedRevision,
+        actionId: firstPass.public.id,
+        command: firstPass.command,
+        source: 'model'
+      }
+    }
+    try {
+      const criticRequest: AiDecisionRequest = {
+        ...baseRequest,
+        decisionId: `${baseRequest.decisionId}-critic`,
+        pass: 'critic',
+        firstPassRanking: ordering,
+        deadlineAtMs: criticDeadlineAtMs
+      }
+      const response = await this.options.api.decide(criticRequest)
+      this.logResponse(criticRequest, response)
+      if (!response.modelId.toLowerCase().includes('gpt-5.4-nano')) {
+        throw new Error(`Critic pass returned disallowed model ${response.modelId}.`)
+      }
+      const selected = shortlisted.find(
+        (candidate) => candidate.public.id === response.actionId
+      )
+      if (!selected)
+        throw new Error(`Critic pass selected stale action ${response.actionId}.`)
+      return {
+        expectedRevision,
+        actionId: selected.public.id,
+        command: selected.command,
+        source: 'model'
+      }
+    } catch (error) {
+      this.recordPermanentProviderFailure(error, 'decision')
+      this.options.logger.warn(
+        '[Game AI] critic pass failed; retaining validated rank winner',
+        errorDetails(error)
+      )
+      return {
+        expectedRevision,
+        actionId: firstPass.public.id,
+        command: firstPass.command,
+        source: 'model'
+      }
+    }
+  }
+
   private async choose(
     phase: 'mulligan' | 'turn',
     candidates: readonly CandidateAction[]
   ): Promise<AiActionDecision> {
+    if (this.options.policy === 'competitive-v2') {
+      return this.chooseCompetitive(phase, candidates)
+    }
     if (candidates.length === 0)
       throw new Error(`No legal AI actions exist for ${phase}.`)
     const deckPlan = await this.deckPlanForDecision(phase)
@@ -1282,7 +1779,7 @@ export class AiTurnController {
     }
     if (
       !this.options.api ||
-      this.providerDisabled ||
+      this.decisionProviderDisabled ||
       Date.now() + 250 >= request.deadlineAtMs
     ) {
       return {
@@ -1293,52 +1790,37 @@ export class AiTurnController {
       }
     }
 
-    let lastError: unknown
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const response = await this.options.api.decide(request)
-        this.logResponse(request, response)
-        if (response.decisionClass !== decisionClass) {
-          throw new Error(
-            `Model returned mismatched decision class ${response.decisionClass}.`
-          )
-        }
-        const selected = shortlisted.find(
-          (candidate) => candidate.public.id === response.actionId
+    try {
+      const response = await this.options.api.decide(request)
+      this.logResponse(request, response)
+      if (response.decisionClass !== decisionClass) {
+        throw new Error(
+          `Model returned mismatched decision class ${response.decisionClass}.`
         )
-        if (!selected)
-          throw new Error(`Model selected stale action ${response.actionId}.`)
-        return {
-          expectedRevision,
-          actionId: selected.public.id,
-          command: selected.command,
-          source: 'model'
-        }
-      } catch (error) {
-        lastError = error
-        if (isPermanentProviderError(error)) {
-          this.providerDisabled = true
-          break
-        }
-        if (attempt === 0 && Date.now() + 500 < request.deadlineAtMs) {
-          this.options.logger.warn(
-            `[Game AI] ${request.decisionId} failed; retrying once`,
-            errorDetails(error)
-          )
-          continue
-        }
-        break
       }
-    }
-    this.options.logger.warn(
-      `[Game AI] ${request.decisionId} failed; using local fallback`,
-      errorDetails(lastError)
-    )
-    return {
-      expectedRevision,
-      actionId: fallback.public.id,
-      command: fallback.command,
-      source: 'fallback'
+      const selected = shortlisted.find(
+        (candidate) => candidate.public.id === response.actionId
+      )
+      if (!selected)
+        throw new Error(`Model selected stale action ${response.actionId}.`)
+      return {
+        expectedRevision,
+        actionId: selected.public.id,
+        command: selected.command,
+        source: 'model'
+      }
+    } catch (error) {
+      this.recordPermanentProviderFailure(error, 'decision')
+      this.options.logger.warn(
+        `[Game AI] ${request.decisionId} failed; using local fallback`,
+        errorDetails(error)
+      )
+      return {
+        expectedRevision,
+        actionId: fallback.public.id,
+        command: fallback.command,
+        source: 'fallback'
+      }
     }
   }
 }

@@ -68,6 +68,28 @@ body {
   cursor: default;
 }
 
+.collection-deck-name-input {
+  position: absolute;
+  z-index: 10;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #fff;
+  caret-color: #fff;
+  font-family: 'Belwe', serif;
+  font-weight: 700;
+  line-height: 1;
+  text-align: left;
+}
+
+.collection-deck-name-input::selection {
+  background: rgba(255, 255, 255, 0.32);
+  color: #000;
+}
+
 .add-card-picker {
   --add-card-picker-scale: 1;
   --add-card-picker-row-cost-width: 54px;

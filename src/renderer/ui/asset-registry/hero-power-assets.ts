@@ -1,17 +1,17 @@
-import druidImage from '@assets/images/heroes/hero-power/hero-power-druid.png'
-import hunterImage from '@assets/images/heroes/hero-power/hero-power-hunter.png'
-import jaraxxusImage from '@assets/images/heroes/hero-power/hero-power-jaraxxus.png'
-import ragnarosImage from '@assets/images/heroes/hero-power/hero-power-ragnaros.png'
-import mageImage from '@assets/images/heroes/hero-power/hero-power-mage.png'
-import paladinImage from '@assets/images/heroes/hero-power/hero-power-paladin.png'
-import priestImage from '@assets/images/heroes/hero-power/hero-power-priest.png'
-import rogueImage from '@assets/images/heroes/hero-power/hero-power-rogue.png'
-import shamanImage from '@assets/images/heroes/hero-power/hero-power-shaman.png'
-import warlockImage from '@assets/images/heroes/hero-power/hero-power-warlock.png'
-import warriorImage from '@assets/images/heroes/hero-power/hero-power-warrior.png'
+import druidImage from '@assets/images/heroes/original-art-heropower/shapeshift.png'
+import hunterImage from '@assets/images/heroes/original-art-heropower/steady-shot.png'
+import jaraxxusImage from '@assets/images/heroes/original-art-heropower/inferno.png'
+import ragnarosImage from '@assets/images/heroes/original-art-heropower/die-insect.png'
+import mageImage from '@assets/images/heroes/original-art-heropower/fireblast.png'
+import paladinImage from '@assets/images/heroes/original-art-heropower/recruit.png'
+import priestImage from '@assets/images/heroes/original-art-heropower/lesser_heal.png'
+import rogueImage from '@assets/images/heroes/original-art-heropower/dagger-mastery.png'
+import shamanImage from '@assets/images/heroes/original-art-heropower/totemic-call.png'
+import warlockImage from '@assets/images/heroes/original-art-heropower/life-tap.png'
+import warriorImage from '@assets/images/heroes/original-art-heropower/armor-up.png'
 
 /**
- * Renderer-side texture keys for the hero power "up" faces. Each key matches
+ * Renderer-side texture keys for raw hero-power artwork. Each key matches
  * the `presentationAssetKey` of the matching `HeroPowerDefinition`, so the
  * game content catalog drives the lookup without renderer-side logic.
  */

@@ -39,6 +39,7 @@ const tauntMinion: MinionViewModel = {
   label: 'test-minion',
   attack: 2,
   health: 3,
+  maxHealth: 3,
   legendary: false,
   taunt: true,
   divineShield: false,

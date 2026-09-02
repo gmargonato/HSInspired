@@ -18,10 +18,10 @@ import arenaCancelImage from '@assets/images/ui/arena/action-button-cancel.png'
 import tavernBrawlBackgroundImage from '@assets/images/ui/tavern-brawl/tavern-background.png'
 import tavernBrawlPlayButtonImage from '@assets/images/ui/tavern-brawl/brawl-play-buttom.png'
 import deckSelectionImage from '@assets/images/ui/deck-selection/deck-selection.png'
+import deckSelectionPaginationNextImage from '@assets/images/ui/deck-selection/pagination-button-next.png'
 import collectionBackgroundImage from '@assets/images/ui/collection/collection-background.png'
 import collectionCoverImage from '@assets/images/ui/collection/collection-cover.png'
 import collectionCoverLockImage from '@assets/images/ui/collection/collection-cover-lock.png'
-import deckSelectionToCollectionButtonImage from '@assets/images/ui/deck-selection/deck-selection-to-collection-button.png'
 import playButtonImage from '@assets/images/ui/deck-selection/play-button.png'
 import uiBackButtonImage from '@assets/images/ui/common/ui-back-button.png'
 import uiDoneButtonImage from '@assets/images/ui/common/ui-done-button.png'
@@ -46,6 +46,7 @@ import gameEnemyTurnImage from '@assets/images/match/button-enemy-turn.png'
 import gameYourTurnImage from '@assets/images/match/flag-your-turn.png'
 import fatigueImage from '@assets/images/match/fatigue.png'
 import damageIndicatorImage from '@assets/images/match/damage-indicator.png'
+import healIndicatorImage from '@assets/images/match/heal-indicator.png'
 import secretImage from '@assets/images/match/secret.png'
 import secretRevealedScreenImage from '@assets/images/match/secret-revealed-screen.png'
 import cardBackImage from '@assets/images/cards/card-back.png'
@@ -67,7 +68,9 @@ import manaCrystalImage from '@assets/images/cards/mana.png'
 import historySecretCardImage from '@assets/images/match/history-secret-card.png'
 import historySecretThumbImage from '@assets/images/match/history-secret-thumb.png'
 import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
+import heroPowerFrontImage from '@assets/images/heroes/hero-power/hero-power-front.png'
 import heroPowerManaImage from '@assets/images/heroes/hero-power/hero-power-mana.png'
+import discoverHistoryHeroPowerImage from '@assets/images/match/discover-history-hero-power.png'
 import minionFrameImage from '@assets/images/board/minion-frame.png'
 import minionFrameLegendaryImage from '@assets/images/board/minion-frame-legendary.png'
 import minionTauntImage from '@assets/images/board/minion-taunt.png'
@@ -99,23 +102,23 @@ import arrowHeadImage from '@assets/images/match/arrow-head.png'
 import arrowCircleImage from '@assets/images/match/arrow-circle.png'
 import winScreenImage from '@assets/images/match/win-screen.png'
 import defeatScreenImage from '@assets/images/match/defeat-screen.png'
+import anduinDeckPortraitImage from '@assets/images/heroes/original-art-portrait/anduin.png'
+import garroshDeckPortraitImage from '@assets/images/heroes/original-art-portrait/garrosh.png'
+import guldanDeckPortraitImage from '@assets/images/heroes/original-art-portrait/guldan.png'
+import jainaDeckPortraitImage from '@assets/images/heroes/original-art-portrait/jaina.png'
+import malfurionDeckPortraitImage from '@assets/images/heroes/original-art-portrait/malfurion.png'
+import rexxarDeckPortraitImage from '@assets/images/heroes/original-art-portrait/rexxar.png'
+import thrallDeckPortraitImage from '@assets/images/heroes/original-art-portrait/thrall.png'
+import utherDeckPortraitImage from '@assets/images/heroes/original-art-portrait/uther.png'
+import valeeraDeckPortraitImage from '@assets/images/heroes/original-art-portrait/valeera.png'
 import druidNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-druid.png'
-import druidDeckFrameImage from '@assets/images/heroes/frames/druid-deck-frame.png'
-import hunterDeckFrameImage from '@assets/images/heroes/frames/hunter-deck-frame.png'
 import hunterNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-hunter.png'
-import mageDeckFrameImage from '@assets/images/heroes/frames/mage-deck-frame.png'
 import mageNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-mage.png'
-import paladinDeckFrameImage from '@assets/images/heroes/frames/paladin-deck-frame.png'
 import paladinNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-paladin.png'
-import priestDeckFrameImage from '@assets/images/heroes/frames/priest-deck-frame.png'
 import priestNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-priest.png'
-import rogueDeckFrameImage from '@assets/images/heroes/frames/rogue-deck-frame.png'
 import rogueNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-rogue.png'
-import shamanDeckFrameImage from '@assets/images/heroes/frames/shaman-deck-frame.png'
 import shamanNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-shaman.png'
-import warlockDeckFrameImage from '@assets/images/heroes/frames/warlock-deck-frame.png'
 import warlockNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-warlock.png'
-import warriorDeckFrameImage from '@assets/images/heroes/frames/warrior-deck-frame.png'
 import warriorNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-warrior.png'
 import { HERO_ASSET_SOURCES, type HeroAssetKey } from './hero-assets'
 import { HERO_POWER_ASSET_SOURCES, type HeroPowerAssetKey } from './hero-power-assets'
@@ -297,6 +300,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'arena'
   ),
   asset(
+    'scene.arena.card-add-aura',
+    ASSET_BUNDLE_IDS.arena,
+    'cardAddAura',
+    cardAddAuraImage,
+    500,
+    500,
+    'arena'
+  ),
+  asset(
     'scene.tavern-brawl.play-button',
     ASSET_BUNDLE_IDS.tavernBrawl,
     'playButton',
@@ -315,12 +327,12 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'deck-selection'
   ),
   asset(
-    'scene.deck-selection.collection-button',
+    'scene.deck-selection.pagination-next-button',
     ASSET_BUNDLE_IDS.deckSelection,
-    'toCollectionButton',
-    deckSelectionToCollectionButtonImage,
-    293,
-    47,
+    'paginationNextButton',
+    deckSelectionPaginationNextImage,
+    88,
+    49,
     'deck-selection'
   ),
   asset(
@@ -456,6 +468,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     damageIndicatorImage,
     159,
     163,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.heal-indicator',
+    ASSET_BUNDLE_IDS.game,
+    'healIndicator',
+    healIndicatorImage,
+    192,
+    197,
     'game-scene'
   ),
   asset(
@@ -819,6 +840,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.hero-power-front',
+    ASSET_BUNDLE_IDS.game,
+    'heroPowerFront',
+    heroPowerFrontImage,
+    150,
+    150,
+    'game-scene'
+  ),
+  asset(
     'scene.game.hero-power-mana',
     ASSET_BUNDLE_IDS.game,
     'heroPowerMana',
@@ -827,14 +857,23 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     55,
     'game-scene'
   ),
+  asset(
+    'scene.game.discover-history-hero-power',
+    ASSET_BUNDLE_IDS.game,
+    'discoverHistoryHeroPower',
+    discoverHistoryHeroPowerImage,
+    620,
+    903,
+    'game-scene'
+  ),
   ...Object.entries(HERO_POWER_ASSET_SOURCES).map(([key, source]) =>
     asset(
       `scene.game.hero-power.${key}`,
       ASSET_BUNDLE_IDS.game,
       key,
       source,
-      150,
-      150,
+      500,
+      500,
       'game-scene'
     )
   ),
@@ -902,13 +941,13 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'collection'
   ),
   asset(
-    'scene.collection.load-deck-button',
-    ASSET_BUNDLE_IDS.collection,
-    'loadDeckButton',
+    'deck-presentation.button-frame',
+    ASSET_BUNDLE_IDS.deckPresentation,
+    'deckButtonFrame',
     loadDeckButtonImage,
-    283,
-    151,
-    'collection'
+    239,
+    107,
+    'deck-presentation'
   ),
   asset(
     'scene.collection.new-deck-button',
@@ -1064,84 +1103,84 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'card-preview'
   ),
   asset(
-    'deck-presentation.druid-deck-frame',
+    'deck-presentation.anduin-portrait',
     ASSET_BUNDLE_IDS.deckPresentation,
-    'druidDeckFrame',
-    druidDeckFrameImage,
-    239,
-    107,
+    'anduinDeckPortrait',
+    anduinDeckPortraitImage,
+    512,
+    512,
     'deck-presentation'
   ),
   asset(
-    'deck-presentation.hunter-deck-frame',
+    'deck-presentation.garrosh-portrait',
     ASSET_BUNDLE_IDS.deckPresentation,
-    'hunterDeckFrame',
-    hunterDeckFrameImage,
-    239,
-    107,
+    'garroshDeckPortrait',
+    garroshDeckPortraitImage,
+    512,
+    512,
     'deck-presentation'
   ),
   asset(
-    'deck-presentation.mage-deck-frame',
+    'deck-presentation.guldan-portrait',
     ASSET_BUNDLE_IDS.deckPresentation,
-    'mageDeckFrame',
-    mageDeckFrameImage,
-    239,
-    107,
+    'guldanDeckPortrait',
+    guldanDeckPortraitImage,
+    512,
+    512,
     'deck-presentation'
   ),
   asset(
-    'deck-presentation.paladin-deck-frame',
+    'deck-presentation.jaina-portrait',
     ASSET_BUNDLE_IDS.deckPresentation,
-    'paladinDeckFrame',
-    paladinDeckFrameImage,
-    239,
-    107,
+    'jainaDeckPortrait',
+    jainaDeckPortraitImage,
+    512,
+    512,
     'deck-presentation'
   ),
   asset(
-    'deck-presentation.priest-deck-frame',
+    'deck-presentation.malfurion-portrait',
     ASSET_BUNDLE_IDS.deckPresentation,
-    'priestDeckFrame',
-    priestDeckFrameImage,
-    239,
-    107,
+    'malfurionDeckPortrait',
+    malfurionDeckPortraitImage,
+    512,
+    512,
     'deck-presentation'
   ),
   asset(
-    'deck-presentation.rogue-deck-frame',
+    'deck-presentation.rexxar-portrait',
     ASSET_BUNDLE_IDS.deckPresentation,
-    'rogueDeckFrame',
-    rogueDeckFrameImage,
-    239,
-    107,
+    'rexxarDeckPortrait',
+    rexxarDeckPortraitImage,
+    512,
+    512,
     'deck-presentation'
   ),
   asset(
-    'deck-presentation.shaman-deck-frame',
+    'deck-presentation.thrall-portrait',
     ASSET_BUNDLE_IDS.deckPresentation,
-    'shamanDeckFrame',
-    shamanDeckFrameImage,
-    239,
-    107,
+    'thrallDeckPortrait',
+    thrallDeckPortraitImage,
+    512,
+    512,
     'deck-presentation'
   ),
   asset(
-    'deck-presentation.warlock-deck-frame',
+    'deck-presentation.uther-portrait',
     ASSET_BUNDLE_IDS.deckPresentation,
-    'warlockDeckFrame',
-    warlockDeckFrameImage,
-    239,
-    107,
+    'utherDeckPortrait',
+    utherDeckPortraitImage,
+    512,
+    512,
     'deck-presentation'
   ),
   asset(
-    'deck-presentation.warrior-deck-frame',
+    'deck-presentation.valeera-portrait',
     ASSET_BUNDLE_IDS.deckPresentation,
-    'warriorDeckFrame',
-    warriorDeckFrameImage,
-    239,
-    107,
+    'valeeraDeckPortrait',
+    valeeraDeckPortraitImage,
+    512,
+    512,
     'deck-presentation'
   ),
   asset(
@@ -1339,24 +1378,26 @@ export interface ArenaAssets {
   confirmButton: Texture
   cancelButton: Texture
   verticalSlider: Texture
+  cardAddAura: Texture
 }
 
 export interface DeckSelectionAssets {
   panel: Texture
-  toCollectionButton: Texture
+  paginationNextButton: Texture
   playButton: Texture
 }
 
 export interface DeckPresentationAssets extends Record<HeroAssetKey, Texture> {
-  druidDeckFrame: Texture
-  hunterDeckFrame: Texture
-  mageDeckFrame: Texture
-  paladinDeckFrame: Texture
-  priestDeckFrame: Texture
-  rogueDeckFrame: Texture
-  shamanDeckFrame: Texture
-  warlockDeckFrame: Texture
-  warriorDeckFrame: Texture
+  deckButtonFrame: Texture
+  anduinDeckPortrait: Texture
+  garroshDeckPortrait: Texture
+  guldanDeckPortrait: Texture
+  jainaDeckPortrait: Texture
+  malfurionDeckPortrait: Texture
+  rexxarDeckPortrait: Texture
+  thrallDeckPortrait: Texture
+  utherDeckPortrait: Texture
+  valeeraDeckPortrait: Texture
   druidNewDeckFrame: Texture
   hunterNewDeckFrame: Texture
   mageNewDeckFrame: Texture
@@ -1373,6 +1414,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   board: Texture
   fatigue: Texture
   damageIndicator: Texture
+  healIndicator: Texture
   historyLocal: Texture
   historyRemote: Texture
   historyArrow: Texture
@@ -1414,7 +1456,9 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   confirmMulliganButton: Texture
   mulliganCoinAnnouncement: Texture
   heroPowerBack: Texture
+  heroPowerFront: Texture
   heroPowerMana: Texture
+  discoverHistoryHeroPower: Texture
   arrowBody: Texture
   arrowHead: Texture
   arrowCircle: Texture
@@ -1445,7 +1489,6 @@ export interface CollectionAssets {
   background: Texture
   cover: Texture
   coverLock: Texture
-  loadDeckButton: Texture
   newDeckButton: Texture
   newDeckHeroSelection: Texture
   selectClassButton: Texture

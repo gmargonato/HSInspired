@@ -2,6 +2,7 @@ import type { Deck } from '../../../game/decks'
 import {
   createTurnMatch,
   type OpeningMatchAnalysis,
+  type AiObservation,
   type OpeningMatchPublicEvent,
   type OpeningMatchPublicState,
   type TurnMatchInstance,
@@ -78,6 +79,16 @@ export class GameBoardSession {
     const state = this.match.getPublicState?.(this.remoteParticipantId)
     if (!state) throw new Error('The match engine does not expose public AI state.')
     return state
+  }
+
+  getAiObservation(): AiObservation {
+    const observation = this.match.getAiObservation?.(
+      this.remoteParticipantId,
+      'opponent-deck-and-hand'
+    )
+    if (!observation)
+      throw new Error('The match engine does not expose AI observations.')
+    return observation
   }
 
   getAiObservedEvents(limit = 24): readonly OpeningMatchPublicEvent[] {

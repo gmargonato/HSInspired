@@ -2,7 +2,7 @@ import type { CardId, CardRarity, ClassId, HeroId } from '../content/cards'
 
 export const DECK_FILE_VERSION = 2 as const
 export const MAX_DECK_CARDS = 30
-export const MAX_DECKS = 9
+export const MAX_DECK_NAME_LENGTH = 15
 export const MAX_NON_LEGENDARY_COPIES = 2
 export const MAX_LEGENDARY_COPIES = 1
 

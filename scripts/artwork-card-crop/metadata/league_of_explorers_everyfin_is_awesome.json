@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_everyfin_is_awesome.jpg",
+  "source_name": "league_of_explorers_everyfin_is_awesome.jpg",
+  "crop_box": [
+    20,
+    31,
+    475,
+    486
+  ],
+  "scale": 1.1,
+  "offset_x": -22.00000000000003,
+  "offset_y": -34.584615384615404,
+  "timestamp": "2026-09-01T11:37:52.146971",
+  "card_id": "league_of_explorers_everyfin_is_awesome",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

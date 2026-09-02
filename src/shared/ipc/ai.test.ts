@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  aiIpcFailure,
+  aiIpcSuccess,
   parseAiDeckPlanRequest,
   parseAiDeckPlanResponse,
+  parseAiCriticDecisionResponse,
   parseAiDecisionRequest,
-  parseAiDecisionResponse
+  parseAiDecisionResponse,
+  parseAiRankDecisionResponse,
+  unwrapAiIpcResult
 } from './ai'
 
 describe('AI IPC contracts', () => {
@@ -59,6 +64,66 @@ describe('AI IPC contracts', () => {
         legalActions: [action, action]
       })
     ).toThrow('action ids must be unique')
+  })
+
+  it('unwraps serializable IPC successes and failures', () => {
+    expect(unwrapAiIpcResult(aiIpcSuccess({ value: 7 }), (value) => value)).toEqual({
+      value: 7
+    })
+    expect(() =>
+      unwrapAiIpcResult(aiIpcFailure(new Error('provider timed out')), () => null)
+    ).toThrow('provider timed out')
+  })
+
+  it('validates complete rank and critic passes against the supplied ids', () => {
+    const allowed = new Set(['action-a', 'action-b'])
+    const rank = parseAiRankDecisionResponse(
+      {
+        pass: 'rank',
+        preferredActionId: 'action-b',
+        orderedActionIds: ['action-b', 'action-a'],
+        confidence: 0.8,
+        rationale: 'The second action has the safer response tree.'
+      },
+      allowed
+    )
+    expect(rank.orderedActionIds).toEqual(['action-b', 'action-a'])
+    expect(
+      parseAiCriticDecisionResponse(
+        {
+          pass: 'critic',
+          finalActionId: 'action-a',
+          retainedFirstChoice: false,
+          identifiedRisks: ['The first choice releases a reserved resource.'],
+          rationale: 'Override after downside review.'
+        },
+        allowed
+      ).finalActionId
+    ).toBe('action-a')
+    expect(() =>
+      parseAiRankDecisionResponse(
+        {
+          pass: 'rank',
+          preferredActionId: 'action-a',
+          orderedActionIds: ['action-a'],
+          confidence: 1,
+          rationale: 'Incomplete ordering.'
+        },
+        allowed
+      )
+    ).toThrow('complete supplied shortlist')
+    expect(() =>
+      parseAiRankDecisionResponse(
+        {
+          pass: 'rank',
+          preferredActionId: 'action-a',
+          orderedActionIds: ['action-a', 'action-a'],
+          confidence: 1,
+          rationale: 'Duplicate ordering.'
+        },
+        allowed
+      )
+    ).toThrow('must not contain duplicates')
   })
 
   it('validates bounded match-scoped deck plans', () => {

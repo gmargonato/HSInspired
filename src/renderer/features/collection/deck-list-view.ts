@@ -11,7 +11,6 @@ import {
 } from './deck-editor-layout'
 
 export interface DeckListViewOptions {
-  readonly maxDecks: number
   readonly newDeckButton: Texture
   readonly verticalSlider: Texture
   readonly onDeckTap?: (deckId: string) => void
@@ -21,7 +20,7 @@ export interface DeckListViewOptions {
   readonly onSliderDown: (event: FederatedPointerEvent) => void
   readonly onSliderMove: (event: FederatedPointerEvent) => void
   readonly onSliderUp: () => void
-  readonly frameForDeck: (deck: Deck) => Texture
+  readonly createDeckButton: (deck: Deck, onClick: () => void) => Button
 }
 
 /** Deck-list presentation isolated from the much larger editor workflow. */
@@ -102,12 +101,11 @@ export class DeckListView {
     this.entries.length = 0
     this.buttons.length = 0
     this.newDeckButton = null
-    this.countLabel.text = `${decks.length} / ${this.options.maxDecks} Decks`
+    this.countLabel.text = `${decks.length} Decks`
 
     decks.forEach((deck, index) => {
       this.addEntry(
-        this.options.frameForDeck(deck),
-        () => this.options.onDeckTap?.(deck.id),
+        this.options.createDeckButton(deck, () => this.options.onDeckTap?.(deck.id)),
         index,
         this.options.onDeleteDeck
           ? () => this.options.onDeleteDeck?.(deck.id)
@@ -115,8 +113,9 @@ export class DeckListView {
       )
     })
     this.newDeckButton = this.addEntry(
-      this.options.newDeckButton,
-      () => this.options.onNewDeck?.(),
+      new Button(this.options.newDeckButton, {
+        onClick: () => this.options.onNewDeck?.()
+      }),
       decks.length,
       undefined
     )
@@ -138,10 +137,10 @@ export class DeckListView {
     return clamped
   }
 
-  setInteractionEnabled(enabled: boolean, canCreateDeck: boolean): void {
+  setInteractionEnabled(enabled: boolean): void {
     this.viewport.eventMode = enabled ? 'static' : 'none'
     for (const button of this.buttons) {
-      button.setEnabled(enabled && (button !== this.newDeckButton || canCreateDeck))
+      button.setEnabled(enabled)
     }
   }
 
@@ -156,19 +155,13 @@ export class DeckListView {
     return { x: center.x, y: center.y }
   }
 
-  private addEntry(
-    texture: Texture,
-    onClick: () => void,
-    index: number,
-    onDelete?: () => void
-  ): Button {
+  private addEntry(button: Button, index: number, onDelete?: () => void): Button {
     const entry = new Container()
     entry.label = `collection.deck-entry.${index}`
     entry.position.set(
       COLLECTION_LAYOUT.deckList.size.width / 2,
       index * (DECK_BUTTON_HEIGHT + DECK_BUTTON_GAP) + DECK_BUTTON_HEIGHT / 2
     )
-    const button = new Button(texture, { onClick })
     button.label = `collection.deck-entry-button.${index}`
     button.setBaseY(0)
     if (onDelete) {

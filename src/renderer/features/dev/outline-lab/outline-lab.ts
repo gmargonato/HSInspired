@@ -144,7 +144,7 @@ export class OutlineLab extends Container {
     selectionAssets: DeckSelectionAssets
   ): void {
     this.addOutlinedTexture(
-      assets.hunterDeckFrame,
+      assets.deckButtonFrame,
       'blue',
       'button',
       1190,

@@ -115,6 +115,9 @@ function attemptCard(
     case 'goblins_vs_gnomes_hemet_nesingwary':
       summon(opponentId, asCardId('basic_bloodfen_raptor'))
       break
+    case 'the_grand_tournament_demonfuse':
+      summon(participantId, asCardId('classic_doomguard'))
+      break
     case 'classic_molten_giant':
       expect(
         scenario.match.dispatch({

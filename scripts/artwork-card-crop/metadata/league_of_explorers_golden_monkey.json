@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_golden_monkey.jpg",
+  "source_name": "league_of_explorers_golden_monkey.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-01T11:38:14.799921",
+  "card_id": "league_of_explorers_golden_monkey",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -2,15 +2,15 @@
   "source_path": "assets\\images\\card-artwork\\blackrock_mountain_imp_gang_boss.jpg",
   "source_name": "blackrock_mountain_imp_gang_boss.jpg",
   "crop_box": [
-    6,
-    6,
-    506,
-    506
+    0,
+    0,
+    512,
+    512
   ],
-  "scale": 1.0,
-  "offset_x": -6.0,
-  "offset_y": -6.0,
-  "timestamp": "2026-08-29T08:12:33.653542",
+  "scale": 0.9765625,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-09-01T11:36:08.693768",
   "card_id": "blackrock_mountain_imp_gang_boss",
   "card_type": "Minion",
   "frame_file": "frame-minion.png"

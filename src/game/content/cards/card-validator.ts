@@ -165,9 +165,12 @@ const ACTION_FIELDS = new Set([
   'attack',
   'cardId',
   'chance',
+  'classBonus',
   'count',
+  'cost',
   'controller',
   'deferUntil',
+  'drawWonCard',
   'crystal',
   'destination',
   'durability',
@@ -182,10 +185,15 @@ const ACTION_FIELDS = new Set([
   'heroDefinition',
   'healingMultiplier',
   'heroPowerMultiplier',
+  'heroPowerUsesPerTurn',
+  'heroPowerDamageBonus',
+  'heroPowerEquipAttackBonus',
   'keyword',
   'keywords',
   'minimum',
   'minimumHealth',
+  'maximumDamageTaken',
+  'maximum',
   'modifyDrawnCard',
   'multiplier',
   'player',
@@ -196,14 +204,18 @@ const ACTION_FIELDS = new Set([
   'replacement',
   'resource',
   'reveal',
+  'returnSourceFromGraveyard',
   'seconds',
   'selection',
   'source',
   'spellDamageMultiplier',
+  'spellDamageBonusMultiplier',
+  'damageTakenMultiplier',
   'target',
   'targetType',
   'trigger',
-  'upgradedPower'
+  'upgradedPower',
+  'winActions'
 ])
 
 const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>> = {
@@ -223,7 +235,7 @@ const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>>
   freeze: ['target'],
   'gain-armor': ['amount'],
   'gain-mana': ['player', 'amount'],
-  'grant-deathrattle': ['target', 'actions'],
+  'grant-deathrattle': ['target'],
   'grant-keyword': ['target', 'keyword'],
   'grant-keywords': ['target', 'keywords'],
   'grant-random-keyword': ['target', 'keywords'],
@@ -270,6 +282,8 @@ const MODIFY_FIELDS = [
   'healingMultiplier',
   'heroPowerMultiplier',
   'minimumHealth',
+  'maximumDamageTaken',
+  'damageTakenMultiplier',
   'spellDamageMultiplier'
 ] as const
 
@@ -400,6 +414,13 @@ function validateActionShape(
     fail(path, 'requires a stat field')
   }
   if (
+    actionName === 'grant-deathrattle' &&
+    record['actions'] === undefined &&
+    record['source'] === undefined
+  ) {
+    fail(path, 'requires actions or source')
+  }
+  if (
     actionName === 'resurrect' &&
     record['target'] === undefined &&
     record['source'] === undefined
@@ -498,7 +519,7 @@ function filterValue(value: unknown, path: string): void {
       finiteNumber(candidate, `${path}.${key}`)
     } else if (key === 'cost') {
       if (typeof candidate === 'string') {
-        if (candidate !== 'target-cost') {
+        if (candidate !== 'target-cost' && candidate !== 'event-card-cost') {
           return fail(`${path}.${key}`, 'unknown dynamic cost value')
         }
       } else finiteNumber(candidate, `${path}.${key}`)
@@ -632,7 +653,7 @@ function nestedActionsValue(value: unknown, path: string): void {
 
   const record = value as Record<string, unknown>
   for (const [key, nested] of Object.entries(record)) {
-    if (key === 'actions') {
+    if (key === 'actions' || key === 'winActions') {
       actionsValue(nested, `${path}.actions`)
     } else if (
       (key === 'target' ||

@@ -1,6 +1,8 @@
 import { Container, Graphics, Text, type Texture } from 'pixi.js'
+import type { HeroPowerId } from '../../../game/content/cards'
 import type { CardChoiceOption, OpeningCard, PlayerId } from '../../../game/match'
 import { gsap } from '../../animation/animations'
+import { HERO_POWER_CARD_CANVAS } from '../../rendering/hero-powers/hero-power-presentation'
 import { Button } from '../../ui/components/button'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { GameCardSlot } from './game-card-slot'
@@ -14,6 +16,7 @@ export interface SelectedCardSlot {
 export interface CardSelectionOverlayOptions {
   readonly toggleTexture: Texture
   readonly createSlot: (card: OpeningCard) => Promise<GameCardSlot>
+  readonly createHeroPowerChoice: (heroPowerId: HeroPowerId) => Container
   readonly onSelect: (card: OpeningCard) => void
   readonly onChooseOption: (choice: number) => void
 }
@@ -24,7 +27,11 @@ export class CardSelectionOverlay extends Container {
   private readonly cardsLayer = new Container()
   private readonly toggle: Button
   private readonly toggleLabel: Text
-  private readonly entries: Array<{ card: OpeningCard; slot: GameCardSlot }> = []
+  private readonly entries: Array<{
+    readonly view: Container
+    readonly card?: OpeningCard
+    readonly slot?: GameCardSlot
+  }> = []
   private boardVisible = false
   private selecting = false
   private selected: SelectedCardSlot | null = null
@@ -75,6 +82,13 @@ export class CardSelectionOverlay extends Container {
     sourceCardId: OpeningCard['cardId'],
     options: readonly CardChoiceOption[]
   ): Promise<void> {
+    if (
+      options.length > 0 &&
+      options.every((option) => option.presentationHeroPowerId !== undefined)
+    ) {
+      await this.showHeroPowerChoices(options)
+      return
+    }
     const cards = options.map((option) => ({
       instanceId: `${sourceCardInstanceId}:choice:${option.choice}`,
       cardId: option.presentationCardId ?? sourceCardId,
@@ -134,11 +148,42 @@ export class CardSelectionOverlay extends Container {
           label.label = `game.card-selection.choice-label:${choice.choice}`
           this.cardsLayer.addChild(label)
         }
-        this.entries.push({ card, slot })
+        this.entries.push({ view: slot, card, slot })
         return slot
       })
     )
     await Promise.all(created.map((slot) => gsap.to(slot, { alpha: 1, duration: 0.2 })))
+  }
+
+  private async showHeroPowerChoices(
+    options: readonly CardChoiceOption[]
+  ): Promise<void> {
+    this.clear()
+    this.visible = true
+    this.boardVisible = false
+    this.selecting = false
+    this.syncView()
+    const midpoint = (options.length - 1) / 2
+    const views = options.map((option, index) => {
+      const heroPowerId = option.presentationHeroPowerId!
+      const view = this.options.createHeroPowerChoice(heroPowerId)
+      view.label = `game.card-selection.hero-power-option:${heroPowerId}`
+      view.pivot.set(HERO_POWER_CARD_CANVAS.width / 2, HERO_POWER_CARD_CANVAS.height)
+      view.position.set(
+        GAME_BOARD_LAYOUT.cardSelection.cards.centerX +
+          (index - midpoint) * GAME_BOARD_LAYOUT.cardSelection.cards.gap,
+        GAME_BOARD_LAYOUT.cardSelection.cards.baselineY
+      )
+      view.scale.set(GAME_BOARD_LAYOUT.cardSelection.cards.scale)
+      view.alpha = 0
+      view.eventMode = 'static'
+      view.cursor = 'pointer'
+      view.on('pointertap', () => this.chooseOption(option, view))
+      this.cardsLayer.addChild(view)
+      this.entries.push({ view })
+      return view
+    })
+    await Promise.all(views.map((view) => gsap.to(view, { alpha: 1, duration: 0.2 })))
   }
 
   takeSelected(instanceId: string): SelectedCardSlot | null {
@@ -152,7 +197,7 @@ export class CardSelectionOverlay extends Container {
   }
 
   clear(): void {
-    for (const entry of this.entries) entry.slot.destroy({ children: true })
+    for (const entry of this.entries) entry.view.destroy({ children: true })
     this.entries.length = 0
     for (const child of this.cardsLayer.removeChildren()) {
       if (!child.destroyed) child.destroy({ children: true })
@@ -174,14 +219,37 @@ export class CardSelectionOverlay extends Container {
     this.selecting = true
     this.toggle.setEnabled(false)
     for (const entry of this.entries) {
-      if (entry.slot === slot) continue
-      entry.slot.setMulliganInteractionEnabled(false)
-      void gsap.to(entry.slot, { alpha: 0, scaleX: 0.2, scaleY: 0.2, duration: 0.2 })
+      if (entry.view === slot) continue
+      entry.slot?.setMulliganInteractionEnabled(false)
+      entry.view.eventMode = 'none'
+      void gsap.to(entry.view, {
+        alpha: 0,
+        scaleX: 0.2,
+        scaleY: 0.2,
+        duration: 0.2
+      })
     }
     this.selected = { card, slot, globalPosition: slot.getGlobalPosition() }
     const choice = this.choicesByInstanceId.get(card.instanceId)
     if (choice) this.options.onChooseOption(choice.choice)
     else this.options.onSelect(card)
+  }
+
+  private chooseOption(option: CardChoiceOption, view: Container): void {
+    if (this.boardVisible || this.selecting) return
+    this.selecting = true
+    this.toggle.setEnabled(false)
+    for (const entry of this.entries) {
+      entry.view.eventMode = 'none'
+      if (entry.view === view) continue
+      void gsap.to(entry.view, {
+        alpha: 0,
+        scaleX: 0.2,
+        scaleY: 0.2,
+        duration: 0.2
+      })
+    }
+    this.options.onChooseOption(option.choice)
   }
 
   private toggleView(): void {

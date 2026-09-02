@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_ethereal_conjurer.jpg",
+  "source_name": "league_of_explorers_ethereal_conjurer.jpg",
+  "crop_box": [
+    31,
+    0,
+    486,
+    455
+  ],
+  "scale": 1.1,
+  "offset_x": -33.67692307692308,
+  "offset_y": 0.0,
+  "timestamp": "2026-09-01T11:37:45.094642",
+  "card_id": "league_of_explorers_ethereal_conjurer",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

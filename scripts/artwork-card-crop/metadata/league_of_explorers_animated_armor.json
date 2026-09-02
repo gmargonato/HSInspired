@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_animated_armor.jpg",
+  "source_name": "league_of_explorers_animated_armor.jpg",
+  "crop_box": [
+    18,
+    0,
+    483,
+    465
+  ],
+  "scale": 1.07421875,
+  "offset_x": -19.076923076923073,
+  "offset_y": 0.0,
+  "timestamp": "2026-09-01T11:36:38.556296",
+  "card_id": "league_of_explorers_animated_armor",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

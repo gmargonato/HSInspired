@@ -19,6 +19,11 @@ const config: AzureOpenAiConfig = {
       reasoningEffort: 'low',
       maxCompletionTokens: 3072
     },
+    matchupPlan: {
+      requestTimeoutMs: 30000,
+      reasoningEffort: 'medium',
+      maxCompletionTokens: 3072
+    },
     mulligan: {
       requestTimeoutMs: 25000,
       reasoningEffort: 'low',
@@ -33,6 +38,16 @@ const config: AzureOpenAiConfig = {
       requestTimeoutMs: 12000,
       reasoningEffort: 'low',
       maxCompletionTokens: 512
+    },
+    rank: {
+      requestTimeoutMs: 10000,
+      reasoningEffort: 'medium',
+      maxCompletionTokens: 1536
+    },
+    critic: {
+      requestTimeoutMs: 10000,
+      reasoningEffort: 'medium',
+      maxCompletionTokens: 1024
     }
   },
   prompts: {
@@ -249,6 +264,72 @@ describe('AzureOpenAiDecisionService', () => {
     expect(JSON.stringify(init?.body)).not.toContain('super-secret-key')
   })
 
+  it('uses an Azure-compatible strict matchup schema without uniqueItems', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    plan: {
+                      planVersion: 2,
+                      selfStrategy: {
+                        archetype: 'tempo',
+                        primaryWinCondition: 'Develop efficient threats.',
+                        secondaryWinCondition: 'Convert board control into damage.',
+                        earlyGamePriority: 'Contest the board.',
+                        midGamePriority: 'Protect initiative.',
+                        lateGamePriority: 'Finish the opponent.',
+                        cardRoles: [],
+                        combos: [],
+                        resourceRules: [],
+                        mulliganPriorityCardIds: []
+                      },
+                      opponentArchetype: 'control',
+                      opponentWinConditions: ['Reach the late game.'],
+                      opponentThreatPriorities: [],
+                      removalPriorityCardIds: [],
+                      earlyGameStrategy: 'Develop safely.',
+                      midGameStrategy: 'Pressure key resources.',
+                      lateGameStrategy: 'Preserve reach.'
+                    },
+                    rationale: 'Use tempo before control stabilizes.'
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+    )
+    const service = new AzureOpenAiDecisionService({
+      loadConfig: async () => config,
+      fetch
+    })
+
+    await service.planMatchup({
+      planId: 'matchup-plan-1',
+      decisionClass: 'deck-plan',
+      promptVersion: 'matchup-v2',
+      schemaVersion: 2,
+      deadlineAtMs: Date.now() + 60_000,
+      informationPolicy: 'opponent-deck-and-hand',
+      mode: { id: 'constructed' },
+      selfDeck: { id: 'self' },
+      opponentDeck: { id: 'opponent' }
+    })
+
+    const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as {
+      reasoning_effort: string
+      response_format: unknown
+    }
+    expect(body.reasoning_effort).toBe('medium')
+    expect(JSON.stringify(body.response_format)).not.toContain('uniqueItems')
+  })
+
   it('selects the configured prompt for the decision phase', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () =>
       Promise.resolve(
@@ -285,6 +366,80 @@ describe('AzureOpenAiDecisionService', () => {
     expect(body.messages[1]?.content).toBe(config.prompts.mulligan)
     expect(body.reasoning_effort).toBe('low')
     expect(body.max_completion_tokens).toBe(2048)
+  })
+
+  it('uses independent competitive rank and critic policies', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    pass: 'rank',
+                    preferredActionId: 'action-0',
+                    orderedActionIds: ['action-0'],
+                    confidence: 0.75,
+                    rationale: 'Ranked the only supplied action.'
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    pass: 'critic',
+                    finalActionId: 'action-0',
+                    retainedFirstChoice: true,
+                    identifiedRisks: [],
+                    rationale: 'The first choice remains valid.'
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+    const service = new AzureOpenAiDecisionService({
+      loadConfig: async () => config,
+      fetch
+    })
+
+    await service.decide({ ...request, pass: 'rank' })
+    await service.decide({
+      ...request,
+      pass: 'critic',
+      firstPassRanking: ['action-0']
+    })
+
+    const rankBody = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as {
+      reasoning_effort: string
+      max_completion_tokens: number
+    }
+    const criticBody = JSON.parse(String(fetch.mock.calls[1]?.[1]?.body)) as {
+      reasoning_effort: string
+      max_completion_tokens: number
+    }
+    expect(rankBody).toMatchObject({
+      reasoning_effort: 'medium',
+      max_completion_tokens: 1536
+    })
+    expect(criticBody).toMatchObject({
+      reasoning_effort: 'medium',
+      max_completion_tokens: 1024
+    })
+    expect(JSON.stringify(rankBody)).not.toContain('uniqueItems')
   })
 
   it('rejects a model action that is not in the engine-issued list', async () => {

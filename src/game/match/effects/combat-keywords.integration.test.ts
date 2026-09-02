@@ -242,26 +242,47 @@ describe('combat keyword matrix', () => {
     const attacker = summon(scenario, participantId, 'classic_alakir_the_windlord')
     const defender = summon(scenario, opponentId, 'classic_argent_squire')
 
-    expect(
-      attack(
-        scenario,
-        participantId,
-        { kind: 'minion', instanceId: attacker.instanceId },
-        { kind: 'minion', instanceId: defender.instanceId }
-      ).accepted
-    ).toBe(true)
+    const shieldedAttack = attack(
+      scenario,
+      participantId,
+      { kind: 'minion', instanceId: attacker.instanceId },
+      { kind: 'minion', instanceId: defender.instanceId }
+    )
+    expect(shieldedAttack.accepted).toBe(true)
+    if (!shieldedAttack.accepted) return
+    const shieldedResult = shieldedAttack.events.find(
+      (event) =>
+        event.type === 'minion-combat-resolved' ||
+        event.type === 'character-combat-resolved'
+    )
+    expect(shieldedResult?.defender).toMatchObject({
+      attemptedDamage: 3,
+      divineShieldConsumed: true,
+      healthBefore: 1,
+      healthAfter: 1
+    })
     expect(player(scenario, opponentId).board[0]).toMatchObject({
       health: 1,
       divineShield: false
     })
-    expect(
-      attack(
-        scenario,
-        participantId,
-        { kind: 'minion', instanceId: attacker.instanceId },
-        { kind: 'minion', instanceId: defender.instanceId }
-      ).accepted
-    ).toBe(true)
+    const overkillAttack = attack(
+      scenario,
+      participantId,
+      { kind: 'minion', instanceId: attacker.instanceId },
+      { kind: 'minion', instanceId: defender.instanceId }
+    )
+    expect(overkillAttack.accepted).toBe(true)
+    if (!overkillAttack.accepted) return
+    const overkillResult = overkillAttack.events.find(
+      (event) =>
+        event.type === 'minion-combat-resolved' ||
+        event.type === 'character-combat-resolved'
+    )
+    expect(overkillResult?.defender).toMatchObject({
+      attemptedDamage: 3,
+      healthBefore: 1,
+      healthAfter: 0
+    })
     expect(player(scenario, opponentId).board).toHaveLength(0)
     expect(
       attack(

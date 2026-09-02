@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_rumbling_elemental.jpg",
+  "source_name": "league_of_explorers_rumbling_elemental.jpg",
+  "crop_box": [
+    23,
+    33,
+    478,
+    488
+  ],
+  "scale": 1.1,
+  "offset_x": -25.67692307692309,
+  "offset_y": -36.44615384615389,
+  "timestamp": "2026-09-01T11:39:26.599452",
+  "card_id": "league_of_explorers_rumbling_elemental",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

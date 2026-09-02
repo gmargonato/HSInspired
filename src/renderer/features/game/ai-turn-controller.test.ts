@@ -4,7 +4,7 @@ import { asCardId, asHeroId } from '../../../game/content/cards'
 import { asPlayerId, type MatchSetup } from '../../../game/match'
 import type { AiDecisionApi, AiDecisionRequest } from '../../../shared/ipc/ai'
 import { GameBoardSession } from './game-board-session'
-import { createFallbackDeckPlan } from './ai-deck-strategy'
+import { createFallbackDeckPlan, createFallbackMatchupPlan } from './ai-deck-strategy'
 import { AiTurnController } from './ai-turn-controller'
 
 const humanId = asPlayerId('human')
@@ -369,7 +369,7 @@ describe('AiTurnController', () => {
     expect(decision.command.type).toBe('end-turn')
   })
 
-  it('retries the provider after a transient failure', async () => {
+  it('uses the local fallback without retrying a transient provider failure', async () => {
     const humanDeck = deck('human-deck', 'jaina')
     const aiDeck = deck('ai-deck', 'guldan')
     const setup: MatchSetup = {
@@ -392,15 +392,9 @@ describe('AiTurnController', () => {
     const session = new GameBoardSession({ setup, decks: [humanDeck, aiDeck] })
     let calls = 0
     const api: AiDecisionApi = {
-      decide: async (request) => {
+      decide: async () => {
         calls += 1
-        if (calls === 1) throw new Error('Azure OpenAI request timed out after 8ms.')
-        return {
-          actionId: request.legalActions[0]!.id,
-          decisionClass: request.decisionClass,
-          rationale: 'The provider recovered.',
-          modelId: 'test-model'
-        }
+        throw new Error('Azure OpenAI request timed out after 8ms.')
       }
     }
     const logger = {
@@ -415,8 +409,8 @@ describe('AiTurnController', () => {
       logger
     })
 
-    expect((await controller.chooseMulligan()).source).toBe('model')
-    expect(calls).toBe(2)
+    expect((await controller.chooseMulligan()).source).toBe('fallback')
+    expect(calls).toBe(1)
   })
 
   it('gives the action decision a fresh deadline after deck planning', async () => {
@@ -589,5 +583,148 @@ describe('AiTurnController', () => {
     expect((await controller.chooseMulligan()).source).toBe('fallback')
     expect((await controller.chooseMulligan()).source).toBe('fallback')
     expect(calls).toBe(1)
+  })
+
+  it('uses strict rank and critic passes with privileged sanitized observations', async () => {
+    const humanDeck = deck('human-deck-v2', 'jaina', 'basic_bloodfen_raptor')
+    const aiDeck = deck('ai-deck-v2', 'guldan')
+    const setup: MatchSetup = {
+      seed: 85,
+      participants: [
+        {
+          participantId: humanId,
+          controllerKind: 'human',
+          heroId: humanDeck.heroId,
+          deckId: humanDeck.id
+        },
+        {
+          participantId: aiId,
+          controllerKind: 'ai',
+          heroId: aiDeck.heroId,
+          deckId: aiDeck.id
+        }
+      ]
+    }
+    const session = new GameBoardSession({ setup, decks: [humanDeck, aiDeck] })
+    const requests: AiDecisionRequest[] = []
+    const api: AiDecisionApi = {
+      planMatchup: async () => ({
+        plan: createFallbackMatchupPlan(aiDeck, humanDeck),
+        rationale: 'Deterministic test matchup.',
+        modelId: 'gpt-5.4-nano'
+      }),
+      decide: async (request) => {
+        requests.push(request)
+        const ids = request.legalActions.map((action) => action.id)
+        if (request.pass === 'rank') {
+          return {
+            actionId: ids[0]!,
+            decisionClass: request.decisionClass,
+            rationale: 'Complete first-pass ranking.',
+            modelId: 'gpt-5.4-nano',
+            pass: 'rank',
+            orderedActionIds: ids,
+            confidence: 0.7
+          }
+        }
+        return {
+          actionId: ids.at(-1)!,
+          decisionClass: request.decisionClass,
+          rationale: 'Critic override.',
+          modelId: 'gpt-5.4-nano',
+          pass: 'critic',
+          retainedFirstChoice: false,
+          identifiedRisks: ['Curve risk.']
+        }
+      }
+    }
+    const controller = new AiTurnController({
+      api,
+      session,
+      decks: [humanDeck, aiDeck],
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      policy: 'competitive-v2'
+    })
+
+    const decision = await controller.chooseMulligan()
+
+    expect(decision.source).toBe('model')
+    expect(requests.map((request) => request.pass)).toEqual(['rank', 'critic'])
+    expect(requests[1]?.firstPassRanking).toEqual(
+      requests[0]?.legalActions.map((action) => action.id)
+    )
+    const state = requests[0]?.gameState
+    expect(state?.['informationPolicy']).toBe('opponent-deck-and-hand')
+    const observation = state?.['observation'] as {
+      originalDecks: unknown[]
+      players: Array<{ role: string; hand: Array<{ cardId: string }> }>
+    }
+    expect(observation.originalDecks).toHaveLength(2)
+    expect(
+      observation.players.find((player) => player.role === 'opponent')?.hand[0]?.cardId
+    ).toBe('basic_bloodfen_raptor')
+  })
+
+  it('keeps turn ranking available after a matchup-plan HTTP 400', async () => {
+    const humanDeck = deck('human-deck-v2-plan-failure', 'jaina')
+    const aiDeck = deck('ai-deck-v2-plan-failure', 'guldan')
+    const setup: MatchSetup = {
+      seed: 86,
+      participants: [
+        {
+          participantId: humanId,
+          controllerKind: 'human',
+          heroId: humanDeck.heroId,
+          deckId: humanDeck.id
+        },
+        {
+          participantId: aiId,
+          controllerKind: 'ai',
+          heroId: aiDeck.heroId,
+          deckId: aiDeck.id
+        }
+      ]
+    }
+    const session = new GameBoardSession({ setup, decks: [humanDeck, aiDeck] })
+    const requests: AiDecisionRequest[] = []
+    const api: AiDecisionApi = {
+      planMatchup: async () => {
+        throw new Error('Azure OpenAI returned HTTP 400: invalid matchup schema')
+      },
+      decide: async (request) => {
+        requests.push(request)
+        const ids = request.legalActions.map((action) => action.id)
+        if (request.pass === 'rank') {
+          return {
+            actionId: ids[0]!,
+            decisionClass: request.decisionClass,
+            rationale: 'Ranked after planning fallback.',
+            modelId: 'gpt-5.4-nano',
+            pass: 'rank',
+            orderedActionIds: ids,
+            confidence: 0.6
+          }
+        }
+        return {
+          actionId: ids[0]!,
+          decisionClass: request.decisionClass,
+          rationale: 'Retained after planning fallback.',
+          modelId: 'gpt-5.4-nano',
+          pass: 'critic',
+          retainedFirstChoice: true,
+          identifiedRisks: []
+        }
+      }
+    }
+    const controller = new AiTurnController({
+      api,
+      session,
+      decks: [humanDeck, aiDeck],
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      policy: 'competitive-v2'
+    })
+
+    expect((await controller.chooseMulligan()).source).toBe('model')
+    expect(requests.map((request) => request.pass)).toEqual(['rank', 'critic'])
   })
 })

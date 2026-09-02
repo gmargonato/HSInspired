@@ -266,13 +266,21 @@ describe('classic hero powers', () => {
     })
     expect(match.getState().players[1].hero.health).toBe(30)
     expect(result.events).toContainEqual(
-      expect.objectContaining({ type: 'character-healed', amount: 0 })
+      expect.objectContaining({
+        type: 'character-healed',
+        amount: 0,
+        attemptedAmount: 2
+      })
     )
     expect(result.events).toContainEqual(
       expect.objectContaining({
         type: 'history-action-resolved',
         action: 'hero-power',
-        source: expect.objectContaining({ heroPowerId: 'priest-lesser-heal' })
+        source: expect.objectContaining({
+          heroPowerId: 'priest-lesser-heal',
+          baseCost: 2,
+          currentCost: 2
+        })
       })
     )
   })

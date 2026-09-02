@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_map_to_the_golden_monkey.jpg",
+  "source_name": "league_of_explorers_map_to_the_golden_monkey.jpg",
+  "crop_box": [
+    31,
+    38,
+    486,
+    493
+  ],
+  "scale": 1.1,
+  "offset_x": -33.984615384615424,
+  "offset_y": -41.83076923076924,
+  "timestamp": "2026-09-01T11:38:49.039420",
+  "card_id": "league_of_explorers_map_to_the_golden_monkey",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

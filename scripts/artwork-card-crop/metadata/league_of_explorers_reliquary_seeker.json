@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_reliquary_seeker.jpg",
+  "source_name": "league_of_explorers_reliquary_seeker.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-01T11:39:16.934250",
+  "card_id": "league_of_explorers_reliquary_seeker",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -1,0 +1,1804 @@
+[
+  {
+    "id": "league_of_explorers_raven_idol",
+    "name": "Raven Idol",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Choose One - Discover a minion; or Discover a spell.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "discover",
+                  "player": "self",
+                  "count": 3,
+                  "source": "random-card",
+                  "filter": {
+                    "cardClass": "self-or-neutral",
+                    "cardType": "Minion"
+                  },
+                  "classBonus": 4
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "discover",
+                  "player": "self",
+                  "count": 3,
+                  "source": "random-card",
+                  "filter": {
+                    "cardClass": "self-or-neutral",
+                    "cardType": "Spell"
+                  },
+                  "classBonus": 4
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_mounted_raptor",
+    "name": "Mounted Raptor",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Deathrattle: Summon a random 1-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon-random",
+            "count": 1,
+            "filter": {
+              "cardType": "Minion",
+              "cost": 1
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_jungle_moonkin",
+    "name": "Jungle Moonkin",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 4,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Both players have Spell Damage +2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "any",
+              "type": "hero",
+              "selection": "all"
+            },
+            "keyword": "spell-damage",
+            "amount": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_explorers_hat",
+    "name": "Explorer's Hat",
+    "rarity": "Rare",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +1/+1 and \"Deathrattle: Add an Explorer's Hat to your hand.\"",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 1,
+            "health": 1
+          },
+          {
+            "action": "grant-deathrattle",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "actions": [
+              {
+                "action": "add-to-hand",
+                "player": "self",
+                "cardId": "league_of_explorers_explorers_hat"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_dart_trap",
+    "name": "Dart Trap",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Secret: When an opposing Hero Power is used, deal 5 damage to a random enemy.",
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "hero-power-used",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_desert_camel",
+    "name": "Desert Camel",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "Battlecry: Put a 1-Cost minion from each deck into the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "each",
+            "source": {
+              "controller": "self",
+              "type": "minion-card",
+              "zone": "deck",
+              "selection": "random",
+              "filter": {
+                "cost": 1
+              }
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_forgotten_torch",
+    "name": "Forgotten Torch",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 3 damage. Shuffle a 'Roaring Torch' into your deck that deals 6 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          },
+          {
+            "action": "shuffle-into-deck",
+            "player": "self",
+            "cardId": "league_of_explorers_roaring_torch",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_animated_armor",
+    "name": "Animated Armor",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Your hero can only take 1 damage at a time.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "maximumDamageTaken": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_ethereal_conjurer",
+    "name": "Ethereal Conjurer",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 6,
+    "health": 3,
+    "rulesText": "Battlecry: Discover a spell.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "cardType": "Spell"
+            },
+            "classBonus": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_sacred_trial",
+    "name": "Sacred Trial",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Secret: When your opponent has at least 3 minions and plays another, destroy it.",
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-played",
+          "controller": "opponent"
+        },
+        "condition": {
+          "type": "event-player-had-minion-count",
+          "operator": "gte",
+          "value": 3
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_keeper_of_uldaman",
+    "name": "Keeper of Uldaman",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Battlecry: Set a minion's Attack and Health to 3.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": {
+              "operation": "set",
+              "value": 3
+            },
+            "health": {
+              "operation": "set",
+              "value": 3
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_anyfin_can_happen",
+    "name": "Anyfin Can Happen",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 10,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon 7 Murlocs that died this game.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "source": "minions-died-this-game",
+            "selection": "random",
+            "count": 7,
+            "filter": {
+              "tribe": "Murloc"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_museum_curator",
+    "name": "Museum Curator",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 1,
+    "health": 2,
+    "rulesText": "Battlecry: Discover a Deathrattle card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "hasDeathrattle": true
+            },
+            "classBonus": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_entomb",
+    "name": "Entomb",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 6,
+    "attack": null,
+    "health": null,
+    "rulesText": "Choose an enemy minion. Shuffle it into your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "self",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_excavated_evil",
+    "name": "Excavated Evil",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 3 damage to all minions. Shuffle this card into your opponent's deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 3
+          },
+          {
+            "action": "shuffle-into-deck",
+            "player": "opponent",
+            "cardId": "league_of_explorers_excavated_evil",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_pit_snake",
+    "name": "Pit Snake",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Destroy any minion damaged by this minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "source": {
+            "type": "minion",
+            "selection": "source"
+          },
+          "target": {
+            "controller": "any",
+            "type": "minion",
+            "selection": "event-target"
+          }
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_unearthed_raptor",
+    "name": "Unearthed Raptor",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Battlecry: Choose a friendly minion. Gain a copy of its Deathrattle effect.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-deathrattle",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "source": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "hasDeathrattle": true
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_tomb_pillager",
+    "name": "Tomb Pillager",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 5,
+    "health": 4,
+    "rulesText": "Deathrattle: Add a Coin to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "basic_the_coin"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_tunnel_trogg",
+    "name": "Tunnel Trogg",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "Whenever you Overload, gain +1 Attack per locked Mana Crystal.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-overload",
+        "event": {
+          "type": "overload-applied",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "event.amount"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_rumbling_elemental",
+    "name": "Rumbling Elemental",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 2,
+    "health": 6,
+    "rulesText": "After you play a Battlecry minion, deal 2 damage to a random enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-card-played",
+        "event": {
+          "type": "minion-played",
+          "controller": "self",
+          "filter": {
+            "hasBattlecry": true
+          }
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_everyfin_is_awesome",
+    "name": "Everyfin is Awesome",
+    "rarity": "Rare",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 7,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your minions +2/+2. Costs (1) less for each Murloc you control.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      },
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "operation": "subtract",
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "self",
+                "type": "minion",
+                "selection": "all",
+                "filter": {
+                  "tribe": "Murloc"
+                }
+              }
+            },
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_dark_peddler",
+    "name": "Dark Peddler",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Battlecry: Discover a 1-Cost card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "cost": 1
+            },
+            "classBonus": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_reliquary_seeker",
+    "name": "Reliquary Seeker",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: If you have 6 other minions, gain +4/+4.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion-count",
+          "player": "self",
+          "operator": "gte",
+          "value": 7
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 4,
+            "health": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_curse_of_rafaam",
+    "name": "Curse of Rafaam",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your opponent a 'Cursed!' card. While they hold it, they take 2 damage on their turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "opponent",
+            "cardId": "league_of_explorers_cursed"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_fierce_monkey",
+    "name": "Fierce Monkey",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
+  },
+  {
+    "id": "league_of_explorers_obsidian_destroyer",
+    "name": "Obsidian Destroyer",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 7,
+    "health": 7,
+    "rulesText": "At the end of your turn, summon a 1/1 Scarab with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "league_of_explorers_scarab",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_cursed_blade",
+    "name": "Cursed Blade",
+    "rarity": "Rare",
+    "cardClass": "Warrior",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Double all damage dealt to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "damageTakenMultiplier": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_murloc_tinyfin",
+    "name": "Murloc Tinyfin",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 0,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "league_of_explorers_jeweled_scarab",
+    "name": "Jeweled Scarab",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 2,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Discover a 3-Cost card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "cost": 3
+            },
+            "classBonus": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_gorillabot_a_3",
+    "name": "Gorillabot A-3",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 4,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Battlecry: If you control another Mech, Discover a Mech.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion-count",
+          "player": "self",
+          "filter": {
+            "tribe": "Mech"
+          },
+          "operator": "gte",
+          "value": 2
+        },
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "tribe": "Mech"
+            },
+            "classBonus": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_huge_toad",
+    "name": "Huge Toad",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 2,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Deathrattle: Deal 1 damage to a random enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_tomb_spider",
+    "name": "Tomb Spider",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 4,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: Discover a Beast.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "tribe": "Beast"
+            },
+            "classBonus": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_naga_sea_witch",
+    "name": "Naga Sea Witch",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Your cards cost (5).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "amount": {
+              "operation": "set",
+              "value": 5
+            },
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_djinni_of_zephyrs",
+    "name": "Djinni of Zephyrs",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "Whenever you cast a spell on another friendly minion, cast a copy of it on this one.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-targeted-minion",
+          "controller": "self",
+          "exclude": "event-target",
+          "target": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "event-target"
+          }
+        },
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "type": "event-card",
+              "selection": "event-source"
+            },
+            "destination": "cast-on-source"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_anubisath_sentinel",
+    "name": "Anubisath Sentinel",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Deathrattle: Give a random friendly minion +3/+3.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random"
+            },
+            "attack": 3,
+            "health": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_fossilized_devilsaur",
+    "name": "Fossilized Devilsaur",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 8,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Battlecry: If you control a Beast, gain Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": {
+            "tribe": "Beast"
+          }
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_sir_finley_mrrgglton",
+    "name": "Sir Finley Mrrgglton",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 1,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "Battlecry: Discover a new basic Hero Power.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "discover-basic"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_brann_bronzebeard",
+    "name": "Brann Bronzebeard",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "Your Battlecries trigger twice.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "multiply-trigger",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "hasBattlecry": true
+              }
+            },
+            "trigger": "battlecry",
+            "multiplier": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_elise_starseeker",
+    "name": "Elise Starseeker",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 5,
+    "rulesText": "Battlecry: Shuffle the 'Map to the Golden Monkey' into your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "self",
+            "cardId": "league_of_explorers_map_to_the_golden_monkey",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_summoning_stone",
+    "name": "Summoning Stone",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 0,
+    "health": 6,
+    "rulesText": "Whenever you cast a spell, summon a random minion of the same Cost.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "summon-random",
+            "count": 1,
+            "filter": {
+              "cardType": "Minion",
+              "cost": "event-card-cost"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_wobbling_runts",
+    "name": "Wobbling Runts",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 2,
+    "health": 6,
+    "rulesText": "Deathrattle: Summon three 2/2 Runts.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "league_of_explorers_rascally_runt",
+            "count": 1
+          },
+          {
+            "action": "summon",
+            "cardId": "league_of_explorers_wily_runt",
+            "count": 1
+          },
+          {
+            "action": "summon",
+            "cardId": "league_of_explorers_grumbly_runt",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_reno_jackson",
+    "name": "Reno Jackson",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "Battlecry: If your deck contains no more than 1 of any card, fully heal your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-deck-has-no-duplicates",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": "full"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_arch_thief_rafaam",
+    "name": "Arch-Thief Rafaam",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 9,
+    "attack": 7,
+    "health": 8,
+    "rulesText": "Battlecry: Discover a powerful Artifact.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "pool": [
+              "league_of_explorers_lantern_of_power",
+              "league_of_explorers_mirror_of_doom",
+              "league_of_explorers_timepiece_of_horror"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_eerie_statue",
+    "name": "Eerie Statue",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 7,
+    "health": 7,
+    "rulesText": "Can't attack unless it's the only minion in the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "board-has-minion-count",
+          "operator": "gte",
+          "value": 2
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "cannot-attack"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_ancient_shade",
+    "name": "Ancient Shade",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 7,
+    "health": 4,
+    "rulesText": "Battlecry: Shuffle an 'Ancient Curse' into your deck that deals 7 damage to you when drawn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "self",
+            "cardId": "league_of_explorers_ancient_curse",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_roaring_torch",
+    "name": "Roaring Torch",
+    "rarity": "Summon",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 6 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 6
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_cursed",
+    "name": "Cursed!",
+    "rarity": "Summon",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "While this is in your hand, take 2 damage at the start of your turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "event": {
+          "type": "turn-started",
+          "turnPlayer": "self"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_scarab",
+    "name": "Scarab",
+    "rarity": "Summon",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": []
+  },
+  {
+    "id": "league_of_explorers_map_to_the_golden_monkey",
+    "name": "Map to the Golden Monkey",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Shuffle the Golden Monkey into your deck. Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "self",
+            "cardId": "league_of_explorers_golden_monkey",
+            "count": 1
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_golden_monkey",
+    "name": "Golden Monkey",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 4,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "Taunt Battlecry: Replace your hand and deck with Legendary minions.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "transform-random",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "filter": {
+              "rarity": "Legendary"
+            }
+          },
+          {
+            "action": "transform-random",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "deck"
+            },
+            "filter": {
+              "rarity": "Legendary"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_rascally_runt",
+    "name": "Rascally Runt",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "league_of_explorers_wily_runt",
+    "name": "Wily Runt",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "league_of_explorers_grumbly_runt",
+    "name": "Grumbly Runt",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "league_of_explorers_ancient_curse",
+    "name": "Ancient Curse",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "When you draw this, take 7 damage and draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-draw",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 7
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          },
+          {
+            "action": "discard",
+            "target": {
+              "type": "card",
+              "selection": "source"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_lantern_of_power",
+    "name": "Lantern of Power",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 10,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +10/+10.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 10,
+            "health": 10
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_mirror_of_doom",
+    "name": "Mirror of Doom",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 10,
+    "attack": null,
+    "health": null,
+    "rulesText": "Fill your board with 3/3 Mummy Zombies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "league_of_explorers_mummy_zombie",
+            "count": {
+              "reference": "available-board-slots"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "league_of_explorers_mummy_zombie",
+    "name": "Mummy Zombie",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "league_of_explorers_timepiece_of_horror",
+    "name": "Timepiece of Horror",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "collectible": false,
+    "cost": 10,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 10 damage randomly split among all enemies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1,
+            "hits": 10
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -25,7 +25,7 @@ import { COLLECTION_PREVIEW_BLUR_STRENGTH } from '../features/collection/collect
 import { DECK_EDITOR_LAYOUT } from '../features/collection/deck-editor-layout'
 import type { AppLogger, DialogService } from '../app/services'
 import type { CardDefinition, DeckClass } from '../../game/content/cards'
-import { MAX_DECKS, type Deck } from '../../game/decks'
+import type { Deck } from '../../game/decks'
 import type { CardPreviewRouteBounds, SceneRouter } from '../app/router'
 import type { CollectibleMode } from '../features/collection/collection-filters'
 import type { CollectionClassFilter } from '../features/collection/collection-query'
@@ -43,6 +43,7 @@ export class CollectionScene extends Scene {
   private previousCollectionClassFilter: CollectionClassFilter = null
   private collectionPreviewBlurFilter: BlurFilter | null = null
   private navigationReady = false
+  private savingDeckName = false
   private unsubscribeDeckStore: (() => void) | null = null
   private disposed = false
 
@@ -119,6 +120,8 @@ export class CollectionScene extends Scene {
     }
     this.deckPanel = new DeckPanelView({
       assets: deckPanelAssets,
+      canvas: this.appInstance.canvas,
+      inputParent: this.appInstance.canvas.parentElement ?? document.body,
       renderer: this.appInstance.renderer,
       deckController: this.deckController,
       state: {
@@ -141,8 +144,7 @@ export class CollectionScene extends Scene {
         onCancelled: () => this.handleNewDeckCreationCancelled(),
         onDeckCreated: (deck) => this.handleNewDeckCreated(deck)
       },
-      this.logger,
-      { newDeckFrames: true }
+      this.logger
     )
     await this.newDeckScene.mount()
     this.root.addChild(this.newDeckScene)
@@ -236,7 +238,7 @@ export class CollectionScene extends Scene {
       onDeckTap: (deckId) => void this.enterDeck(deckId),
       onNewDeck: () => void this.beginNewDeckCreation(),
       onDeleteDeck: (deckId) => void this.deleteDeck(deckId),
-      onEditorDone: () => void this.exitDeckEditor(),
+      onEditorDone: () => this.saveDeckNameAndExitEditor(),
       onError: (message, error) => this.reportError(message, error),
       onWarning: (message, error) => this.reportWarning(message, error)
     }
@@ -355,12 +357,50 @@ export class CollectionScene extends Scene {
     await this.deckPanel.exitEditor()
     if (this.disposed) return
 
+    this.deckPanel.renderDeckList()
+
     try {
       await this.collectionView.applyClassFilter(null)
     } catch (error) {
       this.reportError('Failed to restore the full collection.', error)
     } finally {
       if (!this.disposed) {
+        this.setNavigationEnabled(true)
+        this.setDeckInteractionEnabled(true)
+      }
+    }
+  }
+
+  private async saveDeckNameAndExitEditor(): Promise<void> {
+    if (this.savingDeckName || this.disposed) return
+    const deck = this.deckPanel.getActiveDeck()
+    if (!deck) return
+
+    const name = this.deckPanel.getDeckNameDraft().trim()
+    if (!name) {
+      this.reportError('Deck name cannot be empty.')
+      this.deckPanel.focusDeckName()
+      return
+    }
+
+    this.savingDeckName = true
+    this.setNavigationEnabled(false)
+    this.setDeckInteractionEnabled(false)
+    try {
+      if (name !== deck.name) {
+        await this.deckController.updateDeck({ ...deck, name })
+      }
+      await this.exitDeckEditor()
+    } catch (error) {
+      this.reportError('Failed to save the deck name.', error)
+      if (!this.disposed) {
+        this.setNavigationEnabled(true)
+        this.setDeckInteractionEnabled(true)
+        this.deckPanel.focusDeckName()
+      }
+    } finally {
+      this.savingDeckName = false
+      if (!this.disposed && this.deckPanel.getActiveDeckId() !== null) {
         this.setNavigationEnabled(true)
         this.setDeckInteractionEnabled(true)
       }
@@ -395,12 +435,7 @@ export class CollectionScene extends Scene {
   }
 
   private async beginNewDeckCreation(): Promise<void> {
-    if (
-      !this.navigationReady ||
-      this.disposed ||
-      this.newDeckScene.isOpen ||
-      this.deckController.getDecks().length >= MAX_DECKS
-    ) {
+    if (!this.navigationReady || this.disposed || this.newDeckScene.isOpen) {
       return
     }
 

@@ -9,7 +9,7 @@ export class NewDeckScene extends Scene {
 
   constructor(deckStore: DeckStore, logger?: AppLogger) {
     super()
-    this.view = new NewDeckView(deckStore, {}, logger, { newDeckFrames: true })
+    this.view = new NewDeckView(deckStore, {}, logger)
   }
 
   async init(): Promise<void> {

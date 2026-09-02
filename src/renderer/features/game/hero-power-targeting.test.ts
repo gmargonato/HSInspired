@@ -65,7 +65,8 @@ describe('hero-power target presentation', () => {
         costOffset: { x: 0, y: 0 }
       },
       backTexture: Texture.EMPTY,
-      frontTexture: Texture.EMPTY,
+      frontFrameTexture: Texture.EMPTY,
+      artworkTexture: Texture.EMPTY,
       manaTexture: Texture.EMPTY,
       cost: 2,
       onClick
@@ -95,7 +96,8 @@ describe('hero-power target presentation', () => {
         costOffset: { x: 0, y: 0 }
       },
       backTexture: Texture.EMPTY,
-      frontTexture: Texture.EMPTY,
+      frontFrameTexture: Texture.EMPTY,
+      artworkTexture: Texture.EMPTY,
       manaTexture: Texture.EMPTY,
       cost: 2,
       onClick: vi.fn(),

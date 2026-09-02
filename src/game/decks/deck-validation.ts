@@ -1,6 +1,11 @@
 import { asCardId, asHeroId, type CardId } from '../content/cards'
 import { HERO_CATALOG } from '../content/heroes'
-import { DECK_FILE_VERSION, type Deck, type PersistedDeckFile } from './deck'
+import {
+  DECK_FILE_VERSION,
+  MAX_DECK_NAME_LENGTH,
+  type Deck,
+  type PersistedDeckFile
+} from './deck'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -16,6 +21,9 @@ export function parseDeck(value: unknown, path = 'deck'): Deck {
     throw new Error(`${path}.id is invalid`)
   if (typeof value.name !== 'string' || value.name.trim() === '')
     throw new Error(`${path}.name is invalid`)
+  if (value.name.trim().length > MAX_DECK_NAME_LENGTH) {
+    throw new Error(`${path}.name exceeds ${MAX_DECK_NAME_LENGTH} characters`)
+  }
   if (typeof value.heroId !== 'string' || value.heroId.trim() === '')
     throw new Error(`${path}.heroId is required`)
   if (!isRecord(value.cards)) throw new Error(`${path}.cards is invalid`)

@@ -73,6 +73,41 @@ function play(
 }
 
 describe('resolution presentation events', () => {
+  it('reports Healing Totem full values for undamaged friendly minions', () => {
+    const scenario = createMatchScenario({ seed: 1698 })
+    scenario.confirmBothMulligans()
+    const [participantId] = activePlayers(scenario)
+    summon(scenario, participantId, 'basic_healing_totem')
+    summon(scenario, participantId, 'basic_boulderfist_ogre')
+    const friendlyIds = new Set(
+      player(scenario, participantId).board.map((minion) => minion.instanceId)
+    )
+
+    const result = scenario.match.dispatch({ type: 'end-turn', participantId })
+
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    const restores = result.events.filter(
+      (event) =>
+        event.type === 'effect-resolved' &&
+        event.action === 'restore' &&
+        event.sourceCardId === 'basic_healing_totem' &&
+        typeof event.data?.target === 'string' &&
+        friendlyIds.has(event.data.target)
+    )
+    expect(restores).toHaveLength(2)
+    expect(restores).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          data: expect.objectContaining({ amount: 0, displayAmount: 1 })
+        }),
+        expect.objectContaining({
+          data: expect.objectContaining({ amount: 0, displayAmount: 1 })
+        })
+      ])
+    )
+  })
+
   it.each(['classic_molten_giant', 'classic_mountain_giant'])(
     'does not activate %s hand-only cost effect from the board',
     (cardId) => {
@@ -130,6 +165,16 @@ describe('resolution presentation events', () => {
       (event, index) => index > cueIndex && event.type === 'card-drawn'
     )
     expect(drawIndex).toBeGreaterThan(cueIndex)
+    expect(
+      result.events.find(
+        (event) =>
+          event.type === 'effect-resolved' &&
+          event.action === 'damage' &&
+          event.data?.target === acolyte.instanceId
+      )
+    ).toMatchObject({
+      data: { actualDamage: 3, displayAmount: 6, healthAfter: 0 }
+    })
   })
 
   it('exposes Frothing attack modifications after each damaged minion', () => {

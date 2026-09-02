@@ -8,7 +8,9 @@ import {
   BLACKROCK_MOUNTAIN_CARD_SOURCE,
   CLASSIC_CARD_SOURCE,
   GOBLINS_VS_GNOMES_CARD_SOURCE,
-  NAXXRAMAS_CARD_SOURCE
+  LEAGUE_OF_EXPLORERS_CARD_SOURCE,
+  NAXXRAMAS_CARD_SOURCE,
+  THE_GRAND_TOURNAMENT_CARD_SOURCE
 } from '../cards/sets'
 
 export interface ExpansionCardSourceModule {
@@ -53,6 +55,18 @@ export const EXPANSION_DEFINITIONS: readonly ExpansionDefinition[] = [
     'Blackrock Mountain',
     4,
     BLACKROCK_MOUNTAIN_CARD_SOURCE
+  ),
+  expansion(
+    'league-of-explorers',
+    'League of Explorers',
+    5,
+    LEAGUE_OF_EXPLORERS_CARD_SOURCE
+  ),
+  expansion(
+    'the-grand-tournament',
+    'The Grand Tournament',
+    6,
+    THE_GRAND_TOURNAMENT_CARD_SOURCE
   )
 ]
 

@@ -1,6 +1,15 @@
+import type {
+  AiCandidateDossier,
+  AiInformationPolicy,
+  AiSearchLimits,
+  AiSearchWorkerRequest,
+  AiSearchWorkerResult
+} from '../../game/match/ai'
+
 export const AI_IPC_CHANNELS = {
   decide: 'ai:decide',
-  planDeck: 'ai:plan-deck'
+  planDeck: 'ai:plan-deck',
+  planMatchup: 'ai:plan-matchup'
 } as const
 
 /** Shared limits keep provider schemas and runtime validation in lockstep. */
@@ -21,6 +30,7 @@ export const AI_DECK_PLAN_LIMITS = {
 
 export type AiDecisionPhase = 'mulligan' | 'turn'
 export type AiDecisionClass = 'deck-plan' | 'mulligan' | 'discover' | 'turn'
+export type AiDecisionPass = 'rank' | 'critic'
 export type AiActionKind =
   | 'confirm-mulligan'
   | 'play-card'
@@ -113,6 +123,43 @@ export interface AiDeckPlanRequest {
   readonly deck: JsonObject
 }
 
+export interface AiOpponentThreatPriority {
+  readonly cardId: string
+  readonly priority: 'low' | 'medium' | 'high' | 'critical'
+  readonly preferredResponse: string
+}
+
+export interface AiMatchupPlan {
+  readonly planVersion: 2
+  readonly selfStrategy: Omit<AiDeckPlan, 'planVersion'>
+  readonly opponentArchetype: AiDeckArchetype
+  readonly opponentWinConditions: readonly string[]
+  readonly opponentThreatPriorities: readonly AiOpponentThreatPriority[]
+  readonly removalPriorityCardIds: readonly string[]
+  readonly earlyGameStrategy: string
+  readonly midGameStrategy: string
+  readonly lateGameStrategy: string
+}
+
+export interface AiMatchupPlanRequest {
+  readonly planId: string
+  readonly decisionClass: 'deck-plan'
+  readonly promptVersion: string
+  readonly schemaVersion: 2
+  readonly deadlineAtMs: number
+  readonly informationPolicy: AiInformationPolicy
+  readonly mode: JsonObject
+  readonly selfDeck: JsonObject
+  readonly opponentDeck: JsonObject
+}
+
+export interface AiMatchupPlanResponse {
+  readonly plan: AiMatchupPlan
+  readonly rationale: string
+  readonly modelId: string
+  readonly debug?: AiProviderDebugTrace
+}
+
 export interface AiDecisionRequest {
   readonly decisionId: string
   readonly phase: AiDecisionPhase
@@ -125,6 +172,26 @@ export interface AiDecisionRequest {
   readonly deadlineAtMs: number
   readonly gameState: JsonObject
   readonly legalActions: readonly AiLegalAction[]
+  /** Omitted only by legacy callers; competitive-v2 always supplies a pass. */
+  readonly pass?: AiDecisionPass
+  readonly candidateDossiers?: readonly AiCandidateDossier[]
+  readonly firstPassRanking?: readonly string[]
+}
+
+export interface AiRankDecisionResponse {
+  readonly pass: 'rank'
+  readonly preferredActionId: string
+  readonly orderedActionIds: readonly string[]
+  readonly confidence: number
+  readonly rationale: string
+}
+
+export interface AiCriticDecisionResponse {
+  readonly pass: 'critic'
+  readonly finalActionId: string
+  readonly retainedFirstChoice: boolean
+  readonly identifiedRisks: readonly string[]
+  readonly rationale: string
 }
 
 export interface AiProviderDebugTrace {
@@ -143,6 +210,11 @@ export interface AiDecisionResponse {
   readonly rationale: string
   readonly modelId: string
   readonly debug?: AiProviderDebugTrace
+  readonly pass?: AiDecisionPass
+  readonly orderedActionIds?: readonly string[]
+  readonly confidence?: number
+  readonly retainedFirstChoice?: boolean
+  readonly identifiedRisks?: readonly string[]
 }
 
 export interface AiDeckPlanResponse {
@@ -155,6 +227,60 @@ export interface AiDeckPlanResponse {
 export interface AiDecisionApi {
   decide(request: AiDecisionRequest): Promise<AiDecisionResponse>
   planDeck?(request: AiDeckPlanRequest): Promise<AiDeckPlanResponse>
+  planMatchup?(request: AiMatchupPlanRequest): Promise<AiMatchupPlanResponse>
+}
+
+export interface AiIpcFailure {
+  readonly ok: false
+  readonly error: Readonly<{
+    readonly name: string
+    readonly message: string
+  }>
+}
+
+export interface AiIpcSuccess<T> {
+  readonly ok: true
+  readonly value: T
+}
+
+export type AiIpcResult<T> = AiIpcSuccess<T> | AiIpcFailure
+
+export function aiIpcSuccess<T>(value: T): AiIpcSuccess<T> {
+  return { ok: true, value }
+}
+
+export function aiIpcFailure(error: unknown): AiIpcFailure {
+  return {
+    ok: false,
+    error: {
+      name: error instanceof Error ? error.name : 'Error',
+      message: error instanceof Error ? error.message : String(error)
+    }
+  }
+}
+
+export function unwrapAiIpcResult<T>(
+  value: unknown,
+  parseValue: (candidate: unknown) => T
+): T {
+  if (!isRecord(value) || typeof value['ok'] !== 'boolean') {
+    throw new Error('AI IPC result must be a success or failure object')
+  }
+  if (value['ok']) return parseValue(value['value'])
+  const error = value['error']
+  if (!isRecord(error)) throw new Error('AI IPC failure must contain an error')
+  const message = requireString(error, 'message', 'AI IPC failure')
+  const result = new Error(message)
+  result.name = requireString(error, 'name', 'AI IPC failure')
+  throw result
+}
+
+export type {
+  AiCandidateDossier,
+  AiInformationPolicy,
+  AiSearchLimits,
+  AiSearchWorkerRequest,
+  AiSearchWorkerResult
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -384,6 +510,100 @@ export function parseAiDeckPlan(value: unknown): AiDeckPlan {
   }
 }
 
+export function parseAiMatchupPlan(value: unknown): AiMatchupPlan {
+  if (!isRecord(value)) throw new Error('AI matchup plan must be an object')
+  if (value['planVersion'] !== 2) throw new Error('AI matchup plan version is invalid')
+  if (!isRecord(value['selfStrategy'])) {
+    throw new Error('AI matchup plan selfStrategy must be an object')
+  }
+  const selfStrategy = parseAiDeckPlan({
+    ...value['selfStrategy'],
+    planVersion: 1
+  })
+  const opponentArchetype = value['opponentArchetype']
+  if (
+    opponentArchetype !== 'aggro' &&
+    opponentArchetype !== 'tempo' &&
+    opponentArchetype !== 'midrange' &&
+    opponentArchetype !== 'control' &&
+    opponentArchetype !== 'combo' &&
+    opponentArchetype !== 'fatigue' &&
+    opponentArchetype !== 'hybrid'
+  )
+    throw new Error('AI matchup plan opponentArchetype is invalid')
+  const threatValues = value['opponentThreatPriorities']
+  if (!Array.isArray(threatValues) || threatValues.length > 30) {
+    throw new Error('AI matchup plan opponentThreatPriorities is invalid')
+  }
+  const opponentThreatPriorities = threatValues.map(
+    (entry, index): AiOpponentThreatPriority => {
+      if (!isRecord(entry)) {
+        throw new Error(`AI matchup plan opponentThreatPriorities[${index}] is invalid`)
+      }
+      const priority = entry['priority']
+      if (
+        priority !== 'low' &&
+        priority !== 'medium' &&
+        priority !== 'high' &&
+        priority !== 'critical'
+      )
+        throw new Error(
+          `AI matchup plan opponentThreatPriorities[${index}].priority is invalid`
+        )
+      return {
+        cardId: requireBoundedString(
+          entry,
+          'cardId',
+          `AI matchup plan opponentThreatPriorities[${index}]`,
+          AI_DECK_PLAN_LIMITS.cardIdLength
+        ),
+        priority,
+        preferredResponse: requireTruncatedString(
+          entry,
+          'preferredResponse',
+          `AI matchup plan opponentThreatPriorities[${index}]`,
+          AI_DECK_PLAN_LIMITS.resourceRuleTextLength
+        )
+      }
+    }
+  )
+  const { planVersion: _legacyVersion, ...parsedSelfStrategy } = selfStrategy
+  return {
+    planVersion: 2,
+    selfStrategy: parsedSelfStrategy,
+    opponentArchetype,
+    opponentWinConditions: requireStringArray(
+      value['opponentWinConditions'],
+      'AI matchup plan opponentWinConditions',
+      8
+    ),
+    opponentThreatPriorities,
+    removalPriorityCardIds: requireStringArray(
+      value['removalPriorityCardIds'],
+      'AI matchup plan removalPriorityCardIds',
+      20
+    ),
+    earlyGameStrategy: requireTruncatedString(
+      value,
+      'earlyGameStrategy',
+      'AI matchup plan',
+      AI_DECK_PLAN_LIMITS.strategyTextLength
+    ),
+    midGameStrategy: requireTruncatedString(
+      value,
+      'midGameStrategy',
+      'AI matchup plan',
+      AI_DECK_PLAN_LIMITS.strategyTextLength
+    ),
+    lateGameStrategy: requireTruncatedString(
+      value,
+      'lateGameStrategy',
+      'AI matchup plan',
+      AI_DECK_PLAN_LIMITS.strategyTextLength
+    )
+  }
+}
+
 export function parseAiDeckPlanRequest(value: unknown): AiDeckPlanRequest {
   if (!isRecord(value)) throw new Error('AI deck plan request must be an object')
   if (value['decisionClass'] !== 'deck-plan') {
@@ -410,6 +630,43 @@ export function parseAiDeckPlanRequest(value: unknown): AiDeckPlanRequest {
     deadlineAtMs: deadlineAtMs as number,
     mode,
     deck
+  }
+}
+
+export function parseAiMatchupPlanRequest(value: unknown): AiMatchupPlanRequest {
+  if (!isRecord(value)) throw new Error('AI matchup plan request must be an object')
+  if (value['decisionClass'] !== 'deck-plan' || value['schemaVersion'] !== 2) {
+    throw new Error('AI matchup plan request schema is invalid')
+  }
+  if (value['informationPolicy'] !== 'opponent-deck-and-hand') {
+    throw new Error('AI matchup plan request information policy is invalid')
+  }
+  const deadlineAtMs = value['deadlineAtMs']
+  if (!Number.isSafeInteger(deadlineAtMs) || (deadlineAtMs as number) <= 0) {
+    throw new Error('AI matchup plan request deadlineAtMs must be a positive integer')
+  }
+  const mode = value['mode']
+  const selfDeck = value['selfDeck']
+  const opponentDeck = value['opponentDeck']
+  if (
+    !isRecord(mode) ||
+    !isJsonValue(mode) ||
+    !isRecord(selfDeck) ||
+    !isJsonValue(selfDeck) ||
+    !isRecord(opponentDeck) ||
+    !isJsonValue(opponentDeck)
+  )
+    throw new Error('AI matchup plan request decks and mode must be JSON objects')
+  return {
+    planId: requireString(value, 'planId', 'AI matchup plan request'),
+    decisionClass: 'deck-plan',
+    promptVersion: requireString(value, 'promptVersion', 'AI matchup plan request'),
+    schemaVersion: 2,
+    deadlineAtMs: deadlineAtMs as number,
+    informationPolicy: 'opponent-deck-and-hand',
+    mode,
+    selfDeck,
+    opponentDeck
   }
 }
 
@@ -538,6 +795,34 @@ export function parseAiDecisionRequest(value: unknown): AiDecisionRequest {
   if (ids.size !== legalActions.length) {
     throw new Error('AI decision request action ids must be unique')
   }
+  const pass = value['pass']
+  if (pass !== undefined && pass !== 'rank' && pass !== 'critic') {
+    throw new Error('AI decision request pass is invalid')
+  }
+  const dossierValues = value['candidateDossiers']
+  if (
+    dossierValues !== undefined &&
+    (!Array.isArray(dossierValues) ||
+      dossierValues.length > 8 ||
+      !isJsonValue(dossierValues))
+  )
+    throw new Error('AI decision request candidateDossiers is invalid')
+  const firstPassRanking =
+    value['firstPassRanking'] === undefined
+      ? undefined
+      : requireStringArray(
+          value['firstPassRanking'],
+          'AI decision request firstPassRanking',
+          8
+        )
+  if (pass === 'critic' && !firstPassRanking) {
+    throw new Error('AI critic request requires the first-pass ranking')
+  }
+  if (firstPassRanking?.some((id) => !ids.has(id))) {
+    throw new Error(
+      'AI decision request firstPassRanking contains an unknown action id'
+    )
+  }
   return {
     decisionId: requireString(value, 'decisionId', 'AI decision request'),
     phase,
@@ -548,7 +833,83 @@ export function parseAiDecisionRequest(value: unknown): AiDecisionRequest {
     schemaVersion: schemaVersion as number,
     deadlineAtMs: deadlineAtMs as number,
     gameState,
-    legalActions
+    legalActions,
+    ...(pass ? { pass } : {}),
+    ...(dossierValues
+      ? { candidateDossiers: dossierValues as unknown as readonly AiCandidateDossier[] }
+      : {}),
+    ...(firstPassRanking ? { firstPassRanking } : {})
+  }
+}
+
+export function parseAiRankDecisionResponse(
+  value: unknown,
+  allowedActionIds?: ReadonlySet<string>
+): AiRankDecisionResponse {
+  if (!isRecord(value) || value['pass'] !== 'rank') {
+    throw new Error('AI rank response must be a rank object')
+  }
+  const preferredActionId = requireString(
+    value,
+    'preferredActionId',
+    'AI rank response'
+  )
+  const orderedActionIds = requireStringArray(
+    value['orderedActionIds'],
+    'AI rank response orderedActionIds',
+    8
+  )
+  const confidence = value['confidence']
+  if (
+    typeof confidence !== 'number' ||
+    !Number.isFinite(confidence) ||
+    confidence < 0 ||
+    confidence > 1
+  ) {
+    throw new Error('AI rank response confidence must be between zero and one')
+  }
+  if (orderedActionIds[0] !== preferredActionId) {
+    throw new Error('AI rank response preferredActionId must be ranked first')
+  }
+  if (
+    allowedActionIds &&
+    (orderedActionIds.length !== allowedActionIds.size ||
+      orderedActionIds.some((id) => !allowedActionIds.has(id)))
+  )
+    throw new Error('AI rank response must order the complete supplied shortlist')
+  return {
+    pass: 'rank',
+    preferredActionId,
+    orderedActionIds,
+    confidence,
+    rationale: requireBoundedString(value, 'rationale', 'AI rank response', 500)
+  }
+}
+
+export function parseAiCriticDecisionResponse(
+  value: unknown,
+  allowedActionIds?: ReadonlySet<string>
+): AiCriticDecisionResponse {
+  if (!isRecord(value) || value['pass'] !== 'critic') {
+    throw new Error('AI critic response must be a critic object')
+  }
+  const finalActionId = requireString(value, 'finalActionId', 'AI critic response')
+  if (allowedActionIds && !allowedActionIds.has(finalActionId)) {
+    throw new Error('AI critic response selected an unknown action id')
+  }
+  if (typeof value['retainedFirstChoice'] !== 'boolean') {
+    throw new Error('AI critic response retainedFirstChoice must be boolean')
+  }
+  return {
+    pass: 'critic',
+    finalActionId,
+    retainedFirstChoice: value['retainedFirstChoice'],
+    identifiedRisks: requireStringArray(
+      value['identifiedRisks'],
+      'AI critic response identifiedRisks',
+      8
+    ),
+    rationale: requireBoundedString(value, 'rationale', 'AI critic response', 500)
   }
 }
 
@@ -594,12 +955,46 @@ function parseDebugTrace(value: unknown): AiProviderDebugTrace | undefined {
 export function parseAiDecisionResponse(value: unknown): AiDecisionResponse {
   if (!isRecord(value)) throw new Error('AI decision response must be an object')
   const debug = parseDebugTrace(value['debug'])
+  const pass = value['pass']
+  const parsedPass = pass === 'rank' || pass === 'critic' ? pass : undefined
+  const orderedActionIds =
+    value['orderedActionIds'] === undefined
+      ? undefined
+      : requireStringArray(
+          value['orderedActionIds'],
+          'AI decision response orderedActionIds',
+          8
+        )
+  const confidence = value['confidence']
+  if (
+    confidence !== undefined &&
+    (typeof confidence !== 'number' || confidence < 0 || confidence > 1)
+  ) {
+    throw new Error('AI decision response confidence is invalid')
+  }
+  const retainedFirstChoice = value['retainedFirstChoice']
+  if (retainedFirstChoice !== undefined && typeof retainedFirstChoice !== 'boolean') {
+    throw new Error('AI decision response retainedFirstChoice is invalid')
+  }
+  const identifiedRisks =
+    value['identifiedRisks'] === undefined
+      ? undefined
+      : requireStringArray(
+          value['identifiedRisks'],
+          'AI decision response identifiedRisks',
+          8
+        )
   return {
     actionId: requireString(value, 'actionId', 'AI decision response'),
     decisionClass: parseDecisionClass(value['decisionClass'], 'AI decision response'),
     rationale: requireString(value, 'rationale', 'AI decision response'),
     modelId: requireString(value, 'modelId', 'AI decision response'),
-    ...(debug ? { debug } : {})
+    ...(debug ? { debug } : {}),
+    ...(parsedPass ? { pass: parsedPass } : {}),
+    ...(orderedActionIds ? { orderedActionIds } : {}),
+    ...(typeof confidence === 'number' ? { confidence } : {}),
+    ...(typeof retainedFirstChoice === 'boolean' ? { retainedFirstChoice } : {}),
+    ...(identifiedRisks ? { identifiedRisks } : {})
   }
 }
 
@@ -615,6 +1010,22 @@ export function parseAiDeckPlanResponse(value: unknown): AiDeckPlanResponse {
       AI_DECK_PLAN_LIMITS.rationaleLength
     ),
     modelId: requireString(value, 'modelId', 'AI deck plan response'),
+    ...(debug ? { debug } : {})
+  }
+}
+
+export function parseAiMatchupPlanResponse(value: unknown): AiMatchupPlanResponse {
+  if (!isRecord(value)) throw new Error('AI matchup plan response must be an object')
+  const debug = parseDebugTrace(value['debug'])
+  return {
+    plan: parseAiMatchupPlan(value['plan']),
+    rationale: requireTruncatedString(
+      value,
+      'rationale',
+      'AI matchup plan response',
+      AI_DECK_PLAN_LIMITS.rationaleLength
+    ),
+    modelId: requireString(value, 'modelId', 'AI matchup plan response'),
     ...(debug ? { debug } : {})
   }
 }

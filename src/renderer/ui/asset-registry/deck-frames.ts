@@ -1,16 +1,5 @@
 import type { DeckClass } from '../../../game/content/cards'
 
-export type DeckFrameAssetKey =
-  | 'druidDeckFrame'
-  | 'hunterDeckFrame'
-  | 'mageDeckFrame'
-  | 'paladinDeckFrame'
-  | 'priestDeckFrame'
-  | 'rogueDeckFrame'
-  | 'shamanDeckFrame'
-  | 'warlockDeckFrame'
-  | 'warriorDeckFrame'
-
 export type NewDeckFrameAssetKey =
   | 'druidNewDeckFrame'
   | 'hunterNewDeckFrame'
@@ -21,18 +10,6 @@ export type NewDeckFrameAssetKey =
   | 'shamanNewDeckFrame'
   | 'warlockNewDeckFrame'
   | 'warriorNewDeckFrame'
-
-export const DECK_FRAME_ASSET_KEYS: Record<DeckClass, DeckFrameAssetKey> = {
-  Warlock: 'warlockDeckFrame',
-  Hunter: 'hunterDeckFrame',
-  Rogue: 'rogueDeckFrame',
-  Warrior: 'warriorDeckFrame',
-  Druid: 'druidDeckFrame',
-  Paladin: 'paladinDeckFrame',
-  Priest: 'priestDeckFrame',
-  Mage: 'mageDeckFrame',
-  Shaman: 'shamanDeckFrame'
-}
 
 export const NEW_DECK_FRAME_ASSET_KEYS: Record<DeckClass, NewDeckFrameAssetKey> = {
   Warlock: 'warlockNewDeckFrame',

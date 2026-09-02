@@ -32,6 +32,11 @@ export const DECK_EDITOR_LAYOUT = {
     { width: COLLECTION_LAYOUT.deckList.size.width, height: DECK_BUTTON_HEIGHT },
     { anchor: CENTER, note: 'Deck frame preview in the editor header.' }
   ),
+  deckNameInput: placement(
+    { x: 1525, y: 94 },
+    { width: 230, height: 32 },
+    { anchor: CENTER, note: 'Editable deck name over the locked deck frame.' }
+  ),
   count: placement(
     { x: 1495, y: 1038 },
     { width: 180, height: 40 },

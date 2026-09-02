@@ -21,10 +21,15 @@ import {
   parseAiDeckPlanResponse,
   parseAiDecisionRequest,
   parseAiDecisionResponse,
+  parseAiMatchupPlanRequest,
+  parseAiMatchupPlanResponse,
+  unwrapAiIpcResult,
   type AiDeckPlanRequest,
   type AiDeckPlanResponse,
   type AiDecisionRequest,
-  type AiDecisionResponse
+  type AiDecisionResponse,
+  type AiMatchupPlanRequest,
+  type AiMatchupPlanResponse
 } from '../shared/ipc/ai'
 import {
   DECK_IPC_CHANNELS,
@@ -92,19 +97,31 @@ const api = {
   },
 
   ai: {
+    planMatchup: async (
+      request: AiMatchupPlanRequest
+    ): Promise<AiMatchupPlanResponse> =>
+      unwrapAiIpcResult(
+        await ipcRenderer.invoke(
+          AI_IPC_CHANNELS.planMatchup,
+          parseAiMatchupPlanRequest(request)
+        ),
+        parseAiMatchupPlanResponse
+      ),
     planDeck: async (request: AiDeckPlanRequest): Promise<AiDeckPlanResponse> =>
-      parseAiDeckPlanResponse(
+      unwrapAiIpcResult(
         await ipcRenderer.invoke(
           AI_IPC_CHANNELS.planDeck,
           parseAiDeckPlanRequest(request)
-        )
+        ),
+        parseAiDeckPlanResponse
       ),
     decide: async (request: AiDecisionRequest): Promise<AiDecisionResponse> =>
-      parseAiDecisionResponse(
+      unwrapAiIpcResult(
         await ipcRenderer.invoke(
           AI_IPC_CHANNELS.decide,
           parseAiDecisionRequest(request)
-        )
+        ),
+        parseAiDecisionResponse
       )
   },
 

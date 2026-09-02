@@ -5,7 +5,7 @@ import { HERO_CATALOG, asHeroId } from '../../game/content'
 import {
   DECK_FILE_VERSION,
   DECK_RULES,
-  MAX_DECKS,
+  MAX_DECK_NAME_LENGTH,
   cloneDeck,
   countDeckCards,
   parseDeck,
@@ -56,10 +56,6 @@ function migrateLegacyDeckFile(value: unknown): Deck[] | null {
     return deck
   })
 
-  if (decks.length > MAX_DECKS) {
-    throw new Error(`Too many legacy decks: ${decks.length}`)
-  }
-
   return decks
 }
 
@@ -68,6 +64,9 @@ function validateCreateRequest(value: unknown): DeckCreateRequest {
   if (!isRecord(value)) throw new Error('Invalid deck creation request')
   if (value.name !== undefined && typeof value.name !== 'string') {
     throw new Error('Invalid deck creation request name')
+  }
+  if (value.name !== undefined && value.name.trim().length > MAX_DECK_NAME_LENGTH) {
+    throw new Error(`Deck names cannot exceed ${MAX_DECK_NAME_LENGTH} characters.`)
   }
   if (
     value.heroId !== undefined &&
@@ -99,9 +98,6 @@ export class DeckRepository implements DeckRepositoryPort {
   async create(request?: DeckCreateRequest): Promise<Deck> {
     return this.enqueueMutation(async () => {
       await this.ensureLoaded()
-      if (this.decks.length >= MAX_DECKS)
-        throw new Error(`You can have at most ${MAX_DECKS} decks.`)
-
       const validatedRequest = validateCreateRequest(request)
       const heroId = validatedRequest.heroId ?? HERO_CATALOG.require('guldan').id
       if (!HERO_CATALOG.require(heroId).deckSelectable) {
@@ -208,8 +204,6 @@ export class DeckRepository implements DeckRepositoryPort {
       HERO_CATALOG.require(deck.heroId)
       validateDeckForPersistence(deck)
     }
-    if (file.decks.length > MAX_DECKS)
-      throw new Error(`Too many decks in ${this.filePath}`)
     if (file.decks.some((deck) => countDeckCards(deck) > 30)) {
       throw new Error('Invalid deck card count')
     }

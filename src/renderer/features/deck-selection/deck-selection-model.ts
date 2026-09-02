@@ -1,10 +1,11 @@
 import {
   MAX_DECK_CARDS,
-  MAX_DECKS,
   countDeckCards,
   type Deck
 } from '../../../game/decks'
 import { createSeededRng } from '../../../game/match'
+
+export const DECK_SELECTION_PAGE_SIZE = 9
 
 export interface DeckSelectionEntry {
   readonly deck: Deck
@@ -17,13 +18,27 @@ export function formatClassWins(wins: number): string {
   return `Wins: ${wins}`
 }
 
-/** Builds the stable 3x3 list of decks that are ready to play. */
+/** Returns the number of completed-deck pages, including a stable empty page. */
+export function getDeckSelectionPageCount(decks: readonly Deck[]): number {
+  const completeDeckCount = decks.filter(
+    (deck) => countDeckCards(deck) === MAX_DECK_CARDS
+  ).length
+  return Math.max(1, Math.ceil(completeDeckCount / DECK_SELECTION_PAGE_SIZE))
+}
+
+/** Builds one stable 3x3 page of decks that are ready to play. */
 export function buildDeckSelectionEntries(
-  decks: readonly Deck[]
+  decks: readonly Deck[],
+  pageIndex: number = 0
 ): readonly DeckSelectionEntry[] {
+  const pageCount = getDeckSelectionPageCount(decks)
+  const safePageIndex = Math.max(0, Math.min(pageIndex, pageCount - 1))
   return decks
     .filter((deck) => countDeckCards(deck) === MAX_DECK_CARDS)
-    .slice(0, MAX_DECKS)
+    .slice(
+      safePageIndex * DECK_SELECTION_PAGE_SIZE,
+      (safePageIndex + 1) * DECK_SELECTION_PAGE_SIZE
+    )
     .map((deck, index) => ({
       deck,
       index,

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_summoning_stone.jpg",
+  "source_name": "league_of_explorers_summoning_stone.jpg",
+  "crop_box": [
+    23,
+    26,
+    478,
+    481
+  ],
+  "scale": 1.1,
+  "offset_x": -25.369230769230796,
+  "offset_y": -28.753846153846183,
+  "timestamp": "2026-09-01T11:39:38.326167",
+  "card_id": "league_of_explorers_summoning_stone",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

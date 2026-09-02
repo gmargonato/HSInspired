@@ -65,13 +65,27 @@ export const DECK_SELECTION_LAYOUT = {
     }
   ),
 
-  /** "Go to collection" button on the left side. */
-  toCollectionButton: placement(
-    { x: 752, y: 1033 },
-    { width: 293, height: 47 },
+  /** Current page label in the bottom-center footer recess. */
+  pageLabel: placement(
+    { x: 752, y: 1030 },
+    { width: 0, height: 0 },
     {
       anchor: CENTER
     }
+  ),
+
+  /** Previous-page arrow, mirrored from the supplied next-page asset. */
+  previousPageButton: placement(
+    { x: 620, y: 1030 },
+    { width: 88, height: 49 },
+    { anchor: CENTER }
+  ),
+
+  /** Next-page arrow beside the page label. */
+  nextPageButton: placement(
+    { x: 895, y: 1030 },
+    { width: 88, height: 49 },
+    { anchor: CENTER }
   ),
 
   /** Back button on the right side. */

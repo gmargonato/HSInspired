@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_roaring_torch.jpg",
+  "source_name": "league_of_explorers_roaring_torch.jpg",
+  "crop_box": [
+    28,
+    31,
+    483,
+    486
+  ],
+  "scale": 1.1,
+  "offset_x": -31.061538461538476,
+  "offset_y": -34.2923076923077,
+  "timestamp": "2026-09-01T11:39:22.497921",
+  "card_id": "league_of_explorers_roaring_torch",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

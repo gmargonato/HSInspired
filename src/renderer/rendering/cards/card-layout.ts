@@ -509,9 +509,18 @@ function legendaryFrame(
 function overlays(options: CardRenderOptions): CardGroupNode | null {
   if (!options.silenced) return null
   return group('overlays', { x: 0, y: 0 }, 500, [
-    image('silence', 'card.overlay.silence', { x: 310, y: 475 }, 500, {
-      anchor: { x: 0.5, y: 0.5 }
-    })
+    image(
+      'silence',
+      'card.overlay.silence',
+      {
+        x: SHARED_RULES_BOX.x + SHARED_RULES_BOX.width / 2,
+        y: SHARED_RULES_BOX.y + SHARED_RULES_BOX.height / 2
+      },
+      500,
+      {
+        anchor: { x: 0.5, y: 0.5 }
+      }
+    )
   ])
 }
 

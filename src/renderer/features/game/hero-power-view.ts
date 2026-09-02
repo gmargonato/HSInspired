@@ -1,10 +1,17 @@
-import { Rectangle, Sprite, Text, Texture, type FederatedPointerEvent } from 'pixi.js'
 import {
-  applyAnchoredPlacement,
-  type LayoutPlacement,
-  type LayoutPoint
-} from '../../rendering/layout'
+  Container,
+  Rectangle,
+  Sprite,
+  Text,
+  Texture,
+  type FederatedPointerEvent
+} from 'pixi.js'
+import type { LayoutPlacement, LayoutPoint } from '../../rendering/layout'
 import { AnimatedOutline } from '../../rendering/effects/animated-outline'
+import {
+  HERO_POWER_ICON_CANVAS,
+  HeroPowerIconView
+} from '../../rendering/hero-powers/hero-power-presentation'
 import { Actor } from '../../ui/components/actor'
 
 /** Feature-local flip timing for the hero power reveal/exhaust animations. */
@@ -58,7 +65,8 @@ export interface HeroPowerLayout {
 export interface HeroPowerViewOptions {
   readonly layout: HeroPowerLayout
   readonly backTexture: Texture
-  readonly frontTexture: Texture
+  readonly frontFrameTexture: Texture
+  readonly artworkTexture: Texture
   readonly manaTexture: Texture
   /** Effective cost shown on the up face (the engine's `PlayerHeroPower.cost`). */
   readonly cost: number
@@ -78,13 +86,13 @@ export interface HeroPowerViewOptions {
  * remote card is never clickable and never wears the outline.
  */
 export class HeroPowerView extends Actor {
-  readonly card: Sprite
+  readonly card: Container
+  private readonly frontFace: HeroPowerIconView
+  private readonly backFace: Sprite
   private readonly manaCrystal: Sprite
   private readonly costLabel: Text
   private readonly playableOutline: AnimatedOutline
-  private readonly outlineTarget: Sprite
-  private frontTexture: Texture
-  private readonly backTexture: Texture
+  private readonly outlineTarget: HeroPowerIconView
   private readonly baseScaleX: number
   private readonly interactionRect: Rectangle
   private readonly onPointerDown?: (event: FederatedPointerEvent) => void
@@ -96,8 +104,6 @@ export class HeroPowerView extends Actor {
     super()
     this.onPointerDown = options.onPointerDown
     this.onClick = options.onClick
-    this.frontTexture = options.frontTexture
-    this.backTexture = options.backTexture
     this.label = 'hero-power'
     this.eventMode = 'none'
     this.cursor = 'default'
@@ -117,17 +123,44 @@ export class HeroPowerView extends Actor {
 
     // The playable-outline silhouette: a static copy of the front face behind
     // the flipping card, exactly like the hand cards' playable outlines.
-    this.outlineTarget = new Sprite(options.frontTexture)
-    applyAnchoredPlacement(this.outlineTarget, cardPlacement)
+    this.outlineTarget = new HeroPowerIconView(
+      options.artworkTexture,
+      options.frontFrameTexture
+    )
+    this.outlineTarget.pivot.set(
+      HERO_POWER_ICON_CANVAS.width * cardPlacement.anchor.x,
+      HERO_POWER_ICON_CANVAS.height * cardPlacement.anchor.y
+    )
+    this.outlineTarget.position.set(cardCenterX, cardCenterY)
+    this.outlineTarget.scale.set(
+      cardPlacement.scale?.x ?? 1,
+      cardPlacement.scale?.y ?? 1
+    )
     this.outlineTarget.eventMode = 'none'
     this.outlineTarget.label = 'hero-power-outline-target'
     this.addChild(this.outlineTarget)
     this.playableOutline = new AnimatedOutline(this.outlineTarget, 'green', 'card')
     this.playableOutline.setEnabled(false)
 
-    this.card = new Sprite(options.frontTexture)
-    applyAnchoredPlacement(this.card, cardPlacement)
+    this.card = new Container()
+    this.card.position.set(cardCenterX, cardCenterY)
+    this.card.scale.set(cardPlacement.scale?.x ?? 1, cardPlacement.scale?.y ?? 1)
     this.card.eventMode = 'none'
+    this.card.label = 'hero-power-face'
+    this.frontFace = new HeroPowerIconView(
+      options.artworkTexture,
+      options.frontFrameTexture
+    )
+    this.frontFace.pivot.set(
+      HERO_POWER_ICON_CANVAS.width * cardPlacement.anchor.x,
+      HERO_POWER_ICON_CANVAS.height * cardPlacement.anchor.y
+    )
+    this.backFace = new Sprite(options.backTexture)
+    this.backFace.anchor.set(cardPlacement.anchor.x, cardPlacement.anchor.y)
+    this.backFace.visible = false
+    this.backFace.eventMode = 'none'
+    this.backFace.label = 'hero-power-back'
+    this.card.addChild(this.frontFace, this.backFace)
     this.addChild(this.card)
     this.baseScaleX = this.card.scale.x
 
@@ -166,10 +199,9 @@ export class HeroPowerView extends Actor {
   }
 
   /** Replaces the visible hero-power face without changing its used/up state. */
-  setFrontTexture(texture: Texture): void {
-    this.frontTexture = texture
-    this.outlineTarget.texture = texture
-    if (this.facingUp) this.card.texture = texture
+  setArtwork(texture: Texture): void {
+    this.frontFace.setArtwork(texture)
+    this.outlineTarget.setArtwork(texture)
   }
 
   /**
@@ -211,13 +243,13 @@ export class HeroPowerView extends Actor {
   /** Flips the card to the class front face and reveals the cost gem. */
   flipUp(): Promise<void> {
     if (this.facingUp) return Promise.resolve()
-    return this.flipTo(this.frontTexture, true)
+    return this.flipTo(true)
   }
 
   /** Flips the card to the back face and hides the cost gem. */
   flipDown(): Promise<void> {
     if (!this.facingUp) return Promise.resolve()
-    return this.flipTo(this.backTexture, false)
+    return this.flipTo(false)
   }
 
   /** A brief horizontal wobble when the click was rejected. */
@@ -248,7 +280,7 @@ export class HeroPowerView extends Actor {
    * scale collapses), the face and the cost gem swap, then the new face opens
    * up. A flip that starts while one is running drops the previous flip.
    */
-  private flipTo(face: Texture, showMana: boolean): Promise<void> {
+  private flipTo(showMana: boolean): Promise<void> {
     this.facingUp = showMana
     this.killTweensOf(this.card.scale)
     const timeline = this.timeline()
@@ -258,7 +290,8 @@ export class HeroPowerView extends Actor {
       ease: 'power2.in'
     })
     timeline.call(() => {
-      this.card.texture = face
+      this.frontFace.visible = showMana
+      this.backFace.visible = !showMana
       this.manaCrystal.visible = showMana
       this.costLabel.visible = showMana
     })

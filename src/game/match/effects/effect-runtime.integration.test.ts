@@ -20,6 +20,60 @@ describe('shared effect runtime', () => {
     ] as const
   }
 
+  it('requires a candidate for direct random-target spells such as Flamecannon', () => {
+    const scenario = createMatchScenario({
+      seed: 73,
+      cardId: 'goblins_vs_gnomes_flamecannon'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'goblins_vs_gnomes_flamecannon'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 2,
+        maximum: 2
+      }).accepted
+    ).toBe(true)
+    const flamecannon = player(scenario, participantId).hand[0]!
+
+    expect(
+      scenario.match.getLegality?.(participantId).playableCardInstanceIds
+    ).not.toContain(flamecannon.instanceId)
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: flamecannon.instanceId
+      }).accepted
+    ).toBe(false)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'basic_bloodfen_raptor'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.getLegality?.(participantId).playableCardInstanceIds
+    ).toContain(flamecannon.instanceId)
+  })
+
   it("draws each of Ysera's five Dream cards, including Nightmare", () => {
     const dreamIds = new Set([
       'classic_dream',
@@ -338,6 +392,7 @@ describe('shared effect runtime', () => {
         action: 'restore',
         data: expect.objectContaining({
           amount: 0,
+          displayAmount: 3,
           target: `${opponentId}:hero`
         })
       })
@@ -370,6 +425,142 @@ describe('shared effect runtime', () => {
     ).toEqual({
       conditionallyEnhanced: true
     })
+  })
+
+  it('projects the played card out of hand before evaluating play conditions', () => {
+    const scenario = createMatchScenario({ seed: 43 })
+    scenario.confirmBothMulligans()
+    const playerId = scenario.match.getState().activePlayerId!
+    const clearHand = (): void => {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-clear-zone',
+          participantId: playerId,
+          zone: 'hand'
+        }).accepted
+      ).toBe(true)
+    }
+    const addCard = (cardId: CardId): void => {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId: playerId,
+          cardId
+        }).accepted
+      ).toBe(true)
+    }
+    const effectPreview = (cardId: CardId) => {
+      const card = player(scenario, playerId).hand.find(
+        (candidate) => candidate.cardId === cardId
+      )!
+      return scenario.match.getPlayInput?.(playerId, card.instanceId)?.effectPreview
+    }
+
+    clearHand()
+    addCard('blackrock_mountain_twilight_whelp' as CardId)
+    expect(effectPreview('blackrock_mountain_twilight_whelp' as CardId)).toBeNull()
+
+    addCard('classic_faerie_dragon' as CardId)
+    expect(effectPreview('blackrock_mountain_twilight_whelp' as CardId)).toEqual({
+      conditionallyEnhanced: true
+    })
+
+    clearHand()
+    addCard('blackrock_mountain_core_rager' as CardId)
+    expect(effectPreview('blackrock_mountain_core_rager' as CardId)).toEqual({
+      conditionallyEnhanced: true
+    })
+
+    addCard('classic_ironbeak_owl' as CardId)
+    expect(effectPreview('blackrock_mountain_core_rager' as CardId)).toBeNull()
+  })
+
+  it('projects a played minion onto the board before evaluating its Battlecry', () => {
+    const scenario = createMatchScenario({ seed: 44 })
+    scenario.confirmBothMulligans()
+    const playerId = scenario.match.getState().activePlayerId!
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId: playerId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: playerId,
+        cardId: 'league_of_explorers_gorillabot_a_3'
+      }).accepted
+    ).toBe(true)
+    const gorillabot = player(scenario, playerId).hand[0]!
+
+    expect(
+      scenario.match.getPlayInput?.(playerId, gorillabot.instanceId)?.effectPreview
+    ).toBeNull()
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: playerId,
+        cardId: 'goblins_vs_gnomes_clockwork_gnome'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.getPlayInput?.(playerId, gorillabot.instanceId)?.effectPreview
+    ).toEqual({ conditionallyEnhanced: true })
+  })
+
+  it('projects the current play into Combo condition timing', () => {
+    const scenario = createMatchScenario({ seed: 45 })
+    scenario.confirmBothMulligans()
+    const playerId = scenario.match.getState().activePlayerId!
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId: playerId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    for (const cardId of [
+      'classic_defias_ringleader',
+      'goblins_vs_gnomes_clockwork_gnome'
+    ] as const) {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId: playerId,
+          cardId
+        }).accepted
+      ).toBe(true)
+    }
+    const defias = player(scenario, playerId).hand.find(
+      (card) => card.cardId === 'classic_defias_ringleader'
+    )!
+    expect(
+      scenario.match.getPlayInput?.(playerId, defias.instanceId)?.effectPreview
+    ).toBeNull()
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: playerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const firstPlay = player(scenario, playerId).hand.find(
+      (card) => card.cardId === 'goblins_vs_gnomes_clockwork_gnome'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: playerId,
+        cardInstanceId: firstPlay.instanceId,
+        position: 0
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.getPlayInput?.(playerId, defias.instanceId)?.effectPreview
+    ).toEqual({ conditionallyEnhanced: true })
   })
 
   it('moves Alarm-o-Bot and its hand minion as identity-preserving instances', () => {
@@ -2911,6 +3102,154 @@ describe('shared effect runtime', () => {
       enchantments: []
     })
   })
+
+  it('sets minion Health to a full maximum and restores that maximum through Silence', () => {
+    const scenario = createMatchScenario({ seed: 951 })
+    scenario.confirmBothMulligans()
+    const [participantId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: 'basic_boulderfist_ogre'
+      }).accepted
+    ).toBe(true)
+    const target = player(scenario, participantId).board[0]!
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'classic_equality'
+      }).accepted
+    ).toBe(true)
+    const equality = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_equality'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: equality.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).board[0]).toMatchObject({
+      health: 1,
+      maxHealth: 1,
+      damageTaken: 0
+    })
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'classic_silence'
+      }).accepted
+    ).toBe(true)
+    const silence = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_silence'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: silence.instanceId,
+        targets: [{ kind: 'minion', participantId, instanceId: target.instanceId }]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).board[0]).toMatchObject({
+      health: 7,
+      maxHealth: 7,
+      damageTaken: 0,
+      silenced: true
+    })
+  })
+
+  it('clamps rather than damages a wounded minion when maximum Health decreases', () => {
+    const fixtureId = 'maximum_health_reduction_fixture' as CardId
+    const fixture = {
+      id: fixtureId,
+      name: 'Maximum Health Reduction Fixture',
+      rarity: 'Common',
+      cardClass: 'Neutral',
+      type: 'Spell',
+      subtype: 'General',
+      cost: 0,
+      attack: null,
+      health: null,
+      rulesText: '',
+      keywords: [],
+      effects: [
+        {
+          trigger: 'cast',
+          actions: [
+            {
+              action: 'modify',
+              target: { controller: 'self', type: 'minion', selection: 'chosen' },
+              health: -1
+            }
+          ]
+        }
+      ]
+    } as unknown as CardDefinition
+    const catalog = CARD_CATALOG as unknown as {
+      readonly cardsById: Map<CardId, CardDefinition>
+    }
+    catalog.cardsById.set(fixtureId, fixture)
+    try {
+      const scenario = createMatchScenario({ seed: 952 })
+      scenario.confirmBothMulligans()
+      const [participantId] = activeParticipants(scenario)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-mana',
+          participantId,
+          available: 10,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId,
+          cardId: 'basic_boulderfist_ogre'
+        }).accepted
+      ).toBe(true)
+      const target = player(scenario, participantId).board[0]!
+      for (const cardId of ['classic_moonfire', fixtureId] as const) {
+        expect(
+          scenario.match.dispatch({ type: 'dev-add-card', participantId, cardId })
+            .accepted
+        ).toBe(true)
+        const card = player(scenario, participantId).hand.find(
+          (entry) => entry.cardId === cardId
+        )!
+        expect(
+          scenario.match.dispatch({
+            type: 'play-card',
+            participantId,
+            cardInstanceId: card.instanceId,
+            targets: [{ kind: 'minion', participantId, instanceId: target.instanceId }]
+          }).accepted
+        ).toBe(true)
+      }
+      expect(player(scenario, participantId).board[0]).toMatchObject({
+        health: 6,
+        maxHealth: 6,
+        damageTaken: 0
+      })
+    } finally {
+      catalog.cardsById.delete(fixtureId)
+    }
+  })
+
   it('recomputes a real while-condition aura as its condition changes', () => {
     const scenario = createMatchScenario({ seed: 102 })
     scenario.confirmBothMulligans()

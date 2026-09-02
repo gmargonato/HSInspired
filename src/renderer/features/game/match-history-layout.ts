@@ -29,12 +29,12 @@ export const MATCH_HISTORY_LAYOUT = {
       note: 'Expanded initiating card centered vertically on the 1920x1080 canvas.'
     }),
     heroPowerSource: placement(
-      { x: 524, y: 540 },
-      { width: 150, height: 150 },
+      { x: 400, y: 359 },
+      { width: 620, height: 903 },
       {
-        anchor: CENTER,
-        scale: 1.4,
-        note: 'Hero power face centered in the expanded source-card area.'
+        anchor: TOP_LEFT,
+        scale: HISTORY_SOURCE_CARD_SCALE,
+        note: 'Constructed hero-power card aligned with expanded card previews.'
       }
     ),
     heroSource: placement({ x: 524, y: 540 }, HERO_FRAME_SIZE, {

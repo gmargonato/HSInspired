@@ -8,6 +8,7 @@ import type {
   HistoryActionOutcome
 } from '../../../game/match'
 import { CardView } from '../../rendering/cards/card-view'
+import { HeroPowerCardView } from '../../rendering/hero-powers/hero-power-presentation'
 import { cardCostColor } from '../../rendering/cards/card-cost-presentation'
 import { DamageIndicatorView } from './damage-indicator-view'
 import { Actor } from '../../ui/components/actor'
@@ -37,6 +38,7 @@ export interface MatchHistoryTextures {
   readonly cardBack: Texture
   readonly heroFrames: DeckPresentationAssets
   readonly heroPowers: Record<HeroPowerAssetKey, Texture>
+  readonly heroPowerCardFrame: Texture
 }
 
 interface HistoryRailItem {
@@ -229,7 +231,9 @@ export class MatchHistoryView extends Actor {
     if (entry.action === 'fatigue') {
       this.preview.addChild(this.createFatigueSource(entry, railIndex))
     } else if (entry.action === 'hero-power' && entry.source.heroPowerId) {
-      this.preview.addChild(this.createHeroPowerSource(entry.source.heroPowerId))
+      this.preview.addChild(
+        this.createHeroPowerSource(entry.source.heroPowerId, entry.source.currentCost)
+      )
     } else if (this.isHiddenSecretEntry(entry)) {
       this.preview.addChild(
         this.createHistoryCard(
@@ -408,11 +412,17 @@ export class MatchHistoryView extends Actor {
     ]
   }
 
-  private createHeroPowerSource(heroPowerId: string): Sprite {
-    const source = new Sprite(this.heroPowerTexture(heroPowerId))
+  private createHeroPowerSource(heroPowerId: string, currentCost?: number): Container {
+    const definition = HERO_POWER_CATALOG.require(heroPowerId)
+    const source = new HeroPowerCardView(
+      definition,
+      currentCost ?? definition.cost,
+      this.heroPowerTexture(heroPowerId),
+      this.textures.heroPowerCardFrame
+    )
     source.label = 'game.history.source-hero-power'
     source.eventMode = 'none'
-    applyAnchoredPlacement(source, MATCH_HISTORY_LAYOUT.preview.heroPowerSource)
+    applyPlacement(source, MATCH_HISTORY_LAYOUT.preview.heroPowerSource)
     return source
   }
 

@@ -10,15 +10,22 @@ import { AssetScope } from '../../ui/asset-registry/asset-scope'
 import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/button'
+import { DeckEntryButton } from '../../ui/components/deck-entry-button'
 import { HERO_CATALOG } from '../../../game/content/heroes'
 import type { DeckStore } from '../../ui/deck-store'
 import type { PlayerStatsStore } from '../../ui/player-stats-store'
-import { DECK_FRAME_ASSET_KEYS } from '../../ui/asset-registry/deck-frames'
-import { buildDeckSelectionEntries, formatClassWins } from './deck-selection-model'
+import {
+  getDeckPortraitAssetKey,
+  getDeckPortraitYOffset
+} from '../../ui/asset-registry/deck-portraits'
+import {
+  buildDeckSelectionEntries,
+  formatClassWins,
+  getDeckSelectionPageCount
+} from './deck-selection-model'
 import { DECK_SELECTION_LAYOUT } from './deck-selection-layout'
 
 export interface DeckSelectionViewCallbacks {
-  readonly onCollectionPressed?: () => void | Promise<void>
   readonly onBackPressed?: () => void | Promise<void>
   readonly onPlayPressed?: (
     deck: import('../../../game/decks').Deck
@@ -30,7 +37,11 @@ export class DeckSelectionView extends Container {
   private readonly assetScope = new AssetScope()
   private readonly deckButtons: Button[] = []
   private readonly deckOutlines: AnimatedOutline[] = []
-  private toCollectionButton!: Button
+  private deckGrid!: Container
+  private deckPresentationAssets!: DeckPresentationAssets
+  private pageLabel!: Text
+  private previousPageButton!: Button
+  private nextPageButton!: Button
   private backButton!: Button
   private heroPortrait!: Sprite
   private heroName!: Text
@@ -41,6 +52,7 @@ export class DeckSelectionView extends Container {
   private selectedDeck: import('../../../game/decks').Deck | null = null
   private selectedDeckOutline: AnimatedOutline | null = null
   private navigationStarted = false
+  private currentPageIndex = 0
 
   constructor(
     private readonly deckStore: DeckStore,
@@ -68,6 +80,7 @@ export class DeckSelectionView extends Container {
         await this.assetScope.acquire<DeckPresentationAssets>(
           ASSET_BUNDLE_IDS.deckPresentation
         )
+      this.deckPresentationAssets = deckPresentationAssets
 
       await this.deckStore.load()
       try {
@@ -154,9 +167,26 @@ export class DeckSelectionView extends Container {
   }
 
   private createDeckGrid(assets: DeckPresentationAssets): void {
-    for (const entry of buildDeckSelectionEntries(this.deckStore.getDecks())) {
-      const hero = HERO_CATALOG.require(entry.deck.heroId)
-      const texture = assets[DECK_FRAME_ASSET_KEYS[hero.classId]]
+    this.deckGrid = new Container()
+    this.deckGrid.label = 'deck-selection.deck-grid'
+    this.addChild(this.deckGrid)
+    this.renderDeckGrid(assets)
+  }
+
+  private renderDeckGrid(assets: DeckPresentationAssets): void {
+    for (const outline of this.deckOutlines) outline.dispose()
+    this.deckOutlines.length = 0
+    this.deckButtons.length = 0
+    for (const child of this.deckGrid.removeChildren()) {
+      child.destroy({ children: true })
+    }
+
+    for (const entry of buildDeckSelectionEntries(
+      this.deckStore.getDecks(),
+      this.currentPageIndex
+    )) {
+      const texture = assets.deckButtonFrame
+      const portraitAssetKey = getDeckPortraitAssetKey(entry.deck.heroId)
       const framePosition = {
         x:
           DECK_SELECTION_LAYOUT.deckGrid.frameStart.x +
@@ -175,20 +205,23 @@ export class DeckSelectionView extends Container {
       outlineTarget.position.set(framePosition.x, framePosition.y)
       outlineTarget.eventMode = 'none'
       outlineTarget.label = `deck-selection.deck-outline:${entry.deck.id}`
-      this.addChild(outlineTarget)
+      this.deckGrid.addChild(outlineTarget)
 
       const outline = new AnimatedOutline(outlineTarget, 'blue', 'button')
       outline.setEnabled(false)
       this.deckOutlines.push(outline)
 
-      const button = new Button(texture, {
+      const button = new DeckEntryButton(texture, {
+        portrait: portraitAssetKey ? assets[portraitAssetKey] : undefined,
+        portraitYOffset: getDeckPortraitYOffset(entry.deck.heroId),
+        deckName: entry.deck.name,
         onClick: () => this.selectDeck(entry.deck, assets, outline)
       })
       button.label = `deck-selection.deck:${entry.deck.id}`
       button.position.set(framePosition.x, framePosition.y)
       button.setBaseY(framePosition.y)
       this.deckButtons.push(button)
-      this.addChild(button)
+      this.deckGrid.addChild(button)
     }
   }
 
@@ -217,14 +250,39 @@ export class DeckSelectionView extends Container {
     assets: DeckSelectionAssets,
     sharedAssets: SharedUIAssets
   ): void {
-    this.toCollectionButton = new Button(assets.toCollectionButton, {
-      onClick: () => this.navigate(this.callbacks.onCollectionPressed, 'collection')
+    this.pageLabel = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 28,
+        fill: 0xffffff,
+        stroke: { color: 0x000000, width: 4 },
+        align: 'center'
+      }
     })
-    applyPlacement(this.toCollectionButton, DECK_SELECTION_LAYOUT.toCollectionButton)
-    this.toCollectionButton.setBaseY(
-      DECK_SELECTION_LAYOUT.toCollectionButton.position.y
+    applyAnchoredPlacement(this.pageLabel, DECK_SELECTION_LAYOUT.pageLabel)
+    this.pageLabel.label = 'deck-selection.page-label'
+    this.pageLabel.eventMode = 'none'
+    this.addChild(this.pageLabel)
+
+    this.previousPageButton = new Button(assets.paginationNextButton, {
+      onClick: () => this.setPage(this.currentPageIndex - 1)
+    })
+    applyPlacement(this.previousPageButton, DECK_SELECTION_LAYOUT.previousPageButton)
+    this.previousPageButton.scale.x = -1
+    this.previousPageButton.setBaseY(
+      DECK_SELECTION_LAYOUT.previousPageButton.position.y
     )
-    this.addChild(this.toCollectionButton)
+    this.previousPageButton.label = 'deck-selection.previous-page'
+    this.addChild(this.previousPageButton)
+
+    this.nextPageButton = new Button(assets.paginationNextButton, {
+      onClick: () => this.setPage(this.currentPageIndex + 1)
+    })
+    applyPlacement(this.nextPageButton, DECK_SELECTION_LAYOUT.nextPageButton)
+    this.nextPageButton.setBaseY(DECK_SELECTION_LAYOUT.nextPageButton.position.y)
+    this.nextPageButton.label = 'deck-selection.next-page'
+    this.addChild(this.nextPageButton)
 
     this.backButton = new Button(sharedAssets.backButton, {
       onClick: () => this.navigate(this.callbacks.onBackPressed, 'main menu')
@@ -232,6 +290,46 @@ export class DeckSelectionView extends Container {
     applyPlacement(this.backButton, DECK_SELECTION_LAYOUT.backButton)
     this.backButton.setBaseY(DECK_SELECTION_LAYOUT.backButton.position.y)
     this.addChild(this.backButton)
+
+    this.updatePaginationControls()
+  }
+
+  private setPage(pageIndex: number): void {
+    const pageCount = getDeckSelectionPageCount(this.deckStore.getDecks())
+    const nextPageIndex = Math.max(0, Math.min(pageIndex, pageCount - 1))
+    if (nextPageIndex === this.currentPageIndex) return
+
+    this.currentPageIndex = nextPageIndex
+    this.clearSelection()
+    this.renderDeckGrid(this.deckPresentationAssets)
+    this.updatePaginationControls()
+  }
+
+  private updatePaginationControls(): void {
+    const pageCount = getDeckSelectionPageCount(this.deckStore.getDecks())
+    this.pageLabel.text = `Page ${this.currentPageIndex + 1}/${pageCount}`
+    this.previousPageButton.visible = this.currentPageIndex > 0
+    this.previousPageButton.setEnabled(
+      !this.navigationStarted && this.currentPageIndex > 0
+    )
+    this.nextPageButton.visible = this.currentPageIndex < pageCount - 1
+    this.nextPageButton.setEnabled(
+      !this.navigationStarted && this.currentPageIndex < pageCount - 1
+    )
+  }
+
+  private clearSelection(): void {
+    this.selectedDeckOutline?.setEnabled(false)
+    this.selectedDeckOutline = null
+    this.selectedDeck = null
+    this.heroPortrait.visible = false
+    this.heroName.text = ''
+    this.heroName.visible = false
+    this.classWins.text = ''
+    this.classWins.visible = false
+    this.playButton.visible = false
+    this.playButton.setEnabled(false)
+    this.playOutline.setEnabled(false)
   }
 
   private async navigate(
@@ -255,7 +353,11 @@ export class DeckSelectionView extends Container {
   }
 
   private setNavigationEnabled(enabled: boolean): void {
-    this.toCollectionButton.setEnabled(enabled)
+    this.previousPageButton.setEnabled(enabled && this.currentPageIndex > 0)
+    this.nextPageButton.setEnabled(
+      enabled &&
+        this.currentPageIndex < getDeckSelectionPageCount(this.deckStore.getDecks()) - 1
+    )
     this.backButton.setEnabled(enabled)
     this.playButton.setEnabled(enabled && this.selectedDeck !== null)
     this.playOutline.setEnabled(enabled && this.selectedDeck !== null)

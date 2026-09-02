@@ -11,10 +11,7 @@ import type { RendererLogger } from '../../ui/logger'
 import { AnimationScope } from '../../animation/animations'
 import { AssetScope } from '../../ui/asset-registry/asset-scope'
 import type { DeckStore } from '../../ui/deck-store'
-import {
-  DECK_FRAME_ASSET_KEYS,
-  NEW_DECK_FRAME_ASSET_KEYS
-} from '../../ui/asset-registry/deck-frames'
+import { NEW_DECK_FRAME_ASSET_KEYS } from '../../ui/asset-registry/deck-frames'
 import { NEW_DECK_LAYOUT } from './new-deck-layout'
 import { HERO_CATALOG, type HeroDefinition } from '../../../game/content/heroes'
 import { PLAYABLE_CLASSES, type DeckClass } from '../../../game/content/cards'
@@ -25,11 +22,6 @@ export interface NewDeckViewCallbacks {
   onClassSelected?: (hero: HeroDefinition) => void | Promise<void>
   onCancelled?: () => void | Promise<void>
   onDeckCreated?: (deck: Deck, hero: HeroDefinition) => void | Promise<void>
-}
-
-export interface NewDeckViewOptions {
-  /** Use the 'new-deck-frame-<class>.png' family for the class grid. */
-  newDeckFrames?: boolean
 }
 
 /** Nested deck-creation overlay presented by CollectionScene. */
@@ -61,8 +53,7 @@ export class NewDeckView extends Container {
       info: () => undefined,
       warn: () => undefined,
       error: () => undefined
-    },
-    private readonly options: NewDeckViewOptions = {}
+    }
   ) {
     super()
     this.deckStore = deckStore
@@ -137,12 +128,8 @@ export class NewDeckView extends Container {
     this.heroName.eventMode = 'none'
     this.selectionContent.addChild(this.heroName)
 
-    const frameKeys = this.options.newDeckFrames
-      ? NEW_DECK_FRAME_ASSET_KEYS
-      : DECK_FRAME_ASSET_KEYS
-
     for (const [index, heroClass] of PLAYABLE_CLASSES.entries()) {
-      const texture = this.deckPresentationAssets[frameKeys[heroClass]]
+      const texture = this.deckPresentationAssets[NEW_DECK_FRAME_ASSET_KEYS[heroClass]]
       const button = new Button(texture, {
         highlightOnHover: false,
         pressedBrightness: 1,

@@ -6,6 +6,7 @@
 export const CARD_KEYWORDS = [
   'attack-wrong-enemy-chance-50',
   'cannot-attack',
+  'cannot-attack-heroes',
   'charge',
   'divine-shield',
   'immune',
@@ -25,6 +26,7 @@ export const CARD_TRIGGERS = [
   'cast',
   'deathrattle',
   'end-of-turn',
+  'inspire',
   'on-attack',
   'on-card-played',
   'on-cast',
@@ -32,8 +34,11 @@ export const CARD_TRIGGERS = [
   'on-death',
   'on-discard',
   'on-draw',
+  'on-equip',
   'on-gain-armor',
   'on-heal',
+  'overheal',
+  'on-overload',
   'on-play',
   'on-secret-played',
   'on-secret-revealed',
@@ -62,6 +67,7 @@ export const CARD_EVENT_TYPES = [
   'health-restored',
   'hero-attacked',
   'hero-damaged',
+  'hero-power-used',
   'hero-would-die',
   'minion-attacked',
   'minion-attacks-hero',
@@ -69,11 +75,15 @@ export const CARD_EVENT_TYPES = [
   'minion-died',
   'minion-played',
   'minion-summoned',
+  'overload-applied',
   'weapon-died',
+  'weapon-equipped',
   'secret-played',
   'secret-revealed',
   'spell-cast',
-  'spell-targeted-minion'
+  'spell-targeted-minion',
+  'turn-ended',
+  'turn-started'
 ] as const
 export type CardEventType = (typeof CARD_EVENT_TYPES)[number]
 
@@ -82,12 +92,15 @@ export const CARD_CONDITIONS = [
   'combo',
   'combo-active',
   'drawn-card-matches',
+  'board-has-minion-count',
+  'event-player-had-minion-count',
   'not-combo',
   'player-controls-secret',
   'player-has-damaged-minion',
   'player-has-hand-count',
   'player-has-minion',
   'player-has-minion-count',
+  'player-deck-has-no-duplicates',
   'player-has-secret',
   'player-has-weapon',
   'player-health-gt',
@@ -199,14 +212,17 @@ export type CardOperator = (typeof CARD_OPERATORS)[number]
 /** Closed references used by numeric effect values. */
 export const CARD_VALUE_REFERENCES = [
   'available-board-slots',
+  'beasts-summoned-this-game',
   'cards-played-earlier-this-turn',
   'damage-dealt',
   'drawn-card.cost',
   'event-target.attack',
   'event-target.durability',
   'event.damage',
+  'event.amount',
   'hand-size-difference',
   'health',
+  'hero-powers-used-this-game',
   'hero-damage',
   'minions-died-this-turn',
   'matching-entity-count',
@@ -232,13 +248,14 @@ export const CARD_ACTION_SOURCES = [
   'deck-top',
   'destroyed-minions',
   'friendly-minions-died-this-turn',
+  'minions-died-this-game',
   'hand',
   'random-card'
 ] as const
-export const CARD_ACTION_DESTINATIONS = ['hand'] as const
+export const CARD_ACTION_DESTINATIONS = ['cast-on-source', 'hand'] as const
 export const CARD_ACTION_RESOURCES = ['weapon-durability'] as const
 export const CARD_ACTION_FIELDS = ['health'] as const
-export const CARD_CRYSTAL_MODES = ['empty'] as const
+export const CARD_CRYSTAL_MODES = ['empty', 'full'] as const
 
 export const CARD_ACTIONS = [
   'add-to-hand',
@@ -247,6 +264,7 @@ export const CARD_ACTIONS = [
   'counter-event',
   'damage',
   'destroy',
+  'destroy-all-but-highest-attack',
   'destroy-and-gain-stats',
   'destroy-mana-crystal',
   'destroy-secrets',
@@ -259,13 +277,20 @@ export const CARD_ACTIONS = [
   'freeze',
   'gain-armor',
   'gain-mana',
+  'joust',
   'grant-deathrattle',
   'grant-keyword',
+  'lock-and-load',
   'grant-keywords',
   'grant-random-keyword',
   'grant-targeting',
   'grant-trigger',
   'modify',
+  'modify-hero-power-uses',
+  'modify-hero-power-damage',
+  'modify-weapon-on-hero-power',
+  'redirect-hero-damage',
+  'set-hero-power-drawn-card-cost',
   'multiply-trigger',
   'overload',
   'prevent-lethal',

@@ -1,4 +1,5 @@
 import {
+  BlurFilter,
   Container,
   Graphics,
   Rectangle,
@@ -6,6 +7,7 @@ import {
   Text,
   type FederatedPointerEvent,
   type FederatedWheelEvent,
+  type Renderer,
   type Texture
 } from 'pixi.js'
 import {
@@ -35,6 +37,11 @@ import { Button } from '../../ui/components/button'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { ARENA_LAYOUT } from './arena-layout'
 import { buildArenaDeckEntries, buildArenaManaCurve } from './arena-model'
+import {
+  createCardAddFlightPath,
+  resolveCardAddFlightPoint,
+  resolveCardAddScrollOffset
+} from '../collection/choreography/card-add-flight'
 
 export interface ArenaViewCallbacks {
   readonly onBack: () => void | Promise<void>
@@ -55,8 +62,32 @@ interface ArenaDeckRow {
   readonly artworkHeight: number
 }
 
+interface ArenaCardAddEffect {
+  readonly root: Container
+  readonly source: Sprite
+  readonly bloom: Sprite
+  readonly aura: Sprite
+  readonly row: ArenaDeckRow
+  readonly sourceTexture: ReturnType<Renderer['generateTexture']>
+  readonly blur: BlurFilter
+  destroyed: boolean
+}
+
+interface ArenaCardAddTarget {
+  readonly x: number
+  readonly y: number
+}
+
 const DECK_ROW_COST_WIDTH = 27
 const DECK_ROW_COPIES_WIDTH = 24
+
+const CARD_ADD_CHOREOGRAPHY = {
+  flightDuration: 0.34,
+  landingDuration: 0.1,
+  rowStartScale: 0.88,
+  rowLandingScale: 1.05,
+  sourceGlowScale: 1.28
+} as const
 
 export class ArenaView extends Actor {
   private readonly resolver = new CardAssetResolver()
@@ -64,12 +95,15 @@ export class ArenaView extends Actor {
   private readonly deckContent = new Container()
   private readonly deckViewport = new Container()
   private readonly deckMask = new Graphics()
+  private readonly cardAddEffectLayer = new Container()
   private readonly manaLayer = new Container()
   private readonly statisticsLayer = new Container()
   private readonly heroChoices: HeroChoiceView[] = []
+  private readonly deckRows = new Map<string, ArenaDeckRow>()
   private cardChoices: CardView[] = []
   private selectedHero: Sprite | null = null
   private preview: CardView | null = null
+  private activeCardAddEffect: ArenaCardAddEffect | null = null
   private heading!: Text
   private deckCount!: Text
   private retireButton!: Button
@@ -84,12 +118,14 @@ export class ArenaView extends Actor {
   private maxDeckScroll = 0
   private sliderDragging = false
   private sliderDragOffset = 0
+  private disposed = false
 
   constructor(
     private readonly store: ArenaStore,
     private readonly assets: ArenaAssets,
     private readonly heroAssets: DeckPresentationAssets,
     sharedAssets: SharedUIAssets,
+    private readonly renderer: Renderer,
     private readonly callbacks: ArenaViewCallbacks
   ) {
     super()
@@ -193,6 +229,9 @@ export class ArenaView extends Actor {
     this.addChild(this.backButton)
 
     this.createRetireDialog()
+    this.cardAddEffectLayer.label = 'arena.card-add-effects'
+    this.cardAddEffectLayer.eventMode = 'none'
+    this.addChild(this.cardAddEffectLayer)
   }
 
   private createRetireDialog(): void {
@@ -223,7 +262,7 @@ export class ArenaView extends Actor {
     this.addChild(this.retireDialog)
   }
 
-  private async render(snapshot: ArenaRunSnapshot): Promise<void> {
+  private async render(snapshot: ArenaRunSnapshot, enable = true): Promise<void> {
     this.snapshot = snapshot
     const sequence = ++this.renderSequence
     this.clearChoices()
@@ -249,7 +288,7 @@ export class ArenaView extends Actor {
     } else if (snapshot.phase === 'drafting' && snapshot.cardChoices) {
       await this.renderCardChoices(snapshot.cardChoices, sequence)
     }
-    this.setEnabled(true)
+    if (enable) this.setEnabled(true)
   }
 
   private clearChoices(): void {
@@ -291,12 +330,17 @@ export class ArenaView extends Actor {
       portrait.eventMode = 'none'
       root.addChild(portrait)
 
-      const name = this.createOutlinedText(hero.displayName, 24)
+      const name = this.createOutlinedText(hero.displayName, 24, 0x000000, false)
       name.label = `arena.hero-name.${hero.id}`
       name.anchor.set(0.5)
       name.position.set(0, ARENA_LAYOUT.heroChoices.nameY - ARENA_LAYOUT.heroChoices.y)
       root.addChild(name)
-      const className = this.createOutlinedText(String(hero.classId).toUpperCase(), 18)
+      const className = this.createOutlinedText(
+        String(hero.classId).toUpperCase(),
+        18,
+        0x000000,
+        false
+      )
       className.label = `arena.hero-class.${hero.id}`
       className.anchor.set(0.5)
       className.position.set(
@@ -388,42 +432,248 @@ export class ArenaView extends Actor {
   private async selectCard(cardId: CardId, selected: CardView): Promise<void> {
     if (this.busy) return
     this.setEnabled(false)
+    let effect: ArenaCardAddEffect | null = null
     try {
-      const next = await this.store.pickCard(cardId)
+      if (this.disposed) return
+      const predictedSnapshot: ArenaRunSnapshot = {
+        ...this.snapshot,
+        cards: {
+          ...this.snapshot.cards,
+          [cardId]: (this.snapshot.cards[cardId] ?? 0) + 1
+        },
+        picksCompleted: this.snapshot.picksCompleted + 1
+      }
       for (const card of this.cardChoices) {
         if (card !== selected) this.tweenTo(card, { alpha: 0, duration: 0.16 })
       }
-      await this.animateCardToDeck(selected)
-      await this.render(next)
+      const target = this.prepareCardAddTarget(predictedSnapshot, cardId)
+      effect = this.createCardAddEffect(
+        selected,
+        cardId,
+        predictedSnapshot.cards[cardId] ?? 1
+      )
+      this.activeCardAddEffect = effect
+      const animation = this.animateCardToDeck(selected, effect, target)
+      const [next] = await Promise.all([this.store.pickCard(cardId), animation])
+      if (this.disposed) return
+      await this.render(next, false)
+      await this.animateCardAddLanding(effect, cardId)
+      this.setEnabled(true)
     } catch (error) {
       this.callbacks.onError?.('Failed to add the Arena card.', error)
+      if (effect && !this.disposed) {
+        try {
+          await this.render(this.snapshot)
+        } catch {
+          // Keep the original card-add error as the reported failure.
+        }
+      }
       this.setEnabled(true)
+    } finally {
+      if (effect) this.destroyCardAddEffect(effect)
+      if (this.activeCardAddEffect === effect) this.activeCardAddEffect = null
     }
   }
 
-  private animateCardToDeck(card: CardView): Promise<void> {
-    const start = { x: card.x, y: card.y }
-    const end = { x: 1455, y: 150 }
-    const control = { x: 1320, y: 130 }
-    const progress = { value: 0 }
-    return new Promise((resolve) => {
-      this.tweenTo(progress, {
-        value: 1,
-        duration: 0.42,
-        ease: 'power2.in',
-        onUpdate: () => {
-          const t = progress.value
-          const inverse = 1 - t
-          card.position.set(
-            inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
-            inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y
-          )
-          card.scale.set(ARENA_LAYOUT.cardChoices.scale * (1 - t * 0.72))
-        },
-        onComplete: resolve,
-        onInterrupt: resolve
+  private prepareCardAddTarget(
+    snapshot: ArenaRunSnapshot,
+    cardId: CardId
+  ): ArenaCardAddTarget {
+    const entries = buildArenaDeckEntries(snapshot)
+    const index = entries.findIndex((entry) => entry.card.id === cardId)
+    if (index < 0) throw new Error(`Arena card ${cardId} is missing from the deck.`)
+
+    const rowHeight = ARENA_LAYOUT.deckList.rowHeight
+    const renderedRowHeight = rowHeight - 1
+    const maxScroll = Math.max(
+      0,
+      entries.length * rowHeight - ARENA_LAYOUT.deckList.height
+    )
+    const rowTop = ARENA_LAYOUT.deckList.y + index * rowHeight
+    this.maxDeckScroll = maxScroll
+    this.setDeckScroll(
+      resolveCardAddScrollOffset({
+        viewportTop: ARENA_LAYOUT.deckList.y,
+        viewportHeight: ARENA_LAYOUT.deckList.height,
+        contentOffset: this.deckScroll,
+        maxScroll,
+        rowTop,
+        rowHeight: renderedRowHeight
       })
+    )
+
+    return {
+      x: ARENA_LAYOUT.deckList.x + ARENA_LAYOUT.deckList.width / 2,
+      y: rowTop + this.deckScroll + renderedRowHeight / 2
+    }
+  }
+
+  private createCardAddEffect(
+    selected: CardView,
+    cardId: CardId,
+    count: number
+  ): ArenaCardAddEffect {
+    const bounds = selected.getBounds()
+    const topLeft = this.toLocal({ x: bounds.x, y: bounds.y })
+    const bottomRight = this.toLocal({
+      x: bounds.x + bounds.width,
+      y: bounds.y + bounds.height
     })
+    const centerX = (topLeft.x + bottomRight.x) / 2
+    const centerY = (topLeft.y + bottomRight.y) / 2
+    const sourceWidth = Math.abs(bottomRight.x - topLeft.x)
+    const sourceHeight = Math.abs(bottomRight.y - topLeft.y)
+
+    const root = new Container()
+    root.label = 'arena.card-add-effect'
+    root.eventMode = 'none'
+    this.cardAddEffectLayer.addChild(root)
+
+    const aura = new Sprite(this.assets.cardAddAura)
+    aura.label = 'arena.card-add-aura'
+    aura.anchor.set(0.5)
+    aura.position.set(centerX, centerY)
+    aura.width = sourceWidth * 1.55
+    aura.height = sourceHeight * 1.25
+    aura.blendMode = 'add'
+    aura.alpha = 0.72
+    root.addChild(aura)
+
+    const sourceTexture = this.renderer.generateTexture({
+      target: selected,
+      antialias: true
+    })
+    const bloom = new Sprite(sourceTexture)
+    const blur = new BlurFilter({ strength: 10, quality: 3 })
+    bloom.label = 'arena.card-add-bloom'
+    bloom.anchor.set(0.5)
+    bloom.position.set(centerX, centerY)
+    bloom.width = sourceWidth
+    bloom.height = sourceHeight
+    bloom.blendMode = 'add'
+    bloom.filters = [blur]
+    bloom.alpha = 0.92
+    root.addChild(bloom)
+
+    const source = new Sprite(sourceTexture)
+    source.label = 'arena.card-add-whiteout'
+    source.anchor.set(0.5)
+    source.position.set(centerX, centerY)
+    source.width = sourceWidth
+    source.height = sourceHeight
+    source.blendMode = 'add'
+    source.alpha = 0.92
+    root.addChild(source)
+
+    const row = this.createDeckRow(CARD_CATALOG.require(cardId), count, 0)
+    const rowWidth = ARENA_LAYOUT.deckList.width
+    const rowHeight = ARENA_LAYOUT.deckList.rowHeight - 1
+    row.row.label = 'arena.card-add-row'
+    row.row.eventMode = 'none'
+    row.row.pivot.set(rowWidth / 2, rowHeight / 2)
+    row.row.position.set(centerX, centerY)
+    row.row.scale.set(CARD_ADD_CHOREOGRAPHY.rowStartScale)
+    row.row.alpha = 0
+    root.addChild(row.row)
+
+    void this.resolver
+      .loadArtwork(cardId)
+      .then((artwork) => {
+        if (artwork && row.row.parent === root) this.applyDeckRowArtwork(row, artwork)
+      })
+      .catch(() => undefined)
+
+    return {
+      root,
+      source,
+      bloom,
+      aura,
+      row,
+      sourceTexture,
+      blur,
+      destroyed: false
+    }
+  }
+
+  private animateCardToDeck(
+    card: CardView,
+    effect: ArenaCardAddEffect,
+    target: ArenaCardAddTarget
+  ): Promise<void> {
+    const start = { x: effect.row.row.x, y: effect.row.row.y }
+    const path = createCardAddFlightPath(start, target)
+    const progress = { value: 0 }
+    const updateFlight = (): void => {
+      const point = resolveCardAddFlightPoint(path, progress.value)
+      effect.row.row.position.set(point.x, point.y)
+    }
+
+    return new Promise((resolve) => {
+      const timeline = this.timeline({ onComplete: resolve, onInterrupt: resolve })
+      timeline.to(
+        [effect.source, effect.bloom, effect.aura, card],
+        { alpha: 0, duration: 0.16, ease: 'power2.out' },
+        0
+      )
+      timeline.to(
+        effect.aura.scale,
+        {
+          x: CARD_ADD_CHOREOGRAPHY.sourceGlowScale,
+          y: CARD_ADD_CHOREOGRAPHY.sourceGlowScale,
+          duration: 0.16,
+          ease: 'power2.out'
+        },
+        0
+      )
+      timeline.to(effect.row.row, { alpha: 1, duration: 0.04 }, 0)
+      timeline.to(effect.row.row.scale, { x: 1, y: 1, duration: 0.08 }, 0)
+      timeline.to(
+        progress,
+        {
+          value: 1,
+          duration: CARD_ADD_CHOREOGRAPHY.flightDuration,
+          ease: 'power2.inOut',
+          onUpdate: updateFlight
+        },
+        0
+      )
+    })
+  }
+
+  private animateCardAddLanding(
+    effect: ArenaCardAddEffect,
+    cardId: CardId
+  ): Promise<void> {
+    const target = this.deckRows.get(cardId)
+    if (!target) return Promise.resolve()
+
+    target.row.alpha = 1
+    effect.row.row.alpha = 0
+    return new Promise((resolve) => {
+      const timeline = this.timeline({ onComplete: resolve, onInterrupt: resolve })
+      timeline.fromTo(
+        target.row.scale,
+        {
+          x: CARD_ADD_CHOREOGRAPHY.rowLandingScale,
+          y: CARD_ADD_CHOREOGRAPHY.rowLandingScale
+        },
+        {
+          x: 1,
+          y: 1,
+          duration: CARD_ADD_CHOREOGRAPHY.landingDuration,
+          ease: 'back.out(2)'
+        }
+      )
+    })
+  }
+
+  private destroyCardAddEffect(effect: ArenaCardAddEffect): void {
+    if (effect.destroyed) return
+    effect.destroyed = true
+    effect.root.removeFromParent()
+    effect.blur.destroy()
+    effect.root.destroy({ children: true, texture: false })
+    effect.sourceTexture.destroy(true)
   }
 
   private renderSelectedHero(): void {
@@ -445,11 +695,13 @@ export class ArenaView extends Actor {
   private renderDeck(): void {
     for (const child of this.deckContent.removeChildren())
       child.destroy({ children: true })
+    this.deckRows.clear()
     const entries = buildArenaDeckEntries(this.snapshot)
     const sequence = this.renderSequence
     entries.forEach((entry, index) => {
       const row = this.createDeckRow(entry.card, entry.count, index)
       this.deckContent.addChild(row.row)
+      this.deckRows.set(entry.card.id, row)
       void this.resolver
         .loadArtwork(entry.card.id)
         .then((artwork) => {
@@ -638,8 +890,8 @@ export class ArenaView extends Actor {
           height,
           5
         )
-        .fill({ color: 0x8f2818, alpha: 0.92 })
-        .stroke({ color: 0x2b0d08, width: 2 })
+        .fill({ color: 0xf2a51a, alpha: 0.92 })
+        .stroke({ color: 0x70400b, width: 2 })
       bar.label = `arena.mana.${index}`
       this.manaLayer.addChild(bar)
     })
@@ -656,14 +908,14 @@ export class ArenaView extends Actor {
       this.snapshot.defeats
     ]
     labels.forEach((label, index) => {
-      const labelText = this.createOutlinedText(label, 28, 0x3b2518)
+      const labelText = this.createOutlinedText(label, 28, 0xffffff)
       labelText.label = `arena.stat-label.${index}`
       labelText.anchor.set(0.5)
       labelText.position.set(
         ARENA_LAYOUT.statistics.columns[index],
         ARENA_LAYOUT.statistics.labelsY
       )
-      const valueText = this.createOutlinedText(String(values[index]), 82, 0x25150e)
+      const valueText = this.createOutlinedText(String(values[index]), 82, 0xffffff)
       valueText.label = `arena.stat-value.${index}`
       valueText.anchor.set(0.5)
       valueText.position.set(
@@ -812,7 +1064,12 @@ export class ArenaView extends Actor {
     this.slider.eventMode = enabled && this.maxDeckScroll > 0 ? 'static' : 'none'
   }
 
-  private createOutlinedText(text: string, fontSize: number, fill = 0xffffff): Text {
+  private createOutlinedText(
+    text: string,
+    fontSize: number,
+    fill = 0xffffff,
+    withStroke = true
+  ): Text {
     const value = new Text({
       text,
       style: {
@@ -820,7 +1077,11 @@ export class ArenaView extends Actor {
         fontSize,
         fontWeight: '700',
         fill,
-        stroke: { color: 0x000000, width: Math.max(2, Math.round(fontSize / 10)) },
+        ...(withStroke
+          ? {
+              stroke: { color: 0x000000, width: Math.max(2, Math.round(fontSize / 10)) }
+            }
+          : {}),
         align: 'center'
       }
     })
@@ -829,8 +1090,13 @@ export class ArenaView extends Actor {
   }
 
   override dispose(): void {
+    this.disposed = true
     ++this.renderSequence
     this.hidePreview()
+    if (this.activeCardAddEffect) {
+      this.destroyCardAddEffect(this.activeCardAddEffect)
+      this.activeCardAddEffect = null
+    }
     super.dispose()
   }
 }

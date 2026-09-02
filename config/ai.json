@@ -14,6 +14,11 @@
       "reasoningEffort": "low",
       "maxCompletionTokens": 3072
     },
+    "matchupPlan": {
+      "requestTimeoutMs": 30000,
+      "reasoningEffort": "medium",
+      "maxCompletionTokens": 3072
+    },
     "mulligan": {
       "requestTimeoutMs": 25000,
       "reasoningEffort": "low",
@@ -28,13 +33,28 @@
       "requestTimeoutMs": 20000,
       "reasoningEffort": "low",
       "maxCompletionTokens": 2048
+    },
+    "rank": {
+      "requestTimeoutMs": 10000,
+      "reasoningEffort": "medium",
+      "maxCompletionTokens": 2048
+    },
+    "critic": {
+      "requestTimeoutMs": 10000,
+      "reasoningEffort": "medium",
+      "maxCompletionTokens": 2048
     }
   },
   "prompts": {
     "system": "You rank a closed shortlist of engine-issued actions for the remote AI player in a Hearthstone-style game. Optimize match win probability. The mode's visibility policy is authoritative: unknown opponent cards, secrets, deck order, and future random results are genuinely unknown and must never be assumed. Structured runtime state, the match-scoped deck plan, outcome annotations, and legal IDs are authoritative; never invent an action, target, card, cost, or rule. Apply this order: take guaranteed lethal, prevent forced defeat, then choose the highest expected-win line that advances the deck plan while preserving resources whose release conditions are not met. Uncertainty is a probability tradeoff, not a reason to stop making productive plays. Return exactly the structured response with a concise player-visible rationale and no private chain-of-thought.",
     "deckPlan": "Analyze only the supplied AI deck and structured card relationships. Produce a compact match plan: identify its actual win conditions, game phases, card roles, combos and ordering, resources that must be preserved with explicit release conditions, and mulligan priorities. Reference only card IDs present in the supplied deck. Do not infer an opponent deck or invent rules. Frostbolt-like damage that enables a later combo should be protected when that combo is a real win condition, but every resource must be releasable for lethal, survival, or a superior winning line.",
     "mulligan": "Choose the strongest supplied replacement candidate using the match-scoped deck plan, player number, Coin, exact self opening hand, and public opponent hero/class only. Do not assume opponent hand, decklist, or draw order. Select exactly one supplied candidate ID.",
-    "turn": "Select the strongest supplied action or candidate line for the deck's end goal, not the largest immediate stat change. Guaranteed lethal and forced survival come first. Otherwise compare expected outcome, worst case, plan progress, sequencing, board and hand value, and the opportunity cost of consuming reserved combo resources. Treat unknown secrets as a belief set: play around them only when the expected benefit exceeds the tempo and resource cost. A fresh authoritative state follows every dispatched action."
+    "turn": "Select the strongest supplied action or candidate line for the deck's end goal, not the largest immediate stat change. Guaranteed lethal and forced survival come first. Otherwise compare expected outcome, worst case, plan progress, sequencing, board and hand value, and the opportunity cost of consuming reserved combo resources. Treat unknown secrets as a belief set: play around them only when the expected benefit exceeds the tempo and resource cost. A fresh authoritative state follows every dispatched action.",
+    "competitiveSystem": "Rank only the supplied engine-issued action IDs for the remote AI player. The opponent-deck-and-hand policy intentionally supplies both original decklists and the exact current opponent hand, but remaining deck order, future random values, and facedown secret identity remain unknown. Dossiers and legal IDs are authoritative. Take proven lethal, prevent proven defeat, then maximize match win probability. Return only the strict pass-specific JSON response and no private chain-of-thought.",
+    "matchupPlan": "Analyze both supplied decks. Produce the strict version-2 matchup plan: self win conditions, phase strategy, card roles, combos, resource release rules and mulligan priorities; opponent archetype, win conditions, threat priorities, removal priorities, and phase counter-strategy. Reference self cards only in self fields and opponent cards only in opponent fields. Never invent rules.",
+    "competitiveMulligan": "Rank every supplied replacement candidate. Use both decklists, the exact current hands, and the matchup plan. Do not infer deck order, future random values, or facedown secret identity.",
+    "competitiveTurn": "Return a complete ordering of the supplied shortlist. Proven tactics take precedence; otherwise compare mean, downside, worst case, resource release, uncertainty, and matchup progress.",
+    "critic": "Inspect the supplied first-pass ordering and the same dossiers. Identify concrete risks, then retain the first choice or override it with another supplied action ID."
   },
   "debug": true
 }

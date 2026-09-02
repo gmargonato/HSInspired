@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_anubisath_sentinel.jpg",
+  "source_name": "league_of_explorers_anubisath_sentinel.jpg",
+  "crop_box": [
+    0,
+    0,
+    512,
+    512
+  ],
+  "scale": 0.9765625,
+  "offset_x": 0.0,
+  "offset_y": 0.0,
+  "timestamp": "2026-09-01T11:36:41.199504",
+  "card_id": "league_of_explorers_anubisath_sentinel",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

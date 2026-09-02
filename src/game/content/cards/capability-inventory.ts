@@ -211,6 +211,7 @@ function actionPhase(name: CardActionName): CapabilityPhase {
   if (
     [
       'grant-keyword',
+      'lock-and-load',
       'grant-keywords',
       'grant-random-keyword',
       'modify',
@@ -224,6 +225,7 @@ function actionPhase(name: CardActionName): CapabilityPhase {
     [
       'damage',
       'destroy',
+      'destroy-all-but-highest-attack',
       'destroy-and-gain-stats',
       'gain-armor',
       'restore',
@@ -265,7 +267,8 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'prevent-lethal',
       'redirect-damage',
       'replace-event',
-      'reveal'
+      'reveal',
+      'joust'
     ].includes(name)
   )
     return 13
@@ -273,6 +276,11 @@ function actionPhase(name: CardActionName): CapabilityPhase {
     [
       'equip',
       'equip-random',
+      'modify-hero-power-uses',
+      'modify-hero-power-damage',
+      'modify-weapon-on-hero-power',
+      'redirect-hero-damage',
+      'set-hero-power-drawn-card-cost',
       'replace-hero',
       'set-hero-power',
       'set-turn-limit'

@@ -5,6 +5,7 @@ import {
   type CardDefinition,
   type CardId
 } from './card-definition'
+import type { CardKeyword } from './card-effects'
 import { validateCardRecord } from './card-validator'
 
 /**
@@ -39,8 +40,157 @@ function generatedSpell(
   }
 }
 
+function generatedWeapon(
+  id: string,
+  name: string,
+  attack: number,
+  durability: number
+): CardDefinition {
+  return {
+    id: asCardId(id),
+    expansionId: GENERATED_EXPANSION,
+    set: GENERATED_EXPANSION,
+    name,
+    rarity: 'None',
+    cardClass: GENERATED_CLASS,
+    subtype: null,
+    spellSchool: null,
+    cost: 0,
+    rulesText: '',
+    keywords: [],
+    effects: [],
+    collectible: false,
+    deckLegal: false,
+    type: 'Weapon' as const,
+    attack,
+    health: durability
+  } as unknown as CardDefinition
+}
+
+function generatedMinion(
+  id: string,
+  name: string,
+  attack: number,
+  health: number
+): CardDefinition {
+  return {
+    id: asCardId(id),
+    expansionId: GENERATED_EXPANSION,
+    set: GENERATED_EXPANSION,
+    name,
+    rarity: 'Summon',
+    cardClass: GENERATED_CLASS,
+    subtype: null,
+    spellSchool: null,
+    cost: 0,
+    rulesText: '',
+    keywords: [],
+    effects: [],
+    collectible: false,
+    deckLegal: false,
+    type: 'Minion' as const,
+    attack,
+    health
+  } as unknown as CardDefinition
+}
+
+function generatedMinionWithEffects(
+  id: string,
+  name: string,
+  attack: number,
+  health: number,
+  rulesText: string,
+  effects: readonly Record<string, unknown>[]
+): CardDefinition {
+  return {
+    ...generatedMinion(id, name, attack, health),
+    rulesText,
+    effects: effects as CardDefinition['effects']
+  }
+}
+
+function generatedMinionWithKeywords(
+  id: string,
+  name: string,
+  attack: number,
+  health: number,
+  keywords: readonly CardKeyword[]
+): CardDefinition {
+  return { ...generatedMinion(id, name, attack, health), keywords }
+}
+
+function generatedTriggeredSpell(
+  id: string,
+  name: string,
+  rulesText: string,
+  trigger: 'on-draw',
+  actions: readonly Record<string, unknown>[]
+): CardDefinition {
+  return {
+    ...generatedSpell(id, name, rulesText, []),
+    effects: [{ trigger, actions } as CardDefinition['effects'][number]]
+  }
+}
+
 /** The seven GvG Spare Parts used by the catalog's random-card effects. */
 const GENERATED_CARD_RECORDS: readonly CardDefinition[] = [
+  generatedMinion('the_grand_tournament_ambush_nerubian', 'Nerubian', 4, 4),
+  generatedTriggeredSpell(
+    'the_grand_tournament_ambush',
+    'Ambush!',
+    'When drawn, summon a 4/4 Nerubian.',
+    'on-draw',
+    [{ action: 'summon', cardId: 'the_grand_tournament_ambush_nerubian' }]
+  ),
+  generatedMinionWithKeywords(
+    'the_grand_tournament_bear',
+    'Bear',
+    3,
+    3,
+    ['taunt']
+  ),
+  generatedMinionWithKeywords(
+    'the_grand_tournament_boar',
+    'Boar',
+    4,
+    2,
+    ['charge']
+  ),
+  generatedMinionWithKeywords(
+    'the_grand_tournament_saber_charge_form',
+    'Druid of the Saber',
+    2,
+    1,
+    ['charge']
+  ),
+  generatedMinionWithKeywords(
+    'the_grand_tournament_saber_stealth_form',
+    'Druid of the Saber',
+    3,
+    2,
+    ['stealth']
+  ),
+  generatedMinionWithEffects(
+    'the_grand_tournament_nerubian',
+    'Nerubian',
+    4,
+    4,
+    "Deathrattle: Summon Anub'arak.",
+    [
+      {
+        trigger: 'deathrattle',
+        actions: [{ action: 'summon', cardId: 'the_grand_tournament_anubarak' }]
+      }
+    ]
+  ),
+  generatedMinion('the_grand_tournament_sapling', 'Sapling', 1, 1),
+  generatedMinion('the_grand_tournament_war_kodo', 'War Kodo', 3, 5),
+  generatedWeapon(
+    'the_grand_tournament_poisoned_dagger',
+    'Poisoned Dagger',
+    2,
+    2
+  ),
   generatedSpell(
     'goblins_vs_gnomes_spare_part_armor_plating',
     'Armor Plating',

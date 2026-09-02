@@ -485,12 +485,15 @@ export class CollectionView extends Actor {
         toggle: this.options.assets.expansionToggle,
         tray: this.options.assets.expansionTray,
         collectionOn: this.options.assets.expansionCollectionOn,
-        collectionOff: this.options.assets.expansionCollectionOff
+        collectionOff: this.options.assets.expansionCollectionOff,
+        verticalSlider: this.options.assets.verticalSlider
       },
       layout: {
         toggle: COLLECTION_LAYOUT.expansionFilter.toggle,
         trayOpen: COLLECTION_LAYOUT.expansionFilter.trayOpen,
         trayClosed: COLLECTION_LAYOUT.expansionFilter.trayClosed,
+        viewport: COLLECTION_LAYOUT.expansionFilter.viewport,
+        slider: COLLECTION_LAYOUT.expansionFilter.slider,
         buttons: EXPANSION_CATALOG.all.map((_, index) =>
           getExpansionFilterButtonPlacement(index)
         )
