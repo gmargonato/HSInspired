@@ -95,6 +95,27 @@ function attemptCard(
     case 'classic_cabal_shadow_priest':
       summon(opponentId, asCardId('classic_wisp'))
       break
+    case 'classic_blade_flurry': {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId,
+          cardId: 'basic_assassins_blade'
+        }).accepted
+      ).toBe(true)
+      const weapon = scenario.match
+        .getState()
+        .players.find((candidate) => candidate.participantId === participantId)!
+        .hand.find((card) => card.cardId === 'basic_assassins_blade')!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId,
+          cardInstanceId: weapon.instanceId
+        }).accepted
+      ).toBe(true)
+      break
+    }
     case 'classic_hungry_crab':
       summon(participantId, asCardId('basic_murloc_raider'))
       break

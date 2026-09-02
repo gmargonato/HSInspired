@@ -1,4 +1,5 @@
 import { CARD_CATALOG, type CardDefinition } from '../../content/cards'
+import { HERO_POWER_CATALOG } from '../../content/hero-powers'
 import type { OpeningMatchState, OpeningPlayerState } from '../opening-match-types'
 import type { PlayerId } from '../match-types'
 import type { AiEvaluationComponents, AiStrategicPlanView } from './ai-types'
@@ -51,6 +52,29 @@ function effectiveHealth(player: OpeningPlayerState): number {
 
 function boardAttack(player: OpeningPlayerState): number {
   return player.board.reduce((total, minion) => total + Math.max(0, minion.attack), 0)
+}
+
+/**
+ * Attack that can be removed immediately by an unused targeted-damage hero
+ * power. This makes setup actions legible to the evaluator: reducing a large
+ * threat to one health is valuable when the remaining mana can finish it.
+ * Only guaranteed, currently affordable damage is counted.
+ */
+function immediatelyAnswerableAttack(
+  state: OpeningMatchState,
+  self: OpeningPlayerState,
+  opponent: OpeningPlayerState
+): number {
+  if (state.activePlayerId !== self.participantId || !self.heroPower.available) return 0
+  const power = HERO_POWER_CATALOG.get(self.heroPower.id)
+  if (power?.effect.kind !== 'damage-character') return 0
+  if (self.heroPower.cost > self.mana.available) return 0
+  const damage = self.heroPower.effectOverride?.damage ?? power.effect.amount
+  return opponent.board.reduce(
+    (best, minion) =>
+      minion.health <= damage ? Math.max(best, Math.max(0, minion.attack)) : best,
+    0
+  )
 }
 
 function boardHealth(player: OpeningPlayerState): number {
@@ -147,6 +171,10 @@ export function evaluatePosition(
     throw new Error('AI evaluator perspective is not in the match.')
   const selfAttack = boardAttack(self)
   const opponentAttack = boardAttack(opponent)
+  const projectedOpponentAttack = Math.max(
+    0,
+    opponentAttack - immediatelyAnswerableAttack(state, self, opponent)
+  )
   const selfWeapon = self.weapon ? self.weapon.attack * self.weapon.durability : 0
   const opponentWeapon = opponent.weapon
     ? opponent.weapon.attack * opponent.weapon.durability
@@ -162,7 +190,7 @@ export function evaluatePosition(
     lethalPressure: clamp((selfAttack + selfWeapon - effectiveHealth(opponent)) / 30),
     effectiveHealth: relative(effectiveHealth(self), effectiveHealth(opponent), 30),
     incomingReach: clamp(
-      (effectiveHealth(self) - opponentAttack - opponentWeapon) / 30
+      (effectiveHealth(self) - projectedOpponentAttack - opponentWeapon) / 30
     ),
     boardAttack: relative(selfAttack, opponentAttack, 20),
     boardHealth: relative(boardHealth(self), boardHealth(opponent), 30),
@@ -173,7 +201,7 @@ export function evaluatePosition(
     cardAdvantage: relative(self.hand.length, opponent.hand.length, 8),
     manaEfficiency:
       state.activePlayerId === self.participantId
-        ? clamp(self.mana.available / Math.max(1, self.mana.maximum), 0, 1)
+        ? clamp(1 - self.mana.available / Math.max(1, self.mana.maximum), 0, 1)
         : 0,
     futureCurve: relative(handQuality(self), handQuality(opponent), 8),
     weapon: relative(selfWeapon, opponentWeapon, 16),
@@ -204,7 +232,9 @@ export function evaluatePosition(
     ),
     matchupProgress: matchupProgress(opponent, plan),
     comboProgress: comboProgress(self, plan),
-    threatExposure: clamp(-opponentAttack / Math.max(1, effectiveHealth(self))),
+    threatExposure: clamp(
+      -projectedOpponentAttack / Math.max(1, effectiveHealth(self))
+    ),
     reservedResourceCost: -reservedResourceCost(self, plan)
   }
   const score = (Object.keys(components) as (keyof AiEvaluationComponents)[]).reduce(

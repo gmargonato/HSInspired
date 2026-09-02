@@ -1,5 +1,6 @@
-import { Texture } from 'pixi.js'
+import { Sprite, Texture } from 'pixi.js'
 import { describe, expect, it, vi } from 'vitest'
+import { gsap } from '../../animation/animations'
 
 vi.mock('../../rendering/effects/animated-outline', () => ({
   AnimatedOutline: class {
@@ -113,6 +114,39 @@ describe('hero-power target presentation', () => {
 
     expect(stopPropagation).toHaveBeenCalledOnce()
     expect(onPointerDown).toHaveBeenCalledOnce()
+    view.dispose()
+  })
+
+  it('swaps replacement artwork through a horizontal flip and refreshes face-up', async () => {
+    const view = new HeroPowerView({
+      layout: {
+        card: {
+          position: { x: 100, y: 100 },
+          size: { width: 150, height: 150 },
+          anchor: { x: 0.5, y: 0.5 },
+          scale: { x: 1, y: 1 }
+        },
+        crystalOffset: { x: 0, y: 0 },
+        costOffset: { x: 0, y: 0 }
+      },
+      backTexture: Texture.EMPTY,
+      frontFrameTexture: Texture.EMPTY,
+      artworkTexture: Texture.EMPTY,
+      manaTexture: Texture.EMPTY,
+      cost: 2
+    })
+    await view.flipDown()
+
+    const replacement = view.replaceArtwork(Texture.WHITE)
+    gsap.globalTimeline.progress(1)
+    await replacement
+
+    const artwork = view.getChildByLabel('hero-power.icon.artwork.image', true)
+    expect(artwork).toBeInstanceOf(Sprite)
+    expect((artwork as Sprite).texture).toBe(Texture.WHITE)
+    expect(view.card.scale.x).toBe(1)
+    expect(view.getChildByLabel('hero-power-back', true)?.visible).toBe(false)
+    expect(view.getChildByLabel('hero-power-mana', true)?.visible).toBe(true)
     view.dispose()
   })
 })

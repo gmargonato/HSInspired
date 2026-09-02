@@ -12,6 +12,7 @@ export interface BoardAbilityMarkers {
   readonly deathrattle: boolean
   readonly poisonous: boolean
   readonly trigger: boolean
+  readonly inspire: boolean
   /** Text-only placeholders for board visuals whose authored assets do not exist yet. */
   readonly temporaryAbilityLabels: readonly TemporaryBoardAbilityLabel[]
 }
@@ -56,6 +57,7 @@ export function boardAbilityMarkers(
     (effect) => effect.trigger === 'deathrattle'
   )
   const poisonous = definition.effects.some(isPoisonEffect)
+  const inspire = definition.effects.some((effect) => effect.trigger === 'inspire')
   const trigger =
     definition.effects.some(
       (effect) => IN_PLAY_TRIGGER_TYPES.has(effect.trigger) && !isPoisonEffect(effect)
@@ -79,6 +81,7 @@ export function boardAbilityMarkers(
     deathrattle,
     poisonous,
     trigger,
+    inspire,
     temporaryAbilityLabels
   }
 }
@@ -138,6 +141,7 @@ export function boardMinionAbilityMarkers(
       deathrattle: false,
       poisonous: false,
       trigger: false,
+      inspire: false,
       temporaryAbilityLabels: []
     }
   }
@@ -147,7 +151,13 @@ export function boardMinionAbilityMarkers(
     (expiresOnTurn === undefined || expiresOnTurn >= turnNumber)
   const grantedTrigger = (minion.grantedTriggers ?? []).some(
     (entry) =>
-      entry.trigger !== 'deathrattle' && active(entry.startsOnTurn, entry.expiresOnTurn)
+      entry.trigger !== 'deathrattle' &&
+      entry.trigger !== 'inspire' &&
+      active(entry.startsOnTurn, entry.expiresOnTurn)
+  )
+  const grantedInspire = (minion.grantedTriggers ?? []).some(
+    (entry) =>
+      entry.trigger === 'inspire' && active(entry.startsOnTurn, entry.expiresOnTurn)
   )
   const grantedDeathrattle = (minion.grantedTriggers ?? []).some(
     (entry) =>
@@ -160,6 +170,7 @@ export function boardMinionAbilityMarkers(
     divineShield: runtime.divineShield,
     stealth: runtime.stealth,
     trigger: authored.trigger || grantedTrigger,
+    inspire: authored.inspire || grantedInspire,
     deathrattle:
       authored.deathrattle ||
       grantedDeathrattle ||

@@ -128,6 +128,7 @@ import {
 } from './character-indicator-presentation'
 import { SecretRevealView, SecretZoneView } from './secret-view'
 import { MatchHistoryView } from './match-history-view'
+import { clearMatchResultCombatViews } from './match-result-state'
 import { AiTurnController, COMPETITIVE_AI_POLICY } from './ai-turn-controller'
 import { TargetGestureController } from './target-gesture'
 import {
@@ -370,6 +371,7 @@ export class GameBoardView extends Actor {
   private readonly initialSlots: GameCardSlot[] = []
   private readonly remoteBacks: Sprite[] = []
   private readonly boardLayer = new Container()
+  private readonly matchBackdropLayer = new Container()
   private readonly gameplayLayer = new Container()
   private readonly localMinionLayer = new Container()
   private readonly remoteMinionLayer = new Container()
@@ -666,8 +668,10 @@ export class GameBoardView extends Actor {
             onSelect: this.handleAddCardPickerSelect
           })
         : null
+    this.matchBackdropLayer.label = 'game.match-backdrop'
+    this.addChild(this.matchBackdropLayer)
     this.gameplayLayer.label = 'game.gameplay'
-    this.addChild(this.gameplayLayer)
+    this.matchBackdropLayer.addChild(this.gameplayLayer)
     this.boardMinionCardPreviewLayer.label = 'game.board-minion-card-preview'
     this.boardMinionCardPreviewLayer.eventMode = 'none'
     this.addChild(this.boardMinionCardPreviewLayer)
@@ -868,7 +872,7 @@ export class GameBoardView extends Actor {
       this.localParticipantId,
       (active) => this.setHistoryBoardDesaturated(active)
     )
-    this.addChildAt(this.historyView, 1)
+    this.matchBackdropLayer.addChild(this.historyView)
 
     this.createBoard()
     this.createHeroes(initialState)
@@ -974,8 +978,7 @@ export class GameBoardView extends Actor {
   /** Builds both face-up hero power cards in their final board positions. */
   private createHeroPowers(state: OpeningMatchState): void {
     for (const player of state.players) {
-      const hero = HERO_CATALOG.require(player.heroId)
-      const heroPower = HERO_POWER_CATALOG.require(hero.heroPowerId)
+      const heroPower = HERO_POWER_CATALOG.require(player.heroPower.id)
       const artworkTexture =
         this.options.gameAssets[heroPower.presentationAssetKey as HeroPowerAssetKey]
       const isLocal = player.participantId === this.localParticipantId
@@ -1142,10 +1145,6 @@ export class GameBoardView extends Actor {
           player.heroPower.baseCost ?? player.heroPower.cost,
           player.heroPower.cost
         )
-      )
-      const definition = HERO_POWER_CATALOG.require(player.heroPower.id)
-      view.setArtwork(
-        this.options.gameAssets[definition.presentationAssetKey as HeroPowerAssetKey]
       )
       const legality = this.match.getLegality?.(player.participantId)
       view.setEnabled(
@@ -1968,6 +1967,11 @@ export class GameBoardView extends Actor {
     this.cancelHeroPowerTargeting()
     this.cancelCardTargeting()
     this.deselectAttacker()
+    clearMatchResultCombatViews([
+      ...this.heroViews.values(),
+      ...this.localMinionViews,
+      ...this.remoteMinionViews
+    ])
     this.setMulliganInputEnabled(false)
     this.confirmButton?.setEnabled(false)
     this.handLayer.eventMode = 'none'
@@ -1993,7 +1997,7 @@ export class GameBoardView extends Actor {
       this.matchResultGrayscaleFilter = grayscale
       filters.push(grayscale)
     }
-    this.gameplayLayer.filters = filters
+    this.matchBackdropLayer.filters = filters
 
     const localHero = this.heroViews.get(this.localParticipantId)
     if (!localHero) {
@@ -3312,6 +3316,9 @@ export class GameBoardView extends Actor {
         this.syncTurnHud(this.match.getState())
         await this.presentHeroPowerFlip(event.participantId, false)
         return
+      case 'hero-power-replaced':
+        await this.presentHeroPowerReplaced(event)
+        return
       case 'character-damaged':
         this.showDamageIndicatorForCharacter(
           event.participantId,
@@ -3338,7 +3345,7 @@ export class GameBoardView extends Actor {
         return
       }
       case 'hero-replaced':
-        this.presentHeroReplaced(event.participantId)
+        await this.presentHeroReplaced(event)
         return
       case 'fatigue':
         await this.fatigueView.present(
@@ -3632,8 +3639,10 @@ export class GameBoardView extends Actor {
       if (view) {
         // Runtime-granted triggers may not have reached the end-of-resolution
         // reconciliation yet; the concrete activation itself is authoritative.
-        view.setTrigger(true)
-        await view.presentAbilityPulse('trigger', RESOLUTION_TIMING.triggerPulse)
+        const marker = event.trigger === 'inspire' ? 'inspire' : 'trigger'
+        if (marker === 'inspire') view.setInspire(true)
+        else view.setTrigger(true)
+        await view.presentAbilityPulse(marker, RESOLUTION_TIMING.triggerPulse)
       }
       return
     }
@@ -3957,6 +3966,7 @@ export class GameBoardView extends Actor {
         view.setFrozen(isFrozen(minion.frozenUntilTurn, state.turnNumber))
         view.setStealth(markers.stealth)
         view.setTrigger(markers.trigger)
+        view.setInspire(markers.inspire)
         view.setDeathrattle(markers.deathrattle)
       }
     }
@@ -4064,17 +4074,42 @@ export class GameBoardView extends Actor {
     this.layoutRemoteHand()
   }
 
-  /** Refreshes the existing board portrait after a Hero card replaces it. */
-  private presentHeroReplaced(participantId: PlayerId): void {
-    const player = this.findPlayer(this.match.getState(), participantId)
-    const hero = HERO_CATALOG.require(player.heroId)
-    const view = this.heroViews.get(participantId)
-    view?.setFrame(this.options.heroAssets[hero.presentationAssetKey])
+  /** Flips the portrait and its newly installed Hero Power at the same time. */
+  private async presentHeroReplaced(
+    event: Extract<OpeningMatchEvent, { type: 'hero-replaced' }>
+  ): Promise<void> {
+    const player = this.findPlayer(this.match.getState(), event.participantId)
+    const hero = HERO_CATALOG.require(event.heroId)
+    const heroPower = HERO_POWER_CATALOG.require(hero.heroPowerId)
+    const view = this.heroViews.get(event.participantId)
+    const heroPowerView = this.heroPowerViews.get(event.participantId)
     view?.setStats(
       getHeroAttack(player),
       player.hero.health,
       player.hero.armor,
       player.hero.maxHealth
+    )
+    heroPowerView?.setCost(heroPower.cost)
+    await Promise.all([
+      view?.replaceFrame(this.options.heroAssets[hero.presentationAssetKey]) ??
+        Promise.resolve(),
+      heroPowerView?.replaceArtwork(
+        this.options.gameAssets[heroPower.presentationAssetKey as HeroPowerAssetKey]
+      ) ?? Promise.resolve()
+    ])
+    this.syncHeroPowerViews(this.match.getState())
+  }
+
+  /** Flips an upgraded or otherwise replaced Hero Power to its new face. */
+  private async presentHeroPowerReplaced(
+    event: Extract<OpeningMatchEvent, { type: 'hero-power-replaced' }>
+  ): Promise<void> {
+    const view = this.heroPowerViews.get(event.participantId)
+    if (!view) return
+    const definition = HERO_POWER_CATALOG.require(event.heroPowerId)
+    view.setCost(definition.cost)
+    await view.replaceArtwork(
+      this.options.gameAssets[definition.presentationAssetKey as HeroPowerAssetKey]
     )
     this.syncHeroPowerViews(this.match.getState())
   }
@@ -4606,6 +4641,7 @@ export class GameBoardView extends Actor {
       )
       existing.setStealth(existingMarkers.stealth)
       existing.setTrigger(existingMarkers.trigger)
+      existing.setInspire(existingMarkers.inspire)
       existing.setDeathrattle(existingMarkers.deathrattle)
       return null
     }
@@ -4624,6 +4660,7 @@ export class GameBoardView extends Actor {
       frozen: this.options.gameAssets.minionFrozen,
       stealth: this.options.gameAssets.minionStealth,
       trigger: this.options.gameAssets.boardTrigger,
+      inspire: this.options.gameAssets.boardInspire,
       deathrattle: this.options.gameAssets.boardDeathrattle,
       poisonous: this.options.gameAssets.boardPoisonous,
       attack: this.options.gameAssets.minionAttack,
@@ -4653,6 +4690,7 @@ export class GameBoardView extends Actor {
           deathrattle: markers.deathrattle,
           poisonous: markers.poisonous,
           trigger: markers.trigger,
+          inspire: markers.inspire,
           temporaryAbilityLabels: markers.temporaryAbilityLabels
         },
         textures,
@@ -6747,6 +6785,7 @@ export class GameBoardView extends Actor {
       )
       view.setStealth(markers.stealth)
       view.setTrigger(markers.trigger)
+      view.setInspire(markers.inspire)
       view.setDeathrattle(markers.deathrattle)
       view.setBaseScale(resting.scale)
       this.insertLocalMinionView(minionPlayed.position, view)

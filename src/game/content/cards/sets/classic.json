@@ -1230,6 +1230,10 @@
     "health": null,
     "rulesText": "Destroy your weapon and deal its damage to all enemies.",
     "keywords": [],
+    "playCondition": {
+      "type": "player-has-weapon",
+      "player": "self"
+    },
     "effects": [
       {
         "trigger": "cast",
@@ -1250,7 +1254,7 @@
               "selection": "all"
             },
             "amount": {
-              "reference": "event-target.attack"
+              "reference": "destroyed-weapon.attack"
             }
           }
         ]
@@ -1792,6 +1796,26 @@
     "effects": [
       {
         "trigger": "cast",
+        "condition": {
+          "type": "combo"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 4
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "not-combo"
+        },
         "actions": [
           {
             "action": "modify",
@@ -1802,22 +1826,7 @@
             },
             "attack": 2
           }
-        ],
-        "then": {
-          "condition": {
-            "type": "combo"
-          },
-          "actions": [
-            {
-              "action": "modify",
-              "target": {
-                "selection": "event-target",
-                "type": "minion"
-              },
-              "attack": 2
-            }
-          ]
-        }
+        ]
       }
     ]
   },
@@ -3070,6 +3079,26 @@
     "effects": [
       {
         "trigger": "cast",
+        "condition": {
+          "type": "combo"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 4
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
+        "condition": {
+          "type": "not-combo"
+        },
         "actions": [
           {
             "action": "damage",
@@ -3080,22 +3109,7 @@
             },
             "amount": 2
           }
-        ],
-        "then": {
-          "condition": {
-            "type": "combo"
-          },
-          "actions": [
-            {
-              "action": "damage",
-              "target": {
-                "selection": "event-target",
-                "type": "character"
-              },
-              "amount": 2
-            }
-          ]
-        }
+        ]
       }
     ]
   },
@@ -6616,14 +6630,15 @@
             "target": {
               "controller": "self",
               "type": "card",
-              "selection": "next",
+              "selection": "all",
               "zone": "hand",
               "filter": {
                 "cardType": "Spell"
               }
             },
             "amount": -3,
-            "duration": "this-turn"
+            "duration": "this-turn",
+            "deferUntil": "next-matching-card-played"
           }
         ]
       }

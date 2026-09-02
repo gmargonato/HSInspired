@@ -112,7 +112,17 @@ function extractAssistantContent(response: JsonValue): string {
   if (!isRecord(message) || typeof message['content'] !== 'string') {
     throw new Error('Azure OpenAI response did not contain assistant JSON content.')
   }
-  return message['content']
+  const content = message['content']
+  if (content.trim() === '') {
+    const finishReason = choices[0]['finish_reason']
+    if (finishReason === 'length') {
+      throw new Error(
+        'Azure OpenAI exhausted max_completion_tokens before producing assistant JSON content.'
+      )
+    }
+    throw new Error('Azure OpenAI returned empty assistant JSON content.')
+  }
+  return content
 }
 
 function providerMetadata(response: JsonValue): {
@@ -265,7 +275,26 @@ function buildRequestBody(
           gameState: request.gameState,
           legalActions: request.legalActions,
           pass: request.pass ?? 'legacy',
-          candidateDossiers: request.candidateDossiers ?? [],
+          candidateDossiers: (request.candidateDossiers ?? []).map((dossier) => ({
+            actionId: dossier.actionId,
+            recommendedContinuation: dossier.recommendedContinuation,
+            projectedSuccessor: dossier.projectedSuccessor,
+            opponentStrongestResponse: dossier.opponentStrongestResponse,
+            tacticalProofs: dossier.tacticalProofs.map((proof) => ({
+              kind: proof.kind,
+              proven: proof.proven,
+              complete: proof.complete,
+              annotation: proof.annotation
+            })),
+            evaluation: dossier.evaluation,
+            score: dossier.score,
+            meanScenarioValue: dossier.meanScenarioValue,
+            downsideScenarioValue: dossier.downsideScenarioValue,
+            worstCaseScenarioValue: dossier.worstCaseScenarioValue,
+            resourceUsage: dossier.resourceUsage,
+            uncertainty: dossier.uncertainty,
+            matchupPlanProgress: dossier.matchupPlanProgress
+          })),
           firstPassRanking: request.firstPassRanking ?? []
         })
       }

@@ -340,8 +340,9 @@
         "trigger": "cast",
         "actions": [
           {
-            "action": "shuffle-into-deck",
+            "action": "copy",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "destination": "deck",
             "count": 3
           }
         ]

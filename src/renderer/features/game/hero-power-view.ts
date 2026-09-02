@@ -22,6 +22,12 @@ const FLIP_TIMING = {
   open: 0.2
 } as const
 
+/** Matches the main-menu centerpiece's 400 ms horizontal identity flip. */
+const REPLACEMENT_FLIP_TIMING = {
+  close: 0.2,
+  open: 0.2
+} as const
+
 const UNAVAILABLE_SHAKE = {
   distance: 8,
   duration: 0.24
@@ -202,6 +208,42 @@ export class HeroPowerView extends Actor {
   setArtwork(texture: Texture): void {
     this.frontFace.setArtwork(texture)
     this.outlineTarget.setArtwork(texture)
+  }
+
+  /** Replaces this power through a horizontal flip and refreshes it face-up. */
+  replaceArtwork(texture: Texture): Promise<void> {
+    const restoreEnabled = this.interactivityEnabled
+    this.setEnabled(false)
+    this.killTweensOf(this.card.scale)
+    const timeline = this.timeline()
+    let swapped = false
+    const applyReplacement = (): void => {
+      if (swapped) return
+      swapped = true
+      this.setArtwork(texture)
+      this.facingUp = true
+      this.frontFace.visible = true
+      this.backFace.visible = false
+      this.manaCrystal.visible = true
+      this.costLabel.visible = true
+    }
+    timeline.to(this.card.scale, {
+      x: 0,
+      duration: REPLACEMENT_FLIP_TIMING.close,
+      ease: 'power2.in'
+    })
+    timeline.call(applyReplacement)
+    timeline.to(this.card.scale, {
+      x: this.baseScaleX,
+      duration: REPLACEMENT_FLIP_TIMING.open,
+      ease: 'power2.out'
+    })
+    return this.completeTimeline(timeline, () => {
+      applyReplacement()
+      this.card.scale.x = this.baseScaleX
+      this.setEnabled(restoreEnabled)
+      this.syncPlayableOutline()
+    })
   }
 
   /**

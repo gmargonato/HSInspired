@@ -1,4 +1,4 @@
-import type { CardEffectBlock, CardKeyword } from './card-effects'
+import type { CardEffectBlock, CardEffectValue, CardKeyword } from './card-effects'
 
 /** Stable identifiers shared by authored content and platform-neutral systems. */
 export type CardId = string & { readonly __cardId: unique symbol }
@@ -87,6 +87,8 @@ export interface CardMetadata {
   readonly rulesText: string
   readonly keywords: readonly CardKeyword[]
   readonly effects: readonly CardEffectBlock[]
+  /** Optional condition that must be true before the card can be played. */
+  readonly playCondition?: Readonly<Record<string, CardEffectValue>>
   readonly collectible: boolean
   readonly deckLegal: boolean
 }

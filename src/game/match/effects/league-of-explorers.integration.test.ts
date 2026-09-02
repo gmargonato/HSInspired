@@ -190,8 +190,18 @@ describe('League of Explorers card effects', () => {
 
   it('discovers and installs one of three different basic Hero Powers', () => {
     const value = scenario({ firstHeroId: 'jaina' })
-    const [participantId] = activePlayers(value)
+    const [participantId, opponentId] = activePlayers(value)
     setMana(value, participantId)
+    const used = value.match.dispatch({
+      type: 'use-hero-power',
+      participantId,
+      target: { kind: 'hero', participantId: opponentId }
+    })
+    expect(used.accepted).toBe(true)
+    expect(player(value, participantId).heroPower).toMatchObject({
+      available: false,
+      usesThisTurn: 1
+    })
     addCard(value, participantId, 'league_of_explorers_sir_finley_mrrgglton')
     const finley = player(value, participantId).hand.find(
       (card) => card.cardId === 'league_of_explorers_sir_finley_mrrgglton'
@@ -215,6 +225,16 @@ describe('League of Explorers card effects', () => {
     expect(player(value, participantId).heroPower.id).toBe(
       pending!.resolution!.heroPowerIds[0]
     )
+    expect(player(value, participantId).heroPower).toMatchObject({
+      available: true,
+      usesThisTurn: 0
+    })
+    expect(result.events).toContainEqual({
+      type: 'hero-power-replaced',
+      participantId,
+      previousHeroPowerId: 'mage-fireblast',
+      heroPowerId: pending!.resolution!.heroPowerIds[0]
+    })
   })
 
   it('gives Tunnel Trogg Attack equal to newly applied Overload', () => {

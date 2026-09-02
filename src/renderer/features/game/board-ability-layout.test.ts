@@ -29,8 +29,10 @@ function expectInsideCanvas(
 describe('board ability badge layouts', () => {
   it('shares one bottom-center minion slot without clipping either badge', () => {
     expect(MINION_LAYOUT.trigger.position).toEqual({ x: 80, y: 160 })
+    expect(MINION_LAYOUT.inspire.position).toEqual(MINION_LAYOUT.trigger.position)
     expect(MINION_LAYOUT.deathrattle.position).toEqual({ x: 75, y: 160 })
     expectInsideCanvas(MINION_LAYOUT.trigger, MINION_CANVAS)
+    expectInsideCanvas(MINION_LAYOUT.inspire, MINION_CANVAS)
     expectInsideCanvas(MINION_LAYOUT.deathrattle, MINION_CANVAS)
   })
 
@@ -51,12 +53,16 @@ describe('board ability badge layouts', () => {
     expect(MINION_LAYOUT.trigger).toMatchObject({
       size: { width: 41, height: 44 }
     })
+    expect(MINION_LAYOUT.inspire).toMatchObject({
+      size: { width: 43, height: 38 }
+    })
     expect(MINION_LAYOUT.deathrattle).toMatchObject({
       size: { width: 80, height: 53 }
     })
     expect(MINION_LAYOUT.taunt.scale).toBeUndefined()
     expect(MINION_LAYOUT.divineShield.scale).toBeUndefined()
     expect(MINION_LAYOUT.trigger.scale).toEqual({ x: 0.75, y: 0.75 })
+    expect(MINION_LAYOUT.inspire.scale).toEqual({ x: 0.75, y: 0.75 })
     expect(MINION_LAYOUT.deathrattle.scale).toEqual({ x: 0.75, y: 0.75 })
     expect(WEAPON_LAYOUT.trigger.scale).toBeUndefined()
     expect(WEAPON_LAYOUT.deathrattle.scale).toBeUndefined()

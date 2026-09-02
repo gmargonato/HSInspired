@@ -21,8 +21,8 @@ const config: AzureOpenAiConfig = {
     },
     matchupPlan: {
       requestTimeoutMs: 30000,
-      reasoningEffort: 'medium',
-      maxCompletionTokens: 3072
+      reasoningEffort: 'low',
+      maxCompletionTokens: 4096
     },
     mulligan: {
       requestTimeoutMs: 25000,
@@ -41,12 +41,12 @@ const config: AzureOpenAiConfig = {
     },
     rank: {
       requestTimeoutMs: 10000,
-      reasoningEffort: 'medium',
+      reasoningEffort: 'low',
       maxCompletionTokens: 1536
     },
     critic: {
       requestTimeoutMs: 10000,
-      reasoningEffort: 'medium',
+      reasoningEffort: 'low',
       maxCompletionTokens: 1024
     }
   },
@@ -324,9 +324,11 @@ describe('AzureOpenAiDecisionService', () => {
 
     const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as {
       reasoning_effort: string
+      max_completion_tokens: number
       response_format: unknown
     }
-    expect(body.reasoning_effort).toBe('medium')
+    expect(body.reasoning_effort).toBe('low')
+    expect(body.max_completion_tokens).toBe(4096)
     expect(JSON.stringify(body.response_format)).not.toContain('uniqueItems')
   })
 
@@ -432,11 +434,11 @@ describe('AzureOpenAiDecisionService', () => {
       max_completion_tokens: number
     }
     expect(rankBody).toMatchObject({
-      reasoning_effort: 'medium',
+      reasoning_effort: 'low',
       max_completion_tokens: 1536
     })
     expect(criticBody).toMatchObject({
-      reasoning_effort: 'medium',
+      reasoning_effort: 'low',
       max_completion_tokens: 1024
     })
     expect(JSON.stringify(rankBody)).not.toContain('uniqueItems')
@@ -503,6 +505,37 @@ describe('AzureOpenAiDecisionService', () => {
     )
     expect((error as Error).message).toContain(
       `Raw Azure response body:\n${rawResponse}`
+    )
+  })
+
+  it('identifies an empty length-limited response as token exhaustion', async () => {
+    const rawResponse = JSON.stringify({
+      choices: [
+        {
+          finish_reason: 'length',
+          message: { role: 'assistant', content: '' }
+        }
+      ],
+      usage: {
+        completion_tokens: 3072,
+        completion_tokens_details: { reasoning_tokens: 3072 }
+      }
+    })
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Promise.resolve(
+        new Response(rawResponse, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+    )
+    const service = new AzureOpenAiDecisionService({
+      loadConfig: async () => config,
+      fetch
+    })
+
+    await expect(service.decide(request)).rejects.toThrow(
+      'exhausted max_completion_tokens before producing assistant JSON content'
     )
   })
 })

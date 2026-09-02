@@ -29,6 +29,7 @@ export interface MinionViewModel {
   readonly deathrattle: boolean
   readonly poisonous: boolean
   readonly trigger: boolean
+  readonly inspire: boolean
   readonly temporaryAbilityLabels: readonly string[]
 }
 
@@ -40,13 +41,14 @@ export interface MinionViewTextures {
   readonly frozen: Texture
   readonly stealth: Texture
   readonly trigger: Texture
+  readonly inspire: Texture
   readonly deathrattle: Texture
   readonly poisonous: Texture
   readonly attack: Texture
   readonly health: Texture
 }
 
-export type MinionAbilityMarkerKind = 'trigger' | 'deathrattle'
+export type MinionAbilityMarkerKind = 'trigger' | 'inspire' | 'deathrattle'
 
 export interface AbilityMarkerSnapshot {
   readonly texture: Texture
@@ -103,6 +105,7 @@ export class MinionView extends Container {
   private readonly stealth: Sprite
   private readonly deathrattle: Sprite
   private readonly trigger: Sprite
+  private readonly inspire: Sprite
   private readonly attackLabel: Text
   private readonly healthLabel: Text
   private readonly artworkImage: Sprite
@@ -231,6 +234,12 @@ export class MinionView extends Container {
     this.trigger.visible = model.trigger
     this.trigger.label = 'minion.trigger'
     this.addChild(this.trigger)
+
+    this.inspire = new Sprite(textures.inspire)
+    applyAnchoredPlacement(this.inspire, MINION_LAYOUT.inspire)
+    this.inspire.visible = model.inspire
+    this.inspire.label = 'minion.inspire'
+    this.addChild(this.inspire)
 
     model.temporaryAbilityLabels.forEach((text, index) => {
       const badge = createTemporaryAbilityBadge(
@@ -389,10 +398,20 @@ export class MinionView extends Container {
     this.trigger.visible = visible
   }
 
+  setInspire(visible: boolean): void {
+    this.inspire.visible = visible
+  }
+
+  private abilityMarker(kind: MinionAbilityMarkerKind): Sprite {
+    if (kind === 'deathrattle') return this.deathrattle
+    if (kind === 'inspire') return this.inspire
+    return this.trigger
+  }
+
   getAbilityMarkerSnapshot(
     kind: MinionAbilityMarkerKind
   ): AbilityMarkerSnapshot | null {
-    const marker = kind === 'trigger' ? this.trigger : this.deathrattle
+    const marker = this.abilityMarker(kind)
     if (marker.destroyed) return null
     const global = marker.getGlobalPosition()
     return {
@@ -407,7 +426,7 @@ export class MinionView extends Container {
 
   /** Pulses the existing board ability icon without introducing a new asset. */
   presentAbilityPulse(kind: MinionAbilityMarkerKind, duration: number): Promise<void> {
-    const marker = kind === 'trigger' ? this.trigger : this.deathrattle
+    const marker = this.abilityMarker(kind)
     if (marker.destroyed) return Promise.resolve()
     const pulse = new Sprite(marker.texture)
     pulse.anchor.set(marker.anchor.x, marker.anchor.y)

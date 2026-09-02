@@ -57,6 +57,7 @@ export interface RawCardRecord {
   readonly rulesText?: unknown
   readonly keywords?: unknown
   readonly effects?: unknown
+  readonly playCondition?: unknown
   readonly collectible?: unknown
   readonly deckLegal?: unknown
 }
@@ -868,6 +869,9 @@ export function validateCardRecord(
   const rulesText = textValue(raw.rulesText, `${indexOrPath}.rulesText`)
   const keywords = keywordsValue(raw.keywords, `${indexOrPath}.keywords`)
   const effects = effectsValue(raw.effects, `${indexOrPath}.effects`)
+  if (raw.playCondition !== undefined)
+    conditionValue(raw.playCondition, `${indexOrPath}.playCondition`)
+  const playCondition = raw.playCondition as CardDefinition['playCondition'] | undefined
   const cost = normalizeCost(raw, id)
   const subtype = optionalString(raw.subtype, `${indexOrPath}.subtype`)
   const spellSchool = optionalString(raw.spellSchool, `${indexOrPath}.spellSchool`)
@@ -895,6 +899,7 @@ export function validateCardRecord(
     rulesText,
     keywords,
     effects,
+    ...(playCondition ? { playCondition } : {}),
     collectible,
     deckLegal
   } as const

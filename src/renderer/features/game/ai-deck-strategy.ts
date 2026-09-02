@@ -1,5 +1,9 @@
 import type { Deck } from '../../../game/decks'
-import { CARD_CATALOG, type CardDefinition } from '../../../game/content/cards'
+import {
+  CARD_CATALOG,
+  isCardEffectObject,
+  type CardDefinition
+} from '../../../game/content/cards'
 import type {
   AiCardRole,
   AiDeckPlan,
@@ -123,7 +127,6 @@ function compactDefinition(definition: CardDefinition): JsonObject {
     cost: definition.cost,
     rulesText: definition.rulesText,
     keywords: definition.keywords,
-    effects: definition.effects,
     ...(definition.type === 'Minion'
       ? { attack: definition.attack, health: definition.health }
       : {}),
@@ -232,6 +235,53 @@ function fallbackCombos(deck: Deck): readonly AiDeckPlanCombo[] {
     }))
 }
 
+/**
+ * Reserved resources for the deterministic plan: conditional combo enablers
+ * only. A consumer is reserved when it cannot function without its required
+ * resource and that resource is not the generic presence of minions (so Ice
+ * Lance and Power Overwhelming are preserved while unconditional removal such
+ * as Flamestrike stays freely castable). A producer is reserved only when it
+ * is one of very few in-deck sources of a specific consumed signal (setup
+ * cards like Frostbolt for Ice Lance). Generic payoff bodies are never
+ * reserved; reserving every card that merely participates in a synergy starves
+ * normal development and poisons both fallback and search scoring.
+ */
+function reservedResourceCardIds(synergies: readonly DeckSynergy[]): readonly string[] {
+  const producersBySignal = new Map<string, Set<string>>()
+  for (const synergy of synergies) {
+    const producers = producersBySignal.get(synergy.signal) ?? new Set<string>()
+    producers.add(synergy.producerCardId)
+    producersBySignal.set(synergy.signal, producers)
+  }
+  const buffsFriendlyMinions = (cardId: string): boolean => {
+    const definition = CARD_CATALOG.get(cardId)
+    return (definition?.effects ?? []).some((trigger) =>
+      (trigger.actions ?? []).some((action) => {
+        const target = isCardEffectObject(action.target) ? action.target : null
+        return (
+          action.action === 'modify' &&
+          typeof action.attack === 'number' &&
+          action.attack > 0 &&
+          (target?.['controller'] === 'self' || target?.['controller'] === 'any') &&
+          target['type'] === 'minion'
+        )
+      })
+    )
+  }
+  const reserved = new Set<string>()
+  for (const synergy of synergies) {
+    const genericMinionSignal = synergy.signal === 'minion'
+    if (
+      CARD_CATALOG.get(synergy.consumerCardId)?.type !== 'Minion' &&
+      (!genericMinionSignal || buffsFriendlyMinions(synergy.consumerCardId))
+    )
+      reserved.add(synergy.consumerCardId)
+    if (!genericMinionSignal && (producersBySignal.get(synergy.signal)?.size ?? 0) <= 3)
+      reserved.add(synergy.producerCardId)
+  }
+  return [...reserved]
+}
+
 export function createFallbackDeckPlan(deck: Deck): AiDeckPlan {
   const definitions = Object.keys(deck.cards).map((cardId) =>
     CARD_CATALOG.require(cardId)
@@ -253,7 +303,8 @@ export function createFallbackDeckPlan(deck: Deck): AiDeckPlan {
     .sort((left, right) => left.cost - right.cost)
     .slice(0, 15)
     .map((definition) => definition.id)
-  const comboCardIds = [...new Set(combos.flatMap((combo) => combo.cardIds))]
+  // Reserve only conditional combo enablers (see reservedResourceCardIds).
+  const reservedComboCardIds = reservedResourceCardIds(deriveDeckSynergies(deck))
   return {
     planVersion: 1,
     archetype,
@@ -273,11 +324,11 @@ export function createFallbackDeckPlan(deck: Deck): AiDeckPlan {
     })),
     combos,
     resourceRules:
-      comboCardIds.length === 0
+      reservedComboCardIds.length === 0
         ? []
         : [
             {
-              cardIds: comboCardIds,
+              cardIds: reservedComboCardIds,
               preserveUntil: 'The linked synergy can be completed efficiently.',
               releaseWhen:
                 'Use for lethal, forced survival, or a clearly stronger winning line.'

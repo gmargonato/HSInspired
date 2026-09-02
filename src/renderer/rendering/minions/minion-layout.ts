@@ -78,6 +78,15 @@ export const MINION_LAYOUT = {
       note: 'Bottom-center Trigger badge, layered above Deathrattle.'
     }
   ),
+  inspire: placement(
+    { x: 80, y: 160 },
+    { width: 43, height: 38 },
+    {
+      anchor: CENTER,
+      scale: 0.75,
+      note: 'Bottom-center Inspire badge, sharing the Trigger position and layered above it.'
+    }
+  ),
   deathrattle: placement(
     { x: 75, y: 160 },
     { width: 80, height: 53 },

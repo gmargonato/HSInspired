@@ -8,7 +8,11 @@ import {
   type AiEvaluationComponents,
   type AiStrategicPlanView
 } from '../../../game/match/ai'
-import { CARD_CATALOG, type CardDefinition } from '../../../game/content/cards'
+import {
+  CARD_CATALOG,
+  isCardEffectObject,
+  type CardDefinition
+} from '../../../game/content/cards'
 import { HERO_CATALOG } from '../../../game/content/heroes'
 import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
 import type {
@@ -1350,6 +1354,51 @@ export class AiTurnController {
     return selected
   }
 
+  /**
+   * Phase-3 defense in depth: direct targeted damage at the AI's own hero or
+   * friendly characters is destructive waste unless the resolved outcome is an
+   * immediate win. Both the deterministic fallback and provider-selected
+   * choices flow through shortlists that exclude proven-dominated variants;
+   * this guard protects the raw fallback path when no search dossiers exist.
+   */
+  private isUnjustifiedSelfDamage(candidate: CandidateAction): boolean {
+    const command = candidate.command
+    const aiId = this.options.session.remoteParticipantId
+    if (command.type === 'play-card') {
+      const targets = command.targets ?? []
+      if (targets.length === 0) return false
+      if (!targets.every((target) => target.participantId === aiId)) return false
+      const state = this.options.session.getState()
+      const card = state.players
+        .find((player) => player.participantId === aiId)
+        ?.hand.find((entry) => entry.instanceId === command.cardInstanceId)
+      const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
+      const targetedDamage = (definition?.effects ?? []).some((trigger) =>
+        (trigger.actions ?? []).some((action) => {
+          const target = isCardEffectObject(action.target) ? action.target : null
+          return (
+            action.action === 'damage' &&
+            target?.['controller'] === 'any' &&
+            target['selection'] === 'chosen'
+          )
+        })
+      )
+      if (!targetedDamage) return false
+    } else if (command.type === 'use-hero-power') {
+      if (!command.target || command.target.participantId !== aiId) return false
+      const state = this.options.session.getState()
+      const player = state.players.find((entry) => entry.participantId === aiId)
+      const power = player ? HERO_POWER_CATALOG.get(player.heroPower.id) : undefined
+      if (power?.effect.kind !== 'damage-character') return false
+    } else {
+      return false
+    }
+    if (candidate.analysis?.terminal === 'win') return false
+    if (candidate.analysis && candidate.analysis.accepted) return true
+    const preview = this.options.session.match.preview(command)
+    return preview.accepted && preview.state.winnerId !== aiId
+  }
+
   private fallback(
     candidates: readonly CandidateAction[],
     deckPlan: AiDeckPlan
@@ -1380,11 +1429,15 @@ export class AiTurnController {
       (candidate) => candidate.analysis?.terminal !== 'loss'
     )
     const pool = wins.length > 0 ? wins : safe.length > 0 ? safe : candidates
-    return [...pool].sort(
+    const ordered = [...pool].sort(
       (left, right) =>
         (right.analysis?.score ?? Number.NEGATIVE_INFINITY) -
         (left.analysis?.score ?? Number.NEGATIVE_INFINITY)
-    )[0]!
+    )
+    return (
+      ordered.find((candidate) => !this.isUnjustifiedSelfDamage(candidate)) ??
+      ordered[0]!
+    )
   }
 
   private logResponse(request: AiDecisionRequest, response: AiDecisionResponse): void {
@@ -1491,33 +1544,70 @@ export class AiTurnController {
     )
     const dossiers = new Map<string, AiCandidateDossier>()
     let remainingNodes = COMPETITIVE_AI_SEARCH_LIMITS.nodeLimit
-    const batchSize = 16
-    for (let index = 0; index < roots.length; index += batchSize) {
-      const remainingMs = localDeadlineAtMs - Date.now()
-      if (remainingMs <= 0 || remainingNodes <= 0) break
-      const search = searchCompetitiveTurn(
-        this.options.session.match,
-        this.options.session.remoteParticipantId,
-        roots.slice(index, index + batchSize),
-        {
-          ...COMPETITIVE_AI_SEARCH_LIMITS,
-          // Engine forks cannot cross the structured-clone worker boundary.
-          // Short slices yield between batches so Pixi can present frames while
-          // the persistent worker owns serializable aggregation and ranking.
-          timeBudgetMs: Math.min(50, remainingMs),
-          nodeLimit: Math.min(6_250, remainingNodes)
-        },
-        this.matchupPlanView(matchupPlan),
-        this.transpositionCache
+    if (roots.length === 0) return []
+
+    // Establish global minimum coverage before deepening any root. Baseline
+    // simulation is deliberately exhaustive across this bounded root list, so
+    // OS scheduling and enumeration order cannot make a legal target vanish.
+    const baseline = searchCompetitiveTurn(
+      this.options.session.match,
+      this.options.session.remoteParticipantId,
+      roots,
+      {
+        ...COMPETITIVE_AI_SEARCH_LIMITS,
+        timeBudgetMs: Math.max(1, Math.min(250, localDeadlineAtMs - Date.now()))
+      },
+      this.matchupPlanView(matchupPlan),
+      this.transpositionCache,
+      { baselineOnly: true }
+    )
+    for (const dossier of baseline.dossiers) dossiers.set(dossier.actionId, dossier)
+    const provenLethal = baseline.dossiers.find((dossier) =>
+      dossier.tacticalProofs.some(
+        (proof) => proof.proven && proof.complete && proof.kind === 'guaranteed-lethal'
       )
-      remainingNodes -= search.exploredNodes
-      for (const dossier of search.dossiers) {
-        const current = dossiers.get(dossier.actionId)
-        if (!current || dossier.score > current.score) {
-          dossiers.set(dossier.actionId, dossier)
+    )
+    if (provenLethal) return [provenLethal]
+
+    // Search one root per 50 ms renderer slice. Each complete rotation gives
+    // every card/target/attack variant the same continuation allowance.
+    for (let round = 0; round < 256; round += 1) {
+      let improvedAny = false
+      const start = round % roots.length
+      const roundRoots = [...roots.slice(start), ...roots.slice(0, start)]
+      for (const root of roundRoots) {
+        const remainingMs = localDeadlineAtMs - Date.now()
+        if (remainingMs <= 0 || remainingNodes <= 0) break
+        const search = searchCompetitiveTurn(
+          this.options.session.match,
+          this.options.session.remoteParticipantId,
+          [root],
+          {
+            ...COMPETITIVE_AI_SEARCH_LIMITS,
+            // Engine forks cannot cross the structured-clone worker boundary.
+            // Short slices yield between batches so Pixi can present frames while
+            // the persistent worker owns serializable aggregation and ranking.
+            timeBudgetMs: Math.min(50, remainingMs),
+            nodeLimit: Math.min(6_250, remainingNodes)
+          },
+          this.matchupPlanView(matchupPlan),
+          this.transpositionCache,
+          { baselinePass: false }
+        )
+        remainingNodes -= search.exploredNodes
+        for (const dossier of search.dossiers) {
+          const current = dossiers.get(dossier.actionId)
+          if (!current || dossier.score > current.score) {
+            dossiers.set(dossier.actionId, dossier)
+            improvedAny = true
+          }
         }
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      // A second identical pass cannot deepen a restarted synchronous search.
+      // Stop once a complete rotation produces no better dossier.
+      if (!improvedAny) break
+      if (Date.now() >= localDeadlineAtMs || remainingNodes <= 0) break
     }
     return [...dossiers.values()]
   }
@@ -1698,11 +1788,18 @@ export class AiTurnController {
       }
     }
     try {
+      const criticActionIds = new Set(ordering.slice(0, 4))
       const criticRequest: AiDecisionRequest = {
         ...baseRequest,
         decisionId: `${baseRequest.decisionId}-critic`,
         pass: 'critic',
-        firstPassRanking: ordering,
+        legalActions: baseRequest.legalActions.filter((action) =>
+          criticActionIds.has(action.id)
+        ),
+        candidateDossiers: baseRequest.candidateDossiers.filter((dossier) =>
+          criticActionIds.has(dossier.actionId)
+        ),
+        firstPassRanking: ordering.filter((actionId) => criticActionIds.has(actionId)),
         deadlineAtMs: criticDeadlineAtMs
       }
       const response = await this.options.api.decide(criticRequest)

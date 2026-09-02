@@ -131,6 +131,13 @@ describe('board ability markers', () => {
     expect(markers('classic_sword_of_justice').trigger).toBe(true)
   })
 
+  it('maps Inspire separately from the generic Trigger badge', () => {
+    expect(markers('the_grand_tournament_savage_combatant')).toMatchObject({
+      inspire: true,
+      trigger: false
+    })
+  })
+
   it.each([
     'end-of-turn',
     'on-attack',
@@ -153,6 +160,7 @@ describe('board ability markers', () => {
     'battlecry',
     'cast',
     'deathrattle',
+    'inspire',
     'on-draw',
     'on-play',
     'secret',
@@ -221,5 +229,18 @@ describe('board ability markers', () => {
         effects: [{ trigger: 'deathrattle' }, { trigger: 'start-of-turn' }]
       })
     ).toMatchObject({ deathrattle: true, trigger: true })
+  })
+
+  it('keeps Deathrattle, Trigger, and Inspire independently visible', () => {
+    expect(
+      boardAbilityMarkers({
+        keywords: [],
+        effects: [
+          { trigger: 'deathrattle' },
+          { trigger: 'start-of-turn' },
+          { trigger: 'inspire' }
+        ]
+      })
+    ).toMatchObject({ deathrattle: true, trigger: true, inspire: true })
   })
 })

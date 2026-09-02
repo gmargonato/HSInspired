@@ -3,6 +3,7 @@ import type { Deck } from '../../../game/decks'
 import { asHeroId } from '../../../game/content/cards'
 import {
   createFallbackDeckPlan,
+  createMatchupPlanRequest,
   deriveDeckSynergies,
   reservedCardIds,
   validateDeckPlanForDeck
@@ -44,5 +45,14 @@ describe('AI deck strategy', () => {
         freezeDeck
       )
     ).toThrow('outside its deck')
+  })
+
+  it('sends compact matchup card facts without the verbose effect AST', () => {
+    const request = createMatchupPlanRequest(freezeDeck, freezeDeck, Date.now() + 1_000)
+    const serialized = JSON.stringify(request)
+
+    expect(serialized).toContain('rulesText')
+    expect(serialized).toContain('structuredSynergies')
+    expect(serialized).not.toContain('"effects"')
   })
 })

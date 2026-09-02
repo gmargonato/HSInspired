@@ -376,7 +376,7 @@ export interface PlayerHeroPower {
   readonly creationOrdinal?: number
   readonly cost: number
   readonly available: boolean
-  /** Activations made during the current turn; supports effects such as Garrison Commander. */
+  /** Activations made with the current power this turn; reset when an effect replaces it. */
   readonly usesThisTurn?: number
   readonly baseCost?: number
   readonly targetType?: string
@@ -390,6 +390,8 @@ export interface PendingCostModifier {
   readonly sourceInstanceId: string
   readonly amount: number
   readonly filter: Readonly<Record<string, unknown>>
+  readonly duration?: string
+  readonly expiresOnTurn?: number
 }
 
 export interface OpeningPlayerState {
@@ -729,6 +731,14 @@ export interface HeroPowerUsedEvent {
   readonly mana: PlayerMana
 }
 
+/** A presentation-safe cue emitted when one Hero Power identity replaces another. */
+export interface HeroPowerReplacedEvent {
+  readonly type: 'hero-power-replaced'
+  readonly participantId: PlayerId
+  readonly previousHeroPowerId: HeroPowerId
+  readonly heroPowerId: HeroPowerId
+}
+
 export interface CharacterDamagedEvent {
   readonly type: 'character-damaged'
   readonly source: 'hero-power' | 'fatigue'
@@ -975,6 +985,7 @@ export type OpeningMatchEvent =
   | CardGeneratedEvent
   | CardBurnedEvent
   | HeroPowerUsedEvent
+  | HeroPowerReplacedEvent
   | CharacterDamagedEvent
   | CharacterHealedEvent
   | ArmorGainedEvent

@@ -29,6 +29,7 @@ const textures: MinionViewTextures = {
   frozen: Texture.EMPTY,
   stealth: Texture.EMPTY,
   trigger: Texture.EMPTY,
+  inspire: Texture.EMPTY,
   deathrattle: Texture.EMPTY,
   poisonous: Texture.EMPTY,
   attack: Texture.EMPTY,
@@ -46,8 +47,9 @@ const tauntMinion: MinionViewModel = {
   stealth: false,
   frozen: false,
   deathrattle: false,
-  poisonous: false,
+  poisonous: true,
   trigger: false,
+  inspire: false,
   temporaryAbilityLabels: []
 }
 
@@ -74,6 +76,11 @@ describe('MinionView outline layering', () => {
       childIndex('minion.frozen')
     )
     expect(childIndex('minion.frozen')).toBeLessThan(childIndex('minion.stealth'))
+    expect(childIndex('minion.deathrattle')).toBeLessThan(childIndex('minion.trigger'))
+    expect(childIndex('minion.deathrattle')).toBeLessThan(
+      childIndex('minion.poisonous')
+    )
+    expect(childIndex('minion.trigger')).toBeLessThan(childIndex('minion.inspire'))
 
     view.setCanAttack(true)
     expect(view.children[childIndex('minion.attack-outline-proxy')].visible).toBe(true)
@@ -81,6 +88,27 @@ describe('MinionView outline layering', () => {
     view.setTargetingOutline(true)
     expect(view.children[childIndex('minion.targeting-outline-proxy')].visible).toBe(
       true
+    )
+
+    view.destroy({ children: true })
+  })
+
+  it('pulses the Inspire marker independently from Trigger', async () => {
+    const view = await MinionView.create(tauntMinion, textures, undefined)
+    const inspire = view.children.find((child) => child.label === 'minion.inspire')
+    const trigger = view.children.find((child) => child.label === 'minion.trigger')
+
+    view.setInspire(true)
+    expect(inspire?.visible).toBe(true)
+    expect(trigger?.visible).toBe(false)
+
+    const pulse = view.presentAbilityPulse('inspire', 0.02)
+    expect(view.children.some((child) => child.label === 'minion.inspire.pulse')).toBe(
+      true
+    )
+    await pulse
+    expect(view.children.some((child) => child.label === 'minion.inspire.pulse')).toBe(
+      false
     )
 
     view.destroy({ children: true })

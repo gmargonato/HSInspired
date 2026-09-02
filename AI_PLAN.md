@@ -117,8 +117,8 @@ The gated controller currently performs the following sequence:
    and retain at most eight first actions.
 8. Bypass GPT for proven lethal or a single remaining candidate.
 9. Ask GPT-5.4 nano for a strict complete ranking of the supplied IDs.
-10. If ranking succeeds, ask GPT-5.4 nano to criticize that ordering and either
-    retain or replace the first choice with another supplied ID.
+10. If ranking succeeds, ask GPT-5.4 nano to criticize the top four actions in
+    that ordering and either retain or replace the first choice with one of those IDs.
 11. Validate the model, response schema, candidate membership, revision, deadline,
     and current legality.
 12. Dispatch one atomic command and restart from the resolved state.
@@ -166,9 +166,9 @@ provider metadata identifying another model are rejected.
 | Legacy mulligan  | 25 seconds | Low       | None  |
 | Legacy Discover  | 15 seconds | Low       | None  |
 | Legacy turn      | 20 seconds | Low       | None  |
-| V2 matchup plan  | 30 seconds | Medium    | None  |
-| V2 rank pass     | 10 seconds | Medium    | None  |
-| V2 critic pass   | 10 seconds | Medium    | None  |
+| V2 matchup plan  | 30 seconds | Low       | None  |
+| V2 rank pass     | 10 seconds | Low       | None  |
+| V2 critic pass   | 10 seconds | Low       | None  |
 
 The v2 action budget remains 30 seconds: up to 8 seconds for local search, up to
 10 seconds for ranking, up to 10 seconds for criticism, and at least 2 seconds
@@ -195,6 +195,17 @@ the deterministic matchup plan and validated rank winner, but only one of three
 intended provider stages completed. Provider latency and startup delay therefore
 remain unresolved production blockers.
 
+A later provider trace identified a concrete matchup-planning failure mode. The
+request contained 25,006 prompt tokens, and all 3,072 completion tokens were
+spent as reasoning tokens; Azure returned HTTP 200 with `finish_reason: length`
+and empty assistant content. Rank and critic calls also timed out intermittently
+at 10 seconds. Matchup payloads now omit the duplicate internal effect AST while
+retaining rules text and structured synergies, provider dossiers omit redundant
+first commands and proof command copies, and the critic examines only the top
+four ranked candidates. All three latency-sensitive v2 stages now use low
+reasoning, while matchup planning has a 4,096-token completion allowance. Live
+latency must be re-measured before considering the blocker resolved.
+
 A subsequent manual turn exposed a decision-quality failure: the AI legally cast
 Darkbomb on its own hero without an evident compensating benefit. The engine is
 correct to preserve legal friendly and self targets, but competitive search did
@@ -208,6 +219,20 @@ The console image alone does not establish whether the local winner, rank pass,
 or critic ultimately chose Darkbomb. That distinction does not change the
 required invariant: provider-assisted and deterministic fallback paths must both
 reject a proven dominated self-hit.
+
+The follow-up controlled-scenario pass used seeded custom decks, hands, boards,
+health, and mana to exercise the real competitive-v2 controller without a
+provider. All 12 scenarios passed after the following corrections: nested target
+variants receive distinct canonical command keys; every legal root receives a
+baseline dossier before continuation search; deep slices evaluate one root at a
+time; dominated direct self-damage is removed from search and guarded in raw
+fallback; the lethal solver follows high-potential combo lines depth-first; and
+the evaluator recognizes threats that an unused targeted-damage hero power can
+finish. The passing matrix covered Darkbomb self-hit regressions and hand-order
+permutation, spell and combat lethal, forced defense, board clear, discard for
+lethal, buff preservation, threat targeting, healing, and ordered combo lethal.
+Provider-selected self-harm, hidden-state sampling, and worker-owned search still
+need separate fixtures and acceptance evidence.
 
 ## Known implementation gaps
 
@@ -236,15 +261,16 @@ Competitive v2 is a foundation, not yet the accepted production system.
    have not been obtained.
 7. **Performance acceptance:** renderer responsiveness and the absolute 30-second
    deadline still require production-profile measurement after worker migration.
-8. **Unfair root coverage:** search runs groups of roots in short synchronous
-   slices but expands each group sequentially. Expensive early roots can starve
-   later cards, targets, attacks, and end-turn alternatives, so shortlist quality
-   can depend on enumeration order rather than position value.
-9. **Self-destructive action protection:** friendly-target and self-target actions
-   are legal and correctly enumerated, but there is no complete dominance proof
-   or sufficiently strong outcome penalty preventing unjustified direct
-   self-damage. The observed Darkbomb-to-own-hero play confirms this gap in a
-   live match.
+8. **Deep-search fairness:** every retained root now receives an unconditional
+   baseline dossier, and continuation slices process one root at a time. The
+   restarted synchronous slices still do not preserve a frontier across rounds,
+   however, so equal progressive depth and worker-owned continuation remain open.
+9. **Self-destructive action completeness:** dominated direct targeted damage to
+   the AI hero or friendly characters is now removed from search and rejected by
+   raw fallback, with deterministic Darkbomb regressions passing. The outcome
+   classifier still needs full coverage for friendly destruction, discard, and
+   reserved-resource consumption, plus provider-selection and legitimate
+   self-damage-synergy fixtures.
 10. **Provider latency:** live Azure validation has produced 30-second matchup
     planning timeouts and 10-second critic timeouts. Fallback behavior is safe,
     but the intended two-pass system and acceptable match-start latency are not

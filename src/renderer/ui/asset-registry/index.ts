@@ -79,6 +79,7 @@ import heroFrozenImage from '@assets/images/board/hero-frozen.png'
 import minionFrozenImage from '@assets/images/board/minion-frozen.png'
 import minionStealthImage from '@assets/images/board/minion-stealth.png'
 import minionTriggerImage from '@assets/images/board/minion-trigger.png'
+import minionInspireImage from '@assets/images/board/minion-inspire.png'
 import minionDeathrattleImage from '@assets/images/board/minion-deathrattle.png'
 import minionPoisonousImage from '@assets/images/board/minion-poisonous.png'
 import minionAttackImage from '@assets/images/board/minion-attack.png'
@@ -639,6 +640,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     minionTriggerImage,
     41,
     44,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-inspire',
+    ASSET_BUNDLE_IDS.game,
+    'boardInspire',
+    minionInspireImage,
+    43,
+    38,
     'game-scene'
   ),
   asset(
@@ -1434,6 +1444,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   minionFrozen: Texture
   minionStealth: Texture
   boardTrigger: Texture
+  boardInspire: Texture
   boardDeathrattle: Texture
   boardPoisonous: Texture
   minionAttack: Texture

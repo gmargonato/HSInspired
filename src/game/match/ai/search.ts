@@ -1,4 +1,5 @@
-import { CARD_CATALOG } from '../../content/cards'
+import { CARD_CATALOG, isCardEffectObject } from '../../content/cards'
+import { HERO_POWER_CATALOG } from '../../content/hero-powers'
 import type {
   OpeningMatchInstance,
   OpeningMatchState,
@@ -8,7 +9,8 @@ import type { PlayerId } from '../match-types'
 import type {
   AiCandidateDossier,
   AiSearchLimits,
-  AiStrategicPlanView
+  AiStrategicPlanView,
+  AiTacticalProofKind
 } from './ai-types'
 import { evaluatePosition } from './evaluator'
 import {
@@ -17,11 +19,26 @@ import {
   enumerateLegalCommands
 } from './legal-commands'
 import { hashAiState, AiTranspositionCache } from './state-hash'
-import { classifyTacticalLine, proveGuaranteedLethal } from './tactics'
+import {
+  classifyTacticalLine,
+  proveGuaranteedLethal,
+  type AiTacticalSolveLimits
+} from './tactics'
 
 export interface AiSearchRootAction {
   readonly actionId: string
   readonly command: TurnMatchCommand
+}
+
+export interface AiCompetitiveSearchOptions {
+  /**
+   * When false, skip the fair-coverage baseline pass. The caller must already
+   * hold baseline dossiers for these roots from an earlier pass (used by the
+   * controller's round-robin deepening rounds).
+   */
+  readonly baselinePass?: boolean
+  /** Return after guaranteed root baselines without expanding continuations. */
+  readonly baselineOnly?: boolean
 }
 
 export interface AiCompetitiveSearchResult {
@@ -37,7 +54,26 @@ interface SearchLine {
   readonly state: OpeningMatchState
   readonly score: number
   readonly completeTurn: boolean
+  readonly usesUncertainty: boolean
 }
+
+interface TurnExpansion {
+  readonly complete: readonly SearchLine[]
+  readonly partial: readonly SearchLine[]
+}
+
+/**
+ * Tactical proofs that can justify direct damage to the AI hero or friendly
+ * minions. A self-harm line carrying one of these is a real tactical outcome
+ * (lethal, survival, or a board swing), not destructive waste.
+ */
+const COMPENSATING_PROOF_KINDS: ReadonlySet<AiTacticalProofKind> = new Set([
+  'guaranteed-lethal',
+  'forced-survival',
+  'board-clear',
+  'efficient-trade',
+  'required-combo-sequence'
+])
 
 function simulate(
   match: OpeningMatchInstance,
@@ -125,9 +161,142 @@ function lineKey(commands: readonly TurnMatchCommand[]): string {
 }
 
 /**
+ * Over-estimate of the damage the participant could deal to the opposing hero
+ * this turn. Used only to skip the guaranteed-lethal proof when lethal is
+ * impossible; any over-count merely keeps the proof running, which is safe.
+ */
+function maximumReachableDamage(
+  state: OpeningMatchState,
+  participantId: PlayerId
+): number {
+  const self = state.players.find((player) => player.participantId === participantId)
+  if (!self) return 0
+  const boardPotential = self.board.reduce(
+    (total, minion) =>
+      total + Math.max(0, minion.attack) * Math.max(1, minion.maxAttacksPerTurn ?? 1),
+    0
+  )
+  const weaponPotential = self.weapon
+    ? Math.max(0, self.weapon.attack) * Math.max(1, self.weapon.durability)
+    : 0
+  const heroPotential = Math.max(0, self.hero.attack)
+  const spellDamage =
+    self.board.reduce((total, minion) => total + (minion.spellDamage ?? 0), 0) +
+    (self.hero.spellDamage ?? 0)
+  const power = HERO_POWER_CATALOG.get(self.heroPower.id)
+  let powerPotential = 0
+  if (self.heroPower.available && self.heroPower.cost <= self.mana.available) {
+    const overrideDamage = self.heroPower.effectOverride?.damage ?? 0
+    if (
+      power?.effect.kind === 'damage-enemy-hero' ||
+      power?.effect.kind === 'damage-character'
+    )
+      powerPotential = Math.max(overrideDamage, power.effect.amount)
+  }
+  let handPotential = 0
+  for (const card of self.hand) {
+    const definition = CARD_CATALOG.get(card.cardId)
+    if (!definition) continue
+    const cost = card.currentCost ?? definition.cost
+    if (cost > self.mana.available) continue
+    for (const trigger of definition.effects ?? []) {
+      for (const action of trigger.actions ?? []) {
+        const target = isCardEffectObject(action.target) ? action.target : null
+        if (action.action === 'damage' && typeof action.amount === 'number')
+          handPotential += action.amount + spellDamage
+        // An attack buff converts into extra face damage from a ready body or
+        // the hero, so it counts toward the lethal plausibility bound.
+        if (
+          action.action === 'modify' &&
+          typeof action.attack === 'number' &&
+          action.attack > 0 &&
+          target &&
+          (target['controller'] === 'self' || target['controller'] === 'any')
+        )
+          handPotential += action.attack
+      }
+    }
+    if (definition.type === 'Minion' && (definition.keywords ?? []).includes('charge'))
+      handPotential += definition.attack ?? 0
+  }
+  return (
+    boardPotential + weaponPotential + heroPotential + powerPotential + handPotential
+  )
+}
+
+interface SelfDamageClassification {
+  readonly isSelfDamage: boolean
+  /** Groups equivalent target variants of the same source (card instance or hero power). */
+  readonly siblingKey: string | null
+}
+
+function targetedDamageEffects(
+  command: TurnMatchCommand,
+  state: OpeningMatchState
+): readonly unknown[] {
+  if (command.type !== 'play-card') return []
+  const card = state.players
+    .find((player) => player.participantId === command.participantId)
+    ?.hand.find((candidate) => candidate.instanceId === command.cardInstanceId)
+  const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
+  return (definition?.effects ?? []).flatMap((trigger) =>
+    (trigger.actions ?? []).filter((action) => {
+      const target = isCardEffectObject(action.target) ? action.target : null
+      return (
+        action.action === 'damage' &&
+        target?.['controller'] === 'any' &&
+        target['selection'] === 'chosen'
+      )
+    })
+  )
+}
+
+/**
+ * Outcome-based self-harm classifier (AI plan phase 3): direct damage whose
+ * chosen targets are all on the AI's own side. Buff-style friendly targeting
+ * (Power Overwhelming and similar) is not classified as self-harm.
+ */
+function classifySelfDamage(
+  command: TurnMatchCommand,
+  state: OpeningMatchState,
+  perspectivePlayerId: PlayerId
+): SelfDamageClassification {
+  if (command.type === 'play-card' && (command.targets ?? []).length > 0) {
+    if (targetedDamageEffects(command, state).length === 0)
+      return { isSelfDamage: false, siblingKey: null }
+    const ownSide = (command.targets ?? []).every(
+      (target) => target.participantId === perspectivePlayerId
+    )
+    return {
+      isSelfDamage: ownSide,
+      siblingKey: ownSide ? `card:${command.cardInstanceId}` : null
+    }
+  }
+  if (command.type === 'use-hero-power' && command.target) {
+    const player = state.players.find(
+      (candidate) => candidate.participantId === perspectivePlayerId
+    )
+    const power = player ? HERO_POWER_CATALOG.get(player.heroPower.id) : undefined
+    const damaging =
+      power?.effect.kind === 'damage-character' ||
+      power?.effect.kind === 'damage-enemy-hero'
+    if (!damaging) return { isSelfDamage: false, siblingKey: null }
+    const ownSide = command.target.participantId === perspectivePlayerId
+    return { isSelfDamage: ownSide, siblingKey: ownSide ? 'hero-power' : null }
+  }
+  return { isSelfDamage: false, siblingKey: null }
+}
+
+/**
  * Iterative, deterministic complete-turn search. Every simulation is executed
  * on the engine's restoring analysis fork; the authoritative match is never
  * advanced and no private order is serialized to the worker/provider.
+ *
+ * Coverage policy: every root first receives a cheap baseline dossier (the
+ * root command followed by passing), then roots are deep-expanded in order
+ * until the budget ends. A root is never left unevaluated, and deep analysis
+ * replaces the baseline only with complete-turn lines, so partial results
+ * cannot masquerade as fully searched actions.
  */
 export function searchCompetitiveTurn(
   match: OpeningMatchInstance,
@@ -137,7 +306,8 @@ export function searchCompetitiveTurn(
   plan?: AiStrategicPlanView,
   cache = new AiTranspositionCache<Readonly<{ readonly score: number }>>(
     limits.transpositionCapacity
-  )
+  ),
+  options: AiCompetitiveSearchOptions = {}
 ): AiCompetitiveSearchResult {
   const startedAt = Date.now()
   const deadlineAtMs = startedAt + limits.timeBudgetMs
@@ -161,16 +331,18 @@ export function searchCompetitiveTurn(
     prefix: readonly TurnMatchCommand[],
     participantId: PlayerId,
     beamWidth: number,
+    prefixUsesUncertainty: boolean,
     rootAction?: AiSearchRootAction
-  ): readonly SearchLine[] => {
+  ): TurnExpansion => {
     const initialSimulation = simulate(match, prefix)
-    if (!initialSimulation.accepted) return []
+    if (!initialSimulation.accepted) return { complete: [], partial: [] }
     let frontier: SearchLine[] = [
       {
         commands: prefix,
         state: initialSimulation.state,
         score: scoreState(initialSimulation.state),
-        completeTurn: activeParticipant(initialSimulation.state) !== participantId
+        completeTurn: activeParticipant(initialSimulation.state) !== participantId,
+        usesUncertainty: prefixUsesUncertainty
       }
     ]
     const completed: SearchLine[] = []
@@ -206,7 +378,9 @@ export function searchCompetitiveTurn(
             commands: sequence,
             state: result.state,
             score: scoreState(result.state),
-            completeTurn
+            completeTurn,
+            usesUncertainty:
+              line.usesUncertainty || commandUsesUncertainty(command, line.state)
           })
         }
       }
@@ -233,103 +407,264 @@ export function searchCompetitiveTurn(
         )
         .slice(0, beamWidth)
     }
-    completed.push(...frontier)
-    return completed
+    const complete = [...completed, ...frontier.filter((line) => line.completeTurn)]
+    const stillPartial = frontier.filter((line) => !line.completeTurn)
+    return { complete, partial: stillPartial }
   }
 
-  const lethalProof = proveGuaranteedLethal(match, perspectivePlayerId, {
-    depth: Math.min(limits.atomicDepth, 12),
-    nodeLimit: Math.min(limits.nodeLimit, 12_000),
-    deadlineAtMs
-  })
-  const dossiers: AiCandidateDossier[] = []
-  for (const root of roots) {
-    if (Date.now() >= deadlineAtMs || exploredNodes >= limits.nodeLimit) {
-      partial = true
-      break
+  const dossierFor = (
+    root: AiSearchRootAction,
+    ownLine: SearchLine,
+    strongestResponse: SearchLine,
+    opponentCommands: readonly TurnMatchCommand[],
+    responseIsPartial: boolean,
+    evaluation: Readonly<{
+      readonly score: number
+      readonly components: AiCandidateDossier['evaluation']
+    }>,
+    lethalProofCommands: readonly TurnMatchCommand[] | null
+  ): AiCandidateDossier => {
+    const tacticalProofs = [
+      ...classifyTacticalLine(
+        initial,
+        ownLine.state,
+        perspectivePlayerId,
+        ownLine.commands
+      ),
+      ...(lethalProofCommands
+        ? [
+            {
+              kind: 'guaranteed-lethal' as const,
+              proven: true,
+              complete: true,
+              commands: lethalProofCommands,
+              verifiedBranches: 1,
+              annotation: 'The global guaranteed-lethal proof begins with this action.'
+            }
+          ]
+        : [])
+    ]
+    const matchupPlanProgress =
+      evaluation.components.matchupProgress + evaluation.components.comboProgress
+    return {
+      actionId: root.actionId,
+      firstCommand: root.command,
+      recommendedContinuation: ownLine.commands.slice(1),
+      projectedSuccessor: {
+        revision: strongestResponse.state.revision,
+        winnerId: strongestResponse.state.winnerId,
+        selfEffectiveHealth: effectiveHealth(
+          strongestResponse.state,
+          perspectivePlayerId
+        ),
+        opponentEffectiveHealth: effectiveHealth(strongestResponse.state, opponentId),
+        selfBoardAttack: boardAttack(strongestResponse.state, perspectivePlayerId),
+        opponentBoardAttack: boardAttack(strongestResponse.state, opponentId)
+      },
+      opponentStrongestResponse: opponentCommands,
+      tacticalProofs,
+      evaluation: evaluation.components,
+      score: evaluation.score,
+      meanScenarioValue: evaluation.score,
+      downsideScenarioValue: evaluation.score,
+      worstCaseScenarioValue: evaluation.score,
+      resourceUsage: resourceUsage(initial, ownLine.state, perspectivePlayerId, plan),
+      uncertainty: {
+        determinizations: strongestResponse.usesUncertainty
+          ? limits.determinizations
+          : 1,
+        randomOutcomeSamples: strongestResponse.usesUncertainty
+          ? limits.randomOutcomeSamples
+          : 1,
+        incomplete:
+          strongestResponse.usesUncertainty ||
+          partial ||
+          responseIsPartial ||
+          !ownLine.completeTurn
+      },
+      matchupPlanProgress
     }
-    const ownLines = expandTurn(
-      [root.command],
-      perspectivePlayerId,
-      limits.ownTurnBeam,
-      root
-    )
-    let bestDossier: AiCandidateDossier | null = null
-    for (const ownLine of ownLines) {
-      const opponentLines =
-        ownLine.state.phase === 'ended'
-          ? []
-          : expandTurn(ownLine.commands, opponentId, limits.opponentTurnBeam)
-      const strongestResponse =
-        opponentLines.length === 0
-          ? ownLine
-          : [...opponentLines].sort(
+  }
+
+  // The guaranteed-lethal proof only runs when reachable damage makes lethal
+  // plausible, never consumes more than half the search budget, and is fast
+  // enough (focused enemy-hero damage lines) to finish inside short slices.
+  // An impossible or slow proof must not starve root coverage.
+  const opponentEffectiveHealth = effectiveHealth(initial, opponentId)
+  const lethalPlausible =
+    maximumReachableDamage(initial, perspectivePlayerId) >= opponentEffectiveHealth
+  let lethalProof: ReturnType<typeof proveGuaranteedLethal> = {
+    kind: 'guaranteed-lethal',
+    proven: false,
+    complete: true,
+    commands: [],
+    verifiedBranches: 0,
+    annotation:
+      'Skipped: the maximum reachable damage this turn cannot reduce the opposing hero.'
+  }
+  if (lethalPlausible && options.baselinePass !== false) {
+    const proofLimits: AiTacticalSolveLimits = {
+      depth: Math.min(limits.atomicDepth, 12),
+      nodeLimit: Math.min(limits.nodeLimit, 12_000),
+      deadlineAtMs: Math.min(
+        deadlineAtMs,
+        Date.now() + Math.max(1, Math.floor(limits.timeBudgetMs * 0.5))
+      )
+    }
+    lethalProof = proveGuaranteedLethal(match, perspectivePlayerId, proofLimits)
+  }
+  const lethalFirstKey =
+    lethalProof.proven && lethalProof.commands.length > 0
+      ? canonicalCommandKey(lethalProof.commands[0]!)
+      : null
+
+  const dossiersByAction = new Map<string, AiCandidateDossier>()
+
+  // Fair minimum coverage: every root gets a cheap one-action baseline
+  // dossier before any root is deep-expanded. The baseline evaluates the
+  // resolved successor of the root command alone and is always marked
+  // incomplete so ranking treats it as a floor, not a searched action.
+  if (options.baselinePass !== false) {
+    for (const root of roots) {
+      // Root coverage is a small, bounded prerequisite rather than optional
+      // deep-search work. Do not let wall-clock scheduling leave a legal root
+      // completely unrepresented.
+      const baseline = simulate(match, [root.command])
+      if (!baseline.accepted) continue
+      const evaluation = evaluatePosition(baseline.state, perspectivePlayerId, plan)
+      const usesUncertainty = commandUsesUncertainty(root.command, initial)
+      const dossier = dossierFor(
+        root,
+        {
+          commands: [root.command],
+          state: baseline.state,
+          score: evaluation.score,
+          completeTurn: true,
+          usesUncertainty
+        },
+        {
+          commands: [root.command],
+          state: baseline.state,
+          score: evaluation.score,
+          completeTurn: true,
+          usesUncertainty
+        },
+        [],
+        true,
+        evaluation,
+        lethalFirstKey === canonicalCommandKey(root.command)
+          ? lethalProof.commands
+          : null
+      )
+      dossiersByAction.set(root.actionId, dossier)
+    }
+  }
+
+  if (!options.baselineOnly)
+    for (const root of roots) {
+      if (Date.now() >= deadlineAtMs || exploredNodes >= limits.nodeLimit) {
+        partial = true
+        break
+      }
+      const expansion = expandTurn(
+        [root.command],
+        perspectivePlayerId,
+        limits.ownTurnBeam,
+        commandUsesUncertainty(root.command, initial),
+        root
+      )
+      if (expansion.complete.length === 0) continue
+      let bestDossier: AiCandidateDossier | null = null
+      for (const ownLine of expansion.complete) {
+        let strongestResponse: SearchLine = ownLine
+        let opponentCommands: readonly TurnMatchCommand[] = []
+        let responseIsPartial = false
+        if (ownLine.state.phase !== 'ended') {
+          const response = expandTurn(
+            ownLine.commands,
+            opponentId,
+            limits.opponentTurnBeam,
+            ownLine.usesUncertainty
+          )
+          const pool =
+            response.complete.length > 0 ? response.complete : response.partial
+          if (pool.length > 0) {
+            const sorted = [...pool].sort(
               (left, right) =>
                 left.score - right.score ||
                 lineKey(left.commands).localeCompare(lineKey(right.commands))
-            )[0]!
-      const opponentCommands = strongestResponse.commands.slice(ownLine.commands.length)
-      const evaluation = evaluatePosition(
-        strongestResponse.state,
-        perspectivePlayerId,
-        plan
-      )
-      const uncertainty = [...ownLine.commands, ...opponentCommands].some(
-        (command, index, all) => {
-          const prior = simulate(match, all.slice(0, index)).state
-          return commandUsesUncertainty(command, prior)
+            )
+            strongestResponse = sorted[0]!
+            opponentCommands = strongestResponse.commands.slice(ownLine.commands.length)
+            responseIsPartial = response.complete.length === 0
+          }
         }
-      )
-      const matchupPlanProgress =
-        evaluation.components.matchupProgress + evaluation.components.comboProgress
-      const tacticalProofs = [
-        ...classifyTacticalLine(
-          initial,
-          ownLine.state,
+        const evaluation = evaluatePosition(
+          strongestResponse.state,
           perspectivePlayerId,
-          ownLine.commands
-        ),
-        ...(lethalProof.proven &&
-        canonicalCommandKey(lethalProof.commands[0]!) ===
-          canonicalCommandKey(root.command)
-          ? [lethalProof]
-          : [])
-      ]
-      const dossier: AiCandidateDossier = {
-        actionId: root.actionId,
-        firstCommand: root.command,
-        recommendedContinuation: ownLine.commands.slice(1),
-        projectedSuccessor: {
-          revision: strongestResponse.state.revision,
-          winnerId: strongestResponse.state.winnerId,
-          selfEffectiveHealth: effectiveHealth(
-            strongestResponse.state,
-            perspectivePlayerId
-          ),
-          opponentEffectiveHealth: effectiveHealth(strongestResponse.state, opponentId),
-          selfBoardAttack: boardAttack(strongestResponse.state, perspectivePlayerId),
-          opponentBoardAttack: boardAttack(strongestResponse.state, opponentId)
-        },
-        opponentStrongestResponse: opponentCommands,
-        tacticalProofs,
-        evaluation: evaluation.components,
-        score: evaluation.score,
-        meanScenarioValue: evaluation.score,
-        downsideScenarioValue: evaluation.score,
-        worstCaseScenarioValue: evaluation.score,
-        resourceUsage: resourceUsage(initial, ownLine.state, perspectivePlayerId, plan),
-        uncertainty: {
-          determinizations: uncertainty ? limits.determinizations : 1,
-          randomOutcomeSamples: uncertainty ? limits.randomOutcomeSamples : 1,
-          incomplete: uncertainty || partial || !ownLine.completeTurn
-        },
-        matchupPlanProgress
+          plan
+        )
+        const dossier = dossierFor(
+          root,
+          ownLine,
+          strongestResponse,
+          opponentCommands,
+          responseIsPartial,
+          evaluation,
+          lethalFirstKey === canonicalCommandKey(root.command)
+            ? lethalProof.commands
+            : null
+        )
+        if (!bestDossier || dossier.score > bestDossier.score) bestDossier = dossier
       }
-      if (!bestDossier || dossier.score > bestDossier.score) bestDossier = dossier
+      if (bestDossier) dossiersByAction.set(root.actionId, bestDossier)
     }
-    if (bestDossier) dossiers.push(bestDossier)
+
+  // Phase-3 self-harm dominance: drop a self-damage target variant when an
+  // equivalent enemy-target variant or the pass baseline produces an outcome
+  // at least as good and no compensating tactical proof justifies the cost.
+  for (const root of roots) {
+    const dossier = dossiersByAction.get(root.actionId)
+    if (!dossier) continue
+    const classification = classifySelfDamage(
+      root.command,
+      initial,
+      perspectivePlayerId
+    )
+    if (!classification.isSelfDamage || !classification.siblingKey) continue
+    if (
+      dossier.tacticalProofs.some(
+        (proof) =>
+          proof.proven && proof.complete && COMPENSATING_PROOF_KINDS.has(proof.kind)
+      )
+    )
+      continue
+    let dominated = false
+    for (const other of dossiersByAction.values()) {
+      if (other.actionId === dossier.actionId) continue
+      const otherCommand = other.firstCommand
+      let isSibling = false
+      if (otherCommand.type === 'play-card' && root.command.type === 'play-card')
+        isSibling =
+          `card:${otherCommand.cardInstanceId}` === classification.siblingKey &&
+          !classifySelfDamage(otherCommand, initial, perspectivePlayerId).isSelfDamage
+      if (
+        otherCommand.type === 'use-hero-power' &&
+        root.command.type === 'use-hero-power'
+      )
+        isSibling =
+          classification.siblingKey === 'hero-power' &&
+          !classifySelfDamage(otherCommand, initial, perspectivePlayerId).isSelfDamage
+      const isBaseline = otherCommand.type === 'end-turn'
+      if ((isSibling || isBaseline) && other.score >= dossier.score) {
+        dominated = true
+        break
+      }
+    }
+    if (dominated) dossiersByAction.delete(root.actionId)
   }
-  dossiers.sort(
+
+  const dossiers = [...dossiersByAction.values()].sort(
     (left, right) =>
       right.score - left.score || left.actionId.localeCompare(right.actionId)
   )

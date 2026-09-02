@@ -3825,6 +3825,11 @@ describe('shared effect runtime', () => {
         participantId,
         available: 10,
         maximum: 10
+      },
+      {
+        type: 'dev-set-hero-power' as const,
+        participantId,
+        available: false
       }
     ])
       expect(scenario.match.dispatch(command).accepted).toBe(true)
@@ -3947,9 +3952,14 @@ describe('shared effect runtime', () => {
       heroPower: {
         id: 'ragnaros-die-insects',
         cost: 2,
-        targetType: 'none'
+        targetType: 'none',
+        available: true,
+        usesThisTurn: 0
       }
     })
+    expect(
+      result.events.filter((event) => event.type === 'hero-power-replaced')
+    ).toHaveLength(0)
 
     const power = scenario.match.dispatch({
       type: 'use-hero-power',
@@ -3973,5 +3983,404 @@ describe('shared effect runtime', () => {
         winnerId: participantId
       }).accepted
     ).toBe(false)
+  })
+
+  it('Gang Up keeps its target in play and shuffles three copies into the caster deck', () => {
+    const scenario = createMatchScenario({
+      seed: 423,
+      cardId: 'basic_acidic_swamp_ooze'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activeParticipants(scenario)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'blackrock_mountain_gang_up'
+      }).accepted
+    ).toBe(true)
+    for (let index = 0; index < 9; index += 1) {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId,
+          cardId: 'basic_acidic_swamp_ooze'
+        }).accepted
+      ).toBe(true)
+    }
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'basic_bloodfen_raptor'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+
+    const beforeCaster = player(scenario, participantId)
+    const beforeOpponent = player(scenario, opponentId)
+    const gangUp = beforeCaster.hand.find(
+      (card) => card.cardId === 'blackrock_mountain_gang_up'
+    )!
+    const target = beforeOpponent.board.find(
+      (minion) => minion.cardId === 'basic_bloodfen_raptor'
+    )!
+    const casterDeckIds = new Set(beforeCaster.deck.map((card) => card.instanceId))
+    const casterDeckSize = beforeCaster.deck.length
+    const opponentDeckSize = beforeOpponent.deck.length
+
+    expect(beforeCaster.hand).toHaveLength(10)
+    expect(
+      scenario.match.getLegality?.(participantId).playableCardInstanceIds
+    ).toContain(gangUp.instanceId)
+
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: gangUp.instanceId,
+      targets: [
+        {
+          kind: 'minion',
+          participantId: opponentId,
+          instanceId: target.instanceId
+        }
+      ]
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+
+    const afterCaster = player(scenario, participantId)
+    const afterOpponent = player(scenario, opponentId)
+    const copies = afterCaster.deck.filter(
+      (card) => !casterDeckIds.has(card.instanceId)
+    )
+    expect(afterOpponent.board).toContainEqual(target)
+    expect(afterOpponent.deck).toHaveLength(opponentDeckSize)
+    expect(afterCaster.deck).toHaveLength(casterDeckSize + 3)
+    expect(copies).toHaveLength(3)
+    expect(new Set(copies.map((card) => card.instanceId)).size).toBe(3)
+    for (const copy of copies) {
+      expect(copy).toMatchObject({
+        cardId: 'basic_bloodfen_raptor',
+        ownerId: participantId,
+        controllerId: participantId,
+        zone: 'deck',
+        revealed: false
+      })
+    }
+  })
+
+  it('Blade Flurry requires a weapon and damages all enemies from its destroyed snapshot', () => {
+    const scenario = createMatchScenario({ seed: 424, cardId: 'classic_blade_flurry' })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    for (const cardId of ['classic_blade_flurry', 'basic_assassins_blade'] as const) {
+      expect(
+        scenario.match.dispatch({ type: 'dev-add-card', participantId, cardId })
+          .accepted
+      ).toBe(true)
+    }
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: 'basic_kobold_geomancer'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'basic_boulderfist_ogre'
+      }).accepted
+    ).toBe(true)
+
+    const bladeFlurry = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_blade_flurry'
+    )!
+    expect(
+      scenario.match.getPlayInput?.(participantId, bladeFlurry.instanceId)
+    ).toBeNull()
+    expect(
+      scenario.match.getLegality?.(participantId).playableCardInstanceIds
+    ).not.toContain(bladeFlurry.instanceId)
+
+    const weapon = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'basic_assassins_blade'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: weapon.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.getPlayInput?.(participantId, bladeFlurry.instanceId)
+    ).toMatchObject({
+      currentCost: 2
+    })
+
+    const friendlyHeroHealthBefore = player(scenario, participantId).hero.health
+    const enemyHeroHealthBefore = player(scenario, opponentId).hero.health
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: bladeFlurry.instanceId
+    })
+    expect(result.accepted).toBe(true)
+    expect(player(scenario, participantId).weapon).toBeNull()
+    expect(player(scenario, participantId).hero.health).toBe(friendlyHeroHealthBefore)
+    expect(player(scenario, participantId).board[0]).toMatchObject({
+      cardId: 'basic_kobold_geomancer',
+      health: 2
+    })
+    expect(player(scenario, opponentId).hero.health).toBe(enemyHeroHealthBefore - 4)
+    expect(player(scenario, opponentId).board[0]).toMatchObject({
+      cardId: 'basic_boulderfist_ogre',
+      health: 3
+    })
+  })
+
+  it('Preparation discounts and consumes the next spell chosen this turn', () => {
+    const scenario = createMatchScenario({ seed: 425, cardId: 'classic_preparation' })
+    scenario.confirmBothMulligans()
+    const [participantId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    for (const cardId of [
+      'classic_preparation',
+      'basic_sinister_strike',
+      'classic_sprint',
+      'basic_bloodfen_raptor'
+    ] as const) {
+      expect(
+        scenario.match.dispatch({ type: 'dev-add-card', participantId, cardId })
+          .accepted
+      ).toBe(true)
+    }
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const preparation = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_preparation'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: preparation.instanceId
+      }).accepted
+    ).toBe(true)
+
+    const preparedHand = player(scenario, participantId).hand
+    expect(
+      preparedHand.find((card) => card.cardId === 'basic_sinister_strike')?.currentCost
+    ).toBe(0)
+    expect(
+      preparedHand.find((card) => card.cardId === 'classic_sprint')?.currentCost
+    ).toBe(4)
+    expect(
+      preparedHand.find((card) => card.cardId === 'basic_bloodfen_raptor')?.currentCost
+    ).toBe(2)
+
+    const raptor = preparedHand.find((card) => card.cardId === 'basic_bloodfen_raptor')!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: raptor.instanceId,
+        position: 0
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).pendingCostModifiers).toHaveLength(1)
+
+    const sinisterStrike = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'basic_sinister_strike'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: sinisterStrike.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).pendingCostModifiers).toEqual([])
+    expect(
+      player(scenario, participantId).hand.find(
+        (card) => card.cardId === 'classic_sprint'
+      )?.currentCost
+    ).toBe(7)
+  })
+
+  it('Preparation is consumed by another Preparation and expires at turn end', () => {
+    const scenario = createMatchScenario({ seed: 426, cardId: 'classic_preparation' })
+    scenario.confirmBothMulligans()
+    const [participantId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    for (const cardId of [
+      'classic_preparation',
+      'classic_preparation',
+      'classic_sprint'
+    ] as const) {
+      expect(
+        scenario.match.dispatch({ type: 'dev-add-card', participantId, cardId })
+          .accepted
+      ).toBe(true)
+    }
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+
+    const firstPreparation = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_preparation'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: firstPreparation.instanceId
+      }).accepted
+    ).toBe(true)
+    const secondPreparation = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_preparation'
+    )!
+    expect(secondPreparation.currentCost).toBe(0)
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: secondPreparation.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).pendingCostModifiers).toHaveLength(1)
+    expect(
+      player(scenario, participantId).hand.find(
+        (card) => card.cardId === 'classic_sprint'
+      )?.currentCost
+    ).toBe(4)
+
+    expect(scenario.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
+      true
+    )
+    expect(player(scenario, participantId).pendingCostModifiers).toEqual([])
+    expect(
+      player(scenario, participantId).hand.find(
+        (card) => card.cardId === 'classic_sprint'
+      )?.currentCost
+    ).toBe(7)
+  })
+
+  it('keeps undated next-card discounts active across turn boundaries', () => {
+    const scenario = createMatchScenario({
+      seed: 427,
+      cardId: 'blackrock_mountain_dragon_consort'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    for (const cardId of [
+      'blackrock_mountain_dragon_consort',
+      'classic_faerie_dragon'
+    ] as const) {
+      expect(
+        scenario.match.dispatch({ type: 'dev-add-card', participantId, cardId })
+          .accepted
+      ).toBe(true)
+    }
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const consort = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'blackrock_mountain_dragon_consort'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: consort.instanceId,
+        position: 0
+      }).accepted
+    ).toBe(true)
+    expect(
+      player(scenario, participantId).hand.find(
+        (card) => card.cardId === 'classic_faerie_dragon'
+      )?.currentCost
+    ).toBe(0)
+
+    expect(scenario.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
+      true
+    )
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: opponentId }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).pendingCostModifiers).toHaveLength(1)
+    expect(
+      player(scenario, participantId).hand.find(
+        (card) => card.cardId === 'classic_faerie_dragon'
+      )?.currentCost
+    ).toBe(0)
   })
 })

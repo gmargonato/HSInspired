@@ -215,6 +215,7 @@ export const CARD_VALUE_REFERENCES = [
   'beasts-summoned-this-game',
   'cards-played-earlier-this-turn',
   'damage-dealt',
+  'destroyed-weapon.attack',
   'drawn-card.cost',
   'event-target.attack',
   'event-target.durability',
@@ -252,7 +253,7 @@ export const CARD_ACTION_SOURCES = [
   'hand',
   'random-card'
 ] as const
-export const CARD_ACTION_DESTINATIONS = ['cast-on-source', 'hand'] as const
+export const CARD_ACTION_DESTINATIONS = ['cast-on-source', 'deck', 'hand'] as const
 export const CARD_ACTION_RESOURCES = ['weapon-durability'] as const
 export const CARD_ACTION_FIELDS = ['health'] as const
 export const CARD_CRYSTAL_MODES = ['empty', 'full'] as const
@@ -332,6 +333,12 @@ export type CardEffectValue =
   | null
   | readonly CardEffectValue[]
   | { readonly [key: string]: CardEffectValue }
+
+export function isCardEffectObject(
+  value: CardEffectValue | undefined
+): value is Readonly<Record<string, CardEffectValue>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 export interface CardAction {
   readonly action: CardActionName

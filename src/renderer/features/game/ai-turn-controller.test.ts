@@ -651,7 +651,7 @@ describe('AiTurnController', () => {
     expect(decision.source).toBe('model')
     expect(requests.map((request) => request.pass)).toEqual(['rank', 'critic'])
     expect(requests[1]?.firstPassRanking).toEqual(
-      requests[0]?.legalActions.map((action) => action.id)
+      requests[0]?.legalActions.map((action) => action.id).slice(0, 4)
     )
     const state = requests[0]?.gameState
     expect(state?.['informationPolicy']).toBe('opponent-deck-and-hand')

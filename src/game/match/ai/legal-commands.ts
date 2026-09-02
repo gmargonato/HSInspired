@@ -40,8 +40,23 @@ function assignments(input: PlayCardInput): readonly (readonly CardPlayTargetRef
   return result
 }
 
+/**
+ * Fully distinguishing, order-independent serialization of a command. Keys are
+ * sorted at every nesting level so target variants of the same card (hero vs
+ * minion, one minion vs another) never collapse into a shared key.
+ */
 export function canonicalCommandKey(command: TurnMatchCommand): string {
-  return JSON.stringify(command, Object.keys(command).sort())
+  return JSON.stringify(command, (_key, value) => {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      return Object.keys(value)
+        .sort()
+        .reduce<Record<string, unknown>>((sorted, key) => {
+          sorted[key] = (value as Record<string, unknown>)[key]
+          return sorted
+        }, {})
+    }
+    return value
+  })
 }
 
 /** The single domain-owned enumerator used by tactical and strategic search. */

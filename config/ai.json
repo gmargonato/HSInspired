@@ -16,8 +16,8 @@
     },
     "matchupPlan": {
       "requestTimeoutMs": 30000,
-      "reasoningEffort": "medium",
-      "maxCompletionTokens": 3072
+      "reasoningEffort": "low",
+      "maxCompletionTokens": 4096
     },
     "mulligan": {
       "requestTimeoutMs": 25000,
@@ -36,12 +36,12 @@
     },
     "rank": {
       "requestTimeoutMs": 10000,
-      "reasoningEffort": "medium",
+      "reasoningEffort": "low",
       "maxCompletionTokens": 2048
     },
     "critic": {
       "requestTimeoutMs": 10000,
-      "reasoningEffort": "medium",
+      "reasoningEffort": "low",
       "maxCompletionTokens": 2048
     }
   },

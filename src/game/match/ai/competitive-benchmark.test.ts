@@ -62,8 +62,8 @@ function benchmarkDeck(heroId: string, archetype: number): Deck {
     )
     .slice(0, 15)
   const deck: Deck = {
-    id: `benchmark-${archetype}-${heroId}`,
-    name: `Benchmark ${archetype} ${heroId}`,
+    id: `bench-${archetype}-${heroId.slice(0, 4)}`,
+    name: `Bench ${archetype} ${heroId.slice(0, 4)}`,
     heroId: hero.id,
     cards: Object.fromEntries(candidates.map((card) => [card.id, 2])),
     createdAt: '2026-01-01T00:00:00.000Z',

@@ -23,6 +23,7 @@ export const EVENT_PRESENTATION_POLICY: Readonly<
   'opening-turn-started': 'animation',
   'turn-started': 'animation',
   'hero-power-used': 'animation',
+  'hero-power-replaced': 'animation',
   'character-damaged': 'animation',
   'character-healed': 'animation',
   'armor-gained': 'state-refresh',

@@ -585,6 +585,224 @@ describe('Phase 5/6 real-card integration', () => {
     })
   })
 
+  it.each([
+    ['classic_cold_blood', 'friendly-minion'],
+    ['classic_defias_ringleader', 'none'],
+    ['classic_edwin_vancleef', 'none'],
+    ['classic_eviscerate', 'none'],
+    ['classic_headcrack', 'none'],
+    ['classic_kidnapper', 'enemy-minion'],
+    ['classic_perditions_blade', 'none'],
+    ['classic_si_7_agent', 'none'],
+    ['goblins_vs_gnomes_sabotage', 'enemy-minion'],
+    ['goblins_vs_gnomes_tinkers_sharpsword_oil', 'weapon'],
+    ['the_grand_tournament_undercity_valiant', 'none'],
+    ['the_grand_tournament_shado_pan_rider', 'none']
+  ] as const)(
+    'reports an active conditional enhancement for Combo card %s',
+    (cardId, setup) => {
+      const scenario = createMatchScenario({ seed: 520, cardId })
+      scenario.confirmBothMulligans()
+      const { participantId, opponentId } = context(scenario)
+      setMana(scenario, participantId)
+
+      if (setup === 'friendly-minion' || setup === 'enemy-minion') {
+        expect(
+          scenario.match.dispatch({
+            type: 'dev-summon-minion',
+            participantId: setup === 'friendly-minion' ? participantId : opponentId,
+            cardId: 'basic_bloodfen_raptor'
+          }).accepted
+        ).toBe(true)
+      }
+
+      if (setup !== 'weapon') {
+        const comboCardBefore = handCard(scenario, participantId, cardId)
+        expect(
+          scenario.match.getPlayInput?.(participantId, comboCardBefore.instanceId)
+            ?.effectPreview?.conditionallyEnhanced ?? false
+        ).toBe(false)
+      }
+
+      if (setup === 'weapon') {
+        addCard(scenario, participantId, 'basic_assassins_blade')
+        const weapon = handCard(scenario, participantId, 'basic_assassins_blade')
+        expect(
+          scenario.match.dispatch({
+            type: 'play-card',
+            participantId,
+            cardInstanceId: weapon.instanceId
+          }).accepted
+        ).toBe(true)
+      } else {
+        addCard(scenario, participantId, 'basic_the_coin')
+        const coin = handCard(scenario, participantId, 'basic_the_coin')
+        expect(
+          scenario.match.dispatch({
+            type: 'play-card',
+            participantId,
+            cardInstanceId: coin.instanceId
+          }).accepted
+        ).toBe(true)
+      }
+
+      const comboCard = handCard(scenario, participantId, cardId)
+      expect(
+        scenario.match.getPlayInput?.(participantId, comboCard.instanceId)
+          ?.effectPreview
+      ).toEqual({ conditionallyEnhanced: true })
+    }
+  )
+
+  it('resets Combo enhancement when the next turn begins', () => {
+    const scenario = createMatchScenario({
+      seed: 521,
+      cardId: 'classic_defias_ringleader'
+    })
+    scenario.confirmBothMulligans()
+    const { participantId } = context(scenario)
+    setMana(scenario, participantId)
+    addCard(scenario, participantId, 'basic_the_coin')
+    const coin = handCard(scenario, participantId, 'basic_the_coin')
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: coin.instanceId
+      }).accepted
+    ).toBe(true)
+    const comboCard = handCard(scenario, participantId, 'classic_defias_ringleader')
+    expect(
+      scenario.match.getPlayInput?.(participantId, comboCard.instanceId)?.effectPreview
+    ).toEqual({ conditionallyEnhanced: true })
+
+    const opponentTurn = scenario.match.dispatch({
+      type: 'end-turn',
+      participantId
+    })
+    expect(opponentTurn.accepted).toBe(true)
+    if (!opponentTurn.accepted) return
+    expect(
+      scenario.match.dispatch({
+        type: 'end-turn',
+        participantId: opponentTurn.state.activePlayerId!
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.getPlayInput?.(participantId, comboCard.instanceId)?.effectPreview
+    ).toBeNull()
+  })
+
+  it.each([
+    [false, 2],
+    [true, 4]
+  ] as const)(
+    'resolves Eviscerate with Combo %s as one %i-damage action',
+    (comboActive, expectedDamage) => {
+      const scenario = createMatchScenario({
+        seed: comboActive ? 522 : 523,
+        cardId: 'classic_eviscerate'
+      })
+      scenario.confirmBothMulligans()
+      const { participantId, opponentId } = context(scenario)
+      setMana(scenario, participantId)
+      if (comboActive) {
+        addCard(scenario, participantId, 'basic_the_coin')
+        const coin = handCard(scenario, participantId, 'basic_the_coin')
+        expect(
+          scenario.match.dispatch({
+            type: 'play-card',
+            participantId,
+            cardInstanceId: coin.instanceId
+          }).accepted
+        ).toBe(true)
+      }
+      const eviscerate = handCard(scenario, participantId, 'classic_eviscerate')
+      const healthBefore = player(scenario.match.getState(), opponentId).hero.health
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: eviscerate.instanceId,
+        targets: [{ kind: 'hero', participantId: opponentId }]
+      })
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) return
+      expect(player(result.state, opponentId).hero.health).toBe(
+        healthBefore - expectedDamage
+      )
+      const damageEvents = result.events.filter(
+        (event) => event.type === 'effect-resolved' && event.action === 'damage'
+      )
+      expect(damageEvents).toHaveLength(1)
+      expect(damageEvents[0]).toMatchObject({
+        data: { amount: expectedDamage, displayAmount: expectedDamage }
+      })
+    }
+  )
+
+  it.each([
+    [false, 2],
+    [true, 4]
+  ] as const)(
+    'resolves Cold Blood with Combo %s as one +%i Attack action',
+    (comboActive, expectedAttackGain) => {
+      const scenario = createMatchScenario({
+        seed: comboActive ? 524 : 525,
+        cardId: 'classic_cold_blood'
+      })
+      scenario.confirmBothMulligans()
+      const { participantId } = context(scenario)
+      setMana(scenario, participantId)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId,
+          cardId: 'basic_bloodfen_raptor'
+        }).accepted
+      ).toBe(true)
+      if (comboActive) {
+        addCard(scenario, participantId, 'basic_the_coin')
+        const coin = handCard(scenario, participantId, 'basic_the_coin')
+        expect(
+          scenario.match.dispatch({
+            type: 'play-card',
+            participantId,
+            cardInstanceId: coin.instanceId
+          }).accepted
+        ).toBe(true)
+      }
+      const before = player(scenario.match.getState(), participantId)
+      const target = before.board.find(
+        (minion) => minion.cardId === 'basic_bloodfen_raptor'
+      )!
+      const coldBlood = handCard(scenario, participantId, 'classic_cold_blood')
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: coldBlood.instanceId,
+        targets: [
+          {
+            kind: 'minion',
+            participantId,
+            instanceId: target.instanceId
+          }
+        ]
+      })
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) return
+      expect(
+        player(result.state, participantId).board.find(
+          (minion) => minion.instanceId === target.instanceId
+        )?.attack
+      ).toBe(target.attack + expectedAttackGain)
+      expect(
+        result.events.filter(
+          (event) => event.type === 'effect-resolved' && event.action === 'modify'
+        )
+      ).toHaveLength(1)
+    }
+  )
+
   it("shuffles generated Mine cards for Iron Juggernaut's Battlecry and Deathrattle", () => {
     const juggernaut = createMatchScenario({
       seed: 517,

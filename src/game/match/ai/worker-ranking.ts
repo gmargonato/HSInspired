@@ -1,4 +1,8 @@
-import type { AiSearchWorkerRequest, AiSearchWorkerResult } from './ai-types'
+import type {
+  AiCandidateDossier,
+  AiSearchWorkerRequest,
+  AiSearchWorkerResult
+} from './ai-types'
 
 /** Serializable deterministic final aggregation performed inside the worker. */
 export function rankWorkerDossiers(
@@ -7,17 +11,19 @@ export function rankWorkerDossiers(
 ): AiSearchWorkerResult {
   const riskWeight = 0.24
   const worstCaseWeight = 0.16
-  const ordered = [...request.candidateDossiers].sort((left, right) => {
-    const leftValue =
-      left.meanScenarioValue +
-      left.downsideScenarioValue * riskWeight +
-      left.worstCaseScenarioValue * worstCaseWeight
-    const rightValue =
-      right.meanScenarioValue +
-      right.downsideScenarioValue * riskWeight +
-      right.worstCaseScenarioValue * worstCaseWeight
-    return rightValue - leftValue || left.actionId.localeCompare(right.actionId)
-  })
+  // A partially analyzed action must not outrank a fully searched action with
+  // a comparable scenario value; partial coverage is a quality deficit.
+  const incompletePenalty = 0.4
+  const scenarioValue = (candidate: AiCandidateDossier): number =>
+    candidate.meanScenarioValue +
+    candidate.downsideScenarioValue * riskWeight +
+    candidate.worstCaseScenarioValue * worstCaseWeight -
+    (candidate.uncertainty.incomplete ? incompletePenalty : 0)
+  const ordered = [...request.candidateDossiers].sort(
+    (left, right) =>
+      scenarioValue(right) - scenarioValue(left) ||
+      left.actionId.localeCompare(right.actionId)
+  )
   return {
     type: 'search-result',
     requestId: request.requestId,

@@ -27,6 +27,11 @@ export const HERO_HEALTH_COLORS = {
   increased: 0x6cff47
 } as const
 
+const HERO_REPLACEMENT_FLIP = {
+  close: 0.2,
+  open: 0.2
+} as const
+
 interface StatGroup {
   readonly group: Container
   readonly value: Text
@@ -197,6 +202,38 @@ export class HeroView extends Container {
     this.frame.texture = texture
     this.outlineProxy.texture = texture
     this.targetingOutlineProxy.texture = texture
+  }
+
+  /** Horizontally flips only the portrait frame, swapping identity edge-on. */
+  replaceFrame(texture: Texture): Promise<void> {
+    const baseScaleX = this.frame.scale.x
+    const timeline = this.animationScope.timeline()
+    let swapped = false
+    const applyReplacement = (): void => {
+      if (swapped) return
+      swapped = true
+      this.setFrame(texture)
+    }
+    timeline.to(this.frame.scale, {
+      x: 0,
+      duration: HERO_REPLACEMENT_FLIP.close,
+      ease: 'power2.in'
+    })
+    timeline.call(applyReplacement)
+    timeline.to(this.frame.scale, {
+      x: baseScaleX,
+      duration: HERO_REPLACEMENT_FLIP.open,
+      ease: 'power2.out'
+    })
+    return new Promise((resolve) => {
+      const finish = (): void => {
+        applyReplacement()
+        this.frame.scale.x = baseScaleX
+        resolve()
+      }
+      timeline.eventCallback('onComplete', finish)
+      timeline.eventCallback('onInterrupt', finish)
+    })
   }
 
   setFrozen(visible: boolean): void {

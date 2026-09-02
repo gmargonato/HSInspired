@@ -395,6 +395,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'beasts-summoned-this-game',
       'cards-played-earlier-this-turn',
       'damage-dealt',
+      'destroyed-weapon.attack',
       'drawn-card.cost',
       'event-target.attack',
       'event-target.durability',
@@ -428,7 +429,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'hand',
       'random-card'
     ],
-    'action-destination': ['cast-on-source', 'hand'],
+    'action-destination': ['cast-on-source', 'deck', 'hand'],
     'action-resource': ['weapon-durability'],
     'action-field': ['health'],
     'crystal-mode': ['empty', 'full']
