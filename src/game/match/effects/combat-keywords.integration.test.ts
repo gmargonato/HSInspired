@@ -235,6 +235,127 @@ describe('combat keyword matrix', () => {
     })
   })
 
+  it('makes Gorehowl spend Attack instead of durability after hitting a minion', () => {
+    const scenario = createMatchScenario({
+      seed: 1010,
+      cardId: 'classic_gorehowl',
+      firstHeroId: 'garrosh',
+      secondHeroId: 'garrosh'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const gorehowl = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_gorehowl'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: gorehowl.instanceId
+      }).accepted
+    ).toBe(true)
+
+    const friendlyAttacker = summon(scenario, participantId, 'basic_stonetusk_boar')
+    const defender = summon(scenario, opponentId, 'classic_malygos')
+    expect(
+      attack(
+        scenario,
+        participantId,
+        { kind: 'minion', instanceId: friendlyAttacker.instanceId },
+        { kind: 'minion', instanceId: defender.instanceId }
+      ).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).weapon).toMatchObject({
+      attack: 7,
+      durability: 1,
+      maxDurability: 1
+    })
+
+    const result = attack(
+      scenario,
+      participantId,
+      { kind: 'hero' },
+      { kind: 'minion', instanceId: defender.instanceId }
+    )
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+
+    const combat = result.events.find(
+      (event) => event.type === 'character-combat-resolved'
+    )
+    expect(combat).toMatchObject({
+      attacker: { attack: 7 },
+      defender: { healthBefore: 11, healthAfter: 4 },
+      weapon: {
+        durabilityBefore: 1,
+        durabilityAfter: 1,
+        destroyed: false
+      }
+    })
+    expect(player(scenario, participantId).weapon).toMatchObject({
+      attack: 6,
+      durability: 1,
+      maxDurability: 1
+    })
+  })
+
+  it('makes Gorehowl spend durability normally when hitting a hero', () => {
+    const scenario = createMatchScenario({
+      seed: 1011,
+      cardId: 'classic_gorehowl',
+      firstHeroId: 'garrosh',
+      secondHeroId: 'garrosh'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const gorehowl = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_gorehowl'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: gorehowl.instanceId
+      }).accepted
+    ).toBe(true)
+
+    const result = attack(scenario, participantId, { kind: 'hero' }, { kind: 'hero' })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'character-combat-resolved',
+        attacker: expect.objectContaining({ attack: 7 }),
+        weapon: {
+          participantId,
+          durabilityBefore: 1,
+          durabilityAfter: 0,
+          destroyed: true
+        }
+      })
+    )
+    expect(player(scenario, opponentId).hero.health).toBe(23)
+    expect(player(scenario, participantId).weapon).toBeNull()
+  })
+
   it('consumes Divine Shield before health and permits Windfury but not a third attack', () => {
     const scenario = createMatchScenario({ seed: 1002 })
     scenario.confirmBothMulligans()

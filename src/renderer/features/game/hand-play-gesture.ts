@@ -6,6 +6,8 @@ export interface HandPlayInputRequirement {
 
 export type HandCardTargetingOrigin = 'card' | 'local-hero' | 'minion-preview'
 
+export type PendingCardInputStage = 'choice' | 'target' | 'ready'
+
 /** Targeted spells always aim from the local hero, independent of click or drag input. */
 export function resolveHandCardArrowOrigin(
   cardType: string,
@@ -31,19 +33,68 @@ export function requiresClickConfirmedMinionPlacement(
   cardType: string,
   input: HandPlayInputRequirement
 ): boolean {
-  return (
-    cardType === 'Minion' &&
-    (input.targetSelectors.length > 0 ||
-      (input.choiceCount > 0 && input.choiceTiming !== 'after-placement'))
-  )
+  return cardType === 'Minion' && pendingCardInputStage(input, undefined) !== 'ready'
 }
 
-/** Targeted non-minions may be aimed and released in one continuous gesture. */
+/**
+ * Targeted non-minions may be aimed and released in one continuous gesture.
+ * Pre-play choices must be confirmed first so targeting reflects the selected branch.
+ */
 export function allowsDragTargetingFromHand(
   cardType: string,
   input: HandPlayInputRequirement
 ): boolean {
-  return cardType !== 'Minion' && input.targetSelectors.length > 0
+  return cardType !== 'Minion' && pendingCardInputStage(input, undefined) === 'target'
+}
+
+/** Target presentation starts only after any card choice has been resolved. */
+export function isCardTargetSelectionActive(
+  input: HandPlayInputRequirement,
+  choice: number | undefined,
+  selectedTargetCount = 0
+): boolean {
+  return pendingCardInputStage(input, choice, selectedTargetCount) === 'target'
+}
+
+/**
+ * Canonical renderer progression for input collected before a card is played.
+ * A choice always precedes its branch-specific targets; the play is ready only
+ * after both requirements have been satisfied.
+ */
+export function pendingCardInputStage(
+  input: HandPlayInputRequirement,
+  choice: number | undefined,
+  selectedTargetCount = 0
+): PendingCardInputStage {
+  if (
+    input.choiceCount > 0 &&
+    input.choiceTiming !== 'after-placement' &&
+    choice === undefined
+  )
+    return 'choice'
+  if (selectedTargetCount < input.targetSelectors.length) return 'target'
+  return 'ready'
+}
+
+/** Blocks newly mounted modal controls until the pointer that opened them is released. */
+export class PointerReleaseInputGate {
+  private pointerId: number | null = null
+
+  get blocked(): boolean {
+    return this.pointerId !== null
+  }
+
+  block(pointerId: number): void {
+    this.pointerId = pointerId
+  }
+
+  release(pointerId: number): void {
+    if (this.pointerId === pointerId) this.pointerId = null
+  }
+
+  clear(): void {
+    this.pointerId = null
+  }
 }
 
 /** Prevents the tap synthesized by a placement click from becoming a target click. */

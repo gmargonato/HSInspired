@@ -396,6 +396,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'cards-played-earlier-this-turn',
       'damage-dealt',
       'destroyed-weapon.attack',
+      'destroyed-weapon.durability',
       'drawn-card.cost',
       'event-target.attack',
       'event-target.durability',

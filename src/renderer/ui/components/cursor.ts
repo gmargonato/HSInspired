@@ -1,12 +1,14 @@
 import defaultCursorImage from '@assets/images/cursor/cursor-base.png'
 import grabCursorImage from '@assets/images/cursor/cursor-grab.png'
+import observerCursorImage from '@assets/images/cursor/cursor-observer.png'
 import collectionNewPageImage from '@assets/images/cursor/cursor-pass-page.png'
 import arrowHeadImage from '@assets/images/match/arrow-head.png'
 import arrowCircleImage from '@assets/images/match/arrow-circle.png'
 
 export type CursorVariant =
-  'default' | 'grab' | 'collection-next-page' | 'collection-previous-page'
-export type CursorContextVariant = Exclude<CursorVariant, 'default'>
+  'default' | 'grab' | 'observer' | 'collection-next-page' | 'collection-previous-page'
+export type CursorContextVariant = Exclude<CursorVariant, 'default' | 'observer'>
+export type CursorOverrideVariant = Extract<CursorVariant, 'observer'>
 
 /** The standard cursor artwork is 32 CSS pixels at the default scale. */
 export const CURSOR_BASE_SIZE = 32
@@ -50,9 +52,9 @@ export interface CursorTargetPoint {
  * Keep cursor artwork in one registry so adding a future variant only needs
  * an asset entry and a new CursorVariant value.
  *
- * The standard cursor hotspots align the pointer with the visible fingertip
- * in each 32x32 image. They are stored per variant so future artwork can opt
- * into a different anchor without changing the positioning code.
+ * Standard cursor hotspots align the pointer with each artwork's interaction
+ * point. They are stored per variant so future artwork can use a different
+ * anchor without changing the positioning code.
  */
 const CURSOR_ASSETS: Record<CursorVariant, CursorAsset> = {
   default: {
@@ -68,6 +70,13 @@ const CURSOR_ASSETS: Record<CursorVariant, CursorAsset> = {
     height: CURSOR_BASE_SIZE,
     hotspotX: 9,
     hotspotY: 0
+  },
+  observer: {
+    image: observerCursorImage,
+    width: CURSOR_BASE_SIZE,
+    height: CURSOR_BASE_SIZE,
+    hotspotX: CURSOR_BASE_SIZE / 2,
+    hotspotY: CURSOR_BASE_SIZE / 2
   },
   'collection-next-page': {
     image: collectionNewPageImage,
@@ -99,9 +108,10 @@ export function getCursorSize(scale: number): number {
 }
 
 export function resolveCursorVariant(
-  contextVariant: CursorContextVariant | null = null
+  contextVariant: CursorContextVariant | null = null,
+  overrideVariant: CursorOverrideVariant | null = null
 ): CursorVariant {
-  return contextVariant ?? 'default'
+  return overrideVariant ?? contextVariant ?? 'default'
 }
 
 export function shouldRestoreCursor(
@@ -127,6 +137,7 @@ export class CursorManager {
   private scale = DEFAULT_CURSOR_SCALE
   private variant: CursorVariant = 'default'
   private contextVariant: CursorContextVariant | null = null
+  private overrideVariant: CursorOverrideVariant | null = null
   private leftButtonDown = false
   private pointerX: number | null = null
   private pointerY: number | null = null
@@ -184,13 +195,22 @@ export class CursorManager {
   }
 
   mount(): void {
+    // Mounting is also a cheap health check. Development hot updates can
+    // replace DOM state without recreating this manager, so always restore
+    // the class and cursor layers before deciding whether listeners are
+    // already registered.
+    this.host.classList.add(CUSTOM_CURSOR_CLASS)
+    if (this.element.parentElement !== this.host) this.host.appendChild(this.element)
+    if (this.targetCircleElement.parentElement !== this.host) {
+      this.host.appendChild(this.targetCircleElement)
+    }
+    if (this.arrowHeadElement.parentElement !== this.host) {
+      this.host.appendChild(this.arrowHeadElement)
+    }
+
     if (this.mounted) return
 
     this.mounted = true
-    this.host.classList.add(CUSTOM_CURSOR_CLASS)
-    this.host.appendChild(this.element)
-    this.host.appendChild(this.targetCircleElement)
-    this.host.appendChild(this.arrowHeadElement)
 
     // Capture at the window level so Pixi's own event handling cannot prevent
     // the global cursor state from receiving a release outside an actor.
@@ -222,11 +242,12 @@ export class CursorManager {
     this.arrowHeadElement.style.visibility = 'hidden'
     this.targetCircleElement.style.visibility = 'hidden'
     this.contextVariant = null
+    this.overrideVariant = null
     this.leftButtonDown = false
     this.pointerInsideHost = false
     this.targeting = false
     this.targetingTargetPoint = null
-    this.setVariant(resolveCursorVariant(this.contextVariant))
+    this.setVariant(resolveCursorVariant(this.contextVariant, this.overrideVariant))
     this.mounted = false
   }
 
@@ -248,15 +269,25 @@ export class CursorManager {
 
   setContextVariant(variant: CursorContextVariant | null): void {
     this.contextVariant = variant
-    this.setVariant(resolveCursorVariant(this.contextVariant))
+    this.setVariant(resolveCursorVariant(this.contextVariant, this.overrideVariant))
+  }
+
+  /** Applies a durable state cursor that takes priority over transient interactions. */
+  setOverrideVariant(variant: CursorOverrideVariant | null): void {
+    if (this.overrideVariant === variant) return
+
+    this.overrideVariant = variant
+    this.setVariant(resolveCursorVariant(this.contextVariant, this.overrideVariant))
+    if (this.pointerInsideHost && this.pointerX !== null) this.show()
+    else this.hide()
   }
 
   setTargeting(active: boolean): void {
     if (this.targeting === active) return
     this.targeting = active
     if (active) {
-      this.element.style.visibility = 'hidden'
-      this.syncTargetingVisibility()
+      if (this.pointerInsideHost && this.pointerX !== null) this.show()
+      else this.hide()
       this.updateArrowHeadPosition()
       this.updateTargetCirclePosition()
     } else {
@@ -351,6 +382,7 @@ export class CursorManager {
   }
 
   private onWindowFocus = (): void => {
+    this.mount()
     this.restoreAfterWindowReturn()
   }
 
@@ -363,6 +395,7 @@ export class CursorManager {
       return
     }
 
+    this.mount()
     this.restoreAfterWindowReturn()
   }
 
@@ -471,14 +504,17 @@ export class CursorManager {
 
   private syncTargetingVisibility(): void {
     const showArrowHead =
-      this.targeting && this.pointerInsideHost && this.pointerX !== null
+      this.overrideVariant === null &&
+      this.targeting &&
+      this.pointerInsideHost &&
+      this.pointerX !== null
     this.arrowHeadElement.style.visibility = showArrowHead ? 'visible' : 'hidden'
     this.targetCircleElement.style.visibility =
       showArrowHead && this.targetingTargetPoint ? 'visible' : 'hidden'
   }
 
   private show(): void {
-    if (this.targeting) {
+    if (this.targeting && this.overrideVariant === null) {
       this.element.style.visibility = 'hidden'
       this.syncTargetingVisibility()
       return

@@ -78,6 +78,18 @@ function writeColor(
   value[3] = 1
 }
 
+function writeVector(
+  uniforms: UniformGroup,
+  name: 'uGeometry' | 'uDetail' | 'uMotion',
+  values: readonly [number, number, number, number]
+): void {
+  const target = uniforms.uniforms[name] as unknown as number[]
+  target[0] = values[0]
+  target[1] = values[1]
+  target[2] = values[2]
+  target[3] = values[3]
+}
+
 function outlinePadding(tuning: OutlineTuning): number {
   return (
     tuning.ribbonWidth +
@@ -101,7 +113,7 @@ export class AnimatedOutline extends Actor {
   private readonly target: Container
   private readonly filter: Filter
   private readonly uniforms: UniformGroup
-  private readonly tuning: OutlineTuning
+  private tuning: OutlineTuning
   private readonly timeState = { value: 0 }
   private timeTween?: gsap.core.Tween
   private enabled = true
@@ -182,6 +194,34 @@ export class AnimatedOutline extends Actor {
     writeColor(this.uniforms, 'uRimColor', toRgb01(palette.outerColor))
     writeColor(this.uniforms, 'uGlowColor', toRgb01(palette.outerColor))
     writeColor(this.uniforms, 'uHotColor', toRgb01(palette.highlightColor))
+  }
+
+  setPreset(preset: OutlinePresetName): void {
+    this.setTuning(resolveTuning(preset))
+  }
+
+  /** Applies an in-memory tuning draft without changing the registered preset. */
+  setTuning(tuning: OutlineTuning): void {
+    this.tuning = tuning
+    writeVector(this.uniforms, 'uGeometry', [
+      this.tuning.ribbonWidth,
+      this.tuning.rimWidth,
+      this.tuning.glowWidth,
+      this.tuning.glowStrength
+    ])
+    writeVector(this.uniforms, 'uDetail', [
+      this.tuning.highlightStrength,
+      this.tuning.hotspotScale,
+      this.tuning.hotspotDensity,
+      this.tuning.edgeWobble
+    ])
+    writeVector(this.uniforms, 'uMotion', [
+      this.tuning.motionSpeed,
+      this.tuning.edgeSoftness,
+      0,
+      0
+    ])
+    this.filter.padding = outlinePadding(this.tuning)
   }
 
   override dispose(): void {

@@ -20,18 +20,38 @@ describe('hero identity presentation', () => {
         health: 8,
         maxHealth: 8,
         armor: 5,
-        frozen: true
+        frozen: true,
+        immune: true
       },
       {
         frame: Texture.EMPTY,
         attack: Texture.EMPTY,
         health: Texture.EMPTY,
         armor: Texture.EMPTY,
-        frozen: Texture.EMPTY
+        frozen: Texture.EMPTY,
+        immune: Texture.EMPTY
       }
     )
     const healthScale = view.getChildByLabel('hero.stat-health')!.scale.clone()
-    const frozenScale = view.getChildByLabel('hero.frozen')!.scale.clone()
+    const frozen = view.getChildByLabel('hero.frozen')!
+    const immune = view.getChildByLabel('hero.immune')!
+    const frozenScale = frozen.scale.clone()
+    const immuneScale = immune.scale.clone()
+
+    expect({ x: immune.position.x, y: immune.position.y }).toEqual({
+      x: frozen.position.x,
+      y: frozen.position.y
+    })
+    expect({ x: immune.scale.x, y: immune.scale.y }).toEqual({
+      x: frozen.scale.x,
+      y: frozen.scale.y
+    })
+    expect(view.getChildIndex(immune)).toBeGreaterThan(
+      view.getChildIndex(view.getChildByLabel('hero.frame')!)
+    )
+    expect(view.getChildIndex(immune)).toBeLessThan(
+      view.getChildIndex(view.getChildByLabel('hero.stat-health')!)
+    )
 
     const replacement = view.replaceFrame(Texture.WHITE)
     gsap.globalTimeline.progress(1)
@@ -43,6 +63,10 @@ describe('hero identity presentation', () => {
     expect((frame as Sprite).scale.x).toBe(1)
     expect(view.getChildByLabel('hero.stat-health')!.scale).toEqual(healthScale)
     expect(view.getChildByLabel('hero.frozen')!.scale).toEqual(frozenScale)
+    expect(view.getChildByLabel('hero.immune')!.scale).toEqual(immuneScale)
+    expect(immune.visible).toBe(true)
+    view.setImmune(false)
+    expect(immune.visible).toBe(false)
     view.destroy({ children: true })
   })
 })

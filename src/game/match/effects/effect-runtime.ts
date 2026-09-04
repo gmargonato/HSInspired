@@ -82,6 +82,7 @@ const MAX_HAND_SIZE = 10
 const MAX_BOARD_SIZE = 7
 const MAX_MANA = 10
 const MAX_RESOLUTION_STEPS = DEFAULT_RESOLUTION_BUDGET
+const WEAPON_ATTACK_COST_REPLACEMENT = 'weapon-attack-instead-of-durability'
 
 type Mutable<T> = T extends string | number | boolean | null | undefined
   ? T
@@ -1595,6 +1596,13 @@ export class EffectRuntime {
         return frame.damageDealt
       case 'destroyed-weapon.attack': {
         return this.destroyedWeaponSnapshots.get(frame.controllerId)?.attack ?? 0
+      }
+      case 'destroyed-weapon.durability': {
+        const weaponControllerId =
+          frame.lastActionTarget?.kind === 'weapon'
+            ? frame.lastActionTarget.participantId
+            : frame.controllerId
+        return this.destroyedWeaponSnapshots.get(weaponControllerId)?.durability ?? 0
       }
       case 'drawn-card.cost':
         return frame.drawnCards[0]
@@ -3951,16 +3959,20 @@ export class EffectRuntime {
     )
   }
 
-  private moveToHand(ref: EntityRef, frame: EffectFrame, path: string): void {
+  private moveToHand(
+    ref: EntityRef,
+    frame: EffectFrame,
+    path: string
+  ): EntityRef | null {
     if (ref.kind === 'minion') {
       const controller = this.player(ref.participantId)
       const taken = this.takeBoardMinion(controller, ref.instanceId)
-      if (!taken) return
+      if (!taken) return null
       const { minion } = taken
       const definition = cardDefinition(minion.cardId)
       if (!definition) {
         this.insertBoardMinion(controller, minion, taken.index)
-        return
+        return null
       }
       const previous = { ...ref }
       // A bounced minion returns to its owner's hand, even if it was stolen.
@@ -3987,23 +3999,24 @@ export class EffectRuntime {
           target: ref.instanceId,
           burned: true
         })
-        return
+        return null
       }
       this.applyCardZones(
         owner,
         insertCardIntoPlayer(owner as unknown as OpeningPlayerState, card, 'hand')
       )
-      this.replaceEventReference(frame, previous, {
+      const returned: EntityRef = {
         ...previous,
         kind: 'card',
         zone: 'hand',
         cardId: card.cardId
-      })
+      }
+      this.replaceEventReference(frame, previous, returned)
       this.emit(frame, 'return-to-hand', path, {
         target: ref.instanceId,
         cardId: card.cardId
       })
-      return
+      return returned
     }
     if (ref.kind === 'card') {
       const card = this.removeCard(ref)
@@ -4016,10 +4029,14 @@ export class EffectRuntime {
           card.instanceId,
           false
         )
-        if (returned) this.replaceEventReference(frame, ref, returned)
+        if (returned) {
+          this.replaceEventReference(frame, ref, returned)
+          return returned
+        }
       }
-      return
+      return null
     }
+    return null
   }
 
   private createMinion(
@@ -6255,8 +6272,10 @@ export class EffectRuntime {
         return
       }
       case 'return-to-hand':
-        for (const target of this.actionTargets(action, frame))
-          this.moveToHand(target, frame, path)
+        for (const target of this.actionTargets(action, frame)) {
+          const returned = this.moveToHand(target, frame, path)
+          if (returned) frame.lastActionTarget = returned
+        }
         return
       case 'reveal': {
         const targets =
@@ -7867,30 +7886,41 @@ export class EffectRuntime {
           zone: 'board',
           cardId: minion.cardId
         }
-        return this.hasKeyword(ref, 'taunt') && !this.hasKeyword(ref, 'stealth')
+        return (
+          this.hasKeyword(ref, 'taunt') &&
+          !this.hasKeyword(ref, 'stealth') &&
+          !this.hasKeyword(ref, 'immune')
+        )
       })
-      const defenders =
+      const opponentHero: EntityRef = {
+        instanceId: `${opponent}:hero`,
+        kind: 'hero',
+        participantId: opponent,
+        zone: 'hero'
+      }
+      const defenders: AttackCharacterRef[] =
         taunts.length > 0
           ? taunts.map((minion) => ({
               kind: 'minion' as const,
               instanceId: minion.instanceId
             }))
           : [
-              { kind: 'hero' as const },
+              ...(!this.hasKeyword(opponentHero, 'immune')
+                ? [{ kind: 'hero' as const }]
+                : []),
               ...opponentPlayer.board
-                .filter(
-                  (minion) =>
-                    !this.hasKeyword(
-                      {
-                        instanceId: minion.instanceId,
-                        kind: 'minion',
-                        participantId: opponent,
-                        zone: 'board',
-                        cardId: minion.cardId
-                      },
-                      'stealth'
-                    )
-                )
+                .filter((minion) => {
+                  const ref: EntityRef = {
+                    instanceId: minion.instanceId,
+                    kind: 'minion',
+                    participantId: opponent,
+                    zone: 'board',
+                    cardId: minion.cardId
+                  }
+                  return (
+                    !this.hasKeyword(ref, 'stealth') && !this.hasKeyword(ref, 'immune')
+                  )
+                })
                 .map((minion) => ({
                   kind: 'minion' as const,
                   instanceId: minion.instanceId
@@ -8596,7 +8626,11 @@ export class EffectRuntime {
           'That character cannot attack right now.'
         )
       }
-      if (!this.liveCombatTarget(defender) || this.hasKeyword(defender, 'stealth')) {
+      if (
+        !this.liveCombatTarget(defender) ||
+        this.hasKeyword(defender, 'stealth') ||
+        this.hasKeyword(defender, 'immune')
+      ) {
         throw new ResolutionInputError(
           'invalid-target',
           'The selected target cannot be attacked.'
@@ -8615,7 +8649,11 @@ export class EffectRuntime {
           zone: 'board',
           cardId: minion.cardId
         }
-        return this.hasKeyword(ref, 'taunt') && !this.hasKeyword(ref, 'stealth')
+        return (
+          this.hasKeyword(ref, 'taunt') &&
+          !this.hasKeyword(ref, 'stealth') &&
+          !this.hasKeyword(ref, 'immune')
+        )
       })
       if (
         opposingMinions.length > 0 &&
@@ -8878,15 +8916,28 @@ export class EffectRuntime {
         hero.attacksUsedThisTurn = this.combatAttacksUsed(attacker) + 1
         const weapon = this.player(attacker.participantId).weapon
         if (weapon) {
-          weapon.durability = Math.max(0, weapon.durability - 1)
-          if (weapon.durability === 0)
-            this.queueWeaponDeath({
-              instanceId: weapon.instanceId,
-              kind: 'weapon',
-              participantId: attacker.participantId,
-              zone: 'weapon',
-              cardId: weapon.cardId
-            })
+          const weaponRef: EntityRef = {
+            instanceId: weapon.instanceId,
+            kind: 'weapon',
+            participantId: attacker.participantId,
+            zone: 'weapon',
+            cardId: weapon.cardId
+          }
+          const spendsAttackInsteadOfDurability =
+            resolvedAttack.replacement === WEAPON_ATTACK_COST_REPLACEMENT &&
+            actualDefender.kind === 'minion' &&
+            weaponBeforeAttack?.instanceId === weapon.instanceId
+          if (spendsAttackInsteadOfDurability) {
+            this.modifyEntity(
+              weaponRef,
+              { attack: -1 },
+              attackerFrame,
+              'combat.weapon-attack-cost'
+            )
+          } else {
+            weapon.durability = Math.max(0, weapon.durability - 1)
+            if (weapon.durability === 0) this.queueWeaponDeath(weaponRef)
+          }
         }
       }
       this.expireAttackEnchantments(attacker)
@@ -9782,6 +9833,9 @@ export class EffectRuntime {
       const nextTurnNumber = this.draft.turnNumber + 1
       this.draft.turnNumber = nextTurnNumber
       this.draft.activePlayerId = nextPlayer.participantId
+      // "This turn" effects expire before the next player's start-of-turn
+      // triggers and automatic draw (not after that draw has already resolved).
+      this.recomputeContinuousEffects()
       this.prepareNextTurn(nextPlayer)
       this.resetTurnHistory()
       this.draft.turnStartedAtRevision = this.draft.revision + 1

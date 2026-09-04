@@ -28,7 +28,9 @@ const DECK_PORTRAIT_Y_OFFSETS: Readonly<Record<string, number>> = {
   garrosh: 30,
   jaina: 40,
   rexxar: 40,
-  uther: 40
+  uther: 40,
+  thrall: 35,
+  malfurion: 20
 }
 
 /** Resolves the original-art portrait available for a selectable deck hero. */

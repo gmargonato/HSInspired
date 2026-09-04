@@ -892,7 +892,7 @@ describe('Secret runtime', () => {
     ).toBe(true)
   })
 
-  it('prevents lethal hero damage through Ice Block and consumes the Secret', () => {
+  it('ignores nonlethal damage, then prevents lethal damage through Ice Block', () => {
     const scenario = createMatchScenario({
       seed: 1307,
       cardId: 'basic_arcane_shot'
@@ -908,7 +908,7 @@ describe('Secret runtime', () => {
       scenario.match.dispatch({
         type: 'dev-set-hero',
         participantId: secretController,
-        health: 2
+        health: 3
       }).accepted
     ).toBe(true)
     expect(
@@ -922,19 +922,225 @@ describe('Secret runtime', () => {
       }).accepted
     ).toBe(true)
 
-    const spell = player(scenario, caster).hand.find(
+    const firstSpell = player(scenario, caster).hand.find(
+      (card) => card.cardId === 'basic_arcane_shot'
+    )!
+    const nonlethal = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: caster,
+      cardInstanceId: firstSpell.instanceId,
+      targets: [{ kind: 'hero', participantId: secretController }]
+    })
+    expect(nonlethal.accepted).toBe(true)
+    expect(player(scenario, secretController).hero.health).toBe(1)
+    expect(player(scenario, secretController).secrets).toHaveLength(1)
+
+    const lethalSpell = player(scenario, caster).hand.find(
       (card) => card.cardId === 'basic_arcane_shot'
     )!
     const result = scenario.match.dispatch({
       type: 'play-card',
       participantId: caster,
-      cardInstanceId: spell.instanceId,
+      cardInstanceId: lethalSpell.instanceId,
       targets: [{ kind: 'hero', participantId: secretController }]
     })
 
     expect(result.accepted).toBe(true)
-    expect(player(scenario, secretController).hero.health).toBe(2)
+    expect(player(scenario, secretController).hero.health).toBe(1)
     expect(player(scenario, secretController).secrets).toHaveLength(0)
     expect(result.events.some((event) => event.type === 'match-ended')).toBe(false)
+  })
+
+  for (const secretOwnerKind of ['human', 'ai'] as const) {
+    it(`expires Ice Block before ${secretOwnerKind === 'human' ? 'local' : 'remote'} owner start-of-turn fatigue`, () => {
+      const scenario = createMatchScenario({
+        seed: secretOwnerKind === 'human' ? 1308 : 1309,
+        cardId: 'basic_arcane_shot'
+      })
+      scenario.confirmBothMulligans()
+      const initialPlayer = scenario.match.getState().activePlayerId!
+      const secretController = scenario.match
+        .getState()
+        .players.find(
+          (candidate) => candidate.controllerKind === secretOwnerKind
+        )!.participantId
+      const attacker = scenario.participants.find(
+        (participantId) => participantId !== secretController
+      )!
+
+      setMana(scenario, initialPlayer)
+      setMana(scenario, attacker)
+      setMana(scenario, secretController)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: attacker,
+          cardId: 'basic_acidic_swamp_ooze'
+        }).accepted
+      ).toBe(true)
+      if (initialPlayer !== secretController) {
+        expect(
+          scenario.match.dispatch({
+            type: 'end-turn',
+            participantId: initialPlayer
+          }).accepted
+        ).toBe(true)
+      }
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-hero',
+          participantId: secretController,
+          health: 2
+        }).accepted
+      ).toBe(true)
+      addAndPlaySecret(scenario, secretController, 'classic_ice_block')
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-modify-deck',
+          participantId: secretController,
+          action: 'destroy'
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-fatigue',
+          participantId: secretController,
+          nextDamage: 1
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'end-turn',
+          participantId: secretController
+        }).accepted
+      ).toBe(true)
+
+      setMana(scenario, attacker)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId: attacker,
+          cardId: 'basic_arcane_shot'
+        }).accepted
+      ).toBe(true)
+      const lethalSpell = player(scenario, attacker).hand.findLast(
+        (card) => card.cardId === 'basic_arcane_shot'
+      )!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: attacker,
+          cardInstanceId: lethalSpell.instanceId,
+          targets: [{ kind: 'hero', participantId: secretController }]
+        }).accepted
+      ).toBe(true)
+      expect(player(scenario, secretController).hero).toMatchObject({
+        health: 2,
+        immune: true
+      })
+      expect(player(scenario, secretController).secrets).toHaveLength(0)
+
+      const attackingMinion = player(scenario, attacker).board[0]!
+      expect(
+        scenario.match.getLegality!(attacker).legalAttackTargets[
+          attackingMinion.instanceId
+        ]?.some((target) => target.kind === 'hero')
+      ).toBe(false)
+      expect(
+        scenario.match.dispatch({
+          type: 'attack-character',
+          participantId: attacker,
+          attacker: { kind: 'minion', instanceId: attackingMinion.instanceId },
+          defender: { kind: 'hero' }
+        })
+      ).toMatchObject({ accepted: false, code: 'invalid-target' })
+      expect(player(scenario, attacker).board[0]?.attacksUsedThisTurn ?? 0).toBe(0)
+
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId: attacker,
+          cardId: 'classic_coldlight_oracle'
+        }).accepted
+      ).toBe(true)
+      const oracle = player(scenario, attacker).hand.find(
+        (card) => card.cardId === 'classic_coldlight_oracle'
+      )!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: attacker,
+          cardInstanceId: oracle.instanceId,
+          position: player(scenario, attacker).board.length
+        }).accepted
+      ).toBe(true)
+      expect(player(scenario, secretController).hero.health).toBe(2)
+      expect(player(scenario, secretController).fatigueDamage).toBe(3)
+
+      const transition = scenario.match.dispatch({
+        type: 'end-turn',
+        participantId: attacker
+      })
+      expect(transition.accepted).toBe(true)
+      expect(player(scenario, secretController).hero).toMatchObject({
+        health: 0,
+        immune: false
+      })
+      expect(player(scenario, secretController).fatigueDamage).toBe(4)
+      expect(transition.state).toMatchObject({
+        phase: 'ended',
+        winnerId: attacker,
+        loserId: secretController
+      })
+    })
+  }
+
+  it('does not trigger an armed Ice Block for fatal fatigue on its owner turn', () => {
+    const scenario = createMatchScenario({ seed: 1310 })
+    scenario.confirmBothMulligans()
+    const attacker = scenario.match.getState().activePlayerId!
+    const secretController = scenario.participants.find(
+      (participantId) => participantId !== attacker
+    )!
+    setMana(scenario, attacker)
+    setMana(scenario, secretController)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: attacker }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-hero',
+        participantId: secretController,
+        health: 1
+      }).accepted
+    ).toBe(true)
+    addAndPlaySecret(scenario, secretController, 'classic_ice_block')
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-modify-deck',
+        participantId: secretController,
+        action: 'destroy'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'end-turn',
+        participantId: secretController
+      }).accepted
+    ).toBe(true)
+
+    const transition = scenario.match.dispatch({
+      type: 'end-turn',
+      participantId: attacker
+    })
+
+    expect(transition.accepted).toBe(true)
+    expect(player(scenario, secretController).hero.health).toBe(0)
+    expect(player(scenario, secretController).secrets).toHaveLength(1)
+    expect(transition.state).toMatchObject({
+      phase: 'ended',
+      winnerId: attacker,
+      loserId: secretController
+    })
   })
 })

@@ -2,7 +2,7 @@ import { Container, Rectangle, Sprite, Texture } from 'pixi.js'
 import { CardView } from '../../rendering/cards/card-view'
 import {
   AnimatedOutline,
-  type OutlinePaletteName
+  type OutlinePresetName
 } from '../../rendering/effects/animated-outline'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 
@@ -19,6 +19,7 @@ export class GameCardSlot extends Container {
   private readonly replacedLabel: Sprite
   private playableOutlineRequested = false
   private playableOutlineSuppressed = false
+  private playableOutlinePreset: OutlinePresetName = 'card'
 
   constructor(
     card: CardView,
@@ -95,9 +96,16 @@ export class GameCardSlot extends Container {
     this.syncPlayableOutline()
   }
 
-  /** Marks a currently playable card whose conditional effect is enhanced. */
-  setPlayableOutlinePalette(palette: OutlinePaletteName): void {
-    this.playableOutline.setPalette(palette)
+  /** Gives conditionally enhanced cards a more agitated outline treatment. */
+  setPlayableOutlineEnhanced(enhanced: boolean): void {
+    this.playableOutlinePreset = enhanced ? 'bonus-card' : 'card'
+    if (this.playableOutlineDisposed) return
+    this.playableOutline.setPalette(enhanced ? 'orange' : 'green')
+    this.playableOutline.setPreset(this.playableOutlinePreset)
+  }
+
+  getPlayableOutlinePreset(): OutlinePresetName {
+    return this.playableOutlinePreset
   }
 
   isPlayableOutlineEnabled(): boolean {

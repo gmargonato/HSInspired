@@ -23,6 +23,15 @@ export const HERO_LAYOUT = {
       note: 'Frozen overlay above the portrait frame and below hero stat badges.'
     }
   ),
+  immune: placement(
+    { x: HERO_CANVAS.width / 2, y: HERO_CANVAS.height / 2 },
+    { width: 240, height: 239 },
+    {
+      anchor: CENTER,
+      scale: 2,
+      note: 'Immune overlay centered with Frozen above the portrait frame and below hero stat badges.'
+    }
+  ),
   attackBadge: placement(
     { x: 50, y: 360 },
     { width: 44, height: 51 },

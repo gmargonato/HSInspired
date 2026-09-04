@@ -19,6 +19,7 @@ export interface CardSelectionOverlayOptions {
   readonly createHeroPowerChoice: (heroPowerId: HeroPowerId) => Container
   readonly onSelect: (card: OpeningCard) => void
   readonly onChooseOption: (choice: number) => void
+  readonly isInputBlocked?: () => boolean
 }
 
 /** A modal three-card selector for Tracking and future Discover-style effects. */
@@ -48,7 +49,9 @@ export class CardSelectionOverlay extends Container {
     this.cardsLayer.label = 'game.card-selection.cards'
     this.addChild(this.cardsLayer)
     this.toggle = new Button(options.toggleTexture, {
-      onClick: () => this.toggleView()
+      onClick: () => {
+        if (!this.inputBlocked()) this.toggleView()
+      }
     })
     this.toggle.label = 'game.card-selection.toggle'
     this.toggle.position.set(
@@ -215,7 +218,7 @@ export class CardSelectionOverlay extends Container {
   }
 
   private choose(card: OpeningCard, slot: GameCardSlot): void {
-    if (this.boardVisible || this.selecting) return
+    if (this.inputBlocked() || this.boardVisible || this.selecting) return
     this.selecting = true
     this.toggle.setEnabled(false)
     for (const entry of this.entries) {
@@ -236,7 +239,7 @@ export class CardSelectionOverlay extends Container {
   }
 
   private chooseOption(option: CardChoiceOption, view: Container): void {
-    if (this.boardVisible || this.selecting) return
+    if (this.inputBlocked() || this.boardVisible || this.selecting) return
     this.selecting = true
     this.toggle.setEnabled(false)
     for (const entry of this.entries) {
@@ -256,6 +259,10 @@ export class CardSelectionOverlay extends Container {
     if (this.selecting) return
     this.boardVisible = !this.boardVisible
     this.syncView()
+  }
+
+  private inputBlocked(): boolean {
+    return this.options.isInputBlocked?.() === true
   }
 
   private syncView(): void {

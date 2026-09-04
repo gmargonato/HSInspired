@@ -87,7 +87,12 @@ function createFallbackGameRoute(
   }
 }
 
-const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
+type StandardSceneId = Exclude<SceneId, 'outline-lab'>
+type StandardSceneRequest = Exclude<SceneRequest, { readonly id: 'outline-lab' }>
+export type DevSceneRequest = Extract<SceneRequest, { readonly id: 'outline-lab' }>
+export type DevSceneFactory = (request: DevSceneRequest) => Promise<Scene>
+
+const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
   'main-menu': (_request, dependencies) =>
     new MainMenuScene(dependencies.router, 'closed', dependencies.services.logger),
   'deck-selection': (_request, dependencies) =>
@@ -168,7 +173,7 @@ const SCENE_FACTORIES: Record<SceneId, SceneFactory> = {
 
 /** Creates a fresh scene instance for a native-menu request. */
 export function createScene(
-  request: SceneRequest,
+  request: StandardSceneRequest,
   dependencies: RendererSceneDependencies = defaultDependencies
 ): Scene {
   const factory = SCENE_FACTORIES[request.id]
@@ -183,7 +188,8 @@ export class SceneNavigator implements SceneRouter {
 
   constructor(
     private readonly sceneManager: SceneManager,
-    private readonly services: AppServices = createAppServices()
+    private readonly services: AppServices = createAppServices(),
+    private readonly createDevScene?: DevSceneFactory
   ) {}
 
   /** The renderer composition root uses this for the normal startup route. */
@@ -206,6 +212,19 @@ export class SceneNavigator implements SceneRouter {
   }
 
   async navigateRequest(request: SceneRequest): Promise<void> {
+    if (request.id === 'outline-lab') {
+      if (!this.createDevScene) {
+        throw new Error('Shader Lab is available only in development builds.')
+      }
+      const scene = await this.createDevScene(request)
+      await this.sceneManager.transitionTo(scene, {
+        inset: FULL_VIEWPORT,
+        mode: 'fade',
+        duration: 0.3
+      })
+      return
+    }
+
     if (request.id === 'game') {
       await this.services.deckStore.load()
       const decks = this.services.deckStore.getDecks()

@@ -21,6 +21,8 @@ function getDevMenuBridge(): DevMenuBridge | null {
 }
 
 function getDevSceneId(scene: unknown): DevSceneId {
+  if ((scene as { readonly devSceneId?: unknown } | null)?.devSceneId === 'outline-lab')
+    return 'outline-lab'
   if (scene instanceof MainMenuScene) return 'main-menu'
   if (scene instanceof DeckSelectionScene) return 'deck-selection'
   if (scene instanceof CollectionScene) return 'collection'

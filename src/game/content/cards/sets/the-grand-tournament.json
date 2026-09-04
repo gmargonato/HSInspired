@@ -498,9 +498,9 @@
     "cardClass": "Paladin",
     "type": "Minion",
     "subtype": "General",
-    "cost": 5,
-    "attack": 5,
-    "health": 5,
+    "cost": 6,
+    "attack": 6,
+    "health": 6,
     "rulesText": "Battlecry: Put one of each Secret from your deck into the battlefield.",
     "keywords": [],
     "effects": [{ "trigger": "battlecry", "actions": [{ "action": "put-into-play", "source": "deck", "player": "self", "filter": { "cardType": "Spell", "keyword": "secret" }, "selection": "all" }] }]

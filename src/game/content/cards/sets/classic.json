@@ -3795,20 +3795,16 @@
       {
         "trigger": "on-attack",
         "event": {
-          "target": {
-            "type": "minion",
-            "controller": "opponent"
+          "source": {
+            "type": "hero",
+            "controller": "self"
           }
         },
         "actions": [
           {
-            "action": "modify",
-            "target": {
-              "controller": "self",
-              "type": "weapon",
-              "selection": "source"
-            },
-            "attack": -1
+            "action": "replace-event",
+            "event": "character-attacked",
+            "replacement": "weapon-attack-instead-of-durability"
           }
         ]
       }
@@ -3906,7 +3902,7 @@
             "action": "draw",
             "player": "self",
             "count": {
-              "reference": "event-target.durability"
+              "reference": "destroyed-weapon.durability"
             }
           }
         ]

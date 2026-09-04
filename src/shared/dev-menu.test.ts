@@ -10,6 +10,10 @@ describe('dev deck menu commands', () => {
     expect(isDevSceneId('tavern-brawl')).toBe(true)
   })
 
+  it('accepts Shader Lab as a development scene id', () => {
+    expect(isDevSceneId('outline-lab')).toBe(true)
+  })
+
   it.each([
     { type: 'game:modify-deck', target: 'local', action: 'destroy' },
     { type: 'game:modify-deck', target: 'remote', action: 'refill' }

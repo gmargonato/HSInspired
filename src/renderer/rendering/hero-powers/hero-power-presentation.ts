@@ -1,6 +1,6 @@
 import { Container, Graphics, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import type { HeroPowerDefinition } from '../../../game/content/hero-powers'
-import { applyAnchoredPlacement } from '../layout'
+import { applyAnchoredPlacement, type LayoutPlacement } from '../layout'
 import {
   HERO_POWER_CARD_CANVAS,
   HERO_POWER_ICON_CANVAS,
@@ -9,7 +9,7 @@ import {
 
 function createCircularArtwork(
   texture: Texture,
-  center: { readonly x: number; readonly y: number },
+  artworkPlacement: LayoutPlacement,
   radius: number,
   label: string
 ): { readonly layer: Container; readonly image: Sprite } {
@@ -18,13 +18,12 @@ function createCircularArtwork(
   layer.eventMode = 'none'
 
   const image = new Sprite(texture)
-  image.anchor.set(0.5)
-  image.position.set(center.x, center.y)
-  const diameter = radius * 2
-  image.scale.set(Math.max(diameter / texture.width, diameter / texture.height))
+  applyAnchoredPlacement(image, artworkPlacement)
   image.label = `${label}.image`
 
-  const mask = new Graphics().circle(center.x, center.y, radius).fill(0xffffff)
+  const mask = new Graphics()
+    .circle(artworkPlacement.position.x, artworkPlacement.position.y, radius)
+    .fill(0xffffff)
   mask.label = `${label}.mask`
   layer.mask = mask
   layer.addChild(image, mask)
@@ -42,7 +41,7 @@ export class HeroPowerIconView extends Container {
     const layout = HERO_POWER_PRESENTATION_LAYOUT.icon
     const renderedArtwork = createCircularArtwork(
       artwork,
-      layout.artwork.position,
+      layout.artwork,
       layout.artworkRadius,
       'hero-power.icon.artwork'
     )
@@ -58,11 +57,6 @@ export class HeroPowerIconView extends Container {
 
   setArtwork(texture: Texture): void {
     this.artworkImage.texture = texture
-    const radius = HERO_POWER_PRESENTATION_LAYOUT.icon.artworkRadius
-    const diameter = radius * 2
-    this.artworkImage.scale.set(
-      Math.max(diameter / texture.width, diameter / texture.height)
-    )
   }
 }
 
@@ -86,7 +80,7 @@ export class HeroPowerCardView extends Container {
     const layout = HERO_POWER_PRESENTATION_LAYOUT.card
     const renderedArtwork = createCircularArtwork(
       artwork,
-      layout.artwork.position,
+      layout.artwork,
       layout.artworkRadius,
       'hero-power.card.artwork'
     )

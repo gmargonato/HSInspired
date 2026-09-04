@@ -216,6 +216,7 @@ export const CARD_VALUE_REFERENCES = [
   'cards-played-earlier-this-turn',
   'damage-dealt',
   'destroyed-weapon.attack',
+  'destroyed-weapon.durability',
   'drawn-card.cost',
   'event-target.attack',
   'event-target.durability',

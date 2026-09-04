@@ -145,7 +145,7 @@ export class HeroPowerView extends Actor {
     this.outlineTarget.eventMode = 'none'
     this.outlineTarget.label = 'hero-power-outline-target'
     this.addChild(this.outlineTarget)
-    this.playableOutline = new AnimatedOutline(this.outlineTarget, 'green', 'card')
+    this.playableOutline = new AnimatedOutline(this.outlineTarget, 'green', 'board')
     this.playableOutline.setEnabled(false)
 
     this.card = new Container()

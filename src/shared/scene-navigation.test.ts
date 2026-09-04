@@ -17,4 +17,12 @@ describe('scene navigation contract', () => {
     })
     expect(isSceneRequest({ id: 'tavern-brawl' })).toBe(true)
   })
+
+  it('exposes and accepts the development Shader Lab request', () => {
+    expect(SCENE_MENU_ENTRIES['outline-lab']).toEqual({
+      label: 'Shader Lab',
+      request: { id: 'outline-lab' }
+    })
+    expect(isSceneRequest({ id: 'outline-lab' })).toBe(true)
+  })
 })

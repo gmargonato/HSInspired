@@ -22,6 +22,7 @@ export interface SceneParamsById {
   arena: undefined
   'new-deck': undefined
   'tavern-brawl': undefined
+  'outline-lab': undefined
   game: { deckId: string } | undefined
 }
 
@@ -66,6 +67,7 @@ export const SCENE_MENU_ENTRIES = {
     label: 'Tavern Brawl',
     request: { id: 'tavern-brawl' }
   },
+  'outline-lab': { label: 'Shader Lab', request: { id: 'outline-lab' } },
   game: { label: 'Match (First Complete Deck)', request: { id: 'game' } }
 } as const satisfies SceneMenuCatalog
 

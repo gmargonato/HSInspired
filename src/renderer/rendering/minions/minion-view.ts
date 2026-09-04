@@ -283,7 +283,7 @@ export class MinionView extends Container {
     // Keep every outline above Taunt but below the minion frame. The Taunt ring
     // is larger than the frame and would otherwise obscure the glow.
     this.addChildAt(this.outlineProxy, this.getChildIndex(frame))
-    this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'card')
+    this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'board')
     this.attackOutline.setEnabled(false)
 
     this.targetingOutlineProxy = new Graphics()
@@ -295,7 +295,7 @@ export class MinionView extends Container {
     this.targetingOutline = new AnimatedOutline(
       this.targetingOutlineProxy,
       'red',
-      'card'
+      'board'
     )
     this.targetingOutline.setEnabled(false)
 

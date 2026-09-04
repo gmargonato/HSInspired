@@ -12,7 +12,8 @@ export const HERO_POWER_PRESENTATION_LAYOUT = {
       { width: 500, height: 500 },
       {
         anchor: CENTER,
-        note: 'Raw artwork cover-cropped behind the compact circular opening.'
+        scale: 0.18,
+        note: 'Raw artwork scaled beneath the compact circular opening.'
       }
     ),
     artworkRadius: 60,
@@ -26,6 +27,7 @@ export const HERO_POWER_PRESENTATION_LAYOUT = {
       { width: 500, height: 500 },
       {
         anchor: CENTER,
+        scale: 0.56,
         note: 'Raw artwork cover-cropped behind the detailed circular opening.'
       }
     ),

@@ -2591,6 +2591,62 @@ describe('shared effect runtime', () => {
     })
   })
 
+  it('returns a minion with Shadowstep and reduces its hand cost by two', () => {
+    const scenario = createMatchScenario({ seed: 431 })
+    scenario.confirmBothMulligans()
+    const [playerId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: playerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: playerId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: playerId,
+        cardId: 'classic_shadowstep'
+      }).accepted
+    ).toBe(true)
+
+    const target = player(scenario, playerId).board[0]!
+    const shadowstep = player(scenario, playerId).hand.find(
+      (card) => card.cardId === 'classic_shadowstep'
+    )!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: playerId,
+      cardInstanceId: shadowstep.instanceId,
+      targets: [
+        {
+          kind: 'minion',
+          participantId: playerId,
+          instanceId: target.instanceId
+        }
+      ]
+    })
+
+    expect(result.accepted).toBe(true)
+    const returned = player(scenario, playerId).hand.find(
+      (card) => card.instanceId === target.instanceId
+    )
+    expect(returned).toMatchObject({ currentCost: 0, zone: 'hand' })
+    expect(returned?.costAdjustments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ amount: -2, duration: 'while-in-hand' })
+      ])
+    )
+  })
+
   it('returns an attacking minion with Freezing Trap and applies the hand cost increase', () => {
     const scenario = createMatchScenario({ seed: 44 })
     scenario.confirmBothMulligans()
@@ -4170,6 +4226,149 @@ describe('shared effect runtime', () => {
       cardId: 'basic_boulderfist_ogre',
       health: 3
     })
+  })
+
+  it.each([
+    { remainingDurability: 1, attackBeforeHarrison: true },
+    { remainingDurability: 2, attackBeforeHarrison: false }
+  ])(
+    'Harrison Jones draws $remainingDurability card(s) from the destroyed weapon snapshot',
+    ({ remainingDurability, attackBeforeHarrison }) => {
+      const scenario = createMatchScenario({
+        seed: 425,
+        cardId: 'classic_harrison_jones',
+        firstHeroId: 'garrosh',
+        secondHeroId: 'garrosh'
+      })
+      scenario.confirmBothMulligans()
+      const [harrisonPlayerId, weaponPlayerId] = activeParticipants(scenario)
+
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-clear-zone',
+          participantId: harrisonPlayerId,
+          zone: 'hand'
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId: harrisonPlayerId,
+          cardId: 'classic_harrison_jones'
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId: weaponPlayerId,
+          cardId: 'basic_fiery_war_axe'
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'end-turn',
+          participantId: harrisonPlayerId
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-mana',
+          participantId: weaponPlayerId,
+          available: 10,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+
+      const weapon = player(scenario, weaponPlayerId).hand.find(
+        (card) => card.cardId === 'basic_fiery_war_axe'
+      )!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: weaponPlayerId,
+          cardInstanceId: weapon.instanceId
+        }).accepted
+      ).toBe(true)
+      if (attackBeforeHarrison) {
+        expect(
+          scenario.match.dispatch({
+            type: 'attack-character',
+            participantId: weaponPlayerId,
+            attacker: { kind: 'hero' },
+            defender: { kind: 'hero' }
+          }).accepted
+        ).toBe(true)
+      }
+      expect(player(scenario, weaponPlayerId).weapon?.durability).toBe(
+        remainingDurability
+      )
+      expect(
+        scenario.match.dispatch({
+          type: 'end-turn',
+          participantId: weaponPlayerId
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-mana',
+          participantId: harrisonPlayerId,
+          available: 10,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+
+      const harrison = player(scenario, harrisonPlayerId).hand.find(
+        (card) => card.cardId === 'classic_harrison_jones'
+      )!
+      const deckSizeBefore = player(scenario, harrisonPlayerId).deck.length
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId: harrisonPlayerId,
+        cardInstanceId: harrison.instanceId,
+        position: 0
+      })
+
+      expect(result.accepted).toBe(true)
+      expect(player(scenario, weaponPlayerId).weapon).toBeNull()
+      expect(result.events.filter((event) => event.type === 'card-drawn')).toHaveLength(
+        remainingDurability
+      )
+      expect(player(scenario, harrisonPlayerId).deck).toHaveLength(
+        deckSizeBefore - remainingDurability
+      )
+    }
+  )
+
+  it('Harrison Jones draws no cards when the opponent has no weapon', () => {
+    const scenario = createMatchScenario({
+      seed: 426,
+      cardId: 'classic_harrison_jones'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+
+    const harrison = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_harrison_jones'
+    )!
+    const deckSizeBefore = player(scenario, participantId).deck.length
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: harrison.instanceId,
+      position: 0
+    })
+
+    expect(result.accepted).toBe(true)
+    expect(result.events.filter((event) => event.type === 'card-drawn')).toHaveLength(0)
+    expect(player(scenario, participantId).deck).toHaveLength(deckSizeBefore)
   })
 
   it('Preparation discounts and consumes the next spell chosen this turn', () => {

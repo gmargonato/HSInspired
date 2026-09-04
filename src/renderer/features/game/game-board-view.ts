@@ -63,6 +63,7 @@ import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { Actor } from '../../ui/components/actor'
 import { Button } from '../../ui/components/button'
 import { TARGETING_ARROW_HEAD, type CursorManager } from '../../ui/components/cursor'
+import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 import {
   DEFAULT_HAND_LAYOUT,
   HandCardTransform,
@@ -80,8 +81,11 @@ import {
 } from './hand-drag'
 import {
   OneShotPointerTapGuard,
+  PointerReleaseInputGate,
   allowsDragTargetingFromHand,
+  isCardTargetSelectionActive,
   isHandOwnedSlot,
+  pendingCardInputStage,
   requiresClickConfirmedMinionPlacement,
   resolveHandCardArrowOrigin,
   type HandCardTargetingOrigin
@@ -294,9 +298,12 @@ interface CardPlayTargetingState {
   readonly input: PlayCardInput
   readonly targets: CardPlayTargetRef[]
   readonly position?: number
-  /** Interaction origin; spell arrows resolve card origins to the local hero. */
-  readonly origin: HandCardTargetingOrigin
-  readonly minionPreview?: PendingMinionTargetPreview
+  /** Visual arrow source. This is independent from hand-card restoration. */
+  readonly arrowOrigin: HandCardTargetingOrigin
+  /** Presentation staged while the authoritative card remains pending. */
+  readonly presentation:
+    | { readonly kind: 'hidden-hand-card' }
+    | { readonly kind: 'minion-preview'; readonly preview: PendingMinionTargetPreview }
   choice?: number
 }
 
@@ -416,8 +423,9 @@ export class GameBoardView extends Actor {
   private combatAttackerSelectionUnlocked = false
   private readonly targetGestures =
     new TargetGestureController<BoardTargetGestureSource>()
-  /** Ignores the pointertap synthesized from a targeted minion's placement click. */
+  /** Ignores the pointertap synthesized by a click that advances card play. */
   private readonly cardPlacementTapGuard = new OneShotPointerTapGuard()
+  private readonly cardChoiceInputGate = new PointerReleaseInputGate()
   private cardPlayInProgress = false
   private resolutionPresentationDepth = 0
   private readonly resolutionIdleWaiters: Array<() => void> = []
@@ -546,12 +554,18 @@ export class GameBoardView extends Actor {
       const pointer = this.dragPointer
       const cardInstanceId = entry?.card.instanceId
       if (pointer) this.resolveCardDrop(pointer)
-      if (
-        cardInstanceId &&
-        this.cardTargeting?.cardInstanceId === cardInstanceId &&
-        this.cardTargeting.origin === 'minion-preview'
-      ) {
-        this.cardPlacementTapGuard.arm(event.pointerId)
+      if (cardInstanceId && this.cardTargeting?.cardInstanceId === cardInstanceId) {
+        const targeting = this.cardTargeting
+        const awaitingChoice =
+          pendingCardInputStage(
+            targeting.input,
+            targeting.choice,
+            targeting.targets.length
+          ) === 'choice'
+        if (targeting.presentation.kind === 'minion-preview' || awaitingChoice) {
+          this.cardPlacementTapGuard.arm(event.pointerId)
+        }
+        if (awaitingChoice) this.cardChoiceInputGate.block(event.pointerId)
       }
     }
   }
@@ -559,7 +573,10 @@ export class GameBoardView extends Actor {
     if (this.cardPlacementTapGuard.matches(event.pointerId)) {
       window.setTimeout(() => {
         this.cardPlacementTapGuard.release(event.pointerId)
+        this.cardChoiceInputGate.release(event.pointerId)
       }, 0)
+    } else {
+      this.cardChoiceInputGate.release(event.pointerId)
     }
     if (event.button !== 0) return
     const releasePoint = this.toRendererPoint(event.clientX, event.clientY)
@@ -576,7 +593,24 @@ export class GameBoardView extends Actor {
     const carriedEntry = this.handEntries[this.draggingIndex]
     if (carriedEntry && this.requiresSeparatePlacementClick(carriedEntry)) return
     const pointer = this.dragPointer
+    const cardInstanceId = carriedEntry?.card.instanceId
     if (pointer) this.resolveCardDrop(pointer)
+    if (
+      cardInstanceId &&
+      this.cardTargeting?.cardInstanceId === cardInstanceId &&
+      pendingCardInputStage(
+        this.cardTargeting.input,
+        this.cardTargeting.choice,
+        this.cardTargeting.targets.length
+      ) === 'choice'
+    ) {
+      this.cardPlacementTapGuard.arm(event.pointerId)
+      this.cardChoiceInputGate.block(event.pointerId)
+      window.setTimeout(() => {
+        this.cardPlacementTapGuard.release(event.pointerId)
+        this.cardChoiceInputGate.release(event.pointerId)
+      }, 0)
+    }
   }
   private readonly handleBoardPointerUp = (event: FederatedPointerEvent): void => {
     if (event.button !== 0) return
@@ -606,6 +640,7 @@ export class GameBoardView extends Actor {
   }
   private readonly handleWindowBlur = (): void => {
     this.cardPlacementTapGuard.clear()
+    this.cardChoiceInputGate.clear()
     this.targetGestures.clear()
     this.endDrag()
     this.cancelCombatDrag()
@@ -739,7 +774,8 @@ export class GameBoardView extends Actor {
         )
       },
       onSelect: (card) => this.chooseDiscoverCard(card),
-      onChooseOption: (choice) => this.chooseVisibleCardOption(choice)
+      onChooseOption: (choice) => this.chooseVisibleCardOption(choice),
+      isInputBlocked: () => this.cardChoiceInputGate.blocked
     })
     this.cardSelectionOverlay.label = 'game.card-selection'
     this.gameplayLayer.addChild(this.cardSelectionOverlay)
@@ -787,8 +823,8 @@ export class GameBoardView extends Actor {
         return
       if (event.button !== 0) return
       if (
-        this.cardTargeting?.origin === 'minion-preview' &&
-        this.cardTargeting.minionPreview?.cancelled === true
+        this.cardTargeting?.presentation.kind === 'minion-preview' &&
+        this.cardTargeting.presentation.preview.cancelled === true
       )
         return
       let target = event.target instanceof Container ? event.target : null
@@ -798,6 +834,7 @@ export class GameBoardView extends Actor {
         !target.label?.startsWith('game.minion.') &&
         !target.label?.startsWith('game.hero.') &&
         !target.label?.startsWith('game.card-choice') &&
+        !target.label?.startsWith('game.card-selection') &&
         target.label !== 'game.heroes'
       ) {
         target = target.parent
@@ -956,14 +993,16 @@ export class GameBoardView extends Actor {
           health: player.hero.health,
           maxHealth: player.hero.maxHealth,
           armor: player.hero.armor,
-          frozen: isFrozen(player.hero.frozenUntilTurn, state.turnNumber)
+          frozen: isFrozen(player.hero.frozenUntilTurn, state.turnNumber),
+          immune: player.hero.immune === true
         },
         {
           frame: texture,
           attack: this.options.gameAssets.minionAttack,
           health: this.options.gameAssets.minionHealth,
           armor: this.options.gameAssets.heroArmor,
-          frozen: this.options.gameAssets.heroFrozen
+          frozen: this.options.gameAssets.heroFrozen,
+          immune: this.options.gameAssets.heroImmune
         }
       )
       applyPlacement(view, intro)
@@ -1087,6 +1126,7 @@ export class GameBoardView extends Actor {
 
   /** Refreshes every turn HUD element (deck counts and mana labels). */
   private syncTurnHud(state: OpeningMatchState): void {
+    this.syncMatchCursor(state)
     this.syncDeckCounts(state)
     this.syncMana(state)
     this.syncLocalHandCardCosts(state)
@@ -1246,6 +1286,14 @@ export class GameBoardView extends Actor {
     }
   }
 
+  private minionTargetPreview(
+    targeting: CardPlayTargetingState | null = this.cardTargeting
+  ): PendingMinionTargetPreview | null {
+    return targeting?.presentation.kind === 'minion-preview'
+      ? targeting.presentation.preview
+      : null
+  }
+
   private beginClickedCardTargeting(cardInstanceId: string): void {
     if (this.cardTargeting || this.cardPlayInProgress) return
     const entry = this.handEntries.find(
@@ -1253,7 +1301,8 @@ export class GameBoardView extends Actor {
     )
     if (!entry || cardDefinition(entry.card).type === 'Minion') return
     const input = this.match.getPlayInput?.(this.localParticipantId, cardInstanceId)
-    if (!input || input.targetSelectors.length === 0) return
+    if (!input || !allowsDragTargetingFromHand(cardDefinition(entry.card).type, input))
+      return
     this.beginCardTargeting(entry, input)
   }
 
@@ -1298,8 +1347,11 @@ export class GameBoardView extends Actor {
       return
     if (this.commitCardTargetAt(pointer)) return
     if (
-      this.cardTargeting.input.choiceCount > 0 &&
-      this.cardTargeting.choice === undefined
+      pendingCardInputStage(
+        this.cardTargeting.input,
+        this.cardTargeting.choice,
+        this.cardTargeting.targets.length
+      ) === 'choice'
     )
       return
     this.cancelCardTargeting(pointer)
@@ -1309,11 +1361,18 @@ export class GameBoardView extends Actor {
     const targeting = this.cardTargeting
     if (!targeting) return false
     if (
-      targeting.origin === 'minion-preview' &&
-      targeting.minionPreview?.cancelled === true
+      targeting.presentation.kind === 'minion-preview' &&
+      targeting.presentation.preview.cancelled === true
     )
       return false
-    if (targeting.input.choiceCount > 0 && targeting.choice === undefined) return false
+    if (
+      pendingCardInputStage(
+        targeting.input,
+        targeting.choice,
+        targeting.targets.length
+      ) !== 'target'
+    )
+      return false
     const target = this.cardTargetRef(view)
     if (!target) return false
     const options = targeting.input.legalTargetOptions[targeting.targets.length] ?? []
@@ -1348,7 +1407,7 @@ export class GameBoardView extends Actor {
     entry: HandEntry,
     input: PlayCardInput,
     position?: number,
-    origin: CardPlayTargetingState['origin'] = 'card'
+    arrowOriginHint: HandCardTargetingOrigin = 'card'
   ): void {
     const hasRenderableTarget =
       input.choiceCount > 0 ||
@@ -1367,7 +1426,7 @@ export class GameBoardView extends Actor {
     }
 
     const isMinionTargetPreview =
-      origin === 'card' &&
+      arrowOriginHint === 'card' &&
       cardDefinition(entry.card).type === 'Minion' &&
       input.targetSelectors.length > 0 &&
       position !== undefined
@@ -1397,18 +1456,25 @@ export class GameBoardView extends Actor {
       cardInstanceId: entry.card.instanceId,
       input,
       targets: [],
-      origin: minionPreview ? 'minion-preview' : origin,
-      ...(position === undefined ? {} : { position }),
-      ...(minionPreview ? { minionPreview } : {})
+      arrowOrigin: minionPreview
+        ? 'minion-preview'
+        : resolveHandCardArrowOrigin(cardDefinition(entry.card).type, arrowOriginHint),
+      presentation: minionPreview
+        ? { kind: 'minion-preview', preview: minionPreview }
+        : { kind: 'hidden-hand-card' },
+      ...(position === undefined ? {} : { position })
     }
     this.cardTargeting = targeting
     this.clearHandHover()
     this.hideBoardMinionCardPreview()
     this.deselectAttacker()
     this.cancelHeroPowerTargeting()
-    if (input.choiceCount > 0) {
+    if (pendingCardInputStage(input, undefined) === 'choice') {
+      this.attackLine.clear()
+      this.options.cursor?.setTargeting(false)
+      this.options.cursor?.setTargetingTarget(null)
       this.showCardChoiceOverlay(input)
-      this.endDrag()
+      this.hideHandCardForPendingPlay(entry)
       this.syncBoardAttackability(this.match.getState())
       this.syncTurnControls(this.match.getState())
       return
@@ -1425,17 +1491,13 @@ export class GameBoardView extends Actor {
     }
     this.syncBoardAttackability(this.match.getState())
     this.syncTurnControls(this.match.getState())
-    // Returning the card is presentation-only; the command is not dispatched
+    // The pending presentation is renderer-only; the command is not dispatched
     // until every required target/choice has been collected.
-    if (origin === 'local-hero') {
-      this.hideDraggedCardForTargeting(entry)
-      return
-    }
-    this.endDrag()
+    this.hideHandCardForPendingPlay(entry)
   }
 
   private beginMinionTargetPreview(targeting: CardPlayTargetingState): void {
-    const preview = targeting.minionPreview
+    const preview = this.minionTargetPreview(targeting)
     if (!preview) return
 
     this.cardPlayInProgress = true
@@ -1470,7 +1532,7 @@ export class GameBoardView extends Actor {
     })
 
     void preview.presentationPromise.then((presentation) => {
-      if (this.cardTargeting?.minionPreview !== preview || preview.cancelled) {
+      if (this.minionTargetPreview() !== preview || preview.cancelled) {
         void this.reverseMinionTargetPreview(preview)
         return
       }
@@ -1485,10 +1547,11 @@ export class GameBoardView extends Actor {
       const currentTargeting = this.cardTargeting
       if (
         currentTargeting &&
-        currentTargeting.targets.length >=
-          currentTargeting.input.targetSelectors.length &&
-        (currentTargeting.input.choiceCount === 0 ||
-          currentTargeting.choice !== undefined)
+        pendingCardInputStage(
+          currentTargeting.input,
+          currentTargeting.choice,
+          currentTargeting.targets.length
+        ) === 'ready'
       ) {
         this.commitPendingCardPlay()
       }
@@ -1556,7 +1619,7 @@ export class GameBoardView extends Actor {
     }
   }
 
-  private hideDraggedCardForTargeting(entry: HandEntry): void {
+  private hideHandCardForPendingPlay(entry: HandEntry): void {
     entry.slot.visible = false
     if (this.dragTick) gsap.ticker.remove(this.dragTick)
     this.dragTick = null
@@ -1579,8 +1642,8 @@ export class GameBoardView extends Actor {
     if (!targeting) return
     this.attackLine.clear()
     this.options.cursor?.setTargeting(false)
-    if (targeting.origin === 'minion-preview' && targeting.minionPreview) {
-      const preview = targeting.minionPreview
+    if (targeting.presentation.kind === 'minion-preview') {
+      const preview = targeting.presentation.preview
       preview.cancelled = true
       this.cardTargeting = null
       this.cardPlayInProgress = true
@@ -1599,16 +1662,18 @@ export class GameBoardView extends Actor {
       return
     }
     this.cardTargeting = null
-    if (targeting.origin === 'local-hero') {
+    if (targeting.presentation.kind === 'hidden-hand-card') {
       const entry = this.handEntries.find(
         (candidate) => candidate.card.instanceId === targeting.cardInstanceId
       )
       const returnTo = pointer ?? this.lastTargetingPointer
-      if (entry?.restTransform && returnTo) {
+      if (entry?.restTransform) {
         entry.slot.visible = true
-        entry.slot.position.set(returnTo.x, returnTo.y)
-        entry.slot.rotation = 0
-        entry.slot.scale.set(DEFAULT_HAND_DRAG.dragScale)
+        if (returnTo) {
+          entry.slot.position.set(returnTo.x, returnTo.y)
+          entry.slot.rotation = 0
+          entry.slot.scale.set(DEFAULT_HAND_DRAG.dragScale)
+        }
         this.dragReturning = true
         void this.animateSlotToHand(
           entry.slot,
@@ -1656,7 +1721,7 @@ export class GameBoardView extends Actor {
         await this.returnMinionTargetCardToHand(preview.entry)
       } finally {
         this.activeSummonSlots.delete(preview.entry.slot)
-        if (this.cardTargeting?.minionPreview === preview) this.cardTargeting = null
+        if (this.minionTargetPreview() === preview) this.cardTargeting = null
         if (this.localBoardPreviewIndex === preview.position) {
           this.localBoardPreviewIndex = null
           this.applyLocalBoardLayout()
@@ -1770,10 +1835,7 @@ export class GameBoardView extends Actor {
     if (!target) return
     this.cardTargeting.targets.push(target)
     const { input, targets, choice } = this.cardTargeting
-    const complete =
-      targets.length >= input.targetSelectors.length &&
-      (input.choiceCount === 0 || choice !== undefined)
-    if (complete) {
+    if (pendingCardInputStage(input, choice, targets.length) === 'ready') {
       this.commitPendingCardPlay()
       return
     }
@@ -1789,12 +1851,11 @@ export class GameBoardView extends Actor {
   }
 
   private findTargetableCharacterAt(x: number, y: number): CombatView | null {
+    const pendingPreview = this.minionTargetPreview()?.presentation
     const candidates: readonly CombatView[] = [
       ...this.localMinionViews,
       ...this.remoteMinionViews,
-      ...(this.cardTargeting?.minionPreview?.presentation
-        ? [this.cardTargeting.minionPreview.presentation.view]
-        : []),
+      ...(pendingPreview ? [pendingPreview.view] : []),
       ...this.heroViews.values()
     ]
     return (
@@ -1837,16 +1898,18 @@ export class GameBoardView extends Actor {
     }
     this.syncBoardAttackability(this.match.getState())
     this.syncTurnControls(this.match.getState())
-    const complete = input.targetSelectors.length === 0
-    if (complete) this.commitPendingCardPlay()
+    if (pendingCardInputStage(input, choice) === 'ready') this.commitPendingCardPlay()
   }
 
   private commitPendingCardPlay(): void {
     const targeting = this.cardTargeting
     if (!targeting || this.dragReturning || this.cardPlayInProgress) return
     if (
-      targeting.targets.length < targeting.input.targetSelectors.length ||
-      (targeting.input.choiceCount > 0 && targeting.choice === undefined)
+      pendingCardInputStage(
+        targeting.input,
+        targeting.choice,
+        targeting.targets.length
+      ) !== 'ready'
     )
       return
 
@@ -1864,10 +1927,7 @@ export class GameBoardView extends Actor {
       return
     }
 
-    const minionPreview =
-      targeting.origin === 'minion-preview'
-        ? (targeting.minionPreview?.presentation ?? undefined)
-        : undefined
+    const minionPreview = this.minionTargetPreview(targeting)?.presentation ?? undefined
 
     const result = this.session.dispatch({
       type: 'play-card',
@@ -1921,8 +1981,8 @@ export class GameBoardView extends Actor {
         entry.card.instanceId
       )?.effectPreview
       entry.slot.setPlayableOutlineEnabled(canPlay)
-      entry.slot.setPlayableOutlinePalette(
-        effectPreview?.conditionallyEnhanced ? 'orange' : 'green'
+      entry.slot.setPlayableOutlineEnhanced(
+        effectPreview?.conditionallyEnhanced === true
       )
       if (entry === draggingEntry) {
         this.dragPerspective?.setOutlineEnabled(canPlay)
@@ -1932,6 +1992,7 @@ export class GameBoardView extends Actor {
 
   /** Reflects whose turn it is in the end turn button's texture and enabled state. */
   private syncTurnControls(state: OpeningMatchState): void {
+    this.syncMatchCursor(state)
     const endTurnButton = this.hud.endTurnButton
     if (!endTurnButton) return
     const isLocalTurn = state.activePlayerId === this.localParticipantId
@@ -1950,6 +2011,13 @@ export class GameBoardView extends Actor {
       inputEnabled,
       inputEnabled && !this.localPlayerHasAvailableAction()
     )
+  }
+
+  /** Keeps the opponent-turn cursor above all transient match interactions. */
+  private syncMatchCursor(state: OpeningMatchState): void {
+    const observingOpponentTurn =
+      state.phase === 'turns' && state.activePlayerId === this.remoteParticipantId
+    this.options.cursor?.setOverrideVariant(observingOpponentTurn ? 'observer' : null)
   }
 
   /** Whether the local player has a legal card, hero-power, or attack action. */
@@ -2040,7 +2108,7 @@ export class GameBoardView extends Actor {
 
   /** Makes the summoned-but-uncommitted minion selectable when it is legal. */
   private syncPendingMinionTargetPreview(): void {
-    const preview = this.cardTargeting?.minionPreview?.presentation
+    const preview = this.minionTargetPreview()?.presentation
     if (!preview) return
     const targetable = this.isValidCardTarget(preview.view)
     preview.view.setTargetable(targetable)
@@ -2054,6 +2122,7 @@ export class GameBoardView extends Actor {
     const displayedAttack = state.activePlayerId === ownerId ? getHeroAttack(player) : 0
     view.setStats(displayedAttack, player.hero.health, player.hero.armor)
     view.setFrozen(isFrozen(player.hero.frozenUntilTurn, state.turnNumber))
+    view.setImmune(player.hero.immune === true)
     const heroAttackerId = `${ownerId}:hero`
     const showCanAttack =
       ownerId === this.localParticipantId &&
@@ -2248,7 +2317,7 @@ export class GameBoardView extends Actor {
     if (this.matchResultShown) return
     const canvasBounds = this.options.renderer.canvas.getBoundingClientRect()
     this.options.cursor?.setTargetingVisualScale(
-      canvasBounds.width / this.options.renderer.width
+      Math.min(canvasBounds.width / GAME_WIDTH, canvasBounds.height / GAME_HEIGHT)
     )
     this.updateTargetGesture(event)
     if (this.heroPowerTargeting) {
@@ -2274,10 +2343,16 @@ export class GameBoardView extends Actor {
     if (this.cardTargeting) {
       const targeting = this.cardTargeting
       if (
-        targeting.origin === 'minion-preview' &&
-        targeting.minionPreview?.cancelled === true
+        targeting.presentation.kind === 'minion-preview' &&
+        targeting.presentation.preview.cancelled === true
       ) {
         this.attackLine.clear()
+        this.options.cursor?.setTargetingTarget(null)
+        return
+      }
+      if (!isCardTargetSelectionActive(targeting.input, targeting.choice)) {
+        this.attackLine.clear()
+        this.options.cursor?.setTargeting(false)
         this.options.cursor?.setTargetingTarget(null)
         return
       }
@@ -2286,14 +2361,13 @@ export class GameBoardView extends Actor {
       const entry = this.handEntries.find(
         (candidate) => candidate.card.instanceId === targeting.cardInstanceId
       )
-      const arrowOrigin = entry
-        ? resolveHandCardArrowOrigin(cardDefinition(entry.card).type, targeting.origin)
-        : targeting.origin
+      const arrowOrigin = targeting.arrowOrigin
+      const pendingPreview = this.minionTargetPreview(targeting)
       const from =
         arrowOrigin === 'local-hero'
           ? this.heroViews.get(this.localParticipantId)?.getGlobalPosition()
-          : arrowOrigin === 'minion-preview'
-            ? this.summonLayer.toGlobal(targeting.minionPreview!.targetingOrigin)
+          : arrowOrigin === 'minion-preview' && pendingPreview
+            ? this.summonLayer.toGlobal(pendingPreview.targetingOrigin)
             : entry?.slot.getGlobalPosition()
       if (from) {
         const localFrom = this.attackLineLayer.toLocal(from)
@@ -4089,6 +4163,7 @@ export class GameBoardView extends Actor {
       player.hero.armor,
       player.hero.maxHealth
     )
+    view?.setImmune(player.hero.immune === true)
     heroPowerView?.setCost(heroPower.cost)
     await Promise.all([
       view?.replaceFrame(this.options.heroAssets[hero.presentationAssetKey]) ??
@@ -6387,6 +6462,23 @@ export class GameBoardView extends Actor {
     this.applyLocalBoardLayout()
   }
 
+  /** Clears the carried-card gesture after the engine accepts a play. */
+  private releaseAcceptedHandCard(): void {
+    this.dragReturning = true
+    this.reflowing = true
+    this.dragPointer = null
+    this.dragStartPointer = null
+    this.dragMovedBeyondThreshold = false
+    this.dragState = null
+    if (this.dragTick) gsap.ticker.remove(this.dragTick)
+    this.dragTick = null
+    this.dragPerspective?.destroy()
+    this.dragPerspective = null
+    this.options.cursor?.setContextVariant(null)
+    this.localHoveredSlot = null
+    this.draggingIndex = null
+  }
+
   /** Confirms an already-selected targetless spell (for example Coin or Tracking). */
   private castSelectedTargetlessSpell(index: number, entry: HandEntry): void {
     const result = this.session.dispatch({
@@ -6401,19 +6493,7 @@ export class GameBoardView extends Actor {
     }
     this.cardPlayInProgress = true
     this.syncTurnHud(result.state)
-    this.dragReturning = true
-    this.reflowing = true
-    this.dragPointer = null
-    this.dragStartPointer = null
-    this.dragMovedBeyondThreshold = false
-    this.dragState = null
-    if (this.dragTick) gsap.ticker.remove(this.dragTick)
-    this.dragTick = null
-    this.dragPerspective?.destroy()
-    this.dragPerspective = null
-    this.options.cursor?.setContextVariant(null)
-    this.localHoveredSlot = null
-    this.draggingIndex = null
+    this.releaseAcceptedHandCard()
     void this.presentAcceptedSpellPlay(index, entry, result)
   }
   /** Resolves a carried card through the engine and presents an accepted play. */
@@ -6440,9 +6520,7 @@ export class GameBoardView extends Actor {
       return
     }
 
-    const needsCollectedInput =
-      input.targetSelectors.length > 0 ||
-      (input.choiceCount > 0 && input.choiceTiming === 'before-play')
+    const needsCollectedInput = pendingCardInputStage(input, undefined) !== 'ready'
     if (definition.type === 'Spell' || needsCollectedInput) {
       if (!isInDropZone(pointer, GAME_BOARD_LAYOUT.cardPlay.localDropZone)) {
         this.endDrag()
@@ -6481,19 +6559,7 @@ export class GameBoardView extends Actor {
 
       this.cardPlayInProgress = true
       this.syncTurnHud(result.state)
-      this.dragReturning = true
-      this.reflowing = true
-      this.dragPointer = null
-      this.dragStartPointer = null
-      this.dragMovedBeyondThreshold = false
-      this.dragState = null
-      if (this.dragTick) gsap.ticker.remove(this.dragTick)
-      this.dragTick = null
-      this.dragPerspective?.destroy()
-      this.dragPerspective = null
-      this.options.cursor?.setContextVariant(null)
-      this.localHoveredSlot = null
-      this.draggingIndex = null
+      this.releaseAcceptedHandCard()
 
       void this.presentAcceptedSpellPlay(index, entry, result)
       return
@@ -6518,19 +6584,7 @@ export class GameBoardView extends Actor {
 
       this.cardPlayInProgress = true
       this.syncTurnHud(result.state)
-      this.dragReturning = true
-      this.reflowing = true
-      this.dragPointer = null
-      this.dragStartPointer = null
-      this.dragMovedBeyondThreshold = false
-      this.dragState = null
-      if (this.dragTick) gsap.ticker.remove(this.dragTick)
-      this.dragTick = null
-      this.dragPerspective?.destroy()
-      this.dragPerspective = null
-      this.options.cursor?.setContextVariant(null)
-      this.localHoveredSlot = null
-      this.draggingIndex = null
+      this.releaseAcceptedHandCard()
 
       void this.presentAcceptedWeaponPlay(index, entry, result)
       return
@@ -6555,19 +6609,7 @@ export class GameBoardView extends Actor {
 
       this.cardPlayInProgress = true
       this.syncTurnHud(result.state)
-      this.dragReturning = true
-      this.reflowing = true
-      this.dragPointer = null
-      this.dragStartPointer = null
-      this.dragMovedBeyondThreshold = false
-      this.dragState = null
-      if (this.dragTick) gsap.ticker.remove(this.dragTick)
-      this.dragTick = null
-      this.dragPerspective?.destroy()
-      this.dragPerspective = null
-      this.options.cursor?.setContextVariant(null)
-      this.localHoveredSlot = null
-      this.draggingIndex = null
+      this.releaseAcceptedHandCard()
 
       void this.presentAcceptedHeroPlay(index, entry, result)
       return
@@ -6605,7 +6647,8 @@ export class GameBoardView extends Actor {
     this.localBoardPreviewIndex = position
     this.applyLocalBoardLayout(position)
 
-    // Set every input/reflow guard before the asynchronous presentation begins.
+    // The minion ghost transition intentionally begins between detaching the
+    // live drag ticker and destroying its perspective wrapper.
     this.dragReturning = true
     this.reflowing = true
     this.dragPointer = null
@@ -6973,7 +7016,8 @@ export class GameBoardView extends Actor {
       this.localParticipantId,
       entry.card.instanceId
     )
-    if (!input || input.targetSelectors.length === 0) return false
+    if (!input || !allowsDragTargetingFromHand(cardDefinition(entry.card).type, input))
+      return false
     if (!this.targetGestures.move(pointerId, pointer, DRAG_MOVE_THRESHOLD)) return false
 
     this.lastTargetingPointer = { ...pointer }
@@ -7078,10 +7122,10 @@ export class GameBoardView extends Actor {
         {
           outlineTexture: entry.slot.playableOutlineTexture,
           outlineEnabled,
-          // In-hand playable cards wear the green outline; the card switches
-          // to blue once it is selected and warps around under the cursor.
+          // Playable cards switch to blue once selected while retaining the
+          // normal or conditionally enhanced motion preset from the hand.
           outlinePalette: 'blue',
-          outlinePreset: 'card'
+          outlinePreset: entry.slot.getPlayableOutlinePreset()
         }
       )
     } catch (error) {
@@ -7193,8 +7237,11 @@ export class GameBoardView extends Actor {
     const targeting = this.cardTargeting
     if (
       targeting &&
-      targeting.targets.length >= targeting.input.targetSelectors.length &&
-      (targeting.input.choiceCount === 0 || targeting.choice !== undefined)
+      pendingCardInputStage(
+        targeting.input,
+        targeting.choice,
+        targeting.targets.length
+      ) === 'ready'
     ) {
       this.commitPendingCardPlay()
     }
@@ -7236,7 +7283,9 @@ export class GameBoardView extends Actor {
     window.removeEventListener('blur', this.handleWindowBlur)
     window.removeEventListener('keydown', this.handleWindowKeyDown, true)
     this.cardPlacementTapGuard.clear()
+    this.cardChoiceInputGate.clear()
     this.targetGestures.clear()
+    this.options.cursor?.setOverrideVariant(null)
     this.options.cursor?.setContextVariant(null)
     this.options.cursor?.setTargeting(false)
     this.hideBoardMinionCardPreview()

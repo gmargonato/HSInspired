@@ -1,6 +1,6 @@
 import { Application } from 'pixi.js'
 import { SceneManager } from './scenes/scene-manager'
-import { SceneNavigator } from './app/scene-navigator'
+import { SceneNavigator, type DevSceneFactory } from './app/scene-navigator'
 import { createAppServices } from './app/services'
 import type { AppLogger } from './app/services'
 import { GAME_HEIGHT, GAME_WIDTH } from './app/config'
@@ -13,6 +13,17 @@ export { GAME_HEIGHT, GAME_WIDTH }
 type SceneMenuAPI = {
   onSceneRequest?: (listener: (request: SceneRequest) => void) => () => void
 }
+
+const createDevScene: DevSceneFactory | undefined = import.meta.env.DEV
+  ? async (request) => {
+      switch (request.id) {
+        case 'outline-lab': {
+          const { OutlineLabScene } = await import('@outline-lab')
+          return new OutlineLabScene()
+        }
+      }
+    }
+  : undefined
 
 /**
  * Subscribe to the developer menu without making it a startup dependency.
@@ -44,22 +55,33 @@ function subscribeToSceneMenu(
 }
 
 async function bootstrap(): Promise<void> {
-  const app = new Application()
-
-  await app.init({
-    width: GAME_WIDTH,
-    height: GAME_HEIGHT,
-    backgroundColor: 0x0a0f1e,
-    antialias: true,
-    eventFeatures: { wheel: true },
-    resolution: window.devicePixelRatio || 1,
-    autoDensity: true,
-    resizeTo: window
-  })
-
   const container = document.getElementById('game-container')
   if (!container) {
     throw new Error('Game container was not found')
+  }
+
+  // The cursor is document-level infrastructure, so make it available before
+  // asynchronous Pixi and scene initialization. This also ensures a renderer
+  // reload cannot leave the native OS cursor active while the game boots.
+  const cursor = new CursorManager(container)
+  cursor.mount()
+
+  const app = new Application()
+
+  try {
+    await app.init({
+      width: GAME_WIDTH,
+      height: GAME_HEIGHT,
+      backgroundColor: 0x0a0f1e,
+      antialias: true,
+      eventFeatures: { wheel: true },
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+      resizeTo: window
+    })
+  } catch (error) {
+    cursor.destroy()
+    throw error
   }
 
   container.appendChild(app.canvas)
@@ -81,7 +103,6 @@ async function bootstrap(): Promise<void> {
   window.addEventListener('unhandledrejection', (event) => {
     services.logger.error('[Global] unhandled rejection', event.reason)
   })
-  let cursor: CursorManager | null = null
   let sceneNavigator: SceneNavigator | null = null
   let removeSettingsShortcut = (): void => undefined
   let sceneManagerReady = false
@@ -120,14 +141,11 @@ async function bootstrap(): Promise<void> {
   try {
     app.ticker.maxFPS = 60
 
-    cursor = new CursorManager(container)
-    cursor.mount()
-
     const game = new SceneManager(app, {
-      cursor: cursor ?? undefined,
+      cursor,
       logger: services.logger
     })
-    const navigator = new SceneNavigator(game, services)
+    const navigator = new SceneNavigator(game, services, createDevScene)
     sceneNavigator = navigator
 
     if (import.meta.env.DEV) {
@@ -181,6 +199,10 @@ async function bootstrap(): Promise<void> {
       navigateSceneRequest(request)
     }
 
+    if (import.meta.env.DEV && import.meta.hot) {
+      import.meta.hot.on('vite:afterUpdate', () => cursor.mount())
+    }
+
     // The native Electron menu sends requests through preload. Keep all scene
     // construction in the renderer, where SceneManager and Pixi are available.
     window.addEventListener(
@@ -192,7 +214,8 @@ async function bootstrap(): Promise<void> {
         unsubscribeDevSceneSync()
         unsubscribeDevCommandHandler()
         app.canvas.removeEventListener('contextmenu', preventContextMenu)
-        cursor?.destroy()
+        // The browser discards this document, its nodes, and listeners. Avoid
+        // removing the custom cursor early while Vite performs a full reload.
       },
       { once: true }
     )
@@ -202,7 +225,7 @@ async function bootstrap(): Promise<void> {
     unsubscribeDevDeckSync()
     unsubscribeDevSceneSync()
     unsubscribeDevCommandHandler()
-    cursor?.destroy()
+    cursor.destroy()
     throw error
   }
 }

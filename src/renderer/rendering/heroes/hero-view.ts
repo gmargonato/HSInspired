@@ -11,6 +11,7 @@ export interface HeroViewModel {
   readonly maxHealth: number
   readonly armor: number
   readonly frozen: boolean
+  readonly immune: boolean
 }
 
 export interface HeroViewTextures {
@@ -19,6 +20,7 @@ export interface HeroViewTextures {
   readonly health: Texture
   readonly armor: Texture
   readonly frozen: Texture
+  readonly immune: Texture
 }
 
 export const HERO_HEALTH_COLORS = {
@@ -77,6 +79,7 @@ function setEventModeNone(container: Container): void {
 export class HeroView extends Container {
   private readonly frame: Sprite
   private readonly frozen: Sprite
+  private readonly immune: Sprite
   private readonly attackGroup: Container
   private readonly attackLabel: Text
   private readonly healthGroup: Container
@@ -115,6 +118,12 @@ export class HeroView extends Container {
     this.frozen.visible = model.frozen
     this.frozen.label = 'hero.frozen'
     this.addChild(this.frozen)
+
+    this.immune = new Sprite(textures.immune)
+    applyAnchoredPlacement(this.immune, HERO_LAYOUT.immune)
+    this.immune.visible = model.immune
+    this.immune.label = 'hero.immune'
+    this.addChild(this.immune)
 
     const attack = createStatGroup(
       'hero.stat-attack',
@@ -160,7 +169,7 @@ export class HeroView extends Container {
     this.outlineProxy.eventMode = 'none'
     this.outlineProxy.visible = false
     this.addChildAt(this.outlineProxy, 0)
-    this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'card')
+    this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'board')
     this.attackOutline.setEnabled(false)
 
     this.targetingOutlineProxy = new Sprite(textures.frame)
@@ -172,7 +181,7 @@ export class HeroView extends Container {
     this.targetingOutline = new AnimatedOutline(
       this.targetingOutlineProxy,
       'red',
-      'card'
+      'board'
     )
     this.targetingOutline.setEnabled(false)
 
@@ -238,6 +247,10 @@ export class HeroView extends Container {
 
   setFrozen(visible: boolean): void {
     this.frozen.visible = visible
+  }
+
+  setImmune(visible: boolean): void {
+    this.immune.visible = visible
   }
 
   /** Controls whether the health badge is shown independently of its value. */

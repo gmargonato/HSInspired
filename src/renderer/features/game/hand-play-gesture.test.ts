@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   OneShotPointerTapGuard,
+  PointerReleaseInputGate,
   allowsDragTargetingFromHand,
+  isCardTargetSelectionActive,
   isHandOwnedSlot,
+  pendingCardInputStage,
   resolveHandCardArrowOrigin,
   requiresClickConfirmedMinionPlacement
 } from './hand-play-gesture'
@@ -64,6 +67,57 @@ describe('hand-play gesture', () => {
         choiceCount: 0
       })
     ).toBe(false)
+  })
+
+  it('waits for a pre-play choice before enabling drag targeting', () => {
+    const unresolvedChoice = {
+      targetSelectors: [{}],
+      choiceCount: 2,
+      choiceTiming: 'before-play' as const
+    }
+
+    expect(allowsDragTargetingFromHand('Spell', unresolvedChoice)).toBe(false)
+  })
+
+  it('starts target presentation only after resolving a targeted choice', () => {
+    const targetedChoice = { targetSelectors: [{}], choiceCount: 2 }
+
+    expect(isCardTargetSelectionActive(targetedChoice, undefined)).toBe(false)
+    expect(isCardTargetSelectionActive(targetedChoice, 0)).toBe(true)
+    expect(
+      isCardTargetSelectionActive({ targetSelectors: [], choiceCount: 2 }, 1)
+    ).toBe(false)
+  })
+
+  it('uses one ordered progression for choice, target, and ready states', () => {
+    const livingRootsBeforeChoice = { targetSelectors: [{}], choiceCount: 2 }
+    const livingRootsDamageChoice = { targetSelectors: [{}], choiceCount: 2 }
+    const livingRootsSummonChoice = { targetSelectors: [], choiceCount: 2 }
+    const darkbomb = { targetSelectors: [{}], choiceCount: 0 }
+    const druidOfTheFlame = {
+      targetSelectors: [],
+      choiceCount: 2,
+      choiceTiming: 'after-placement' as const
+    }
+
+    expect(pendingCardInputStage(livingRootsBeforeChoice, undefined)).toBe('choice')
+    expect(pendingCardInputStage(livingRootsDamageChoice, 0)).toBe('target')
+    expect(pendingCardInputStage(livingRootsDamageChoice, 0, 1)).toBe('ready')
+    expect(pendingCardInputStage(livingRootsSummonChoice, 1)).toBe('ready')
+    expect(pendingCardInputStage(darkbomb, undefined)).toBe('target')
+    expect(pendingCardInputStage(darkbomb, undefined, 1)).toBe('ready')
+    expect(pendingCardInputStage(druidOfTheFlame, undefined)).toBe('ready')
+  })
+
+  it('blocks modal input until the opening pointer is released', () => {
+    const gate = new PointerReleaseInputGate()
+    gate.block(7)
+
+    expect(gate.blocked).toBe(true)
+    gate.release(8)
+    expect(gate.blocked).toBe(true)
+    gate.release(7)
+    expect(gate.blocked).toBe(false)
   })
 
   it('always renders targeted spells from the local hero', () => {
