@@ -153,6 +153,16 @@ export class MatchHistoryView extends Actor {
     )
     artwork.mask = mask
     container.addChild(artwork, mask)
+    if (entry.kind === 'burn') this.showThumbnail(artwork, this.textures.burnThumb)
+    else if (entry.action === 'fatigue')
+      this.showThumbnail(artwork, this.textures.fatigueThumb)
+    else if (entry.action === 'hero-power' && entry.source.heroPowerId)
+      this.showThumbnail(artwork, this.heroPowerTexture(entry.source.heroPowerId))
+    else if (this.isHiddenSecretEntry(entry))
+      this.showThumbnail(artwork, this.textures.secretThumb)
+    else if (entry.source.cardId) void this.loadThumbnail(artwork, entry.source.cardId)
+    else container.addChild(this.createUnknownThumbnail())
+
     const frame = new Sprite(
       entry.participantId === this.localParticipantId
         ? this.textures.local
@@ -162,15 +172,6 @@ export class MatchHistoryView extends Actor {
     container.addChild(frame)
     container.on('pointerenter', () => void this.open(entry, index))
     container.on('pointerleave', () => this.close(entry.id))
-    if (entry.kind === 'burn') this.showThumbnail(artwork, this.textures.burnThumb)
-    else if (entry.action === 'fatigue')
-      this.showThumbnail(artwork, this.textures.fatigueThumb)
-    else if (entry.action === 'hero-power' && entry.source.heroPowerId)
-      this.showThumbnail(artwork, this.heroPowerTexture(entry.source.heroPowerId))
-    else if (this.isHiddenSecretEntry(entry))
-      this.showThumbnail(artwork, this.textures.secretThumb)
-    else if (entry.source.cardId) void this.loadThumbnail(artwork, entry.source.cardId)
-    else this.drawUnknownThumbnail(artwork)
     return { entry, container }
   }
 
@@ -198,8 +199,14 @@ export class MatchHistoryView extends Actor {
     )
   }
 
-  private drawUnknownThumbnail(sprite: Sprite): void {
-    const placeholder = new Graphics()
+  private createUnknownThumbnail(): Container {
+    const placeholder = new Container()
+    placeholder.label = 'game.history.unknown-thumbnail'
+    placeholder.position.set(
+      MATCH_HISTORY_LAYOUT.rail.artworkInset,
+      MATCH_HISTORY_LAYOUT.rail.artworkInset
+    )
+    const background = new Graphics()
       .roundRect(
         0,
         0,
@@ -208,14 +215,16 @@ export class MatchHistoryView extends Actor {
         5
       )
       .fill({ color: 0x17131a })
+    background.label = 'game.history.unknown-thumbnail-background'
     const label = new Text({
       text: '?',
       style: { fontFamily: 'Belwe', fontSize: 42, fill: 0xe7d9ab },
       anchor: 0.5
     })
+    label.label = 'game.history.unknown-thumbnail-label'
     label.position.set(28, 30)
-    placeholder.addChild(label)
-    sprite.addChild(placeholder)
+    placeholder.addChild(background, label)
+    return placeholder
   }
 
   private async open(entry: MatchHistoryEntry, railIndex: number): Promise<void> {

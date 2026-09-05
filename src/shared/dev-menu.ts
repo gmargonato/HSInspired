@@ -19,6 +19,7 @@ export type DevSceneId =
   | 'arena'
   | 'new-deck'
   | 'tavern-brawl'
+  | 'card-inspector'
   | 'outline-lab'
   | 'game'
   | 'settings'
@@ -122,6 +123,7 @@ export function isDevSceneId(value: unknown): value is DevSceneId {
       'arena',
       'new-deck',
       'tavern-brawl',
+      'card-inspector',
       'outline-lab',
       'game',
       'settings',

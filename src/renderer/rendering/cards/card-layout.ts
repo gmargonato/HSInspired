@@ -89,40 +89,29 @@ const FRAME_SOURCE_TO_CANVAS_Y = CARD_CANVAS.height / 905
 export const CLASS_FRAME_MASK_SOURCE_LAYOUTS = {
   minion: {
     primary: { x: 13, y: 20, width: 594, height: 866 },
-    accent: { x: 31, y: 34, width: 557, height: 538 }
+    secondary: { x: 31, y: 34, width: 557, height: 538 }
   },
   spell: {
-    primary: { x: 7, y: 11, width: 606, height: 883 },
-    accent: { x: 35, y: 10, width: 549, height: 473 }
+    primary: { x: 7, y: 11, width: 606, height: 883 }
   }
 } as const
 
-function classFrameMaskPlacements(
-  source: (typeof CLASS_FRAME_MASK_SOURCE_LAYOUTS)[keyof typeof CLASS_FRAME_MASK_SOURCE_LAYOUTS]
-) {
+function classFrameMaskPlacement(source: CardBounds) {
   return {
-    primary: {
-      position: { x: source.primary.x, y: source.primary.y * FRAME_SOURCE_TO_CANVAS_Y },
-      size: {
-        width: source.primary.width,
-        height: source.primary.height * FRAME_SOURCE_TO_CANVAS_Y
-      }
-    },
-    accent: {
-      position: { x: source.accent.x, y: source.accent.y * FRAME_SOURCE_TO_CANVAS_Y },
-      size: {
-        width: source.accent.width,
-        height: source.accent.height * FRAME_SOURCE_TO_CANVAS_Y
-      }
+    position: { x: source.x, y: source.y * FRAME_SOURCE_TO_CANVAS_Y },
+    size: {
+      width: source.width,
+      height: source.height * FRAME_SOURCE_TO_CANVAS_Y
     }
   }
 }
 
-export const MINION_CLASS_FRAME_MASK_PLACEMENTS = classFrameMaskPlacements(
-  CLASS_FRAME_MASK_SOURCE_LAYOUTS.minion
-)
-export const SPELL_CLASS_FRAME_MASK_PLACEMENTS = classFrameMaskPlacements(
-  CLASS_FRAME_MASK_SOURCE_LAYOUTS.spell
+export const MINION_CLASS_FRAME_MASK_PLACEMENTS = {
+  primary: classFrameMaskPlacement(CLASS_FRAME_MASK_SOURCE_LAYOUTS.minion.primary),
+  secondary: classFrameMaskPlacement(CLASS_FRAME_MASK_SOURCE_LAYOUTS.minion.secondary)
+} as const
+export const SPELL_CLASS_FRAME_MASK_PLACEMENT = classFrameMaskPlacement(
+  CLASS_FRAME_MASK_SOURCE_LAYOUTS.spell.primary
 )
 const SHARED_STATS = {
   mana: { x: 60, y: 50 },
@@ -245,25 +234,28 @@ function classFrameMasks(
   }
 
   const template = card.type === 'Minion' ? 'minion' : 'spell'
-  const placements =
+  const primaryPlacement =
     template === 'minion'
-      ? MINION_CLASS_FRAME_MASK_PLACEMENTS
-      : SPELL_CLASS_FRAME_MASK_PLACEMENTS
+      ? MINION_CLASS_FRAME_MASK_PLACEMENTS.primary
+      : SPELL_CLASS_FRAME_MASK_PLACEMENT
+
+  const primary = image(
+    'class-frame-mask-1',
+    `card.frame.${template}.class-mask-1`,
+    primaryPlacement.position,
+    CLASS_FRAME_MASK_Z_INDEX,
+    { size: primaryPlacement.size }
+  )
+  if (template === 'spell') return [primary]
 
   return [
-    image(
-      'class-frame-mask-1',
-      `card.frame.${template}.class-mask-1`,
-      placements.primary.position,
-      CLASS_FRAME_MASK_Z_INDEX,
-      { size: placements.primary.size }
-    ),
+    primary,
     image(
       'class-frame-mask-2',
-      `card.frame.${template}.class-mask-2`,
-      placements.accent.position,
+      'card.frame.minion.class-mask-2',
+      MINION_CLASS_FRAME_MASK_PLACEMENTS.secondary.position,
       CLASS_FRAME_MASK_Z_INDEX + 1,
-      { size: placements.accent.size }
+      { size: MINION_CLASS_FRAME_MASK_PLACEMENTS.secondary.size }
     )
   ]
 }
@@ -616,7 +608,7 @@ export function buildCardLayout(
   const diagnostics = [
     `Uses the ${template} profile on the canonical ${CARD_CANVAS.width} × ${CARD_CANVAS.height} canvas.`,
     'Frame, name, rules, stats, and rarity are rendered as semantic nodes.',
-    'Playable minion classes use the shared editable white-mask colors; Neutral remains uncolored.'
+    'Playable class cards use editable white-mask colors; spells use only the primary mask and Neutral remains uncolored.'
   ]
 
   if (card.type === 'Hero')

@@ -33,11 +33,6 @@ describe('AI configuration', () => {
         reasoningEffort: 'low',
         maxCompletionTokens: 2048
       },
-      matchupPlan: {
-        requestTimeoutMs: 8000,
-        reasoningEffort: 'low',
-        maxCompletionTokens: 2048
-      },
       mulligan: {
         requestTimeoutMs: 8000,
         reasoningEffort: 'low',
@@ -59,6 +54,11 @@ describe('AI configuration', () => {
         maxCompletionTokens: 2048
       },
       critic: {
+        requestTimeoutMs: 8000,
+        reasoningEffort: 'low',
+        maxCompletionTokens: 2048
+      },
+      strategyReview: {
         requestTimeoutMs: 8000,
         reasoningEffort: 'low',
         maxCompletionTokens: 2048

@@ -48,6 +48,7 @@ export class MainMenuView extends Actor {
   private menuGroup!: Container
   private chestBox!: Sprite
   private lidLeft!: PerspectiveMesh
+  private rightLidGroup!: Container
   private lidRight!: PerspectiveMesh
   private centerPartMount!: Container
   private centerCard!: FlipCard
@@ -134,7 +135,7 @@ export class MainMenuView extends Actor {
     this.centerPartMount = new Container()
     this.centerPartMount.label = 'main-menu.center-part-mount'
     this.centerPartMount.addChild(this.centerCard)
-    this.lidRight.addChild(this.centerPartMount)
+    this.rightLidGroup.addChild(this.centerPartMount)
     this.updateLidMeshes(this.entryMode === 'returning' ? 1 : 0)
     if (this.entryMode === 'returning') {
       // At the fully open angle the meshes retain a one-pixel minimum width.
@@ -268,7 +269,12 @@ export class MainMenuView extends Actor {
 
     this.lidRight = this.createLidMesh(rightLid, 'right')
     this.lidRight.label = 'main-menu.right-lid'
-    this.menuGroup.addChild(this.lidRight)
+    this.rightLidGroup = new Container()
+    this.rightLidGroup.label = 'main-menu.right-lid-group'
+    this.rightLidGroup.position.copyFrom(this.lidRight.position)
+    this.lidRight.position.set(0, 0)
+    this.rightLidGroup.addChild(this.lidRight)
+    this.menuGroup.addChild(this.rightLidGroup)
   }
 
   private createLidMesh(texture: Texture, side: LidSide): PerspectiveMesh {

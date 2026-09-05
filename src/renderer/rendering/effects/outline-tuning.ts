@@ -1,68 +1,37 @@
-/** Names intentionally stay closed so gameplay callers select a semantic
- * budget instead of inventing a one-off outline material. */
-export type OutlinePresetName = 'card' | 'bonus-card' | 'board' | 'button'
+import rawConfig from '../../../../config/outline-tunings.json'
+import {
+  OUTLINE_PRESET_NAMES,
+  parseOutlineTuningConfig,
+  type OutlinePresetName,
+  type OutlineTuning,
+  type OutlineTuningConfig
+} from '../../../shared/ipc/outline-tuning'
 
-export interface OutlineTuning {
-  readonly ribbonWidth: number
-  readonly edgeSoftness: number
-  readonly rimWidth: number
-  readonly glowWidth: number
-  readonly glowStrength: number
-  readonly highlightStrength: number
-  readonly hotspotScale: number
-  readonly hotspotDensity: number
-  readonly edgeWobble: number
-  readonly motionSpeed: number
+export type {
+  OutlinePresetName,
+  OutlineTuning,
+  OutlineTuningConfig
+} from '../../../shared/ipc/outline-tuning'
+
+const initialConfig = parseOutlineTuningConfig(rawConfig)
+
+/** Current production tuning registry, initialized from the checked-in JSON config. */
+export const OUTLINE_TUNINGS: Record<OutlinePresetName, OutlineTuning> =
+  Object.fromEntries(
+    OUTLINE_PRESET_NAMES.map((preset) => [preset, initialConfig.presets[preset]])
+  ) as Record<OutlinePresetName, OutlineTuning>
+
+export function getOutlineTuning(preset: OutlinePresetName): OutlineTuning {
+  return OUTLINE_TUNINGS[preset]
 }
 
-/** Approved Arcane Filament material used by every production outline. */
-export const OUTLINE_TUNINGS: Record<OutlinePresetName, OutlineTuning> = {
-  card: {
-    ribbonWidth: 6,
-    edgeSoftness: 2,
-    rimWidth: 2,
-    glowWidth: 5,
-    glowStrength: 1,
-    highlightStrength: 2,
-    hotspotScale: 50,
-    hotspotDensity: 1,
-    edgeWobble: 4,
-    motionSpeed: 0.7
-  },
-  'bonus-card': {
-    ribbonWidth: 8,
-    edgeSoftness: 2,
-    rimWidth: 2,
-    glowWidth: 5,
-    glowStrength: 1,
-    highlightStrength: 2,
-    hotspotScale: 50,
-    hotspotDensity: 1,
-    edgeWobble: 8,
-    motionSpeed: 1.4
-  },
-	board: {
-	  ribbonWidth: 6.1,
-	  edgeSoftness: 10,
-	  rimWidth: 0,
-	  glowWidth: 30,
-	  glowStrength: 1.33,
-	  highlightStrength: 5,
-	  hotspotScale: 50,
-	  hotspotDensity: 0,
-	  edgeWobble: 4.9,
-	  motionSpeed: 1.35
-	},
-  button: {
-	  ribbonWidth: 6,
-	  edgeSoftness: 10,
-	  rimWidth: 7.1,
-	  glowWidth: 30,
-	  glowStrength: 0.88,
-	  highlightStrength: 0.6,
-	  hotspotScale: 46,
-	  hotspotDensity: 1.3,
-	  edgeWobble: 10.3,
-	  motionSpeed: 1
-	}
+export function getOutlineTuningConfig(): OutlineTuningConfig {
+  return parseOutlineTuningConfig({ version: 1, presets: OUTLINE_TUNINGS })
+}
+
+export function updateOutlineTuningConfig(config: OutlineTuningConfig): void {
+  const parsed = parseOutlineTuningConfig(config)
+  for (const preset of OUTLINE_PRESET_NAMES) {
+    OUTLINE_TUNINGS[preset] = parsed.presets[preset]
+  }
 }

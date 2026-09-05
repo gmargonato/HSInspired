@@ -14,6 +14,10 @@ describe('dev deck menu commands', () => {
     expect(isDevSceneId('outline-lab')).toBe(true)
   })
 
+  it('accepts Card Inspector as a development scene id', () => {
+    expect(isDevSceneId('card-inspector')).toBe(true)
+  })
+
   it.each([
     { type: 'game:modify-deck', target: 'local', action: 'destroy' },
     { type: 'game:modify-deck', target: 'remote', action: 'refill' }

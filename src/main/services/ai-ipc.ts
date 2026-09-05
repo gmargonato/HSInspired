@@ -4,7 +4,7 @@ import {
   aiIpcFailure,
   aiIpcSuccess,
   parseAiDeckPlanRequest,
-  parseAiMatchupPlanRequest,
+  parseAiStrategyReviewRequest,
   parseAiDecisionRequest,
   type AiIpcResult
 } from '../../shared/ipc/ai'
@@ -25,7 +25,7 @@ export function registerAiIpc(service: AzureOpenAiDecisionService): void {
   ipcMain.handle(AI_IPC_CHANNELS.planDeck, (_event, request: unknown) =>
     settle(() => service.planDeck(parseAiDeckPlanRequest(request)))
   )
-  ipcMain.handle(AI_IPC_CHANNELS.planMatchup, (_event, request: unknown) =>
-    settle(() => service.planMatchup(parseAiMatchupPlanRequest(request)))
+  ipcMain.handle(AI_IPC_CHANNELS.reviewStrategy, (_event, request: unknown) =>
+    settle(() => service.reviewStrategy(parseAiStrategyReviewRequest(request)))
   )
 }

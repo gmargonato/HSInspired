@@ -63,4 +63,46 @@ describe('ArenaRepository', () => {
     expect(new Set(retired.heroChoices)).toHaveLength(3)
     expect([...retired.heroChoices].sort()).not.toEqual([...initial.heroChoices].sort())
   })
+
+  it('stops accepting results after twelve wins', async () => {
+    const { repository } = await createRepository()
+    const initial = await repository.get()
+    let run = await repository.selectHero(initial.heroChoices[0])
+    while (run.phase === 'drafting') {
+      run = await repository.pickCard(run.cardChoices![0])
+    }
+
+    for (let win = 0; win < 12; win += 1) {
+      run = await repository.recordResult('win')
+    }
+
+    expect(run).toMatchObject({ gamesPlayed: 12, wins: 12, defeats: 0 })
+    await expect(repository.recordResult('defeat')).rejects.toThrow(
+      'The Arena run is complete and must be retired.'
+    )
+    await expect(repository.get()).resolves.toMatchObject({
+      gamesPlayed: 12,
+      wins: 12,
+      defeats: 0
+    })
+  })
+
+  it('stops accepting results after three defeats while draws remain non-terminal', async () => {
+    const { repository } = await createRepository()
+    const initial = await repository.get()
+    let run = await repository.selectHero(initial.heroChoices[0])
+    while (run.phase === 'drafting') {
+      run = await repository.pickCard(run.cardChoices![0])
+    }
+
+    await repository.recordResult('draw')
+    for (let defeat = 0; defeat < 3; defeat += 1) {
+      run = await repository.recordResult('defeat')
+    }
+
+    expect(run).toMatchObject({ gamesPlayed: 4, wins: 0, defeats: 3 })
+    await expect(repository.recordResult('draw')).rejects.toThrow(
+      'The Arena run is complete and must be retired.'
+    )
+  })
 })

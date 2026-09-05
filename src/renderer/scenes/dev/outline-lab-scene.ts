@@ -1,7 +1,7 @@
 import { Scene } from '../scene'
 import { OutlineLab } from '../../features/dev/outline-lab'
 
-/** Development-only, non-persistent editor for outline preset tuning. */
+/** Development-only editor for persisted outline preset tuning. */
 export class OutlineLabScene extends Scene {
   readonly devSceneId = 'outline-lab' as const
   private lab!: OutlineLab

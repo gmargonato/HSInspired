@@ -1,5 +1,6 @@
 import type { Deck } from '../../../game/decks'
 import {
+  CARD_CONDITIONS,
   CARD_CATALOG,
   isCardEffectObject,
   type CardDefinition
@@ -9,21 +10,19 @@ import type {
   AiDeckPlan,
   AiDeckPlanCombo,
   AiDeckPlanRequest,
-  AiMatchupPlan,
-  AiMatchupPlanRequest,
   JsonObject
 } from '../../../shared/ipc/ai'
 
 export const AI_DECK_PLAN_PROMPT_VERSION = 'automatic-deck-plan-v1'
 export const AI_DECK_PLAN_SCHEMA_VERSION = 1
-export const AI_MATCHUP_PLAN_PROMPT_VERSION = 'competitive-matchup-plan-v2'
-export const AI_MATCHUP_PLAN_SCHEMA_VERSION = 2
 
 interface CardSignals {
   readonly produces: readonly string[]
   readonly requires: readonly string[]
   readonly actions: readonly string[]
 }
+
+const CARD_CONDITION_TYPES = new Set<string>(CARD_CONDITIONS)
 
 export interface DeckSynergy {
   readonly producerCardId: string
@@ -50,6 +49,9 @@ function walkRecords(
 }
 
 function normalizedConditionSignal(type: string): string | null {
+  // Event names and target descriptors also use a `type` field. Only authored
+  // condition types describe a resource the deck must deliberately provide.
+  if (!CARD_CONDITION_TYPES.has(type)) return null
   const normalized = type
     .replace(/^target-/, '')
     .replace(/^player-/, '')
@@ -58,9 +60,10 @@ function normalizedConditionSignal(type: string): string | null {
     .replace(/^controls-/, '')
   if (normalized === 'not-frozen') return null
   if (normalized.includes('frozen')) return 'frozen'
-  if (normalized.includes('damaged')) return 'damaged'
+  if (normalized.includes('damage')) return 'damaged'
   if (normalized.includes('secret')) return 'secret'
   if (normalized.includes('weapon')) return 'weapon'
+  if (normalized.includes('demon')) return 'demon'
   if (normalized.includes('minion')) return 'minion'
   if (normalized.includes('spell')) return 'spell'
   return null
@@ -76,19 +79,43 @@ function signalsFor(definition: CardDefinition): CardSignals {
       actions.add(action)
       if (action === 'freeze') produces.add('frozen')
       if (action === 'damage') produces.add('damaged')
-      if (action === 'summon' || action === 'summon-copy') produces.add('minion')
-      if (action === 'equip-weapon') produces.add('weapon')
+      if (
+        action === 'summon' ||
+        action === 'summon-copy' ||
+        action === 'summon-for-each' ||
+        action === 'summon-random' ||
+        action === 'put-into-play' ||
+        action === 'resurrect'
+      )
+        produces.add('minion')
+      if (action === 'equip' || action === 'equip-random') produces.add('weapon')
     }
     if (typeof record['keyword'] === 'string') produces.add(record['keyword'])
     if (typeof record['type'] === 'string') {
       const signal = normalizedConditionSignal(record['type'])
       if (signal) requires.add(signal)
+      // A friendly target/filter is also a real structural dependency (for
+      // example Deadly Poison needs a weapon). Do not treat `any` or opposing
+      // targets as deck synergies: that would make removal such as Polymorph
+      // look dependent on running minions in our own deck.
+      if (record['controller'] === 'self') {
+        if (record['type'] === 'minion') requires.add('minion')
+        if (record['type'] === 'weapon') requires.add('weapon')
+      }
     }
   })
   for (const keyword of definition.keywords ?? []) produces.add(keyword)
-  if (definition.type === 'Minion') produces.add('minion')
+  if (definition.type === 'Minion') {
+    produces.add('minion')
+    if (definition.subtype && definition.subtype !== 'General')
+      produces.add(String(definition.subtype).toLowerCase())
+  }
   if (definition.type === 'Weapon') produces.add('weapon')
-  if (definition.type === 'Spell') produces.add('spell')
+  if (definition.type === 'Spell') {
+    produces.add('spell')
+    if (definition.spellSchool)
+      produces.add(String(definition.spellSchool).toLowerCase())
+  }
   return { actions: [...actions], produces: [...produces], requires: [...requires] }
 }
 
@@ -124,14 +151,23 @@ function compactDefinition(definition: CardDefinition): JsonObject {
     name: definition.name,
     type: definition.type,
     cardClass: definition.cardClass,
+    subtype: definition.subtype,
+    spellSchool: definition.spellSchool,
     cost: definition.cost,
     rulesText: definition.rulesText,
     keywords: definition.keywords,
+    // Authored effects are the mechanical source of truth. Supplying them is
+    // what lets planning work for newly-authored and nonstandard cards without
+    // relying on model memory or parsing display-only rules text.
+    effects: definition.effects,
     ...(definition.type === 'Minion'
       ? { attack: definition.attack, health: definition.health }
       : {}),
     ...(definition.type === 'Weapon'
       ? { attack: definition.attack, durability: definition.durability }
+      : {}),
+    ...(definition.type === 'Hero'
+      ? { armor: definition.armor, replacementHeroId: definition.replacementHeroId }
       : {})
   })
 }
@@ -167,72 +203,63 @@ export function createDeckPlanRequest(
   }
 }
 
-function compactDeck(deck: Deck): JsonObject {
-  return toJsonObject({
-    id: deck.id,
-    name: deck.name,
-    heroId: deck.heroId,
-    cards: Object.entries(deck.cards).map(([cardId, count]) => ({
-      count,
-      definition: compactDefinition(CARD_CATALOG.require(cardId))
-    })),
-    structuredSynergies: deriveDeckSynergies(deck)
-  })
-}
-
-export function createMatchupPlanRequest(
-  selfDeck: Deck,
-  opponentDeck: Deck,
-  deadlineAtMs: number
-): AiMatchupPlanRequest {
-  return {
-    planId: `matchup-plan-${selfDeck.id}-${opponentDeck.id}-${Date.now()}`,
-    decisionClass: 'deck-plan',
-    promptVersion: AI_MATCHUP_PLAN_PROMPT_VERSION,
-    schemaVersion: AI_MATCHUP_PLAN_SCHEMA_VERSION,
-    deadlineAtMs,
-    informationPolicy: 'opponent-deck-and-hand',
-    mode: toJsonObject({
-      id: 'constructed',
-      objective: 'Defeat the opposing hero.',
-      informationPolicy: 'opponent-deck-and-hand',
-      deckSize: 30,
-      maximumBoardSize: 7
-    }),
-    selfDeck: compactDeck(selfDeck),
-    opponentDeck: compactDeck(opponentDeck)
-  }
-}
-
 function rolesFor(definition: CardDefinition): readonly AiCardRole[] {
   const signals = signalsFor(definition)
   const roles = new Set<AiCardRole>()
-  if (signals.actions.includes('draw')) roles.add('draw')
-  if (signals.actions.includes('damage') || signals.actions.includes('destroy')) {
+  if (
+    signals.actions.some(
+      (action) =>
+        action === 'draw' ||
+        action === 'draw-until' ||
+        action === 'discover' ||
+        action === 'add-to-hand'
+    )
+  )
+    roles.add('draw')
+  if (
+    signals.actions.some(
+      (action) =>
+        action === 'damage' ||
+        action.startsWith('destroy') ||
+        action === 'silence' ||
+        action.startsWith('transform') ||
+        action === 'take-control'
+    )
+  ) {
     roles.add('removal')
-    roles.add('finisher')
+    if (signals.actions.includes('damage')) roles.add('finisher')
   }
   if (
-    signals.actions.includes('heal') ||
-    signals.actions.includes('gain-armor') ||
-    signals.actions.includes('give-armor')
+    signals.actions.some(
+      (action) =>
+        action === 'restore' ||
+        action === 'gain-armor' ||
+        action === 'set-health' ||
+        action === 'prevent-lethal'
+    )
   ) {
     roles.add('survival')
   }
-  if (definition.type === 'Minion' || signals.actions.includes('summon'))
+  if (
+    definition.type === 'Minion' ||
+    signals.actions.some(
+      (action) =>
+        action.startsWith('summon') ||
+        action === 'put-into-play' ||
+        action === 'resurrect'
+    )
+  )
     roles.add('tempo')
   if (signals.requires.length > 0) roles.add('combo-piece')
   if (roles.size === 0) roles.add('flex')
   return [...roles]
 }
 
-function fallbackCombos(deck: Deck): readonly AiDeckPlanCombo[] {
-  return deriveDeckSynergies(deck)
-    .slice(0, 12)
-    .map((synergy) => ({
-      cardIds: [synergy.producerCardId, synergy.consumerCardId],
-      purpose: `${synergy.producerCardId} creates ${synergy.signal} for ${synergy.consumerCardId}.`
-    }))
+function fallbackCombos(synergies: readonly DeckSynergy[]): readonly AiDeckPlanCombo[] {
+  return synergies.map((synergy) => ({
+    cardIds: [synergy.producerCardId, synergy.consumerCardId],
+    purpose: `${synergy.producerCardId} creates ${synergy.signal} for ${synergy.consumerCardId}.`
+  }))
 }
 
 /**
@@ -286,7 +313,8 @@ export function createFallbackDeckPlan(deck: Deck): AiDeckPlan {
   const definitions = Object.keys(deck.cards).map((cardId) =>
     CARD_CATALOG.require(cardId)
   )
-  const combos = fallbackCombos(deck)
+  const synergies = deriveDeckSynergies(deck).slice(0, 12)
+  const combos = fallbackCombos(synergies)
   const averageCost =
     definitions.reduce(
       (total, definition) => total + definition.cost * (deck.cards[definition.id] ?? 0),
@@ -297,14 +325,44 @@ export function createFallbackDeckPlan(deck: Deck): AiDeckPlan {
       Object.values(deck.cards).reduce((total, count) => total + count, 0)
     )
   const archetype =
-    combos.length > 0 ? 'combo' : averageCost <= 3 ? 'aggro' : 'midrange'
+    combos.length > 0
+      ? 'detected synergy / combo plan'
+      : averageCost <= 3
+        ? 'low-curve board pressure'
+        : 'board-centric value and pressure'
   const lowCostCards = definitions
     .filter((definition) => definition.cost <= 2)
     .sort((left, right) => left.cost - right.cost)
     .slice(0, 15)
     .map((definition) => definition.id)
   // Reserve only conditional combo enablers (see reservedResourceCardIds).
-  const reservedComboCardIds = reservedResourceCardIds(deriveDeckSynergies(deck))
+  const reservedComboCardIds = new Set(reservedResourceCardIds(synergies))
+  const seenResourceRules = new Set<string>()
+  const resourceRules = combos.flatMap((combo) => {
+    const cardIds = [
+      ...new Set(combo.cardIds.filter((cardId) => reservedComboCardIds.has(cardId)))
+    ]
+    if (cardIds.length === 0) return []
+    const key = [...cardIds].sort().join('|')
+    if (seenResourceRules.has(key)) return []
+    seenResourceRules.add(key)
+    return [
+      {
+        cardIds,
+        preserveUntil: `The linked package is ready: ${combo.purpose}`,
+        releaseWhen:
+          'Use for lethal, forced survival, a completed combo, redundancy, a critical threat, or an invalidated plan.',
+        releaseTriggers: [
+          'lethal',
+          'forced-survival',
+          'combo-ready',
+          'redundant-copy',
+          'invalidated-combo',
+          'critical-threat'
+        ] as const
+      }
+    ]
+  })
   return {
     planVersion: 1,
     archetype,
@@ -323,68 +381,9 @@ export function createFallbackDeckPlan(deck: Deck): AiDeckPlan {
       roles: rolesFor(definition)
     })),
     combos,
-    resourceRules:
-      reservedComboCardIds.length === 0
-        ? []
-        : [
-            {
-              cardIds: reservedComboCardIds,
-              preserveUntil: 'The linked synergy can be completed efficiently.',
-              releaseWhen:
-                'Use for lethal, forced survival, or a clearly stronger winning line.'
-            }
-          ],
+    resourceRules,
     mulliganPriorityCardIds: lowCostCards
   }
-}
-
-export function createFallbackMatchupPlan(
-  selfDeck: Deck,
-  opponentDeck: Deck
-): AiMatchupPlan {
-  const self = createFallbackDeckPlan(selfDeck)
-  const opponent = createFallbackDeckPlan(opponentDeck)
-  const opponentDefinitions = Object.keys(opponentDeck.cards).map((cardId) =>
-    CARD_CATALOG.require(cardId)
-  )
-  const threats = [...opponentDefinitions]
-    .sort((left, right) => {
-      const leftStats = left.type === 'Minion' ? left.attack + left.health : left.cost
-      const rightStats =
-        right.type === 'Minion' ? right.attack + right.health : right.cost
-      return rightStats - leftStats || String(left.id).localeCompare(String(right.id))
-    })
-    .slice(0, 12)
-  const { planVersion: _legacyVersion, ...selfStrategy } = self
-  return {
-    planVersion: 2,
-    selfStrategy,
-    opponentArchetype: opponent.archetype,
-    opponentWinConditions: [
-      opponent.primaryWinCondition,
-      opponent.secondaryWinCondition
-    ],
-    opponentThreatPriorities: threats.map((definition, index) => ({
-      cardId: definition.id,
-      priority: index < 3 ? 'critical' : index < 7 ? 'high' : 'medium',
-      preferredResponse:
-        definition.type === 'Minion'
-          ? 'Remove efficiently before it can compound board pressure.'
-          : 'Track copies and avoid exposing the highest-value target.'
-    })),
-    removalPriorityCardIds: threats
-      .filter((definition) => definition.type === 'Minion')
-      .map((definition) => definition.id),
-    earlyGameStrategy: `Execute the self plan while respecting the opponent's ${opponent.archetype} opening.`,
-    midGameStrategy:
-      'Contest priority threats without releasing reserved resources prematurely.',
-    lateGameStrategy:
-      'Convert the surviving win condition while accounting for remaining opposing reach.'
-  }
-}
-
-export function matchupSelfDeckPlan(plan: AiMatchupPlan): AiDeckPlan {
-  return { planVersion: 1, ...plan.selfStrategy }
 }
 
 export function validateDeckPlanForDeck(plan: AiDeckPlan, deck: Deck): AiDeckPlan {
@@ -398,24 +397,32 @@ export function validateDeckPlanForDeck(plan: AiDeckPlan, deck: Deck): AiDeckPla
   const invalid = referenced.find((cardId) => !available.has(cardId))
   if (invalid)
     throw new Error(`AI deck plan references card ${invalid} outside its deck.`)
-  return plan
-}
-
-export function validateMatchupPlanForDecks(
-  plan: AiMatchupPlan,
-  selfDeck: Deck,
-  opponentDeck: Deck
-): AiMatchupPlan {
-  validateDeckPlanForDeck(matchupSelfDeckPlan(plan), selfDeck)
-  const opponentCardIds = new Set(Object.keys(opponentDeck.cards))
-  const invalidThreat = [
-    ...plan.opponentThreatPriorities.map((entry) => entry.cardId),
-    ...plan.removalPriorityCardIds
-  ].find((cardId) => !opponentCardIds.has(cardId))
-  if (invalidThreat) {
-    throw new Error(
-      `AI matchup plan references opponent card ${invalidThreat} outside the opponent deck.`
-    )
+  const roleCardIds = plan.cardRoles.map((entry) => entry.cardId)
+  if (
+    new Set(roleCardIds).size !== roleCardIds.length ||
+    roleCardIds.length !== available.size ||
+    [...available].some((cardId) => !roleCardIds.includes(cardId))
+  ) {
+    throw new Error('AI deck plan must assign roles to every distinct deck card once.')
+  }
+  for (const combo of plan.combos) {
+    if (combo.cardIds.length === 0) {
+      throw new Error('AI deck plan combos must contain at least one card.')
+    }
+    const required = new Map<string, number>()
+    for (const cardId of combo.cardIds) {
+      required.set(cardId, (required.get(cardId) ?? 0) + 1)
+    }
+    for (const [cardId, count] of required) {
+      if (count > (deck.cards[cardId] ?? 0)) {
+        throw new Error(
+          `AI deck plan combo requires ${count} copies of ${cardId}, but the deck has fewer.`
+        )
+      }
+    }
+  }
+  if (plan.resourceRules.some((rule) => rule.cardIds.length === 0)) {
+    throw new Error('AI deck plan resource rules must contain at least one card.')
   }
   return plan
 }

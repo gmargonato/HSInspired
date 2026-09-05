@@ -22,6 +22,7 @@ export interface SceneParamsById {
   arena: undefined
   'new-deck': undefined
   'tavern-brawl': undefined
+  'card-inspector': undefined
   'outline-lab': undefined
   game: { deckId: string } | undefined
 }
@@ -66,6 +67,10 @@ export const SCENE_MENU_ENTRIES = {
   'tavern-brawl': {
     label: 'Tavern Brawl',
     request: { id: 'tavern-brawl' }
+  },
+  'card-inspector': {
+    label: 'Card Class Color Lab',
+    request: { id: 'card-inspector' }
   },
   'outline-lab': { label: 'Shader Lab', request: { id: 'outline-lab' } },
   game: { label: 'Match (First Complete Deck)', request: { id: 'game' } }

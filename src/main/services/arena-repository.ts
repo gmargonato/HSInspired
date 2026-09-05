@@ -7,6 +7,7 @@ import {
   createArenaCardChoices,
   createArenaHeroChoices,
   createSeededRng,
+  isArenaRunComplete,
   type ArenaMatchResult,
   type ArenaRunSnapshot,
   type CardId,
@@ -119,6 +120,9 @@ export class ArenaRepository {
       await this.ensureLoaded()
       const current = this.requireRun()
       if (current.phase !== 'ready') throw new Error('Arena deck is not complete.')
+      if (isArenaRunComplete(current)) {
+        throw new Error('The Arena run is complete and must be retired.')
+      }
       const next: ArenaRunSnapshot = {
         ...current,
         gamesPlayed: current.gamesPlayed + 1,

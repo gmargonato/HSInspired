@@ -16,6 +16,7 @@ import {
   arenaRunToDeck,
   createArenaOpponentDeck,
   createHumanVsAiMatchSetup,
+  isArenaRunComplete,
   type ArenaRunSnapshot,
   type CardDefinition,
   type CardId,
@@ -278,7 +279,8 @@ export class ArenaView extends Actor {
           ? 'Choose a Card'
           : 'Statistics'
     this.retireButton.visible = snapshot.heroId !== null
-    this.playButton.visible = snapshot.phase === 'ready'
+    this.playButton.visible =
+      snapshot.phase === 'ready' && !isArenaRunComplete(snapshot)
     this.statisticsLayer.visible = snapshot.phase === 'ready'
     this.manaLayer.visible = snapshot.heroId !== null
     this.deckCount.text = `${snapshot.picksCompleted}/30`
@@ -1019,7 +1021,12 @@ export class ArenaView extends Actor {
   }
 
   private playArena(): void {
-    if (this.busy || this.snapshot.phase !== 'ready') return
+    if (
+      this.busy ||
+      this.snapshot.phase !== 'ready' ||
+      isArenaRunComplete(this.snapshot)
+    )
+      return
     const seed = createMatchSeed()
     const humanDeck = arenaRunToDeck(this.snapshot)
     const aiDeck = createArenaOpponentDeck(seed)
@@ -1059,7 +1066,9 @@ export class ArenaView extends Actor {
     }
     for (const card of this.cardChoices) card.eventMode = enabled ? 'static' : 'none'
     this.retireButton.setEnabled(enabled && this.snapshot?.heroId !== null)
-    this.playButton.setEnabled(enabled && this.snapshot?.phase === 'ready')
+    this.playButton.setEnabled(
+      enabled && this.snapshot?.phase === 'ready' && !isArenaRunComplete(this.snapshot)
+    )
     this.backButton.setEnabled(enabled)
     this.slider.eventMode = enabled && this.maxDeckScroll > 0 ? 'static' : 'none'
   }

@@ -4,10 +4,13 @@ import { countDeckCards } from '../decks'
 import { createSeededRng } from '../match'
 import {
   ARENA_DECK_ID,
+  ARENA_MAX_DEFEATS,
+  ARENA_MAX_WINS,
   arenaRunToDeck,
   createArenaCardChoices,
   createArenaHeroChoices,
   createArenaOpponentDeck,
+  isArenaRunComplete,
   type ArenaRunSnapshot
 } from './arena'
 
@@ -66,5 +69,23 @@ describe('Arena draft generation', () => {
       updatedAt: timestamp
     }
     expect(arenaRunToDeck(run).cards.basic_arcane_missiles).toBe(30)
+  })
+})
+
+describe('Arena run completion', () => {
+  it('ends at twelve wins or three defeats', () => {
+    expect(isArenaRunComplete({ wins: ARENA_MAX_WINS - 1, defeats: 0 })).toBe(false)
+    expect(isArenaRunComplete({ wins: ARENA_MAX_WINS, defeats: 0 })).toBe(true)
+    expect(isArenaRunComplete({ wins: 0, defeats: ARENA_MAX_DEFEATS - 1 })).toBe(false)
+    expect(isArenaRunComplete({ wins: 0, defeats: ARENA_MAX_DEFEATS })).toBe(true)
+  })
+
+  it('does not count draws toward either limit', () => {
+    expect(
+      isArenaRunComplete({
+        wins: ARENA_MAX_WINS - 1,
+        defeats: ARENA_MAX_DEFEATS - 1
+      })
+    ).toBe(false)
   })
 })

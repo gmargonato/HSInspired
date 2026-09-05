@@ -4,8 +4,12 @@ import type { DecksApi } from '../shared/ipc/decks'
 import type { WindowSettingsApi } from '../shared/ipc/window-settings'
 import type { PlayerStatsApi } from '../shared/ipc/player-stats'
 import type { ArenaApi } from '../shared/ipc/arena'
+import type { CardClassBuilderApi } from '../shared/ipc/card-class-builder'
+import type { OutlineTuningApi } from '../shared/ipc/outline-tuning'
 
 interface AppAPI {
+  cardClassBuilder?: CardClassBuilderApi
+  outlineTuning?: OutlineTuningApi
   arena: ArenaApi
   onSceneRequest(listener: (request: SceneRequest) => void): () => void
   ai: AiDecisionApi

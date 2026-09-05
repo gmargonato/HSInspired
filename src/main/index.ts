@@ -17,6 +17,10 @@ import { registerPlayerStatsIpc } from './services/player-stats-ipc'
 import { PlayerStatsRepository } from './services/player-stats-repository'
 import { ArenaRepository } from './services/arena-repository'
 import { registerArenaIpc } from './services/arena-ipc'
+import { CardClassBuilderRepository } from './services/card-class-builder-repository'
+import { registerCardClassBuilderIpc } from './services/card-class-builder-ipc'
+import { OutlineTuningRepository } from './services/outline-tuning-repository'
+import { registerOutlineTuningIpc } from './services/outline-tuning-ipc'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
@@ -106,6 +110,16 @@ void app
     electronApp.setAppUserModelId('com.hsinspired.app')
 
     const appPath = app.getAppPath()
+    if (is.dev) {
+      registerCardClassBuilderIpc(
+        new CardClassBuilderRepository(
+          join(appPath, 'config', 'card-class-colors.json')
+        )
+      )
+      registerOutlineTuningIpc(
+        new OutlineTuningRepository(join(appPath, 'config', 'outline-tunings.json'))
+      )
+    }
     registerAiIpc(
       new AzureOpenAiDecisionService({
         loadConfig: () =>

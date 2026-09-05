@@ -107,7 +107,10 @@ export class ExpansionTray extends Actor {
     this.toggleButton.label = 'collection.expansion-toggle'
     this.addChild(this.toggleButton)
 
-    this.outline = new AnimatedOutline(outlineTarget, 'blue', 'button')
+    this.outline = new AnimatedOutline(outlineTarget, {
+      palette: 'blue',
+      preset: 'button'
+    })
     this.outline.setEnabled(false)
     this.addChild(this.outline)
     this.on('globalpointerdown', this.handleGlobalPointerDown)

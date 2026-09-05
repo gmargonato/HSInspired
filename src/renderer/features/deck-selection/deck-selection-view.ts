@@ -162,7 +162,10 @@ export class DeckSelectionView extends Container {
     this.playButton.setEnabled(false)
     this.addChild(this.playButton)
 
-    this.playOutline = new AnimatedOutline(this.playOutlineTarget, 'blue', 'button')
+    this.playOutline = new AnimatedOutline(this.playOutlineTarget, {
+      palette: 'blue',
+      preset: 'button'
+    })
     this.playOutline.setEnabled(false)
   }
 
@@ -207,7 +210,10 @@ export class DeckSelectionView extends Container {
       outlineTarget.label = `deck-selection.deck-outline:${entry.deck.id}`
       this.deckGrid.addChild(outlineTarget)
 
-      const outline = new AnimatedOutline(outlineTarget, 'blue', 'button')
+      const outline = new AnimatedOutline(outlineTarget, {
+        palette: 'blue',
+        preset: 'button'
+      })
       outline.setEnabled(false)
       this.deckOutlines.push(outline)
 

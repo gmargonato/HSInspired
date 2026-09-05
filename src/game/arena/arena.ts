@@ -14,6 +14,8 @@ export const ARENA_DECK_ID = 'arena-deck'
 export const ARENA_DECK_SIZE = 30
 export const ARENA_HERO_CHOICE_COUNT = 3
 export const ARENA_CARD_CHOICE_COUNT = 3
+export const ARENA_MAX_WINS = 12
+export const ARENA_MAX_DEFEATS = 3
 
 export type ArenaPhase = 'choosing-hero' | 'drafting' | 'ready'
 export type ArenaMatchResult = 'win' | 'defeat' | 'draw'
@@ -35,6 +37,12 @@ export interface ArenaRunSnapshot {
   readonly defeats: number
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+export function isArenaRunComplete(
+  run: Pick<ArenaRunSnapshot, 'wins' | 'defeats'>
+): boolean {
+  return run.wins >= ARENA_MAX_WINS || run.defeats >= ARENA_MAX_DEFEATS
 }
 
 const RARITY_WEIGHTS: Readonly<Record<ArenaDraftRarity, number>> = {

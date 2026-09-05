@@ -3,7 +3,7 @@ import { asCardId } from '../../content/cards'
 import { createMatchScenario } from '../testing/match-scenario-builder'
 import { classifyTacticalLine, proveGuaranteedLethal } from './tactics'
 
-describe('competitive AI tactical proofs', () => {
+describe('strategic AI tactical proofs', () => {
   it('proves a deterministic targeted lethal without mutating the live match', () => {
     const scenario = createMatchScenario({ seed: 91 })
     scenario.confirmBothMulligans()

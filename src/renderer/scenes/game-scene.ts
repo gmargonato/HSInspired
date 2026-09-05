@@ -20,6 +20,7 @@ import type {
 import { Scene } from './scene'
 import type { AiDecisionApi } from '../../shared/ipc/ai'
 import type { MatchEndedEvent } from '../../game/match'
+import { isArenaRunComplete } from '../../game/arena'
 import { HERO_CATALOG } from '../../game/content/heroes'
 import {
   classifyArenaMatchResult,
@@ -28,7 +29,7 @@ import {
 import { GameBoardSession } from '../features/game/game-board-session'
 import {
   AiTurnController,
-  COMPETITIVE_AI_POLICY
+  STRATEGIC_AI_POLICY
 } from '../features/game/ai-turn-controller'
 
 /** Full-screen route adapter for the first playable opening sequence. */
@@ -88,7 +89,7 @@ export class GameScene extends Scene {
       session: aiSession,
       decks,
       logger: aiLogger,
-      policy: COMPETITIVE_AI_POLICY
+      policy: STRATEGIC_AI_POLICY
     })
     aiController.prewarmDeckPlan()
     this.logger?.info('[GameScene] AI deck planning started')
@@ -198,12 +199,36 @@ export class GameScene extends Scene {
     return this.view?.playOpeningReveal() ?? Promise.resolve()
   }
 
+  async devConfirmMulligan(): Promise<void> {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    await this.view.devConfirmMulligan()
+  }
+
+  async devAddCard(cardId: string, target: DevMatchTarget = 'local'): Promise<void> {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    await this.view.devAddCard(cardId, target)
+  }
+
+  async devSummonMinion(cardId: string, target: DevMatchTarget): Promise<void> {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    await this.view.devSummonMinion(cardId, target)
+  }
+
+  async devExerciseHandInteraction(): Promise<void> {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    await this.view.devExerciseHandInteraction()
+  }
+
   concede(): void {
     if (!this.view) throw new Error('Game view is not ready for match actions.')
     this.view.concede()
   }
 
-  createRestartRoute(): GameRoute {
+  createRestartRoute(): AppRoute {
+    const arenaRun = this.arenaStore.getSnapshot()
+    if (this.route.mode === 'arena' && arenaRun && isArenaRunComplete(arenaRun)) {
+      return { id: 'arena' }
+    }
     let seed = createMatchSeed()
     if (this.route.setup.seed !== undefined && seed === this.route.setup.seed) {
       seed = (seed + 1) >>> 0

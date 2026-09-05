@@ -1,8 +1,10 @@
-import { Container, Graphics, Text, type Texture } from 'pixi.js'
+import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js'
 import type { HeroPowerId } from '../../../game/content/cards'
 import type { CardChoiceOption, OpeningCard, PlayerId } from '../../../game/match'
 import { gsap } from '../../animation/animations'
+import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import { HERO_POWER_CARD_CANVAS } from '../../rendering/hero-powers/hero-power-presentation'
+import { applyAnchoredPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/button'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { GameCardSlot } from './game-card-slot'
@@ -26,6 +28,7 @@ export interface CardSelectionOverlayOptions {
 export class CardSelectionOverlay extends Container {
   private readonly darkOverlay = new Graphics()
   private readonly cardsLayer = new Container()
+  private readonly toggleOutline: AnimatedOutline
   private readonly toggle: Button
   private readonly toggleLabel: Text
   private readonly entries: Array<{
@@ -48,6 +51,17 @@ export class CardSelectionOverlay extends Container {
     this.addChild(this.darkOverlay)
     this.cardsLayer.label = 'game.card-selection.cards'
     this.addChild(this.cardsLayer)
+
+    const toggleOutlineTarget = new Sprite(options.toggleTexture)
+    applyAnchoredPlacement(
+      toggleOutlineTarget,
+      GAME_BOARD_LAYOUT.cardSelection.toggleButton
+    )
+    toggleOutlineTarget.eventMode = 'none'
+    toggleOutlineTarget.label = 'game.card-selection.toggle-outline'
+    this.addChild(toggleOutlineTarget)
+    this.toggleOutline = new AnimatedOutline(toggleOutlineTarget, { preset: 'ghost' })
+
     this.toggle = new Button(options.toggleTexture, {
       onClick: () => {
         if (!this.inputBlocked()) this.toggleView()
@@ -213,6 +227,7 @@ export class CardSelectionOverlay extends Container {
 
   dispose(): void {
     this.clear()
+    this.toggleOutline.dispose()
     this.toggle.destroy({ children: true })
     super.destroy({ children: true })
   }

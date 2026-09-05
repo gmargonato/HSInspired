@@ -156,11 +156,10 @@ export class HandCardPerspective {
       })
       this.outlineMesh.position.copyFrom(this.mesh.position)
       this.outlineMesh.eventMode = 'none'
-      this.outlineEffect = new AnimatedOutline(
-        this.outlineMesh,
-        options.outlinePalette ?? 'green',
-        options.outlinePreset ?? 'card'
-      )
+      this.outlineEffect = new AnimatedOutline(this.outlineMesh, {
+        palette: options.outlinePalette ?? 'green',
+        preset: options.outlinePreset ?? 'card'
+      })
       this.outlineEffect.setEnabled(options.outlineEnabled ?? true)
     } else {
       this.outlineMesh = null

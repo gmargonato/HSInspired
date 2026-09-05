@@ -1,6 +1,7 @@
 import type {
   AiCandidateDossier,
   AiInformationPolicy,
+  AiResourceReleaseTrigger,
   AiSearchLimits,
   AiSearchWorkerRequest,
   AiSearchWorkerResult
@@ -9,7 +10,7 @@ import type {
 export const AI_IPC_CHANNELS = {
   decide: 'ai:decide',
   planDeck: 'ai:plan-deck',
-  planMatchup: 'ai:plan-matchup'
+  reviewStrategy: 'ai:review-strategy'
 } as const
 
 /** Shared limits keep provider schemas and runtime validation in lockstep. */
@@ -25,6 +26,7 @@ export const AI_DECK_PLAN_LIMITS = {
   resourceRules: 12,
   cardIdsPerResourceRule: 8,
   resourceRuleTextLength: 240,
+  releaseTriggersPerResourceRule: 6,
   mulliganPriorityCards: 15
 } as const
 
@@ -68,8 +70,8 @@ export interface AiActionAnalysis {
   readonly uncertain?: boolean
 }
 
-export type AiDeckArchetype =
-  'aggro' | 'tempo' | 'midrange' | 'control' | 'combo' | 'fatigue' | 'hybrid'
+/** Free-form, deck-derived label; plans are not restricted to known archetypes. */
+export type AiDeckArchetype = string
 
 export type AiCardRole =
   | 'win-condition'
@@ -96,6 +98,7 @@ export interface AiDeckPlanResourceRule {
   readonly cardIds: readonly string[]
   readonly preserveUntil: string
   readonly releaseWhen: string
+  readonly releaseTriggers: readonly AiResourceReleaseTrigger[]
 }
 
 /** Compact strategic memory generated once per match from the AI's own deck. */
@@ -123,38 +126,35 @@ export interface AiDeckPlanRequest {
   readonly deck: JsonObject
 }
 
-export interface AiOpponentThreatPriority {
-  readonly cardId: string
-  readonly priority: 'low' | 'medium' | 'high' | 'critical'
-  readonly preferredResponse: string
-}
-
-export interface AiMatchupPlan {
-  readonly planVersion: 2
-  readonly selfStrategy: Omit<AiDeckPlan, 'planVersion'>
-  readonly opponentArchetype: AiDeckArchetype
-  readonly opponentWinConditions: readonly string[]
-  readonly opponentThreatPriorities: readonly AiOpponentThreatPriority[]
-  readonly removalPriorityCardIds: readonly string[]
-  readonly earlyGameStrategy: string
-  readonly midGameStrategy: string
-  readonly lateGameStrategy: string
-}
-
-export interface AiMatchupPlanRequest {
-  readonly planId: string
-  readonly decisionClass: 'deck-plan'
+export interface AiStrategyReviewRequest {
+  readonly reviewId: string
+  readonly decisionClass: 'strategy-review'
   readonly promptVersion: string
-  readonly schemaVersion: 2
+  readonly schemaVersion: 1
   readonly deadlineAtMs: number
-  readonly informationPolicy: AiInformationPolicy
-  readonly mode: JsonObject
-  readonly selfDeck: JsonObject
-  readonly opponentDeck: JsonObject
+  readonly previousPlan: JsonObject
+  readonly strategicMemory: JsonObject
+  readonly gameState: JsonObject
 }
 
-export interface AiMatchupPlanResponse {
-  readonly plan: AiMatchupPlan
+interface AiStrategyReviewBase {
+  readonly reviewVersion: 1
+  readonly changeReasons: readonly string[]
+  readonly opponentAssessment: string
+}
+
+export type AiStrategyReview =
+  | (AiStrategyReviewBase & {
+      readonly changed: false
+      readonly revisedPlan: null
+    })
+  | (AiStrategyReviewBase & {
+      readonly changed: true
+      readonly revisedPlan: AiDeckPlan
+    })
+
+export interface AiStrategyReviewResponse {
+  readonly review: AiStrategyReview
   readonly rationale: string
   readonly modelId: string
   readonly debug?: AiProviderDebugTrace
@@ -172,7 +172,7 @@ export interface AiDecisionRequest {
   readonly deadlineAtMs: number
   readonly gameState: JsonObject
   readonly legalActions: readonly AiLegalAction[]
-  /** Omitted only by legacy callers; competitive-v2 always supplies a pass. */
+  /** Omitted only by the legacy policy; strategic-v3 supplies a rank or critic pass. */
   readonly pass?: AiDecisionPass
   readonly candidateDossiers?: readonly AiCandidateDossier[]
   readonly firstPassRanking?: readonly string[]
@@ -227,7 +227,7 @@ export interface AiDeckPlanResponse {
 export interface AiDecisionApi {
   decide(request: AiDecisionRequest): Promise<AiDecisionResponse>
   planDeck?(request: AiDeckPlanRequest): Promise<AiDeckPlanResponse>
-  planMatchup?(request: AiMatchupPlanRequest): Promise<AiMatchupPlanResponse>
+  reviewStrategy?(request: AiStrategyReviewRequest): Promise<AiStrategyReviewResponse>
 }
 
 export interface AiIpcFailure {
@@ -278,6 +278,7 @@ export function unwrapAiIpcResult<T>(
 export type {
   AiCandidateDossier,
   AiInformationPolicy,
+  AiResourceReleaseTrigger,
   AiSearchLimits,
   AiSearchWorkerRequest,
   AiSearchWorkerResult
@@ -338,7 +339,8 @@ function requireTruncatedString(
 function requireStringArray(
   value: unknown,
   label: string,
-  maximumLength: number
+  maximumLength: number,
+  allowDuplicates = false
 ): readonly string[] {
   if (!Array.isArray(value) || value.length > maximumLength) {
     throw new Error(`${label} must be an array with at most ${maximumLength} entries`)
@@ -349,7 +351,7 @@ function requireStringArray(
     }
     return entry.trim()
   })
-  if (new Set(result).size !== result.length) {
+  if (!allowDuplicates && new Set(result).size !== result.length) {
     throw new Error(`${label} must not contain duplicates`)
   }
   return result
@@ -367,21 +369,19 @@ const AI_CARD_ROLES = new Set<AiCardRole>([
   'flex'
 ])
 
+const AI_RESOURCE_RELEASE_TRIGGERS = new Set<AiResourceReleaseTrigger>([
+  'lethal',
+  'forced-survival',
+  'combo-ready',
+  'redundant-copy',
+  'invalidated-combo',
+  'critical-threat'
+])
+
 export function parseAiDeckPlan(value: unknown): AiDeckPlan {
   if (!isRecord(value)) throw new Error('AI deck plan must be an object')
   if (value['planVersion'] !== 1) throw new Error('AI deck plan version is invalid')
-  const archetype = value['archetype']
-  if (
-    archetype !== 'aggro' &&
-    archetype !== 'tempo' &&
-    archetype !== 'midrange' &&
-    archetype !== 'control' &&
-    archetype !== 'combo' &&
-    archetype !== 'fatigue' &&
-    archetype !== 'hybrid'
-  ) {
-    throw new Error('AI deck plan archetype is invalid')
-  }
+  const archetype = requireBoundedString(value, 'archetype', 'AI deck plan', 120)
   const cardRoleValues = value['cardRoles']
   if (
     !Array.isArray(cardRoleValues) ||
@@ -423,7 +423,8 @@ export function parseAiDeckPlan(value: unknown): AiDeckPlan {
       cardIds: requireStringArray(
         entry['cardIds'],
         `AI deck plan combos[${index}].cardIds`,
-        AI_DECK_PLAN_LIMITS.cardIdsPerCombo
+        AI_DECK_PLAN_LIMITS.cardIdsPerCombo,
+        true
       ),
       purpose: requireTruncatedString(
         entry,
@@ -446,6 +447,19 @@ export function parseAiDeckPlan(value: unknown): AiDeckPlan {
     if (!isRecord(entry)) {
       throw new Error(`AI deck plan resourceRules[${index}] is invalid`)
     }
+    const releaseTriggers = requireStringArray(
+      entry['releaseTriggers'],
+      `AI deck plan resourceRules[${index}].releaseTriggers`,
+      AI_DECK_PLAN_LIMITS.releaseTriggersPerResourceRule
+    )
+    if (
+      releaseTriggers.length === 0 ||
+      !releaseTriggers.every((trigger) =>
+        AI_RESOURCE_RELEASE_TRIGGERS.has(trigger as AiResourceReleaseTrigger)
+      )
+    ) {
+      throw new Error(`AI deck plan resourceRules[${index}].releaseTriggers is invalid`)
+    }
     return {
       cardIds: requireStringArray(
         entry['cardIds'],
@@ -463,7 +477,8 @@ export function parseAiDeckPlan(value: unknown): AiDeckPlan {
         'releaseWhen',
         `AI deck plan resourceRules[${index}]`,
         AI_DECK_PLAN_LIMITS.resourceRuleTextLength
-      )
+      ),
+      releaseTriggers: releaseTriggers as readonly AiResourceReleaseTrigger[]
     }
   })
   return {
@@ -510,100 +525,6 @@ export function parseAiDeckPlan(value: unknown): AiDeckPlan {
   }
 }
 
-export function parseAiMatchupPlan(value: unknown): AiMatchupPlan {
-  if (!isRecord(value)) throw new Error('AI matchup plan must be an object')
-  if (value['planVersion'] !== 2) throw new Error('AI matchup plan version is invalid')
-  if (!isRecord(value['selfStrategy'])) {
-    throw new Error('AI matchup plan selfStrategy must be an object')
-  }
-  const selfStrategy = parseAiDeckPlan({
-    ...value['selfStrategy'],
-    planVersion: 1
-  })
-  const opponentArchetype = value['opponentArchetype']
-  if (
-    opponentArchetype !== 'aggro' &&
-    opponentArchetype !== 'tempo' &&
-    opponentArchetype !== 'midrange' &&
-    opponentArchetype !== 'control' &&
-    opponentArchetype !== 'combo' &&
-    opponentArchetype !== 'fatigue' &&
-    opponentArchetype !== 'hybrid'
-  )
-    throw new Error('AI matchup plan opponentArchetype is invalid')
-  const threatValues = value['opponentThreatPriorities']
-  if (!Array.isArray(threatValues) || threatValues.length > 30) {
-    throw new Error('AI matchup plan opponentThreatPriorities is invalid')
-  }
-  const opponentThreatPriorities = threatValues.map(
-    (entry, index): AiOpponentThreatPriority => {
-      if (!isRecord(entry)) {
-        throw new Error(`AI matchup plan opponentThreatPriorities[${index}] is invalid`)
-      }
-      const priority = entry['priority']
-      if (
-        priority !== 'low' &&
-        priority !== 'medium' &&
-        priority !== 'high' &&
-        priority !== 'critical'
-      )
-        throw new Error(
-          `AI matchup plan opponentThreatPriorities[${index}].priority is invalid`
-        )
-      return {
-        cardId: requireBoundedString(
-          entry,
-          'cardId',
-          `AI matchup plan opponentThreatPriorities[${index}]`,
-          AI_DECK_PLAN_LIMITS.cardIdLength
-        ),
-        priority,
-        preferredResponse: requireTruncatedString(
-          entry,
-          'preferredResponse',
-          `AI matchup plan opponentThreatPriorities[${index}]`,
-          AI_DECK_PLAN_LIMITS.resourceRuleTextLength
-        )
-      }
-    }
-  )
-  const { planVersion: _legacyVersion, ...parsedSelfStrategy } = selfStrategy
-  return {
-    planVersion: 2,
-    selfStrategy: parsedSelfStrategy,
-    opponentArchetype,
-    opponentWinConditions: requireStringArray(
-      value['opponentWinConditions'],
-      'AI matchup plan opponentWinConditions',
-      8
-    ),
-    opponentThreatPriorities,
-    removalPriorityCardIds: requireStringArray(
-      value['removalPriorityCardIds'],
-      'AI matchup plan removalPriorityCardIds',
-      20
-    ),
-    earlyGameStrategy: requireTruncatedString(
-      value,
-      'earlyGameStrategy',
-      'AI matchup plan',
-      AI_DECK_PLAN_LIMITS.strategyTextLength
-    ),
-    midGameStrategy: requireTruncatedString(
-      value,
-      'midGameStrategy',
-      'AI matchup plan',
-      AI_DECK_PLAN_LIMITS.strategyTextLength
-    ),
-    lateGameStrategy: requireTruncatedString(
-      value,
-      'lateGameStrategy',
-      'AI matchup plan',
-      AI_DECK_PLAN_LIMITS.strategyTextLength
-    )
-  }
-}
-
 export function parseAiDeckPlanRequest(value: unknown): AiDeckPlanRequest {
   if (!isRecord(value)) throw new Error('AI deck plan request must be an object')
   if (value['decisionClass'] !== 'deck-plan') {
@@ -633,40 +554,39 @@ export function parseAiDeckPlanRequest(value: unknown): AiDeckPlanRequest {
   }
 }
 
-export function parseAiMatchupPlanRequest(value: unknown): AiMatchupPlanRequest {
-  if (!isRecord(value)) throw new Error('AI matchup plan request must be an object')
-  if (value['decisionClass'] !== 'deck-plan' || value['schemaVersion'] !== 2) {
-    throw new Error('AI matchup plan request schema is invalid')
-  }
-  if (value['informationPolicy'] !== 'opponent-deck-and-hand') {
-    throw new Error('AI matchup plan request information policy is invalid')
+export function parseAiStrategyReviewRequest(value: unknown): AiStrategyReviewRequest {
+  if (!isRecord(value)) throw new Error('AI strategy review request must be an object')
+  if (value['decisionClass'] !== 'strategy-review' || value['schemaVersion'] !== 1) {
+    throw new Error('AI strategy review request schema is invalid')
   }
   const deadlineAtMs = value['deadlineAtMs']
   if (!Number.isSafeInteger(deadlineAtMs) || (deadlineAtMs as number) <= 0) {
-    throw new Error('AI matchup plan request deadlineAtMs must be a positive integer')
+    throw new Error(
+      'AI strategy review request deadlineAtMs must be a positive integer'
+    )
   }
-  const mode = value['mode']
-  const selfDeck = value['selfDeck']
-  const opponentDeck = value['opponentDeck']
+  const previousPlan = value['previousPlan']
+  const strategicMemory = value['strategicMemory']
+  const gameState = value['gameState']
   if (
-    !isRecord(mode) ||
-    !isJsonValue(mode) ||
-    !isRecord(selfDeck) ||
-    !isJsonValue(selfDeck) ||
-    !isRecord(opponentDeck) ||
-    !isJsonValue(opponentDeck)
-  )
-    throw new Error('AI matchup plan request decks and mode must be JSON objects')
+    !isRecord(previousPlan) ||
+    !isJsonValue(previousPlan) ||
+    !isRecord(strategicMemory) ||
+    !isJsonValue(strategicMemory) ||
+    !isRecord(gameState) ||
+    !isJsonValue(gameState)
+  ) {
+    throw new Error('AI strategy review request context must contain JSON objects')
+  }
   return {
-    planId: requireString(value, 'planId', 'AI matchup plan request'),
-    decisionClass: 'deck-plan',
-    promptVersion: requireString(value, 'promptVersion', 'AI matchup plan request'),
-    schemaVersion: 2,
+    reviewId: requireString(value, 'reviewId', 'AI strategy review request'),
+    decisionClass: 'strategy-review',
+    promptVersion: requireString(value, 'promptVersion', 'AI strategy review request'),
+    schemaVersion: 1,
     deadlineAtMs: deadlineAtMs as number,
-    informationPolicy: 'opponent-deck-and-hand',
-    mode,
-    selfDeck,
-    opponentDeck
+    previousPlan,
+    strategicMemory,
+    gameState
   }
 }
 
@@ -760,7 +680,10 @@ export function parseAiDecisionRequest(value: unknown): AiDecisionRequest {
     value['decisionClass'],
     'AI decision request'
   )
-  if ((phase === 'mulligan') !== (decisionClass === 'mulligan')) {
+  if (
+    (phase === 'mulligan' && decisionClass !== 'mulligan') ||
+    (phase === 'turn' && decisionClass !== 'turn' && decisionClass !== 'discover')
+  ) {
     throw new Error('AI decision request phase and decisionClass are inconsistent')
   }
   const matchRevision = value['matchRevision']
@@ -1014,18 +937,50 @@ export function parseAiDeckPlanResponse(value: unknown): AiDeckPlanResponse {
   }
 }
 
-export function parseAiMatchupPlanResponse(value: unknown): AiMatchupPlanResponse {
-  if (!isRecord(value)) throw new Error('AI matchup plan response must be an object')
+export function parseAiStrategyReview(value: unknown): AiStrategyReview {
+  if (!isRecord(value) || value['reviewVersion'] !== 1) {
+    throw new Error('AI strategy review must be a version-1 object')
+  }
+  if (typeof value['changed'] !== 'boolean') {
+    throw new Error('AI strategy review changed must be boolean')
+  }
+  const changeReasons = requireStringArray(
+    value['changeReasons'],
+    'AI strategy review changeReasons',
+    8
+  )
+  if (value['changed'] && changeReasons.length === 0) {
+    throw new Error('A changed AI strategy review requires a public-evidence reason')
+  }
+  const shared = {
+    reviewVersion: 1 as const,
+    changeReasons,
+    opponentAssessment: requireTruncatedString(
+      value,
+      'opponentAssessment',
+      'AI strategy review',
+      AI_DECK_PLAN_LIMITS.strategyTextLength
+    )
+  }
+  return value['changed']
+    ? { ...shared, changed: true, revisedPlan: parseAiDeckPlan(value['revisedPlan']) }
+    : { ...shared, changed: false, revisedPlan: null }
+}
+
+export function parseAiStrategyReviewResponse(
+  value: unknown
+): AiStrategyReviewResponse {
+  if (!isRecord(value)) throw new Error('AI strategy review response must be an object')
   const debug = parseDebugTrace(value['debug'])
   return {
-    plan: parseAiMatchupPlan(value['plan']),
+    review: parseAiStrategyReview(value['review']),
     rationale: requireTruncatedString(
       value,
       'rationale',
-      'AI matchup plan response',
+      'AI strategy review response',
       AI_DECK_PLAN_LIMITS.rationaleLength
     ),
-    modelId: requireString(value, 'modelId', 'AI matchup plan response'),
+    modelId: requireString(value, 'modelId', 'AI strategy review response'),
     ...(debug ? { debug } : {})
   }
 }

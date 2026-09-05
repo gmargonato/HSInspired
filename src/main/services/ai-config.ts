@@ -7,11 +7,11 @@ export interface AiPrompts {
   readonly deckPlan: string
   readonly mulligan: string
   readonly turn: string
-  readonly competitiveSystem?: string
-  readonly matchupPlan?: string
-  readonly competitiveMulligan?: string
-  readonly competitiveTurn?: string
+  readonly strategicSystem?: string
+  readonly strategicMulligan?: string
+  readonly strategicTurn?: string
   readonly critic?: string
+  readonly strategyReview?: string
 }
 
 export interface AiDecisionPolicy {
@@ -33,12 +33,12 @@ export interface AzureOpenAiConfig {
   readonly prompts: AiPrompts
   readonly decisionPolicies: Readonly<{
     readonly deckPlan: AiDecisionPolicy
-    readonly matchupPlan: AiDecisionPolicy
     readonly mulligan: AiDecisionPolicy
     readonly discover: AiDecisionPolicy
     readonly turn: AiDecisionPolicy
     readonly rank: AiDecisionPolicy
     readonly critic: AiDecisionPolicy
+    readonly strategyReview: AiDecisionPolicy
   }>
   readonly debug: boolean
   readonly apiKey: string
@@ -87,21 +87,21 @@ function parsePrompts(value: unknown): AiPrompts {
     if (value[key] === undefined) return undefined
     return requiredString(value, key)
   }
-  const competitiveSystem = optionalPrompt('competitiveSystem')
-  const matchupPlan = optionalPrompt('matchupPlan')
-  const competitiveMulligan = optionalPrompt('competitiveMulligan')
-  const competitiveTurn = optionalPrompt('competitiveTurn')
+  const strategicSystem = optionalPrompt('strategicSystem')
+  const strategicMulligan = optionalPrompt('strategicMulligan')
+  const strategicTurn = optionalPrompt('strategicTurn')
   const critic = optionalPrompt('critic')
+  const strategyReview = optionalPrompt('strategyReview')
   return {
     system: requiredString(value, 'system'),
     deckPlan: requiredString(value, 'deckPlan'),
     mulligan: requiredString(value, 'mulligan'),
     turn: requiredString(value, 'turn'),
-    ...(competitiveSystem ? { competitiveSystem } : {}),
-    ...(matchupPlan ? { matchupPlan } : {}),
-    ...(competitiveMulligan ? { competitiveMulligan } : {}),
-    ...(competitiveTurn ? { competitiveTurn } : {}),
-    ...(critic ? { critic } : {})
+    ...(strategicSystem ? { strategicSystem } : {}),
+    ...(strategicMulligan ? { strategicMulligan } : {}),
+    ...(strategicTurn ? { strategicTurn } : {}),
+    ...(critic ? { critic } : {}),
+    ...(strategyReview ? { strategyReview } : {})
   }
 }
 
@@ -152,11 +152,6 @@ function parseDecisionPolicies(
       fallback,
       'decisionPolicies.deckPlan'
     ),
-    matchupPlan: parseDecisionPolicy(
-      value?.['matchupPlan'],
-      fallback,
-      'decisionPolicies.matchupPlan'
-    ),
     mulligan: parseDecisionPolicy(
       value?.['mulligan'],
       fallback,
@@ -169,7 +164,12 @@ function parseDecisionPolicies(
     ),
     turn: parseDecisionPolicy(value?.['turn'], fallback, 'decisionPolicies.turn'),
     rank: parseDecisionPolicy(value?.['rank'], fallback, 'decisionPolicies.rank'),
-    critic: parseDecisionPolicy(value?.['critic'], fallback, 'decisionPolicies.critic')
+    critic: parseDecisionPolicy(value?.['critic'], fallback, 'decisionPolicies.critic'),
+    strategyReview: parseDecisionPolicy(
+      value?.['strategyReview'],
+      fallback,
+      'decisionPolicies.strategyReview'
+    )
   }
 }
 

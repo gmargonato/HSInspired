@@ -82,17 +82,16 @@ export class GameBoardSession {
   }
 
   getAiObservation(): AiObservation {
-    const observation = this.match.getAiObservation?.(
-      this.remoteParticipantId,
-      'opponent-deck-and-hand'
-    )
+    const observation = this.match.getAiObservation?.(this.remoteParticipantId, 'fair')
     if (!observation)
       throw new Error('The match engine does not expose AI observations.')
     return observation
   }
 
-  getAiObservedEvents(limit = 24): readonly OpeningMatchPublicEvent[] {
-    return this.aiObservedEvents.slice(-Math.max(0, limit))
+  getAiObservedEvents(limit?: number): readonly OpeningMatchPublicEvent[] {
+    return limit === undefined
+      ? [...this.aiObservedEvents]
+      : this.aiObservedEvents.slice(-Math.max(0, limit))
   }
 
   findPlayer(state: TurnMatchState, participantId: PlayerId) {

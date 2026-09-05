@@ -1,13 +1,19 @@
 import type { Deck } from '../../decks'
 import type { CardId } from '../../content/cards'
 import type {
+  OpeningMatchCheckpoint,
   OpeningMatchState,
   OpeningPlayerState,
   OpeningMatchCommand as TurnMatchCommand
 } from '../opening-match-types'
 import type { PlayerId } from '../match-types'
 
-export type AiInformationPolicy = 'opponent-deck-and-hand'
+/**
+ * The AI receives exactly the information available to the player it controls.
+ * Keeping this as a single literal makes privileged observations impossible to
+ * request accidentally through the public match boundary.
+ */
+export type AiInformationPolicy = 'fair'
 
 export interface AiSearchLimits {
   readonly timeBudgetMs: number
@@ -20,14 +26,17 @@ export interface AiSearchLimits {
   readonly transpositionCapacity: number
 }
 
-export const COMPETITIVE_AI_SEARCH_LIMITS: AiSearchLimits = {
+export const STRATEGIC_AI_SEARCH_LIMITS: AiSearchLimits = {
   timeBudgetMs: 8_000,
   nodeLimit: 50_000,
   atomicDepth: 16,
   ownTurnBeam: 64,
   opponentTurnBeam: 32,
-  determinizations: 8,
-  randomOutcomeSamples: 4,
+  // Fair belief-state sampling is not implemented yet. Keep these truthful so
+  // downstream consumers never mistake one authoritative hidden state for a
+  // sampled uncertainty distribution.
+  determinizations: 0,
+  randomOutcomeSamples: 0,
   transpositionCapacity: 50_000
 }
 
@@ -48,7 +57,12 @@ export interface AiObservedPlayer {
   readonly playerNumber: 1 | 2
   readonly heroId: OpeningPlayerState['heroId']
   readonly hero: Omit<OpeningPlayerState['hero'], 'creationOrdinal'>
+  /**
+   * Exact self cards, or the subset of opponent cards explicitly revealed to
+   * this player. `handSize` remains the authoritative total.
+   */
   readonly hand: readonly AiObservedCard[]
+  readonly handSize: number
   readonly deckSize: number
   readonly board: readonly Omit<
     OpeningPlayerState['board'][number],
@@ -76,12 +90,13 @@ export interface AiObservedDeck {
 }
 
 /**
- * Model/search input. It intentionally contains exact hand multisets and both
- * original decklists, but never a remaining deck order, RNG cursor, hidden
- * entity id, creation ordinal, or facedown secret identity.
+ * Model/search input. It contains the AI's exact hand and submitted deck plus
+ * public opponent information, but never an unrevealed opposing hand/deck
+ * identity, remaining deck order, RNG cursor, hidden entity id, creation
+ * ordinal, or facedown secret identity.
  */
 export interface AiObservation {
-  readonly schemaVersion: 2
+  readonly schemaVersion: 3
   readonly informationPolicy: AiInformationPolicy
   readonly revision: number
   readonly phase: OpeningMatchState['phase']
@@ -89,7 +104,8 @@ export interface AiObservation {
   readonly activePlayerId: PlayerId | null
   readonly perspectivePlayerId: PlayerId
   readonly players: readonly [AiObservedPlayer, AiObservedPlayer]
-  readonly originalDecks: readonly [AiObservedDeck, AiObservedDeck]
+  /** A player knows the deck it brought, never the opponent's submitted list. */
+  readonly selfOriginalDeck: AiObservedDeck
 }
 
 export interface AiEvaluationComponents {
@@ -110,6 +126,8 @@ export interface AiEvaluationComponents {
   readonly heroPower: number
   readonly removal: number
   readonly draw: number
+  /** Value of learning before committing the rest of the turn. */
+  readonly informationValue: number
   readonly fatigue: number
   readonly burnRisk: number
   readonly matchupProgress: number
@@ -164,7 +182,7 @@ export interface AiCandidateDossier {
     readonly randomOutcomeSamples: number
     readonly incomplete: boolean
   }>
-  readonly matchupPlanProgress: number
+  readonly strategyProgress: number
 }
 
 export interface AiSearchWorkerRequest {
@@ -172,14 +190,31 @@ export interface AiSearchWorkerRequest {
   readonly requestId: string
   readonly observationRevision: number
   readonly limits: AiSearchLimits
-  readonly candidateDossiers: readonly AiCandidateDossier[]
+  readonly checkpoint: OpeningMatchCheckpoint
+  readonly perspectivePlayerId: PlayerId
+  readonly roots?: readonly Readonly<{
+    readonly actionId: string
+    readonly command: TurnMatchCommand
+  }>[]
+  readonly plan: AiStrategicPlanView
   readonly deterministicSampleSeed: number
 }
+
+export interface AiSearchWorkerCancelRequest {
+  readonly type: 'cancel-search'
+  readonly requestId: string
+}
+
+export type AiSearchWorkerMessage = AiSearchWorkerRequest | AiSearchWorkerCancelRequest
 
 export interface AiSearchWorkerResult {
   readonly type: 'search-result'
   readonly requestId: string
   readonly observationRevision: number
+  readonly roots: readonly Readonly<{
+    readonly actionId: string
+    readonly command: TurnMatchCommand
+  }>[]
   readonly candidateDossiers: readonly AiCandidateDossier[]
   readonly exploredNodes: number
   readonly cacheHits: number
@@ -188,7 +223,24 @@ export interface AiSearchWorkerResult {
 }
 
 export interface AiStrategicPlanView {
-  readonly selfComboCardIds?: readonly string[]
+  readonly selfCombos?: readonly Readonly<{
+    readonly cardIds: readonly string[]
+    readonly purpose: string
+  }>[]
   readonly reservedCardIds?: readonly string[]
-  readonly opponentThreatCardIds?: readonly string[]
+  readonly activeReservedCardIds?: readonly string[]
+  readonly selfDeckCardCounts?: Readonly<Record<string, number>>
+  readonly observedOpponentThreatCardIds?: readonly string[]
+  readonly resourceRules?: readonly Readonly<{
+    readonly cardIds: readonly string[]
+    readonly releaseTriggers: readonly AiResourceReleaseTrigger[]
+  }>[]
 }
+
+export type AiResourceReleaseTrigger =
+  | 'lethal'
+  | 'forced-survival'
+  | 'combo-ready'
+  | 'redundant-copy'
+  | 'invalidated-combo'
+  | 'critical-threat'

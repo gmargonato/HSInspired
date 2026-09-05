@@ -53,6 +53,7 @@ import type { RendererLogger } from '../../ui/logger'
 import { CardView } from '../../rendering/cards/card-view'
 import { CARD_CANVAS, CARD_PROFILES } from '../../rendering/cards/card-layout'
 import { cardCostColor } from '../../rendering/cards/card-cost-presentation'
+import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import { gsap } from '../../animation/animations'
 import {
   type DeckPresentationAssets,
@@ -91,6 +92,7 @@ import {
   type HandCardTargetingOrigin
 } from './hand-play-gesture'
 import { HandCardPerspective } from './hand-card-perspective'
+import { CardDrawAnimation } from './card-draw-animation'
 import { HeroPowerView, type HeroPowerLayout } from './hero-power-view'
 import {
   MinionView,
@@ -133,7 +135,7 @@ import {
 import { SecretRevealView, SecretZoneView } from './secret-view'
 import { MatchHistoryView } from './match-history-view'
 import { clearMatchResultCombatViews } from './match-result-state'
-import { AiTurnController, COMPETITIVE_AI_POLICY } from './ai-turn-controller'
+import { AiTurnController, STRATEGIC_AI_POLICY } from './ai-turn-controller'
 import { TargetGestureController } from './target-gesture'
 import {
   boardMinionCardPreviewKey,
@@ -444,8 +446,13 @@ export class GameBoardView extends Actor {
   private readonly travelLayer = new Container()
   private readonly deckLayer = new Container()
   private readonly deckViews = new Map<PlayerId, Sprite>()
+  private readonly drawOrigins = new WeakMap<Container, Sprite>()
+  private readonly drawAnimations = new Set<CardDrawAnimation>()
   private readonly turnLayer = this.hud.turnLayer
   private readonly mulliganLayer = new Container()
+  private mulliganAnnouncementOutlineTarget: Sprite | null = null
+  private mulliganAnnouncementOutline: AnimatedOutline | null = null
+  private confirmMulliganOutline: AnimatedOutline | null = null
   private readonly handLayer = new Container()
   private readonly remoteHandLayer = new Container()
   private readonly heroViews = new Map<PlayerId, HeroView>()
@@ -881,7 +888,7 @@ export class GameBoardView extends Actor {
         session: this.session,
         decks: this.options.decks,
         logger: this.logger,
-        policy: COMPETITIVE_AI_POLICY
+        policy: STRATEGIC_AI_POLICY
       })
     const initialState = this.match.getState()
     this.aiMulliganResolution = this.resolveAiMulligan(
@@ -933,6 +940,21 @@ export class GameBoardView extends Actor {
     this.remoteBackCount = remotePlayer.hand.length
     this.ensureRemoteBacks(this.remoteBackCount)
 
+    const confirmOutlineTarget = new Sprite(
+      this.options.gameAssets.confirmMulliganButton
+    )
+    applyAnchoredPlacement(
+      confirmOutlineTarget,
+      GAME_BOARD_LAYOUT.mulligan.confirmButton
+    )
+    confirmOutlineTarget.eventMode = 'none'
+    confirmOutlineTarget.label = 'game.mulligan.confirm-outline'
+    this.mulliganLayer.addChild(confirmOutlineTarget)
+    this.confirmMulliganOutline = new AnimatedOutline(confirmOutlineTarget, {
+      preset: 'ghost'
+    })
+    this.confirmMulliganOutline.setEnabled(false)
+
     this.confirmButton = new Button(this.options.gameAssets.confirmMulliganButton, {
       onClick: () => void this.confirmMulligan()
     })
@@ -964,6 +986,45 @@ export class GameBoardView extends Actor {
     this.remoteHandLayer.visible = true
     await this.wait(OPENING_TIMING.boardPause)
     await this.presentMulligan()
+  }
+
+  /** Development benchmark hook that follows the normal mulligan command path. */
+  async devConfirmMulligan(): Promise<void> {
+    await this.confirmMulligan()
+  }
+
+  /** Exercises hover, drag snapshotting, and targeted-card presentation. */
+  async devExerciseHandInteraction(): Promise<void> {
+    if (!this.handModeActive)
+      throw new Error('Hand interaction requires the completed opening sequence.')
+    const playableIds = new Set(
+      this.match.getLegality?.(this.localParticipantId).playableCardInstanceIds ?? []
+    )
+    const index = this.handEntries.findIndex((entry) =>
+      playableIds.has(entry.card.instanceId)
+    )
+    const entry = this.handEntries[index]
+    if (!entry?.restTransform)
+      throw new Error('No playable benchmark card is available.')
+
+    this.localHoveredSlot = entry.slot
+    this.applyHoverDelta()
+    await this.wait(0.25)
+
+    const pointerId = -1
+    const start = { x: entry.restTransform.x, y: entry.restTransform.y }
+    const moved = { x: start.x + 90, y: start.y - 150 }
+    this.beginDrag(index, start, pointerId)
+    this.dragPointer = moved
+    await this.wait(0.5)
+
+    if (this.tryActivateDraggedCardTargeting(entry, moved, pointerId)) {
+      await this.wait(0.5)
+      this.cancelCardTargeting(moved)
+    } else {
+      this.endDrag()
+    }
+    await this.wait(OPENING_TIMING.hover + 0.15)
   }
 
   private createBoard(): void {
@@ -1128,7 +1189,6 @@ export class GameBoardView extends Actor {
   private syncTurnHud(state: OpeningMatchState): void {
     this.syncMatchCursor(state)
     this.syncDeckCounts(state)
-    this.syncMana(state)
     this.syncLocalHandCardCosts(state)
     this.syncPlayableCardOutlines()
     this.syncHeroPowerViews(state)
@@ -2932,6 +2992,22 @@ export class GameBoardView extends Actor {
     overlay.alpha = 0
     this.mulliganLayer.addChild(overlay)
 
+    const announcementOutlineTarget = new Sprite(
+      this.options.gameAssets.mulliganAnnouncement
+    )
+    applyAnchoredPlacement(
+      announcementOutlineTarget,
+      GAME_BOARD_LAYOUT.mulligan.announcement
+    )
+    announcementOutlineTarget.label = 'game.mulligan.announcement-outline'
+    announcementOutlineTarget.alpha = 0
+    announcementOutlineTarget.eventMode = 'none'
+    this.mulliganLayer.addChild(announcementOutlineTarget)
+    this.mulliganAnnouncementOutlineTarget = announcementOutlineTarget
+    this.mulliganAnnouncementOutline = new AnimatedOutline(announcementOutlineTarget, {
+      preset: 'ghost'
+    })
+
     const announcement = new Sprite(this.options.gameAssets.mulliganAnnouncement)
     applyAnchoredPlacement(announcement, GAME_BOARD_LAYOUT.mulligan.announcement)
     announcement.label = 'game.mulligan.announcement'
@@ -3010,7 +3086,8 @@ export class GameBoardView extends Actor {
       card.instanceId,
       this.options.gameAssets.mulliganReplaceCross,
       this.options.gameAssets.mulliganReplacedLabel,
-      outlineTexture
+      outlineTexture,
+      this.options.renderer
     )
     return slot
   }
@@ -3070,10 +3147,13 @@ export class GameBoardView extends Actor {
       'game.mulligan.announcement'
     )
     const overlay = this.mulliganLayer.getChildByLabel('game.mulligan.dark-overlay')
-    if (!announcement || !overlay)
+    const announcementOutlineTarget = this.mulliganAnnouncementOutlineTarget
+    if (!announcement || !overlay || !announcementOutlineTarget)
       throw new Error('Mulligan presentation is unavailable.')
+    this.mulliganAnnouncementOutline?.setEnabled(true)
     await Promise.all([
       this.fadeTo(overlay, 1, OPENING_TIMING.mulliganFade),
+      this.fadeTo(announcementOutlineTarget, 1, OPENING_TIMING.mulliganFade),
       this.fadeTo(announcement, 1, OPENING_TIMING.mulliganFade)
     ])
     const localCommonCount = this.localPlayerNumber === 2 ? 3 : this.initialSlots.length
@@ -3092,6 +3172,7 @@ export class GameBoardView extends Actor {
     this.setMulliganInputEnabled(true)
     this.confirmButton.visible = true
     this.confirmButton.setEnabled(true)
+    this.confirmMulliganOutline?.setEnabled(true)
   }
 
   private async presentPlayerTwoAnnouncement(): Promise<void> {
@@ -3153,7 +3234,9 @@ export class GameBoardView extends Actor {
     if (this.confirmationLocked) return
     this.confirmationLocked = true
     this.setMulliganInputEnabled(false)
+    this.confirmButton.visible = false
     this.confirmButton.setEnabled(false)
+    this.confirmMulliganOutline?.setEnabled(false)
     for (const entry of this.handEntries) {
       entry.slot.setMulliganInteractionEnabled(false)
       entry.slot.setPlayableOutlineEnabled(false)
@@ -3166,7 +3249,9 @@ export class GameBoardView extends Actor {
       this.confirmationLocked = false
       this.syncMulliganSelectionVisuals()
       this.setMulliganInputEnabled(true)
+      this.confirmButton.visible = true
       this.confirmButton.setEnabled(true)
+      this.confirmMulliganOutline?.setEnabled(true)
       return
     }
     const result = this.session.dispatch({
@@ -3179,14 +3264,16 @@ export class GameBoardView extends Actor {
       this.confirmationLocked = false
       this.syncMulliganSelectionVisuals()
       this.setMulliganInputEnabled(true)
+      this.confirmButton.visible = true
       this.confirmButton.setEnabled(true)
+      this.confirmMulliganOutline?.setEnabled(true)
       return
     }
-    this.confirmButton.visible = false
     await this.presentResolutionEvents(result.events)
     await this.wait(OPENING_TIMING.handoffPause)
     await this.fadeTo(this.mulliganLayer, 0, OPENING_TIMING.mulliganFade)
     this.mulliganLayer.visible = false
+    this.confirmButton.visible = false
   }
 
   private async resolveAiMulligan(
@@ -6194,12 +6281,15 @@ export class GameBoardView extends Actor {
       'game.mulligan.announcement'
     )
     const overlay = this.mulliganLayer.getChildByLabel('game.mulligan.dark-overlay')
-    if (!announcement || !overlay)
+    const announcementOutlineTarget = this.mulliganAnnouncementOutlineTarget
+    if (!announcement || !overlay || !announcementOutlineTarget)
       throw new Error('Mulligan presentation is unavailable.')
     await Promise.all([
       this.fadeTo(announcement, 0, OPENING_TIMING.mulliganFade),
+      this.fadeTo(announcementOutlineTarget, 0, OPENING_TIMING.mulliganFade),
       this.fadeTo(overlay, 0, OPENING_TIMING.mulliganFade)
     ])
+    this.mulliganAnnouncementOutline?.setEnabled(false)
   }
 
   private async addLocalCard(card: OpeningCard): Promise<void> {
@@ -6255,6 +6345,12 @@ export class GameBoardView extends Actor {
     deck: LayoutPlacement,
     sequence: number
   ): void {
+    const deckView = this.deckViews.get(
+      deck === GAME_BOARD_LAYOUT.decks.local
+        ? this.localParticipantId
+        : this.remoteParticipantId
+    )
+    if (deckView) this.drawOrigins.set(slot, deckView)
     slot.setMulliganInteractionEnabled(false)
     slot.position.set(deck.position.x, deck.position.y)
     slot.scale.set(
@@ -6291,6 +6387,8 @@ export class GameBoardView extends Actor {
   }
 
   private prepareBackAtDeck(back: Sprite, sequence: number): void {
+    const deckView = this.deckViews.get(this.remoteParticipantId)
+    if (deckView) this.drawOrigins.set(back, deckView)
     back.position.set(
       GAME_BOARD_LAYOUT.decks.remote.position.x,
       GAME_BOARD_LAYOUT.decks.remote.position.y
@@ -6315,6 +6413,19 @@ export class GameBoardView extends Actor {
     const x =
       GAME_BOARD_LAYOUT.mulligan.cards.centerX +
       (index - midpoint) * GAME_BOARD_LAYOUT.mulligan.cards.gap
+    if (this.drawOrigins.has(slot)) {
+      slot.position.set(x, GAME_BOARD_LAYOUT.mulligan.cards.baselineY)
+      slot.scale.set(GAME_BOARD_LAYOUT.mulligan.cards.scale)
+      slot.skew.set(0, 0)
+      slot.rotation = 0
+      return this.animateDeckDeparture(
+        slot,
+        duration,
+        staggerIndex * OPENING_TIMING.cardStagger
+      ).then(() => {
+        if (!slot.destroyed && !this.destroyed) this.mulliganLayer.addChild(slot)
+      })
+    }
     const timeline = this.timeline()
     timeline.to(slot, {
       x,
@@ -6363,6 +6474,20 @@ export class GameBoardView extends Actor {
     const { gap, scale } = this.remoteHandMetrics(count)
     const normalized = midpoint === 0 ? 0 : (index - midpoint) / midpoint
     const x = GAME_BOARD_LAYOUT.remoteHand.centerX + (index - midpoint) * gap
+    if (this.drawOrigins.has(back)) {
+      back.position.set(
+        x,
+        GAME_BOARD_LAYOUT.remoteHand.baselineY -
+          Math.abs(normalized) * GAME_BOARD_LAYOUT.remoteHand.edgeTuck
+      )
+      back.rotation = -(index - midpoint) * GAME_BOARD_LAYOUT.remoteHand.rotationStep
+      back.scale.set(scale)
+      return this.animateDeckDeparture(
+        back,
+        duration,
+        staggerIndex * OPENING_TIMING.cardStagger
+      )
+    }
     const timeline = this.timeline()
     timeline.to(back, {
       x,
@@ -7278,6 +7403,9 @@ export class GameBoardView extends Actor {
   }
 
   override dispose(): void {
+    for (const animation of this.drawAnimations) animation.dispose()
+    this.drawAnimations.clear()
+    this.aiController?.dispose()
     window.removeEventListener('pointerdown', this.handleWindowPointerDown, true)
     window.removeEventListener('pointerup', this.handleWindowPointerUp, true)
     window.removeEventListener('blur', this.handleWindowBlur)
@@ -7311,6 +7439,10 @@ export class GameBoardView extends Actor {
       }
     }
     this.activeDeathGhosts.clear()
+    this.mulliganAnnouncementOutline?.dispose()
+    this.mulliganAnnouncementOutline = null
+    this.confirmMulliganOutline?.dispose()
+    this.confirmMulliganOutline = null
     this.attackLine.clear()
     if (this.draggingIndex !== null) {
       this.handEntries[this.draggingIndex]?.slot.suppressPlayableOutline(false)
@@ -7558,6 +7690,19 @@ export class GameBoardView extends Actor {
     gsap.killTweensOf(slot.scale)
     gsap.killTweensOf(slot.skew)
 
+    if (this.drawOrigins.has(slot)) {
+      slot.position.set(transform.x, transform.y)
+      slot.rotation = transform.rotation
+      slot.scale.set(transform.scale)
+      slot.skew.set(0, 0)
+      slot.zIndex = transform.zIndex
+      return this.animateDeckDeparture(
+        slot,
+        Math.max(positionDuration, scaleDuration),
+        delay
+      )
+    }
+
     const timeline = this.timeline()
     timeline.to(slot, {
       x: transform.x,
@@ -7601,10 +7746,47 @@ export class GameBoardView extends Actor {
    * pointer events — a moving hit area on the animated slot causes oscillation.
    */
   private configureHandSlot(slot: GameCardSlot): void {
+    if (!import.meta.env.DEV || import.meta.env.VITE_MATCH_OUTLINE_MODE !== 'live') {
+      slot.enableBakedPlayableOutline(DEFAULT_HAND_LAYOUT.cardScale)
+    }
     slot.setMulliganInteractionEnabled(false)
     slot.removeAllListeners('pointertap')
     slot.removeAllListeners('pointerover')
     slot.removeAllListeners('pointerout')
+  }
+
+  private async animateDeckDeparture(
+    target: GameCardSlot | Sprite,
+    duration: number,
+    delay: number
+  ): Promise<void> {
+    const deck = this.drawOrigins.get(target)
+    this.drawOrigins.delete(target)
+    if (!deck || this.destroyed) return
+    const animation = new CardDrawAnimation(
+      this.options.renderer,
+      this.travelLayer,
+      deck,
+      target,
+      this.options.gameAssets.cardBack,
+      target instanceof GameCardSlot ? target : undefined
+    )
+    this.drawAnimations.add(animation)
+    const progress = { value: 0 }
+    try {
+      await this.completeTimeline(
+        this.timeline().to(progress, {
+          value: 1,
+          duration,
+          delay,
+          ease: 'none',
+          onUpdate: () => animation.update(progress.value)
+        })
+      )
+    } finally {
+      animation.dispose()
+      this.drawAnimations.delete(animation)
+    }
   }
 
   private fadeTo(

@@ -144,7 +144,7 @@ export const MINION_LAYOUT = {
   sleepingZ: {
     origin: { x: 114, y: 42 },
     baseFontSize: 38,
-    spawnIntervalMs: 950,
+    spawnIntervalMs: 1500,
     driftX: 34,
     driftY: -30,
     duration: 2.9,

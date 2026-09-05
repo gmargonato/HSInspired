@@ -169,7 +169,10 @@ export class HeroView extends Container {
     this.outlineProxy.eventMode = 'none'
     this.outlineProxy.visible = false
     this.addChildAt(this.outlineProxy, 0)
-    this.attackOutline = new AnimatedOutline(this.outlineProxy, 'green', 'board')
+    this.attackOutline = new AnimatedOutline(this.outlineProxy, {
+      palette: 'green',
+      preset: 'board'
+    })
     this.attackOutline.setEnabled(false)
 
     this.targetingOutlineProxy = new Sprite(textures.frame)
@@ -178,11 +181,10 @@ export class HeroView extends Container {
     this.targetingOutlineProxy.eventMode = 'none'
     this.targetingOutlineProxy.visible = false
     this.addChildAt(this.targetingOutlineProxy, 0)
-    this.targetingOutline = new AnimatedOutline(
-      this.targetingOutlineProxy,
-      'red',
-      'board'
-    )
+    this.targetingOutline = new AnimatedOutline(this.targetingOutlineProxy, {
+      palette: 'red',
+      preset: 'board'
+    })
     this.targetingOutline.setEnabled(false)
 
     this.hitArea = new Rectangle(0, 0, HERO_CANVAS.width, HERO_CANVAS.height)

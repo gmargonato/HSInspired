@@ -2,9 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Deck } from '../../../game/decks'
 import { asCardId, asHeroId } from '../../../game/content/cards'
 import { asPlayerId, type MatchSetup } from '../../../game/match'
-import type { AiDecisionApi, AiDecisionRequest } from '../../../shared/ipc/ai'
+import type {
+  AiDecisionApi,
+  AiDecisionRequest,
+  AiStrategyReviewRequest
+} from '../../../shared/ipc/ai'
 import { GameBoardSession } from './game-board-session'
-import { createFallbackDeckPlan, createFallbackMatchupPlan } from './ai-deck-strategy'
+import { createFallbackDeckPlan } from './ai-deck-strategy'
 import { AiTurnController } from './ai-turn-controller'
 
 const humanId = asPlayerId('human')
@@ -22,7 +26,10 @@ function deck(id: string, heroId: string, cardId = 'basic_acidic_swamp_ooze'): D
 }
 
 describe('AiTurnController', () => {
-  async function requestFacingSecret(secretId: string): Promise<AiDecisionRequest> {
+  async function requestsFacingSecret(
+    secretId: string,
+    policy: 'legacy' | 'strategic-v3' = 'legacy'
+  ): Promise<readonly AiDecisionRequest[]> {
     const humanDeck = deck('human-secret-deck', 'jaina', 'basic_bloodfen_raptor')
     const aiDeck = deck('ai-secret-deck', 'guldan')
     const setup: MatchSetup = {
@@ -99,6 +106,34 @@ describe('AiTurnController', () => {
         const action =
           request.legalActions.find((candidate) => candidate.kind === 'end-turn') ??
           request.legalActions[0]!
+        if (request.pass === 'rank') {
+          const orderedActionIds = [
+            action.id,
+            ...request.legalActions
+              .map((candidate) => candidate.id)
+              .filter((actionId) => actionId !== action.id)
+          ]
+          return {
+            actionId: action.id,
+            decisionClass: request.decisionClass,
+            rationale: 'Rank using only public information.',
+            modelId: 'gpt-5.4-nano',
+            pass: 'rank',
+            orderedActionIds,
+            confidence: 0.6
+          }
+        }
+        if (request.pass === 'critic') {
+          return {
+            actionId: action.id,
+            decisionClass: request.decisionClass,
+            rationale: 'Retain the fair first-pass choice.',
+            modelId: 'gpt-5.4-nano',
+            pass: 'critic',
+            retainedFirstChoice: true,
+            identifiedRisks: ['The facedown secret remains uncertain.']
+          }
+        }
         return {
           actionId: action.id,
           decisionClass: request.decisionClass,
@@ -111,17 +146,18 @@ describe('AiTurnController', () => {
       api,
       session,
       decks: [humanDeck, aiDeck],
-      logger: { info: () => undefined, warn: () => undefined, error: () => undefined }
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      policy
     })
     await controller.chooseTurnAction()
-    const captured = requests[0]
-    if (!captured) throw new Error('The controller did not issue a decision request.')
-    return captured
+    if (requests.length === 0)
+      throw new Error('The controller did not issue a decision request.')
+    return requests
   }
 
   it('does not leak a secret identity through context, previews, or shortlisting', async () => {
-    const mirrorRequest = await requestFacingSecret('classic_mirror_entity')
-    const counterspellRequest = await requestFacingSecret('classic_counterspell')
+    const mirrorRequest = (await requestsFacingSecret('classic_mirror_entity'))[0]!
+    const counterspellRequest = (await requestsFacingSecret('classic_counterspell'))[0]!
     const mirrorState = mirrorRequest.gameState['currentState'] as {
       players: Array<{
         participantId: string
@@ -132,10 +168,58 @@ describe('AiTurnController', () => {
       mirrorState.players.find((player) => player.participantId === humanId)?.secrets
     ).toEqual([expect.objectContaining({ cardId: null })])
     expect(
-      mirrorRequest.legalActions.every((action) => action.analysis?.uncertain === true)
+      mirrorRequest.legalActions.some((action) => action.analysis?.uncertain === true)
+    ).toBe(true)
+    expect(
+      mirrorRequest.legalActions.find((action) => action.kind === 'end-turn')?.analysis
+        ?.uncertain
     ).toBe(true)
     expect(mirrorRequest.gameState).toEqual(counterspellRequest.gameState)
     expect(mirrorRequest.legalActions).toEqual(counterspellRequest.legalActions)
+  })
+
+  it('adds a critic pass for a complex fair decision involving a facedown secret', async () => {
+    const mirrorRequests = await requestsFacingSecret(
+      'classic_mirror_entity',
+      'strategic-v3'
+    )
+    const counterspellRequests = await requestsFacingSecret(
+      'classic_counterspell',
+      'strategic-v3'
+    )
+
+    expect(mirrorRequests.map((request) => request.pass)).toEqual(['rank', 'critic'])
+    expect(mirrorRequests.map((request) => request.gameState)).toEqual(
+      counterspellRequests.map((request) => request.gameState)
+    )
+    expect(mirrorRequests.map((request) => request.legalActions)).toEqual(
+      counterspellRequests.map((request) => request.legalActions)
+    )
+    expect(mirrorRequests.map((request) => request.candidateDossiers)).toEqual(
+      counterspellRequests.map((request) => request.candidateDossiers)
+    )
+    for (const request of mirrorRequests) {
+      expect(request.gameState['informationPolicy']).toBe('fair')
+      const eventLedger = JSON.stringify(request.gameState['publicEventLedger'])
+      expect(eventLedger).not.toContain('creationOrdinal')
+      expect(eventLedger).not.toContain('human:deck:')
+      expect(
+        request.candidateDossiers?.every(
+          (dossier) => dossier.uncertainty.determinizations === 0
+        )
+      ).toBe(true)
+      expect(
+        request.candidateDossiers?.some((dossier) => dossier.uncertainty.incomplete)
+      ).toBe(true)
+      expect(
+        request.candidateDossiers?.some(
+          (dossier) => dossier.evaluation.informationValue > 0
+        )
+      ).toBe(true)
+      expect(
+        request.candidateDossiers?.some((dossier) => !dossier.uncertainty.incomplete)
+      ).toBe(true)
+    }
   })
 
   it('marks Frostbolt as a reserved combo resource instead of free face damage', async () => {
@@ -585,7 +669,7 @@ describe('AiTurnController', () => {
     expect(calls).toBe(1)
   })
 
-  it('uses strict rank and critic passes with privileged sanitized observations', async () => {
+  it('uses a fair strategic rank pass without revealing the opponent deck or hand', async () => {
     const humanDeck = deck('human-deck-v2', 'jaina', 'basic_bloodfen_raptor')
     const aiDeck = deck('ai-deck-v2', 'guldan')
     const setup: MatchSetup = {
@@ -608,9 +692,9 @@ describe('AiTurnController', () => {
     const session = new GameBoardSession({ setup, decks: [humanDeck, aiDeck] })
     const requests: AiDecisionRequest[] = []
     const api: AiDecisionApi = {
-      planMatchup: async () => ({
-        plan: createFallbackMatchupPlan(aiDeck, humanDeck),
-        rationale: 'Deterministic test matchup.',
+      planDeck: async () => ({
+        plan: createFallbackDeckPlan(aiDeck),
+        rationale: 'Deterministic test plan.',
         modelId: 'gpt-5.4-nano'
       }),
       decide: async (request) => {
@@ -643,29 +727,122 @@ describe('AiTurnController', () => {
       session,
       decks: [humanDeck, aiDeck],
       logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
-      policy: 'competitive-v2'
+      policy: 'strategic-v3'
     })
 
     const decision = await controller.chooseMulligan()
 
     expect(decision.source).toBe('model')
-    expect(requests.map((request) => request.pass)).toEqual(['rank', 'critic'])
-    expect(requests[1]?.firstPassRanking).toEqual(
-      requests[0]?.legalActions.map((action) => action.id).slice(0, 4)
-    )
+    expect(requests.map((request) => request.pass)).toEqual(['rank'])
     const state = requests[0]?.gameState
-    expect(state?.['informationPolicy']).toBe('opponent-deck-and-hand')
+    expect(state?.['informationPolicy']).toBe('fair')
     const observation = state?.['observation'] as {
-      originalDecks: unknown[]
-      players: Array<{ role: string; hand: Array<{ cardId: string }> }>
+      selfOriginalDeck: { id: string }
+      players: Array<{
+        role: string
+        hand: Array<{ cardId: string }>
+        handSize: number
+      }>
     }
-    expect(observation.originalDecks).toHaveLength(2)
+    expect(observation.selfOriginalDeck.id).toBe(aiDeck.id)
     expect(
-      observation.players.find((player) => player.role === 'opponent')?.hand[0]?.cardId
-    ).toBe('basic_bloodfen_raptor')
+      observation.players.find((player) => player.role === 'opponent')
+    ).toMatchObject({
+      hand: [],
+      handSize: 3
+    })
+    expect(state?.['cardDefinitions']).toHaveProperty('basic_acidic_swamp_ooze')
+    expect(state?.['heroPowerDefinitions']).toHaveProperty('warlock-life-tap')
+    expect(JSON.stringify(state)).not.toContain(humanDeck.id)
   })
 
-  it('keeps turn ranking available after a matchup-plan HTTP 400', async () => {
+  it('uses the engine proof without provider passes for obvious deterministic lethal', async () => {
+    const humanDeck = deck('human-ordinary-turn', 'jaina', 'basic_bloodfen_raptor')
+    const aiDeck = deck('ai-ordinary-turn', 'anduin', 'basic_mind_blast')
+    const session = new GameBoardSession({
+      setup: {
+        seed: 89,
+        participants: [
+          {
+            participantId: humanId,
+            controllerKind: 'human',
+            heroId: humanDeck.heroId,
+            deckId: humanDeck.id
+          },
+          {
+            participantId: aiId,
+            controllerKind: 'ai',
+            heroId: aiDeck.heroId,
+            deckId: aiDeck.id
+          }
+        ]
+      },
+      decks: [humanDeck, aiDeck]
+    })
+    for (const participantId of [humanId, aiId]) {
+      expect(
+        session.dispatch({
+          type: 'confirm-mulligan',
+          participantId,
+          replaceInstanceIds: []
+        }).accepted
+      ).toBe(true)
+    }
+    if (session.getState().activePlayerId === humanId) {
+      expect(
+        session.dispatch({ type: 'end-turn', participantId: humanId }).accepted
+      ).toBe(true)
+    }
+    expect(
+      session.dispatch({
+        type: 'dev-set-mana',
+        participantId: aiId,
+        available: 2,
+        maximum: 2
+      }).accepted
+    ).toBe(true)
+    expect(
+      session.dispatch({
+        type: 'dev-set-hero',
+        participantId: humanId,
+        health: 5
+      }).accepted
+    ).toBe(true)
+    const requests: AiDecisionRequest[] = []
+    const api: AiDecisionApi = {
+      planDeck: async () => ({
+        plan: createFallbackDeckPlan(aiDeck),
+        rationale: 'Deterministic test plan.',
+        modelId: 'gpt-5.4-nano'
+      }),
+      decide: async (request) => {
+        requests.push(request)
+        const ids = request.legalActions.map((action) => action.id)
+        return {
+          actionId: ids[0]!,
+          decisionClass: request.decisionClass,
+          rationale: 'Rank the ordinary turn once.',
+          modelId: 'gpt-5.4-nano',
+          pass: 'rank',
+          orderedActionIds: ids,
+          confidence: 0.8
+        }
+      }
+    }
+    const controller = new AiTurnController({
+      api,
+      session,
+      decks: [humanDeck, aiDeck],
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      policy: 'strategic-v3'
+    })
+
+    await controller.chooseTurnAction()
+
+    expect(requests).toEqual([])
+  })
+
+  it('keeps ranking available after a deck-plan provider failure', async () => {
     const humanDeck = deck('human-deck-v2-plan-failure', 'jaina')
     const aiDeck = deck('ai-deck-v2-plan-failure', 'guldan')
     const setup: MatchSetup = {
@@ -688,8 +865,8 @@ describe('AiTurnController', () => {
     const session = new GameBoardSession({ setup, decks: [humanDeck, aiDeck] })
     const requests: AiDecisionRequest[] = []
     const api: AiDecisionApi = {
-      planMatchup: async () => {
-        throw new Error('Azure OpenAI returned HTTP 400: invalid matchup schema')
+      planDeck: async () => {
+        throw new Error('Azure OpenAI returned HTTP 400: invalid deck-plan schema')
       },
       decide: async (request) => {
         requests.push(request)
@@ -721,10 +898,142 @@ describe('AiTurnController', () => {
       session,
       decks: [humanDeck, aiDeck],
       logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
-      policy: 'competitive-v2'
+      policy: 'strategic-v3'
     })
 
     expect((await controller.chooseMulligan()).source).toBe('model')
-    expect(requests.map((request) => request.pass)).toEqual(['rank', 'critic'])
+    expect(requests.map((request) => request.pass)).toEqual(['rank'])
+  })
+
+  it('reviews strategy from new public evidence without sending hidden opponent data', async () => {
+    const humanDeck = deck('human-public-evidence-deck', 'jaina', 'basic_murloc_raider')
+    const aiDeck = deck('ai-strategy-review-deck', 'guldan')
+    const setup: MatchSetup = {
+      seed: 87,
+      participants: [
+        {
+          participantId: humanId,
+          controllerKind: 'human',
+          heroId: humanDeck.heroId,
+          deckId: humanDeck.id
+        },
+        {
+          participantId: aiId,
+          controllerKind: 'ai',
+          heroId: aiDeck.heroId,
+          deckId: aiDeck.id
+        }
+      ]
+    }
+    const session = new GameBoardSession({ setup, decks: [humanDeck, aiDeck] })
+    const plan = createFallbackDeckPlan(aiDeck)
+    const reviews: AiStrategyReviewRequest[] = []
+    const decisions: AiDecisionRequest[] = []
+    const api: AiDecisionApi = {
+      planDeck: async () => ({
+        plan,
+        rationale: 'Initial self-deck strategy.',
+        modelId: 'gpt-5.4-nano'
+      }),
+      reviewStrategy: async (request) => {
+        reviews.push(request)
+        return {
+          review: {
+            reviewVersion: 1,
+            changed: false,
+            revisedPlan: null,
+            changeReasons: [],
+            opponentAssessment: 'The revealed one-drop suggests early tempo.'
+          },
+          rationale: 'Preserve the current plan.',
+          modelId: 'gpt-5.4-nano'
+        }
+      },
+      decide: async (request) => {
+        decisions.push(request)
+        const ids = request.legalActions.map((action) => action.id)
+        return {
+          actionId: ids[0]!,
+          decisionClass: request.decisionClass,
+          rationale: 'Ranked fair actions.',
+          modelId: 'gpt-5.4-nano',
+          pass: 'rank',
+          orderedActionIds: ids,
+          confidence: 0.7
+        }
+      }
+    }
+    const controller = new AiTurnController({
+      api,
+      session,
+      decks: [humanDeck, aiDeck],
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      policy: 'strategic-v3'
+    })
+
+    const aiMulligan = await controller.chooseMulligan()
+    expect(session.dispatch(aiMulligan.command).accepted).toBe(true)
+    expect(
+      session.dispatch({
+        type: 'confirm-mulligan',
+        participantId: humanId,
+        replaceInstanceIds: []
+      }).accepted
+    ).toBe(true)
+    if (session.getState().activePlayerId === aiId) {
+      expect(session.dispatch({ type: 'end-turn', participantId: aiId }).accepted).toBe(
+        true
+      )
+    }
+    expect(
+      session.dispatch({
+        type: 'dev-set-mana',
+        participantId: humanId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const human = session.findPlayer(session.getState(), humanId)
+    const oneDrops = human.hand
+      .filter((card) => card.cardId === 'basic_murloc_raider')
+      .slice(0, 2)
+    expect(oneDrops).toHaveLength(2)
+    for (const [position, oneDrop] of oneDrops.entries()) {
+      expect(
+        session.dispatch({
+          type: 'play-card',
+          participantId: humanId,
+          cardInstanceId: oneDrop.instanceId,
+          position
+        }).accepted
+      ).toBe(true)
+    }
+    expect(
+      session.dispatch({ type: 'end-turn', participantId: humanId }).accepted
+    ).toBe(true)
+
+    await controller.chooseTurnAction()
+
+    expect(reviews).toHaveLength(1)
+    expect(JSON.stringify(reviews[0])).not.toContain(humanDeck.id)
+    expect(reviews[0]?.gameState['informationPolicy']).toBe('fair')
+    const observation = reviews[0]?.gameState['observation'] as {
+      players: Array<{ role: string; hand: unknown[]; handSize: number }>
+    }
+    expect(
+      observation.players.find((player) => player.role === 'opponent')
+    ).toMatchObject({
+      hand: []
+    })
+    expect(reviews[0]?.gameState['cardDefinitions']).toHaveProperty(
+      'basic_murloc_raider'
+    )
+    expect(reviews[0]?.gameState['cardDefinitions']).toHaveProperty(
+      'basic_acidic_swamp_ooze'
+    )
+    expect(decisions.at(-1)?.gameState['opponentAssessment']).toBe(
+      'The revealed one-drop suggests early tempo.'
+    )
+    expect(JSON.stringify(reviews[0]?.strategicMemory)).toContain('basic_murloc_raider')
   })
 })

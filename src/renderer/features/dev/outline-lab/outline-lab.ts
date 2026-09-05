@@ -20,7 +20,10 @@ import {
   type OutlinePresetName,
   type OutlineTuning
 } from '../../../rendering/effects/animated-outline'
-import { OUTLINE_TUNINGS } from '../../../rendering/effects/outline-tuning'
+import {
+  getOutlineTuningConfig,
+  updateOutlineTuningConfig
+} from '../../../rendering/effects/outline-tuning'
 
 const CANVAS_WIDTH = 1920
 const CANVAS_HEIGHT = 1080
@@ -28,16 +31,24 @@ const PREVIEW_PANEL = { x: 40, y: 185, width: 1120, height: 850 } as const
 const CONTROLS_PANEL = { x: 1180, y: 185, width: 700, height: 850 } as const
 const SLIDER_WIDTH = 205
 
-const PRESETS: readonly OutlinePresetName[] = ['card', 'bonus-card', 'board', 'button']
+const PRESETS: readonly OutlinePresetName[] = [
+  'card',
+  'bonus-card',
+  'board',
+  'button',
+  'ghost'
+]
 const PRESET_LABELS: Record<OutlinePresetName, string> = {
   card: 'Card',
   'bonus-card': 'Bonus Card',
   board: 'Board',
-  button: 'Button'
+  button: 'Button',
+  ghost: 'Ghost'
 }
 const PALETTES: readonly OutlinePaletteName[] = [
   'green',
   'orange',
+  'purple',
   'blue',
   'red',
   'white'
@@ -45,6 +56,7 @@ const PALETTES: readonly OutlinePaletteName[] = [
 const PALETTE_COLORS: Record<OutlinePaletteName, number> = {
   green: 0x6cff46,
   orange: 0xffff0a,
+  purple: 0xc56cff,
   blue: 0x6cffff,
   red: 0xff8a52,
   white: 0xf5f5f5
@@ -102,11 +114,13 @@ interface SliderState {
 }
 
 function cloneTunings(): Record<OutlinePresetName, OutlineTuning> {
+  const tunings = getOutlineTuningConfig().presets
   return {
-    card: { ...OUTLINE_TUNINGS.card },
-    'bonus-card': { ...OUTLINE_TUNINGS['bonus-card'] },
-    board: { ...OUTLINE_TUNINGS.board },
-    button: { ...OUTLINE_TUNINGS.button }
+    card: { ...tunings.card },
+    'bonus-card': { ...tunings['bonus-card'] },
+    board: { ...tunings.board },
+    button: { ...tunings.button },
+    ghost: { ...tunings.ghost }
   }
 }
 
@@ -165,7 +179,7 @@ function formatValue(value: number, step: number): string {
   return value.toFixed(decimals)
 }
 
-/** Development-only, non-persistent editor for production outline presets. */
+/** Development-only live editor for the persisted production outline presets. */
 export class OutlineLab extends Container {
   private readonly assetScope = new AssetScope()
   private readonly resolver = new CardAssetResolver()
@@ -179,10 +193,15 @@ export class OutlineLab extends Container {
     card: 'green',
     'bonus-card': 'orange',
     board: 'green',
-    button: 'blue'
+    button: 'blue',
+    ghost: 'purple'
   }
   private selectedPreset: OutlinePresetName = 'card'
   private activeSlider: SliderState | null = null
+  private saveTimer: ReturnType<typeof setTimeout> | null = null
+  private saveRequested = false
+  private saveInFlight = false
+  private disposed = false
   private statusLabel!: Text
 
   async mount(): Promise<void> {
@@ -206,6 +225,8 @@ export class OutlineLab extends Container {
   }
 
   dispose(): void {
+    this.flushSave()
+    this.disposed = true
     for (const outlines of this.outlines.values()) {
       for (const outline of outlines) outline.dispose()
     }
@@ -228,7 +249,7 @@ export class OutlineLab extends Container {
     addLabel(this, 'OUTLINE SHADER LAB', 40, 24, 34)
     addLabel(
       this,
-      'Temporary session values only — copy a tuning block when you want to keep it.',
+      'Production outline tuning — changes save automatically.',
       430,
       35,
       19,
@@ -244,7 +265,7 @@ export class OutlineLab extends Container {
 
     this.statusLabel = addLabel(
       this,
-      'Values reset when this scene is closed.',
+      'Saved production configuration.',
       62,
       992,
       16,
@@ -253,7 +274,7 @@ export class OutlineLab extends Container {
   }
 
   private createPresetTabs(): void {
-    const tabWidth = 260
+    const tabWidth = 214
     for (const [index, preset] of PRESETS.entries()) {
       const tab = this.createButton(
         40 + index * (tabWidth + 12),
@@ -289,14 +310,6 @@ export class OutlineLab extends Container {
       const row = index % 5
       this.createSlider(spec, 1202 + column * 330, 278 + row * 126)
     }
-
-    this.createButton(1202, 958, 190, 50, 'Reset preset', () =>
-      this.resetPreset(this.selectedPreset)
-    )
-    this.createButton(1410, 958, 190, 50, 'Reset all', () => this.resetAll())
-    this.createButton(1618, 958, 238, 50, 'Copy TypeScript', () => {
-      void this.copySelectedTuning()
-    })
   }
 
   private createSlider(spec: TuningControlSpec, x: number, y: number): void {
@@ -432,6 +445,26 @@ export class OutlineLab extends Container {
       0.92,
       'Play button'
     )
+
+    const ghostGroup = this.createPreviewGroup('ghost')
+    this.addOutlinedTexture(
+      ghostGroup,
+      deckAssets.deckButtonFrame,
+      'ghost',
+      330,
+      575,
+      1.65,
+      'Deck frame'
+    )
+    this.addOutlinedTexture(
+      ghostGroup,
+      selectionAssets.playButton,
+      'ghost',
+      800,
+      575,
+      0.92,
+      'Play button'
+    )
   }
 
   private createPreviewGroup(preset: OutlinePresetName): Container {
@@ -502,7 +535,10 @@ export class OutlineLab extends Container {
   }
 
   private registerOutline(target: Container, preset: OutlinePresetName): void {
-    const outline = new AnimatedOutline(target, this.selectedPalettes[preset], preset)
+    const outline = new AnimatedOutline(target, {
+      palette: this.selectedPalettes[preset],
+      preset
+    })
     outline.setTuning(this.drafts[preset])
     const outlines = this.outlines.get(preset) ?? []
     outlines.push(outline)
@@ -519,7 +555,7 @@ export class OutlineLab extends Container {
     }
     this.refreshPresetTabs()
     this.refreshPaletteButtons()
-    this.statusLabel.text = `${PRESET_LABELS[preset]} draft loaded. Changes remain in memory until you leave the scene.`
+    this.statusLabel.text = `${PRESET_LABELS[preset]} production values loaded. Changes save automatically.`
   }
 
   private selectPalette(palette: OutlinePaletteName): void {
@@ -560,44 +596,20 @@ export class OutlineLab extends Container {
     for (const outline of this.outlines.get(preset) ?? []) {
       outline.setTuning(this.drafts[preset])
     }
-    this.refreshPresetTabs()
-    this.statusLabel.text = `${PRESET_LABELS[preset]} has temporary edits.`
+    updateOutlineTuningConfig({ version: 1, presets: this.drafts })
+    this.scheduleSave()
   }
 
   private endSliderDrag(slider: SliderState): void {
     if (this.activeSlider === slider) this.activeSlider = null
-  }
-
-  private resetPreset(preset: OutlinePresetName): void {
-    this.drafts[preset] = { ...OUTLINE_TUNINGS[preset] }
-    for (const outline of this.outlines.get(preset) ?? []) {
-      outline.setTuning(this.drafts[preset])
-    }
-    if (preset === this.selectedPreset) {
-      for (const slider of this.sliders.values()) {
-        this.setSliderValue(slider, this.drafts[preset][slider.spec.key], false)
-      }
-    }
-    this.refreshPresetTabs()
-    this.statusLabel.text = `${PRESET_LABELS[preset]} restored to compiled values.`
-  }
-
-  private resetAll(): void {
-    for (const preset of PRESETS) this.resetPreset(preset)
-    this.statusLabel.text = 'All presets restored to compiled values.'
-  }
-
-  private isPresetEdited(preset: OutlinePresetName): boolean {
-    return CONTROL_SPECS.some(
-      ({ key }) => this.drafts[preset][key] !== OUTLINE_TUNINGS[preset][key]
-    )
+    this.flushSave()
   }
 
   private refreshPresetTabs(): void {
     for (const preset of PRESETS) {
       const tab = this.presetTabs.get(preset)
       if (!tab) continue
-      tab.label.text = `${PRESET_LABELS[preset]}${this.isPresetEdited(preset) ? ' *' : ''}`
+      tab.label.text = PRESET_LABELS[preset]
       this.drawButton(tab, preset === this.selectedPreset)
     }
   }
@@ -609,21 +621,49 @@ export class OutlineLab extends Container {
     }
   }
 
-  private async copySelectedTuning(): Promise<void> {
-    const preset = this.selectedPreset
-    const property = preset === 'bonus-card' ? `'${preset}'` : preset
-    const lines = CONTROL_SPECS.map(
-      ({ key }) => `  ${key}: ${this.drafts[preset][key]}`
-    )
-    const source = `${property}: {\n${lines.join(',\n')}\n}`
+  private scheduleSave(): void {
+    this.saveRequested = true
+    this.statusLabel.text = 'Saving production configuration…'
+    if (this.saveTimer) clearTimeout(this.saveTimer)
+    this.saveTimer = setTimeout(() => this.flushSave(), 200)
+  }
 
-    try {
-      await navigator.clipboard.writeText(source)
-      this.statusLabel.text = `${PRESET_LABELS[preset]} TypeScript copied to the clipboard.`
-    } catch (error) {
-      console.info('[OutlineLab] Clipboard unavailable. Tuning block:', source, error)
+  private flushSave(): void {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer)
+      this.saveTimer = null
+    }
+    if (!this.saveRequested || this.saveInFlight) return
+    void this.drainSaves()
+  }
+
+  private async drainSaves(): Promise<void> {
+    const save = window.api.outlineTuning?.save
+    if (!save) {
       this.statusLabel.text =
-        'Clipboard unavailable; the tuning block was written to the developer console.'
+        'Unable to save: development outline tuning API is unavailable.'
+      return
+    }
+
+    this.saveInFlight = true
+    try {
+      while (this.saveRequested) {
+        this.saveRequested = false
+        try {
+          await save(getOutlineTuningConfig())
+        } catch (error) {
+          this.saveRequested = true
+          console.error('[OutlineLab] Failed to save production configuration.', error)
+          if (!this.disposed) {
+            this.statusLabel.text =
+              'Save failed. The current values remain live; edit again to retry.'
+          }
+          return
+        }
+      }
+      if (!this.disposed) this.statusLabel.text = 'Saved production configuration.'
+    } finally {
+      this.saveInFlight = false
     }
   }
 

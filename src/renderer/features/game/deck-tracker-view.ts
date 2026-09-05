@@ -34,6 +34,7 @@ export class DeckTrackerView extends Actor {
   private maxScroll = 0
   private disposed = false
   private sortMode: DeckTrackerSortMode = 'cost'
+  private renderedDeckKey: string | null = null
 
   constructor(
     private readonly cardResolver = new CardAssetResolver(),
@@ -71,6 +72,11 @@ export class DeckTrackerView extends Actor {
   }
 
   update(deck: readonly OpeningCard[]): void {
+    const deckKey = `${this.sortMode}:${deck
+      .map((card) => `${card.instanceId}:${card.cardId}`)
+      .join(',')}`
+    if (deckKey === this.renderedDeckKey) return
+    this.renderedDeckKey = deckKey
     const sequence = ++this.renderSequence
     const entries = buildDeckTrackerEntries(deck, this.sortMode)
     const oldRows = this.content.removeChildren()
@@ -118,7 +124,9 @@ export class DeckTrackerView extends Actor {
   }
 
   setSortMode(sortMode: DeckTrackerSortMode): void {
+    if (this.sortMode === sortMode) return
     this.sortMode = sortMode
+    this.renderedDeckKey = null
   }
 
   private createRow(entry: DeckTrackerEntry, index: number): DeckTrackerRowView {

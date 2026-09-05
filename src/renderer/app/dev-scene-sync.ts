@@ -21,8 +21,8 @@ function getDevMenuBridge(): DevMenuBridge | null {
 }
 
 function getDevSceneId(scene: unknown): DevSceneId {
-  if ((scene as { readonly devSceneId?: unknown } | null)?.devSceneId === 'outline-lab')
-    return 'outline-lab'
+  const devSceneId = (scene as { readonly devSceneId?: unknown } | null)?.devSceneId
+  if (devSceneId === 'card-inspector' || devSceneId === 'outline-lab') return devSceneId
   if (scene instanceof MainMenuScene) return 'main-menu'
   if (scene instanceof DeckSelectionScene) return 'deck-selection'
   if (scene instanceof CollectionScene) return 'collection'
@@ -47,7 +47,6 @@ export function installDevSceneSync(
   const bridge = getDevMenuBridge()
   const notifySceneChanged = bridge?.notifySceneChanged
   if (!notifySceneChanged) {
-    logger.info('[DevMenu] scene sync bridge unavailable')
     return () => undefined
   }
 
@@ -58,7 +57,6 @@ export function installDevSceneSync(
     lastSceneId = sceneId
     try {
       notifySceneChanged(sceneId)
-      logger.info('[DevMenu] scene changed', sceneId)
     } catch (error) {
       logger.warn('[DevMenu] failed to notify scene', error)
     }

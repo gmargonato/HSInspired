@@ -51,11 +51,10 @@ export class GameHudView {
     )
     this.endTurnOutlineTarget.eventMode = 'none'
     this.endTurnOutlineTarget.label = 'game.end-turn-exhausted-outline-target'
-    this.endTurnOutline = new AnimatedOutline(
-      this.endTurnOutlineTarget,
-      'green',
-      'button'
-    )
+    this.endTurnOutline = new AnimatedOutline(this.endTurnOutlineTarget, {
+      palette: 'green',
+      preset: 'button'
+    })
     this.endTurnOutline.setEnabled(false)
     this.turnLayer.addChild(this.endTurnOutlineTarget)
 
@@ -126,7 +125,6 @@ export class GameHudView {
       this.manaLabels.remote.text = `${remote.mana.available}/${remote.mana.maximum}`
     }
     this.manaLocalTray?.sync(resolveManaCrystalStates(local.mana, highlightCost))
-    if (this.deckTracker.visible) this.deckTracker.update(local.deck)
   }
 
   toggleDeckTracker(deck: readonly OpeningCard[]): boolean {

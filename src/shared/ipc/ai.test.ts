@@ -8,6 +8,8 @@ import {
   parseAiDecisionRequest,
   parseAiDecisionResponse,
   parseAiRankDecisionResponse,
+  parseAiStrategyReviewRequest,
+  parseAiStrategyReviewResponse,
   unwrapAiIpcResult
 } from './ai'
 
@@ -64,6 +66,30 @@ describe('AI IPC contracts', () => {
         legalActions: [action, action]
       })
     ).toThrow('action ids must be unique')
+  })
+
+  it('rejects decision classes that do not belong to the request phase', () => {
+    expect(() =>
+      parseAiDecisionRequest({
+        decisionId: 'turn-1-0',
+        phase: 'turn',
+        decisionClass: 'deck-plan',
+        matchRevision: 1,
+        promptVersion: 'test-v1',
+        contextVersion: 3,
+        schemaVersion: 2,
+        deadlineAtMs: 1,
+        gameState: {},
+        legalActions: [
+          {
+            id: 'action-0',
+            kind: 'end-turn',
+            description: 'End turn.',
+            details: {}
+          }
+        ]
+      })
+    ).toThrow('phase and decisionClass are inconsistent')
   })
 
   it('unwraps serializable IPC successes and failures', () => {
@@ -144,7 +170,7 @@ describe('AI IPC contracts', () => {
     const response = parseAiDeckPlanResponse({
       plan: {
         planVersion: 1,
-        archetype: 'combo',
+        archetype: 'freeze setup into delayed burst',
         primaryWinCondition: verboseStrategy,
         secondaryWinCondition: 'Control the board.',
         earlyGamePriority: 'Draw.',
@@ -161,7 +187,8 @@ describe('AI IPC contracts', () => {
           {
             cardIds: ['basic_frostbolt', 'classic_ice_lance'],
             preserveUntil: verboseRule,
-            releaseWhen: verboseRule
+            releaseWhen: verboseRule,
+            releaseTriggers: ['lethal', 'forced-survival', 'combo-ready']
           }
         ],
         mulliganPriorityCardIds: ['basic_frostbolt']
@@ -170,10 +197,52 @@ describe('AI IPC contracts', () => {
       modelId: 'test-model'
     })
     expect(response.plan.resourceRules[0]?.cardIds).toContain('classic_ice_lance')
+    expect(response.plan.archetype).toBe('freeze setup into delayed burst')
     expect(response.plan.primaryWinCondition).toHaveLength(500)
     expect(response.plan.combos[0]?.purpose).toHaveLength(240)
     expect(response.plan.resourceRules[0]?.preserveUntil).toHaveLength(240)
     expect(response.plan.resourceRules[0]?.releaseWhen).toHaveLength(240)
+    expect(response.plan.resourceRules[0]?.releaseTriggers).toContain('lethal')
     expect(response.rationale).toHaveLength(500)
+  })
+
+  it('requires evidence reasons for a changed strategy review', () => {
+    const request = parseAiStrategyReviewRequest({
+      reviewId: 'review-4',
+      decisionClass: 'strategy-review',
+      promptVersion: 'review-v1',
+      schemaVersion: 1,
+      deadlineAtMs: 1,
+      previousPlan: { planVersion: 1 },
+      strategicMemory: { reviewReasons: ['Opponent revealed a finisher.'] },
+      gameState: { informationPolicy: 'fair' }
+    })
+    expect(request.decisionClass).toBe('strategy-review')
+    const unchangedPlan = {
+      planVersion: 1,
+      archetype: 'tempo',
+      primaryWinCondition: 'Keep initiative.',
+      secondaryWinCondition: 'Win through value.',
+      earlyGamePriority: 'Develop.',
+      midGamePriority: 'Pressure.',
+      lateGamePriority: 'Finish.',
+      cardRoles: [],
+      combos: [],
+      resourceRules: [],
+      mulliganPriorityCardIds: []
+    }
+    expect(() =>
+      parseAiStrategyReviewResponse({
+        review: {
+          reviewVersion: 1,
+          changed: true,
+          revisedPlan: unchangedPlan,
+          changeReasons: [],
+          opponentAssessment: 'Control is increasingly likely.'
+        },
+        rationale: 'Change without evidence.',
+        modelId: 'gpt-5.4-nano'
+      })
+    ).toThrow('requires a public-evidence reason')
   })
 })

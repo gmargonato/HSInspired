@@ -21,15 +21,15 @@ import {
   parseAiDeckPlanResponse,
   parseAiDecisionRequest,
   parseAiDecisionResponse,
-  parseAiMatchupPlanRequest,
-  parseAiMatchupPlanResponse,
+  parseAiStrategyReviewRequest,
+  parseAiStrategyReviewResponse,
   unwrapAiIpcResult,
   type AiDeckPlanRequest,
   type AiDeckPlanResponse,
   type AiDecisionRequest,
   type AiDecisionResponse,
-  type AiMatchupPlanRequest,
-  type AiMatchupPlanResponse
+  type AiStrategyReviewRequest,
+  type AiStrategyReviewResponse
 } from '../shared/ipc/ai'
 import {
   DECK_IPC_CHANNELS,
@@ -63,8 +63,38 @@ import {
   type ArenaApi,
   type ArenaRunSnapshot
 } from '../shared/ipc/arena'
+import {
+  CARD_CLASS_BUILDER_IPC_CHANNELS,
+  parseCardClassBuilderConfig,
+  type CardClassBuilderConfig
+} from '../shared/ipc/card-class-builder'
+import {
+  OUTLINE_TUNING_IPC_CHANNELS,
+  parseOutlineTuningConfig,
+  type OutlineTuningConfig
+} from '../shared/ipc/outline-tuning'
 
 const api = {
+  ...(process.env.NODE_ENV === 'development'
+    ? {
+        cardClassBuilder: {
+          save: async (config: CardClassBuilderConfig): Promise<void> => {
+            await ipcRenderer.invoke(
+              CARD_CLASS_BUILDER_IPC_CHANNELS.save,
+              parseCardClassBuilderConfig(config)
+            )
+          }
+        },
+        outlineTuning: {
+          save: async (config: OutlineTuningConfig): Promise<void> => {
+            await ipcRenderer.invoke(
+              OUTLINE_TUNING_IPC_CHANNELS.save,
+              parseOutlineTuningConfig(config)
+            )
+          }
+        }
+      }
+    : {}),
   arena: {
     get: async (): Promise<ArenaRunSnapshot> =>
       parseArenaRunSnapshot(await ipcRenderer.invoke(ARENA_IPC_CHANNELS.get)),
@@ -97,16 +127,6 @@ const api = {
   },
 
   ai: {
-    planMatchup: async (
-      request: AiMatchupPlanRequest
-    ): Promise<AiMatchupPlanResponse> =>
-      unwrapAiIpcResult(
-        await ipcRenderer.invoke(
-          AI_IPC_CHANNELS.planMatchup,
-          parseAiMatchupPlanRequest(request)
-        ),
-        parseAiMatchupPlanResponse
-      ),
     planDeck: async (request: AiDeckPlanRequest): Promise<AiDeckPlanResponse> =>
       unwrapAiIpcResult(
         await ipcRenderer.invoke(
@@ -114,6 +134,16 @@ const api = {
           parseAiDeckPlanRequest(request)
         ),
         parseAiDeckPlanResponse
+      ),
+    reviewStrategy: async (
+      request: AiStrategyReviewRequest
+    ): Promise<AiStrategyReviewResponse> =>
+      unwrapAiIpcResult(
+        await ipcRenderer.invoke(
+          AI_IPC_CHANNELS.reviewStrategy,
+          parseAiStrategyReviewRequest(request)
+        ),
+        parseAiStrategyReviewResponse
       ),
     decide: async (request: AiDecisionRequest): Promise<AiDecisionResponse> =>
       unwrapAiIpcResult(
@@ -131,22 +161,13 @@ const api = {
    * and renderer teardown.
    */
   onSceneRequest(listener: (request: SceneRequest) => void): () => void {
-    const trace = (...details: readonly unknown[]): void => {
-      if (process.env.NODE_ENV !== 'production') {
-        console.info('[Scenes menu][preload]', ...details)
-      }
-    }
     const handleSceneRequest = (_event: IpcRendererEvent, request: unknown): void => {
       if (isSceneRequest(request)) {
-        trace('received', request)
         listener(request)
-      } else {
-        trace('rejected request', request)
       }
     }
 
     ipcRenderer.on(SCENE_REQUEST_CHANNEL, handleSceneRequest)
-    trace('listener registered')
     return () => ipcRenderer.removeListener(SCENE_REQUEST_CHANNEL, handleSceneRequest)
   },
 

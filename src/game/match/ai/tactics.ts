@@ -9,7 +9,7 @@ import type {
 import type { PlayerId } from '../match-types'
 import type { AiTacticalProof } from './ai-types'
 import {
-  COMPETITIVE_AI_EVALUATOR_WEIGHTS,
+  STRATEGIC_AI_EVALUATOR_WEIGHTS,
   evaluatePosition,
   type AiEvaluatorWeights
 } from './evaluator'
@@ -18,6 +18,7 @@ import {
   canonicalCommandKey,
   enumerateLegalCommands
 } from './legal-commands'
+import { commandUsesUncertainty } from './uncertainty'
 
 /**
  * Tactical profitability compares positions, not turn-phase bookkeeping:
@@ -26,9 +27,9 @@ import {
  * justify a cost).
  */
 const TACTICAL_EVALUATION_WEIGHTS: AiEvaluatorWeights = {
-  ...COMPETITIVE_AI_EVALUATOR_WEIGHTS,
+  ...STRATEGIC_AI_EVALUATOR_WEIGHTS,
   components: {
-    ...COMPETITIVE_AI_EVALUATOR_WEIGHTS.components,
+    ...STRATEGIC_AI_EVALUATOR_WEIGHTS.components,
     manaEfficiency: 0,
     initiative: 0
   }
@@ -59,14 +60,7 @@ function commandCardId(
 }
 
 function mayBranch(command: TurnMatchCommand, state: OpeningMatchState): boolean {
-  const opponent = state.players.find(
-    (player) => player.participantId !== command.participantId
-  )
-  if ((opponent?.secrets ?? []).some((secret) => !secret.revealed)) return true
-  const cardId = commandCardId(command, state)
-  const definition = cardId ? CARD_CATALOG.get(cardId) : undefined
-  const effects = JSON.stringify(definition?.effects ?? []).toLowerCase()
-  return /random|discover|shuffle|generate|draw/.test(effects)
+  return commandUsesUncertainty(command, state)
 }
 
 function simulate(

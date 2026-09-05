@@ -4,6 +4,7 @@ import { HERO_POWER_CATALOG } from '../content/hero-powers'
 import { countDeckCards, type Deck } from '../decks'
 import { createSeededRng, type DeterministicRng } from './rng'
 import {
+  EffectRuntime,
   getDerivedState,
   getMatchLegality,
   getPlayInput,
@@ -58,6 +59,7 @@ import type {
   OpeningRejectedResult,
   OpeningCommandResult,
   OpeningMatchInstance,
+  OpeningMatchCheckpoint,
   OpeningMatchPublicEvent,
   OpeningMatchPublicState,
   OpeningPublicCard,
@@ -2208,7 +2210,8 @@ function applyDevStateChange(
 export function createOpeningMatch(
   setup: MatchSetup,
   deckSnapshots: readonly Deck[],
-  rng: DeterministicRng = createSeededRng(setup.seed)
+  rng: DeterministicRng = createSeededRng(setup.seed),
+  checkpoint?: OpeningMatchCheckpoint
 ): OpeningMatchInstance {
   const recordEffectTrace = setup.recordEffectTrace === true
   const decksById = new Map(deckSnapshots.map((deck) => [deck.id, deck]))
@@ -2333,6 +2336,41 @@ export function createOpeningMatch(
     state = transaction.commit()
   }
   let devDeckRefillCounter = 0
+  let queryRuntime: EffectRuntime | null = null
+  let queryRevision = -1
+  let derivedStateCache: OpeningMatchState | null = null
+  const playInputCache = new Map<string, PlayCardInput | null>()
+  const legalityCache = new Map<PlayerId, MatchLegality>()
+
+  /** Reuses the expensive derived-state setup across pure queries at one revision. */
+  const getQueryRuntime = (): EffectRuntime => {
+    if (queryRuntime && queryRevision === state.revision) return queryRuntime
+    queryRuntime = new EffectRuntime(state)
+    queryRevision = state.revision
+    derivedStateCache = null
+    playInputCache.clear()
+    legalityCache.clear()
+    return queryRuntime
+  }
+
+  const getDerivedSnapshot = (): OpeningMatchState => {
+    getQueryRuntime()
+    derivedStateCache ??= queryRuntime!.getDerivedState()
+    return derivedStateCache
+  }
+
+  if (checkpoint) {
+    if (checkpoint.schemaVersion !== 1) {
+      throw new Error(
+        `Unsupported match checkpoint schema ${checkpoint.schemaVersion}.`
+      )
+    }
+    state = cloneOpeningMatchState(checkpoint.state)
+    assertOpeningMatchInvariants(state)
+    rng.restore(checkpoint.rngState)
+    nextEntityOrdinal = checkpoint.nextEntityOrdinal
+    devDeckRefillCounter = checkpoint.devDeckRefillCounter
+  }
 
   const refillDeckFor = (participantId: PlayerId): readonly OpeningCard[] => {
     const participant = setup.participants.find(
@@ -2552,30 +2590,51 @@ export function createOpeningMatch(
   const instance: OpeningMatchInstance = {
     setup,
     getState(): OpeningMatchState {
-      return cloneOpeningMatchState(getDerivedState(state))
+      return cloneOpeningMatchState(getDerivedSnapshot())
+    },
+    getCheckpoint(): OpeningMatchCheckpoint {
+      return {
+        schemaVersion: 1,
+        setup,
+        decks: deckSnapshots,
+        state: cloneOpeningMatchState(state),
+        rngState: rng.snapshot(),
+        nextEntityOrdinal,
+        devDeckRefillCounter
+      }
     },
     getPlayInput(
       participantId: PlayerId,
       cardInstanceId: string,
       choice?: number
     ): PlayCardInput | null {
-      return getPlayInput(state, participantId, cardInstanceId, choice)
+      const runtime = getQueryRuntime()
+      const key = `${participantId}\u0000${cardInstanceId}\u0000${choice ?? ''}`
+      if (playInputCache.has(key)) return playInputCache.get(key) ?? null
+      const input = runtime.getPlayInput(participantId, cardInstanceId, choice)
+      playInputCache.set(key, input)
+      return input
     },
     getLegality(participantId: PlayerId): MatchLegality {
-      return getMatchLegality(state, participantId)
+      const runtime = getQueryRuntime()
+      const cached = legalityCache.get(participantId)
+      if (cached) return cached
+      const legality = runtime.getMatchLegality(participantId)
+      legalityCache.set(participantId, legality)
+      return legality
     },
     getEffectTrace(): readonly EffectTraceEntry[] {
       return state.effectTrace ? state.effectTrace.map((entry) => ({ ...entry })) : []
     },
     getPublicState(participantId: PlayerId): OpeningMatchPublicState {
-      return getOpeningMatchPublicState(getDerivedState(state), participantId)
+      return getOpeningMatchPublicState(getDerivedSnapshot(), participantId)
     },
     getAiObservation(participantId, policy) {
-      if (policy !== 'opponent-deck-and-hand') {
+      if (policy !== 'fair') {
         throw new Error(`Unsupported AI information policy: ${String(policy)}`)
       }
       return createAiObservation(
-        getDerivedState(state),
+        getDerivedSnapshot(),
         setup,
         deckSnapshots,
         participantId
@@ -3093,4 +3152,16 @@ export function createOpeningMatch(
     }
   }
   return instance
+}
+
+/** Restores an independent match instance from a structured-cloned checkpoint. */
+export function createOpeningMatchFromCheckpoint(
+  checkpoint: OpeningMatchCheckpoint
+): OpeningMatchInstance {
+  return createOpeningMatch(
+    checkpoint.setup,
+    checkpoint.decks,
+    createSeededRng(checkpoint.setup.seed),
+    checkpoint
+  )
 }

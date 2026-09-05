@@ -42,6 +42,22 @@ body {
   display: block;
 }
 
+.fps-counter {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 999;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font:
+    14px/1.4 Consolas,
+    monospace;
+  pointer-events: none;
+  user-select: none;
+}
+
 .collection-search-input {
   position: absolute;
   z-index: 10;
@@ -88,6 +104,202 @@ body {
 .collection-deck-name-input::selection {
   background: rgba(255, 255, 255, 0.32);
   color: #000;
+}
+
+.card-color-lab {
+  position: absolute;
+  z-index: 40;
+  box-sizing: border-box;
+  transform-origin: top left;
+  padding: 18px;
+  border: 2px solid #4b5877;
+  border-radius: 12px;
+  background: rgba(18, 26, 44, 0.97);
+  color: #eef3ff;
+  font-family: Arial, sans-serif;
+  pointer-events: auto;
+}
+
+.card-color-lab[hidden] {
+  display: none;
+}
+
+.card-color-lab__title {
+  margin: 0;
+  color: #f1d36a;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.card-color-lab__subtitle {
+  margin: 7px 0 14px;
+  color: #aab6cf;
+  font-size: 13px;
+}
+
+.card-color-lab__toolbar {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.card-color-lab__classes {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+}
+
+.card-color-lab__templates {
+  display: flex;
+  gap: 5px;
+}
+
+.card-color-lab__button,
+.card-color-lab__mask-title {
+  box-sizing: border-box;
+  border: 1px solid #6f8fc9;
+  border-radius: 5px;
+  background: #263a60;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.card-color-lab__button {
+  min-height: 27px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.card-color-lab__button.is-selected,
+.card-color-lab__mask.is-active .card-color-lab__mask-title {
+  border-color: #f1d36a;
+  background: #755d1e;
+  color: #fff4b8;
+}
+
+.card-color-lab__link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #d8c49a;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.card-color-lab__link[hidden],
+.card-color-lab__mask[hidden] {
+  display: none;
+}
+
+.card-color-lab__link-input {
+  width: 16px;
+  height: 16px;
+  accent-color: #d0a72b;
+}
+
+.card-color-lab__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.card-color-lab.is-spell .card-color-lab__columns {
+  grid-template-columns: 1fr;
+}
+
+.card-color-lab__mask {
+  box-sizing: border-box;
+  padding: 10px;
+  border: 2px solid #34425f;
+  border-radius: 8px;
+  background: #10182a;
+}
+
+.card-color-lab__mask.is-active {
+  border-color: #d0a72b;
+  box-shadow: 0 0 8px rgba(241, 211, 106, 0.22);
+}
+
+.card-color-lab__mask-title {
+  width: 100%;
+  height: 29px;
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.card-color-lab__number,
+.card-color-lab__blend {
+  box-sizing: border-box;
+  border: 1px solid #637398;
+  border-radius: 4px;
+  outline: none;
+  background: #080e18;
+  color: #fff;
+  font-family: Consolas, monospace;
+}
+
+.card-color-lab__blend-label {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  color: #dce4f5;
+  font-size: 12px;
+}
+
+.card-color-lab__blend {
+  height: 27px;
+  padding: 0 5px;
+  font-size: 12px;
+}
+
+.card-color-lab__field {
+  display: grid;
+  grid-template-columns: 75px 1fr 68px 22px;
+  align-items: center;
+  gap: 6px;
+  min-height: 41px;
+  font-size: 12px;
+}
+
+.card-color-lab__field-label {
+  color: #dce4f5;
+}
+
+.card-color-lab__range {
+  width: 100%;
+  margin: 0;
+  accent-color: #f1d36a;
+}
+
+.card-color-lab__number {
+  width: 68px;
+  height: 27px;
+  padding: 0 4px;
+  text-align: right;
+}
+
+.card-color-lab__number:focus,
+.card-color-lab__blend:focus {
+  border-color: #f1d36a;
+  box-shadow: 0 0 5px rgba(241, 211, 106, 0.3);
+}
+
+.card-color-lab__suffix {
+  color: #8fa0bd;
+  font-size: 11px;
+}
+
+.card-color-lab__status {
+  margin-top: 9px;
+  color: #aab6cf;
+  font-size: 12px;
+  text-align: right;
 }
 
 .add-card-picker {

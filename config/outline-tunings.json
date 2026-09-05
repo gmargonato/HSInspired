@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "presets": {
+    "card": {
+      "ribbonWidth": 8,
+      "edgeSoftness": 2,
+      "rimWidth": 2,
+      "glowWidth": 5,
+      "glowStrength": 1,
+      "highlightStrength": 2,
+      "hotspotScale": 50,
+      "hotspotDensity": 1,
+      "edgeWobble": 4,
+      "motionSpeed": 0.7
+    },
+    "bonus-card": {
+      "ribbonWidth": 8,
+      "edgeSoftness": 2,
+      "rimWidth": 2,
+      "glowWidth": 5,
+      "glowStrength": 1,
+      "highlightStrength": 2,
+      "hotspotScale": 50,
+      "hotspotDensity": 1,
+      "edgeWobble": 8,
+      "motionSpeed": 1.4
+    },
+    "board": {
+      "ribbonWidth": 6,
+      "edgeSoftness": 10,
+      "rimWidth": 0,
+      "glowWidth": 30,
+      "glowStrength": 1.33,
+      "highlightStrength": 5,
+      "hotspotScale": 50,
+      "hotspotDensity": 0,
+      "edgeWobble": 4.9,
+      "motionSpeed": 1.35
+    },
+    "button": {
+      "ribbonWidth": 12,
+      "edgeSoftness": 10,
+      "rimWidth": 6.9,
+      "glowWidth": 9.25,
+      "glowStrength": 0,
+      "highlightStrength": 0.6,
+      "hotspotScale": 46,
+      "hotspotDensity": 1.3,
+      "edgeWobble": 6.8,
+      "motionSpeed": 1
+    },
+    "ghost": {
+      "ribbonWidth": 4,
+      "edgeSoftness": 10,
+      "rimWidth": 15,
+      "glowWidth": 0,
+      "glowStrength": 0,
+      "highlightStrength": 2.05,
+      "hotspotScale": 1,
+      "hotspotDensity": 4,
+      "edgeWobble": 16,
+      "motionSpeed": 2
+    }
+  }
+}

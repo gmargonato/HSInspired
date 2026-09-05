@@ -1,370 +1,417 @@
-# Competitive Game AI Plan
+I am developing an AI opponent for a Hearthstone-inspired card game.
 
-## Objective and release policy
+The system already works. The game itself calculates the legal actions available to the AI, and an LLM evaluates those options and decides what to do. There is also a planning phase at the start of the match where the AI sees its own deck and tries to understand how that deck wants to play, followed by a mulligan decision.
 
-Competitive AI v2 should combine deterministic engine search with GPT-5.4 nano
-ranking while always dispatching an engine-issued legal command. It intentionally
-knows both original decklists and the opponent's exact current hand, but it must
-not know remaining deck order, future random values, hidden entity-order fields,
-or the identity of a facedown secret.
+The main problem is no longer basic gameplay. The AI can usually make reasonable immediate decisions. The goal now is to make it better at long-term strategy, sequencing, resource preservation, opponent interpretation, and planning across multiple turns.
 
-Competitive v2 remains behind the build-time `VITE_COMPETITIVE_AI_V2=true`
-switch. The default production policy is still the legacy AI. Do not enable v2 by
-default until every acceptance gate in this document passes.
+An important requirement is that the AI should determine the strategy of its deck dynamically during the planning phase. Do not assume that decks have predefined or hard-coded archetypes or strategies. I frequently change cards, create new decks, or experiment with unusual combinations. The AI should inspect the actual deck it has been given and determine for itself how that particular deck is likely to win, which cards are important, which combinations matter, and what resources should be preserved.
 
-## Current architecture
+The AI should maintain an understanding of its own strategy throughout the game. It should not forget the original plan simply because an individual action has good immediate value.
 
-```text
-authoritative deterministic match engine
-                |
-                +--> legal command enumeration and isolated analysis forks
-                |
-                +--> local tactical/search evaluation
-                            |
-                            +--> deterministic fallback
-                            |
-                            +--> bounded shortlist and dossiers
-                                         |
-                                         +--> GPT-5.4 nano rank
-                                         +--> GPT-5.4 nano critic (v2 only)
-                                                     |
-                                                     v
-                                  revision + membership + live-legality checks
-                                                     |
-                                                     v
-                                         dispatch one atomic command
-```
+For example, if the AI determines that Frostbolt is an important part of a future burst-damage combination, it should understand that using Frostbolt to kill an ordinary minion may have a significant strategic cost, even if the immediate trade looks good.
 
-The game domain owns legality, deterministic transitions, evaluation, hashing,
-and analysis forks. The renderer currently orchestrates search and decision
-timing. A persistent Web Worker performs serializable dossier aggregation. The
-Electron main process owns the Azure adapter, while shared code owns validated
-IPC contracts.
+The AI should think beyond the current board state. Hearthstone-style games involve understanding what happened previously, what both players are trying to accomplish, and what the current decisions may enable several turns later.
 
-After each accepted command, the next decision starts from the newly resolved
-state while the previous command's presentation animation is playing. Dispatch
-waits until presentation is idle, and stale decisions are discarded by revision.
+The AI should also build and continuously update an understanding of the human opponent.
 
-## Match-scoped strategy
+It should consider observable actions from previous turns and try to infer things such as:
 
-### Legacy policy
+What type of game the opponent appears to be playing.
 
-- Generates a version-1 plan from the AI's own deck.
-- Planning starts during scene initialization and overlaps asset loading and the
-  opening presentation.
-- Mulligan ranking can proceed with the deterministic fallback while remote deck
-  planning is still in flight.
-- The plan tracks win conditions, phase priorities, card roles, combos, resource
-  preservation and release rules, and mulligan priorities.
+Whether the opponent is prioritizing aggression, control, card advantage, survival, tempo, combos, or another goal.
 
-### Competitive-v2 policy
+What important resources the opponent may be preserving.
 
-- Generates one version-2 matchup plan from both original decklists.
-- Validates self-strategy card references against the AI deck and threat/removal
-  references against the opponent deck.
-- Tracks combo viability, reserved resources, opposing threats, and release
-  conditions locally as the match revision changes.
-- Uses a deterministic structured-effects fallback when the provider is
-  unavailable or returns an invalid plan.
+What future threats may be developing.
 
-## Information policy
+Whether recent behavior changes the AI's previous assumptions about the opponent.
 
-Competitive v2 exposes an `opponent-deck-and-hand` observation containing:
+The AI must never have access to information that a real player would not know.
 
-- both original unordered decklists;
-- the exact current hands of both players;
-- public board, hero, weapon, mana, graveyard, and revealed-secret information;
-- only deck sizes, never remaining deck order.
+It must not know the opponent's hand.
 
-The observation removes instance IDs and order-correlated fields from hidden
-cards, along with creation ordinals, play-order metadata, and RNG cursor state.
-Facedown secret identities remain `null`.
+It must not know hidden cards.
 
-The provider receives only this sanitized observation and engine-issued action
-IDs. It never receives the authoritative remaining deck order or secret identity.
+It must not know the exact identity of secrets that have not been revealed.
 
-## Legacy turn decision
+It must not know the opponent's remaining deck unless that information has legitimately become known during gameplay.
 
-The default legacy controller currently:
+Hidden information is intentional and should remain part of the reasoning process.
 
-1. Enumerates legal actions and constructs bounded complete-turn candidate lines.
-2. Searches to atomic depth 12 with beam width 32, a 4,000-node ceiling, and a
-   250 ms local budget.
-3. Simulates deterministic lines on restoring engine forks.
-4. Scores and shortlists at most 12 strategically distinct candidates.
-5. Bypasses the provider for an immediate simulated win or a single candidate.
-6. Otherwise asks GPT-5.4 nano to choose one supplied candidate ID.
-7. Uses the local plan-aware winner immediately if the request fails.
-8. Dispatches only the selected line's first command, then plans again.
+The AI should reason using uncertainty rather than cheating.
 
-Legacy action decisions are attempted once; provider timeouts are not retried.
+For example, if the opponent has played a secret, the AI may consider which secrets are possible based on known game information. It may adapt its actions to reduce risk or test possibilities, but it should not behave as though it knows which secret is present.
 
-## Competitive-v2 turn decision
+The AI should also learn from information revealed during gameplay. If an action rules out a possible secret, reveals a card, produces a random result, or otherwise changes what is known, subsequent decisions should reflect that new information.
 
-The gated controller currently performs the following sequence:
+Action sequencing is very important.
 
-1. Enumerate canonical legal first commands, including every legal target,
-   position, choice, attack, hero power, Discover choice, and end-turn command.
-2. Run a deterministic guaranteed-lethal proof search.
-3. For each retained first command, expand complete AI-turn continuations.
-4. Collapse equivalent successor states by strategic hash and retain the best
-   continuation for each distinct first command.
-5. Expand the opponent's complete-turn responses and select the response with the
-   lowest AI evaluation.
-6. Build a dossier with the continuation, strongest response, tactical flags,
-   component evaluation, resource usage, uncertainty, and matchup progress.
-7. Send dossiers to the persistent worker for deterministic risk-weighted sorting
-   and retain at most eight first actions.
-8. Bypass GPT for proven lethal or a single remaining candidate.
-9. Ask GPT-5.4 nano for a strict complete ranking of the supplied IDs.
-10. If ranking succeeds, ask GPT-5.4 nano to criticize the top four actions in
-    that ordering and either retain or replace the first choice with one of those IDs.
-11. Validate the model, response schema, candidate membership, revision, deadline,
-    and current legality.
-12. Dispatch one atomic command and restart from the resolved state.
+The AI should understand that two turns containing the same actions can have very different quality depending on the order in which those actions are performed.
 
-Production v2 limits are an eight-second local-search allowance, 50,000 nodes,
-atomic depth 16, own-turn beam 64, opponent-turn beam 32, eight intended hidden
-state determinizations, four intended relevant-random samples, and 50,000 cached
-transposition entries per match.
+Information-generating actions should receive special consideration.
 
-Root actions must receive fair minimum coverage before any root receives deeper
-analysis. Target enumeration order, card order, and 50 ms renderer slices must
-not determine which commands reach the shortlist. After the minimum pass,
-iterative deepening may spend additional time on the most promising roots.
+For example, drawing a card at the beginning of a turn may be significantly better than drawing the same card at the end of the turn because the newly drawn card may change the best available play.
 
-## Evaluation
+The AI should recognize situations where deliberately triggering card draw, generating cards, testing hidden information, or resolving uncertain effects before committing important resources creates additional strategic value.
 
-The version-2 deterministic evaluator normalizes and weights:
+It should also recognize card synergies that involve multiple actions.
 
-- terminal outcome and lethal pressure;
-- effective health and incoming reach;
-- board attack, health, keywords, initiative, and open board slots;
-- hand quality, card advantage, mana efficiency, and future curve;
-- weapons, hero power, removal, draw, fatigue, and burn risk;
-- matchup progress, combo progress, threat exposure, and reserved-resource cost.
+For example, playing Acolyte of Pain and intentionally damaging it may be better than treating the Acolyte and the damaging effect as unrelated actions.
 
-Weights are versioned runtime configuration. Final tuning must be performed
-offline through seeded self-play; runtime evaluation must remain deterministic
-and must not call another model.
+The AI should evaluate complete lines of play rather than looking only at isolated actions whenever the situation requires it.
 
-Evaluation must distinguish strategically justified costs from destructive
-waste. Damage to the AI hero or friendly characters, discarded resources, and
-other negative self-effects require an identified compensating outcome such as
-proven lethal, survival, board swing, or validated combo progress. Merely
-spending mana, casting a card, or triggering a generic spell synergy is not
-enough to make self-harm profitable.
+However, the LLM should not replace deterministic game logic.
 
-## Provider and reliability policy
+The game engine should remain responsible for facts that can be calculated reliably, including legal actions, mana availability, valid targets, damage calculations, card effects, board state, lethal calculations, and other mechanical rules.
 
-Only the configured GPT-5.4-nano Azure deployment is accepted. Configuration and
-provider metadata identifying another model are rejected.
+Do not rely on the LLM to guess calculations that the game can determine exactly.
 
-| Request          |    Timeout | Reasoning | Retry |
-| ---------------- | ---------: | --------- | ----- |
-| Legacy deck plan | 30 seconds | Low       | None  |
-| Legacy mulligan  | 25 seconds | Low       | None  |
-| Legacy Discover  | 15 seconds | Low       | None  |
-| Legacy turn      | 20 seconds | Low       | None  |
-| V2 matchup plan  | 30 seconds | Low       | None  |
-| V2 rank pass     | 10 seconds | Low       | None  |
-| V2 critic pass   | 10 seconds | Low       | None  |
+The LLM's primary value should be strategic judgment, interpretation, prioritization, prediction, and evaluation.
 
-The v2 action budget remains 30 seconds: up to 8 seconds for local search, up to
-10 seconds for ranking, up to 10 seconds for criticism, and at least 2 seconds
-for validation and dispatch.
+The system currently has access to two models: GPT-5.4-nano and GPT-5.4-mini.
 
-Provider failures cross Electron IPC as serializable failure results rather than
-rejected main-process handlers. The renderer logs the failure and uses the
-appropriate deterministic fallback without producing Electron handler stack
-traces.
+Response time is very important. A stronger AI is desirable, but gameplay cannot become noticeably slow after every ordinary action.
 
-Matchup-planning failure is isolated from action-ranking failure. A planning
-HTTP error or timeout may select the deterministic matchup plan, but it must not
-disable rank or critic calls for the rest of the match. Likewise, critic failure
-retains the validated rank winner rather than invalidating the entire decision.
+We therefore want to explore a balance between fast tactical reasoning and deeper strategic reasoning.
 
-## Live validation findings
+Not every decision deserves the same amount of computation.
 
-The first manual competitive-v2 validation after removing Azure-incompatible
-`uniqueItems` schema keywords confirmed that the schema rejection was gone and
-that failure isolation worked. Matchup planning timed out after approximately
-29.9 seconds, the mulligan rank pass succeeded in approximately 7.3 seconds,
-and the critic timed out after approximately 10 seconds. The game continued with
-the deterministic matchup plan and validated rank winner, but only one of three
-intended provider stages completed. Provider latency and startup delay therefore
-remain unresolved production blockers.
+Simple or obvious positions should remain fast.
 
-A later provider trace identified a concrete matchup-planning failure mode. The
-request contained 25,006 prompt tokens, and all 3,072 completion tokens were
-spent as reasoning tokens; Azure returned HTTP 200 with `finish_reason: length`
-and empty assistant content. Rank and critic calls also timed out intermittently
-at 10 seconds. Matchup payloads now omit the duplicate internal effect AST while
-retaining rules text and structured synergies, provider dossiers omit redundant
-first commands and proof command copies, and the critic examines only the top
-four ranked candidates. All three latency-sensitive v2 stages now use low
-reasoning, while matchup planning has a 4,096-token completion allowance. Live
-latency must be re-measured before considering the blocker resolved.
+Complicated, high-impact, strategically important, or uncertain situations may justify deeper reasoning.
 
-A subsequent manual turn exposed a decision-quality failure: the AI legally cast
-Darkbomb on its own hero without an evident compensating benefit. The engine is
-correct to preserve legal friendly and self targets, but competitive search did
-not prove the action useful or dominated before allowing it into the final
-decision path. Short renderer-thread search slices currently process roots
-sequentially, so early target variants can consume a slice before equivalent
-enemy-target or end-turn roots receive comparable analysis. This makes command
-and target enumeration order an unintended strategic bias.
+Possible examples include turns involving lethal opportunities, possible opponent lethal, important combo pieces, major resource commitments, secrets, unusual synergies, difficult sequencing, card draw, random outcomes, or decisions where several options appear similarly strong.
 
-The console image alone does not establish whether the local winner, rank pass,
-or critic ultimately chose Darkbomb. That distinction does not change the
-required invariant: provider-assisted and deterministic fallback paths must both
-reject a proven dominated self-hit.
+The AI should also be capable of reconsidering its plan when meaningful new information appears.
 
-The follow-up controlled-scenario pass used seeded custom decks, hands, boards,
-health, and mana to exercise the real competitive-v2 controller without a
-provider. All 12 scenarios passed after the following corrections: nested target
-variants receive distinct canonical command keys; every legal root receives a
-baseline dossier before continuation search; deep slices evaluate one root at a
-time; dominated direct self-damage is removed from search and guarded in raw
-fallback; the lethal solver follows high-potential combo lines depth-first; and
-the evaluator recognizes threats that an unused targeted-damage hero power can
-finish. The passing matrix covered Darkbomb self-hit regressions and hand-order
-permutation, spell and combat lethal, forced defense, board clear, discard for
-lethal, buff preservation, threat targeting, healing, and ordered combo lethal.
-Provider-selected self-harm, hidden-state sampling, and worker-owned search still
-need separate fixtures and acceptance evidence.
+The strategy created at the beginning of the match is not permanent. It is the AI's initial hypothesis about how its deck should play.
 
-## Known implementation gaps
+As the match develops, that strategy may need to change because of the opponent's deck, cards drawn, resources already spent, unexpected synergies, board state, life totals, or other circumstances.
 
-Competitive v2 is a foundation, not yet the accepted production system.
+At the same time, the AI should not change strategies impulsively every turn. There should be continuity unless there is a legitimate reason to adjust the plan.
 
-1. **Hidden-state correctness:** the configured determinization and random-sample
-   counts are currently dossier metadata. The search does not yet hydrate eight
-   independent hidden orders or four independent relevant RNG outcomes. Mean,
-   downside, and worst-case values therefore normally share one deterministic
-   score.
-2. **Authoritative-state leakage risk:** engine search currently forks the live
-   authoritative match. Although provider observations are sanitized and uncertain
-   actions are marked incomplete, local simulations are not yet guaranteed to be
-   invariant to actual deck order, secret identity, or future RNG.
-3. **Worker ownership:** engine branching still runs in short renderer-thread
-   slices. The worker currently performs only serializable dossier sorting. Full
-   search must move behind a hydratable analysis-state boundary.
-4. **Tactical integration:** guaranteed lethal is integrated as a global proof
-   pass. Board-clear, efficient-trade, combo-order, and profitable-action helpers
-   exist, but they are not all integrated as complete global proofs. Avoidable
-   forced defeat remains incomplete.
-5. **Scenario aggregation:** the downside and worst-case formula exists, but it
-   does not yet aggregate real determinization and RNG samples.
-6. **Benchmark completion:** the opt-in six-archetype, 600-game, seat-swapped
-   benchmark harness exists, but a complete valid run and the required 65% score
-   have not been obtained.
-7. **Performance acceptance:** renderer responsiveness and the absolute 30-second
-   deadline still require production-profile measurement after worker migration.
-8. **Deep-search fairness:** every retained root now receives an unconditional
-   baseline dossier, and continuation slices process one root at a time. The
-   restarted synchronous slices still do not preserve a frontier across rounds,
-   however, so equal progressive depth and worker-owned continuation remain open.
-9. **Self-destructive action completeness:** dominated direct targeted damage to
-   the AI hero or friendly characters is now removed from search and rejected by
-   raw fallback, with deterministic Darkbomb regressions passing. The outcome
-   classifier still needs full coverage for friendly destruction, discard, and
-   reserved-resource consumption, plus provider-selection and legitimate
-   self-damage-synergy fixtures.
-10. **Provider latency:** live Azure validation has produced 30-second matchup
-    planning timeouts and 10-second critic timeouts. Fallback behavior is safe,
-    but the intended two-pass system and acceptable match-start latency are not
-    yet reliable at the configured limits.
+The desired result is an opponent that appears to understand the match rather than simply selecting locally valuable actions.
 
-## Next implementation phases
+The AI should reason about:
 
-### Phase 1: independent analysis state
+Its own likely win condition.
 
-- Define a serializable analysis snapshot containing only allowed observation
-  information plus deterministic public engine state.
-- Hydrate independent analysis matches without copying authoritative deck order,
-  facedown secret identity, RNG cursor, event buffers, revisions, or entity counters.
-- Generate seeded hidden deck orders, secret candidates, and relevant random
-  outcomes from the observation and deterministic sample seed.
-- Prove observation and search invariance with paired hidden-state fixtures.
+Its current plan.
 
-### Phase 2: worker-owned search
+Important cards and resources.
 
-- Move legal-command expansion, tactical solving, evaluation, state hashing, and
-  complete-turn/opponent-response search into the persistent worker.
-- Replace sequential root consumption with round-robin or equivalent fair
-  iterative deepening. Give every retained first command and target variant a
-  bounded initial evaluation before deepening any one root.
-- Make partial results record which roots were reached, and never present an
-  unevaluated action as equivalent to a fully searched action.
-- Return partial deterministic results on timeout or worker failure.
-- Reuse reachable transposition entries after each atomic action without allowing
-  stale revision data to cross matches.
-- Measure animation frame responsiveness under production search limits.
+Resources that should be preserved.
 
-### Phase 3: tactical and scenario completeness
+Useful combinations and synergies.
 
-- Integrate guaranteed lethal, forced survival, board clear, efficient trade,
-  required combo order, and unconditional-profit proofs into the root search.
-- Require every relevant deterministic or sampled branch before marking a result
-  proven; incomplete trees remain annotations.
-- Aggregate real samples into mean, downside, worst-case, and survival values.
-- Hard-prune only proven illegal, dominated, or self-destructive commands.
-- Add an outcome-based self-harm classifier covering damage to the AI hero,
-  damage or destruction of friendly minions, discard, and reserved-resource
-  consumption. Preserve unusual synergy actions with a penalty until their
-  compensating value is verified; hard-prune them only when dominance or
-  self-destruction is proven.
-- Compare targeted variants of the same card directly. An own-hero damage target
-  must not survive when an otherwise equivalent enemy target or no-action line
-  produces a strictly better state, unless a concrete synergy changes the
-  resolved outcome.
+Immediate tactical value.
 
-### Phase 4: fixtures and reliability
+Future value.
 
-- Complete tactical fixtures for lethal, survival, clears, trades, combo release,
-  fatigue, secrets, random effects, and tempting blunders.
-- Add targeted-spell regression fixtures for Darkbomb on the AI hero, friendly
-  minions, enemy minions, and the enemy hero. Cover both local fallback and
-  provider-selected IDs, plus positions where self-damage is genuinely required
-  for lethal or survival so legitimate synergy is not over-pruned.
-- Add root-order permutation fixtures proving that reordering cards, targets, or
-  otherwise equivalent legal-command enumeration does not change the selected
-  strategic action.
-- Verify worker isolation, deterministic seeded results, hash equivalence, cache
-  reuse, timeout partial results, and full restoration of authoritative engine state.
-- Cover rank/critic failures, stale responses, malformed IDs, model allowlisting,
-  worker crashes, budget sharing, and deterministic fallback.
-- Measure live Azure latency separately for matchup planning, mulligan ranking,
-  turn ranking, and criticism. Reduce prompt/schema payloads or revise which
-  decision classes require criticism if the configured deadlines cannot be met
-  reliably; do not hide persistent timeouts behind fallback-only testing.
+Card advantage.
 
-### Phase 5: benchmark and tuning
+Tempo.
 
-- Make the benchmark fast enough to finish reliably under a fixed node budget.
-- Run all 600 seeded, seat-swapped games across six validated archetypes.
-- Tune evaluator weights offline without changing runtime determinism.
-- Record seeds, deck versions, configuration versions, score, confidence interval,
-  node counts, cache hits, and elapsed time for reproducibility.
+Survival.
 
-### Phase 6: activation
+Potential lethal setups.
 
-Enable competitive v2 by default only when:
+Action sequencing.
 
-- every forced tactical fixture passes;
-- the 600-game score against frozen legacy is at least 65%, with draws worth half;
-- observation and search results are invariant to unavailable hidden information;
-- every retained root receives fair minimum analysis independent of enumeration
-  order, and partial-search metadata identifies any uncovered roots;
-- proven dominated self-damage is never dispatched by either local fallback or
-  provider selection, while validated self-damage synergies remain available;
-- renderer animation remains responsive under production limits;
-- no action exceeds the absolute 30-second deadline;
-- live provider validation demonstrates that the configured planning, rank, and
-  critic policies complete reliably within their allocated budgets, or the
-  policy is deliberately revised and re-accepted;
-- type, lint, dependency-boundary, build, and existing engine tests pass.
+Information gained by drawing or revealing cards.
 
-Until then, keep the legacy policy as the default and treat competitive v2 as an
-explicit development/benchmark mode.
+Hidden information and uncertainty.
+
+The opponent's likely strategy.
+
+Recent opponent behavior.
+
+Possible future opponent threats.
+
+How the current turn affects future turns.
+
+Do not make the AI omniscient.
+
+Do not hard-code deck strategies.
+
+Do not assume standard archetypes are always being used.
+
+Do not sacrifice important long-term resources simply because an immediate action appears efficient.
+
+Do not treat actions independently when they form a meaningful sequence or combo.
+
+Do not ask the language model to solve deterministic calculations that the game engine already knows.
+
+Do not make every ordinary turn unnecessarily slow in pursuit of perfect play.
+
+Do preserve uncertainty.
+
+Do allow the AI to form hypotheses and update them.
+
+Do allow the AI to recognize and preserve its own win condition.
+
+Do consider the human player's strategy as well as the AI's strategy.
+
+Do consider previous turns instead of evaluating every board state in isolation.
+
+Do value information before commitment when appropriate.
+
+Do allow deeper reasoning when the position is strategically important.
+
+The overall goal is not to create a perfect Hearthstone engine.
+
+The goal is to create an AI opponent that reacts quickly during normal gameplay but demonstrates believable strategic intelligence: it remembers what it is trying to accomplish, notices what the human player appears to be doing, preserves important resources, recognizes combinations, sequences actions intelligently, learns from revealed information, and plans beyond the current turn.
+
+---
+
+# Implementation status
+
+Updated: September 4, 2026
+
+The first strategic-AI implementation is now in place under the `strategic-v3` policy. The original requirements above remain the product intent; this section records what the current implementation actually does, what was deliberately deferred, and what should be improved next.
+
+## Implemented
+
+### Fair information boundary
+
+- The AI observation contract has a single supported information policy: `fair`.
+- The AI receives its own hand and original submitted deck list, but never its shuffled deck order.
+- The opponent's hand is represented primarily by its public size. A card identity is included only when that exact card was legitimately revealed to the AI.
+- Revealing an opponent card does not expose its private live cost, enchantments, or stable internal entity ID.
+- Opposing deck order and unrevealed deck contents are removed from observations and search hashes.
+- Facedown opposing Secrets expose only public facts such as controller, count, and class. Their card IDs are withheld until revealed.
+- The AI still knows the identity of its own facedown Secrets.
+- Pending opponent-only choices, private cost modifiers, hidden queued effects, effect traces, revisions, and similar authoritative metadata are excluded from fair search identity.
+- Hidden-state invariance tests verify that changing an unseen opponent hand, deck, top-deck effect, or Secret does not change the AI's fair observation or deterministic search result.
+
+### Dynamic deck planning
+
+- Match strategy is created from the AI's actual submitted deck and authored card mechanics. There are no predefined deck names or hard-coded archetype assignments.
+- The plan contains a free-form archetype description, primary and secondary win conditions, early/mid/late priorities, card roles, combos, resource rules, and mulligan priorities.
+- Mechanical fallback planning recognizes damage, removal, draw, healing, armor, weapons, summons, tribal requirements, friendly-target requirements, and other authored effect relationships.
+- Combo validation is duplicate-aware. A combo can require two copies of the same card when the deck actually contains two copies, but cannot claim more copies than exist.
+- Independent combo packages receive independent preservation and release rules; completing one package does not release every unrelated reserved card.
+- Generated plans are validated against the exact deck before being accepted.
+
+### Persistent strategy and opponent interpretation
+
+- `AiStrategicTracker` persists the initial plan throughout the match.
+- It tracks observable card plays, attacks, resource use, posture, revealed threats, combo readiness, combo invalidation, and resource-release state.
+- Opponent hypotheses are based only on public behavior and use descriptive postures such as aggression, control, tempo, card advantage, survival, or combo preparation rather than hard-coded deck labels.
+- Strategy review is triggered only by meaningful public evidence. Reviews must cite an exact supplied reason when changing the plan.
+- An unchanged review cannot silently replace the current plan.
+- Opponent assessments persist between reviews instead of being regenerated from scratch every action.
+- Secret beliefs maintain possible and ruled-out card IDs using the opponent's public class and observed trigger outcomes. Safe trigger deductions are supported, including cases where a Secret remains possible because its effect could not resolve.
+
+### Deterministic tactics and sequencing
+
+- Legal actions and all authoritative mechanics remain owned by the match engine.
+- The local search evaluates complete current-turn lines rather than treating every action independently.
+- Guaranteed lethal is proven by deterministic engine simulation and attached to the candidate as a tactical proof.
+- Search recognizes meaningful multi-action sequences, including playing Acolyte of Pain and then deliberately damaging it to draw.
+- Information-producing actions can terminate the current search segment. The live controller dispatches the action and plans again after the real result is known.
+- Search never previews through an unknown draw, random result, opposing Secret, lethal Deathrattle with an unknown outcome, or another private-information boundary.
+- End Turn stops at a public handoff representation instead of dispatching the opponent's hidden top card inside search.
+- Public action intent is used at an uncertainty boundary so target choice, damage, minion bodies, armor, weapons, summons, and similar known consequences still matter without observing the hidden result.
+- Information value favors drawing, generating, discovering, or testing a Secret before committing the rest of the turn's resources.
+- Cards drawn by the opponent are not incorrectly counted as information gained by the AI.
+- Guaranteed self-damage is assessed at an information boundary, including rejecting Life Tap when it would kill the AI and penalizing it when public opposing reach makes the health payment unsafe.
+- The evaluator gives critical weight to publicly visible next-turn lethal and additional value to persistent board engines such as auras and repeatable triggers.
+- Beam search prunes continuations by public action value before simulation. This allows a small node budget to reach later actions instead of being exhausted by engine enumeration order at depth one.
+- Deep-search budget is allocated to the strongest fair baselines first rather than whichever legal action the engine happened to enumerate first.
+- Search-cache keys include the strategic plan and fair public state so private changes cannot create hidden-information cache behavior.
+
+### Uncertainty reporting
+
+- Random-outcome samples and hidden-state determinizations are reported as zero because true belief-state sampling has not been implemented yet.
+- Configuration values are never presented as completed samples.
+- Candidates that stop at an information boundary are explicitly marked incomplete for downstream strategic judgment.
+- Tactical proofs are not claimed for lines whose authoritative outcome was deliberately not observed.
+
+### Adaptive decision pipeline
+
+- `strategic-v3` is the default policy, with the previous policy retained as an explicit legacy fallback.
+- Every legal root receives a cheap local baseline before deeper work begins.
+- Decisions are classified as simple, normal, or complex using tactical risk, uncertainty, Secrets, information value, reserved resources, score proximity, and other strategic signals.
+- Simple decisions can stay local and fast.
+- Normal decisions send a bounded shortlist to one model-ranking pass.
+- Complex decisions can use a larger shortlist followed by a critic pass over the best candidates.
+- Routine End Turn actions alone do not make a position complex.
+- Overall, local-search, provider, and dispatch-reserve deadlines prevent the AI from waiting indefinitely.
+- The persistent strategic worker is created lazily, reused across decisions, and disposed with the board/controller lifecycle.
+
+### Model and IPC boundary
+
+- The active implementation is intentionally restricted to GPT-5.4-nano.
+- Configuration and response metadata reject a deployment/model that is not GPT-5.4-nano.
+- GPT-5.4-mini escalation was deliberately deferred rather than added implicitly.
+- Azure Chat Completions requests use strict JSON Schema response formats, bounded output, reasoning effort, and runtime response validation.
+- Rank and critic responses can select only supplied action IDs. Rank responses must provide a complete, duplicate-free ordering of the shortlist.
+- Deck-plan, strategy-review, mulligan, discover, and turn request classes are validated independently. Invalid phase/class combinations are rejected before crossing IPC.
+- Provider prompts receive only fair observations, visible card definitions, candidate dossiers, strategic memory, and a bounded event ledger.
+- The event ledger is capped and includes explicit truncation metadata.
+
+## Validation completed
+
+- The focused nine-file AI suite passed with 68 tests and one intentional benchmark skip before the final tactical refinements.
+- The final search, tactics, and benchmark regression set passed 24 tests with the long benchmark intentionally skipped in the ordinary test command.
+- Both Node and renderer TypeScript projects passed type checking.
+- ESLint passed.
+- Dependency Cruiser reported no architecture violations.
+- The production smoke build passed and emitted the renamed strategic worker correctly.
+- `git diff --check` passed.
+- A final 24-game fair, same-deck, seat-swapped benchmark smoke run passed the configured 65% gate after the beam-search correction.
+- A 60-game run made before the final beam-search correction scored 60%. A new 60-game confirmation was stopped before completion because of runtime. The canonical 600-game benchmark has therefore not been validated against the final implementation and should not yet be treated as a proven strength claim.
+
+## Deliberately deferred
+
+- True belief-state construction and sampling for hidden hands, decks, Secrets, and random outcomes.
+- GPT-5.4-mini escalation for selected high-impact positions.
+- Authoritative multi-turn simulation across an unknown opponent draw.
+- Full calibration against the canonical 600-game benchmark.
+
+# Improvements discovered during implementation
+
+These are ordered roughly by expected strategic value.
+
+## 1. Add real belief-state sampling
+
+Build legal hidden-state hypotheses from public evidence and sample from those hypotheses rather than the authoritative match state. Samples should respect:
+
+- the opponent's class and submitted-mode deck rules;
+- cards already played, revealed, discarded, transformed, or generated;
+- hand and deck sizes;
+- possible Secret identities and trigger deductions;
+- known generation sources;
+- copy limits where they legitimately apply.
+
+Candidate scores should expose mean, downside, and worst-case values across actual samples. Only then should `determinizations` and `randomOutcomeSamples` become non-zero.
+
+## 2. Build a public turn-start projection
+
+Current search correctly stops before End Turn would consume a hidden top card. The tradeoff is that it cannot authoritatively simulate the opponent's next turn.
+
+A useful next layer would advance only deterministic public turn mechanics:
+
+- active-player handoff;
+- mana growth and refresh;
+- attack and hero-power refresh;
+- overload and other already-public resource effects;
+- deterministic start/end-of-turn effects whose inputs and outcomes are public.
+
+The unknown draw and any effects depending on it would remain unresolved. This would allow better analysis of guaranteed board attacks and public counterplay without leaking the top card.
+
+## 3. Improve expected-value models at information boundaries
+
+The current public-intent evaluator covers common action shapes but is still heuristic. It should gain typed, mechanic-specific expected values for:
+
+- random summons based on the legal candidate pool;
+- Discover pools and class weighting;
+- random damage distributions;
+- discard distributions;
+- jousts and deck-top comparisons;
+- random transformations;
+- Deathrattles that summon or generate random cards;
+- symmetrical draw and generation effects;
+- burn risk when drawing near the hand limit.
+
+This work should use authored effect objects rather than regular-expression inspection wherever possible.
+
+## 4. Replace heuristic synergy discovery with an effect dependency graph
+
+The dynamic deck planner now finds useful mechanical relationships, but unusual custom cards will expose gaps. A typed dependency graph could connect producers and consumers such as:
+
+- weapon creation to weapon buffs;
+- token production to sacrifice or board-wide buffs;
+- damage events to on-damage triggers;
+- spell casting to spell-triggered engines;
+- tribes to tribal payoffs;
+- discard sources to discard payoffs;
+- healing, armor, overload, Secrets, and Deathrattles to their payoffs;
+- cost reduction to expensive finishers;
+- duplicated combo pieces and interchangeable substitutes.
+
+The graph should distinguish requirements, enablers, payoffs, replacements, and anti-synergies. This would make fallback planning substantially stronger for newly authored decks.
+
+## 5. Make opponent hypotheses probabilistic
+
+The tracker currently maintains descriptive postures and evidence. It could maintain a small probability distribution that changes after each public action.
+
+Useful evidence includes passing with available mana, repeated face attacks, defensive trading, unusual card retention, symmetrical draw, resource hoarding, board commitment, revealed combo pieces, and deviations from previously observed priorities. The model should retain competing hypotheses when evidence is ambiguous instead of collapsing to one label.
+
+## 6. Improve Secret reasoning and test sequencing
+
+Secret tracking can currently rule out safe cases. It should eventually:
+
+- weight possible Secrets rather than treating every remaining identity equally;
+- recognize generated-versus-deck-origin Secrets;
+- calculate the cost of each safe test order;
+- preserve cheap test resources when a more dangerous Secret remains possible;
+- update beliefs from partial resolution and non-resolution;
+- evaluate the downside of triggering each possible Secret before committing a key resource.
+
+## 7. Strengthen resource reservation
+
+Resource rules currently support independent release states, but their opportunity-cost model is coarse. Improvements should include:
+
+- reserving a required number of copies rather than just a card ID;
+- valuing interchangeable combo substitutes;
+- releasing only the portion of a package no longer needed;
+- distinguishing soft preference from hard reservation;
+- considering draw probability and remaining deck count;
+- recognizing when waiting for a combo has become less valuable than immediate survival or tempo;
+- recording why a resource was spent despite its reservation.
+
+## 8. Extend multi-turn planning without pretending hidden information is known
+
+After public turn-start projection and belief sampling exist, search can evaluate short strategic horizons such as setup, opponent response distribution, and payoff turn. This should remain shallow and selective. Good triggers include lethal setups, combo assembly, major resource commitments, board clears, fatigue transitions, and possible opponent lethal.
+
+## 9. Add optional GPT-5.4-mini escalation
+
+Nano-only operation is appropriate for the current stage. If mini is enabled later, it should be a narrow, measured escalation rather than a default second call.
+
+Potential escalation criteria:
+
+- verified lethal or survival branches disagree with the nano ranking;
+- several top candidates remain very close after local search;
+- a major reserved resource would be released;
+- Secret or random-outcome downside is unusually large;
+- a strategy review would materially replace the current win condition.
+
+Latency, decision quality, and override rate should be recorded before making this permanent.
+
+## 10. Move more search work off the renderer thread
+
+The worker currently ranks serializable dossiers, while engine forks remain on the renderer side. A serializable domain snapshot or worker-safe match clone would allow complete search to run away from Pixi rendering. Until then, incremental slices should continue to yield frequently and reuse the transposition cache.
+
+## 11. Expand evaluation beyond one aggregate win-rate gate
+
+The seat-swapped benchmark is useful, but a single win-rate number is noisy and slow. Add deterministic scenario suites for:
+
+- obvious and non-obvious lethal;
+- preventing publicly visible opponent lethal;
+- correct trade-versus-face decisions;
+- draw-before-commitment ordering;
+- Secret test ordering;
+- combo preservation and justified release;
+- fatigue and hand-burn decisions;
+- board-engine removal;
+- choosing among random-outcome risk profiles;
+- invariance under changes to every hidden field.
+
+Keep the 600-game benchmark as an occasional strength check, but use smaller fixed scenario suites as the fast regression gate. Record results per deck and seat because aggregate success can hide a weak matchup or first/second-player bias.
+
+## 12. Add decision replay and calibration telemetry
+
+For development builds, persist a compact replay containing the fair observation hash, plan version, candidate scores, selected line, model ranking, critic override, deadline use, fallback reason, uncertainty boundary, and eventual outcome. This would make it possible to answer whether poor play came from the engine evaluator, search coverage, strategic plan, model judgment, or timeout fallback.
+
+Telemetry must never store fields that were excluded by the fair observation contract.
+
+# Recommended next order
+
+1. Add the public turn-start projection and deterministic tactical scenario suite.
+2. Replace regex-based public-intent and synergy inspection with typed effect visitors.
+3. Implement legal belief-state sampling and calibrate uncertainty scores.
+4. Improve probabilistic opponent and Secret models.
+5. Run and tune the canonical benchmark.
+6. Evaluate GPT-5.4-mini escalation only after the local system is calibrated.

@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "classes": {
+    "Druid": {
+      "primary": {
+        "hue": 36.8254,
+        "saturation": 1,
+        "lightness": 0.373,
+        "opacity": 1,
+        "blendMode": "multiply"
+      },
+      "secondary": {
+        "hue": 40,
+        "saturation": 1,
+        "lightness": 0.5078,
+        "opacity": 0.529,
+        "blendMode": "add"
+      }
+    },
+    "Hunter": {
+      "primary": {
+        "hue": 123.7931,
+        "saturation": 0.703,
+        "lightness": 0.351,
+        "opacity": 1,
+        "blendMode": "multiply"
+      },
+      "secondary": {
+        "hue": 40,
+        "saturation": 1,
+        "lightness": 0.5,
+        "opacity": 0.637,
+        "blendMode": "add"
+      }
+    },
+    "Mage": {
+      "primary": {
+        "hue": 214.8,
+        "saturation": 0.592,
+        "lightness": 0.47,
+        "opacity": 0.48,
+        "blendMode": "normal"
+      },
+      "secondary": {
+        "hue": 40,
+        "saturation": 1,
+        "lightness": 0.5078,
+        "opacity": 0.71,
+        "blendMode": "add"
+      }
+    },
+    "Paladin": {
+      "primary": {
+        "hue": 61,
+        "saturation": 1,
+        "lightness": 0.529,
+        "opacity": 1,
+        "blendMode": "multiply"
+      },
+      "secondary": {
+        "hue": 40,
+        "saturation": 0.552,
+        "lightness": 0.529,
+        "opacity": 0.784,
+        "blendMode": "add"
+      }
+    },
+    "Priest": {
+      "primary": {
+        "hue": 0,
+        "saturation": 0,
+        "lightness": 0.5,
+        "opacity": 0.483,
+        "blendMode": "add"
+      },
+      "secondary": {
+        "hue": 53.4,
+        "saturation": 1,
+        "lightness": 0.494,
+        "opacity": 1,
+        "blendMode": "multiply"
+      }
+    },
+    "Rogue": {
+      "primary": {
+        "hue": 194.1667,
+        "saturation": 1,
+        "lightness": 0.1412,
+        "opacity": 0.56,
+        "blendMode": "multiply"
+      },
+      "secondary": {
+        "hue": 40,
+        "saturation": 1,
+        "lightness": 0.5078,
+        "opacity": 0.549,
+        "blendMode": "add"
+      }
+    },
+    "Shaman": {
+      "primary": {
+        "hue": 211.8219,
+        "saturation": 1,
+        "lightness": 0.471,
+        "opacity": 1,
+        "blendMode": "multiply"
+      },
+      "secondary": {
+        "hue": 40,
+        "saturation": 1,
+        "lightness": 0.5,
+        "opacity": 0.705,
+        "blendMode": "add"
+      }
+    },
+    "Warlock": {
+      "primary": {
+        "hue": 278.1022,
+        "saturation": 0.35,
+        "lightness": 0.5,
+        "opacity": 1,
+        "blendMode": "multiply"
+      },
+      "secondary": {
+        "hue": 54.5,
+        "saturation": 1,
+        "lightness": 0.517,
+        "opacity": 0.64,
+        "blendMode": "add"
+      }
+    },
+    "Warrior": {
+      "primary": {
+        "hue": 0,
+        "saturation": 0.5,
+        "lightness": 0.5,
+        "opacity": 1,
+        "blendMode": "multiply"
+      },
+      "secondary": {
+        "hue": 53.4,
+        "saturation": 1,
+        "lightness": 0.497,
+        "opacity": 0.596,
+        "blendMode": "add"
+      }
+    }
+  },
+  "offsets": {
+    "minion": {
+      "primary": {
+        "x": 0,
+        "y": 0
+      },
+      "secondary": {
+        "x": 0,
+        "y": -3
+      }
+    },
+    "spell": {
+      "primary": {
+        "x": 0,
+        "y": 2.6
+      }
+    }
+  }
+}

@@ -37,6 +37,7 @@ npm run verify
 Individual focused commands:
 
 - `npm run dev` — Run Electron app in development mode.
+- `npm run perf:match` — Run the automated in-app match performance benchmark and write `artifacts/match-performance/latest.json`.
 - `npm run typecheck` — Run TypeScript checks across node and web contexts.
 - `npm run deps:check` — Validate architectural boundaries and dependency rules.
 - `npm run lint` — Lint code with ESLint.

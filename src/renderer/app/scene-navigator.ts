@@ -87,9 +87,10 @@ function createFallbackGameRoute(
   }
 }
 
-type StandardSceneId = Exclude<SceneId, 'outline-lab'>
-type StandardSceneRequest = Exclude<SceneRequest, { readonly id: 'outline-lab' }>
-export type DevSceneRequest = Extract<SceneRequest, { readonly id: 'outline-lab' }>
+type DevSceneId = 'card-inspector' | 'outline-lab'
+type StandardSceneId = Exclude<SceneId, DevSceneId>
+type StandardSceneRequest = Exclude<SceneRequest, { readonly id: DevSceneId }>
+export type DevSceneRequest = Extract<SceneRequest, { readonly id: DevSceneId }>
 export type DevSceneFactory = (request: DevSceneRequest) => Promise<Scene>
 
 const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
@@ -212,9 +213,9 @@ export class SceneNavigator implements SceneRouter {
   }
 
   async navigateRequest(request: SceneRequest): Promise<void> {
-    if (request.id === 'outline-lab') {
+    if (request.id === 'card-inspector' || request.id === 'outline-lab') {
       if (!this.createDevScene) {
-        throw new Error('Shader Lab is available only in development builds.')
+        throw new Error('Development labs are available only in development builds.')
       }
       const scene = await this.createDevScene(request)
       await this.sceneManager.transitionTo(scene, {

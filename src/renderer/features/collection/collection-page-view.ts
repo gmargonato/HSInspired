@@ -1,10 +1,4 @@
-import {
-  AlphaFilter,
-  Container,
-  type FederatedPointerEvent,
-  Sprite,
-  Text
-} from 'pixi.js'
+import { Container, type FederatedPointerEvent, Sprite, Text } from 'pixi.js'
 import type { CardDefinition } from '../../../game/content/cards'
 import { getCardCopyLimit, getDeckCardCount, type Deck } from '../../../game/decks'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
@@ -49,7 +43,6 @@ export class CollectionPageView extends Container {
   private readonly classLabel: Text
   private readonly pageLabel: Text
   private readonly emptyStateImage: Sprite
-  private completedAlphaFilter: AlphaFilter | null = null
   private pages: readonly CollectionPage[] = []
   private renderSequence = 0
   private disposed = false
@@ -151,6 +144,9 @@ export class CollectionPageView extends Container {
           )
         }
         this.layoutCard(view, cardIndex)
+        // Keep the full authored card resolution for sharp thumbnails and card-add
+        // snapshots, but composite its static masks and blends only once per page.
+        view.cacheAsTexture({ resolution: 1, antialias: true })
         nextCardLayer.addChild(view)
       }
       const previousCardLayer = this.cardLayerRoot.removeChildren()[0]
@@ -190,8 +186,9 @@ export class CollectionPageView extends Container {
       const atLimit = Boolean(
         deck && card && getDeckCardCount(deck, card.id) >= getCardCopyLimit(card)
       )
-      child.filters = atLimit ? [this.getCompletedAlphaFilter()] : null
-      child.alpha = 1
+      // The cached card is one image, so alpha dims the complete card uniformly
+      // without another filter pass or rebuilding its texture.
+      child.alpha = atLimit ? COMPLETED_COLLECTION_CARD_ALPHA : 1
     }
   }
 
@@ -214,17 +211,6 @@ export class CollectionPageView extends Container {
 
   private destroyCardViews(views: readonly CardView[]): void {
     for (const view of views) view.destroy({ children: true })
-  }
-
-  private getCompletedAlphaFilter(): AlphaFilter {
-    if (!this.completedAlphaFilter) {
-      this.completedAlphaFilter = new AlphaFilter({
-        alpha: COMPLETED_COLLECTION_CARD_ALPHA,
-        resolution: 'inherit',
-        antialias: 'inherit'
-      })
-    }
-    return this.completedAlphaFilter
   }
 
   private handleCardTap(

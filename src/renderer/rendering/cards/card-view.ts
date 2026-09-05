@@ -13,10 +13,11 @@ import {
 import { resolveCardTitleFit } from './card-title-fit'
 import {
   classFrameAppearanceFor,
-  type ClassFrameAppearanceControls,
+  subscribeToClassFrameConfig,
   type ClassFrameBlendMode,
   shouldRenderClassFrameColors
 } from './class-frame-colors'
+import type { ClassFrameLayerAppearance } from './class-frame-colors'
 
 export interface CardViewOptions extends CardRenderOptions {
   readonly artwork?: Texture
@@ -253,6 +254,7 @@ export class CardView extends Container {
   private readonly treeObjects = new Map<string, TreeObjectEntry>()
   private readonly basePositions = new Map<string, { x: number; y: number }>()
   private readonly semanticOffsets = new Map<string, { x: number; y: number }>()
+  private unsubscribeClassFrameConfig: (() => void) | null = null
   private readonly content: Container
 
   private constructor(plan: CardLayout) {
@@ -283,6 +285,9 @@ export class CardView extends Container {
         (card.type === 'Minion' || card.type === 'Spell')
       ) {
         view.setClassFrameAppearance(card.cardClass)
+        view.unsubscribeClassFrameConfig = subscribeToClassFrameConfig(() => {
+          view.setClassFrameAppearance(card.cardClass)
+        })
       }
     } catch (error) {
       view.destroy({ children: true })
@@ -291,29 +296,42 @@ export class CardView extends Container {
     return view
   }
 
-  setClassFrameAppearance(
-    classId: string,
-    controls: ClassFrameAppearanceControls = {}
-  ): void {
-    const appearance = classFrameAppearanceFor(classId, controls)
-    if (!appearance || !this.hasLayer('card.class-frame-mask-1')) return
+  /** Collapse a completed card tree to one GPU surface until semantic content changes. */
+  enableTextureCache(): void {
+    if (this.isCachedAsTexture) return
+    this.cacheAsTexture({ antialias: true, resolution: 1 })
+  }
 
-    this.setLayerAppearance('card.class-frame-mask-1', {
-      alpha: appearance.primaryAlpha,
-      tint: appearance.primary,
-      blendMode: appearance.primaryBlendMode
-    })
-    this.setLayerAppearance('card.class-frame-mask-2', {
-      alpha: appearance.accentAlpha,
-      tint: appearance.accent,
-      blendMode: appearance.accentBlendMode
-    })
+  setClassFrameAppearance(classId: string): void {
+    const appearance = classFrameAppearanceFor(classId)
+    if (!appearance || !this.hasLayer('card.class-frame-mask-1')) return
+    if (this.plan.template !== 'minion' && this.plan.template !== 'spell') return
+
+    this.applyClassFrameLayer(
+      'card.class-frame-mask-1',
+      appearance.primary,
+      this.plan.template
+    )
+    if (this.hasLayer('card.class-frame-mask-2')) {
+      this.applyClassFrameLayer(
+        'card.class-frame-mask-2',
+        appearance.secondary,
+        this.plan.template
+      )
+    }
+  }
+
+  override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.unsubscribeClassFrameConfig?.()
+    this.unsubscribeClassFrameConfig = null
+    super.destroy(options)
   }
 
   setLayerVisible(layerId: string, visible: boolean): void {
     const objects = this.layerObjects.get(layerId)
     if (!objects) throw new Error(`Unknown card layer: ${layerId}`)
     for (const object of objects) object.visible = visible
+    this.updateCacheTexture()
   }
 
   isLayerVisible(layerId: string): boolean {
@@ -335,6 +353,20 @@ export class CardView extends Container {
       if (appearance.tint !== undefined) object.tint = appearance.tint
       if (appearance.blendMode !== undefined) object.blendMode = appearance.blendMode
     }
+    this.updateCacheTexture()
+  }
+
+  private applyClassFrameLayer(
+    path: string,
+    appearance: ClassFrameLayerAppearance,
+    template: 'minion' | 'spell'
+  ): void {
+    this.setLayerAppearance(path, {
+      alpha: appearance.alpha,
+      tint: appearance.color,
+      blendMode: appearance.blendMode
+    })
+    this.setSemanticLayerOffset(path, appearance.offsets[template])
   }
 
   /** Refreshes the visible mana value without rebuilding the card tree. */
@@ -342,6 +374,7 @@ export class CardView extends Container {
     const entry = this.treeObjects.get('card.stats.mana.label')
     if (!entry || !(entry.object instanceof Text)) return
     entry.object.text = String(Math.max(0, Math.floor(cost)))
+    this.updateCacheTexture()
   }
 
   /** Tints the mana value according to its derived cost relative to printed cost. */
@@ -349,6 +382,7 @@ export class CardView extends Container {
     const entry = this.treeObjects.get('card.stats.mana.label')
     if (!entry || !(entry.object instanceof Text)) return
     entry.object.style.fill = CARD_COST_COLORS[color]
+    this.updateCacheTexture()
   }
 
   /** Returns the authored semantic nodes for diagnostics and dev tooling. */
@@ -374,6 +408,7 @@ export class CardView extends Container {
     if (!entry || !base) throw new Error(`Unknown card node: ${path}`)
     this.semanticOffsets.set(path, { x: offset.x, y: offset.y })
     entry.object.position.set(base.x + offset.x, base.y + offset.y)
+    this.updateCacheTexture()
   }
 
   private getNodeMetadataFor(path: string, entry: TreeObjectEntry): CardNodeMetadata {

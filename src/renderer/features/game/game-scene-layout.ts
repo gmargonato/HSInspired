@@ -140,7 +140,7 @@ export const GAME_BOARD_LAYOUT = {
   weapons: {
     /** Local equipped weapon, screen-left of the local hero frame. */
     local: placement(
-      { x: 800, y: 835 },
+      { x: 800, y: 855 },
       { width: 240, height: 210 },
       {
         anchor: CENTER,
@@ -318,7 +318,7 @@ export const GAME_BOARD_LAYOUT = {
   heroPowers: {
     /** Local hero power card, right of the local hero portrait. */
     local: placement(
-      { x: 1160, y: 825 },
+      { x: 1160, y: 835 },
       { width: 150, height: 150 },
       {
         anchor: CENTER,
@@ -328,7 +328,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote hero power card, right of the remote hero portrait. */
     remote: placement(
-      { x: 1160, y: 180 },
+      { x: 1160, y: 200 },
       { width: 150, height: 150 },
       {
         anchor: CENTER,

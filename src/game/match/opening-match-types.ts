@@ -7,6 +7,7 @@ import type {
   HeroId,
   HeroPowerId
 } from '../content/cards'
+import type { Deck } from '../decks'
 import type { ResolutionCorrelation } from './contracts'
 import type { ControllerKind, MatchSetup, PlayerId } from './match-types'
 import type { AiInformationPolicy, AiObservation } from './ai/ai-types'
@@ -1074,9 +1075,25 @@ export interface OpeningMatchAnalysis {
   getLegality(participantId: PlayerId): MatchLegality
 }
 
+/**
+ * Structured-clone-safe snapshot used to continue deterministic analysis in a
+ * worker without sharing the renderer's live match instance.
+ */
+export interface OpeningMatchCheckpoint {
+  readonly schemaVersion: 1
+  readonly setup: MatchSetup
+  readonly decks: readonly Deck[]
+  readonly state: OpeningMatchState
+  readonly rngState: unknown
+  readonly nextEntityOrdinal: number
+  readonly devDeckRefillCounter: number
+}
+
 export interface OpeningMatchInstance {
   readonly setup: MatchSetup
   getState(): OpeningMatchState
+  /** Captures every mutable engine value needed for deterministic restoration. */
+  getCheckpoint(): OpeningMatchCheckpoint
   dispatch(command: unknown): OpeningCommandResult
   /**
    * Executes a command against an isolated snapshot of the current match.

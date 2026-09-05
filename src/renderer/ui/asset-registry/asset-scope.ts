@@ -4,6 +4,7 @@ type AssetBundle = Record<string, string>
 
 const registeredBundles = new Set<string>()
 const bundleSources = new Map<string, readonly string[]>()
+const bundleAliases = new Map<string, ReadonlyMap<string, string>>()
 const persistentBundles = new Set<string>()
 const pinnedBundles = new Set<string>()
 const bundleReferences = new Map<string, number>()
@@ -21,10 +22,39 @@ export function registerAssetBundle(
 ): void {
   if (registeredBundles.has(bundleId)) return
 
-  Assets.addBundle(bundleId, assets)
+  // Pixi's resolver aliases are global even when assets belong to separate
+  // bundles. Qualify them at the resolver boundary so common bundle-local
+  // names such as `background` cannot overwrite one another.
+  const aliases = new Map<string, string>()
+  const qualifiedAssets = Object.fromEntries(
+    Object.entries(assets).map(([alias, source]) => {
+      const qualifiedAlias = `${bundleId}:${alias}`
+      aliases.set(qualifiedAlias, alias)
+      return [qualifiedAlias, source]
+    })
+  )
+
+  Assets.addBundle(bundleId, qualifiedAssets)
   registeredBundles.add(bundleId)
+  bundleAliases.set(bundleId, aliases)
   bundleSources.set(bundleId, [...new Set(Object.values(assets))])
   if (options.persistent) persistentBundles.add(bundleId)
+}
+
+function restoreBundleAliases(bundleId: string, loaded: unknown): unknown {
+  if (typeof loaded !== 'object' || loaded === null || Array.isArray(loaded)) {
+    return loaded
+  }
+
+  const aliases = bundleAliases.get(bundleId)
+  if (!aliases) return loaded
+
+  return Object.fromEntries(
+    Object.entries(loaded).map(([qualifiedAlias, value]) => [
+      aliases.get(qualifiedAlias) ?? qualifiedAlias,
+      value
+    ])
+  )
 }
 
 function sourcesFor(bundleId: string): readonly string[] {
@@ -74,7 +104,7 @@ async function loadBundle(bundleId: string): Promise<unknown> {
   }
 
   try {
-    const loaded = await pendingLoad
+    const loaded = restoreBundleAliases(bundleId, await pendingLoad)
     loadedBundles.set(bundleId, loaded)
     pinPersistentBundle(bundleId)
     return loaded

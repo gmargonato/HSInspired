@@ -19,11 +19,6 @@ const config: AzureOpenAiConfig = {
       reasoningEffort: 'low',
       maxCompletionTokens: 3072
     },
-    matchupPlan: {
-      requestTimeoutMs: 30000,
-      reasoningEffort: 'low',
-      maxCompletionTokens: 4096
-    },
     mulligan: {
       requestTimeoutMs: 25000,
       reasoningEffort: 'low',
@@ -48,6 +43,11 @@ const config: AzureOpenAiConfig = {
       requestTimeoutMs: 10000,
       reasoningEffort: 'low',
       maxCompletionTokens: 1024
+    },
+    strategyReview: {
+      requestTimeoutMs: 8000,
+      reasoningEffort: 'low',
+      maxCompletionTokens: 3072
     }
   },
   prompts: {
@@ -113,10 +113,11 @@ describe('AzureOpenAiDecisionService', () => {
                         {
                           cardIds: ['basic_frostbolt'],
                           preserveUntil: 'The combo is ready.',
-                          releaseWhen: longReleaseCondition
+                          releaseWhen: longReleaseCondition,
+                          releaseTriggers: ['lethal', 'forced-survival', 'combo-ready']
                         }
                       ],
-                      mulliganPriorityCardIds: ['basic_frostbolt']
+                      mulliganPriorityCardIds: ['basic_frostbolt', 'basic_frostbolt']
                     },
                     rationale: longRationale
                   })
@@ -139,12 +140,21 @@ describe('AzureOpenAiDecisionService', () => {
       schemaVersion: 1,
       deadlineAtMs: Date.now() + 60_000,
       mode: { id: 'constructed' },
-      deck: { id: 'freeze-mage' }
+      deck: {
+        id: 'freeze-mage',
+        cards: [
+          {
+            count: 2,
+            definition: { id: 'basic_frostbolt', name: 'Frostbolt' }
+          }
+        ]
+      }
     }
 
     const response = await service.planDeck(planRequest)
 
     expect(response.plan.archetype).toBe('combo')
+    expect(response.plan.mulliganPriorityCardIds).toEqual(['basic_frostbolt'])
     expect(response.plan.resourceRules[0]?.releaseWhen).toHaveLength(240)
     expect(response.rationale).toHaveLength(500)
     expect(longRationale.length).toBeGreaterThan(500)
@@ -160,7 +170,10 @@ describe('AzureOpenAiDecisionService', () => {
               plan: {
                 properties: {
                   primaryWinCondition: { maxLength: number }
-                  cardRoles: { maxItems: number }
+                  cardRoles: {
+                    maxItems: number
+                    items: { properties: { cardId: { enum: string[] } } }
+                  }
                   combos: {
                     maxItems: number
                     items: {
@@ -177,6 +190,7 @@ describe('AzureOpenAiDecisionService', () => {
                         cardIds: { maxItems: number }
                         preserveUntil: { maxLength: number }
                         releaseWhen: { maxLength: number }
+                        releaseTriggers: { maxItems: number }
                       }
                     }
                   }
@@ -199,6 +213,9 @@ describe('AzureOpenAiDecisionService', () => {
       body.response_format.json_schema.schema.properties.plan.properties
     expect(planSchema.primaryWinCondition.maxLength).toBe(500)
     expect(planSchema.cardRoles.maxItems).toBe(30)
+    expect(planSchema.cardRoles.items.properties.cardId.enum).toEqual([
+      'basic_frostbolt'
+    ])
     expect(planSchema.combos.maxItems).toBe(12)
     expect(planSchema.combos.items.properties.cardIds.maxItems).toBe(8)
     expect(planSchema.combos.items.properties.purpose.maxLength).toBe(240)
@@ -206,6 +223,7 @@ describe('AzureOpenAiDecisionService', () => {
     expect(planSchema.resourceRules.items.properties.cardIds.maxItems).toBe(8)
     expect(planSchema.resourceRules.items.properties.preserveUntil.maxLength).toBe(240)
     expect(planSchema.resourceRules.items.properties.releaseWhen.maxLength).toBe(240)
+    expect(planSchema.resourceRules.items.properties.releaseTriggers.maxItems).toBe(6)
     expect(planSchema.mulliganPriorityCardIds.maxItems).toBe(15)
   })
 
@@ -264,7 +282,7 @@ describe('AzureOpenAiDecisionService', () => {
     expect(JSON.stringify(init?.body)).not.toContain('super-secret-key')
   })
 
-  it('uses an Azure-compatible strict matchup schema without uniqueItems', async () => {
+  it('uses an Azure-compatible strict fair strategy-review schema', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () =>
       Promise.resolve(
         new Response(
@@ -273,29 +291,14 @@ describe('AzureOpenAiDecisionService', () => {
               {
                 message: {
                   content: JSON.stringify({
-                    plan: {
-                      planVersion: 2,
-                      selfStrategy: {
-                        archetype: 'tempo',
-                        primaryWinCondition: 'Develop efficient threats.',
-                        secondaryWinCondition: 'Convert board control into damage.',
-                        earlyGamePriority: 'Contest the board.',
-                        midGamePriority: 'Protect initiative.',
-                        lateGamePriority: 'Finish the opponent.',
-                        cardRoles: [],
-                        combos: [],
-                        resourceRules: [],
-                        mulliganPriorityCardIds: []
-                      },
-                      opponentArchetype: 'control',
-                      opponentWinConditions: ['Reach the late game.'],
-                      opponentThreatPriorities: [],
-                      removalPriorityCardIds: [],
-                      earlyGameStrategy: 'Develop safely.',
-                      midGameStrategy: 'Pressure key resources.',
-                      lateGameStrategy: 'Preserve reach.'
+                    review: {
+                      reviewVersion: 1,
+                      changed: false,
+                      revisedPlan: null,
+                      changeReasons: [],
+                      opponentAssessment: 'The opponent remains uncertain.'
                     },
-                    rationale: 'Use tempo before control stabilizes.'
+                    rationale: 'No public evidence supports a revision.'
                   })
                 }
               }
@@ -310,25 +313,38 @@ describe('AzureOpenAiDecisionService', () => {
       fetch
     })
 
-    await service.planMatchup({
-      planId: 'matchup-plan-1',
-      decisionClass: 'deck-plan',
-      promptVersion: 'matchup-v2',
-      schemaVersion: 2,
+    await service.reviewStrategy({
+      reviewId: 'strategy-review-1',
+      decisionClass: 'strategy-review',
+      promptVersion: 'strategy-review-v1',
+      schemaVersion: 1,
       deadlineAtMs: Date.now() + 60_000,
-      informationPolicy: 'opponent-deck-and-hand',
-      mode: { id: 'constructed' },
-      selfDeck: { id: 'self' },
-      opponentDeck: { id: 'opponent' }
+      previousPlan: { planVersion: 1 },
+      strategicMemory: { informationPolicy: 'fair' },
+      gameState: { informationPolicy: 'fair' }
     })
 
     const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as {
       reasoning_effort: string
       max_completion_tokens: number
-      response_format: unknown
+      response_format: {
+        json_schema: {
+          schema: {
+            properties: {
+              review: {
+                properties: { revisedPlan: { anyOf: Array<{ type?: string }> } }
+              }
+            }
+          }
+        }
+      }
     }
     expect(body.reasoning_effort).toBe('low')
-    expect(body.max_completion_tokens).toBe(4096)
+    expect(body.max_completion_tokens).toBe(3072)
+    expect(
+      body.response_format.json_schema.schema.properties.review.properties.revisedPlan
+        .anyOf
+    ).toContainEqual({ type: 'null' })
     expect(JSON.stringify(body.response_format)).not.toContain('uniqueItems')
   })
 
@@ -370,7 +386,7 @@ describe('AzureOpenAiDecisionService', () => {
     expect(body.max_completion_tokens).toBe(2048)
   })
 
-  it('uses independent competitive rank and critic policies', async () => {
+  it('uses independent strategic rank and critic policies', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(

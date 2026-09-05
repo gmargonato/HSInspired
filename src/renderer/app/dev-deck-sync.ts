@@ -39,7 +39,6 @@ export function installDevDeckSync(
   const bridge = getDevMenuBridge()
   const syncDecks = bridge?.syncDecks
   if (!syncDecks) {
-    logger.info('[DevMenu] deck sync bridge unavailable')
     return () => undefined
   }
 
@@ -51,7 +50,6 @@ export function installDevDeckSync(
       if (payload === lastPayload) return
       lastPayload = payload
       syncDecks(entries)
-      logger.info('[DevMenu] synced decks', entries)
     } catch (error) {
       logger.warn('[DevMenu] failed to sync decks', error)
     }

@@ -97,7 +97,9 @@ module.exports = {
     tsConfig: { fileName: 'tsconfig.web.json' },
     doNotFollow: { path: 'node_modules' },
     enhancedResolveOptions: {
-      extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json']
+      extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json'],
+      exportsFields: ['exports'],
+      conditionNames: ['import', 'require', 'node', 'default', 'types']
     },
     exclude: ['(^|/)node_modules/', '(^|/)(dist|out|artifacts|dist-card-lab)/']
   }

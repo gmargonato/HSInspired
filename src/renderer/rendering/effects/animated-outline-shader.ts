@@ -43,6 +43,24 @@ for (let ring = 1; ring <= RING_COUNT; ring++) {
     }
   }`)
   }
+
+  if (ring < RING_COUNT) {
+    // Coverage is in [0, 1], so a later ring's candidate cannot be closer
+    // than that ring's radius minus its radial step: this ring's radius
+    // or farther. Once the current minimum is below that bound, all of
+    // the remaining texture samples would leave the result unchanged.
+    // Allow for the six-decimal shader literals and float arithmetic by
+    // lowering the bound conservatively; borderline pixels keep searching.
+    const remainingDistanceLowerBound = (radiusFraction - 0.00001).toFixed(6)
+    GLSL_DISTANCE_SAMPLES.push(`
+    if (result.distance < maxRadius * ${remainingDistanceLowerBound}) {
+        return result;
+    }`)
+    WGSL_DISTANCE_SAMPLES.push(`
+  if (result.distance < maxRadius * ${remainingDistanceLowerBound}) {
+    return result;
+  }`)
+  }
 }
 
 const VERTEX_GLSL = `
@@ -69,10 +87,14 @@ void main(void) {
 }
 `
 
-const FRAGMENT_GLSL = `
+export type OutlineShaderMode = 'live' | 'distance' | 'cached'
+
+function fragmentGlsl(mode: OutlineShaderMode): string {
+  return `
 in vec2 vTextureCoord;
 out vec4 finalColor;
 uniform sampler2D uTexture;
+${mode === 'cached' ? 'uniform highp sampler2D uDistanceCache;' : ''}
 uniform vec4 uInputPixel;
 uniform vec4 uInputClamp;
 uniform vec4 uBaseColor;
@@ -107,6 +129,13 @@ float outlineFbm(vec2 p) {
 }
 
 DistanceResult outlineDistance(vec2 uv, float maxRadius) {
+${
+  mode === 'cached'
+    ? `
+    highp uvec4 bytes = uvec4(round(texelFetch(uDistanceCache, ivec2(uv * uInputPixel.xy), 0) * 255.0));
+    highp uint bits = bytes.x | (bytes.y << 8u) | (bytes.z << 16u) | (bytes.w << 24u);
+    return DistanceResult(uintBitsToFloat(bits));`
+    : `
     DistanceResult result;
     result.distance = maxRadius;
     vec2 direction;
@@ -115,6 +144,8 @@ DistanceResult outlineDistance(vec2 uv, float maxRadius) {
     float candidate;
 ${GLSL_DISTANCE_SAMPLES.join('\n')}
     return result;
+`
+}
 }
 
 vec4 layerOver(vec4 below, vec3 color, float alpha) {
@@ -135,10 +166,27 @@ void main() {
     float edgeSoftness = max(0.75, uMotion.y);
 
     vec4 source = texture(uTexture, vTextureCoord);
+    // Fully covered source pixels contribute no exterior outline. Avoid the
+    // 216-sample distance search across the opaque interior of the proxy.
+    if (source.a >= 0.78) {
+        finalColor = vec4(0.0);
+        return;
+    }
     vec2 patternPixel = vTextureCoord * uInputPixel.xy;
     float time = uTime * speed;
     float maxRadius = ribbonWidth + rimWidth + glowWidth + edgeWobble * 1.5 + 3.0;
     DistanceResult field = outlineDistance(vTextureCoord, maxRadius);
+${
+  mode === 'distance'
+    ? `
+    // Store the float's bits, not a quantized distance. This target is data:
+    // blending, MSAA, dithering and interpolated cache reads are disabled.
+    highp uint bits = floatBitsToUint(field.distance);
+    highp uvec4 bytes = uvec4(bits, bits >> 8u, bits >> 16u, bits >> 24u) & uvec4(255u);
+    finalColor = vec4(bytes) / 255.0;
+    return;
+`
+    : `
 
     // Preserve the texture's authored antialiasing instead of rebuilding its
     // edge from only near-opaque texels.
@@ -167,6 +215,13 @@ void main() {
     float glowEnd = rimExtent + glowWidth;
     float glowCoverage = 1.0 - smoothstep(glowStart, glowEnd, distanceToEdge);
 
+    // These exact zeroes already make every layer transparent. Avoid the
+    // bloom and highlight noise without trimming any faint edge pixels.
+    if (baseAlpha == 0.0 && rimAlpha == 0.0 && (glowCoverage == 0.0 || glowStrength == 0.0)) {
+        finalColor = vec4(0.0);
+        return;
+    }
+
     // The atmospheric layer follows the contour motion but varies at a slower
     // frequency, so it breathes independently around the dense material.
     float bloomNoise = outlineFbm(patternPixel * 0.018 + vec2(time * 0.34, -time * 0.23));
@@ -180,11 +235,16 @@ void main() {
     float laneInner = smoothstep(ribbonWidth * 0.10, ribbonWidth * 0.32, distanceToEdge);
     float laneOuter = 1.0 - smoothstep(ribbonWidth * 0.62, ribbonWidth * 0.84, distanceToEdge);
     float highlightLane = laneInner * laneOuter * baseAlpha;
-    float hotspotNoise = outlineFbm(patternPixel / hotspotScale + vec2(-time * 1.10, time * 0.46));
-    float hotspotThreshold = mix(0.72, 0.54, hotspotDensity);
-    float hotspotMask = smoothstep(hotspotThreshold, hotspotThreshold + 0.13, hotspotNoise);
-    float filament = 0.14 + hotspotMask * 0.86;
-    float hotspotMix = clamp(highlightLane * filament * highlightStrength * mix(0.80, 1.15, flameLick), 0.0, 1.0);
+    float hotspotMix = 0.0;
+    // Outside the highlight lane this multiplication is exactly zero,
+    // regardless of the noise value. Keep the original math inside it.
+    if (highlightLane != 0.0 && highlightStrength != 0.0) {
+        float hotspotNoise = outlineFbm(patternPixel / hotspotScale + vec2(-time * 1.10, time * 0.46));
+        float hotspotThreshold = mix(0.72, 0.54, hotspotDensity);
+        float hotspotMask = smoothstep(hotspotThreshold, hotspotThreshold + 0.13, hotspotNoise);
+        float filament = 0.14 + hotspotMask * 0.86;
+        hotspotMix = clamp(highlightLane * filament * highlightStrength * mix(0.80, 1.15, flameLick), 0.0, 1.0);
+    }
 
     // Premultiplied layer-over composition. The ribbon and rim remain dense;
     // only the bloom carries low alpha.
@@ -196,10 +256,14 @@ void main() {
     // the bright layer can never enlarge the outline silhouette.
     result.rgb = mix(result.rgb, uHotColor.rgb * result.a, hotspotMix);
     finalColor = result;
+`
+}
 }
 `
+}
 
-const SOURCE_WGSL = `
+function sourceWgsl(mode: OutlineShaderMode): string {
+  return `
 struct GlobalFilterUniforms { uInputSize: vec4<f32>, uInputPixel: vec4<f32>, uInputClamp: vec4<f32>, uOutputFrame: vec4<f32>, uGlobalFrame: vec4<f32>, uOutputTexture: vec4<f32>, };
 struct OutlineUniforms { uBaseColor: vec4<f32>, uRimColor: vec4<f32>, uGlowColor: vec4<f32>, uHotColor: vec4<f32>, uGeometry: vec4<f32>, uDetail: vec4<f32>, uMotion: vec4<f32>, uTime: f32, };
 struct DistanceResult { distance: f32, };
@@ -207,6 +271,7 @@ struct DistanceResult { distance: f32, };
 @group(0) @binding(1) var uTexture: texture_2d<f32>;
 @group(0) @binding(2) var uSampler: sampler;
 @group(1) @binding(0) var<uniform> outlineUniforms: OutlineUniforms;
+${mode === 'cached' ? '@group(1) @binding(1) var uDistanceCache: texture_2d<f32>;' : ''}
 struct VSOutput { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32>, };
 
 fn filterVertexPosition(aPosition: vec2<f32>) -> vec4<f32> {
@@ -225,9 +290,18 @@ fn outlineNoise(p: vec2<f32>) -> f32 {
 }
 fn outlineFbm(p: vec2<f32>) -> f32 { return 0.62 * outlineNoise(p) + 0.28 * outlineNoise(p * 2.07 + 11.3) + 0.10 * outlineNoise(p * 4.11 + 29.7); }
 fn outlineDistance(uv: vec2<f32>, maxRadius: f32) -> DistanceResult {
+${
+  mode === 'cached'
+    ? `
+  let bytes = vec4<u32>(round(textureLoad(uDistanceCache, vec2<i32>(uv * gfu.uInputPixel.xy), 0) * 255.0));
+  let bits = bytes.x | (bytes.y << 8u) | (bytes.z << 16u) | (bytes.w << 24u);
+  return DistanceResult(bitcast<f32>(bits));`
+    : `
   var result = DistanceResult(maxRadius);
 ${WGSL_DISTANCE_SAMPLES.join('\n')}
   return result;
+`
+}
 }
 fn layerOver(below: vec4<f32>, color: vec3<f32>, alpha: f32) -> vec4<f32> {
   let remaining = 1.0 - alpha;
@@ -238,31 +312,58 @@ fn layerOver(below: vec4<f32>, color: vec3<f32>, alpha: f32) -> vec4<f32> {
   let ribbonWidth = outlineUniforms.uGeometry.x; let rimWidth = outlineUniforms.uGeometry.y; let glowWidth = outlineUniforms.uGeometry.z; let glowStrength = outlineUniforms.uGeometry.w;
   let highlightStrength = outlineUniforms.uDetail.x; let hotspotScale = max(8.0, outlineUniforms.uDetail.y); let hotspotDensity = clamp(outlineUniforms.uDetail.z, 0.0, 1.0); let edgeWobble = max(0.0, outlineUniforms.uDetail.w);
   let speed = outlineUniforms.uMotion.x; let edgeSoftness = max(0.75, outlineUniforms.uMotion.y);
-  let source = textureSample(uTexture, uSampler, uv); let patternPixel = uv * gfu.uInputPixel.xy; let time = outlineUniforms.uTime * speed; let maxRadius = ribbonWidth + rimWidth + glowWidth + edgeWobble * 1.5 + 3.0;
+  let source = textureSample(uTexture, uSampler, uv);
+  // Matches sourceMask's opaque plateau below, where exterior is exactly zero.
+  if (source.a >= 0.78) { return vec4<f32>(0.0); }
+  let patternPixel = uv * gfu.uInputPixel.xy; let time = outlineUniforms.uTime * speed; let maxRadius = ribbonWidth + rimWidth + glowWidth + edgeWobble * 1.5 + 3.0;
   let field = outlineDistance(uv, maxRadius); let sourceMask = smoothstep(0.02, 0.78, source.a); let exterior = 1.0 - sourceMask;
+${
+  mode === 'distance'
+    ? `
+  let bits = bitcast<u32>(field.distance);
+  let bytes = vec4<u32>(bits, bits >> 8u, bits >> 16u, bits >> 24u) & vec4<u32>(255u);
+  return vec4<f32>(bytes) / 255.0;
+`
+    : `
   let wobbleScale = max(18.0, hotspotScale * 1.2); let wobbleNoise = outlineFbm(patternPixel / wobbleScale + vec2<f32>(time * 0.52, -time * 0.37)); let lickNoise = outlineFbm(patternPixel / max(12.0, wobbleScale * 0.42) + vec2<f32>(-time * 1.18, time * 0.74)); let flameLick = outlineSmooth((lickNoise - 0.56) / 0.34); let wobble = ((wobbleNoise - 0.5) * 1.6 + (flameLick - 0.35) * 0.55) * edgeWobble; let distanceToEdge = max(0.0, field.distance - wobble);
   let baseAlpha = (1.0 - smoothstep(ribbonWidth - edgeSoftness, ribbonWidth + edgeSoftness, distanceToEdge)) * exterior;
   let rimExtent = ribbonWidth + rimWidth; let rimSoftness = edgeSoftness * 1.18;
   let rimAlpha = (1.0 - smoothstep(rimExtent - rimSoftness, rimExtent + rimSoftness, distanceToEdge)) * exterior * 0.92;
   let glowStart = max(ribbonWidth, rimExtent - edgeSoftness * 0.45); let glowEnd = rimExtent + glowWidth; let glowCoverage = 1.0 - smoothstep(glowStart, glowEnd, distanceToEdge);
+  // Match the exact-zero layer shortcut in the WebGL shader.
+  if (baseAlpha == 0.0 && rimAlpha == 0.0 && (glowCoverage == 0.0 || glowStrength == 0.0)) {
+    return vec4<f32>(0.0);
+  }
   let bloomNoise = outlineFbm(patternPixel * 0.018 + vec2<f32>(time * 0.34, -time * 0.23)); let energyVariation = clamp(edgeWobble / 3.5, 0.0, 1.0); let bloomPulse = mix(1.0 - energyVariation * 0.22, 1.0 + energyVariation * 0.32, bloomNoise); let haloAlpha = clamp(glowCoverage * exterior * glowStrength * 0.34 * bloomPulse, 0.0, 1.0);
   let laneInner = smoothstep(ribbonWidth * 0.10, ribbonWidth * 0.32, distanceToEdge); let laneOuter = 1.0 - smoothstep(ribbonWidth * 0.62, ribbonWidth * 0.84, distanceToEdge); let highlightLane = laneInner * laneOuter * baseAlpha;
-  let hotspotNoise = outlineFbm(patternPixel / hotspotScale + vec2<f32>(-time * 1.10, time * 0.46)); let hotspotThreshold = mix(0.72, 0.54, hotspotDensity); let hotspotMask = smoothstep(hotspotThreshold, hotspotThreshold + 0.13, hotspotNoise); let filament = 0.14 + hotspotMask * 0.86; let hotspotMix = clamp(highlightLane * filament * highlightStrength * mix(0.80, 1.15, flameLick), 0.0, 1.0);
+  var hotspotMix = 0.0;
+  if (highlightLane != 0.0 && highlightStrength != 0.0) {
+    let hotspotNoise = outlineFbm(patternPixel / hotspotScale + vec2<f32>(-time * 1.10, time * 0.46)); let hotspotThreshold = mix(0.72, 0.54, hotspotDensity); let hotspotMask = smoothstep(hotspotThreshold, hotspotThreshold + 0.13, hotspotNoise); let filament = 0.14 + hotspotMask * 0.86; hotspotMix = clamp(highlightLane * filament * highlightStrength * mix(0.80, 1.15, flameLick), 0.0, 1.0);
+  }
   var result = vec4<f32>(0.0); result = layerOver(result, outlineUniforms.uGlowColor.rgb, haloAlpha); result = layerOver(result, outlineUniforms.uRimColor.rgb, rimAlpha); result = layerOver(result, outlineUniforms.uBaseColor.rgb, baseAlpha); result = vec4<f32>(mix(result.rgb, outlineUniforms.uHotColor.rgb * result.a, hotspotMix), result.a); return result;
+`
+}
 }
 `
+}
 
-export function createAnimatedOutlineGlProgram(): GlProgram {
+export function createAnimatedOutlineGlProgram(
+  mode: OutlineShaderMode = 'live'
+): GlProgram {
+  const version = mode === 'live' ? '' : '#version 300 es\n'
   return GlProgram.from({
-    vertex: VERTEX_GLSL,
-    fragment: FRAGMENT_GLSL,
-    name: 'animated-outline'
+    vertex: version + VERTEX_GLSL,
+    fragment: version + fragmentGlsl(mode),
+    name: `animated-outline-${mode}`
   })
 }
 
-export function createAnimatedOutlineGpuProgram(): GpuProgram {
+export function createAnimatedOutlineGpuProgram(
+  mode: OutlineShaderMode = 'live'
+): GpuProgram {
+  const source = sourceWgsl(mode)
   return GpuProgram.from({
-    vertex: { source: SOURCE_WGSL, entryPoint: 'mainVertex' },
-    fragment: { source: SOURCE_WGSL, entryPoint: 'mainFragment' }
+    vertex: { source, entryPoint: 'mainVertex' },
+    fragment: { source, entryPoint: 'mainFragment' }
   })
 }

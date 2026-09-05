@@ -2,10 +2,10 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import { resolve } from 'path'
 
 const DEVELOPMENT_CSP =
-  "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' http://localhost:8081 ws://localhost:8081 data: blob:"
+  "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' http://localhost:8081 ws://localhost:8081 data: blob:"
 
 const PRODUCTION_CSP =
-  "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' data: blob:"
+  "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' data: blob:"
 
 function cspPlugin(mode: string) {
   const csp = mode === 'development' ? DEVELOPMENT_CSP : PRODUCTION_CSP
@@ -18,6 +18,20 @@ function cspPlugin(mode: string) {
   }
 }
 
+const CARD_CLASS_CONFIG_PATH = resolve('config/card-class-colors.json')
+const OUTLINE_TUNING_CONFIG_PATH = resolve('config/outline-tunings.json')
+const LIVE_CONFIG_PATHS = new Set([CARD_CLASS_CONFIG_PATH, OUTLINE_TUNING_CONFIG_PATH])
+
+function liveConfigHmrGuard() {
+  return {
+    name: 'live-config-hmr-guard',
+    handleHotUpdate(context: { readonly file: string }) {
+      if (LIVE_CONFIG_PATHS.has(resolve(context.file))) return []
+      return undefined
+    }
+  }
+}
+
 export default defineConfig(({ mode }) => ({
   main: {
     plugins: [externalizeDepsPlugin()]
@@ -26,7 +40,7 @@ export default defineConfig(({ mode }) => ({
     plugins: [externalizeDepsPlugin()]
   },
   renderer: {
-    plugins: [cspPlugin(mode)],
+    plugins: [cspPlugin(mode), liveConfigHmrGuard()],
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer'),
@@ -45,6 +59,11 @@ export default defineConfig(({ mode }) => ({
           mode === 'production'
             ? 'src/renderer/app/renderer-production-placeholder.ts'
             : 'src/renderer/features/dev/layout-inspector/index.ts'
+        ),
+        '@dev-match-performance': resolve(
+          mode === 'production'
+            ? 'src/renderer/app/renderer-production-placeholder.ts'
+            : 'src/renderer/app/dev-match-performance.ts'
         ),
         '@outline-directions': resolve(
           mode === 'production'

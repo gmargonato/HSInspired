@@ -11,12 +11,65 @@ import type {
 import { asPlayerId, type MatchSetup, type PlayerId } from '../match-types'
 import { evaluatePosition } from './evaluator'
 import { canonicalCommandKey, enumerateLegalCommands } from './legal-commands'
-import { searchCompetitiveTurn } from './search'
+import { searchStrategicTurn } from './search'
 import { AiTranspositionCache } from './state-hash'
+import { commandUsesUncertainty } from './uncertainty'
 
 const RUN_BENCHMARK = process.env['HSINSPIRED_RUN_AI_BENCHMARK'] === '1'
+const requestedPairCount = Number(process.env['HSINSPIRED_AI_BENCHMARK_PAIRS'] ?? 300)
+const BENCHMARK_PAIR_COUNT =
+  Number.isSafeInteger(requestedPairCount) && requestedPairCount > 0
+    ? requestedPairCount
+    : 300
+const TRACE_BENCHMARK = process.env['HSINSPIRED_AI_BENCHMARK_TRACE'] === '1'
+const CROSS_DECK_BENCHMARK = process.env['HSINSPIRED_AI_BENCHMARK_CROSS_DECK'] === '1'
+const requestedStartPair = Number(
+  process.env['HSINSPIRED_AI_BENCHMARK_START_PAIR'] ?? 0
+)
+const BENCHMARK_START_PAIR =
+  Number.isSafeInteger(requestedStartPair) && requestedStartPair >= 0
+    ? requestedStartPair
+    : 0
 const COMPETITIVE_ID = asPlayerId('benchmark-competitive')
 const LEGACY_ID = asPlayerId('benchmark-legacy')
+
+function commandLabel(state: OpeningMatchState, command: TurnMatchCommand): string {
+  const actor = state.players.find(
+    (player) => player.participantId === command.participantId
+  )
+  if (command.type === 'play-card') {
+    const card = actor?.hand.find(
+      (candidate) => candidate.instanceId === command.cardInstanceId
+    )
+    return card ? `play ${String(card.cardId)}` : 'play unknown-card'
+  }
+  if (command.type === 'use-hero-power')
+    return `hero-power ${String(actor?.heroPower.id ?? 'unknown')}`
+  if (command.type === 'attack-character') {
+    const attackerInstanceId =
+      command.attacker.kind === 'minion' ? command.attacker.instanceId : null
+    const defenderInstanceId =
+      command.defender.kind === 'minion' ? command.defender.instanceId : null
+    const attacker =
+      attackerInstanceId === null
+        ? 'hero'
+        : String(
+            actor?.board.find((minion) => minion.instanceId === attackerInstanceId)
+              ?.cardId ?? 'unknown-minion'
+          )
+    const defender =
+      defenderInstanceId === null
+        ? 'hero'
+        : String(
+            state.players
+              .flatMap((player) => player.board)
+              .find((minion) => minion.instanceId === defenderInstanceId)?.cardId ??
+              'unknown-minion'
+          )
+    return `attack ${attacker} -> ${defender}`
+  }
+  return command.type
+}
 
 function effectText(card: CardDefinition): string {
   return JSON.stringify(card.effects).toLowerCase()
@@ -125,12 +178,20 @@ function chooseLegacy(
     .analyze((fork) => enumerateLegalCommands(fork, participantId))
     .filter((command) => !rejected.has(canonicalCommandKey(command)))
   const evaluated = commands.map((command) => {
-    const result = match.preview(command)
+    // The one-ply baseline obeys the same information boundary as strategic
+    // search. Previewing an uncertain command would reveal the authoritative
+    // Secret, draw, or RNG result before the policy commits to the action.
+    const result = commandUsesUncertainty(command, before, participantId)
+      ? null
+      : match.preview(command)
     return {
       command,
-      score: result.accepted
-        ? legacyScore(before, result.state, participantId)
-        : Number.NEGATIVE_INFINITY
+      score:
+        result === null
+          ? 0
+          : result.accepted
+            ? legacyScore(before, result.state, participantId)
+            : Number.NEGATIVE_INFINITY
     }
   })
   return (
@@ -157,7 +218,7 @@ function chooseCompetitive(
     actionId: `benchmark-action-${index}`,
     command
   }))
-  const result = searchCompetitiveTurn(
+  const result = searchStrategicTurn(
     match,
     participantId,
     roots,
@@ -174,6 +235,17 @@ function chooseCompetitive(
     undefined,
     cache
   )
+  if (TRACE_BENCHMARK) {
+    console.info(
+      `[AI benchmark] strategic top=${result.dossiers
+        .slice(0, 3)
+        .map(
+          (dossier) =>
+            `${commandLabel(match.getState(), dossier.firstCommand)}:${dossier.score.toFixed(3)}${dossier.uncertainty.incomplete ? '?' : ''}`
+        )
+        .join(', ')}`
+    )
+  }
   return (
     result.dossiers[0]?.firstCommand ?? chooseLegacy(match, participantId, rejected)
   )
@@ -185,6 +257,11 @@ function playGame(
   legacyDeck: Deck,
   swapped: boolean
 ): 'win' | 'loss' | 'draw' {
+  if (TRACE_BENCHMARK) {
+    console.info(
+      `[AI benchmark] seed=${seed} swapped=${swapped} strategic=${competitiveDeck.id} legacy=${legacyDeck.id}`
+    )
+  }
   const competitiveSetup = {
     participantId: COMPETITIVE_ID,
     controllerKind: 'ai' as const,
@@ -234,29 +311,66 @@ function playGame(
       participantId === COMPETITIVE_ID
         ? chooseCompetitive(match, participantId, rejected, cache)
         : chooseLegacy(match, participantId, rejected)
+    if (TRACE_BENCHMARK) {
+      const self = state.players.find(
+        (player) => player.participantId === participantId
+      )!
+      const opponent = state.players.find(
+        (player) => player.participantId !== participantId
+      )!
+      console.info(
+        `[AI benchmark] turn=${state.turnNumber} side=${participantId === COMPETITIVE_ID ? 'strategic' : 'legacy'} hp=${self.hero.health + self.hero.armor}/${opponent.hero.health + opponent.hero.armor} mana=${self.mana.available} command=${commandLabel(state, command)}`
+      )
+    }
     const result = match.dispatch(command)
     if (!result.accepted) rejected.add(canonicalCommandKey(command))
   }
   const final = match.getState()
+  if (TRACE_BENCHMARK) {
+    console.info(
+      `[AI benchmark] result winner=${final.winnerId ?? 'draw'} actionsRevision=${final.revision}`
+    )
+  }
   if (final.winnerId === COMPETITIVE_ID) return 'win'
   if (final.loserId === COMPETITIVE_ID) return 'loss'
   return 'draw'
 }
 
-describe('competitive AI v2 benchmark', () => {
+describe('strategic AI v3 benchmark', () => {
   const benchmark = RUN_BENCHMARK ? it : it.skip
   benchmark(
-    'scores at least 65% over 600 seeded seat-swapped games',
+    'scores at least 65% over 600 fair, same-deck, seat-swapped games',
     async () => {
       let wins = 0
       let draws = 0
-      for (let pair = 0; pair < 300; pair += 1) {
+      const matchupResults = new Map<
+        string,
+        { wins: number; draws: number; losses: number }
+      >()
+      for (let offset = 0; offset < BENCHMARK_PAIR_COUNT; offset += 1) {
+        const pair = BENCHMARK_START_PAIR + offset
         const competitiveDeck = COMPETITIVE_BENCHMARK_DECKS[pair % 6]!
-        const legacyDeck = COMPETITIVE_BENCHMARK_DECKS[(pair + 1) % 6]!
+        const legacyDeck = CROSS_DECK_BENCHMARK
+          ? COMPETITIVE_BENCHMARK_DECKS[(pair + 1) % 6]!
+          : competitiveDeck
+        const matchupKey = `${competitiveDeck.id} vs ${legacyDeck.id}`
+        const matchup = matchupResults.get(matchupKey) ?? {
+          wins: 0,
+          draws: 0,
+          losses: 0
+        }
+        matchupResults.set(matchupKey, matchup)
         for (const swapped of [false, true]) {
           const result = playGame(50_000 + pair, competitiveDeck, legacyDeck, swapped)
-          if (result === 'win') wins += 1
-          else if (result === 'draw') draws += 1
+          if (result === 'win') {
+            wins += 1
+            matchup.wins += 1
+          } else if (result === 'draw') {
+            draws += 1
+            matchup.draws += 1
+          } else {
+            matchup.losses += 1
+          }
         }
         // Yield to Vitest's timeout and reporters without changing any game
         // seed, state, or policy decision.
@@ -264,8 +378,21 @@ describe('competitive AI v2 benchmark', () => {
           await new Promise<void>((resolve) => setTimeout(resolve, 0))
         }
       }
-      const score = (wins + draws * 0.5) / 600
-      expect(score).toBeGreaterThanOrEqual(0.65)
+      const gameCount = BENCHMARK_PAIR_COUNT * 2
+      const score = (wins + draws * 0.5) / gameCount
+      const matchupSummary = [...matchupResults]
+        .map(
+          ([name, result]) =>
+            `${name}: ${result.wins}W/${result.draws}D/${result.losses}L`
+        )
+        .join('; ')
+      console.info(
+        `[AI benchmark] ${(score * 100).toFixed(2)}%: ${wins} wins, ${draws} draws, ${gameCount - wins - draws} losses over ${gameCount} fair games; ${matchupSummary}`
+      )
+      expect(
+        score,
+        `strategic benchmark: ${wins} wins, ${draws} draws, ${gameCount - wins - draws} losses over ${gameCount} games; ${matchupSummary}`
+      ).toBeGreaterThanOrEqual(0.65)
     },
     30 * 60_000
   )

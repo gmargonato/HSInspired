@@ -20,13 +20,11 @@ export function installDevCommandHandler(
 ): () => void {
   const bridge = getDevMenuBridge()
   if (!bridge?.onDevCommand) {
-    logger.info('[DevMenu] command bridge unavailable')
     return () => undefined
   }
 
   const handleCommand = (command: DevCommand): void => {
     const current = sceneManager.current
-    logger.info('[DevMenu] command received', command, current?.constructor.name)
 
     if (command.type === 'collection:set-collectible') {
       if (current instanceof CollectionScene) {
@@ -109,7 +107,6 @@ export function installDevCommandHandler(
       if (current instanceof GameScene) {
         try {
           current.toggleDeckTracker()
-          logger.info('[DevMenu] game tracker toggled')
         } catch (error) {
           logger.error('[DevMenu] failed to toggle tracker', error)
         }

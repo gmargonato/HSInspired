@@ -46,7 +46,7 @@ export const WEAPON_LAYOUT = {
     note: 'Centered row of temporary text badges below the authored ability art.'
   },
   attackBadge: placement(
-    { x: 65, y: 153 },
+    { x: 75, y: 145 },
     { width: 171, height: 180 },
     {
       anchor: CENTER,
@@ -55,7 +55,7 @@ export const WEAPON_LAYOUT = {
     }
   ),
   durabilityBadge: placement(
-    { x: 175, y: 153 },
+    { x: 175, y: 145 },
     { width: 164, height: 179 },
     {
       anchor: CENTER,

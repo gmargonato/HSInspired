@@ -1,3 +1,6 @@
+// Despite its name, this installs Pixi's CSP-safe polyfills for code paths
+// that otherwise generate runtime functions with eval.
+import 'pixi.js/unsafe-eval'
 import { Application } from 'pixi.js'
 import { SceneManager } from './scenes/scene-manager'
 import { SceneNavigator, type DevSceneFactory } from './app/scene-navigator'
@@ -17,6 +20,10 @@ type SceneMenuAPI = {
 const createDevScene: DevSceneFactory | undefined = import.meta.env.DEV
   ? async (request) => {
       switch (request.id) {
+        case 'card-inspector': {
+          const { CardInspectorScene } = await import('@dev-inspector')
+          return new CardInspectorScene()
+        }
         case 'outline-lab': {
           const { OutlineLabScene } = await import('@outline-lab')
           return new OutlineLabScene()
@@ -40,10 +47,8 @@ function subscribeToSceneMenu(
   if (typeof sceneAPI?.onSceneRequest === 'function') {
     try {
       const unsubscribe = sceneAPI.onSceneRequest((request) => {
-        logger.info('[Scenes menu][renderer] received via window.api', request)
         listener(request)
       })
-      logger.info('[Scenes menu][renderer] listening via window.api')
       return unsubscribe
     } catch (error) {
       logger.warn('The custom Scenes bridge could not be registered.', error)
@@ -52,6 +57,48 @@ function subscribeToSceneMenu(
 
   logger.warn('Scenes menu bridge is unavailable; developer navigation is disabled.')
   return () => undefined
+}
+
+function mountFpsCounter(app: Application, container: HTMLElement): () => void {
+  const counter = document.createElement('div')
+  counter.className = 'fps-counter'
+  counter.textContent = 'FPS: --'
+  container.appendChild(counter)
+
+  let frames = 0
+  let sampleStart = performance.now()
+  let previousFrameAt = sampleStart
+  const frameTimes: number[] = []
+  const updateCounter = (): void => {
+    frames += 1
+    const now = performance.now()
+    frameTimes.push(now - previousFrameAt)
+    previousFrameAt = now
+    const elapsed = now - sampleStart
+    if (elapsed < 500) return
+
+    // Measure real elapsed time so slow frames are not hidden by delta clamping.
+    const sortedFrameTimes = [...frameTimes].sort((left, right) => left - right)
+    const p95Index = Math.min(
+      sortedFrameTimes.length - 1,
+      Math.floor(sortedFrameTimes.length * 0.95)
+    )
+    const p95 = sortedFrameTimes[p95Index] ?? 0
+    const worst = sortedFrameTimes.at(-1) ?? 0
+    counter.textContent =
+      `FPS: ${Math.round((frames * 1000) / elapsed)}` +
+      ` · p95: ${p95.toFixed(1)}ms · max: ${worst.toFixed(1)}ms` +
+      ` · ${app.renderer.resolution}x`
+    frames = 0
+    frameTimes.length = 0
+    sampleStart = now
+  }
+  app.ticker.add(updateCounter)
+
+  return () => {
+    app.ticker.remove(updateCounter)
+    counter.remove()
+  }
 }
 
 async function bootstrap(): Promise<void> {
@@ -74,6 +121,7 @@ async function bootstrap(): Promise<void> {
       height: GAME_HEIGHT,
       backgroundColor: 0x0a0f1e,
       antialias: true,
+      useBackBuffer: true,
       eventFeatures: { wheel: true },
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
@@ -114,7 +162,6 @@ async function bootstrap(): Promise<void> {
       return
     }
 
-    services.logger.info('[Scenes menu][renderer] navigating', request)
     void sceneNavigator.navigateRequest(request).catch((error: unknown) => {
       services.logger.error('Failed to navigate from the Scenes menu.', error)
     })
@@ -137,9 +184,16 @@ async function bootstrap(): Promise<void> {
 
   let unsubscribeDevSceneSync = (): void => undefined
   let unsubscribeDevCommandHandler = (): void => undefined
+  let removeFpsCounter = (): void => undefined
+  let removeDevFilterToggle = (): void => undefined
 
   try {
     app.ticker.maxFPS = 60
+    removeFpsCounter = mountFpsCounter(app, container)
+    if (import.meta.env.DEV) {
+      const { installDevFilterToggle } = await import('./app/dev-filter-toggle')
+      removeDevFilterToggle = installDevFilterToggle(app, container)
+    }
 
     const game = new SceneManager(app, {
       cursor,
@@ -160,6 +214,9 @@ async function bootstrap(): Promise<void> {
       import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'card-inspector'
     const directOutlineLabStart =
       import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'outline-lab'
+    const directMatchPerformanceStart =
+      import.meta.env.DEV &&
+      import.meta.env.VITE_DEV_START_ROUTE === 'match-performance'
     if (directInspectorStart) {
       const { CardInspectorScene } = await import('@dev-inspector')
       await game.start(new CardInspectorScene())
@@ -168,6 +225,20 @@ async function bootstrap(): Promise<void> {
       await game.start(new OutlineLabScene())
     } else {
       await game.start(navigator.createInitialScene())
+    }
+
+    if (directMatchPerformanceStart) {
+      const { runMatchPerformanceBenchmark } = await import('@dev-match-performance')
+      ;(
+        window as Window & {
+          __matchPerformanceBenchmark?: ReturnType<typeof runMatchPerformanceBenchmark>
+        }
+      ).__matchPerformanceBenchmark = runMatchPerformanceBenchmark({
+        app,
+        sceneManager: game,
+        navigator,
+        services
+      })
     }
 
     const handleSettingsShortcut = (event: KeyboardEvent): void => {
@@ -208,6 +279,8 @@ async function bootstrap(): Promise<void> {
     window.addEventListener(
       'beforeunload',
       () => {
+        removeFpsCounter()
+        removeDevFilterToggle()
         removeSettingsShortcut()
         unsubscribeFromSceneMenu()
         unsubscribeDevDeckSync()
@@ -220,6 +293,8 @@ async function bootstrap(): Promise<void> {
       { once: true }
     )
   } catch (error) {
+    removeFpsCounter()
+    removeDevFilterToggle()
     removeSettingsShortcut()
     unsubscribeFromSceneMenu()
     unsubscribeDevDeckSync()

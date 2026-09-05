@@ -1,9 +1,11 @@
-import { Container, Rectangle, Sprite, Texture } from 'pixi.js'
+import { Container, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
 import { CardView } from '../../rendering/cards/card-view'
 import {
   AnimatedOutline,
+  type OutlinePaletteInput,
   type OutlinePresetName
 } from '../../rendering/effects/animated-outline'
+import { BakedAnimatedOutline } from '../../rendering/effects/baked-animated-outline'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 
 const SUMMON_GHOST_COLOR = 0x79e9ff
@@ -12,7 +14,7 @@ export class GameCardSlot extends Container {
   readonly card: CardView
   readonly instanceId: string
   readonly playableOutlineTexture: Texture
-  readonly playableOutline: AnimatedOutline
+  private playableOutline: AnimatedOutline | BakedAnimatedOutline
   private readonly outlineTarget: Sprite
   private playableOutlineDisposed = false
   private readonly replaceCross: Sprite
@@ -20,13 +22,15 @@ export class GameCardSlot extends Container {
   private playableOutlineRequested = false
   private playableOutlineSuppressed = false
   private playableOutlinePreset: OutlinePresetName = 'card'
+  private playableOutlinePalette: OutlinePaletteInput = 'green'
 
   constructor(
     card: CardView,
     instanceId: string,
     replaceCrossTexture: Texture,
     replacedLabelTexture: Texture,
-    outlineTexture: Texture
+    outlineTexture: Texture,
+    private readonly renderer: Renderer
   ) {
     super()
     this.card = card
@@ -53,10 +57,15 @@ export class GameCardSlot extends Container {
     this.outlineTarget.eventMode = 'none'
     this.outlineTarget.label = `${card.label}.playable-outline-target`
     this.addChild(this.outlineTarget)
-    this.playableOutline = new AnimatedOutline(this.outlineTarget, 'green', 'card')
+    this.playableOutline = new AnimatedOutline(this.outlineTarget, {
+      palette: 'green',
+      preset: 'card',
+      cacheDistance: true
+    })
     this.setPlayableOutlineEnabled(false)
 
     this.addChild(card)
+    card.enableTextureCache()
 
     this.replaceCross = new Sprite(replaceCrossTexture)
     this.replaceCross.anchor.set(0.5)
@@ -99,9 +108,42 @@ export class GameCardSlot extends Container {
   /** Gives conditionally enhanced cards a more agitated outline treatment. */
   setPlayableOutlineEnhanced(enhanced: boolean): void {
     this.playableOutlinePreset = enhanced ? 'bonus-card' : 'card'
+    this.playableOutlinePalette = enhanced ? 'orange' : 'green'
     if (this.playableOutlineDisposed) return
-    this.playableOutline.setPalette(enhanced ? 'orange' : 'green')
+    if (this.playableOutline instanceof BakedAnimatedOutline) {
+      this.playableOutline.setAppearance(
+        this.playableOutlinePalette,
+        this.playableOutlinePreset
+      )
+      return
+    }
+    this.playableOutline.setPalette(this.playableOutlinePalette)
     this.playableOutline.setPreset(this.playableOutlinePreset)
+  }
+
+  /** Settled hand cards share pre-rendered shader frames instead of ten filters. */
+  enableBakedPlayableOutline(displayScale: number): void {
+    if (
+      this.playableOutlineDisposed ||
+      this.playableOutline instanceof BakedAnimatedOutline
+    )
+      return
+    this.playableOutline.dispose()
+    this.outlineTarget.visible = false
+    const baked = new BakedAnimatedOutline(
+      this.renderer,
+      this.playableOutlineTexture,
+      this.card.plan.width,
+      this.card.renderedHeight,
+      displayScale,
+      this.playableOutlinePalette,
+      this.playableOutlinePreset
+    )
+    baked.position.copyFrom(this.outlineTarget.position)
+    baked.zIndex = this.outlineTarget.zIndex
+    this.addChildAt(baked, this.getChildIndex(this.card))
+    this.playableOutline = baked
+    this.syncPlayableOutline()
   }
 
   getPlayableOutlinePreset(): OutlinePresetName {
@@ -136,6 +178,11 @@ export class GameCardSlot extends Container {
     if (this.playableOutlineDisposed) return
     this.playableOutlineDisposed = true
     this.playableOutline.dispose()
+  }
+
+  override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.disposePlayableOutline()
+    super.destroy(options)
   }
 
   private syncPlayableOutline(): void {

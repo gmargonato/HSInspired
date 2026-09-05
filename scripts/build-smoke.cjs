@@ -35,6 +35,7 @@ walk(rendererOutput)
 const devOnlyMarkers = [
   'CardInspectorScene',
   'features/dev/card-inspector',
+  'runMatchPerformanceBenchmark',
   'VITE_DEV_START_ROUTE'
 ]
 const leakedMarkers = textFiles.flatMap((path) => {
