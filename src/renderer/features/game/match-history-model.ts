@@ -3,6 +3,7 @@ import type {
   HistoryActionResolvedEvent,
   HistoryActionOutcome
 } from '../../../game/match'
+import { projectHistoryAction } from '../../../game/match/history-visibility'
 
 interface MatchHistoryEntryBase {
   readonly id: number
@@ -36,9 +37,13 @@ export class MatchHistoryModel {
   private nextId = 0
   private entries: readonly MatchHistoryEntry[] = []
 
-  constructor(private readonly capacity = 8) {}
+  constructor(
+    private readonly viewerId: string,
+    private readonly capacity = 8
+  ) {}
 
   record(event: HistoryActionResolvedEvent): MatchHistoryEntry {
+    event = projectHistoryAction(event, this.viewerId)
     const byTarget = new Map<string, MatchHistoryTarget>()
     for (const outcome of event.outcomes) {
       if (outcome.kind === 'damage' && (outcome.amount ?? 0) <= 0) continue

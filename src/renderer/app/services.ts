@@ -1,6 +1,7 @@
 import { PersistentDeckStore, type DeckStore } from './deck-store'
 import { createAppLogger, type AppLogger } from './logger'
 import type { AiDecisionApi } from '../../shared/ipc/ai'
+import type { MatchLogsApi } from '../../shared/ipc/match-logs'
 import { PersistentPlayerStatsStore } from './player-stats-store'
 import type { PlayerStatsStore } from '../ui/player-stats-store'
 import { PersistentArenaStore } from './arena-store'
@@ -51,6 +52,7 @@ class BrowserDialogService implements DialogService {
 
 /** Renderer-lifetime dependencies assembled once by the application root. */
 export interface AppServices {
+  readonly matchLogs?: MatchLogsApi
   readonly ai: AiDecisionApi
   readonly arenaStore: ArenaStore
   readonly deckStore: DeckStore
@@ -66,12 +68,18 @@ export function createAppServices(overrides: Partial<AppServices> = {}): AppServ
     (typeof window !== 'undefined' && window.api?.ai
       ? window.api.ai
       : {
+          planDeck: async () => {
+            throw new Error('The AI deck-plan bridge is unavailable.')
+          },
           decide: async () => {
             throw new Error('The AI decision bridge is unavailable.')
           }
         })
   return {
     ai,
+    matchLogs:
+      overrides.matchLogs ??
+      (typeof window !== 'undefined' ? window.api?.matchLogs : undefined),
     arenaStore: overrides.arenaStore ?? new PersistentArenaStore(),
     deckStore: overrides.deckStore ?? new PersistentDeckStore(undefined, logger),
     playerStatsStore: overrides.playerStatsStore ?? new PersistentPlayerStatsStore(),

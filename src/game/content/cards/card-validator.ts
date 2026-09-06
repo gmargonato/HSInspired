@@ -50,6 +50,7 @@ export interface RawCardRecord {
   readonly subtype?: unknown
   readonly spellSchool?: unknown
   readonly cost?: unknown
+  readonly spellDamage?: unknown
   readonly attack?: unknown
   readonly health?: unknown
   readonly armor?: unknown
@@ -193,6 +194,7 @@ const ACTION_FIELDS = new Set([
   'keywords',
   'minimum',
   'minimumHealth',
+  'friendlyMinionMinimumHealth',
   'maximumDamageTaken',
   'maximum',
   'modifyDrawnCard',
@@ -216,7 +218,8 @@ const ACTION_FIELDS = new Set([
   'targetType',
   'trigger',
   'upgradedPower',
-  'winActions'
+  'winActions',
+  'loseActions'
 ])
 
 const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>> = {
@@ -277,6 +280,7 @@ const SUMMON_ACTIONS = new Set<CardActionName>([
 ])
 
 const MODIFY_FIELDS = [
+  'friendlyMinionMinimumHealth',
   'attack',
   'durability',
   'health',
@@ -289,6 +293,7 @@ const MODIFY_FIELDS = [
 ] as const
 
 const NUMERIC_VALUE_FIELDS = [
+  'friendlyMinionMinimumHealth',
   'amount',
   'count',
   'attack',
@@ -317,6 +322,16 @@ function numericEffectValue(value: unknown, path: string, allowFull: boolean): v
 
   const record = value as Record<string, unknown>
   const keys = Object.keys(record)
+  if (record['condition'] !== undefined) {
+    for (const key of keys) {
+      if (!['condition', 'thenValue', 'elseValue'].includes(key))
+        return fail(`${path}.${key}`, 'unknown conditional value field')
+    }
+    conditionValue(record['condition'], `${path}.condition`)
+    numericEffectValue(record['thenValue'], `${path}.thenValue`, allowFull)
+    numericEffectValue(record['elseValue'], `${path}.elseValue`, allowFull)
+    return
+  }
   if (record['random'] !== undefined) {
     if (keys.length !== 1 || !Array.isArray(record['random'])) {
       return fail(path, 'random values only support an array')
@@ -654,7 +669,7 @@ function nestedActionsValue(value: unknown, path: string): void {
 
   const record = value as Record<string, unknown>
   for (const [key, nested] of Object.entries(record)) {
-    if (key === 'actions' || key === 'winActions') {
+    if (key === 'actions' || key === 'winActions' || key === 'loseActions') {
       actionsValue(nested, `${path}.actions`)
     } else if (
       (key === 'target' ||
@@ -778,9 +793,15 @@ function choiceValue(value: unknown, path: string): void {
       unknown
     >
     for (const key of Object.keys(optionRecord)) {
-      if (key !== 'actions') {
+      if (key !== 'actions' && key !== 'presentationCardId') {
         return fail(`${path}.options[${index}].${key}`, 'unknown choice option field')
       }
+    }
+    if (optionRecord['presentationCardId'] !== undefined) {
+      stringValue(
+        optionRecord['presentationCardId'],
+        `${path}.options[${index}].presentationCardId`
+      )
     }
     if (optionRecord['actions'] === undefined) {
       return fail(`${path}.options[${index}].actions`, 'is required')
@@ -896,6 +917,9 @@ export function validateCardRecord(
     subtype,
     spellSchool,
     cost,
+    ...(raw.spellDamage !== undefined
+      ? { spellDamage: statistic(raw.spellDamage, `${indexOrPath}.spellDamage`, true)! }
+      : {}),
     rulesText,
     keywords,
     effects,

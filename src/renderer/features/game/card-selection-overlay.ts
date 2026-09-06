@@ -109,6 +109,9 @@ export class CardSelectionOverlay extends Container {
     const cards = options.map((option) => ({
       instanceId: `${sourceCardInstanceId}:choice:${option.choice}`,
       cardId: option.presentationCardId ?? sourceCardId,
+      ...(option.presentationCost !== undefined
+        ? { baseCost: option.presentationCost, currentCost: option.presentationCost }
+        : {}),
       ownerId: participantId,
       controllerId: participantId,
       zone: 'revealed' as const,
@@ -146,7 +149,7 @@ export class CardSelectionOverlay extends Container {
         slot.on('pointertap', () => this.choose(card, slot))
         this.cardsLayer.addChild(slot)
         const choice = this.choicesByInstanceId.get(card.instanceId)
-        if (choice) {
+        if (choice && !choice.presentationCardId) {
           const label = new Text({
             text: choice.label,
             style: {

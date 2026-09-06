@@ -7,7 +7,7 @@
     "type": "Minion",
     "subtype": "General",
     "cost": 2,
-    "attack": 2,
+    "attack": 3,
     "health": 2,
     "rulesText": "Battlecry: Destroy your opponent's weapon.",
     "keywords": [],
@@ -1522,7 +1522,7 @@
           {
             "action": "restore",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -1654,7 +1654,7 @@
           {
             "action": "restore",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -1792,7 +1792,7 @@
     "cardClass": "Hunter",
     "type": "Spell",
     "subtype": "General",
-    "cost": 1,
+    "cost": 0,
     "attack": null,
     "health": null,
     "rulesText": "Change a minion's Health to 1.",
@@ -2852,7 +2852,7 @@
     "cardClass": "Warlock",
     "type": "Spell",
     "subtype": "General",
-    "cost": 1,
+    "cost": 0,
     "attack": null,
     "health": null,
     "rulesText": "Deal 4 damage. Discard a random card.",
@@ -3321,7 +3321,7 @@
           {
             "action": "restore",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },

@@ -1680,6 +1680,14 @@ export class EffectRuntime {
     if (typeof value === 'string')
       return allowFull && value === 'full' ? Number.POSITIVE_INFINITY : 0
     if (!isRecord(value)) return 0
+    if (value.condition !== undefined)
+      return this.evaluate(
+        this.conditionMatches(value.condition, frame)
+          ? value.thenValue
+          : value.elseValue,
+        frame,
+        allowFull
+      )
     if (Array.isArray(value.random)) {
       const randomValues = value.random.filter(
         (entry): entry is number => typeof entry === 'number'
@@ -3152,6 +3160,9 @@ export class EffectRuntime {
       ...(typeof action.minimumHealth === 'number'
         ? { minimumHealth: action.minimumHealth }
         : {}),
+      ...(typeof action.friendlyMinionMinimumHealth === 'number'
+        ? { friendlyMinionMinimumHealth: action.friendlyMinionMinimumHealth }
+        : {}),
       ...multiplierValues,
       duration,
       ...(duration === 'this-turn' ? { expiresOnTurn: this.draft.turnNumber } : {}),
@@ -3622,7 +3633,16 @@ export class EffectRuntime {
               this.sourceIsInPlay(enchantment.sourceInstanceId))
           return active ? Math.max(minimum, enchantment.minimumHealth ?? 0) : minimum
         },
-        0
+        (this.player(ref.participantId).hero.enchantments ?? []).reduce(
+          (minimum, enchantment) =>
+            (enchantment.startsOnTurn === undefined ||
+              enchantment.startsOnTurn <= this.draft.turnNumber) &&
+            (enchantment.expiresOnTurn === undefined ||
+              enchantment.expiresOnTurn >= this.draft.turnNumber)
+              ? Math.max(minimum, enchantment.friendlyMinionMinimumHealth ?? 0)
+              : minimum,
+          0
+        )
       )
       actualDamage = Math.min(actualDamage, Math.max(0, minion.health - minimumHealth))
       minion.health = Math.max(minimumHealth, minion.health - actualDamage)
@@ -3713,6 +3733,17 @@ export class EffectRuntime {
         ? this.effectMultiplier(frame.controllerId, 'heroPowerMultiplier')
         : 1
     const displayAmount = Math.max(0, integer(fullAmount * multiplier))
+    if (this.hasHealthReplacement(frame.controllerId, frame) && displayAmount > 0) {
+      const replacementFrame = cloneFrame(frame, `${path}.replace-event`)
+      this.applyDamage(ref, displayAmount, replacementFrame, `${path}.replacement`)
+      this.emit(frame, 'restore', path, {
+        target: ref.instanceId,
+        amount: displayAmount,
+        displayAmount,
+        replaced: true
+      })
+      return displayAmount
+    }
     const healed = Math.max(0, Math.min(maximum, before + displayAmount) - before)
     if (healed === 0) {
       this.emit(frame, 'restore', path, {
@@ -3733,17 +3764,6 @@ export class EffectRuntime {
           overheal: true
         })
       return 0
-    }
-    if (this.hasHealthReplacement(frame.controllerId, frame) && healed > 0) {
-      const replacementFrame = cloneFrame(frame, `${path}.replace-event`)
-      this.applyDamage(ref, healed, replacementFrame, `${path}.replacement`)
-      this.emit(frame, 'restore', path, {
-        target: ref.instanceId,
-        amount: healed,
-        displayAmount,
-        replaced: true
-      })
-      return healed
     }
     target.health += healed
     if (ref.kind === 'hero')
@@ -3967,7 +3987,15 @@ export class EffectRuntime {
     if (ref.kind === 'minion') {
       const controller = this.player(ref.participantId)
       const taken = this.takeBoardMinion(controller, ref.instanceId)
-      if (!taken) return null
+      if (!taken) {
+        if (frame.source.instanceId !== ref.instanceId || !ref.cardId) return null
+        const graveyardIndex = (controller.graveyard ?? []).findIndex(
+          (entry) => entry.minion.instanceId === ref.instanceId
+        )
+        if (graveyardIndex < 0) return null
+        this.removeGraveyardAt(controller, graveyardIndex)
+        return this.addCardToHand(ref.participantId, ref.cardId, frame, path)
+      }
       const { minion } = taken
       const definition = cardDefinition(minion.cardId)
       if (!definition) {
@@ -5044,7 +5072,8 @@ export class EffectRuntime {
         const opponentCost = opponent
           ? (cardDefinition(opponent.cardId)?.cost ?? 0)
           : null
-        const won = ownCost !== null && opponentCost !== null && ownCost > opponentCost
+        const won =
+          ownCost !== null && (opponentCost === null || ownCost > opponentCost)
         this.emit(frame, name, path, {
           ownCardId: own?.cardId ?? null,
           opponentCardId: opponent?.cardId ?? null,
@@ -5077,10 +5106,15 @@ export class EffectRuntime {
         }
         if (won && Array.isArray(action.winActions))
           this.runActions(action.winActions, frame, `${path}.winActions`)
+        if (!won && Array.isArray(action.loseActions))
+          this.runActions(action.loseActions, frame, `${path}.loseActions`)
         return
       }
       case 'change-cost': {
-        if (action.deferUntil === 'next-matching-card-played') {
+        if (
+          action.deferUntil === 'next-matching-card-played' ||
+          action.deferUntil === 'matching-cards-until-expiry'
+        ) {
           const target = isRecord(action.target) ? action.target : null
           const filter = target && isRecord(target.filter) ? target.filter : {}
           const participantId =
@@ -5095,9 +5129,21 @@ export class EffectRuntime {
               sourceInstanceId: frame.source.instanceId,
               amount,
               filter,
+              ...(isRecord(action.amount) && action.amount.operation === 'set'
+                ? { operation: 'set' as const }
+                : {}),
               ...(duration ? { duration } : {}),
+              ...(duration === 'next-turn'
+                ? {
+                    startsOnTurn: this.draft.turnNumber + 1,
+                    expiresOnTurn: this.draft.turnNumber + 1
+                  }
+                : {}),
               ...(duration === 'this-turn'
                 ? { expiresOnTurn: this.draft.turnNumber }
+                : {}),
+              ...(action.deferUntil === 'next-matching-card-played'
+                ? { consumeOnMatch: true }
                 : {})
             }
           ]
@@ -6995,6 +7041,11 @@ export class EffectRuntime {
           minion.immune = false
           minion.spellImmune = false
           minion.frozenUntilTurn = null
+          this.emit(frame, 'silence', path, {
+            target: target.instanceId,
+            attack: minion.attack,
+            health: minion.health
+          })
           frame.lastActionTarget = temporaryControl
             ? this.returnTemporaryControlledMinion(
                 minion,
@@ -7323,7 +7374,9 @@ export class EffectRuntime {
             : keywords.includes('windfury')
               ? 2
               : 1
-          const baseSpellDamage = base?.keywords.includes('spell-damage') ? 1 : 0
+          const baseSpellDamage = base?.keywords.includes('spell-damage')
+            ? (base.spellDamage ?? 1)
+            : 0
           const grantedSpellDamage = activeEnchantments.reduce(
             (value, enchantment) =>
               value +
@@ -7420,7 +7473,7 @@ export class EffectRuntime {
           }
         }
         player.pendingCostModifiers = (player.pendingCostModifiers ?? []).filter(
-          (modifier) => this.pendingCostModifierIsActive(modifier)
+          (modifier) => this.pendingCostModifierIsStored(modifier)
         )
         for (const card of player.hand) {
           const source: EntityRef = {
@@ -7503,6 +7556,14 @@ export class EffectRuntime {
     const options = collectChoiceOptions(card.effects) ?? []
     const labels = this.choiceLabelsFor(card)
     return options.map((option, choice) => {
+      if (isRecord(option) && typeof option.presentationCardId === 'string') {
+        return {
+          choice,
+          label: labels[choice] ?? `Choice ${choice + 1}`,
+          presentationCardId: option.presentationCardId as CardId,
+          presentationCost: card.cost
+        }
+      }
       const actions = isRecord(option) ? asArray(option.actions) : []
       const transform = actions.find(
         (action) =>
@@ -7601,10 +7662,18 @@ export class EffectRuntime {
     )
   }
 
-  private pendingCostModifierIsActive(modifier: PendingCostModifier): boolean {
+  private pendingCostModifierIsStored(modifier: PendingCostModifier): boolean {
     return (
       modifier.expiresOnTurn === undefined ||
       modifier.expiresOnTurn >= this.draft.turnNumber
+    )
+  }
+
+  private pendingCostModifierIsActive(modifier: PendingCostModifier): boolean {
+    return (
+      (modifier.startsOnTurn === undefined ||
+        modifier.startsOnTurn <= this.draft.turnNumber) &&
+      this.pendingCostModifierIsStored(modifier)
     )
   }
 
@@ -7627,7 +7696,13 @@ export class EffectRuntime {
           this.pendingCostModifierIsActive(modifier) &&
           this.matchesFilter(reference, modifier.filter, frame)
       )
-      .reduce((total, modifier) => total + modifier.amount, 0)
+      .reduce(
+        (total, modifier) =>
+          modifier.operation === 'set'
+            ? modifier.amount - (card.currentCost ?? card.baseCost ?? 0)
+            : total + modifier.amount,
+        0
+      )
   }
 
   private consumePendingCostModifiers(
@@ -7644,7 +7719,9 @@ export class EffectRuntime {
       cardId: card.cardId
     }
     player.pendingCostModifiers = (player.pendingCostModifiers ?? []).filter(
-      (modifier) => !this.matchesFilter(reference, modifier.filter, frame)
+      (modifier) =>
+        !modifier.consumeOnMatch ||
+        !this.matchesFilter(reference, modifier.filter, frame)
     )
   }
 
@@ -9227,6 +9304,9 @@ export class EffectRuntime {
               amount: player.heroPower.effectOverride.damage
             }
           : power.effect
+      const restoreIsDamage =
+        effect.kind === 'restore-character' &&
+        this.hasHealthReplacement(options.participantId, frame)
       const heroPowerDamageBonus = this.heroPowerDamageBonus(options.participantId)
       const reportedTarget =
         target ??
@@ -9464,11 +9544,11 @@ export class EffectRuntime {
           reportedTarget.kind === 'hero'
             ? this.player(reportedTarget.participantId).hero.armor
             : 0
-        const amount =
-          effect.kind === 'restore-character'
-            ? Math.max(0, healthAfter - reportedBefore.health)
-            : Math.max(0, reportedBefore.health - healthAfter) +
-              Math.max(0, reportedBefore.armor - armorAfter)
+        const reportedAsDamage = effect.kind !== 'restore-character' || restoreIsDamage
+        const amount = reportedAsDamage
+          ? Math.max(0, reportedBefore.health - healthAfter) +
+            Math.max(0, reportedBefore.armor - armorAfter)
+          : Math.max(0, healthAfter - reportedBefore.health)
         const attemptedAmount =
           effect.kind === 'restore-character'
             ? Math.max(
@@ -9480,20 +9560,8 @@ export class EffectRuntime {
               )
             : this.damageAmounts(reportedTarget, effect.amount, frame).displayAmount
         this.events.push(
-          effect.kind === 'restore-character'
+          reportedAsDamage
             ? {
-                type: 'character-healed',
-                participantId: reportedTarget.participantId,
-                character:
-                  reportedTarget.kind === 'hero'
-                    ? { kind: 'hero' }
-                    : { kind: 'minion', instanceId: reportedTarget.instanceId },
-                amount,
-                attemptedAmount,
-                healthBefore: reportedBefore.health,
-                healthAfter
-              }
-            : {
                 type: 'character-damaged',
                 source: 'hero-power',
                 participantId: reportedTarget.participantId,
@@ -9508,6 +9576,18 @@ export class EffectRuntime {
                 armorBefore: reportedBefore.armor,
                 armorAfter,
                 destroyed: healthAfter <= 0
+              }
+            : {
+                type: 'character-healed',
+                participantId: reportedTarget.participantId,
+                character:
+                  reportedTarget.kind === 'hero'
+                    ? { kind: 'hero' }
+                    : { kind: 'minion', instanceId: reportedTarget.instanceId },
+                amount,
+                attemptedAmount,
+                healthBefore: reportedBefore.health,
+                healthAfter
               }
         )
       }

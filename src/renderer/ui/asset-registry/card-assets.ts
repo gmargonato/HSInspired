@@ -57,8 +57,8 @@ export const CARD_ASSET_DEFINITIONS = [
     'card.frame.minion.class-mask-2',
     'color-mask-2-frame-minion.png',
     colorMask2FrameMinionImage,
-    557,
-    538
+    599,
+    580
   ),
   cardAsset('card.frame.spell', 'frame-spell.png', frameSpellImage, 620, 905),
   cardAsset(

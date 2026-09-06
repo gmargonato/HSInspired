@@ -1,4 +1,12 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import {
+  MATCH_LOG_CHANNELS,
+  parseMatchLogId,
+  parseMatchLogObject,
+  parseMatchLogRecord,
+  parseMatchLogStatus,
+  type MatchLogsApi
+} from '../shared/ipc/match-logs'
 import { isSceneRequest, SCENE_REQUEST_CHANNEL } from '../shared/scene-navigation'
 import type { SceneRequest } from '../shared/scene-navigation'
 import {
@@ -21,15 +29,11 @@ import {
   parseAiDeckPlanResponse,
   parseAiDecisionRequest,
   parseAiDecisionResponse,
-  parseAiStrategyReviewRequest,
-  parseAiStrategyReviewResponse,
   unwrapAiIpcResult,
   type AiDeckPlanRequest,
   type AiDeckPlanResponse,
   type AiDecisionRequest,
-  type AiDecisionResponse,
-  type AiStrategyReviewRequest,
-  type AiStrategyReviewResponse
+  type AiDecisionResponse
 } from '../shared/ipc/ai'
 import {
   DECK_IPC_CHANNELS,
@@ -75,6 +79,29 @@ import {
 } from '../shared/ipc/outline-tuning'
 
 const api = {
+  matchLogs: {
+    start: async (metadata) =>
+      parseMatchLogId(
+        await ipcRenderer.invoke(
+          MATCH_LOG_CHANNELS.start,
+          parseMatchLogObject(metadata)
+        )
+      ),
+    append: async (id, record) => {
+      await ipcRenderer.invoke(
+        MATCH_LOG_CHANNELS.append,
+        parseMatchLogId(id),
+        parseMatchLogRecord(record)
+      )
+    },
+    finish: async (id, status) => {
+      await ipcRenderer.invoke(
+        MATCH_LOG_CHANNELS.finish,
+        parseMatchLogId(id),
+        parseMatchLogStatus(status)
+      )
+    }
+  } satisfies MatchLogsApi,
   ...(process.env.NODE_ENV === 'development'
     ? {
         cardClassBuilder: {
@@ -134,16 +161,6 @@ const api = {
           parseAiDeckPlanRequest(request)
         ),
         parseAiDeckPlanResponse
-      ),
-    reviewStrategy: async (
-      request: AiStrategyReviewRequest
-    ): Promise<AiStrategyReviewResponse> =>
-      unwrapAiIpcResult(
-        await ipcRenderer.invoke(
-          AI_IPC_CHANNELS.reviewStrategy,
-          parseAiStrategyReviewRequest(request)
-        ),
-        parseAiStrategyReviewResponse
       ),
     decide: async (request: AiDecisionRequest): Promise<AiDecisionResponse> =>
       unwrapAiIpcResult(

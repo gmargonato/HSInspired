@@ -38,7 +38,7 @@ export const MINION_LAYOUT = {
     }
   ),
   frozen: placement(
-    { x: 80, y: 105 },
+    { x: 80, y: 90 },
     { width: 160, height: 210 },
     {
       anchor: CENTER,

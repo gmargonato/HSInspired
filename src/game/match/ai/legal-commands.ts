@@ -2,20 +2,33 @@ import type {
   AttackCharacterRef,
   CardPlayTargetRef,
   OpeningMatchAnalysis,
+  OpeningMatchCommand,
   OpeningMatchState,
-  PlayCardInput,
-  OpeningMatchCommand as TurnMatchCommand
+  PlayCardInput
 } from '../opening-match-types'
 import type { PlayerId } from '../match-types'
 
-function targetKey(target: CardPlayTargetRef): string {
-  return target.kind === 'hero'
-    ? `hero:${target.participantId}`
-    : `${target.kind}:${target.participantId}:${target.instanceId}`
+function stable(value: unknown): string {
+  return JSON.stringify(value, (_key, nested) => {
+    if (!nested || typeof nested !== 'object' || Array.isArray(nested)) return nested
+    return Object.fromEntries(
+      Object.entries(nested as Record<string, unknown>).sort(([left], [right]) =>
+        left.localeCompare(right)
+      )
+    )
+  })
 }
 
-function assignments(input: PlayCardInput): readonly (readonly CardPlayTargetRef[])[] {
-  if (input.targetSelectors.length === 0) return [[]]
+export function canonicalCommandKey(command: OpeningMatchCommand): string {
+  return stable(command)
+}
+
+function targetKey(target: CardPlayTargetRef): string {
+  return stable(target)
+}
+
+function targetAssignments(input: PlayCardInput): readonly CardPlayTargetRef[][] {
+  if (input.legalTargetOptions.length === 0) return [[]]
   const result: CardPlayTargetRef[][] = []
   const visit = (
     index: number,
@@ -40,67 +53,48 @@ function assignments(input: PlayCardInput): readonly (readonly CardPlayTargetRef
   return result
 }
 
-/**
- * Fully distinguishing, order-independent serialization of a command. Keys are
- * sorted at every nesting level so target variants of the same card (hero vs
- * minion, one minion vs another) never collapse into a shared key.
- */
-export function canonicalCommandKey(command: TurnMatchCommand): string {
-  return JSON.stringify(command, (_key, value) => {
-    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      return Object.keys(value)
-        .sort()
-        .reduce<Record<string, unknown>>((sorted, key) => {
-          sorted[key] = (value as Record<string, unknown>)[key]
-          return sorted
-        }, {})
-    }
-    return value
-  })
-}
-
-/** The single domain-owned enumerator used by tactical and strategic search. */
+/** Produces every command the engine currently accepts for this player. */
 export function enumerateLegalCommands(
   match: OpeningMatchAnalysis,
   participantId: PlayerId
-): readonly TurnMatchCommand[] {
+): readonly OpeningMatchCommand[] {
   const state = match.getState()
   if (state.pendingDiscover?.participantId === participantId) {
-    const pendingDiscover = state.pendingDiscover
-    return pendingDiscover.candidates.map((card) => ({
-      type: 'choose-discover-card' as const,
+    return state.pendingDiscover.candidates.map((card) => ({
+      type: 'choose-discover-card',
       participantId,
       cardInstanceId: card.instanceId
     }))
   }
   if (state.pendingCardChoice?.participantId === participantId) {
-    const pendingCardChoice = state.pendingCardChoice
-    return pendingCardChoice.options.map((option) => ({
-      type: 'choose-card-option' as const,
+    return state.pendingCardChoice.options.map((option) => ({
+      type: 'choose-card-option',
       participantId,
-      sourceCardInstanceId: pendingCardChoice.sourceCardInstanceId,
+      sourceCardInstanceId: state.pendingCardChoice!.sourceCardInstanceId,
       choice: option.choice
     }))
   }
-  const legality = match.getLegality(participantId)
+
   const player = state.players.find(
     (candidate) => candidate.participantId === participantId
   )
   if (!player) return []
-  const commands: TurnMatchCommand[] = []
+  const legality = match.getLegality(participantId)
+  const commands: OpeningMatchCommand[] = []
+
   for (const cardInstanceId of legality.playableCardInstanceIds) {
     const base = match.getPlayInput(participantId, cardInstanceId)
     if (!base) continue
-    const choices = base.choiceCount > 0 ? base.legalChoices : [undefined]
-    for (const choice of choices) {
+    for (const choice of base.choiceCount > 0 ? base.legalChoices : [undefined]) {
       const input =
         choice === undefined
           ? base
           : match.getPlayInput(participantId, cardInstanceId, choice)
       if (!input) continue
-      const positions = input.requiresPosition ? input.legalPositions : [undefined]
-      for (const position of positions) {
-        for (const targets of assignments(input)) {
+      for (const position of input.requiresPosition
+        ? input.legalPositions
+        : [undefined]) {
+        for (const targets of targetAssignments(input)) {
           commands.push({
             type: 'play-card',
             participantId,
@@ -113,25 +107,22 @@ export function enumerateLegalCommands(
       }
     }
   }
-  const opponent = state.players.find(
-    (candidate) => candidate.participantId !== participantId
-  )
-  if (opponent) {
-    for (const [attackerId, targets] of Object.entries(legality.legalAttackTargets)) {
-      const attacker: AttackCharacterRef =
-        attackerId === `${participantId}:hero`
-          ? { kind: 'hero' }
-          : { kind: 'minion', instanceId: attackerId }
-      for (const defender of targets) {
-        commands.push({ type: 'attack-character', participantId, attacker, defender })
-      }
+
+  for (const [attackerId, targets] of Object.entries(legality.legalAttackTargets)) {
+    const attacker: AttackCharacterRef =
+      attackerId === `${participantId}:hero`
+        ? { kind: 'hero' }
+        : { kind: 'minion', instanceId: attackerId }
+    for (const defender of targets) {
+      commands.push({ type: 'attack-character', participantId, attacker, defender })
     }
   }
+
   if (legality.legalHeroPower) {
     const targets =
-      legality.legalHeroPowerTargets.length === 0
-        ? [undefined]
-        : legality.legalHeroPowerTargets
+      legality.legalHeroPowerTargets.length > 0
+        ? legality.legalHeroPowerTargets
+        : [undefined]
     for (const target of targets) {
       commands.push({
         type: 'use-hero-power',
@@ -144,6 +135,34 @@ export function enumerateLegalCommands(
   return commands.sort((left, right) =>
     canonicalCommandKey(left).localeCompare(canonicalCommandKey(right))
   )
+}
+
+/** Removes copy-identical hand actions without collapsing different targets. */
+export function canonicalizeEquivalentRootActions<
+  T extends Readonly<{
+    readonly actionId: string
+    readonly command: OpeningMatchCommand
+  }>
+>(state: OpeningMatchState, roots: readonly T[]): readonly T[] {
+  const seen = new Set<string>()
+  return roots.filter((root) => {
+    const command = root.command
+    let key = canonicalCommandKey(command)
+    if (command.type === 'play-card') {
+      const card = state.players
+        .find((player) => player.participantId === command.participantId)
+        ?.hand.find((candidate) => candidate.instanceId === command.cardInstanceId)
+      if (card) {
+        key = stable({
+          ...command,
+          cardInstanceId: { cardId: card.cardId, currentCost: card.currentCost }
+        })
+      }
+    }
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 export function activeParticipant(state: OpeningMatchState): PlayerId | null {

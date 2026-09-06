@@ -53,7 +53,12 @@ export class DeckSelectionScene extends Scene {
   private async onPlayPressed(deck: Deck): Promise<void> {
     await this.deckStore.load()
     const seed = createMatchSeed()
-    const opponent = chooseOpponentDeck(this.deckStore.getDecks(), deck.id, seed)
+    const opponent = chooseOpponentDeck(
+      this.deckStore.getDecks(),
+      deck.id,
+      seed,
+      import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined
+    )
     if (!opponent) {
       throw new Error('At least one complete deck is required to start a game.')
     }

@@ -76,6 +76,23 @@ export function pendingCardInputStage(
   return 'ready'
 }
 
+/**
+ * A staged minion play cannot commit until its visual preview has finished.
+ * Targets may be collected during the preview; its completion callback retries
+ * the commit once the presentation can be safely promoted to the live board.
+ */
+export function canCommitPendingCardPlay(
+  input: HandPlayInputRequirement,
+  choice: number | undefined,
+  selectedTargetCount: number,
+  minionPreviewReady = true
+): boolean {
+  return (
+    minionPreviewReady &&
+    pendingCardInputStage(input, choice, selectedTargetCount) === 'ready'
+  )
+}
+
 /** Blocks newly mounted modal controls until the pointer that opened them is released. */
 export class PointerReleaseInputGate {
   private pointerId: number | null = null

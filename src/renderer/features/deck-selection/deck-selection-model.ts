@@ -1,8 +1,4 @@
-import {
-  MAX_DECK_CARDS,
-  countDeckCards,
-  type Deck
-} from '../../../game/decks'
+import { MAX_DECK_CARDS, countDeckCards, type Deck } from '../../../game/decks'
 import { createSeededRng } from '../../../game/match'
 
 export const DECK_SELECTION_PAGE_SIZE = 9
@@ -51,12 +47,18 @@ export function buildDeckSelectionEntries(
 export function chooseOpponentDeck(
   decks: readonly Deck[],
   localDeckId: string,
-  seed: number
+  seed: number,
+  preferredOpponentDeckId?: string
 ): Deck | undefined {
   const completeDecks = decks.filter((deck) => countDeckCards(deck) === MAX_DECK_CARDS)
   const alternatives = completeDecks.filter((deck) => deck.id !== localDeckId)
   const candidates = alternatives.length > 0 ? alternatives : completeDecks
   if (candidates.length === 0) return undefined
+
+  const preferred = preferredOpponentDeckId
+    ? candidates.find((deck) => deck.id === preferredOpponentDeckId)
+    : undefined
+  if (preferred) return preferred
 
   const index = Math.floor(createSeededRng(seed ^ 0x51f15e).next() * candidates.length)
   return candidates[Math.min(index, candidates.length - 1)]

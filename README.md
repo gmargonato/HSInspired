@@ -43,9 +43,13 @@ Individual focused commands:
 - `npm run lint` — Lint code with ESLint.
 - `npm run format:check` — Check code formatting with Prettier (`npm run format` to fix).
 - `npm run build:smoke` — Verify production build and check for development marker leaks.
+- `npm run architecture:map`: Generate the code health atlas, audit report, and complete relationship evidence at `artifacts/architecture/`.
+- `npm run architecture:check`: Check the architecture analyzer against isolated fixtures without launching the app.
 
 ---
 
 ## 3. Architecture & AI Agent Instructions
 
 All architectural boundaries, file naming standards, layout contracts, asset pipelines, and engineering invariants are documented in **[AGENTS.md](AGENTS.md)**.
+
+The visual maps and their generation workflow are documented in **[docs/architecture](docs/architecture/README.md)**.

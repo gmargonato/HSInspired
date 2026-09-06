@@ -77,6 +77,10 @@ export const GAME_BOARD_LAYOUT = {
       maxStep: 150,
       minionScale: 1
     },
+    /** Arc used when an existing minion changes sides without being recreated. */
+    controlTransfer: {
+      arcHeight: 28
+    },
     /** Dynamic card-to-minion materialization, centred on the reserved row slot. */
     summon: {
       cardScale: 0.27,
@@ -365,6 +369,15 @@ export const GAME_BOARD_LAYOUT = {
       { width: 235, height: 127 },
       {
         anchor: CENTER
+      }
+    ),
+    /** Waiting banner that replaces Confirm after the local mulligan is locked. */
+    opponentStillChoosing: placement(
+      { x: 960, y: 875 },
+      { width: 636, height: 198 },
+      {
+        anchor: CENTER,
+        scale: 0.8
       }
     ),
     /** "Choose your cards" banner at the top of the screen (top-center). */

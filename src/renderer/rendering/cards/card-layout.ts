@@ -81,36 +81,33 @@ const LEGENDARY_FRAME_OFFSET = { x: 60, y: -35 } as const
 const FRAME_SOURCE_TO_CANVAS_Y = CARD_CANVAS.height / 905
 
 /**
- * Per-template crop coordinates in the 620x905 source-frame space. Every
- * mask gets independent X/Y controls; add a new template here when its masks
- * are available. Rendering converts only vertical coordinates to the 900px
- * card canvas.
+ * Per-template positions in the 620x905 source-frame space. Every mask gets
+ * independent X/Y controls; add a new template here when its masks are
+ * available. Rendering converts only vertical coordinates to the 900px card
+ * canvas. Mask dimensions always come from their source textures.
  */
 export const CLASS_FRAME_MASK_SOURCE_LAYOUTS = {
   minion: {
-    primary: { x: 13, y: 20, width: 594, height: 866 },
-    secondary: { x: 31, y: 34, width: 557, height: 538 }
+    primary: { x: 13, y: 20 },
+    secondary: { x: 31, y: 34 }
   },
   spell: {
-    primary: { x: 7, y: 11, width: 606, height: 883 }
+    primary: { x: 7, y: 11 }
   }
 } as const
 
-function classFrameMaskPlacement(source: CardBounds) {
+function classFrameMaskPosition(source: CardPoint): CardPoint {
   return {
-    position: { x: source.x, y: source.y * FRAME_SOURCE_TO_CANVAS_Y },
-    size: {
-      width: source.width,
-      height: source.height * FRAME_SOURCE_TO_CANVAS_Y
-    }
+    x: source.x,
+    y: source.y * FRAME_SOURCE_TO_CANVAS_Y
   }
 }
 
-export const MINION_CLASS_FRAME_MASK_PLACEMENTS = {
-  primary: classFrameMaskPlacement(CLASS_FRAME_MASK_SOURCE_LAYOUTS.minion.primary),
-  secondary: classFrameMaskPlacement(CLASS_FRAME_MASK_SOURCE_LAYOUTS.minion.secondary)
+export const MINION_CLASS_FRAME_MASK_POSITIONS = {
+  primary: classFrameMaskPosition(CLASS_FRAME_MASK_SOURCE_LAYOUTS.minion.primary),
+  secondary: classFrameMaskPosition(CLASS_FRAME_MASK_SOURCE_LAYOUTS.minion.secondary)
 } as const
-export const SPELL_CLASS_FRAME_MASK_PLACEMENT = classFrameMaskPlacement(
+export const SPELL_CLASS_FRAME_MASK_POSITION = classFrameMaskPosition(
   CLASS_FRAME_MASK_SOURCE_LAYOUTS.spell.primary
 )
 const SHARED_STATS = {
@@ -236,15 +233,14 @@ function classFrameMasks(
   const template = card.type === 'Minion' ? 'minion' : 'spell'
   const primaryPlacement =
     template === 'minion'
-      ? MINION_CLASS_FRAME_MASK_PLACEMENTS.primary
-      : SPELL_CLASS_FRAME_MASK_PLACEMENT
+      ? MINION_CLASS_FRAME_MASK_POSITIONS.primary
+      : SPELL_CLASS_FRAME_MASK_POSITION
 
   const primary = image(
     'class-frame-mask-1',
     `card.frame.${template}.class-mask-1`,
-    primaryPlacement.position,
-    CLASS_FRAME_MASK_Z_INDEX,
-    { size: primaryPlacement.size }
+    primaryPlacement,
+    CLASS_FRAME_MASK_Z_INDEX
   )
   if (template === 'spell') return [primary]
 
@@ -253,9 +249,8 @@ function classFrameMasks(
     image(
       'class-frame-mask-2',
       'card.frame.minion.class-mask-2',
-      MINION_CLASS_FRAME_MASK_PLACEMENTS.secondary.position,
-      CLASS_FRAME_MASK_Z_INDEX + 1,
-      { size: MINION_CLASS_FRAME_MASK_PLACEMENTS.secondary.size }
+      MINION_CLASS_FRAME_MASK_POSITIONS.secondary,
+      CLASS_FRAME_MASK_Z_INDEX + 1
     )
   ]
 }

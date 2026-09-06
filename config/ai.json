@@ -5,56 +5,15 @@
   "deploymentName": "GUS-SSA-gpt-5.4-nano",
   "endpoint": "https://gus-openai-guscancolleges-temp.openai.azure.com/",
   "apiVersion": "2024-12-01-preview",
-  "requestTimeoutMs": 10000,
+  "planTimeoutMs": 60000,
+  "decisionTimeoutMs": 30000,
   "reasoningEffort": "low",
-  "maxCompletionTokens": 2048,
-  "decisionPolicies": {
-    "deckPlan": {
-      "requestTimeoutMs": 60000,
-      "reasoningEffort": "low",
-      "maxCompletionTokens": 3072
-    },
-    "mulligan": {
-      "requestTimeoutMs": 25000,
-      "reasoningEffort": "low",
-      "maxCompletionTokens": 2048
-    },
-    "discover": {
-      "requestTimeoutMs": 15000,
-      "reasoningEffort": "low",
-      "maxCompletionTokens": 1024
-    },
-    "turn": {
-      "requestTimeoutMs": 20000,
-      "reasoningEffort": "low",
-      "maxCompletionTokens": 2048
-    },
-    "rank": {
-      "requestTimeoutMs": 10000,
-      "reasoningEffort": "low",
-      "maxCompletionTokens": 2048
-    },
-    "critic": {
-      "requestTimeoutMs": 10000,
-      "reasoningEffort": "low",
-      "maxCompletionTokens": 2048
-    },
-    "strategyReview": {
-      "requestTimeoutMs": 20000,
-      "reasoningEffort": "low",
-      "maxCompletionTokens": 3072
-    }
-  },
+  "planMaxCompletionTokens": 8192,
+  "decisionMaxCompletionTokens": 4096,
   "prompts": {
-    "system": "You rank a closed shortlist of engine-issued actions for the remote AI player in a Hearthstone-style game. Optimize match win probability. The mode's visibility policy is authoritative: unknown opponent cards, secrets, deck order, and future random results are genuinely unknown and must never be assumed. Structured runtime state, the match-scoped deck plan, outcome annotations, and legal IDs are authoritative; never invent an action, target, card, cost, or rule. Apply this order: take guaranteed lethal, prevent forced defeat, then choose the highest expected-win line that advances the deck plan while preserving resources whose release conditions are not met. Uncertainty is a probability tradeoff, not a reason to stop making productive plays. Return exactly the structured response with a concise player-visible rationale and no private chain-of-thought.",
-    "deckPlan": "Analyze only the supplied AI deck, authored card effects, and structured card relationships. Derive this particular deck's strategy without forcing it into a known archetype; archetype is a concise free-form strategy label. Produce a compact match plan: identify its actual win conditions, game phases, card roles, combos and ordering, resources that must be preserved, structured mechanical release triggers, and mulligan priorities. Assign at least one role to every distinct card exactly once. Reference only card IDs and copy counts present in the supplied deck; a combo may repeat a card ID only when it truly requires multiple copies and the deck contains them. Do not infer an opponent deck or invent rules. Frostbolt-like damage that enables a later combo should be protected when that combo is a real win condition, but every resource must be releasable for lethal, survival, combo readiness, redundancy, plan invalidation, or a critical threat.",
-    "mulligan": "Choose the strongest supplied replacement candidate using the match-scoped deck plan, player number, Coin, exact self opening hand, and public opponent hero/class only. Do not assume opponent hand, decklist, or draw order. Select exactly one supplied candidate ID.",
-    "turn": "Select the strongest supplied action or candidate line for the deck's end goal, not the largest immediate stat change. Guaranteed lethal and forced survival come first. Otherwise compare expected outcome, worst case, plan progress, sequencing, board and hand value, and the opportunity cost of consuming reserved combo resources. Treat unknown secrets as a belief set: play around them only when the expected benefit exceeds the tempo and resource cost. A fresh authoritative state follows every dispatched action.",
-    "strategicSystem": "Rank only the supplied engine-issued action IDs for the remote AI player. The fair policy supplies the AI's own deck and hand plus public opponent information only; an opposing card identity is usable only when the observation explicitly says it was revealed. Never infer unrevealed opponent hand identities, the submitted deck, remaining deck order, future random values, or facedown secret identity. Dossiers and legal IDs are authoritative. Take proven lethal, prevent proven defeat, then maximize match win probability while preserving the active strategy. Return only the strict pass-specific JSON response and no private chain-of-thought.",
-    "strategicMulligan": "Rank every supplied replacement candidate from the AI deck plan, exact self opening hand, player number, Coin, and public opponent hero or class only.",
-    "strategicTurn": "Return a complete ordering of the supplied shortlist. Proven tactics take precedence; otherwise compare public-state exposure, resource release, uncertainty, information timing, strategy progress, and long-term value.",
-    "critic": "Inspect the supplied first-pass ordering and the same fair-information dossiers. Identify concrete risks, then retain the first choice or override it with another supplied action ID.",
-    "strategyReview": "Review the previous self strategy using only the supplied fair observation and new public evidence. Preserve the previous plan unless that evidence materially changes its viability. When changed is false, revisedPlan must be null. When changed is true, cite at least one supplied evidence reason and return a complete revised deck plan that references only cards in the AI deck. Opponent assessments must remain hypotheses and must never claim hidden hand, deck, secret, or future random knowledge."
+    "system": "You control the remote player in a Hearthstone-style card game. Use only the supplied fair information and engine-verified policies. Never invent an action, card, target, effect, hidden opponent card, facedown Secret, deck order, or random result. The engine owns legality and mechanics; you own strategic judgment. Take a supplied lethal policy when one exists. Otherwise prevent immediate defeat, respect the exact-deck plan, remove dangerous engines, preserve scarce win-condition resources, and prefer efficient complete turns over isolated short-term value. Return only the required JSON.",
+    "deckPlan": "Derive a strategy from this exact card multiset and its authored mechanics. No deck name or preloaded deck guide is provided. Identify the actual win conditions, important sequencing, resources worth preserving and concrete conditions that justify spending them, and mulligan priorities. Keep the plan compact and reference only supplied card IDs. Do not infer an opponent deck.",
+    "decision": "Choose one supplied engine-verified policy as a whole. The result summaries contain only public information. Compare the complete sequence, not merely its first action. A resource-preserving play is preferable when it reaches an equal result; spending a combo or finisher resource requires a concrete survival, critical-threat, or winning justification. Treat repeatable enemy engines as more dangerous than disposable damage bodies when the board and plan support that judgment. Unknown information remains unknown."
   },
   "debug": true
 }

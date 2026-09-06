@@ -77,6 +77,8 @@ export interface RuntimeEnchantment {
   readonly swapStats?: boolean
   readonly targetingGranted?: string | null
   readonly minimumHealth?: number
+  /** A hero enchantment protecting its controller's current and future minions. */
+  readonly friendlyMinionMinimumHealth?: number
   /** Caps one incoming damage event before damage-taken multipliers apply. */
   readonly maximumDamageTaken?: number
   /** Multiplies damage after per-event caps and before Armor absorbs it. */
@@ -387,12 +389,16 @@ export interface PlayerHeroPower {
 }
 
 export interface PendingCostModifier {
+  readonly operation?: 'set'
   readonly id: string
   readonly sourceInstanceId: string
   readonly amount: number
   readonly filter: Readonly<Record<string, unknown>>
   readonly duration?: string
+  readonly startsOnTurn?: number
   readonly expiresOnTurn?: number
+  /** Removes this modifier after the first matching card is played. */
+  readonly consumeOnMatch?: boolean
 }
 
 export interface OpeningPlayerState {
@@ -459,6 +465,8 @@ export interface CardChoiceOption {
   readonly label: string
   /** Existing card definition used to render a full-card option when available. */
   readonly presentationCardId?: CardId
+  /** Parent card's printed cost, displayed without charging for the choice again. */
+  readonly presentationCost?: number
   /** Hero power rendered as a constructed discovery option when present. */
   readonly presentationHeroPowerId?: HeroPowerId
 }
@@ -929,6 +937,8 @@ export interface DevStateChangedEvent {
 
 /** A stable, presentation-safe character/entity captured when an action resolves. */
 export interface HistoryEntitySnapshot {
+  /** Explicit placeholder for a concealed played Secret; null alone is ambiguous. */
+  readonly concealedAs?: 'secret'
   /** Stable action-time identity used to group several effects on one target. */
   readonly id: string
   readonly participantId: PlayerId

@@ -29,7 +29,8 @@
                   },
                   "classBonus": 4
                 }
-              ]
+              ],
+              "presentationCardId": "league_of_explorers_raven_idol_minion"
             },
             {
               "actions": [
@@ -44,7 +45,8 @@
                   },
                   "classBonus": 4
                 }
-              ]
+              ],
+              "presentationCardId": "league_of_explorers_raven_idol_spell"
             }
           ]
         }
@@ -1800,5 +1802,35 @@
         ]
       }
     ]
+  },
+  {
+    "id": "league_of_explorers_raven_idol_minion",
+    "collectible": false,
+    "name": "Raven Idol",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Discover a minion.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "league_of_explorers_raven_idol_spell",
+    "collectible": false,
+    "name": "Raven Idol",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Discover a spell.",
+    "keywords": [],
+    "effects": []
   }
 ]

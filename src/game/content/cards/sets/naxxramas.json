@@ -853,10 +853,13 @@
             "target": {
               "controller": "opponent",
               "type": "spell-card",
-              "zone": "hand"
+              "filter": {
+                "cardType": "Spell"
+              }
             },
             "amount": 5,
-            "duration": "next-turn"
+            "duration": "next-turn",
+            "deferUntil": "matching-cards-until-expiry"
           }
         ]
       }

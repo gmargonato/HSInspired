@@ -84,6 +84,7 @@ export interface CardMetadata {
   readonly subtype: string | null
   readonly spellSchool: string | null
   readonly cost: number
+  readonly spellDamage?: number
   readonly rulesText: string
   readonly keywords: readonly CardKeyword[]
   readonly effects: readonly CardEffectBlock[]

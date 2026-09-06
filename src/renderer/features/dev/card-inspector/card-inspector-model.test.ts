@@ -30,7 +30,15 @@ describe('CardInspectorModel', () => {
       'offsetX',
       'offsetY'
     ])
-    expect(CARD_CLASS_BLEND_MODES).toEqual(['normal', 'add', 'multiply', 'screen'])
+    expect(CARD_CLASS_BLEND_MODES).toEqual([
+      'normal',
+      'add',
+      'multiply',
+      'screen',
+      'color',
+      'overlay',
+      'soft-light'
+    ])
   })
 
   it('edits the live production configuration', () => {

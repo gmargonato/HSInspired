@@ -23,12 +23,28 @@ function artworkFileName(cardId: string): string {
 /** Improves minification when the same authored texture is used by compact cards. */
 function configureCardTexture(texture: Texture): Texture {
   const source = texture.source
-  source.autoGenerateMipmaps = true
-  source.mipLevelCount =
+  const mipLevelCount =
     Math.floor(Math.log2(Math.max(source.pixelWidth, source.pixelHeight))) + 1
+  const needsReconfiguration =
+    !source.autoGenerateMipmaps ||
+    source.mipLevelCount !== mipLevelCount ||
+    source.style.minFilter !== 'linear' ||
+    source.style.mipmapFilter !== 'linear'
+
+  if (!needsReconfiguration) return texture
+
+  source.autoGenerateMipmaps = true
+  source.mipLevelCount = mipLevelCount
   source.style.minFilter = 'linear'
   source.style.mipmapFilter = 'linear'
   source.style.update()
+
+  // Assets are cached by URL, so a card texture can share its TextureSource
+  // with another bundle that rendered it before this resolver configured
+  // mipmaps (the Armor badge is one example). Recreate any existing GPU
+  // allocation so its mip levels agree with the updated source metadata.
+  // The image resource stays loaded and is uploaded again on the next render.
+  source.unload()
   return texture
 }
 

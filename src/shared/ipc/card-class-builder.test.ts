@@ -14,7 +14,7 @@ describe('card class builder IPC', () => {
 
   it('rejects unsupported modes and incomplete class sets', () => {
     const unsupported = structuredClone(rawConfig)
-    unsupported.classes.Druid.secondary.blendMode = 'overlay'
+    unsupported.classes.Druid.secondary.blendMode = 'unsupported-mode'
     expect(() => parseCardClassBuilderConfig(unsupported)).toThrow()
 
     const incomplete = structuredClone(rawConfig) as Record<string, unknown>

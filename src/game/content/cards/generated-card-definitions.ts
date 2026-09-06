@@ -94,21 +94,6 @@ function generatedMinion(
   } as unknown as CardDefinition
 }
 
-function generatedMinionWithEffects(
-  id: string,
-  name: string,
-  attack: number,
-  health: number,
-  rulesText: string,
-  effects: readonly Record<string, unknown>[]
-): CardDefinition {
-  return {
-    ...generatedMinion(id, name, attack, health),
-    rulesText,
-    effects: effects as CardDefinition['effects']
-  }
-}
-
 function generatedMinionWithKeywords(
   id: string,
   name: string,
@@ -170,19 +155,7 @@ const GENERATED_CARD_RECORDS: readonly CardDefinition[] = [
     2,
     ['stealth']
   ),
-  generatedMinionWithEffects(
-    'the_grand_tournament_nerubian',
-    'Nerubian',
-    4,
-    4,
-    "Deathrattle: Summon Anub'arak.",
-    [
-      {
-        trigger: 'deathrattle',
-        actions: [{ action: 'summon', cardId: 'the_grand_tournament_anubarak' }]
-      }
-    ]
-  ),
+  generatedMinion('the_grand_tournament_nerubian', 'Nerubian', 4, 4),
   generatedMinion('the_grand_tournament_sapling', 'Sapling', 1, 1),
   generatedMinion('the_grand_tournament_war_kodo', 'War Kodo', 3, 5),
   generatedWeapon(

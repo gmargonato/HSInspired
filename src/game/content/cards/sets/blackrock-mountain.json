@@ -20,19 +20,27 @@
               "actions": [
                 {
                   "action": "transform",
-                  "target": { "type": "minion", "selection": "source" },
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
                   "cardId": "blackrock_mountain_druid_of_the_flame_5_2"
                 }
-              ]
+              ],
+              "presentationCardId": "blackrock_mountain_firecat_form"
             },
             {
               "actions": [
                 {
                   "action": "transform",
-                  "target": { "type": "minion", "selection": "source" },
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
                   "cardId": "blackrock_mountain_druid_of_the_flame_2_5"
                 }
-              ]
+              ],
+              "presentationCardId": "blackrock_mountain_fire_hawk_form"
             }
           ]
         }
@@ -184,7 +192,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -197,7 +205,10 @@
         "actions": [
           {
             "action": "change-cost",
-            "target": { "type": "card", "selection": "source" },
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
             "amount": {
               "reference": "minions-died-this-turn",
               "operation": "subtract"
@@ -504,19 +515,20 @@
         "actions": [
           {
             "action": "damage",
-            "target": { "controller": "any", "type": "minion", "selection": "all" },
-            "amount": 1
-          }
-        ]
-      },
-      {
-        "trigger": "cast",
-        "condition": { "type": "player-health-lte", "player": "self", "value": 12 },
-        "actions": [
-          {
-            "action": "damage",
-            "target": { "controller": "any", "type": "minion", "selection": "all" },
-            "amount": 2
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": {
+              "condition": {
+                "type": "player-health-lte",
+                "player": "self",
+                "value": 12
+              },
+              "thenValue": 3,
+              "elseValue": 1
+            }
           }
         ]
       }
@@ -681,13 +693,15 @@
         "condition": {
           "type": "player-has-card-in-hand",
           "player": "self",
-          "filter": { "tribe": "Dragon" }
+          "filter": {
+            "tribe": "Dragon"
+          }
         },
         "actions": [
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -994,6 +1008,36 @@
     "attack": 2,
     "health": 1,
     "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "blackrock_mountain_firecat_form",
+    "collectible": false,
+    "name": "Firecat Form",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "+3 Attack.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "blackrock_mountain_fire_hawk_form",
+    "collectible": false,
+    "name": "Fire Hawk Form",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "+3 Health.",
     "keywords": [],
     "effects": []
   }

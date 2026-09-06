@@ -1,5 +1,7 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { readFile } from 'node:fs/promises'
+import { parseMatchLogObject } from '../shared/ipc/match-logs'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import icon from '../../assets/icon.png?asset'
 import { DeckRepository } from './services/deck-repository'
@@ -20,6 +22,8 @@ import { registerArenaIpc } from './services/arena-ipc'
 import { CardClassBuilderRepository } from './services/card-class-builder-repository'
 import { registerCardClassBuilderIpc } from './services/card-class-builder-ipc'
 import { OutlineTuningRepository } from './services/outline-tuning-repository'
+import { MatchLogRepository } from './services/match-log-repository'
+import { registerMatchLogIpc } from './services/match-log-ipc'
 import { registerOutlineTuningIpc } from './services/outline-tuning-ipc'
 
 const WINDOW_WIDTH = 1920
@@ -29,6 +33,27 @@ const WINDOW_HEIGHT = 1080
  * Set this to false for the release build to restore Alt-to-reveal behavior.
  */
 const KEEP_NATIVE_MENU_BAR_VISIBLE = true
+let matchLogs: MatchLogRepository | undefined
+let drainingLogs = false
+let logsDrained = false
+
+app.on('before-quit', (event) => {
+  if (!matchLogs || logsDrained) return
+  event.preventDefault()
+  if (drainingLogs) return
+  drainingLogs = true
+  let timer: ReturnType<typeof setTimeout>
+  void Promise.race([
+    matchLogs.interrupt(),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, 5000)
+    })
+  ]).finally(() => {
+    clearTimeout(timer)
+    logsDrained = true
+    app.quit()
+  })
+})
 
 function isAllowedExternalUrl(url: string): boolean {
   try {
@@ -110,6 +135,19 @@ void app
     electronApp.setAppUserModelId('com.hsinspired.app')
 
     const appPath = app.getAppPath()
+    matchLogs = new MatchLogRepository(
+      is.dev
+        ? join(appPath, 'artifacts', 'match-logs')
+        : join(app.getPath('userData'), 'match-logs')
+    )
+    await matchLogs
+      .initialize()
+      .catch((error) => console.error('Could not initialize match logging:', error))
+    registerMatchLogIpc(matchLogs, async () =>
+      parseMatchLogObject(
+        JSON.parse(await readFile(join(appPath, 'config', 'ai.json'), 'utf8'))
+      )
+    )
     if (is.dev) {
       registerCardClassBuilderIpc(
         new CardClassBuilderRepository(
@@ -122,6 +160,19 @@ void app
     }
     registerAiIpc(
       new AzureOpenAiDecisionService({
+        record: (matchId, requestId, kind, data) => {
+          void matchLogs!
+            .append(matchId, {
+              stream: 'decisions',
+              kind,
+              timestamp: new Date().toISOString(),
+              decisionId: requestId,
+              data
+            })
+            .catch((error) =>
+              console.error('Could not record AI provider data:', error)
+            )
+        },
         loadConfig: () =>
           loadAzureOpenAiConfig({
             configPath: join(appPath, 'config', 'ai.json'),
@@ -130,7 +181,8 @@ void app
               join(app.getPath('userData'), 'ai-key.local.txt')
             ]
           })
-      })
+      }),
+      matchLogs
     )
     registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))
     registerPlayerStatsIpc(
@@ -143,6 +195,19 @@ void app
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
+      const owner = window.webContents.id
+      window.webContents.on('render-process-gone', () => {
+        void matchLogs?.interrupt(owner)
+      })
+      window.webContents.on(
+        'did-start-navigation',
+        (_event, _url, _inPlace, isMainFrame) => {
+          if (isMainFrame) void matchLogs?.interrupt(owner)
+        }
+      )
+      window.on('closed', () => {
+        void matchLogs?.interrupt(owner)
+      })
     })
 
     const mainWindow = await createWindow(windowSettingsRepository)

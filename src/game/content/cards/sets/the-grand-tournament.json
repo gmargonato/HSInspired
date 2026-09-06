@@ -11,7 +11,38 @@
     "health": null,
     "rulesText": "Choose One - Deal 2 damage; or Summon two 1/1 Saplings.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "choice": { "options": [{ "actions": [{ "action": "damage", "target": { "type": "character", "selection": "chosen" }, "amount": 2 }] }, { "actions": [{ "action": "summon", "cardId": "the_grand_tournament_sapling", "count": 2 }] }] } }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "damage",
+                  "target": {
+                    "type": "character",
+                    "selection": "chosen"
+                  },
+                  "amount": 2
+                }
+              ],
+              "presentationCardId": "the_grand_tournament_living_roots_damage"
+            },
+            {
+              "actions": [
+                {
+                  "action": "summon",
+                  "cardId": "the_grand_tournament_sapling",
+                  "count": 2
+                }
+              ],
+              "presentationCardId": "the_grand_tournament_living_roots_saplings"
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_darnassus_aspirant",
@@ -39,7 +70,41 @@
     "health": 1,
     "rulesText": "Choose One - Transform into a 2/1 with Charge; or a 3/2 with Stealth.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "choice": { "options": [{ "actions": [{ "action": "transform", "target": { "type": "minion", "selection": "source" }, "cardId": "the_grand_tournament_saber_charge_form" }] }, { "actions": [{ "action": "transform", "target": { "type": "minion", "selection": "source" }, "cardId": "the_grand_tournament_saber_stealth_form" }] }] } }]
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "transform",
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "cardId": "the_grand_tournament_saber_charge_form"
+                }
+              ],
+              "presentationCardId": "the_grand_tournament_lion_form"
+            },
+            {
+              "actions": [
+                {
+                  "action": "transform",
+                  "target": {
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "cardId": "the_grand_tournament_saber_stealth_form"
+                }
+              ],
+              "presentationCardId": "the_grand_tournament_panther_form"
+            }
+          ]
+        }
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_mulch",
@@ -98,12 +163,31 @@
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
-    "cost": 5,
+    "cost": 4,
     "attack": null,
     "health": null,
     "rulesText": "Gain 10 Mana Crystals. Discard your hand.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "gain-mana", "player": "self", "amount": 10, "crystal": "full" }, { "action": "discard", "source": { "zone": "hand", "selection": "all" } }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "gain-mana",
+            "player": "self",
+            "amount": 10,
+            "crystal": "full"
+          },
+          {
+            "action": "discard",
+            "source": {
+              "zone": "hand",
+              "selection": "all"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_knight_of_the_wild",
@@ -115,9 +199,31 @@
     "cost": 7,
     "attack": 6,
     "health": 6,
-    "rulesText": "Costs (1) less for each Beast you've summoned this game.",
+    "rulesText": "Whenever you summon a Beast, reduce the Cost of this card by (1).",
     "keywords": [],
-    "effects": [{ "trigger": "while-in-hand", "actions": [{ "action": "change-cost", "target": { "type": "card", "selection": "source" }, "amount": { "operation": "subtract", "reference": "beasts-summoned-this-game" }, "duration": "while-in-hand" }] }]
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "filter": {
+            "tribe": "Beast"
+          }
+        },
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": -1,
+            "minimum": 0
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_aviana",
@@ -140,12 +246,21 @@
     "cardClass": "Hunter",
     "type": "Spell",
     "subtype": "General",
-    "cost": 0,
+    "cost": 2,
     "attack": null,
     "health": null,
     "rulesText": "Each time you cast a spell this turn, get a random Hunter card.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "lock-and-load" }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "lock-and-load"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_brave_archer",
@@ -232,12 +347,23 @@
     "cardClass": "Hunter",
     "type": "Spell",
     "subtype": "General",
-    "cost": 3,
+    "cost": 6,
     "attack": null,
     "health": null,
     "rulesText": "Summon three 1/1 Webspinners with \"Deathrattle: Get a random Beast.\"",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "summon", "cardId": "naxxramas_webspinner", "count": 3 }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "naxxramas_webspinner",
+            "count": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_acidmaw",
@@ -246,12 +372,34 @@
     "cardClass": "Hunter",
     "type": "Minion",
     "subtype": "Beast",
-    "cost": 3,
+    "cost": 7,
     "attack": 4,
     "health": 2,
-    "rulesText": "Whenever an enemy minion takes damage, destroy it.",
+    "rulesText": "Whenever another minion takes damage, destroy it.",
     "keywords": [],
-    "effects": [{ "trigger": "on-damage", "event": { "target": { "type": "minion", "controller": "opponent", "selection": "event-target" } }, "actions": [{ "action": "destroy", "target": { "type": "minion", "controller": "opponent", "selection": "event-target" } }] }]
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "target": {
+            "type": "minion",
+            "controller": "any",
+            "selection": "event-target",
+            "exclude": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "type": "minion",
+              "controller": "any",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_dreadscale",
@@ -263,9 +411,25 @@
     "cost": 3,
     "attack": 4,
     "health": 2,
-    "rulesText": "At the end of your turn, deal 1 damage to all enemies.",
+    "rulesText": "At the end of your turn, deal 1 damage to all other minions.",
     "keywords": [],
-    "effects": [{ "trigger": "end-of-turn", "actions": [{ "action": "damage", "target": { "type": "character", "controller": "opponent", "selection": "all" }, "amount": 1 }] }]
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "minion",
+              "controller": "any",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_ram_wrangler",
@@ -347,9 +511,24 @@
     "cost": 3,
     "attack": 3,
     "health": 4,
-    "rulesText": "Battlecry: Both players get a random spell. Yours costs (2) less.",
+    "rulesText": "Battlecry: Add a random spell to each player's hand.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "add-to-hand", "player": "each", "source": "random-card", "filter": { "cardType": "Spell" }, "count": 1 }, { "action": "change-cost", "target": { "type": "added-card", "controller": "self", "selection": "all" }, "amount": -2, "minimum": 0 }] }]
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "each",
+            "source": "random-card",
+            "filter": {
+              "cardType": "Spell"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_dalaran_aspirant",
@@ -361,9 +540,24 @@
     "cost": 4,
     "attack": 3,
     "health": 5,
-    "rulesText": "Spell Damage +1. Inspire: Gain Spell Damage +1.",
-    "keywords": ["spell-damage"],
-    "effects": [{ "trigger": "inspire", "actions": [{ "action": "grant-keyword", "target": { "type": "minion", "selection": "source" }, "keyword": "spell-damage", "amount": 1 }] }]
+    "rulesText": "Inspire: Gain Spell Damage +1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "inspire",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "spell-damage",
+            "amount": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_flame_lance",
@@ -375,9 +569,23 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 25 damage to a minion.",
+    "rulesText": "Deal 8 damage to a minion.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "damage", "target": { "type": "minion", "selection": "chosen" }, "amount": 25 }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 8
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_coldarra_drake",
@@ -388,10 +596,20 @@
     "subtype": "Dragon",
     "cost": 6,
     "attack": 6,
-    "health": 7,
+    "health": 6,
     "rulesText": "You can use your Hero Power any number of times.",
     "keywords": [],
-    "effects": [{ "trigger": "aura", "actions": [{ "action": "modify-hero-power-uses", "heroPowerUsesPerTurn": 99 }] }]
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify-hero-power-uses",
+            "heroPowerUsesPerTurn": 99
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_rhonin",
@@ -457,11 +675,29 @@
     "type": "Minion",
     "subtype": "General",
     "cost": 3,
-    "attack": 3,
+    "attack": 2,
     "health": 4,
-    "rulesText": "Your Silver Hand Recruits have +2 Attack and Taunt.",
+    "rulesText": "Your Silver Hand Recruits have +1 Attack.",
     "keywords": [],
-    "effects": [{ "trigger": "aura", "actions": [{ "action": "modify", "target": { "type": "minion", "controller": "self", "selection": "all", "filter": { "cardId": "basic_silver_hand_recruit" } }, "attack": 2 }, { "action": "grant-keyword", "target": { "type": "minion", "controller": "self", "selection": "all", "filter": { "cardId": "basic_silver_hand_recruit" } }, "keyword": "taunt" }] }]
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "controller": "self",
+              "selection": "all",
+              "filter": {
+                "cardId": "basic_silver_hand_recruit"
+              }
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_enter_the_coliseum",
@@ -470,12 +706,21 @@
     "cardClass": "Paladin",
     "type": "Spell",
     "subtype": "General",
-    "cost": 3,
+    "cost": 6,
     "attack": null,
     "health": null,
     "rulesText": "Destroy all minions except each player's highest Attack minion.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "destroy-all-but-highest-attack" }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy-all-but-highest-attack"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_murloc_knight",
@@ -568,12 +813,32 @@
     "cardClass": "Priest",
     "type": "Minion",
     "subtype": "General",
-    "cost": 2,
-    "attack": 1,
-    "health": 4,
-    "rulesText": "Overheal: Gain +2 Attack.",
+    "cost": 4,
+    "attack": 3,
+    "health": 5,
+    "rulesText": "Whenever a character is healed, gain +2 Attack.",
     "keywords": [],
-    "effects": [{ "trigger": "overheal", "event": { "target": { "type": "minion", "selection": "source" } }, "actions": [{ "action": "modify", "target": { "type": "minion", "selection": "source" }, "attack": 2 }] }]
+    "effects": [
+      {
+        "trigger": "on-heal",
+        "event": {
+          "type": "health-restored",
+          "target": {
+            "type": "character"
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_shadowfiend",
@@ -582,12 +847,32 @@
     "cardClass": "Priest",
     "type": "Minion",
     "subtype": "General",
-    "cost": 2,
-    "attack": 2,
+    "cost": 3,
+    "attack": 3,
     "health": 3,
     "rulesText": "Whenever you draw a card, reduce its Cost by (1).",
     "keywords": [],
-    "effects": [{ "trigger": "on-draw", "event": { "controller": "self" }, "actions": [{ "action": "change-cost", "target": { "type": "drawn-card", "controller": "self", "selection": "event-target", "zone": "hand" }, "amount": -1, "duration": "permanent" }] }]
+    "effects": [
+      {
+        "trigger": "on-draw",
+        "event": {
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "drawn-card",
+              "controller": "self",
+              "selection": "event-target",
+              "zone": "hand"
+            },
+            "amount": -1,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_confuse",
@@ -624,12 +909,27 @@
     "cardClass": "Priest",
     "type": "Spell",
     "subtype": "General",
-    "cost": 3,
+    "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Put a copy of an enemy minion into your hand. It costs (1).",
+    "rulesText": "Put a copy of an enemy minion into your hand.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "copy", "target": { "type": "minion", "controller": "opponent", "selection": "chosen" }, "destination": "hand" }, { "action": "change-cost", "target": { "type": "added-card", "selection": "all" }, "amount": -99, "minimum": 1 }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "type": "minion",
+              "controller": "opponent",
+              "selection": "chosen"
+            },
+            "destination": "hand"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_spawn_of_shadows",
@@ -638,12 +938,27 @@
     "cardClass": "Priest",
     "type": "Minion",
     "subtype": "Undead",
-    "cost": 5,
+    "cost": 4,
     "attack": 5,
-    "health": 5,
-    "rulesText": "Battlecry and Inspire: Deal 4 damage to each hero.",
+    "health": 4,
+    "rulesText": "Inspire: Deal 4 damage to each hero.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "damage", "target": { "type": "hero", "controller": "any", "selection": "all" }, "amount": 4 }] }, { "trigger": "inspire", "actions": [{ "action": "damage", "target": { "type": "hero", "controller": "any", "selection": "all" }, "amount": 4 }] }]
+    "effects": [
+      {
+        "trigger": "inspire",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "hero",
+              "controller": "any",
+              "selection": "all"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_confessor_paletress",
@@ -655,9 +970,22 @@
     "cost": 7,
     "attack": 5,
     "health": 4,
-    "rulesText": "Battlecry and Inspire: Summon a random Legendary minion.",
+    "rulesText": "Inspire: Summon a random Legendary minion.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "summon-random", "filter": { "rarity": "Legendary" }, "count": 1 }] }, { "trigger": "inspire", "actions": [{ "action": "summon-random", "filter": { "rarity": "Legendary" }, "count": 1 }] }]
+    "effects": [
+      {
+        "trigger": "inspire",
+        "actions": [
+          {
+            "action": "summon-random",
+            "filter": {
+              "rarity": "Legendary"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_buccaneer",
@@ -708,12 +1036,22 @@
     "cardClass": "Rogue",
     "type": "Weapon",
     "subtype": "General",
-    "cost": 2,
+    "cost": 4,
     "attack": 1,
     "health": 3,
     "rulesText": "Your Hero Power gives this +1 Attack instead of replacing it.",
     "keywords": [],
-    "effects": [{ "trigger": "aura", "actions": [{ "action": "modify-weapon-on-hero-power", "heroPowerEquipAttackBonus": 1 }] }]
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify-weapon-on-hero-power",
+            "heroPowerEquipAttackBonus": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_shady_dealer",
@@ -739,9 +1077,24 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Get 3 random cards (from your opponent's class).",
+    "rulesText": "Add 2 random class cards to your hand (from your opponent's class).",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "add-to-hand", "player": "self", "source": "random-card", "filter": { "cardClass": "opponent" }, "count": 3 }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "cardClass": "opponent"
+            },
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_beneath_the_grounds",
@@ -767,9 +1120,26 @@
     "cost": 5,
     "attack": 3,
     "health": 7,
-    "rulesText": "Combo: Gain +4 Attack.",
+    "rulesText": "Combo: Gain +3 Attack.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "condition": { "type": "combo" }, "actions": [{ "action": "modify", "target": { "type": "minion", "selection": "source" }, "attack": 4 }] }]
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "combo"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_anubarak",
@@ -778,12 +1148,29 @@
     "cardClass": "Rogue",
     "type": "Minion",
     "subtype": "Undead",
-    "cost": 8,
+    "cost": 9,
     "attack": 8,
     "health": 4,
-    "rulesText": "Deathrattle: Summon a 4/4 Nerubian with \"Deathrattle: Summon Anub'arak.\"",
+    "rulesText": "Deathrattle: Return this to your hand and summon a 4/4 Nerubian.",
     "keywords": [],
-    "effects": [{ "trigger": "deathrattle", "actions": [{ "action": "summon", "cardId": "the_grand_tournament_nerubian" }] }]
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            }
+          },
+          {
+            "action": "summon",
+            "cardId": "the_grand_tournament_nerubian"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_tuskarr_totemic",
@@ -792,12 +1179,25 @@
     "cardClass": "Shaman",
     "type": "Minion",
     "subtype": "General",
-    "cost": 2,
+    "cost": 3,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry: Summon a random basic Totem.",
+    "rulesText": "Battlecry: Summon ANY random Totem.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "summon-random", "pool": ["basic_healing_totem", "basic_searing_totem", "basic_stoneclaw_totem", "basic_wrath_of_air_totem"], "count": 1 }] }]
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-random",
+            "count": 1,
+            "filter": {
+              "tribe": "Totem"
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_totem_golem",
@@ -823,9 +1223,24 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Draw 2 cards. Overload: (1)",
+    "rulesText": "Draw 2 cards. Overload: (2)",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "draw", "player": "self", "count": 2 }, { "action": "overload", "amount": 1 }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 2
+          },
+          {
+            "action": "overload",
+            "amount": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_healing_wave",
@@ -837,9 +1252,40 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Restore 8 Health. Reveal a minion in each deck. If yours costs more, restore 16 instead.",
+    "rulesText": "Restore 7 Health. Reveal a minion in each deck. If yours costs more, Restore 14 instead.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "restore", "target": { "type": "hero", "controller": "self", "selection": "hero" }, "amount": 8 }, { "action": "joust", "winActions": [{ "action": "restore", "target": { "type": "hero", "controller": "self", "selection": "hero" }, "amount": 8 }] }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "joust",
+            "winActions": [
+              {
+                "action": "restore",
+                "target": {
+                  "type": "character",
+                  "controller": "any",
+                  "selection": "chosen"
+                },
+                "amount": 14
+              }
+            ],
+            "loseActions": [
+              {
+                "action": "restore",
+                "target": {
+                  "type": "character",
+                  "controller": "any",
+                  "selection": "chosen"
+                },
+                "amount": 7
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_charged_hammer",
@@ -848,12 +1294,25 @@
     "cardClass": "Shaman",
     "type": "Weapon",
     "subtype": "General",
-    "cost": 3,
+    "cost": 4,
     "attack": 2,
     "health": 3,
     "rulesText": "Deathrattle: Your Hero Power becomes 'Deal 2 damage.'",
     "keywords": [],
-    "effects": [{ "trigger": "deathrattle", "actions": [{ "action": "set-hero-power", "player": "self", "power": { "damage": 2 } }] }]
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": {
+              "damage": 2
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_elemental_destruction",
@@ -865,9 +1324,30 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 4-5 damage to all minions. Overload: (2)",
+    "rulesText": "Deal 4-5 damage to all minions. Overload: (5)",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "damage", "target": { "type": "minion", "controller": "any", "selection": "all" }, "amount": 4, "minimum": 4, "maximum": 5 }, { "action": "overload", "amount": 2 }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "minion",
+              "controller": "any",
+              "selection": "all"
+            },
+            "amount": 4,
+            "minimum": 4,
+            "maximum": 5
+          },
+          {
+            "action": "overload",
+            "amount": 5
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_draenei_totemcarver",
@@ -878,10 +1358,45 @@
     "subtype": "Draenei",
     "cost": 4,
     "attack": 4,
-    "health": 5,
+    "health": 4,
     "rulesText": "Battlecry: Gain +1/+1 for each friendly Totem.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "modify", "target": { "type": "minion", "selection": "source" }, "attack": { "reference": "matching-entity-count", "selector": { "type": "minion", "controller": "self", "selection": "all", "filter": { "tribe": "Totem" } } }, "health": { "reference": "matching-entity-count", "selector": { "type": "minion", "controller": "self", "selection": "all", "filter": { "tribe": "Totem" } } } }] }]
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "type": "minion",
+                "controller": "self",
+                "selection": "all",
+                "filter": {
+                  "tribe": "Totem"
+                }
+              }
+            },
+            "health": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "type": "minion",
+                "controller": "self",
+                "selection": "all",
+                "filter": {
+                  "tribe": "Totem"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_thunder_bluff_valiant",
@@ -893,9 +1408,27 @@
     "cost": 5,
     "attack": 3,
     "health": 6,
-    "rulesText": "Battlecry and Inspire: Give your Totems +2 Attack.",
+    "rulesText": "Inspire: Give your Totems +2 Attack.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "modify", "target": { "type": "minion", "controller": "self", "selection": "all", "filter": { "tribe": "Totem" } }, "attack": 2 }] }, { "trigger": "inspire", "actions": [{ "action": "modify", "target": { "type": "minion", "controller": "self", "selection": "all", "filter": { "tribe": "Totem" } }, "attack": 2 }] }]
+    "effects": [
+      {
+        "trigger": "inspire",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "controller": "self",
+              "selection": "all",
+              "filter": {
+                "tribe": "Totem"
+              }
+            },
+            "attack": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_the_mistcaller",
@@ -921,9 +1454,24 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Whenever you discard a card, gain +2/+1.",
+    "rulesText": "Whenever you discard a card, gain +1/+1.",
     "keywords": [],
-    "effects": [{ "trigger": "on-discard", "actions": [{ "action": "modify", "target": { "type": "minion", "selection": "source" }, "attack": 2, "health": 1 }] }]
+    "effects": [
+      {
+        "trigger": "on-discard",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_demonfuse",
@@ -935,9 +1483,33 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Give a Demon +3/+3.",
+    "rulesText": "Give a Demon +3/+3. Give your opponent a Mana Crystal.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "modify", "target": { "type": "minion", "selection": "chosen", "filter": { "tribe": "Demon" } }, "attack": 3, "health": 3 }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Demon"
+              }
+            },
+            "attack": 3,
+            "health": 3
+          },
+          {
+            "action": "gain-mana",
+            "player": "opponent",
+            "amount": 1,
+            "crystal": "empty"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_wrathguard",
@@ -963,9 +1535,19 @@
     "cost": 4,
     "attack": 1,
     "health": 1,
-    "rulesText": "Deathrattle: At the end of the turn, summon a Dreadsteed.",
+    "rulesText": "Deathrattle: Summon a Dreadsteed.",
     "keywords": [],
-    "effects": [{ "trigger": "deathrattle", "actions": [{ "action": "schedule", "trigger": "end-of-turn", "actions": [{ "action": "summon", "cardId": "the_grand_tournament_dreadsteed" }] }] }]
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "the_grand_tournament_dreadsteed"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_fist_of_jaraxxus",
@@ -988,12 +1570,35 @@
     "cardClass": "Warlock",
     "type": "Spell",
     "subtype": "General",
-    "cost": 4,
+    "cost": 6,
     "attack": null,
     "health": null,
     "rulesText": "Destroy 2 random enemy minions. Discard 2 random cards.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "destroy", "target": { "type": "minion", "controller": "opponent", "selection": "random", "count": 2 } }, { "action": "discard", "source": { "zone": "hand", "selection": "random" }, "count": 2 }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "type": "minion",
+              "controller": "opponent",
+              "selection": "random",
+              "count": 2
+            }
+          },
+          {
+            "action": "discard",
+            "source": {
+              "zone": "hand",
+              "selection": "random"
+            },
+            "count": 2
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_void_crusher",
@@ -1044,12 +1649,31 @@
     "cardClass": "Warrior",
     "type": "Spell",
     "subtype": "General",
-    "cost": 2,
+    "cost": 3,
     "attack": null,
     "health": null,
     "rulesText": "Deal 3 damage. Gain 3 Armor.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "damage", "target": { "type": "character", "selection": "chosen" }, "amount": 3 }, { "action": "gain-armor", "player": "self", "amount": 3 }] }]
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          },
+          {
+            "action": "gain-armor",
+            "player": "self",
+            "amount": 3
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_bolster",
@@ -1591,11 +2215,28 @@
     "type": "Minion",
     "subtype": "Beast",
     "cost": 5,
-    "attack": 5,
+    "attack": 4,
     "health": 3,
     "rulesText": "Inspire: Give your other minions +1/+1.",
     "keywords": [],
-    "effects": [{ "trigger": "inspire", "actions": [{ "action": "modify", "target": { "type": "minion", "controller": "self", "selection": "all", "exclude": "source" }, "attack": 1, "health": 1 }] }]
+    "effects": [
+      {
+        "trigger": "inspire",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "controller": "self",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "the_grand_tournament_clockwork_knight",
@@ -1674,9 +2315,9 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "General",
-    "cost": 5,
+    "cost": 6,
     "attack": 6,
-    "health": 4,
+    "health": 3,
     "rulesText": "Battlecry: Replace your starting Hero Power with a better one.",
     "keywords": [],
     "effects": [
@@ -1873,5 +2514,65 @@
     "rulesText": "Costs (1) less for each time you used your Hero Power this game.",
     "keywords": [],
     "effects": [{ "trigger": "while-in-hand", "actions": [{ "action": "change-cost", "target": { "type": "card", "selection": "source" }, "amount": { "operation": "subtract", "reference": "hero-powers-used-this-game" }, "duration": "while-in-hand" }] }]
+  },
+  {
+    "id": "the_grand_tournament_living_roots_damage",
+    "collectible": false,
+    "name": "Living Roots",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 2 damage.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "the_grand_tournament_living_roots_saplings",
+    "collectible": false,
+    "name": "Living Roots",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon two 1/1 Saplings.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "the_grand_tournament_lion_form",
+    "collectible": false,
+    "name": "Lion Form",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Charge",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "the_grand_tournament_panther_form",
+    "collectible": false,
+    "name": "Panther Form",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "+1/+1 and Stealth.",
+    "keywords": [],
+    "effects": []
   }
 ]

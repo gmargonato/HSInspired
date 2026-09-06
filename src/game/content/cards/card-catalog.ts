@@ -23,6 +23,9 @@ function referencedCardIds(value: unknown): readonly string[] {
   })
   const references = [
     typeof record['cardId'] === 'string' ? record['cardId'] : null,
+    typeof record['presentationCardId'] === 'string'
+      ? record['presentationCardId']
+      : null,
     typeof record['excludeCardId'] === 'string' ? record['excludeCardId'] : null
   ].filter((reference): reference is string => reference !== null)
   return [...references, ...nested]

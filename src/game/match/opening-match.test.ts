@@ -99,6 +99,53 @@ function cycleBackToHuman(match: OpeningMatchInstance): void {
   setMana(match, HUMAN_ID)
 }
 
+describe('mulligan confirmation', () => {
+  it('replaces one participant hand before the other participant confirms', () => {
+    const match = createOpeningMatch(
+      {
+        seed: 1,
+        participants: [
+          {
+            participantId: HUMAN_ID,
+            controllerKind: 'human',
+            heroId: asHeroId('jaina'),
+            deckId: 'human-deck'
+          },
+          {
+            participantId: OPPONENT_ID,
+            controllerKind: 'ai',
+            heroId: asHeroId('rexxar'),
+            deckId: 'opponent-deck'
+          }
+        ]
+      },
+      [deck('human-deck', 'jaina'), deck('opponent-deck', 'rexxar')],
+      { next: () => 0.1, snapshot: () => 0, restore: () => undefined }
+    )
+    const returnedCard = match.getState().players[0].hand[0]!
+
+    const result = accept(
+      match.dispatch({
+        type: 'confirm-mulligan',
+        participantId: HUMAN_ID,
+        replaceInstanceIds: [returnedCard.instanceId]
+      })
+    )
+
+    expect(result.events[0]).toMatchObject({
+      type: 'mulligan-resolved',
+      participantId: HUMAN_ID,
+      returnedCards: [{ instanceId: returnedCard.instanceId }]
+    })
+    expect(result.state.phase).toBe('mulligan')
+    expect(result.state.players[0].mulliganConfirmed).toBe(true)
+    expect(result.state.players[0].hand).not.toContainEqual(
+      expect.objectContaining({ instanceId: returnedCard.instanceId })
+    )
+    expect(result.state.players[1].mulliganConfirmed).toBe(false)
+  })
+})
+
 describe('retired command boundary', () => {
   it('rejects legacy play and attack command names without changing state', () => {
     const match = startMatch('jaina')

@@ -4,6 +4,661 @@ import { createMatchScenario } from '../testing/match-scenario-builder'
 import { getDerivedState, getMatchLegality, resolveCardPlay } from './effect-runtime'
 
 describe('shared effect runtime', () => {
+  it('protects minions summoned after Commanding Shout and expires after the turn', () => {
+    const scenario = createMatchScenario({ seed: 909, cardId: 'basic_fireball' })
+    scenario.confirmBothMulligans()
+    const [id, enemy] = activeParticipants(scenario)
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: id,
+      available: 10,
+      maximum: 10
+    })
+    scenario.match.dispatch({
+      type: 'dev-add-card',
+      participantId: id,
+      cardId: 'classic_commanding_shout'
+    })
+    const shout = player(scenario, id).hand.find(
+      (c) => c.cardId === 'classic_commanding_shout'
+    )!
+    const deckSize = player(scenario, id).deck.length
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: shout.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, id).deck.length).toBe(deckSize - 1)
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: id,
+      cardId: 'basic_acidic_swamp_ooze'
+    })
+    const target = {
+      kind: 'minion' as const,
+      participantId: id,
+      instanceId: player(scenario, id).board[0]!.instanceId
+    }
+    const fireball = player(scenario, id).hand.find(
+      (c) => c.cardId === 'basic_fireball'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: fireball.instanceId,
+        targets: [target]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, id).board[0]!.health).toBe(1)
+    scenario.match.dispatch({ type: 'end-turn', participantId: id })
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: enemy,
+      available: 10,
+      maximum: 10
+    })
+    const nextFireball = player(scenario, enemy).hand.find(
+      (c) => c.cardId === 'basic_fireball'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: enemy,
+        cardInstanceId: nextFireball.instanceId,
+        targets: [target]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, id).board).toHaveLength(0)
+  })
+
+  it('summons Hogger Gnolls with two attack, two health and Taunt', () => {
+    const scenario = createMatchScenario({ seed: 910, cardId: 'basic_fireball' })
+    scenario.confirmBothMulligans()
+    const [id] = activeParticipants(scenario)
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: id,
+      cardId: 'classic_hogger'
+    })
+    scenario.match.dispatch({ type: 'end-turn', participantId: id })
+    expect(
+      player(scenario, id).board.find((m) => m.cardId === 'classic_gnoll')
+    ).toMatchObject({
+      attack: 2,
+      health: 2,
+      keywords: expect.arrayContaining(['taunt'])
+    })
+  })
+
+  it('returns release Anubarak to hand and summons a plain Nerubian on death', () => {
+    const scenario = createMatchScenario({
+      seed: 906,
+      cardId: 'basic_shadow_word_death'
+    })
+    scenario.confirmBothMulligans()
+    const [id, enemy] = activeParticipants(scenario)
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: id,
+      available: 10,
+      maximum: 10
+    })
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: enemy,
+      cardId: 'the_grand_tournament_anubarak'
+    })
+    const card = player(scenario, id).hand.find(
+      (c) => c.cardId === 'basic_shadow_word_death'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: card.instanceId,
+        targets: [
+          {
+            kind: 'minion',
+            participantId: enemy,
+            instanceId: player(scenario, enemy).board[0]!.instanceId
+          }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(
+      player(scenario, enemy).hand.some(
+        (c) => c.cardId === 'the_grand_tournament_anubarak' && c.currentCost === 9
+      )
+    ).toBe(true)
+    expect(player(scenario, enemy).board[0]).toMatchObject({
+      cardId: 'the_grand_tournament_nerubian',
+      attack: 4,
+      health: 4
+    })
+    expect(CARD_CATALOG.require('the_grand_tournament_nerubian').effects).toEqual([])
+  })
+
+  it('discounts Knight of the Wild only for Beasts summoned while it is in hand', () => {
+    const scenario = createMatchScenario({ seed: 907, cardId: 'basic_fireball' })
+    scenario.confirmBothMulligans()
+    const [id] = activeParticipants(scenario)
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: id,
+      cardId: 'basic_bloodfen_raptor'
+    })
+    scenario.match.dispatch({
+      type: 'dev-add-card',
+      participantId: id,
+      cardId: 'the_grand_tournament_knight_of_the_wild'
+    })
+    expect(
+      player(scenario, id).hand.find(
+        (c) => c.cardId === 'the_grand_tournament_knight_of_the_wild'
+      )!.currentCost
+    ).toBe(7)
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: id,
+      available: 10,
+      maximum: 10
+    })
+    scenario.match.dispatch({
+      type: 'dev-add-card',
+      participantId: id,
+      cardId: 'basic_bloodfen_raptor'
+    })
+    const raptor = player(scenario, id).hand.find(
+      (c) => c.cardId === 'basic_bloodfen_raptor'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: raptor.instanceId,
+        position: 0
+      }).accepted
+    ).toBe(true)
+    expect(
+      player(scenario, id).hand.find(
+        (c) => c.cardId === 'the_grand_tournament_knight_of_the_wild'
+      )!.currentCost
+    ).toBe(6)
+  })
+
+  it.each(['lower', 'empty'] as const)(
+    'heals fourteen in one event when Healing Wave beats a %s opposing deck',
+    (opponentDeck) => {
+      const scenario = createMatchScenario({
+        seed: 908,
+        cardId: 'basic_boulderfist_ogre'
+      })
+      scenario.confirmBothMulligans()
+      const [id, enemy] = activeParticipants(scenario)
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: id,
+        available: 10,
+        maximum: 10
+      })
+      scenario.match.dispatch({ type: 'dev-set-hero', participantId: id, health: 10 })
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: id,
+        cardId: 'the_grand_tournament_healing_wave'
+      })
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: id,
+        cardId: 'classic_lightwarden'
+      })
+      const state = scenario.match.getState()
+      const configured = {
+        ...state,
+        players: state.players.map((p) =>
+          p.participantId === enemy
+            ? {
+                ...p,
+                deck:
+                  opponentDeck === 'empty'
+                    ? []
+                    : p.deck.map((c) => ({ ...c, cardId: 'classic_wisp' as CardId }))
+              }
+            : p
+        ) as unknown as typeof state.players
+      }
+      const card = player(scenario, id).hand.find(
+        (c) => c.cardId === 'the_grand_tournament_healing_wave'
+      )!
+      const result = resolveCardPlay({
+        state: configured,
+        rng: scenario.rng,
+        participantId: id,
+        cardInstanceId: card.instanceId,
+        targets: [{ kind: 'hero', participantId: id }],
+        nextEntityOrdinal: state.nextEntityOrdinal
+      })
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) return
+      const healed = result.state.players.find((p) => p.participantId === id)!
+      expect(healed.hero.health).toBe(24)
+      expect(healed.board[0]!.attack).toBe(3)
+    }
+  )
+
+  it('uses Malygos spell damage and removes it on silence', () => {
+    const scenario = createMatchScenario({ seed: 901, cardId: 'basic_fireball' })
+    scenario.confirmBothMulligans()
+    const [id, enemy] = activeParticipants(scenario)
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: id,
+      cardId: 'classic_malygos'
+    })
+    expect(player(scenario, id).board[0]!.spellDamage).toBe(5)
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: id,
+      available: 10,
+      maximum: 10
+    })
+    const card = player(scenario, id).hand.find((c) => c.cardId === 'basic_fireball')!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: card.instanceId,
+        targets: [{ kind: 'hero', participantId: enemy }]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, enemy).hero.health).toBe(19)
+    scenario.match.dispatch({
+      type: 'dev-add-card',
+      participantId: id,
+      cardId: 'classic_silence'
+    })
+    const silence = player(scenario, id).hand.find(
+      (c) => c.cardId === 'classic_silence'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: silence.instanceId,
+        targets: [
+          {
+            kind: 'minion',
+            participantId: id,
+            instanceId: player(scenario, id).board[0]!.instanceId
+          }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, id).board[0]!.spellDamage).toBe(0)
+  })
+
+  it('makes existing and newly added enemy spells free only during Millhouse next turn', () => {
+    const scenario = createMatchScenario({ seed: 902, cardId: 'basic_fireball' })
+    scenario.confirmBothMulligans()
+    const [id, enemy] = activeParticipants(scenario)
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: id,
+      available: 10,
+      maximum: 10
+    })
+    scenario.match.dispatch({
+      type: 'dev-add-card',
+      participantId: id,
+      cardId: 'classic_millhouse_manastorm'
+    })
+    const card = player(scenario, id).hand.find(
+      (c) => c.cardId === 'classic_millhouse_manastorm'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: card.instanceId,
+        position: 0
+      }).accepted
+    ).toBe(true)
+    expect(
+      player(scenario, enemy).hand.find((c) => c.cardId === 'basic_fireball')!
+        .currentCost
+    ).toBe(4)
+    scenario.match.dispatch({ type: 'end-turn', participantId: id })
+    expect(
+      player(scenario, enemy)
+        .hand.filter((c) => c.cardId === 'basic_fireball')
+        .every((c) => c.currentCost === 0)
+    ).toBe(true)
+    scenario.match.dispatch({
+      type: 'dev-add-card',
+      participantId: enemy,
+      cardId: 'basic_flamestrike'
+    })
+    expect(
+      player(scenario, enemy).hand.find((c) => c.cardId === 'basic_flamestrike')!
+        .currentCost
+    ).toBe(0)
+    scenario.match.dispatch({ type: 'end-turn', participantId: enemy })
+    expect(
+      player(scenario, enemy).hand.find((c) => c.cardId === 'basic_fireball')!
+        .currentCost
+    ).toBe(4)
+  })
+
+  it('detonates a normally drawn Burrowing Mine for ten damage', () => {
+    const scenario = createMatchScenario({
+      seed: 903,
+      cardId: 'goblins_vs_gnomes_burrowing_mine'
+    })
+    scenario.confirmBothMulligans()
+    const [id, enemy] = activeParticipants(scenario)
+    const health = player(scenario, enemy).hero.health
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: id }).accepted
+    ).toBe(true)
+    expect(player(scenario, enemy).hero.health).toBe(health - 10)
+  })
+
+  it.each([12, 13])('resolves Revenge as one damage pulse at %s health', (health) => {
+    const scenario = createMatchScenario({
+      seed: 904,
+      cardId: 'blackrock_mountain_revenge'
+    })
+    scenario.confirmBothMulligans()
+    const [id, enemy] = activeParticipants(scenario)
+    scenario.match.dispatch({ type: 'dev-set-hero', participantId: id, health })
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: id,
+      available: 10,
+      maximum: 10
+    })
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: enemy,
+      cardId: 'goblins_vs_gnomes_shielded_minibot'
+    })
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: enemy,
+      cardId: 'basic_chillwind_yeti'
+    })
+    const card = player(scenario, id).hand.find(
+      (c) => c.cardId === 'blackrock_mountain_revenge'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: card.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, enemy).board.map((m) => m.health)).toEqual([
+      2,
+      health <= 12 ? 2 : 4
+    ])
+  })
+
+  it('allows Healing Wave to target the opposing hero and heals seven on a tied joust', () => {
+    const scenario = createMatchScenario({
+      seed: 905,
+      cardId: 'the_grand_tournament_healing_wave'
+    })
+    scenario.confirmBothMulligans()
+    const [id, enemy] = activeParticipants(scenario)
+    scenario.match.dispatch({ type: 'dev-set-hero', participantId: enemy, health: 10 })
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: id,
+      available: 10,
+      maximum: 10
+    })
+    const card = player(scenario, id).hand.find(
+      (c) => c.cardId === 'the_grand_tournament_healing_wave'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: card.instanceId,
+        targets: [{ kind: 'hero', participantId: enemy }]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, enemy).hero.health).toBe(17)
+  })
+
+  it.each([
+    ['classic_power_of_the_wild', 0],
+    ['classic_power_of_the_wild', 1],
+    ['the_grand_tournament_living_roots', 0],
+    ['the_grand_tournament_living_roots', 1]
+  ] as const)(
+    'resolves %s choice %s without playing its presentation token',
+    (cardId, choice) => {
+      const scenario = createMatchScenario({ seed: 923, cardId })
+      scenario.confirmBothMulligans()
+      const [participantId, opponentId] = activeParticipants(scenario)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-mana',
+          participantId,
+          available: 10,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId,
+          cardId: 'basic_acidic_swamp_ooze'
+        }).accepted
+      ).toBe(true)
+      const before = player(scenario, participantId).board[0]!
+      const card = player(scenario, participantId).hand.find(
+        (entry) => entry.cardId === cardId
+      )!
+      const damage = cardId === 'the_grand_tournament_living_roots' && choice === 0
+      const heroHealth = player(scenario, opponentId).hero.health
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId,
+        choice,
+        ...(damage
+          ? { targets: [{ kind: 'hero' as const, participantId: opponentId }] }
+          : {})
+      })
+      expect(result.accepted).toBe(true)
+      const board = player(scenario, participantId).board
+      if (choice === 1) {
+        const panther = cardId === 'classic_power_of_the_wild'
+        expect(board.slice(1).map((minion) => minion.cardId)).toEqual(
+          panther
+            ? ['classic_panther']
+            : ['the_grand_tournament_sapling', 'the_grand_tournament_sapling']
+        )
+      } else if (damage) {
+        expect(player(scenario, opponentId).hero.health).toBe(heroHealth - 2)
+      } else {
+        expect(board[0]).toMatchObject({
+          attack: before.attack + 1,
+          health: before.health + 1
+        })
+      }
+      expect(player(scenario, participantId).mana.available).toBe(
+        10 - CARD_CATALOG.require(cardId).cost
+      )
+      expect(scenario.match.getState().history?.cardsPlayedThisTurn).toEqual([cardId])
+      expect(scenario.match.getState().history?.cardsCastThisTurn).toEqual([cardId])
+    }
+  )
+
+  it.each([
+    [
+      'blackrock_mountain_druid_of_the_flame',
+      ['blackrock_mountain_firecat_form', 'blackrock_mountain_fire_hawk_form']
+    ],
+    [
+      'classic_ancient_of_lore',
+      ['classic_ancient_teachings', 'classic_ancient_secrets']
+    ],
+    ['classic_ancient_of_war', ['classic_rooted', 'classic_uproot']],
+    ['classic_cenarius', ['classic_demigods_favor', 'classic_shandos_lesson']],
+    ['classic_druid_of_the_claw', ['classic_cat_form', 'classic_bear_form']],
+    ['classic_keeper_of_the_grove', ['classic_moonfire_choose_one', 'classic_dispel']],
+    [
+      'classic_mark_of_nature',
+      ['classic_mark_of_nature_attack', 'classic_mark_of_nature_health']
+    ],
+    ['classic_nourish', ['classic_nourish_mana', 'classic_nourish_draw']],
+    [
+      'classic_power_of_the_wild',
+      ['classic_leader_of_the_pack', 'classic_summon_a_panther']
+    ],
+    ['classic_starfall', ['classic_starfall_single', 'classic_starfall_all']],
+    ['classic_wrath', ['classic_wrath_damage', 'classic_wrath_draw']],
+    [
+      'goblins_vs_gnomes_anodized_robo_cub',
+      ['goblins_vs_gnomes_attack_mode', 'goblins_vs_gnomes_tank_mode']
+    ],
+    [
+      'goblins_vs_gnomes_grove_tender',
+      ['goblins_vs_gnomes_gift_of_mana', 'goblins_vs_gnomes_gift_of_cards']
+    ],
+    [
+      'goblins_vs_gnomes_dark_wispers',
+      ['goblins_vs_gnomes_dark_wispers_wisps', 'goblins_vs_gnomes_dark_wispers_buff']
+    ],
+    [
+      'league_of_explorers_raven_idol',
+      ['league_of_explorers_raven_idol_minion', 'league_of_explorers_raven_idol_spell']
+    ],
+    [
+      'the_grand_tournament_living_roots',
+      [
+        'the_grand_tournament_living_roots_damage',
+        'the_grand_tournament_living_roots_saplings'
+      ]
+    ],
+    [
+      'the_grand_tournament_druid_of_the_saber',
+      ['the_grand_tournament_lion_form', 'the_grand_tournament_panther_form']
+    ]
+  ])('projects distinct researched choice cards for %s', (cardId, expectedIds) => {
+    const scenario = createMatchScenario({ seed: 921, cardId })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const card = player(scenario, participantId).hand.find(
+      (entry) => entry.cardId === cardId
+    )!
+    const input = scenario.match.getPlayInput?.(participantId, card.instanceId)
+    expect(input?.choiceOptions.map((option) => option.presentationCardId)).toEqual(
+      expectedIds
+    )
+    expect(input?.choiceOptions.map((option) => option.choice)).toEqual([0, 1])
+    for (const option of input!.choiceOptions) {
+      expect(option.presentationCost).toBe(CARD_CATALOG.require(cardId).cost)
+      const definition = CARD_CATALOG.require(option.presentationCardId!)
+      expect(definition).toMatchObject({
+        type: 'Spell',
+        collectible: false,
+        deckLegal: false,
+        rarity: 'None'
+      })
+      expect(definition.rulesText.length).toBeGreaterThan(0)
+    }
+  })
+
+  it.each([
+    ['classic_wrath', 0, 3, false],
+    ['classic_wrath', 1, 1, true],
+    ['classic_starfall', 0, 5, false],
+    ['classic_starfall', 1, 2, false]
+  ] as const)(
+    'resolves %s branch %s with the original choice identity',
+    (cardId, choice, damage, draws) => {
+      const scenario = createMatchScenario({ seed: 922, cardId })
+      scenario.confirmBothMulligans()
+      const [participantId, opponentId] = activeParticipants(scenario)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-mana',
+          participantId,
+          available: 10,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+      for (const owner of [participantId, opponentId, opponentId])
+        expect(
+          scenario.match.dispatch({
+            type: 'dev-summon-minion',
+            participantId: owner,
+            cardId: 'basic_boulderfist_ogre'
+          }).accepted
+        ).toBe(true)
+      const card = player(scenario, participantId).hand.find(
+        (entry) => entry.cardId === cardId
+      )!
+      const beforeHand = player(scenario, participantId).hand.length
+      const beforeHealth = player(scenario, opponentId).board.map(
+        (minion) => minion.health
+      )
+      const friendlyHealth = player(scenario, participantId).board[0]!.health
+      const area = cardId === 'classic_starfall' && choice === 1
+      const target = player(scenario, opponentId).board[0]!
+      const input = scenario.match.getPlayInput?.(
+        participantId,
+        card.instanceId,
+        choice
+      )
+      expect(input?.targetSelectors).toHaveLength(area ? 0 : 1)
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId,
+          cardInstanceId: card.instanceId,
+          choice,
+          ...(area
+            ? {}
+            : {
+                targets: [
+                  {
+                    kind: 'minion' as const,
+                    participantId: opponentId,
+                    instanceId: target.instanceId
+                  }
+                ]
+              })
+        }).accepted
+      ).toBe(true)
+      expect(player(scenario, opponentId).board.map((minion) => minion.health)).toEqual(
+        [beforeHealth[0]! - damage, beforeHealth[1]! - (area ? damage : 0)]
+      )
+      expect(player(scenario, participantId).board[0]!.health).toBe(friendlyHealth)
+      expect(player(scenario, participantId).hand.length).toBe(
+        beforeHand - 1 + (draws ? 1 : 0)
+      )
+      expect(player(scenario, participantId).mana.available).toBe(
+        10 - CARD_CATALOG.require(cardId).cost
+      )
+    }
+  )
+
   const player = (
     scenario: ReturnType<typeof createMatchScenario>,
     participantId: string
@@ -1954,6 +2609,11 @@ describe('shared effect runtime', () => {
     expect(sourceInHand.players[playerIndex]!.board[0]!.attack).toBe(baseAttack)
   })
   it('retains a real next-turn cost modifier until it becomes active and expires', () => {
+    expect(CARD_CATALOG.require('naxxramas_loatheb').effects).toMatchObject([
+      {
+        actions: [{ deferUntil: 'matching-cards-until-expiry' }]
+      }
+    ])
     const scenario = createMatchScenario({ seed: 95, cardId: 'naxxramas_loatheb' })
     scenario.confirmBothMulligans()
     const [playerId, opponentId] = activeParticipants(scenario)
@@ -1983,6 +2643,7 @@ describe('shared effect runtime', () => {
         position: 0
       }).accepted
     ).toBe(true)
+    expect(player(scenario, opponentId).pendingCostModifiers).toHaveLength(1)
 
     const spellCost = () =>
       player(scenario, opponentId).hand.find(
@@ -1993,6 +2654,17 @@ describe('shared effect runtime', () => {
       scenario.match.dispatch({ type: 'end-turn', participantId: playerId }).accepted
     ).toBe(true)
     expect(spellCost()).toBe(6)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: opponentId,
+        cardId: 'basic_fireball'
+      }).accepted
+    ).toBe(true)
+    expect(
+      player(scenario, opponentId).hand.find((card) => card.cardId === 'basic_fireball')
+        ?.currentCost
+    ).toBe(9)
     expect(
       scenario.match.dispatch({ type: 'end-turn', participantId: opponentId }).accepted
     ).toBe(true)
@@ -2822,6 +3494,71 @@ describe('shared effect runtime', () => {
     expect(damage.accepted).toBe(true)
     expect(player(scenario, playerId).hero).toMatchObject({ health: 30, armor: 0 })
     expect(player(scenario, opponentId).hero.health).toBe(28)
+  })
+
+  it('converts Circle of Healing and Lesser Heal into damage, including on full-health targets', () => {
+    const scenario = createMatchScenario({
+      seed: 47,
+      firstHeroId: 'anduin',
+      secondHeroId: 'anduin'
+    })
+    scenario.confirmBothMulligans()
+    const [playerId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: playerId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: playerId,
+        cardId: 'classic_auchenai_soulpriest'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: playerId,
+        cardId: 'classic_circle_of_healing'
+      }).accepted
+    ).toBe(true)
+    const circle = player(scenario, playerId).hand.find(
+      (card) => card.cardId === 'classic_circle_of_healing'
+    )
+    expect(circle).toBeDefined()
+
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: playerId,
+        cardInstanceId: circle!.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, playerId).board[0]).toMatchObject({ health: 1 })
+
+    const power = scenario.match.dispatch({
+      type: 'use-hero-power',
+      participantId: playerId,
+      target: { kind: 'hero', participantId: playerId }
+    })
+    expect(power.accepted).toBe(true)
+    expect(player(scenario, playerId).hero.health).toBe(28)
+    expect(power.events).toContainEqual(
+      expect.objectContaining({
+        type: 'character-damaged',
+        source: 'hero-power',
+        participantId: playerId,
+        amount: 2,
+        attemptedAmount: 2
+      })
+    )
+    expect(power.events).not.toContainEqual(
+      expect.objectContaining({ type: 'character-healed', participantId: playerId })
+    )
   })
 
   it('limits Auchenai replacement to the controller of the replacement source', () => {
@@ -3899,9 +4636,14 @@ describe('shared effect runtime', () => {
         choiceOptions: [
           {
             choice: 0,
-            presentationCardId: 'blackrock_mountain_druid_of_the_flame_5_2'
+            presentationCardId: 'blackrock_mountain_firecat_form',
+            presentationCost: 3
           },
-          { choice: 1, presentationCardId: 'blackrock_mountain_druid_of_the_flame_2_5' }
+          {
+            choice: 1,
+            presentationCardId: 'blackrock_mountain_fire_hawk_form',
+            presentationCost: 3
+          }
         ]
       }
     )

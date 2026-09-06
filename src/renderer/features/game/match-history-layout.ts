@@ -91,5 +91,15 @@ export const MATCH_HISTORY_LAYOUT = {
       offsetY: 82,
       scale: 0.58
     }
+  },
+  remoteCardPlay: {
+    origin: placement({ x: 985, y: 180 }, CARD_CANVAS, {
+      anchor: CENTER,
+      scale: 0.12,
+      note: 'Remote card appears small at the center of the remote hero portrait.'
+    }),
+    travelDuration: 0.2,
+    holdDuration: 1,
+    fadeDuration: 0.1
   }
 } as const

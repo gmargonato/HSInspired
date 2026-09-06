@@ -8,8 +8,6 @@ import {
 import { BakedAnimatedOutline } from '../../rendering/effects/baked-animated-outline'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 
-const SUMMON_GHOST_COLOR = 0x79e9ff
-
 export class GameCardSlot extends Container {
   readonly card: CardView
   readonly instanceId: string
@@ -159,19 +157,12 @@ export class GameCardSlot extends Container {
     this.syncPlayableOutline()
   }
 
-  beginSummonGhost(): void {
+  beginMinionPlayTransition(): void {
     this.setMulliganInteractionEnabled(false)
     this.replaceCross.visible = false
     this.replacedLabel.visible = false
     this.disposePlayableOutline()
-    this.outlineTarget.visible = true
-    this.outlineTarget.tint = SUMMON_GHOST_COLOR
-    this.outlineTarget.alpha = 0.24
-    this.outlineTarget.blendMode = 'add'
-  }
-
-  setSummonGlowStrength(alpha: number): void {
-    this.outlineTarget.alpha = alpha
+    this.outlineTarget.visible = false
   }
 
   disposePlayableOutline(): void {

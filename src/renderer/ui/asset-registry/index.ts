@@ -55,6 +55,7 @@ import mulliganAnnouncementImage from '@assets/images/match/mulligan-announcemen
 import mulliganReplaceCrossImage from '@assets/images/match/mulligan-replace-cross.png'
 import mulliganReplacedLabelImage from '@assets/images/match/mulligan-replaced-label.png'
 import confirmMulliganButtonImage from '@assets/images/match/confirm-mulligan-button.png'
+import mulliganOpponentStillChoosingImage from '@assets/images/match/mulligan-opponent-still-choosing.png'
 import toggleViewButtonImage from '@assets/images/match/toggle-view-button.png'
 import mulliganCoinAnnouncementImage from '@assets/images/match/mulligan-coin-announcement.png'
 import historyLocalImage from '@assets/images/match/history-local.png'
@@ -833,6 +834,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.mulligan-opponent-still-choosing',
+    ASSET_BUNDLE_IDS.game,
+    'mulliganOpponentStillChoosing',
+    mulliganOpponentStillChoosingImage,
+    636,
+    198,
+    'game-scene'
+  ),
+  asset(
     'scene.game.toggle-view-button',
     ASSET_BUNDLE_IDS.game,
     'toggleViewButton',
@@ -1476,6 +1486,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   mulliganReplaceCross: Texture
   mulliganReplacedLabel: Texture
   confirmMulliganButton: Texture
+  mulliganOpponentStillChoosing: Texture
   mulliganCoinAnnouncement: Texture
   heroPowerBack: Texture
   heroPowerFront: Texture

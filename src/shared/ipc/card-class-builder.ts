@@ -14,7 +14,15 @@ export const CARD_CLASS_BUILDER_CLASSES = [
   'Warrior'
 ] as const
 
-export const CARD_CLASS_BLEND_MODES = ['normal', 'add', 'multiply', 'screen'] as const
+export const CARD_CLASS_BLEND_MODES = [
+  'normal',
+  'add',
+  'multiply',
+  'screen',
+  'color',
+  'overlay',
+  'soft-light'
+] as const
 
 export type CardClassBuilderClass = (typeof CARD_CLASS_BUILDER_CLASSES)[number]
 export type CardClassBlendMode = (typeof CARD_CLASS_BLEND_MODES)[number]

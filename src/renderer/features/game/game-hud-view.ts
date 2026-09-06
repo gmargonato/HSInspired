@@ -17,6 +17,7 @@ const END_TURN_FLIP_DURATION = 0.32
 /** Owned HUD composition for turn controls, mana, deck counts, and tracker. */
 export class GameHudView {
   readonly turnLayer = new Container()
+  readonly turnButtonLayer = new Container()
   readonly deckTracker: DeckTrackerView
   endTurnButton: Button | null = null
   private endTurnOutlineTarget: Sprite | null = null
@@ -32,18 +33,21 @@ export class GameHudView {
   constructor(resolver: CardAssetResolver) {
     this.deckTracker = new DeckTrackerView(resolver)
     this.turnLayer.label = 'game.turn-hud'
+    this.turnButtonLayer.label = 'game.turn-button'
     // Keep the HUD container passive so its interactive children (notably the
     // End Turn button) still participate in Pixi hit testing. `none` skips the
     // entire subtree, which makes a rendered/enabled button impossible to
     // click.
     this.turnLayer.eventMode = 'passive'
+    this.turnButtonLayer.eventMode = 'passive'
   }
 
   mount(
     assets: Pick<GameAssets, 'endTurn' | 'manaCrystal'>,
-    onEndTurn: () => void
+    onEndTurn: () => void,
+    initialTurnTexture: Texture = assets.endTurn
   ): void {
-    this.endTurnOutlineTarget = new Sprite(assets.endTurn)
+    this.endTurnOutlineTarget = new Sprite(initialTurnTexture)
     applyPlacement(this.endTurnOutlineTarget, GAME_BOARD_LAYOUT.endTurnButton)
     this.endTurnOutlineTarget.anchor.set(
       GAME_BOARD_LAYOUT.endTurnButton.anchor.x,
@@ -56,17 +60,18 @@ export class GameHudView {
       preset: 'button'
     })
     this.endTurnOutline.setEnabled(false)
-    this.turnLayer.addChild(this.endTurnOutlineTarget)
+    this.turnButtonLayer.addChild(this.endTurnOutlineTarget)
 
-    this.endTurnButton = new Button(assets.endTurn, {
+    this.endTurnButton = new Button(initialTurnTexture, {
       highlightOnHover: false,
       onClick: onEndTurn
     })
     applyPlacement(this.endTurnButton, GAME_BOARD_LAYOUT.endTurnButton)
+    this.endTurnButton.label = 'game.end-turn'
     this.endTurnButton.setBaseY(GAME_BOARD_LAYOUT.endTurnButton.position.y)
     this.endTurnButton.setEnabled(false)
-    this.turnLayer.addChild(this.endTurnButton)
-    this.endTurnTexture = assets.endTurn
+    this.turnButtonLayer.addChild(this.endTurnButton)
+    this.endTurnTexture = initialTurnTexture
 
     const localCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.localCount, 34)
     const remoteCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.remoteCount, 34)
@@ -155,6 +160,7 @@ export class GameHudView {
     this.yourTurnFlag?.destroy({ children: true })
     this.yourTurnFlag = null
     this.turnLayer.destroy({ children: true })
+    this.turnButtonLayer.destroy({ children: true })
   }
 
   private createHudLabel(placement: LayoutPlacement, fontSize: number): Text {

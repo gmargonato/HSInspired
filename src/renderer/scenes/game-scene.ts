@@ -29,8 +29,11 @@ import {
 import { GameBoardSession } from '../features/game/game-board-session'
 import {
   AiTurnController,
-  STRATEGIC_AI_POLICY
+  AI_DECISION_LIMITS
 } from '../features/game/ai-turn-controller'
+import { AI_POLICY_LIMITS } from '../../game/match/ai/policy-planner'
+import { MatchRecorder, logObject } from '../features/game/match-recorder'
+import type { MatchLogsApi } from '../../shared/ipc/match-logs'
 
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
@@ -38,6 +41,7 @@ export class GameScene extends Scene {
   private readonly route: GameRoute
   private readonly logger?: AppLogger
   private view: GameBoardView | null = null
+  private recorder?: MatchRecorder
 
   constructor(
     route: GameRoute,
@@ -46,7 +50,9 @@ export class GameScene extends Scene {
     private readonly arenaStore: ArenaStore,
     logger?: AppLogger,
     private readonly router?: SceneRouter,
-    private readonly ai?: AiDecisionApi
+    private readonly ai?: AiDecisionApi,
+    private readonly matchLogs?: MatchLogsApi,
+    private readonly reportLogError: (message: string) => void = console.error
   ) {
     super()
     this.route = route
@@ -55,6 +61,19 @@ export class GameScene extends Scene {
   }
 
   async init(): Promise<void> {
+    try {
+      await this.initMatch()
+    } catch (error) {
+      this.recorder?.record('events', 'error', {
+        message: 'Match initialization failed.',
+        error
+      })
+      this.recorder?.finish('interrupted')
+      throw error
+    }
+  }
+
+  private async initMatch(): Promise<void> {
     this.logger?.info('[GameScene] init start', this.route)
     if (!this.route.deckSnapshots) {
       await this.deckStore.load()
@@ -78,18 +97,32 @@ export class GameScene extends Scene {
       decks.map((d) => `${d.id} — ${d.heroId}`)
     )
 
-    const aiLogger = this.logger ?? {
-      info: () => undefined,
-      warn: () => undefined,
-      error: () => undefined
-    }
-    const aiSession = new GameBoardSession({ setup: this.route.setup, decks })
+    this.recorder = new MatchRecorder(
+      this.matchLogs,
+      logObject({
+        mode: this.route.mode ?? 'standard',
+        aiRuntimeSettings: { ...AI_POLICY_LIMITS, ...AI_DECISION_LIMITS }
+      }),
+      this.reportLogError
+    )
+    const aiLogger = this.recorder.logger(
+      this.logger ?? {
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined
+      }
+    )
+    const aiSession = new GameBoardSession({
+      setup: this.route.setup,
+      decks,
+      recorder: this.recorder
+    })
     const aiController = new AiTurnController({
       api: this.ai,
       session: aiSession,
       decks,
       logger: aiLogger,
-      policy: STRATEGIC_AI_POLICY
+      recorder: this.recorder
     })
     aiController.prewarmDeckPlan()
     this.logger?.info('[GameScene] AI deck planning started')
@@ -113,7 +146,7 @@ export class GameScene extends Scene {
       heroAssets,
       renderer: this.appInstance.renderer,
       cursor: this.sceneManager.cursor,
-      logger: this.logger,
+      logger: aiLogger,
       ai: this.ai,
       aiRuntime: { session: aiSession, controller: aiController },
       onMatchEnded: (event) => this.recordMatchResult(event),
@@ -278,6 +311,7 @@ export class GameScene extends Scene {
   }
 
   protected onExit(): void {
+    this.recorder?.finish('abandoned')
     if (!this.view) return
     this.root.removeChild(this.view)
     this.view.dispose()

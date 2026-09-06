@@ -67,30 +67,14 @@ function mountFpsCounter(app: Application, container: HTMLElement): () => void {
 
   let frames = 0
   let sampleStart = performance.now()
-  let previousFrameAt = sampleStart
-  const frameTimes: number[] = []
   const updateCounter = (): void => {
     frames += 1
     const now = performance.now()
-    frameTimes.push(now - previousFrameAt)
-    previousFrameAt = now
     const elapsed = now - sampleStart
     if (elapsed < 500) return
 
-    // Measure real elapsed time so slow frames are not hidden by delta clamping.
-    const sortedFrameTimes = [...frameTimes].sort((left, right) => left - right)
-    const p95Index = Math.min(
-      sortedFrameTimes.length - 1,
-      Math.floor(sortedFrameTimes.length * 0.95)
-    )
-    const p95 = sortedFrameTimes[p95Index] ?? 0
-    const worst = sortedFrameTimes.at(-1) ?? 0
-    counter.textContent =
-      `FPS: ${Math.round((frames * 1000) / elapsed)}` +
-      ` · p95: ${p95.toFixed(1)}ms · max: ${worst.toFixed(1)}ms` +
-      ` · ${app.renderer.resolution}x`
+    counter.textContent = `FPS: ${Math.round((frames * 1000) / elapsed)}`
     frames = 0
-    frameTimes.length = 0
     sampleStart = now
   }
   app.ticker.add(updateCounter)
@@ -185,15 +169,12 @@ async function bootstrap(): Promise<void> {
   let unsubscribeDevSceneSync = (): void => undefined
   let unsubscribeDevCommandHandler = (): void => undefined
   let removeFpsCounter = (): void => undefined
-  let removeDevFilterToggle = (): void => undefined
 
   try {
     app.ticker.maxFPS = 60
     removeFpsCounter = mountFpsCounter(app, container)
-    if (import.meta.env.DEV) {
-      const { installDevFilterToggle } = await import('./app/dev-filter-toggle')
-      removeDevFilterToggle = installDevFilterToggle(app, container)
-    }
+    // Keep the F3 GPU-effects toggle and its status readout disabled. Never
+    // restore either unless a user or human explicitly asks for them back.
 
     const game = new SceneManager(app, {
       cursor,
@@ -217,6 +198,8 @@ async function bootstrap(): Promise<void> {
     const directMatchPerformanceStart =
       import.meta.env.DEV &&
       import.meta.env.VITE_DEV_START_ROUTE === 'match-performance'
+    const directGameStart =
+      import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'game'
     if (directInspectorStart) {
       const { CardInspectorScene } = await import('@dev-inspector')
       await game.start(new CardInspectorScene())
@@ -225,6 +208,12 @@ async function bootstrap(): Promise<void> {
       await game.start(new OutlineLabScene())
     } else {
       await game.start(navigator.createInitialScene())
+      if (directGameStart) {
+        await navigator.navigateRequest({
+          id: 'game',
+          params: { deckId: import.meta.env.VITE_DEV_HUMAN_DECK_ID }
+        })
+      }
     }
 
     if (directMatchPerformanceStart) {
@@ -280,7 +269,6 @@ async function bootstrap(): Promise<void> {
       'beforeunload',
       () => {
         removeFpsCounter()
-        removeDevFilterToggle()
         removeSettingsShortcut()
         unsubscribeFromSceneMenu()
         unsubscribeDevDeckSync()
@@ -294,7 +282,6 @@ async function bootstrap(): Promise<void> {
     )
   } catch (error) {
     removeFpsCounter()
-    removeDevFilterToggle()
     removeSettingsShortcut()
     unsubscribeFromSceneMenu()
     unsubscribeDevDeckSync()

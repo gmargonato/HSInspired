@@ -10,8 +10,11 @@ import {
   type TurnMatchState
 } from '../../../game/match'
 import type { MatchSetup, PlayerId } from '../../../game/match'
+import type { MatchRecorder } from './match-recorder'
+import { captureMatchCommand, captureMatchStart } from './match-log-capture'
 
 export interface GameBoardSessionOptions {
+  readonly recorder?: MatchRecorder
   readonly setup: MatchSetup
   readonly decks: readonly Deck[]
 }
@@ -31,6 +34,7 @@ export class GameBoardSession {
 
   constructor(options: GameBoardSessionOptions) {
     const match = createTurnMatch(options.setup, options.decks)
+    let logState = match.getState()
     const human = options.setup.participants.find(
       (participant) => participant.controllerKind === 'human'
     )
@@ -53,18 +57,43 @@ export class GameBoardSession {
       analyze: <T>(operation: (fork: OpeningMatchAnalysis) => T) =>
         match.analyze(operation),
       dispatch: (command: unknown) => {
+        const before = logState
         const result = match.dispatch(command)
+        logState = result.state
+        options.recorder?.record(
+          'events',
+          'command',
+          () => captureMatchCommand(before, result, command),
+          typeof command === 'object' &&
+            command !== null &&
+            'participantId' in command &&
+            command.participantId === remote.participantId
+            ? options.recorder?.decisionId
+            : ''
+        )
         if (result.accepted) {
           this.aiObservedEvents.push(
             ...(match.getPublicEvents?.(remote.participantId, result.events) ?? [])
           )
         }
+        if (result.accepted && result.state.phase === 'ended')
+          options.recorder?.finish('completed')
         return result
       }
     }
     const state = match.getState()
     this.localPlayerNumber = this.findPlayer(state, human.participantId).playerNumber
     this.remotePlayerNumber = this.findPlayer(state, remote.participantId).playerNumber
+    options.recorder?.setContext(() => ({
+      revision: logState.revision,
+      turnNumber: logState.turnNumber
+    }))
+    options.recorder?.record(
+      'events',
+      'match-start',
+      () => captureMatchStart(options.setup, state),
+      ''
+    )
   }
 
   getState(): TurnMatchState {

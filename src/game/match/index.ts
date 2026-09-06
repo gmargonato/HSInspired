@@ -5,6 +5,7 @@ export * from './match-setup'
 export * from './proof'
 export * from './rng'
 export * from './opening-match'
+export * from './history-visibility'
 export * from './turn-match'
 export {
   captureDeathBatch,

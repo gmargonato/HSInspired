@@ -1,0 +1,132 @@
+import type { CardDefinition } from '../../../game/content/cards'
+import { isSecretCardPlay } from '../../../game/match/history-visibility'
+import type { OpeningCard, TurnMatchCommand } from '../../../game/match'
+import { Container, Sprite, type Texture } from 'pixi.js'
+import { CardView } from '../../rendering/cards/card-view'
+import type { LayoutPlacement } from '../../rendering/layout'
+import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
+import { Actor } from '../../ui/components/actor'
+import { MATCH_HISTORY_LAYOUT } from './match-history-layout'
+
+function topLeftForCard(placement: LayoutPlacement): {
+  readonly x: number
+  readonly y: number
+} {
+  const scaleX = placement.scale?.x ?? 1
+  const scaleY = placement.scale?.y ?? 1
+  return {
+    x: placement.position.x - placement.anchor.x * placement.size.width * scaleX,
+    y: placement.position.y - placement.anchor.y * placement.size.height * scaleY
+  }
+}
+
+/** Returns the remote hand card consumed by a play command, if it is still present. */
+export function playedRemoteCard(
+  command: TurnMatchCommand,
+  hand: readonly OpeningCard[]
+): OpeningCard | null {
+  if (command.type !== 'play-card') return null
+  return hand.find((card) => card.instanceId === command.cardInstanceId) ?? null
+}
+
+export function isRemoteSecret(definition: CardDefinition): boolean {
+  return isSecretCardPlay(definition)
+}
+
+/**
+ * A non-blocking, face-up card flight that makes each remote play readable
+ * without interrupting its normal board, weapon, or effect presentation.
+ */
+export class RemoteCardPlayPreview extends Actor {
+  private sequence = 0
+
+  constructor(
+    private readonly resolver: CardAssetResolver,
+    private readonly secretTexture: Texture
+  ) {
+    super()
+    this.label = 'game.remote-card-play-preview'
+    this.eventMode = 'none'
+  }
+
+  async present(definition: CardDefinition): Promise<void> {
+    const sequence = ++this.sequence
+    this.clearActiveCard()
+
+    const card = await this.createCard(definition)
+    if (sequence !== this.sequence || this.destroyed) {
+      card.destroy({ children: true })
+      return
+    }
+
+    const origin = MATCH_HISTORY_LAYOUT.remoteCardPlay.origin
+    const destination = MATCH_HISTORY_LAYOUT.preview.source
+    const originPosition = topLeftForCard(origin)
+    const destinationPosition = topLeftForCard(destination)
+    card.label = isRemoteSecret(definition)
+      ? 'game.remote-card-play-preview.secret'
+      : `game.remote-card-play-preview.${definition.id}`
+    card.eventMode = 'none'
+    card.position.set(originPosition.x, originPosition.y)
+    card.scale.set(origin.scale!.x, origin.scale!.y)
+    this.addChild(card)
+
+    const timeline = this.timeline()
+      .to(card, {
+        x: destinationPosition.x,
+        y: destinationPosition.y,
+        duration: MATCH_HISTORY_LAYOUT.remoteCardPlay.travelDuration,
+        ease: 'power2.in'
+      })
+      .to(
+        card.scale,
+        {
+          x: destination.scale!.x,
+          y: destination.scale!.y,
+          duration: MATCH_HISTORY_LAYOUT.remoteCardPlay.travelDuration,
+          ease: 'power2.in'
+        },
+        0
+      )
+      .to({}, { duration: MATCH_HISTORY_LAYOUT.remoteCardPlay.holdDuration })
+      .to(card, {
+        alpha: 0,
+        duration: MATCH_HISTORY_LAYOUT.remoteCardPlay.fadeDuration,
+        ease: 'power1.in'
+      })
+
+    await new Promise<void>((resolve) => {
+      timeline.eventCallback('onComplete', resolve)
+      timeline.eventCallback('onInterrupt', resolve)
+    })
+    if (sequence !== this.sequence || card.destroyed) return
+    card.removeFromParent()
+    card.destroy({ children: true })
+  }
+
+  override dispose(): void {
+    this.sequence += 1
+    this.clearActiveCard()
+    super.dispose()
+  }
+
+  private clearActiveCard(): void {
+    this.killAnimations()
+    for (const child of this.removeChildren()) child.destroy({ children: true })
+  }
+
+  private async createCard(definition: CardDefinition): Promise<Container> {
+    if (isRemoteSecret(definition)) {
+      const container = new Container()
+      const card = new Sprite(this.secretTexture)
+      card.scale.set(MATCH_HISTORY_LAYOUT.preview.historyCard.scale)
+      container.addChild(card)
+      return container
+    }
+
+    const artwork = await this.resolver.loadArtwork(definition.id)
+    return CardView.create(definition, this.resolver, {
+      artwork: artwork ?? undefined
+    })
+  }
+}

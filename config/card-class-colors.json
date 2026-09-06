@@ -3,146 +3,146 @@
   "classes": {
     "Druid": {
       "primary": {
-        "hue": 36.8254,
+        "hue": 24.1,
         "saturation": 1,
-        "lightness": 0.373,
-        "opacity": 1,
-        "blendMode": "multiply"
+        "lightness": 0.237,
+        "opacity": 0.726,
+        "blendMode": "soft-light"
       },
       "secondary": {
-        "hue": 40,
+        "hue": 40.8,
         "saturation": 1,
-        "lightness": 0.5078,
-        "opacity": 0.529,
-        "blendMode": "add"
+        "lightness": 0.681,
+        "opacity": 0.968,
+        "blendMode": "normal"
       }
     },
     "Hunter": {
       "primary": {
-        "hue": 123.7931,
-        "saturation": 0.703,
-        "lightness": 0.351,
-        "opacity": 1,
+        "hue": 125.3,
+        "saturation": 1,
+        "lightness": 0.327,
+        "opacity": 0.614,
         "blendMode": "multiply"
       },
       "secondary": {
-        "hue": 40,
+        "hue": 47.1,
         "saturation": 1,
-        "lightness": 0.5,
-        "opacity": 0.637,
-        "blendMode": "add"
+        "lightness": 0.549,
+        "opacity": 0.845,
+        "blendMode": "screen"
       }
     },
     "Mage": {
       "primary": {
         "hue": 214.8,
-        "saturation": 0.592,
-        "lightness": 0.47,
-        "opacity": 0.48,
-        "blendMode": "normal"
+        "saturation": 1,
+        "lightness": 0.483,
+        "opacity": 0.579,
+        "blendMode": "color"
       },
       "secondary": {
         "hue": 40,
         "saturation": 1,
-        "lightness": 0.5078,
-        "opacity": 0.71,
-        "blendMode": "add"
+        "lightness": 0.743,
+        "opacity": 1,
+        "blendMode": "normal"
       }
     },
     "Paladin": {
       "primary": {
-        "hue": 61,
-        "saturation": 1,
-        "lightness": 0.529,
-        "opacity": 1,
-        "blendMode": "multiply"
-      },
-      "secondary": {
-        "hue": 40,
-        "saturation": 0.552,
-        "lightness": 0.529,
-        "opacity": 0.784,
-        "blendMode": "add"
-      }
-    },
-    "Priest": {
-      "primary": {
-        "hue": 0,
-        "saturation": 0,
-        "lightness": 0.5,
-        "opacity": 0.483,
-        "blendMode": "add"
+        "hue": 36.7,
+        "saturation": 0.638,
+        "lightness": 0.626,
+        "opacity": 0.991,
+        "blendMode": "overlay"
       },
       "secondary": {
         "hue": 53.4,
         "saturation": 1,
-        "lightness": 0.494,
+        "lightness": 0.617,
         "opacity": 1,
-        "blendMode": "multiply"
+        "blendMode": "normal"
+      }
+    },
+    "Priest": {
+      "primary": {
+        "hue": 212.7,
+        "saturation": 1,
+        "lightness": 0.711,
+        "opacity": 0.295,
+        "blendMode": "add"
+      },
+      "secondary": {
+        "hue": 45,
+        "saturation": 1,
+        "lightness": 0.605,
+        "opacity": 1,
+        "blendMode": "normal"
       }
     },
     "Rogue": {
       "primary": {
-        "hue": 194.1667,
+        "hue": 212.7,
         "saturation": 1,
-        "lightness": 0.1412,
-        "opacity": 0.56,
+        "lightness": 0.203,
+        "opacity": 0.688,
         "blendMode": "multiply"
       },
       "secondary": {
-        "hue": 40,
+        "hue": 48.1,
         "saturation": 1,
-        "lightness": 0.5078,
-        "opacity": 0.549,
+        "lightness": 0.643,
+        "opacity": 0.669,
         "blendMode": "add"
       }
     },
     "Shaman": {
       "primary": {
-        "hue": 211.8219,
+        "hue": 227.5,
         "saturation": 1,
-        "lightness": 0.471,
+        "lightness": 0.623,
         "opacity": 1,
         "blendMode": "multiply"
       },
       "secondary": {
-        "hue": 40,
+        "hue": 51.3,
         "saturation": 1,
-        "lightness": 0.5,
-        "opacity": 0.705,
-        "blendMode": "add"
+        "lightness": 0.684,
+        "opacity": 0.842,
+        "blendMode": "screen"
       }
     },
     "Warlock": {
       "primary": {
-        "hue": 278.1022,
-        "saturation": 0.35,
-        "lightness": 0.5,
+        "hue": 258,
+        "saturation": 0.421,
+        "lightness": 0.415,
         "opacity": 1,
-        "blendMode": "multiply"
+        "blendMode": "overlay"
       },
       "secondary": {
-        "hue": 54.5,
-        "saturation": 1,
-        "lightness": 0.517,
-        "opacity": 0.64,
-        "blendMode": "add"
+        "hue": 39.7,
+        "saturation": 0.968,
+        "lightness": 0.626,
+        "opacity": 1,
+        "blendMode": "screen"
       }
     },
     "Warrior": {
       "primary": {
         "hue": 0,
-        "saturation": 0.5,
-        "lightness": 0.5,
-        "opacity": 1,
-        "blendMode": "multiply"
+        "saturation": 1,
+        "lightness": 0.275,
+        "opacity": 0.767,
+        "blendMode": "overlay"
       },
       "secondary": {
-        "hue": 53.4,
+        "hue": 43.9,
         "saturation": 1,
-        "lightness": 0.497,
-        "opacity": 0.596,
-        "blendMode": "add"
+        "lightness": 0.669,
+        "opacity": 1,
+        "blendMode": "screen"
       }
     }
   },
@@ -150,11 +150,11 @@
     "minion": {
       "primary": {
         "x": 0,
-        "y": 0
+        "y": -4
       },
       "secondary": {
-        "x": 0,
-        "y": -3
+        "x": -22.4,
+        "y": -30.6
       }
     },
     "spell": {

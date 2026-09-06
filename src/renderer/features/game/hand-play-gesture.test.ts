@@ -3,6 +3,7 @@ import {
   OneShotPointerTapGuard,
   PointerReleaseInputGate,
   allowsDragTargetingFromHand,
+  canCommitPendingCardPlay,
   isCardTargetSelectionActive,
   isHandOwnedSlot,
   pendingCardInputStage,
@@ -107,6 +108,14 @@ describe('hand-play gesture', () => {
     expect(pendingCardInputStage(darkbomb, undefined)).toBe('target')
     expect(pendingCardInputStage(darkbomb, undefined, 1)).toBe('ready')
     expect(pendingCardInputStage(druidOfTheFlame, undefined)).toBe('ready')
+  })
+
+  it('waits for a staged minion preview before committing collected targets', () => {
+    const targetedMinion = { targetSelectors: [{}], choiceCount: 0 }
+
+    expect(canCommitPendingCardPlay(targetedMinion, undefined, 1, false)).toBe(false)
+    expect(canCommitPendingCardPlay(targetedMinion, undefined, 1, true)).toBe(true)
+    expect(canCommitPendingCardPlay(targetedMinion, undefined, 0, true)).toBe(false)
   })
 
   it('blocks modal input until the opening pointer is released', () => {

@@ -75,7 +75,7 @@ export function historyOutcomeText(
 
 /** Hover-driven action rail, kept outside the desaturated board layer. */
 export class MatchHistoryView extends Actor {
-  private readonly model = new MatchHistoryModel(MATCH_HISTORY_LAYOUT.rail.capacity)
+  private readonly model: MatchHistoryModel
   private readonly rail = new Container()
   private readonly preview = new Container()
   private readonly resolver = new CardAssetResolver()
@@ -88,6 +88,10 @@ export class MatchHistoryView extends Actor {
     private readonly setBoardDesaturated: (active: boolean) => void
   ) {
     super()
+    this.model = new MatchHistoryModel(
+      localParticipantId,
+      MATCH_HISTORY_LAYOUT.rail.capacity
+    )
     this.label = 'game.history'
     this.eventMode = 'passive'
     this.rail.label = 'game.history.rail'
@@ -158,7 +162,7 @@ export class MatchHistoryView extends Actor {
       this.showThumbnail(artwork, this.textures.fatigueThumb)
     else if (entry.action === 'hero-power' && entry.source.heroPowerId)
       this.showThumbnail(artwork, this.heroPowerTexture(entry.source.heroPowerId))
-    else if (this.isHiddenSecretEntry(entry))
+    else if (this.isConcealedSecretEntry(entry))
       this.showThumbnail(artwork, this.textures.secretThumb)
     else if (entry.source.cardId) void this.loadThumbnail(artwork, entry.source.cardId)
     else container.addChild(this.createUnknownThumbnail())
@@ -243,7 +247,7 @@ export class MatchHistoryView extends Actor {
       this.preview.addChild(
         this.createHeroPowerSource(entry.source.heroPowerId, entry.source.currentCost)
       )
-    } else if (this.isHiddenSecretEntry(entry)) {
+    } else if (this.isConcealedSecretEntry(entry)) {
       this.preview.addChild(
         this.createHistoryCard(
           this.textures.secretCard,
@@ -286,11 +290,12 @@ export class MatchHistoryView extends Actor {
     return MATCH_HISTORY_LAYOUT.preview.source
   }
 
-  private isHiddenSecretEntry(entry: MatchHistoryActionEntry): boolean {
-    return Boolean(
-      entry.source.participantId !== this.localParticipantId &&
-      entry.source.cardId &&
-      CARD_CATALOG.require(entry.source.cardId).keywords.includes('secret')
+  private isConcealedSecretEntry(entry: MatchHistoryActionEntry): boolean {
+    return (
+      entry.action === 'card' &&
+      entry.participantId !== this.localParticipantId &&
+      entry.source.kind === 'card' &&
+      entry.source.concealedAs === 'secret'
     )
   }
 

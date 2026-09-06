@@ -1,4 +1,5 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
+import 'pixi.js/advanced-blend-modes'
 import type { CardDefinition } from '../../../game/content/cards'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import {

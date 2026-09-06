@@ -133,7 +133,12 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       : undefined
     const seed = createMatchSeed()
     const opponent = requestedDeckId
-      ? chooseOpponentDeck(decks, requestedDeckId, seed)
+      ? chooseOpponentDeck(
+          decks,
+          requestedDeckId,
+          seed,
+          import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined
+        )
       : undefined
 
     if (deck && opponent) {
@@ -150,7 +155,9 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
         dependencies.services.arenaStore,
         dependencies.services.logger,
         dependencies.router,
-        dependencies.services.ai
+        dependencies.services.ai,
+        dependencies.services.matchLogs,
+        (message) => dependencies.services.dialogs.error(message)
       )
     }
 
@@ -167,7 +174,9 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       dependencies.services.arenaStore,
       dependencies.services.logger,
       dependencies.router,
-      dependencies.services.ai
+      dependencies.services.ai,
+      dependencies.services.matchLogs,
+      (message) => dependencies.services.dialogs.error(message)
     )
   }
 }
@@ -247,7 +256,12 @@ export class SceneNavigator implements SceneRouter {
       }
 
       const seed = createMatchSeed()
-      const opponent = chooseOpponentDeck(decks, targetDeckId, seed)
+      const opponent = chooseOpponentDeck(
+        decks,
+        targetDeckId,
+        seed,
+        import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined
+      )
       if (!opponent) {
         throw new Error('At least one complete deck is required to start a game.')
       }
@@ -466,7 +480,9 @@ export class SceneNavigator implements SceneRouter {
           this.services.arenaStore,
           this.services.logger,
           this,
-          this.services.ai
+          this.services.ai,
+          this.services.matchLogs,
+          (message) => this.services.dialogs.error(message)
         )
       case 'card-preview':
         return new CardViewScene({

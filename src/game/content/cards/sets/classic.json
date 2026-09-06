@@ -349,20 +349,22 @@
                   "player": "self",
                   "count": 2
                 }
-              ]
+              ],
+              "presentationCardId": "classic_ancient_teachings"
             },
             {
               "actions": [
                 {
                   "action": "restore",
                   "target": {
-                    "controller": "self",
+                    "controller": "any",
                     "type": "character",
                     "selection": "chosen"
                   },
                   "amount": 5
                 }
-              ]
+              ],
+              "presentationCardId": "classic_ancient_secrets"
             }
           ]
         }
@@ -404,7 +406,8 @@
                   },
                   "health": 5
                 }
-              ]
+              ],
+              "presentationCardId": "classic_rooted"
             },
             {
               "actions": [
@@ -416,7 +419,8 @@
                   },
                   "attack": 5
                 }
-              ]
+              ],
+              "presentationCardId": "classic_uproot"
             }
           ]
         }
@@ -427,7 +431,7 @@
     "id": "classic_ancient_secrets",
     "collectible": false,
     "name": "Ancient Secrets",
-    "rarity": "Common",
+    "rarity": "None",
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
@@ -443,7 +447,7 @@
           {
             "action": "restore",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -457,7 +461,7 @@
     "id": "classic_ancient_teachings",
     "collectible": false,
     "name": "Ancient Teachings",
-    "rarity": "Common",
+    "rarity": "None",
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
@@ -1028,7 +1032,7 @@
     "id": "classic_bear_form",
     "collectible": false,
     "name": "Bear Form",
-    "rarity": "Common",
+    "rarity": "None",
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
@@ -1721,7 +1725,8 @@
                   "attack": 2,
                   "health": 2
                 }
-              ]
+              ],
+              "presentationCardId": "classic_demigods_favor"
             },
             {
               "actions": [
@@ -1730,7 +1735,8 @@
                   "cardId": "basic_treant_cenarius",
                   "count": 2
                 }
-              ]
+              ],
+              "presentationCardId": "classic_shandos_lesson"
             }
           ]
         }
@@ -1903,7 +1909,7 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Your minions can't be reduced below 1 Health this turn.",
+    "rulesText": "Your minions can't be reduced below 1 Health this turn. Draw a card.",
     "keywords": [],
     "effects": [
       {
@@ -1913,11 +1919,16 @@
             "action": "modify",
             "target": {
               "controller": "self",
-              "type": "minion",
-              "selection": "all"
+              "type": "hero",
+              "selection": "hero"
             },
-            "minimumHealth": 1,
+            "friendlyMinionMinimumHealth": 1,
             "duration": "this-turn"
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
           }
         ]
       }
@@ -2490,7 +2501,7 @@
     "id": "classic_dispel",
     "collectible": false,
     "name": "Dispel",
-    "rarity": "Common",
+    "rarity": "None",
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
@@ -2687,7 +2698,8 @@
                   },
                   "keyword": "charge"
                 }
-              ]
+              ],
+              "presentationCardId": "classic_cat_form"
             },
             {
               "actions": [
@@ -2707,7 +2719,8 @@
                   },
                   "keyword": "taunt"
                 }
-              ]
+              ],
+              "presentationCardId": "classic_bear_form"
             }
           ]
         }
@@ -2872,7 +2885,7 @@
           {
             "action": "restore",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -3706,7 +3719,7 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "General",
-    "cost": 6,
+    "cost": 5,
     "attack": 4,
     "health": 4,
     "rulesText": "Whenever you cast a spell, draw a card.",
@@ -3772,11 +3785,13 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "General",
-    "cost": 1,
-    "attack": 1,
-    "health": 1,
-    "rulesText": "",
-    "keywords": ["taunt"],
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Taunt.",
+    "keywords": [
+      "taunt"
+    ],
     "effects": []
   },
   {
@@ -4678,7 +4693,8 @@
                   },
                   "amount": 2
                 }
-              ]
+              ],
+              "presentationCardId": "classic_moonfire_choose_one"
             },
             {
               "actions": [
@@ -4690,7 +4706,8 @@
                     "selection": "chosen"
                   }
                 }
-              ]
+              ],
+              "presentationCardId": "classic_dispel"
             }
           ]
         }
@@ -4960,7 +4977,7 @@
           {
             "action": "restore",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -5604,7 +5621,8 @@
                   },
                   "attack": 4
                 }
-              ]
+              ],
+              "presentationCardId": "classic_mark_of_nature_attack"
             },
             {
               "actions": [
@@ -5626,7 +5644,8 @@
                   },
                   "keyword": "taunt"
                 }
-              ]
+              ],
+              "presentationCardId": "classic_mark_of_nature_health"
             }
           ]
         }
@@ -5767,7 +5786,30 @@
     "health": 4,
     "rulesText": "Battlecry: Enemy spells cost (0) next turn.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "controller": "opponent",
+              "selection": "all",
+              "filter": {
+                "cardType": "Spell"
+              }
+            },
+            "amount": {
+              "operation": "set",
+              "value": 0
+            },
+            "duration": "next-turn",
+            "deferUntil": "matching-cards-until-expiry"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "classic_mind_control_tech",
@@ -6135,11 +6177,11 @@
     "cost": 2,
     "attack": 0,
     "health": 4,
-    "rulesText": "At the end of your turn, you have a 50% chance to draw a card.",
+    "rulesText": "At the start of your turn, you have a 50% chance to draw an extra card.",
     "keywords": [],
     "effects": [
       {
-        "trigger": "end-of-turn",
+        "trigger": "start-of-turn",
         "actions": [
           {
             "action": "draw",
@@ -6239,7 +6281,8 @@
                   "amount": 2,
                   "crystal": "empty"
                 }
-              ]
+              ],
+              "presentationCardId": "classic_nourish_mana"
             },
             {
               "actions": [
@@ -6248,7 +6291,8 @@
                   "player": "self",
                   "count": 3
                 }
-              ]
+              ],
+              "presentationCardId": "classic_nourish_draw"
             }
           ]
         }
@@ -6539,7 +6583,8 @@
                   "attack": 1,
                   "health": 1
                 }
-              ]
+              ],
+              "presentationCardId": "classic_leader_of_the_pack"
             },
             {
               "actions": [
@@ -6548,7 +6593,8 @@
                   "cardId": "classic_panther",
                   "count": 1
                 }
-              ]
+              ],
+              "presentationCardId": "classic_summon_a_panther"
             }
           ]
         }
@@ -7321,7 +7367,7 @@
     "id": "classic_shandos_lesson",
     "collectible": false,
     "name": "Shan'do's Lesson",
-    "rarity": "Common",
+    "rarity": "None",
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
@@ -8050,29 +8096,50 @@
   {
     "id": "classic_starfall",
     "name": "Starfall",
-    "rarity": "Common",
+    "rarity": "Rare",
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 5 damage to a minion.",
+    "rulesText": "Choose One - Deal 5 damage to a minion; or 2 damage to all enemy minions.",
     "keywords": [],
     "effects": [
       {
         "trigger": "cast",
-        "actions": [
-          {
-            "action": "damage",
-            "target": {
-              "controller": "any",
-              "type": "minion",
-              "selection": "chosen"
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "damage",
+                  "target": {
+                    "controller": "any",
+                    "type": "minion",
+                    "selection": "chosen"
+                  },
+                  "amount": 5
+                }
+              ],
+              "presentationCardId": "classic_starfall_single"
             },
-            "amount": 5
-          }
-        ]
+            {
+              "actions": [
+                {
+                  "action": "damage",
+                  "target": {
+                    "controller": "opponent",
+                    "type": "minion",
+                    "selection": "all"
+                  },
+                  "amount": 2
+                }
+              ],
+              "presentationCardId": "classic_starfall_all"
+            }
+          ]
+        }
       }
     ]
   },
@@ -8166,7 +8233,7 @@
     "id": "classic_summon_a_panther",
     "collectible": false,
     "name": "Summon a Panther",
-    "rarity": "Common",
+    "rarity": "None",
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
@@ -8507,9 +8574,9 @@
     "type": "Minion",
     "subtype": "General",
     "cost": 3,
-    "attack": 2,
-    "health": 2,
-    "rulesText": "Battlecry: Transform a minion into a 5/5 Devilsaur or a 1/1 Squirrel at random.",
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: Transform another random minion into a 5/5 Devilsaur or a 1/1 Squirrel.",
     "keywords": [],
     "effects": [
       {
@@ -8520,9 +8587,13 @@
             "target": {
               "controller": "any",
               "type": "minion",
-              "selection": "chosen"
+              "selection": "random",
+              "exclude": "source"
             },
-            "pool": ["classic_devilsaur", "classic_squirrel"]
+            "pool": [
+              "classic_devilsaur",
+              "classic_squirrel"
+            ]
           }
         ]
       }
@@ -8625,7 +8696,7 @@
     "cost": 5,
     "attack": 2,
     "health": 5,
-    "rulesText": "Your other beasts have Charge.",
+    "rulesText": "Your Beasts have Charge.",
     "keywords": [],
     "effects": [
       {
@@ -8639,8 +8710,7 @@
               "selection": "all",
               "filter": {
                 "tribe": "Beast"
-              },
-              "exclude": "source"
+              }
             },
             "keyword": "charge"
           }
@@ -8755,7 +8825,7 @@
     "cardClass": "Hunter",
     "type": "Spell",
     "subtype": "General",
-    "cost": 3,
+    "cost": 2,
     "attack": null,
     "health": null,
     "rulesText": "For each enemy minion, summon a 1/1 Hound with Charge.",
@@ -8831,7 +8901,7 @@
     "id": "classic_uproot",
     "collectible": false,
     "name": "Uproot",
-    "rarity": "Common",
+    "rarity": "None",
     "cardClass": "Druid",
     "type": "Spell",
     "subtype": "General",
@@ -9125,27 +9195,48 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 1 damage to a minion. Draw a card.",
+    "rulesText": "Choose One - Deal 3 damage to a minion; or 1 damage and draw a card.",
     "keywords": [],
     "effects": [
       {
         "trigger": "cast",
-        "actions": [
-          {
-            "action": "damage",
-            "target": {
-              "controller": "any",
-              "type": "minion",
-              "selection": "chosen"
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "damage",
+                  "target": {
+                    "controller": "any",
+                    "type": "minion",
+                    "selection": "chosen"
+                  },
+                  "amount": 3
+                }
+              ],
+              "presentationCardId": "classic_wrath_damage"
             },
-            "amount": 1
-          },
-          {
-            "action": "draw",
-            "player": "self",
-            "count": 1
-          }
-        ]
+            {
+              "actions": [
+                {
+                  "action": "damage",
+                  "target": {
+                    "controller": "any",
+                    "type": "minion",
+                    "selection": "chosen"
+                  },
+                  "amount": 1
+                },
+                {
+                  "action": "draw",
+                  "player": "self",
+                  "count": 1
+                }
+              ],
+              "presentationCardId": "classic_wrath_draw"
+            }
+          ]
+        }
       }
     ]
   },
@@ -9378,5 +9469,200 @@
         ]
       }
     ]
+  },
+  {
+    "id": "classic_rooted",
+    "collectible": false,
+    "name": "Rooted",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "+5 Health and Taunt.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_demigods_favor",
+    "collectible": false,
+    "name": "Demigod's Favor",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your other minions +2/+2.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_cat_form",
+    "collectible": false,
+    "name": "Cat Form",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Charge",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_moonfire_choose_one",
+    "collectible": false,
+    "name": "Moonfire",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 2 damage.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_mark_of_nature_attack",
+    "collectible": false,
+    "name": "Mark of Nature",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +4 Attack.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_mark_of_nature_health",
+    "collectible": false,
+    "name": "Mark of Nature",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +4 Health and Taunt.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_nourish_mana",
+    "collectible": false,
+    "name": "Nourish",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Gain 2 Mana Crystals.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_nourish_draw",
+    "collectible": false,
+    "name": "Nourish",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw 3 cards.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_leader_of_the_pack",
+    "collectible": false,
+    "name": "Leader of the Pack",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your minions +1/+1.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_wrath_damage",
+    "collectible": false,
+    "name": "Wrath",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 3 damage to a minion.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_wrath_draw",
+    "collectible": false,
+    "name": "Wrath",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 1 damage to a minion. Draw a card.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_starfall_single",
+    "collectible": false,
+    "name": "Starfall",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 5 damage to a minion.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "classic_starfall_all",
+    "collectible": false,
+    "name": "Starfall",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 2 damage to all enemy minions.",
+    "keywords": [],
+    "effects": []
   }
 ]

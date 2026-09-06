@@ -29,7 +29,7 @@ export const SECRET_LAYOUT = {
   ),
   countTextStyle: {
     fontFamily: 'Belwe',
-    fontSize: 34,
+    fontSize: 50,
     fill: 0xffffff,
     stroke: { color: 0x000000, width: 5 },
     align: 'center' as const

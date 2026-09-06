@@ -39,8 +39,9 @@ export interface ManaCrystalState {
  * Derives the tray's per-crystal states from the engine mana, plus the cost of
  * the hand card currently hovered/dragged (or null for none). Full crystals
  * cover `available`; the tail up to `maximum` is consumed; crystals beyond
- * `maximum` are simply absent. The highlight covers the first `highlightCost`
- * full crystals, capped by availability and by the ten-crystal maximum.
+ * `maximum` are simply absent. The highlight covers the right-most
+ * `highlightCost` full crystals, capped by availability and by the ten-crystal
+ * maximum.
  */
 export function resolveManaCrystalStates(
   mana: PlayerMana,
@@ -55,7 +56,7 @@ export function resolveManaCrystalStates(
 
   return Array.from({ length: maximum }, (_, index) => ({
     phase: index < available ? 'full' : 'consumed',
-    highlighted: index < highlightCount
+    highlighted: index >= available - highlightCount && index < available
   }))
 }
 

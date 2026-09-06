@@ -1,12 +1,15 @@
-/** Whether a friendly attacker may be selected during the current combat presentation. */
+/**
+ * Combat visuals serialize independently from the engine, so another legal
+ * attacker may be selected while an earlier combat presentation is queued.
+ */
 export function canSelectCombatAttacker(
-  combatInProgress: boolean,
-  attackerSelectionUnlocked: boolean
+  _combatInProgress: boolean,
+  _attackerSelectionUnlocked: boolean
 ): boolean {
-  return !combatInProgress || attackerSelectionUnlocked
+  return true
 }
 
-/** Combat commands remain serialized until the current presentation fully settles. */
-export function canCommitCombatAttack(combatInProgress: boolean): boolean {
-  return !combatInProgress
+/** A legal engine attack can join the presentation FIFO immediately. */
+export function canCommitCombatAttack(_combatInProgress: boolean): boolean {
+  return true
 }

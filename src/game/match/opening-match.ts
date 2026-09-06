@@ -18,6 +18,7 @@ import { assertOpeningMatchInvariants } from './rules/invariants'
 import { moveCardForPlayer, removeCardFromPlayer } from './rules/zone-state'
 import { StateTransaction } from './rules/runtime-state'
 import { createAiObservation } from './ai/observation'
+import { projectHistoryAction } from './history-visibility'
 import type { MatchParticipantSetup, MatchSetup, PlayerId } from './match-types'
 import type {
   OpeningCard,
@@ -736,18 +737,8 @@ export function getOpeningMatchPublicEvents(
           ...event,
           card: maskPublicCard(cardForEvent(event), viewerId, true)
         }
-      case 'history-action-resolved': {
-        const sourceDefinition = event.source.cardId
-          ? CARD_CATALOG.get(event.source.cardId)
-          : undefined
-        const hidesPlayedSecret =
-          event.participantId !== viewerId &&
-          event.action === 'card' &&
-          sourceDefinition?.keywords?.includes('secret') === true
-        return hidesPlayedSecret
-          ? { ...event, source: { ...event.source, cardId: null } }
-          : event
-      }
+      case 'history-action-resolved':
+        return projectHistoryAction(event, viewerId)
       default:
         return event
     }
@@ -2338,15 +2329,18 @@ export function createOpeningMatch(
   let devDeckRefillCounter = 0
   let queryRuntime: EffectRuntime | null = null
   let queryRevision = -1
+  let queryState: OpeningMatchState | null = null
   let derivedStateCache: OpeningMatchState | null = null
   const playInputCache = new Map<string, PlayCardInput | null>()
   const legalityCache = new Map<PlayerId, MatchLegality>()
 
   /** Reuses the expensive derived-state setup across pure queries at one revision. */
   const getQueryRuntime = (): EffectRuntime => {
-    if (queryRuntime && queryRevision === state.revision) return queryRuntime
+    if (queryRuntime && queryRevision === state.revision && queryState === state)
+      return queryRuntime
     queryRuntime = new EffectRuntime(state)
     queryRevision = state.revision
+    queryState = state
     derivedStateCache = null
     playInputCache.clear()
     legalityCache.clear()

@@ -28,7 +28,8 @@
                   "attack": 1,
                   "duration": "permanent"
                 }
-              ]
+              ],
+              "presentationCardId": "goblins_vs_gnomes_attack_mode"
             },
             {
               "actions": [
@@ -42,7 +43,8 @@
                   "health": 1,
                   "duration": "permanent"
                 }
-              ]
+              ],
+              "presentationCardId": "goblins_vs_gnomes_tank_mode"
             }
           ]
         }
@@ -74,7 +76,8 @@
                   "amount": 1,
                   "crystal": "empty"
                 }
-              ]
+              ],
+              "presentationCardId": "goblins_vs_gnomes_gift_of_mana"
             },
             {
               "actions": [
@@ -83,7 +86,8 @@
                   "player": "each",
                   "count": 1
                 }
-              ]
+              ],
+              "presentationCardId": "goblins_vs_gnomes_gift_of_cards"
             }
           ]
         }
@@ -150,7 +154,8 @@
                   "cardId": "goblins_vs_gnomes_wisp",
                   "count": 5
                 }
-              ]
+              ],
+              "presentationCardId": "goblins_vs_gnomes_dark_wispers_wisps"
             },
             {
               "actions": [
@@ -174,7 +179,8 @@
                   },
                   "keyword": "taunt"
                 }
-              ]
+              ],
+              "presentationCardId": "goblins_vs_gnomes_dark_wispers_buff"
             }
           ]
         }
@@ -1808,7 +1814,7 @@
     "cost": 4,
     "attack": 2,
     "health": 5,
-    "rulesText": "Whenever another Murloc dies, draw a card. Overload: (1)",
+    "rulesText": "Whenever another friendly Murloc dies, draw a card. Overload: (1)",
     "keywords": [],
     "effects": [
       {
@@ -1825,7 +1831,8 @@
           "filter": {
             "tribe": "Murloc"
           },
-          "exclude": "source"
+          "exclude": "source",
+          "controller": "self"
         }
       },
       {
@@ -3964,7 +3971,23 @@
     "health": null,
     "rulesText": "Casts When drawn. You take 10 damage.",
     "keywords": [],
-    "effects": []
+    "effects": [
+      {
+        "trigger": "on-draw",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "hero",
+              "controller": "self",
+              "selection": "hero"
+            },
+            "amount": 10,
+            "spellDamageBonusMultiplier": 0
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "goblins_vs_gnomes_chicken",
@@ -4024,6 +4047,96 @@
     "health": 8,
     "rulesText": "Mega-Windfury",
     "keywords": ["mega-windfury"],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_attack_mode",
+    "collectible": false,
+    "name": "Attack Mode",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "+1 Attack.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_tank_mode",
+    "collectible": false,
+    "name": "Tank Mode",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "+1 Health.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_gift_of_mana",
+    "collectible": false,
+    "name": "Gift of Mana",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give each player a Mana Crystal.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_gift_of_cards",
+    "collectible": false,
+    "name": "Gift of Cards",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Each player draws a card.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_dark_wispers_wisps",
+    "collectible": false,
+    "name": "Dark Wispers",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon 5 Wisps.",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "goblins_vs_gnomes_dark_wispers_buff",
+    "collectible": false,
+    "name": "Dark Wispers",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +5/+5 and Taunt.",
+    "keywords": [],
     "effects": []
   }
 ]
