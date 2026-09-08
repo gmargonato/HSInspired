@@ -1,4 +1,14 @@
 import { Texture, type AssetsManifest } from 'pixi.js'
+import spellPlayAuraImage from '@assets/images/cards/play-aura-spell.png'
+import minionPlayAuraImage from '@assets/images/cards/play-aura-minion.png'
+import playSpotlight1Image from '@assets/images/effects/spotlight-01.png'
+import playSpotlight2Image from '@assets/images/effects/spotlight-02.png'
+import playSpotlight3Image from '@assets/images/effects/spotlight-03.png'
+import playSpotlight4Image from '@assets/images/effects/spotlight-04.png'
+import playSpotlight5Image from '@assets/images/effects/spotlight-05.png'
+import playSpotlight6Image from '@assets/images/effects/spotlight-06.png'
+import playSpotlight7Image from '@assets/images/effects/spotlight-07.png'
+import playSpotlight8Image from '@assets/images/effects/spotlight-08.png'
 import tableImage from '@assets/images/ui/main-menu/table.png'
 import boxImage from '@assets/images/ui/main-menu/box.png'
 import leftLidImage from '@assets/images/ui/main-menu/left-lid.png'
@@ -723,6 +733,96 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     weaponImage,
     172,
     146,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-play-aura',
+    ASSET_BUNDLE_IDS.game,
+    'minionPlayAura',
+    minionPlayAuraImage,
+    698,
+    927,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.spell-play-aura',
+    ASSET_BUNDLE_IDS.game,
+    'spellPlayAura',
+    spellPlayAuraImage,
+    720,
+    1000,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.play-spotlight-01',
+    ASSET_BUNDLE_IDS.game,
+    'playSpotlight1',
+    playSpotlight1Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.play-spotlight-02',
+    ASSET_BUNDLE_IDS.game,
+    'playSpotlight2',
+    playSpotlight2Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.play-spotlight-03',
+    ASSET_BUNDLE_IDS.game,
+    'playSpotlight3',
+    playSpotlight3Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.play-spotlight-04',
+    ASSET_BUNDLE_IDS.game,
+    'playSpotlight4',
+    playSpotlight4Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.play-spotlight-05',
+    ASSET_BUNDLE_IDS.game,
+    'playSpotlight5',
+    playSpotlight5Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.play-spotlight-06',
+    ASSET_BUNDLE_IDS.game,
+    'playSpotlight6',
+    playSpotlight6Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.play-spotlight-07',
+    ASSET_BUNDLE_IDS.game,
+    'playSpotlight7',
+    playSpotlight7Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.play-spotlight-08',
+    ASSET_BUNDLE_IDS.game,
+    'playSpotlight8',
+    playSpotlight8Image,
+    256,
+    256,
     'game-scene'
   ),
   asset(
@@ -1474,6 +1574,16 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   minionWillDie: Texture
   weapon: Texture
   minionSummonRays: Texture
+  spellPlayAura: Texture
+  minionPlayAura: Texture
+  playSpotlight1: Texture
+  playSpotlight2: Texture
+  playSpotlight3: Texture
+  playSpotlight4: Texture
+  playSpotlight5: Texture
+  playSpotlight6: Texture
+  playSpotlight7: Texture
+  playSpotlight8: Texture
   deck: Texture
   manaCrystal: Texture
   endTurn: Texture

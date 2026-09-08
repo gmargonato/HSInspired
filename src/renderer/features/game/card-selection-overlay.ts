@@ -1,7 +1,8 @@
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js'
 import type { HeroPowerId } from '../../../game/content/cards'
 import type { CardChoiceOption, OpeningCard, PlayerId } from '../../../game/match'
-import { gsap } from '../../animation/animations'
+import { AnimationScope } from '../../animation/animations'
+import { completeTimeline } from './game-presentation-animation'
 import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import { HERO_POWER_CARD_CANVAS } from '../../rendering/hero-powers/hero-power-presentation'
 import { applyAnchoredPlacement } from '../../rendering/layout'
@@ -26,6 +27,8 @@ export interface CardSelectionOverlayOptions {
 
 /** A modal three-card selector for Tracking and future Discover-style effects. */
 export class CardSelectionOverlay extends Container {
+  private readonly animationScope = new AnimationScope()
+  private requestRevision = 0
   private readonly darkOverlay = new Graphics()
   private readonly cardsLayer = new Container()
   private readonly toggleOutline: AnimatedOutline
@@ -124,7 +127,9 @@ export class CardSelectionOverlay extends Container {
     candidates: readonly OpeningCard[],
     choiceOptions: readonly CardChoiceOption[] = []
   ): Promise<void> {
+    if (this.destroyed) return
     this.clear()
+    const revision = this.requestRevision
     choiceOptions.forEach((option, index) => {
       const card = candidates[index]
       if (card) this.choicesByInstanceId.set(card.instanceId, option)
@@ -137,6 +142,10 @@ export class CardSelectionOverlay extends Container {
     const created = await Promise.all(
       candidates.map(async (card, index) => {
         const slot = await this.options.createSlot(card)
+        if (this.destroyed || revision !== this.requestRevision) {
+          slot.destroy({ children: true })
+          return null
+        }
         slot.label = `game.card-selection.option:${card.instanceId}`
         slot.position.set(
           GAME_BOARD_LAYOUT.cardSelection.cards.centerX +
@@ -172,12 +181,22 @@ export class CardSelectionOverlay extends Container {
         return slot
       })
     )
-    await Promise.all(created.map((slot) => gsap.to(slot, { alpha: 1, duration: 0.2 })))
+    if (this.destroyed || revision !== this.requestRevision) return
+    await Promise.all(
+      created.map((slot) =>
+        slot
+          ? completeTimeline(
+              this.animationScope.timeline().to(slot, { alpha: 1, duration: 0.2 })
+            )
+          : Promise.resolve()
+      )
+    )
   }
 
   private async showHeroPowerChoices(
     options: readonly CardChoiceOption[]
   ): Promise<void> {
+    if (this.destroyed) return
     this.clear()
     this.visible = true
     this.boardVisible = false
@@ -203,7 +222,13 @@ export class CardSelectionOverlay extends Container {
       this.entries.push({ view })
       return view
     })
-    await Promise.all(views.map((view) => gsap.to(view, { alpha: 1, duration: 0.2 })))
+    await Promise.all(
+      views.map((view) =>
+        completeTimeline(
+          this.animationScope.timeline().to(view, { alpha: 1, duration: 0.2 })
+        )
+      )
+    )
   }
 
   takeSelected(instanceId: string): SelectedCardSlot | null {
@@ -217,6 +242,9 @@ export class CardSelectionOverlay extends Container {
   }
 
   clear(): void {
+    if (this.destroyed) return
+    this.requestRevision += 1
+    this.animationScope.kill()
     for (const entry of this.entries) entry.view.destroy({ children: true })
     this.entries.length = 0
     for (const child of this.cardsLayer.removeChildren()) {
@@ -229,9 +257,10 @@ export class CardSelectionOverlay extends Container {
   }
 
   dispose(): void {
+    if (this.destroyed) return
     this.clear()
     this.toggleOutline.dispose()
-    this.toggle.destroy({ children: true })
+    this.toggle.dispose()
     super.destroy({ children: true })
   }
 
@@ -243,7 +272,7 @@ export class CardSelectionOverlay extends Container {
       if (entry.view === slot) continue
       entry.slot?.setMulliganInteractionEnabled(false)
       entry.view.eventMode = 'none'
-      void gsap.to(entry.view, {
+      void this.animationScope.to(entry.view, {
         alpha: 0,
         scaleX: 0.2,
         scaleY: 0.2,
@@ -263,7 +292,7 @@ export class CardSelectionOverlay extends Container {
     for (const entry of this.entries) {
       entry.view.eventMode = 'none'
       if (entry.view === view) continue
-      void gsap.to(entry.view, {
+      void this.animationScope.to(entry.view, {
         alpha: 0,
         scaleX: 0.2,
         scaleY: 0.2,

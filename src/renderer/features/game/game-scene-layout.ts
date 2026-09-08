@@ -81,14 +81,6 @@ export const GAME_BOARD_LAYOUT = {
     controlTransfer: {
       arcHeight: 28
     },
-    /** Dynamic card-to-minion materialization, centred on the reserved row slot. */
-    summon: {
-      cardScale: 0.27,
-      chargedCardScale: 0.32,
-      minionStartScaleMultiplier: 1.3,
-      minionStartYOffset: -20,
-      raysSize: 320
-    },
     /** Full-card hover preview positioned relative to the live board minion. */
     cardPreview: {
       scale: 0.4,

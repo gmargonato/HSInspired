@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { asHeroId } from '../content/cards'
 import type { Deck } from '../decks'
+import { createMatchScenario } from './testing/match-scenario-builder'
 import {
   asPlayerId,
   createOpeningMatch,
@@ -23,6 +24,165 @@ function deck(id: string, heroId: string): Deck {
 }
 
 describe('opening match checkpoints', () => {
+  it('isolates returned resolver results, query snapshots, and hypothetical states', () => {
+    const { match } = createMatchScenario()
+    const participantId = match.getState().players[0].participantId
+    const result = match.dispatch({
+      type: 'dev-set-mana',
+      participantId,
+      available: 5,
+      maximum: 5
+    })
+    expect(result.accepted).toBe(true)
+    const baseline = match.getCheckpoint()
+    const query = match.getState()
+    const hypothetical = match.analyze((fork) => {
+      fork.dispatch({ type: 'dev-set-mana', participantId, available: 9, maximum: 9 })
+      return fork.getState()
+    })
+    for (const snapshot of [result.state, query, hypothetical]) {
+      Object.assign(snapshot.players[0].hero, { health: -100 })
+      Object.assign(snapshot.players[0].hand[0]!, { cardId: 'corrupted' })
+      expect(match.getCheckpoint()).toEqual(baseline)
+    }
+  })
+
+  it('matches the pre-refactor seeded command, event, visibility, and checkpoint baseline', async () => {
+    // Recorded before AUDIT.md implementation. Update only for an intentional
+    // behavior change, never to make a preservation refactor pass.
+    for (const seed of [17, 314159]) {
+      const { match, participants } = createMatchScenario({
+        seed,
+        secondHeroId: 'jaina'
+      })
+      const observations: Record<string, unknown[]> = {
+        commands: [],
+        results: [],
+        checkpoints: [],
+        legality: [],
+        publicState: [],
+        publicEvents: [],
+        trace: []
+      }
+      const dispatch = (command: unknown, accepted = true) => {
+        const before = match.getCheckpoint()
+        const preview = match.preview(command)
+        expect(match.getCheckpoint()).toEqual(before)
+        const result = match.dispatch(command)
+        expect(result).toEqual(preview)
+        expect(result.accepted, JSON.stringify(command)).toBe(accepted)
+        observations.commands.push(command)
+        observations.results.push(result)
+        observations.checkpoints.push(match.getCheckpoint())
+        observations.legality.push(participants.map((id) => match.getLegality!(id)))
+        observations.publicState.push(
+          participants.map((id) => match.getPublicState!(id))
+        )
+        observations.publicEvents.push(
+          participants.map((id) => match.getPublicEvents!(id, result.events))
+        )
+        observations.trace.push(match.getEffectTrace!())
+        return result
+      }
+      dispatch(null, false)
+      for (const participantId of participants) {
+        const hand = match
+          .getState()
+          .players.find((p) => p.participantId === participantId)!.hand
+        dispatch({
+          type: 'confirm-mulligan',
+          participantId,
+          replaceInstanceIds: [hand[0]!.instanceId]
+        })
+      }
+      const participantId = match.getState().activePlayerId!
+      const opponentId = participants.find((id) => id !== participantId)!
+      const mana = () =>
+        dispatch({ type: 'dev-set-mana', participantId, available: 10, maximum: 10 })
+      const summon = (owner: typeof participantId, cardId: string) =>
+        dispatch({ type: 'dev-summon-minion', participantId: owner, cardId })
+      const play = (cardId: string, extra: Record<string, unknown> = {}) => {
+        mana()
+        dispatch({ type: 'dev-add-card', participantId, cardId })
+        const card = match
+          .getState()
+          .players.find((p) => p.participantId === participantId)!
+          .hand.find((c) => c.cardId === cardId)!
+        dispatch({
+          type: 'play-card',
+          participantId,
+          cardInstanceId: card.instanceId,
+          ...extra
+        })
+      }
+      mana()
+      dispatch({ type: 'play-card', participantId, cardInstanceId: 'missing' }, false)
+      dispatch({
+        type: 'use-hero-power',
+        participantId,
+        target: { kind: 'hero', participantId: opponentId }
+      })
+      play('goblins_vs_gnomes_blingtron_3000', { position: 0 })
+      summon(opponentId, 'naxxramas_haunted_creeper')
+      summon(opponentId, 'naxxramas_nerubian_egg')
+      play('basic_flamestrike')
+      const target = match
+        .getState()
+        .players.find((p) => p.participantId === opponentId)!.board[0]!
+      const targets = [
+        { kind: 'minion', participantId: opponentId, instanceId: target.instanceId }
+      ]
+      play('basic_polymorph', { targets })
+      play('basic_mind_control', { targets })
+      summon(participantId, 'basic_raid_leader')
+      play('classic_ice_barrier')
+      play('league_of_explorers_raven_idol', { choice: 0 })
+      const pending = match.getState().pendingDiscover!
+      expect(pending).toBeDefined()
+      dispatch({
+        type: 'choose-discover-card',
+        participantId,
+        cardInstanceId: pending.candidates[0]!.instanceId
+      })
+      dispatch({ type: 'end-turn', participantId })
+      dispatch({ type: 'end-turn', participantId: opponentId })
+      const attacker = match
+        .getState()
+        .players.find((p) => p.participantId === participantId)!.board[0]!
+      dispatch({
+        type: 'attack-character',
+        participantId,
+        attacker: { kind: 'minion', instanceId: attacker.instanceId },
+        defender: { kind: 'hero' }
+      })
+      for (let i = 0; i < 10; i += 1) dispatch({ type: 'dev-draw', participantId })
+      dispatch({ type: 'dev-modify-deck', participantId, action: 'destroy' })
+      dispatch({ type: 'dev-draw', participantId })
+      dispatch({ type: 'dev-modify-deck', participantId, action: 'refill' })
+      const beforeAnalysis = match.getCheckpoint()
+      expect(() =>
+        match.analyze((fork) => {
+          fork.dispatch({ type: 'end-turn', participantId })
+          throw new Error('abort analysis')
+        })
+      ).toThrow('abort analysis')
+      expect(match.getCheckpoint()).toEqual(beforeAnalysis)
+      const digests: Record<string, string> = {}
+      for (const [boundary, values] of Object.entries(observations)) {
+        const hash = await crypto.subtle.digest(
+          'SHA-256',
+          new TextEncoder().encode(JSON.stringify(values))
+        )
+        digests[boundary] = Array.from(new Uint8Array(hash), (byte) =>
+          byte.toString(16).padStart(2, '0')
+        ).join('')
+      }
+      expect({ commands: observations.commands, digests }).toMatchSnapshot(
+        `seed ${seed}`
+      )
+    }
+  })
+
   it('does not reuse derived query state across hypothetical branches with equal revisions', () => {
     const decks = [deck('branch-human-deck', 'jaina'), deck('branch-ai-deck', 'guldan')]
     const setup: MatchSetup = {

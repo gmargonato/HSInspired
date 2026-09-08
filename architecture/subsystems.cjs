@@ -31,7 +31,8 @@ module.exports = {
       roots: [
         'src/renderer/features/game/target-gesture',
         'src/renderer/features/game/hero-power-targeting',
-        'src/renderer/features/game/combat-input-window',
+        'src/renderer/features/game/game-card-targeting',
+        'src/renderer/features/game/game-hand-drag',
         'src/renderer/features/game/hand-play-gesture',
         'src/renderer/features/game/hand-drag',
         'src/renderer/features/game/attack-line'

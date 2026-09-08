@@ -1,60 +1,24 @@
+import type { EffectQueries } from './effect-queries'
+import type {
+  EntityRef as QueryEntity,
+  SemanticEvent as QueryEvent,
+  EffectFrame as QueryFrame
+} from './effect-context'
 import { describe, expect, it } from 'vitest'
-import { CARD_CATALOG, type CardDefinition } from '../../content/cards'
+import { CARD_CATALOG, asCardId, type CardDefinition } from '../../content/cards'
 import { createMatchScenario } from '../testing/match-scenario-builder'
 import type { CardPlayTargetRef } from '../opening-match'
-import type { PlayerId } from '../match-types'
+import { asPlayerId, type PlayerId } from '../match-types'
 import { EffectRuntime, resolveCardPlay } from './effect-runtime'
 
 type Scenario = ReturnType<typeof createMatchScenario>
 
 type ParticipantPair = readonly [PlayerId, PlayerId]
 
-type QueryEntity = {
-  readonly instanceId: string
-  readonly kind: string
-  readonly participantId: string
-  readonly zone: string
-  readonly cardId?: string
-}
+type QueryRuntime = EffectQueries
 
-type QueryEvent = {
-  readonly sequence: number
-  readonly type: string
-  readonly source: QueryEntity | null
-  readonly target: QueryEntity | null
-  readonly controllerId: string | null
-  readonly cardId?: string
-  readonly cardInstanceId?: string
-  readonly kind?: string
-  readonly damage?: number
-  readonly amount?: number
-}
-
-type QueryFrame = {
-  readonly source: QueryEntity
-  readonly event: QueryEvent | null
-  readonly controllerId: string
-  readonly chosenTargets: readonly QueryEntity[]
-  readonly drawnCards: QueryEntity[]
-  readonly addedCards: QueryEntity[]
-  lastEvent: QueryEvent | null
-  damageDealt: number
-  removedKeywordCount: number
-}
-
-type QueryRuntime = {
-  frameFor(
-    source: QueryEntity,
-    event: QueryEvent | null,
-    chosenTargets: readonly QueryEntity[]
-  ): QueryFrame
-  select(selector: unknown, frame: QueryFrame): readonly QueryEntity[]
-  evaluate(value: unknown, frame: QueryFrame): number
-  conditionMatches(value: unknown, frame: QueryFrame): boolean
-}
-
-function queryRuntime(runtime: EffectRuntime): QueryRuntime {
-  return runtime as unknown as QueryRuntime
+function queryRuntime(runtime: EffectRuntime): EffectQueries {
+  return runtime.queries
 }
 
 function entityKey(entity: QueryEntity): string {
@@ -62,13 +26,19 @@ function entityKey(entity: QueryEntity): string {
 }
 
 function entityRef(
-  kind: string,
+  kind: QueryEntity['kind'],
   participantId: string,
   instanceId: string,
-  zone: string,
+  zone: QueryEntity['zone'],
   cardId?: string
 ): QueryEntity {
-  return { kind, participantId, instanceId, zone, ...(cardId ? { cardId } : {}) }
+  return {
+    kind,
+    participantId: asPlayerId(participantId),
+    instanceId,
+    zone,
+    ...(cardId ? { cardId: asCardId(cardId) } : {})
+  }
 }
 
 function activeParticipants(scenario: Scenario): ParticipantPair {
@@ -379,8 +349,8 @@ describe('effect-runtime query language', () => {
   })
   type QueryFixture = {
     readonly runtime: QueryRuntime
-    readonly selfId: string
-    readonly opponentId: string
+    readonly selfId: PlayerId
+    readonly opponentId: PlayerId
     readonly source: QueryEntity
     readonly ownBoard: readonly QueryEntity[]
     readonly opponentBoard: readonly QueryEntity[]
@@ -589,7 +559,7 @@ describe('effect-runtime query language', () => {
       source: fixture.source,
       target: fixture.opponentBoard[1]!,
       controllerId: fixture.selfId,
-      cardId: 'basic_fireball',
+      cardId: asCardId('basic_fireball'),
       cardInstanceId: 'event-card:1',
       kind: 'play'
     }

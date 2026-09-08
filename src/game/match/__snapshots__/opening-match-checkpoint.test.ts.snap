@@ -1,0 +1,511 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`opening match checkpoints > matches the pre-refactor seeded command, event, visibility, and checkpoint baseline > seed 17 1`] = `
+{
+  "commands": [
+    null,
+    {
+      "participantId": "scenario-player-one",
+      "replaceInstanceIds": [
+        "scenario-player-one:deck:17",
+      ],
+      "type": "confirm-mulligan",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "replaceInstanceIds": [
+        "scenario-player-two:deck:21",
+      ],
+      "type": "confirm-mulligan",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-two",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardInstanceId": "missing",
+      "participantId": "scenario-player-two",
+      "type": "play-card",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "target": {
+        "kind": "hero",
+        "participantId": "scenario-player-one",
+      },
+      "type": "use-hero-power",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-two",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "goblins_vs_gnomes_blingtron_3000",
+      "participantId": "scenario-player-two",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-two:dev:65",
+      "participantId": "scenario-player-two",
+      "position": 0,
+      "type": "play-card",
+    },
+    {
+      "cardId": "naxxramas_haunted_creeper",
+      "participantId": "scenario-player-one",
+      "type": "dev-summon-minion",
+    },
+    {
+      "cardId": "naxxramas_nerubian_egg",
+      "participantId": "scenario-player-one",
+      "type": "dev-summon-minion",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-two",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "basic_flamestrike",
+      "participantId": "scenario-player-two",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-two:dev:75",
+      "participantId": "scenario-player-two",
+      "type": "play-card",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-two",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "basic_polymorph",
+      "participantId": "scenario-player-two",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-two:dev:87",
+      "participantId": "scenario-player-two",
+      "targets": [
+        {
+          "instanceId": "scenario-player-one:summoned:84",
+          "kind": "minion",
+          "participantId": "scenario-player-one",
+        },
+      ],
+      "type": "play-card",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-two",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "basic_mind_control",
+      "participantId": "scenario-player-two",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-two:dev:88",
+      "participantId": "scenario-player-two",
+      "targets": [
+        {
+          "instanceId": "scenario-player-one:summoned:84",
+          "kind": "minion",
+          "participantId": "scenario-player-one",
+        },
+      ],
+      "type": "play-card",
+    },
+    {
+      "cardId": "basic_raid_leader",
+      "participantId": "scenario-player-two",
+      "type": "dev-summon-minion",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-two",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "classic_ice_barrier",
+      "participantId": "scenario-player-two",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-two:dev:90",
+      "participantId": "scenario-player-two",
+      "type": "play-card",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-two",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "league_of_explorers_raven_idol",
+      "participantId": "scenario-player-two",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-two:dev:92",
+      "choice": 0,
+      "participantId": "scenario-player-two",
+      "type": "play-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-two:discover:93",
+      "participantId": "scenario-player-two",
+      "type": "choose-discover-card",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "end-turn",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "end-turn",
+    },
+    {
+      "attacker": {
+        "instanceId": "scenario-player-two:dev:65",
+        "kind": "minion",
+      },
+      "defender": {
+        "kind": "hero",
+      },
+      "participantId": "scenario-player-two",
+      "type": "attack-character",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "action": "destroy",
+      "participantId": "scenario-player-two",
+      "type": "dev-modify-deck",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "dev-draw",
+    },
+    {
+      "action": "refill",
+      "participantId": "scenario-player-two",
+      "type": "dev-modify-deck",
+    },
+  ],
+  "digests": {
+    "checkpoints": "a01ff7e7f91313b20f0a8f4a5f6e5ef43be90d147690a81c532b2cbd79012f98",
+    "commands": "27b804fe2b22d674637c2dbd70f541ddf2c71dbbe634aea3e12427dc0af3cbf7",
+    "legality": "e02dcef498531f50981eca6da8270a4b5283f61dd227576c8632ea7375bbf309",
+    "publicEvents": "3fb2dc46c94e9ab84fbd46a421d773ad615013c4f861009f853c8afd9e3d65df",
+    "publicState": "59e81c2bc6179543056bd7f3ea7aee4e1b3cdf6cca389955f3f9484fa2f9eead",
+    "results": "ef5f8e073e2b2c03c8960721f2af8b535159f0a711db4f61246d557c573a7067",
+    "trace": "6f9277bab5a076f7a968a330260a83441d6297a62ca61709305c1dbc53675b37",
+  },
+}
+`;
+
+exports[`opening match checkpoints > matches the pre-refactor seeded command, event, visibility, and checkpoint baseline > seed 314159 1`] = `
+{
+  "commands": [
+    null,
+    {
+      "participantId": "scenario-player-one",
+      "replaceInstanceIds": [
+        "scenario-player-one:deck:22",
+      ],
+      "type": "confirm-mulligan",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "replaceInstanceIds": [
+        "scenario-player-two:deck:22",
+      ],
+      "type": "confirm-mulligan",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-one",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardInstanceId": "missing",
+      "participantId": "scenario-player-one",
+      "type": "play-card",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "target": {
+        "kind": "hero",
+        "participantId": "scenario-player-two",
+      },
+      "type": "use-hero-power",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-one",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "goblins_vs_gnomes_blingtron_3000",
+      "participantId": "scenario-player-one",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-one:dev:65",
+      "participantId": "scenario-player-one",
+      "position": 0,
+      "type": "play-card",
+    },
+    {
+      "cardId": "naxxramas_haunted_creeper",
+      "participantId": "scenario-player-two",
+      "type": "dev-summon-minion",
+    },
+    {
+      "cardId": "naxxramas_nerubian_egg",
+      "participantId": "scenario-player-two",
+      "type": "dev-summon-minion",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-one",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "basic_flamestrike",
+      "participantId": "scenario-player-one",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-one:dev:75",
+      "participantId": "scenario-player-one",
+      "type": "play-card",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-one",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "basic_polymorph",
+      "participantId": "scenario-player-one",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-one:dev:87",
+      "participantId": "scenario-player-one",
+      "targets": [
+        {
+          "instanceId": "scenario-player-two:summoned:84",
+          "kind": "minion",
+          "participantId": "scenario-player-two",
+        },
+      ],
+      "type": "play-card",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-one",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "basic_mind_control",
+      "participantId": "scenario-player-one",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-one:dev:88",
+      "participantId": "scenario-player-one",
+      "targets": [
+        {
+          "instanceId": "scenario-player-two:summoned:84",
+          "kind": "minion",
+          "participantId": "scenario-player-two",
+        },
+      ],
+      "type": "play-card",
+    },
+    {
+      "cardId": "basic_raid_leader",
+      "participantId": "scenario-player-one",
+      "type": "dev-summon-minion",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-one",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "classic_ice_barrier",
+      "participantId": "scenario-player-one",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-one:dev:90",
+      "participantId": "scenario-player-one",
+      "type": "play-card",
+    },
+    {
+      "available": 10,
+      "maximum": 10,
+      "participantId": "scenario-player-one",
+      "type": "dev-set-mana",
+    },
+    {
+      "cardId": "league_of_explorers_raven_idol",
+      "participantId": "scenario-player-one",
+      "type": "dev-add-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-one:dev:92",
+      "choice": 0,
+      "participantId": "scenario-player-one",
+      "type": "play-card",
+    },
+    {
+      "cardInstanceId": "scenario-player-one:discover:93",
+      "participantId": "scenario-player-one",
+      "type": "choose-discover-card",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "end-turn",
+    },
+    {
+      "participantId": "scenario-player-two",
+      "type": "end-turn",
+    },
+    {
+      "attacker": {
+        "instanceId": "scenario-player-one:dev:65",
+        "kind": "minion",
+      },
+      "defender": {
+        "kind": "hero",
+      },
+      "participantId": "scenario-player-one",
+      "type": "attack-character",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "action": "destroy",
+      "participantId": "scenario-player-one",
+      "type": "dev-modify-deck",
+    },
+    {
+      "participantId": "scenario-player-one",
+      "type": "dev-draw",
+    },
+    {
+      "action": "refill",
+      "participantId": "scenario-player-one",
+      "type": "dev-modify-deck",
+    },
+  ],
+  "digests": {
+    "checkpoints": "8d850d4063b46d1cd8fa7addeb82ae83edca02b18f0ac6b708155d9a15a27459",
+    "commands": "1df3500ff667fe5e400400a3846fef06b20472bb50e02d546cdda1d90574a273",
+    "legality": "ea7e766d0e80dbe36bafbadec1da246845e2047de8159d96bd0e70a5b0b0f119",
+    "publicEvents": "fcef1f6834e5e99c58eb571e478cea962631bcc013fbd54f74c539f89a29579e",
+    "publicState": "61bed0cf4d07be5dbd7aa1ba5d8ba09f134305105957a6f10c0fa229bc3c7422",
+    "results": "419f3b2b87fc07edde3b0c46c5564457be03081ec386e6f243cd8bfc86f60510",
+    "trace": "95579aeae47e801ebc55dedb0cb49313d63ed242b3d4711fdc4ce6a7876c6b76",
+  },
+}
+`;

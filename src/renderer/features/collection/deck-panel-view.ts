@@ -30,7 +30,7 @@ import {
   shouldAnimateDeckRowRemoval
 } from './deck-editor-model'
 import { DeckListView } from './deck-list-view'
-import { CollectionDeckController } from './collection-deck-controller'
+import type { DeckStore } from '../../ui/deck-store'
 import { COLLECTION_LAYOUT } from './collection-layout'
 import {
   DECK_EDITOR_CONTENT_FADE_DURATION,
@@ -96,7 +96,7 @@ export interface DeckPanelViewOptions {
   readonly canvas: HTMLCanvasElement
   readonly inputParent: HTMLElement
   readonly renderer: Renderer
-  readonly deckController: CollectionDeckController
+  readonly deckStore: DeckStore
   readonly state: DeckPanelStateProvider
   readonly callbacks?: DeckPanelViewCallbacks
 }
@@ -135,7 +135,7 @@ interface CardAddEffect {
  * scene: the deck list, its shared scrollbar, and the full deck editor overlay.
  */
 export class DeckPanelView extends Actor {
-  private readonly deckController: CollectionDeckController
+  private readonly deckStore: DeckStore
   private readonly cardResolver = new CardAssetResolver()
   private readonly deckEditorRows = new Map<string, DeckCardRow>()
   private readonly cardAddQueue: PendingCardAddition[] = []
@@ -175,7 +175,7 @@ export class DeckPanelView extends Actor {
 
   constructor(private readonly options: DeckPanelViewOptions) {
     super()
-    this.deckController = options.deckController
+    this.deckStore = options.deckStore
     this.deckList = new DeckListView({
       newDeckButton: options.assets.newDeckButton,
       verticalSlider: options.assets.verticalSlider,
@@ -222,7 +222,7 @@ export class DeckPanelView extends Actor {
 
   getActiveDeck(): Deck | null {
     return this.activeDeckId
-      ? (this.deckController.getDeck(this.activeDeckId) ?? null)
+      ? (this.deckStore.getDeck(this.activeDeckId) ?? null)
       : null
   }
 
@@ -260,16 +260,14 @@ export class DeckPanelView extends Actor {
   }
 
   getDeckEntryOrigin(deckId: string): { x: number; y: number } | null {
-    const deckIndex = this.deckController
-      .getDecks()
-      .findIndex((deck) => deck.id === deckId)
+    const deckIndex = this.deckStore.getDecks().findIndex((deck) => deck.id === deckId)
     return deckIndex === -1
       ? null
       : this.deckList.getEntryOrigin(deckIndex, this.deckEditorLayer)
   }
 
   renderDeckList(): void {
-    const decks = this.deckController.getDecks()
+    const decks = this.deckStore.getDecks()
     this.deckMaxScroll = this.deckList.render(decks)
     this.setDeckScroll(this.deckScrollOffset)
     this.setInteractionEnabled(this.options.state.isNavigationReady() && !this.disposed)
@@ -413,7 +411,7 @@ export class DeckPanelView extends Actor {
     const baseDeck =
       this.optimisticDeck?.id === deckId
         ? this.optimisticDeck
-        : this.deckController.getDeck(deckId)
+        : this.deckStore.getDeck(deckId)
     if (!baseDeck) return Promise.resolve()
 
     const prediction = addCardToDeck(baseDeck, card)
@@ -446,12 +444,12 @@ export class DeckPanelView extends Actor {
     const deckId = this.activeDeckId
     if (!deckId || this.deckEditorTransitioning || this.isMutating) return
 
-    const result = await this.deckController.addCard(deckId, card)
+    const result = await this.deckStore.addCard(deckId, card)
     if (!result.ok) {
       this.reportCardAddFailure(result)
       return
     }
-    const deck = this.deckController.getDeck(deckId)
+    const deck = this.deckStore.getDeck(deckId)
     if (deck) this.updateEditor(deck)
   }
 
@@ -471,7 +469,7 @@ export class DeckPanelView extends Actor {
           continue
         }
 
-        const previousDeck = this.deckController.getDeck(request.deckId)
+        const previousDeck = this.deckStore.getDeck(request.deckId)
         const previousRows = new Map(
           [...this.deckEditorRows].map(([cardId, row]) => [cardId, row.row.y])
         )
@@ -488,13 +486,13 @@ export class DeckPanelView extends Actor {
           if (target) this.scrollAddedDeckRowIntoView(target.row)
 
           const [result] = await Promise.all([
-            this.deckController.addCard(request.deckId, request.card),
+            this.deckStore.addCard(request.deckId, request.card),
             target ? this.animateCardAddFlight(effect, target) : Promise.resolve()
           ])
 
           if (!result.ok) {
             this.reportCardAddFailure(result)
-            const authoritativeDeck = this.deckController.getDeck(request.deckId)
+            const authoritativeDeck = this.deckStore.getDeck(request.deckId)
             if (authoritativeDeck) this.updateEditor(authoritativeDeck)
             await this.animateRejectedCardAdd(effect)
             this.clearPendingCardAdditions()
@@ -780,7 +778,7 @@ export class DeckPanelView extends Actor {
     }
 
     const transitionSequence = this.deckEditorTransitionSequence
-    const deck = this.deckController.getDeck(deckId)
+    const deck = this.deckStore.getDeck(deckId)
     const shouldAnimateRowRemoval = shouldAnimateDeckRowRemoval(
       deck ? getDeckCardCount(deck, cardId) : 0
     )
@@ -813,16 +811,16 @@ export class DeckPanelView extends Actor {
         return
       }
 
-      const result = await this.deckController.removeCard(deckId, cardId)
+      const result = await this.deckStore.removeCard(deckId, cardId)
       if (!result.ok) {
         this.options.callbacks?.onError?.(result.message)
-        const updatedDeck = this.deckController.getDeck(deckId)
+        const updatedDeck = this.deckStore.getDeck(deckId)
         if (updatedDeck) this.updateEditor(updatedDeck)
         this.flashDeckEditorCount()
         return
       }
 
-      const updatedDeck = this.deckController.getDeck(deckId)
+      const updatedDeck = this.deckStore.getDeck(deckId)
       if (updatedDeck) this.updateEditor(updatedDeck)
     } catch (error) {
       this.options.callbacks?.onError?.(
@@ -830,7 +828,7 @@ export class DeckPanelView extends Actor {
         error
       )
       if (!this.disposed && this.activeDeckId === deckId) {
-        const updatedDeck = this.deckController.getDeck(deckId)
+        const updatedDeck = this.deckStore.getDeck(deckId)
         if (updatedDeck) this.updateEditor(updatedDeck)
         this.flashDeckEditorCount()
       }

@@ -1,6 +1,7 @@
+import { replaceFileAtomically } from './atomic-file'
+import { SerialOperationQueue } from './serial-operation-queue'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import {
   createEmptyClassWinTotals,
   parsePlayableClassId,
@@ -41,18 +42,18 @@ export class PlayerStatsRepository {
   }
   private loaded = false
   private loadPromise: Promise<void> | null = null
-  private mutationQueue: Promise<void> = Promise.resolve()
+  private readonly mutations = new SerialOperationQueue()
 
   constructor(private readonly filePath: string) {}
 
   async get(): Promise<PlayerStatsSnapshot> {
     await this.ensureLoaded()
-    await this.mutationQueue
+    await this.mutations.settled
     return cloneSnapshot(this.snapshot)
   }
 
   async recordWin(classId: ClassId): Promise<PlayerStatsSnapshot> {
-    return this.enqueueMutation(async () => {
+    return this.mutations.enqueue(async () => {
       await this.ensureLoaded()
       const validatedClassId = parsePlayableClassId(classId) as DeckClass
       const currentWins = this.snapshot.winsByClass[validatedClassId]
@@ -74,7 +75,7 @@ export class PlayerStatsRepository {
   }
 
   async recordTavernBrawlWin(): Promise<PlayerStatsSnapshot> {
-    return this.enqueueMutation(async () => {
+    return this.mutations.enqueue(async () => {
       await this.ensureLoaded()
       if (this.snapshot.tavernBrawlWins === Number.MAX_SAFE_INTEGER) {
         throw new Error('Tavern Brawl win total cannot be incremented')
@@ -137,21 +138,10 @@ export class PlayerStatsRepository {
       tavernBrawlWins: snapshot.tavernBrawlWins
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
-    await mkdir(dirname(this.filePath), { recursive: true })
-    try {
-      await writeFile(temporaryPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
-      await rename(temporaryPath, this.filePath)
-    } finally {
-      await unlink(temporaryPath).catch(() => undefined)
-    }
-  }
-
-  private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
-    const next = this.mutationQueue.then(operation, operation)
-    this.mutationQueue = next.then(
-      () => undefined,
-      () => undefined
+    await replaceFileAtomically(
+      this.filePath,
+      temporaryPath,
+      () => JSON.stringify(payload, null, 2) + '\n'
     )
-    return next
   }
 }

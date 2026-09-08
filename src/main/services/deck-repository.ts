@@ -1,5 +1,7 @@
+import { replaceFileAtomically } from './atomic-file'
+import { SerialOperationQueue } from './serial-operation-queue'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
+import { readFile, readdir, rename } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { HERO_CATALOG, asHeroId } from '../../game/content'
 import {
@@ -86,7 +88,7 @@ export class DeckRepository implements DeckRepositoryPort {
   private loadPromise: Promise<void> | null = null
   private decks: Deck[] = []
   private writeQueue: Promise<void> = Promise.resolve()
-  private mutationQueue: Promise<void> = Promise.resolve()
+  private readonly mutations = new SerialOperationQueue()
 
   constructor(private readonly filePath: string) {}
 
@@ -96,7 +98,7 @@ export class DeckRepository implements DeckRepositoryPort {
   }
 
   async create(request?: DeckCreateRequest): Promise<Deck> {
-    return this.enqueueMutation(async () => {
+    return this.mutations.enqueue(async () => {
       await this.ensureLoaded()
       const validatedRequest = validateCreateRequest(request)
       const heroId = validatedRequest.heroId ?? HERO_CATALOG.require('guldan').id
@@ -119,7 +121,7 @@ export class DeckRepository implements DeckRepositoryPort {
   }
 
   async update(deck: Deck): Promise<Deck> {
-    return this.enqueueMutation(async () => {
+    return this.mutations.enqueue(async () => {
       await this.ensureLoaded()
       const validatedDeck = parseDeck(deck)
       if (!HERO_CATALOG.require(validatedDeck.heroId).deckSelectable) {
@@ -150,7 +152,7 @@ export class DeckRepository implements DeckRepositoryPort {
   }
 
   async delete(deckId: string): Promise<void> {
-    return this.enqueueMutation(async () => {
+    return this.mutations.enqueue(async () => {
       await this.ensureLoaded()
       if (typeof deckId !== 'string' || deckId.trim() === '')
         throw new Error('Invalid deck id')
@@ -294,19 +296,13 @@ export class DeckRepository implements DeckRepositoryPort {
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
     const write = this.writeQueue
       .catch(() => undefined)
-      .then(async () => {
-        await mkdir(dirname(this.filePath), { recursive: true })
-        try {
-          await writeFile(
-            temporaryPath,
-            `${JSON.stringify(payload, null, 2)}\n`,
-            'utf8'
-          )
-          await rename(temporaryPath, this.filePath)
-        } finally {
-          await unlink(temporaryPath).catch(() => undefined)
-        }
-      })
+      .then(() =>
+        replaceFileAtomically(
+          this.filePath,
+          temporaryPath,
+          () => JSON.stringify(payload, null, 2) + '\n'
+        )
+      )
     this.writeQueue = write
     await write
   }
@@ -316,14 +312,5 @@ export class DeckRepository implements DeckRepositoryPort {
     let number = this.decks.length + 1
     while (names.has(`Deck ${number}`)) number += 1
     return `Deck ${number}`
-  }
-
-  private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
-    const next = this.mutationQueue.then(operation, operation)
-    this.mutationQueue = next.then(
-      () => undefined,
-      () => undefined
-    )
-    return next
   }
 }

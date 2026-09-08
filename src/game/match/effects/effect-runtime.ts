@@ -1,3 +1,25 @@
+import { runSummonAction, type SummonActionContext } from './summon-actions'
+import { runManaAction, type ManaActionContext } from './mana-actions'
+import { MAX_MANA, stringValue } from './effect-primitives'
+import { EffectQueries } from './effect-queries'
+import {
+  isRecord,
+  integer,
+  clamp,
+  cardDefinition,
+  entityKey,
+  MAX_BOARD_SIZE
+} from './effect-primitives'
+import type {
+  Mutable,
+  DraftState,
+  DraftPlayer,
+  DraftMinion,
+  DraftCard,
+  EntityRef,
+  SemanticEvent,
+  EffectFrame
+} from './effect-context'
 import {
   CARD_CATALOG,
   CARD_KEYWORDS,
@@ -79,91 +101,8 @@ import {
 } from './resolution-queue'
 
 const MAX_HAND_SIZE = 10
-const MAX_BOARD_SIZE = 7
-const MAX_MANA = 10
 const MAX_RESOLUTION_STEPS = DEFAULT_RESOLUTION_BUDGET
 const WEAPON_ATTACK_COST_REPLACEMENT = 'weapon-attack-instead-of-durability'
-
-type Mutable<T> = T extends string | number | boolean | null | undefined
-  ? T
-  : T extends readonly (infer U)[]
-    ? Mutable<U>[]
-    : T extends object
-      ? { -readonly [K in keyof T]: Mutable<T[K]> }
-      : T
-
-type DraftState = Mutable<OpeningMatchState>
-type DraftPlayer = DraftState['players'][number]
-type DraftMinion = Mutable<BoardMinion>
-type DraftCard = Mutable<OpeningCard>
-
-interface EntityRef {
-  readonly instanceId: string
-  readonly kind: RuntimeEntityKind
-  readonly participantId: PlayerId
-  readonly zone: RuntimeZone
-  readonly cardId?: CardId
-}
-
-interface SemanticEvent {
-  readonly sequence: number
-  readonly type: CardEventType
-  readonly source: EntityRef | null
-  readonly target: EntityRef | null
-  readonly controllerId: PlayerId | null
-  readonly targetControllerId?: PlayerId | null
-  readonly cardId?: CardId
-  readonly cardInstanceId?: string
-  readonly damage?: number
-  readonly amount?: number
-  readonly overheal?: boolean
-  /** Board size controlled by the event player before a played minion entered. */
-  readonly minionCountBeforePlay?: number
-  readonly card?: OpeningCard
-  readonly kind?:
-    | 'play'
-    | 'cast'
-    | 'discard'
-    | 'draw'
-    | 'armor'
-    | 'heal'
-    | 'summon'
-    | 'damage'
-    | 'turn-start'
-    | 'turn-end'
-  readonly correlation?: ResolutionCorrelation
-  cancelled?: boolean
-  prevented?: boolean
-  replacement?: string
-  redirectTarget?: EntityRef
-}
-
-interface EffectFrame {
-  readonly source: EntityRef
-  readonly sourceCardId: CardId | null
-  readonly correlation: ResolutionCorrelation
-  readonly rng: DeterministicRng
-  readonly controllerId: PlayerId
-  readonly event: SemanticEvent | null
-  lastEvent: SemanticEvent | null
-  readonly chosenTargets: readonly EntityRef[]
-  targetContext: EntityRef | null
-  lastActionTarget: EntityRef | null
-  readonly choiceIndex: number | undefined
-  readonly preserved: Map<string, readonly EntityRef[]>
-  readonly actionPath: string
-  selectedTargetCursor: number
-  damageDealt: number
-  removedKeywordCount: number
-  readonly addedCards: EntityRef[]
-  readonly drawnCards: EntityRef[]
-  readonly destroyedMinions: EntityRef[]
-  randomDamageExcluded: Set<string>
-  readonly continuous?: boolean
-  readonly isHeroPower?: boolean
-  /** Evaluates play-time conditions after the source leaves hand and enters play. */
-  readonly prospectiveCardPlay?: boolean
-}
 
 export interface EffectRuntimeOptions {
   readonly state: OpeningMatchState
@@ -309,10 +248,6 @@ class ResolutionInputError extends Error {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 function clonePlain<T>(value: T): T {
   if (Array.isArray(value)) return value.map((entry) => clonePlain(entry)) as T
   if (!isRecord(value)) return value
@@ -331,18 +266,6 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asArray(value: unknown): readonly unknown[] {
   return Array.isArray(value) ? value : []
-}
-
-function stringValue(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
-}
-
-function integer(value: number): number {
-  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.max(minimum, Math.min(maximum, integer(value)))
 }
 
 /**
@@ -388,14 +311,6 @@ function attacksPerTurnForKeywords(keywords: ReadonlySet<CardKeyword>): number {
   return keywords.has('windfury') ? 2 : 1
 }
 
-function cardDefinition(cardId: CardId): CardDefinition | undefined {
-  return CARD_CATALOG.get(cardId)
-}
-
-function cardHasTrigger(card: CardDefinition, trigger: CardTrigger): boolean {
-  return card.effects.some((effect) => effect.trigger === trigger)
-}
-
 function isMindControlSpell(card: CardDefinition): boolean {
   return (
     card.type === 'Spell' &&
@@ -409,10 +324,6 @@ function isMindControlSpell(card: CardDefinition): boolean {
 
 function sourceCardId(source: EntityRef | null): CardId | null {
   return source?.cardId ?? null
-}
-
-function entityKey(ref: EntityRef): string {
-  return `${ref.kind}:${ref.instanceId}`
 }
 
 function eventController(event: SemanticEvent): PlayerId | null {
@@ -630,6 +541,9 @@ function collectSelectedEffectActions(
  * draft state. It deliberately has no renderer or platform dependencies.
  */
 export class EffectRuntime {
+  readonly queries: EffectQueries
+  private readonly summonContext: SummonActionContext
+  private readonly manaContext: ManaActionContext
   private readonly initialState: OpeningMatchState
   private readonly draft: DraftState
   private readonly events: OpeningMatchEvent[] = []
@@ -687,7 +601,51 @@ export class EffectRuntime {
     this.recordTrace = recordTrace
     this.draft.pendingResolution = true
     this.draft.history = historyOf(this.draft)
+    this.queries = new EffectQueries({
+      draft: this.draft,
+      rng: this.rng,
+      destroyedWeaponSnapshots: this.destroyedWeaponSnapshots,
+      playerIndex: this.playerIndex.bind(this),
+      entityCard: this.entityCard.bind(this),
+      currentMinion: this.currentMinion.bind(this),
+      currentCard: this.currentCard.bind(this),
+      player: this.player.bind(this),
+      costForEntity: this.costForEntity.bind(this),
+      hasKeyword: this.hasKeyword.bind(this),
+      readMaximumHealth: this.readMaximumHealth.bind(this),
+      readAttack: this.readAttack.bind(this),
+      allEntities: this.allEntities.bind(this),
+      step: this.step.bind(this),
+      sourcePlayer: this.sourcePlayer.bind(this),
+      isFrozen: this.isFrozen.bind(this),
+      frameFor: this.frameFor.bind(this)
+    })
+    this.summonContext = {
+      rng: this.rng,
+      queries: this.queries,
+      actionCardId: this.actionCardId.bind(this),
+      actionTargets: this.actionTargets.bind(this),
+      sourceEntities: this.sourceEntities.bind(this),
+      currentMinion: this.currentMinion.bind(this),
+      summonPosition: this.summonPosition.bind(this),
+      createMinion: this.createMinion.bind(this)
+    }
+    this.manaContext = {
+      player: this.player.bind(this),
+      targetPlayers: this.targetPlayers.bind(this),
+      evaluate: this.queries.evaluate.bind(this.queries),
+      emit: this.emit.bind(this),
+      emitSemantic: this.emitSemantic.bind(this)
+    }
     this.recomputeContinuousEffects()
+  }
+
+  select(selector: unknown, frame: EffectFrame): readonly EntityRef[] {
+    return this.queries.select(selector, frame)
+  }
+
+  evaluate(value: unknown, frame: EffectFrame, allowFull = false): number {
+    return this.queries.evaluate(value, frame, allowFull)
   }
 
   private get revision(): number {
@@ -1081,646 +1039,6 @@ export class EffectRuntime {
     return result
   }
 
-  /**
-   * The card that caused an event may already have left its authoritative zone
-   * by the time reactive effects resolve.  It is nevertheless a valid, typed
-   * selector candidate for event-card effects (for example Gallywix).
-   */
-  private eventCard(frame: EffectFrame): EntityRef | null {
-    const event = frame.event
-    if (!event?.cardId) return null
-    return {
-      instanceId: event.cardInstanceId ?? `event-card:${event.sequence}`,
-      kind: 'card',
-      participantId: event.controllerId ?? frame.controllerId,
-      zone: 'revealed',
-      cardId: event.cardId
-    }
-  }
-
-  private relativeController(value: unknown, frame: EffectFrame): PlayerId | null {
-    if (value === 'self') return frame.controllerId
-    if (value === 'opponent') return this.otherPlayer(frame.controllerId)
-    if (value === 'any' || value === undefined) return null
-    return typeof value === 'string' &&
-      this.draft.players.some((player) => player.participantId === value)
-      ? (value as PlayerId)
-      : null
-  }
-
-  private otherPlayer(participantId: PlayerId): PlayerId {
-    return this.draft.players[this.playerIndex(participantId) === 0 ? 1 : 0]
-      .participantId
-  }
-
-  private matchesType(ref: EntityRef, type: unknown): boolean {
-    if (typeof type !== 'string') return true
-    const definition = this.entityCard(ref)
-    switch (type) {
-      case 'card':
-      case 'event-card':
-      case 'added-card':
-      case 'drawn-card':
-        return ref.kind === 'card'
-      case 'minion-card':
-        return ref.kind === 'card' && definition?.type === 'Minion'
-      case 'spell-card':
-        return ref.kind === 'card' && definition?.type === 'Spell'
-      case 'character':
-        return ref.kind === 'hero' || ref.kind === 'minion'
-      case 'hero':
-        return ref.kind === 'hero'
-      case 'hero-power':
-        return ref.kind === 'hero-power'
-      case 'minion':
-        return ref.kind === 'minion'
-      case 'secret':
-        return ref.kind === 'secret'
-      case 'weapon':
-        return ref.kind === 'weapon'
-      default:
-        return false
-    }
-  }
-
-  private targetForFrame(frame: EffectFrame): EntityRef | null {
-    return (
-      frame.targetContext ??
-      frame.event?.target ??
-      frame.chosenTargets[0] ??
-      frame.lastEvent?.target ??
-      null
-    )
-  }
-
-  private eventTargetForFrame(frame: EffectFrame): EntityRef | null {
-    return (
-      frame.event?.target ??
-      frame.lastActionTarget ??
-      frame.targetContext ??
-      frame.lastEvent?.target ??
-      frame.chosenTargets[0] ??
-      null
-    )
-  }
-
-  private withTarget<T>(frame: EffectFrame, target: EntityRef, task: () => T): T {
-    const previous = frame.targetContext
-    frame.targetContext = target
-    try {
-      return task()
-    } finally {
-      frame.targetContext = previous
-    }
-  }
-
-  private matchesFilter(
-    ref: EntityRef,
-    filterValue: unknown,
-    frame: EffectFrame
-  ): boolean {
-    if (!isRecord(filterValue)) return true
-    const filter = filterValue
-    const minion = this.currentMinion(ref)
-    const card = this.currentCard(ref)
-    const definition = this.entityCard(ref)
-    let matches = true
-    for (const [key, value] of Object.entries(filter)) {
-      if (key === 'negate') continue
-      let condition = true
-      if (key === 'cardId') condition = ref.cardId === value
-      else if (key === 'cardType') condition = definition?.type === value
-      else if (key === 'cardClass') {
-        const selfClass = HERO_CATALOG.get(
-          this.player(frame.controllerId).heroId
-        )?.classId
-        const expected =
-          value === 'opponent'
-            ? HERO_CATALOG.get(this.player(this.otherPlayer(frame.controllerId)).heroId)
-                ?.classId
-            : value
-        condition =
-          value === 'self'
-            ? definition?.cardClass === selfClass
-            : value === 'self-or-neutral'
-              ? definition?.cardClass === selfClass ||
-                definition?.cardClass === 'Neutral'
-              : definition?.cardClass === expected
-      } else if (key === 'cost') {
-        const cost = card?.currentCost ?? card?.baseCost ?? definition?.cost
-        const valueRecord = isRecord(value) ? value : null
-        const rawExpected = valueRecord
-          ? (valueRecord.value ?? valueRecord.reference ?? valueRecord.cost)
-          : value
-        const comparisonTarget = this.targetForFrame(frame)
-        const targetCost =
-          rawExpected === 'target-cost'
-            ? this.costForEntity(comparisonTarget ?? undefined)
-            : rawExpected === 'event-card-cost'
-              ? (frame.event?.card?.currentCost ??
-                frame.event?.card?.baseCost ??
-                (frame.event?.cardId
-                  ? cardDefinition(frame.event.cardId)?.cost
-                  : undefined))
-              : rawExpected
-        const operator =
-          typeof valueRecord?.operator === 'string'
-            ? valueRecord.operator
-            : typeof filter.operator === 'string'
-              ? filter.operator
-              : 'eq'
-        condition =
-          typeof cost === 'number' &&
-          typeof targetCost === 'number' &&
-          this.compare(cost, operator, targetCost)
-      } else if (key === 'damaged') {
-        const damaged = minion
-          ? minion.health < minion.maxHealth
-          : ref.kind === 'hero'
-            ? this.player(ref.participantId).hero.health <
-              this.player(ref.participantId).hero.maxHealth
-            : false
-        condition = typeof value === 'boolean' ? damaged === value : damaged
-      } else if (key === 'hasBattlecry') {
-        const hasBattlecry = definition
-          ? cardHasTrigger(definition, 'battlecry')
-          : false
-        condition = typeof value === 'boolean' ? hasBattlecry === value : hasBattlecry
-      } else if (key === 'hasDeathrattle') {
-        const hasDeathrattle = definition
-          ? cardHasTrigger(definition, 'deathrattle') ||
-            Boolean(minion?.deathrattles?.length)
-          : false
-        condition =
-          typeof value === 'boolean' ? hasDeathrattle === value : hasDeathrattle
-      } else if (key === 'keyword')
-        condition = minion
-          ? this.hasKeyword(ref, value as CardKeyword)
-          : ref.kind === 'hero'
-            ? this.hasKeyword(ref, value as CardKeyword)
-            : Boolean(definition?.keywords.includes(value as CardKeyword))
-      else if (key === 'overload')
-        condition = Boolean(
-          (definition?.effects ?? []).some((effect) =>
-            effect.actions?.some((action) => action.action === 'overload')
-          ) === value
-        )
-      else if (key === 'rarity') condition = definition?.rarity === value
-      else if (key === 'sparePart')
-        condition =
-          definition?.id.includes('spare') === value ||
-          definition?.name.toLowerCase().includes('spare') === value
-      else if (key === 'tribe') condition = definition?.subtype === value
-      else if (key === 'type')
-        condition = definition?.type === value || definition?.subtype === value
-      else if (key === 'stat') {
-        const actual =
-          value === 'health' ? this.readMaximumHealth(ref) : this.readAttack(ref)
-        const expected = isRecord(filter.value)
-          ? this.evaluate(filter.value, frame)
-          : filter.value
-        condition =
-          typeof actual === 'number' &&
-          typeof expected === 'number' &&
-          this.compare(actual, filter.operator, expected)
-      } else if (key === 'operator' || key === 'value') continue
-      if (!condition) matches = false
-    }
-    if (isRecord(filter.negate))
-      return matches && !this.matchesFilter(ref, filter.negate, frame)
-    return filter.negate === true ? !matches : matches
-  }
-
-  private compare(left: number, operator: unknown, right: number): boolean {
-    switch (operator) {
-      case 'gt':
-        return left > right
-      case 'gte':
-        return left >= right
-      case 'lt':
-        return left < right
-      case 'lte':
-        return left <= right
-      case 'eq':
-      default:
-        return left === right
-    }
-  }
-
-  private adjacentTo(ref: EntityRef): EntityRef[] {
-    if (ref.kind !== 'minion') return []
-    const player = this.player(ref.participantId)
-    const index = player.board.findIndex(
-      (minion) => minion.instanceId === ref.instanceId
-    )
-    if (index < 0) return []
-    return [player.board[index - 1], player.board[index + 1]]
-      .filter((minion): minion is DraftMinion => Boolean(minion))
-      .map((minion) => ({
-        instanceId: minion.instanceId,
-        kind: 'minion' as const,
-        participantId: player.participantId,
-        zone: 'board' as const,
-        cardId: minion.cardId
-      }))
-  }
-
-  private selectorPositionMatches(
-    candidate: EntityRef,
-    selector: Record<string, unknown>
-  ): boolean {
-    const rawPosition = selector.position
-    if (rawPosition === undefined) return true
-    const position = typeof rawPosition === 'string' ? rawPosition : null
-    if (candidate.kind === 'card' && candidate.zone === 'deck') {
-      const deck = this.player(candidate.participantId).deck
-      const index = deck.findIndex((card) => card.instanceId === candidate.instanceId)
-      if (index < 0) return false
-      if (position === 'top' || position === 'first') {
-        const count =
-          typeof selector.count === 'number'
-            ? Math.max(0, Math.floor(selector.count))
-            : 1
-        return index < count
-      }
-      if (position === 'bottom' || position === 'last') {
-        const count =
-          typeof selector.count === 'number'
-            ? Math.max(0, Math.floor(selector.count))
-            : 1
-        return index >= Math.max(0, deck.length - count)
-      }
-      const numeric =
-        typeof rawPosition === 'number' ? rawPosition : Number(rawPosition)
-      return Number.isInteger(numeric) && numeric >= 0 && index === numeric
-    }
-    if (candidate.kind === 'minion' && candidate.zone === 'board') {
-      const board = this.player(candidate.participantId).board
-      const index = board.findIndex(
-        (minion) => minion.instanceId === candidate.instanceId
-      )
-      const numeric =
-        typeof rawPosition === 'number' ? rawPosition : Number(rawPosition)
-      return Number.isInteger(numeric) && numeric >= 0 && index === numeric
-    }
-    return false
-  }
-  private selectorMatches(
-    candidate: EntityRef,
-    selector: Record<string, unknown>,
-    frame: EffectFrame
-  ): boolean {
-    const controller = this.relativeController(selector.controller, frame)
-    if (controller && candidate.participantId !== controller) return false
-    if (selector.zone && candidate.zone !== selector.zone) return false
-    if (!this.selectorPositionMatches(candidate, selector)) return false
-    if (!this.matchesType(candidate, selector.type)) return false
-    if (
-      selector.exclude === 'source' &&
-      entityKey(candidate) === entityKey(frame.source)
-    )
-      return false
-    if (
-      selector.exclude === 'event-target' &&
-      frame.event?.target &&
-      entityKey(candidate) === entityKey(frame.event.target)
-    )
-      return false
-    if (selector.excludeCardId && candidate.cardId === selector.excludeCardId)
-      return false
-    return this.matchesFilter(candidate, selector.filter, frame)
-  }
-
-  private selectorCandidates(
-    selector: Record<string, unknown>,
-    frame: EffectFrame
-  ): EntityRef[] {
-    const selectorType = selector.type
-    const eventCard = this.eventCard(frame)
-    const contextualCards =
-      selectorType === 'event-card'
-        ? eventCard
-          ? [eventCard]
-          : []
-        : selectorType === 'drawn-card'
-          ? [
-              ...frame.drawnCards,
-              ...(frame.event?.kind === 'draw' && frame.event.target?.kind === 'card'
-                ? [frame.event.target]
-                : [])
-            ]
-          : selectorType === 'added-card'
-            ? [...frame.addedCards]
-            : null
-    let candidates = (contextualCards ?? this.allEntities())
-      .filter(
-        (candidate, index, all) =>
-          all.findIndex((other) => entityKey(other) === entityKey(candidate)) === index
-      )
-      .filter((candidate) => this.selectorMatches(candidate, selector, frame))
-    const selection = selector.selection
-    if (selection === 'other-player-hand') {
-      candidates = candidates.filter(
-        (candidate) =>
-          candidate.kind === 'card' &&
-          candidate.participantId !== frame.controllerId &&
-          candidate.zone === 'hand'
-      )
-    }
-    if (selection === 'hero')
-      candidates = candidates.filter((candidate) => candidate.kind === 'hero')
-    if (selection === 'next') {
-      const sourceIndex = candidates.findIndex(
-        (candidate) => entityKey(candidate) === entityKey(frame.source)
-      )
-      candidates =
-        sourceIndex >= 0
-          ? candidates.slice(sourceIndex + 1, sourceIndex + 2)
-          : candidates.slice(0, 1)
-    }
-    if (selection === 'adjacent') {
-      const anchor =
-        selector.adjacentTo === 'source'
-          ? frame.source
-          : selector.adjacentTo === 'event-source'
-            ? (frame.event?.source ?? frame.source)
-            : (frame.event?.target ?? frame.source)
-      candidates = this.adjacentTo(anchor).filter((candidate) =>
-        this.selectorMatches(candidate, selector, frame)
-      )
-    }
-    return candidates
-  }
-
-  private chosenTarget(
-    frame: EffectFrame,
-    selector: Record<string, unknown>
-  ): EntityRef[] {
-    const candidates = frame.chosenTargets.filter((target) =>
-      this.selectorMatches(target, selector, frame)
-    )
-    if (candidates.length === 0) return []
-    if (frame.chosenTargets.length === 1) return [candidates[0]!]
-    const index = frame.selectedTargetCursor
-    frame.selectedTargetCursor += 1
-    return candidates[index]
-      ? [candidates[index]!]
-      : [candidates[candidates.length - 1]!]
-  }
-
-  /** Resolves a selector in stable zone/board order before count or random choice. */
-  select(selectorValue: unknown, frame: EffectFrame): readonly EntityRef[] {
-    this.step(`${frame.actionPath}:select`)
-    if (typeof selectorValue === 'string') {
-      if (selectorValue === 'source') return [frame.source]
-      if (selectorValue === 'event-source' && frame.event?.source)
-        return [frame.event.source]
-      if (selectorValue === 'event-target')
-        return frame.event?.target
-          ? [frame.event.target]
-          : frame.lastActionTarget
-            ? [frame.lastActionTarget]
-            : []
-      return []
-    }
-    if (!isRecord(selectorValue)) return []
-    const selector = selectorValue
-    const selection = selector.selection
-    if (selection === 'source')
-      return this.selectorMatches(frame.source, selector, frame) ? [frame.source] : []
-    if (selection === 'event-source') {
-      const eventSource = frame.event?.source
-      return eventSource && this.selectorMatches(eventSource, selector, frame)
-        ? [eventSource]
-        : []
-    }
-    if (selection === 'event-target') {
-      const eventTarget = frame.event?.target ?? frame.lastActionTarget
-      return eventTarget && this.selectorMatches(eventTarget, selector, frame)
-        ? [eventTarget]
-        : []
-    }
-    if (selection === 'chosen') return this.chosenTarget(frame, selector)
-
-    let candidates: EntityRef[]
-    if (selection === 'chosen-and-adjacent') {
-      const chosen = this.chosenTarget(frame, {
-        ...selector,
-        selection: 'chosen'
-      })
-      if (chosen.length === 0) return []
-      const anchor = chosen[0]!
-      const adjacent = this.adjacentTo(anchor)
-      candidates = [anchor, ...adjacent].filter((candidate) =>
-        this.selectorMatches(candidate, selector, frame)
-      )
-    } else {
-      candidates = this.selectorCandidates(selector, frame)
-    }
-
-    const count =
-      typeof selector.count === 'number'
-        ? clamp(selector.count, 0, candidates.length)
-        : undefined
-    if (selection === 'random') {
-      if (frame.randomDamageExcluded.size > 0)
-        candidates = candidates.filter((candidate) => {
-          const key = entityKey(candidate)
-          if (!frame.randomDamageExcluded.has(key)) return true
-          const minion =
-            candidate.kind === 'minion' ? this.currentMinion(candidate) : null
-          if (minion && minion.health > 0) {
-            frame.randomDamageExcluded.delete(key)
-            return true
-          }
-          return false
-        })
-      const chosen: EntityRef[] = []
-      const pool = [...candidates]
-      const amount = count ?? 1
-      for (let index = 0; index < amount && pool.length > 0; index += 1) {
-        const selectedIndex = Math.floor(this.rng.next() * pool.length)
-        chosen.push(...pool.splice(selectedIndex, 1))
-      }
-      candidates = chosen
-    } else if (count !== undefined) {
-      candidates = candidates.slice(0, count)
-    }
-
-    if (selector.preserve) {
-      const preserveSelector = isRecord(selector.preserve)
-        ? {
-            controller: selector.controller,
-            type: selector.type,
-            zone: selector.zone,
-            filter: selector.filter,
-            exclude: selector.exclude,
-            excludeCardId: selector.excludeCardId,
-            ...selector.preserve
-          }
-        : {}
-      const preserved = this.select(preserveSelector, frame)
-      const preservedKeys = new Set(preserved.map(entityKey))
-      frame.preserved.set(
-        JSON.stringify(selector.preserve),
-        preserved.map((candidate) => ({ ...candidate }))
-      )
-      candidates = candidates.filter(
-        (candidate) => !preservedKeys.has(entityKey(candidate))
-      )
-    }
-    return candidates
-  }
-
-  private numericReference(
-    reference: string,
-    frame: EffectFrame,
-    expression?: Record<string, unknown>
-  ): number {
-    const sourceMinion = this.currentMinion(frame.source)
-    const sourceCard = this.currentCard(frame.source)
-    const eventTarget = this.eventTargetForFrame(frame)
-    const target = this.targetForFrame(frame)
-    const targetMinion = target ? this.currentMinion(target) : null
-    const targetCard = target ? this.currentCard(target) : null
-    const owner = this.sourcePlayer(frame)
-    const opponent = this.player(this.otherPlayer(frame.controllerId))
-    switch (reference) {
-      case 'available-board-slots':
-        return Math.max(0, MAX_BOARD_SIZE - owner.board.length)
-      case 'beasts-summoned-this-game':
-        return this.draft.history?.beastsSummonedByPlayer[frame.controllerId] ?? 0
-      case 'cards-played-earlier-this-turn':
-        return Math.max(0, (this.draft.history?.cardsPlayedThisTurn.length ?? 0) - 1)
-      case 'damage-dealt':
-        return frame.damageDealt
-      case 'destroyed-weapon.attack': {
-        return this.destroyedWeaponSnapshots.get(frame.controllerId)?.attack ?? 0
-      }
-      case 'destroyed-weapon.durability': {
-        const weaponControllerId =
-          frame.lastActionTarget?.kind === 'weapon'
-            ? frame.lastActionTarget.participantId
-            : frame.controllerId
-        return this.destroyedWeaponSnapshots.get(weaponControllerId)?.durability ?? 0
-      }
-      case 'drawn-card.cost':
-        return frame.drawnCards[0]
-          ? (this.currentCard(frame.drawnCards[0])?.currentCost ??
-              this.entityCard(frame.drawnCards[0])?.cost ??
-              0)
-          : (frame.event?.card?.currentCost ?? frame.event?.card?.baseCost ?? 0)
-      case 'event-target.attack':
-        return eventTarget ? this.readAttack(eventTarget) : 0
-      case 'event-target.durability':
-        return eventTarget && eventTarget.kind === 'weapon'
-          ? (this.player(eventTarget.participantId).weapon?.durability ?? 0)
-          : 0
-      case 'event.damage':
-        return frame.event?.damage ?? frame.event?.amount ?? 0
-      case 'event.amount':
-        return frame.event?.amount ?? frame.event?.damage ?? 0
-      case 'hand-size-difference':
-        if (expression?.opponent === true)
-          return Math.max(0, opponent.hand.length - owner.hand.length)
-        return Math.abs(owner.hand.length - opponent.hand.length)
-      case 'health':
-        return sourceMinion?.health ?? owner.hero.health
-      case 'hero-damage':
-        return Math.max(0, owner.hero.maxHealth - owner.hero.health)
-      case 'hero-powers-used-this-game':
-        return this.draft.history?.heroPowersUsedByPlayer[frame.controllerId] ?? 0
-      case 'minions-died-this-turn':
-        return this.draft.history?.minionsDiedThisTurn.length ?? 0
-      case 'matching-entity-count':
-        return isRecord(expression?.selector)
-          ? this.select(expression.selector, frame).length
-          : frame.event?.target
-            ? 1
-            : 0
-      case 'other-cards-in-hand':
-        return Math.max(0, owner.hand.length - (sourceCard ? 1 : 0))
-      case 'other-minions-on-board':
-        return Math.max(
-          0,
-          this.draft.players.flatMap((player) => player.board).length -
-            (sourceMinion ? 1 : 0)
-        )
-      case 'removed-keyword-count':
-        return frame.removedKeywordCount
-      case 'self.hero.armor':
-        return owner.hero.armor
-      case 'self.hero.attack':
-        return owner.hero.attack + (owner.weapon?.attack ?? 0)
-      case 'source.attack':
-        return (
-          sourceMinion?.attack ??
-          (frame.source.kind === 'weapon' ? (owner.weapon?.attack ?? 0) : 0)
-        )
-      case 'source.health':
-        return sourceMinion?.health ?? owner.hero.health
-      case 'source.weapon.attack':
-        return owner.weapon?.attack ?? 0
-      case 'target.attack':
-        return target ? this.readAttack(target) : 0
-      case 'target.health':
-        if (targetMinion) return targetMinion.health
-        if (target?.kind === 'hero')
-          return this.player(target.participantId).hero.health
-        return targetCard?.currentCost ?? 0
-      default:
-        return 0
-    }
-  }
-
-  /** Evaluates a closed numeric expression at the action boundary. */
-  evaluate(value: unknown, frame: EffectFrame, allowFull = false): number {
-    this.step(`${frame.actionPath}:value`)
-    if (typeof value === 'number') return value
-    if (typeof value === 'string')
-      return allowFull && value === 'full' ? Number.POSITIVE_INFINITY : 0
-    if (!isRecord(value)) return 0
-    if (value.condition !== undefined)
-      return this.evaluate(
-        this.conditionMatches(value.condition, frame)
-          ? value.thenValue
-          : value.elseValue,
-        frame,
-        allowFull
-      )
-    if (Array.isArray(value.random)) {
-      const randomValues = value.random.filter(
-        (entry): entry is number => typeof entry === 'number'
-      )
-      if (randomValues.length === 0) return 0
-      return (
-        randomValues[Math.floor(this.rng.next() * randomValues.length)] ??
-        randomValues[0]!
-      )
-    }
-    const reference =
-      typeof value.reference === 'string'
-        ? this.numericReference(value.reference, frame, value)
-        : undefined
-    const literal = typeof value.value === 'number' ? value.value : undefined
-    const base = reference ?? literal ?? 0
-    if (value.operation === undefined && typeof value.multiplier === 'number')
-      return base * value.multiplier
-    switch (value.operation) {
-      case 'multiply':
-        return (
-          base *
-          (literal ?? (typeof value.multiplier === 'number' ? value.multiplier : 1))
-        )
-      case 'set':
-        return literal ?? reference ?? 0
-      case 'subtract':
-        return literal === undefined ? -base : literal - (reference ?? 0)
-      default:
-        return base
-    }
-  }
-
   private valueForStat(value: unknown, current: number, frame: EffectFrame): number {
     if (typeof value === 'number') return current + value
     if (isRecord(value)) {
@@ -1728,24 +1046,26 @@ export class EffectRuntime {
         value.operation === undefined &&
         (value.reference === 'source.health' || value.reference === 'target.health')
       )
-        return this.evaluate(value, frame)
+        return this.queries.evaluate(value, frame)
       if (value.operation === 'multiply') {
         const multiplier =
-          typeof value.value === 'number' ? value.value : this.evaluate(value, frame)
+          typeof value.value === 'number'
+            ? value.value
+            : this.queries.evaluate(value, frame)
         return current * multiplier
       }
-      if (value.operation === 'set') return this.evaluate(value, frame)
+      if (value.operation === 'set') return this.queries.evaluate(value, frame)
       if (value.operation === 'subtract') {
         const amount =
           value.value === undefined && typeof value.reference === 'string'
-            ? this.numericReference(value.reference, frame)
+            ? this.queries.numericReference(value.reference, frame)
             : value.value === undefined
-              ? Math.abs(this.evaluate(value, frame))
-              : this.evaluate(value.value, frame)
+              ? Math.abs(this.queries.evaluate(value, frame))
+              : this.queries.evaluate(value.value, frame)
         return current - amount
       }
     }
-    return current + this.evaluate(value, frame)
+    return current + this.queries.evaluate(value, frame)
   }
 
   private targetPlayers(
@@ -1755,7 +1075,7 @@ export class EffectRuntime {
     const player = action.player
     if (player === 'each')
       return this.draft.players.map((candidate) => candidate.participantId)
-    if (player === 'opponent') return [this.otherPlayer(frame.controllerId)]
+    if (player === 'opponent') return [this.queries.otherPlayer(frame.controllerId)]
     if (player === 'turn-player')
       return this.draft.activePlayerId
         ? [this.draft.activePlayerId]
@@ -1772,7 +1092,7 @@ export class EffectRuntime {
     action: Record<string, unknown>,
     frame: EffectFrame
   ): readonly EntityRef[] {
-    if (action.target !== undefined) return this.select(action.target, frame)
+    if (action.target !== undefined) return this.queries.select(action.target, frame)
     if (action.player !== undefined) {
       return this.targetPlayers(action, frame).map((participantId) => ({
         instanceId: `${participantId}:hero`,
@@ -2093,7 +1413,7 @@ export class EffectRuntime {
       }
       return []
     }
-    return [...this.select(source, frame)]
+    return [...this.queries.select(source, frame)]
   }
 
   private updateMinion(
@@ -2293,7 +1613,11 @@ export class EffectRuntime {
     if (
       spec.filter &&
       event.target &&
-      !this.matchesFilter(event.target, spec.filter, this.frameFor(source, event, []))
+      !this.queries.matchesFilter(
+        event.target,
+        spec.filter,
+        this.frameFor(source, event, [])
+      )
     )
       return false
     if (
@@ -2318,9 +1642,9 @@ export class EffectRuntime {
     event: SemanticEvent
   ): boolean {
     const frame = this.frameFor(source, event, [])
-    return this.select(selector, frame).some(
-      (candidate) => entityKey(candidate) === entityKey(value)
-    )
+    return this.queries
+      .select(selector, frame)
+      .some((candidate) => entityKey(candidate) === entityKey(value))
   }
 
   private frameFor(
@@ -2634,7 +1958,8 @@ export class EffectRuntime {
 
   /** Whether this Secret has at least one action that can affect the live state. */
   private secretCanTakeEffect(block: CardEffectBlock, frame: EffectFrame): boolean {
-    if (block.condition && !this.conditionMatches(block.condition, frame)) return false
+    if (block.condition && !this.queries.conditionMatches(block.condition, frame))
+      return false
     return (block.actions ?? []).some((rawAction) => {
       const action = rawAction as Record<string, unknown>
       const name = stringValue(action.action)
@@ -2645,7 +1970,7 @@ export class EffectRuntime {
         case 'summon': {
           const controller =
             action.controller === 'opponent'
-              ? this.otherPlayer(frame.controllerId)
+              ? this.queries.otherPlayer(frame.controllerId)
               : frame.controllerId
           return (
             this.player(controller).board.length < MAX_BOARD_SIZE &&
@@ -2722,7 +2047,8 @@ export class EffectRuntime {
         const prior = this.activeFrame
         this.activeFrame = frame
         try {
-          if (block.condition && !this.conditionMatches(block.condition, frame)) return
+          if (block.condition && !this.queries.conditionMatches(block.condition, frame))
+            return
           const activation = emitTriggerPresentation
             ? this.emitTriggerActivated(frame, block.trigger)
             : null
@@ -2739,11 +2065,19 @@ export class EffectRuntime {
                   `${path}.choice[${choice}]`
                 )
             } else if (block.actions) {
-              this.runActions(block.actions, frame, `${path}.actions`)
+              this.runActions(
+                block.actions,
+                frame,
+                `${path}.actions`,
+                this.runValidatedAction.bind(this)
+              )
             }
             if (block.then) {
               const branch = asRecord(block.then)
-              if (!branch.condition || this.conditionMatches(branch.condition, frame))
+              if (
+                !branch.condition ||
+                this.queries.conditionMatches(branch.condition, frame)
+              )
                 this.runActions(asArray(branch.actions), frame, `${path}.then`)
             }
             if (block.repeat) {
@@ -2751,7 +2085,7 @@ export class EffectRuntime {
               let count = 0
               while (
                 count < MAX_RESOLUTION_STEPS &&
-                !this.conditionMatches(repeat.until, frame)
+                !this.queries.conditionMatches(repeat.until, frame)
               ) {
                 const priorEventSequence = frame.lastEvent?.sequence
                 this.runActions(
@@ -2785,10 +2119,15 @@ export class EffectRuntime {
     return _frame.choiceIndex ?? 0
   }
 
-  private runActions(
-    actions: readonly unknown[],
+  private runActions<Action>(
+    actions: readonly Action[],
     frame: EffectFrame,
-    path: string
+    path: string,
+    runAction: (
+      action: Action,
+      frame: EffectFrame,
+      path: string
+    ) => void = this.runAction.bind(this)
   ): void {
     actions.forEach((action, index) => {
       const actionPath = `${path}[${index}]`
@@ -2796,221 +2135,12 @@ export class EffectRuntime {
       this.executeQueued(
         actionPath,
         () => {
-          this.runAction(action, frame, actionPath)
+          runAction(action, frame, actionPath)
           this.processDeaths()
         },
         kind
       )
     })
-  }
-
-  private conditionMatches(value: unknown, frame: EffectFrame): boolean {
-    if (typeof value === 'string') {
-      return this.conditionMatches({ type: value }, frame)
-    }
-    if (!isRecord(value) || typeof value.type !== 'string') return false
-    const condition = value
-    const target = this.targetForFrame(frame)
-    const relativePlayer = (candidate: unknown): DraftPlayer => {
-      if (candidate === 'opponent')
-        return this.player(this.otherPlayer(frame.controllerId))
-      if (candidate === 'turn-player' && this.draft.activePlayerId)
-        return this.player(this.draft.activePlayerId)
-      if (
-        typeof candidate === 'string' &&
-        this.draft.players.some((player) => player.participantId === candidate)
-      )
-        return this.player(candidate as PlayerId)
-      return this.player(frame.controllerId)
-    }
-    const player = relativePlayer(condition.player)
-    const prospectiveDefinition =
-      frame.prospectiveCardPlay && frame.sourceCardId
-        ? cardDefinition(frame.sourceCardId)
-        : undefined
-    const isProspectiveController = (targetPlayer: DraftPlayer): boolean =>
-      frame.prospectiveCardPlay === true &&
-      targetPlayer.participantId === frame.controllerId
-    const cardsInConditionHand = (targetPlayer: DraftPlayer): readonly DraftCard[] =>
-      isProspectiveController(targetPlayer)
-        ? targetPlayer.hand.filter(
-            (card) => card.instanceId !== frame.source.instanceId
-          )
-        : targetPlayer.hand
-    const cardsPlayedEarlierThisTurn = Math.max(
-      0,
-      (this.draft.history?.cardsPlayedThisTurn.length ?? 0) -
-        (frame.prospectiveCardPlay ? 0 : 1)
-    )
-    const matchingMinions = (
-      targetPlayer: DraftPlayer,
-      filter: unknown
-    ): readonly EntityRef[] => {
-      const candidates: EntityRef[] = targetPlayer.board.map((minion) => ({
-        instanceId: minion.instanceId,
-        kind: 'minion',
-        participantId: targetPlayer.participantId,
-        zone: 'board',
-        cardId: minion.cardId
-      }))
-      if (
-        isProspectiveController(targetPlayer) &&
-        prospectiveDefinition?.type === 'Minion'
-      ) {
-        // The source remains a card reference so filters can read its authored
-        // stats and keywords before a runtime minion instance exists.
-        candidates.push(frame.source)
-      }
-      return candidates.filter((candidate) =>
-        this.matchesFilter(candidate, filter, frame)
-      )
-    }
-    switch (condition.type) {
-      case 'board-has-minion-count':
-        return this.compare(
-          this.draft.players.reduce(
-            (count, candidate) =>
-              count + matchingMinions(candidate, condition.filter).length,
-            0
-          ),
-          condition.operator,
-          Number(condition.value)
-        )
-      case 'card-died-this-game':
-        return condition.cardId === undefined
-          ? (this.draft.history?.cardsDiedThisGame.length ?? 0) > 0
-          : Boolean(
-              this.draft.history?.cardsDiedThisGame.includes(String(condition.cardId))
-            )
-      case 'combo':
-      case 'combo-active':
-        return cardsPlayedEarlierThisTurn > 0
-      case 'not-combo':
-        return cardsPlayedEarlierThisTurn === 0
-      case 'drawn-card-matches':
-        return (
-          frame.drawnCards.length > 0
-            ? frame.drawnCards
-            : frame.event?.target?.kind === 'card' && frame.event.target
-              ? [frame.event.target]
-              : []
-        ).some((card) => this.matchesFilter(card, condition.filter, frame))
-      case 'event-player-had-minion-count':
-        return this.compare(
-          frame.event?.minionCountBeforePlay ?? 0,
-          condition.operator,
-          Number(condition.value)
-        )
-      case 'player-controls-secret':
-      case 'player-has-secret':
-        return (player.secrets ?? []).length > 0
-      case 'player-has-damaged-minion':
-        return player.board.some((minion) => minion.health < minion.maxHealth)
-      case 'player-has-card-in-hand':
-        return cardsInConditionHand(player).some((card) =>
-          this.matchesFilter(
-            {
-              instanceId: card.instanceId,
-              kind: 'card',
-              participantId: player.participantId,
-              zone: 'hand',
-              cardId: card.cardId
-            },
-            condition.filter,
-            frame
-          )
-        )
-      case 'player-has-hand-count':
-        return this.compare(
-          cardsInConditionHand(player).length,
-          condition.operator,
-          Number(condition.value)
-        )
-      case 'player-has-minion':
-        return matchingMinions(player, condition.filter).length > 0
-      case 'player-has-minion-count':
-        return this.compare(
-          matchingMinions(player, condition.filter).length,
-          condition.operator,
-          Number(condition.value)
-        )
-      case 'player-deck-has-no-duplicates': {
-        const counts = new Map<string, number>()
-        for (const card of player.deck)
-          counts.set(card.cardId, (counts.get(card.cardId) ?? 0) + 1)
-        return [...counts.values()].every((count) => count === 1)
-      }
-      case 'player-has-weapon':
-        return (
-          player.weapon !== null ||
-          (isProspectiveController(player) && prospectiveDefinition?.type === 'Weapon')
-        )
-      case 'player-health-gt':
-        return player.hero.health > Number(condition.value)
-      case 'player-health-lte':
-        return player.hero.health <= Number(condition.value)
-      case 'player-lacks-minion':
-        return matchingMinions(player, condition.filter).length === 0
-      case 'player-lacks-weapon':
-        return (
-          player.weapon === null &&
-          !(isProspectiveController(player) && prospectiveDefinition?.type === 'Weapon')
-        )
-      case 'source-damaged': {
-        const minion = this.currentMinion(frame.source)
-        if (minion) return minion.health < minion.maxHealth
-        if (frame.source.kind === 'hero') {
-          const hero = this.player(frame.source.participantId).hero
-          return hero.health < hero.maxHealth
-        }
-        return false
-      }
-      case 'target-damaged': {
-        if (!target) return false
-        const minion = this.currentMinion(target)
-        if (minion) return minion.health < minion.maxHealth
-        if (target.kind === 'hero') {
-          const hero = this.player(target.participantId).hero
-          return hero.health < hero.maxHealth
-        }
-        return false
-      }
-      case 'target-died':
-        if (
-          frame.lastEvent?.type === 'minion-died' ||
-          frame.event?.type === 'minion-died'
-        )
-          return true
-        return Boolean(target?.kind === 'minion' && this.currentMinion(target) === null)
-      case 'target-frozen':
-        return Boolean(target && this.isFrozen(target))
-      case 'target-is-friendly-demon': {
-        return Boolean(
-          target &&
-          target.participantId === frame.controllerId &&
-          this.entityCard(target)?.subtype === 'Demon'
-        )
-      }
-      case 'target-is-not-friendly-demon': {
-        return Boolean(
-          target &&
-          !(
-            target.participantId === frame.controllerId &&
-            this.entityCard(target)?.subtype === 'Demon'
-          )
-        )
-      }
-      case 'target-not-frozen':
-        return Boolean(target && !this.isFrozen(target))
-      case 'target-survived':
-        if (!target) return false
-        if (target.kind === 'hero')
-          return this.player(target.participantId).hero.health > 0
-        if (target.kind !== 'minion') return false
-        return (this.currentMinion(target)?.health ?? 0) > 0
-      default:
-        return false
-    }
   }
 
   private isFrozen(ref: EntityRef): boolean {
@@ -4469,11 +3599,13 @@ export class EffectRuntime {
           zone: 'revealed' as const,
           cardId: cardId as CardId
         }))
-        .filter((candidate) => this.matchesFilter(candidate, action.filter, frame))
+        .filter((candidate) =>
+          this.queries.matchesFilter(candidate, action.filter, frame)
+        )
       const count =
         action.count === undefined
           ? 1
-          : Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+          : Math.max(0, Math.floor(this.queries.evaluate(action.count, frame)))
       const pool = [...candidates]
       const selected: EntityRef[] = []
       while (selected.length < count && pool.length > 0) {
@@ -4484,25 +3616,27 @@ export class EffectRuntime {
     }
     let source =
       sourceSelector?.selection === 'random' && action.count !== undefined
-        ? this.selectorCandidates(
+        ? this.queries.selectorCandidates(
             { ...sourceSelector, selection: 'all', count: undefined },
             frame
           )
         : this.cardRefsFromSource(action.source, frame)
     const filter = action.filter
-    source = source.filter((candidate) => this.matchesFilter(candidate, filter, frame))
+    source = source.filter((candidate) =>
+      this.queries.matchesFilter(candidate, filter, frame)
+    )
     if (action.source === 'deck-top') {
       const count =
         action.count === undefined
           ? 1
-          : Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+          : Math.max(0, Math.floor(this.queries.evaluate(action.count, frame)))
       return source.slice(0, count)
     }
     if (action.selection === 'random' || sourceSelector?.selection === 'random') {
       const count =
         action.count === undefined
           ? 1
-          : Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+          : Math.max(0, Math.floor(this.queries.evaluate(action.count, frame)))
       const pool = [...source]
       const selected: EntityRef[] = []
       while (selected.length < count && pool.length > 0) {
@@ -4514,7 +3648,7 @@ export class EffectRuntime {
     if (action.count !== undefined && action.source !== 'random-card') {
       return source.slice(
         0,
-        Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+        Math.max(0, Math.floor(this.queries.evaluate(action.count, frame)))
       )
     }
     return source
@@ -4994,7 +4128,7 @@ export class EffectRuntime {
     const health =
       healthValue === 'full' || healthValue === undefined
         ? definition.health
-        : this.evaluate(healthValue, frame)
+        : this.queries.evaluate(healthValue, frame)
     const summoned = this.createMinion(
       controllerId,
       snapshot.cardId,
@@ -5027,17 +4161,59 @@ export class EffectRuntime {
     return summoned
   }
 
+  /** Typed block actions narrow here; runtime-created blocks keep the record guard. */
+  private runValidatedAction(
+    action: CardAction,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    if (!isRecord(action)) return
+    switch (action.action) {
+      case 'destroy-mana-crystal':
+      case 'gain-mana':
+      case 'overload':
+      case 'unlock-overload':
+        return runManaAction(action, frame, path, this.manaContext)
+      default:
+        return this.runAction(action, frame, path)
+    }
+  }
+
   private runAction(actionValue: unknown, frame: EffectFrame, path: string): void {
     if (!isRecord(actionValue) || typeof actionValue.action !== 'string') return
     const action = actionValue
     const name = action.action as string
     switch (name) {
+      case 'destroy-mana-crystal':
+      case 'gain-mana':
+      case 'overload':
+      case 'unlock-overload':
+        return runManaAction(
+          {
+            action: name,
+            amount: action.amount,
+            player: stringValue(action.player) ?? undefined,
+            duration: action.duration === 'this-turn' ? 'this-turn' : undefined,
+            crystal:
+              action.crystal === 'empty' || action.crystal === 'full'
+                ? action.crystal
+                : undefined
+          },
+          frame,
+          path,
+          this.manaContext
+        )
+      case 'summon':
+      case 'summon-copy':
+      case 'summon-for-each':
+      case 'summon-random':
+        return runSummonAction(name, action, frame, path, this.summonContext)
       case 'add-to-hand': {
         const players = this.targetPlayers(action, frame)
         const count =
           action.count === undefined
             ? 1
-            : Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+            : Math.max(0, Math.floor(this.queries.evaluate(action.count, frame)))
         for (const participantId of players) {
           const sources =
             action.source === undefined
@@ -5065,7 +4241,7 @@ export class EffectRuntime {
           if (candidates.length === 0) return null
           return candidates[Math.floor(this.rng.next() * candidates.length)] ?? null
         }
-        const opponentId = this.otherPlayer(frame.controllerId)
+        const opponentId = this.queries.otherPlayer(frame.controllerId)
         const own = minionInDeck(frame.controllerId)
         const opponent = minionInDeck(opponentId)
         const ownCost = own ? (cardDefinition(own.cardId)?.cost ?? 0) : null
@@ -5118,8 +4294,9 @@ export class EffectRuntime {
           const target = isRecord(action.target) ? action.target : null
           const filter = target && isRecord(target.filter) ? target.filter : {}
           const participantId =
-            this.relativeController(target?.controller, frame) ?? frame.controllerId
-          const amount = this.evaluate(action.amount, frame)
+            this.queries.relativeController(target?.controller, frame) ??
+            frame.controllerId
+          const amount = this.queries.evaluate(action.amount, frame)
           const duration = stringValue(action.duration)
           const player = this.player(participantId)
           player.pendingCostModifiers = [
@@ -5157,8 +4334,8 @@ export class EffectRuntime {
         const targets = this.actionTargets(action, frame)
         const minimum = typeof action.minimum === 'number' ? action.minimum : 0
         for (const target of targets) {
-          const evaluated = this.withTarget(frame, target, () =>
-            this.evaluate(action.amount, frame)
+          const evaluated = this.queries.withTarget(frame, target, () =>
+            this.queries.evaluate(action.amount, frame)
           )
           const amount =
             isRecord(action.amount) && action.amount.operation === 'set'
@@ -5217,7 +4394,7 @@ export class EffectRuntime {
         const count =
           action.count === undefined
             ? 1
-            : Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+            : Math.max(0, Math.floor(this.queries.evaluate(action.count, frame)))
         if (destination === 'deck') {
           const destinationPlayer = this.player(frame.controllerId)
           let generated = false
@@ -5262,18 +4439,18 @@ export class EffectRuntime {
         for (const target of targets) {
           for (let index = 0; index < count; index += 1) {
             if (target.kind === 'minion' && isRecord(destination)) {
-              const destinationTarget = this.select(destination, frame)[0]
+              const destinationTarget = this.queries.select(destination, frame)[0]
               if (destinationTarget?.kind === 'minion')
                 this.transformMinionIntoCopy(destinationTarget, target, frame, path)
             } else if (target.cardId) {
               let destinationPlayer = frame.controllerId
               if (isRecord(destination)) {
-                const destinationTargets = this.select(destination, frame)
+                const destinationTargets = this.queries.select(destination, frame)
                 destinationPlayer =
                   destinationTargets[0]?.participantId ??
                   (destination.selection === 'other-player-hand'
-                    ? this.otherPlayer(frame.controllerId)
-                    : (this.relativeController(destination.controller, frame) ??
+                    ? this.queries.otherPlayer(frame.controllerId)
+                    : (this.queries.relativeController(destination.controller, frame) ??
                       frame.controllerId))
               }
               this.addCardToHand(destinationPlayer, target.cardId, frame, path)
@@ -5290,7 +4467,7 @@ export class EffectRuntime {
         const baseHits =
           action.hits === undefined
             ? 1
-            : Math.max(1, Math.floor(this.evaluate(action.hits, frame)))
+            : Math.max(1, Math.floor(this.queries.evaluate(action.hits, frame)))
         const randomTarget =
           isRecord(action.target) && action.target.selection === 'random'
         const targets = randomTarget ? [] : this.actionTargets(action, frame)
@@ -5315,7 +4492,7 @@ export class EffectRuntime {
               ? this.actionTargets(action, frame)
               : targets
             for (const target of selectedTargets) {
-              this.withTarget(frame, target, () => {
+              this.queries.withTarget(frame, target, () => {
                 const minimum =
                   typeof action.minimum === 'number' ? Math.floor(action.minimum) : null
                 const maximum =
@@ -5323,7 +4500,7 @@ export class EffectRuntime {
                 const amount =
                   minimum !== null && maximum !== null && maximum >= minimum
                     ? minimum + Math.floor(this.rng.next() * (maximum - minimum + 1))
-                    : this.evaluate(action.amount, frame)
+                    : this.queries.evaluate(action.amount, frame)
                 this.applyDamage(target, amount, frame, path + '.hit' + hit, {
                   skipSpellScaling: randomSplitSpell,
                   ...(typeof action.spellDamageBonusMultiplier === 'number'
@@ -5346,7 +4523,9 @@ export class EffectRuntime {
       }
       case 'destroy':
         for (const target of this.actionTargets(action, frame)) {
-          this.withTarget(frame, target, () => this.directDestroy(target, frame, path))
+          this.queries.withTarget(frame, target, () =>
+            this.directDestroy(target, frame, path)
+          )
           frame.lastActionTarget = target
         }
         return
@@ -5378,7 +4557,7 @@ export class EffectRuntime {
       case 'destroy-and-gain-stats': {
         const targets = this.actionTargets(action, frame)
         const destination = isRecord(action.destination)
-          ? this.select(action.destination, frame)
+          ? this.queries.select(action.destination, frame)
           : [frame.source]
         for (const target of targets) {
           const attack = this.readAttack(target)
@@ -5392,16 +4571,6 @@ export class EffectRuntime {
               path + '.destination'
             )
           }
-        }
-        return
-      }
-      case 'destroy-mana-crystal': {
-        for (const participantId of this.targetPlayers(action, frame)) {
-          const player = this.player(participantId)
-          const amount = Math.max(0, Math.floor(this.evaluate(action.amount, frame)))
-          player.mana.maximum = Math.max(0, player.mana.maximum - amount)
-          player.mana.available = Math.min(player.mana.available, player.mana.maximum)
-          this.emit(frame, name, path, { participantId, amount })
         }
         return
       }
@@ -5448,7 +4617,10 @@ export class EffectRuntime {
         return
       }
       case 'discover': {
-        const count = Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+        const count = Math.max(
+          0,
+          Math.floor(this.queries.evaluate(action.count, frame))
+        )
         for (const participantId of this.targetPlayers(action, frame)) {
           const fromDeck =
             action.source === 'deck' ||
@@ -5485,7 +4657,7 @@ export class EffectRuntime {
                 zone: 'revealed',
                 cardId: definition.id
               }
-              return this.matchesFilter(candidate, action.filter, discoverFrame)
+              return this.queries.matchesFilter(candidate, action.filter, discoverFrame)
             })
             const weighted = [...pool]
             const selected: CardDefinition[] = []
@@ -5568,7 +4740,7 @@ export class EffectRuntime {
         const count =
           action.count === undefined
             ? 1
-            : Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+            : Math.max(0, Math.floor(this.queries.evaluate(action.count, frame)))
         for (const participantId of this.targetPlayers(action, frame)) {
           let selected: EntityRef[] = []
           if (action.source !== undefined) {
@@ -5635,7 +4807,10 @@ export class EffectRuntime {
         return
       }
       case 'draw-until': {
-        const handSize = Math.max(0, Math.floor(this.evaluate(action.handSize, frame)))
+        const handSize = Math.max(
+          0,
+          Math.floor(this.queries.evaluate(action.handSize, frame))
+        )
         for (const participantId of this.targetPlayers(action, frame)) {
           const drawCount = Math.max(
             0,
@@ -5655,7 +4830,7 @@ export class EffectRuntime {
         const pool = CARD_CATALOG.all.filter(
           (card) =>
             card.type === 'Weapon' &&
-            this.matchesFilter(
+            this.queries.matchesFilter(
               {
                 instanceId: frame.controllerId + ':pool:' + card.id,
                 kind: 'card',
@@ -5689,9 +4864,12 @@ export class EffectRuntime {
       case 'gain-armor':
         for (const target of this.actionTargets(action, frame)) {
           if (target.kind !== 'hero') continue
-          this.withTarget(frame, target, () => {
+          this.queries.withTarget(frame, target, () => {
             const hero = this.player(target.participantId).hero
-            const amount = Math.max(0, Math.floor(this.evaluate(action.amount, frame)))
+            const amount = Math.max(
+              0,
+              Math.floor(this.queries.evaluate(action.amount, frame))
+            )
             hero.armor += amount
             this.historyUpdate((history) => {
               history.armorGainedThisTurn += amount
@@ -5712,36 +4890,6 @@ export class EffectRuntime {
             })
           })
           frame.lastActionTarget = target
-        }
-        return
-      case 'gain-mana':
-        for (const participantId of this.targetPlayers(action, frame)) {
-          const player = this.player(participantId)
-          const amount = Math.max(0, Math.floor(this.evaluate(action.amount, frame)))
-          const duration = stringValue(action.duration)
-          if (action.crystal === 'empty') {
-            player.mana.maximum = Math.min(MAX_MANA, player.mana.maximum + amount)
-          } else if (action.crystal === 'full') {
-            const gained = Math.min(MAX_MANA - player.mana.maximum, amount)
-            player.mana.maximum += gained
-            player.mana.available = Math.min(MAX_MANA, player.mana.available + gained)
-          } else if (duration === 'this-turn') {
-            player.mana.temporary = (player.mana.temporary ?? 0) + amount
-            player.mana.available = Math.min(
-              MAX_MANA + (player.mana.temporary ?? 0),
-              player.mana.available + amount
-            )
-          } else {
-            player.mana.available = Math.min(
-              player.mana.maximum,
-              player.mana.available + amount
-            )
-          }
-          this.emit(frame, name, path, {
-            participantId,
-            amount,
-            mana: { ...player.mana }
-          })
         }
         return
       case 'grant-deathrattle':
@@ -5829,7 +4977,7 @@ export class EffectRuntime {
           Math.floor(
             typeof action.amount === 'number'
               ? action.amount
-              : this.evaluate(action.amount ?? 1, frame)
+              : this.queries.evaluate(action.amount ?? 1, frame)
           )
         )
         for (const target of this.actionTargets(action, frame)) {
@@ -5960,7 +5108,7 @@ export class EffectRuntime {
       }
       case 'modify':
         for (const target of this.actionTargets(action, frame)) {
-          this.withTarget(frame, target, () =>
+          this.queries.withTarget(frame, target, () =>
             this.modifyEntity(target, action, frame, path)
           )
           frame.lastActionTarget = target
@@ -5986,7 +5134,7 @@ export class EffectRuntime {
         if (!trigger || !CARD_TRIGGERS.includes(trigger)) return
         const multiplier = Math.max(
           1,
-          Math.floor(this.evaluate(action.multiplier, frame))
+          Math.floor(this.queries.evaluate(action.multiplier, frame))
         )
         const duration = stringValue(action.duration) ?? 'permanent'
         for (const target of this.actionTargets(action, frame)) {
@@ -6029,50 +5177,6 @@ export class EffectRuntime {
             trigger,
             multiplier
           })
-        }
-        return
-      }
-      case 'overload': {
-        const amount = Math.max(0, Math.floor(this.evaluate(action.amount, frame)))
-        for (const participantId of this.targetPlayers(action, frame)) {
-          const player = this.player(participantId)
-          const previous = player.mana.overloadNextTurn ?? 0
-          const nextOverload = Math.min(MAX_MANA, previous + amount)
-          const appliedAmount = nextOverload - previous
-          player.mana.overloadNextTurn = nextOverload
-          player.overload = nextOverload
-          this.emit(frame, name, path, {
-            participantId,
-            amount: appliedAmount,
-            overloadNextTurn: nextOverload
-          })
-          this.emitSemantic({
-            type: 'overload-applied',
-            source: frame.source,
-            target: {
-              instanceId: `${participantId}:hero`,
-              kind: 'hero',
-              participantId,
-              zone: 'hero'
-            },
-            controllerId: participantId,
-            targetControllerId: participantId,
-            amount: appliedAmount
-          })
-        }
-        return
-      }
-      case 'unlock-overload': {
-        for (const participantId of this.targetPlayers(action, frame)) {
-          const player = this.player(participantId)
-          const locked = player.mana.overloadLocked ?? 0
-          player.mana = {
-            ...player.mana,
-            available: Math.min(player.mana.maximum, player.mana.available + locked),
-            overloadLocked: 0
-          }
-          player.overload = 0
-          this.emit(frame, name, path, { participantId, amount: locked })
         }
         return
       }
@@ -6168,10 +5272,12 @@ export class EffectRuntime {
             choiceIndex: frame.choiceIndex
           }
           const targets =
-            action.target === undefined ? [] : this.select(action.target, sourceFrame)
+            action.target === undefined
+              ? []
+              : this.queries.select(action.target, sourceFrame)
           for (const target of targets) {
-            this.withTarget(sourceFrame, target, () => {
-              const amount = this.evaluate(action.amount, sourceFrame)
+            this.queries.withTarget(sourceFrame, target, () => {
+              const amount = this.queries.evaluate(action.amount, sourceFrame)
               this.applyDamage(target, amount, sourceFrame, path)
             })
             frame.lastActionTarget = target
@@ -6269,8 +5375,8 @@ export class EffectRuntime {
         return
       case 'restore':
         for (const target of this.actionTargets(action, frame)) {
-          this.withTarget(frame, target, () => {
-            const amount = this.evaluate(action.amount, frame, true)
+          this.queries.withTarget(frame, target, () => {
+            const amount = this.queries.evaluate(action.amount, frame, true)
             this.applyRestore(target, amount, frame, path)
           })
           frame.lastActionTarget = target
@@ -6309,7 +5415,7 @@ export class EffectRuntime {
           const count =
             action.count === undefined
               ? sources.length
-              : Math.max(0, Math.floor(this.evaluate(action.count, frame)))
+              : Math.max(0, Math.floor(this.queries.evaluate(action.count, frame)))
           for (const source of sources.slice(0, count)) {
             if (source.kind === 'minion')
               this.resurrect(source, frame, path, action.health)
@@ -6362,10 +5468,12 @@ export class EffectRuntime {
           }
           this.directDestroy(source, sourceFrame, path + '.sacrifice')
           const targets =
-            action.target === undefined ? [] : this.select(action.target, sourceFrame)
+            action.target === undefined
+              ? []
+              : this.queries.select(action.target, sourceFrame)
           for (const target of targets) {
-            this.withTarget(sourceFrame, target, () => {
-              const amount = this.evaluate(action.amount, sourceFrame)
+            this.queries.withTarget(sourceFrame, target, () => {
+              const amount = this.queries.evaluate(action.amount, sourceFrame)
               this.applyDamage(target, amount, sourceFrame, path + '.damage')
             })
             frame.lastActionTarget = target
@@ -6377,7 +5485,9 @@ export class EffectRuntime {
         const trigger = stringValue(action.trigger) as CardTrigger | null
         if (!trigger || !CARD_TRIGGERS.includes(trigger)) return
         const selectedTarget =
-          action.target === undefined ? undefined : this.select(action.target, frame)[0]
+          action.target === undefined
+            ? undefined
+            : this.queries.select(action.target, frame)[0]
         // A start-of-turn schedule without an explicit turn is authored as
         // the source controller's next turn. If the source is acting now,
         // the opponent's turn is one boundary away and the source's turn is
@@ -6451,8 +5561,8 @@ export class EffectRuntime {
       }
       case 'set-health':
         for (const target of this.actionTargets(action, frame)) {
-          const amount = this.withTarget(frame, target, () =>
-            this.evaluate(action.amount, frame)
+          const amount = this.queries.withTarget(frame, target, () =>
+            this.queries.evaluate(action.amount, frame)
           )
           this.setHealth(target, amount)
           this.emit(frame, name, path, {
@@ -6548,7 +5658,9 @@ export class EffectRuntime {
           for (const participantId of playerIds) {
             const player = this.player(participantId)
             const previousHeroPowerId = player.heroPower.id
-            const opponentPower = this.player(this.otherPlayer(participantId)).heroPower
+            const opponentPower = this.player(
+              this.queries.otherPlayer(participantId)
+            ).heroPower
             player.heroPower = {
               ...clonePlain(opponentPower),
               creationOrdinal: player.heroPower.creationOrdinal,
@@ -6594,7 +5706,10 @@ export class EffectRuntime {
         return
       }
       case 'set-turn-limit': {
-        const seconds = Math.max(0, Math.floor(this.evaluate(action.seconds, frame)))
+        const seconds = Math.max(
+          0,
+          Math.floor(this.queries.evaluate(action.seconds, frame))
+        )
         this.draft.turnLimitSeconds = seconds > 0 ? seconds : null
         this.emit(frame, name, path, { seconds: this.draft.turnLimitSeconds })
         return
@@ -6676,7 +5791,7 @@ export class EffectRuntime {
         if (generatedCardId && action.target === undefined) {
           const generatedCount = Math.max(
             0,
-            Math.floor(this.evaluate(action.count ?? 1, frame))
+            Math.floor(this.queries.evaluate(action.count ?? 1, frame))
           )
           for (const participantId of this.targetPlayers(action, frame)) {
             const player = this.player(participantId)
@@ -6718,143 +5833,7 @@ export class EffectRuntime {
         }
         return
       }
-      case 'summon': {
-        const cardId = this.actionCardId(action)
-        if (!cardId) return
-        const count = Math.max(0, this.evaluate(action.count ?? 1, frame))
-        const controller =
-          typeof action.controller === 'string' && action.controller === 'opponent'
-            ? this.otherPlayer(frame.controllerId)
-            : frame.controllerId
-        const placement =
-          typeof action.placement === 'string'
-            ? (action.placement as CardSummonPlacement)
-            : undefined
-        let summonIndex = 0
-        for (let index = 0; index < count; index += 1) {
-          const summoned = this.createMinion(
-            controller,
-            cardId,
-            frame,
-            `${path}.${index}`,
-            undefined,
-            this.summonPosition(frame, controller, placement, summonIndex)
-          )
-          if (summoned) summonIndex += 1
-          if (
-            summoned &&
-            frame.event &&
-            (action.asNewAttackTarget === true || action.asNewSpellTarget === true)
-          ) {
-            frame.event.redirectTarget = summoned
-          }
-        }
-        return
-      }
-      case 'summon-copy': {
-        const targets =
-          action.target !== undefined
-            ? this.actionTargets(action, frame)
-            : this.sourceEntities(action, frame)
-        const count =
-          action.source !== undefined
-            ? 1
-            : Math.max(1, this.evaluate(action.count ?? 1, frame))
-        const placement =
-          typeof action.placement === 'string'
-            ? (action.placement as CardSummonPlacement)
-            : undefined
-        let summonIndex = 0
-        for (const target of targets)
-          for (let index = 0; index < count; index += 1)
-            if (target.cardId)
-              if (
-                this.createMinion(
-                  frame.controllerId,
-                  target.cardId,
-                  frame,
-                  path,
-                  undefined,
-                  this.summonPosition(
-                    frame,
-                    frame.controllerId,
-                    placement,
-                    summonIndex
-                  ),
-                  this.currentMinion(target) ?? undefined
-                )
-              )
-                summonIndex += 1
-        return
-      }
-      case 'summon-for-each': {
-        const cardId = this.actionCardId(action)
-        if (!cardId) return
-        const sources = this.sourceEntities(action, frame)
-        const placement =
-          typeof action.placement === 'string'
-            ? (action.placement as CardSummonPlacement)
-            : undefined
-        let summonIndex = 0
-        for (let index = 0; index < sources.length; index += 1)
-          if (
-            this.createMinion(
-              frame.controllerId,
-              cardId,
-              frame,
-              `${path}.${index}`,
-              undefined,
-              this.summonPosition(frame, frame.controllerId, placement, summonIndex)
-            )
-          )
-            summonIndex += 1
-        return
-      }
-      case 'summon-random': {
-        const count = Math.max(0, this.evaluate(action.count ?? 1, frame))
-        const pool = Array.isArray(action.pool)
-          ? action.pool.filter((entry): entry is string => typeof entry === 'string')
-          : CARD_CATALOG.all
-              .filter(
-                (card) =>
-                  card.collectible &&
-                  card.type === 'Minion' &&
-                  this.matchesFilter(
-                    {
-                      instanceId: `${frame.controllerId}:pool:${card.id}`,
-                      kind: 'card',
-                      participantId: frame.controllerId,
-                      zone: 'revealed',
-                      cardId: card.id
-                    },
-                    action.filter,
-                    frame
-                  )
-              )
-              .map((card) => card.id)
-        const placement =
-          typeof action.placement === 'string'
-            ? (action.placement as CardSummonPlacement)
-            : undefined
-        let summonIndex = 0
-        for (let index = 0; index < count; index += 1) {
-          const cardId = pool[Math.floor(this.rng.next() * pool.length)] as
-            CardId | undefined
-          if (cardId)
-            if (
-              this.createMinion(
-                frame.controllerId,
-                cardId,
-                frame,
-                `${path}.${index}`,
-                undefined,
-                this.summonPosition(frame, frame.controllerId, placement, summonIndex)
-              )
-            )
-              summonIndex += 1
-        }
-        return
-      }
+
       case 'swap': {
         const source =
           action.source !== undefined
@@ -6968,7 +5947,7 @@ export class EffectRuntime {
                 (card) =>
                   card.collectible &&
                   card.type === 'Minion' &&
-                  this.matchesFilter(
+                  this.queries.matchesFilter(
                     {
                       instanceId: `${frame.controllerId}:pool:${card.id}`,
                       kind: 'card',
@@ -7515,7 +6494,7 @@ export class EffectRuntime {
       if (!block.condition) return true
       const type = isRecord(block.condition) ? block.condition.type : undefined
       if (typeof type === 'string' && type.startsWith('target-')) return true
-      return this.conditionMatches(block.condition, frame)
+      return this.queries.conditionMatches(block.condition, frame)
     })
     collectTargetSelectors(activeEffects, '.effects', selectors, choiceIndex)
     const seen = new Set<string>()
@@ -7606,7 +6585,7 @@ export class EffectRuntime {
     const activeBlocks = card.effects.filter(
       (block) =>
         (block.trigger === 'cast' || block.trigger === 'battlecry') &&
-        (!block.condition || this.conditionMatches(block.condition, frame))
+        (!block.condition || this.queries.conditionMatches(block.condition, frame))
     )
     if (activeBlocks.length === 0) return null
     return {
@@ -7619,7 +6598,7 @@ export class EffectRuntime {
         const branch = asRecord(block.then)
         return Boolean(
           branch.condition &&
-          this.conditionMatches(branch.condition, frame) &&
+          this.queries.conditionMatches(branch.condition, frame) &&
           this.isPositivePlayCondition(branch.condition)
         )
       })
@@ -7636,7 +6615,7 @@ export class EffectRuntime {
     for (const block of card.effects) {
       if (
         block.trigger !== 'cast' ||
-        (block.condition && !this.conditionMatches(block.condition, frame))
+        (block.condition && !this.queries.conditionMatches(block.condition, frame))
       )
         continue
       collectSelectedEffectActions(block.actions, choiceIndex, actions)
@@ -7694,7 +6673,7 @@ export class EffectRuntime {
       .filter(
         (modifier) =>
           this.pendingCostModifierIsActive(modifier) &&
-          this.matchesFilter(reference, modifier.filter, frame)
+          this.queries.matchesFilter(reference, modifier.filter, frame)
       )
       .reduce(
         (total, modifier) =>
@@ -7721,7 +6700,7 @@ export class EffectRuntime {
     player.pendingCostModifiers = (player.pendingCostModifiers ?? []).filter(
       (modifier) =>
         !modifier.consumeOnMatch ||
-        !this.matchesFilter(reference, modifier.filter, frame)
+        !this.queries.matchesFilter(reference, modifier.filter, frame)
     )
   }
 
@@ -7771,7 +6750,7 @@ export class EffectRuntime {
     }
     if (
       definition.playCondition &&
-      !this.conditionMatches(definition.playCondition, targetFrame)
+      !this.queries.conditionMatches(definition.playCondition, targetFrame)
     )
       return null
     if (!this.hasResolvableSpellCastAction(definition, targetFrame, selectedChoice)) {
@@ -7836,7 +6815,7 @@ export class EffectRuntime {
       count: preservesPositionRange ? selectorValue.count : undefined,
       preserve: undefined
     }
-    const candidates = this.selectorCandidates(selector, frame)
+    const candidates = this.queries.selectorCandidates(selector, frame)
     if (!this.sourceIsSpell(frame)) return candidates
     return candidates.filter(
       (candidate) =>
@@ -7953,7 +6932,7 @@ export class EffectRuntime {
       : []
     const legalAttackTargets: Record<string, AttackCharacterRef[]> = {}
     if (active) {
-      const opponent = this.otherPlayer(participantId)
+      const opponent = this.queries.otherPlayer(participantId)
       const opponentPlayer = this.player(opponent)
       const taunts = opponentPlayer.board.filter((minion) => {
         const ref: EntityRef = {
@@ -8270,7 +7249,7 @@ export class EffectRuntime {
         ...this.frameFor(source, null, [current]),
         choiceIndex: options.choice
       }
-      const expectedController = this.relativeController(
+      const expectedController = this.queries.relativeController(
         asRecord(selectors[index]).controller,
         targetFrame
       )
@@ -8280,9 +7259,9 @@ export class EffectRuntime {
           'A selected target is controlled by the wrong participant.'
         )
       if (
-        !this.select(selectors[index], targetFrame).some(
-          (candidate) => entityKey(candidate) === entityKey(current)
-        )
+        !this.queries
+          .select(selectors[index], targetFrame)
+          .some((candidate) => entityKey(candidate) === entityKey(current))
       ) {
         throw new ResolutionInputError(
           'illegal-target',
@@ -8691,7 +7670,7 @@ export class EffectRuntime {
         options.attacker,
         'invalid-attacker'
       )
-      const defenderOwner = this.otherPlayer(options.participantId)
+      const defenderOwner = this.queries.otherPlayer(options.participantId)
       const defender = this.attackEntity(
         defenderOwner,
         options.defender,
@@ -9312,9 +8291,9 @@ export class EffectRuntime {
         target ??
         (effect.kind === 'damage-enemy-hero'
           ? {
-              instanceId: `${this.otherPlayer(options.participantId)}:hero`,
+              instanceId: `${this.queries.otherPlayer(options.participantId)}:hero`,
               kind: 'hero' as const,
-              participantId: this.otherPlayer(options.participantId),
+              participantId: this.queries.otherPlayer(options.participantId),
               zone: 'hero' as const
             }
           : effect.kind === 'draw-and-self-damage'
@@ -9909,7 +8888,7 @@ export class EffectRuntime {
 
       endingPlayer.hero.attack = 0
       endingPlayer.hero.attacksUsedThisTurn = 0
-      const nextPlayer = this.player(this.otherPlayer(options.participantId))
+      const nextPlayer = this.player(this.queries.otherPlayer(options.participantId))
       const nextTurnNumber = this.draft.turnNumber + 1
       this.draft.turnNumber = nextTurnNumber
       this.draft.activePlayerId = nextPlayer.participantId

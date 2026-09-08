@@ -6153,6 +6153,45 @@
     ]
   },
   {
+    "id": "classic_old_murk_eye",
+    "name": "Old Murk-Eye",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 4,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "Charge. Has +1 Attack for each other Murloc on the battlefield.",
+    "keywords": ["charge"],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "any",
+                "type": "minion",
+                "selection": "all",
+                "filter": {
+                  "tribe": "Murloc"
+                },
+                "exclude": "source"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
     "id": "classic_naga_myrmidon",
     "collectible": false,
     "name": "Naga Myrmidon",

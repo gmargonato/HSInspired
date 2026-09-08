@@ -81,6 +81,16 @@ export class AnimationScope implements Animations {
     if (target === undefined) this.paused = false
   }
 
+  /** Cancels one owned timeline/tween and releases its tracked targets immediately. */
+  cancel(animation: gsap.core.Animation): void {
+    for (const item of this.tracked) {
+      if (item.animation !== animation) continue
+      item.animation.kill()
+      this.tracked.delete(item)
+      return
+    }
+  }
+
   private track<T extends gsap.core.Animation>(
     animation: T,
     target?: gsap.TweenTarget

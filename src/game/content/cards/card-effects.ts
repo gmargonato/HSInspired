@@ -341,10 +341,56 @@ export function isCardEffectObject(
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export interface CardAction {
-  readonly action: CardActionName
-  readonly [key: string]: CardEffectValue
+/** Numeric shapes accepted by the content validator; only amount/health allow full. */
+export type CardNumericValue<Full extends 'full' | never = never> =
+  | number
+  | Full
+  | {
+      readonly condition: Readonly<Record<string, CardEffectValue>>
+      readonly thenValue: CardNumericValue<Full>
+      readonly elseValue: CardNumericValue<Full>
+    }
+  | { readonly random: readonly number[] }
+  | ({
+      readonly operation?: CardValueOperation
+      readonly opponent?: boolean
+      readonly keyword?: CardKeyword
+      readonly multiplier?: number
+      readonly selector?: Readonly<Record<string, CardEffectValue>>
+      readonly value?: number
+    } & (
+      | { readonly reference: CardValueReference }
+      | { readonly operation: CardValueOperation; readonly value: number }
+    ))
+
+export type ManaActionName =
+  'gain-mana' | 'destroy-mana-crystal' | 'overload' | 'unlock-overload'
+
+type ManaActionFields = {
+  readonly player?: (typeof CARD_ACTION_PLAYERS)[number]
+  readonly amount?: CardNumericValue<'full'>
+  readonly crystal?: (typeof CARD_CRYSTAL_MODES)[number]
+  readonly duration?: CardDuration
 }
+
+/** Other validator-supported action fields remain available during incremental typing. */
+export type ManaCardAction = Readonly<Record<string, CardEffectValue>> &
+  ManaActionFields &
+  (
+    | {
+        readonly action: 'gain-mana' | 'destroy-mana-crystal'
+        readonly player: (typeof CARD_ACTION_PLAYERS)[number]
+        readonly amount: CardNumericValue<'full'>
+      }
+    | { readonly action: 'overload'; readonly amount: CardNumericValue<'full'> }
+    | { readonly action: 'unlock-overload' }
+  )
+
+export type CardAction =
+  | ManaCardAction
+  | (Readonly<Record<string, CardEffectValue>> & {
+      readonly action: Exclude<CardActionName, ManaActionName>
+    })
 
 export interface CardEffectBlock {
   readonly trigger: CardTrigger

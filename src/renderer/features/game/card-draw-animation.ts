@@ -8,7 +8,7 @@ export type DrawCorners = readonly [Point, Point, Point, Point]
 const mix = (a: number, b: number, t: number): number => a + (b - a) * t
 const smooth = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10)
 
-export type CardDrawProfile = 'direct' | 'local-reveal'
+export type CardDrawProfile = 'direct' | 'local-reveal' | 'mulligan-reveal'
 type FlightPose = { corners: DrawCorners; front: boolean; edgeOn: boolean }
 type FlightFrame = {
   at: number
@@ -33,7 +33,8 @@ function sampleFlightChannel(
   index: number,
   channel: FlightChannel,
   progress: number,
-  peakAt: number
+  peakAt: number,
+  peakTangentScale: number
 ): number {
   const tangent = (i: number): number => {
     if (i === 0 || i === frames.length - 1) return 0
@@ -48,10 +49,7 @@ function sampleFlightChannel(
     const w1 = 2 * after + before
     const w2 = after + 2 * before
     const slope = (w1 + w2) / (w1 / left + w2 / right)
-    return (
-      slope *
-      (current.at === peakAt ? CARD_DRAW_LAYOUT.localReveal.peakTangentScale : 1)
-    )
+    return slope * (current.at === peakAt ? peakTangentScale : 1)
   }
   const a = frames[index]
   const b = frames[index + 1]
@@ -72,9 +70,11 @@ export function createLocalDrawFlight(
   start: DrawCorners,
   end: DrawCorners,
   width: number,
-  height: number
+  height: number,
+  profile: Exclude<CardDrawProfile, 'direct'> = 'local-reveal'
 ): (progress: number) => FlightPose {
   const layout = CARD_DRAW_LAYOUT.localReveal
+  const mulligan = profile === 'mulligan-reveal'
   // Clockwise landscape orientation maps the texture's top edge to the deck's right edge.
   const departureCorners: DrawCorners = [start[1], start[2], start[3], start[0]]
   const a = cornerCenter(start)
@@ -96,8 +96,9 @@ export function createLocalDrawFlight(
   const reveal = layout.reveal.map((key): FlightFrame => ({
     at: key.at / layout.duration,
     ...key.pose.position,
+    y: mulligan ? key.mulliganY : key.pose.position.y,
     scale: key.pose.scale?.x ?? 1,
-    rotation: key.rotation * radians,
+    rotation: (mulligan ? key.mulliganRotation : key.rotation) * radians,
     planeRotation: key.planeRotation * radians,
     yaw: key.yaw * radians,
     taper: key.taper
@@ -118,9 +119,11 @@ export function createLocalDrawFlight(
     ...layout.descent.map((key): FlightFrame => ({
       at: key.at / layout.duration,
       x: mix(peak.x, b.x, key.handProgress),
-      y: mix(peak.y, b.y, key.handProgress) + key.drop,
+      y: mix(peak.y, b.y, key.handProgress) + (mulligan ? 0 : key.drop),
       scale: mix(peak.scale, last.scale, key.scaleProgress),
-      rotation: endRotation * key.rotationProgress,
+      rotation: mulligan
+        ? key.mulliganRotation * radians
+        : endRotation * key.rotationProgress,
       planeRotation: 0,
       yaw: Math.PI,
       taper: 1
@@ -167,7 +170,6 @@ export function createLocalDrawFlight(
     })) as unknown as DrawCorners
   }
 
-  const initialCorners = project(first)
   const finalCorners = project(last)
   return (progress): FlightPose => {
     if (progress <= 0) return { corners: departureCorners, front: false, edgeOn: false }
@@ -176,7 +178,14 @@ export function createLocalDrawFlight(
       (_, i) => i < frames.length - 1 && progress < frames[i + 1].at
     )
     const channel = (key: FlightChannel): number =>
-      sampleFlightChannel(frames, index, key, progress, peak.at)
+      sampleFlightChannel(
+        frames,
+        index,
+        key,
+        progress,
+        peak.at,
+        mulligan ? layout.peakTangentScale : 0
+      )
     const pose: FlightFrame = {
       at: progress,
       x: channel('x'),
@@ -187,17 +196,26 @@ export function createLocalDrawFlight(
       yaw: channel('yaw'),
       taper: channel('taper')
     }
-    const departure =
-      1 - smooth(Math.min(1, (progress * layout.duration) / layout.departureRelease))
+    const turn = smooth(
+      Math.max(
+        0,
+        Math.min(
+          1,
+          (progress * layout.duration - layout.departureTurnStart) /
+            (layout.departureRelease - layout.departureTurnStart)
+        )
+      )
+    )
+    const departureScale = pose.scale / first.scale
     const arrival = smooth(Math.max(0, (progress - peak.at) / (1 - peak.at)))
     const corners = project(pose).map((p, i) => ({
+      // Preserve the painted deck's taper and orientation during the rightward slide.
+      // Release the scaled silhouette smoothly into the existing rigid-plane turn.
       x:
-        p.x +
-        (departureCorners[i].x - initialCorners[i].x) * departure +
+        mix(pose.x + (departureCorners[i].x - a.x) * departureScale, p.x, turn) +
         (end[i].x - finalCorners[i].x) * arrival,
       y:
-        p.y +
-        (departureCorners[i].y - initialCorners[i].y) * departure +
+        mix(a.y + (departureCorners[i].y - a.y) * departureScale, p.y, turn) +
         (end[i].y - finalCorners[i].y) * arrival
     })) as unknown as DrawCorners
     const cosine = Math.cos(pose.yaw)
@@ -326,12 +344,13 @@ export class CardDrawAnimation {
       { x: frame.right, y: frame.bottom },
       { x: frame.x, y: frame.bottom }
     ].map((p) => layer.toLocal(face.toGlobal(p))) as unknown as DrawCorners
-    if (profile === 'local-reveal' && slot)
+    if (profile !== 'direct' && slot)
       this.localFlight = createLocalDrawFlight(
         this.start,
         this.end,
         frame.width,
-        frame.height
+        frame.height,
+        profile
       )
     if (slot)
       this.frontTexture = renderer.generateTexture({

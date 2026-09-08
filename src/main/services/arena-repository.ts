@@ -1,6 +1,7 @@
+import { replaceFileAtomically } from './atomic-file'
+import { SerialOperationQueue } from './serial-operation-queue'
 import { randomBytes, randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { readFile, rename } from 'node:fs/promises'
 import {
   ARENA_DECK_ID,
   ARENA_DECK_SIZE,
@@ -40,18 +41,18 @@ export class ArenaRepository {
   private run: ArenaRunSnapshot | null = null
   private loaded = false
   private loadPromise: Promise<void> | null = null
-  private mutationQueue: Promise<void> = Promise.resolve()
+  private readonly mutations = new SerialOperationQueue()
 
   constructor(private readonly filePath: string) {}
 
   async get(): Promise<ArenaRunSnapshot> {
     await this.ensureLoaded()
-    await this.mutationQueue
+    await this.mutations.settled
     return cloneRun(this.requireRun())
   }
 
   async selectHero(heroId: HeroId): Promise<ArenaRunSnapshot> {
-    return this.enqueue(async () => {
+    return this.mutations.enqueue(async () => {
       await this.ensureLoaded()
       const current = this.requireRun()
       if (current.phase !== 'choosing-hero' || !current.heroChoices.includes(heroId)) {
@@ -72,7 +73,7 @@ export class ArenaRepository {
   }
 
   async pickCard(cardId: CardId): Promise<ArenaRunSnapshot> {
-    return this.enqueue(async () => {
+    return this.mutations.enqueue(async () => {
       await this.ensureLoaded()
       const current = this.requireRun()
       if (
@@ -105,7 +106,7 @@ export class ArenaRepository {
   }
 
   async retire(): Promise<ArenaRunSnapshot> {
-    return this.enqueue(async () => {
+    return this.mutations.enqueue(async () => {
       await this.ensureLoaded()
       const next = this.createFreshRun(this.requireRun().heroChoices)
       await this.persist(next)
@@ -116,7 +117,7 @@ export class ArenaRepository {
   }
 
   async recordResult(result: ArenaMatchResult): Promise<ArenaRunSnapshot> {
-    return this.enqueue(async () => {
+    return this.mutations.enqueue(async () => {
       await this.ensureLoaded()
       const current = this.requireRun()
       if (current.phase !== 'ready') throw new Error('Arena deck is not complete.')
@@ -205,21 +206,10 @@ export class ArenaRepository {
   private async persist(run: ArenaRunSnapshot): Promise<void> {
     const payload: PersistedArenaFile = { version: ARENA_FILE_VERSION, run }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
-    await mkdir(dirname(this.filePath), { recursive: true })
-    try {
-      await writeFile(temporaryPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
-      await rename(temporaryPath, this.filePath)
-    } finally {
-      await unlink(temporaryPath).catch(() => undefined)
-    }
-  }
-
-  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
-    const next = this.mutationQueue.then(operation, operation)
-    this.mutationQueue = next.then(
-      () => undefined,
-      () => undefined
+    await replaceFileAtomically(
+      this.filePath,
+      temporaryPath,
+      () => JSON.stringify(payload, null, 2) + '\n'
     )
-    return next
   }
 }

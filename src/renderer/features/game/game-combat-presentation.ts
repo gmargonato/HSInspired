@@ -1,0 +1,1001 @@
+import { Container, Sprite } from 'pixi.js'
+import type { Texture } from 'pixi.js'
+import type { AnimationScope } from '../../animation/animations'
+import {
+  getHeroAttack,
+  type AttackCharacterRef,
+  type CharacterCombatantResult,
+  type CharacterCombatResolvedEvent,
+  type OpeningMatchEvent,
+  type OpeningPlayerState,
+  type PlayerId
+} from '../../../game/match'
+import { MinionView } from '../../rendering/minions/minion-view'
+import { HeroView } from '../../rendering/heroes/hero-view'
+import { WeaponView } from '../../rendering/weapons/weapon-view'
+import type { GameAssets } from '../../ui/asset-registry'
+import { DamageIndicatorView } from './damage-indicator-view'
+import { HealIndicatorView } from './heal-indicator-view'
+import { BOARD_TIMING, RESOLUTION_TIMING } from './game-presentation-timing'
+import { completeTimeline } from './game-presentation-animation'
+
+export const COMBAT_ATTACKER_Z_INDEX = 100
+
+interface CombatViewPlacement {
+  readonly parent: Container
+  readonly index: number
+  readonly zIndex: number
+}
+
+export type CombatView = MinionView | HeroView
+
+interface ActiveCombatPresentation {
+  readonly combatId: string
+  readonly attacker: CombatView
+  readonly defender: CombatView
+  readonly attackerOrigin: { readonly x: number; readonly y: number }
+  readonly defenderOrigin: { readonly x: number; readonly y: number }
+  readonly attackerPlacement: CombatViewPlacement
+  readonly attackerAttack: number
+  readonly deferredAttackerDeathInstanceIds: Set<string>
+  readonly attackerDamageIndicators: Set<DamageIndicatorView>
+  impactStarted: boolean
+  attackerReturned: boolean
+  screenShake: Promise<void> | null
+}
+
+interface DeathGhostTemplate {
+  readonly sourceInstanceId: string
+  readonly snapshot: {
+    readonly texture: Texture
+    readonly globalPosition: { readonly x: number; readonly y: number }
+    readonly worldScale: number
+  }
+}
+
+interface CombatPresentationContext {
+  findCharacter(
+    ownerId: PlayerId,
+    character: AttackCharacterRef
+  ): CombatView | undefined
+  findMinion(ownerId: PlayerId, instanceId: string): MinionView | undefined
+  weaponView(ownerId: PlayerId): WeaponView | undefined
+  presentedPlayer(ownerId: string): OpeningPlayerState
+  removeMinion(view: MinionView): void
+  removeWeapon(ownerId: PlayerId, view?: WeaponView): void
+  layoutLocalRow(): void
+  layoutRemoteRow(): void
+  screenShake(attack: number): Promise<void>
+  onImpact(): void
+}
+
+/** Owns combat animation state, overlays, death snapshots, and transient indicators.
+ * Character views are borrowed from the board and returned to their original layers.
+ */
+export class GameCombatPresentation {
+  readonly layer = new Container()
+  private readonly activeCombatPresentations = new Map<
+    string,
+    ActiveCombatPresentation
+  >()
+  private readonly deathGhostTemplates = new Map<string, DeathGhostTemplate>()
+  private readonly deathBatchSources = new Map<string, readonly string[]>()
+  private readonly activeDeathGhosts = new Set<Sprite>()
+  private readonly combatPreviewMarkers = new Map<CombatView, Sprite>()
+
+  constructor(
+    private readonly assets: GameAssets,
+    private readonly animations: Pick<AnimationScope, 'timeline'>,
+    private readonly context: CombatPresentationContext
+  ) {}
+
+  trackAttackerDamage(view: CombatView, indicator: DamageIndicatorView): void {
+    const activeCombat = this.activeCombatForAttacker(view)
+    activeCombat?.attackerDamageIndicators.add(indicator)
+  }
+
+  beginLatestImpact(): void {
+    const active = this.latestActiveCombat()
+    if (active && !active.impactStarted) {
+      active.impactStarted = true
+      active.screenShake = this.context.screenShake(active.attackerAttack)
+    }
+  }
+
+  returnLatestAttacker(): Promise<void> | undefined {
+    const active = this.latestActiveCombat()
+    if (active) return this.returnActiveCombatAttacker(active)
+    return undefined
+  }
+
+  captureDeathMarker(
+    instanceId: string,
+    snapshot: DeathGhostTemplate['snapshot']
+  ): void {
+    this.deathGhostTemplates.set(instanceId, { sourceInstanceId: instanceId, snapshot })
+  }
+
+  dispose(): void {
+    this.clearCombatPreview()
+    this.activeCombatPresentations.clear()
+    this.deathGhostTemplates.clear()
+    this.deathBatchSources.clear()
+    for (const ghost of this.activeDeathGhosts) {
+      if (!ghost.destroyed) {
+        ghost.removeFromParent()
+        ghost.destroy({ children: true })
+      }
+    }
+    this.activeDeathGhosts.clear()
+    // The board still owns and disposes borrowed character views.
+    for (const child of [...this.layer.children]) {
+      if (child instanceof MinionView || child instanceof HeroView)
+        child.removeFromParent()
+    }
+    this.layer.destroy({ children: true })
+  }
+
+  syncCombatPreviewMarkers(lethalViews: readonly CombatView[]): void {
+    const desired = new Set(lethalViews)
+    for (const [view, marker] of this.combatPreviewMarkers) {
+      if (desired.has(view)) continue
+      if (!marker.destroyed) {
+        marker.removeFromParent()
+        marker.destroy()
+      }
+      this.combatPreviewMarkers.delete(view)
+    }
+    for (const view of desired) {
+      if (!this.combatPreviewMarkers.has(view)) {
+        this.combatPreviewMarkers.set(view, this.createDeathMarker(view))
+      }
+    }
+    this.updateCombatMarkerPositions()
+  }
+
+  updateCombatMarkerPositions(): void {
+    for (const [view, marker] of this.combatPreviewMarkers) {
+      if (view.destroyed || !view.parent || marker.destroyed) {
+        if (!marker.destroyed) {
+          marker.removeFromParent()
+          marker.destroy()
+        }
+        this.combatPreviewMarkers.delete(view)
+        continue
+      }
+      this.positionDeathMarker(marker, view)
+    }
+  }
+
+  clearCombatPreview(): void {
+    for (const marker of this.combatPreviewMarkers.values()) {
+      if (!marker.destroyed) {
+        marker.removeFromParent()
+        marker.destroy()
+      }
+    }
+    this.combatPreviewMarkers.clear()
+  }
+
+  async presentCombatStarted(
+    event: Extract<OpeningMatchEvent, { type: 'combat-started' }>
+  ): Promise<void> {
+    const attacker = this.context.findCharacter(
+      event.attacker.participantId,
+      event.attacker.character
+    )
+    const defender = this.context.findCharacter(
+      event.defender.participantId,
+      event.defender.character
+    )
+    if (!attacker || !defender || !attacker.parent || !defender.parent) return
+
+    const attackerOrigin = { x: attacker.x, y: attacker.y }
+    const defenderOrigin = { x: defender.x, y: defender.y }
+    const attackerGlobal = attacker.parent.toGlobal(attacker.position)
+    const defenderGlobal = defender.parent.toGlobal(defender.position)
+    const attackerPlacement = this.promoteCombatViewForCombat(attacker)
+    const active: ActiveCombatPresentation = {
+      combatId: event.combatId,
+      attacker,
+      defender,
+      attackerOrigin,
+      defenderOrigin,
+      attackerPlacement,
+      attackerAttack: event.attacker.attack,
+      deferredAttackerDeathInstanceIds: new Set(),
+      attackerDamageIndicators: new Set(),
+      impactStarted: false,
+      attackerReturned: false,
+      screenShake: null
+    }
+    this.activeCombatPresentations.set(event.combatId, active)
+
+    const contactGlobal = {
+      x: attackerGlobal.x + (defenderGlobal.x - attackerGlobal.x) * 0.62,
+      y: attackerGlobal.y + (defenderGlobal.y - attackerGlobal.y) * 0.62
+    }
+    const contact = attacker.parent.toLocal(contactGlobal)
+    const followDeathMarkers = (): void => this.updateCombatMarkerPositions()
+
+    try {
+      this.updateCombatMarkerPositions()
+      await this.wait(BOARD_TIMING.combatWindupPause)
+      if (this.layer.destroyed) return
+
+      const lunge = this.animations.timeline()
+      lunge.to(attacker, {
+        x: contact.x,
+        y: contact.y,
+        duration: BOARD_TIMING.combatLunge,
+        ease: 'power2.in'
+      })
+      lunge.eventCallback('onUpdate', followDeathMarkers)
+      await completeTimeline(lunge)
+      if (this.layer.destroyed) return
+      this.context.onImpact()
+    } catch (error) {
+      this.activeCombatPresentations.delete(event.combatId)
+      if (!attacker.destroyed)
+        this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
+      throw error
+    }
+  }
+
+  async presentCombatResolved(
+    event: Extract<
+      OpeningMatchEvent,
+      { type: 'minion-combat-resolved' | 'character-combat-resolved' }
+    >
+  ): Promise<void> {
+    const combatId = event.combatId
+    const active = combatId ? this.activeCombatPresentations.get(combatId) : undefined
+    if (!active) {
+      if (event.type === 'minion-combat-resolved') await this.presentMinionCombat(event)
+      else await this.presentCharacterCombat(event)
+      return
+    }
+    this.activeCombatPresentations.delete(combatId!)
+    const attacker = active.attacker
+    const defender = active.defender
+    try {
+      if (!attacker.destroyed) this.setCombatViewFinalStats(attacker, event.attacker)
+      if (!defender.destroyed) this.setCombatViewFinalStats(defender, event.defender)
+
+      if (!active.impactStarted) {
+        active.impactStarted = true
+        active.screenShake = this.context.screenShake(active.attackerAttack)
+        await this.wait(RESOLUTION_TIMING.combatImpactPause)
+        if (this.layer.destroyed) return
+      }
+      const screenShake = active.screenShake ?? Promise.resolve()
+
+      const attackerDestroyed = event.attacker.destroyed
+      const defenderDestroyed = event.defender.destroyed
+      const settle = (
+        view: CombatView,
+        origin: { readonly x: number; readonly y: number },
+        destroyed: boolean
+      ): Promise<void> => {
+        if (view.destroyed) return Promise.resolve()
+        const timeline = this.animations.timeline()
+        const attackerAlreadyReturned = view === attacker && active.attackerReturned
+        if (view === attacker && !attackerAlreadyReturned) {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        } else {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        }
+        if (destroyed && view instanceof MinionView) {
+          timeline
+            .to(
+              view,
+              {
+                alpha: 0,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              view === attacker && !attackerAlreadyReturned
+                ? BOARD_TIMING.combatReturn
+                : 0
+            )
+            .to(
+              view.scale,
+              {
+                x: view.scale.x * 0.7,
+                y: view.scale.y * 0.7,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              view === attacker && !attackerAlreadyReturned
+                ? BOARD_TIMING.combatReturn
+                : 0
+            )
+        }
+        if (attackerAlreadyReturned && !destroyed) return Promise.resolve()
+        timeline.eventCallback('onUpdate', () => {
+          this.updateCombatMarkerPositions()
+          this.updateCombatDamageIndicators(active)
+        })
+        return completeTimeline(timeline)
+      }
+
+      await Promise.all([
+        settle(attacker, active.attackerOrigin, attackerDestroyed),
+        settle(defender, active.defenderOrigin, defenderDestroyed),
+        screenShake
+      ])
+      if (this.layer.destroyed) return
+
+      if (attackerDestroyed && attacker instanceof MinionView)
+        this.context.removeMinion(attacker)
+      else if (active.attackerPlacement && !attacker.destroyed)
+        this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)
+      if (defenderDestroyed && defender instanceof MinionView)
+        this.context.removeMinion(defender)
+      this.context.layoutLocalRow()
+      this.context.layoutRemoteRow()
+    } finally {
+      active.attackerDamageIndicators.clear()
+      active.deferredAttackerDeathInstanceIds.clear()
+      if (!attacker.destroyed)
+        this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)
+      this.clearCombatPreview()
+    }
+  }
+
+  async presentDeathBatchStarted(
+    event: Extract<OpeningMatchEvent, { type: 'death-batch-started' }>
+  ): Promise<void> {
+    this.deathBatchSources.set(
+      event.batchId,
+      event.deaths.map((death) => death.instanceId)
+    )
+    const animations: Promise<void>[] = []
+    const views = new Map<string, MinionView | WeaponView>()
+    for (const death of event.deaths) {
+      const view =
+        death.kind === 'minion'
+          ? this.context.findMinion(death.participantId, death.instanceId)
+          : this.context.weaponView(death.participantId)?.instanceId ===
+              death.instanceId
+            ? this.context.weaponView(death.participantId)
+            : undefined
+      if (!view || view.destroyed) continue
+      if (death.hasDeathrattle && !this.deathGhostTemplates.has(death.instanceId)) {
+        view.setDeathrattle(true)
+        const snapshot = view.getAbilityMarkerSnapshot('deathrattle')
+        if (snapshot)
+          this.deathGhostTemplates.set(death.instanceId, {
+            sourceInstanceId: death.instanceId,
+            snapshot
+          })
+      }
+      // Combat damage resolves its death batch before the combat-resolved
+      // event. Keep a lethal attacker visible until that event can return it
+      // to its board position and play its collapse there.
+      const activeCombat =
+        view instanceof MinionView ? this.activeCombatForAttacker(view) : undefined
+      if (activeCombat) {
+        activeCombat.deferredAttackerDeathInstanceIds.add(death.instanceId)
+        continue
+      }
+      views.set(death.instanceId, view)
+      const targetScale = view.scale.x * 0.72
+      const timeline = this.animations.timeline()
+      timeline.to(view, {
+        alpha: 0,
+        duration: RESOLUTION_TIMING.deathCollapse,
+        ease: 'power2.in'
+      })
+      timeline.to(
+        view.scale,
+        {
+          x: targetScale,
+          y: targetScale,
+          duration: RESOLUTION_TIMING.deathCollapse,
+          ease: 'power2.in'
+        },
+        0
+      )
+      animations.push(completeTimeline(timeline))
+    }
+    await Promise.all(animations)
+    for (const death of event.deaths) {
+      const view = views.get(death.instanceId)
+      if (view instanceof MinionView) this.context.removeMinion(view)
+      else if (view instanceof WeaponView)
+        this.context.removeWeapon(death.participantId, view)
+    }
+  }
+
+  completeDeathBatch(batchId: string): void {
+    for (const instanceId of this.deathBatchSources.get(batchId) ?? [])
+      this.deathGhostTemplates.delete(instanceId)
+    this.deathBatchSources.delete(batchId)
+  }
+
+  async presentDeathrattleGhost(
+    instanceId: string,
+    fallbackSnapshot?: DeathGhostTemplate['snapshot']
+  ): Promise<void> {
+    const template =
+      this.deathGhostTemplates.get(instanceId) ??
+      (fallbackSnapshot
+        ? { sourceInstanceId: instanceId, snapshot: fallbackSnapshot }
+        : undefined)
+    // A synthetic Deathrattle activation (for example Feign Death) does not
+    // enter a death batch, so there may be no captured marker. Keep the same
+    // pacing even when the source view is unavailable.
+    if (!template) {
+      await this.wait(RESOLUTION_TIMING.deathrattleGhost)
+      return
+    }
+    const ghost = new Sprite(template.snapshot.texture)
+    ghost.anchor.set(0.5)
+    const local = this.layer.toLocal(template.snapshot.globalPosition)
+    ghost.position.set(local.x, local.y)
+    ghost.scale.set(template.snapshot.worldScale)
+    ghost.alpha = 1
+    ghost.zIndex = 1250
+    ghost.label = `game.deathrattle.${instanceId}`
+    ghost.eventMode = 'none'
+    this.layer.addChild(ghost)
+    this.activeDeathGhosts.add(ghost)
+    const cleanup = (): void => {
+      this.activeDeathGhosts.delete(ghost)
+      if (!ghost.destroyed) ghost.destroy({ children: true })
+    }
+    const timeline = this.animations.timeline()
+    timeline.to(
+      ghost.scale,
+      {
+        x: template.snapshot.worldScale * 2,
+        y: template.snapshot.worldScale * 2,
+        duration: RESOLUTION_TIMING.deathrattleGhost,
+        ease: 'power2.out'
+      },
+      0
+    )
+    timeline.to(
+      ghost,
+      {
+        alpha: 0,
+        duration: RESOLUTION_TIMING.deathrattleGhost,
+        ease: 'power2.in'
+      },
+      0
+    )
+    try {
+      await completeTimeline(timeline)
+    } finally {
+      cleanup()
+    }
+  }
+
+  private async presentMinionCombat(
+    event: Extract<OpeningMatchEvent, { type: 'minion-combat-resolved' }>
+  ): Promise<void> {
+    const attacker = this.context.findMinion(
+      event.attacker.participantId,
+      event.attacker.instanceId
+    )
+    const defender = this.context.findMinion(
+      event.defender.participantId,
+      event.defender.instanceId
+    )
+    if (!attacker || !defender || !attacker.parent || !defender.parent) {
+      this.clearCombatPreview()
+      return
+    }
+
+    let attackerPlacement: CombatViewPlacement | null = null
+    try {
+      const attackerOrigin = { x: attacker.x, y: attacker.y }
+      const defenderOrigin = { x: defender.x, y: defender.y }
+      const attackerGlobal = attacker.parent.toGlobal(attacker.position)
+      const defenderGlobal = defender.parent.toGlobal(defender.position)
+      attackerPlacement = this.promoteCombatViewForCombat(attacker)
+      const contactGlobal = {
+        x: attackerGlobal.x + (defenderGlobal.x - attackerGlobal.x) * 0.62,
+        y: attackerGlobal.y + (defenderGlobal.y - attackerGlobal.y) * 0.62
+      }
+      const contact = attacker.parent.toLocal(contactGlobal)
+      const followDeathMarkers = (): void => this.updateCombatMarkerPositions()
+
+      this.updateCombatMarkerPositions()
+      await this.wait(BOARD_TIMING.combatWindupPause)
+      if (this.layer.destroyed) return
+
+      const lunge = this.animations.timeline()
+      lunge.to(attacker, {
+        x: contact.x,
+        y: contact.y,
+        duration: BOARD_TIMING.combatLunge,
+        ease: 'power2.in'
+      })
+      lunge.eventCallback('onUpdate', followDeathMarkers)
+      // Only the attacker moves during the attack wind-up and lunge. The
+      // defender remains planted and is updated at impact instead.
+      await completeTimeline(lunge)
+      if (this.layer.destroyed) return
+
+      this.setCombatViewStats(attacker, event.attacker)
+      this.setCombatViewStats(defender, event.defender)
+      followDeathMarkers()
+      const screenShake = this.context.screenShake(event.attacker.attack)
+      this.context.onImpact()
+      await this.wait(BOARD_TIMING.combatImpact)
+      if (this.layer.destroyed) return
+
+      const attackerDamageTaken = event.attacker.divineShieldConsumed
+        ? 0
+        : event.attacker.attemptedDamage
+      const defenderDamageTaken = event.defender.divineShieldConsumed
+        ? 0
+        : event.defender.attemptedDamage
+      const attackerDamageIndicator = this.showDamageIndicator(
+        attacker,
+        attackerDamageTaken
+      )
+      this.showDamageIndicator(defender, defenderDamageTaken)
+      const followSettleOverlays = (): void => {
+        followDeathMarkers()
+        if (attackerDamageIndicator && !attackerDamageIndicator.destroyed) {
+          this.positionCharacterIndicator(attackerDamageIndicator, attacker)
+        }
+      }
+
+      const settle = (
+        view: MinionView,
+        origin: { x: number; y: number }
+      ): Promise<void> => {
+        if (view.destroyed) return Promise.resolve()
+        const timeline = this.animations.timeline()
+        const destroyed =
+          view === attacker ? event.attacker.destroyed : event.defender.destroyed
+
+        if (view === attacker) {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        }
+        if (destroyed) {
+          const deathStart = view === attacker ? BOARD_TIMING.combatReturn : 0
+          timeline
+            .to(
+              view,
+              {
+                alpha: 0,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              deathStart
+            )
+            .to(
+              view.scale,
+              {
+                x: view.scale.x * 0.7,
+                y: view.scale.y * 0.7,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              deathStart
+            )
+        } else if (view !== attacker) {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        }
+        timeline.eventCallback('onUpdate', followSettleOverlays)
+        return completeTimeline(timeline)
+      }
+
+      await Promise.all([
+        settle(attacker, attackerOrigin),
+        settle(defender, defenderOrigin),
+        screenShake
+      ])
+      if (this.layer.destroyed) return
+
+      if (event.attacker.destroyed) this.context.removeMinion(attacker)
+      else if (attackerPlacement) {
+        this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
+      }
+      if (event.defender.destroyed) this.context.removeMinion(defender)
+      this.context.layoutLocalRow()
+      this.context.layoutRemoteRow()
+    } finally {
+      if (!attacker.destroyed && attackerPlacement) {
+        this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
+      }
+      this.clearCombatPreview()
+    }
+  }
+
+  private async presentCharacterCombat(
+    event: CharacterCombatResolvedEvent
+  ): Promise<void> {
+    const attacker = this.context.findCharacter(
+      event.attacker.participantId,
+      event.attacker.character
+    )
+    const defender = this.context.findCharacter(
+      event.defender.participantId,
+      event.defender.character
+    )
+    if (!attacker || !defender || !attacker.parent || !defender.parent) {
+      this.clearCombatPreview()
+      return
+    }
+
+    let attackerPlacement: CombatViewPlacement | null = null
+    try {
+      const attackerOrigin = { x: attacker.x, y: attacker.y }
+      const defenderOrigin = { x: defender.x, y: defender.y }
+      const attackerGlobal = attacker.parent.toGlobal(attacker.position)
+      const defenderGlobal = defender.parent.toGlobal(defender.position)
+      attackerPlacement = this.promoteCombatViewForCombat(attacker)
+      const contactGlobal = {
+        x: attackerGlobal.x + (defenderGlobal.x - attackerGlobal.x) * 0.62,
+        y: attackerGlobal.y + (defenderGlobal.y - attackerGlobal.y) * 0.62
+      }
+      const contact = attacker.parent.toLocal(contactGlobal)
+      const followDeathMarkers = (): void => this.updateCombatMarkerPositions()
+
+      this.updateCombatMarkerPositions()
+      await this.wait(BOARD_TIMING.combatWindupPause)
+      if (this.layer.destroyed) return
+
+      const lunge = this.animations.timeline()
+      lunge.to(attacker, {
+        x: contact.x,
+        y: contact.y,
+        duration: BOARD_TIMING.combatLunge,
+        ease: 'power2.in'
+      })
+      lunge.eventCallback('onUpdate', followDeathMarkers)
+      await completeTimeline(lunge)
+      if (this.layer.destroyed) return
+
+      this.setCombatViewStats(attacker, event.attacker)
+      this.setCombatViewStats(defender, event.defender)
+      followDeathMarkers()
+      const screenShake = this.context.screenShake(event.attacker.attack)
+      this.context.onImpact()
+      await this.wait(BOARD_TIMING.combatImpact)
+      if (this.layer.destroyed) return
+
+      const damageTaken = (combatant: CharacterCombatantResult): number =>
+        combatant.divineShieldConsumed ? 0 : combatant.attemptedDamage
+      const attackerDamageIndicator = this.showDamageIndicator(
+        attacker,
+        damageTaken(event.attacker)
+      )
+      this.showDamageIndicator(defender, damageTaken(event.defender))
+      const followSettleOverlays = (): void => {
+        followDeathMarkers()
+        if (attackerDamageIndicator && !attackerDamageIndicator.destroyed) {
+          this.positionCharacterIndicator(attackerDamageIndicator, attacker)
+        }
+      }
+
+      const settle = (
+        view: CombatView,
+        origin: { x: number; y: number },
+        destroyed: boolean
+      ): Promise<void> => {
+        if (view.destroyed) return Promise.resolve()
+        const timeline = this.animations.timeline()
+        // Heroes remain visible at zero Health so the terminal state is clear;
+        // attacking minions return home before their death collapse.
+        if (view === attacker) {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        }
+        if (destroyed && view instanceof MinionView) {
+          const deathStart = view === attacker ? BOARD_TIMING.combatReturn : 0
+          timeline
+            .to(
+              view,
+              {
+                alpha: 0,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              deathStart
+            )
+            .to(
+              view.scale,
+              {
+                x: view.scale.x * 0.7,
+                y: view.scale.y * 0.7,
+                duration: BOARD_TIMING.combatDeath,
+                ease: 'power2.in'
+              },
+              deathStart
+            )
+        } else if (view !== attacker) {
+          timeline.to(view, {
+            x: origin.x,
+            y: origin.y,
+            duration: BOARD_TIMING.combatReturn,
+            ease: 'power2.out'
+          })
+        }
+        timeline.eventCallback('onUpdate', followSettleOverlays)
+        return completeTimeline(timeline)
+      }
+
+      await Promise.all([
+        settle(attacker, attackerOrigin, event.attacker.destroyed),
+        settle(defender, defenderOrigin, event.defender.destroyed),
+        screenShake
+      ])
+      if (this.layer.destroyed) return
+
+      if (event.attacker.destroyed && attacker instanceof MinionView) {
+        this.context.removeMinion(attacker)
+      } else if (attackerPlacement) {
+        this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
+      }
+      if (event.defender.destroyed && defender instanceof MinionView) {
+        this.context.removeMinion(defender)
+      }
+      this.context.layoutLocalRow()
+      this.context.layoutRemoteRow()
+    } finally {
+      if (!attacker.destroyed && attackerPlacement) {
+        this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
+      }
+      this.clearCombatPreview()
+    }
+  }
+
+  private createDeathMarker(view: CombatView): Sprite {
+    const marker = new Sprite(this.assets.minionWillDie)
+    marker.anchor.set(0.5)
+    marker.scale.set(0.8)
+    this.positionDeathMarker(marker, view)
+    marker.zIndex = 1000
+    marker.eventMode = 'none'
+    const ref = view instanceof HeroView ? 'hero' : (view.instanceId ?? 'unknown')
+    marker.label = `game.character.will-die.${ref}`
+    this.layer.addChild(marker)
+    return marker
+  }
+
+  private positionDeathMarker(marker: Sprite, view: CombatView): void {
+    const global = view.parent
+      ? view.parent.toGlobal(view.position)
+      : view.getGlobalPosition()
+    const local = this.layer.toLocal(global)
+    marker.position.set(local.x, local.y - 15)
+  }
+
+  showDamageIndicatorForCharacter(
+    ownerId: PlayerId,
+    character: AttackCharacterRef,
+    amount: number
+  ): void {
+    const view = this.context.findCharacter(ownerId, character)
+    if (view) this.showDamageIndicator(view, amount)
+  }
+
+  showHealIndicatorForCharacter(
+    ownerId: PlayerId,
+    character: AttackCharacterRef,
+    amount: number
+  ): void {
+    const view = this.context.findCharacter(ownerId, character)
+    if (view) this.showHealIndicator(view, amount)
+  }
+
+  showDamageIndicator(view: CombatView, amount: number): DamageIndicatorView | null {
+    if (amount <= 0) return null
+
+    const indicator = new DamageIndicatorView(this.assets.damageIndicator, amount)
+    return this.showCharacterIndicator(indicator, view)
+  }
+
+  showHealIndicator(view: CombatView, amount: number): HealIndicatorView | null {
+    if (amount <= 0) return null
+
+    const indicator = new HealIndicatorView(this.assets.healIndicator, amount)
+    return this.showCharacterIndicator(indicator, view)
+  }
+
+  private showCharacterIndicator<T extends DamageIndicatorView | HealIndicatorView>(
+    indicator: T,
+    view: CombatView
+  ): T {
+    this.positionCharacterIndicator(indicator, view)
+    indicator.scale.set(0)
+    indicator.zIndex = 1100
+    this.layer.addChild(indicator)
+
+    const timeline = this.animations.timeline()
+    timeline.to(indicator.scale, {
+      x: 1,
+      y: 1,
+      duration: BOARD_TIMING.characterIndicatorGrow,
+      ease: 'back.out(1.7)'
+    })
+    timeline.to(indicator, {
+      alpha: 1,
+      duration: BOARD_TIMING.characterIndicatorHold
+    })
+    timeline.to(indicator, {
+      alpha: 0,
+      duration: BOARD_TIMING.characterIndicatorFade,
+      ease: 'power2.in'
+    })
+    timeline.eventCallback('onComplete', () => {
+      indicator.removeFromParent()
+      indicator.destroy({ children: true })
+    })
+    return indicator
+  }
+
+  private positionCharacterIndicator(
+    indicator: DamageIndicatorView | HealIndicatorView,
+    view: CombatView
+  ): void {
+    const global = view.parent
+      ? view.parent.toGlobal(view.position)
+      : view.getGlobalPosition()
+    const local = this.layer.toLocal(global)
+    indicator.position.set(local.x, local.y - (view instanceof HeroView ? 5 : 15))
+  }
+
+  private latestActiveCombat(): ActiveCombatPresentation | undefined {
+    let latest: ActiveCombatPresentation | undefined
+    for (const presentation of this.activeCombatPresentations.values())
+      latest = presentation
+    return latest
+  }
+
+  private activeCombatForAttacker(
+    view: CombatView
+  ): ActiveCombatPresentation | undefined {
+    for (const presentation of this.activeCombatPresentations.values()) {
+      if (presentation.attacker === view) return presentation
+    }
+    return undefined
+  }
+
+  private updateCombatDamageIndicators(active: ActiveCombatPresentation): void {
+    for (const indicator of active.attackerDamageIndicators) {
+      if (indicator.destroyed) {
+        active.attackerDamageIndicators.delete(indicator)
+        continue
+      }
+      this.positionCharacterIndicator(indicator, active.attacker)
+    }
+  }
+
+  private async returnActiveCombatAttacker(
+    active: ActiveCombatPresentation
+  ): Promise<void> {
+    const attacker = active.attacker
+    if (active.attackerReturned || attacker.destroyed) return
+
+    const timeline = this.animations.timeline()
+    timeline.to(attacker, {
+      x: active.attackerOrigin.x,
+      y: active.attackerOrigin.y,
+      duration: BOARD_TIMING.combatReturn,
+      ease: 'power2.out'
+    })
+    timeline.eventCallback('onUpdate', () => {
+      this.updateCombatMarkerPositions()
+      this.updateCombatDamageIndicators(active)
+    })
+    await completeTimeline(timeline)
+    active.attackerReturned = true
+  }
+
+  private setCombatViewStats(
+    view: CombatView,
+    result: {
+      readonly attack: number
+      readonly healthAfter: number
+      readonly armorAfter?: number
+    }
+  ): void {
+    if (view instanceof HeroView) {
+      view.setStats(result.attack, result.healthAfter, result.armorAfter ?? 0)
+    } else {
+      view.setStats(result.attack, result.healthAfter)
+    }
+  }
+
+  private setCombatViewFinalStats(
+    view: CombatView,
+    result: {
+      readonly attack: number
+      readonly healthAfter: number
+      readonly armorAfter?: number
+    }
+  ): void {
+    if (view instanceof HeroView) {
+      const ownerId = view.ownerId
+      if (ownerId) {
+        const player = this.context.presentedPlayer(ownerId)
+        view.setStats(getHeroAttack(player), player.hero.health, player.hero.armor)
+        return
+      }
+    } else if (view.ownerId && view.instanceId) {
+      const player = this.context.presentedPlayer(view.ownerId)
+      const minion = player.board.find(
+        (candidate) => candidate.instanceId === view.instanceId
+      )
+      if (minion) {
+        view.setStats(minion.attack, minion.health, minion.maxHealth)
+        return
+      }
+    }
+    this.setCombatViewStats(view, result)
+  }
+
+  private promoteCombatViewForCombat(view: CombatView): CombatViewPlacement {
+    const parent = view.parent
+    if (!parent) {
+      throw new Error('Cannot promote a combat character without a board parent.')
+    }
+
+    const placement = {
+      parent,
+      index: parent.getChildIndex(view),
+      zIndex: view.zIndex
+    }
+    const global = view.getGlobalPosition()
+    this.layer.addChild(view)
+    const local = this.layer.toLocal(global)
+    view.position.set(local.x, local.y)
+    view.zIndex = COMBAT_ATTACKER_Z_INDEX
+    return placement
+  }
+
+  private restoreCombatViewAfterCombat(
+    view: CombatView,
+    placement: CombatViewPlacement
+  ): void {
+    if (view.destroyed || view.parent === placement.parent) {
+      if (!view.destroyed) view.zIndex = placement.zIndex
+      return
+    }
+
+    const global = view.getGlobalPosition()
+    placement.parent.addChildAt(
+      view,
+      Math.min(placement.index, placement.parent.children.length)
+    )
+    const local = placement.parent.toLocal(global)
+    view.position.set(local.x, local.y)
+    view.zIndex = placement.zIndex
+  }
+
+  private wait(duration: number): Promise<void> {
+    return completeTimeline(this.animations.timeline().to({}, { duration }))
+  }
+}

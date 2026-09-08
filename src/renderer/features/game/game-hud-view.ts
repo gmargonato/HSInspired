@@ -1,7 +1,12 @@
+import type { AnimationScope } from '../../animation/animations'
 import { Container, Sprite, Text, type Texture } from 'pixi.js'
 import type { PlayerId, OpeningCard, OpeningMatchState } from '../../../game/match'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
-import { applyPlacement, type LayoutPlacement } from '../../rendering/layout'
+import {
+  applyPlacement,
+  applyAnchoredPlacement,
+  type LayoutPlacement
+} from '../../rendering/layout'
 import { ManaTray, resolveManaCrystalStates } from './mana-tray'
 import { DeckTrackerView } from './deck-tracker-view'
 import type { DeckTrackerSortMode } from './deck-tracker-model'
@@ -13,6 +18,11 @@ import type { CardAssetResolver } from '../../ui/asset-registry/card-asset-resol
 type Player = OpeningMatchState['players'][number]
 
 const END_TURN_FLIP_DURATION = 0.32
+const YOUR_TURN_TIMING = {
+  yourTurnGrow: 0.35,
+  yourTurnHold: 1,
+  yourTurnFadeOut: 0.15
+} as const
 
 /** Owned HUD composition for turn controls, mana, deck counts, and tracker. */
 export class GameHudView {
@@ -28,9 +38,13 @@ export class GameHudView {
   deckCountLabels: { local: Text; remote: Text } | null = null
   manaLabels: { local: Text; remote: Text } | null = null
   manaLocalTray: ManaTray | null = null
-  yourTurnFlag: Sprite | null = null
+  private yourTurnFlag: Sprite | null = null
+  private yourTurnTimeline: gsap.core.Timeline | null = null
 
-  constructor(resolver: CardAssetResolver) {
+  constructor(
+    resolver: CardAssetResolver,
+    private readonly animations: Pick<AnimationScope, 'timeline' | 'cancel'>
+  ) {
     this.deckTracker = new DeckTrackerView(resolver)
     this.turnLayer.label = 'game.turn-hud'
     this.turnButtonLayer.label = 'game.turn-button'
@@ -149,6 +163,70 @@ export class GameHudView {
     if (this.deckTracker.visible) this.deckTracker.update(localDeck)
   }
 
+  /**
+   * Shows the "Your turn" banner, always centred on the board: it fades in
+   * while growing from a small scale up to full size, holds briefly, then fades
+   * out. Fire-and-forget — turn flow and draw animations continue underneath
+   * it. No sound.
+   */
+  presentYourTurnFlag(texture: Texture): void {
+    this.clearYourTurnFlag()
+    const layout = GAME_BOARD_LAYOUT.yourTurnFlag
+    const flag = new Sprite(texture)
+    applyAnchoredPlacement(flag, layout)
+    flag.scale.set(GAME_BOARD_LAYOUT.yourTurnStartScale)
+    flag.alpha = 0
+    flag.label = 'game.your-turn-flag'
+    flag.eventMode = 'none'
+    this.turnLayer.addChild(flag)
+    this.yourTurnFlag = flag
+
+    const finalScale = layout.scale ?? { x: 1, y: 1 }
+    const timeline = this.animations.timeline()
+    this.yourTurnTimeline = timeline
+    timeline.to(flag, {
+      alpha: 1,
+      duration: YOUR_TURN_TIMING.yourTurnGrow,
+      ease: 'power2.out'
+    })
+    timeline.to(
+      flag.scale,
+      {
+        x: finalScale.x,
+        y: finalScale.y,
+        duration: YOUR_TURN_TIMING.yourTurnGrow,
+        ease: 'power2.out'
+      },
+      0
+    )
+    timeline.to(
+      flag,
+      {
+        alpha: 0,
+        duration: YOUR_TURN_TIMING.yourTurnFadeOut,
+        ease: 'power2.in'
+      },
+      YOUR_TURN_TIMING.yourTurnGrow + YOUR_TURN_TIMING.yourTurnHold
+    )
+    const completed = new Promise<void>((resolve) => {
+      timeline.eventCallback('onComplete', resolve)
+      timeline.eventCallback('onInterrupt', resolve)
+    })
+    void completed.then(() => {
+      if (this.yourTurnFlag !== flag || flag.destroyed) return
+      this.yourTurnTimeline = null
+      this.yourTurnFlag = null
+      flag.destroy({ children: true })
+    })
+  }
+
+  private clearYourTurnFlag(): void {
+    if (this.yourTurnTimeline) this.animations.cancel(this.yourTurnTimeline)
+    this.yourTurnTimeline = null
+    this.yourTurnFlag?.destroy({ children: true })
+    this.yourTurnFlag = null
+  }
+
   dispose(): void {
     this.endTurnOutline?.dispose()
     this.endTurnOutline = null
@@ -157,8 +235,7 @@ export class GameHudView {
     this.deckTracker.dispose()
     this.manaLocalTray?.dispose()
     this.manaLocalTray = null
-    this.yourTurnFlag?.destroy({ children: true })
-    this.yourTurnFlag = null
+    this.clearYourTurnFlag()
     this.turnLayer.destroy({ children: true })
     this.turnButtonLayer.destroy({ children: true })
   }

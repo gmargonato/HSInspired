@@ -20,7 +20,6 @@ import {
   type DeckPanelAssets,
   type DeckPanelViewCallbacks
 } from '../features/collection/deck-panel-view'
-import { CollectionDeckController } from '../features/collection/collection-deck-controller'
 import { COLLECTION_PREVIEW_BLUR_STRENGTH } from '../features/collection/collection-layout'
 import { DECK_EDITOR_LAYOUT } from '../features/collection/deck-editor-layout'
 import type { AppLogger, DialogService } from '../app/services'
@@ -33,7 +32,6 @@ import { setCollectionPreviewCached } from '../features/collection/collection-pr
 
 /** Full-viewport collection scene presented through the main menu transition. */
 export class CollectionScene extends Scene {
-  private readonly deckController: CollectionDeckController
   private background!: Sprite
   private collectionView!: CollectionView
   private deckPanel!: DeckPanelView
@@ -61,9 +59,6 @@ export class CollectionScene extends Scene {
     }
   ) {
     super()
-    this.deckController = new CollectionDeckController(deckStore, () =>
-      this.deleteDeckView.confirmDeletion()
-    )
   }
 
   async init(): Promise<void> {
@@ -110,7 +105,7 @@ export class CollectionScene extends Scene {
     this.collectionView.init()
     this.root.addChild(this.collectionView)
 
-    await this.deckController.load()
+    await this.deckStore.load()
     await this.waitForFonts()
 
     const deckPanelAssets: DeckPanelAssets = {
@@ -123,7 +118,7 @@ export class CollectionScene extends Scene {
       canvas: this.appInstance.canvas,
       inputParent: this.appInstance.canvas.parentElement ?? document.body,
       renderer: this.appInstance.renderer,
-      deckController: this.deckController,
+      deckStore: this.deckStore,
       state: {
         isNavigationReady: () => this.navigationReady,
         isNewDeckOpen: () => this.newDeckScene?.isOpen ?? false
@@ -154,9 +149,7 @@ export class CollectionScene extends Scene {
     this.root.addChild(this.deleteDeckView)
 
     await this.collectionView.renderPage(0)
-    this.unsubscribeDeckStore = this.deckController.subscribe(
-      this.handleDeckStoreChanged
-    )
+    this.unsubscribeDeckStore = this.deckStore.subscribe(this.handleDeckStoreChanged)
     this.notifyCollectibleMode(this.collectionView.collectibleMode as CollectibleMode)
   }
 
@@ -291,12 +284,12 @@ export class CollectionScene extends Scene {
 
     const activeDeckId = this.deckPanel.getActiveDeckId()
     if (activeDeckId) {
-      if (!this.deckController.getDeck(activeDeckId)) {
+      if (!this.deckStore.getDeck(activeDeckId)) {
         void this.exitDeckEditor().then(() => {
           if (!this.disposed) this.deckPanel.renderDeckList()
         })
       } else {
-        const deck = this.deckController.getDeck(activeDeckId)
+        const deck = this.deckStore.getDeck(activeDeckId)
         if (deck && !this.deckPanel.isAddingCard) this.deckPanel.updateEditor(deck)
         this.collectionView.refreshCompletionState()
       }
@@ -315,7 +308,7 @@ export class CollectionScene extends Scene {
     ) {
       return
     }
-    const deck = this.deckController.getDeck(deckId)
+    const deck = this.deckStore.getDeck(deckId)
     if (!deck) return
 
     const origin = this.deckPanel.getDeckEntryOrigin(deckId) ?? {
@@ -388,7 +381,7 @@ export class CollectionScene extends Scene {
     this.setDeckInteractionEnabled(false)
     try {
       if (name !== deck.name) {
-        await this.deckController.updateDeck({ ...deck, name })
+        await this.deckStore.updateDeck({ ...deck, name })
       }
       await this.exitDeckEditor()
     } catch (error) {
@@ -487,12 +480,12 @@ export class CollectionScene extends Scene {
   }
 
   private async deleteDeck(deckId: string): Promise<void> {
-    const deck = this.deckController.getDeck(deckId)
+    const deck = this.deckStore.getDeck(deckId)
     if (!deck) return
-    if (!(await this.deckController.confirmDeckDeletion(deck))) return
+    if (!(await this.deleteDeckView.confirmDeletion())) return
 
     try {
-      await this.deckController.deleteDeck(deckId)
+      await this.deckStore.deleteDeck(deckId)
     } catch (error) {
       this.reportError(`Failed to delete ${deck.name}.`, error)
     }

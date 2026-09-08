@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import {
   CARD_ACTIONS,
   CARD_CATALOG,
@@ -11,7 +11,11 @@ import {
   CAPABILITY_OWNERSHIP,
   GENERATED_CARD_DEFINITIONS,
   assertCapabilityOwnership,
-  createCapabilityInventory
+  createCapabilityInventory,
+  validateCardRecord,
+  type CardAction,
+  type ManaCardAction,
+  type CardNumericValue
 } from './index'
 
 describe('card capability inventory', () => {
@@ -81,5 +85,93 @@ describe('card capability inventory', () => {
         (entry) => entry.family === 'selector-field' && entry.name === 'selection'
       )?.usageCount
     ).toBeGreaterThan(0)
+  })
+})
+
+describe('validated mana action types', () => {
+  function validateAction(action: unknown): CardAction {
+    const card = validateCardRecord(
+      {
+        ...CARD_CATALOG.require('basic_fireball'),
+        effects: [{ trigger: 'cast', actions: [action] }]
+      },
+      'basic'
+    )
+    return card.effects![0]!.actions![0]!
+  }
+
+  it('narrows required fields and retains supported numeric expressions and extensions', () => {
+    const amounts: readonly CardNumericValue<'full'>[] = [
+      -1.5,
+      'full',
+      { random: [-1, 2.5] },
+      {
+        reference: 'source.health',
+        operation: 'multiply',
+        multiplier: 2,
+        opponent: true
+      },
+      { operation: 'set', value: 3 },
+      {
+        condition: { type: 'combo' },
+        thenValue: 'full',
+        elseValue: { reference: 'event.amount' }
+      }
+    ]
+    for (const amount of amounts) {
+      const authored = {
+        action: 'gain-mana',
+        player: 'each',
+        amount,
+        crystal: 'full',
+        duration: 'this-turn',
+        count: 2
+      } satisfies ManaCardAction
+      const action = validateAction(authored)
+      expect(action).toEqual(authored)
+      if (action.action === 'gain-mana') {
+        expectTypeOf(action.amount).toExtend<CardNumericValue<'full'>>()
+        expectTypeOf(action.player).toEqualTypeOf<
+          'each' | 'opponent' | 'self' | 'turn-player'
+        >()
+      }
+    }
+    expect(validateAction({ action: 'overload', amount: 2 })).toEqual({
+      action: 'overload',
+      amount: 2
+    })
+    expect(validateAction({ action: 'unlock-overload' })).toEqual({
+      action: 'unlock-overload'
+    })
+    // These are compile-time contracts, never passed to the interpreter.
+    expectTypeOf({
+      action: 'gain-mana',
+      amount: 1
+    } as const).not.toExtend<ManaCardAction>()
+    expectTypeOf({ action: 'overload' } as const).not.toExtend<ManaCardAction>()
+    expectTypeOf({
+      action: 'gain-mana',
+      player: 'each',
+      amount: true
+    } as const).not.toExtend<CardAction>()
+  })
+
+  it.each([
+    [{ action: 'gain-mana', amount: 1 }, '.player: is required for this action'],
+    [{ action: 'overload' }, '.amount: is required for this action'],
+    [
+      { action: 'overload', amount: true },
+      '.amount: expected a number or typed value reference'
+    ],
+    [
+      { action: 'overload', amount: { random: [] } },
+      '.amount.random: must not be empty'
+    ],
+    [
+      { action: 'overload', amount: { operation: 'set' } },
+      '.amount: an operation requires a value or reference'
+    ]
+  ])('preserves validation diagnostics for %j', (action, diagnostic) => {
+    expect(() => validateAction(action)).toThrow(diagnostic)
   })
 })
