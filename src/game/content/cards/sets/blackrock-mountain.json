@@ -159,7 +159,7 @@
     "effects": [
       {
         "trigger": "on-cast",
-        "event": { "type": "spell-cast", "controller": "self" },
+        "event": { "type": "spell-resolved", "controller": "self" },
         "actions": [
           {
             "action": "damage",

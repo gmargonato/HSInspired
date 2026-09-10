@@ -2497,8 +2497,8 @@
     "cost": 9,
     "attack": 10,
     "health": 10,
-    "rulesText": "Charge Can't attack heroes.",
-    "keywords": ["charge", "cannot-attack-heroes"],
+    "rulesText": "Rush.",
+    "keywords": ["rush"],
     "effects": []
   },
   {

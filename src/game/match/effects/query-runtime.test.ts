@@ -206,7 +206,7 @@ describe('effect-runtime query language', () => {
     expect(CARD_CATALOG.require(transformed.cardId).cost).toBe(
       CARD_CATALOG.require('classic_mountain_giant').cost
     )
-    expect(transformed.cardId).toBe('goblins_vs_gnomes_clockwork_giant')
+    expect(transformed.cardId).toBe('one_night_in_karazhan_arcane_giant')
   })
 
   it('limits Discover candidates to the declared top position range', () => {

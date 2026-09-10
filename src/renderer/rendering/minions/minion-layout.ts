@@ -1,4 +1,4 @@
-import { CENTER, placement, type LayoutPlacement } from '../layout'
+import { CENTER, placement } from '../layout'
 
 /** The local design space for one board minion. Its pivot is the canvas center. */
 export const MINION_CANVAS = { width: 160, height: 210 } as const
@@ -105,13 +105,34 @@ export const MINION_LAYOUT = {
       note: 'Bottom-center Poisonous flask, layered above Deathrattle and below Trigger.'
     }
   ),
-  temporaryAbilityBadges: {
-    centerX: 80,
-    centerY: 190,
-    size: { width: 36, height: 36 },
-    gap: 4,
-    note: 'Centered row of temporary text badges below the authored ability art.'
-  },
+  windfury: placement(
+    { x: 80, y: 160 },
+    { width: 51, height: 48 },
+    {
+      anchor: CENTER,
+      scale: 0.75,
+      note: 'Bottom-center Windfury and Mega Windfury badge, sharing the Trigger position.'
+    }
+  ),
+  spellDamage: placement(
+    { x: 80, y: 160 },
+    { width: 43, height: 45 },
+    {
+      anchor: CENTER,
+      scale: 0.75,
+      note: 'Bottom-center Spell Damage badge, sharing the Trigger position.'
+    }
+  ),
+  elusive: placement(
+    { x: 80, y: 85 },
+    { width: 113, height: 153 },
+    { anchor: CENTER, note: 'Elusive portrait overlay.' }
+  ),
+  immune: placement(
+    { x: 80, y: 85 },
+    { width: 125, height: 167 },
+    { anchor: CENTER, note: 'Immune portrait overlay.' }
+  ),
   attackBadge: placement(
     { x: 35, y: 130 },
     { width: 44, height: 51 },
@@ -153,20 +174,3 @@ export const MINION_LAYOUT = {
   },
   selectionScale: 1.15
 } as const
-
-/** Parameterized bottom row so cards with multiple missing visuals remain readable. */
-export function minionTemporaryAbilityBadgePlacement(
-  index: number,
-  count: number
-): LayoutPlacement {
-  const row = MINION_LAYOUT.temporaryAbilityBadges
-  const step = row.size.width + row.gap
-  return placement(
-    {
-      x: row.centerX + (index - (count - 1) / 2) * step,
-      y: row.centerY
-    },
-    row.size,
-    { anchor: CENTER, note: row.note }
-  )
-}

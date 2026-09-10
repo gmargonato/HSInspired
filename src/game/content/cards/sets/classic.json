@@ -2989,7 +2989,7 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Destroy any minion damaged by this minion.",
+    "rulesText": "Poisonous.",
     "keywords": [],
     "effects": [
       {
@@ -3275,7 +3275,7 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Can't be targeted by Spells or Hero Powers.",
+    "rulesText": "Elusive.",
     "keywords": ["spell-immune"],
     "effects": []
   },
@@ -4921,7 +4921,7 @@
     "cost": 3,
     "attack": 3,
     "health": 5,
-    "rulesText": "Can't be targeted by Spells or Hero powers.",
+    "rulesText": "Elusive.",
     "keywords": ["spell-immune"],
     "effects": []
   },
@@ -5999,11 +5999,6 @@
     "effects": [
       {
         "trigger": "cast",
-        "condition": {
-          "type": "player-health-lte",
-          "player": "self",
-          "value": 12
-        },
         "actions": [
           {
             "action": "damage",
@@ -6012,26 +6007,15 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 6
-          }
-        ]
-      },
-      {
-        "trigger": "cast",
-        "condition": {
-          "type": "player-health-gt",
-          "player": "self",
-          "value": 12
-        },
-        "actions": [
-          {
-            "action": "damage",
-            "target": {
-              "controller": "any",
-              "type": "character",
-              "selection": "chosen"
-            },
-            "amount": 4
+            "amount": {
+              "condition": {
+                "type": "player-health-lte",
+                "player": "self",
+                "value": 12
+              },
+              "thenValue": 6,
+              "elseValue": 4
+            }
           }
         ]
       }
@@ -6348,15 +6332,25 @@
     "cost": 9,
     "attack": 8,
     "health": 8,
-    "rulesText": "Players only have 15 seconds to take their turns.",
+    "rulesText": "Battlecry: Restore 15 Health to your hero. Refresh your Mana Crystals.",
     "keywords": [],
     "effects": [
       {
-        "trigger": "aura",
+        "trigger": "battlecry",
         "actions": [
           {
-            "action": "set-turn-limit",
-            "seconds": 15
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 15
+          },
+          {
+            "action": "refresh-mana",
+            "player": "self",
+            "amount": "all"
           }
         ]
       }
@@ -6430,7 +6424,7 @@
     "cost": 2,
     "attack": 1,
     "health": 1,
-    "rulesText": "Stealth. Destroy any minion damaged by this minion.",
+    "rulesText": "Stealth. Poisonous.",
     "keywords": ["stealth"],
     "effects": [
       {
@@ -9150,7 +9144,7 @@
       {
         "trigger": "on-cast",
         "event": {
-          "type": "spell-cast",
+          "type": "spell-resolved",
           "controller": "self"
         },
         "actions": [

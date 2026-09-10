@@ -96,7 +96,7 @@ export class HeroPowerCardView extends Container {
       text: String(cost),
       style: {
         fontFamily: 'Belwe',
-        fontSize: 58,
+        fontSize: 90,
         fill: 0xffffff,
         stroke: { color: 0x17120f, width: 8 },
         align: 'center'
@@ -131,7 +131,7 @@ export class HeroPowerCardView extends Container {
       text: definition.rulesText,
       style: {
         fontFamily: 'Franklin Gothic Condensed',
-        fontSize: 35,
+        fontSize: 44,
         fill: 0x201a15,
         align: 'center',
         wordWrap: true,

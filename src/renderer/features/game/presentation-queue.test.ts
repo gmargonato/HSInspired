@@ -17,7 +17,12 @@ import { GameBoardView, type GameBoardViewOptions } from './game-board-view'
 import { gsap, type AnimationScope } from '../../animation/animations'
 import { createMatchScenario } from '../../../game/match/testing/match-scenario-builder'
 import { GameBoardSession } from './game-board-session'
-import type { OpeningCard, OpeningMatchState, PlayerId } from '../../../game/match'
+import type {
+  OpeningCard,
+  OpeningMatchEvent,
+  OpeningMatchState,
+  PlayerId
+} from '../../../game/match'
 import type { HeroView } from '../../rendering/heroes/hero-view'
 import type { GameCardSlot } from './game-card-slot'
 import { TargetGestureController } from './target-gesture'
@@ -269,7 +274,10 @@ describe('board lifecycle preservation', () => {
           poisonous: false,
           trigger: false,
           inspire: false,
-          temporaryAbilityLabels: []
+          windfury: false,
+          spellDamage: false,
+          elusive: false,
+          immune: false
         },
         new Proxy({} as MinionViewTextures, { get: () => Texture.WHITE }),
         Texture.WHITE
@@ -435,7 +443,10 @@ describe('board lifecycle preservation', () => {
           poisonous: false,
           trigger: false,
           inspire: false,
-          temporaryAbilityLabels: []
+          windfury: false,
+          spellDamage: false,
+          elusive: false,
+          immune: false
         },
         new Proxy({} as MinionViewTextures, { get: () => Texture.WHITE }),
         Texture.WHITE
@@ -652,7 +663,7 @@ describe('board lifecycle preservation', () => {
     }
     expect(completed).toBe(true)
     await job
-    expect(setStats).toHaveBeenLastCalledWith(0, 27, 0)
+    expect(setStats).toHaveBeenLastCalledWith(0, 27, 0, 30)
     expect(attacker.parent).toBe(origin.parent)
     expect(attacker.parent!.getChildIndex(attacker)).toBe(origin.index)
     expect({ x: attacker.x, y: attacker.y, zIndex: attacker.zIndex }).toEqual({
@@ -674,6 +685,66 @@ describe('board lifecycle preservation', () => {
     expect(timelines).toHaveLength(timelinesAtExit)
     expect(attacker.destroyed).toBe(true)
     expect(defender.destroyed).toBe(true)
+  })
+
+  it('updates a hero immediately for a set-health effect event', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      createHeroes(state: OpeningMatchState): void
+      heroViews: Map<PlayerId, HeroView>
+      wait(duration: number): Promise<void>
+      enqueuePresentation(
+        state: OpeningMatchState,
+        present: () => Promise<void>
+      ): Promise<void>
+      presentEffectResolved(
+        event: Extract<OpeningMatchEvent, { type: 'effect-resolved' }>
+      ): Promise<void>
+    }
+    for (const player of internal.session.getState().players) {
+      const result = internal.session.dispatch({
+        type: 'confirm-mulligan',
+        participantId: player.participantId,
+        replaceInstanceIds: []
+      })
+      expect(result.accepted).toBe(true)
+    }
+    const ownerId = internal.session.localParticipantId
+    const changed = internal.session.dispatch({
+      type: 'dev-set-hero',
+      participantId: ownerId,
+      health: 10
+    })
+    expect(changed.accepted).toBe(true)
+    if (!changed.accepted) return
+
+    internal.createHeroes(changed.state)
+    const hero = internal.heroViews.get(ownerId)!
+    const setStats = vi.spyOn(hero, 'setStats')
+    vi.spyOn(internal, 'wait').mockResolvedValue()
+    const event: Extract<OpeningMatchEvent, { type: 'effect-resolved' }> = {
+      type: 'effect-resolved',
+      revision: changed.state.revision,
+      sourceInstanceId: 'alexstrasza-instance',
+      sourceCardId: asCardId('classic_alexstrasza'),
+      controllerId: ownerId,
+      action: 'set-health',
+      actionPath: 'play-card.battlecry[0]',
+      data: {
+        target: `${ownerId}:hero`,
+        health: 15,
+        healthBefore: 10,
+        healthAfter: 15,
+        maximumHealthAfter: 30
+      }
+    }
+
+    await internal.enqueuePresentation(changed.state, () =>
+      internal.presentEffectResolved(event)
+    )
+
+    expect(setStats).toHaveBeenCalledWith(0, 15, 0, 30)
   })
 
   it('keeps hand hover blocked by reflow and targeting and clears listeners on exit', () => {
@@ -719,6 +790,101 @@ describe('board lifecycle preservation', () => {
     expect(hand.layer.listenerCount('globalpointermove')).toBe(0)
     expect(slot.destroyed).toBe(true)
   })
+
+  it.each(['draw', 'generated', 'discover'] as const)(
+    'keeps hover responsive while a %s card arrives',
+    async (source) => {
+      const value = board()
+      const internal = value as unknown as {
+        hand: GameHandView
+        cardSelectionOverlay: CardSelectionOverlay
+        createSlot(card: OpeningCard): Promise<GameCardSlot>
+        prepareSlotAtDeck(): void
+        prepareSlotAtGeneratedOrigin(): void
+        addLocalCard(card: OpeningCard): Promise<void>
+        spawnLocalCard(
+          card: OpeningCard,
+          origin: { x: number; y: number }
+        ): Promise<void>
+      }
+      const hand = internal.hand
+      const existing = ['first', 'second'].map((id, index) => {
+        const slot = mulliganSlot(id)
+        const rest = layoutHand(2)[index]!
+        slot.position.set(rest.x, rest.y)
+        slot.scale.set(rest.scale)
+        hand.layer.addChild(slot)
+        hand.append({
+          card: { instanceId: id, cardId: asCardId('classic_wisp') },
+          slot,
+          restTransform: rest,
+          displaced: false
+        })
+        return slot
+      })
+      hand.activate()
+      const move = (index: number) => {
+        const rest = hand.entries[index]!.restTransform!
+        hand.layer.emit('pointermove', {
+          getLocalPosition: () => ({ x: rest.x, y: rest.y - 40 })
+        } as unknown as FederatedPointerEvent)
+      }
+      move(0)
+      const enlargedScale = existing[0]!.scale.x
+      const incoming = mulliganSlot('incoming')
+      const card = { instanceId: 'incoming', cardId: asCardId('classic_wisp') }
+      vi.spyOn(internal, 'createSlot').mockResolvedValue(incoming)
+      vi.spyOn(internal, 'prepareSlotAtDeck').mockImplementation(() => {})
+      vi.spyOn(internal, 'prepareSlotAtGeneratedOrigin').mockImplementation(() => {})
+      vi.spyOn(hand, 'configureSlot').mockImplementation(() => {})
+      if (source === 'discover') {
+        vi.spyOn(internal.cardSelectionOverlay, 'takeSelected').mockReturnValue({
+          card,
+          slot: incoming,
+          globalPosition: { x: 0, y: 0 }
+        })
+      }
+      let land!: () => void
+      const travel = new Promise<void>((resolve) => {
+        land = resolve
+      })
+      vi.spyOn(hand, 'animateSlotToHand').mockReturnValue(travel)
+      let finished = false
+      const arrival = (
+        source === 'generated'
+          ? internal.spawnLocalCard(card, { x: 0, y: 0 })
+          : internal.addLocalCard(card)
+      ).then(() => {
+        finished = true
+      })
+      await Promise.resolve()
+      expect(hand.isReflowing).toBe(false)
+      expect(hand.hoveredSlot).toBe(existing[0])
+      for (const tween of gsap.getTweensOf([existing[0], existing[0]!.scale]))
+        tween.progress(1)
+      expect(existing[0]!.scale.x).toBe(enlargedScale)
+      move(1)
+      expect(hand.hoveredSlot).toBe(existing[1])
+      for (const tween of gsap.getTweensOf([existing[1], existing[1]!.scale]))
+        tween.progress(1)
+      expect(existing[1]!.scale.x).toBe(enlargedScale)
+      hand.layer.emit('pointerleave', {} as FederatedPointerEvent)
+      expect(hand.hoveredSlot).toBeNull()
+      move(2)
+      expect(hand.hoveredSlot).toBeNull()
+      expect(finished).toBe(false)
+      // Finishing a draw must not release an unrelated interaction barrier.
+      hand.setReflowing(true)
+      land()
+      await arrival
+      expect(hand.isReflowing).toBe(true)
+      move(2)
+      expect(hand.hoveredSlot).toBeNull()
+      hand.setReflowing(false)
+      move(2)
+      expect(hand.hoveredSlot).toBe(incoming)
+    }
+  )
 
   it('releases a held card snapshot and ticker when returning to the hand or exiting', async () => {
     const value = board()
@@ -1101,4 +1267,95 @@ describe('PresentationQueue', () => {
     await expect(failed).rejects.toThrow('presentation failed')
     await expect(next).resolves.toBe('presented')
   })
+})
+
+describe('shared board card hover preview', () => {
+  it.each(['drag', 'card', 'hero-power', 'combat'] as const)(
+    'dismisses previews while %s is active',
+    async (mode) => {
+      const value = board()
+      const internal = value as unknown as {
+        hand: GameHandView
+        cardPlay: { current: unknown }
+        heroPowerTargeting: boolean
+        selectedCombatView: Container | null
+        boardCardPreview: Container | null
+        hoveredBoardCardView: Container | null
+        showBoardCardPreview(view: Container): Promise<void>
+        isBoardCardPreviewEnabled(): boolean
+      }
+      expect(internal.isBoardCardPreviewEnabled()).toBe(true)
+      const source = new Container()
+      const preview = new Container()
+      internal.boardCardPreview = preview
+      internal.hoveredBoardCardView = source
+      if (mode === 'drag')
+        vi.spyOn(internal.hand.drag, 'index', 'get').mockReturnValue(0)
+      if (mode === 'card')
+        vi.spyOn(internal.cardPlay, 'current', 'get').mockReturnValue({})
+      if (mode === 'hero-power') internal.heroPowerTargeting = true
+      if (mode === 'combat') internal.selectedCombatView = source
+      expect(internal.isBoardCardPreviewEnabled()).toBe(false)
+      await internal.showBoardCardPreview(source)
+      expect(preview.destroyed).toBe(true)
+      expect(internal.boardCardPreview).toBeNull()
+      expect(internal.hoveredBoardCardView).toBeNull()
+      vi.restoreAllMocks()
+      internal.heroPowerTargeting = false
+      internal.selectedCombatView = null
+      source.destroy()
+    }
+  )
+})
+
+describe('board preview asynchronous cancellation', () => {
+  it.each(['leave', 'remove', 'switch'] as const)(
+    'cancels pending artwork on %s',
+    async (action) => {
+      const value = board()
+      const internal = value as unknown as {
+        resolver: { loadArtwork(): Promise<unknown> }
+        boardCardPreviewForView(view: Container): unknown
+        showBoardCardPreview(view: Container): Promise<void>
+        hideBoardCardPreview(view?: Container): void
+        removeWeaponView(owner: PlayerId, view: Container): void
+        weaponViews: Map<PlayerId, Container>
+        boardCardPreview: Container | null
+        hoveredBoardCardView: Container | null
+      }
+      const source = new Container()
+      const other = new Container()
+      value.addChild(source, other)
+      vi.spyOn(internal, 'boardCardPreviewForView').mockReturnValue({
+        key: 'weapon-1',
+        model: { card: { id: asCardId('basic_fiery_war_axe') } }
+      })
+      let resolveArtwork!: () => void
+      vi.spyOn(internal.resolver, 'loadArtwork').mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveArtwork = resolve
+          })
+      )
+      const pending = internal.showBoardCardPreview(source)
+      const finishFirst = resolveArtwork
+      if (action === 'leave') internal.hideBoardCardPreview(source)
+      if (action === 'remove') {
+        const owner = 'local' as PlayerId
+        internal.weaponViews.set(owner, source)
+        internal.removeWeaponView(owner, source)
+      }
+      let next: Promise<void> | undefined
+      if (action === 'switch') next = internal.showBoardCardPreview(other)
+      finishFirst()
+      await pending
+      expect(internal.boardCardPreview).toBeNull()
+      expect(internal.hoveredBoardCardView).toBe(action === 'switch' ? other : null)
+      if (next) {
+        internal.hideBoardCardPreview(other)
+        resolveArtwork()
+        await next
+      }
+    }
+  )
 })

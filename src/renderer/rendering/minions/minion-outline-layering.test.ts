@@ -22,6 +22,10 @@ import {
 } from './minion-view'
 
 const textures: MinionViewTextures = {
+  windfury: Texture.EMPTY,
+  spellDamage: Texture.EMPTY,
+  elusive: Texture.EMPTY,
+  immune: Texture.EMPTY,
   frame: Texture.EMPTY,
   legendaryFrame: Texture.EMPTY,
   taunt: Texture.EMPTY,
@@ -50,10 +54,36 @@ const tauntMinion: MinionViewModel = {
   poisonous: true,
   trigger: false,
   inspire: false,
-  temporaryAbilityLabels: []
+  windfury: false,
+  spellDamage: false,
+  elusive: false,
+  immune: false
 }
 
 describe('MinionView outline layering', () => {
+  it('toggles all new ability sprites without rebuilding the minion', async () => {
+    const view = await MinionView.create(tauntMinion, textures, undefined)
+    const sprites = ['windfury', 'spell-damage', 'elusive', 'immune'].map((name) =>
+      view.children.find((child) => child.label === 'minion.' + name)!
+    )
+    expect(sprites.every((sprite) => !sprite.visible)).toBe(true)
+    view.setAbilityEffects({
+      windfury: true,
+      spellDamage: true,
+      elusive: true,
+      immune: true
+    })
+    expect(sprites.every((sprite) => sprite.visible)).toBe(true)
+    view.setAbilityEffects({
+      windfury: false,
+      spellDamage: false,
+      elusive: false,
+      immune: false
+    })
+    expect(sprites.every((sprite) => !sprite.visible)).toBe(true)
+    view.destroy({ children: true })
+  })
+
   it('renders attack and targeting outlines between Taunt and the minion frame', async () => {
     const view = await MinionView.create(tauntMinion, textures, undefined)
 

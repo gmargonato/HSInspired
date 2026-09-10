@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { getMatchLegality, resolveAttack } from './effect-runtime'
+import type { BoardMinion } from '../opening-match-types'
+import { isBoardMinionSleeping } from '../rules/minion-attack-state'
+import { enumerateLegalCommands } from '../ai/legal-commands'
 import { canBoardMinionAttack, canHeroAttack, getHeroAttack } from '../opening-match'
 import { createMatchScenario } from '../testing/match-scenario-builder'
 
@@ -613,4 +617,93 @@ describe('combat keyword matrix', () => {
     }
     expect(run()).toEqual(run())
   })
+})
+
+describe('Rush', () => {
+  it('attacks minions immediately and heroes on the next friendly turn', () => {
+    const scenario = createMatchScenario({ seed: 8101 })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+    const icehowl = summon(scenario, participantId, 'the_grand_tournament_icehowl')
+    const attacker = { kind: 'minion' as const, instanceId: icehowl.instanceId }
+    expect(isBoardMinionSleeping(icehowl, scenario.match.getState().turnNumber)).toBe(
+      false
+    )
+    expect(
+      scenario.match.getLegality!(participantId).legalAttackTargets[icehowl.instanceId]
+    ).toBeUndefined()
+    expect(
+      scenario.match
+        .analyze((fork) => enumerateLegalCommands(fork, participantId))
+        .filter((command) => command.type === 'attack-character')
+    ).toEqual([])
+    expect(attack(scenario, participantId, attacker, { kind: 'hero' }).accepted).toBe(
+      false
+    )
+    const target = summon(scenario, opponentId, 'basic_goldshire_footman')
+    expect(
+      scenario.match.getLegality!(participantId).legalAttackTargets[icehowl.instanceId]
+    ).toEqual([{ kind: 'minion', instanceId: target.instanceId }])
+    expect(
+      attack(scenario, participantId, attacker, {
+        kind: 'minion',
+        instanceId: target.instanceId
+      }).accepted
+    ).toBe(true)
+    beginNextTurn(scenario, participantId, opponentId)
+    expect(
+      scenario.match.getLegality!(participantId).legalAttackTargets[icehowl.instanceId]
+    ).toContainEqual({ kind: 'hero' })
+    expect(attack(scenario, participantId, attacker, { kind: 'hero' }).accepted).toBe(
+      true
+    )
+  })
+
+  it.each(['charge', 'silence', 'freeze', 'control', 'prohibition', 'spent'] as const)(
+    'keeps legality and attack resolution consistent for %s',
+    (mode) => {
+      const scenario = createMatchScenario({ seed: 8102 })
+      scenario.confirmBothMulligans()
+      const [participantId, opponentId] = activePlayers(scenario)
+      const icehowl = summon(scenario, participantId, 'the_grand_tournament_icehowl')
+      const target = summon(scenario, opponentId, 'basic_acidic_swamp_ooze')
+      const state = scenario.match.getState()
+      const minion = state.players.find((p) => p.participantId === participantId)!
+        .board[0]! as { -readonly [K in keyof BoardMinion]: BoardMinion[K] }
+      if (mode === 'charge') minion.keywords = ['rush', 'charge']
+      if (mode === 'silence') minion.silenced = true
+      if (mode === 'freeze') minion.frozenUntilTurn = state.turnNumber
+      if (mode === 'control') {
+        minion.summonedOnTurn = state.turnNumber - 1
+        minion.controllerChangedOnTurn = state.turnNumber
+      }
+      if (mode === 'prohibition')
+        minion.keywords = ['rush', 'charge', 'cannot-attack-heroes']
+      if (mode === 'spent') {
+        minion.lastAttackedOnTurn = state.turnNumber
+        minion.attacksUsedThisTurn = 1
+      }
+      const canHitMinion = ['charge', 'control', 'prohibition'].includes(mode)
+      const canHitHero = mode === 'charge'
+      const targets =
+        getMatchLegality(state, participantId).legalAttackTargets[icehowl.instanceId] ??
+        []
+      expect(targets.some((t) => t.kind === 'hero')).toBe(canHitHero)
+      expect(targets.some((t) => t.kind === 'minion')).toBe(canHitMinion)
+      for (const [defender, accepted] of [
+        [{ kind: 'hero' as const }, canHitHero],
+        [{ kind: 'minion' as const, instanceId: target.instanceId }, canHitMinion]
+      ] as const) {
+        expect(
+          resolveAttack({
+            state,
+            participantId,
+            attacker: { kind: 'minion', instanceId: icehowl.instanceId },
+            defender
+          }).accepted
+        ).toBe(accepted)
+      }
+      expect(isBoardMinionSleeping(minion, state.turnNumber)).toBe(mode === 'silence')
+    }
+  )
 })

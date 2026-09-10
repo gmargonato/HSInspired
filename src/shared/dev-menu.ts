@@ -2,12 +2,9 @@
  * Development-only menu contracts.
  *
  * Keep this free of renderer/main implementations so both processes can
- * safely import it. The deck list for the Match submenu is renderer-owned
- * (the renderer already caches decks via DeckStore) and is pushed to the
- * main process for menu rendering.
+ * safely import it.
  */
 
-export const DEV_DECK_SYNC_CHANNEL = 'debug:dev-decks-sync'
 export const DEV_SCENE_CHANGED_CHANNEL = 'debug:scene-changed'
 export const DEV_COMMAND_CHANNEL = 'debug:dev-command'
 export const DEV_COLLECTIBLE_SYNC_CHANNEL = 'debug:collectible-sync'
@@ -25,12 +22,6 @@ export type DevSceneId =
   | 'settings'
   | 'card-preview'
   | 'unknown'
-
-export interface DevDeckEntry {
-  readonly id: string
-  readonly heroId: string
-  readonly classId: string
-}
 
 export type CollectibleMode = 'all' | 'collectible' | 'uncollectible'
 export type DevMatchTarget = 'local' | 'remote'
@@ -94,23 +85,6 @@ export type DevCommand =
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-export function isDevDeckEntry(value: unknown): value is DevDeckEntry {
-  if (!isRecord(value)) return false
-  return (
-    typeof value.id === 'string' &&
-    value.id.length > 0 &&
-    typeof value.heroId === 'string' &&
-    value.heroId.length > 0 &&
-    typeof value.classId === 'string' &&
-    value.classId.length > 0
-  )
-}
-
-export function isDevDeckSyncPayload(value: unknown): value is readonly DevDeckEntry[] {
-  if (!Array.isArray(value)) return false
-  return value.every(isDevDeckEntry)
 }
 
 export function isDevSceneId(value: unknown): value is DevSceneId {

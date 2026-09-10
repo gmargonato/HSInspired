@@ -59,6 +59,8 @@ export interface RuntimeEntityReference {
 }
 
 export interface RuntimeEnchantment {
+  /** Identifies a cultist enhancement independently of ordinary stat buffs. */
+  readonly cthun?: boolean
   readonly id: string
   readonly sourceInstanceId: string
   readonly sourceCardId: CardId | null
@@ -74,6 +76,9 @@ export interface RuntimeEnchantment {
   readonly triggerMultipliers?: Readonly<Record<string, number>>
   readonly attackMultiplier?: number
   readonly healthMultiplier?: number
+  /** Overrides the number of times a hero may attack in the current turn. */
+  readonly maxAttacksPerTurn?: number
+  readonly unlimitedAttacks?: boolean
   readonly swapStats?: boolean
   readonly targetingGranted?: string | null
   readonly minimumHealth?: number
@@ -83,6 +88,9 @@ export interface RuntimeEnchantment {
   readonly maximumDamageTaken?: number
   /** Multiplies damage after per-event caps and before Armor absorbs it. */
   readonly damageTakenMultiplier?: number
+  /** Event type replaced by this enchantment when no event frame is open. */
+  readonly replacesEvent?: CardEventType
+  readonly eventReplacement?: string
   readonly keywords?: readonly CardKeyword[]
   readonly removedKeywords?: readonly CardKeyword[]
   /** Controller restored when a temporary control enchantment ends or is silenced. */
@@ -162,6 +170,9 @@ export interface MatchHistory {
   readonly healingThisTurn: number
   readonly armorGainedThisTurn: number
   readonly cardsPlayedThisGame: readonly string[]
+  readonly spellsCastThisGameByPlayer: Readonly<Record<string, number>>
+  readonly totemsSummonedThisGameByPlayer: Readonly<Record<string, number>>
+  readonly secretsPlayedThisGameByPlayer: Readonly<Record<string, number>>
   readonly cardsDiedThisGame: readonly string[]
   readonly beastsSummonedByPlayer: Readonly<Record<string, number>>
   readonly heroPowersUsedByPlayer: Readonly<Record<string, number>>
@@ -401,7 +412,16 @@ export interface PendingCostModifier {
   readonly consumeOnMatch?: boolean
 }
 
+export interface CthunProgression {
+  readonly attack: number
+  readonly health: number
+  readonly taunt: boolean
+}
+
 export interface OpeningPlayerState {
+  /** Original C'Thun ritual totals, independent of any physical card instance. */
+  readonly cthun?: CthunProgression
+  readonly cthunDied?: boolean
   readonly participantId: PlayerId
   readonly controllerKind: ControllerKind
   readonly heroId: HeroId
@@ -414,6 +434,10 @@ export interface OpeningPlayerState {
   readonly weapon: BoardWeapon | null
   readonly mana: PlayerMana
   readonly heroPower: PlayerHeroPower
+  /** Persistent replacement cost for the player's current and future hero power. */
+  readonly heroPowerCostOverride?: number
+  /** Whether the original deck list contained at most one copy of every card. */
+  readonly deckHasNoDuplicates?: boolean
   /** Damage dealt by the next failed draw; starts at 1 and rises after each fatigue hit. */
   readonly fatigueDamage: number
   readonly mulliganConfirmed: boolean
@@ -427,9 +451,13 @@ export interface OpeningPlayerState {
   /** Turn-scoped count of Lock and Load rewards. */
   readonly lockAndLoadCount?: number
   readonly lockAndLoadTurn?: number
+  /** Persistent counters used by expansion mechanics such as Jade Golems. */
+  readonly counters?: Readonly<Record<string, number>>
 }
 
 export interface OpeningMatchState {
+  /** Opening effect snapshots retained for skipped mulligans and checkpoint presentation. */
+  readonly openingHistory?: readonly HistoryActionResolvedEvent[]
   readonly phase: OpeningPhase
   readonly playerOneId: PlayerId
   readonly playerTwoId: PlayerId
@@ -449,6 +477,8 @@ export interface OpeningMatchState {
   readonly pendingDiscover?: PendingDiscoverChoice
   /** A blocking after-placement Choice owned by one participant. */
   readonly pendingCardChoice?: PendingCardChoice
+  /** End Turn has been committed; only pending choices and the transition may follow. */
+  readonly aiBonusTurn?: number
   readonly scheduledEffects?: readonly ScheduledEffect[]
 }
 
@@ -456,8 +486,33 @@ export interface PendingDiscoverChoice {
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
   readonly candidates: readonly OpeningCard[]
-  readonly origin?: 'deck' | 'generated'
+  readonly origin?: 'deck' | 'generated' | 'opponent-deck'
+  readonly continuation?: PendingDiscoverContinuation
   readonly queued?: readonly Omit<PendingDiscoverChoice, 'queued'>[]
+}
+
+export interface PendingDiscoverContinuation {
+  readonly source: Readonly<{
+    readonly instanceId: string
+    readonly kind: RuntimeEntityKind
+    readonly participantId: PlayerId
+    readonly zone: RuntimeZone
+    readonly cardId?: CardId
+  }>
+  readonly sourceCardId: CardId | null
+  readonly controllerId: PlayerId
+  readonly chosenTargets: readonly Readonly<{
+    readonly instanceId: string
+    readonly kind: RuntimeEntityKind
+    readonly participantId: PlayerId
+    readonly zone: RuntimeZone
+    readonly cardId?: CardId
+  }>[]
+  readonly choiceIndex?: number
+  readonly actions: readonly Record<string, unknown>[]
+  readonly actionPath: string
+  readonly event?: Readonly<Record<string, unknown>>
+  readonly storeAs?: string
 }
 
 export interface CardChoiceOption {
@@ -476,11 +531,33 @@ export interface PendingCardChoice {
   readonly sourceCardInstanceId: string
   readonly sourceCardId: CardId
   readonly options: readonly CardChoiceOption[]
-  readonly resolution?: {
-    readonly type: 'hero-power'
-    readonly heroPowerIds: readonly HeroPowerId[]
-  }
+  readonly resolution?:
+    | {
+        readonly type: 'hero-power'
+        readonly heroPowerIds: readonly HeroPowerId[]
+      }
+    | {
+        readonly type: 'kazakus-potion'
+        readonly stage: 'cost' | 'first-ingredient' | 'second-ingredient'
+        readonly costOptions: readonly KazakusPotionCostOption[]
+        readonly selectedCostOption?: KazakusPotionCostOption
+        readonly firstIngredientOffers?: readonly CardId[]
+        readonly selectedFirstIngredient?: CardId
+        readonly secondIngredientOffers?: readonly CardId[]
+      }
   readonly queued?: readonly Omit<PendingCardChoice, 'queued'>[]
+}
+
+export interface KazakusPotionCostOption {
+  readonly cost: number
+  readonly presentationCardId: CardId
+  readonly ingredientPool: readonly CardId[]
+  readonly recipes: readonly KazakusPotionRecipe[]
+}
+
+export interface KazakusPotionRecipe {
+  readonly ingredients: readonly CardId[]
+  readonly cardId: CardId
 }
 
 export interface ConfirmMulliganCommand {
@@ -937,6 +1014,24 @@ export interface DevStateChangedEvent {
 
 /** A stable, presentation-safe character/entity captured when an action resolves. */
 export interface HistoryEntitySnapshot {
+  readonly zone?: RuntimeZone
+  readonly ownerId?: PlayerId
+  readonly knownTo?: readonly PlayerId[]
+  readonly publicIdentity?: boolean
+  readonly attack?: number
+  readonly health?: number
+  readonly maxHealth?: number
+  readonly armor?: number
+  readonly durability?: number
+  readonly maxDurability?: number
+  readonly keywords?: readonly CardKeyword[]
+  readonly silenced?: boolean
+  readonly frozen?: boolean
+  readonly divineShield?: boolean
+  readonly immune?: boolean
+  readonly spellDamage?: number
+  readonly rulesText?: string
+  readonly abilities?: readonly string[]
   /** Explicit placeholder for a concealed played Secret; null alone is ambiguous. */
   readonly concealedAs?: 'secret'
   /** Stable action-time identity used to group several effects on one target. */
@@ -954,6 +1049,7 @@ export interface HistoryEntitySnapshot {
 /** One public result belonging to a single played card, power, or combat action. */
 export interface HistoryActionOutcome {
   readonly kind:
+    | 'cast-spell'
     | 'damage'
     | 'death'
     | 'summon-board'
@@ -965,7 +1061,21 @@ export interface HistoryActionOutcome {
     | 'draw'
     | 'fatigue'
     | 'freeze'
+    | 'silence'
+    | 'shield-lost'
+    | 'prevented'
+    | 'return-hand'
+    | 'shuffle-deck'
+    | 'discard'
+    | 'burn'
+    | 'transform'
+    | 'control'
+    | 'equip'
+    | 'state'
   readonly target: HistoryEntitySnapshot
+  readonly before?: HistoryEntitySnapshot
+  readonly armorDamage?: number
+  readonly healthDamage?: number
   readonly amount?: number
   readonly attackDelta?: number
   readonly healthDelta?: number
@@ -977,9 +1087,21 @@ export interface HistoryActionOutcome {
  * what the player saw in their action history.
  */
 export interface HistoryActionResolvedEvent {
+  readonly entryId?: string
+  readonly parentActionId?: string
+  readonly append?: boolean
   readonly type: 'history-action-resolved'
   readonly participantId: PlayerId
   readonly action: 'card' | 'hero-power' | 'combat' | 'trigger' | 'fatigue'
+  readonly source: HistoryEntitySnapshot
+  readonly outcomes: readonly HistoryActionOutcome[]
+}
+
+/** Internal, event-time facts. Removed when projecting events to a viewer. */
+export interface HistoryEffectRecordedEvent {
+  readonly type: 'history-effect-recorded'
+  readonly causeId: string
+  readonly parentActionId: string
   readonly source: HistoryEntitySnapshot
   readonly outcomes: readonly HistoryActionOutcome[]
 }
@@ -1015,6 +1137,7 @@ export type OpeningMatchEvent =
   | DevMinionSummonedEvent
   | DevStateChangedEvent
   | HistoryActionResolvedEvent
+  | HistoryEffectRecordedEvent
   | TriggerActivatedEvent
   | DeathBatchStartedEvent
   | DeathBatchCompletedEvent
@@ -1163,7 +1286,10 @@ export interface OpeningMatchPublicState extends Omit<
   | 'scheduledEffects'
 > {
   readonly players: readonly [OpeningPublicPlayerState, OpeningPublicPlayerState]
-  readonly pendingDiscover?: Omit<PendingDiscoverChoice, 'candidates'> & {
+  readonly pendingDiscover?: Omit<
+    PendingDiscoverChoice,
+    'candidates' | 'continuation'
+  > & {
     readonly candidates: readonly OpeningPublicCard[]
   }
   readonly pendingCardChoice?: PendingCardChoice

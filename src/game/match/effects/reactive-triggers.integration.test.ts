@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createMatchScenario } from '../testing/match-scenario-builder'
+import type { PlayCardCommand } from '../opening-match-types'
 
 type Scenario = ReturnType<typeof createMatchScenario>
 
@@ -606,5 +607,245 @@ describe('reactive trigger timing', () => {
         removalCardId === 'classic_silence' ? 'basic_acidic_swamp_ooze' : 'basic_sheep'
       )
     }
+  })
+})
+
+describe('original after-spell timing', () => {
+  type Command = Parameters<Scenario['match']['dispatch']>[0]
+
+  function dispatch(scenario: Scenario, command: Command) {
+    const result = scenario.match.dispatch(command)
+    expect(result.accepted, JSON.stringify(result)).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    return result
+  }
+
+  function setup(cardId?: string) {
+    const scenario = createMatchScenario({ cardId })
+    scenario.confirmBothMulligans()
+    return scenario
+  }
+
+  function summon(
+    scenario: Scenario,
+    cardId: string,
+    participantId = activePlayers(scenario)[0]
+  ) {
+    dispatch(scenario, { type: 'dev-summon-minion', participantId, cardId })
+    return player(scenario, participantId).board.at(-1)!
+  }
+
+  function play(
+    scenario: Scenario,
+    cardId: string,
+    targets: PlayCardCommand['targets'] = []
+  ) {
+    const [participantId] = activePlayers(scenario)
+    setMana(scenario, participantId)
+    dispatch(scenario, { type: 'dev-add-card', participantId, cardId })
+    const card = player(scenario, participantId).hand.find(
+      (card) => card.cardId === cardId
+    )!
+    return dispatch(scenario, {
+      type: 'play-card',
+      participantId,
+      cardInstanceId: card.instanceId,
+      targets
+    })
+  }
+
+  function target(scenario: Scenario, instanceId: string) {
+    return {
+      kind: 'minion' as const,
+      participantId: activePlayers(scenario)[0],
+      instanceId
+    }
+  }
+
+  function counter(scenario: Scenario) {
+    const [caster, opponent] = activePlayers(scenario)
+    dispatch(scenario, { type: 'end-turn', participantId: caster })
+    play(scenario, 'classic_counterspell')
+    dispatch(scenario, { type: 'end-turn', participantId: opponent })
+  }
+
+  it('resolves Equality before Pyromancer, clearing both boards', () => {
+    const s = setup()
+    const [caster, opponent] = activePlayers(s)
+    summon(s, 'classic_wild_pyromancer')
+    summon(s, 'basic_bloodfen_raptor', opponent)
+    play(s, 'classic_equality')
+    expect(player(s, caster).board).toHaveLength(0)
+    expect(player(s, opponent).board).toHaveLength(0)
+  })
+
+  it('does not trigger a Pyromancer killed by the spell', () => {
+    const s = setup()
+    const [, opponent] = activePlayers(s)
+    const pyro = summon(s, 'classic_wild_pyromancer')
+    const raptor = summon(s, 'basic_bloodfen_raptor', opponent)
+    play(s, 'basic_frostbolt', [target(s, pyro.instanceId)])
+    expect(player(s, opponent).board[0].health).toBe(raptor.health)
+  })
+
+  it('heals before the Pyromancer damage', () => {
+    const s = setup()
+    const pyro = summon(s, 'classic_wild_pyromancer')
+    play(s, 'basic_the_coin')
+    expect(player(s, activePlayers(s)[0]).board[0].health).toBe(1)
+    play(s, 'basic_holy_light', [target(s, pyro.instanceId)])
+    expect(player(s, activePlayers(s)[0]).board[0].health).toBe(1)
+  })
+
+  it('does not trigger a Pyromancer silenced by the spell', () => {
+    const s = setup()
+    const pyro = summon(s, 'classic_wild_pyromancer')
+    play(s, 'classic_silence', [target(s, pyro.instanceId)])
+    expect(player(s, activePlayers(s)[0]).board[0].health).toBe(pyro.health)
+  })
+
+  it('lets a Pyromancer summoned by Mindgames trigger under the original rules', () => {
+    const s = setup('classic_wild_pyromancer')
+    play(s, 'classic_mindgames')
+    expect(player(s, activePlayers(s)[0]).board[0]).toMatchObject({
+      cardId: 'classic_wild_pyromancer',
+      health: 1
+    })
+  })
+
+  it('draws both cards before Flamewaker deals damage', () => {
+    const s = setup()
+    summon(s, 'blackrock_mountain_flamewaker')
+    const result = play(s, 'basic_arcane_intellect')
+    const actions = result.events.flatMap((e) =>
+      e.type === 'effect-resolved' ? [e.action] : []
+    )
+    expect(actions).toEqual(['draw', 'draw', 'damage', 'damage'])
+  })
+
+  it('keeps Violet Teacher before the spell and Pyromancer after it', () => {
+    const s = setup()
+    summon(s, 'classic_violet_teacher')
+    summon(s, 'classic_wild_pyromancer')
+    play(s, 'basic_bloodlust')
+    expect(player(s, activePlayers(s)[0]).board.map((m) => m.cardId)).not.toContain(
+      'classic_violet_apprentice'
+    )
+    const teacher = player(s, activePlayers(s)[0]).board.find(
+      (m) => m.cardId === 'classic_violet_teacher'
+    )!
+    expect(teacher.attack).toBe(6)
+  })
+
+  it('runs early and late cast listeners for a Secret spell', () => {
+    const s = setup()
+    summon(s, 'classic_wild_pyromancer')
+    const wyrm = summon(s, 'classic_mana_wyrm')
+    play(s, 'classic_mirror_entity')
+    const p = player(s, activePlayers(s)[0])
+    expect(p.secrets).toHaveLength(1)
+    expect(p.board[0].health).toBe(1)
+    expect(p.board[1].attack).toBe(wyrm.attack + 1)
+  })
+
+  it.each(['classic_mirror_entity', 'basic_arcane_intellect'])(
+    'counters %s without an after-spell trigger',
+    (cardId) => {
+      const s = setup()
+      summon(s, 'classic_wild_pyromancer')
+      counter(s)
+      const result = play(s, cardId)
+      const [caster, opponent] = activePlayers(s)
+      expect(player(s, caster).board[0].health).toBe(2)
+      expect(player(s, caster).secrets ?? []).toHaveLength(0)
+      expect(player(s, opponent).secrets ?? []).toHaveLength(0)
+      expect(
+        result.events.filter(
+          (e) =>
+            e.type === 'effect-resolved' &&
+            (e.action === 'damage' || e.action === 'draw')
+        )
+      ).toHaveLength(0)
+    }
+  )
+
+  it('copies the buff onto Djinni after the original target', () => {
+    const s = setup()
+    const djinni = summon(s, 'league_of_explorers_djinni_of_zephyrs')
+    const raptor = summon(s, 'basic_bloodfen_raptor')
+    const result = play(s, 'basic_blessing_of_kings', [target(s, raptor.instanceId)])
+    const buffs = result.events.flatMap((e) =>
+      e.type === 'effect-resolved' && e.action === 'modify' ? [e.data?.target] : []
+    )
+    expect(buffs).toEqual([raptor.instanceId, djinni.instanceId])
+  })
+
+  it('does not let a Djinni copy consume Counterspell before the original spell', () => {
+    const s = setup()
+    summon(s, 'league_of_explorers_djinni_of_zephyrs')
+    const raptor = summon(s, 'basic_bloodfen_raptor')
+    counter(s)
+    const result = play(s, 'basic_blessing_of_kings', [target(s, raptor.instanceId)])
+    expect(
+      result.events.filter((e) => e.type === 'effect-resolved' && e.action === 'modify')
+    ).toHaveLength(0)
+    expect(player(s, activePlayers(s)[0]).board[1].attack).toBe(raptor.attack)
+  })
+
+  it('copies the full spell once per Djinni without recursive copies', () => {
+    const s = setup()
+    summon(s, 'league_of_explorers_djinni_of_zephyrs')
+    summon(s, 'league_of_explorers_djinni_of_zephyrs')
+    const raptor = summon(s, 'basic_bloodfen_raptor')
+    const result = play(s, 'basic_power_word_shield', [target(s, raptor.instanceId)])
+    expect(result.events.filter((e) => e.type === 'card-drawn')).toHaveLength(3)
+  })
+
+  it('keeps early and late cast effects on a Djinni copy', () => {
+    const s = setup()
+    summon(s, 'classic_wild_pyromancer')
+    const wyrm = summon(s, 'classic_mana_wyrm')
+    summon(s, 'league_of_explorers_djinni_of_zephyrs')
+    const raptor = summon(s, 'basic_bloodfen_raptor')
+    const result = play(s, 'basic_blessing_of_kings', [target(s, raptor.instanceId)])
+    const p = player(s, activePlayers(s)[0])
+    expect(p.board.find((m) => m.instanceId === wyrm.instanceId)?.attack).toBe(
+      wyrm.attack + 2
+    )
+    expect(
+      result.events.filter(
+        (e) =>
+          e.type === 'trigger-activated' &&
+          e.source.cardId === 'classic_wild_pyromancer'
+      )
+    ).toHaveLength(2)
+  })
+
+  it('copies Shadowstep after the original target has left the board', () => {
+    const s = setup()
+    const djinni = summon(s, 'league_of_explorers_djinni_of_zephyrs')
+    const raptor = summon(s, 'basic_bloodfen_raptor')
+    play(s, 'classic_shadowstep', [target(s, raptor.instanceId)])
+    const p = player(s, activePlayers(s)[0])
+    expect(p.board).toHaveLength(0)
+    expect(p.hand.map((card) => card.instanceId)).toEqual(
+      expect.arrayContaining([djinni.instanceId, raptor.instanceId])
+    )
+  })
+
+  it('checks Djinni target ownership after Mind Control under the original rules', () => {
+    const s = setup()
+    const [, opponent] = activePlayers(s)
+    const djinni = summon(s, 'league_of_explorers_djinni_of_zephyrs')
+    const raptor = summon(s, 'basic_bloodfen_raptor', opponent)
+    const result = play(s, 'basic_mind_control', [
+      { kind: 'minion', participantId: opponent, instanceId: raptor.instanceId }
+    ])
+    expect(
+      result.events.some(
+        (e) =>
+          e.type === 'trigger-activated' && e.source.instanceId === djinni.instanceId
+      )
+    ).toBe(true)
   })
 })

@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_CANVAS } from '../../rendering/cards/card-layout'
-import {
-  DEFAULT_HAND_LAYOUT,
-  isPointerOverLiftedCard,
-  layoutHand,
-  resolveHandHover
-} from './hand-layout'
+import { DEFAULT_HAND_LAYOUT, layoutHand, resolveHandHover } from './hand-layout'
 
 describe('layoutHand', () => {
   it('keeps hands of four cards at the original flat fan baseline', () => {
@@ -60,63 +55,33 @@ describe('layoutHand', () => {
     const last = hand[hand.length - 1]!
 
     expect(
-      resolveHandHover(
-        { x: first.x - 70, y: first.y - 20 },
-        hand,
-        DEFAULT_HAND_LAYOUT,
-        null
-      )
+      resolveHandHover({ x: first.x - 70, y: first.y - 20 }, hand, DEFAULT_HAND_LAYOUT)
     ).toBe(0)
     expect(
-      resolveHandHover(
-        { x: last.x + 70, y: last.y - 20 },
-        hand,
-        DEFAULT_HAND_LAYOUT,
-        null
-      )
+      resolveHandHover({ x: last.x + 70, y: last.y - 20 }, hand, DEFAULT_HAND_LAYOUT)
     ).toBe(hand.length - 1)
   })
 
-  it('keeps pointer ownership across the complete lifted card body', () => {
-    const hand = layoutHand(4)
+  it.each([4, 8])('uses the resting hover boundary for %i cards', (count) => {
+    const hand = layoutHand(count)
     const card = hand[2]!
-    const halfWidth =
-      (CARD_CANVAS.width * DEFAULT_HAND_LAYOUT.hoverScale) / 2 +
-      DEFAULT_HAND_LAYOUT.hoverKeepMargin
-    const bottom = card.y - DEFAULT_HAND_LAYOUT.hoverLift
     const top =
-      bottom -
-      CARD_CANVAS.height * DEFAULT_HAND_LAYOUT.hoverScale -
-      DEFAULT_HAND_LAYOUT.hoverKeepMargin
-    const centerY = (top + bottom) / 2
-
+      card.y -
+      CARD_CANVAS.height * DEFAULT_HAND_LAYOUT.cardScale -
+      DEFAULT_HAND_LAYOUT.hoverEntryMargin
+    expect(resolveHandHover({ x: card.x, y: top }, hand, DEFAULT_HAND_LAYOUT)).toBe(2)
     expect(
-      isPointerOverLiftedCard(
-        { x: card.x + halfWidth, y: centerY },
-        card,
-        DEFAULT_HAND_LAYOUT
-      )
-    ).toBe(true)
+      resolveHandHover({ x: card.x, y: top - 1 }, hand, DEFAULT_HAND_LAYOUT)
+    ).toBeNull()
     expect(
-      isPointerOverLiftedCard(
-        { x: card.x + halfWidth + 1, y: centerY },
-        card,
-        DEFAULT_HAND_LAYOUT
-      )
-    ).toBe(false)
+      resolveHandHover({ x: hand[3]!.x, y: hand[3]!.y - 20 }, hand, DEFAULT_HAND_LAYOUT)
+    ).toBe(3)
+    const enlargedTop =
+      card.y -
+      DEFAULT_HAND_LAYOUT.hoverLift -
+      CARD_CANVAS.height * DEFAULT_HAND_LAYOUT.hoverScale
     expect(
-      isPointerOverLiftedCard({ x: card.x, y: top - 1 }, card, DEFAULT_HAND_LAYOUT)
-    ).toBe(false)
-    expect(
-      resolveHandHover({ x: card.x, y: centerY }, hand, DEFAULT_HAND_LAYOUT, 2)
-    ).toBe(2)
-    expect(
-      resolveHandHover(
-        { x: card.x + halfWidth + 1, y: centerY },
-        hand,
-        DEFAULT_HAND_LAYOUT,
-        2
-      )
+      resolveHandHover({ x: card.x, y: enlargedTop + 20 }, hand, DEFAULT_HAND_LAYOUT)
     ).toBeNull()
   })
 })

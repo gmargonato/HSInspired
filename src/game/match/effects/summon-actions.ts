@@ -38,7 +38,8 @@ export interface SummonActionContext {
     path: string,
     sourceInstanceId?: string,
     position?: number,
-    copyFrom?: DraftMinion
+    copyFrom?: DraftMinion,
+    modifications?: unknown
   ): EntityRef | null
 }
 
@@ -113,7 +114,8 @@ export function runSummonAction(
                   placement,
                   summonIndex
                 ),
-                context.currentMinion(target) ?? undefined
+                context.currentMinion(target) ?? undefined,
+                action.modifications
               )
             )
               summonIndex += 1

@@ -69,7 +69,10 @@ export const EXPANSION_IDS = [
   'naxxramas',
   'blackrock-mountain',
   'league-of-explorers',
-  'the-grand-tournament'
+  'the-grand-tournament',
+  'one-night-in-karazhan',
+  'whispers-of-the-old-gods',
+  'mean-streets-of-gadgetzan'
 ] as const
 export type KnownExpansionId = (typeof EXPANSION_IDS)[number]
 
@@ -133,7 +136,10 @@ export function formatExpansionName(expansionId: ExpansionId | string): string {
     naxxramas: 'Curse of Naxxramas',
     'blackrock-mountain': 'Blackrock Mountain',
     'league-of-explorers': 'League of Explorers',
-    'the-grand-tournament': 'The Grand Tournament'
+    'the-grand-tournament': 'The Grand Tournament',
+    'one-night-in-karazhan': 'One Night in Karazhan',
+    'whispers-of-the-old-gods': 'Whispers of the Old Gods',
+    'mean-streets-of-gadgetzan': 'Mean Streets of Gadgetzan'
   }
   const knownLabel = labels[expansionId]
   if (knownLabel) return knownLabel

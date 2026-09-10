@@ -1,0 +1,1677 @@
+[
+  {
+    "id": "one_night_in_karazhan_enchanted_raven",
+    "name": "Enchanted Raven",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "one_night_in_karazhan_menagerie_warden",
+    "name": "Menagerie Warden",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: Choose a friendly Beast. Summon a copy of it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Beast"
+              }
+            },
+            "count": 1,
+            "exactCopy": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_moonglade_portal",
+    "name": "Moonglade Portal",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 6,
+    "attack": null,
+    "health": null,
+    "rulesText": "Restore 6 Health. Summon a random 6-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 6
+          },
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": 6
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_cat_trick",
+    "name": "Cat Trick",
+    "rarity": "Rare",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Secret: After your opponent casts a spell, summon a 4/2 Panther with Stealth.",
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "spell-resolved",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_cat_in_a_hat",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_kindly_grandmother",
+    "name": "Kindly Grandmother",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 2,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Summon a 3/2 Big Bad Wolf.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_big_bad_wolf",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_cloaked_huntress",
+    "name": "Cloaked Huntress",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Your Secrets cost (0).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "spell-card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "keyword": "secret"
+              }
+            },
+            "amount": {
+              "operation": "set",
+              "value": 0
+            },
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_babbling_book",
+    "name": "Babbling Book",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Add a random Mage spell to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "cardType": "Spell",
+              "cardClass": "Mage"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_medivhs_valet",
+    "name": "Medivh's Valet",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Battlecry: If you control a Secret, deal 3 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-secret",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_firelands_portal",
+    "name": "Firelands Portal",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 7,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 5 damage. Summon a random 5-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 5
+          },
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": 5
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_ivory_knight",
+    "name": "Ivory Knight",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: Discover a spell. Restore Health to your hero equal to its Cost.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "cardType": "Spell"
+            },
+            "classBonus": 4,
+            "storeAs": "discoveredCard"
+          },
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": {
+              "reference": "discoveredCard.cost"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_purify",
+    "name": "Purify",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Silence a friendly minion. Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_priest_of_the_feast",
+    "name": "Priest of the Feast",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 6,
+    "rulesText": "Whenever you cast a spell, restore 3 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_onyx_bishop",
+    "name": "Onyx Bishop",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Battlecry: Summon a friendly minion that died this game.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "resurrect",
+            "player": "self",
+            "source": "friendly-minions-died-this-game",
+            "selection": "random",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_swashburglar",
+    "name": "Swashburglar",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Add a random class card to your hand (from your opponent's class).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "cardClass": "opponent"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_spirit_claws",
+    "name": "Spirit Claws",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "Has +2 Attack while you have Spell Damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "player-has-spell-damage",
+          "player": "self",
+          "minimum": 1
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "source"
+            },
+            "attack": 2,
+            "duration": "while-condition"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_maelstrom_portal",
+    "name": "Maelstrom Portal",
+    "rarity": "Rare",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 1 damage to all enemy minions. Summon a random 1-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 1
+          },
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": 1
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_malchezaars_imp",
+    "name": "Malchezaar's Imp",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 1,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "Whenever you discard a card, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-discard",
+        "event": {
+          "type": "card-discarded",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_silverware_golem",
+    "name": "Silverware Golem",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "If you discard this minion, summon it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-discard",
+        "event": {
+          "type": "card-discarded",
+          "source": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": "discarded-event-card",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_fools_bane",
+    "name": "Fool's Bane",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Unlimited attacks each turn. Can't attack heroes.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify-hero-attacks",
+            "player": "self",
+            "unlimited": true,
+            "forbiddenTargetTypes": ["hero"],
+            "duration": "while-source-equipped"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_ironforge_portal",
+    "name": "Ironforge Portal",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Gain 4 Armor. Summon a random 4-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "gain-armor",
+            "player": "self",
+            "amount": 4
+          },
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": 4
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_netherspite_historian",
+    "name": "Netherspite Historian",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "Battlecry: If you're holding a Dragon, Discover a Dragon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": {
+            "tribe": "Dragon"
+          }
+        },
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "tribe": "Dragon"
+            },
+            "classBonus": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_barnes",
+    "name": "Barnes",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Battlecry: Summon a 1/1 copy of a random minion in your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "random",
+              "zone": "deck"
+            },
+            "count": 1,
+            "modifications": {
+              "attack": {
+                "operation": "set",
+                "value": 1
+              },
+              "health": {
+                "operation": "set",
+                "value": 1
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_book_wyrm",
+    "name": "Book Wyrm",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 6,
+    "attack": 3,
+    "health": 6,
+    "rulesText": "Battlecry: If you're holding a Dragon, destroy an enemy minion with 3 or less Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": {
+            "tribe": "Dragon"
+          }
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "stat": "attack",
+                "operator": "lte",
+                "value": 3
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_the_curator",
+    "name": "The Curator",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 7,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "Taunt. Battlecry: Draw a Beast, Dragon, and Murloc from your deck.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "filter": {
+              "tribe": "Beast"
+            }
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "filter": {
+              "tribe": "Dragon"
+            }
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "filter": {
+              "tribe": "Murloc"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_medivh_the_guardian",
+    "name": "Medivh, the Guardian",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 8,
+    "attack": 7,
+    "health": 7,
+    "rulesText": "Battlecry: Equip Atiesh, Greatstaff of the Guardian.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "equip",
+            "cardId": "one_night_in_karazhan_atiesh"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_arcane_giant",
+    "name": "Arcane Giant",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 12,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Costs (1) less for each spell you've cast this game.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "friendly-spells-cast-this-game",
+              "operation": "subtract"
+            },
+            "minimum": 0,
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "one_night_in_karazhan_big_bad_wolf",
+    "name": "Big Bad Wolf",
+    "rarity": "Summon",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 2,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_cat_in_a_hat",
+    "name": "Cat in a Hat",
+    "rarity": "Summon",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 4,
+    "health": 2,
+    "rulesText": "Stealth.",
+    "keywords": ["stealth"],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_atiesh",
+    "name": "Atiesh",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "After you cast a spell, summon a random minion of that Cost. Lose 1 Durability.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-resolved",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": "event-card-cost"
+            },
+            "count": 1
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "source"
+            },
+            "durability": -1
+          }
+        ]
+      }
+    ],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_nightbane_templar",
+    "name": "Nightbane Templar",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Battlecry: If you're holding a Dragon, summon two 1/1 Whelps.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "filter": {
+            "tribe": "Dragon"
+          }
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_whelp",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_prince_malchezaar",
+    "name": "Prince Malchezaar",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 5,
+    "attack": 5,
+    "health": 6,
+    "rulesText": "When the game starts, add 5 extra Legendary minions to your deck.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_menagerie_magician",
+    "name": "Menagerie Magician",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: Give a random friendly Beast, Dragon, and Murloc +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "filter": {
+                "tribe": "Beast"
+              }
+            },
+            "attack": 2,
+            "health": 2
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "filter": {
+                "tribe": "Dragon"
+              }
+            },
+            "attack": 2,
+            "health": 2
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "filter": {
+                "tribe": "Murloc"
+              }
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_moat_lurker",
+    "name": "Moat Lurker",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: Destroy a minion. Deathrattle: Resummon it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_violet_illusionist",
+    "name": "Violet Illusionist",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "During your turn, your hero is Immune.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_protect_the_king",
+    "name": "Protect the King!",
+    "rarity": "Rare",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "For each enemy minion, summon a 1/1 Pawn with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_pawn",
+            "count": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "opponent",
+                "type": "minion",
+                "selection": "all"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_wicked_witchdoctor",
+    "name": "Wicked Witchdoctor",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Whenever you cast a spell, summon a random basic Totem.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardClass": "Neutral",
+              "tribe": "Totem"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_kara_kazham",
+    "name": "Kara Kazham!",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon a 1/1 Candle, 2/2 Broom, and 3/3 Teapot.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_candle",
+            "count": 1
+          },
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_broom",
+            "count": 1
+          },
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_teapot",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_ethereal_peddler",
+    "name": "Ethereal Peddler",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 6,
+    "rulesText": "Battlecry: If you're holding any non-Rogue class cards,  reduce their Cost by (2).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardClass": "not-self"
+              }
+            },
+            "amount": -2,
+            "duration": "this-game"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_arcane_anomaly",
+    "name": "Arcane Anomaly",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Whenever you cast a spell, give this minion +1 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_zoobot",
+    "name": "Zoobot",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mechanical",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: Give a random friendly Beast, Dragon, and Murloc +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "filter": {
+                "tribe": "Beast"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "filter": {
+                "tribe": "Dragon"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "filter": {
+                "tribe": "Murloc"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_pompous_thespian",
+    "name": "Pompous Thespian",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_runic_egg",
+    "name": "Runic Egg",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 0,
+    "health": 2,
+    "rulesText": "Deathrattle: Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_deadly_fork",
+    "name": "Deadly Fork",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Deathrattle: Add a 3/2 weapon to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "one_night_in_karazhan_sharp_fork",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_arcanosmith",
+    "name": "Arcanosmith",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Battlecry: Summon a 0/5 minion with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_animated_shield",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_silvermoon_portal",
+    "name": "Silvermoon Portal",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 4,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +2/+2. Summon a random 2-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 2,
+            "health": 2
+          },
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": 2
+            },
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_avian_watcher",
+    "name": "Avian Watcher",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 3,
+    "health": 6,
+    "rulesText": "Battlecry: If you control a Secret, gain +1/+1 and Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-secret",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_pantry_spider",
+    "name": "Pantry Spider",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "Battlecry: Summon a 1/3 Spider.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_cellar_spider",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_moroes",
+    "name": "Moroes",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Stealth At the end of your turn, summon a 1/1 Steward.",
+    "keywords": ["stealth"],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "one_night_in_karazhan_steward",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "one_night_in_karazhan_whelp",
+    "name": "Whelp",
+    "rarity": "None",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_pawn",
+    "name": "Pawn",
+    "rarity": "None",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_candle",
+    "name": "Candle",
+    "rarity": "None",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_broom",
+    "name": "Broom",
+    "rarity": "None",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_teapot",
+    "name": "Teapot",
+    "rarity": "None",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_animated_shield",
+    "name": "Animated Shield",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 0,
+    "health": 5,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_steward",
+    "name": "Steward",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_cellar_spider",
+    "name": "Cellar Spider",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "one_night_in_karazhan_sharp_fork",
+    "name": "Sharp Fork",
+    "rarity": "None",
+    "cardClass": "Rogue",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "health": 2
+  }
+]

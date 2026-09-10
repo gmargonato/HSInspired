@@ -1,5 +1,9 @@
-import type { MinionCardDefinition } from '../../../game/content/cards'
-import type { BoardMinion } from '../../../game/match'
+import { cthunCardRulesText } from '../../../game/match/cthun'
+import type {
+  MinionCardDefinition,
+  WeaponCardDefinition
+} from '../../../game/content/cards'
+import type { BoardMinion, BoardWeapon } from '../../../game/match'
 import {
   minionAttackColor,
   minionHealthColor
@@ -58,6 +62,7 @@ export function boardMinionCardPreviewModel(
   return {
     card: {
       ...definition,
+      rulesText: cthunCardRulesText(minion, definition.rulesText),
       attack: minion.attack,
       health: minion.health
     },
@@ -77,7 +82,8 @@ export function boardMinionCardPreviewKey(minion: BoardMinion): string {
     minion.maxHealth,
     minion.baseAttack ?? '',
     minion.baseHealth ?? '',
-    minion.silenced === true ? 1 : 0
+    minion.silenced === true ? 1 : 0,
+    minion.enchantments?.some((entry) => entry.keywords?.includes('taunt')) ? 1 : 0
   ].join(':')
 }
 
@@ -98,4 +104,32 @@ export function positionBoardMinionCardPreview(
     x: clamp(source.x + source.width + layout.gap, minX, maxX),
     y: clamp(source.y + source.height / 2 - previewHeight / 2, minY, maxY)
   }
+}
+
+/** Display-only weapon card with the equipped instance's current stats. */
+export function boardWeaponCardPreviewModel(
+  definition: WeaponCardDefinition,
+  weapon: BoardWeapon
+) {
+  return {
+    card: { ...definition, attack: weapon.attack, durability: weapon.durability },
+    silenced: false,
+    attackColor: minionAttackColor(weapon.attack, definition.attack),
+    healthColor: minionHealthColor(
+      weapon.durability,
+      weapon.maxDurability,
+      definition.durability
+    )
+  }
+}
+
+export function boardWeaponCardPreviewKey(weapon: BoardWeapon): string {
+  return [
+    'weapon',
+    weapon.instanceId,
+    weapon.cardId,
+    weapon.attack,
+    weapon.durability,
+    weapon.maxDurability
+  ].join(':')
 }

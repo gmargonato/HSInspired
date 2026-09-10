@@ -8,6 +8,8 @@ export const CARD_KEYWORDS = [
   'cannot-attack',
   'cannot-attack-heroes',
   'charge',
+  'lifesteal',
+  'rush',
   'divine-shield',
   'immune',
   'mega-windfury',
@@ -45,7 +47,8 @@ export const CARD_TRIGGERS = [
   'on-summon',
   'secret',
   'start-of-turn',
-  'while-in-hand'
+  'while-in-hand',
+  'while-in-deck'
 ] as const
 export type CardTrigger = (typeof CARD_TRIGGERS)[number]
 
@@ -61,6 +64,7 @@ export const CARD_EVENT_TYPES = [
   'card-played',
   'card-discarded',
   'character-attacked',
+  'attack-resolved',
   'damage-dealt',
   'first-minion-played-this-turn',
   'friendly-minion-attacked',
@@ -81,6 +85,8 @@ export const CARD_EVENT_TYPES = [
   'secret-played',
   'secret-revealed',
   'spell-cast',
+  'spell-resolved',
+  'spell',
   'spell-targeted-minion',
   'turn-ended',
   'turn-started'
@@ -101,7 +107,10 @@ export const CARD_CONDITIONS = [
   'player-has-minion',
   'player-has-minion-count',
   'player-deck-has-no-duplicates',
+  'cthun-attack-at-least',
+  'defender-died-from-combat',
   'player-has-secret',
+  'player-has-spell-damage',
   'player-has-weapon',
   'player-health-gt',
   'player-health-lte',
@@ -114,6 +123,7 @@ export const CARD_CONDITIONS = [
   'target-is-friendly-demon',
   'target-is-not-friendly-demon',
   'target-not-frozen',
+  'target-matches',
   'target-survived',
   'player-has-card-in-hand'
 ] as const
@@ -124,11 +134,13 @@ export const CARD_DURATIONS = [
   'permanent',
   'this-attack',
   'this-turn',
+  'this-game',
   'until-next-turn',
   'while-condition',
   'while-damaged',
   'while-in-hand',
-  'while-source-in-play'
+  'while-source-in-play',
+  'while-source-equipped'
 ] as const
 export type CardDuration = (typeof CARD_DURATIONS)[number]
 
@@ -146,6 +158,7 @@ export const CARD_SELECTOR_TYPES = [
   'minion',
   'minion-card',
   'secret',
+  'spell',
   'spell-card',
   'weapon'
 ] as const
@@ -162,7 +175,8 @@ export const CARD_SELECTOR_SELECTIONS = [
   'next',
   'other-player-hand',
   'random',
-  'source'
+  'source',
+  'stored'
 ] as const
 export type CardSelectorSelection = (typeof CARD_SELECTOR_SELECTIONS)[number]
 
@@ -176,22 +190,29 @@ export const CARD_SELECTOR_FIELDS = [
   'adjacentTo',
   'controller',
   'count',
+  'distinct',
+  'distinctDeathEvents',
   'exclude',
   'excludeCardId',
   'filter',
   'preserve',
   'position',
+  'reference',
   'selection',
+  'order',
   'type',
   'zone'
 ] as const
 
 export const CARD_FILTER_FIELDS = [
   'cardId',
+  'cardClassIn',
   'cardClass',
   'cardType',
   'cost',
   'damaged',
+  'frozen',
+  'collectible',
   'hasBattlecry',
   'hasDeathrattle',
   'keyword',
@@ -201,6 +222,8 @@ export const CARD_FILTER_FIELDS = [
   'rarity',
   'sparePart',
   'stat',
+  'mortallyWounded',
+  'printedOnly',
   'tribe',
   'type',
   'value'
@@ -213,8 +236,12 @@ export type CardOperator = (typeof CARD_OPERATORS)[number]
 export const CARD_VALUE_REFERENCES = [
   'available-board-slots',
   'beasts-summoned-this-game',
+  'friendly-spells-cast-this-game',
+  'friendly-totems-summoned-this-game',
+  'friendly-secrets-played-this-game',
   'cards-played-earlier-this-turn',
   'damage-dealt',
+  'last-damage-amount',
   'destroyed-weapon.attack',
   'destroyed-weapon.durability',
   'drawn-card.cost',
@@ -222,6 +249,7 @@ export const CARD_VALUE_REFERENCES = [
   'event-target.durability',
   'event.damage',
   'event.amount',
+  'event-card-cost',
   'hand-size-difference',
   'health',
   'hero-powers-used-this-game',
@@ -237,7 +265,15 @@ export const CARD_VALUE_REFERENCES = [
   'source.health',
   'source.weapon.attack',
   'target.attack',
-  'target.health'
+  'target.health',
+  'destroyed-target.attack',
+  'destroyed-target.health',
+  'manaSpent',
+  'secretsDestroyed.count',
+  'summonedJade',
+  'returnedCard',
+  'discoveredCard.cost',
+  'target.baseCost'
 ] as const
 export type CardValueReference = (typeof CARD_VALUE_REFERENCES)[number]
 
@@ -250,8 +286,11 @@ export const CARD_ACTION_SOURCES = [
   'deck-top',
   'destroyed-minions',
   'friendly-minions-died-this-turn',
+  'friendly-minions-died-this-game',
   'minions-died-this-game',
   'hand',
+  'discarded-event-card',
+  'opponent-deck',
   'random-card'
 ] as const
 export const CARD_ACTION_DESTINATIONS = ['cast-on-source', 'deck', 'hand'] as const
@@ -323,7 +362,19 @@ export const CARD_ACTIONS = [
   'transform',
   'transform-random',
   'trigger-deathrattle',
-  'unlock-overload'
+  'unlock-overload',
+  'combine-choose-one',
+  'spend-all-mana',
+  'buff-cthun',
+  'copy-stats',
+  'summon-jade-golem',
+  'shuffle-dead-cthun',
+  'cast-random-spells',
+  'modify-hero-attacks',
+  'refresh-mana',
+  'refresh-hero-power',
+  'set-hero-power-cost',
+  'create-kazakus-potion'
 ] as const
 export type CardActionName = (typeof CARD_ACTIONS)[number]
 

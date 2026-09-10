@@ -51,6 +51,7 @@ import settingsRestartImage from '@assets/images/ui/settings/settings-restart.pn
 import settingsQuitImage from '@assets/images/ui/settings/settings-quit.png'
 import gameBoardImage from '@assets/images/match/BOARD.png'
 import gameDeckImage from '@assets/images/match/deck.png'
+import gameFatigueDeckImage from '@assets/images/match/fatigue-deck.png'
 import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
 import gameEnemyTurnImage from '@assets/images/match/button-enemy-turn.png'
 import gameYourTurnImage from '@assets/images/match/flag-your-turn.png'
@@ -76,6 +77,7 @@ import historyBurnThumbImage from '@assets/images/match/history-burn-thumb.png'
 import historyFatigueCardImage from '@assets/images/match/history-fatigue-card.png'
 import historyFatigueThumbImage from '@assets/images/match/history-fatigue-thumb.png'
 import manaCrystalImage from '@assets/images/cards/mana.png'
+import manaOverloadImage from '@assets/images/match/mana-overload.png'
 import historySecretCardImage from '@assets/images/match/history-secret-card.png'
 import historySecretThumbImage from '@assets/images/match/history-secret-thumb.png'
 import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
@@ -89,6 +91,10 @@ import minionDivineShieldImage from '@assets/images/board/minion-divine-shield.p
 import heroFrozenImage from '@assets/images/board/hero-frozen.png'
 import heroImmuneImage from '@assets/images/board/hero-immune.png'
 import minionFrozenImage from '@assets/images/board/minion-frozen.png'
+import minionImmuneImage from '@assets/images/board/minion-immune.png'
+import minionElusiveImage from '@assets/images/board/minion-elusive.png'
+import minionSpellDamageImage from '@assets/images/board/minion-spell-damage.png'
+import minionWindfuryImage from '@assets/images/board/minion-windfury.png'
 import minionStealthImage from '@assets/images/board/minion-stealth.png'
 import minionTriggerImage from '@assets/images/board/minion-trigger.png'
 import minionInspireImage from '@assets/images/board/minion-inspire.png'
@@ -646,6 +652,42 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.minion-windfury',
+    ASSET_BUNDLE_IDS.game,
+    'minionWindfury',
+    minionWindfuryImage,
+    51,
+    48,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-spell-damage',
+    ASSET_BUNDLE_IDS.game,
+    'minionSpellDamage',
+    minionSpellDamageImage,
+    43,
+    45,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-elusive',
+    ASSET_BUNDLE_IDS.game,
+    'minionElusive',
+    minionElusiveImage,
+    113,
+    153,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-immune',
+    ASSET_BUNDLE_IDS.game,
+    'minionImmune',
+    minionImmuneImage,
+    125,
+    167,
+    'game-scene'
+  ),
+  asset(
     'scene.game.minion-stealth',
     ASSET_BUNDLE_IDS.game,
     'minionStealth',
@@ -841,6 +883,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     gameDeckImage,
     83,
     181,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fatigue-deck',
+    ASSET_BUNDLE_IDS.game,
+    'fatigueDeck',
+    gameFatigueDeckImage,
+    60,
+    191,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.mana-overload',
+    ASSET_BUNDLE_IDS.game,
+    'manaOverload',
+    manaOverloadImage,
+    49,
+    48,
     'game-scene'
   ),
   asset(
@@ -1563,6 +1623,10 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   heroFrozen: Texture
   heroImmune: Texture
   minionFrozen: Texture
+  minionWindfury: Texture
+  minionSpellDamage: Texture
+  minionElusive: Texture
+  minionImmune: Texture
   minionStealth: Texture
   boardTrigger: Texture
   boardInspire: Texture
@@ -1585,7 +1649,9 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   playSpotlight7: Texture
   playSpotlight8: Texture
   deck: Texture
+  fatigueDeck: Texture
   manaCrystal: Texture
+  manaOverload: Texture
   endTurn: Texture
   toggleViewButton: Texture
   enemyTurn: Texture

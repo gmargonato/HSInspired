@@ -158,14 +158,6 @@ async function bootstrap(): Promise<void> {
     services.logger
   )
 
-  // Keep the native `Scenes > Match` submenu in sync (Deck ID — Class).
-  // Renderer is the source of truth for completeness and class mapping.
-  let unsubscribeDevDeckSync = (): void => undefined
-  if (import.meta.env.DEV) {
-    const { installDevDeckSync } = await import('./app/dev-deck-sync')
-    unsubscribeDevDeckSync = installDevDeckSync(services.deckStore, services.logger)
-  }
-
   let unsubscribeDevSceneSync = (): void => undefined
   let unsubscribeDevCommandHandler = (): void => undefined
   let removeFpsCounter = (): void => undefined
@@ -271,7 +263,6 @@ async function bootstrap(): Promise<void> {
         removeFpsCounter()
         removeSettingsShortcut()
         unsubscribeFromSceneMenu()
-        unsubscribeDevDeckSync()
         unsubscribeDevSceneSync()
         unsubscribeDevCommandHandler()
         app.canvas.removeEventListener('contextmenu', preventContextMenu)
@@ -284,7 +275,6 @@ async function bootstrap(): Promise<void> {
     removeFpsCounter()
     removeSettingsShortcut()
     unsubscribeFromSceneMenu()
-    unsubscribeDevDeckSync()
     unsubscribeDevSceneSync()
     unsubscribeDevCommandHandler()
     cursor.destroy()

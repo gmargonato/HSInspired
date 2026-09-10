@@ -789,7 +789,7 @@
     "cost": 4,
     "attack": 2,
     "health": 5,
-    "rulesText": "Adjacent minions can't be targeted by spells or Hero Powers.",
+    "rulesText": "Adjacent minions have Elusive.",
     "keywords": [],
     "effects": [
       {
@@ -1992,7 +1992,7 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2-4 damage. Summon 4 Imps, minus one for each damage dealt.",
+    "rulesText": "Deal 2-4 damage. Summon that many Imps.",
     "keywords": [],
     "effects": [
       {
@@ -2013,11 +2013,7 @@
             {
               "action": "summon",
               "cardId": "classic_imp",
-              "count": {
-                "operation": "subtract",
-                "value": 4,
-                "reference": "damage-dealt"
-              }
+              "count": { "reference": "last-damage-amount" }
             }
           ]
         }
@@ -3075,7 +3071,7 @@
     "cost": 4,
     "attack": 2,
     "health": 5,
-    "rulesText": "Taunt. Can't be targeted by spells or Hero Powers.",
+    "rulesText": "Taunt. Elusive.",
     "keywords": ["taunt", "spell-immune"],
     "effects": []
   },

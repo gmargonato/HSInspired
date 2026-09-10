@@ -43,6 +43,7 @@ export const EVENT_PRESENTATION_POLICY: Readonly<
   'dev-minion-summoned': 'animation',
   'dev-state-changed': 'state-refresh',
   'history-action-resolved': 'log-only',
+  'history-effect-recorded': 'invisible',
   'trigger-activated': 'animation',
   'death-batch-started': 'animation',
   'death-batch-completed': 'state-refresh',

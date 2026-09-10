@@ -115,7 +115,7 @@ describe('Secret runtime', () => {
     expect(scenario.match.getState()).toEqual(before)
   })
 
-  it('enforces the five-Secret capacity without consuming the sixth card', () => {
+  it('allows a sixth distinct Secret and consumes its hand card', () => {
     const scenario = createMatchScenario({ seed: 1304 })
     scenario.confirmBothMulligans()
     const controller = scenario.match.getState().activePlayerId!
@@ -143,18 +143,18 @@ describe('Secret runtime', () => {
     const sixth = player(scenario, controller).hand.find(
       (card) => card.cardId === 'classic_ice_block'
     )!
-    const rejected = scenario.match.dispatch({
+    const result = scenario.match.dispatch({
       type: 'play-card',
       participantId: controller,
       cardInstanceId: sixth.instanceId
     })
-    expect(rejected.accepted).toBe(false)
-    expect(player(scenario, controller).secrets).toHaveLength(5)
+    expect(result.accepted).toBe(true)
+    expect(player(scenario, controller).secrets).toHaveLength(6)
     expect(
       player(scenario, controller).hand.some(
         (card) => card.instanceId === sixth.instanceId
       )
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('counters a spell, consumes the Secret, and emits one public reveal', () => {

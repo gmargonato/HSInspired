@@ -1,3 +1,4 @@
+import { cthunCardRulesText } from '../../../game/match/cthun'
 import type { CardDefinition } from '../../../game/content/cards'
 import { isSecretCardPlay } from '../../../game/match/history-visibility'
 import type { OpeningCard, TurnMatchCommand } from '../../../game/match'
@@ -20,7 +21,7 @@ function topLeftForCard(placement: LayoutPlacement): {
   }
 }
 
-/** Returns the remote hand card consumed by a play command, if it is still present. */
+/** Only playing a hand card produces a cast preview; crafting is a choice. */
 export function playedRemoteCard(
   command: TurnMatchCommand,
   hand: readonly OpeningCard[]
@@ -49,11 +50,11 @@ export class RemoteCardPlayPreview extends Actor {
     this.eventMode = 'none'
   }
 
-  async present(definition: CardDefinition): Promise<void> {
+  async present(definition: CardDefinition, snapshot?: OpeningCard): Promise<void> {
     const sequence = ++this.sequence
     this.clearActiveCard()
 
-    const card = await this.createCard(definition)
+    const card = await this.createCard(definition, snapshot)
     if (sequence !== this.sequence || this.destroyed) {
       card.destroy({ children: true })
       return
@@ -115,7 +116,10 @@ export class RemoteCardPlayPreview extends Actor {
     for (const child of this.removeChildren()) child.destroy({ children: true })
   }
 
-  private async createCard(definition: CardDefinition): Promise<Container> {
+  private async createCard(
+    definition: CardDefinition,
+    snapshot?: OpeningCard
+  ): Promise<Container> {
     if (isRemoteSecret(definition)) {
       const container = new Container()
       const card = new Sprite(this.secretTexture)
@@ -126,7 +130,10 @@ export class RemoteCardPlayPreview extends Actor {
 
     const artwork = await this.resolver.loadArtwork(definition.id)
     return CardView.create(definition, this.resolver, {
-      artwork: artwork ?? undefined
+      artwork: artwork ?? undefined,
+      snapshot: snapshot
+        ? { ...snapshot, rulesText: cthunCardRulesText(snapshot, definition.rulesText) }
+        : undefined
     })
   }
 }

@@ -27,7 +27,7 @@ export const CARD_DRAW_LAYOUT = {
     normalAscentDuration: 1,
     normalDescentDuration: 10 / 21, // Preserve the existing ~0.476-second landing.
     // Normal draws hold the revealed card here; mulligan deals stay continuous.
-    peakHold: 1,
+    peakHold: 0.75,
     // Angles are authored in degrees: yaw 0 shows the back, 180 the front.
     // Plane rotation is applied before perspective; 90 starts the back landscape.
     // Taper is bottom width / top width before the sideways perspective turn.

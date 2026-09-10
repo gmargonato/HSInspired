@@ -6,14 +6,40 @@
  */
 export const SCENE_REQUEST_CHANNEL = 'debug:scene-request'
 
+export type DevMatchLaunchMode = 'first-player' | 'second-player' | 'skip-mulligan'
+
+type DevMatchMenuCatalog = {
+  readonly [Mode in DevMatchLaunchMode]: {
+    readonly label: string
+    readonly request: {
+      readonly id: 'game'
+      readonly params: { readonly launchMode: Mode }
+    }
+  }
+}
+
+export const DEV_MATCH_MENU_ENTRIES = {
+  'first-player': {
+    label: 'Start as First player',
+    request: { id: 'game', params: { launchMode: 'first-player' } }
+  },
+  'second-player': {
+    label: 'Start as Second player',
+    request: { id: 'game', params: { launchMode: 'second-player' } }
+  },
+  'skip-mulligan': {
+    label: 'Skip mulligan',
+    request: { id: 'game', params: { launchMode: 'skip-mulligan' } }
+  }
+} as const satisfies DevMatchMenuCatalog
+
 /**
  * Parameters accepted by each scene request. Adding a parameterized scene
  * here makes the request type require its data everywhere it is constructed.
- * For example: `game: { deckId: string }`.
+ * The development Match request can carry a deck override and launch mode.
  *
- * `game` supports both auto selection (no params) and explicit deck selection
- * via `deckId` - the native menu sends one or the other depending on whether
- * the user picked a specific deck. Keep the union so both forms validate.
+ * `game` supports auto selection (no params) and optional deck or launch-mode
+ * overrides for development tooling.
  */
 export interface SceneParamsById {
   'main-menu': undefined
@@ -24,7 +50,7 @@ export interface SceneParamsById {
   'tavern-brawl': undefined
   'card-inspector': undefined
   'outline-lab': undefined
-  game: { deckId: string } | undefined
+  game: { deckId?: string; launchMode?: DevMatchLaunchMode } | undefined
 }
 
 export type SceneId = keyof SceneParamsById
@@ -73,7 +99,7 @@ export const SCENE_MENU_ENTRIES = {
     request: { id: 'card-inspector' }
   },
   'outline-lab': { label: 'Shader Lab', request: { id: 'outline-lab' } },
-  game: { label: 'Match (First Complete Deck)', request: { id: 'game' } }
+  game: { label: 'Match', request: { id: 'game' } }
 } as const satisfies SceneMenuCatalog
 
 const knownSceneIds = new Set<string>(
@@ -89,8 +115,19 @@ export function isSceneRequest(value: unknown): value is SceneRequest {
 
   if (request.id === 'game' && request.params !== undefined) {
     if (typeof request.params !== 'object' || request.params === null) return false
-    const params = request.params as { deckId?: unknown }
-    if (typeof params.deckId !== 'string' || params.deckId.length === 0) return false
+    const params = request.params as { deckId?: unknown; launchMode?: unknown }
+    if (
+      params.deckId !== undefined &&
+      (typeof params.deckId !== 'string' || params.deckId.length === 0)
+    )
+      return false
+    if (
+      params.launchMode !== undefined &&
+      params.launchMode !== 'first-player' &&
+      params.launchMode !== 'second-player' &&
+      params.launchMode !== 'skip-mulligan'
+    )
+      return false
   }
 
   return true

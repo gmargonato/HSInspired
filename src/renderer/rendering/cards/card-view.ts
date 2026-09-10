@@ -4,6 +4,7 @@ import type { CardDefinition } from '../../../game/content/cards'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import {
   CARD_NAME_FIT,
+  formatCardRulesText,
   buildCardLayout,
   type CardBounds,
   type CardLayout,
@@ -22,6 +23,16 @@ import type { ClassFrameLayerAppearance } from './class-frame-colors'
 
 export interface CardViewOptions extends CardRenderOptions {
   readonly artwork?: Texture
+  readonly snapshot?: {
+    readonly currentCost?: number
+    readonly attack?: number
+    readonly health?: number
+    readonly maxHealth?: number
+    readonly durability?: number
+    readonly maxDurability?: number
+    readonly rulesText?: string
+    readonly silenced?: boolean
+  }
 }
 
 export interface CardLayerAppearance {
@@ -281,6 +292,7 @@ export class CardView extends Container {
     const view = new CardView(buildCardLayout(card, options))
     try {
       await view.build(resolver, options.artwork)
+      if (options.snapshot) view.applySnapshot(card, options.snapshot)
       if (
         shouldRenderClassFrameColors(options.classFrameColors) &&
         (card.type === 'Minion' || card.type === 'Spell')
@@ -370,6 +382,16 @@ export class CardView extends Container {
     this.setSemanticLayerOffset(path, appearance.offsets[template])
   }
 
+  /** Updates match-specific text while preserving authored wrapping and keyword styles. */
+  setRulesText(rulesText: string): void {
+    const entry = this.treeObjects.get('card.rules')
+    if (!entry || !(entry.object instanceof Text)) return
+    const text = formatCardRulesText({ id: this.plan.cardId, rulesText })
+    if (entry.object.text === text) return
+    entry.object.text = text
+    this.updateCacheTexture()
+  }
+
   /** Refreshes the visible mana value without rebuilding the card tree. */
   setManaCost(cost: number): void {
     const entry = this.treeObjects.get('card.stats.mana.label')
@@ -383,6 +405,61 @@ export class CardView extends Container {
     const entry = this.treeObjects.get('card.stats.mana.label')
     if (!entry || !(entry.object instanceof Text)) return
     entry.object.style.fill = CARD_COST_COLORS[color]
+    this.updateCacheTexture()
+  }
+
+  applySnapshot(
+    card: CardDefinition,
+    snapshot: NonNullable<CardViewOptions['snapshot']>
+  ): void {
+    const write = (
+      name: string,
+      value: number | undefined,
+      base: number | null,
+      damaged = false
+    ): void => {
+      if (value === undefined) return
+      const node = this.treeObjects.get(`card.stats.${name}.label`)
+      if (!node || !(node.object instanceof Text)) return
+      node.object.text = String(Math.max(0, value))
+      node.object.style.fill = damaged
+        ? 0xff4a4a
+        : base !== null && value > base
+          ? 0x6cff47
+          : 0xffffff
+    }
+    if (snapshot.currentCost !== undefined) {
+      this.setManaCost(snapshot.currentCost)
+      this.setManaCostColor(
+        snapshot.currentCost < card.cost
+          ? 'reduced'
+          : snapshot.currentCost > card.cost
+            ? 'increased'
+            : 'normal'
+      )
+    }
+    write(
+      'attack',
+      snapshot.attack,
+      card.type === 'Minion' || card.type === 'Weapon' ? card.attack : null
+    )
+    write(
+      'health',
+      snapshot.health,
+      card.type === 'Minion' ? card.health : null,
+      snapshot.health !== undefined &&
+        snapshot.health <
+          (snapshot.maxHealth ?? (card.type === 'Minion' ? card.health : 0))
+    )
+    write(
+      'durability',
+      snapshot.durability,
+      card.type === 'Weapon' ? card.durability : null,
+      snapshot.durability !== undefined &&
+        snapshot.durability < (snapshot.maxDurability ?? 0)
+    )
+    if (snapshot.rulesText !== undefined) this.setRulesText(snapshot.rulesText)
+    if (snapshot.silenced) this.setLayerAppearance('card.rules', { alpha: 0.3 })
     this.updateCacheTexture()
   }
 

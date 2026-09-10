@@ -157,10 +157,10 @@ const HERO_POWER_DATA = [
     'Warrior',
     'DIE, INSECT!',
     2,
-    'Deal 8 damage to a random enemy.',
+    'Deal 8 damage to a character.',
     'hero-power-ragnaros',
-    'none',
-    { kind: 'damage-random-enemy', amount: 8 }
+    'any-character',
+    { kind: 'damage-character', amount: 8 }
   ],
   [
     'warrior-armor-up',

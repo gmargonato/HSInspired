@@ -5,7 +5,7 @@ Each new match has one folder containing exactly two persistent files:
 - `match.txt`: the chronological gameplay transcript, using Local Player and Remote Player.
 - `ai.json`: compact AI decision summaries: chosen plays, returned explanations, execution results, and errors.
 
-Development recordings are in `artifacts/match-logs/`. Installed builds use `match-logs/` under Electron's application data directory. Folder names contain a UTC timestamp and unique match ID. Existing recordings are retained unchanged; schema version 4 applies only to new recordings.
+Development recordings are in `artifacts/match-logs/`. Installed builds use `match-logs/` under Electron's application data directory. Folder names contain a UTC timestamp and unique match ID. Existing recordings are retained unchanged; schema version 5 applies only to new recordings.
 
 ## Reading the transcript
 
@@ -35,15 +35,26 @@ The transcript includes developer interventions, match results, abandonment, int
 
 ## Reading AI decisions
 
-`ai.json` is ordinary, indented JSON. Its small header contains the match ID, participants, timestamps, status, recording completeness, model name, and deck strategy. The model and strategy are stored once.
+`ai.json` is ordinary, indented JSON. Its header contains the match ID, participants, timestamps, status, recording completeness, model name, and deck strategy. New schema-5 decisions also retain a fair observation, candidate policy summaries, policy evidence, lethal-search coverage, and execution effects. Delayed AI draw, burn, and fatigue effects caused at action boundaries are retained in `boundaryEffects`. The model and strategy are stored once.
 
-Each decision has a sequential decision number, turn number (0 for the opening mulligan), selection source, one returned explanation, and a list of plays:
+Each decision has a sequential decision number, turn number (0 for the opening mulligan), selection source and reason code, selected policy ID, candidate count, one returned explanation, and a list of plays. Reason codes distinguish model selection, engine lethal, unavailable API, a single safe policy, provider failure, live safety replacement, and no generated policies. Policy evidence records whether consequences are proven or bounded, risk flags, resolved effect totals, and whether a policy is a guaranteed lethal or a provable immediate loss:
 
 ```json
 {
   "turn": 4,
   "decision": 7,
   "source": "model",
+  "reasonCode": "model-selected",
+  "policyId": "policy-3",
+  "candidateCount": 12,
+  "hasCompleteOutcome": true,
+  "lethalCandidateCount": 0,
+  "evidence": {
+    "certainty": "proven",
+    "riskFlags": [],
+    "guaranteedLethal": false,
+    "immediateLoss": false
+  },
   "plays": [
     { "action": "Play Shielded Minibot", "result": "executed" },
     { "action": "End turn", "result": "executed" }
@@ -52,11 +63,11 @@ Each decision has a sequential decision number, turn number (0 for the opening m
 }
 ```
 
-Plays use card names. Selections initially have a `pending` result; matching engine commands update them to `executed` or `rejected`. Rejected attempts include an error. Retries remain separate attempts. A new decision or normal match exit marks unused planned plays `not executed`. Crash recovery or failed logging marks unconfirmed pending plays `unknown`, since their execution result may have been lost. Late execution results can still update their corresponding play without reopening the match.
+Plays use card names, with board minion targets including their slot, current stats, and instance ID. Selections initially have a `pending` result; matching engine commands update them to `executed` or `rejected`. Executed plays include compact event types, state changes, and mana snapshots. Rejected attempts include an error. Retries remain separate attempts. A new decision or normal match exit marks unused planned plays `not executed`. Crash recovery or failed logging marks unconfirmed pending plays `unknown`, since their execution result may have been lost. Late execution results can still update their corresponding play without reopening the match.
 
 Fallbacks retain their source and explanation. Provider failures retain a short error on the decision; planning errors without a gameplay decision appear in an optional header-level errors list. Late provider responses do not overwrite the explanation for the selected fallback.
 
-There are no full model inputs, board snapshots, alternative policies, raw provider envelopes, prompt/configuration dumps, fingerprints, usage statistics, timing records, or gameplay-event archives. Provider response explanations are not duplicated alongside selection explanations. Gameplay consequences belong in `match.txt`. Exact model-input reconstruction is intentionally unavailable.
+Schema 5 retains a redacted fair observation and compact candidate summaries for each AI selection. It still omits raw provider request/response envelopes, credentials, prompt/configuration dumps, hidden opponent information, and exact model-input reconstruction outside the retained fair observation. Provider response explanations are not duplicated alongside selection explanations. Gameplay consequences remain fully represented in `match.txt`; compact execution and boundary effects in `ai.json` exist to correlate decisions with outcomes.
 
 Returned explanations are the model's stated rationale, not a guarantee of correctness. No additional model calls are made. Credentials and request headers remain filtered, and the playing model's fair-information inputs are unchanged.
 
@@ -64,7 +75,7 @@ Returned explanations are the model's stated rationale, not a guarantee of corre
 
 The main process formats and writes logs asynchronously. TXT is append-only. JSON is atomically replaced using a temporary file, removed after the operation. Writes are batched at roughly 250 ms and flushed at turn boundaries and exit. The queue is bounded to 256 pending records plus the active batch. Large AI inputs are discarded before entering the write queue. The compact decision summaries are retained in memory and rewritten when a batch is flushed.
 
-Status is `in-progress`, `completed`, `abandoned`, or `interrupted`. Completed results are not overwritten by scene disposal or shutdown. Late AI records may update the JSON without reopening the match. On startup, unfinished version-4 recordings are marked interrupted and incomplete. Historical formats are not converted or modified.
+Status is `in-progress`, `completed`, `abandoned`, or `interrupted`. Completed results are not overwritten by scene disposal or shutdown. Late AI records may update the JSON without reopening the match. On startup, unfinished version-4 and version-5 recordings are marked interrupted and incomplete. Historical formats are not converted or modified.
 
 Normal shutdown allows up to five seconds for outstanding writes. A hard crash may lose buffered records, leave a partial text line, or leave a temporary JSON file. TXT and JSON are not a transactional pair. If writes fail or the queue overflows, gameplay continues and the existing logging-error notice is shown; the JSON and TXT mark incompleteness where writable.
 

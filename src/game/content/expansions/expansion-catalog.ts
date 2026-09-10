@@ -9,7 +9,10 @@ import {
   CLASSIC_CARD_SOURCE,
   GOBLINS_VS_GNOMES_CARD_SOURCE,
   LEAGUE_OF_EXPLORERS_CARD_SOURCE,
+  MEAN_STREETS_OF_GADGETZAN_CARD_SOURCE,
   NAXXRAMAS_CARD_SOURCE,
+  ONE_NIGHT_IN_KARAZHAN_CARD_SOURCE,
+  WHISPERS_OF_THE_OLD_GODS_CARD_SOURCE,
   THE_GRAND_TOURNAMENT_CARD_SOURCE
 } from '../cards/sets'
 
@@ -48,8 +51,8 @@ function expansion(
 export const EXPANSION_DEFINITIONS: readonly ExpansionDefinition[] = [
   expansion('basic', 'Basic', 0, BASIC_CARD_SOURCE),
   expansion('classic', 'Classic', 1, CLASSIC_CARD_SOURCE),
-  expansion('goblins-vs-gnomes', 'Goblins vs Gnomes', 2, GOBLINS_VS_GNOMES_CARD_SOURCE),
-  expansion('naxxramas', 'Curse of Naxxramas', 3, NAXXRAMAS_CARD_SOURCE),
+  expansion('naxxramas', 'Curse of Naxxramas', 2, NAXXRAMAS_CARD_SOURCE),
+  expansion('goblins-vs-gnomes', 'Goblins vs Gnomes', 3, GOBLINS_VS_GNOMES_CARD_SOURCE),
   expansion(
     'blackrock-mountain',
     'Blackrock Mountain',
@@ -57,16 +60,34 @@ export const EXPANSION_DEFINITIONS: readonly ExpansionDefinition[] = [
     BLACKROCK_MOUNTAIN_CARD_SOURCE
   ),
   expansion(
+    'the-grand-tournament',
+    'The Grand Tournament',
+    5,
+    THE_GRAND_TOURNAMENT_CARD_SOURCE
+  ),
+  expansion(
     'league-of-explorers',
     'League of Explorers',
-    5,
+    6,
     LEAGUE_OF_EXPLORERS_CARD_SOURCE
   ),
   expansion(
-    'the-grand-tournament',
-    'The Grand Tournament',
-    6,
-    THE_GRAND_TOURNAMENT_CARD_SOURCE
+    'whispers-of-the-old-gods',
+    'Whispers of the Old Gods',
+    7,
+    WHISPERS_OF_THE_OLD_GODS_CARD_SOURCE
+  ),
+  expansion(
+    'one-night-in-karazhan',
+    'One Night in Karazhan',
+    8,
+    ONE_NIGHT_IN_KARAZHAN_CARD_SOURCE
+  ),
+  expansion(
+    'mean-streets-of-gadgetzan',
+    'Mean Streets of Gadgetzan',
+    9,
+    MEAN_STREETS_OF_GADGETZAN_CARD_SOURCE
   )
 ]
 

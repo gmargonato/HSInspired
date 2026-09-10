@@ -198,10 +198,14 @@ export class HeroView extends Container {
     return new HeroView(model, textures)
   }
 
-  setStats(attack: number, health: number, armor: number, maxHealth?: number): void {
-    if (maxHealth !== undefined) this.maxHealth = maxHealth
+  setAttack(attack: number): void {
     this.attackLabel.text = String(attack)
     this.attackGroup.visible = attack > 0
+  }
+
+  setStats(attack: number, health: number, armor: number, maxHealth: number): void {
+    this.maxHealth = maxHealth
+    this.setAttack(attack)
     this.healthLabel.text = String(health)
     this.setHealthColor(health)
     this.armorLabel.text = String(armor)

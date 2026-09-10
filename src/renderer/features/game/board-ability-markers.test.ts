@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { markHearthstoneKeywords } from '../../rendering/cards/card-text-markup'
 import { CARD_CATALOG, type CardTrigger } from '../../../game/content/cards'
 import {
   isBoardMinionSleeping,
@@ -19,6 +20,42 @@ function markersForTrigger(trigger: CardTrigger) {
 }
 
 describe('board ability markers', () => {
+  it('uses resolved granted abilities and hides them after removal or silence', () => {
+    const minion = {
+      cardId: CARD_CATALOG.require('basic_stonetusk_boar').id,
+      keywords: [],
+      health: 1,
+      maxHealth: 1,
+      maxAttacksPerTurn: 4,
+      spellDamage: 2,
+      spellImmune: true,
+      immune: true
+    } as unknown as BoardMinion
+    const visible = { windfury: true, spellDamage: true, elusive: true, immune: true }
+    const hidden = {
+      windfury: false,
+      spellDamage: false,
+      elusive: false,
+      immune: false
+    }
+    expect(boardMinionRuntimeMarkers(minion, 1)).toMatchObject(visible)
+    expect(
+      boardMinionRuntimeMarkers(
+        {
+          ...minion,
+          maxAttacksPerTurn: 1,
+          spellDamage: 0,
+          spellImmune: false,
+          immune: false
+        },
+        2
+      )
+    ).toMatchObject(hidden)
+    expect(boardMinionRuntimeMarkers({ ...minion, silenced: true }, 1)).toMatchObject(
+      hidden
+    )
+  })
+
   it('uses controller-change exhaustion unless a current Charge effect overrides it', () => {
     const boar = CARD_CATALOG.require('basic_stonetusk_boar')
     const shadowMadness = CARD_CATALOG.require('classic_shadow_madness')
@@ -83,7 +120,7 @@ describe('board ability markers', () => {
       ]
     } as BoardMinion
 
-    expect(boardMinionRuntimeMarkers(minion, 1)).toEqual({
+    expect(boardMinionRuntimeMarkers(minion, 1)).toMatchObject({
       taunt: true,
       divineShield: false,
       stealth: false
@@ -106,7 +143,7 @@ describe('board ability markers', () => {
       silenced: true
     } as BoardMinion
 
-    expect(boardMinionRuntimeMarkers(minion, 1)).toEqual({
+    expect(boardMinionRuntimeMarkers(minion, 1)).toMatchObject({
       taunt: false,
       divineShield: false,
       stealth: false
@@ -180,42 +217,56 @@ describe('board ability markers', () => {
   it('uses authored Poisonous and Stealth indicators instead of temporary labels', () => {
     expect(markers('classic_emperor_cobra')).toMatchObject({
       poisonous: true,
-      temporaryAbilityLabels: []
+      windfury: false,
+      spellDamage: false,
+      elusive: false,
+      immune: false
     })
     expect(markers('classic_patient_assassin')).toMatchObject({
       poisonous: true,
       stealth: true,
-      temporaryAbilityLabels: []
+      windfury: false,
+      spellDamage: false,
+      elusive: false,
+      immune: false
     })
-    expect(markers('goblins_vs_gnomes_mini_mage').temporaryAbilityLabels).toEqual([
-      'Spell Damage'
-    ])
+    expect(markers('goblins_vs_gnomes_mini_mage').spellDamage).toBe(true)
     expect(markers('goblins_vs_gnomes_mini_mage').stealth).toBe(true)
-    expect(markers('classic_doomhammer').temporaryAbilityLabels).toEqual(['Windfury'])
-    expect(markers('goblins_vs_gnomes_v_07_tr_0n').temporaryAbilityLabels).toEqual([
-      'Mega Windfury'
-    ])
-    expect(markers('classic_faerie_dragon').temporaryAbilityLabels).toEqual([
-      'Spell Immune'
-    ])
-    expect(markers('classic_ancient_watcher').temporaryAbilityLabels).toEqual([
-      'Cannot Attack'
-    ])
+    expect(markers('classic_doomhammer').windfury).toBe(true)
+    expect(markers('goblins_vs_gnomes_v_07_tr_0n').windfury).toBe(true)
+    expect(markers('classic_faerie_dragon').elusive).toBe(true)
+    expect(markers('classic_ancient_watcher')).toMatchObject({
+      windfury: false,
+      spellDamage: false,
+      elusive: false,
+      immune: false
+    })
   })
 
   it('uses the Trigger asset for the persistent wrong-enemy attack effect', () => {
     expect(markers('goblins_vs_gnomes_ogre_brute')).toMatchObject({
       trigger: true,
-      temporaryAbilityLabels: []
+      windfury: false,
+      spellDamage: false,
+      elusive: false,
+      immune: false
     })
     expect(markers('goblins_vs_gnomes_ogre_warmaul')).toMatchObject({
       trigger: true,
-      temporaryAbilityLabels: []
+      windfury: false,
+      spellDamage: false,
+      elusive: false,
+      immune: false
     })
   })
 
   it('does not add a persistent badge for source-play Charge', () => {
-    expect(markers('basic_stonetusk_boar').temporaryAbilityLabels).toEqual([])
+    expect(markers('basic_stonetusk_boar')).toMatchObject({
+      windfury: false,
+      spellDamage: false,
+      elusive: false,
+      immune: false
+    })
   })
 
   it("shows Iron Juggernaut's deathrattle marker", () => {
@@ -243,4 +294,25 @@ describe('board ability markers', () => {
       })
     ).toMatchObject({ deathrattle: true, trigger: true, inspire: true })
   })
+})
+
+it('uses modern bold keywords across matching card descriptions', () => {
+  for (const [id, text] of [
+    ['classic_patient_assassin', 'Stealth. Poisonous.'],
+    ['classic_emperor_cobra', 'Poisonous.'],
+    ['naxxramas_maexxna', 'Poisonous.'],
+    ['league_of_explorers_pit_snake', 'Poisonous.'],
+    ['classic_faerie_dragon', 'Elusive.'],
+    ['classic_laughing_sister', 'Elusive.'],
+    ['naxxramas_spectral_knight', 'Elusive.'],
+    ['goblins_vs_gnomes_arcane_nullifier_x_21', 'Taunt. Elusive.'],
+    ['goblins_vs_gnomes_wee_spellstopper', 'Adjacent minions have Elusive.'],
+    ['the_grand_tournament_icehowl', 'Rush.']
+  ]) {
+    expect(CARD_CATALOG.require(id!).rulesText).toBe(text)
+    const keyword = text!.match(/Poisonous|Elusive|Rush/)![0]
+    expect(markHearthstoneKeywords(text!)).toContain(
+      '<keyword>' + keyword + '</keyword>'
+    )
+  }
 })

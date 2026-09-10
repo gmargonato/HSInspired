@@ -923,7 +923,15 @@ export class GameCombatPresentation {
     }
   ): void {
     if (view instanceof HeroView) {
-      view.setStats(result.attack, result.healthAfter, result.armorAfter ?? 0)
+      const player = view.ownerId
+        ? this.context.presentedPlayer(view.ownerId)
+        : undefined
+      view.setStats(
+        result.attack,
+        result.healthAfter,
+        result.armorAfter ?? 0,
+        player?.hero.maxHealth ?? result.healthAfter
+      )
     } else {
       view.setStats(result.attack, result.healthAfter)
     }
@@ -941,7 +949,12 @@ export class GameCombatPresentation {
       const ownerId = view.ownerId
       if (ownerId) {
         const player = this.context.presentedPlayer(ownerId)
-        view.setStats(getHeroAttack(player), player.hero.health, player.hero.armor)
+        view.setStats(
+          getHeroAttack(player),
+          player.hero.health,
+          player.hero.armor,
+          player.hero.maxHealth
+        )
         return
       }
     } else if (view.ownerId && view.instanceId) {

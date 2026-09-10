@@ -1,4 +1,4 @@
-import { Sprite, Texture } from 'pixi.js'
+import { Sprite, Text, Texture } from 'pixi.js'
 import { describe, expect, it, vi } from 'vitest'
 import { gsap } from '../../animation/animations'
 
@@ -9,7 +9,7 @@ vi.mock('../effects/animated-outline', () => ({
   }
 }))
 
-import { HeroView } from './hero-view'
+import { HERO_HEALTH_COLORS, HeroView } from './hero-view'
 
 describe('hero identity presentation', () => {
   it('flips only the portrait frame when the hero is replaced', async () => {
@@ -67,6 +67,38 @@ describe('hero identity presentation', () => {
     expect(immune.visible).toBe(true)
     view.setImmune(false)
     expect(immune.visible).toBe(false)
+    view.destroy({ children: true })
+  })
+
+  it('uses the latest maximum health when coloring the health value', () => {
+    const view = HeroView.create(
+      {
+        label: 'game.hero.local',
+        attack: 0,
+        health: 30,
+        maxHealth: 30,
+        armor: 0,
+        frozen: false,
+        immune: false
+      },
+      {
+        frame: Texture.EMPTY,
+        attack: Texture.EMPTY,
+        health: Texture.EMPTY,
+        armor: Texture.EMPTY,
+        frozen: Texture.EMPTY,
+        immune: Texture.EMPTY
+      }
+    )
+    const healthGroup = view.getChildByLabel('hero.stat-health')!
+    const healthLabel = healthGroup.getChildByLabel('hero.stat-health-value') as Text
+
+    view.setStats(0, 30, 0, 35)
+    expect(healthLabel.style.fill).toBe(HERO_HEALTH_COLORS.damaged)
+    view.setStats(0, 35, 0, 35)
+    expect(healthLabel.style.fill).toBe(HERO_HEALTH_COLORS.normal)
+    view.setStats(0, 36, 0, 35)
+    expect(healthLabel.style.fill).toBe(HERO_HEALTH_COLORS.increased)
     view.destroy({ children: true })
   })
 })

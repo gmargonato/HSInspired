@@ -183,9 +183,27 @@ export class HandCardPerspective {
     this.setTarget({ x: 0, y: 0 })
   }
 
+  /** Snapshot the displayed warp in normalized texture coordinates. */
+  captureCorners(): PerspectiveCorners {
+    const width = this.texture.width
+    const height = this.texture.height
+    const corners = resolvePerspectiveCorners(this.current, width, height)
+    const normalize = (point: PerspectivePoint): PerspectivePoint => ({
+      x: point.x / width,
+      y: point.y / height
+    })
+    return {
+      topLeft: normalize(corners.topLeft),
+      topRight: normalize(corners.topRight),
+      bottomRight: normalize(corners.bottomRight),
+      bottomLeft: normalize(corners.bottomLeft)
+    }
+  }
+
   update(deltaMS: number): void {
     if (this.destroyed) return
-    const smoothing = resolveParallaxSmoothing(deltaMS)
+    const returningToNeutral = this.target.x === 0 && this.target.y === 0
+    const smoothing = resolveParallaxSmoothing(deltaMS * (returningToNeutral ? 0.5 : 1))
     this.current.x += (this.target.x - this.current.x) * smoothing
     this.current.y += (this.target.y - this.current.y) * smoothing
 

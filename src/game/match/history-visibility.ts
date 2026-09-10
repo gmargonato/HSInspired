@@ -1,5 +1,17 @@
 import { CARD_CATALOG, type CardDefinition } from '../content/cards'
-import type { HistoryActionResolvedEvent } from './opening-match-types'
+import type {
+  HistoryActionResolvedEvent,
+  HistoryEntitySnapshot
+} from './opening-match-types'
+
+function conceal(target: HistoryEntitySnapshot): HistoryEntitySnapshot {
+  return {
+    id: target.id,
+    participantId: target.participantId,
+    kind: 'hidden',
+    cardId: null
+  }
+}
 
 /** A Secret's identity is private when played, even if its card was previously known. */
 export function isSecretCardPlay(definition: CardDefinition): boolean {
@@ -19,6 +31,12 @@ export function projectHistoryAction(
     event.participantId !== viewerId &&
     definition !== undefined &&
     isSecretCardPlay(definition)
+  const unknownSource =
+    event.action === 'trigger' &&
+    event.source.participantId !== viewerId &&
+    (event.source.zone === 'hand' || event.source.zone === 'deck') &&
+    !event.source.publicIdentity &&
+    !event.source.knownTo?.some((id) => id === viewerId)
   const source = hideSecret
     ? {
         id: event.source.id,
@@ -27,7 +45,9 @@ export function projectHistoryAction(
         cardId: null,
         concealedAs: 'secret' as const
       }
-    : { ...event.source }
+    : unknownSource
+      ? conceal(event.source)
+      : { ...event.source }
   // Grouped outcome previews must not recover a hidden identity from another
   // outcome on the same hand card (for example a generated card plus a buff).
   const hiddenTargets = new Set(
@@ -36,7 +56,12 @@ export function projectHistoryAction(
         ({ kind, target }) =>
           target.participantId !== viewerId &&
           (target.kind === 'card' || target.kind === 'hidden') &&
-          (kind === 'draw' || kind === 'create-hand')
+          !target.publicIdentity &&
+          !target.knownTo?.some((id) => id === viewerId) &&
+          (kind === 'draw' ||
+            kind === 'create-hand' ||
+            target.zone === 'hand' ||
+            target.zone === 'deck')
       )
       .map(({ target }) => target.id)
   )
@@ -45,6 +70,7 @@ export function projectHistoryAction(
     source,
     outcomes: event.outcomes.map((outcome) => ({
       ...outcome,
+      before: hiddenTargets.has(outcome.target.id) ? undefined : outcome.before,
       target: hiddenTargets.has(outcome.target.id)
         ? {
             id: outcome.target.id,

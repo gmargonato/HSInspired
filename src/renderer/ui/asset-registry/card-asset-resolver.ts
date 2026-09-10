@@ -1,5 +1,6 @@
 import { Assets, Texture } from 'pixi.js'
 import { hasCardAssetDefinition, resolveCardAssetDefinition } from './card-assets'
+import { resolveGadgetzanArtworkId } from './gadgetzan-artwork-aliases'
 
 const artworkUrls = import.meta.glob(
   '../../../../assets/images/card-artwork/*.{jpg,jpeg,png}',
@@ -10,14 +11,19 @@ const artworkUrls = import.meta.glob(
   }
 ) as Record<string, string>
 
-const CARD_ARTWORK_EXTENSION = '.jpg'
-
 function artworkGlobKey(fileName: string): string {
   return `../../../../assets/images/card-artwork/${fileName}`
 }
 
-function artworkFileName(cardId: string): string {
-  return `${cardId}${CARD_ARTWORK_EXTENSION}`
+function artworkFileNames(cardId: string): readonly string[] {
+  const resolvedId = resolveGadgetzanArtworkId(cardId)
+  return [`${resolvedId}.jpg`, `${resolvedId}.jpeg`, `${resolvedId}.png`]
+}
+
+function artworkUrl(cardId: string): string | undefined {
+  return artworkFileNames(cardId)
+    .map((fileName) => artworkUrls[artworkGlobKey(fileName)])
+    .find((url): url is string => url !== undefined)
 }
 
 /** Improves minification when the same authored texture is used by compact cards. */
@@ -57,11 +63,11 @@ export function getCardAssetUrl(fileName: string): string {
 }
 
 export function hasCardArtwork(cardId: string): boolean {
-  return artworkGlobKey(artworkFileName(cardId)) in artworkUrls
+  return artworkUrl(cardId) !== undefined
 }
 
 export function getCardArtworkUrl(cardId: string): string | undefined {
-  return artworkUrls[artworkGlobKey(artworkFileName(cardId))]
+  return artworkUrl(cardId)
 }
 
 export class CardAssetResolver {
@@ -88,14 +94,14 @@ export class CardAssetResolver {
     const artworkUrl = getCardArtworkUrl(cardId)
     if (!artworkUrl) return Promise.resolve(undefined)
 
-    const existing = this.artworkPromises.get(cardId)
+    const existing = this.artworkPromises.get(artworkUrl)
     if (existing) return existing
 
     const promise = Assets.load<Texture>(artworkUrl).then(configureCardTexture)
-    this.artworkPromises.set(cardId, promise)
+    this.artworkPromises.set(artworkUrl, promise)
     void promise.catch(() => {
-      if (this.artworkPromises.get(cardId) === promise) {
-        this.artworkPromises.delete(cardId)
+      if (this.artworkPromises.get(artworkUrl) === promise) {
+        this.artworkPromises.delete(artworkUrl)
       }
     })
     return promise

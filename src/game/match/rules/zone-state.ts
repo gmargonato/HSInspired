@@ -1,3 +1,4 @@
+import { applyCthunToCard } from '../cthun'
 import type { OpeningCard, OpeningPlayerState } from '../opening-match-types'
 
 export type CardZone = 'deck' | 'hand' | 'revealed' | 'discarded'
@@ -69,7 +70,7 @@ export function insertCardIntoPlayer(
   const knownTo = new Set(card.knownTo ?? [])
   if (zone === 'hand' || zone === 'revealed') knownTo.add(player.participantId)
   const normalized: OpeningCard = {
-    ...card,
+    ...applyCthunToCard(card, player),
     controllerId: player.participantId,
     zone,
     revealed: zone === 'hand' || zone === 'revealed',

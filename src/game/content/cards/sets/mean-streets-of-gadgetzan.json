@@ -1,0 +1,4519 @@
+[
+  {
+    "id": "mean_streets_of_gadgetzan_jade_idol",
+    "name": "Jade Idol",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Choose One - Summon a Jade Golem; or Shuffle 3 copies of this card into your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "presentationCardId": "mean_streets_of_gadgetzan_jade_idol_summon_choice",
+              "actions": [
+                {
+                  "action": "summon-jade-golem",
+                  "player": "self",
+                  "counter": "jade-golem-size",
+                  "initialSize": 1,
+                  "maximumSize": 30,
+                  "incrementOnFailedSummon": true
+                }
+              ]
+            },
+            {
+              "presentationCardId": "mean_streets_of_gadgetzan_jade_idol_shuffle_choice",
+              "actions": [
+                {
+                  "action": "shuffle-into-deck",
+                  "player": "self",
+                  "cardId": "mean_streets_of_gadgetzan_jade_idol",
+                  "count": 3
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_mark_of_the_lotus",
+    "name": "Mark of the Lotus",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your minions +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_blossom",
+    "name": "Jade Blossom",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon a Jade Golem. Gain an empty Mana Crystal.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon-jade-golem",
+            "player": "self",
+            "counter": "jade-golem-size",
+            "initialSize": 1,
+            "maximumSize": 30,
+            "incrementOnFailedSummon": true
+          },
+          {
+            "action": "gain-mana",
+            "player": "self",
+            "amount": 1,
+            "crystal": "empty"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_behemoth",
+    "name": "Jade Behemoth",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 3,
+    "health": 6,
+    "rulesText": "Taunt. Battlecry: Summon a Jade Golem.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-jade-golem",
+            "player": "self",
+            "counter": "jade-golem-size",
+            "initialSize": 1,
+            "maximumSize": 30,
+            "incrementOnFailedSummon": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kun_the_forgotten_king",
+    "name": "Kun the Forgotten King",
+    "rarity": "Legendary",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 10,
+    "attack": 7,
+    "health": 7,
+    "rulesText": "Choose One - Gain 10 Armor; or Refresh your Mana Crystals.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "presentationCardId": "mean_streets_of_gadgetzan_kun_armor_choice",
+              "actions": [
+                {
+                  "action": "gain-armor",
+                  "player": "self",
+                  "amount": 10
+                }
+              ]
+            },
+            {
+              "presentationCardId": "mean_streets_of_gadgetzan_kun_refresh_choice",
+              "actions": [
+                {
+                  "action": "refresh-mana",
+                  "player": "self",
+                  "amount": "all"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_alleycat",
+    "name": "Alleycat",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Summon a 1/1 Cat.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "mean_streets_of_gadgetzan_tabbycat",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_rat_pack",
+    "name": "Rat Pack",
+    "rarity": "Epic",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Deathrattle: Summon a number of 1/1 Rats equal to this minion's Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "mean_streets_of_gadgetzan_rat",
+            "count": {
+              "reference": "source.attack",
+              "snapshot": "at-death"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kabal_lackey",
+    "name": "Kabal Lackey",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Battlecry: The next Secret you play this turn costs (0).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "spell-card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "keyword": "secret"
+              }
+            },
+            "amount": {
+              "operation": "set",
+              "value": 0
+            },
+            "duration": "this-turn",
+            "deferUntil": "next-matching-card-played"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_potion_of_polymorph",
+    "name": "Potion of Polymorph",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Secret: After your opponent plays a minion, transform it into a 1/1 Sheep.",
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-played",
+          "controller": "opponent",
+          "phase": "after-battlecry"
+        },
+        "actions": [
+          {
+            "action": "transform",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "cardId": "mean_streets_of_gadgetzan_sheep"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_volcanic_potion",
+    "name": "Volcanic Potion",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 2 damage to all minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kabal_crystal_runner",
+    "name": "Kabal Crystal Runner",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Costs (2) less for each Secret you've played this game.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "friendly-secrets-played-this-game",
+              "multiplier": 2,
+              "operation": "subtract"
+            },
+            "minimum": 0,
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_inkmaster_solia",
+    "name": "Inkmaster Solia",
+    "rarity": "Legendary",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: If your deck has no duplicates, the next spell you cast this turn costs (0).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-deck-has-no-duplicates",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "spell-card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "amount": {
+              "operation": "set",
+              "value": 0
+            },
+            "duration": "this-turn",
+            "deferUntil": "next-matching-card-played"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_small_time_recruits",
+    "name": "Small-Time Recruits",
+    "rarity": "Epic",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw three 1-Cost minions from your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 3,
+            "filter": {
+              "cardType": "Minion",
+              "cost": 1
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_wickerflame_burnbristle",
+    "name": "Wickerflame Burnbristle",
+    "rarity": "Legendary",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Divine Shield. Taunt. Damage dealt by this minion also heals your hero.",
+    "keywords": ["divine-shield", "taunt", "lifesteal"],
+    "effects": []
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_pint_size_potion",
+    "name": "Pint-Size Potion",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give all enemy minions -3 Attack this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "attack": -3,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_potion_of_madness",
+    "name": "Potion of Madness",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Gain control of an enemy minion with 2 or less Attack until end of turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "take-control",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "stat": "attack",
+                "operator": "lte",
+                "value": 2
+              }
+            },
+            "duration": "this-turn",
+            "canAttackImmediately": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kabal_talonpriest",
+    "name": "Kabal Talonpriest",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Battlecry: Give a friendly minion +3 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "health": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_greater_healing_potion",
+    "name": "Greater Healing Potion",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 4,
+    "attack": null,
+    "health": null,
+    "rulesText": "Restore 12 Health to a friendly character.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 12
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_drakonid_operative",
+    "name": "Drakonid Operative",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 5,
+    "attack": 5,
+    "health": 6,
+    "rulesText": "Battlecry: If you're holding a Dragon, Discover a card in your opponent's deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": {
+            "tribe": "Dragon"
+          }
+        },
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "opponent-deck",
+            "filter": {},
+            "classBonus": 1,
+            "copy": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kabal_songstealer",
+    "name": "Kabal Songstealer",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: Silence a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_raza_the_chained",
+    "name": "Raza the Chained",
+    "rarity": "Legendary",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: If your deck has no duplicates, your Hero Power costs (0) this game.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-deck-has-no-duplicates",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "set-hero-power-cost",
+            "player": "self",
+            "cost": 0,
+            "duration": "this-game",
+            "appliesToFutureHeroPowers": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_dragonfire_potion",
+    "name": "Dragonfire Potion",
+    "rarity": "Epic",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 6,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 5 damage to all minions except Dragons.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "tribe": "Dragon",
+                "negate": true
+              }
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_counterfeit_coin",
+    "name": "Counterfeit Coin",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Gain 1 Mana Crystal this turn only.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "gain-mana",
+            "player": "self",
+            "amount": 1,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_shuriken",
+    "name": "Jade Shuriken",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 2 damage. Combo: Summon a Jade Golem.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "then": {
+          "condition": {
+            "type": "combo"
+          },
+          "actions": [
+            {
+              "action": "summon-jade-golem",
+              "player": "self",
+              "counter": "jade-golem-size",
+              "initialSize": 1,
+              "maximumSize": 30,
+              "incrementOnFailedSummon": true
+            }
+          ]
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_swarmer",
+    "name": "Jade Swarmer",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Stealth. Deathrattle: Summon a Jade Golem.",
+    "keywords": ["stealth"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon-jade-golem",
+            "player": "self",
+            "counter": "jade-golem-size",
+            "initialSize": 1,
+            "maximumSize": 30,
+            "incrementOnFailedSummon": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_shaku_the_collector",
+    "name": "Shaku, the Collector",
+    "rarity": "Legendary",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Stealth. Whenever this attacks, add a random card to your hand (from your opponent's class).",
+    "keywords": ["stealth"],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "source": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "cardClass": "opponent"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_devolve",
+    "name": "Devolve",
+    "rarity": "Rare",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Transform all enemy minions into random ones that cost (1) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "transform-random",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "filter": {
+              "cardType": "Minion",
+              "cost": {
+                "reference": "target.baseCost",
+                "offset": -1
+              }
+            },
+            "leaveUnchangedIfNoValidCost": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_claws",
+    "name": "Jade Claws",
+    "rarity": "Rare",
+    "cardClass": "Shaman",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Battlecry: Summon a Jade Golem. Overload: (1)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-jade-golem",
+            "player": "self",
+            "counter": "jade-golem-size",
+            "initialSize": 1,
+            "maximumSize": 30,
+            "incrementOnFailedSummon": true
+          }
+        ]
+      },
+      {
+        "trigger": "on-play",
+        "event": {
+          "type": "card-played",
+          "controller": "self",
+          "source": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "overload",
+            "player": "self",
+            "amount": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_lightning",
+    "name": "Jade Lightning",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 4,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 4 damage. Summon a Jade Golem.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 4
+          },
+          {
+            "action": "summon-jade-golem",
+            "player": "self",
+            "counter": "jade-golem-size",
+            "initialSize": 1,
+            "maximumSize": 30,
+            "incrementOnFailedSummon": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jinyu_waterspeaker",
+    "name": "Jinyu Waterspeaker",
+    "rarity": "Rare",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 6,
+    "rulesText": "Battlecry: Restore 6 Health. Overload: (1)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 6
+          }
+        ]
+      },
+      {
+        "trigger": "on-play",
+        "event": {
+          "type": "card-played",
+          "controller": "self",
+          "source": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "overload",
+            "player": "self",
+            "amount": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_white_eyes",
+    "name": "White Eyes",
+    "rarity": "Legendary",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Taunt. Deathrattle: Shuffle 'The Storm Guardian' into your deck.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "self",
+            "cardId": "mean_streets_of_gadgetzan_the_storm_guardian",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_chieftain",
+    "name": "Jade Chieftain",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: Summon a Jade Golem. Give it Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-jade-golem",
+            "player": "self",
+            "counter": "jade-golem-size",
+            "initialSize": 1,
+            "maximumSize": 30,
+            "incrementOnFailedSummon": true,
+            "storeAs": "summonedJade"
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "type": "minion",
+              "controller": "self",
+              "selection": "stored",
+              "reference": "summonedJade"
+            },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_blastcrystal_potion",
+    "name": "Blastcrystal Potion",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 4,
+    "attack": null,
+    "health": null,
+    "rulesText": "Destroy a minion and one of your Mana Crystals.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "destroy-mana-crystal",
+            "player": "self",
+            "amount": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_crystalweaver",
+    "name": "Crystalweaver",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 5,
+    "health": 4,
+    "rulesText": "Battlecry: Give your Demons +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "tribe": "Demon"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_felfire_potion",
+    "name": "Felfire Potion",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 6,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 5 damage to all characters.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_abyssal_enforcer",
+    "name": "Abyssal Enforcer",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 7,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "Battlecry: Deal 3 damage to all other characters.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_sleep_with_the_fishes",
+    "name": "Sleep with the Fishes",
+    "rarity": "Epic",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 3 damage to all damaged minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "damaged": true
+              }
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_alley_armorsmith",
+    "name": "Alley Armorsmith",
+    "rarity": "Rare",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 2,
+    "health": 7,
+    "rulesText": "Taunt. Whenever this minion deals damage, gain that much Armor.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "source": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "gain-armor",
+            "player": "self",
+            "amount": {
+              "reference": "event.amount"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_mistress_of_mixtures",
+    "name": "Mistress of Mixtures",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Deathrattle: Restore 4 Health to each hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_patches_the_pirate",
+    "name": "Patches the Pirate",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Charge. After you play a Pirate, summon this minion from your deck.",
+    "keywords": ["charge"],
+    "effects": [
+      {
+        "trigger": "while-in-deck",
+        "event": {
+          "type": "minion-played",
+          "controller": "self",
+          "filter": {
+            "tribe": "Pirate"
+          },
+          "exclude": "source"
+        },
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": "deck",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            },
+            "selection": "source"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_small_time_buccaneer",
+    "name": "Small-Time Buccaneer",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 1,
+    "attack": 1,
+    "health": 2,
+    "rulesText": "Has +2 Attack while you have a weapon equipped.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "player-has-weapon",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "duration": "while-condition"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_dirty_rat",
+    "name": "Dirty Rat",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 6,
+    "rulesText": "Taunt. Battlecry: Your opponent summons a random minion from their hand.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "opponent",
+            "source": "hand",
+            "filter": {
+              "cardType": "Minion"
+            },
+            "selection": "random"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_auctionmaster_beardo",
+    "name": "Auctionmaster Beardo",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "After you cast a spell, refresh your Hero Power.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-resolved",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "refresh-hero-power",
+            "player": "self"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kabal_courier",
+    "name": "Kabal Courier",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Battlecry: Discover a Mage, Priest, or Warlock card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClassIn": ["Mage", "Priest", "Warlock"],
+              "collectible": true
+            },
+            "classBonus": 1,
+            "oneOptionPerClass": true
+          }
+        ]
+      }
+    ],
+    "classes": ["Mage", "Priest", "Warlock"]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_spirit",
+    "name": "Jade Spirit",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Battlecry: Summon a Jade Golem.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-jade-golem",
+            "player": "self",
+            "counter": "jade-golem-size",
+            "initialSize": 1,
+            "maximumSize": 30,
+            "incrementOnFailedSummon": true
+          }
+        ]
+      }
+    ],
+    "classes": ["Druid", "Rogue", "Shaman"]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kazakus",
+    "name": "Kazakus",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: Create a custom spell.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "create-kazakus-potion",
+            "player": "self",
+            "ingredientChoices": 2,
+            "optionsPerChoice": 3,
+            "distinctIngredients": true,
+            "secondOfferExcludes": "selected-first-ingredient-only",
+            "recipeOrderMatters": false
+          }
+        ]
+      }
+    ],
+    "classes": ["Mage", "Priest", "Warlock"]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_naga_corsair",
+    "name": "Naga Corsair",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 4,
+    "attack": 5,
+    "health": 4,
+    "rulesText": "Battlecry: Give your weapon +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_burgly_bully",
+    "name": "Burgly Bully",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "Whenever your opponent casts a spell, add a Coin to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "basic_the_coin",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_doppelgangster",
+    "name": "Doppelgangster",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Battlecry: Summon 2 copies of this minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "count": 2,
+            "exactCopy": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_finja_the_flying_star",
+    "name": "Finja, the Flying Star",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 5,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "Stealth. Whenever this attacks and kills a minion, summon 2 Murlocs from your deck.",
+    "keywords": ["stealth"],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "attack-resolved",
+          "source": {
+            "selection": "source"
+          }
+        },
+        "condition": {
+          "type": "defender-died-from-combat",
+          "sourceMustSurvive": true
+        },
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": "deck",
+            "filter": {
+              "tribe": "Murloc"
+            },
+            "selection": "random",
+            "count": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_second_rate_bruiser",
+    "name": "Second-Rate Bruiser",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 5,
+    "rulesText": "Taunt. Costs (2) less if your opponent has at least three minions.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "condition": {
+          "type": "player-has-minion-count",
+          "player": "opponent",
+          "operator": "gte",
+          "value": 3
+        },
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": -2,
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_aya_blackpaw",
+    "name": "Aya Blackpaw",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 5,
+    "health": 3,
+    "rulesText": "Battlecry and Deathrattle: Summon a Jade Golem.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-jade-golem",
+            "player": "self",
+            "counter": "jade-golem-size",
+            "initialSize": 1,
+            "maximumSize": 30,
+            "incrementOnFailedSummon": true
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon-jade-golem",
+            "player": "self",
+            "counter": "jade-golem-size",
+            "initialSize": 1,
+            "maximumSize": 30,
+            "incrementOnFailedSummon": true
+          }
+        ]
+      }
+    ],
+    "classes": ["Druid", "Rogue", "Shaman"]
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_idol_shuffle_choice",
+    "name": "Jade Idol Shuffle Choice",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Shuffle 3 copies of Jade Idol into your deck.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_jade_idol_summon_choice",
+    "name": "Jade Idol Summon Choice",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon a Jade Golem.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kun_armor_choice",
+    "name": "Kun Armor Choice",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Gain 10 Armor.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kun_refresh_choice",
+    "name": "Kun Refresh Choice",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Refresh your Mana Crystals.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_rat",
+    "name": "Rat",
+    "rarity": "Summon",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_tabbycat",
+    "name": "Tabbycat",
+    "rarity": "Summon",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_the_storm_guardian",
+    "name": "The Storm Guardian",
+    "rarity": "Summon",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 10,
+    "health": 10,
+    "rulesText": "Taunt.",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_lesser_potion",
+    "name": "Lesser Potion",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Create a 1-Cost spell.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_sheep",
+    "name": "Sheep",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kazakus_demon_2",
+    "name": "Kabal Demon",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_greater_potion",
+    "name": "Greater Potion",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Create a 5-Cost spell.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kazakus_demon_5",
+    "name": "Kabal Demon",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kazakus_demon_8",
+    "name": "Kabal Demon",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 8,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_superior_potion",
+    "name": "Superior Potion",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 10,
+    "attack": null,
+    "health": null,
+    "rulesText": "Create a 10-Cost spell.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_genzo_the_shark",
+    "name": "Genzo, the Shark",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 5,
+    "health": 4,
+    "rulesText": "Whenever this attacks, both players draw until they have 3 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "draw-until",
+            "player": "self",
+            "handSize": 3
+          },
+          {
+            "action": "draw-until",
+            "player": "opponent",
+            "handSize": 3
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_trogg_beastrager",
+    "name": "Trogg Beastrager",
+    "rarity": "Rare",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Battlecry: Give a random Beast in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Beast"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kooky_chemist",
+    "name": "Kooky Chemist",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: Swap the Attack and Health of a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "swap-stats",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_streetwise_investigator",
+    "name": "Streetwise Investigator",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "Battlecry: Enemy minions lose Stealth.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "remove-keyword",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "keyword": "stealth"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_call_in_the_finishers",
+    "name": "Call in the Finishers",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 4,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon four 1/1 Murlocs.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "mean_streets_of_gadgetzan_murloc_razorgill",
+            "count": 4
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_finders_keepers",
+    "name": "Finders Keepers",
+    "rarity": "Epic",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Discover a card with Overload. Overload: (1)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "overload": true
+            }
+          },
+          {
+            "action": "overload",
+            "player": "self",
+            "amount": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_lotus_assassin",
+    "name": "Lotus Assassin",
+    "rarity": "Epic",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Stealth. Whenever this attacks and kills a minion, gain Stealth.",
+    "keywords": ["stealth"],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "attack-resolved",
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        },
+        "condition": {
+          "type": "defender-died-from-combat",
+          "sourceMustSurvive": true
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "stealth"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_blowgill_sniper",
+    "name": "Blowgill Sniper",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 2,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Battlecry: Deal 1 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_unlicensed_apothecary",
+    "name": "Unlicensed Apothecary",
+    "rarity": "Epic",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 3,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Whenever you summon a minion, deal 5 damage to your Hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "controller": "self",
+          "type": "minion-summoned"
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "hero"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_backstreet_leper",
+    "name": "Backstreet Leper",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 1,
+    "rulesText": "Deathrattle: Deal 2 damage to the enemy hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "hero"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_mayor_noggenfogger",
+    "name": "Mayor Noggenfogger",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 9,
+    "attack": 5,
+    "health": 4,
+    "rulesText": "All targets are chosen randomly.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_public_defender",
+    "name": "Public Defender",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 0,
+    "health": 7,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_defias_cleaner",
+    "name": "Defias Cleaner",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 5,
+    "health": 7,
+    "rulesText": "Battlecry: Silence a minion with Deathrattle.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "silence",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "hasDeathrattle": true
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_fight_promoter",
+    "name": "Fight Promoter",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: If you control a minion with 6 or more  Health, draw two cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": {
+            "stat": "health",
+            "operator": "gte",
+            "value": 6
+          }
+        },
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_friendly_bartender",
+    "name": "Friendly Bartender",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "At the end of your turn, restore 1 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "hero"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_cryomancer",
+    "name": "Cryomancer",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: Gain +2/+2 if an enemy is Frozen.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "target-frozen"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_red_mana_wyrm",
+    "name": "Red Mana Wyrm",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 2,
+    "health": 6,
+    "rulesText": "Whenever you cast a spell, gain +2 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_grimestreet_smuggler",
+    "name": "Grimestreet Smuggler",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "Battlecry: Give a random minion in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_grimy_gadgeteer",
+    "name": "Grimy Gadgeteer",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "At the end of your turn, give a random minion in your hand +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand",
+              "filter": {
+                "cardType": "Minion"
+              }
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_greater_arcane_missiles",
+    "name": "Greater Arcane Missiles",
+    "rarity": "Epic",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 7,
+    "attack": null,
+    "health": null,
+    "rulesText": "Shoot three missiles at random enemies that deal 3 damage each.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 3
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 3
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_lotus_illusionist",
+    "name": "Lotus Illusionist",
+    "rarity": "Epic",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 5,
+    "rulesText": "After this minion attacks a hero, transform it into a  random 6-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "minion-attacks-hero",
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "transform-random",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "filter": {
+              "cardType": "Minion",
+              "cost": 6
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_hobart_grapplehammer",
+    "name": "Hobart Grapplehammer",
+    "rarity": "Legendary",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Battlecry: Give all weapons in your hand and deck +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "attack": 1
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all",
+              "zone": "deck"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kabal_trafficker",
+    "name": "Kabal Trafficker",
+    "rarity": "Epic",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "At the end of your turn, add a random Demon to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "tribe": "Demon",
+              "collectible": true
+            },
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_wrathion",
+    "name": "Wrathion",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 4,
+    "health": 5,
+    "rulesText": "Taunt. Battlecry: Draw cards until you draw one that isn't a Dragon.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw-until",
+            "player": "self",
+            "filter": {
+              "tribe": "Dragon"
+            },
+            "stopWhen": "non-matching",
+            "handSize": 10
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_dispatch_kodo",
+    "name": "Dispatch Kodo",
+    "rarity": "Rare",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 4,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "Battlecry: Deal damage equal to this minion's Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": {
+              "reference": "source.attack"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_meanstreet_marshal",
+    "name": "Meanstreet Marshal",
+    "rarity": "Epic",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 2,
+    "rulesText": "Deathrattle: If this minion has 2 or more Attack, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_worgen_greaser",
+    "name": "Worgen Greaser",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 6,
+    "health": 3,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_grimscale_chum",
+    "name": "Grimscale Chum",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Battlecry: Give a random Murloc in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Murloc"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_seadevil_stinger",
+    "name": "Seadevil Stinger",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 4,
+    "attack": 4,
+    "health": 2,
+    "rulesText": "Battlecry: The next Murloc you play this turn costs  Health instead of Mana.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Murloc"
+              }
+            },
+            "amount": {
+              "operation": "set",
+              "value": 0
+            },
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_krul_the_unshackled",
+    "name": "Krul the Unshackled",
+    "rarity": "Legendary",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 9,
+    "attack": 7,
+    "health": 9,
+    "rulesText": "Battlecry: If your deck has no duplicates, summon all  Demons from your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-deck-has-no-duplicates",
+          "player": "self"
+        },
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Demon"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_fel_orc_soulfiend",
+    "name": "Fel Orc Soulfiend",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 7,
+    "rulesText": "At the start of your turn, deal 2 damage to this minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_wind_up_burglebot",
+    "name": "Wind-up Burglebot",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mechanical",
+    "cost": 6,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Whenever this attacks a minion and survives, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "attack-resolved",
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        },
+        "condition": {
+          "type": "target-survived"
+        },
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_grimestreet_protector",
+    "name": "Grimestreet Protector",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "Taunt Battlecry: Give adjacent  minions Divine Shield.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "adjacent"
+            },
+            "keyword": "divine-shield"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_freezing_potion",
+    "name": "Freezing Potion",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Freeze an enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_smugglers_crate",
+    "name": "Smuggler's Crate",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a random Beast in your hand +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Beast"
+              }
+            },
+            "attack": 2,
+            "health": 2,
+            "allowEmptyTargets": true
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_shadow_sensei",
+    "name": "Shadow Sensei",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: Give a Stealthed minion +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "keyword": "stealth"
+              }
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_sergeant_sally",
+    "name": "Sergeant Sally",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Deal damage equal to this minion's Attack to all enemy minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": {
+              "reference": "source.attack"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_hired_gun",
+    "name": "Hired Gun",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_grimestreet_informant",
+    "name": "Grimestreet Informant",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Discover a Hunter, Paladin, or Warrior card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClassIn": ["Hunter", "Paladin", "Warrior"]
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_bloodfury_potion",
+    "name": "Bloodfury Potion",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +3 Attack. If it's a Demon, also give it +3 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 3
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Demon"
+              }
+            },
+            "health": 3,
+            "allowEmptyTargets": true
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_madam_goya",
+    "name": "Madam Goya",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "Battlecry: Choose a friendly minion. Swap it with a minion in your deck.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_shadow_rager",
+    "name": "Shadow Rager",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 5,
+    "health": 1,
+    "rulesText": "Stealth",
+    "keywords": ["stealth"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_stolen_goods",
+    "name": "Stolen Goods",
+    "rarity": "Rare",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a random Taunt minion in your hand +3/+3.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand",
+              "filter": {
+                "keyword": "taunt"
+              }
+            },
+            "attack": 3,
+            "health": 3,
+            "allowEmptyTargets": true
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_lunar_visions",
+    "name": "Lunar Visions",
+    "rarity": "Epic",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw 2 cards. Minions drawn cost (2) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_celestial_dreamer",
+    "name": "Celestial Dreamer",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: If a friendly minion has 5 or more Attack, gain +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": {
+            "stat": "attack",
+            "operator": "gte",
+            "value": 5
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_manic_soulcaster",
+    "name": "Manic Soulcaster",
+    "rarity": "Epic",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Battlecry: Choose a friendly minion. Shuffle a copy into your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "destination": "deck",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_lotus_agents",
+    "name": "Lotus Agents",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 3,
+    "rulesText": "Battlecry: Discover a Druid, Rogue, or Shaman card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClassIn": ["Druid", "Rogue", "Shaman"]
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_grook_fu_master",
+    "name": "Grook Fu Master",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 3,
+    "health": 5,
+    "rulesText": "Windfury",
+    "keywords": ["windfury"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_piranha_launcher",
+    "name": "Piranha Launcher",
+    "rarity": "Epic",
+    "cardClass": "Hunter",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "After your hero attacks, summon a 1/1 Piranha.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "hero-attacked",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "mean_streets_of_gadgetzan_piranha",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_blubber_baron",
+    "name": "Blubber Baron",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Whenever you summon a Battlecry minion while this is in your hand, gain +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "controller": "self",
+          "type": "minion-summoned",
+          "filter": {
+            "hasBattlecry": true
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_toxic_sewer_ooze",
+    "name": "Toxic Sewer Ooze",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "Battlecry: Remove 1 Durability from your opponent's weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "opponent",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "health": -1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_weasel_tunneler",
+    "name": "Weasel Tunneler",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Shuffle this minion into your opponent's deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "opponent",
+            "cardId": "mean_streets_of_gadgetzan_weasel_tunneler",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_big_time_racketeer",
+    "name": "Big-Time Racketeer",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Summon a 6/6 Ogre.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "mean_streets_of_gadgetzan_little_friend",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_getaway_kodo",
+    "name": "Getaway Kodo",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Secret: When a friendly minion dies, return it to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-died",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "event-source"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_grimestreet_pawnbroker",
+    "name": "Grimestreet Pawnbroker",
+    "rarity": "Rare",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: Give a random weapon in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "random",
+              "zone": "hand"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_pilfered_power",
+    "name": "Pilfered Power",
+    "rarity": "Epic",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Gain an empty Mana Crystal for each friendly minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "gain-mana",
+            "player": "self",
+            "amount": {
+              "reference": "other-minions-on-board"
+            },
+            "crystal": "empty"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_mana_geode",
+    "name": "Mana Geode",
+    "rarity": "Epic",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Whenever this minion is healed, summon a 2/2 Crystal.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-heal",
+        "event": {
+          "target": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "mean_streets_of_gadgetzan_crystal",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_spiked_hogrider",
+    "name": "Spiked Hogrider",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: If an enemy minion has Taunt, gain Charge.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion",
+          "player": "opponent",
+          "filter": {
+            "keyword": "taunt"
+          }
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "charge"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_hozen_healer",
+    "name": "Hozen Healer",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 2,
+    "health": 6,
+    "rulesText": "Battlecry: Restore a minion to full Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "set-health",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": "full"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_knuckles",
+    "name": "Knuckles",
+    "rarity": "Legendary",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 5,
+    "attack": 3,
+    "health": 7,
+    "rulesText": "After this attacks a minion, it also hits the enemy hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          },
+          "target": {
+            "type": "minion",
+            "selection": "event-target"
+          }
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "hero"
+            },
+            "amount": {
+              "reference": "source.attack"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_brass_knuckles",
+    "name": "Brass Knuckles",
+    "rarity": "Epic",
+    "cardClass": "Warrior",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "After your hero attacks, give a random minion in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "hero-attacked",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand",
+              "filter": {
+                "cardType": "Minion"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_i_know_a_guy",
+    "name": "I Know a Guy",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Discover a Taunt minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardType": "Minion",
+              "keyword": "taunt"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_gadgetzan_socialite",
+    "name": "Gadgetzan Socialite",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Battlecry: Restore 2 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_grimestreet_enforcer",
+    "name": "Grimestreet Enforcer",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "At the end of your turn, give all minions in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardType": "Minion"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_hidden_cache",
+    "name": "Hidden Cache",
+    "rarity": "Rare",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Secret: After your opponent plays a minion, give a random minion in your hand +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-played",
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_don_hancho",
+    "name": "Don Han'Cho",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 5,
+    "health": 6,
+    "rulesText": "Battlecry: Give a random minion in your hand +5/+5.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand"
+            },
+            "attack": 5,
+            "health": 5
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_backroom_bouncer",
+    "name": "Backroom Bouncer",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Whenever a friendly minion dies, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "event": {
+          "controller": "self",
+          "type": "minion-died"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_tanaris_hogchopper",
+    "name": "Tanaris Hogchopper",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: If your opponent's hand is empty, gain Charge.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-hand-count",
+          "player": "opponent",
+          "operator": "eq",
+          "value": 0
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "charge"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_smugglers_run",
+    "name": "Smuggler's Run",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give all minions in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardType": "Minion"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_ancient_of_blossoms",
+    "name": "Ancient of Blossoms",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 3,
+    "health": 8,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_gadgetzan_ferryman",
+    "name": "Gadgetzan Ferryman",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Combo: Return a friendly minion to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "combo-active"
+        },
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_virmen_sensei",
+    "name": "Virmen Sensei",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 5,
+    "rulesText": "Battlecry: Give a friendly Beast +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": {
+                "tribe": "Beast"
+              }
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_leatherclad_hogleader",
+    "name": "Leatherclad Hogleader",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "Battlecry: If your opponent has 6 or more cards in hand, gain Charge.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-hand-count",
+          "player": "opponent",
+          "operator": "gte",
+          "value": 6
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "keyword": "charge"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_bomb_squad",
+    "name": "Bomb Squad",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Battlecry: Deal 5 damage to an enemy minion. Deathrattle: Deal 5 damage to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_street_trickster",
+    "name": "Street Trickster",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 3,
+    "attack": 0,
+    "health": 7,
+    "rulesText": "Spell Damage +1",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "spellDamage": 1
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_grimestreet_outfitter",
+    "name": "Grimestreet Outfitter",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Give all minions in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardType": "Minion"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kabal_chemist",
+    "name": "Kabal Chemist",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: Add a random Potion to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "type": "potion"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_shaky_zipgunner",
+    "name": "Shaky Zipgunner",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Deathrattle: Give a random minion in your hand +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_daring_reporter",
+    "name": "Daring Reporter",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Whenever your opponent draws a card, gain +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-draw",
+        "event": {
+          "controller": "opponent"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_luckydo_buccaneer",
+    "name": "Luckydo Buccaneer",
+    "rarity": "Epic",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 6,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: If your weapon has at least 3 Attack, gain +4/+4.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-weapon",
+          "player": "self",
+          "filter": {
+            "stat": "attack",
+            "operator": "gte",
+            "value": 3
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 4,
+            "health": 4
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_murloc_razorgill",
+    "name": "Murloc Razorgill",
+    "rarity": "None",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_piranha",
+    "name": "Piranha",
+    "rarity": "None",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_crystal",
+    "name": "Crystal",
+    "rarity": "None",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_kabal_demon",
+    "name": "Kabal Demon",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "mean_streets_of_gadgetzan_little_friend",
+    "name": "\"Little Friend\"",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  }
+]

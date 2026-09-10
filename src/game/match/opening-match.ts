@@ -1,3 +1,5 @@
+import { applyCthunToCard } from './cthun'
+import { resolvePrinceMalchezaar } from './prince-malchezaar'
 import { cloneOpeningMatchState, cloneUnknown } from './match-state-snapshot'
 export { cloneOpeningMatchState } from './match-state-snapshot'
 import {
@@ -10,6 +12,8 @@ export {
 } from './match-public-projection'
 import {
   triggerHistoryEvents,
+  withoutHistoryFacts,
+  choiceHistoryEvent,
   fatigueHistoryEvents,
   cardHistoryEvent,
   heroPowerHistoryEvent,
@@ -18,7 +22,8 @@ import {
 import { parseCommand } from './match-command-parser'
 import { CARD_CATALOG, asCardId } from '../content/cards'
 import { HERO_CATALOG } from '../content/heroes'
-import { HERO_POWER_CATALOG } from '../content/hero-powers'
+import { HERO_POWER_CATALOG, BASIC_HERO_POWER_UPGRADES } from '../content/hero-powers'
+import { AI_BONUS_SETTINGS, createAiBonusChoice } from './ai-bonuses'
 import { countDeckCards, type Deck } from '../decks'
 import { createSeededRng, type DeterministicRng } from './rng'
 import {
@@ -31,6 +36,7 @@ import {
   resolveAttack,
   resolveCardPlay,
   resolvePendingCardChoice,
+  resolvePendingDiscoverChoice,
   resolveHeroPower,
   resolveTurnTransition
 } from './effects/effect-runtime'
@@ -188,6 +194,14 @@ function expandDeck(
   return cards
 }
 
+function hasNoDuplicateCards(cards: readonly OpeningCard[]): boolean {
+  return new Set(cards.map((card) => card.cardId)).size === cards.length
+}
+
+function deckDefinitionHasNoDuplicates(deck: Deck): boolean {
+  return Object.values(deck.cards).every((count) => count === 1)
+}
+
 function findPlayerIndex(
   players: readonly [OpeningPlayerState, OpeningPlayerState],
   participantId: PlayerId
@@ -297,17 +311,20 @@ function applyDevAddCard(
     return reject(state, 'unknown-card', `Unknown card ${command.cardId}.`)
   }
 
-  const card: OpeningCard = {
-    instanceId: `${player.participantId}:dev:${counter}`,
-    cardId: definition.id,
-    ownerId: player.participantId,
-    controllerId: player.participantId,
-    creationOrdinal: counter,
-    baseCost: definition.cost,
-    currentCost: definition.cost,
-    zone: 'hand',
-    revealed: true
-  }
+  const card: OpeningCard = applyCthunToCard(
+    {
+      instanceId: `${player.participantId}:dev:${counter}`,
+      cardId: definition.id,
+      ownerId: player.participantId,
+      controllerId: player.participantId,
+      creationOrdinal: counter,
+      baseCost: definition.cost,
+      currentCost: definition.cost,
+      zone: 'hand',
+      revealed: true
+    },
+    player
+  )
 
   const nextPlayer: OpeningPlayerState = {
     ...player,
@@ -358,12 +375,23 @@ function applyDevSummonMinion(
     return reject(state, 'not-a-minion', 'Only minion cards can be summoned.')
   }
 
+  const runtimeCard = applyCthunToCard(
+    {
+      instanceId: `${player.participantId}:dev:${counter}`,
+      cardId: definition.id,
+      baseCost: definition.cost,
+      currentCost: definition.cost,
+      zone: 'hand',
+      revealed: true
+    },
+    player
+  )
   const minion: BoardMinion = {
     instanceId: `${player.participantId}:dev:${counter}`,
     cardId: definition.id,
-    attack: definition.attack,
-    health: definition.health,
-    maxHealth: definition.health,
+    attack: runtimeCard.attack ?? definition.attack,
+    health: runtimeCard.health ?? definition.health,
+    maxHealth: runtimeCard.health ?? definition.health,
     summonedOnTurn: state.turnNumber,
     lastAttackedOnTurn: null,
     ownerId: player.participantId,
@@ -373,7 +401,7 @@ function applyDevSummonMinion(
     baseAttack: definition.attack,
     baseHealth: definition.health,
     keywords: [...definition.keywords],
-    enchantments: [],
+    enchantments: runtimeCard.enchantments ?? [],
     grantedTriggers: [],
     deathrattles: definition.effects.filter(
       (effect) => effect.trigger === 'deathrattle'
@@ -515,7 +543,11 @@ function applyDevModifyDeck(
 
   const player = state.players[playerIndex]
   const deck = command.action === 'destroy' ? [] : refillDeck()
-  const nextPlayer: OpeningPlayerState = { ...player, deck }
+  const nextPlayer: OpeningPlayerState = {
+    ...player,
+    deck,
+    deckHasNoDuplicates: hasNoDuplicateCards(deck)
+  }
   const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
   nextPlayers[playerIndex] = nextPlayer
   const nextState: OpeningMatchState = {
@@ -567,7 +599,24 @@ export function createOpeningMatch(
 ): OpeningMatchInstance {
   const recordEffectTrace = setup.recordEffectTrace === true
   const decksById = new Map(deckSnapshots.map((deck) => [deck.id, deck]))
-  const playerOneIndex: 0 | 1 = rng.next() < 0.5 ? 0 : 1
+  const configuredPlayerOneIndex =
+    setup.startingParticipantId === undefined
+      ? -1
+      : setup.participants.findIndex(
+          (participant) => participant.participantId === setup.startingParticipantId
+        )
+  if (
+    configuredPlayerOneIndex !== -1 &&
+    configuredPlayerOneIndex !== 0 &&
+    configuredPlayerOneIndex !== 1
+  )
+    throw new Error('MatchSetup.startingParticipantId must identify a participant.')
+  const playerOneIndex: 0 | 1 =
+    configuredPlayerOneIndex === 0 || configuredPlayerOneIndex === 1
+      ? configuredPlayerOneIndex
+      : rng.next() < 0.5
+        ? 0
+        : 1
   const playerTwoIndex: 0 | 1 = playerOneIndex === 0 ? 1 : 0
   const order = [playerOneIndex, playerTwoIndex] as const
   let initialEntityOrdinal = 0
@@ -580,7 +629,15 @@ export function createOpeningMatch(
     const deck = decksById.get(participant.deckId)
     if (!deck) throw new Error(`Deck ${participant.deckId} is not available.`)
     const hero = HERO_CATALOG.require(participant.heroId)
-    const heroPower = HERO_POWER_CATALOG.require(hero.heroPowerId)
+    const heroPower = HERO_POWER_CATALOG.require(
+      participant.controllerKind === 'ai' && AI_BONUS_SETTINGS.upgradedHeroPower
+        ? (BASIC_HERO_POWER_UPGRADES[hero.heroPowerId] ?? hero.heroPowerId)
+        : hero.heroPowerId
+    )
+    const startingHealth =
+      participant.controllerKind === 'ai'
+        ? AI_BONUS_SETTINGS.startingHealth
+        : hero.startingHealth
     const expanded = expandDeck(deck, participant, initialEntityOrdinal)
     initialEntityOrdinal += expanded.length
     const shuffled = shuffle(expanded, rng)
@@ -595,15 +652,15 @@ export function createOpeningMatch(
       controllerKind: participant.controllerKind,
       heroId: participant.heroId,
       hero: {
-        health: hero.startingHealth,
-        maxHealth: hero.startingHealth,
+        health: startingHealth,
+        maxHealth: startingHealth,
         armor: 0,
         attack: 0,
         lastAttackedOnTurn: null,
         instanceId: `${participant.participantId}:hero`,
         creationOrdinal: initialEntityOrdinal++,
         baseAttack: 0,
-        baseMaxHealth: hero.startingHealth,
+        baseMaxHealth: startingHealth,
         baseKeywords: [],
         keywords: [],
         enchantments: [],
@@ -621,8 +678,10 @@ export function createOpeningMatch(
       weapon: null,
       mana: {
         available: 0,
-        maximum: participant.controllerKind === 'ai' ? 1 : 0
+        maximum:
+          participant.controllerKind === 'ai' ? AI_BONUS_SETTINGS.startingMana : 0
       },
+      deckHasNoDuplicates: deckDefinitionHasNoDuplicates(deck),
       heroPower: {
         id: heroPower.id,
         creationOrdinal: initialEntityOrdinal++,
@@ -638,7 +697,8 @@ export function createOpeningMatch(
       secrets: [],
       graveyard: [],
       discardedCards: [],
-      overload: 0
+      overload: 0,
+      counters: {}
     } satisfies OpeningPlayerState
   }
   const players = [createPlayer(order[0], 0), createPlayer(order[1], 1)] as [
@@ -667,6 +727,9 @@ export function createOpeningMatch(
       healingThisTurn: 0,
       armorGainedThisTurn: 0,
       cardsPlayedThisGame: [],
+      spellsCastThisGameByPlayer: {},
+      totemsSummonedThisGameByPlayer: {},
+      secretsPlayedThisGameByPlayer: {},
       cardsDiedThisGame: [],
       beastsSummonedByPlayer: {},
       heroPowersUsedByPlayer: {}
@@ -727,6 +790,80 @@ export function createOpeningMatch(
     rng.restore(checkpoint.rngState)
     nextEntityOrdinal = checkpoint.nextEntityOrdinal
     devDeckRefillCounter = checkpoint.devDeckRefillCounter
+  }
+
+  const completeOpening = (events: OpeningMatchEvent[]): void => {
+    const nextPlayers = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
+    const playerTwo = nextPlayers[1]
+    const coin: OpeningCard = {
+      instanceId: `${playerTwo.participantId}:coin`,
+      cardId: COIN_CARD_ID,
+      ownerId: playerTwo.participantId,
+      controllerId: playerTwo.participantId,
+      creationOrdinal: nextEntityOrdinal++,
+      baseCost: CARD_CATALOG.require(COIN_CARD_ID).cost,
+      currentCost: CARD_CATALOG.require(COIN_CARD_ID).cost,
+      zone: 'hand',
+      revealed: true
+    }
+    const playerTwoWithCoin: OpeningPlayerState = {
+      ...playerTwo,
+      hand: [...playerTwo.hand, coin]
+    }
+    nextPlayers[1] = playerTwoWithCoin
+    events.push({
+      type: 'coin-granted',
+      participantId: playerTwo.participantId,
+      card: cloneCard(coin)
+    })
+
+    const openingHistory = nextPlayers.flatMap((player, index) => {
+      const participant = setup.participants.find(
+        (p) => p.participantId === player.participantId
+      )!
+      const resolved = resolvePrinceMalchezaar(
+        player,
+        decksById.get(participant.deckId)!,
+        rng,
+        () => nextEntityOrdinal++
+      )
+      nextPlayers[index] = resolved.player
+      return resolved.history ? [resolved.history] : []
+    })
+    events.push(...openingHistory)
+    const playerOne = nextPlayers[0]
+    const drawn = drawCards(playerOne, 1)
+    const playerOneMana = growMana(playerOne.mana)
+    nextPlayers[0] = {
+      ...drawn.player,
+      mana: playerOneMana,
+      heroPower: { ...drawn.player.heroPower, available: true }
+    }
+    state = {
+      ...state,
+      phase: 'turns',
+      activePlayerId: playerOne.participantId,
+      turnNumber: 1,
+      players: nextPlayers,
+      revision: state.revision + 1,
+      turnStartedAtRevision: state.revision + 1,
+      ...(openingHistory.length ? { openingHistory } : {}),
+      nextEntityOrdinal
+    }
+    events.push({
+      type: 'opening-turn-started',
+      participantId: playerOne.participantId,
+      playerNumber: 1,
+      mana: playerOneMana
+    })
+    const card = drawn.cards[0]
+    if (card) {
+      events.push({
+        type: 'opening-card-drawn',
+        participantId: playerOne.participantId,
+        card: cloneCard(card)
+      })
+    }
   }
 
   const refillDeckFor = (participantId: PlayerId): readonly OpeningCard[] => {
@@ -797,8 +934,9 @@ export function createOpeningMatch(
       accepted: true,
       state: cloneOpeningMatchState(state),
       events: [
-        ...result.events,
+        ...withoutHistoryFacts(result.events),
         ...(history ? [history] : []),
+        ...triggerHistoryEvents(before, result.state, result.events, false),
         ...fatigueHistoryEvents(before, result.events)
       ]
     }
@@ -807,6 +945,7 @@ export function createOpeningMatch(
   const dispatchCardChoice = (
     command: ChooseCardOptionCommand
   ): OpeningCommandResult => {
+    const before = state
     const rngSnapshot = rng.snapshot()
     const resolution = resolvePendingCardChoice({
       state,
@@ -822,7 +961,20 @@ export function createOpeningMatch(
     return {
       accepted: true,
       state: cloneOpeningMatchState(state),
-      events: result.events
+      events: [
+        ...withoutHistoryFacts(result.events),
+        ...(() => {
+          const history = choiceHistoryEvent(
+            before,
+            result.state,
+            command.sourceCardInstanceId,
+            command.participantId,
+            result.events
+          )
+          return history ? [history] : []
+        })(),
+        ...triggerHistoryEvents(before, result.state, result.events, false)
+      ]
     }
   }
 
@@ -838,6 +990,58 @@ export function createOpeningMatch(
         'wrong-controller',
         'Only the Discover owner may choose a card.'
       )
+    if (pending.continuation) {
+      const before = state
+      const rngSnapshot = rng.snapshot()
+      const resolution = resolvePendingDiscoverChoice({
+        state,
+        rng,
+        participantId: command.participantId,
+        cardInstanceId: command.cardInstanceId,
+        nextEntityOrdinal,
+        recordTrace: recordEffectTrace
+      })
+      const result = commitResolution(resolution, rngSnapshot)
+      if (!result.accepted) return result
+      const selected = result.events.find((event) => event.type === 'card-drawn')
+      const events = [...withoutHistoryFacts(result.events)]
+      if (selected?.type === 'card-drawn')
+        events.push({
+          type: 'history-action-resolved',
+          append: true,
+          participantId: command.participantId,
+          action: 'card',
+          source: {
+            id: pending.sourceCardInstanceId,
+            participantId: command.participantId,
+            kind: 'card',
+            cardId: null
+          },
+          outcomes: [
+            {
+              kind: 'create-hand',
+              target: {
+                id: selected.card.instanceId,
+                participantId: command.participantId,
+                kind: 'card',
+                cardId: selected.card.cardId,
+                zone: 'hand',
+                baseCost: selected.card.baseCost,
+                currentCost: selected.card.currentCost
+              }
+            }
+          ]
+        })
+      return {
+        accepted: true,
+        state: cloneOpeningMatchState(state),
+        events: [
+          ...events,
+          ...triggerHistoryEvents(before, result.state, result.events, false),
+          ...fatigueHistoryEvents(before, result.events)
+        ]
+      }
+    }
     if (!pending.candidates.some((card) => card.instanceId === command.cardInstanceId))
       return reject(
         state,
@@ -850,11 +1054,10 @@ export function createOpeningMatch(
       return reject(state, 'unknown-participant', 'Unknown participant.')
     let player = state.players[playerIndex]
     const events: OpeningMatchEvent[] = []
+    const candidatesAreCopies =
+      pending.origin === 'generated' || pending.origin === 'opponent-deck'
     for (const candidate of pending.candidates) {
-      if (
-        pending.origin === 'generated' &&
-        candidate.instanceId !== command.cardInstanceId
-      ) {
+      if (candidatesAreCopies && candidate.instanceId !== command.cardInstanceId) {
         const removed = removeCardFromPlayer(player, candidate.instanceId)
         if (!removed || removed.zone !== 'revealed')
           return reject(
@@ -907,9 +1110,47 @@ export function createOpeningMatch(
     }
     assertOpeningMatchInvariants(nextState)
     commitState(nextState)
+    const selected = events.find((event) => event.type === 'card-drawn')
+    if (selected?.type === 'card-drawn')
+      events.push({
+        type: 'history-action-resolved',
+        append: true,
+        participantId: command.participantId,
+        action: 'card',
+        source: {
+          id: pending.sourceCardInstanceId,
+          participantId: command.participantId,
+          kind: 'card',
+          cardId: null
+        },
+        outcomes: [
+          {
+            kind: 'create-hand',
+            target: {
+              id: selected.card.instanceId,
+              participantId: command.participantId,
+              kind: 'card',
+              cardId: selected.card.cardId,
+              zone: 'hand',
+              baseCost: selected.card.baseCost,
+              currentCost: selected.card.currentCost
+            }
+          }
+        ]
+      })
     return { accepted: true, state: cloneOpeningMatchState(state), events }
   }
   const dispatchTurnTransition = (participantId: PlayerId): OpeningCommandResult => {
+    const bonus = createAiBonusChoice(state, participantId, rng)
+    if (bonus) {
+      commitState({
+        ...state,
+        pendingCardChoice: bonus,
+        aiBonusTurn: state.turnNumber,
+        revision: state.revision + 1
+      })
+      return { accepted: true, state: cloneOpeningMatchState(state), events: [] }
+    }
     const before = state
     const rngSnapshot = rng.snapshot()
     const resolution = resolveTurnTransition({
@@ -928,7 +1169,7 @@ export function createOpeningMatch(
     return {
       accepted: true,
       state: cloneOpeningMatchState(state),
-      events: [...result.events, ...history]
+      events: [...withoutHistoryFacts(result.events), ...history]
     }
   }
 
@@ -1075,6 +1316,14 @@ export function createOpeningMatch(
         return reject(state, 'match-ended', 'The match has already ended.')
       }
 
+      if (state.aiBonusTurn === state.turnNumber && command.type !== 'end-turn') {
+        return reject(
+          state,
+          'invalid-command',
+          'Finish the committed end turn after resolving the bonus.'
+        )
+      }
+
       if (command.type === 'end-turn') {
         return dispatchTurnTransition(command.participantId)
       }
@@ -1102,8 +1351,9 @@ export function createOpeningMatch(
           accepted: true,
           state: cloneOpeningMatchState(state),
           events: [
-            ...result.events,
+            ...withoutHistoryFacts(result.events),
             history,
+            ...triggerHistoryEvents(before, result.state, result.events, false),
             ...fatigueHistoryEvents(before, result.events)
           ]
         }
@@ -1158,7 +1408,11 @@ export function createOpeningMatch(
         return {
           accepted: true,
           state: cloneOpeningMatchState(state),
-          events: [...result.events, history]
+          events: [
+            ...withoutHistoryFacts(result.events),
+            history,
+            ...triggerHistoryEvents(before, result.state, result.events, false)
+          ]
         }
       }
 
@@ -1411,68 +1665,21 @@ export function createOpeningMatch(
         }
       ]
 
-      if (nextPlayers.every((candidate) => candidate.mulliganConfirmed)) {
-        const playerTwo = nextPlayers[1]
-        const coin: OpeningCard = {
-          instanceId: `${playerTwo.participantId}:coin`,
-          cardId: COIN_CARD_ID,
-          ownerId: playerTwo.participantId,
-          controllerId: playerTwo.participantId,
-          creationOrdinal: nextEntityOrdinal++,
-          baseCost: CARD_CATALOG.require(COIN_CARD_ID).cost,
-          currentCost: CARD_CATALOG.require(COIN_CARD_ID).cost,
-          zone: 'hand',
-          revealed: true
-        }
-        const playerTwoWithCoin: OpeningPlayerState = {
-          ...playerTwo,
-          hand: [...playerTwo.hand, coin]
-        }
-        nextPlayers[1] = playerTwoWithCoin
-        state = { ...state, players: nextPlayers }
-        events.push({
-          type: 'coin-granted',
-          participantId: playerTwo.participantId,
-          card: cloneCard(coin)
-        })
-
-        const playerOne = nextPlayers[0]
-        const drawn = drawCards(playerOne, 1)
-        const playerOneMana = growMana(playerOne.mana)
-        nextPlayers[0] = {
-          ...drawn.player,
-          mana: playerOneMana,
-          heroPower: { ...drawn.player.heroPower, available: true }
-        }
-        state = {
-          ...state,
-          phase: 'turns',
-          activePlayerId: playerOne.participantId,
-          turnNumber: 1,
-          players: nextPlayers,
-          revision: state.revision + 1,
-          turnStartedAtRevision: state.revision + 1,
-          nextEntityOrdinal
-        }
-        events.push({
-          type: 'opening-turn-started',
-          participantId: playerOne.participantId,
-          playerNumber: 1,
-          mana: playerOneMana
-        })
-        const card = drawn.cards[0]
-        if (card) {
-          events.push({
-            type: 'opening-card-drawn',
-            participantId: playerOne.participantId,
-            card: cloneCard(card)
-          })
-        }
-      }
+      if (nextPlayers.every((candidate) => candidate.mulliganConfirmed))
+        completeOpening(events)
 
       assertOpeningMatchInvariants(state)
       return { accepted: true, state: cloneOpeningMatchState(state), events }
     }
+  }
+  if (!checkpoint && setup.skipMulligan) {
+    const confirmedPlayers = state.players.map((player) => ({
+      ...player,
+      mulliganConfirmed: true
+    })) as [OpeningPlayerState, OpeningPlayerState]
+    state = { ...state, players: confirmedPlayers, revision: state.revision + 1 }
+    completeOpening([])
+    assertOpeningMatchInvariants(state)
   }
   return instance
 }

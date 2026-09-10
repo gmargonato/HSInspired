@@ -238,8 +238,9 @@ export class SceneNavigator implements SceneRouter {
     if (request.id === 'game') {
       await this.services.deckStore.load()
       const decks = this.services.deckStore.getDecks()
-      const requestedDeckId = (request as { params?: { deckId?: string } }).params
-        ?.deckId
+      const gameParams = 'params' in request ? request.params : undefined
+      const requestedDeckId = gameParams?.deckId
+      const launchMode = gameParams?.launchMode
       const targetDeckId =
         requestedDeckId ??
         decks.filter((deck) => countDeckCards(deck) === MAX_DECK_CARDS)[0]?.id
@@ -271,7 +272,14 @@ export class SceneNavigator implements SceneRouter {
             humanDeck: { id: deck.id, heroId: deck.heroId },
             aiDeck: { id: opponent.id, heroId: opponent.heroId }
           },
-          seed
+          seed,
+          launchMode === 'first-player'
+            ? { humanSeat: 'first' }
+            : launchMode === 'second-player'
+              ? { humanSeat: 'second' }
+              : launchMode === 'skip-mulligan'
+                ? { skipMulligan: true }
+                : undefined
         )
       )
       return

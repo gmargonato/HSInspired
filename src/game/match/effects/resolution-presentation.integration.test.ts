@@ -108,6 +108,56 @@ describe('resolution presentation events', () => {
     )
   })
 
+  it("reports Alexstrasza's actual hero health after setting it to fifteen", () => {
+    const scenario = createMatchScenario({ seed: 1697 })
+    scenario.confirmBothMulligans()
+    const [participantId] = activePlayers(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-hero',
+        participantId,
+        health: 10
+      }).accepted
+    ).toBe(true)
+    addCard(scenario, participantId, 'classic_alexstrasza')
+
+    const alexstrasza = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_alexstrasza'
+    )!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: alexstrasza.instanceId,
+      targets: [{ kind: 'hero', participantId }],
+      position: 0
+    })
+
+    expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+    if (!result.accepted) return
+    expect(player(scenario, participantId).hero.health).toBe(15)
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'effect-resolved',
+        action: 'set-health',
+        data: expect.objectContaining({
+          target: `${participantId}:hero`,
+          health: 15,
+          healthBefore: 10,
+          healthAfter: 15,
+          maximumHealthAfter: 30
+        })
+      })
+    )
+  })
+
   it.each(['classic_molten_giant', 'classic_mountain_giant'])(
     'does not activate %s hand-only cost effect from the board',
     (cardId) => {

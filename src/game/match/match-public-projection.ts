@@ -54,6 +54,7 @@ export function getOpeningMatchPublicState(
     scheduledEffects: _scheduledEffects,
     pendingDiscover: _pendingDiscover,
     pendingCardChoice: _pendingCardChoice,
+    openingHistory,
     ...publicSnapshot
   } = snapshot
   const players = snapshot.players.map((player) => ({
@@ -87,12 +88,17 @@ export function getOpeningMatchPublicState(
   void _pendingCardChoice
   const pendingDiscover =
     snapshot.pendingDiscover?.participantId === viewerId
-      ? {
-          ...snapshot.pendingDiscover,
-          candidates: snapshot.pendingDiscover.candidates.map((card) =>
-            maskPublicCard(card, viewerId, true)
-          )
-        }
+      ? (() => {
+          const { continuation: _continuation, ...withoutContinuation } =
+            snapshot.pendingDiscover!
+          void _continuation
+          return {
+            ...withoutContinuation,
+            candidates: snapshot.pendingDiscover.candidates.map((card) =>
+              maskPublicCard(card, viewerId, true)
+            )
+          }
+        })()
       : undefined
   const pendingCardChoice =
     snapshot.pendingCardChoice?.participantId === viewerId
@@ -100,6 +106,13 @@ export function getOpeningMatchPublicState(
       : undefined
   return {
     ...publicSnapshot,
+    ...(openingHistory
+      ? {
+          openingHistory: openingHistory.map((event) =>
+            projectHistoryAction(event, viewerId)
+          )
+        }
+      : {}),
     players,
     ...(pendingDiscover ? { pendingDiscover } : {}),
     ...(pendingCardChoice ? { pendingCardChoice } : {})
@@ -149,52 +162,54 @@ export function getOpeningMatchPublicEvents(
   events: readonly OpeningMatchEvent[],
   viewerId: PlayerId
 ): readonly OpeningMatchPublicEvent[] {
-  return events.map((event) => {
-    switch (event.type) {
-      case 'effect-resolved':
-        return maskPublicEffectEvent(event, viewerId)
-      case 'mulligan-resolved':
-        return {
-          ...event,
-          returnedCards: event.returnedCards.map((card) =>
-            maskPublicCard(card, viewerId, event.participantId === viewerId)
-          ),
-          replacementCards: event.replacementCards.map((card) =>
-            maskPublicCard(card, viewerId, event.participantId === viewerId)
-          )
-        }
-      case 'discover-started':
-        return {
-          ...event,
-          candidates: event.candidates.map((card) =>
-            maskPublicCard(card, viewerId, event.participantId === viewerId)
-          )
-        }
-      case 'card-choice-started':
-        return event.participantId === viewerId ? event : { ...event, options: [] }
-      case 'coin-granted':
-      case 'opening-card-drawn':
-      case 'card-drawn':
-      case 'dev-card-added':
-        return {
-          ...event,
-          card: maskPublicCard(
-            cardForEvent(event),
-            viewerId,
-            event.participantId === viewerId
-          )
-        }
-      case 'card-burned':
-        return {
-          ...event,
-          card: maskPublicCard(cardForEvent(event), viewerId, true)
-        }
-      case 'history-action-resolved':
-        return projectHistoryAction(event, viewerId)
-      default:
-        return event
-    }
-  }) as readonly OpeningMatchPublicEvent[]
+  return events
+    .filter((event) => event.type !== 'history-effect-recorded')
+    .map((event) => {
+      switch (event.type) {
+        case 'effect-resolved':
+          return maskPublicEffectEvent(event, viewerId)
+        case 'mulligan-resolved':
+          return {
+            ...event,
+            returnedCards: event.returnedCards.map((card) =>
+              maskPublicCard(card, viewerId, event.participantId === viewerId)
+            ),
+            replacementCards: event.replacementCards.map((card) =>
+              maskPublicCard(card, viewerId, event.participantId === viewerId)
+            )
+          }
+        case 'discover-started':
+          return {
+            ...event,
+            candidates: event.candidates.map((card) =>
+              maskPublicCard(card, viewerId, event.participantId === viewerId)
+            )
+          }
+        case 'card-choice-started':
+          return event.participantId === viewerId ? event : { ...event, options: [] }
+        case 'coin-granted':
+        case 'opening-card-drawn':
+        case 'card-drawn':
+        case 'dev-card-added':
+          return {
+            ...event,
+            card: maskPublicCard(
+              cardForEvent(event),
+              viewerId,
+              event.participantId === viewerId
+            )
+          }
+        case 'card-burned':
+          return {
+            ...event,
+            card: maskPublicCard(cardForEvent(event), viewerId, true)
+          }
+        case 'history-action-resolved':
+          return projectHistoryAction(event, viewerId)
+        default:
+          return event
+      }
+    }) as readonly OpeningMatchPublicEvent[]
 }
 
 function cardForEvent(

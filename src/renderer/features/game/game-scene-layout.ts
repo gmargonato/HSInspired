@@ -155,6 +155,8 @@ export const GAME_BOARD_LAYOUT = {
   },
 
   decks: {
+    /** Empty-deck X offsets in canvas pixels: negative moves left, positive right. */
+    fatigueOffsetX: { local: -20, remote: -20 },
     /** Local player's deck pile. */
     local: placement(
       { x: 1680, y: 643 },
@@ -281,6 +283,16 @@ export const GAME_BOARD_LAYOUT = {
      */
     crystals: {
       firstCrystalCenter: { x: 1355, y: 1010 },
+      pendingRowOffsetY: 40,
+      overloadCrystal: placement(
+        { x: 0, y: 0 },
+        { width: 49, height: 48 },
+        {
+          anchor: CENTER,
+          scale: 38 / 49,
+          note: 'Locked crystal artwork shared by current and pending overload rows.'
+        }
+      ),
       /** Center-to-center spacing between crystals. */
       gap: 35,
       /** Native crystal size with a uniform scale, local to each crystal. */

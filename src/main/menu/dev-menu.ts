@@ -1,35 +1,29 @@
 import { BrowserWindow, Menu, MenuItem, ipcMain } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import {
+  DEV_MATCH_MENU_ENTRIES,
   SCENE_MENU_ENTRIES,
-  SCENE_REQUEST_CHANNEL
+  SCENE_REQUEST_CHANNEL,
+  type SceneRequest
 } from '../../shared/scene-navigation'
 import {
   DEV_COLLECTIBLE_SYNC_CHANNEL,
   DEV_COMMAND_CHANNEL,
-  DEV_DECK_SYNC_CHANNEL,
   DEV_SCENE_CHANGED_CHANNEL,
   isCollectibleMode,
-  isDevDeckSyncPayload,
   isDevSceneId,
   type CollectibleMode,
   type DevCommand,
-  type DevDeckEntry,
   type DevSceneId
 } from '../../shared/dev-menu'
 
-let cachedDevDecks: readonly DevDeckEntry[] = []
 let cachedMainWindow: BrowserWindow | null = null
 let cachedCurrentSceneId: DevSceneId = 'unknown'
 let cachedCollectibleMode: CollectibleMode = 'collectible'
-let devDeckSyncHandlerInstalled = false
 let devSceneChangedHandlerInstalled = false
 let devCollectibleSyncHandlerInstalled = false
 
-function sendSceneRequest(
-  mainWindow: BrowserWindow,
-  request: (typeof SCENE_MENU_ENTRIES)[keyof typeof SCENE_MENU_ENTRIES]['request']
-): void {
+function sendSceneRequest(mainWindow: BrowserWindow, request: SceneRequest): void {
   const targetWindow =
     BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? mainWindow
   targetWindow.webContents.send(SCENE_REQUEST_CHANNEL, request)
@@ -51,33 +45,12 @@ function buildScenesMenu(mainWindow: BrowserWindow): MenuItem {
     click: () => sendSceneRequest(mainWindow, entry.request)
   }))
 
-  const matchSubmenu: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: SCENE_MENU_ENTRIES.game.label,
-      click: () => sendSceneRequest(mainWindow, SCENE_MENU_ENTRIES.game.request)
-    },
-    { type: 'separator' }
-  ]
-
-  if (cachedDevDecks.length === 0) {
-    matchSubmenu.push({ label: 'No complete deck', enabled: false })
-  } else {
-    for (const deck of cachedDevDecks) {
-      matchSubmenu.push({
-        label: `${deck.id} — ${deck.classId}`,
-        click: () => {
-          const targetWindow =
-            BrowserWindow.getFocusedWindow() ??
-            BrowserWindow.getAllWindows()[0] ??
-            mainWindow
-          targetWindow.webContents.send(SCENE_REQUEST_CHANNEL, {
-            id: 'game',
-            params: { deckId: deck.id }
-          })
-        }
-      })
-    }
-  }
+  const matchSubmenu: Electron.MenuItemConstructorOptions[] = Object.values(
+    DEV_MATCH_MENU_ENTRIES
+  ).map((entry) => ({
+    label: entry.label,
+    click: () => sendSceneRequest(mainWindow, entry.request)
+  }))
 
   return new MenuItem({
     id: 'debug-scenes-menu',
@@ -418,22 +391,8 @@ function rebuildAllDevMenus(): void {
   Menu.setApplicationMenu(newMenu)
 }
 
-function rebuildScenesMenu(): void {
-  rebuildAllDevMenus()
-}
-
 function rebuildOptionsMenu(): void {
   rebuildAllDevMenus()
-}
-
-function installDevDeckSyncHandler(): void {
-  if (devDeckSyncHandlerInstalled) return
-  devDeckSyncHandlerInstalled = true
-  ipcMain.on(DEV_DECK_SYNC_CHANNEL, (_event, payload: unknown) => {
-    if (!isDevDeckSyncPayload(payload)) return
-    cachedDevDecks = payload
-    rebuildScenesMenu()
-  })
 }
 
 function installDevSceneChangedHandler(): void {
@@ -461,9 +420,9 @@ function installCollectibleSyncHandler(): void {
  * menu. The menu owns no renderer objects; it sends a small typed request
  * through preload, where the renderer resolves the request to a Scene.
  *
- * The `Match` entry is a submenu populated from the renderer-pushed deck list
- * (Deck ID — Class). This keeps the renderer as the source of truth for
- * completeness while the main process only renders the menu.
+ * The `Match` entry is a fixed three-option development launcher.
+ * The renderer remains the source of truth for deck completeness.
+ * The renderer selects the first complete deck and constructs the actual route.
  *
  * The `Options` menu is context-aware: its items are enabled only for the
  * scene reported by the renderer via `DEV_SCENE_CHANGED_CHANNEL`.
@@ -472,7 +431,6 @@ export function installSceneMenu(mainWindow: BrowserWindow): void {
   if (!is.dev) return
 
   cachedMainWindow = mainWindow
-  installDevDeckSyncHandler()
   installDevSceneChangedHandler()
   installCollectibleSyncHandler()
 

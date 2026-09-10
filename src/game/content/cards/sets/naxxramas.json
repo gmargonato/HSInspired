@@ -183,7 +183,7 @@
     "cost": 5,
     "attack": 4,
     "health": 6,
-    "rulesText": "Can't be targeted by Spells or Hero Powers.",
+    "rulesText": "Elusive.",
     "keywords": ["spell-immune"],
     "effects": []
   },
@@ -226,7 +226,7 @@
     "cost": 6,
     "attack": 2,
     "health": 8,
-    "rulesText": "Destroy any minion damaged by this minion.",
+    "rulesText": "Poisonous.",
     "keywords": [],
     "effects": [
       {

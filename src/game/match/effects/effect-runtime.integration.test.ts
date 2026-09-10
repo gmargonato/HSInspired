@@ -74,6 +74,67 @@ describe('shared effect runtime', () => {
     expect(player(scenario, id).board).toHaveLength(0)
   })
 
+  it('summons Barnes as a 1/1 copy without consuming its deck source', () => {
+    const scenario = createMatchScenario({
+      seed: 911,
+      cardId: 'one_night_in_karazhan_barnes'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+
+    const before = player(scenario, participantId)
+    const playedBarnes = before.hand.find(
+      (card) => card.cardId === 'one_night_in_karazhan_barnes'
+    )!
+    const deckInstanceIds = before.deck.map((card) => card.instanceId)
+
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: playedBarnes.instanceId,
+      position: 0
+    })
+    expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+
+    const after = player(scenario, participantId)
+    expect(after.deck.map((card) => card.instanceId)).toEqual(deckInstanceIds)
+    expect(after.board).toHaveLength(2)
+
+    const playedMinion = after.board.find(
+      (minion) => minion.instanceId === playedBarnes.instanceId
+    )
+    const summonedCopy = after.board.find(
+      (minion) => minion.instanceId !== playedBarnes.instanceId
+    )
+    expect(playedMinion).toMatchObject({ attack: 3, health: 4 })
+    expect(summonedCopy).toMatchObject({
+      cardId: 'one_night_in_karazhan_barnes',
+      attack: 1,
+      health: 1,
+      maxHealth: 1
+    })
+    expect(deckInstanceIds).not.toContain(summonedCopy?.instanceId)
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'minion-summoned',
+        minion: expect.objectContaining({
+          instanceId: summonedCopy?.instanceId,
+          attack: 1,
+          health: 1,
+          maxHealth: 1
+        })
+      })
+    )
+  })
+
   it('summons Hogger Gnolls with two attack, two health and Taunt', () => {
     const scenario = createMatchScenario({ seed: 910, cardId: 'basic_fireball' })
     scenario.confirmBothMulligans()
@@ -1081,6 +1142,54 @@ describe('shared effect runtime', () => {
       conditionallyEnhanced: true
     })
   })
+
+  it.each([
+    [26, false, 4],
+    [13, false, 4],
+    [12, true, 6]
+  ] as const)(
+    'uses the enhanced Mortal Strike branch only at %s Health',
+    (health, conditionallyEnhanced, damage) => {
+      const scenario = createMatchScenario({
+        seed: 4242 + health,
+        cardId: 'classic_mortal_strike'
+      })
+      scenario.confirmBothMulligans()
+      const [playerId, opponentId] = activeParticipants(scenario)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-hero',
+          participantId: playerId,
+          health
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-mana',
+          participantId: playerId,
+          available: 10,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+
+      const mortalStrike = player(scenario, playerId).hand.find(
+        (card) => card.cardId === 'classic_mortal_strike'
+      )!
+      expect(
+        scenario.match.getPlayInput?.(playerId, mortalStrike.instanceId)?.effectPreview
+      ).toEqual({ conditionallyEnhanced })
+
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: playerId,
+          cardInstanceId: mortalStrike.instanceId,
+          targets: [{ kind: 'hero', participantId: opponentId }]
+        }).accepted
+      ).toBe(true)
+      expect(player(scenario, opponentId).hero.health).toBe(30 - damage)
+    }
+  )
 
   it('projects the played card out of hand before evaluating play conditions', () => {
     const scenario = createMatchScenario({ seed: 43 })
@@ -4750,7 +4859,7 @@ describe('shared effect runtime', () => {
       heroPower: {
         id: 'ragnaros-die-insects',
         cost: 2,
-        targetType: 'none',
+        targetType: 'any-character',
         available: true,
         usesThisTurn: 0
       }
@@ -4759,9 +4868,13 @@ describe('shared effect runtime', () => {
       result.events.filter((event) => event.type === 'hero-power-replaced')
     ).toHaveLength(0)
 
+    expect(
+      scenario.match.dispatch({ type: 'use-hero-power', participantId }).accepted
+    ).toBe(false)
     const power = scenario.match.dispatch({
       type: 'use-hero-power',
-      participantId
+      participantId,
+      target: { kind: 'hero', participantId: opponentId }
     })
     expect(power).toMatchObject({ accepted: true })
     expect(player(scenario, opponentId).hero.health).toBe(22)

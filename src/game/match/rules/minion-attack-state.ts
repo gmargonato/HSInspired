@@ -7,9 +7,7 @@ export function effectiveBoardMinionKeywords(
     Partial<Pick<BoardMinion, 'health' | 'maxHealth'>>,
   currentTurn?: number
 ): readonly CardKeyword[] {
-  if (minion.silenced) return []
-
-  const keywords = new Set<CardKeyword>(minion.keywords ?? [])
+  const keywords = new Set<CardKeyword>(minion.silenced ? [] : (minion.keywords ?? []))
   for (const enchantment of minion.enchantments ?? []) {
     if (
       (enchantment.startsOnTurn !== undefined &&
@@ -66,6 +64,8 @@ export function isBoardMinionSleeping(
 ): boolean {
   return (
     hasBoardMinionEntryExhaustion(minion, currentTurn) &&
-    !effectiveBoardMinionKeywords(minion, currentTurn).includes('charge')
+    !effectiveBoardMinionKeywords(minion, currentTurn).some(
+      (keyword) => keyword === 'charge' || keyword === 'rush'
+    )
   )
 }

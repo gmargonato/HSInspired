@@ -19,6 +19,10 @@ export interface MatchSetup {
   /** Extensible rules/profile identifier; omitted legacy setups use constructed. */
   readonly modeId?: string
   readonly seed?: number
+  /** Optional deterministic seat override used by development match launches. */
+  readonly startingParticipantId?: PlayerId
+  /** Development launch option that keeps both opening hands unchanged. */
+  readonly skipMulligan?: boolean
   /** Development/test diagnostics only; normal matches do not retain effect traces. */
   readonly recordEffectTrace?: boolean
 }

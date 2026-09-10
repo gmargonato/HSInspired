@@ -1,8 +1,10 @@
 import type { Deck } from '../../../game/decks'
+import type { JsonObject } from '../../../shared/ipc/ai'
 import {
   createTurnMatch,
   type OpeningMatchAnalysis,
   type AiObservation,
+  type OpeningMatchEvent,
   type OpeningMatchPublicEvent,
   type OpeningMatchPublicState,
   type TurnMatchInstance,
@@ -12,6 +14,57 @@ import {
 import type { MatchSetup, PlayerId } from '../../../game/match'
 import type { MatchRecorder } from './match-recorder'
 import { captureMatchCommand, captureMatchStart } from './match-log-capture'
+
+function delayedAiEffects(
+  events: readonly OpeningMatchEvent[],
+  participantId: PlayerId,
+  sourceParticipantId: PlayerId | undefined,
+  commandType: string,
+  beforeTurnNumber: number,
+  afterTurnNumber: number
+): JsonObject | undefined {
+  let cardsDrawn = 0
+  let cardsBurned = 0
+  let fatigueDamage = 0
+  const eventTypes = new Set<string>()
+  const drawnCardIds: string[] = []
+  const burnedCardIds: string[] = []
+
+  for (const event of events) {
+    if (!('participantId' in event) || event.participantId !== participantId) continue
+    switch (event.type) {
+      case 'card-drawn':
+        cardsDrawn += 1
+        eventTypes.add(event.type)
+        drawnCardIds.push(String(event.card.cardId))
+        break
+      case 'card-burned':
+        cardsBurned += 1
+        eventTypes.add(event.type)
+        burnedCardIds.push(String(event.card.cardId))
+        break
+      case 'fatigue':
+        fatigueDamage += Math.max(0, event.amount)
+        eventTypes.add(event.type)
+        break
+    }
+  }
+
+  if (cardsDrawn === 0 && cardsBurned === 0 && fatigueDamage === 0) return undefined
+  return {
+    participantId,
+    ...(sourceParticipantId ? { sourceParticipantId } : {}),
+    commandType,
+    beforeTurnNumber,
+    afterTurnNumber,
+    eventTypes: [...eventTypes],
+    cardsDrawn,
+    cardsBurned,
+    fatigueDamage,
+    ...(drawnCardIds.length ? { drawnCardIds } : {}),
+    ...(burnedCardIds.length ? { burnedCardIds } : {})
+  }
+}
 
 export interface GameBoardSessionOptions {
   readonly recorder?: MatchRecorder
@@ -60,6 +113,14 @@ export class GameBoardSession {
         const before = logState
         const result = match.dispatch(command)
         logState = result.state
+        const input =
+          command && typeof command === 'object'
+            ? (command as { readonly participantId?: unknown; readonly type?: unknown })
+            : {}
+        const commandParticipantId =
+          typeof input.participantId === 'string'
+            ? (input.participantId as PlayerId)
+            : undefined
         options.recorder?.record(
           'events',
           'command',
@@ -71,6 +132,18 @@ export class GameBoardSession {
             ? options.recorder?.decisionId
             : ''
         )
+        if (result.accepted && commandParticipantId !== remote.participantId) {
+          const effects = delayedAiEffects(
+            result.events,
+            remote.participantId,
+            commandParticipantId,
+            typeof input.type === 'string' ? input.type : 'unknown',
+            before.turnNumber,
+            result.state.turnNumber
+          )
+          if (effects)
+            options.recorder?.record('decisions', 'boundary-effects', effects, '')
+        }
         if (result.accepted) {
           this.aiObservedEvents.push(
             ...(match.getPublicEvents?.(remote.participantId, result.events) ?? [])

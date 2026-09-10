@@ -116,10 +116,129 @@ describe('League of Explorers card effects', () => {
     setMana(value, participantId)
     addCard(value, participantId, 'league_of_explorers_ethereal_conjurer')
 
-    play(value, participantId, 'league_of_explorers_ethereal_conjurer')
+    const played = play(value, participantId, 'league_of_explorers_ethereal_conjurer')
+    expect(
+      played.events.filter((event) => event.type === 'discover-started')
+    ).toHaveLength(1)
 
     expect(value.match.getState().pendingDiscover?.candidates).toHaveLength(3)
     expect(value.match.getState().pendingDiscover?.queued).toHaveLength(1)
+    const handBefore = player(value, participantId).hand.length
+    for (let index = 0; index < 2; index++) {
+      const pending = value.match.getState().pendingDiscover!
+      const result = value.match.dispatch({
+        type: 'choose-discover-card',
+        participantId,
+        cardInstanceId: pending.candidates[0]!.instanceId
+      })
+      expect(result.accepted).toBe(true)
+      expect(
+        result.events.filter((event) => event.type === 'discover-started')
+      ).toHaveLength(index === 0 ? 1 : 0)
+    }
+    expect(value.match.getState().pendingDiscover).toBeUndefined()
+    expect(player(value, participantId).hand).toHaveLength(handBefore + 2)
+    expect(player(value, participantId).revealedCards).toHaveLength(0)
+    expect(value.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
+      true
+    )
+  })
+
+  it('presents both Finley choices with Brann and installs each selected power', () => {
+    const value = scenario()
+    const [participantId] = activePlayers(value)
+    summon(value, participantId, 'league_of_explorers_brann_bronzebeard')
+    setMana(value, participantId)
+    addCard(value, participantId, 'league_of_explorers_sir_finley_mrrgglton')
+    const played = play(
+      value,
+      participantId,
+      'league_of_explorers_sir_finley_mrrgglton'
+    )
+    expect(
+      played.events.filter((event) => event.type === 'card-choice-started')
+    ).toHaveLength(1)
+    expect(value.match.getState().pendingCardChoice?.queued).toHaveLength(1)
+    for (let index = 0; index < 2; index++) {
+      const pending = value.match.getState().pendingCardChoice!
+      const result = value.match.dispatch({
+        type: 'choose-card-option',
+        participantId,
+        sourceCardInstanceId: pending.sourceCardInstanceId,
+        choice: 0
+      })
+      expect(result.accepted).toBe(true)
+      expect(player(value, participantId).heroPower.id).toBe(
+        pending.options[0]!.presentationHeroPowerId
+      )
+      const events = result.events.filter(
+        (event) => event.type === 'card-choice-started'
+      )
+      expect(events).toHaveLength(index === 0 ? 1 : 0)
+      if (index === 0)
+        expect(events[0]).toMatchObject({
+          options: result.state.pendingCardChoice?.options
+        })
+    }
+    expect(value.match.getState().pendingCardChoice).toBeUndefined()
+    expect(value.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
+      true
+    )
+  })
+
+  it.each([0, 1, 2])(
+    'applies targeted Battlecries with %s Branns without stacking past twice',
+    (branns) => {
+      const value = scenario()
+      const [participantId, opponentId] = activePlayers(value)
+      for (let index = 0; index < branns; index++)
+        summon(value, participantId, 'league_of_explorers_brann_bronzebeard')
+      setMana(value, participantId)
+      addCard(value, participantId, 'basic_elven_archer')
+      const before = player(value, opponentId).hero.health
+      play(value, participantId, 'basic_elven_archer', {
+        targets: [{ kind: 'hero', participantId: opponentId }]
+      })
+      expect(player(value, opponentId).hero.health).toBe(before - (branns ? 2 : 1))
+    }
+  )
+
+  it('removes the doubling aura when Brann is silenced', () => {
+    const value = scenario()
+    const [participantId, opponentId] = activePlayers(value)
+    summon(value, participantId, 'league_of_explorers_brann_bronzebeard')
+    const brann = player(value, participantId).board.at(-1)!
+    setMana(value, participantId)
+    addCard(value, participantId, 'classic_silence')
+    play(value, participantId, 'classic_silence', {
+      targets: [{ kind: 'minion', participantId, instanceId: brann.instanceId }]
+    })
+    addCard(value, participantId, 'basic_elven_archer')
+    const before = player(value, opponentId).hero.health
+    play(value, participantId, 'basic_elven_archer', {
+      targets: [{ kind: 'hero', participantId: opponentId }]
+    })
+    expect(player(value, opponentId).hero.health).toBe(before - 1)
+  })
+
+  it('finishes a doubled Battlecry when its target dies on the first hit', () => {
+    const value = scenario()
+    const [participantId, opponentId] = activePlayers(value)
+    summon(value, participantId, 'league_of_explorers_brann_bronzebeard')
+    summon(value, opponentId, 'basic_elven_archer')
+    const victim = player(value, opponentId).board.at(-1)!
+    setMana(value, participantId)
+    addCard(value, participantId, 'basic_elven_archer')
+    const result = play(value, participantId, 'basic_elven_archer', {
+      targets: [
+        { kind: 'minion', participantId: opponentId, instanceId: victim.instanceId }
+      ]
+    })
+    expect(result.accepted).toBe(true)
+    expect(player(value, opponentId).board).toHaveLength(0)
+    expect(value.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
+      true
+    )
   })
 
   it('caps damage before applying Cursed Blade damage multiplication', () => {
@@ -210,6 +329,8 @@ describe('League of Explorers card effects', () => {
     play(value, participantId, 'league_of_explorers_sir_finley_mrrgglton')
     const pending = value.match.getState().pendingCardChoice
     expect(pending?.options).toHaveLength(3)
+    if (pending?.resolution?.type !== 'hero-power')
+      throw new Error('Expected hero-power choice')
     expect(pending?.resolution?.heroPowerIds).not.toContain('mage-fireblast')
     expect(pending?.options.map((option) => option.presentationHeroPowerId)).toEqual(
       pending?.resolution?.heroPowerIds
@@ -346,7 +467,8 @@ describe('League of Explorers card effects', () => {
   })
 
   it('resolves Dart Trap after the opposing Hero Power', () => {
-    const value = scenario()
+    // This card-rule fixture exercises basic Armor Up, independently of AI handicaps.
+    const value = scenario({ secondController: 'human' })
     const [secretOwnerId, opponentId] = activePlayers(value)
     setMana(value, secretOwnerId)
     addCard(value, secretOwnerId, 'league_of_explorers_dart_trap')

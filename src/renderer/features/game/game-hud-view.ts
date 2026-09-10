@@ -57,7 +57,7 @@ export class GameHudView {
   }
 
   mount(
-    assets: Pick<GameAssets, 'endTurn' | 'manaCrystal'>,
+    assets: Pick<GameAssets, 'endTurn' | 'manaCrystal' | 'manaOverload'>,
     onEndTurn: () => void,
     initialTurnTexture: Texture = assets.endTurn
   ): void {
@@ -99,6 +99,7 @@ export class GameHudView {
 
     this.manaLocalTray = new ManaTray(
       assets.manaCrystal,
+      assets.manaOverload,
       GAME_BOARD_LAYOUT.mana.crystals
     )
     this.turnLayer.addChild(this.manaLocalTray)
@@ -143,7 +144,10 @@ export class GameHudView {
       this.manaLabels.local.text = `${local.mana.available}/${local.mana.maximum}`
       this.manaLabels.remote.text = `${remote.mana.available}/${remote.mana.maximum}`
     }
-    this.manaLocalTray?.sync(resolveManaCrystalStates(local.mana, highlightCost))
+    this.manaLocalTray?.sync(
+      resolveManaCrystalStates(local.mana, highlightCost),
+      local.mana.overloadNextTurn
+    )
   }
 
   toggleDeckTracker(deck: readonly OpeningCard[]): boolean {

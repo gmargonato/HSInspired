@@ -46,6 +46,11 @@ export interface SemanticEvent {
   /** Board size controlled by the event player before a played minion entered. */
   readonly minionCountBeforePlay?: number
   readonly card?: OpeningCard
+  /** A minion recast this spell; it must not generate further spell copies. */
+  readonly spellCopy?: boolean
+  /** Combat-only facts consumed by explicit attack-resolved triggers. */
+  readonly defenderDied?: boolean
+  readonly attackerDied?: boolean
   readonly kind?:
     | 'play'
     | 'cast'
@@ -77,14 +82,21 @@ export interface EffectFrame {
   lastActionTarget: EntityRef | null
   readonly choiceIndex: number | undefined
   readonly preserved: Map<string, readonly EntityRef[]>
+  /** Entity references captured by action metadata such as storeAs. */
+  readonly stored: Map<string, readonly EntityRef[]>
+  /** Scalar values captured by action metadata such as spend-all-mana. */
+  readonly storedValues: Map<string, number>
   readonly actionPath: string
   selectedTargetCursor: number
   damageDealt: number
+  lastDamageAmount: number
   removedKeywordCount: number
   readonly addedCards: EntityRef[]
   readonly drawnCards: EntityRef[]
   readonly destroyedMinions: EntityRef[]
   randomDamageExcluded: Set<string>
+  /** Prevents a replacement heal from recursively creating Lifesteal. */
+  readonly skipLifesteal?: boolean
   readonly continuous?: boolean
   readonly isHeroPower?: boolean
   /** Evaluates play-time conditions after the source leaves hand and enters play. */

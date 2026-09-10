@@ -55,10 +55,26 @@ export function parseMatchSetup(value: unknown): MatchSetup {
   ) {
     throw new Error('MatchSetup.modeId must be a non-empty string')
   }
+  const startingParticipantId =
+    value.startingParticipantId === undefined
+      ? undefined
+      : asPlayerId(requiredString(value.startingParticipantId, 'startingParticipantId'))
+  if (
+    startingParticipantId !== undefined &&
+    startingParticipantId !== first.participantId &&
+    startingParticipantId !== second.participantId
+  ) {
+    throw new Error('MatchSetup.startingParticipantId must identify a participant')
+  }
+  if (value.skipMulligan !== undefined && typeof value.skipMulligan !== 'boolean') {
+    throw new Error('MatchSetup.skipMulligan must be a boolean')
+  }
   return {
     participants: [first, second],
     ...(typeof value.modeId === 'string' ? { modeId: value.modeId.trim() } : {}),
-    ...(value.seed === undefined ? {} : { seed: value.seed })
+    ...(value.seed === undefined ? {} : { seed: value.seed }),
+    ...(startingParticipantId === undefined ? {} : { startingParticipantId }),
+    ...(value.skipMulligan === true ? { skipMulligan: true } : {})
   }
 }
 

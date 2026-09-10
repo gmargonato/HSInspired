@@ -158,7 +158,9 @@ function actionRecord(value: unknown, path: string): CardActionName {
 }
 
 const ACTION_FIELDS = new Set([
+  'allowEmptyTargets',
   'action',
+  'appliesToFutureHeroPowers',
   'amount',
   'actions',
   'attachedToTarget',
@@ -166,20 +168,30 @@ const ACTION_FIELDS = new Set([
   'asNewSpellTarget',
   'attack',
   'cardId',
+  'canAttackImmediately',
   'chance',
   'classBonus',
+  'continueAfterSourceLeaves',
+  'copy',
   'count',
+  'counter',
   'cost',
+  'costOptions',
+  'countsAsPlayedFromHand',
   'controller',
   'deferUntil',
+  'distinctDeathEvents',
+  'distinctIngredients',
   'drawWonCard',
   'crystal',
   'destination',
   'durability',
   'duration',
   'event',
+  'exactCopy',
   'field',
   'filter',
+  'forbiddenTargetTypes',
   'handSize',
   'health',
   'heroId',
@@ -190,36 +202,59 @@ const ACTION_FIELDS = new Set([
   'heroPowerUsesPerTurn',
   'heroPowerDamageBonus',
   'heroPowerEquipAttackBonus',
+  'incrementOnFailedSummon',
+  'ingredientChoices',
+  'initialSize',
   'keyword',
   'keywords',
+  'leaveUnchangedIfNoValidCost',
+  'maximumSize',
   'minimum',
   'minimumHealth',
   'friendlyMinionMinimumHealth',
   'maximumDamageTaken',
   'maximum',
+  'modifications',
   'modifyDrawnCard',
   'multiplier',
+  'oneOptionPerClass',
+  'optionsPerChoice',
+  'order',
+  'payCost',
   'player',
   'pool',
   'placement',
   'power',
   'preserveMaximum',
+  'recipeOrderMatters',
   'replacement',
   'resource',
   'reveal',
   'returnSourceFromGraveyard',
+  'secondOfferExcludes',
   'seconds',
   'selection',
   'source',
+  'snapshot',
   'spellDamageMultiplier',
   'spellDamageBonusMultiplier',
   'damageTakenMultiplier',
+  'stats',
+  'storeAs',
+  'storeStats',
+  'stopWhen',
   'target',
+  'targetSelection',
   'targetType',
+  'transformOverrides',
   'trigger',
+  'unlimited',
   'upgradedPower',
   'winActions',
-  'loseActions'
+  'loseActions',
+  'ingredientPool',
+  'recipes',
+  'classes'
 ])
 
 const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>> = {
@@ -313,7 +348,7 @@ function numericEffectValue(value: unknown, path: string, allowFull: boolean): v
     return
   }
   if (typeof value === 'string') {
-    if (allowFull && value === 'full') return
+    if (allowFull && (value === 'full' || value === 'all')) return
     return fail(path, 'unknown numeric value')
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -350,6 +385,7 @@ function numericEffectValue(value: unknown, path: string, allowFull: boolean): v
     'keyword',
     'multiplier',
     'reference',
+    'snapshot',
     'selector',
     'value'
   ])
@@ -377,6 +413,12 @@ function numericEffectValue(value: unknown, path: string, allowFull: boolean): v
   if (record['opponent'] !== undefined && typeof record['opponent'] !== 'boolean') {
     fail(`${path}.opponent`, 'expected a boolean')
   }
+  if (
+    record['snapshot'] !== undefined &&
+    typeof record['snapshot'] !== 'boolean' &&
+    record['snapshot'] !== 'at-death'
+  )
+    fail(`${path}.snapshot`, 'expected a boolean or at-death')
   if (record['reference'] === undefined && record['operation'] === undefined) {
     return fail(path, 'requires a reference, operation, or random value')
   }
@@ -409,6 +451,8 @@ function validateActionShape(
   if (actionName === 'copy' && record['destination'] === undefined) {
     fail(`${path}.destination`, 'is required for this action')
   }
+  if (record['allowEmptyTargets'] !== undefined)
+    booleanValue(record['allowEmptyTargets'], `${path}.allowEmptyTargets`, false)
   if (
     actionName === 'discard' &&
     record['target'] === undefined &&
@@ -494,9 +538,12 @@ function validateActionShape(
 
 const CONDITION_FIELDS = [
   'cardId',
+  'exclude',
   'filter',
+  'minimum',
   'operator',
   'player',
+  'sourceMustSurvive',
   'type',
   'value'
 ] as const
@@ -505,6 +552,7 @@ const EVENT_FIELDS = [
   'controller',
   'exclude',
   'filter',
+  'phase',
   'source',
   'target',
   'type',
@@ -520,11 +568,15 @@ function filterValue(value: unknown, path: string): void {
     const candidate = filter[key]
     if (
       key === 'damaged' ||
+      key === 'frozen' ||
       key === 'hasBattlecry' ||
       key === 'hasDeathrattle' ||
+      key === 'collectible' ||
+      key === 'mortallyWounded' ||
       key === 'negate' ||
       key === 'overload' ||
-      key === 'sparePart'
+      key === 'sparePart' ||
+      key === 'printedOnly'
     ) {
       if (typeof candidate !== 'boolean') {
         return fail(`${path}.${key}`, 'expected a boolean')
@@ -538,7 +590,31 @@ function filterValue(value: unknown, path: string): void {
         if (candidate !== 'target-cost' && candidate !== 'event-card-cost') {
           return fail(`${path}.${key}`, 'unknown dynamic cost value')
         }
-      } else finiteNumber(candidate, `${path}.${key}`)
+      } else if (typeof candidate === 'number')
+        finiteNumber(candidate, `${path}.${key}`)
+      else {
+        const cost = recordObject(candidate, `${path}.${key}`) as Record<
+          string,
+          unknown
+        >
+        for (const costKey of Object.keys(cost)) {
+          if (!['reference', 'offset', 'operator', 'value'].includes(costKey))
+            return fail(`${path}.${key}.${costKey}`, 'unknown dynamic cost field')
+        }
+        if (cost.reference !== undefined)
+          enumValue(cost.reference, CARD_VALUE_REFERENCES, `${path}.${key}.reference`)
+        if (cost.offset !== undefined)
+          signedNumber(cost.offset, `${path}.${key}.offset`)
+        if (cost.operator !== undefined)
+          enumValue(cost.operator, CARD_OPERATORS, `${path}.${key}.operator`)
+        if (cost.value !== undefined) finiteNumber(cost.value, `${path}.${key}.value`)
+      }
+    } else if (key === 'cardClassIn') {
+      if (!Array.isArray(candidate) || candidate.length === 0)
+        return fail(`${path}.${key}`, 'expected a non-empty array')
+      candidate.forEach((entry, index) =>
+        stringValue(entry, `${path}.${key}[${index}]`)
+      )
     } else {
       stringValue(candidate, `${path}.${key}`)
     }
@@ -562,6 +638,13 @@ function conditionValue(value: unknown, path: string): void {
     stringValue(condition['player'], `${path}.player`)
   if (condition['cardId'] !== undefined)
     stringValue(condition['cardId'], `${path}.cardId`)
+  if (condition['minimum'] !== undefined)
+    finiteNumber(condition['minimum'], `${path}.minimum`)
+  if (
+    condition['sourceMustSurvive'] !== undefined &&
+    typeof condition['sourceMustSurvive'] !== 'boolean'
+  )
+    fail(`${path}.sourceMustSurvive`, 'expected a boolean')
   if (condition['value'] !== undefined)
     finiteNumber(condition['value'], `${path}.value`)
 }
@@ -586,6 +669,7 @@ function eventValue(value: unknown, path: string): void {
     enumValue(event['exclude'], CARD_SELECTOR_EXCLUDES, `${path}.exclude`)
   }
   if (event['filter'] !== undefined) filterValue(event['filter'], `${path}.filter`)
+  if (event['phase'] !== undefined) stringValue(event['phase'], `${path}.phase`)
   if (event['source'] !== undefined) selectorValue(event['source'], `${path}.source`)
   if (event['target'] !== undefined) selectorValue(event['target'], `${path}.target`)
   if (event['turnPlayer'] !== undefined)
@@ -654,6 +738,14 @@ function selectorValue(value: unknown, path: string): void {
   if (selector['position'] !== undefined) {
     stringValue(selector['position'], `${path}.position`)
   }
+  if (selector['reference'] !== undefined) {
+    stringValue(selector['reference'], `${path}.reference`)
+  }
+  if (selector['distinct'] !== undefined)
+    booleanValue(selector['distinct'], `${path}.distinct`, false)
+  if (selector['distinctDeathEvents'] !== undefined)
+    booleanValue(selector['distinctDeathEvents'], `${path}.distinctDeathEvents`, false)
+  if (selector['order'] !== undefined) stringValue(selector['order'], `${path}.order`)
   if (selector['filter'] !== undefined)
     filterValue(selector['filter'], `${path}.filter`)
   if (selector['preserve'] !== undefined)
@@ -725,8 +817,17 @@ function actionsValue(value: unknown, path: string): void {
         return fail(`${actionPath}.${key}`, 'unknown action field')
       }
     }
+    if (record['storeStats'] !== undefined)
+      booleanValue(record['storeStats'], `${actionPath}.storeStats`, false)
     const actionName = actionRecord(record, actionPath)
     validateActionShape(actionName, record, actionPath)
+    if (actionName === 'draw-until' && record['stopWhen'] !== undefined) {
+      enumValue(
+        record['stopWhen'],
+        ['matching', 'non-matching'] as const,
+        `${actionPath}.stopWhen`
+      )
+    }
     if (record['player'] !== undefined) {
       enumValue(record['player'], CARD_ACTION_PLAYERS, `${actionPath}.player`)
     }

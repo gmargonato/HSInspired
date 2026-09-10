@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  MINION_CANVAS,
-  MINION_LAYOUT,
-  minionTemporaryAbilityBadgePlacement
-} from '../../rendering/minions/minion-layout'
+import { MINION_CANVAS, MINION_LAYOUT } from '../../rendering/minions/minion-layout'
 import {
   WEAPON_CANVAS,
   WEAPON_LAYOUT,
@@ -68,16 +64,10 @@ describe('board ability badge layouts', () => {
     expect(WEAPON_LAYOUT.deathrattle.scale).toBeUndefined()
   })
 
-  it('spreads temporary minion badges across a centered bottom row', () => {
-    const placements = [0, 1].map((index) =>
-      minionTemporaryAbilityBadgePlacement(index, 2)
-    )
-
-    expect(placements.map((value) => value.position)).toEqual([
-      { x: 60, y: 190 },
-      { x: 100, y: 190 }
-    ])
-    placements.forEach((value) => expectInsideCanvas(value, MINION_CANVAS))
+  it('keeps the new minion visuals inside the canvas', () => {
+    for (const key of ['windfury', 'spellDamage', 'elusive', 'immune'] as const) {
+      expectInsideCanvas(MINION_LAYOUT[key], MINION_CANVAS)
+    }
   })
 
   it('spreads temporary weapon badges across a centered bottom row', () => {

@@ -1,3 +1,4 @@
+import { cthunSnapshot } from '../cthun'
 import { HERO_CATALOG } from '../../content/heroes'
 import type { CardDefinition, CardKeyword } from '../../content/cards'
 import type {
@@ -104,6 +105,8 @@ export class EffectQueries {
         return ref.kind === 'card' && definition?.type === 'Minion'
       case 'spell-card':
         return ref.kind === 'card' && definition?.type === 'Spell'
+      case 'spell':
+        return ref.kind === 'card' && definition?.type === 'Spell'
       case 'character':
         return ref.kind === 'hero' || ref.kind === 'minion'
       case 'hero':
@@ -181,6 +184,13 @@ export class EffectQueries {
               ? definition?.cardClass === selfClass ||
                 definition?.cardClass === 'Neutral'
               : definition?.cardClass === expected
+      } else if (key === 'cardClassIn') {
+        condition =
+          Array.isArray(value) &&
+          typeof definition?.cardClass === 'string' &&
+          value.includes(definition.cardClass)
+      } else if (key === 'collectible') {
+        condition = typeof value === 'boolean' && definition?.collectible === value
       } else if (key === 'cost') {
         const cost = card?.currentCost ?? card?.baseCost ?? definition?.cost
         const valueRecord = isRecord(value) ? value : null
@@ -191,13 +201,19 @@ export class EffectQueries {
         const targetCost =
           rawExpected === 'target-cost'
             ? this.context.costForEntity(comparisonTarget ?? undefined)
-            : rawExpected === 'event-card-cost'
-              ? (frame.event?.card?.currentCost ??
-                frame.event?.card?.baseCost ??
-                (frame.event?.cardId
-                  ? cardDefinition(frame.event.cardId)?.cost
-                  : undefined))
-              : rawExpected
+            : rawExpected === 'target.baseCost'
+              ? comparisonTarget?.cardId
+                ? cardDefinition(comparisonTarget.cardId)?.cost
+                : undefined
+              : rawExpected === 'event-card-cost'
+                ? (frame.event?.card?.currentCost ??
+                  frame.event?.card?.baseCost ??
+                  (frame.event?.cardId
+                    ? cardDefinition(frame.event.cardId)?.cost
+                    : undefined))
+                : rawExpected
+        const offset =
+          valueRecord && typeof valueRecord.offset === 'number' ? valueRecord.offset : 0
         const operator =
           typeof valueRecord?.operator === 'string'
             ? valueRecord.operator
@@ -207,7 +223,7 @@ export class EffectQueries {
         condition =
           typeof cost === 'number' &&
           typeof targetCost === 'number' &&
-          this.compare(cost, operator, targetCost)
+          this.compare(cost, operator, targetCost + offset)
       } else if (key === 'damaged') {
         const damaged = minion
           ? minion.health < minion.maxHealth
@@ -216,6 +232,13 @@ export class EffectQueries {
               this.context.player(ref.participantId).hero.maxHealth
             : false
         condition = typeof value === 'boolean' ? damaged === value : damaged
+      } else if (key === 'frozen') {
+        const frozen = this.context.isFrozen(ref)
+        condition = typeof value === 'boolean' ? frozen === value : frozen
+      } else if (key === 'mortallyWounded') {
+        const mortallyWounded = minion ? minion.health <= 0 : false
+        condition =
+          typeof value === 'boolean' ? mortallyWounded === value : mortallyWounded
       } else if (key === 'hasBattlecry') {
         const hasBattlecry = definition
           ? cardHasTrigger(definition, 'battlecry')
@@ -233,7 +256,9 @@ export class EffectQueries {
           ? this.context.hasKeyword(ref, value as CardKeyword)
           : ref.kind === 'hero'
             ? this.context.hasKeyword(ref, value as CardKeyword)
-            : Boolean(definition?.keywords.includes(value as CardKeyword))
+            : ref.kind === 'card'
+              ? this.context.hasKeyword(ref, value as CardKeyword)
+              : Boolean(definition?.keywords.includes(value as CardKeyword))
       else if (key === 'overload')
         condition = Boolean(
           (definition?.effects ?? []).some((effect) =>
@@ -249,10 +274,23 @@ export class EffectQueries {
       else if (key === 'type')
         condition = definition?.type === value || definition?.subtype === value
       else if (key === 'stat') {
+        const printedOnly = filter.printedOnly === true
         const actual =
           value === 'health'
-            ? this.context.readMaximumHealth(ref)
-            : this.context.readAttack(ref)
+            ? printedOnly
+              ? definition?.type === 'Minion'
+                ? definition.health
+                : definition?.type === 'Hero'
+                  ? undefined
+                  : undefined
+              : this.context.readMaximumHealth(ref)
+            : printedOnly
+              ? definition?.type === 'Minion'
+                ? definition.attack
+                : definition?.type === 'Weapon'
+                  ? definition.attack
+                  : 0
+              : this.context.readAttack(ref)
         const expected = isRecord(filter.value)
           ? this.evaluate(filter.value, frame)
           : filter.value
@@ -260,7 +298,8 @@ export class EffectQueries {
           typeof actual === 'number' &&
           typeof expected === 'number' &&
           this.compare(actual, filter.operator, expected)
-      } else if (key === 'operator' || key === 'value') continue
+      } else if (key === 'operator' || key === 'value' || key === 'printedOnly')
+        continue
       if (!condition) matches = false
     }
     if (isRecord(filter.negate))
@@ -461,6 +500,14 @@ export class EffectQueries {
     if (!isRecord(selectorValue)) return []
     const selector = selectorValue
     const selection = selector.selection
+    if (selection === 'stored') {
+      const reference = selector.reference
+      const stored =
+        typeof reference === 'string' ? (frame.stored.get(reference) ?? []) : []
+      return stored
+        .map((candidate) => ({ ...candidate }))
+        .filter((candidate) => this.selectorMatches(candidate, selector, frame))
+    }
     if (selection === 'source')
       return this.selectorMatches(frame.source, selector, frame) ? [frame.source] : []
     if (selection === 'event-source') {
@@ -574,6 +621,8 @@ export class EffectQueries {
         )
       case 'damage-dealt':
         return frame.damageDealt
+      case 'last-damage-amount':
+        return frame.lastDamageAmount
       case 'destroyed-weapon.attack': {
         return (
           this.context.destroyedWeaponSnapshots.get(frame.controllerId)?.attack ?? 0
@@ -604,6 +653,43 @@ export class EffectQueries {
         return frame.event?.damage ?? frame.event?.amount ?? 0
       case 'event.amount':
         return frame.event?.amount ?? frame.event?.damage ?? 0
+      case 'event-card-cost':
+        return (
+          frame.event?.card?.currentCost ??
+          frame.event?.card?.baseCost ??
+          (frame.event?.cardId ? (cardDefinition(frame.event.cardId)?.cost ?? 0) : 0)
+        )
+      case 'friendly-spells-cast-this-game':
+        return (
+          this.context.draft.history?.spellsCastThisGameByPlayer?.[
+            frame.controllerId
+          ] ?? 0
+        )
+      case 'friendly-totems-summoned-this-game':
+        return (
+          this.context.draft.history?.totemsSummonedThisGameByPlayer?.[
+            frame.controllerId
+          ] ?? 0
+        )
+      case 'friendly-secrets-played-this-game':
+        return (
+          this.context.draft.history?.secretsPlayedThisGameByPlayer?.[
+            frame.controllerId
+          ] ?? 0
+        )
+      case 'manaSpent':
+      case 'secretsDestroyed.count':
+        return frame.storedValues.get(reference) ?? 0
+      case 'discoveredCard.cost': {
+        const discovered = frame.stored.get('discoveredCard')?.[0]
+        return discovered
+          ? (this.context.currentCard(discovered)?.currentCost ??
+              this.context.entityCard(discovered)?.cost ??
+              0)
+          : (frame.storedValues.get(reference) ?? 0)
+      }
+      case 'target.baseCost':
+        return target?.cardId ? (cardDefinition(target.cardId)?.cost ?? 0) : 0
       case 'hand-size-difference':
         if (expression?.opponent === true)
           return Math.max(0, opponent.hand.length - owner.hand.length)
@@ -647,6 +733,9 @@ export class EffectQueries {
         return sourceMinion?.health ?? owner.hero.health
       case 'source.weapon.attack':
         return owner.weapon?.attack ?? 0
+      case 'destroyed-target.attack':
+      case 'destroyed-target.health':
+        return frame.storedValues.get(reference) ?? 0
       case 'target.attack':
         return target ? this.context.readAttack(target) : 0
       case 'target.health':
@@ -664,7 +753,9 @@ export class EffectQueries {
     this.context.step(`${frame.actionPath}:value`)
     if (typeof value === 'number') return value
     if (typeof value === 'string')
-      return allowFull && value === 'full' ? Number.POSITIVE_INFINITY : 0
+      return allowFull && (value === 'full' || value === 'all')
+        ? Number.POSITIVE_INFINITY
+        : 0
     if (!isRecord(value)) return 0
     if (value.condition !== undefined)
       return this.evaluate(
@@ -689,6 +780,14 @@ export class EffectQueries {
         ? this.numericReference(value.reference, frame, value)
         : undefined
     const literal = typeof value.value === 'number' ? value.value : undefined
+    if (value.snapshot === true || value.snapshot === 'at-death') {
+      const snapshotKey = `${frame.actionPath}:snapshot`
+      const previous = frame.storedValues.get(snapshotKey)
+      if (previous !== undefined) return previous
+      const snapshot = reference ?? literal ?? 0
+      frame.storedValues.set(snapshotKey, snapshot)
+      return snapshot
+    }
     const base = reference ?? literal ?? 0
     if (value.operation === undefined && typeof value.multiplier === 'number')
       return base * value.multiplier
@@ -842,6 +941,7 @@ export class EffectQueries {
           Number(condition.value)
         )
       case 'player-deck-has-no-duplicates': {
+        if (player.deckHasNoDuplicates !== undefined) return player.deckHasNoDuplicates
         const counts = new Map<string, number>()
         for (const card of player.deck)
           counts.set(card.cardId, (counts.get(card.cardId) ?? 0) + 1)
@@ -890,6 +990,38 @@ export class EffectQueries {
           return true
         return Boolean(
           target?.kind === 'minion' && this.context.currentMinion(target) === null
+        )
+      case 'cthun-attack-at-least':
+        return (
+          (cthunSnapshot(player).attack ?? 6) >=
+          Number(condition.value ?? condition.minimum ?? 0)
+        )
+      case 'defender-died-from-combat': {
+        const event =
+          frame.event?.type === 'attack-resolved'
+            ? frame.event
+            : frame.lastEvent?.type === 'attack-resolved'
+              ? frame.lastEvent
+              : null
+        if (!event || event.defenderDied !== true) return false
+        if (condition.sourceMustSurvive !== true) return true
+        return (
+          frame.source.kind === 'minion' &&
+          (this.context.currentMinion(frame.source)?.health ?? 0) > 0
+        )
+      }
+      case 'player-has-spell-damage': {
+        const spellDamage =
+          (player.hero.spellDamage ?? 0) +
+          player.board.reduce((sum, minion) => sum + (minion.spellDamage ?? 0), 0)
+        return spellDamage >= Number(condition.minimum ?? condition.value ?? 1)
+      }
+      case 'target-matches':
+        return Boolean(
+          target &&
+          (condition.exclude !== true ||
+            entityKey(target) !== entityKey(frame.source)) &&
+          this.matchesFilter(target, condition.filter, frame)
         )
       case 'target-frozen':
         return Boolean(target && this.context.isFrozen(target))

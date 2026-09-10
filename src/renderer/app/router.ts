@@ -1,6 +1,7 @@
 import type { CardId } from '../../game/content/cards'
 import {
   createHumanVsAiMatchSetup,
+  type HumanVsAiMatchOptions,
   type HumanVsAiDeckSelection
 } from '../../game/match'
 import type { CardPreviewRouteBounds } from '../features/card-preview/card-preview-route'
@@ -27,9 +28,13 @@ export type AppRoute =
 /** Adapter used by deck selection to hand a complete setup to GameScene. */
 export function createHumanVsAiGameRoute(
   selection: HumanVsAiDeckSelection,
-  seed?: number
+  seed?: number,
+  options?: HumanVsAiMatchOptions
 ): GameRoute {
-  return { id: 'game', setup: createHumanVsAiMatchSetup(selection, seed) }
+  return {
+    id: 'game',
+    setup: createHumanVsAiMatchSetup(selection, seed, options)
+  }
 }
 
 /** Typed renderer navigation port consumed by scenes and feature views. */

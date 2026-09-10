@@ -13,7 +13,6 @@ import {
   type HandCardTransform,
   type HandPointer,
   handHoverHitBounds,
-  isPointerOverLiftedCard,
   layoutHand,
   resolveHandHover
 } from './hand-layout'
@@ -144,24 +143,19 @@ export class GameHandView {
     const bounds = handHoverHitBounds(DEFAULT_HAND_LAYOUT)
     const handRect = new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
     // The fixed hand zone sits above board controls in the display tree. A
-    // lifted card owns every point inside its visible body; elsewhere, holes
+    // resting hand area owns card input; elsewhere, holes
     // expose only board objects that can currently accept pointer input.
     this.layer.hitArea = {
       contains: (x: number, y: number): boolean => {
         if (!handRect.contains(x, y)) return false
 
-        const hoveredEntry = this.localHoveredSlot
-          ? this.handEntries.find((entry) => entry.slot === this.localHoveredSlot)
-          : undefined
-        const hoveredRest = hoveredEntry?.restTransform
-        if (
-          hoveredEntry &&
-          hoveredRest &&
-          isHandOwnedSlot(hoveredEntry.slot, this.layer) &&
-          isPointerOverLiftedCard({ x, y }, hoveredRest, DEFAULT_HAND_LAYOUT)
-        ) {
-          return true
-        }
+        const resolved = resolveHandHover(
+          { x, y },
+          this.handEntries.map((entry) => entry.restTransform),
+          DEFAULT_HAND_LAYOUT
+        )
+        const entry = resolved !== null ? this.handEntries[resolved] : undefined
+        if (entry && isHandOwnedSlot(entry.slot, this.layer)) return true
 
         return this.callbacks.allowsHandHit(x, y)
       }
@@ -171,20 +165,15 @@ export class GameHandView {
         return
       const local = event.getLocalPosition(this.layer)
       if (this.drag.index !== null) return
-      const transforms = this.handEntries.map((entry) =>
-        isHandOwnedSlot(entry.slot, this.layer) ? entry.restTransform : undefined
-      )
-      const hoveredIndex = this.localHoveredSlot
-        ? this.handEntries.findIndex((entry) => entry.slot === this.localHoveredSlot)
-        : -1
-      const resolved = resolveHandHover(
-        local,
-        transforms,
-        DEFAULT_HAND_LAYOUT,
-        hoveredIndex >= 0 ? hoveredIndex : null
-      )
-      const nearest =
+      // Include arriving slots in the fan geometry, but only let cards that
+      // have reached the hand own hover. Missing edge transforms would make
+      // the hit resolver reject the entire fan during a draw.
+      const transforms = this.handEntries.map((entry) => entry.restTransform)
+      const resolved = resolveHandHover(local, transforms, DEFAULT_HAND_LAYOUT)
+      const candidate =
         resolved !== null ? (this.handEntries[resolved]?.slot ?? null) : null
+      const nearest =
+        candidate && isHandOwnedSlot(candidate, this.layer) ? candidate : null
       if (nearest === this.localHoveredSlot) return
       this.localHoveredSlot = nearest
       this.applyHoverDelta()
@@ -204,6 +193,7 @@ export class GameHandView {
     readonly positionDuration: number
     readonly scaleDuration: number
     readonly delayedInstanceId?: string
+    readonly preserveHover?: boolean
   }): Promise<void> {
     const transforms = layoutHand(this.handEntries.length, DEFAULT_HAND_LAYOUT, null)
     await Promise.all(
@@ -211,6 +201,23 @@ export class GameHandView {
         const transform = transforms[index]
         if (!transform) return Promise.resolve()
         entry.restTransform = transform
+        if (opts.preserveHover && entry.card.instanceId !== opts.delayedInstanceId) {
+          // Existing cards remain hoverable while the incoming card travels.
+          // Use interruptible tweens instead of a layout timeline so changing
+          // hover cannot fight the reflow or delay completion of the draw.
+          if (!isHandOwnedSlot(entry.slot, this.layer) || this.drag.index === index)
+            return Promise.resolve()
+          const hoveredIndex = entry.slot === this.localHoveredSlot ? index : -1
+          entry.displaced = hoveredIndex >= 0
+          this.animateHoverTarget(
+            entry.slot,
+            this.computeHoverTarget(transform, index, hoveredIndex),
+            entry.displaced,
+            opts.positionDuration,
+            opts.scaleDuration
+          )
+          return Promise.resolve()
+        }
         entry.displaced = false
         const delay =
           opts.delayedInstanceId !== undefined &&
@@ -241,8 +248,22 @@ export class GameHandView {
       if (!entry.restTransform) return
       const shouldDisplace = hoveredIndex >= 0 && index === hoveredIndex
       if (!shouldDisplace && !entry.displaced) return
+      if (shouldDisplace && entry.displaced) return
       const target = this.computeHoverTarget(entry.restTransform, index, hoveredIndex)
-      this.animateHoverTarget(entry.slot, target, shouldDisplace)
+      if (shouldDisplace) {
+        // Appear enlarged just below the final hover position, then settle upward.
+        entry.slot.position.set(
+          target.x,
+          target.y + DEFAULT_HAND_LAYOUT.hoverSettleDistance
+        )
+        entry.slot.rotation = target.rotation
+      }
+      this.animateHoverTarget(
+        entry.slot,
+        target,
+        shouldDisplace,
+        shouldDisplace ? OPENING_TIMING.hoverSettle : OPENING_TIMING.hover
+      )
       entry.displaced = shouldDisplace
     })
     this.callbacks.syncMana()
@@ -266,20 +287,26 @@ export class GameHandView {
   private animateHoverTarget(
     slot: GameCardSlot,
     target: HandCardTransform,
-    isHovered: boolean
+    isHovered: boolean,
+    positionDuration = isHovered ? 0 : OPENING_TIMING.hover,
+    scaleDuration = isHovered ? 0 : OPENING_TIMING.hover
   ): void {
+    // Also cancel reflow tweens that have not started yet; overwrite:auto
+    // only resolves active conflicts and can otherwise lower a new hover.
+    gsap.killTweensOf(slot, 'x,y,rotation')
+    gsap.killTweensOf(slot.scale, 'x,y')
     this.animations.to(slot, {
       x: target.x,
       y: target.y,
       rotation: target.rotation,
-      duration: isHovered ? 0 : OPENING_TIMING.hover,
+      duration: positionDuration,
       ease: 'power2.out',
       overwrite: 'auto'
     })
     this.animations.to(slot.scale, {
       x: target.scale,
       y: target.scale,
-      duration: isHovered ? 0 : OPENING_TIMING.hover,
+      duration: scaleDuration,
       ease: 'power2.out',
       overwrite: 'auto'
     })

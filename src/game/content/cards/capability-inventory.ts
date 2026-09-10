@@ -194,6 +194,18 @@ function actionPhase(name: CardActionName): CapabilityPhase {
   if (
     [
       'add-to-hand',
+      'combine-choose-one',
+      'spend-all-mana',
+      'buff-cthun',
+      'copy-stats',
+      'summon-jade-golem',
+      'shuffle-dead-cthun',
+      'cast-random-spells',
+      'modify-hero-attacks',
+      'refresh-mana',
+      'refresh-hero-power',
+      'set-hero-power-cost',
+      'create-kazakus-potion',
       'change-cost',
       'copy',
       'discard',
@@ -291,7 +303,7 @@ function actionPhase(name: CardActionName): CapabilityPhase {
 }
 
 function triggerPhase(name: (typeof CARD_TRIGGERS)[number]): CapabilityPhase {
-  if (name === 'aura' || name === 'while-in-hand') return 12
+  if (name === 'aura' || name === 'while-in-hand' || name === 'while-in-deck') return 12
   if (name === 'secret' || name === 'on-secret-played' || name === 'on-secret-revealed')
     return 13
   return 11

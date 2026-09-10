@@ -2,52 +2,53 @@ import { describe, expect, it } from 'vitest'
 import { createMatchScenario } from './testing/match-scenario-builder'
 
 describe('special action parity', () => {
-  it('derives Nozdormu turn limits in the domain and accepts only an elapsed timeout', () => {
+  it('restores the hero and refreshes mana when Nozdormu is played', () => {
     const scenario = createMatchScenario({ seed: 1401 })
     scenario.confirmBothMulligans()
     const participantId = scenario.match.getState().activePlayerId!
     expect(
       scenario.match.dispatch({
-        type: 'dev-summon-minion',
-        participantId,
-        cardId: 'classic_nozdormu'
-      }).accepted
-    ).toBe(true)
-    expect(scenario.match.getState().turnLimitSeconds).toBe(15)
-    expect(
-      scenario.match.dispatch({ type: 'timeout', participantId, elapsedSeconds: 14 })
-    ).toMatchObject({ accepted: false, code: 'timeout-unavailable' })
-    expect(scenario.match.getState().turnLimitSeconds).toBe(15)
-    expect(
-      scenario.match.dispatch({ type: 'timeout', participantId, elapsedSeconds: 15 })
-        .accepted
-    ).toBe(true)
-    expect(scenario.match.getState().activePlayerId).not.toBe(participantId)
-  })
-
-  it('expires Nozdormu turn limits when its aura source leaves the board', () => {
-    const scenario = createMatchScenario({ seed: 1403 })
-    scenario.confirmBothMulligans()
-    const participantId = scenario.match.getState().activePlayerId!
-    expect(
-      scenario.match.dispatch({
-        type: 'dev-summon-minion',
-        participantId,
-        cardId: 'classic_nozdormu'
-      }).accepted
-    ).toBe(true)
-    expect(scenario.match.getState().turnLimitSeconds).toBe(15)
-    expect(
-      scenario.match.dispatch({
         type: 'dev-clear-zone',
         participantId,
-        zone: 'board'
+        zone: 'hand'
       }).accepted
     ).toBe(true)
-    expect(scenario.match.getState().turnLimitSeconds).toBeNull()
     expect(
-      scenario.match.dispatch({ type: 'timeout', participantId, elapsedSeconds: 15 })
-    ).toMatchObject({ accepted: false, code: 'timeout-unavailable' })
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'classic_nozdormu'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({ type: 'dev-set-hero', participantId, health: 15 })
+        .accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const nozdormu = scenario.match
+      .getState()
+      .players.find((player) => player.participantId === participantId)!
+      .hand[0]!
+    const playResult = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: nozdormu.instanceId,
+      position: 0
+    })
+    expect(playResult.accepted).toBe(true)
+    const player = scenario.match
+      .getState()
+      .players.find((candidate) => candidate.participantId === participantId)!
+    expect(player.hero.health).toBe(30)
+    expect(player.mana).toMatchObject({ available: 10, maximum: 10 })
+    expect(scenario.match.getState().turnLimitSeconds).toBeNull()
   })
 
   it('replaces and upgrades Shadowform through the shared hero-power runtime', () => {

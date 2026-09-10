@@ -27,6 +27,8 @@ export interface HandLayoutConfig {
   readonly cardScale: number
   /** How far a hovered card lifts above the resting baseline. */
   readonly hoverLift: number
+  /** Upward travel after the enlarged card first appears, in design pixels. */
+  readonly hoverSettleDistance: number
   /** Scale of a hovered (lifted) card. */
   readonly hoverScale: number
   /**
@@ -38,8 +40,6 @@ export interface HandLayoutConfig {
   readonly hoverSpread: number
   /** Vertical grace in px above a resting card's top edge for hover entry. */
   readonly hoverEntryMargin: number
-  /** Extra slack in px around the lifted card's bounds for hover keep-alive. */
-  readonly hoverKeepMargin: number
 }
 
 export interface HandCardTransform {
@@ -77,9 +77,9 @@ export const DEFAULT_HAND_LAYOUT: HandLayoutConfig = {
   hoverScale: 0.5,
   safeRightBoundaryX: 1257,
   hoverLift: 120,
+  hoverSettleDistance: 20,
   hoverSpread: 45,
-  hoverEntryMargin: 15,
-  hoverKeepMargin: 10
+  hoverEntryMargin: 15
 }
 
 /**
@@ -173,20 +173,13 @@ export interface HandHoverHitBounds {
   readonly height: number
 }
 
-/**
- * Bounds of the hand layer's pointer hit zone on the 1920x1080 canvas. It must
- * cover both the resting strip (where hover may enter) and the tallest lifted
- * card, so the pointer can roam over a hovered card without leaving the zone
- * and dropping the hover.
- */
+/** Broad pointer bounds covering resting cards, including the dense-hand lift. */
 export function handHoverHitBounds(config: HandLayoutConfig): HandHoverHitBounds {
-  const top = Math.min(
-    config.baselineY - CARD_CANVAS.height * config.cardScale - config.hoverEntryMargin,
+  const top =
     config.baselineY -
-      config.hoverLift -
-      CARD_CANVAS.height * config.hoverScale -
-      config.hoverKeepMargin
-  )
+    config.denseHandLift -
+    CARD_CANVAS.height * config.cardScale -
+    config.hoverEntryMargin
   return { x: 0, y: top, width: 1920, height: 1080 - top }
 }
 
@@ -202,8 +195,7 @@ export function handHoverHitBounds(config: HandLayoutConfig): HandHoverHitBounds
  * - In the *entry strip* (at or below a resting card's top edge plus a small
  *   grace margin) the slot mapping is authoritative — moving along the strip
  *   always switches to the card under the pointer, however tight the fan.
- * - Above the strip, hover is retained only while the pointer stays over the
- *   currently lifted card's on-screen body (`isPointerOverLiftedCard`).
+ * - Above the strip, hover clears even over enlarged artwork.
  *
  * All geometry derives from the *resting* transforms and config constants —
  * never from in-flight animations — so hover targets cannot oscillate.
@@ -211,8 +203,7 @@ export function handHoverHitBounds(config: HandLayoutConfig): HandHoverHitBounds
 export function resolveHandHover(
   pointer: HandPointer,
   transforms: readonly (HandCardTransform | undefined)[],
-  config: HandLayoutConfig,
-  hoveredIndex: number | null
+  config: HandLayoutConfig
 ): number | null {
   const cardCount = transforms.length
   if (cardCount === 0) return null
@@ -225,13 +216,6 @@ export function resolveHandHover(
       if (pointer.y >= restTop - config.hoverEntryMargin) {
         return slotIndex
       }
-    }
-  }
-
-  if (hoveredIndex !== null) {
-    const hovered = transforms[hoveredIndex]
-    if (hovered && isPointerOverLiftedCard(pointer, hovered, config)) {
-      return hoveredIndex
     }
   }
 
@@ -280,20 +264,4 @@ function resolveSlotIndex(
     if (pointerX < (current.x + next.x) / 2) return index
   }
   return cardCount - 1
-}
-
-/** Whether the pointer is inside the stable target bounds of one lifted card. */
-export function isPointerOverLiftedCard(
-  pointer: HandPointer,
-  transform: HandCardTransform,
-  config: HandLayoutConfig
-): boolean {
-  const halfWidth = (CARD_CANVAS.width * config.hoverScale) / 2 + config.hoverKeepMargin
-  const bottom = transform.y - config.hoverLift
-  const top = bottom - CARD_CANVAS.height * config.hoverScale
-  return (
-    Math.abs(pointer.x - transform.x) <= halfWidth &&
-    pointer.y >= top - config.hoverKeepMargin &&
-    pointer.y <= bottom + config.hoverKeepMargin
-  )
 }

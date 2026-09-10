@@ -351,7 +351,9 @@ const CARD_RULES_LINE_BREAKS: Readonly<Record<string, readonly string[]>> = {
   classic_deathwing: ['discard']
 }
 
-function rulesText(card: CardDefinition): string {
+export function formatCardRulesText(
+  card: Pick<CardDefinition, 'id' | 'rulesText'>
+): string {
   if (!card.rulesText) return ''
 
   const displayText = (CARD_RULES_LINE_BREAKS[card.id] ?? []).reduce(
@@ -547,7 +549,7 @@ export function buildCardRenderTree(
     children.push(
       text(
         'rules',
-        rulesText(card),
+        formatCardRulesText(card),
         profile.rulesBox,
         card.type === 'Weapon' ? WEAPON_RULES_STYLE : RULES_STYLE_BASE,
         220

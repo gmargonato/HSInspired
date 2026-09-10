@@ -2,10 +2,13 @@ import { CARD_CATALOG } from '../../../game/content/cards'
 import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
 import type { Deck } from '../../../game/decks'
 import {
+  assessPolicyCommand,
   buildEngineVerifiedPolicies,
   canonicalCommandKey,
   enumerateLegalCommands,
+  findGuaranteedLethalPolicy,
   type AiObservation,
+  type AiPolicyAssessment,
   type AiPolicyOutcome,
   type EngineVerifiedPolicy
 } from '../../../game/match/ai'
@@ -35,15 +38,25 @@ interface CandidatePolicy {
   readonly id: string
   readonly commands: readonly TurnMatchCommand[]
   readonly view: AiPolicyOption
+  readonly assessment?: AiPolicyAssessment
   readonly outcome?: AiPolicyOutcome
   readonly fallbackRank?: number
 }
+
+type AiSelectionReason =
+  | 'model-selected'
+  | 'engine-guaranteed-lethal'
+  | 'api-unavailable'
+  | 'single-safe-policy'
+  | 'provider-failed'
+  | 'safety-recheck'
+  | 'no-policies'
 
 export interface AiActionDecision {
   readonly expectedRevision: number
   readonly actionId: string
   readonly command: TurnMatchCommand
-  readonly source: 'model' | 'fallback'
+  readonly source: 'model' | 'fallback' | 'engine'
 }
 
 export interface AiTurnControllerOptions {
@@ -59,6 +72,7 @@ interface QueuedPolicy {
   readonly id: string
   readonly source: AiActionDecision['source']
   readonly commands: readonly TurnMatchCommand[]
+  readonly assessment?: AiPolicyAssessment
 }
 
 const PLAN_DEADLINE_MS = 60_000
@@ -106,11 +120,35 @@ function compareVectors(left: readonly number[], right: readonly number[]): numb
   return 0
 }
 
+function policyRiskCost(policy: CandidatePolicy): number {
+  const flags = policy.assessment?.riskFlags ?? []
+  return flags.reduce((total, flag) => {
+    switch (flag) {
+      case 'immediate-loss':
+        return total + 100
+      case 'fatigue-lethal':
+        return total + 100
+      case 'draws-from-empty-deck':
+        return total + 20
+      case 'hand-overflow':
+      case 'burns-card':
+        return total + 12
+      case 'no-effect':
+      case 'ineffective-hero-freeze':
+        return total + 8
+      default:
+        return total
+    }
+  }, 0)
+}
+
 function outcomeFallbackVector(policy: CandidatePolicy): readonly number[] {
   const result = policy.outcome
-  if (!result) return [0, 0, 0, 0, 0, 0, policy.fallbackRank ?? 0]
+  if (!result)
+    return [0, -policyRiskCost(policy), 0, 0, 0, 0, 0, policy.fallbackRank ?? 0]
   return [
     result.winner === 'self' ? 3 : result.winner === 'opponent' ? -3 : 1,
+    -policyRiskCost(policy),
     -boardThreat(result.opponent),
     effectiveHealth(result.self),
     boardThreat(result.self),
@@ -119,6 +157,62 @@ function outcomeFallbackVector(policy: CandidatePolicy): readonly number[] {
     policy.view.completeTurn ? 1 : 0,
     policy.fallbackRank ?? 0
   ]
+}
+
+function hasRisk(
+  policy: CandidatePolicy,
+  risk: AiPolicyAssessment['riskFlags'][number]
+): boolean {
+  return policy.assessment?.riskFlags.includes(risk) === true
+}
+
+function filterWhenAvailable(
+  policies: readonly CandidatePolicy[],
+  predicate: (policy: CandidatePolicy) => boolean
+): readonly CandidatePolicy[] {
+  const filtered = policies.filter(predicate)
+  return filtered.length > 0 ? filtered : policies
+}
+
+function safePolicyPool(
+  policies: readonly CandidatePolicy[]
+): readonly CandidatePolicy[] {
+  const viable = filterWhenAvailable(
+    policies,
+    (policy) => policy.assessment?.rejectable !== true
+  )
+  const withoutFatalFatigue = filterWhenAvailable(
+    viable,
+    (policy) => !hasRisk(policy, 'fatigue-lethal')
+  )
+  const withoutEmptyDeckDraw = filterWhenAvailable(
+    withoutFatalFatigue,
+    (policy) => !hasRisk(policy, 'draws-from-empty-deck')
+  )
+  const withoutBurn = filterWhenAvailable(
+    withoutEmptyDeckDraw,
+    (policy) => !hasRisk(policy, 'hand-overflow')
+  )
+  return filterWhenAvailable(withoutBurn, (policy) => !hasRisk(policy, 'no-effect'))
+}
+
+function policyAssessmentHasSafetyRisk(
+  assessment: AiPolicyAssessment | undefined
+): boolean {
+  return (
+    assessment?.rejectable === true ||
+    assessment?.riskFlags.some((risk) =>
+      [
+        'no-effect',
+        'ineffective-hero-freeze',
+        'immediate-loss',
+        'draws-from-empty-deck',
+        'hand-overflow',
+        'burns-card',
+        'fatigue-lethal'
+      ].includes(risk)
+    ) === true
+  )
 }
 
 export class AiTurnController {
@@ -201,6 +295,39 @@ export class AiTurnController {
       const continuation = this.continuePolicy()
       if (continuation) return continuation
       this.beginDecision('turn')
+      const pending = this.options.session.getState().pendingCardChoice
+      if (pending?.resolution?.type === 'kazakus-potion') {
+        this.options.recorder?.record('decisions', 'potion-offers', {
+          options: pending.options,
+          origin:
+            this.options.session.getState().aiBonusTurn ===
+            this.options.session.getState().turnNumber
+              ? 'turn-bonus'
+              : 'card',
+          stage: pending.resolution.stage,
+          cost: pending.resolution.selectedCostOption?.cost
+        })
+      }
+      const lethalSearch = await findGuaranteedLethalPolicy(
+        this.options.session.match,
+        this.options.session.remoteParticipantId
+      )
+      this.options.recorder?.record('decisions', 'lethal-search', {
+        expandedNodes: lethalSearch.expandedNodes,
+        elapsedMs: lethalSearch.elapsedMs,
+        exhausted: lethalSearch.exhausted,
+        found: lethalSearch.policy !== null
+      })
+      if (lethalSearch.policy) {
+        const lethalPolicy = this.candidatePolicy(lethalSearch.policy)
+        return this.decisionFrom(
+          lethalPolicy,
+          'engine',
+          'Engine-verified guaranteed lethal.',
+          'turn',
+          [lethalPolicy]
+        )
+      }
       const policies = (
         await buildEngineVerifiedPolicies(
           this.options.session.match,
@@ -211,7 +338,8 @@ export class AiTurnController {
         this.options.recorder?.record('decisions', 'selection', {
           source: 'fallback',
           policyId: 'fallback-end-turn',
-          reason: 'No generated policies.'
+          reason: 'No generated policies.',
+          reasonCode: 'no-policies'
         })
         const participantId = this.options.session.remoteParticipantId
         return {
@@ -282,12 +410,14 @@ export class AiTurnController {
     return {
       id: policy.id,
       commands: policy.commands,
+      assessment: policy.assessment,
       outcome: policy.outcome,
       view: {
         id: policy.id,
         actions: policy.actions,
         completeTurn: policy.completeTurn,
         stopsAtNewInformation: policy.stopsAtNewInformation,
+        ...(policy.assessment ? { evidence: policy.assessment } : {}),
         ...(policy.outcome ? { result: jsonObject(policy.outcome) } : {})
       }
     }
@@ -322,9 +452,35 @@ export class AiTurnController {
       this.queuedPolicy = null
       return null
     }
+    const nextAssessment = assessPolicyCommand(
+      this.options.session.match,
+      this.options.session.remoteParticipantId,
+      next
+    )
+    if (
+      nextAssessment?.rejectable ||
+      nextAssessment?.riskFlags.includes('no-effect') ||
+      nextAssessment?.riskFlags.includes('ineffective-hero-freeze') ||
+      nextAssessment?.riskFlags.includes('immediate-loss') ||
+      nextAssessment?.riskFlags.includes('fatigue-lethal') ||
+      nextAssessment?.riskFlags.includes('hand-overflow') ||
+      nextAssessment?.riskFlags.includes('draws-from-empty-deck')
+    ) {
+      this.options.logger.info('[Game AI] queued policy became unsafe; replanning', {
+        policyId: queued.id,
+        riskFlags: nextAssessment?.riskFlags ?? [],
+        rejectable: nextAssessment?.rejectable ?? false
+      })
+      this.queuedPolicy = null
+      return null
+    }
     this.queuedPolicy =
       queued.commands.length > 1
-        ? { ...queued, commands: queued.commands.slice(1) }
+        ? {
+            ...queued,
+            commands: queued.commands.slice(1),
+            assessment: nextAssessment ?? queued.assessment
+          }
         : null
     this.options.logger.info('[Game AI] continuing engine-verified policy', {
       revision: state.revision,
@@ -393,7 +549,26 @@ export class AiTurnController {
       observation,
       visibleCards,
       visibleHeroPowers,
-      recentPublicEvents: this.options.session.getAiObservedEvents(MAX_PUBLIC_EVENTS)
+      recentPublicEvents: this.options.session.getAiObservedEvents(MAX_PUBLIC_EVENTS),
+      ...(state.pendingCardChoice?.resolution?.type === 'kazakus-potion'
+        ? {
+            potionCrafting: {
+              instruction:
+                'Craft a Kazakus potion by choosing ingredients. The completed potion goes into your hand and costs its normal mana to play. Choose targets only when playing the potion, not while crafting. Consider both ingredients and future turns when choosing.',
+              origin: state.aiBonusTurn === state.turnNumber ? 'turn-bonus' : 'card',
+              mustEndTurnAfterCrafting: state.aiBonusTurn === state.turnNumber,
+              stage: state.pendingCardChoice.resolution.stage,
+              cost: state.pendingCardChoice.resolution.selectedCostOption?.cost,
+              firstIngredient: state.pendingCardChoice.resolution
+                .selectedFirstIngredient
+                ? CARD_CATALOG.require(
+                    state.pendingCardChoice.resolution.selectedFirstIngredient
+                  )
+                : undefined,
+              options: state.pendingCardChoice.options
+            }
+          }
+        : {})
     })
   }
 
@@ -412,27 +587,68 @@ export class AiTurnController {
     source: AiActionDecision['source'],
     rationale: string,
     phase: 'mulligan' | 'turn',
-    considered: readonly CandidatePolicy[]
+    considered: readonly CandidatePolicy[],
+    reasonCode: AiSelectionReason = source === 'model'
+      ? 'model-selected'
+      : source === 'engine'
+        ? 'engine-guaranteed-lethal'
+        : 'single-safe-policy'
   ): AiActionDecision {
     const state = this.options.session.getState()
     const [command, ...remaining] = policy.commands
     if (!command) throw new Error(`AI policy ${policy.id} has no command.`)
     this.queuedPolicy =
       phase === 'turn' && remaining.length > 0
-        ? { id: policy.id, source, commands: remaining, decisionId: this.decisionId }
+        ? {
+            id: policy.id,
+            source,
+            commands: remaining,
+            decisionId: this.decisionId,
+            assessment: policy.assessment
+          }
         : null
     this.options.recorder?.record('decisions', 'selection', {
       source,
+      reasonCode,
       phase,
       policyId: policy.id,
+      candidateCount: considered.length,
+      hasCompleteOutcome: considered.some(
+        (candidate) => candidate.outcome !== undefined
+      ),
+      lethalCandidateCount: considered.filter(
+        (candidate) =>
+          candidate.assessment?.guaranteedLethal === true ||
+          candidate.outcome?.winner === 'self'
+      ).length,
+      observation: jsonObject(this.options.session.getAiObservation()),
+      candidates: jsonValue(
+        considered.map((candidate) => ({
+          id: candidate.id,
+          actions: candidate.view.actions,
+          completeTurn: candidate.view.completeTurn,
+          stopsAtNewInformation: candidate.view.stopsAtNewInformation,
+          ...(candidate.view.evidence ? { evidence: candidate.view.evidence } : {}),
+          ...(candidate.view.result ? { result: candidate.view.result } : {})
+        }))
+      ),
       actions: policy.view.actions,
       rationale,
-      commands: policy.commands
+      commands: policy.commands,
+      ...(policy.assessment
+        ? {
+            evidence: jsonObject(policy.assessment),
+            riskFlags: policy.assessment.riskFlags,
+            guaranteedLethal: policy.assessment.guaranteedLethal,
+            rejectable: policy.assessment.rejectable
+          }
+        : {})
     })
     this.options.logger.info('[Game AI] selected policy', {
       revision: state.revision,
       phase,
       source,
+      reasonCode,
       policyId: policy.id,
       actions: policy.view.actions,
       rationale,
@@ -441,7 +657,8 @@ export class AiTurnController {
         actions: candidate.view.actions,
         completeTurn: candidate.view.completeTurn,
         stopsAtNewInformation: candidate.view.stopsAtNewInformation,
-        result: candidate.view.result
+        result: candidate.view.result,
+        evidence: candidate.view.evidence
       }))
     })
     return {
@@ -457,16 +674,29 @@ export class AiTurnController {
     policies: readonly CandidatePolicy[]
   ): Promise<AiActionDecision> {
     if (this.disposed) throw new Error('AI controller was disposed.')
-    const lethal = policies.filter((policy) => policy.outcome?.winner === 'self')
-    const considered = lethal.length > 0 ? lethal : policies
+    const lethal = policies.filter(
+      (policy) =>
+        policy.assessment?.guaranteedLethal === true ||
+        policy.outcome?.winner === 'self'
+    )
+    const considered = lethal.length > 0 ? lethal : safePolicyPool(policies)
     const fallback = this.fallback(considered)
     if (!this.options.api || considered.length === 1) {
       return this.decisionFrom(
         fallback,
         'fallback',
-        lethal.length > 0 ? 'Engine-verified lethal.' : 'Remote choice unavailable.',
+        lethal.length > 0
+          ? 'Engine-verified lethal.'
+          : !this.options.api
+            ? 'Remote choice unavailable.'
+            : 'Only one safe policy remains.',
         phase,
-        considered
+        considered,
+        lethal.length > 0
+          ? 'engine-guaranteed-lethal'
+          : !this.options.api
+            ? 'api-unavailable'
+            : 'single-safe-policy'
       )
     }
 
@@ -491,6 +721,42 @@ export class AiTurnController {
       }
       const selected = considered.find((policy) => policy.id === response.policyId)
       if (!selected) throw new Error(`AI selected unknown policy ${response.policyId}.`)
+      const liveAssessment = selected.commands[0]
+        ? assessPolicyCommand(
+            this.options.session.match,
+            this.options.session.remoteParticipantId,
+            selected.commands[0]
+          )
+        : null
+      const selectedIsWinning =
+        selected.assessment?.guaranteedLethal === true ||
+        selected.outcome?.winner === 'self'
+      if (
+        !selectedIsWinning &&
+        policyAssessmentHasSafetyRisk(liveAssessment ?? selected.assessment)
+      ) {
+        const replacements = policies.filter(
+          (candidate) =>
+            candidate.id !== selected.id &&
+            !policyAssessmentHasSafetyRisk(candidate.assessment)
+        )
+        if (replacements.length > 0) {
+          const replacement = this.fallback(replacements)
+          this.options.logger.warn('[Game AI] live safety recheck replaced policy', {
+            selectedPolicyId: selected.id,
+            replacementPolicyId: replacement.id,
+            riskFlags: liveAssessment?.riskFlags ?? selected.assessment?.riskFlags ?? []
+          })
+          return this.decisionFrom(
+            replacement,
+            'fallback',
+            'Live engine safety recheck rejected the provider selection.',
+            phase,
+            considered,
+            'safety-recheck'
+          )
+        }
+      }
       return this.decisionFrom(selected, 'model', response.rationale, phase, considered)
     } catch (error) {
       this.options.logger.warn(
@@ -506,7 +772,8 @@ export class AiTurnController {
         'fallback',
         'Provider failed; selected by the small public-state fallback.',
         phase,
-        considered
+        considered,
+        'provider-failed'
       )
     }
   }

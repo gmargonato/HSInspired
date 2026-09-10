@@ -1,10 +1,9 @@
-import { asCardId, type CardId } from '../content/cards'
+import { historySnapshot } from './history-recorder'
 import type { PlayerId } from './match-types'
 import type {
   OpeningMatchState,
   AttackCharacterRef,
   HistoryEntitySnapshot,
-  EffectDomainEvent,
   HistoryActionOutcome,
   OpeningMatchEvent,
   HistoryActionResolvedEvent,
@@ -16,312 +15,85 @@ import type {
 function historySnapshotForCharacter(
   state: OpeningMatchState,
   participantId: PlayerId,
-  character:
-    { readonly kind: 'hero' } | { readonly kind: 'minion'; readonly instanceId: string }
-): HistoryEntitySnapshot {
-  if (character.kind === 'hero') {
-    const player = state.players.find(
-      (candidate) => candidate.participantId === participantId
-    )
-    return {
-      id: `${participantId}:hero`,
-      participantId,
-      kind: 'hero',
-      cardId: null,
-      ...(player ? { heroId: player.heroId } : {})
-    }
-  }
-  const player = state.players.find(
-    (candidate) => candidate.participantId === participantId
-  )
-  const minion = player?.board.find(
-    (candidate) => candidate.instanceId === character.instanceId
-  )
-  return {
-    id: character.instanceId,
-    participantId,
-    kind: minion ? 'minion' : 'hidden',
-    cardId: minion?.cardId ?? null
-  }
-}
-
-function historySnapshotForCombatant(
-  state: OpeningMatchState,
-  participantId: PlayerId,
   character: AttackCharacterRef
 ): HistoryEntitySnapshot {
-  return historySnapshotForCharacter(state, participantId, character)
-}
-
-function historySnapshotForInstance(
-  state: OpeningMatchState,
-  participantId: PlayerId,
-  instanceId: string | null,
-  cardId: CardId | null = null
-): HistoryEntitySnapshot {
-  if (instanceId === `${participantId}:hero`)
-    return {
-      id: instanceId,
-      participantId,
-      kind: 'hero',
-      cardId: null,
-      ...(state.players.find((player) => player.participantId === participantId)
-        ? {
-            heroId: state.players.find(
-              (player) => player.participantId === participantId
-            )!.heroId
-          }
-        : {})
-    }
-  const player = state.players.find(
-    (candidate) => candidate.participantId === participantId
-  )
-  const minion = player?.board.find((candidate) => candidate.instanceId === instanceId)
-  if (minion)
-    return {
-      id: minion.instanceId,
-      participantId,
-      kind: 'minion',
-      cardId: minion.cardId
-    }
-  if (player?.weapon?.instanceId === instanceId)
-    return {
-      id: player.weapon.instanceId,
-      participantId,
-      kind: 'weapon',
-      cardId: player.weapon.cardId
-    }
-  const card = [...(player?.hand ?? []), ...(player?.deck ?? [])].find(
-    (candidate) => candidate.instanceId === instanceId
-  )
-  return {
-    id: instanceId ?? `${participantId}:hidden:${cardId ?? 'unknown'}`,
-    participantId,
-    kind: cardId ? 'card' : 'hidden',
-    cardId: card?.cardId ?? cardId,
-    ...(card ? { baseCost: card.baseCost, currentCost: card.currentCost } : {})
-  }
-}
-
-/** Resolves an effect target across both boards before falling back to its controller. */
-function historySnapshotForEffectTarget(
-  state: OpeningMatchState,
-  fallbackParticipantId: PlayerId,
-  instanceId: string | null,
-  cardId: CardId | null = null
-): HistoryEntitySnapshot {
-  const owner = state.players.find(
-    (player) =>
-      instanceId === `${player.participantId}:hero` ||
-      player.board.some((minion) => minion.instanceId === instanceId) ||
-      player.weapon?.instanceId === instanceId ||
-      [...player.hand, ...player.deck].some((card) => card.instanceId === instanceId)
-  )
-  return historySnapshotForInstance(
+  return historySnapshot(
     state,
-    owner?.participantId ?? fallbackParticipantId,
-    instanceId,
-    cardId
-  )
-}
-
-function historyEffectOutcome(
-  before: OpeningMatchState,
-  after: OpeningMatchState,
-  event: EffectDomainEvent
-): readonly HistoryActionOutcome[] {
-  const data = event.data ?? {}
-  const participantId =
-    typeof data.participantId === 'string'
-      ? (data.participantId as PlayerId)
-      : event.controllerId
-  const instanceId =
-    typeof data.target === 'string'
-      ? data.target
-      : typeof data.instanceId === 'string'
-        ? data.instanceId
-        : null
-  const cardId = typeof data.cardId === 'string' ? asCardId(data.cardId) : null
-  const target = historySnapshotForEffectTarget(
-    event.action === 'add-to-hand' || event.action === 'summon' ? after : before,
     participantId,
-    instanceId,
-    cardId
+    character.kind === 'hero' ? participantId + ':hero' : character.instanceId
   )
-  if (event.action === 'damage') {
-    const amount = typeof data.actualDamage === 'number' ? data.actualDamage : 0
-    return [
-      { kind: 'damage', target, amount },
-      ...(typeof data.healthAfter === 'number' && data.healthAfter <= 0
-        ? [{ kind: 'death' as const, target }]
-        : [])
-    ]
-  }
-  if (event.action === 'freeze') return [{ kind: 'freeze', target }]
-  if (event.action === 'summon') return [{ kind: 'summon-board', target }]
-  if (event.action === 'add-to-hand') return [{ kind: 'create-hand', target }]
-  if (event.action === 'destroy') return [{ kind: 'destroy', target }]
-  if (event.action === 'modify') return [{ kind: 'buff', target }]
-  return []
 }
 
 function historyOutcomes(
-  before: OpeningMatchState,
+  _before: OpeningMatchState,
   after: OpeningMatchState,
-  events: readonly OpeningMatchEvent[],
-  includeEffectOutcomes = false
+  events: readonly OpeningMatchEvent[]
 ): readonly HistoryActionOutcome[] {
-  const outcomes: HistoryActionOutcome[] = []
-  for (const event of events) {
-    switch (event.type) {
-      case 'character-damaged': {
-        const target = historySnapshotForCharacter(
-          before,
-          event.participantId,
-          event.character
-        )
-        outcomes.push({ kind: 'damage', target, amount: event.amount })
-        if (event.destroyed) outcomes.push({ kind: 'death', target })
-        break
-      }
-      case 'character-healed':
-        outcomes.push({
-          kind: 'heal',
-          target: historySnapshotForCharacter(
-            before,
-            event.participantId,
-            event.character
-          ),
-          amount: event.amount
-        })
-        break
-      case 'armor-gained':
-        outcomes.push({
-          kind: 'armor',
+  return events.flatMap((event): readonly HistoryActionOutcome[] => {
+    if (event.type === 'history-effect-recorded')
+      return event.causeId.endsWith(':root') ? event.outcomes : []
+    if (event.type === 'hero-power-replaced') {
+      const player = after.players.find((p) => p.participantId === event.participantId)!
+      return [
+        {
+          kind: 'state',
           target: {
-            id: `${event.participantId}:hero`,
+            id: event.participantId + ':hero-power',
             participantId: event.participantId,
             kind: 'hero',
             cardId: null,
-            heroId: before.players.find(
-              (player) => player.participantId === event.participantId
-            )?.heroId
-          },
-          amount: event.amount
-        })
-        break
-      case 'fatigue':
-        outcomes.push({
-          kind: 'fatigue',
-          target: {
-            id: `${event.participantId}:hero`,
-            participantId: event.participantId,
-            kind: 'hero',
-            cardId: null,
-            heroId: before.players.find(
-              (player) => player.participantId === event.participantId
-            )?.heroId
-          },
-          amount: event.amount
-        })
-        break
-      case 'hero-power-minion-summoned':
-      case 'dev-minion-summoned':
-        outcomes.push({
-          kind: 'summon-board',
-          target: {
-            id: event.minion.instanceId,
-            participantId: event.participantId,
-            kind: 'minion',
-            cardId: event.minion.cardId
+            heroPowerId: event.heroPowerId,
+            currentCost: player.heroPower.cost,
+            baseCost: player.heroPower.baseCost,
+            publicIdentity: true
           }
-        })
-        break
-      case 'card-drawn':
-      case 'opening-card-drawn':
-        outcomes.push({
-          kind: 'draw',
-          target: {
-            id: event.card.instanceId,
-            participantId: event.participantId,
-            kind: 'hidden',
-            cardId: null
-          }
-        })
-        break
-      case 'minion-combat-resolved':
-        outcomes.push({
-          kind: 'damage',
-          target: historySnapshotForCharacter(before, event.defender.participantId, {
-            kind: 'minion',
-            instanceId: event.defender.instanceId
-          }),
-          amount: event.defender.damageDealt
-        })
-        break
-      case 'character-combat-resolved':
-        outcomes.push({
-          kind: 'damage',
-          target: historySnapshotForCombatant(
-            before,
-            event.defender.participantId,
-            event.defender.character
-          ),
-          amount: event.defender.damageDealt
-        })
-        break
-      case 'effect-resolved': {
-        if (includeEffectOutcomes)
-          outcomes.push(...historyEffectOutcome(before, after, event))
-        break
-      }
-      default:
-        break
+        }
+      ]
     }
-  }
-  return outcomes
+    if (event.type === 'hero-replaced')
+      return [
+        {
+          kind: 'transform',
+          target: historySnapshot(
+            after,
+            event.participantId,
+            event.participantId + ':hero'
+          )
+        }
+      ]
+    return []
+  })
 }
 
 export function triggerHistoryEvents(
-  before: OpeningMatchState,
-  after: OpeningMatchState,
-  events: readonly OpeningMatchEvent[]
+  _before: OpeningMatchState,
+  _after: OpeningMatchState,
+  events: readonly OpeningMatchEvent[],
+  includeRoot = true
 ): readonly HistoryActionResolvedEvent[] {
-  const entries = new Map<
-    string,
-    {
-      readonly participantId: PlayerId
-      readonly source: HistoryEntitySnapshot
-      readonly outcomes: HistoryActionOutcome[]
-    }
-  >()
-  for (const event of events) {
-    if (event.type !== 'effect-resolved') continue
-    const outcomes = historyEffectOutcome(before, after, event)
-    if (outcomes.length === 0 || !event.sourceCardId) continue
-    const source = historySnapshotForEffectTarget(
-      before,
-      event.controllerId,
-      event.sourceInstanceId,
-      event.sourceCardId
-    )
-    if (source.kind !== 'minion') continue
-    const existing = entries.get(source.id)
-    if (existing) existing.outcomes.push(...outcomes)
-    else
-      entries.set(source.id, {
-        participantId: event.controllerId,
-        source,
-        outcomes: [...outcomes]
-      })
+  const entries = new Map<string, HistoryActionResolvedEvent>()
+  const order = new Map<string, number>()
+  for (const [index, event] of events.entries()) {
+    if (event.type === 'trigger-activated') order.set(event.activationId, index)
+    if (event.type !== 'history-effect-recorded') continue
+    const root = event.causeId.endsWith(':root')
+    if (root && (!includeRoot || !event.source.cardId)) continue
+    const id = root ? event.causeId + ':' + event.source.id : event.causeId
+    const existing = entries.get(id)
+    entries.set(id, {
+      type: 'history-action-resolved',
+      entryId: id,
+      parentActionId: event.parentActionId,
+      participantId: event.source.participantId,
+      action: 'trigger',
+      source: existing?.source ?? event.source,
+      outcomes: [...(existing?.outcomes ?? []), ...event.outcomes]
+    })
+    if (!order.has(id)) order.set(id, index)
   }
-  return [...entries.values()].map((entry) => ({
-    type: 'history-action-resolved',
-    participantId: entry.participantId,
-    action: 'trigger',
-    source: entry.source,
-    outcomes: entry.outcomes
-  }))
+  return [...entries.values()].sort(
+    (a, b) => order.get(a.entryId!)! - order.get(b.entryId!)!
+  )
 }
 
 export function fatigueHistoryEvents(
@@ -362,17 +134,20 @@ export function cardHistoryEvent(
   if (!card) return null
   return {
     type: 'history-action-resolved',
+    entryId: 'resolution:' + after.revision + ':root',
     participantId: command.participantId,
     action: 'card',
     source: {
-      id: card.instanceId,
-      participantId: command.participantId,
-      kind: 'card',
-      cardId: card.cardId,
-      baseCost: card.baseCost,
-      currentCost: card.currentCost
+      ...((
+        events.find(
+          (event) =>
+            event.type === 'history-effect-recorded' &&
+            event.source.id === card.instanceId
+        ) as Extract<OpeningMatchEvent, { type: 'history-effect-recorded' }> | undefined
+      )?.source ??
+        historySnapshot(before, command.participantId, card.instanceId, card.cardId))
     },
-    outcomes: historyOutcomes(before, after, events, true)
+    outcomes: historyOutcomes(before, after, events)
   }
 }
 
@@ -387,6 +162,7 @@ export function heroPowerHistoryEvent(
   )
   return {
     type: 'history-action-resolved',
+    entryId: 'resolution:' + after.revision + ':root',
     participantId: command.participantId,
     action: 'hero-power',
     source: {
@@ -411,13 +187,41 @@ export function combatHistoryEvent(
 ): HistoryActionResolvedEvent {
   return {
     type: 'history-action-resolved',
+    entryId: 'resolution:' + after.revision + ':root',
     participantId: command.participantId,
     action: 'combat',
-    source: historySnapshotForCombatant(
+    source: historySnapshotForCharacter(
       before,
       command.participantId,
       command.attacker
     ),
     outcomes: historyOutcomes(before, after, events)
   }
+}
+
+/** Resumed choices contribute to the original card entry. */
+export function choiceHistoryEvent(
+  before: OpeningMatchState,
+  after: OpeningMatchState,
+  sourceId: string,
+  participantId: PlayerId,
+  events: readonly OpeningMatchEvent[]
+): HistoryActionResolvedEvent | null {
+  const outcomes = historyOutcomes(before, after, events)
+  if (outcomes.length === 0) return null
+  return {
+    type: 'history-action-resolved',
+    append: true,
+    participantId,
+    action: 'card',
+    source: historySnapshot(before, participantId, sourceId),
+    outcomes
+  }
+}
+
+/** Facts are resolver-private; publish only their completed history entries. */
+export function withoutHistoryFacts(
+  events: readonly OpeningMatchEvent[]
+): readonly OpeningMatchEvent[] {
+  return events.filter((event) => event.type !== 'history-effect-recorded')
 }

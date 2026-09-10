@@ -10,7 +10,7 @@ import {
   stepDrag,
   type HandDragState
 } from './hand-drag'
-import { HandCardPerspective } from './hand-card-perspective'
+import { HandCardPerspective, type PerspectiveCorners } from './hand-card-perspective'
 import { OPENING_TIMING } from './game-presentation-timing'
 
 export const DRAG_MOVE_THRESHOLD = 10
@@ -62,6 +62,10 @@ export class GameHandDrag {
   }
   get returning(): boolean {
     return this.dragReturning
+  }
+
+  capturePerspective(): PerspectiveCorners | undefined {
+    return this.dragPerspective?.captureCorners()
   }
   get movedBeyondThreshold(): boolean {
     return this.dragMovedBeyondThreshold

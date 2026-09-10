@@ -16,6 +16,7 @@ import { CompactAiLog, compactAiRecord } from './compact-ai-log'
 
 const FLUSH_INTERVAL_MS = 250
 const MAX_PENDING_RECORDS = 256
+const AI_LOG_SCHEMA_VERSION = 5
 
 interface PendingRecord {
   record: MatchLogRecord & { sequence: number }
@@ -92,7 +93,11 @@ export class MatchLogRepository {
           if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
           throw error
         }
-        if (summary.schemaVersion === 4 && summary.status === 'in-progress') {
+        if (
+          (summary.schemaVersion === 4 ||
+            summary.schemaVersion === AI_LOG_SCHEMA_VERSION) &&
+          summary.status === 'in-progress'
+        ) {
           for (const decision of (summary.decisions ?? []) as JsonObject[]) {
             for (const play of (decision.plays ?? []) as Record<string, JsonValue>[]) {
               if (play.result === 'pending') play.result = 'unknown'
@@ -122,13 +127,14 @@ export class MatchLogRepository {
     const directory = join(this.root, `${timestamp.replace(/[:.]/g, '-')}_${id}`)
     await mkdir(directory, { recursive: true })
     const summary: JsonObject = {
-      schemaVersion: 4,
+      schemaVersion: AI_LOG_SCHEMA_VERSION,
       matchId: id,
       startedAt: timestamp,
       status: 'in-progress',
       recordingIncomplete: false,
       participants: [],
       decisions: [],
+      boundaryEffects: [],
       ...(typeof (metadata.aiConfig as JsonObject | undefined)?.modelId === 'string'
         ? { model: (metadata.aiConfig as JsonObject).modelId }
         : {})

@@ -1,13 +1,7 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
 import { AnimatedOutline } from '../effects/animated-outline'
-import { createTemporaryAbilityBadge } from '../temporary-ability-badge'
-import {
-  MINION_CANVAS,
-  MINION_HIT_AREA,
-  MINION_LAYOUT,
-  minionTemporaryAbilityBadgePlacement
-} from './minion-layout'
+import { MINION_CANVAS, MINION_HIT_AREA, MINION_LAYOUT } from './minion-layout'
 import { SleepingZs } from './sleeping-zs'
 import { AnimationScope } from '../../animation/animations'
 import { minionAttackColor, minionHealthColor } from './minion-stat-presentation'
@@ -30,10 +24,17 @@ export interface MinionViewModel {
   readonly poisonous: boolean
   readonly trigger: boolean
   readonly inspire: boolean
-  readonly temporaryAbilityLabels: readonly string[]
+  readonly windfury: boolean
+  readonly spellDamage: boolean
+  readonly elusive: boolean
+  readonly immune: boolean
 }
 
 export interface MinionViewTextures {
+  readonly windfury: Texture
+  readonly spellDamage: Texture
+  readonly elusive: Texture
+  readonly immune: Texture
   readonly frame: Texture
   readonly legendaryFrame: Texture
   readonly taunt: Texture
@@ -101,6 +102,10 @@ export class MinionView extends Container {
   private readonly legendaryFrame: Sprite
   private readonly taunt: Sprite
   private readonly divineShield: Sprite
+  private readonly windfury: Sprite
+  private readonly spellDamage: Sprite
+  private readonly elusive: Sprite
+  private readonly immune: Sprite
   private readonly frozen: Sprite
   private readonly stealth: Sprite
   private readonly deathrattle: Sprite
@@ -206,6 +211,18 @@ export class MinionView extends Container {
     this.stealth.label = 'minion.stealth'
     this.addChild(this.stealth)
 
+    this.elusive = new Sprite(textures.elusive)
+    applyAnchoredPlacement(this.elusive, MINION_LAYOUT.elusive)
+    this.elusive.visible = model.elusive
+    this.elusive.label = 'minion.elusive'
+    this.addChild(this.elusive)
+
+    this.immune = new Sprite(textures.immune)
+    applyAnchoredPlacement(this.immune, MINION_LAYOUT.immune)
+    this.immune.visible = model.immune
+    this.immune.label = 'minion.immune'
+    this.addChild(this.immune)
+
     this.divineShield = new Sprite(textures.divineShield)
     applyAnchoredPlacement(this.divineShield, MINION_LAYOUT.divineShield)
     this.divineShield.visible = model.divineShield
@@ -241,17 +258,17 @@ export class MinionView extends Container {
     this.inspire.label = 'minion.inspire'
     this.addChild(this.inspire)
 
-    model.temporaryAbilityLabels.forEach((text, index) => {
-      const badge = createTemporaryAbilityBadge(
-        text,
-        minionTemporaryAbilityBadgePlacement(
-          index,
-          model.temporaryAbilityLabels.length
-        ),
-        `minion.temporary-ability-${index}`
-      )
-      this.addChild(badge)
-    })
+    this.windfury = new Sprite(textures.windfury)
+    applyAnchoredPlacement(this.windfury, MINION_LAYOUT.windfury)
+    this.windfury.visible = model.windfury
+    this.windfury.label = 'minion.windfury'
+    this.addChild(this.windfury)
+
+    this.spellDamage = new Sprite(textures.spellDamage)
+    applyAnchoredPlacement(this.spellDamage, MINION_LAYOUT.spellDamage)
+    this.spellDamage.visible = model.spellDamage
+    this.spellDamage.label = 'minion.spell-damage'
+    this.addChild(this.spellDamage)
 
     const attack = createStatGroup(
       'minion.stat-attack',
@@ -374,6 +391,15 @@ export class MinionView extends Container {
       this.maxHealth,
       this.baseHealth
     )
+  }
+
+  setAbilityEffects(
+    markers: Pick<MinionViewModel, 'windfury' | 'spellDamage' | 'elusive' | 'immune'>
+  ): void {
+    this.windfury.visible = markers.windfury
+    this.spellDamage.visible = markers.spellDamage
+    this.elusive.visible = markers.elusive
+    this.immune.visible = markers.immune
   }
 
   setTaunt(visible: boolean): void {

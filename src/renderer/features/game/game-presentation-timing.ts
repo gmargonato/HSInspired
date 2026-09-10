@@ -12,7 +12,8 @@ export const OPENING_TIMING = {
   playerTwoFourthCard: 0.65,
   replacementPause: 0.25,
   handoffPause: 0.5,
-  hover: 0.2
+  hover: 0.2,
+  hoverSettle: 0.1
 } as const
 
 /** Resolution pacing shared by every trigger/death/outcome presentation. */

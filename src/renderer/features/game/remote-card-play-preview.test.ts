@@ -14,6 +14,15 @@ const spell: OpeningCard = {
 }
 
 describe('playedRemoteCard', () => {
+  it('does not preview potion ingredient choices as casts', () => {
+    const command: TurnMatchCommand = {
+      type: 'choose-card-option',
+      participantId: remoteId,
+      sourceCardInstanceId: 'turn-bonus',
+      choice: 0
+    }
+    expect(playedRemoteCard(command, [spell])).toBeNull()
+  })
   it('returns the hand card consumed by a remote play command', () => {
     const command: TurnMatchCommand = {
       type: 'play-card',

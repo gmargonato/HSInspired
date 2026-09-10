@@ -79,6 +79,11 @@ export function enumerateLegalCommands(
     (candidate) => candidate.participantId === participantId
   )
   if (!player) return []
+  if (state.aiBonusTurn === state.turnNumber) {
+    return state.activePlayerId === participantId
+      ? [{ type: 'end-turn', participantId }]
+      : []
+  }
   const legality = match.getLegality(participantId)
   const commands: OpeningMatchCommand[] = []
 

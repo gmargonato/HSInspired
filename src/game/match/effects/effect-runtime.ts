@@ -1,3 +1,23 @@
+import {
+  applyCthunToCard,
+  cthunEnchantment,
+  cthunSnapshot,
+  CTHUN_ID,
+  EMPTY_CTHUN
+} from '../cthun'
+import { HistoryRecorder } from '../history-recorder'
+import { eligibleAiBonusSecrets } from '../ai-bonuses'
+import {
+  kazakusCostOptions,
+  ingredientChoiceOptions,
+  firstPotionIngredientChoice,
+  potionIngredientOffers
+} from '../kazakus-potion'
+import {
+  scaleSpellDamage,
+  spellDamageBonus,
+  spellDamageMultiplier
+} from '../spell-damage'
 import { runSummonAction, type SummonActionContext } from './summon-actions'
 import { runManaAction, type ManaActionContext } from './mana-actions'
 import { MAX_MANA, stringValue } from './effect-primitives'
@@ -58,6 +78,9 @@ import type {
   OpeningMatchEvent,
   OpeningMatchState,
   OpeningPlayerState,
+  PendingCardChoice,
+  PendingDiscoverContinuation,
+  PendingDiscoverChoice,
   PendingCostModifier,
   PlayCardInput,
   HeroPowerTargetRef,
@@ -124,6 +147,15 @@ export interface PendingCardChoiceRuntimeOptions {
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
   readonly choice: number
+  readonly nextEntityOrdinal?: number
+  readonly recordTrace?: boolean
+}
+
+export interface PendingDiscoverRuntimeOptions {
+  readonly state: OpeningMatchState
+  readonly rng?: DeterministicRng
+  readonly participantId: PlayerId
+  readonly cardInstanceId: string
   readonly nextEntityOrdinal?: number
   readonly recordTrace?: boolean
 }
@@ -294,6 +326,9 @@ function createHistory(): MatchHistory {
     healingThisTurn: 0,
     armorGainedThisTurn: 0,
     cardsPlayedThisGame: [],
+    spellsCastThisGameByPlayer: {},
+    totemsSummonedThisGameByPlayer: {},
+    secretsPlayedThisGameByPlayer: {},
     cardsDiedThisGame: [],
     beastsSummonedByPlayer: {},
     heroPowersUsedByPlayer: {}
@@ -396,15 +431,24 @@ function cloneFrame(frame: EffectFrame, actionPath: string): EffectFrame {
         targets.map((target) => ({ ...target }))
       ])
     ),
+    stored: new Map(
+      [...frame.stored.entries()].map(([key, targets]) => [
+        key,
+        targets.map((target) => ({ ...target }))
+      ])
+    ),
+    storedValues: new Map(frame.storedValues),
     actionPath,
     choiceIndex: frame.choiceIndex,
     selectedTargetCursor: 0,
     damageDealt: 0,
+    lastDamageAmount: frame.lastDamageAmount,
     removedKeywordCount: 0,
     addedCards: [],
     drawnCards: [],
     randomDamageExcluded: new Set(),
-    continuous: frame.continuous
+    continuous: frame.continuous,
+    skipLifesteal: frame.skipLifesteal
   }
 }
 
@@ -466,7 +510,11 @@ function makeEffectEvent(
 function collectTargetSelectors(
   value: unknown,
   path: string,
-  result: { selector: Readonly<Record<string, unknown>>; path: string }[],
+  result: {
+    selector: Readonly<Record<string, unknown>>
+    path: string
+    optional?: boolean
+  }[],
   choiceIndex?: number
 ): void {
   if (Array.isArray(value)) {
@@ -478,19 +526,29 @@ function collectTargetSelectors(
   if (!isRecord(value)) return
   const choice = value.choice
   if (isRecord(choice) && Array.isArray(choice.options) && choiceIndex !== undefined) {
-    const option = choice.options[choiceIndex]
-    if (option !== undefined)
-      collectTargetSelectors(
-        option,
-        `${path}.choice[${choiceIndex}]`,
-        result,
-        choiceIndex
+    if (choiceIndex === -1) {
+      choice.options.forEach((option, index) =>
+        collectTargetSelectors(option, `${path}.choice[${index}]`, result, choiceIndex)
       )
+    } else {
+      const option = choice.options[choiceIndex]
+      if (option !== undefined)
+        collectTargetSelectors(
+          option,
+          `${path}.choice[${choiceIndex}]`,
+          result,
+          choiceIndex
+        )
+    }
   }
   if (value.selection === 'chosen' || value.selection === 'chosen-and-adjacent')
     result.push({ selector: value, path })
   for (const [key, nested] of Object.entries(value)) {
     if (key === 'choice') continue
+    if (key === 'target' && value.allowEmptyTargets === true && isRecord(nested)) {
+      result.push({ selector: nested, path: `${path}.target`, optional: true })
+      continue
+    }
     collectTargetSelectors(nested, `${path}.${key}`, result, choiceIndex)
   }
 }
@@ -526,8 +584,14 @@ function collectSelectedEffectActions(
   if (typeof value.action === 'string') result.push(value)
   const choice = value.choice
   if (isRecord(choice) && Array.isArray(choice.options) && choiceIndex !== undefined) {
-    const option = choice.options[choiceIndex]
-    if (option !== undefined) collectSelectedEffectActions(option, choiceIndex, result)
+    if (choiceIndex === -1) {
+      for (const option of choice.options)
+        collectSelectedEffectActions(option, choiceIndex, result)
+    } else {
+      const option = choice.options[choiceIndex]
+      if (option !== undefined)
+        collectSelectedEffectActions(option, choiceIndex, result)
+    }
   }
   for (const [key, nested] of Object.entries(value)) {
     if (key === 'choice' || key === 'target' || key === 'source') continue
@@ -582,6 +646,8 @@ export class EffectRuntime {
   private combatSequence = 0
   private activeFrame: EffectFrame | null = null
   private readonly activeTriggerIds: string[] = []
+  private historyRecorder: HistoryRecorder | null = null
+  private automaticChoiceDepth = 0
   private deathBatchSequence = 0
   private deathResolutionDepth = 0
   private deriving = false
@@ -628,7 +694,28 @@ export class EffectRuntime {
       sourceEntities: this.sourceEntities.bind(this),
       currentMinion: this.currentMinion.bind(this),
       summonPosition: this.summonPosition.bind(this),
-      createMinion: this.createMinion.bind(this)
+      createMinion: (
+        participantId,
+        cardId,
+        frame,
+        path,
+        sourceInstanceId,
+        position,
+        copyFrom,
+        modifications
+      ) =>
+        this.createMinion(
+          participantId,
+          cardId,
+          frame,
+          path,
+          sourceInstanceId,
+          position,
+          copyFrom,
+          undefined,
+          false,
+          modifications
+        )
     }
     this.manaContext = {
       player: this.player.bind(this),
@@ -719,6 +806,21 @@ export class EffectRuntime {
     this.events.push(
       makeEffectEvent(this.revision, frame, action, actionPath, frame.event?.type, data)
     )
+    const history = actionPath.endsWith('.fatigue')
+      ? null
+      : this.historyRecorder?.capture(
+          this.draft as unknown as OpeningMatchState,
+          {
+            sourceId: frame.source.instanceId,
+            cardId: frame.sourceCardId,
+            participantId: frame.controllerId,
+            causeId: this.activeTriggerIds.at(-1) ?? `${this.resolutionId}:root`,
+            parentActionId: `${this.resolutionId}:root`
+          },
+          action,
+          data
+        )
+    if (history) this.events.push(history)
     if (this.recordTrace)
       this.trace.push({
         revision: this.revision,
@@ -739,6 +841,13 @@ export class EffectRuntime {
     const event = frame.event
     if (!event) return null
     const activationId = `${this.resolutionId}:trigger:${this.presentationSequence++}`
+    this.historyRecorder?.beginCause(
+      this.draft as unknown as OpeningMatchState,
+      activationId,
+      frame.controllerId,
+      frame.source.instanceId,
+      frame.sourceCardId
+    )
     const activation: TriggerActivatedEvent = {
       type: 'trigger-activated',
       activationId,
@@ -872,6 +981,10 @@ export class EffectRuntime {
       source?.zone === 'hero-power' ||
       source?.zone === 'secret'
     )
+  }
+
+  private sourceIsEquipped(instanceId: string): boolean {
+    return this.draft.players.some((player) => player.weapon?.instanceId === instanceId)
   }
 
   private currentCard(ref: EntityRef): DraftCard | null {
@@ -1207,6 +1320,7 @@ export class EffectRuntime {
   }
 
   private appendGraveyard(player: DraftPlayer, entry: GraveyardMinion): void {
+    if (entry.minion.cardId === CTHUN_ID) player.cthunDied = true
     player.graveyard = [...(player.graveyard ?? []), entry] as DraftPlayer['graveyard']
   }
 
@@ -1249,6 +1363,7 @@ export class EffectRuntime {
       zone: 'hand',
       revealed: true
     }
+    Object.assign(card, applyCthunToCard(card, targetPlayer))
     if (targetPlayer.hand.length >= MAX_HAND_SIZE) {
       this.applyCardZones(
         targetPlayer,
@@ -1402,6 +1517,40 @@ export class EffectRuntime {
             cardId: entry.minion.cardId
           }))
       }
+      if (source === 'friendly-minions-died-this-game') {
+        return (this.player(frame.controllerId).graveyard ?? []).map((entry) => ({
+          instanceId: entry.minion.instanceId,
+          kind: 'minion' as const,
+          participantId: frame.controllerId,
+          zone: 'graveyard' as const,
+          cardId: entry.minion.cardId
+        }))
+      }
+      if (source === 'opponent-deck') {
+        const opponent = this.queries.otherPlayer(frame.controllerId)
+        return this.player(opponent).deck.map((card) => ({
+          instanceId: card.instanceId,
+          kind: 'card' as const,
+          participantId: opponent,
+          zone: 'deck' as const,
+          cardId: card.cardId
+        }))
+      }
+      if (source === 'discarded-event-card') {
+        const eventTarget = frame.event?.target
+        if (eventTarget?.kind === 'card') return [eventTarget]
+        if (frame.event?.cardId)
+          return [
+            {
+              instanceId:
+                frame.event.cardInstanceId ?? `event-card:${frame.event.sequence}`,
+              kind: 'card' as const,
+              participantId: frame.event.controllerId ?? frame.controllerId,
+              zone: 'discarded' as const,
+              cardId: frame.event.cardId
+            }
+          ]
+      }
       if (source === 'minions-died-this-game') {
         return (this.draft.history?.cardsDiedThisGame ?? []).map((cardId, index) => ({
           instanceId: `history:${index}:${cardId}`,
@@ -1499,7 +1648,6 @@ export class EffectRuntime {
       : (definition?.effects.filter((effect) => effect.trigger === trigger) ?? [])
     const granted =
       minion?.grantedTriggers
-        ?.filter(() => !minion.silenced)
         ?.filter(
           (entry) =>
             (entry.startsOnTurn === undefined ||
@@ -1568,6 +1716,19 @@ export class EffectRuntime {
     source: EntityRef
   ): boolean {
     const eventSpec = block.event
+    if (block.trigger === 'inspire' && event.controllerId !== source.participantId)
+      return false
+    // Unqualified on-cast listeners belong to the early cast window only.
+    if (event.type === 'spell-resolved' && eventSpec?.type !== 'spell-resolved')
+      return false
+    // A copied spell can trigger cast listeners, but not another copy chain.
+    if (
+      event.spellCopy &&
+      block.actions?.some(
+        (action) => action.action === 'copy' && action.destination === 'cast-on-source'
+      )
+    )
+      return false
     const isOwnEntryEvent =
       source.kind === 'minion' &&
       event.target !== null &&
@@ -1665,9 +1826,12 @@ export class EffectRuntime {
       lastActionTarget: null,
       choiceIndex: undefined,
       preserved: new Map(),
+      stored: new Map(),
+      storedValues: new Map(),
       actionPath: 'event',
       selectedTargetCursor: 0,
       damageDealt: 0,
+      lastDamageAmount: 0,
       removedKeywordCount: 0,
       addedCards: [],
       drawnCards: [],
@@ -1680,6 +1844,7 @@ export class EffectRuntime {
   private triggerMatches(trigger: CardTrigger, event: SemanticEvent): boolean {
     if (trigger === 'secret') return true
     if (trigger === 'while-in-hand') return true
+    if (trigger === 'while-in-deck') return true
     if (event.kind === 'turn-start' || event.kind === 'turn-end') {
       return trigger === (event.kind === 'turn-start' ? 'start-of-turn' : 'end-of-turn')
     }
@@ -1688,9 +1853,11 @@ export class EffectRuntime {
     if (event.kind === 'armor') return trigger === 'on-gain-armor'
     if (event.kind === 'heal')
       return (
-        trigger === 'on-heal' || (trigger === 'overheal' && event.overheal === true)
+        (trigger === 'on-heal' && (event.amount ?? 0) > 0) ||
+        (trigger === 'overheal' && event.overheal === true)
       )
     if (event.kind === 'summon') return trigger === 'on-summon'
+    if (event.type === 'attack-resolved') return trigger === 'on-attack'
     if (event.type === 'spell-targeted-minion') return trigger === 'on-cast'
     if (event.kind === 'damage')
       return trigger === 'on-damage' && event.type === 'damage-dealt'
@@ -1743,7 +1910,7 @@ export class EffectRuntime {
         const definitionBlocks = minion.silenced
           ? []
           : (cardDefinition(minion.cardId)?.effects ?? [])
-        const granted = (minion.silenced ? [] : (minion.grantedTriggers ?? []))
+        const granted = (minion.grantedTriggers ?? [])
           .filter(
             (entry) =>
               (entry.startsOnTurn === undefined ||
@@ -1833,6 +2000,24 @@ export class EffectRuntime {
           ) {
             result.push({ source, block, order: order++ })
           }
+        }
+      }
+      for (const card of player.deck) {
+        const source: EntityRef = {
+          instanceId: card.instanceId,
+          kind: 'card',
+          participantId: player.participantId,
+          zone: 'deck',
+          cardId: card.cardId
+        }
+        for (const block of cardDefinition(card.cardId)?.effects ?? []) {
+          if (
+            block.trigger === 'while-in-deck' &&
+            block.event &&
+            this.triggerMatches(block.trigger, event) &&
+            this.matchesEvent(block, event, source)
+          )
+            result.push({ source, block, order: order++ })
         }
       }
       for (const secret of player.secrets ?? []) {
@@ -2054,24 +2239,69 @@ export class EffectRuntime {
             : null
           if (activation) this.activeTriggerIds.push(activation.activationId)
           try {
+            let pausedForChoice = false
             if (block.choice) {
               const options = asArray(asRecord(block.choice).options)
               const choice = frame === this.activeFrame ? this.choiceForFrame(frame) : 0
-              const option = options[choice]
-              if (isRecord(option))
-                this.runActions(
-                  asArray(option.actions),
-                  frame,
-                  `${path}.choice[${choice}]`
+              if (choice === -1) {
+                const sourceTransforms = options.flatMap((option) =>
+                  asArray(isRecord(option) ? option.actions : undefined).filter(
+                    (action): action is Readonly<Record<string, unknown>> =>
+                      isRecord(action) &&
+                      action.action === 'transform' &&
+                      typeof action.cardId === 'string' &&
+                      isRecord(action.target) &&
+                      action.target.type === 'minion' &&
+                      action.target.selection === 'source'
+                  )
                 )
+                const combinedTransform =
+                  frame.source.kind === 'minion' && sourceTransforms.length > 1
+                    ? this.applyCombinedChooseOneTransform(
+                        frame,
+                        sourceTransforms,
+                        `${path}.combined-transform`
+                      )
+                    : false
+                options.forEach((option, index) => {
+                  if (!isRecord(option)) return
+                  frame.selectedTargetCursor = 0
+                  const optionActions = asArray(option.actions).filter(
+                    (action) =>
+                      !(
+                        combinedTransform &&
+                        isRecord(action) &&
+                        action.action === 'transform' &&
+                        isRecord(action.target) &&
+                        action.target.type === 'minion' &&
+                        action.target.selection === 'source'
+                      )
+                  )
+                  const paused = this.runActions(
+                    optionActions,
+                    frame,
+                    `${path}.choice[${index}]`
+                  )
+                  if (paused) pausedForChoice = true
+                })
+              } else {
+                const option = options[choice]
+                if (isRecord(option))
+                  pausedForChoice = this.runActions(
+                    asArray(option.actions),
+                    frame,
+                    `${path}.choice[${choice}]`
+                  )
+              }
             } else if (block.actions) {
-              this.runActions(
+              pausedForChoice = this.runActions(
                 block.actions,
                 frame,
                 `${path}.actions`,
                 this.runValidatedAction.bind(this)
               )
             }
+            if (pausedForChoice) return
             if (block.then) {
               const branch = asRecord(block.then)
               if (
@@ -2119,6 +2349,54 @@ export class EffectRuntime {
     return _frame.choiceIndex ?? 0
   }
 
+  private applyCombinedChooseOneTransform(
+    frame: EffectFrame,
+    transforms: readonly Readonly<Record<string, unknown>>[],
+    path: string
+  ): boolean {
+    if (frame.source.kind !== 'minion') return false
+    const override = frame.sourceCardId
+      ? this.combinedChooseOneOverride(frame.controllerId, frame.sourceCardId)
+      : null
+    if (override) {
+      this.transformMinion(frame.source, override, frame, path)
+      return true
+    }
+    const definitions = transforms
+      .map((action) => cardDefinition(action.cardId as CardId))
+      .filter(
+        (definition): definition is Extract<CardDefinition, { type: 'Minion' }> =>
+          definition?.type === 'Minion'
+      )
+    if (definitions.length < 2) return false
+    const first = transforms[0]
+    const firstCardId =
+      typeof first?.cardId === 'string' ? (first.cardId as CardId) : null
+    if (!firstCardId) return false
+    this.transformMinion(frame.source, firstCardId, frame, path)
+    const minion = this.currentMinion(frame.source)
+    if (!minion) return true
+    const keywords = new Set<CardKeyword>(
+      definitions.flatMap((definition) => definition.keywords)
+    )
+    const attack = Math.max(...definitions.map((definition) => definition.attack))
+    const health = Math.max(...definitions.map((definition) => definition.health))
+    minion.baseAttack = attack
+    minion.baseHealth = health
+    minion.attack = attack
+    minion.maxHealth = health
+    minion.health = health
+    minion.damageTaken = 0
+    minion.keywords = [...keywords]
+    minion.divineShield = keywords.has('divine-shield')
+    minion.divineShieldConsumed = false
+    minion.stealth = keywords.has('stealth')
+    minion.stealthRevealed = false
+    minion.immune = keywords.has('immune')
+    minion.spellImmune = keywords.has('spell-immune')
+    return true
+  }
+
   private runActions<Action>(
     actions: readonly Action[],
     frame: EffectFrame,
@@ -2128,19 +2406,91 @@ export class EffectRuntime {
       frame: EffectFrame,
       path: string
     ) => void = this.runAction.bind(this)
-  ): void {
-    actions.forEach((action, index) => {
+  ): boolean {
+    for (const [index, action] of actions.entries()) {
       const actionPath = `${path}[${index}]`
       const kind: ResolutionQueueKind = path.includes('.repeat') ? 'repeat' : 'action'
+      let paused = false
       this.executeQueued(
         actionPath,
         () => {
           runAction(action, frame, actionPath)
           this.processDeaths()
+          if (
+            isRecord(action) &&
+            action.action === 'discover' &&
+            index + 1 < actions.length
+          )
+            paused = this.attachDiscoverContinuation(
+              frame,
+              action,
+              actions.slice(index + 1),
+              actionPath
+            )
         },
         kind
       )
-    })
+      if (paused) return true
+    }
+    return false
+  }
+
+  private attachDiscoverContinuation(
+    frame: EffectFrame,
+    action: Readonly<Record<string, unknown>>,
+    actions: readonly unknown[],
+    actionPath: string
+  ): boolean {
+    const pending = this.draft.pendingDiscover
+    if (!pending || actions.length === 0) return false
+    const continuation: PendingDiscoverContinuation = {
+      source: { ...frame.source },
+      sourceCardId: frame.sourceCardId,
+      controllerId: frame.controllerId,
+      chosenTargets: frame.chosenTargets.map((target) => ({ ...target })),
+      ...(frame.choiceIndex === undefined ? {} : { choiceIndex: frame.choiceIndex }),
+      actions: actions
+        .filter(isRecord)
+        .map((entry) => clonePlain(entry) as Record<string, unknown>),
+      actionPath: `${actionPath}.continuation`,
+      ...(frame.event
+        ? {
+            event: clonePlain(frame.event) as unknown as Readonly<
+              Record<string, unknown>
+            >
+          }
+        : {}),
+      ...(typeof action.storeAs === 'string' ? { storeAs: action.storeAs } : {})
+    }
+    const entries = [pending, ...(pending.queued ?? [])]
+    let targetIndex = -1
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      if (
+        entries[index]?.sourceCardInstanceId === frame.source.instanceId &&
+        entries[index]?.participantId === frame.controllerId
+      ) {
+        targetIndex = index
+        break
+      }
+    }
+    if (targetIndex < 0) return false
+    if (targetIndex === 0) {
+      pending.continuation = continuation as unknown as NonNullable<
+        DraftState['pendingDiscover']
+      >['continuation']
+    } else {
+      const queued = [...(pending.queued ?? [])]
+      const queuedEntry = queued[targetIndex - 1]
+      if (!queuedEntry) return false
+      queued[targetIndex - 1] = {
+        ...queuedEntry,
+        continuation: continuation as unknown as NonNullable<
+          DraftState['pendingDiscover']
+        >['continuation']
+      }
+      pending.queued = queued
+    }
+    return true
   }
 
   private isFrozen(ref: EntityRef): boolean {
@@ -2167,6 +2517,17 @@ export class EffectRuntime {
       player.hero.health = clamp(health, 0, player.hero.maxHealth)
       player.hero.damageTaken = Math.max(0, player.hero.maxHealth - player.hero.health)
     }
+  }
+
+  private readHealth(ref: EntityRef): number {
+    if (ref.kind === 'minion') return this.currentMinion(ref)?.health ?? 0
+    if (ref.kind === 'hero') return this.player(ref.participantId).hero.health
+    if (ref.kind === 'card') {
+      const card = this.currentCard(ref)
+      const definition = card?.cardId ? cardDefinition(card.cardId) : undefined
+      return card?.health ?? (definition?.type === 'Minion' ? definition.health : 0)
+    }
+    return this.readMaximumHealth(ref)
   }
 
   private addEnchantment(ref: EntityRef, enchantment: RuntimeEnchantment): void {
@@ -2239,6 +2600,18 @@ export class EffectRuntime {
       action.durability === undefined
         ? undefined
         : this.valueForStat(action.durability, this.readDurability(ref), frame)
+    // Positive durability modifiers are maximum-durability buffs. A negative
+    // weapon durability modifier, however, represents spending a current
+    // durability charge (for example Atiesh or Bloodsail Corsair). It must not
+    // become a max-durability enchantment, otherwise a weapon can reach zero
+    // without entering the normal weapon-death pipeline.
+    const weaponDurabilityLoss =
+      ref.kind === 'weapon' &&
+      !frame.continuous &&
+      durabilityValue !== undefined &&
+      durabilityValue < durabilityBefore
+        ? durabilityBefore - durabilityValue
+        : 0
     const attackMultiplier =
       isRecord(action.attack) &&
       action.attack.operation === 'multiply' &&
@@ -2284,9 +2657,9 @@ export class EffectRuntime {
             maximumHealthDelta: healthValue - this.readMaximumHealth(ref)
           }),
       ...(healthMultiplier === undefined ? {} : { healthMultiplier }),
-      ...(durabilityValue === undefined
+      ...(durabilityValue === undefined || weaponDurabilityLoss > 0
         ? {}
-        : { durabilityDelta: durabilityValue - this.readDurability(ref) }),
+        : { durabilityDelta: durabilityValue - durabilityBefore }),
       ...(typeof action.minimumHealth === 'number'
         ? { minimumHealth: action.minimumHealth }
         : {}),
@@ -2309,6 +2682,7 @@ export class EffectRuntime {
       ...(frame.continuous ? { continuous: true } : {})
     }
     this.addEnchantment(ref, enchantment)
+    let weaponBroken = false
     if (ref.kind === 'minion') {
       this.updateMinion(ref, (minion) => {
         if (action.attack !== undefined)
@@ -2349,6 +2723,8 @@ export class EffectRuntime {
         if (action.attack !== undefined)
           weapon.attack = Math.max(0, attackValue ?? weapon.attack)
       }
+      if (weaponDurabilityLoss > 0)
+        weaponBroken = this.applyWeaponDurabilityLoss(ref, weaponDurabilityLoss)
     } else if (ref.kind === 'card') {
       const card = this.currentCard(ref)
       const definition = card ? cardDefinition(card.cardId) : undefined
@@ -2386,6 +2762,7 @@ export class EffectRuntime {
       durabilityBefore,
       durabilityAfter
     })
+    if (weaponBroken) this.queueWeaponDeath(ref)
   }
 
   private readAttack(ref: EntityRef): number {
@@ -2461,6 +2838,7 @@ export class EffectRuntime {
     field: 'healingMultiplier' | 'heroPowerMultiplier' | 'spellDamageMultiplier'
   ): number {
     const player = this.player(participantId)
+    if (field === 'spellDamageMultiplier') return spellDamageMultiplier(player)
     return [
       player.hero[field] ?? 1,
       ...player.board.map((minion) => minion[field] ?? 1)
@@ -2468,17 +2846,25 @@ export class EffectRuntime {
   }
 
   private spellDamageBonus(participantId: PlayerId): number {
-    const player = this.player(participantId)
-    return (
-      player.board.reduce((total, minion) => total + (minion.spellDamage ?? 0), 0) +
-      (player.hero.spellDamage ?? 0)
-    )
+    return spellDamageBonus(this.player(participantId))
   }
 
   private hasKeyword(ref: EntityRef, keyword: CardKeyword): boolean {
+    if (ref.kind === 'card') {
+      const card = this.currentCard(ref)
+      const keywords = new Set(
+        card ? (cardDefinition(card.cardId)?.keywords ?? []) : []
+      )
+      for (const enchantment of card?.enchantments ?? []) {
+        for (const added of enchantment.keywords ?? []) keywords.add(added)
+        for (const removed of enchantment.removedKeywords ?? [])
+          keywords.delete(removed)
+      }
+      return keywords.has(keyword)
+    }
     if (ref.kind === 'minion') {
       const minion = this.currentMinion(ref)
-      if (!minion || minion.silenced) return false
+      if (!minion) return false
       const keywords = effectiveBoardMinionKeywords(minion, this.draft.turnNumber)
       if (!keywords.includes(keyword)) return false
       if (keyword === 'divine-shield') return minion.divineShield === true
@@ -2593,6 +2979,7 @@ export class EffectRuntime {
     options: {
       readonly skipSpellScaling?: boolean
       readonly spellDamageBonusMultiplier?: number
+      readonly skipLifesteal?: boolean
     } = {}
   ): {
     readonly requested: number
@@ -2612,7 +2999,7 @@ export class EffectRuntime {
         : this.sourceIsSpell(frame)
           ? this.effectMultiplier(frame.controllerId, 'spellDamageMultiplier')
           : 1
-    const scaledDamage = Math.max(0, integer(requested * damageMultiplier))
+    const scaledDamage = scaleSpellDamage(amount, spellBonus, damageMultiplier)
     const displayAmount =
       ref.kind === 'hero'
         ? Math.max(
@@ -2637,6 +3024,7 @@ export class EffectRuntime {
     options: {
       readonly skipSpellScaling?: boolean
       readonly spellDamageBonusMultiplier?: number
+      readonly skipLifesteal?: boolean
     } = {}
   ): number {
     if (ref.kind === 'hero') {
@@ -2822,11 +3210,59 @@ export class EffectRuntime {
       amount: effectiveDamage,
       kind: 'damage'
     })
+    if (
+      !options.skipLifesteal &&
+      !frame.skipLifesteal &&
+      (frame.source.kind === 'minion' || frame.source.kind === 'hero') &&
+      this.hasKeyword(frame.source, 'lifesteal')
+    ) {
+      const lifestealFrame = {
+        ...cloneFrame(frame, `${path}.lifesteal`),
+        skipLifesteal: true
+      }
+      this.applyRestore(
+        {
+          instanceId: `${frame.controllerId}:hero`,
+          kind: 'hero',
+          participantId: frame.controllerId,
+          zone: 'hero'
+        },
+        effectiveDamage,
+        lifestealFrame,
+        `${path}.lifesteal`,
+        {
+          forceHealthReplacement: this.hasHealthReplacement(
+            frame.controllerId,
+            frame,
+            true
+          )
+        }
+      )
+    }
     return effectiveDamage
   }
 
-  private hasHealthReplacement(participantId: PlayerId, frame: EffectFrame): boolean {
-    if (!this.sourceIsSpell(frame) && !frame.isHeroPower) return false
+  private hasHealthReplacement(
+    participantId: PlayerId,
+    frame: EffectFrame,
+    includeMinionEffects = false
+  ): boolean {
+    if (!includeMinionEffects && !this.sourceIsSpell(frame) && !frame.isHeroPower)
+      return false
+    const hero = this.player(participantId).hero
+    const activeStoredReplacement = (hero.enchantments ?? []).some(
+      (enchantment) =>
+        enchantment.replacesEvent === 'health-restored' &&
+        enchantment.eventReplacement === 'damage' &&
+        (enchantment.startsOnTurn === undefined ||
+          enchantment.startsOnTurn <= this.draft.turnNumber) &&
+        (enchantment.expiresOnTurn === undefined ||
+          enchantment.expiresOnTurn >= this.draft.turnNumber) &&
+        (!enchantment.continuous ||
+          this.sourceIsInPlay(enchantment.sourceInstanceId) ||
+          this.sourceIsEquipped(enchantment.sourceInstanceId))
+    )
+    if (activeStoredReplacement) return true
     return this.player(participantId).board.some(
       (minion) =>
         !minion.silenced &&
@@ -2845,7 +3281,8 @@ export class EffectRuntime {
     ref: EntityRef,
     amount: number,
     frame: EffectFrame,
-    path: string
+    path: string,
+    options: { readonly forceHealthReplacement?: boolean } = {}
   ): number {
     const target =
       ref.kind === 'hero'
@@ -2863,7 +3300,11 @@ export class EffectRuntime {
         ? this.effectMultiplier(frame.controllerId, 'heroPowerMultiplier')
         : 1
     const displayAmount = Math.max(0, integer(fullAmount * multiplier))
-    if (this.hasHealthReplacement(frame.controllerId, frame) && displayAmount > 0) {
+    if (
+      (options.forceHealthReplacement ||
+        this.hasHealthReplacement(frame.controllerId, frame)) &&
+      displayAmount > 0
+    ) {
       const replacementFrame = cloneFrame(frame, `${path}.replace-event`)
       this.applyDamage(ref, displayAmount, replacementFrame, `${path}.replacement`)
       this.emit(frame, 'restore', path, {
@@ -3206,13 +3647,27 @@ export class EffectRuntime {
     position?: number,
     copyFrom?: DraftMinion,
     cardState?: DraftCard,
-    deferSummonTriggers = false
+    deferSummonTriggers = false,
+    initialModifications?: unknown
   ): EntityRef | null {
     const player = this.player(participantId)
     if (player.board.length >= MAX_BOARD_SIZE) return null
     const definition = cardDefinition(cardId)
     if (!definition || definition.type !== 'Minion') return null
     const instanceId = sourceInstanceId ?? this.allocateId(`${participantId}:summoned`)
+    if (cardId === CTHUN_ID && !copyFrom) {
+      cardState = applyCthunToCard(
+        cardState ?? {
+          instanceId,
+          cardId,
+          baseCost: definition.cost,
+          currentCost: definition.cost,
+          zone: 'hand',
+          revealed: true
+        },
+        player
+      ) as DraftCard
+    }
     const minion: DraftMinion = {
       instanceId,
       cardId,
@@ -3272,11 +3727,6 @@ export class EffectRuntime {
           (copyFrom?.health ?? definition.health)
       )
     }
-    const insertion = this.insertBoardMinion(
-      player,
-      minion,
-      position === undefined ? undefined : position
-    )
     const ref: EntityRef = {
       instanceId,
       kind: 'minion',
@@ -3284,12 +3734,26 @@ export class EffectRuntime {
       zone: 'board',
       cardId
     }
+    const insertion = this.insertBoardMinion(
+      player,
+      minion,
+      position === undefined ? undefined : position
+    )
+    // A copied summon must have its final stats before summon listeners observe it.
+    if (isRecord(initialModifications))
+      this.modifyEntity(ref, initialModifications, frame, `${path}.modifications`)
     this.historyUpdate((history) => {
       history.minionsSummonedThisTurn = [...history.minionsSummonedThisTurn, cardId]
       if (cardDefinition(cardId)?.subtype === 'Beast')
         history.beastsSummonedByPlayer = {
           ...history.beastsSummonedByPlayer,
           [participantId]: (history.beastsSummonedByPlayer[participantId] ?? 0) + 1
+        }
+      if (cardDefinition(cardId)?.subtype === 'Totem')
+        history.totemsSummonedThisGameByPlayer = {
+          ...(history.totemsSummonedThisGameByPlayer ?? {}),
+          [participantId]:
+            (history.totemsSummonedThisGameByPlayer?.[participantId] ?? 0) + 1
         }
     })
     this.emit(frame, 'summon', path, {
@@ -3581,6 +4045,14 @@ export class EffectRuntime {
     frame: EffectFrame
   ): EntityRef[] {
     if (action.source === undefined) return []
+    if (
+      action.selection === 'source' &&
+      frame.source.kind === 'card' &&
+      (action.source === 'deck' ||
+        action.source === 'hand' ||
+        action.source === 'deck-top')
+    )
+      return [frame.source]
     const sourceSelector = isRecord(action.source) ? action.source : null
     if (action.source === 'random-card') {
       const randomCardIds = Array.isArray(action.pool)
@@ -3773,6 +4245,11 @@ export class EffectRuntime {
     const player = this.player(ref.participantId)
     const weapon = player.weapon
     if (!weapon || weapon.instanceId !== ref.instanceId) return false
+    this.historyRecorder?.remember(
+      this.draft as unknown as OpeningMatchState,
+      player.participantId,
+      weapon.instanceId
+    )
     const source: EntityRef = {
       instanceId: weapon.instanceId,
       kind: 'weapon',
@@ -3795,6 +4272,14 @@ export class EffectRuntime {
     )
     player.weapon = null
     return true
+  }
+
+  private applyWeaponDurabilityLoss(ref: EntityRef, amount: number): boolean {
+    if (ref.kind !== 'weapon' || amount <= 0) return false
+    const weapon = this.player(ref.participantId).weapon
+    if (!weapon || weapon.instanceId !== ref.instanceId) return false
+    weapon.durability = Math.max(0, weapon.durability - amount)
+    return weapon.durability === 0
   }
 
   private directDestroy(ref: EntityRef, frame: EffectFrame, path: string): void {
@@ -3907,6 +4392,16 @@ export class EffectRuntime {
     minion.spellImmune = definition.keywords.includes('spell-immune')
     minion.frozenUntilTurn = null
     minion.damageTaken = 0
+    if (cardId === CTHUN_ID) {
+      const ritual = cthunEnchantment(
+        this.allocateId('cthun-transform'),
+        this.player(ref.participantId).cthun ?? EMPTY_CTHUN
+      )
+      minion.enchantments = [ritual] as DraftMinion['enchantments']
+      minion.attack += ritual.attackDelta ?? 0
+      minion.maxHealth += ritual.healthDelta ?? 0
+      minion.health = minion.maxHealth
+    }
     this.emit(frame, 'transform', path, { target: ref.instanceId, cardId })
   }
 
@@ -4129,6 +4624,14 @@ export class EffectRuntime {
       healthValue === 'full' || healthValue === undefined
         ? definition.health
         : this.queries.evaluate(healthValue, frame)
+    const ritual =
+      snapshot.cardId === CTHUN_ID
+        ? cthunEnchantment(
+            this.allocateId('cthun-resurrect'),
+            this.player(controllerId).cthun ?? EMPTY_CTHUN
+          )
+        : undefined
+    const maximumHealth = definition.health + (ritual?.healthDelta ?? 0)
     const summoned = this.createMinion(
       controllerId,
       snapshot.cardId,
@@ -4138,13 +4641,14 @@ export class EffectRuntime {
       undefined,
       {
         ...snapshot,
-        health,
-        maxHealth: definition.health,
-        attack: definition.attack,
+        health:
+          healthValue === undefined || healthValue === 'full' ? maximumHealth : health,
+        maxHealth: maximumHealth,
+        attack: definition.attack + (ritual?.attackDelta ?? 0),
         baseAttack: definition.attack,
         baseHealth: definition.health,
         keywords: [...definition.keywords],
-        enchantments: [],
+        enchantments: ritual ? [ritual] : [],
         grantedTriggers: [],
         deathrattles: [],
         silenced: false,
@@ -4176,6 +4680,418 @@ export class EffectRuntime {
         return runManaAction(action, frame, path, this.manaContext)
       default:
         return this.runAction(action, frame, path)
+    }
+  }
+
+  private spendAllMana(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    for (const participantId of this.targetPlayers(action, frame)) {
+      const player = this.player(participantId)
+      const spent = Math.max(0, player.mana.available)
+      player.mana = { ...player.mana, available: 0, temporary: 0 }
+      if (typeof action.storeAs === 'string')
+        frame.storedValues.set(action.storeAs, spent)
+      this.emit(frame, 'spend-all-mana', path, { participantId, spent })
+    }
+  }
+
+  private buffCthun(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    if (action.cardId !== CTHUN_ID) return
+    const attack = Math.floor(this.queries.evaluate(action.attack ?? 0, frame))
+    const health = Math.floor(this.queries.evaluate(action.health ?? 0, frame))
+    const taunt = Array.isArray(action.keywords) && action.keywords.includes('taunt')
+    for (const participantId of this.targetPlayers(action, frame)) {
+      const player = this.player(participantId)
+      const before = cthunSnapshot(player)
+      const previous = player.cthun ?? EMPTY_CTHUN
+      player.cthun = {
+        attack: previous.attack + attack,
+        health: previous.health + health,
+        taunt: previous.taunt || taunt
+      }
+      for (const card of [
+        ...player.deck,
+        ...player.hand,
+        ...(player.revealedCards ?? [])
+      ]) {
+        Object.assign(card, applyCthunToCard(card, player))
+      }
+      for (const minion of player.board) {
+        if (minion.cardId !== CTHUN_ID) continue
+        const enchantment = cthunEnchantment(this.allocateId('cthun-buff'), {
+          attack,
+          health,
+          taunt
+        })
+        minion.enchantments = [
+          ...(minion.enchantments ?? []),
+          enchantment
+        ] as DraftMinion['enchantments']
+        minion.attack += attack
+        minion.maxHealth += health
+        minion.health += health
+        minion.damageTaken = Math.max(0, minion.maxHealth - minion.health)
+      }
+      this.emit(frame, 'buff-cthun', path, {
+        participantId,
+        cardId: CTHUN_ID,
+        attack,
+        health,
+        target: before.id,
+        before,
+        snapshot: cthunSnapshot(player)
+      })
+    }
+  }
+
+  private summonJade(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    const counter =
+      typeof action.counter === 'string' ? action.counter : 'jade-golem-size'
+    const initialSize =
+      typeof action.initialSize === 'number'
+        ? Math.max(1, Math.floor(action.initialSize))
+        : 1
+    const maximumSize =
+      typeof action.maximumSize === 'number'
+        ? Math.max(initialSize, Math.floor(action.maximumSize))
+        : initialSize
+    const pool = Array.isArray(action.pool)
+      ? action.pool.filter((entry): entry is string => typeof entry === 'string')
+      : []
+    for (const participantId of this.targetPlayers(action, frame)) {
+      const player = this.player(participantId)
+      const currentSize = Math.min(
+        maximumSize,
+        Math.max(initialSize, player.counters?.[counter] ?? initialSize)
+      )
+      const cardId = pool[currentSize - 1] as CardId | undefined
+      const summoned = cardId
+        ? this.createMinion(participantId, cardId, frame, path)
+        : null
+      const nextSize = Math.min(maximumSize, currentSize + 1)
+      player.counters = { ...(player.counters ?? {}), [counter]: nextSize }
+      if (summoned && typeof action.storeAs === 'string')
+        frame.stored.set(action.storeAs, [summoned])
+      this.emit(frame, 'summon-jade-golem', path, {
+        participantId,
+        cardId: cardId ?? null,
+        instanceId: summoned?.instanceId ?? null,
+        size: currentSize,
+        nextSize
+      })
+    }
+  }
+
+  private copyStats(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    const source = this.sourceEntities(action, frame)[0]
+    if (!source) return
+    const stats = Array.isArray(action.stats)
+      ? action.stats.filter((entry): entry is string => typeof entry === 'string')
+      : ['attack', 'health']
+    const sourceAttack = this.readAttack(source)
+    const sourceHealth = this.readMaximumHealth(source)
+    for (const target of this.actionTargets(action, frame)) {
+      if (target.kind !== 'minion' || source.kind !== 'minion') continue
+      const update: Record<string, unknown> = { action: 'modify' }
+      if (stats.includes('attack'))
+        update.attack = { operation: 'set', value: sourceAttack }
+      if (stats.includes('health'))
+        update.health = { operation: 'set', value: sourceHealth }
+      if (Object.keys(update).length === 1) continue
+      this.modifyEntity(target, update, frame, path)
+      frame.lastActionTarget = target
+    }
+  }
+
+  private refreshMana(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    for (const participantId of this.targetPlayers(action, frame)) {
+      const player = this.player(participantId)
+      const amount = action.amount
+      const available =
+        amount === 'all'
+          ? player.mana.maximum + (player.mana.temporary ?? 0)
+          : Math.min(
+              player.mana.maximum + (player.mana.temporary ?? 0),
+              player.mana.available +
+                (typeof amount === 'number' ? Math.max(0, Math.floor(amount)) : 0)
+            )
+      player.mana = { ...player.mana, available }
+      this.emit(frame, 'refresh-mana', path, { participantId, available })
+    }
+  }
+
+  private refreshHeroPower(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    for (const participantId of this.targetPlayers(action, frame)) {
+      this.player(participantId).heroPower.available = true
+      this.emit(frame, 'refresh-hero-power', path, { participantId })
+    }
+  }
+
+  private setHeroPowerCost(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    if (typeof action.cost !== 'number') return
+    const cost = Math.max(0, Math.floor(action.cost))
+    for (const participantId of this.targetPlayers(action, frame)) {
+      const player = this.player(participantId)
+      player.heroPower.cost = cost
+      if (action.appliesToFutureHeroPowers === true) player.heroPowerCostOverride = cost
+      this.emit(frame, 'set-hero-power-cost', path, { participantId, cost })
+    }
+  }
+
+  private shuffleDeadCthun(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    if (action.cardId !== CTHUN_ID) return
+    for (const participantId of this.targetPlayers(action, frame)) {
+      const player = this.player(participantId)
+      if (
+        !player.cthunDied &&
+        !(player.graveyard ?? []).some((entry) => entry.minion.cardId === CTHUN_ID)
+      )
+        continue
+      const definition = cardDefinition(CTHUN_ID)!
+      const card = applyCthunToCard(
+        {
+          instanceId: this.allocateId(participantId + ':cthun'),
+          cardId: CTHUN_ID,
+          ownerId: participantId,
+          controllerId: participantId,
+          creationOrdinal: this.nextEntityOrdinal++,
+          baseCost: definition.cost,
+          currentCost: definition.cost,
+          zone: 'deck',
+          revealed: false
+        },
+        player
+      )
+      this.applyCardZones(
+        player,
+        insertCardIntoPlayer(player, card, 'deck') as DraftPlayer
+      )
+      this.applyCardZones(player, { ...player, deck: this.shuffle(player.deck) })
+      this.emit(frame, 'shuffle-dead-cthun', path, {
+        participantId,
+        cardId: CTHUN_ID,
+        instanceId: card.instanceId
+      })
+    }
+  }
+
+  private castRandomSpells(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    const count = Math.max(
+      0,
+      Math.floor(this.queries.evaluate(action.count ?? 0, frame))
+    )
+    if (count === 0) return
+    const authoredPool = Array.isArray(action.pool)
+      ? action.pool
+          .filter((entry): entry is string => typeof entry === 'string')
+          .map((cardId) => CARD_CATALOG.get(cardId))
+          .filter(
+            (definition): definition is CardDefinition => definition !== undefined
+          )
+      : CARD_CATALOG.all
+    const pool = authoredPool.filter((definition) => {
+      if (definition.type !== 'Spell' || definition.collectible !== true) return false
+      const candidate: EntityRef = {
+        instanceId: `${frame.controllerId}:random-spell:${definition.id}`,
+        kind: 'card',
+        participantId: frame.controllerId,
+        zone: 'revealed',
+        cardId: definition.id
+      }
+      return this.queries.matchesFilter(candidate, action.filter, frame)
+    })
+    // Snapshot the cast count and controller: pre-nerf Yogg keeps resolving
+    // after destruction, transformation, silence, or removal from the board.
+    this.automaticChoiceDepth += 1
+    try {
+      for (let index = 0; index < count && pool.length > 0; index += 1) {
+        const definition =
+          pool[Math.floor(this.rng.next() * pool.length)] ?? pool[pool.length - 1]
+        if (!definition || definition.type !== 'Spell') continue
+        const source: EntityRef = {
+          instanceId: this.allocateId(`${frame.controllerId}:random-spell`),
+          kind: 'card',
+          participantId: frame.controllerId,
+          zone: 'revealed',
+          cardId: definition.id
+        }
+        const card: DraftCard = {
+          instanceId: source.instanceId,
+          cardId: definition.id,
+          ownerId: frame.controllerId,
+          controllerId: frame.controllerId,
+          creationOrdinal: this.nextEntityOrdinal++,
+          baseCost: definition.cost,
+          currentCost: definition.cost,
+          zone: 'discarded',
+          revealed: true,
+          knownTo: [frame.controllerId]
+        }
+        const choices = collectChoiceOptions(definition.effects)
+        const choiceIndex =
+          choices && choices.length > 0
+            ? this.combinedChooseOneActive(frame.controllerId)
+              ? -1
+              : Math.floor(this.rng.next() * choices.length)
+            : undefined
+        const targetFrame = {
+          ...this.frameFor(source, null, []),
+          choiceIndex
+        }
+        const selectors = this.targetSelectorsFor(definition, targetFrame, choiceIndex)
+        const chosenTargets: EntityRef[] = []
+        const usedTargets = new Set<string>()
+        for (const selector of selectors) {
+          const candidates = this.legalInputCandidates(selector, targetFrame).filter(
+            (candidate) => !usedTargets.has(entityKey(candidate))
+          )
+          const selected =
+            candidates[Math.floor(this.rng.next() * candidates.length)] ?? null
+          if (!selected) continue
+          chosenTargets.push(selected)
+          usedTargets.add(entityKey(selected))
+        }
+        const resolvedTargets = [...chosenTargets]
+        for (
+          let targetIndex = 0;
+          targetIndex < resolvedTargets.length;
+          targetIndex += 1
+        ) {
+          const target = resolvedTargets[targetIndex]
+          if (target.kind !== 'minion') continue
+          const targeted = this.emitCardPlayedSemantic(
+            source,
+            target,
+            card,
+            'spell-targeted-minion'
+          )
+          if (targeted.redirectTarget)
+            resolvedTargets[targetIndex] = targeted.redirectTarget
+        }
+        const castEvent = this.emitCardPlayedSemantic(
+          source,
+          resolvedTargets[0] ?? source,
+          card,
+          'spell-cast',
+          'cast'
+        )
+        this.emit(frame, 'cast-spell', `${path}[${index}]`, {
+          participantId: frame.controllerId,
+          instanceId: source.instanceId,
+          cardId: definition.id
+        })
+        if (castEvent.cancelled) continue
+        this.runCardBlocks(
+          definition,
+          'cast',
+          {
+            ...this.frameFor(source, null, resolvedTargets),
+            choiceIndex
+          },
+          `${path}[${index}]`
+        )
+        this.processDeaths()
+        this.emitCardPlayedSemantic(
+          source,
+          resolvedTargets[0] ?? source,
+          card,
+          'spell-resolved',
+          'cast'
+        )
+      }
+    } finally {
+      this.automaticChoiceDepth -= 1
+    }
+  }
+
+  private createKazakusPotion(
+    action: Record<string, unknown>,
+    frame: EffectFrame,
+    path: string
+  ): void {
+    const sourceCardId = frame.sourceCardId
+    if (!sourceCardId) return
+    const costOptions = kazakusCostOptions(action)
+    if (costOptions.length === 0) return
+    for (const participantId of this.targetPlayers(action, frame)) {
+      const pending: Omit<PendingCardChoice, 'queued'> = {
+        participantId,
+        sourceCardInstanceId: frame.source.instanceId,
+        sourceCardId,
+        options: costOptions.map((option, choice) => ({
+          choice,
+          label:
+            cardDefinition(option.presentationCardId)?.name ??
+            option.presentationCardId,
+          presentationCardId: option.presentationCardId,
+          presentationCost: option.cost
+        })),
+        resolution: {
+          type: 'kazakus-potion',
+          stage: 'cost',
+          costOptions
+        }
+      }
+      const queued = Boolean(this.draft.pendingCardChoice)
+      if (this.draft.pendingCardChoice) {
+        this.draft.pendingCardChoice.queued = [
+          ...(this.draft.pendingCardChoice.queued ?? []),
+          pending as unknown as NonNullable<
+            DraftState['pendingCardChoice']
+          >['queued'] extends readonly (infer Entry)[]
+            ? Entry
+            : never
+        ]
+      } else
+        this.draft.pendingCardChoice =
+          pending as unknown as DraftState['pendingCardChoice']
+      if (!queued)
+        this.events.push({
+          type: 'card-choice-started',
+          participantId,
+          sourceCardInstanceId: frame.source.instanceId,
+          sourceCardId,
+          options: pending.options
+        })
+      this.emit(frame, 'create-kazakus-potion', path, {
+        participantId,
+        costs: costOptions.map((option) => option.cost)
+      })
     }
   }
 
@@ -4286,6 +5202,40 @@ export class EffectRuntime {
           this.runActions(action.loseActions, frame, `${path}.loseActions`)
         return
       }
+      case 'combine-choose-one':
+        // Fandral's aura is queried when a Choose One card is played. The
+        // action itself only declares that continuous capability.
+        return
+      case 'spend-all-mana':
+        this.spendAllMana(action, frame, path)
+        return
+      case 'buff-cthun':
+        this.buffCthun(action, frame, path)
+        return
+      case 'copy-stats':
+        this.copyStats(action, frame, path)
+        return
+      case 'summon-jade-golem':
+        this.summonJade(action, frame, path)
+        return
+      case 'refresh-mana':
+        this.refreshMana(action, frame, path)
+        return
+      case 'refresh-hero-power':
+        this.refreshHeroPower(action, frame, path)
+        return
+      case 'set-hero-power-cost':
+        this.setHeroPowerCost(action, frame, path)
+        return
+      case 'shuffle-dead-cthun':
+        this.shuffleDeadCthun(action, frame, path)
+        return
+      case 'cast-random-spells':
+        this.castRandomSpells(action, frame, path)
+        return
+      case 'create-kazakus-potion':
+        this.createKazakusPotion(action, frame, path)
+        return
       case 'change-cost': {
         if (
           action.deferUntil === 'next-matching-card-played' ||
@@ -4367,7 +5317,8 @@ export class EffectRuntime {
               targetControllerId: frame.source.participantId,
               cardId: target.cardId,
               cardInstanceId: target.instanceId,
-              kind: 'play'
+              kind: 'play',
+              spellCopy: true
             })
             const copiedTarget = targetEvent.redirectTarget ?? frame.source
             const castEvent = this.emitSemantic({
@@ -4379,15 +5330,19 @@ export class EffectRuntime {
               cardId: target.cardId,
               cardInstanceId: target.instanceId,
               card: frame.event?.card,
-              kind: 'cast'
+              kind: 'cast',
+              spellCopy: true
             })
-            if (!castEvent.cancelled)
+            if (!castEvent.cancelled) {
               this.runCardBlocks(
                 definition,
                 'cast',
                 this.frameFor(copiedSource, null, [copiedTarget]),
                 `${path}.cast-copy`
               )
+              this.processDeaths()
+              this.emitSemantic({ ...castEvent, type: 'spell-resolved' })
+            }
           }
           return
         }
@@ -4467,7 +5422,7 @@ export class EffectRuntime {
         const baseHits =
           action.hits === undefined
             ? 1
-            : Math.max(1, Math.floor(this.queries.evaluate(action.hits, frame)))
+            : Math.max(0, Math.floor(this.queries.evaluate(action.hits, frame)))
         const randomTarget =
           isRecord(action.target) && action.target.selection === 'random'
         const targets = randomTarget ? [] : this.actionTargets(action, frame)
@@ -4477,8 +5432,11 @@ export class EffectRuntime {
           ? Math.max(
               1,
               Math.floor(
-                (baseHits + this.spellDamageBonus(frame.controllerId)) *
+                scaleSpellDamage(
+                  baseHits,
+                  this.spellDamageBonus(frame.controllerId),
                   this.effectMultiplier(frame.controllerId, 'spellDamageMultiplier')
+                )
               )
             )
           : baseHits
@@ -4501,6 +5459,7 @@ export class EffectRuntime {
                   minimum !== null && maximum !== null && maximum >= minimum
                     ? minimum + Math.floor(this.rng.next() * (maximum - minimum + 1))
                     : this.queries.evaluate(action.amount, frame)
+                frame.lastDamageAmount = amount
                 this.applyDamage(target, amount, frame, path + '.hit' + hit, {
                   skipSpellScaling: randomSplitSpell,
                   ...(typeof action.spellDamageBonusMultiplier === 'number'
@@ -4523,6 +5482,16 @@ export class EffectRuntime {
       }
       case 'destroy':
         for (const target of this.actionTargets(action, frame)) {
+          if (
+            action.storeStats === true &&
+            !frame.storedValues.has('destroyed-target.attack')
+          ) {
+            const victim = this.currentMinion(target)
+            if (victim) {
+              frame.storedValues.set('destroyed-target.attack', victim.attack)
+              frame.storedValues.set('destroyed-target.health', victim.health)
+            }
+          }
           this.queries.withTarget(frame, target, () =>
             this.directDestroy(target, frame, path)
           )
@@ -4626,6 +5595,7 @@ export class EffectRuntime {
             action.source === 'deck' ||
             action.source === 'deck-top' ||
             (isRecord(action.source) && action.source.zone === 'deck')
+          const fromOpponentDeck = action.source === 'opponent-deck'
           let candidates: DraftCard[] = []
           if (fromDeck) {
             candidates = this.revealDeckTop(
@@ -4637,6 +5607,42 @@ export class EffectRuntime {
               .map((ref) => this.currentCard(ref))
               .filter((card): card is DraftCard => card !== null)
               .map((card) => clonePlain(card) as DraftCard)
+          } else if (fromOpponentDeck) {
+            const opponent = this.queries.otherPlayer(participantId)
+            const opponentDeck = this.player(opponent).deck.filter((card) =>
+              this.queries.matchesFilter(
+                {
+                  instanceId: card.instanceId,
+                  kind: 'card',
+                  participantId: opponent,
+                  zone: 'deck',
+                  cardId: card.cardId
+                },
+                action.filter,
+                { ...frame, controllerId: participantId }
+              )
+            )
+            for (const card of this.shuffle([...opponentDeck]).slice(0, count)) {
+              const definition = cardDefinition(card.cardId)
+              if (!definition) continue
+              const generated: DraftCard = {
+                ...clonePlain(card),
+                instanceId: this.allocateId(`${participantId}:discover`),
+                ownerId: participantId,
+                controllerId: participantId,
+                creationOrdinal: this.nextEntityOrdinal++,
+                zone: 'revealed',
+                revealed: true,
+                knownTo: [participantId]
+              }
+              const updated = insertCardIntoPlayer(
+                this.player(participantId) as unknown as OpeningPlayerState,
+                generated,
+                'revealed'
+              ) as DraftPlayer
+              this.applyCardZones(this.player(participantId), updated)
+              candidates.push(clonePlain(generated) as DraftCard)
+            }
           } else {
             const player = this.player(participantId)
             const discoverFrame = { ...frame, controllerId: participantId }
@@ -4659,7 +5665,22 @@ export class EffectRuntime {
               }
               return this.queries.matchesFilter(candidate, action.filter, discoverFrame)
             })
-            const weighted = [...pool]
+            const weighted =
+              action.oneOptionPerClass === true
+                ? [
+                    ...[...new Set(pool.map((definition) => definition.cardClass))]
+                      .map((cardClass) => {
+                        const classPool = pool.filter(
+                          (definition) => definition.cardClass === cardClass
+                        )
+                        return classPool[Math.floor(this.rng.next() * classPool.length)]
+                      })
+                      .filter(
+                        (definition): definition is CardDefinition =>
+                          definition !== undefined
+                      )
+                  ]
+                : [...pool]
             const selected: CardDefinition[] = []
             const classBonus = Math.max(
               1,
@@ -4710,7 +5731,27 @@ export class EffectRuntime {
             participantId,
             sourceCardInstanceId: frame.source.instanceId,
             candidates,
-            origin: fromDeck ? ('deck' as const) : ('generated' as const)
+            origin: fromDeck
+              ? ('deck' as const)
+              : fromOpponentDeck
+                ? ('opponent-deck' as const)
+                : ('generated' as const)
+          }
+          if (this.automaticChoiceDepth > 0) {
+            const selected =
+              candidates[Math.floor(this.rng.next() * candidates.length)]!
+            const selectedRef = this.selectDiscoverCandidate(pending, {
+              participantId,
+              cardInstanceId: selected.instanceId
+            })
+            if (typeof action.storeAs === 'string' && selectedRef)
+              frame.stored.set(action.storeAs, [selectedRef])
+            this.emit(frame, name, path, {
+              participantId,
+              cardIds: [selected.cardId],
+              instanceIds: [selected.instanceId]
+            })
+            continue
           }
           const queued = Boolean(this.draft.pendingDiscover)
           if (this.draft.pendingDiscover) {
@@ -4811,13 +5852,25 @@ export class EffectRuntime {
           0,
           Math.floor(this.queries.evaluate(action.handSize, frame))
         )
+        const stopWhen =
+          action.stopWhen === 'matching' || action.stopWhen === 'non-matching'
+            ? action.stopWhen
+            : null
         for (const participantId of this.targetPlayers(action, frame)) {
           const drawCount = Math.max(
             0,
             handSize - this.player(participantId).hand.length
           )
-          for (let index = 0; index < drawCount; index += 1)
-            this.drawOne(participantId, frame, path)
+          for (let index = 0; index < drawCount; index += 1) {
+            const drawn = this.drawOne(participantId, frame, path + '.' + index)
+            if (!drawn || !stopWhen || action.filter === undefined) continue
+            const matching = this.queries.matchesFilter(drawn, action.filter, frame)
+            if (
+              (stopWhen === 'matching' && matching) ||
+              (stopWhen === 'non-matching' && !matching)
+            )
+              break
+          }
         }
         return
       }
@@ -5114,6 +6167,41 @@ export class EffectRuntime {
           frame.lastActionTarget = target
         }
         return
+      case 'modify-hero-attacks': {
+        const duration = stringValue(action.duration) ?? 'permanent'
+        const limit =
+          action.unlimited === true
+            ? 99
+            : typeof action.maxAttacksPerTurn === 'number'
+              ? Math.max(1, Math.floor(action.maxAttacksPerTurn))
+              : undefined
+        if (limit === undefined) return
+        for (const target of this.actionTargets(action, frame)) {
+          if (target.kind !== 'hero') continue
+          this.addEnchantment(target, {
+            id: frame.continuous
+              ? `${frame.source.instanceId}:continuous-hero-attacks:${target.instanceId}:${path}`
+              : this.allocateId(`${frame.source.instanceId}:hero-attacks`),
+            sourceInstanceId: frame.source.instanceId,
+            sourceCardId: frame.sourceCardId,
+            maxAttacksPerTurn: limit,
+            ...(action.unlimited === true ? { unlimitedAttacks: true } : {}),
+            duration,
+            ...(frame.continuous ? { continuous: true } : {})
+          })
+          if (frame.continuous) {
+            const hero = this.player(target.participantId).hero
+            hero.maxAttacksPerTurn = Math.max(hero.maxAttacksPerTurn ?? 1, limit)
+          }
+          this.emit(frame, name, path, {
+            target: target.instanceId,
+            maxAttacksPerTurn: limit,
+            unlimited: action.unlimited === true
+          })
+        }
+        this.recomputeContinuousEffects()
+        return
+      }
       case 'modify-hero-power-uses':
         // This is a declarative aura read by heroPowerUseLimit().
         return
@@ -5205,10 +6293,9 @@ export class EffectRuntime {
             if (
               definition.type === 'Spell' &&
               definition.keywords.includes('secret') &&
-              ((targetPlayer.secrets ?? []).length >= 5 ||
-                (targetPlayer.secrets ?? []).some(
-                  (secret) => secret.cardId === definition.id
-                ))
+              (targetPlayer.secrets ?? []).some(
+                (secret) => secret.cardId === definition.id
+              )
             )
               continue
             const card = this.removeCard(source)
@@ -5371,6 +6458,40 @@ export class EffectRuntime {
             eventType: frame.event.type,
             replacement: replacement ?? null
           })
+        } else if (!frame.event) {
+          const eventType = stringValue(action.event) as CardEventType | null
+          const replacement = stringValue(action.replacement)
+          if (!eventType || !replacement || frame.continuous) return
+          const duration = stringValue(action.duration) ?? 'permanent'
+          for (const target of this.actionTargets(action, frame)) {
+            if (target.kind !== 'hero') continue
+            this.addEnchantment(target, {
+              id: this.allocateId(`${frame.source.instanceId}:event-replacement`),
+              sourceInstanceId: frame.source.instanceId,
+              sourceCardId: frame.sourceCardId,
+              replacesEvent: eventType,
+              eventReplacement: replacement,
+              duration,
+              ...(duration === 'this-turn'
+                ? { expiresOnTurn: this.draft.turnNumber }
+                : {}),
+              ...(duration === 'next-turn'
+                ? {
+                    startsOnTurn: this.draft.turnNumber + 1,
+                    expiresOnTurn: this.draft.turnNumber + 1
+                  }
+                : {}),
+              ...(duration === 'until-next-turn'
+                ? { expiresOnTurn: this.draft.turnNumber + 1 }
+                : {})
+            })
+            this.emit(frame, name, path, {
+              target: target.instanceId,
+              eventType,
+              replacement,
+              duration
+            })
+          }
         }
         return
       case 'restore':
@@ -5564,10 +6685,14 @@ export class EffectRuntime {
           const amount = this.queries.withTarget(frame, target, () =>
             this.queries.evaluate(action.amount, frame)
           )
+          const healthBefore = this.readHealth(target)
           this.setHealth(target, amount)
           this.emit(frame, name, path, {
             target: target.instanceId,
-            health: amount
+            health: amount,
+            healthBefore,
+            healthAfter: this.readHealth(target),
+            maximumHealthAfter: this.readMaximumHealth(target)
           })
           frame.lastActionTarget = target
         }
@@ -5604,24 +6729,23 @@ export class EffectRuntime {
           }
           return
         }
-        if (action.power === 'discover-basic') {
-          const basicIds = new Set([
-            'druid-shapeshift',
-            'hunter-steady-shot',
-            'mage-fireblast',
-            'paladin-reinforce',
-            'priest-lesser-heal',
-            'rogue-dagger-mastery',
-            'shaman-totemic-call',
-            'warlock-life-tap',
-            'warrior-armor-up'
-          ])
+        if (
+          action.power === 'discover-basic' ||
+          action.power === 'discover-current-tier'
+        ) {
+          const basicIds = new Set(Object.keys(BASIC_HERO_POWER_UPGRADES))
+          const upgradedIds = new Set(Object.values(BASIC_HERO_POWER_UPGRADES))
           for (const participantId of playerIds) {
             const player = this.player(participantId)
+            const powerIds =
+              action.power === 'discover-current-tier' &&
+              upgradedIds.has(player.heroPower.id)
+                ? upgradedIds
+                : basicIds
             const pool = this.shuffle(
               HERO_POWER_CATALOG.all.filter(
                 (definition) =>
-                  basicIds.has(definition.id) && definition.id !== player.heroPower.id
+                  powerIds.has(definition.id) && definition.id !== player.heroPower.id
               )
             ).slice(0, 3)
             const pending = {
@@ -5638,19 +6762,21 @@ export class EffectRuntime {
                 heroPowerIds: pool.map((definition) => definition.id)
               }
             }
+            const queued = Boolean(this.draft.pendingCardChoice)
             if (this.draft.pendingCardChoice) {
               this.draft.pendingCardChoice.queued = [
                 ...(this.draft.pendingCardChoice.queued ?? []),
                 pending
               ]
             } else this.draft.pendingCardChoice = pending
-            this.events.push({
-              type: 'card-choice-started',
-              participantId,
-              sourceCardInstanceId: frame.source.instanceId,
-              sourceCardId: frame.sourceCardId!,
-              options: pending.options
-            })
+            if (!queued)
+              this.events.push({
+                type: 'card-choice-started',
+                participantId,
+                sourceCardInstanceId: frame.source.instanceId,
+                sourceCardId: frame.sourceCardId!,
+                options: pending.options
+              })
           }
           return
         }
@@ -5940,27 +7066,33 @@ export class EffectRuntime {
         return
       }
       case 'transform-random': {
-        const pool = Array.isArray(action.pool)
-          ? action.pool.filter((entry): entry is string => typeof entry === 'string')
-          : CARD_CATALOG.all
+        const authoredPool = Array.isArray(action.pool)
+          ? action.pool
+              .filter((entry): entry is string => typeof entry === 'string')
+              .map((cardId) => CARD_CATALOG.get(cardId))
               .filter(
-                (card) =>
-                  card.collectible &&
-                  card.type === 'Minion' &&
-                  this.queries.matchesFilter(
-                    {
-                      instanceId: `${frame.controllerId}:pool:${card.id}`,
-                      kind: 'card',
-                      participantId: frame.controllerId,
-                      zone: 'revealed',
-                      cardId: card.id
-                    },
-                    action.filter,
-                    frame
-                  )
+                (definition): definition is CardDefinition => definition !== undefined
               )
-              .map((card) => card.id)
+          : CARD_CATALOG.all
+        const poolForTarget = (target: EntityRef): readonly CardId[] =>
+          authoredPool
+            .filter((card) => {
+              if (card.type !== 'Minion') return false
+              if (!Array.isArray(action.pool) && card.collectible !== true) return false
+              const candidate: EntityRef = {
+                instanceId: `${frame.controllerId}:pool:${card.id}`,
+                kind: 'card',
+                participantId: frame.controllerId,
+                zone: 'revealed',
+                cardId: card.id
+              }
+              return this.queries.withTarget(frame, target, () =>
+                this.queries.matchesFilter(candidate, action.filter, frame)
+              )
+            })
+            .map((card) => card.id)
         for (const target of this.actionTargets(action, frame)) {
+          const pool = poolForTarget(target)
           const cardId = pool[Math.floor(this.rng.next() * pool.length)] as
             CardId | undefined
           if (!cardId) continue
@@ -6054,6 +7186,7 @@ export class EffectRuntime {
           ...player.hand,
           ...(player.revealedCards ?? [])
         ]) {
+          Object.assign(card, applyCthunToCard(card, player))
           const definition = cardDefinition(card.cardId)
           const storedAdjustments = (card.costAdjustments ?? []).filter(
             (adjustment) => {
@@ -6093,6 +7226,8 @@ export class EffectRuntime {
           if (enchantment.continuous) return false
           if (enchantment.duration === 'while-source-in-play')
             return this.sourceIsInPlay(enchantment.sourceInstanceId)
+          if (enchantment.duration === 'while-source-equipped')
+            return this.sourceIsEquipped(enchantment.sourceInstanceId)
           return true
         })
         const activeHeroEnchantments = heroEnchantments.filter(
@@ -6172,7 +7307,16 @@ export class EffectRuntime {
               heroCombatKeywords.delete(keyword)
           }
         }
-        hero.maxAttacksPerTurn = attacksPerTurnForKeywords(heroCombatKeywords)
+        const keywordAttackLimit = attacksPerTurnForKeywords(heroCombatKeywords)
+        const enchantmentAttackLimit = activeHeroEnchantments.reduce(
+          (limit, enchantment) => Math.max(limit, enchantment.maxAttacksPerTurn ?? 0),
+          keywordAttackLimit
+        )
+        hero.maxAttacksPerTurn = activeHeroEnchantments.some(
+          (enchantment) => enchantment.unlimitedAttacks
+        )
+          ? 99
+          : enchantmentAttackLimit
         hero.spellDamage = heroKeywords.has('spell-damage')
           ? Math.max(
               1,
@@ -6255,7 +7399,8 @@ export class EffectRuntime {
             this.draft.turnNumber >= enchantment.startsOnTurn
         )
         power.enchantments = powerEnchantments as Mutable<typeof power>['enchantments']
-        const basePowerCost = power.baseCost ?? power.cost
+        const basePowerCost =
+          player.heroPowerCostOverride ?? power.baseCost ?? power.cost
         power.baseCost = basePowerCost
         power.cost = Math.max(
           0,
@@ -6353,9 +7498,10 @@ export class EffectRuntime {
             : keywords.includes('windfury')
               ? 2
               : 1
-          const baseSpellDamage = base?.keywords.includes('spell-damage')
-            ? (base.spellDamage ?? 1)
-            : 0
+          const baseSpellDamage =
+            !minion.silenced && base?.keywords.includes('spell-damage')
+              ? (base.spellDamage ?? 1)
+              : 0
           const grantedSpellDamage = activeEnchantments.reduce(
             (value, enchantment) =>
               value +
@@ -6478,6 +7624,7 @@ export class EffectRuntime {
       }
     } finally {
       this.deriving = false
+      this.historyRecorder?.settle(this.draft as unknown as OpeningMatchState)
     }
   }
 
@@ -6489,6 +7636,7 @@ export class EffectRuntime {
     const selectors: {
       selector: Readonly<Record<string, unknown>>
       path: string
+      optional?: boolean
     }[] = []
     const activeEffects = card.effects.filter((block) => {
       if (!block.condition) return true
@@ -6499,7 +7647,9 @@ export class EffectRuntime {
     collectTargetSelectors(activeEffects, '.effects', selectors, choiceIndex)
     const seen = new Set<string>()
     return selectors
-      .map((entry) => entry.selector)
+      .map((entry) =>
+        entry.optional ? { ...entry.selector, __optionalTarget: true } : entry.selector
+      )
       .filter((selector) => {
         const key = JSON.stringify(selector)
         if (seen.has(key)) return false
@@ -6507,8 +7657,44 @@ export class EffectRuntime {
         return true
       })
   }
-  private choiceCountFor(card: CardDefinition): number {
+  private combinedChooseOneActive(participantId: PlayerId): boolean {
+    return this.player(participantId).board.some((minion) => {
+      if (minion.silenced) return false
+      return (cardDefinition(minion.cardId)?.effects ?? []).some(
+        (block) =>
+          block.trigger === 'aura' &&
+          (block.actions ?? []).some((action) => action.action === 'combine-choose-one')
+      )
+    })
+  }
+
+  private combinedChooseOneOverride(
+    participantId: PlayerId,
+    cardId: CardId
+  ): CardId | null {
+    for (const minion of this.player(participantId).board) {
+      if (minion.silenced) continue
+      for (const block of cardDefinition(minion.cardId)?.effects ?? []) {
+        if (block.trigger !== 'aura') continue
+        for (const action of block.actions ?? []) {
+          if (
+            action.action !== 'combine-choose-one' ||
+            !isRecord(action.transformOverrides)
+          )
+            continue
+          const override = action.transformOverrides[cardId]
+          if (typeof override === 'string' && CARD_CATALOG.get(override as CardId))
+            return override as CardId
+        }
+      }
+    }
+    return null
+  }
+
+  private choiceCountFor(card: CardDefinition, participantId?: PlayerId): number {
     const options = collectChoiceOptions(card.effects)
+    if (options && participantId && this.combinedChooseOneActive(participantId))
+      return 0
     return options?.length ?? 0
   }
 
@@ -6561,10 +7747,15 @@ export class EffectRuntime {
     })
   }
 
-  private choiceTimingFor(card: CardDefinition): 'before-play' | 'after-placement' {
+  private choiceTimingFor(
+    card: CardDefinition,
+    participantId?: PlayerId
+  ): 'before-play' | 'after-placement' {
     if (card.type !== 'Minion') return 'before-play'
     const options = collectChoiceOptions(card.effects) ?? []
     if (options.length === 0) return 'before-play'
+    if (participantId && this.combinedChooseOneActive(participantId))
+      return 'before-play'
     const selfTransforms = options.every((option) => {
       if (!isRecord(option)) return false
       const actions = asArray(option.actions)
@@ -6593,6 +7784,22 @@ export class EffectRuntime {
         if (
           block.condition !== undefined &&
           this.isPositivePlayCondition(block.condition)
+        )
+          return true
+        const actions: Readonly<Record<string, unknown>>[] = []
+        collectSelectedEffectActions(block.actions, frame.choiceIndex, actions)
+        if (
+          actions.some((action) => {
+            const amount = asRecord(action.amount)
+            return (
+              action.action === 'damage' &&
+              amount.condition !== undefined &&
+              typeof amount.thenValue === 'number' &&
+              typeof amount.elseValue === 'number' &&
+              amount.thenValue > amount.elseValue &&
+              this.queries.conditionMatches(amount.condition, frame)
+            )
+          })
         )
           return true
         const branch = asRecord(block.then)
@@ -6624,6 +7831,7 @@ export class EffectRuntime {
     return actions.some((action) => {
       const target = isRecord(action.target) ? action.target : null
       return (
+        action.allowEmptyTargets === true ||
         target?.selection !== 'random' ||
         this.legalInputCandidates(target, frame).length > 0
       )
@@ -6725,15 +7933,21 @@ export class EffectRuntime {
       requiresPosition && player.board.length < MAX_BOARD_SIZE
         ? Array.from({ length: player.board.length + 1 }, (_, index) => index)
         : []
-    const choiceCount = this.choiceCountFor(definition)
+    const choiceCount = this.choiceCountFor(definition, participantId)
     const choiceOptions = this.choiceOptionsFor(definition)
-    const choiceTiming = this.choiceTimingFor(definition)
+    const choiceTiming = this.choiceTimingFor(definition, participantId)
     if (
       choiceIndex !== undefined &&
       (!Number.isInteger(choiceIndex) || choiceIndex < 0 || choiceIndex >= choiceCount)
     )
       return null
-    const selectedChoice = choiceCount > 0 ? (choiceIndex ?? 0) : undefined
+    const selectedChoice =
+      choiceCount > 0
+        ? (choiceIndex ?? 0)
+        : collectChoiceOptions(definition.effects)?.length &&
+            this.combinedChooseOneActive(participantId)
+          ? -1
+          : undefined
     const source: EntityRef = {
       instanceId: card.instanceId,
       kind: 'card',
@@ -6746,6 +7960,7 @@ export class EffectRuntime {
     // previews and conditional target discovery must evaluate that projected state.
     const targetFrame = {
       ...this.frameFor(source, null, []),
+      choiceIndex: selectedChoice,
       prospectiveCardPlay: true
     }
     if (
@@ -6756,10 +7971,15 @@ export class EffectRuntime {
     if (!this.hasResolvableSpellCastAction(definition, targetFrame, selectedChoice)) {
       return null
     }
-    const targetSelectors = this.targetSelectorsFor(
+    const discoveredTargetSelectors = this.targetSelectorsFor(
       definition,
       targetFrame,
       selectedChoice
+    )
+    const targetSelectors = discoveredTargetSelectors.filter((selector) =>
+      selector.__optionalTarget === true
+        ? this.legalInputCandidates(selector, targetFrame).length > 0
+        : true
     )
     const legalTargetOptions = targetSelectors.map((selector) =>
       this.legalInputCandidates(selector, targetFrame)
@@ -6874,7 +8094,6 @@ export class EffectRuntime {
               return false
             if (definition.type === 'Spell' && definition.keywords.includes('secret')) {
               if (
-                (player.secrets ?? []).length >= 5 ||
                 (player.secrets ?? []).some((secret) => secret.cardId === card.cardId)
               )
                 return false
@@ -6924,6 +8143,7 @@ export class EffectRuntime {
               !keywords.includes('cannot-attack') &&
               !frozen &&
               (keywords.includes('charge') ||
+                keywords.includes('rush') ||
                 !hasBoardMinionEntryExhaustion(minion, this.draft.turnNumber)) &&
               attacks < maximum
             )
@@ -6982,17 +8202,30 @@ export class EffectRuntime {
                   instanceId: minion.instanceId
                 }))
             ]
-      for (const attacker of legalAttackerInstanceIds)
-        legalAttackTargets[attacker] = defenders
-      if (
-        this.combatCanAttack({
-          instanceId: `${participantId}:hero`,
-          kind: 'hero',
+      for (const attacker of legalAttackerInstanceIds) {
+        const ref: EntityRef = {
+          instanceId: attacker,
+          kind: 'minion',
           participantId,
-          zone: 'hero'
-        })
-      ) {
-        legalAttackTargets[`${participantId}:hero`] = defenders
+          zone: 'board'
+        }
+        const targets = defenders.filter(
+          (defender) => defender.kind !== 'hero' || this.combatCanAttackHeroes(ref)
+        )
+        if (targets.length > 0) legalAttackTargets[attacker] = targets
+      }
+      const heroRef: EntityRef = {
+        instanceId: `${participantId}:hero`,
+        kind: 'hero',
+        participantId,
+        zone: 'hero'
+      }
+      if (this.combatCanAttack(heroRef)) {
+        const heroTargets = defenders.filter(
+          (defender) => defender.kind !== 'hero' || this.combatCanAttackHeroes(heroRef)
+        )
+        if (heroTargets.length > 0)
+          legalAttackTargets[`${participantId}:hero`] = heroTargets
       }
     }
     const legalTargets: Record<string, readonly CardPlayTargetRef[]> = {}
@@ -7121,8 +8354,8 @@ export class EffectRuntime {
     if (!report.supported) throw new UnsupportedEffectCapabilityError(report)
     if (isMindControlSpell(definition) && player.board.length >= MAX_BOARD_SIZE)
       throw new ResolutionInputError('board-full', 'The board is full.')
-    const choiceCount = this.choiceCountFor(definition)
-    const choiceTiming = this.choiceTimingFor(definition)
+    const choiceCount = this.choiceCountFor(definition, options.participantId)
+    const choiceTiming = this.choiceTimingFor(definition, options.participantId)
     if (choiceCount > 0) {
       if (
         options.choice === undefined &&
@@ -7156,8 +8389,6 @@ export class EffectRuntime {
     if (definition.type === 'Minion' && player.board.length >= MAX_BOARD_SIZE)
       throw new ResolutionInputError('board-full', 'The board is full.')
     if (definition.keywords.includes('secret')) {
-      if ((player.secrets ?? []).length >= 5)
-        throw new ResolutionInputError('resolution-failed', 'The secret zone is full.')
       if ((player.secrets ?? []).some((secret) => secret.cardId === card.cardId))
         throw new ResolutionInputError(
           'resolution-failed',
@@ -7505,6 +8736,35 @@ export class EffectRuntime {
     return 0
   }
 
+  private combatCanAttackHeroes(ref: EntityRef): boolean {
+    if (this.hasKeyword(ref, 'cannot-attack-heroes')) return false
+    if (ref.kind === 'hero') {
+      const weapon = this.player(ref.participantId).weapon
+      if (
+        weapon &&
+        (cardDefinition(weapon.cardId)?.effects ?? [])
+          .filter((block) => block.trigger === 'aura')
+          .flatMap((block) => block.actions ?? [])
+          .some(
+            (action) =>
+              action.action === 'modify-hero-attacks' &&
+              Array.isArray(action.forbiddenTargetTypes) &&
+              action.forbiddenTargetTypes.includes('hero')
+          )
+      )
+        return false
+    }
+    if (ref.kind !== 'minion') return true
+    const minion = this.currentMinion(ref)
+    if (!minion) return false
+    const keywords = effectiveBoardMinionKeywords(minion, this.draft.turnNumber)
+    return (
+      !hasBoardMinionEntryExhaustion(minion, this.draft.turnNumber) ||
+      !keywords.includes('rush') ||
+      keywords.includes('charge')
+    )
+  }
+
   private combatCanAttack(ref: EntityRef): boolean {
     if (ref.kind !== 'hero' && ref.kind !== 'minion') return false
     if (
@@ -7517,8 +8777,8 @@ export class EffectRuntime {
       const minion = this.currentMinion(ref)
       if (!minion || minion.health <= 0) return false
       if (
-        !effectiveBoardMinionKeywords(minion, this.draft.turnNumber).includes(
-          'charge'
+        !effectiveBoardMinionKeywords(minion, this.draft.turnNumber).some(
+          (keyword) => keyword === 'charge' || keyword === 'rush'
         ) &&
         hasBoardMinionEntryExhaustion(minion, this.draft.turnNumber)
       )
@@ -7654,6 +8914,9 @@ export class EffectRuntime {
   }
 
   resolveAttack(options: AttackRuntimeOptions): EffectResolutionResult {
+    this.historyRecorder = new HistoryRecorder(
+      this.draft as unknown as OpeningMatchState
+    )
     try {
       if (this.draft.phase !== 'turns')
         throw new ResolutionInputError(
@@ -7692,7 +8955,7 @@ export class EffectRuntime {
           'The selected target cannot be attacked.'
         )
       }
-      if (defender.kind === 'hero' && this.hasKeyword(attacker, 'cannot-attack-heroes'))
+      if (defender.kind === 'hero' && !this.combatCanAttackHeroes(attacker))
         throw new ResolutionInputError(
           'invalid-target',
           'That character cannot attack heroes.'
@@ -7960,6 +9223,26 @@ export class EffectRuntime {
       const attackerDivineShieldConsumed =
         attackerHadDivineShield && !this.hasKeyword(attacker, 'divine-shield')
 
+      const attackerDied =
+        attacker.kind === 'hero'
+          ? this.player(attacker.participantId).hero.health <= 0
+          : (this.currentMinion(attacker)?.health ?? 0) <= 0
+      const defenderDied =
+        actualDefender.kind === 'hero'
+          ? this.player(actualDefender.participantId).hero.health <= 0
+          : (this.currentMinion(actualDefender)?.health ?? 0) <= 0
+      this.emitSemantic({
+        type: 'attack-resolved',
+        source: attacker,
+        target: actualDefender,
+        controllerId: attacker.participantId,
+        targetControllerId: actualDefender.participantId,
+        damage: attackerDamage,
+        amount: defenderDamage,
+        attackerDied,
+        defenderDied
+      })
+
       if (attacker.kind === 'minion') {
         const minion = this.currentMinion(attacker)
         if (minion) {
@@ -7991,8 +9274,8 @@ export class EffectRuntime {
               'combat.weapon-attack-cost'
             )
           } else {
-            weapon.durability = Math.max(0, weapon.durability - 1)
-            if (weapon.durability === 0) this.queueWeaponDeath(weaponRef)
+            if (this.applyWeaponDurabilityLoss(weaponRef, 1))
+              this.queueWeaponDeath(weaponRef)
           }
         }
       }
@@ -8115,6 +9398,9 @@ export class EffectRuntime {
   }
 
   resolveHeroPower(options: HeroPowerRuntimeOptions): EffectResolutionResult {
+    this.historyRecorder = new HistoryRecorder(
+      this.draft as unknown as OpeningMatchState
+    )
     try {
       if (this.draft.phase !== 'turns')
         throw new ResolutionInputError(
@@ -8841,7 +10127,95 @@ export class EffectRuntime {
   }
 
   /** Resolves the complete end/start turn boundary as one atomic command. */
+  private castAiBonusSecret(participantId: PlayerId): void {
+    const pool = eligibleAiBonusSecrets(
+      this.draft as unknown as OpeningMatchState,
+      participantId
+    )
+    if (pool.length === 0) return
+    const cardId = pool[Math.floor(this.rng.next() * pool.length)]!
+    const definition = CARD_CATALOG.require(cardId)
+    const player = this.player(participantId)
+    const card: DraftCard = {
+      instanceId: this.allocateId(`${participantId}:bonus-secret`),
+      cardId,
+      ownerId: participantId,
+      controllerId: participantId,
+      creationOrdinal: this.nextEntityOrdinal++,
+      baseCost: definition.cost,
+      currentCost: 0,
+      zone: 'discarded',
+      revealed: false,
+      knownTo: [participantId]
+    }
+    const source: EntityRef = {
+      instanceId: card.instanceId,
+      cardId,
+      participantId,
+      kind: 'card',
+      zone: 'discarded'
+    }
+    this.events.push({
+      type: 'history-action-resolved',
+      participantId,
+      action: 'card',
+      source: {
+        id: card.instanceId,
+        cardId,
+        participantId,
+        kind: 'card',
+        baseCost: definition.cost,
+        currentCost: 0
+      },
+      outcomes: []
+    })
+    this.historyUpdate((history) => {
+      history.cardsPlayedThisTurn = [...history.cardsPlayedThisTurn, cardId]
+      history.cardsPlayedThisGame = [...history.cardsPlayedThisGame, cardId]
+      history.cardsCastThisTurn = [...history.cardsCastThisTurn, cardId]
+      history.spellsCastThisGameByPlayer = {
+        ...history.spellsCastThisGameByPlayer,
+        [participantId]: (history.spellsCastThisGameByPlayer?.[participantId] ?? 0) + 1
+      }
+    })
+    this.emitCardPlayedSemantic(source, source, card, 'card-played')
+    const cast = this.emitCardPlayedSemantic(source, source, card, 'spell-cast', 'cast')
+    if (cast.cancelled) this.addToDiscardedCards(player, card)
+    else {
+      this.appendSecret(player, {
+        instanceId: card.instanceId,
+        cardId,
+        ownerId: participantId,
+        controllerId: participantId,
+        creationOrdinal: card.creationOrdinal!,
+        playOrder: this.nextEntityOrdinal++,
+        revealed: false
+      })
+      this.historyUpdate((history) => {
+        history.secretsPlayedThisGameByPlayer = {
+          ...history.secretsPlayedThisGameByPlayer,
+          [participantId]:
+            (history.secretsPlayedThisGameByPlayer?.[participantId] ?? 0) + 1
+        }
+      })
+      const secretSource: EntityRef = { ...source, kind: 'secret', zone: 'secret' }
+      this.emitCardPlayedSemantic(secretSource, secretSource, card, 'secret-played')
+      this.runCardBlocks(
+        definition,
+        'on-secret-played',
+        this.frameFor(source, null, []),
+        'bonus-secret'
+      )
+      this.processDeaths()
+      this.emitCardPlayedSemantic(source, source, card, 'spell-resolved', 'cast')
+    }
+    this.processDeaths()
+  }
+
   resolveTurnTransition(options: TurnTransitionRuntimeOptions): EffectResolutionResult {
+    this.historyRecorder = new HistoryRecorder(
+      this.draft as unknown as OpeningMatchState
+    )
     try {
       if (this.draft.phase !== 'turns')
         throw new ResolutionInputError(
@@ -8854,6 +10228,17 @@ export class EffectRuntime {
           'Only the active participant can end the turn.'
         )
       const endingPlayer = this.player(options.participantId)
+      this.castAiBonusSecret(options.participantId)
+      if (this.draft.players.some((player) => player.hero.health <= 0)) {
+        return {
+          accepted: true,
+          state: this.commitResolution(),
+          events: clonePlain(this.events) as OpeningMatchEvent[],
+          trace: copyPlainArray(this.trace),
+          nextEntityOrdinal: this.nextEntityOrdinal,
+          triggerEvents: copyPlainArray(this.triggerEvents)
+        }
+      }
       this.step('checkpoint.turn-end', 'checkpoint')
       const endingHero: EntityRef = {
         instanceId: `${options.participantId}:hero`,
@@ -8960,6 +10345,12 @@ export class EffectRuntime {
     validated: ReturnType<EffectRuntime['validatePlayInput']>
   ): void {
     const player = this.player(options.participantId)
+    const effectiveChoice =
+      options.choice ??
+      (collectChoiceOptions(validated.definition.effects)?.length &&
+      this.combinedChooseOneActive(options.participantId)
+        ? -1
+        : undefined)
     const handIndex = player.hand.findIndex(
       (card) => card.instanceId === options.cardInstanceId
     )
@@ -8996,12 +10387,18 @@ export class EffectRuntime {
     this.historyUpdate((history) => {
       history.cardsPlayedThisTurn = [...history.cardsPlayedThisTurn, card.cardId]
       history.cardsPlayedThisGame = [...history.cardsPlayedThisGame, card.cardId]
-      if (validated.definition.type === 'Spell')
+      if (validated.definition.type === 'Spell') {
         history.cardsCastThisTurn = [...history.cardsCastThisTurn, card.cardId]
+        history.spellsCastThisGameByPlayer = {
+          ...(history.spellsCastThisGameByPlayer ?? {}),
+          [options.participantId]:
+            (history.spellsCastThisGameByPlayer?.[options.participantId] ?? 0) + 1
+        }
+      }
     })
     let frame = {
       ...this.frameFor(validated.source, null, validated.chosenTargets),
-      choiceIndex: options.choice
+      choiceIndex: effectiveChoice
     }
     if (validated.definition.type === 'Minion') {
       const minionCountBeforePlay = player.board.length
@@ -9023,7 +10420,7 @@ export class EffectRuntime {
       this.recomputeContinuousEffects()
       frame = {
         ...this.frameFor(minion, null, validated.chosenTargets),
-        choiceIndex: options.choice
+        choiceIndex: effectiveChoice
       }
       const playedMinionsThisTurn = (this.draft.history?.cardsPlayedThisTurn ?? [])
         .map((cardId) => cardDefinition(cardId as CardId))
@@ -9105,10 +10502,11 @@ export class EffectRuntime {
       }
       frame = {
         ...this.frameFor(target, null, validated.chosenTargets),
-        choiceIndex: options.choice
+        choiceIndex: effectiveChoice
       }
       this.emitCardPlayedSemantic(target, target, card, 'card-played')
       this.runCardBlocks(validated.definition, 'on-play', frame, 'play-card')
+      this.runCardBlocks(validated.definition, 'battlecry', frame, 'play-card')
       this.events.push({
         type: 'weapon-equipped',
         participantId: options.participantId,
@@ -9125,45 +10523,20 @@ export class EffectRuntime {
       frame = {
         ...this.frameFor(target, null, validated.chosenTargets),
         sourceCardId: card.cardId,
-        choiceIndex: options.choice
+        choiceIndex: effectiveChoice
       }
       this.emitCardPlayedSemantic(validated.source, target, card, 'card-played')
       this.runCardBlocks(validated.definition, 'on-play', frame, 'play-card')
       this.runCardBlocks(validated.definition, 'battlecry', frame, 'play-card')
-    } else if (validated.definition.keywords.includes('secret')) {
-      if ((player.secrets ?? []).length >= 5)
-        throw new ResolutionInputError('resolution-failed', 'The secret zone is full.')
-      if ((player.secrets ?? []).some((secret) => secret.cardId === card.cardId))
-        throw new ResolutionInputError(
-          'resolution-failed',
-          'A copy of that secret is already active.'
-        )
-      const secret: SecretState = {
-        instanceId: card.instanceId,
-        cardId: card.cardId,
-        ownerId: options.participantId,
-        controllerId: options.participantId,
-        creationOrdinal: card.creationOrdinal ?? this.nextEntityOrdinal++,
-        playOrder: this.nextEntityOrdinal++,
-        revealed: false
-      }
-      this.emitCardPlayedSemantic(
-        validated.source,
-        validated.source,
-        card,
-        'card-played'
-      )
-      this.appendSecret(player, secret)
-      const target: EntityRef = {
-        instanceId: secret.instanceId,
-        kind: 'secret',
-        participantId: options.participantId,
-        zone: 'secret',
-        cardId: card.cardId
-      }
-      this.emitCardPlayedSemantic(target, target, card, 'secret-played')
-      this.runCardBlocks(validated.definition, 'on-secret-played', frame, 'play-card')
     } else {
+      const isSecret = validated.definition.keywords.includes('secret')
+      if (isSecret) {
+        if ((player.secrets ?? []).some((secret) => secret.cardId === card.cardId))
+          throw new ResolutionInputError(
+            'resolution-failed',
+            'A copy of that secret is already active.'
+          )
+      }
       this.emitCardPlayedSemantic(
         validated.source,
         validated.source,
@@ -9183,10 +10556,6 @@ export class EffectRuntime {
         )
         if (targeted.redirectTarget) resolvedTargets[index] = targeted.redirectTarget
       }
-      const castFrame = {
-        ...this.frameFor(validated.source, null, resolvedTargets),
-        choiceIndex: options.choice
-      }
       const castEvent = this.emitCardPlayedSemantic(
         validated.source,
         resolvedTargets[0] ?? validated.source,
@@ -9194,13 +10563,77 @@ export class EffectRuntime {
         'spell-cast',
         'cast'
       )
-      if (!castEvent.cancelled)
-        this.runCardBlocks(validated.definition, 'cast', castFrame, 'play-card')
+      if (!castEvent.cancelled) {
+        const castFrame = {
+          ...this.frameFor(validated.source, null, resolvedTargets),
+          choiceIndex: effectiveChoice
+        }
+        if (isSecret) {
+          const secret: SecretState = {
+            instanceId: card.instanceId,
+            cardId: card.cardId,
+            ownerId: options.participantId,
+            controllerId: options.participantId,
+            creationOrdinal: card.creationOrdinal ?? this.nextEntityOrdinal++,
+            playOrder: this.nextEntityOrdinal++,
+            revealed: false
+          }
+          this.appendSecret(player, secret)
+          this.historyUpdate((history) => {
+            history.secretsPlayedThisGameByPlayer = {
+              ...(history.secretsPlayedThisGameByPlayer ?? {}),
+              [options.participantId]:
+                (history.secretsPlayedThisGameByPlayer?.[options.participantId] ?? 0) +
+                1
+            }
+          })
+          const target: EntityRef = {
+            instanceId: secret.instanceId,
+            kind: 'secret',
+            participantId: options.participantId,
+            zone: 'secret',
+            cardId: card.cardId
+          }
+          this.emitCardPlayedSemantic(target, target, card, 'secret-played')
+          this.runCardBlocks(
+            validated.definition,
+            'on-secret-played',
+            castFrame,
+            'play-card'
+          )
+        } else {
+          this.runCardBlocks(validated.definition, 'cast', castFrame, 'play-card')
+        }
+        // Original rules discover listeners after the spell and its deaths,
+        // so a Pyromancer summoned by this spell can also trigger.
+        this.processDeaths()
+        const spellTarget = resolvedTargets[0] ?? validated.source
+        const currentTarget = this.allEntities().find(
+          (entity) => entity.instanceId === spellTarget.instanceId
+        )
+        // Keep the original minion target even if it left the board, but use
+        // its new controller when the spell moved it to the other player.
+        this.emitCardPlayedSemantic(
+          validated.source,
+          {
+            ...spellTarget,
+            participantId: currentTarget?.participantId ?? spellTarget.participantId
+          },
+          card,
+          'spell-resolved',
+          'cast'
+        )
+      } else if (isSecret) {
+        this.addToDiscardedCards(player, card)
+      }
     }
     this.processDeaths()
   }
 
   resolveCardPlay(options: EffectRuntimeOptions): EffectResolutionResult {
+    this.historyRecorder = new HistoryRecorder(
+      this.draft as unknown as OpeningMatchState
+    )
     try {
       const validated = this.validatePlayInput(options)
       this.step('checkpoint.card-play', 'checkpoint')
@@ -9279,9 +10712,211 @@ export class EffectRuntime {
     }
   }
 
+  private selectDiscoverCandidate(
+    pending: NonNullable<DraftState['pendingDiscover']>,
+    options: Pick<PendingDiscoverRuntimeOptions, 'participantId' | 'cardInstanceId'>
+  ): EntityRef | null {
+    const player = this.player(options.participantId)
+    const selectedCandidate = pending.candidates.find(
+      (card) => card.instanceId === options.cardInstanceId
+    )!
+    const candidatesAreCopies =
+      pending.origin === 'generated' || pending.origin === 'opponent-deck'
+    let selectedRef: EntityRef | null = null
+    for (const candidate of pending.candidates) {
+      const candidateRef: EntityRef = {
+        instanceId: candidate.instanceId,
+        kind: 'card',
+        participantId: options.participantId,
+        zone: 'revealed',
+        cardId: candidate.cardId
+      }
+      const card = this.currentCard(candidateRef)
+      if (!card || card.zone !== 'revealed')
+        throw new ResolutionInputError(
+          'stale-target',
+          'A Discover candidate is no longer available.'
+        )
+      const removed = this.removeCard(candidateRef)
+      if (!removed)
+        throw new ResolutionInputError(
+          'stale-target',
+          'A Discover candidate is no longer available.'
+        )
+      if (candidate.instanceId === selectedCandidate.instanceId) {
+        if (player.hand.length >= MAX_HAND_SIZE) {
+          this.addToDiscardedCards(player, {
+            ...removed,
+            zone: 'discarded',
+            revealed: false
+          })
+          this.events.push({
+            type: 'card-burned',
+            participantId: options.participantId,
+            card: clonePlain({
+              ...removed,
+              zone: 'discarded',
+              revealed: false
+            }) as OpeningCard
+          })
+        } else {
+          const handCard: DraftCard = {
+            ...removed,
+            zone: 'hand',
+            revealed: true,
+            knownTo: [options.participantId]
+          }
+          this.applyCardZones(
+            player,
+            insertCardIntoPlayer(
+              player as unknown as OpeningPlayerState,
+              handCard,
+              'hand'
+            ) as DraftPlayer
+          )
+          selectedRef = {
+            instanceId: handCard.instanceId,
+            kind: 'card',
+            participantId: options.participantId,
+            zone: 'hand',
+            cardId: handCard.cardId
+          }
+          this.events.push({
+            type: 'card-drawn',
+            participantId: options.participantId,
+            card: clonePlain(handCard) as OpeningCard
+          })
+        }
+      } else if (!candidatesAreCopies) {
+        this.addToDiscardedCards(player, {
+          ...removed,
+          zone: 'discarded',
+          revealed: false
+        })
+      }
+    }
+    return selectedRef
+  }
+
+  resolvePendingDiscoverChoice(
+    options: PendingDiscoverRuntimeOptions
+  ): EffectResolutionResult {
+    this.historyRecorder = new HistoryRecorder(
+      this.draft as unknown as OpeningMatchState
+    )
+    try {
+      const pending = this.draft.pendingDiscover
+      if (!pending)
+        throw new ResolutionInputError(
+          'missing-input',
+          'No Discover choice is pending.'
+        )
+      if (
+        pending.participantId !== options.participantId ||
+        !pending.candidates.some((card) => card.instanceId === options.cardInstanceId)
+      )
+        throw new ResolutionInputError(
+          'invalid-target',
+          'The selected card is not a Discover candidate.'
+        )
+      const selectedRef = this.selectDiscoverCandidate(pending, options)
+
+      const queuedNext =
+        pending.queued && pending.queued.length > 0
+          ? {
+              ...pending.queued[0]!,
+              ...(pending.queued.length > 1 ? { queued: pending.queued.slice(1) } : {})
+            }
+          : undefined
+      this.draft.pendingDiscover = undefined
+      const continuation = pending.continuation
+      if (continuation) {
+        const source =
+          this.findEntity(
+            continuation.source.instanceId,
+            continuation.source.participantId
+          ) ?? (continuation.source as EntityRef)
+        const continuationFrame = {
+          ...this.frameFor(
+            source,
+            continuation.event
+              ? (continuation.event as unknown as SemanticEvent)
+              : null,
+            continuation.chosenTargets as EntityRef[]
+          ),
+          choiceIndex: continuation.choiceIndex
+        }
+        if (continuation.storeAs && selectedRef)
+          continuationFrame.stored.set(continuation.storeAs, [selectedRef])
+        this.runActions(
+          continuation.actions,
+          continuationFrame,
+          continuation.actionPath
+        )
+      }
+      const nestedPending = (
+        this.draft as unknown as {
+          pendingDiscover?: Mutable<PendingDiscoverChoice>
+        }
+      ).pendingDiscover
+      if (nestedPending) {
+        if (queuedNext)
+          nestedPending.queued = [
+            ...(nestedPending.queued ?? []),
+            queuedNext as unknown as Mutable<Omit<PendingDiscoverChoice, 'queued'>>
+          ]
+      } else {
+        this.draft.pendingDiscover = queuedNext as DraftState['pendingDiscover']
+        if (queuedNext)
+          this.events.push({
+            type: 'discover-started',
+            participantId: queuedNext.participantId,
+            sourceCardInstanceId: queuedNext.sourceCardInstanceId,
+            candidates: clonePlain(queuedNext.candidates) as OpeningCard[]
+          })
+      }
+      this.processDeaths()
+      const nextState = this.commitResolution()
+      return {
+        accepted: true,
+        state: nextState,
+        events: clonePlain(this.events) as OpeningMatchEvent[],
+        trace: copyPlainArray(this.trace),
+        nextEntityOrdinal: this.nextEntityOrdinal,
+        triggerEvents: copyPlainArray(this.triggerEvents)
+      }
+    } catch (error) {
+      return this.resolutionFailure(error)
+    }
+  }
+
+  private advancePendingCardChoice(
+    pending: NonNullable<DraftState['pendingCardChoice']>
+  ): void {
+    const [next, ...queued] = pending.queued ?? []
+    this.draft.pendingCardChoice = next
+      ? { ...next, ...(queued.length > 0 ? { queued } : {}) }
+      : undefined
+  }
+
+  private announcePendingCardChoice(): void {
+    const pending = this.draft.pendingCardChoice
+    if (!pending) return
+    this.events.push({
+      type: 'card-choice-started',
+      participantId: pending.participantId,
+      sourceCardInstanceId: pending.sourceCardInstanceId,
+      sourceCardId: pending.sourceCardId,
+      options: clonePlain(pending.options)
+    })
+  }
+
   resolvePendingCardChoice(
     options: PendingCardChoiceRuntimeOptions
   ): EffectResolutionResult {
+    this.historyRecorder = new HistoryRecorder(
+      this.draft as unknown as OpeningMatchState
+    )
     try {
       const pending = this.draft.pendingCardChoice
       if (!pending)
@@ -9296,6 +10931,146 @@ export class EffectRuntime {
         )
       if (!pending.options.some((option) => option.choice === options.choice))
         throw new ResolutionInputError('extra-input', 'The selected choice is invalid.')
+      if (pending.resolution?.type === 'kazakus-potion') {
+        const resolution = pending.resolution
+        const selected = pending.options.find(
+          (option) => option.choice === options.choice
+        )
+        if (!selected)
+          throw new ResolutionInputError(
+            'extra-input',
+            'The selected choice is invalid.'
+          )
+        if (resolution.stage === 'cost') {
+          const costOption = resolution.costOptions[options.choice]
+          if (!costOption)
+            throw new ResolutionInputError(
+              'stale-target',
+              'The potion cost is unavailable.'
+            )
+          const nextPending = firstPotionIngredientChoice(
+            pending,
+            resolution.costOptions,
+            costOption,
+            this.rng
+          )
+          this.draft.pendingCardChoice =
+            nextPending as unknown as DraftState['pendingCardChoice']
+          this.events.push({
+            type: 'card-choice-started',
+            participantId: pending.participantId,
+            sourceCardInstanceId: pending.sourceCardInstanceId,
+            sourceCardId: pending.sourceCardId,
+            options: nextPending.options
+          })
+          const nextState = this.commitResolution()
+          return {
+            accepted: true,
+            state: nextState,
+            events: clonePlain(this.events) as OpeningMatchEvent[],
+            trace: copyPlainArray(this.trace),
+            nextEntityOrdinal: this.nextEntityOrdinal,
+            triggerEvents: copyPlainArray(this.triggerEvents)
+          }
+        }
+        if (resolution.stage === 'first-ingredient') {
+          const firstIngredient = resolution.firstIngredientOffers?.[options.choice]
+          const costOption = resolution.selectedCostOption
+          if (!firstIngredient || !costOption)
+            throw new ResolutionInputError(
+              'stale-target',
+              'The first potion ingredient is unavailable.'
+            )
+          const offers = potionIngredientOffers(
+            costOption.ingredientPool.filter((cardId) => cardId !== firstIngredient),
+            this.rng
+          )
+          if (offers.length < 1)
+            throw new ResolutionInputError(
+              'resolution-failed',
+              'The potion has no valid second ingredient.'
+            )
+          const nextPending: Omit<PendingCardChoice, 'queued'> = {
+            ...pending,
+            options: ingredientChoiceOptions(offers),
+            resolution: {
+              type: 'kazakus-potion',
+              stage: 'second-ingredient',
+              costOptions: resolution.costOptions,
+              selectedCostOption: costOption,
+              firstIngredientOffers: resolution.firstIngredientOffers,
+              selectedFirstIngredient: firstIngredient,
+              secondIngredientOffers: offers
+            }
+          }
+          this.draft.pendingCardChoice =
+            nextPending as unknown as DraftState['pendingCardChoice']
+          this.events.push({
+            type: 'card-choice-started',
+            participantId: pending.participantId,
+            sourceCardInstanceId: pending.sourceCardInstanceId,
+            sourceCardId: pending.sourceCardId,
+            options: nextPending.options
+          })
+          const nextState = this.commitResolution()
+          return {
+            accepted: true,
+            state: nextState,
+            events: clonePlain(this.events) as OpeningMatchEvent[],
+            trace: copyPlainArray(this.trace),
+            nextEntityOrdinal: this.nextEntityOrdinal,
+            triggerEvents: copyPlainArray(this.triggerEvents)
+          }
+        }
+        const secondIngredient = resolution.secondIngredientOffers?.[options.choice]
+        const firstIngredient = resolution.selectedFirstIngredient
+        const costOption = resolution.selectedCostOption
+        if (!firstIngredient || !secondIngredient || !costOption)
+          throw new ResolutionInputError(
+            'stale-target',
+            'The selected potion ingredients are unavailable.'
+          )
+        const recipe = costOption.recipes.find(
+          (candidate) =>
+            candidate.ingredients.length === 2 &&
+            candidate.ingredients.includes(firstIngredient) &&
+            candidate.ingredients.includes(secondIngredient)
+        )
+        if (!recipe)
+          throw new ResolutionInputError(
+            'resolution-failed',
+            'The selected potion ingredients have no recipe.'
+          )
+        const source = this.findEntity(
+          pending.sourceCardInstanceId,
+          pending.participantId
+        ) ?? {
+          instanceId: pending.sourceCardInstanceId,
+          kind: 'minion' as const,
+          participantId: pending.participantId,
+          zone: 'graveyard' as const,
+          cardId: pending.sourceCardId
+        }
+        this.advancePendingCardChoice(pending)
+        this.addCardToHand(
+          pending.participantId,
+          recipe.cardId,
+          this.frameFor(source, null, []),
+          'pending-choice.kazakus-potion'
+        )
+        this.processDeaths()
+        this.announcePendingCardChoice()
+        const nextState = this.commitResolution()
+        return {
+          accepted: true,
+          state: nextState,
+          events: clonePlain(this.events) as OpeningMatchEvent[],
+          trace: copyPlainArray(this.trace),
+          nextEntityOrdinal: this.nextEntityOrdinal,
+          triggerEvents: copyPlainArray(this.triggerEvents)
+        }
+      }
+
       if (pending.resolution?.type === 'hero-power') {
         const powerId = pending.resolution.heroPowerIds[options.choice]
         const definition = powerId ? HERO_POWER_CATALOG.get(powerId) : undefined
@@ -9323,15 +11098,8 @@ export class EffectRuntime {
           previousHeroPowerId: previous.id,
           heroPowerId: definition.id
         })
-        this.draft.pendingCardChoice =
-          pending.queued && pending.queued.length > 0
-            ? {
-                ...pending.queued[0]!,
-                ...(pending.queued.length > 1
-                  ? { queued: pending.queued.slice(1) }
-                  : {})
-              }
-            : undefined
+        this.advancePendingCardChoice(pending)
+        this.announcePendingCardChoice()
         const nextState = this.commitResolution()
         return {
           accepted: true,
@@ -9422,6 +11190,17 @@ export function resolvePendingCardChoice(
     options.nextEntityOrdinal,
     options.recordTrace
   ).resolvePendingCardChoice(options)
+}
+
+export function resolvePendingDiscoverChoice(
+  options: PendingDiscoverRuntimeOptions
+): EffectResolutionResult {
+  return new EffectRuntime(
+    options.state,
+    options.rng ?? createSeededRng(options.state.revision + 1),
+    options.nextEntityOrdinal,
+    options.recordTrace
+  ).resolvePendingDiscoverChoice(options)
 }
 
 export function resolveAttack(options: AttackRuntimeOptions): EffectResolutionResult {

@@ -1,4 +1,5 @@
-import { Container, Sprite, type Texture } from 'pixi.js'
+import { Container, PerspectiveMesh, Sprite, type Texture } from 'pixi.js'
+import type { PerspectiveCorners } from './hand-card-perspective'
 import type { CardDefinition } from '../../../game/content/cards'
 import type { CardView } from '../../rendering/cards/card-view'
 import { Actor } from '../../ui/components/actor'
@@ -20,6 +21,7 @@ interface RisingParticleProfile {
 }
 
 export interface CardPlayPose {
+  readonly perspective?: PerspectiveCorners
   readonly x: number
   readonly y: number
   readonly width: number
@@ -221,11 +223,30 @@ export class CardPlayAnimation extends Actor {
     effect.eventMode = 'none'
     this.addChild(effect)
 
-    const aura = new Sprite(this.spellAura)
+    const width = pose.width * profile.aura.widthMultiplier
+    const height = pose.height * profile.aura.heightMultiplier
+    const corners = pose.perspective ?? {
+      topLeft: { x: 0, y: 0 },
+      topRight: { x: 1, y: 0 },
+      bottomRight: { x: 1, y: 1 },
+      bottomLeft: { x: 0, y: 1 }
+    }
+    // Center the captured quadrilateral on the cast pose. Scaling during the
+    // fade preserves its perspective instead of easing it back to a rectangle.
+    const aura = new PerspectiveMesh({
+      texture: this.spellAura,
+      verticesX: 10,
+      verticesY: 10,
+      x0: (corners.topLeft.x - 0.5) * width,
+      y0: (corners.topLeft.y - 0.5) * height,
+      x1: (corners.topRight.x - 0.5) * width,
+      y1: (corners.topRight.y - 0.5) * height,
+      x2: (corners.bottomRight.x - 0.5) * width,
+      y2: (corners.bottomRight.y - 0.5) * height,
+      x3: (corners.bottomLeft.x - 0.5) * width,
+      y3: (corners.bottomLeft.y - 0.5) * height
+    })
     aura.label = 'game.spell-play-aura'
-    aura.anchor.set(0.5)
-    aura.width = pose.width * profile.aura.widthMultiplier
-    aura.height = pose.height * profile.aura.heightMultiplier
     aura.alpha = profile.aura.initialAlpha
     aura.blendMode = 'add'
     effect.addChild(aura)

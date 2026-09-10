@@ -2,15 +2,13 @@ import { CENTER, TOP_LEFT, placement } from '../../rendering/layout'
 import { CARD_CANVAS } from '../../rendering/cards/card-layout'
 
 const HISTORY_SOURCE_CARD_SCALE = 0.4
-const HISTORY_TARGET_CARD_SCALE = 0.27
-const HERO_FRAME_SIZE = { width: 358, height: 410 } as const
 
 /** Geometry for the Hearthstone-style action history overlay. */
 export const MATCH_HISTORY_LAYOUT = {
   name: 'Match history',
   rail: {
     frame: placement(
-      { x: 295, y: 285 },
+      { x: 287, y: 280 },
       { width: 75, height: 75 },
       {
         anchor: TOP_LEFT,
@@ -28,69 +26,13 @@ export const MATCH_HISTORY_LAYOUT = {
       scale: HISTORY_SOURCE_CARD_SCALE,
       note: 'Expanded initiating card centered vertically on the 1920x1080 canvas.'
     }),
-    heroPowerSource: placement(
-      { x: 400, y: 359 },
-      { width: 620, height: 903 },
-      {
-        anchor: TOP_LEFT,
-        scale: HISTORY_SOURCE_CARD_SCALE,
-        note: 'Constructed hero-power card aligned with expanded card previews.'
-      }
-    ),
-    heroSource: placement({ x: 524, y: 540 }, HERO_FRAME_SIZE, {
-      anchor: CENTER,
-      scale: (CARD_CANVAS.height * HISTORY_SOURCE_CARD_SCALE) / HERO_FRAME_SIZE.height,
-      note: 'Hero portrait matched to the expanded card height.'
-    }),
-    historyCard: {
-      scale: CARD_CANVAS.height / 392,
-      burnScale: CARD_CANVAS.height / 656,
-      fatigueDamage: { x: 191, y: 520, scale: 1.75 }
-    },
-    targetGrid: {
-      origin: { x: 825, y: 185 },
-      singleRowY: 325,
-      gapX: 185,
-      gapY: 280,
-      scale: HISTORY_TARGET_CARD_SCALE,
-      cardSize: {
-        width: CARD_CANVAS.width * HISTORY_TARGET_CARD_SCALE,
-        height: CARD_CANVAS.height * HISTORY_TARGET_CARD_SCALE
-      },
-      arrow: {
-        size: { width: 91, height: 92 },
-        offsetY: 88,
-        scale: 0.7,
-        gapToCard: 95
-      }
-    },
-    fallback: placement(
-      { x: 315, y: 490 },
-      { width: 235, height: 100 },
-      {
-        anchor: TOP_LEFT,
-        note: 'Centered text-only hero power, hidden, and fatigue action source.'
-      }
-    ),
-    heroOutcome: {
-      scale: (CARD_CANVAS.height * HISTORY_TARGET_CARD_SCALE) / HERO_FRAME_SIZE.height
-    },
-    outcomeBadge: {
-      offsetX: 0,
-      offsetY: 267,
-      width: 150,
-      height: 38
-    },
-    outcomeDamage: {
-      offsetX: 75,
-      offsetY: 167,
-      scale: 0.62
-    },
-    outcomeDeath: {
-      offsetX: 95,
-      offsetY: 82,
-      scale: 0.58
-    }
+    // Also used by the existing remote Secret preview.
+    historyCard: { scale: CARD_CANVAS.height / 392 },
+    arrow: placement(
+      { x: 722, y: 540 },
+      { width: 91, height: 92 },
+      { anchor: CENTER, scale: 0.7 }
+    )
   },
   remoteCardPlay: {
     origin: placement({ x: 985, y: 180 }, CARD_CANVAS, {
@@ -101,5 +43,87 @@ export const MATCH_HISTORY_LAYOUT = {
     travelDuration: 0.2,
     holdDuration: 1,
     fadeDuration: 0.1
+  }
+} as const
+
+/** Padded card footprint includes protruding mana and stat badges. */
+export const HISTORY_GRID = {
+  x: 790,
+  y: 160,
+  width: 1080,
+  height: 760,
+  cellWidth: 740,
+  cellHeight: 1020,
+  insetX: 60,
+  insetY: 60,
+  maxScale: HISTORY_SOURCE_CARD_SCALE,
+  arrow: { x: 722, y: 540 }
+} as const
+
+export function historyTargetPlacements(
+  count: number
+): readonly { x: number; y: number; scale: number }[] {
+  if (count <= 0) return []
+  let columns = 1,
+    rows = count,
+    scale = 0
+  for (let candidate = 1; candidate <= count; candidate++) {
+    const candidateRows = Math.ceil(count / candidate)
+    const fit = Math.min(
+      HISTORY_GRID.maxScale,
+      HISTORY_GRID.width / (candidate * HISTORY_GRID.cellWidth),
+      HISTORY_GRID.height / (candidateRows * HISTORY_GRID.cellHeight)
+    )
+    if (fit > scale + 1e-9 || (Math.abs(fit - scale) < 1e-9 && candidateRows < rows)) {
+      columns = candidate
+      rows = candidateRows
+      scale = fit
+    }
+  }
+  const top =
+    HISTORY_GRID.y + (HISTORY_GRID.height - rows * HISTORY_GRID.cellHeight * scale) / 2
+  return Array.from({ length: count }, (_, index) => {
+    const row = Math.floor(index / columns),
+      column = index % columns
+    const rowCount = Math.min(columns, count - row * columns)
+    return {
+      x:
+        HISTORY_GRID.x +
+        (((columns - rowCount) * HISTORY_GRID.cellWidth) / 2 +
+          column * HISTORY_GRID.cellWidth +
+          HISTORY_GRID.insetX) *
+          scale,
+      y: top + (row * HISTORY_GRID.cellHeight + HISTORY_GRID.insetY) * scale,
+      scale
+    }
+  })
+}
+
+/** Local positions within a 620x900 historical card. */
+export const HISTORY_CARD_DETAILS = {
+  size: CARD_CANVAS,
+  hero: placement(
+    { x: 310, y: 450 },
+    { width: 358, height: 410 },
+    { anchor: CENTER, scale: 620 / 358 }
+  ),
+  damage: placement(
+    { x: 310, y: 635 },
+    { width: 159, height: 163 },
+    { anchor: CENTER, scale: 2.4 }
+  ),
+  heal: placement({ x: 310, y: 605 }, { width: 260, height: 120 }, { anchor: CENTER }),
+  mixedHeal: placement(
+    { x: 310, y: 760 },
+    { width: 260, height: 120 },
+    { anchor: CENTER }
+  ),
+  hits: placement({ x: 465, y: 710 }, { width: 130, height: 60 }, { anchor: CENTER }),
+  death: placement({ x: 310, y: 200 }, { width: 200, height: 200 }, { anchor: CENTER }),
+  heroStats: {
+    health: { x: 570, y: 735 },
+    armor: { x: 570, y: 600 },
+    attack: { x: 50, y: 735 },
+    badgeHeight: 140
   }
 } as const

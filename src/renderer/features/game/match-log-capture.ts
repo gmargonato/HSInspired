@@ -135,6 +135,7 @@ export function captureMatchCommand(
       (event) =>
         !redundantSummary(event) &&
         event.type !== 'history-action-resolved' &&
+        event.type !== 'history-effect-recorded' &&
         event.type !== 'death-batch-completed' &&
         !(
           event.type === 'minion-combat-resolved' &&

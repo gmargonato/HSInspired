@@ -14,6 +14,26 @@ import {
   canonicalizeEquivalentRootActions,
   enumerateLegalCommands
 } from './legal-commands'
+import {
+  assessPolicySteps,
+  type AiPolicyAssessment,
+  type AiPolicyAssessmentStep
+} from './policy-assessment'
+
+export {
+  AI_POLICY_RISK_FLAGS,
+  assessPolicyCommand,
+  assessPolicySteps
+} from './policy-assessment'
+export type {
+  AiPolicyActionAssessment,
+  AiPolicyAssessment,
+  AiPolicyAssessmentStep,
+  AiPolicyCertainty,
+  AiPolicyDeferredEffects,
+  AiPolicyEffectSummary,
+  AiPolicyRiskFlag
+} from './policy-assessment'
 
 export interface AiPolicyOutcome {
   readonly turnNumber: number
@@ -53,6 +73,7 @@ export interface EngineVerifiedPolicy {
   readonly actions: readonly string[]
   readonly completeTurn: boolean
   readonly stopsAtNewInformation: boolean
+  readonly assessment: AiPolicyAssessment
   readonly outcome?: AiPolicyOutcome
 }
 
@@ -63,6 +84,7 @@ interface InspectedLine {
   readonly next: readonly OpeningMatchCommand[]
   readonly completeTurn: boolean
   readonly stopsAtNewInformation: boolean
+  readonly assessment: AiPolicyAssessment
   readonly outcome?: AiPolicyOutcome
 }
 
@@ -71,6 +93,9 @@ const MAX_POLICIES = 128
 const MAX_NODES = 416
 const MAX_CHILDREN = 12
 const TIME_BUDGET_MS = 500
+const MAX_LETHAL_NODES = 2_000
+const LETHAL_TIME_BUDGET_MS = 250
+const MAX_LETHAL_DEPTH = 12
 
 export const AI_POLICY_LIMITS = {
   maxRoots: MAX_ROOTS,
@@ -78,6 +103,12 @@ export const AI_POLICY_LIMITS = {
   maxNodes: MAX_NODES,
   maxChildren: MAX_CHILDREN,
   timeBudgetMs: TIME_BUDGET_MS
+} as const
+
+export const AI_LETHAL_SEARCH_LIMITS = {
+  maxNodes: MAX_LETHAL_NODES,
+  timeBudgetMs: LETHAL_TIME_BUDGET_MS,
+  maxDepth: MAX_LETHAL_DEPTH
 } as const
 
 function cardName(cardId: string): string {
@@ -88,18 +119,21 @@ function playerLabel(participantId: PlayerId, perspective: PlayerId): string {
   return participantId === perspective ? 'self' : 'opponent'
 }
 
-function minionName(
+function minionDescription(
   state: OpeningMatchState,
   participantId: PlayerId,
   instanceId: string
 ): string {
-  const minion = state.players
-    .find((player) => player.participantId === participantId)
-    ?.board.find((candidate) => candidate.instanceId === instanceId)
-  return minion ? cardName(minion.cardId) : 'unknown minion'
+  const owner = state.players.find((player) => player.participantId === participantId)
+  const index =
+    owner?.board.findIndex((candidate) => candidate.instanceId === instanceId) ?? -1
+  const minion = index >= 0 ? owner?.board[index] : undefined
+  return minion
+    ? `${cardName(minion.cardId)} [slot ${index + 1}, ${minion.attack}/${minion.health}, id ${instanceId}]`
+    : 'unknown minion'
 }
 
-function relativeMinionName(
+function relativeMinionDescription(
   state: OpeningMatchState,
   perspective: PlayerId,
   owner: 'self' | 'opponent',
@@ -110,7 +144,9 @@ function relativeMinionName(
       ? candidate.participantId === perspective
       : candidate.participantId !== perspective
   )
-  return player ? minionName(state, player.participantId, instanceId) : 'unknown minion'
+  return player
+    ? minionDescription(state, player.participantId, instanceId)
+    : 'unknown minion'
 }
 
 function targetDescription(
@@ -121,7 +157,7 @@ function targetDescription(
   const owner = playerLabel(target.participantId, perspective)
   if (target.kind === 'hero') return `${owner} hero`
   if (target.kind === 'minion') {
-    return `${owner} ${minionName(state, target.participantId, target.instanceId)}`
+    return `${owner} ${minionDescription(state, target.participantId, target.instanceId)}`
   }
   if (target.kind === 'weapon') return `${owner} weapon`
   if (target.kind === 'secret') return `${owner} Secret`
@@ -135,7 +171,7 @@ function attackDescription(
   owner: 'self' | 'opponent'
 ): string {
   if (ref.kind === 'hero') return `${owner} hero`
-  return `${owner} ${relativeMinionName(state, participantId, owner, ref.instanceId)}`
+  return `${owner} ${relativeMinionDescription(state, participantId, owner, ref.instanceId)}`
 }
 
 function describeCommand(
@@ -349,14 +385,23 @@ function inspect(
   return match.analyze((fork) => {
     const executed: OpeningMatchCommand[] = []
     const actions: string[] = []
+    const steps: AiPolicyAssessmentStep[] = []
     let boundary = false
     for (const command of commands) {
       const before = fork.getState()
-      actions.push(describeCommand(before, command, perspective))
+      const action = describeCommand(before, command, perspective)
+      actions.push(action)
       boundary = commandCreatesNewInformation(before, command, perspective)
       const result = fork.dispatch(command)
       if (!result.accepted) return null
       executed.push(command)
+      steps.push({
+        command,
+        action,
+        before,
+        after: result.state,
+        events: result.events
+      })
       if (boundary) break
     }
     const state = fork.getState()
@@ -379,6 +424,7 @@ function inspect(
             ).map((root) => root.command),
       completeTurn,
       stopsAtNewInformation: boundary,
+      assessment: assessPolicySteps(perspective, steps, state, boundary),
       ...(visibleOutcome ? { outcome: visibleOutcome } : {})
     }
   })
@@ -507,6 +553,133 @@ export async function buildEngineVerifiedPolicies(
     actions: line.actions,
     completeTurn: line.completeTurn,
     stopsAtNewInformation: line.stopsAtNewInformation,
+    assessment: line.assessment,
     ...(line.outcome ? { outcome: line.outcome } : {})
   }))
+}
+
+export interface AiLethalSearchResult {
+  readonly policy: EngineVerifiedPolicy | null
+  readonly expandedNodes: number
+  readonly elapsedMs: number
+  readonly exhausted: boolean
+}
+
+function commandLethalPriority(
+  state: OpeningMatchState,
+  command: OpeningMatchCommand
+): number {
+  if (command.type === 'attack-character') return 0
+  if (command.type === 'use-hero-power') {
+    const owner = state.players.find(
+      (player) => player.participantId === command.participantId
+    )
+    const effect = owner
+      ? HERO_POWER_CATALOG.get(owner.heroPower.id)?.effect
+      : undefined
+    return effect?.kind.includes('damage') ? 1 : 4
+  }
+  if (command.type === 'play-card') {
+    const card = state.players
+      .find((player) => player.participantId === command.participantId)
+      ?.hand.find((candidate) => candidate.instanceId === command.cardInstanceId)
+    const actions = card
+      ? JSON.stringify(CARD_CATALOG.get(card.cardId)?.effects).toLowerCase()
+      : ''
+    if (actions.includes('"action":"damage"')) return 1
+    if (actions.includes('"action":"destroy"')) return 2
+    if (actions.includes('"action":"buff"') || actions.includes('"action":"modify"'))
+      return 3
+    return 5
+  }
+  if (command.type === 'end-turn') return 99
+  return 6
+}
+
+function prioritizeLethalCommands(
+  state: OpeningMatchState,
+  commands: readonly OpeningMatchCommand[]
+): readonly OpeningMatchCommand[] {
+  return [...commands].sort(
+    (left, right) =>
+      commandLethalPriority(state, left) - commandLethalPriority(state, right) ||
+      canonicalCommandKey(left).localeCompare(canonicalCommandKey(right))
+  )
+}
+
+function commandPathKey(commands: readonly OpeningMatchCommand[]): string {
+  return commands.map(canonicalCommandKey).join('\u0000')
+}
+
+/**
+ * Searches the full deterministic command frontier for a guaranteed win before
+ * asking the provider to rank ordinary policies. New-information boundaries
+ * are terminal for this search because their result cannot be proven fairly.
+ */
+export async function findGuaranteedLethalPolicy(
+  match: OpeningMatchInstance,
+  perspective: PlayerId
+): Promise<AiLethalSearchResult> {
+  const startedAt = performance.now()
+  const roots = match.analyze((fork) => enumerateLegalCommands(fork, perspective))
+  const queue: OpeningMatchCommand[][] = prioritizeLethalCommands(
+    match.getState(),
+    roots
+  ).map((command) => [command])
+  const seen = new Set<string>(queue.map(commandPathKey))
+  let expandedNodes = 0
+
+  while (
+    queue.length > 0 &&
+    expandedNodes < MAX_LETHAL_NODES &&
+    performance.now() - startedAt < LETHAL_TIME_BUDGET_MS
+  ) {
+    const commands = queue.shift()!
+    const line = inspect(match, perspective, commands)
+    expandedNodes += 1
+    if (line?.assessment.guaranteedLethal && line.outcome?.winner === 'self') {
+      return {
+        policy: {
+          id: 'engine-guaranteed-lethal',
+          commands: line.commands,
+          actions: line.actions,
+          completeTurn: line.completeTurn,
+          stopsAtNewInformation: line.stopsAtNewInformation,
+          assessment: line.assessment,
+          ...(line.outcome ? { outcome: line.outcome } : {})
+        },
+        expandedNodes,
+        elapsedMs: Number((performance.now() - startedAt).toFixed(2)),
+        exhausted: false
+      }
+    }
+    if (
+      !line ||
+      line.completeTurn ||
+      line.stopsAtNewInformation ||
+      commands.length >= MAX_LETHAL_DEPTH
+    ) {
+      continue
+    }
+    for (const next of prioritizeLethalCommands(line.state, line.next)) {
+      const extended = [...commands, next]
+      const key = commandPathKey(extended)
+      if (seen.has(key)) continue
+      seen.add(key)
+      queue.push(extended)
+    }
+    if (expandedNodes % 32 === 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    }
+  }
+
+  return {
+    policy: null,
+    expandedNodes,
+    elapsedMs: Number((performance.now() - startedAt).toFixed(2)),
+    exhausted:
+      queue.length > 0 &&
+      (expandedNodes >= MAX_LETHAL_NODES ||
+        performance.now() - startedAt >= LETHAL_TIME_BUDGET_MS)
+  }
 }

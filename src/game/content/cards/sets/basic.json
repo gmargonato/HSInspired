@@ -2013,6 +2013,7 @@
         "actions": [
           {
             "action": "copy",
+            "allowEmptyTargets": true,
             "target": {
               "controller": "opponent",
               "type": "card",

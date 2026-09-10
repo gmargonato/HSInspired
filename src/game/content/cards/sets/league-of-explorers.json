@@ -525,7 +525,7 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "Destroy any minion damaged by this minion.",
+    "rulesText": "Poisonous.",
     "keywords": [],
     "effects": [
       {
@@ -1088,13 +1088,13 @@
     "cost": 5,
     "attack": 4,
     "health": 6,
-    "rulesText": "Whenever you cast a spell on another friendly minion, cast a copy of it on this one.",
+    "rulesText": "After you cast a spell on another friendly minion, cast a copy of it on this one.",
     "keywords": [],
     "effects": [
       {
         "trigger": "on-cast",
         "event": {
-          "type": "spell-targeted-minion",
+          "type": "spell-resolved",
           "controller": "self",
           "exclude": "event-target",
           "target": {
@@ -1191,7 +1191,7 @@
     "cost": 1,
     "attack": 1,
     "health": 3,
-    "rulesText": "Battlecry: Discover a new basic Hero Power.",
+    "rulesText": "Battlecry: Discover a new Hero Power.",
     "keywords": [],
     "effects": [
       {
@@ -1200,7 +1200,7 @@
           {
             "action": "set-hero-power",
             "player": "self",
-            "power": "discover-basic"
+            "power": "discover-current-tier"
           }
         ]
       }

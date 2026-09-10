@@ -6,6 +6,8 @@ const HEARTHSTONE_KEYWORDS = [
   'Deathrattle',
   'Windfury',
   'Poisonous',
+  'Elusive',
+  'Enrage',
   'Lifesteal',
   'Overload',
   'Discover',

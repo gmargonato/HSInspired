@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { isSceneRequest, SCENE_MENU_ENTRIES } from './scene-navigation'
+import {
+  DEV_MATCH_MENU_ENTRIES,
+  isSceneRequest,
+  SCENE_MENU_ENTRIES
+} from './scene-navigation'
 
 describe('scene navigation contract', () => {
   it('exposes and accepts the Arena scene request', () => {
@@ -32,5 +36,18 @@ describe('scene navigation contract', () => {
       request: { id: 'card-inspector' }
     })
     expect(isSceneRequest({ id: 'card-inspector' })).toBe(true)
+  })
+
+  it('exposes exactly the three development Match launch options', () => {
+    expect(Object.values(DEV_MATCH_MENU_ENTRIES).map((entry) => entry.label)).toEqual([
+      'Start as First player',
+      'Start as Second player',
+      'Skip mulligan'
+    ])
+    for (const entry of Object.values(DEV_MATCH_MENU_ENTRIES))
+      expect(isSceneRequest(entry.request)).toBe(true)
+    expect(isSceneRequest({ id: 'game', params: { launchMode: 'invalid' } })).toBe(
+      false
+    )
   })
 })

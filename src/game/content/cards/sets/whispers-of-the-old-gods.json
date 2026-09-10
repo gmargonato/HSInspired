@@ -1,0 +1,4485 @@
+[
+  {
+    "id": "whispers_of_the_old_gods_mark_of_yshaarj",
+    "name": "Mark of Y'Shaarj",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +2/+2. If it's a Beast, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "then": {
+          "condition": {
+            "type": "target-matches",
+            "filter": {
+              "tribe": "Beast"
+            }
+          },
+          "actions": [
+            {
+              "action": "draw",
+              "player": "self",
+              "count": 1
+            }
+          ]
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_feral_rage",
+    "name": "Feral Rage",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Choose One - Give your hero +4 Attack this turn; or Gain 8 Armor.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "presentationCardId": "whispers_of_the_old_gods_feral_rage_attack",
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "controller": "self",
+                    "type": "hero",
+                    "selection": "all"
+                  },
+                  "attack": 4,
+                  "duration": "this-turn"
+                }
+              ]
+            },
+            {
+              "presentationCardId": "whispers_of_the_old_gods_feral_rage_armor",
+              "actions": [
+                {
+                  "action": "gain-armor",
+                  "player": "self",
+                  "amount": 8
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_fandral_staghelm",
+    "name": "Fandral Staghelm",
+    "rarity": "Legendary",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 5,
+    "rulesText": "Your Choose One cards have both effects combined.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "combine-choose-one",
+            "player": "self",
+            "duration": "while-source-in-play",
+            "transformOverrides": {
+              "blackrock_mountain_druid_of_the_flame": "blackrock_mountain_druid_of_the_flame_5_5",
+              "the_grand_tournament_druid_of_the_saber": "whispers_of_the_old_gods_druid_of_the_saber_combined"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_klaxxi_amber_weaver",
+    "name": "Klaxxi Amber-Weaver",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 5,
+    "rulesText": "Battlecry: If your C'Thun has at least 10 Attack, gain +5 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "cthun-attack-at-least",
+          "player": "self",
+          "value": 10,
+          "cardId": "whispers_of_the_old_gods_cthun"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "health": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_mire_keeper",
+    "name": "Mire Keeper",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Choose One - Summon a 2/2 Slime; or Gain an empty Mana Crystal.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "presentationCardId": "whispers_of_the_old_gods_mire_keeper_slime_choice",
+              "actions": [
+                {
+                  "action": "summon",
+                  "cardId": "whispers_of_the_old_gods_mire_keeper_slime",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "presentationCardId": "whispers_of_the_old_gods_mire_keeper_mana_choice",
+              "actions": [
+                {
+                  "action": "gain-mana",
+                  "player": "self",
+                  "amount": 1,
+                  "crystal": "empty"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_dark_arakkoa",
+    "name": "Dark Arakkoa",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 5,
+    "health": 7,
+    "rulesText": "Taunt. Battlecry: Give your C'Thun +3/+3 (wherever it is).",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 3,
+            "health": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_fiery_bat",
+    "name": "Fiery Bat",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Deathrattle: Deal 1 damage to a random enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_carrion_grub",
+    "name": "Carrion Grub",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 2,
+    "health": 5,
+    "rulesText": "",
+    "keywords": [],
+    "effects": []
+  },
+  {
+    "id": "whispers_of_the_old_gods_infested_wolf",
+    "name": "Infested Wolf",
+    "rarity": "Rare",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 4,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Deathrattle: Summon two 1/1 Spiders.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_spider",
+            "count": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_call_of_the_wild",
+    "name": "Call of the Wild",
+    "rarity": "Epic",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 8,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon all three Animal Companions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "basic_huffer",
+            "count": 1
+          },
+          {
+            "action": "summon",
+            "cardId": "classic_leokk",
+            "count": 1
+          },
+          {
+            "action": "summon",
+            "cardId": "basic_misha",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_forbidden_flame",
+    "name": "Forbidden Flame",
+    "rarity": "Epic",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Spend all your Mana. Deal that much damage to a minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "spend-all-mana",
+            "player": "self",
+            "storeAs": "manaSpent"
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": {
+              "reference": "manaSpent"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_cult_sorcerer",
+    "name": "Cult Sorcerer",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Spell Damage +1. After you cast a spell, give your C'Thun +1/+1 (wherever it is).",
+    "keywords": ["spell-damage"],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-resolved",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_twilight_flamecaller",
+    "name": "Twilight Flamecaller",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Battlecry: Deal 1 damage to all enemy minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_cabalists_tome",
+    "name": "Cabalist's Tome",
+    "rarity": "Epic",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Add 3 random Mage spells to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "cardType": "Spell",
+              "cardClass": "Mage"
+            },
+            "count": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_faceless_summoner",
+    "name": "Faceless Summoner",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: Summon a random 3-Cost minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": 3
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_forbidden_healing",
+    "name": "Forbidden Healing",
+    "rarity": "Epic",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Spend all your Mana. Restore twice that much Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "spend-all-mana",
+            "player": "self",
+            "storeAs": "manaSpent"
+          },
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": {
+              "reference": "manaSpent",
+              "multiplier": 2
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_selfless_hero",
+    "name": "Selfless Hero",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Deathrattle: Give a random friendly minion Divine Shield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random"
+            },
+            "keyword": "divine-shield"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_rallying_blade",
+    "name": "Rallying Blade",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Battlecry: Give +1/+1 to your minions with Divine Shield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "keyword": "divine-shield"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_steward_of_darkshire",
+    "name": "Steward of Darkshire",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Whenever you summon a 1-Health minion, give it Divine Shield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "filter": {
+            "stat": "health",
+            "operator": "eq",
+            "value": 1
+          }
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "keyword": "divine-shield"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_stand_against_darkness",
+    "name": "Stand Against Darkness",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon five 1/1 Silver Hand Recruits.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "basic_silver_hand_recruit",
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_ragnaros_lightlord",
+    "name": "Ragnaros, Lightlord",
+    "rarity": "Legendary",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 8,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "At the end of your turn, restore 8 Health to a damaged friendly character.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "random",
+              "filter": {
+                "damaged": true
+              }
+            },
+            "amount": 8
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_forbidden_shaping",
+    "name": "Forbidden Shaping",
+    "rarity": "Epic",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Spend all your Mana. Summon a random minion that costs that much.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "spend-all-mana",
+            "player": "self",
+            "storeAs": "manaSpent"
+          },
+          {
+            "action": "summon-random",
+            "filter": {
+              "cardType": "Minion",
+              "cost": {
+                "reference": "manaSpent"
+              }
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_embrace_the_shadow",
+    "name": "Embrace the Shadow",
+    "rarity": "Epic",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "This turn, your healing effects deal damage instead.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "replace-event",
+            "event": "health-restored",
+            "replacement": "damage",
+            "player": "self",
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_shadow_word_horror",
+    "name": "Shadow Word: Horror",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 4,
+    "attack": null,
+    "health": null,
+    "rulesText": "Destroy all minions with 2 or less Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "stat": "attack",
+                "operator": "lte",
+                "value": 2
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_shifting_shade",
+    "name": "Shifting Shade",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "Deathrattle: Add a copy of a random card in your opponent's deck to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "opponent",
+              "type": "card",
+              "selection": "random",
+              "zone": "deck"
+            },
+            "destination": "hand",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_darkshire_alchemist",
+    "name": "Darkshire Alchemist",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 5,
+    "rulesText": "Battlecry: Restore 5 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_twilight_darkmender",
+    "name": "Twilight Darkmender",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 6,
+    "health": 5,
+    "rulesText": "Battlecry: If your C'Thun has at least 10 Attack, restore 10 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "cthun-attack-at-least",
+          "player": "self",
+          "value": 10,
+          "cardId": "whispers_of_the_old_gods_cthun"
+        },
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 10
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_journey_below",
+    "name": "Journey Below",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Discover a Deathrattle card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardClass": "self-or-neutral",
+              "hasDeathrattle": true
+            },
+            "classBonus": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_undercity_huckster",
+    "name": "Undercity Huckster",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Deathrattle: Add a random card to your hand (from your opponent's class).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "cardClass": "opponent"
+            },
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_shadow_strike",
+    "name": "Shadow Strike",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 5 damage to an undamaged character.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen",
+              "filter": {
+                "damaged": false
+              }
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_xaril_poisoned_mind",
+    "name": "Xaril, Poisoned Mind",
+    "rarity": "Legendary",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Battlecry and Deathrattle: Add a random Toxin card to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "pool": [
+              "whispers_of_the_old_gods_bloodthistle_toxin",
+              "whispers_of_the_old_gods_briarthorn_toxin",
+              "whispers_of_the_old_gods_fadeleaf_toxin",
+              "whispers_of_the_old_gods_firebloom_toxin",
+              "whispers_of_the_old_gods_kingsblood_toxin"
+            ],
+            "count": 1
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "pool": [
+              "whispers_of_the_old_gods_bloodthistle_toxin",
+              "whispers_of_the_old_gods_briarthorn_toxin",
+              "whispers_of_the_old_gods_fadeleaf_toxin",
+              "whispers_of_the_old_gods_firebloom_toxin",
+              "whispers_of_the_old_gods_kingsblood_toxin"
+            ],
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_shadowcaster",
+    "name": "Shadowcaster",
+    "rarity": "Epic",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: Choose a friendly minion. Add a 1/1 copy to your hand that costs (1).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "destination": "hand",
+            "player": "self",
+            "count": 1,
+            "modifications": {
+              "cost": {
+                "operation": "set",
+                "value": 1
+              },
+              "attack": {
+                "operation": "set",
+                "value": 1
+              },
+              "health": {
+                "operation": "set",
+                "value": 1
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_evolve",
+    "name": "Evolve",
+    "rarity": "Rare",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Transform your minions into random minions that cost (1) more.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "transform-random",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "filter": {
+              "cardType": "Minion",
+              "cost": {
+                "reference": "target.baseCost",
+                "offset": 1
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_primal_fusion",
+    "name": "Primal Fusion",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +1/+1 for each of your Totems.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "self",
+                "type": "minion",
+                "selection": "all",
+                "filter": {
+                  "tribe": "Totem"
+                }
+              }
+            },
+            "health": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "self",
+                "type": "minion",
+                "selection": "all",
+                "filter": {
+                  "tribe": "Totem"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_eternal_sentinel",
+    "name": "Eternal Sentinel",
+    "rarity": "Epic",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Battlecry: Unlock your Overloaded Mana Crystals.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "unlock-overload",
+            "player": "self"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_flamewreathed_faceless",
+    "name": "Flamewreathed Faceless",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 7,
+    "health": 7,
+    "rulesText": "Overload: (2)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-play",
+        "event": {
+          "type": "card-played",
+          "controller": "self",
+          "source": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "overload",
+            "player": "self",
+            "amount": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_master_of_evolution",
+    "name": "Master of Evolution",
+    "rarity": "Rare",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 5,
+    "rulesText": "Battlecry: Transform a friendly minion into a random one that costs (1) more.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "transform-random",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "filter": {
+              "cardType": "Minion",
+              "cost": {
+                "reference": "target.baseCost",
+                "offset": 1
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_hallazeal_the_ascended",
+    "name": "Hallazeal the Ascended",
+    "rarity": "Legendary",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "Whenever your spells deal damage, restore that much Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "controller": "self",
+          "source": {
+            "type": "spell"
+          }
+        },
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": {
+              "reference": "event.amount"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_thing_from_below",
+    "name": "Thing from Below",
+    "rarity": "Rare",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Taunt. Costs (1) less for each Totem you summoned this game.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "friendly-totems-summoned-this-game",
+              "operation": "subtract"
+            },
+            "minimum": 0,
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_forbidden_ritual",
+    "name": "Forbidden Ritual",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Spend all your Mana. Summon that many 1/1 Tentacles.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "spend-all-mana",
+            "player": "self",
+            "storeAs": "manaSpent"
+          },
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_icky_tentacle",
+            "count": {
+              "reference": "manaSpent"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_possessed_villager",
+    "name": "Possessed Villager",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Summon a 1/1 Shadowbeast.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_shadowbeast",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_darkshire_librarian",
+    "name": "Darkshire Librarian",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Battlecry: Discard a random card. Deathrattle: Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discard",
+            "player": "self",
+            "source": {
+              "zone": "hand",
+              "selection": "random"
+            },
+            "count": 1
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_darkshire_councilman",
+    "name": "Darkshire Councilman",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 1,
+    "health": 5,
+    "rulesText": "After you summon a minion, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "exclude": "source"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_blood_to_ichor",
+    "name": "Blood To Ichor",
+    "rarity": "Rare",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 1 damage to a minion. If it survives, summon a 2/2 Slime.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "then": {
+          "condition": {
+            "type": "target-survived"
+          },
+          "actions": [
+            {
+              "action": "summon",
+              "cardId": "whispers_of_the_old_gods_blood_to_ichor_slime",
+              "count": 1
+            }
+          ]
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_nzoths_first_mate",
+    "name": "N'Zoth's First Mate",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Equip a 1/3 Rusty Hook.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "equip",
+            "cardId": "whispers_of_the_old_gods_rusty_hook"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_bloodsail_cultist",
+    "name": "Bloodsail Cultist",
+    "rarity": "Rare",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 3,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Battlecry: If you control another Pirate, give your weapon +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "exclude": "source",
+          "filter": {
+            "tribe": "Pirate"
+          }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "attack": 1,
+            "durability": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_ravaging_ghoul",
+    "name": "Ravaging Ghoul",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: Deal 1 damage to all other minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_bloodhoof_brave",
+    "name": "Bloodhoof Brave",
+    "rarity": "Common",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 2,
+    "health": 6,
+    "rulesText": "Taunt. Enrage: +3 Attack.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "source-damaged"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 3,
+            "duration": "while-damaged"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_ancient_shieldbearer",
+    "name": "Ancient Shieldbearer",
+    "rarity": "Epic",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "Battlecry: If your C'Thun has at least 10 Attack, gain 10 Armor.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "cthun-attack-at-least",
+          "player": "self",
+          "value": 10,
+          "cardId": "whispers_of_the_old_gods_cthun"
+        },
+        "actions": [
+          {
+            "action": "gain-armor",
+            "player": "self",
+            "amount": 10
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_malkorok",
+    "name": "Malkorok",
+    "rarity": "Legendary",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 6,
+    "health": 5,
+    "rulesText": "Battlecry: Equip a random weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "equip-random",
+            "player": "self",
+            "filter": {
+              "cardType": "Weapon",
+              "collectible": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_beckoner_of_evil",
+    "name": "Beckoner of Evil",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Battlecry: Give your C'Thun +2/+2 (wherever it is).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_disciple_of_cthun",
+    "name": "Disciple of C'Thun",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Battlecry: Deal 2 damage. Give your C'Thun +2/+2 (wherever it is).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          },
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_twilight_elder",
+    "name": "Twilight Elder",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "At the end of your turn, give your C'Thun +1/+1 (wherever it is).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_cthuns_chosen",
+    "name": "C'Thun's Chosen",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 2,
+    "rulesText": "Divine Shield. Battlecry: Give your C'Thun +2/+2 (wherever it is).",
+    "keywords": ["divine-shield"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_eater_of_secrets",
+    "name": "Eater of Secrets",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "Battlecry: Destroy all enemy Secrets. Gain +1/+1 for each.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "secret",
+              "selection": "all"
+            },
+            "storeAs": "secretsDestroyed"
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "secretsDestroyed.count"
+            },
+            "health": {
+              "reference": "secretsDestroyed.count"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_evolved_kobold",
+    "name": "Evolved Kobold",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Spell Damage +2.",
+    "keywords": ["spell-damage"],
+    "effects": [],
+    "spellDamage": 2
+  },
+  {
+    "id": "whispers_of_the_old_gods_faceless_shambler",
+    "name": "Faceless Shambler",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Taunt. Battlecry: Copy a friendly minion's Attack and Health.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "copy-stats",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "source": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "exclude": "source"
+            },
+            "stats": ["attack", "health"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_crazed_worshipper",
+    "name": "Crazed Worshipper",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 3,
+    "health": 6,
+    "rulesText": "Taunt. Whenever this minion takes damage, give your C'Thun +1/+1 (wherever it is).",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "target": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_cult_apothecary",
+    "name": "Cult Apothecary",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: For each enemy minion, restore 2 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "opponent",
+                "type": "minion",
+                "selection": "all"
+              },
+              "multiplier": 2
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_twin_emperor_veklor",
+    "name": "Twin Emperor Vek'lor",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "Taunt. Battlecry: If your C'Thun has at least 10 Attack, summon another Emperor.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "cthun-attack-at-least",
+          "player": "self",
+          "value": 10,
+          "cardId": "whispers_of_the_old_gods_cthun"
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_twin_emperor_veknilash",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_doomcaller",
+    "name": "Doomcaller",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 8,
+    "attack": 7,
+    "health": 9,
+    "rulesText": "Battlecry: Give your C'Thun +2/+2. If it's dead, shuffle it into your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 2,
+            "health": 2
+          },
+          {
+            "action": "shuffle-dead-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_cthun",
+    "name": "C'Thun",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 10,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "Battlecry: Deal damage equal to this minion's Attack randomly split among all enemies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1,
+            "hits": {
+              "reference": "source.attack"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_nzoth_the_corruptor",
+    "name": "N'Zoth, the Corruptor",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 10,
+    "attack": 5,
+    "health": 7,
+    "rulesText": "Battlecry: Summon your Deathrattle minions that died this game.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "resurrect",
+            "player": "self",
+            "source": "friendly-minions-died-this-game",
+            "selection": "all",
+            "filter": {
+              "hasDeathrattle": true,
+              "printedOnly": true
+            },
+            "order": "random"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_yshaarj_rage_unbound",
+    "name": "Y'Shaarj, Rage Unbound",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 10,
+    "attack": 10,
+    "health": 10,
+    "rulesText": "At the end of your turn, put a minion from your deck into the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": "deck",
+            "filter": {
+              "cardType": "Minion"
+            },
+            "selection": "random"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_yogg_saron_hopes_end",
+    "name": "Yogg-Saron, Hope's End",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 10,
+    "attack": 7,
+    "health": 5,
+    "rulesText": "Battlecry: Cast a random spell for each spell you've cast this game (targets chosen randomly).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "cast-random-spells",
+            "player": "self",
+            "count": {
+              "reference": "friendly-spells-cast-this-game",
+              "snapshot": true
+            },
+            "filter": {
+              "cardType": "Spell",
+              "collectible": true
+            },
+            "targetSelection": "random-valid",
+            "payCost": false,
+            "continueAfterSourceLeaves": true,
+            "countsAsPlayedFromHand": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "whispers_of_the_old_gods_feral_rage_armor",
+    "name": "Feral Rage Armor",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Gain 8 Armor.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_feral_rage_attack",
+    "name": "Feral Rage Attack",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your hero +4 Attack this turn.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_mire_keeper_mana_choice",
+    "name": "Mire Keeper Mana Choice",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Gain an empty Mana Crystal.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_mire_keeper_slime_choice",
+    "name": "Mire Keeper Slime Choice",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon a 2/2 Slime.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_druid_of_the_saber_combined",
+    "name": "Druid of the Saber",
+    "rarity": "Summon",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 2,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Charge. Stealth.",
+    "keywords": ["charge", "stealth"],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_mire_keeper_slime",
+    "name": "Slime",
+    "rarity": "Summon",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_spider",
+    "name": "Spider",
+    "rarity": "Summon",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_bloodthistle_toxin",
+    "name": "Bloodthistle Toxin",
+    "rarity": "Summon",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Return a friendly minion to your hand. It costs (2) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "storeAs": "returnedCard"
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "stored",
+              "reference": "returnedCard",
+              "zone": "hand"
+            },
+            "amount": -2,
+            "minimum": 0,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_briarthorn_toxin",
+    "name": "Briarthorn Toxin",
+    "rarity": "Summon",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +3 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 3
+          }
+        ]
+      }
+    ],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_fadeleaf_toxin",
+    "name": "Fadeleaf Toxin",
+    "rarity": "Summon",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a friendly minion Stealth until your next turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "stealth",
+            "duration": "until-next-turn"
+          }
+        ]
+      }
+    ],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_firebloom_toxin",
+    "name": "Firebloom Toxin",
+    "rarity": "Summon",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 2 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_kingsblood_toxin",
+    "name": "Kingsblood Toxin",
+    "rarity": "Summon",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_icky_tentacle",
+    "name": "Icky Tentacle",
+    "rarity": "Summon",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_shadowbeast",
+    "name": "Shadowbeast",
+    "rarity": "Summon",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_rusty_hook",
+    "name": "Rusty Hook",
+    "rarity": "Summon",
+    "cardClass": "Warrior",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_blood_to_ichor_slime",
+    "name": "Slime",
+    "rarity": "Summon",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_twin_emperor_veknilash",
+    "name": "Twin Emperor Vek'nilash",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "Taunt.",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_cyclopian_horror",
+    "name": "Cyclopian Horror",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Taunt. Battlecry: Gain +1 Health for each enemy minion.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "health": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "opponent",
+                "type": "minion",
+                "selection": "all"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_nat_the_darkfisher",
+    "name": "Nat, the Darkfisher",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "At the start of your opponent's turn, they have a 50% chance to draw an extra card.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_hogger_doom_of_elwynn",
+    "name": "Hogger, Doom of Elwynn",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "Whenever this minion takes damage, summon a 2/2 Gnoll with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "target": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_gnoll",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_tentacles_for_arms",
+    "name": "Tentacles for Arms",
+    "rarity": "Epic",
+    "cardClass": "Warrior",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Deathrattle: Return this to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "source"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_blackwater_pirate",
+    "name": "Blackwater Pirate",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 4,
+    "attack": 2,
+    "health": 5,
+    "rulesText": "Your weapons cost (2) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "amount": -2,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_divine_strength",
+    "name": "Divine Strength",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +1/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 1,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_bilefin_tidehunter",
+    "name": "Bilefin Tidehunter",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 2,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Battlecry: Summon a 1/1 Ooze with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_slime",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_southsea_squidface",
+    "name": "Southsea Squidface",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 4,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Deathrattle: Give your weapon +2 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "attack": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_zealous_initiate",
+    "name": "Zealous Initiate",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Give a random friendly minion +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_the_boogeymonster",
+    "name": "The Boogeymonster",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 8,
+    "attack": 6,
+    "health": 7,
+    "rulesText": "Whenever this attacks and kills a minion, gain +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "attack-resolved",
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          }
+        },
+        "condition": {
+          "type": "defender-died-from-combat",
+          "sourceMustSurvive": true
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_scaled_nightmare",
+    "name": "Scaled Nightmare",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 6,
+    "attack": 2,
+    "health": 8,
+    "rulesText": "At the start of your turn, double this minion's Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "operation": "multiply",
+              "value": 2
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_polluted_hoarder",
+    "name": "Polluted Hoarder",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 2,
+    "rulesText": "Deathrattle: Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_squirming_tentacle",
+    "name": "Squirming Tentacle",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_silithid_swarmer",
+    "name": "Silithid Swarmer",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 3,
+    "health": 5,
+    "rulesText": "Can only attack if your hero attacked this turn.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_infest",
+    "name": "Infest",
+    "rarity": "Rare",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your minions \"Deathrattle: Add a random Beast to your hand.\"",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-deathrattle",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "actions": [
+              {
+                "action": "add-to-hand",
+                "player": "self",
+                "source": "random-card",
+                "filter": {
+                  "tribe": "Beast",
+                  "collectible": true
+                },
+                "count": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_blood_of_the_ancient_one",
+    "name": "Blood of The Ancient One",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 9,
+    "attack": 9,
+    "health": 9,
+    "rulesText": "If you control two of these at the end of your turn, merge them into 'The Ancient One'.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_corrupted_seer",
+    "name": "Corrupted Seer",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 6,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Battlecry: Deal 2 damage to all non-Murloc minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "tribe": "Murloc",
+                "negate": true
+              }
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_bog_creeper",
+    "name": "Bog Creeper",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 6,
+    "health": 8,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_midnight_drake",
+    "name": "Midnight Drake",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 4,
+    "attack": 1,
+    "health": 4,
+    "rulesText": "Battlecry: Gain +1 Attack for each other card in your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "other-cards-in-hand"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_psych_o_tron",
+    "name": "Psych-o-Tron",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mechanical",
+    "cost": 5,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Taunt Divine Shield",
+    "keywords": ["divine-shield", "taunt"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_on_the_hunt",
+    "name": "On the Hunt",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 1 damage. Summon a 1/1 Mastiff.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 1
+          },
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_mastiff",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_spreading_madness",
+    "name": "Spreading Madness",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 9 damage randomly split among ALL characters.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1,
+            "hits": 9
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_mukla_tyrant_of_the_vale",
+    "name": "Mukla, Tyrant of the Vale",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 6,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: Add 2 Bananas to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "classic_bananas",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_hooded_acolyte",
+    "name": "Hooded Acolyte",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 6,
+    "rulesText": "Whenever a character is healed, give your C'Thun +1/+1 (wherever it is).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-heal",
+        "event": {
+          "controller": "any"
+        },
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_validated_doomsayer",
+    "name": "Validated Doomsayer",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 0,
+    "health": 7,
+    "rulesText": "At the start of your turn, set this minion's Attack to 7.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "operation": "set",
+              "value": 7
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_forbidden_ancient",
+    "name": "Forbidden Ancient",
+    "rarity": "Epic",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Spend all your Mana. Gain +1/+1 for each mana spent.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "spend-all-mana",
+            "player": "self",
+            "storeAs": "manaSpent"
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": {
+              "reference": "manaSpent"
+            },
+            "health": {
+              "reference": "manaSpent"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_power_word_tentacles",
+    "name": "Power Word: Tentacles",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +2/+6.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 2,
+            "health": 6
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_demented_frostcaller",
+    "name": "Demented Frostcaller",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "After you cast a spell, Freeze a random enemy.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": {
+          "type": "spell-cast",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_tentacle_of_nzoth",
+    "name": "Tentacle of N'Zoth",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Deal 1 damage to all minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_twilight_geomancer",
+    "name": "Twilight Geomancer",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 1,
+    "health": 4,
+    "rulesText": "Taunt Battlecry: Give your C'Thun Taunt (wherever it is).",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "keywords": ["taunt"]
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_hammer_of_twilight",
+    "name": "Hammer of Twilight",
+    "rarity": "Epic",
+    "cardClass": "Shaman",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 4,
+    "health": 2,
+    "rulesText": "Deathrattle: Summon a 4/2 Elemental.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_twilight_elemental",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_faceless_behemoth",
+    "name": "Faceless Behemoth",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 10,
+    "attack": 10,
+    "health": 10,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_shifter_zerus",
+    "name": "Shifter Zerus",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Each turn this is in your hand, transform it into a random minion.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_herald_volazj",
+    "name": "Herald Volazj",
+    "rarity": "Legendary",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: Summon a 1/1 copy of each of your other minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "count": 1,
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_giant_sand_worm",
+    "name": "Giant Sand Worm",
+    "rarity": "Epic",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 8,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Whenever this attacks and kills a minion, it may attack again.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_bladed_cultist",
+    "name": "Bladed Cultist",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 2,
+    "rulesText": "Combo: Gain +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "combo-active"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_skeram_cultist",
+    "name": "Skeram Cultist",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 7,
+    "health": 6,
+    "rulesText": "Battlecry: Give your C'Thun +2/+2 (wherever it is).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_usher_of_souls",
+    "name": "Usher of Souls",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 6,
+    "rulesText": "Whenever a friendly minion dies, give your C'Thun +1/+1 (wherever it is).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "event": {
+          "controller": "self",
+          "type": "minion-died"
+        },
+        "actions": [
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_eldritch_horror",
+    "name": "Eldritch Horror",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 8,
+    "attack": 6,
+    "health": 10,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_darkspeaker",
+    "name": "Darkspeaker",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 3,
+    "health": 6,
+    "rulesText": "Battlecry: Swap stats with a friendly minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "swap-stats",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_stormcrack",
+    "name": "Stormcrack",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 4 damage to a minion. Overload: (1)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 4
+          },
+          {
+            "action": "overload",
+            "player": "self",
+            "amount": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_forlorn_stalker",
+    "name": "Forlorn Stalker",
+    "rarity": "Rare",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 4,
+    "health": 2,
+    "rulesText": "Battlecry: Give all Deathrattle minions in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "hasDeathrattle": true
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_twisted_worgen",
+    "name": "Twisted Worgen",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 3,
+    "health": 1,
+    "rulesText": "Stealth",
+    "keywords": ["stealth"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_nerubian_prophet",
+    "name": "Nerubian Prophet",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "At the start of your turn, reduce this card's Cost by (1).",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_shatter",
+    "name": "Shatter",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Destroy a Frozen minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "filter": {
+              "frozen": true
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_addled_grizzly",
+    "name": "Addled Grizzly",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 3,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "After you summon a minion, give it +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "controller": "self",
+          "type": "minion-summoned"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_vilefin_inquisitor",
+    "name": "Vilefin Inquisitor",
+    "rarity": "Epic",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 1,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "Battlecry: Your Hero Power becomes 'Summon a 1/1 Murloc.'",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "summon-murloc"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_anomalus",
+    "name": "Anomalus",
+    "rarity": "Legendary",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 8,
+    "attack": 8,
+    "health": 6,
+    "rulesText": "Deathrattle: Deal 8 damage to all minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 8
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_a_light_in_the_darkness",
+    "name": "A Light in the Darkness",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Discover a minion. Give it +1/+1.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_grotesque_dragonhawk",
+    "name": "Grotesque Dragonhawk",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 7,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Windfury",
+    "keywords": ["windfury"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_twilight_summoner",
+    "name": "Twilight Summoner",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Summon a 5/5 Faceless Destroyer.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_faceless_destroyer",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_deathwing_dragonlord",
+    "name": "Deathwing, Dragonlord",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 10,
+    "attack": 12,
+    "health": 12,
+    "rulesText": "Deathrattle: Put all Dragons from your hand into the battlefield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": {
+              "type": "minion-card",
+              "controller": "self",
+              "zone": "hand",
+              "selection": "all",
+              "filter": {
+                "tribe": "Dragon"
+              }
+            },
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_amgam_rager",
+    "name": "Am'gam Rager",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 1,
+    "health": 5,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_renounce_darkness",
+    "name": "Renounce Darkness",
+    "rarity": "Epic",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Replace your Hero Power and Warlock cards with another class's. The cards cost (1) less.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_doom",
+    "name": "DOOM!",
+    "rarity": "Epic",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 10,
+    "attack": null,
+    "health": null,
+    "rulesText": "Destroy all minions. Draw a card for each.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_duskboar",
+    "name": "Duskboar",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 2,
+    "attack": 4,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_servant_of_yogg_saron",
+    "name": "Servant of Yogg-Saron",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 4,
+    "rulesText": "Battlecry: Cast a random spell that costs (5) or less (targets chosen randomly).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "cast-random-spells",
+            "player": "self",
+            "count": 1,
+            "filter": {
+              "cost": 5,
+              "operator": "lte"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_aberrant_berserker",
+    "name": "Aberrant Berserker",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 5,
+    "rulesText": "Enrage: +2 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": {
+          "type": "source-damaged"
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 2,
+            "duration": "while-damaged"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_wisps_of_the_old_gods",
+    "name": "Wisps of the Old Gods",
+    "rarity": "Epic",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 7,
+    "attack": null,
+    "health": null,
+    "rulesText": "Choose One - Summon seven 1/1 Wisps; or Give your minions +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "summon",
+                  "cardId": "whispers_of_the_old_gods_wisp",
+                  "count": 7
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "modify",
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "all"
+                  },
+                  "attack": 2,
+                  "health": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_blade_of_cthun",
+    "name": "Blade of C'Thun",
+    "rarity": "Epic",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 9,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: Destroy a minion. Add its Attack and Health to your C'Thun's (wherever it is).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "storeStats": true,
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "buff-cthun",
+            "player": "self",
+            "cardId": "whispers_of_the_old_gods_cthun",
+            "attack": {
+              "reference": "destroyed-target.attack"
+            },
+            "health": {
+              "reference": "destroyed-target.health"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_infested_tauren",
+    "name": "Infested Tauren",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Taunt Deathrattle: Summon a 2/2 Slime.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_slime",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_blood_warriors",
+    "name": "Blood Warriors",
+    "rarity": "Epic",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Add a copy of each damaged friendly minion to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "damaged": true
+              }
+            },
+            "destination": "hand"
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_spawn_of_nzoth",
+    "name": "Spawn of N'Zoth",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Deathrattle: Give your minions +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_chogall",
+    "name": "Cho'gall",
+    "rarity": "Legendary",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 7,
+    "health": 7,
+    "rulesText": "Battlecry: The next spell you cast this turn costs Health instead of Mana.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_corrupted_healbot",
+    "name": "Corrupted Healbot",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mechanical",
+    "cost": 5,
+    "attack": 6,
+    "health": 6,
+    "rulesText": "Deathrattle: Restore 8 Health to the enemy hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "opponent",
+              "type": "hero",
+              "selection": "hero"
+            },
+            "amount": 8
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_soggoth_the_slitherer",
+    "name": "Soggoth the Slitherer",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 9,
+    "attack": 5,
+    "health": 9,
+    "rulesText": "Taunt Can't be targeted by spells or Hero Powers.",
+    "keywords": ["taunt", "spell-immune"],
+    "effects": [],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_princess_huhuran",
+    "name": "Princess Huhuran",
+    "rarity": "Legendary",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 5,
+    "attack": 6,
+    "health": 5,
+    "rulesText": "Battlecry: Trigger a friendly minion's Deathrattle effect.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "trigger-deathrattle",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_ancient_harbinger",
+    "name": "Ancient Harbinger",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "At the start of your turn, put a 10-Cost minion from your deck into your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "filter": {
+              "cardType": "Minion",
+              "cost": 10
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_thistle_tea",
+    "name": "Thistle Tea",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 6,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw a card. Add 2 extra copies of it to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "storeAs": "drawnCard"
+          },
+          {
+            "action": "copy",
+            "target": {
+              "controller": "self",
+              "type": "drawn-card",
+              "selection": "stored"
+            },
+            "destination": "hand",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_gnoll",
+    "name": "Gnoll",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Taunt",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_the_ancient_one",
+    "name": "The Ancient One",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 9,
+    "attack": 30,
+    "health": 30,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_mastiff",
+    "name": "Mastiff",
+    "rarity": "None",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_twilight_elemental",
+    "name": "Twilight Elemental",
+    "rarity": "Epic",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 4,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_faceless_destroyer",
+    "name": "Faceless Destroyer",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_wisp",
+    "name": "Wisp",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 0,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_many_wisps",
+    "name": "Many Wisps",
+    "rarity": "Epic",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon seven 1/1 Wisps.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_big_wisps",
+    "name": "Big Wisps",
+    "rarity": "Epic",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your minions +2/+2.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_slime",
+    "name": "Slime",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
+  }
+]

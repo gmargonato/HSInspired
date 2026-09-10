@@ -47,7 +47,7 @@ function attemptCard(
     const setupMinion = scenario.match.dispatch({
       type: 'dev-summon-minion',
       participantId: targetParticipantId,
-      cardId: 'basic_acidic_swamp_ooze'
+      cardId: 'basic_senjin_shieldmasta'
     })
     expect(setupMinion.accepted).toBe(true)
   }
@@ -148,6 +148,31 @@ function attemptCard(
         }).accepted
       ).toBe(true)
       break
+    case 'mean_streets_of_gadgetzan_potion_of_madness':
+      summon(opponentId, asCardId('classic_wisp'))
+      break
+  }
+  if (cardId === 'one_night_in_karazhan_arcane_giant') {
+    for (let index = 0; index < 12; index += 1) {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId,
+          cardId: 'basic_the_coin'
+        }).accepted
+      ).toBe(true)
+      const coin = scenario.match
+        .getState()
+        .players.find((candidate) => candidate.participantId === participantId)!
+        .hand.find((card) => card.cardId === 'basic_the_coin')!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId,
+          cardInstanceId: coin.instanceId
+        }).accepted
+      ).toBe(true)
+    }
   }
   const refreshedMana = scenario.match.dispatch({
     type: 'dev-set-mana',
@@ -168,12 +193,18 @@ function attemptCard(
     }
   }
   const input = scenario.match.getPlayInput?.(participantId, handCard.instanceId)
-  const legality = scenario.match.getLegality?.(participantId)
-  const legalTargets = legality?.legalTargets[handCard.instanceId] ?? []
+  const selectedInput =
+    input && input.choiceCount > 0
+      ? scenario.match.getPlayInput?.(
+          participantId,
+          handCard.instanceId,
+          input.legalChoices[0]
+        )
+      : input
   const used = new Set<string>()
-  const targets = input?.targetSelectors
-    .map(() => {
-      const target = legalTargets.find((candidate) => !used.has(targetKey(candidate)))
+  const targets = selectedInput?.legalTargetOptions
+    .map((options) => {
+      const target = options.find((candidate) => !used.has(targetKey(candidate)))
       if (target) used.add(targetKey(target))
       return target
     })
@@ -182,9 +213,11 @@ function attemptCard(
     type: 'play-card',
     participantId,
     cardInstanceId: handCard.instanceId,
-    ...(input?.requiresPosition ? { position: input.legalPositions[0] ?? 0 } : {}),
+    ...(selectedInput?.requiresPosition
+      ? { position: selectedInput.legalPositions[0] ?? 0 }
+      : {}),
     ...(targets && targets.length > 0 ? { targets } : {}),
-    ...(input && input.choiceCount > 0 ? { choice: 0 } : {})
+    ...(input && input.choiceCount > 0 ? { choice: input.legalChoices[0] ?? 0 } : {})
   })
   return {
     result,

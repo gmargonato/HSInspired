@@ -25,6 +25,16 @@ export function compactAiRecord(record: MatchLogRecord): MatchLogRecord | undefi
   if (record.stream !== 'decisions') return record
   const data = record.data
   switch (record.kind) {
+    case 'potion-offers':
+      return {
+        ...record,
+        data: {
+          options: data.options ?? [],
+          origin: data.origin ?? 'card',
+          stage: data.stage ?? '',
+          cost: data.cost ?? null
+        }
+      }
     case 'provider-request':
       return {
         ...record,
@@ -51,9 +61,57 @@ export function compactAiRecord(record: MatchLogRecord): MatchLogRecord | undefi
         ...record,
         data: {
           source: data.source ?? 'unknown',
+          reasonCode: data.reasonCode ?? 'unknown',
+          phase: data.phase ?? 'turn',
+          policyId: data.policyId ?? '',
+          candidateCount: data.candidateCount ?? 0,
+          hasCompleteOutcome: data.hasCompleteOutcome ?? false,
+          lethalCandidateCount: data.lethalCandidateCount ?? 0,
+          observation: data.observation ?? null,
+          candidates: data.candidates ?? [],
           actions: data.actions ?? [],
           commands: data.commands ?? [],
-          explanation: data.explanation ?? data.rationale ?? data.reason ?? ''
+          explanation: data.explanation ?? data.rationale ?? data.reason ?? '',
+          evidence: data.evidence ?? null,
+          riskFlags: data.riskFlags ?? [],
+          guaranteedLethal: data.guaranteedLethal ?? false,
+          rejectable: data.rejectable ?? false
+        }
+      }
+    case 'boundary-effects':
+      return {
+        ...record,
+        data: {
+          participantId: data.participantId ?? '',
+          sourceParticipantId: data.sourceParticipantId ?? null,
+          commandType: data.commandType ?? 'unknown',
+          beforeTurnNumber: data.beforeTurnNumber ?? 0,
+          afterTurnNumber: data.afterTurnNumber ?? 0,
+          eventTypes: data.eventTypes ?? [],
+          cardsDrawn: data.cardsDrawn ?? 0,
+          cardsBurned: data.cardsBurned ?? 0,
+          fatigueDamage: data.fatigueDamage ?? 0,
+          drawnCardIds: data.drawnCardIds ?? [],
+          burnedCardIds: data.burnedCardIds ?? []
+        }
+      }
+    case 'lethal-search':
+      return {
+        ...record,
+        data: {
+          expandedNodes: data.expandedNodes ?? 0,
+          elapsedMs: data.elapsedMs ?? 0,
+          exhausted: data.exhausted ?? false,
+          found: data.found ?? false
+        }
+      }
+    case 'decision-timing':
+    case 'continuation-timing':
+      return {
+        ...record,
+        data: {
+          phase: data.phase ?? 'turn',
+          elapsedMs: data.elapsedMs ?? 0
         }
       }
     case 'provider-failure':
@@ -117,7 +175,11 @@ export class CompactAiLog {
     const name = (ref: JsonObject, owner?: JsonValue): string => {
       if (ref.kind === 'hero') return `${label(ref.participantId ?? owner)}'s hero`
       const entity = entities.find((entity) => entity.id === ref.instanceId)
-      return `${label(entity?.participantId ?? ref.participantId ?? owner)}'s ${card(entity?.cardId ?? ref.cardId)}`
+      const details =
+        ref.kind === 'minion'
+          ? ` [slot ${typeof entity?.position === 'number' ? entity.position : '?'}, ${typeof entity?.attack === 'number' && typeof entity?.health === 'number' ? `${entity.attack}/${entity.health}` : '?'}, id ${text(entity?.id) || text(ref.instanceId)}]`
+          : ''
+      return `${label(entity?.participantId ?? ref.participantId ?? owner)}'s ${card(entity?.cardId ?? ref.cardId)}${details}`
     }
     const targets = Array.isArray(command.targets)
       ? list(command.targets)
@@ -161,6 +223,16 @@ export class CompactAiLog {
 
   accept(record: MatchLogRecord): void {
     const data = record.data
+    if (record.kind === 'boundary-effects') {
+      const effects = (this.document.boundaryEffects as JsonValue[] | undefined) ?? []
+      effects.push(data)
+      this.document.boundaryEffects = effects
+      return
+    }
+    if (record.kind === 'potion-offers') {
+      this.decision(record).output.potionCrafting = data
+      return
+    }
     if (record.kind === 'provider-request') {
       if (data.model && !this.document.model) this.document.model = data.model
       if (data.planning && record.decisionId) this.planning.add(record.decisionId)
@@ -171,6 +243,14 @@ export class CompactAiLog {
       if (data.strategy) this.document.strategy = data.strategy
       return
     }
+    if (record.kind === 'lethal-search') {
+      this.decision(record).output.lethalSearch = data
+      return
+    }
+    if (record.kind === 'decision-timing' || record.kind === 'continuation-timing') {
+      this.decision(record).output.timing = data
+      return
+    }
     if (record.kind === 'selection') {
       const decision = this.decision(record)
       for (const previous of this.decisions.values()) {
@@ -179,7 +259,20 @@ export class CompactAiLog {
           if (play.result === 'pending') play.result = 'not executed'
       }
       decision.output.source = data.source ?? 'unknown'
+      decision.output.reasonCode = data.reasonCode ?? 'unknown'
+      decision.output.phase = data.phase ?? 'turn'
+      decision.output.policyId = data.policyId ?? ''
+      decision.output.candidateCount = data.candidateCount ?? 0
+      decision.output.hasCompleteOutcome = data.hasCompleteOutcome ?? false
+      decision.output.lethalCandidateCount = data.lethalCandidateCount ?? 0
+      if (data.observation) decision.output.observation = data.observation
+      if (data.candidates) decision.output.candidates = data.candidates
       if (data.explanation) decision.output.explanation = data.explanation
+      if (data.evidence) decision.output.evidence = data.evidence
+      if (data.riskFlags) decision.output.riskFlags = data.riskFlags
+      if (data.guaranteedLethal !== undefined)
+        decision.output.guaranteedLethal = data.guaranteedLethal
+      if (data.rejectable !== undefined) decision.output.rejectable = data.rejectable
       const commands = list(data.commands)
       const actions = Array.isArray(data.actions) ? data.actions : []
       const count = Math.max(commands.length, actions.length)
@@ -210,6 +303,11 @@ export class CompactAiLog {
       }
       play.action = this.action(command, data)
       play.result = data.accepted === false ? 'rejected' : 'executed'
+      play.effects = {
+        eventTypes: list(data.events).map((event) => text(event.type) || 'unknown'),
+        changes: data.changes ?? [],
+        players: data.players ?? []
+      }
       if (data.accepted === false)
         play.error =
           text(data.message) || text(data.code) || 'Rejected by the game rules.'

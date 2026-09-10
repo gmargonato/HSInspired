@@ -12,15 +12,12 @@ import type { SceneRequest } from '../shared/scene-navigation'
 import {
   DEV_COLLECTIBLE_SYNC_CHANNEL,
   DEV_COMMAND_CHANNEL,
-  DEV_DECK_SYNC_CHANNEL,
   DEV_SCENE_CHANGED_CHANNEL,
   isCollectibleMode,
   isDevCommand,
-  isDevDeckSyncPayload,
   isDevSceneId,
   type CollectibleMode,
   type DevCommand,
-  type DevDeckEntry,
   type DevSceneId
 } from '../shared/dev-menu'
 import {
@@ -189,13 +186,6 @@ const api = {
   },
 
   devMenu: {
-    syncDecks(entries: readonly DevDeckEntry[]): void {
-      if (process.env.NODE_ENV !== 'production' && !isDevDeckSyncPayload(entries)) {
-        console.warn('[DevMenu][preload] rejected deck sync payload', entries)
-        return
-      }
-      ipcRenderer.send(DEV_DECK_SYNC_CHANNEL, entries)
-    },
     notifySceneChanged(sceneId: DevSceneId): void {
       if (process.env.NODE_ENV !== 'production' && !isDevSceneId(sceneId)) {
         console.warn('[DevMenu][preload] rejected scene id', sceneId)

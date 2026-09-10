@@ -4,6 +4,8 @@ import type { BoardMinion } from '../../../game/match'
 import { buildCardRenderTree } from '../../rendering/cards/card-layout'
 import { MINION_STAT_COLORS } from '../../rendering/minions/minion-stat-presentation'
 import {
+  boardWeaponCardPreviewModel,
+  boardWeaponCardPreviewKey,
   boardMinionCardPreviewModel,
   canShowBoardMinionCardPreview,
   positionBoardMinionCardPreview
@@ -109,5 +111,41 @@ describe('board minion card preview', () => {
         layout
       )
     ).toEqual({ x: 1652, y: 700 })
+  })
+})
+
+describe('equipped weapon card preview', () => {
+  it('shows live attack and durability without changing the catalog', () => {
+    const definition = CARD_CATALOG.require(asCardId('basic_fiery_war_axe'))
+    if (definition.type !== 'Weapon') throw new Error('Expected a weapon.')
+    const weapon = {
+      instanceId: 'weapon-1',
+      cardId: definition.id,
+      attack: definition.attack + 1,
+      durability: 1,
+      maxDurability: definition.durability + 1
+    }
+    const model = boardWeaponCardPreviewModel(definition, weapon)
+    expect(model.card.attack).toBe(weapon.attack)
+    expect(model.card.durability).toBe(1)
+    expect(model.attackColor).toBe(MINION_STAT_COLORS.increased)
+    expect(model.healthColor).toBe(MINION_STAT_COLORS.damaged)
+    expect(model.card).not.toBe(definition)
+    expect(
+      boardWeaponCardPreviewModel(definition, {
+        ...weapon,
+        durability: weapon.maxDurability
+      }).healthColor
+    ).toBe(MINION_STAT_COLORS.increased)
+    for (const changed of [
+      { attack: 9 },
+      { durability: 2 },
+      { maxDurability: 9 },
+      { instanceId: 'replacement' }
+    ]) {
+      expect(boardWeaponCardPreviewKey({ ...weapon, ...changed })).not.toBe(
+        boardWeaponCardPreviewKey(weapon)
+      )
+    }
   })
 })
