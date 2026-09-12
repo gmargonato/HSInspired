@@ -1,4 +1,10 @@
-import { Container, type FederatedPointerEvent, Sprite, Text } from 'pixi.js'
+import {
+  AlphaFilter,
+  Container,
+  type FederatedPointerEvent,
+  Sprite,
+  Text
+} from 'pixi.js'
 import type { CardDefinition } from '../../../game/content/cards'
 import { getCardCopyLimit, getDeckCardCount, type Deck } from '../../../game/decks'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
@@ -40,6 +46,7 @@ export class CollectionPageView extends Container {
   private readonly cardResolver: CardAssetResolver
   private readonly options: CollectionPageViewOptions
   private readonly cardLayerRoot = new Container()
+  private readonly completionFilters = new WeakMap<CardView, AlphaFilter>()
   private readonly classLabel: Text
   private readonly pageLabel: Text
   private readonly emptyStateImage: Sprite
@@ -117,7 +124,10 @@ export class CollectionPageView extends Container {
       const results = await Promise.allSettled(
         page.cards.map(async (card) => {
           const artwork = await this.cardResolver.loadArtwork(card.id)
-          return CardView.create(card, this.cardResolver, { artwork })
+          return CardView.create(card, this.cardResolver, {
+            artwork,
+            animatePremiumArtwork: true
+          })
         })
       )
       const views = results.flatMap((result) =>
@@ -146,7 +156,7 @@ export class CollectionPageView extends Container {
         this.layoutCard(view, cardIndex)
         // Keep the full authored card resolution for sharp thumbnails and card-add
         // snapshots, but composite its static masks and blends only once per page.
-        view.cacheAsTexture({ resolution: 1, antialias: true })
+        view.enableTextureCache()
         nextCardLayer.addChild(view)
       }
       const previousCardLayer = this.cardLayerRoot.removeChildren()[0]
@@ -186,9 +196,30 @@ export class CollectionPageView extends Container {
       const atLimit = Boolean(
         deck && card && getDeckCardCount(deck, card.id) >= getCardCopyLimit(card)
       )
-      // The cached card is one image, so alpha dims the complete card uniformly
-      // without another filter pass or rebuilding its texture.
-      child.alpha = atLimit ? COMPLETED_COLLECTION_CARD_ALPHA : 1
+      // Fade the finished composite so live artwork cannot bleed through the frame.
+      let filter = this.completionFilters.get(child)
+      if (atLimit && !filter) {
+        filter = new AlphaFilter({
+          alpha: COMPLETED_COLLECTION_CARD_ALPHA,
+          resolution: 'inherit'
+        })
+        filter.enabled = false
+        this.completionFilters.set(child, filter)
+        const ownedFilter = filter
+        child.once('destroyed', () => ownedFilter.destroy())
+      }
+      if (filter && filter.enabled !== atLimit) {
+        // Cached masks/blends rebuild in local coordinates; the outer fade filter
+        // uses screen coordinates. Render live while dimmed to keep them consistent.
+        if (atLimit) {
+          child.disableTextureCache()
+          child.filters = [...(child.filters ?? []), filter]
+        } else {
+          child.filters = (child.filters ?? []).filter((entry) => entry !== filter)
+          child.enableTextureCache()
+        }
+        filter.enabled = atLimit
+      }
     }
   }
 

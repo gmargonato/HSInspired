@@ -8,6 +8,7 @@
 export const DEV_SCENE_CHANGED_CHANNEL = 'debug:scene-changed'
 export const DEV_COMMAND_CHANNEL = 'debug:dev-command'
 export const DEV_COLLECTIBLE_SYNC_CHANNEL = 'debug:collectible-sync'
+export const DEV_PREMIUM_SYNC_CHANNEL = 'debug:premium-sync'
 
 export type DevSceneId =
   | 'main-menu'
@@ -33,6 +34,7 @@ export type DevDeckTrackerVisibility = 'hidden' | 'local'
 export type DevDeckTrackerSortMode = 'cost' | 'alphabetical' | 'draw-order'
 
 export type DevCommand =
+  | { readonly type: 'cards:set-premium'; readonly enabled: boolean }
   | { readonly type: 'collection:set-collectible'; readonly mode: CollectibleMode }
   | { readonly type: 'game:toggle-tracker' }
   | {
@@ -125,6 +127,7 @@ function isDevDeckAction(value: unknown): value is DevDeckAction {
 
 export function isDevCommand(value: unknown): value is DevCommand {
   if (!isRecord(value) || typeof value.type !== 'string') return false
+  if (value.type === 'cards:set-premium') return typeof value.enabled === 'boolean'
   if (value.type === 'collection:set-collectible') {
     const mode = (value as { mode?: unknown }).mode
     return isCollectibleMode(mode)

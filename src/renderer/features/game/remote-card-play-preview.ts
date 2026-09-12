@@ -130,6 +130,7 @@ export class RemoteCardPlayPreview extends Actor {
 
     const artwork = await this.resolver.loadArtwork(definition.id)
     return CardView.create(definition, this.resolver, {
+      animatePremiumArtwork: true,
       artwork: artwork ?? undefined,
       snapshot: snapshot
         ? { ...snapshot, rulesText: cthunCardRulesText(snapshot, definition.rulesText) }

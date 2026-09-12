@@ -90,11 +90,11 @@ describe('AI turn bonuses', () => {
     expect(remaining.length).toBeGreaterThan(0)
     expect(remaining).toEqual(expect.arrayContaining(pool.slice(5)))
     for (const cardId of pool.slice(0, 5)) expect(remaining).not.toContain(cardId)
-    AI_BONUS_SETTINGS.secretsEnabled = false
+    AI_BONUS_SETTINGS.bonusSecretsEnabled = false
     try {
       expect(eligibleAiBonusSecrets(state, ai)).toEqual([])
     } finally {
-      AI_BONUS_SETTINGS.secretsEnabled = true
+      AI_BONUS_SETTINGS.bonusSecretsEnabled = true
     }
   })
 
@@ -375,13 +375,13 @@ describe('AI turn bonuses', () => {
 
   it('can disable only the bonus while retaining the upgraded starting power', () => {
     const { match, ai } = ready()
-    AI_BONUS_SETTINGS.enabled = false
+    AI_BONUS_SETTINGS.ravenIdolEnabled = false
     try {
       accept(match.dispatch({ type: 'end-turn', participantId: ai }))
       expect(match.getState().pendingCardChoice).toBeUndefined()
       expect(match.getState().activePlayerId).not.toBe(ai)
     } finally {
-      AI_BONUS_SETTINGS.enabled = true
+      AI_BONUS_SETTINGS.ravenIdolEnabled = true
     }
   })
 })

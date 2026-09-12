@@ -95,7 +95,7 @@ export const SCENE_MENU_ENTRIES = {
     request: { id: 'tavern-brawl' }
   },
   'card-inspector': {
-    label: 'Card Class Color Lab',
+    label: 'Card Lab',
     request: { id: 'card-inspector' }
   },
   'outline-lab': { label: 'Shader Lab', request: { id: 'outline-lab' } },

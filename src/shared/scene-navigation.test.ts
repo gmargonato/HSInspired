@@ -30,9 +30,9 @@ describe('scene navigation contract', () => {
     expect(isSceneRequest({ id: 'outline-lab' })).toBe(true)
   })
 
-  it('exposes and accepts the Card Class Color Lab request', () => {
+  it('exposes and accepts the Card Lab request', () => {
     expect(SCENE_MENU_ENTRIES['card-inspector']).toEqual({
-      label: 'Card Class Color Lab',
+      label: 'Card Lab',
       request: { id: 'card-inspector' }
     })
     expect(isSceneRequest({ id: 'card-inspector' })).toBe(true)

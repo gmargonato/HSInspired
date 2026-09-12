@@ -22,6 +22,9 @@ export interface HslColor {
 }
 
 export interface ClassFrameLayerAppearance {
+  readonly premiumOffsets: Readonly<
+    Record<ClassFrameTemplate, { readonly x: number; readonly y: number }>
+  >
   readonly color: number
   readonly alpha: number
   readonly blendMode: ClassFrameBlendMode
@@ -109,6 +112,10 @@ function layerAppearance(
     color: hslToHex(layer),
     alpha: layer.opacity,
     blendMode: layer.blendMode,
+    premiumOffsets: {
+      minion: config.offsets.premium.minion.primary,
+      spell: config.offsets.premium.spell.primary
+    },
     offsets: {
       minion: config.offsets.minion[channel],
       spell: config.offsets.spell.primary

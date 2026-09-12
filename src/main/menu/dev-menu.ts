@@ -8,6 +8,7 @@ import {
 } from '../../shared/scene-navigation'
 import {
   DEV_COLLECTIBLE_SYNC_CHANNEL,
+  DEV_PREMIUM_SYNC_CHANNEL,
   DEV_COMMAND_CHANNEL,
   DEV_SCENE_CHANGED_CHANNEL,
   isCollectibleMode,
@@ -20,8 +21,9 @@ import {
 let cachedMainWindow: BrowserWindow | null = null
 let cachedCurrentSceneId: DevSceneId = 'unknown'
 let cachedCollectibleMode: CollectibleMode = 'collectible'
+let cachedPremiumEnabled = false
 let devSceneChangedHandlerInstalled = false
-let devCollectibleSyncHandlerInstalled = false
+let devOptionSyncHandlerInstalled = false
 
 function sendSceneRequest(mainWindow: BrowserWindow, request: SceneRequest): void {
   const targetWindow =
@@ -340,6 +342,21 @@ function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
     label: 'Options',
     submenu: [
       { label: 'Collection', submenu: collectionSubmenu },
+      {
+        label: 'Cards',
+        submenu: [
+          {
+            label: 'Premium',
+            submenu: [true, false].map((enabled) => ({
+              label: enabled ? 'On' : 'Off',
+              type: 'radio' as const,
+              checked: cachedPremiumEnabled === enabled,
+              click: () =>
+                sendDevCommand(mainWindow, { type: 'cards:set-premium', enabled })
+            }))
+          }
+        ]
+      },
       { label: 'Match', submenu: matchSubmenu }
     ]
   })
@@ -405,9 +422,14 @@ function installDevSceneChangedHandler(): void {
   })
 }
 
-function installCollectibleSyncHandler(): void {
-  if (devCollectibleSyncHandlerInstalled) return
-  devCollectibleSyncHandlerInstalled = true
+function installOptionSyncHandler(): void {
+  if (devOptionSyncHandlerInstalled) return
+  devOptionSyncHandlerInstalled = true
+  ipcMain.on(DEV_PREMIUM_SYNC_CHANNEL, (_event, payload: unknown) => {
+    if (typeof payload !== 'boolean') return
+    cachedPremiumEnabled = payload
+    rebuildOptionsMenu()
+  })
   ipcMain.on(DEV_COLLECTIBLE_SYNC_CHANNEL, (_event, payload: unknown) => {
     if (!isCollectibleMode(payload)) return
     cachedCollectibleMode = payload
@@ -432,7 +454,7 @@ export function installSceneMenu(mainWindow: BrowserWindow): void {
 
   cachedMainWindow = mainWindow
   installDevSceneChangedHandler()
-  installCollectibleSyncHandler()
+  installOptionSyncHandler()
 
   rebuildAllDevMenus()
 }

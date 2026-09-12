@@ -32,6 +32,76 @@ body {
   font-display: block;
 }
 
+/* Authored artwork: 1237 x 355. Keep text beside the portrait (x 395..1170)
+   and controls below it; container units scale typography with the artwork. */
+.app-error-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 1000;
+  width: min(1237px, calc(100vw - 48px), calc((100vh - 48px) * 1237 / 355));
+  aspect-ratio: 1237 / 355;
+  transform: translateX(-50%);
+  container-type: inline-size;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  color: #000;
+  font-family: 'Franklin Gothic Condensed', Arial, sans-serif;
+}
+
+.app-error-notice-message {
+  position: absolute;
+  left: 31.93%;
+  right: 5.42%;
+  top: 21.13%;
+  height: 45.07%;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  text-align: left;
+  font-size: 2.587cqw;
+  font-weight: 400;
+  line-height: 1.12;
+}
+
+.app-error-notice-button {
+  position: absolute;
+  bottom: 16.9%;
+  width: 12%;
+  height: 11.83%;
+  padding: 0;
+  border: 1px solid #715025;
+  border-radius: 0.4cqw;
+  background: linear-gradient(#efd49a, #c3944f);
+  box-shadow: 0 1px 2px #68431f80;
+  color: #000;
+  font-family: inherit;
+  font-size: 2.264cqw;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-error-notice-button:hover {
+  filter: brightness(1.1);
+}
+
+.app-error-notice-button:focus-visible,
+.app-error-notice-message:focus-visible {
+  outline: 2px solid #57360e;
+  outline-offset: 2px;
+}
+
+.app-error-notice-retry {
+  right: 18.7%;
+}
+
+.app-error-notice-dismiss {
+  right: 5.42%;
+}
+
 #game-container {
   position: relative;
   width: 100vw;
@@ -107,6 +177,8 @@ body {
 }
 
 .card-color-lab {
+  display: flex;
+  flex-direction: column;
   position: absolute;
   z-index: 40;
   box-sizing: border-box;
@@ -124,6 +196,25 @@ body {
   display: none;
 }
 
+.card-color-lab__columns[hidden],
+.card-color-lab__notice[hidden],
+.card-color-lab__subtitle[hidden],
+.card-color-lab__status[hidden] {
+  display: none;
+}
+
+.card-color-lab__notice {
+  flex: 1;
+  color: #aab6cf;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.card-color-lab__button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .card-color-lab__title {
   margin: 0;
   color: #f1d36a;
@@ -134,20 +225,21 @@ body {
 .card-color-lab__subtitle {
   margin: 7px 0 14px;
   color: #aab6cf;
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .card-color-lab__toolbar {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto auto 1fr;
   align-items: center;
   gap: 14px;
   margin-bottom: 12px;
 }
 
 .card-color-lab__classes {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(9, 1fr);
   gap: 5px;
 }
 
@@ -168,49 +260,37 @@ body {
 }
 
 .card-color-lab__button {
-  min-height: 27px;
+  min-height: 36px;
   padding: 3px 8px;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .card-color-lab__button.is-selected,
-.card-color-lab__mask.is-active .card-color-lab__mask-title {
+.card-color-lab__mask:focus-within .card-color-lab__mask-title {
   border-color: #f1d36a;
   background: #755d1e;
   color: #fff4b8;
 }
 
-.card-color-lab__link {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #d8c49a;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.card-color-lab__link[hidden],
 .card-color-lab__mask[hidden] {
   display: none;
 }
 
-.card-color-lab__link-input {
-  width: 16px;
-  height: 16px;
-  accent-color: #d0a72b;
-}
-
 .card-color-lab__columns {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
-.card-color-lab.is-spell .card-color-lab__columns {
+.card-color-lab.is-single-mask .card-color-lab__columns {
   grid-template-columns: 1fr;
 }
 
 .card-color-lab__mask {
+  display: grid;
+  grid-template-rows: auto auto repeat(6, minmax(0, 1fr));
   box-sizing: border-box;
   padding: 10px;
   border: 2px solid #34425f;
@@ -218,16 +298,21 @@ body {
   background: #10182a;
 }
 
-.card-color-lab__mask.is-active {
+.card-color-lab__mask:focus-within {
   border-color: #d0a72b;
   box-shadow: 0 0 8px rgba(241, 211, 106, 0.22);
 }
 
 .card-color-lab__mask-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 7px;
+  cursor: default;
   width: 100%;
-  height: 29px;
+  height: 36px;
   margin-bottom: 7px;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 700;
 }
 
@@ -249,22 +334,22 @@ body {
   gap: 7px;
   margin-bottom: 6px;
   color: #dce4f5;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .card-color-lab__blend {
-  height: 27px;
+  height: 36px;
   padding: 0 5px;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .card-color-lab__field {
   display: grid;
-  grid-template-columns: 75px 1fr 68px 22px;
+  grid-template-columns: 90px minmax(0, 1fr) 110px 26px;
   align-items: center;
   gap: 6px;
   min-height: 41px;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .card-color-lab__field-label {
@@ -278,8 +363,8 @@ body {
 }
 
 .card-color-lab__number {
-  width: 68px;
-  height: 27px;
+  width: 110px;
+  height: 36px;
   padding: 0 4px;
   text-align: right;
 }

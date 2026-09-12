@@ -11,6 +11,17 @@ import type {
 
 function observedCard(card: OpeningCard, revealCost: boolean): AiObservedCard {
   return {
+    instanceId: card.instanceId,
+    ...(revealCost
+      ? {
+          modifications: structuredClone({
+            attack: card.attack,
+            health: card.health,
+            enchantments: card.enchantments,
+            costAdjustments: card.costAdjustments
+          })
+        }
+      : {}),
     cardId: card.cardId,
     baseCost: card.baseCost ?? null,
     currentCost: revealCost ? (card.currentCost ?? null) : null
@@ -58,8 +69,21 @@ export function createAiObservation(
     weapon: player.weapon ? stripOrdering(player.weapon) : null,
     mana: structuredClone(player.mana),
     heroPower: stripOrdering(player.heroPower),
+    effects: structuredClone({
+      cthun: player.cthun,
+      cthunDied: player.cthunDied,
+      overload: player.overload,
+      counters: player.counters,
+      heroPowerCostOverride: player.heroPowerCostOverride,
+      lockAndLoadCount: player.lockAndLoadCount,
+      lockAndLoadTurn: player.lockAndLoadTurn,
+      ...(player.participantId === perspectivePlayerId
+        ? { pendingCostModifiers: player.pendingCostModifiers }
+        : {})
+    }),
     fatigueDamage: player.fatigueDamage,
     secrets: (player.secrets ?? []).map((secret) => ({
+      instanceId: secret.instanceId,
       revealed: secret.revealed,
       cardId:
         secret.revealed || player.participantId === perspectivePlayerId

@@ -541,10 +541,7 @@ export class ArenaView extends Actor {
     aura.alpha = 0.72
     root.addChild(aura)
 
-    const sourceTexture = this.renderer.generateTexture({
-      target: selected,
-      antialias: true
-    })
+    const sourceTexture = selected.createAppearanceSnapshot(this.renderer)
     const bloom = new Sprite(sourceTexture)
     const blur = new BlurFilter({ strength: 10, quality: 3 })
     bloom.label = 'arena.card-add-bloom'

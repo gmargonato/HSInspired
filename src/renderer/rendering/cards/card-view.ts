@@ -1,4 +1,13 @@
-import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
+import {
+  Container,
+  Graphics,
+  Matrix,
+  Rectangle,
+  Sprite,
+  Text,
+  Texture,
+  type Renderer
+} from 'pixi.js'
 import 'pixi.js/advanced-blend-modes'
 import type { CardDefinition } from '../../../game/content/cards'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
@@ -20,8 +29,14 @@ import {
   shouldRenderClassFrameColors
 } from './class-frame-colors'
 import type { ClassFrameLayerAppearance } from './class-frame-colors'
+import { isPremiumEnabled, subscribeToPremiumAppearance } from '../premium-appearance'
+import {
+  PremiumArtworkBreath,
+  isArtworkVisible
+} from '../effects/premium-artwork-breath'
 
 export interface CardViewOptions extends CardRenderOptions {
+  readonly animatePremiumArtwork?: boolean
   readonly artwork?: Texture
   readonly snapshot?: {
     readonly currentCost?: number
@@ -259,7 +274,10 @@ function drawNodeDebug(
 }
 
 export class CardView extends Container {
-  readonly plan: CardLayout
+  private activePlan: CardLayout
+  get plan(): CardLayout {
+    return this.activePlan
+  }
   readonly renderedHeight: number
 
   private readonly layerObjects = new Map<string, Array<Container | Sprite | Text>>()
@@ -267,11 +285,21 @@ export class CardView extends Container {
   private readonly basePositions = new Map<string, { x: number; y: number }>()
   private readonly semanticOffsets = new Map<string, { x: number; y: number }>()
   private unsubscribeClassFrameConfig: (() => void) | null = null
+  private unsubscribePremium: (() => void) | null = null
+  private premium = false
+  private readonly alphaMasks = new Map<string, Sprite>()
+  private readonly appearanceSnapshots = new Set<() => void>()
   private readonly content: Container
+  private staticLayers: Container | null = null
+  private artworkBreath: PremiumArtworkBreath | null = null
+  private readonly animatedSnapshots = new Map<
+    Texture,
+    { refresh: () => void; isVisible: () => boolean }
+  >()
 
   private constructor(plan: CardLayout) {
     super()
-    this.plan = plan
+    this.activePlan = plan
     this.sortableChildren = true
     this.eventMode = 'static'
     this.hitArea = new Rectangle(0, 0, plan.width, plan.height * plan.renderScaleY)
@@ -289,9 +317,16 @@ export class CardView extends Container {
     resolver: CardAssetResolver,
     options: CardViewOptions = {}
   ): Promise<CardView> {
-    const view = new CardView(buildCardLayout(card, options))
+    // Start with both standard class-mask sprites mounted so switching is synchronous.
+    const view = new CardView(buildCardLayout(card, { ...options, premium: false }))
+    const supportsPremium =
+      card.type === 'Minion' || card.type === 'Spell' || card.type === 'Weapon'
     try {
       await view.build(resolver, options.artwork)
+      if (supportsPremium && options.animatePremiumArtwork && options.artwork) {
+        view.prepareArtworkBreathing()
+      }
+      if (supportsPremium) await view.preparePremiumAppearance(card, resolver, options)
       if (options.snapshot) view.applySnapshot(card, options.snapshot)
       if (
         shouldRenderClassFrameColors(options.classFrameColors) &&
@@ -311,8 +346,87 @@ export class CardView extends Container {
 
   /** Collapse a completed card tree to one GPU surface until semantic content changes. */
   enableTextureCache(): void {
+    if (this.staticLayers) {
+      this.staticLayers.cacheAsTexture({ antialias: true, resolution: 1 })
+      return
+    }
     if (this.isCachedAsTexture) return
     this.cacheAsTexture({ antialias: true, resolution: 1 })
+  }
+
+  /** Avoid nested cache rendering when an ancestor composites live card layers. */
+  disableTextureCache(): void {
+    this.cacheAsTexture(false)
+    this.staticLayers?.cacheAsTexture(false)
+  }
+
+  override updateCacheTexture = (): void => {
+    Container.prototype.updateCacheTexture.call(this)
+    this.staticLayers?.updateCacheTexture()
+  }
+
+  private prepareArtworkBreathing(): void {
+    const artwork = this.treeObjects.get('card.artwork')?.object
+    const root = this.treeObjects.get('card')?.object
+    if (!artwork || !root) return
+    const staticLayers = new Container()
+    staticLayers.label = `${this.plan.cardId}:card.static-layers`
+    staticLayers.sortableChildren = true
+    staticLayers.zIndex = 1
+    // Artwork is the bottom layer; everything above it can remain cached.
+    for (const child of [...root.children]) {
+      if (child !== artwork) staticLayers.addChild(child)
+    }
+    root.addChild(staticLayers)
+    this.staticLayers = staticLayers
+    staticLayers.cacheAsTexture({ antialias: true, resolution: 1 })
+    this.artworkBreath = new PremiumArtworkBreath(
+      artwork,
+      () =>
+        (isArtworkVisible(this) && isArtworkVisible(artwork)) ||
+        [...this.animatedSnapshots.values()].some((snapshot) => snapshot.isVisible()),
+      () => {
+        for (const snapshot of this.animatedSnapshots.values()) {
+          if (snapshot.isVisible()) snapshot.refresh()
+        }
+      }
+    )
+  }
+
+  /** Keeps temporary card-flight snapshots in sync with the session appearance. */
+  createAppearanceSnapshot(
+    renderer: Renderer,
+    frame?: Rectangle,
+    isVisible?: () => boolean
+  ): ReturnType<Renderer['generateTexture']> {
+    const region = frame?.clone() ?? this.getLocalBounds().rectangle.clone()
+    const texture = renderer.generateTexture({
+      target: this,
+      frame: region,
+      antialias: true
+    })
+    const refresh = (): void => {
+      const visible = this.visible
+      this.visible = true
+      try {
+        renderer.render({
+          container: this,
+          target: texture,
+          transform: new Matrix().translate(-region.x, -region.y),
+          clear: true
+        })
+        texture.source.updateMipmaps()
+      } finally {
+        this.visible = visible
+      }
+    }
+    this.appearanceSnapshots.add(refresh)
+    if (isVisible) this.animatedSnapshots.set(texture, { refresh, isVisible })
+    texture.once('destroy', () => {
+      this.appearanceSnapshots.delete(refresh)
+      this.animatedSnapshots.delete(texture)
+    })
+    return texture
   }
 
   setClassFrameAppearance(classId: string): void {
@@ -335,6 +449,11 @@ export class CardView extends Container {
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.artworkBreath?.destroy()
+    this.animatedSnapshots.clear()
+    this.appearanceSnapshots.clear()
+    this.unsubscribePremium?.()
+    this.unsubscribePremium = null
     this.unsubscribeClassFrameConfig?.()
     this.unsubscribeClassFrameConfig = null
     super.destroy(options)
@@ -379,7 +498,115 @@ export class CardView extends Container {
       tint: appearance.color,
       blendMode: appearance.blendMode
     })
-    this.setSemanticLayerOffset(path, appearance.offsets[template])
+    this.setSemanticLayerOffset(
+      path,
+      this.premium ? appearance.premiumOffsets[template] : appearance.offsets[template]
+    )
+  }
+
+  /** Preload the small set of alternate textures; keep all live switching synchronous. */
+  private async preparePremiumAppearance(
+    card: CardDefinition,
+    resolver: CardAssetResolver,
+    options: CardViewOptions
+  ): Promise<void> {
+    const standard = this.plan
+    const premium = buildCardLayout(card, { ...options, premium: true })
+    const standardImages = standard.tree.root.children.filter(
+      (node) => node.kind === 'image'
+    )
+    const premiumImages = premium.tree.root.children.filter(
+      (node) => node.kind === 'image'
+    )
+    const changedIds = new Set(
+      standardImages
+        .filter((node) => {
+          const alternate = premiumImages.find((candidate) => candidate.id === node.id)
+          return (
+            !alternate ||
+            alternate.assetKey !== node.assetKey ||
+            alternate.alphaMask?.assetKey !== node.alphaMask?.assetKey
+          )
+        })
+        .map((node) => node.id)
+    )
+    const keys = new Set(
+      [...standardImages, ...premiumImages]
+        .filter((node) => changedIds.has(node.id))
+        .flatMap((node) => [
+          node.assetKey,
+          ...(node.alphaMask ? [node.alphaMask.assetKey] : [])
+        ])
+    )
+    const textures = new Map(
+      await Promise.all(
+        [...keys].map(async (key) => [key, await resolver.load(key)] as const)
+      )
+    )
+    const apply = (enabled: boolean): void => {
+      if (this.destroyed) return
+      this.premium = enabled
+      this.artworkBreath?.setEnabled(enabled)
+      this.activePlan = enabled ? premium : standard
+      const images = enabled ? premiumImages : standardImages
+      for (const id of changedIds) {
+        const path = `card.${id}`
+        const entry = this.treeObjects.get(path)
+        if (!entry || !(entry.object instanceof Sprite)) continue
+        const node = images.find((candidate) => candidate.id === id)
+        if (!node) {
+          entry.object.visible = false
+          continue
+        }
+        const sprite = entry.object
+        const transform = node.transform
+        sprite.texture = textures.get(node.assetKey)!
+        sprite.scale.set(transform.scale?.x ?? 1, transform.scale?.y ?? 1)
+        if (transform.size) {
+          sprite.width = transform.size.width
+          sprite.height = transform.size.height
+        }
+        sprite.visible = node.visible ?? true
+        this.basePositions.set(path, { ...transform.position })
+        const offset = this.semanticOffsets.get(path) ?? { x: 0, y: 0 }
+        sprite.position.set(
+          transform.position.x + offset.x,
+          transform.position.y + offset.y
+        )
+        this.treeObjects.set(path, { node, object: sprite })
+        const mask = this.alphaMasks.get(path)
+        if (mask && node.alphaMask) {
+          mask.texture = textures.get(node.alphaMask.assetKey)!
+          const size = node.alphaMask.transform.size
+          if (size) {
+            mask.width = size.width
+            mask.height = size.height
+          }
+        }
+      }
+      const rulesNode = this.activePlan.tree.root.children.find(
+        (node) => node.id === 'rules'
+      )
+      const rulesEntry = this.treeObjects.get('card.rules')
+      if (rulesNode?.kind === 'text' && rulesEntry?.object instanceof Text) {
+        rulesEntry.object.style.fill = rulesNode.style.fill
+        if (rulesNode.style.stroke)
+          rulesEntry.object.style.stroke = rulesNode.style.stroke
+        this.treeObjects.set('card.rules', {
+          node: rulesNode,
+          object: rulesEntry.object
+        })
+      }
+      this.setClassFrameAppearance(card.cardClass)
+      this.updateCacheTexture()
+      for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
+        if (ancestor.isCachedAsTexture) ancestor.updateCacheTexture()
+      }
+      for (const refresh of this.appearanceSnapshots) refresh()
+    }
+    apply(options.premium ?? isPremiumEnabled())
+    if (options.premium === undefined)
+      this.unsubscribePremium = subscribeToPremiumAppearance(apply)
   }
 
   /** Updates match-specific text while preserving authored wrapping and keyword styles. */
@@ -633,6 +860,7 @@ export class CardView extends Container {
         }
         mask.eventMode = 'none'
         sprite.mask = mask
+        this.alphaMasks.set(path, mask)
         parent.addChild(mask)
       }
       this.registerTreeObject(path, node, sprite)

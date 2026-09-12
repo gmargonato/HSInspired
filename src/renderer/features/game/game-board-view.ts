@@ -25,7 +25,6 @@ import {
   MAX_BOARD_SIZE,
   type AttackCharacterRef,
   type BoardMinion,
-  type ConfirmMulliganCommand,
   type HeroPowerTargetRef,
   type MulliganResolvedEvent,
   type MatchEndedEvent,
@@ -168,7 +167,7 @@ export interface GameBoardViewOptions {
   readonly cursor?: CursorManager | null
   readonly logger?: RendererLogger
   readonly ai?: AiDecisionApi
-  /** May be created by the scene early so deck planning overlaps asset loading. */
+  /** Shares the scene-owned match session and conversational controller. */
   readonly aiRuntime?: {
     readonly session: GameBoardSession
     readonly controller: AiTurnController
@@ -886,19 +885,11 @@ export class GameBoardView extends Actor {
         setup: this.options.route.setup,
         decks: this.options.decks
       })
-    const remoteSetup = this.options.route.setup.participants.find(
-      (participant) => participant.participantId === this.remoteParticipantId
-    )
-    const remoteDeck = this.options.decks.find(
-      (deck) => deck.id === remoteSetup?.deckId
-    )
-    if (!remoteDeck) throw new Error('The AI deck is unavailable.')
     this.aiController =
       this.options.aiRuntime?.controller ??
       new AiTurnController({
         api: this.options.ai,
         session: this.session,
-        decks: this.options.decks,
         logger: this.logger
       })
     const initialState = this.match.getState()
@@ -911,10 +902,15 @@ export class GameBoardView extends Actor {
       {
         local: this.options.gameAssets.historyLocal,
         remote: this.options.gameAssets.historyRemote,
+        localAttack: this.options.gameAssets.historyLocalAttack,
+        localTrigger: this.options.gameAssets.historyLocalTrigger,
+        remoteAttack: this.options.gameAssets.historyRemoteAttack,
+        remoteTrigger: this.options.gameAssets.historyRemoteTrigger,
         arrow: this.options.gameAssets.historyArrow,
         burnCard: this.options.gameAssets.historyBurnCard,
         burnThumb: this.options.gameAssets.historyBurnThumb,
         damageIndicator: this.options.gameAssets.damageIndicator,
+        healIndicator: this.options.gameAssets.healIndicator,
         willDie: this.options.gameAssets.minionWillDie,
         secretCard: this.options.gameAssets.historySecretCard,
         secretThumb: this.options.gameAssets.historySecretThumb,
@@ -2358,106 +2354,60 @@ export class GameBoardView extends Actor {
     )
   }
 
-  /**
-   * Executes a retained complete-turn policy across deterministic commands.
-   * Planning resumes only after a hidden/random boundary, an invalidated
-   * continuation, or the next turn. Commands are still dispatched only while
-   * presentation is idle and against their expected revision.
-   */
+  /** Request each action only after the previous engine and presentation work settles. */
   private async scheduleAiTurn(): Promise<void> {
     if (this.aiTurnRunning) return
     this.aiTurnRunning = true
+    let resumeAfterFailure = false
     try {
       await this.wait(TURN_TIMING.aiTurnDelay)
-      if (this.match.getState().activePlayerId !== this.remoteParticipantId) return
-      let decisionPromise = this.aiController.chooseTurnAction()
-      await this.waitForResolutionIdle()
-      if (!this.turnLayer.visible || this.destroyed) return
-
-      let acceptedActions = 0
-      let rejectedActions = 0
       while (!this.destroyed) {
+        await this.waitForResolutionIdle()
+        if (!this.turnLayer.visible || this.destroyed) return
         const state = this.match.getState()
         if (
           state.phase !== 'turns' ||
-          state.activePlayerId !== this.remoteParticipantId
+          (state.pendingDiscover?.participantId ??
+            state.pendingCardChoice?.participantId ??
+            state.activePlayerId) !== this.remoteParticipantId
         )
           return
-        if (acceptedActions >= 64 && state.aiBonusTurn !== state.turnNumber) {
-          this.logger.warn('[Game AI] action safety limit reached; ending turn')
-          const result = this.session.dispatch({
-            type: 'end-turn',
-            participantId: this.remoteParticipantId
-          })
-          if (result.accepted) {
-            this.syncTurnHud(result.state)
-            await this.presentResolutionEvents(result.events)
-            if (result.state.pendingCardChoice?.resolution?.type === 'kazakus-potion') {
-              decisionPromise = this.aiController.chooseTurnAction()
-              continue
-            }
-          }
+        const decision = await this.aiController.chooseTurnAction()
+        if (this.destroyed) return
+        if (!decision) {
+          if (this.aiController.isPaused && (await this.aiController.waitForResume()))
+            continue
+          if (this.aiController.hasLegalActions()) continue
           return
         }
-
-        const decision = await decisionPromise
-        if (this.destroyed) return
-        if (decision.expectedRevision !== this.match.getState().revision) {
-          this.logger.warn('[Game AI] discarded stale decision', decision)
-          decisionPromise = this.aiController.chooseTurnAction()
-          continue
-        }
-
+        if (!this.aiController.isCurrent(decision)) continue
         const remoteBackCountBefore = this.remoteBackCount
         const remotePlayedCard = playedRemoteCard(
           decision.command,
-          this.findPlayer(state, this.remoteParticipantId).hand
+          this.findPlayer(this.match.getState(), this.remoteParticipantId).hand
         )
         const result = this.session.dispatch(decision.command)
+        this.aiController.recordExecution(decision, result)
         if (!result.accepted) {
-          rejectedActions += 1
-          this.logger.error('[Game AI] engine rejected selected action', {
-            decision,
-            code: result.code,
-            message: result.message
-          })
-          if (rejectedActions >= 2) {
-            const endResult = this.session.dispatch({
-              type: 'end-turn',
-              participantId: this.remoteParticipantId
-            })
-            if (endResult.accepted) {
-              this.syncTurnHud(endResult.state)
-              await this.presentResolutionEvents(endResult.events)
-            }
-            return
-          }
-          decisionPromise = this.aiController.chooseTurnAction()
-          continue
+          this.aiController.pause(
+            new Error('AI move rejected by engine: ' + result.message),
+            decision
+          )
+          if (await this.aiController.waitForResume()) continue
+          return
         }
-
-        acceptedActions += 1
-        rejectedActions = 0
-        if (remotePlayedCard) {
-          void this.remoteCardPlayPreview
-            .present(CARD_CATALOG.require(remotePlayedCard.cardId), remotePlayedCard)
-            .catch((error: unknown) =>
-              this.logger.warn('[Game AI] remote card preview failed', error)
-            )
-        }
+        const preview = remotePlayedCard
+          ? this.remoteCardPlayPreview
+              .present(CARD_CATALOG.require(remotePlayedCard.cardId), remotePlayedCard)
+              .catch((error: unknown) =>
+                this.logger.warn('[Game AI] remote card preview failed', error)
+              )
+          : Promise.resolve()
         this.syncTurnHud(result.state)
         this.syncTurnControls(result.state)
         this.syncSecrets(result.state)
-
-        const remainsAiTurn =
-          result.state.phase === 'turns' &&
-          result.state.activePlayerId === this.remoteParticipantId
-        const nextDecisionPromise = remainsAiTurn
-          ? this.aiController.chooseTurnAction()
-          : null
-        await this.presentResolutionEvents(result.events)
+        await Promise.all([this.presentResolutionEvents(result.events), preview])
         this.syncSecrets(result.state)
-
         if (
           decision.command.type === 'play-card' &&
           this.remoteBackCount === remoteBackCountBefore
@@ -2465,28 +2415,17 @@ export class GameBoardView extends Actor {
           this.remoteBackCount = Math.max(0, this.remoteBackCount - 1)
           this.layoutRemoteHand()
         }
-        if (!nextDecisionPromise) return
         await this.wait(0.12)
-        decisionPromise = nextDecisionPromise
       }
     } catch (error) {
-      this.logger.error('[Game AI] turn loop failed', error)
-      if (
-        !this.destroyed &&
-        this.match.getState().activePlayerId === this.remoteParticipantId
-      ) {
-        const result = this.session.dispatch({
-          type: 'end-turn',
-          participantId: this.remoteParticipantId
-        })
-        if (result.accepted) {
-          this.syncTurnHud(result.state)
-          await this.presentResolutionEvents(result.events)
-        }
+      if (!this.destroyed) {
+        this.aiController.pause(error)
+        resumeAfterFailure = await this.aiController.waitForResume()
       }
     } finally {
       this.aiTurnRunning = false
     }
+    if (resumeAfterFailure && !this.destroyed) await this.scheduleAiTurn()
   }
 
   private createOpeningLayer(state: OpeningMatchState): void {
@@ -2545,6 +2484,7 @@ export class GameBoardView extends Actor {
     const definition = cardDefinition(card)
     const artwork = await this.resolver.loadArtwork(card.cardId)
     const view = await CardView.create(definition, this.resolver, {
+      animatePremiumArtwork: true,
       artwork,
       snapshot: card
     })
@@ -2730,62 +2670,49 @@ export class GameBoardView extends Actor {
   private async resolveAiMulligan(
     decisionPromise: ReturnType<AiTurnController['chooseMulligan']>
   ): Promise<MulliganResolutionBatch | null> {
-    const keepHandCommand: ConfirmMulliganCommand = {
-      type: 'confirm-mulligan',
-      participantId: this.remoteParticipantId,
-      replaceInstanceIds: []
-    }
-    let command = keepHandCommand
-
     try {
-      const decision = await decisionPromise
-      if (this.destroyed) return null
-
-      const state = this.match.getState()
-      const remotePlayer = this.findPlayer(state, this.remoteParticipantId)
-      if (remotePlayer.mulliganConfirmed) return { state, events: [] }
-
-      const remoteHandIds = new Set(remotePlayer.hand.map((card) => card.instanceId))
-
-      // The local confirmation legitimately advances the shared revision while
-      // this decision is pending; the remote opening hand is its stable boundary.
-      if (
-        decision.command.type === 'confirm-mulligan' &&
-        decision.command.participantId === this.remoteParticipantId &&
-        decision.command.replaceInstanceIds.every((instanceId) =>
-          remoteHandIds.has(instanceId)
-        )
-      ) {
-        command = decision.command
-      } else {
-        this.logger.warn('[Game AI] mulligan decision became stale; keeping the hand')
+      while (!this.destroyed) {
+        const decision = await decisionPromise
+        if (this.destroyed) return null
+        const state = this.match.getState()
+        if (this.findPlayer(state, this.remoteParticipantId).mulliganConfirmed)
+          return { state, events: [] }
+        if (!decision || !this.aiController.isCurrent(decision)) {
+          if (this.aiController.isPaused) {
+            if (!(await this.aiController.waitForResume())) return null
+            decisionPromise = this.aiController.chooseMulligan()
+            continue
+          }
+          if (state.phase !== 'mulligan' || !this.aiController.hasLegalActions())
+            return null
+          await this.waitForResolutionIdle()
+          if (this.destroyed) return null
+          decisionPromise = this.aiController.chooseMulligan()
+          continue
+        }
+        const result = this.session.dispatch(decision.command)
+        this.aiController.recordExecution(decision, result)
+        if (!result.accepted) {
+          this.aiController.pause(
+            new Error('AI mulligan rejected by engine: ' + result.message),
+            decision
+          )
+          if (await this.aiController.waitForResume()) {
+            decisionPromise = this.aiController.chooseMulligan()
+            continue
+          }
+          return null
+        }
+        return { state: result.state, events: result.events }
       }
     } catch (error) {
-      if (this.destroyed) return null
-      this.logger.warn('[Game AI] mulligan decision failed; keeping the hand', error)
+      if (!this.destroyed) {
+        this.aiController.pause(error)
+        if (await this.aiController.waitForResume())
+          return this.resolveAiMulligan(this.aiController.chooseMulligan())
+      }
     }
-
-    if (this.destroyed) return null
-    const currentRemotePlayer = this.findPlayer(
-      this.match.getState(),
-      this.remoteParticipantId
-    )
-    if (currentRemotePlayer.mulliganConfirmed) {
-      return { state: this.match.getState(), events: [] }
-    }
-
-    let result = this.session.dispatch(command)
-    if (!result.accepted && command.replaceInstanceIds.length > 0) {
-      this.logger.warn(
-        `[Game AI] mulligan selection was rejected (${result.message}); keeping the hand`
-      )
-      result = this.session.dispatch(keepHandCommand)
-    }
-    if (!result.accepted) {
-      this.logger.error(`[Game AI] mulligan confirmation failed: ${result.message}`)
-      return null
-    }
-    return { state: result.state, events: result.events }
+    return null
   }
 
   /**
@@ -2915,10 +2842,12 @@ export class GameBoardView extends Actor {
         await this.presentDraw(event.participantId, event.card)
         return
       case 'discover-started':
+        if (event.participantId === this.remoteParticipantId) void this.scheduleAiTurn()
         if (event.participantId === this.localParticipantId)
           await this.cardSelectionOverlay.show(event.candidates)
         return
       case 'card-choice-started':
+        if (event.participantId === this.remoteParticipantId) void this.scheduleAiTurn()
         if (event.participantId === this.localParticipantId) {
           await this.cardSelectionOverlay.showChoices(
             event.participantId,
@@ -3944,6 +3873,7 @@ export class GameBoardView extends Actor {
       },
       {
         frame: this.options.gameAssets.weapon,
+        premiumFrame: this.options.gameAssets.premiumWeapon,
         trigger: this.options.gameAssets.boardTrigger,
         deathrattle: this.options.gameAssets.boardDeathrattle,
         attack: attackTexture,
@@ -4078,9 +4008,12 @@ export class GameBoardView extends Actor {
       this.presentationState().turnNumber
     )
     const textures: MinionViewTextures = {
+      premiumFrame: this.options.gameAssets.premiumMinionFrame,
       frame: this.options.gameAssets.minionFrame,
       legendaryFrame: this.options.gameAssets.minionFrameLegendary,
+      premiumLegendaryFrame: this.options.gameAssets.premiumMinionFrameLegendary,
       taunt: this.options.gameAssets.minionTaunt,
+      premiumTaunt: this.options.gameAssets.premiumMinionTaunt,
       divineShield: this.options.gameAssets.minionDivineShield,
       frozen: this.options.gameAssets.minionFrozen,
       stealth: this.options.gameAssets.minionStealth,
@@ -4563,6 +4496,7 @@ export class GameBoardView extends Actor {
 
       const model = source.model
       const preview = await CardView.create(model.card, this.resolver, {
+        animatePremiumArtwork: true,
         artwork,
         silenced: model.silenced
       })
@@ -4797,6 +4731,7 @@ export class GameBoardView extends Actor {
   }
 
   private insertLocalMinionView(position: number, view: MinionView): void {
+    position = Math.max(0, Math.min(position, this.localMinionViews.length))
     this.localMinionViews.splice(position, 0, view)
     this.localMinionLayer.addChildAt(
       view,
@@ -4805,6 +4740,7 @@ export class GameBoardView extends Actor {
   }
 
   private insertRemoteMinionView(position: number, view: MinionView): void {
+    position = Math.max(0, Math.min(position, this.remoteMinionViews.length))
     this.remoteMinionViews.splice(position, 0, view)
     this.remoteMinionLayer.addChildAt(
       view,

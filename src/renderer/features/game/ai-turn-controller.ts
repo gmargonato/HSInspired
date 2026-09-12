@@ -1,806 +1,715 @@
-import { CARD_CATALOG } from '../../../game/content/cards'
-import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
-import type { Deck } from '../../../game/decks'
+import { describeAiEvents } from '../../../game/match/ai/event-narrative'
+import { enumerateLegalCommands, canonicalCommandKey } from '../../../game/match/ai'
+import type { TurnMatchCommand, TurnMatchResult } from '../../../game/match'
 import {
-  assessPolicyCommand,
-  buildEngineVerifiedPolicies,
-  canonicalCommandKey,
-  enumerateLegalCommands,
-  findGuaranteedLethalPolicy,
-  type AiObservation,
-  type AiPolicyAssessment,
-  type AiPolicyOutcome,
-  type EngineVerifiedPolicy
-} from '../../../game/match/ai'
-import type {
-  ConfirmMulliganCommand,
-  TurnMatchCommand,
-  TurnMatchState
-} from '../../../game/match'
-import type {
-  AiDecisionApi,
-  AiDecisionRequest,
-  AiDeckPlan,
-  AiPolicyOption,
-  JsonObject,
-  JsonValue
+  AiRequestError,
+  AI_REQUEST_LIMITS,
+  AI_LOG_SCHEMA_VERSION,
+  type AiDecisionApi,
+  type AiDecisionIdentity,
+  type AiDecisionResponse,
+  type AiDecisionRequest,
+  type AiMessage,
+  type JsonObject
 } from '../../../shared/ipc/ai'
-import type { RendererLogger } from '../../ui/logger'
 import {
-  createDeckPlanRequest,
-  createFallbackDeckPlan,
-  validateDeckPlan
-} from './ai-deck-plan'
+  AI_DELIBERATION_LIMITS,
+  sameAiIntent,
+  validateAiChoicePhase,
+  type AiPlanNote
+} from '../../../shared/ipc/ai-deliberation'
+import { aiActionIntent } from './ai-action-intent'
+import { answerAiChecks } from './ai-fact-checks'
+import {
+  AI_PLAN_INSTRUCTION,
+  AI_VERIFY_INSTRUCTION,
+  AI_NEXT_INSTRUCTION,
+  AI_COMMIT_INSTRUCTION,
+  AI_INSPECT_INSTRUCTION
+} from './ai-prompts'
+import type { RendererLogger } from '../../ui/logger'
 import type { GameBoardSession } from './game-board-session'
 import type { MatchRecorder } from './match-recorder'
+import {
+  aiActions,
+  aiActionFacts,
+  aiJson,
+  aiModelState,
+  aiSystemContext
+} from './ai-context'
 
-interface CandidatePolicy {
-  readonly id: string
-  readonly commands: readonly TurnMatchCommand[]
-  readonly view: AiPolicyOption
-  readonly assessment?: AiPolicyAssessment
-  readonly outcome?: AiPolicyOutcome
-  readonly fallbackRank?: number
-}
-
-type AiSelectionReason =
-  | 'model-selected'
-  | 'engine-guaranteed-lethal'
-  | 'api-unavailable'
-  | 'single-safe-policy'
-  | 'provider-failed'
-  | 'safety-recheck'
-  | 'no-policies'
-
-export interface AiActionDecision {
-  readonly expectedRevision: number
+// Byte limits bound payload size; they are not model token-window guarantees.
+export const AI_CONVERSATION_LIMITS = {
+  maxExchanges: 16,
+  maxMessageBytes: AI_REQUEST_LIMITS.maxContextBytes
+} as const
+export interface AiActionDecision extends AiDecisionIdentity {
   readonly actionId: string
   readonly command: TurnMatchCommand
-  readonly source: 'model' | 'fallback' | 'engine'
+  readonly source: 'model' | 'forced' | 'random-timeout'
+  readonly reason?: string
+  readonly expectedResult?: string
 }
-
 export interface AiTurnControllerOptions {
   readonly recorder?: MatchRecorder
   readonly api?: AiDecisionApi
   readonly session: GameBoardSession
-  readonly decks: readonly Deck[]
   readonly logger: RendererLogger
+  readonly onFailure?: (message: string, retry?: () => void) => void
+  readonly online?: () => boolean
 }
-
-interface QueuedPolicy {
-  readonly decisionId: string
-  readonly id: string
-  readonly source: AiActionDecision['source']
-  readonly commands: readonly TurnMatchCommand[]
-  readonly assessment?: AiPolicyAssessment
-}
-
-const PLAN_DEADLINE_MS = 60_000
-const DECISION_DEADLINE_MS = 30_000
-const MAX_PUBLIC_EVENTS = 64
-
-export const AI_DECISION_LIMITS = {
-  planDeadlineMs: PLAN_DEADLINE_MS,
-  decisionDeadlineMs: DECISION_DEADLINE_MS,
-  maxPublicEvents: MAX_PUBLIC_EVENTS
-} as const
-
-function jsonValue(value: unknown): JsonValue {
-  return JSON.parse(JSON.stringify(value)) as JsonValue
-}
-
-function jsonObject(value: unknown): JsonObject {
-  return jsonValue(value) as JsonObject
-}
-
-function effectiveHealth(player: AiPolicyOutcome['self']): number {
-  return player.health + player.armor
-}
-
-function boardThreat(player: AiPolicyOutcome['self']): number {
-  return player.board.reduce((total, minion) => {
-    const text = minion.rulesText.toLowerCase()
-    const repeatable = /whenever|after you|at the (?:start|end)|inspire/.test(text)
-    const delayed = /deathrattle/.test(text)
-    return (
-      total +
-      Math.max(0, minion.attack) +
-      Math.max(0, minion.health) * 0.25 +
-      (repeatable ? 4 : 0) +
-      (delayed ? 1 : 0)
-    )
-  }, 0)
-}
-
-function compareVectors(left: readonly number[], right: readonly number[]): number {
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const difference = (left[index] ?? 0) - (right[index] ?? 0)
-    if (difference !== 0) return difference
-  }
-  return 0
-}
-
-function policyRiskCost(policy: CandidatePolicy): number {
-  const flags = policy.assessment?.riskFlags ?? []
-  return flags.reduce((total, flag) => {
-    switch (flag) {
-      case 'immediate-loss':
-        return total + 100
-      case 'fatigue-lethal':
-        return total + 100
-      case 'draws-from-empty-deck':
-        return total + 20
-      case 'hand-overflow':
-      case 'burns-card':
-        return total + 12
-      case 'no-effect':
-      case 'ineffective-hero-freeze':
-        return total + 8
-      default:
-        return total
-    }
-  }, 0)
-}
-
-function outcomeFallbackVector(policy: CandidatePolicy): readonly number[] {
-  const result = policy.outcome
-  if (!result)
-    return [0, -policyRiskCost(policy), 0, 0, 0, 0, 0, policy.fallbackRank ?? 0]
-  return [
-    result.winner === 'self' ? 3 : result.winner === 'opponent' ? -3 : 1,
-    -policyRiskCost(policy),
-    -boardThreat(result.opponent),
-    effectiveHealth(result.self),
-    boardThreat(result.self),
-    typeof result.self.hand === 'number' ? result.self.hand : result.self.hand.length,
-    -effectiveHealth(result.opponent),
-    policy.view.completeTurn ? 1 : 0,
-    policy.fallbackRank ?? 0
-  ]
-}
-
-function hasRisk(
-  policy: CandidatePolicy,
-  risk: AiPolicyAssessment['riskFlags'][number]
-): boolean {
-  return policy.assessment?.riskFlags.includes(risk) === true
-}
-
-function filterWhenAvailable(
-  policies: readonly CandidatePolicy[],
-  predicate: (policy: CandidatePolicy) => boolean
-): readonly CandidatePolicy[] {
-  const filtered = policies.filter(predicate)
-  return filtered.length > 0 ? filtered : policies
-}
-
-function safePolicyPool(
-  policies: readonly CandidatePolicy[]
-): readonly CandidatePolicy[] {
-  const viable = filterWhenAvailable(
-    policies,
-    (policy) => policy.assessment?.rejectable !== true
-  )
-  const withoutFatalFatigue = filterWhenAvailable(
-    viable,
-    (policy) => !hasRisk(policy, 'fatigue-lethal')
-  )
-  const withoutEmptyDeckDraw = filterWhenAvailable(
-    withoutFatalFatigue,
-    (policy) => !hasRisk(policy, 'draws-from-empty-deck')
-  )
-  const withoutBurn = filterWhenAvailable(
-    withoutEmptyDeckDraw,
-    (policy) => !hasRisk(policy, 'hand-overflow')
-  )
-  return filterWhenAvailable(withoutBurn, (policy) => !hasRisk(policy, 'no-effect'))
-}
-
-function policyAssessmentHasSafetyRisk(
-  assessment: AiPolicyAssessment | undefined
-): boolean {
-  return (
-    assessment?.rejectable === true ||
-    assessment?.riskFlags.some((risk) =>
-      [
-        'no-effect',
-        'ineffective-hero-freeze',
-        'immediate-loss',
-        'draws-from-empty-deck',
-        'hand-overflow',
-        'burns-card',
-        'fatigue-lethal'
-      ].includes(risk)
-    ) === true
-  )
-}
-
 export class AiTurnController {
-  private decisionId = ''
+  private readonly matchId = crypto.randomUUID()
+  private readonly system: AiMessage
+  private readonly unsubscribe: () => void
+  private readonly unsubscribeProgress?: () => void
+  private readonly exchanges: [AiMessage, AiMessage][] = []
   private sequence = 0
-  private deckPlan: AiDeckPlan | null = null
-  private deckPlanPromise: Promise<AiDeckPlan> | null = null
-  private queuedPolicy: QueuedPolicy | null = null
+  private eventCursor = 0
   private disposed = false
+  private failed = false
+  private resumeWaiter?: (resumed: boolean) => void
+  private pauseGeneration = 0
+  private turnPlan?: { turn: number; note: AiPlanNote }
+  private plannedTurn?: number
+  private lastExpectation?: string
+  private inspectionBudget = { turn: -1, used: 0, revisions: new Set<number>() }
+  private maxMessageBytes: number = AI_REQUEST_LIMITS.maxContextBytes
+  private trimmed = false
+  private active: { identity: AiDecisionIdentity; cancel: () => void } | null = null
+  private pending: Promise<AiActionDecision | null> | null = null
+  private readonly actualResults: unknown[] = []
 
-  constructor(private readonly options: AiTurnControllerOptions) {}
-
+  constructor(private readonly options: AiTurnControllerOptions) {
+    this.system = aiSystemContext(options.session)
+    this.unsubscribeProgress = options.api?.onProgress?.((progress) => {
+      const identity = this.active?.identity
+      if (
+        identity &&
+        progress.matchId === identity.matchId &&
+        progress.requestId === identity.requestId &&
+        progress.expectedRevision === identity.expectedRevision &&
+        this.current(identity)
+      )
+        this.log('request-progress', progress)
+    })
+    this.unsubscribe = options.session.subscribe((result) => {
+      if (
+        this.active &&
+        result.state.revision !== this.active.identity.expectedRevision
+      )
+        this.cancel('state changed')
+    })
+  }
   dispose(): void {
     this.disposed = true
-    this.queuedPolicy = null
+    this.resumeWaiter?.(false)
+    this.resumeWaiter = undefined
+    this.cancel('match exited')
+    this.unsubscribe()
+    this.unsubscribeProgress?.()
+    this.exchanges.length = 0
+    this.actualResults.length = 0
   }
-
-  prewarmDeckPlan(): void {
-    void this.ensureDeckPlan()
-  }
-
-  private beginDecision(phase: 'mulligan' | 'turn'): void {
-    this.decisionId = `${phase}-${this.options.session.getState().revision}-${this.sequence++}`
-    if (this.options.recorder) {
-      this.options.recorder.decisionId = this.decisionId
-    }
-  }
-
-  async chooseMulligan(): Promise<AiActionDecision> {
-    return this.measure('mulligan', async () => {
-      this.beginDecision('mulligan')
-      const state = this.options.session.getState()
-      const player = this.options.session.findPlayer(
-        state,
-        this.options.session.remoteParticipantId
-      )
-      const policies: CandidatePolicy[] = []
-      for (let mask = 0; mask < 1 << player.hand.length; mask += 1) {
-        const replaced = player.hand.filter(
-          (_card, index) => (mask & (1 << index)) !== 0
-        )
-        const command: ConfirmMulliganCommand = {
-          type: 'confirm-mulligan',
-          participantId: player.participantId,
-          replaceInstanceIds: replaced.map((card) => card.instanceId)
-        }
-        const expensiveKept = player.hand.filter(
-          (card, index) =>
-            (mask & (1 << index)) === 0 &&
-            card.cardId !== 'system_the_coin' &&
-            (card.currentCost ?? card.baseCost ?? 0) >= 4
-        ).length
-        policies.push({
-          id: `mulligan-${mask}`,
-          commands: [command],
-          fallbackRank: -expensiveKept,
-          view: {
-            id: `mulligan-${mask}`,
-            actions: [
-              replaced.length === 0
-                ? 'Keep the entire opening hand.'
-                : `Replace ${replaced
-                    .map(
-                      (card) =>
-                        `${CARD_CATALOG.require(card.cardId).name} (${card.cardId})`
-                    )
-                    .join(', ')}.`
-            ],
-            completeTurn: true,
-            stopsAtNewInformation: true
-          }
-        })
-      }
-      return this.choosePolicy('mulligan', policies)
+  private cancel(reason: string): void {
+    const active = this.active
+    if (!active) return
+    this.active = null
+    active.cancel()
+    void this.options.api?.cancel(active.identity).catch(() => undefined)
+    this.log(reason === 'state changed' ? 'request-superseded' : 'cancelled', {
+      ...active.identity,
+      reason
     })
   }
-
-  async chooseTurnAction(): Promise<AiActionDecision> {
-    return this.measure('turn', async () => {
-      const continuation = this.continuePolicy()
-      if (continuation) return continuation
-      this.beginDecision('turn')
-      const pending = this.options.session.getState().pendingCardChoice
-      if (pending?.resolution?.type === 'kazakus-potion') {
-        this.options.recorder?.record('decisions', 'potion-offers', {
-          options: pending.options,
-          origin:
-            this.options.session.getState().aiBonusTurn ===
-            this.options.session.getState().turnNumber
-              ? 'turn-bonus'
-              : 'card',
-          stage: pending.resolution.stage,
-          cost: pending.resolution.selectedCostOption?.cost
-        })
-      }
-      const lethalSearch = await findGuaranteedLethalPolicy(
-        this.options.session.match,
-        this.options.session.remoteParticipantId
-      )
-      this.options.recorder?.record('decisions', 'lethal-search', {
-        expandedNodes: lethalSearch.expandedNodes,
-        elapsedMs: lethalSearch.elapsedMs,
-        exhausted: lethalSearch.exhausted,
-        found: lethalSearch.policy !== null
-      })
-      if (lethalSearch.policy) {
-        const lethalPolicy = this.candidatePolicy(lethalSearch.policy)
-        return this.decisionFrom(
-          lethalPolicy,
-          'engine',
-          'Engine-verified guaranteed lethal.',
-          'turn',
-          [lethalPolicy]
-        )
-      }
-      const policies = (
-        await buildEngineVerifiedPolicies(
-          this.options.session.match,
-          this.options.session.remoteParticipantId
-        )
-      ).map((policy) => this.candidatePolicy(policy))
-      if (policies.length === 0) {
-        this.options.recorder?.record('decisions', 'selection', {
-          source: 'fallback',
-          policyId: 'fallback-end-turn',
-          reason: 'No generated policies.',
-          reasonCode: 'no-policies'
-        })
-        const participantId = this.options.session.remoteParticipantId
-        return {
-          expectedRevision: this.options.session.getState().revision,
-          actionId: 'fallback-end-turn',
-          command: { type: 'end-turn', participantId },
-          source: 'fallback'
-        }
-      }
-      return this.choosePolicy('turn', policies)
+  private log(kind: string, data: unknown, failure = false): void {
+    const snapshot = aiJson({
+      schemaVersion: AI_LOG_SCHEMA_VERSION,
+      matchId: this.matchId,
+      turn: this.options.session.getState().turnNumber,
+      ...aiJson(data)
     })
-  }
-
-  private aiDeck(): Deck {
-    const participant = this.options.session.match.setup.participants.find(
-      (candidate) =>
-        candidate.participantId === this.options.session.remoteParticipantId
-    )
-    const deck = this.options.decks.find(
-      (candidate) => candidate.id === participant?.deckId
-    )
-    if (!deck) throw new Error('The AI deck is unavailable.')
-    return deck
-  }
-
-  private async ensureDeckPlan(): Promise<AiDeckPlan> {
-    if (this.deckPlan) return this.deckPlan
-    if (this.deckPlanPromise) return this.deckPlanPromise
-    const fallback = createFallbackDeckPlan()
-    this.deckPlanPromise = (async () => {
-      if (!this.options.api) return fallback
-      try {
-        const logMatchId = await this.options.recorder?.ready
-        const request = {
-          ...createDeckPlanRequest(this.aiDeck(), Date.now() + PLAN_DEADLINE_MS),
-          ...(logMatchId ? { logMatchId } : {})
-        }
-        const response = await this.options.api.planDeck(request)
-        if (!response.modelId.toLowerCase().includes('gpt-5.4-nano')) {
-          throw new Error(`Deck plan used disallowed model ${response.modelId}.`)
-        }
-        const plan = validateDeckPlan(response.plan, this.aiDeck())
-        this.options.logger.info('[Game AI] exact-deck plan ready', {
-          strategy: plan.strategy,
-          preserve: plan.preserve,
-          modelId: response.modelId
-        })
-        return plan
-      } catch (error) {
-        this.options.logger.warn(
-          '[Game AI] deck plan failed; using generic plan',
-          error
-        )
-        return fallback
-      }
-    })()
-    this.deckPlan = await this.deckPlanPromise
+    this.options.logger[failure ? 'warn' : 'info']('[Game AI] ' + kind, snapshot)
     this.options.recorder?.record(
       'decisions',
-      'deck-plan-active',
-      { plan: this.deckPlan },
-      'deck-plan'
+      kind,
+      snapshot,
+      String(snapshot.requestId ?? '')
     )
-    return this.deckPlan
   }
-
-  private candidatePolicy(policy: EngineVerifiedPolicy): CandidatePolicy {
-    return {
-      id: policy.id,
-      commands: policy.commands,
-      assessment: policy.assessment,
-      outcome: policy.outcome,
-      view: {
-        id: policy.id,
-        actions: policy.actions,
-        completeTurn: policy.completeTurn,
-        stopsAtNewInformation: policy.stopsAtNewInformation,
-        ...(policy.assessment ? { evidence: policy.assessment } : {}),
-        ...(policy.outcome ? { result: jsonObject(policy.outcome) } : {})
-      }
-    }
-  }
-
   private legalCommands(): readonly TurnMatchCommand[] {
-    return this.options.session.match.analyze((fork) =>
-      enumerateLegalCommands(fork, this.options.session.remoteParticipantId)
+    const match = this.options.session.match
+    if (!match.getPlayInput || !match.getLegality)
+      throw new Error('AI requires engine legality queries.')
+    return enumerateLegalCommands(
+      {
+        getState: () => match.getState(),
+        getPlayInput: match.getPlayInput,
+        getLegality: match.getLegality
+      },
+      this.options.session.remoteParticipantId
     )
   }
-
-  private continuePolicy(): AiActionDecision | null {
-    const queued = this.queuedPolicy
-    if (!queued || queued.commands.length === 0) return null
-    this.decisionId = queued.decisionId
-    if (this.options.recorder) this.options.recorder.decisionId = this.decisionId
-    const state = this.options.session.getState()
-    if (
-      state.phase !== 'turns' ||
-      state.activePlayerId !== this.options.session.remoteParticipantId
-    ) {
-      this.queuedPolicy = null
-      return null
-    }
-    const next = queued.commands[0]!
-    const legal = new Set(this.legalCommands().map(canonicalCommandKey))
-    if (!legal.has(canonicalCommandKey(next))) {
-      this.options.logger.info('[Game AI] policy diverged; replanning', {
-        policyId: queued.id,
-        next: canonicalCommandKey(next)
-      })
-      this.queuedPolicy = null
-      return null
-    }
-    const nextAssessment = assessPolicyCommand(
-      this.options.session.match,
-      this.options.session.remoteParticipantId,
-      next
+  hasLegalActions(): boolean {
+    return !this.disposed && !this.failed && this.legalCommands().length > 0
+  }
+  get isPaused(): boolean {
+    return this.failed && !this.disposed
+  }
+  waitForResume(): Promise<boolean> {
+    if (this.disposed) return Promise.resolve(false)
+    if (!this.failed) return Promise.resolve(true)
+    return new Promise((resolve) => {
+      this.resumeWaiter = resolve
+    })
+  }
+  chooseMulligan(): Promise<AiActionDecision | null> {
+    return this.chooseTurnAction()
+  }
+  chooseTurnAction(): Promise<AiActionDecision | null> {
+    if (this.pending) return this.pending
+    this.pending = this.choose().finally(() => {
+      this.pending = null
+    })
+    return this.pending
+  }
+  private current(identity: AiDecisionIdentity): boolean {
+    return (
+      !this.disposed &&
+      !this.failed &&
+      this.options.session.getState().revision === identity.expectedRevision
     )
-    if (
-      nextAssessment?.rejectable ||
-      nextAssessment?.riskFlags.includes('no-effect') ||
-      nextAssessment?.riskFlags.includes('ineffective-hero-freeze') ||
-      nextAssessment?.riskFlags.includes('immediate-loss') ||
-      nextAssessment?.riskFlags.includes('fatigue-lethal') ||
-      nextAssessment?.riskFlags.includes('hand-overflow') ||
-      nextAssessment?.riskFlags.includes('draws-from-empty-deck')
+  }
+  /** All terminal failures stop automatic retries and produce one visible notice. */
+  pause(error: unknown, identity?: AiDecisionIdentity): void {
+    if (this.disposed || this.failed) return
+    this.failed = true
+    const generation = ++this.pauseGeneration
+    this.cancel('AI paused')
+    this.log(
+      'failure',
+      {
+        ...(identity ?? {
+          matchId: this.matchId,
+          expectedRevision: this.options.session.getState().revision
+        }),
+        reason: error instanceof Error ? error.message : String(error),
+        source: 'paused',
+        ...(error instanceof AiRequestError ? { diagnostics: error.details } : {})
+      },
+      true
+    )
+    this.options.onFailure?.(
+      'The AI could not complete its turn. The match is paused; no random move was played. Retry AI to request a new decision (another provider charge may apply), or use the game menu to leave. Details were recorded in the match logs.',
+      () => {
+        if (this.disposed || !this.failed || generation !== this.pauseGeneration) return
+        this.failed = false
+        this.log('manual-retry', {
+          reason: 'User requested a new decision from the current board.'
+        })
+        this.resumeWaiter?.(true)
+        this.resumeWaiter = undefined
+      }
+    )
+  }
+  private messages(
+    current: AiMessage,
+    decision: readonly AiMessage[] = []
+  ): AiMessage[] {
+    const assemble = (): AiMessage[] => [
+      this.system,
+      ...this.exchanges.flat(),
+      ...decision,
+      current
+    ]
+    const bytes = (): number =>
+      new TextEncoder().encode(JSON.stringify(assemble())).length
+    let dropped = 0
+    while (
+      this.exchanges.length &&
+      (this.exchanges.length > AI_CONVERSATION_LIMITS.maxExchanges ||
+        bytes() > this.maxMessageBytes)
     ) {
-      this.options.logger.info('[Game AI] queued policy became unsafe; replanning', {
-        policyId: queued.id,
-        riskFlags: nextAssessment?.riskFlags ?? [],
-        rejectable: nextAssessment?.rejectable ?? false
-      })
-      this.queuedPolicy = null
+      this.exchanges.shift()
+      dropped++
+    }
+    if (dropped && !this.trimmed) {
+      this.trimmed = true
+      this.log('history-trim', { dropped, retained: this.exchanges.length })
+    }
+    // Never truncate current mechanics or legal actions to make a request fit.
+    if (bytes() > this.maxMessageBytes)
+      throw new Error('Current AI facts exceed the configured context allowance.')
+    return assemble()
+  }
+  private async choose(): Promise<AiActionDecision | null> {
+    if (this.disposed || this.failed) return null
+    const session = this.options.session
+    const identity = {
+      matchId: this.matchId,
+      requestId: this.matchId + ':' + this.sequence++,
+      expectedRevision: session.getState().revision
+    }
+    const commands = this.legalCommands()
+    if (!commands.length) {
+      const state = session.getState()
+      if (
+        state.phase === 'turns' &&
+        state.activePlayerId === session.remoteParticipantId &&
+        !state.pendingResolution &&
+        !state.pendingDiscover &&
+        !state.pendingCardChoice
+      )
+        this.pause(new Error('Active AI has no legal inputs.'), identity)
       return null
     }
-    this.queuedPolicy =
-      queued.commands.length > 1
-        ? {
-            ...queued,
-            commands: queued.commands.slice(1),
-            assessment: nextAssessment ?? queued.assessment
+    const cursor = session.getAiEventCursor()
+    const events = describeAiEvents(
+      session.getAiEventsSince(this.eventCursor),
+      session.remoteParticipantId
+    )
+    let selected = commands[0]!
+    let actionId = 'a0'
+    let source: AiActionDecision['source'] = 'forced'
+    let reason: string | undefined
+    let expectedResult: string | undefined
+    if (commands.length > 1) {
+      let cancelled!: () => void
+      const cancellation = new Promise<null>((resolve) => {
+        cancelled = () => resolve(null)
+      })
+      this.active = { identity, cancel: cancelled }
+      try {
+        if (!this.options.api) throw new Error('AI API bridge unavailable.')
+        if (!(
+          this.options.online?.() ??
+          (typeof navigator === 'undefined' || navigator.onLine !== false)
+        ))
+          throw new Error('Network is known offline.')
+        const settings = await Promise.race([this.options.api.settings(), cancellation])
+        if (!settings || !this.current(identity)) return null
+        if (!settings.enabled) throw new Error('External game AI is disabled.')
+        this.maxMessageBytes =
+          settings.maxContextBytes ?? AI_REQUEST_LIMITS.maxContextBytes
+        const actions = aiActions(session, commands)
+        const history = session.getAiPublicHistory().recentEvents
+        const retainedEvents = Array.isArray(history)
+          ? history.filter((event): event is string => typeof event === 'string')
+          : []
+        const facts = {
+          state: aiModelState(session, commands),
+          eventsSincePreviousDecision: events,
+          actualActionResults: [...this.actualResults],
+          previousExpectation: this.lastExpectation,
+          actions: aiActionFacts(actions)
+        }
+        const decisionConversation: AiMessage[] = []
+        const decisionHistory: [AiMessage, AiMessage][] = []
+        const turn = session.getState().turnNumber
+        if (this.turnPlan?.turn !== turn) this.turnPlan = undefined
+        if (this.inspectionBudget.turn !== turn)
+          this.inspectionBudget = { turn, used: 0, revisions: new Set() }
+        let planning =
+          this.plannedTurn !== turn &&
+          session.getState().phase === 'turns' &&
+          session.getState().activePlayerId === session.remoteParticipantId &&
+          !session.getState().pendingDiscover &&
+          !session.getState().pendingCardChoice
+        let followup: JsonObject | undefined
+        let repairCount = 0
+        for (;;) {
+          const allowInspection =
+            !planning &&
+            session.getState().phase === 'turns' &&
+            !session.getState().pendingDiscover &&
+            !session.getState().pendingCardChoice &&
+            this.inspectionBudget.used < AI_DELIBERATION_LIMITS.extraExchangesPerTurn &&
+            !this.inspectionBudget.revisions.has(identity.expectedRevision)
+          const instruction = planning
+            ? AI_PLAN_INSTRUCTION
+            : (followup?.challenge ? AI_VERIFY_INSTRUCTION : AI_NEXT_INSTRUCTION) +
+              '\n' +
+              (allowInspection ? AI_INSPECT_INSTRUCTION : AI_COMMIT_INSTRUCTION)
+          const user: AiMessage = {
+            role: 'user',
+            content: JSON.stringify({
+              ...(followup ?? facts),
+              revision: identity.expectedRevision,
+              ...(this.turnPlan ? { turnPlan: this.turnPlan.note } : {}),
+              instruction
+            })
           }
-        : null
-    this.options.logger.info('[Game AI] continuing engine-verified policy', {
-      revision: state.revision,
-      policyId: queued.id,
-      command: canonicalCommandKey(next),
-      remaining: queued.commands.length - 1
-    })
-    return {
-      expectedRevision: state.revision,
-      actionId: `${queued.id}:continuation`,
-      command: next,
-      source: queued.source
-    }
-  }
-
-  private visibleCardIds(
-    observation: AiObservation,
-    state: TurnMatchState
-  ): readonly string[] {
-    const ids = new Set<string>()
-    for (const player of observation.players) {
-      for (const card of player.hand) ids.add(card.cardId)
-      for (const minion of player.board) ids.add(minion.cardId)
-      for (const cardId of player.graveyardCardIds) ids.add(cardId)
-      if (player.weapon) ids.add(player.weapon.cardId)
-      for (const secret of player.secrets) if (secret.cardId) ids.add(secret.cardId)
-    }
-    if (state.pendingDiscover?.participantId === observation.perspectivePlayerId) {
-      for (const card of state.pendingDiscover.candidates) ids.add(card.cardId)
-    }
-    if (state.pendingCardChoice?.participantId === observation.perspectivePlayerId) {
-      for (const option of state.pendingCardChoice.options) {
-        if (option.presentationCardId) ids.add(option.presentationCardId)
-      }
-    }
-    return [...ids].sort()
-  }
-
-  private modelState(): JsonObject {
-    const observation = this.options.session.getAiObservation()
-    const state = this.options.session.getState()
-    const visibleCards = this.visibleCardIds(observation, state).map((cardId) => {
-      const definition = CARD_CATALOG.require(cardId)
-      return {
-        cardId,
-        name: definition.name,
-        cost: definition.cost,
-        type: definition.type,
-        rulesText: definition.rulesText,
-        keywords: definition.keywords ?? [],
-        effects: definition.effects
-      }
-    })
-    const visibleHeroPowers = observation.players.map((player) => {
-      const definition = HERO_POWER_CATALOG.require(player.heroPower.id)
-      return {
-        participantId: player.participantId,
-        id: definition.id,
-        name: definition.displayName,
-        cost: player.heroPower.cost,
-        available: player.heroPower.available,
-        rulesText: definition.rulesText
-      }
-    })
-    return jsonObject({
-      observation,
-      visibleCards,
-      visibleHeroPowers,
-      recentPublicEvents: this.options.session.getAiObservedEvents(MAX_PUBLIC_EVENTS),
-      ...(state.pendingCardChoice?.resolution?.type === 'kazakus-potion'
-        ? {
-            potionCrafting: {
-              instruction:
-                'Craft a Kazakus potion by choosing ingredients. The completed potion goes into your hand and costs its normal mana to play. Choose targets only when playing the potion, not while crafting. Consider both ingredients and future turns when choosing.',
-              origin: state.aiBonusTurn === state.turnNumber ? 'turn-bonus' : 'card',
-              mustEndTurnAfterCrafting: state.aiBonusTurn === state.turnNumber,
-              stage: state.pendingCardChoice.resolution.stage,
-              cost: state.pendingCardChoice.resolution.selectedCostOption?.cost,
-              firstIngredient: state.pendingCardChoice.resolution
-                .selectedFirstIngredient
-                ? CARD_CATALOG.require(
-                    state.pendingCardChoice.resolution.selectedFirstIngredient
+          const request: AiDecisionRequest & { messages: AiMessage[] } = {
+            ...identity,
+            phase: planning ? 'plan' : 'action',
+            allowInspection,
+            messages: this.messages(user, decisionConversation),
+            actionIds: actions.map((action) => action.id)
+          }
+          if (
+            new TextEncoder().encode(JSON.stringify(request.messages)).length >
+            this.maxMessageBytes
+          )
+            throw new Error('AI request exceeds the configured context allowance.')
+          this.log('request-started', {
+            ...identity,
+            ...settings,
+            phase: request.phase,
+            allowInspection,
+            extraExchangesUsed: this.inspectionBudget.used,
+            actionCount: actions.length,
+            actions,
+            contextBytes: new TextEncoder().encode(JSON.stringify(request.messages))
+              .length,
+            retainedExchanges: this.exchanges.length,
+            request
+          })
+          let response: AiDecisionResponse | null
+          for (;;) {
+            try {
+              response = await Promise.race([
+                this.options.api.decide(request),
+                cancellation
+              ])
+              if (
+                response &&
+                this.current(identity) &&
+                response.matchId === identity.matchId &&
+                response.requestId === identity.requestId &&
+                response.expectedRevision === identity.expectedRevision
+              ) {
+                try {
+                  validateAiChoicePhase(response.choice, request)
+                  if ('actionId' in response.choice) {
+                    const selectedId = response.choice.actionId
+                    const action = actions.find((a) => a.id === selectedId)
+                    if (
+                      !action ||
+                      !sameAiIntent(
+                        response.choice.intent,
+                        aiActionIntent(action.command, session.localParticipantId)
+                      )
+                    )
+                      throw new Error(
+                        'Action ID and intent disagree. Copy the intended current input and its exact source/targets/position/option; do not execute an ambiguous choice.'
+                      )
+                  }
+                } catch (error) {
+                  throw new AiRequestError(
+                    error instanceof Error ? error.message : String(error),
+                    {
+                      repairable: true,
+                      failureKind: 'invalid-choice',
+                      rejectedContent: JSON.stringify({
+                        reason: response.reason,
+                        choice: response.choice
+                      }),
+                      ...(response.usage ? { usage: response.usage } : {})
+                    }
                   )
-                : undefined,
-              options: state.pendingCardChoice.options
+                }
+              }
+              break
+            } catch (error) {
+              if (!this.current(identity) || this.active?.identity !== identity)
+                return null
+              if (
+                !(error instanceof AiRequestError) ||
+                error.details?.repairable !== true
+              )
+                throw error
+              this.log('response-rejected', {
+                ...identity,
+                repairCount,
+                phase: request.phase,
+                reason: error.message,
+                diagnostics: error.details
+              })
+              if (repairCount >= 1) throw error
+              repairCount++
+              const instruction =
+                'Your response failed validation: ' +
+                error.message +
+                '. Correct the response format, not the strategy. Keep your intended choice if legal. ' +
+                'Return reason and exactly one choice matching the current response schema. Each text field is at most 600 characters; the choice is at most 8000 characters. ' +
+                (planning
+                  ? 'Return choice.plan with 1–2 candidates, at most 6 steps each, and 0–3 checks. '
+                  : 'For a commit include actionId, matching intent, expectedResult and planUpdate (null if unchanged). ' +
+                    (allowInspection
+                      ? 'Inspection may contain 1–3 supported checks. '
+                      : 'Inspection is unavailable. Commit now. ')) +
+                'No extra fields or markdown. The board and available actions have not changed.'
+              request.messages = [
+                ...request.messages,
+                {
+                  role: 'assistant',
+                  content: String(error.details.rejectedContent ?? '') || 'null'
+                },
+                { role: 'user', content: JSON.stringify({ instruction }) }
+              ]
+              if (
+                new TextEncoder().encode(JSON.stringify(request.messages)).length >
+                this.maxMessageBytes
+              )
+                throw new Error(
+                  'AI format correction exceeds the configured context allowance.',
+                  { cause: error }
+                )
+              this.log('format-repair', {
+                ...identity,
+                repairCount,
+                phase: request.phase,
+                instruction,
+                contextBytes: new TextEncoder().encode(JSON.stringify(request.messages))
+                  .length
+              })
             }
           }
-        : {})
-    })
-  }
-
-  private fallback(policies: readonly CandidatePolicy[]): CandidatePolicy {
-    return [...policies].sort((left, right) => {
-      const vectorOrder = compareVectors(
-        outcomeFallbackVector(right),
-        outcomeFallbackVector(left)
-      )
-      return vectorOrder || left.id.localeCompare(right.id)
-    })[0]!
-  }
-
-  private decisionFrom(
-    policy: CandidatePolicy,
-    source: AiActionDecision['source'],
-    rationale: string,
-    phase: 'mulligan' | 'turn',
-    considered: readonly CandidatePolicy[],
-    reasonCode: AiSelectionReason = source === 'model'
-      ? 'model-selected'
-      : source === 'engine'
-        ? 'engine-guaranteed-lethal'
-        : 'single-safe-policy'
-  ): AiActionDecision {
-    const state = this.options.session.getState()
-    const [command, ...remaining] = policy.commands
-    if (!command) throw new Error(`AI policy ${policy.id} has no command.`)
-    this.queuedPolicy =
-      phase === 'turn' && remaining.length > 0
-        ? {
-            id: policy.id,
-            source,
-            commands: remaining,
-            decisionId: this.decisionId,
-            assessment: policy.assessment
+          if (!response || !this.current(identity)) return null
+          if (
+            response.matchId !== identity.matchId ||
+            response.requestId !== identity.requestId ||
+            response.expectedRevision !== identity.expectedRevision
+          ) {
+            this.log('cancelled', { ...identity, reason: 'response identity mismatch' })
+            return null
           }
-        : null
-    this.options.recorder?.record('decisions', 'selection', {
-      source,
-      reasonCode,
-      phase,
-      policyId: policy.id,
-      candidateCount: considered.length,
-      hasCompleteOutcome: considered.some(
-        (candidate) => candidate.outcome !== undefined
-      ),
-      lethalCandidateCount: considered.filter(
-        (candidate) =>
-          candidate.assessment?.guaranteedLethal === true ||
-          candidate.outcome?.winner === 'self'
-      ).length,
-      observation: jsonObject(this.options.session.getAiObservation()),
-      candidates: jsonValue(
-        considered.map((candidate) => ({
-          id: candidate.id,
-          actions: candidate.view.actions,
-          completeTurn: candidate.view.completeTurn,
-          stopsAtNewInformation: candidate.view.stopsAtNewInformation,
-          ...(candidate.view.evidence ? { evidence: candidate.view.evidence } : {}),
-          ...(candidate.view.result ? { result: candidate.view.result } : {})
-        }))
-      ),
-      actions: policy.view.actions,
-      rationale,
-      commands: policy.commands,
-      ...(policy.assessment
-        ? {
-            evidence: jsonObject(policy.assessment),
-            riskFlags: policy.assessment.riskFlags,
-            guaranteedLethal: policy.assessment.guaranteedLethal,
-            rejectable: policy.assessment.rejectable
+          const reply = { choice: response.choice, reason: response.reason }
+          if (planning) {
+            if (!('plan' in response.choice))
+              throw new Error('AI planning returned an executable choice.')
+            const plan = response.choice.plan
+            this.plannedTurn = turn
+            const preferred = plan.candidates[plan.preferred]!
+            this.turnPlan = {
+              turn,
+              note: {
+                objective: plan.objective,
+                continuation: preferred.sequence.join(' -> '),
+                reconsiderIf: plan.lossRisk
+              }
+            }
+            this.log('turn-plan', {
+              ...response,
+              phase: 'plan',
+              repairCount
+            })
+            decisionConversation.push(user, {
+              role: 'assistant',
+              content: JSON.stringify(reply)
+            })
+            decisionHistory.push([
+              { role: 'user', content: JSON.stringify({ turn, phase: 'plan' }) },
+              { role: 'assistant', content: JSON.stringify(reply) }
+            ])
+            const proposed = actions.find((a) => a.id === plan.firstActionId)!
+            const intent = aiActionIntent(proposed.command, session.localParticipantId)
+            const relevantRefs = [
+              ...new Set(
+                [intent.source, ...intent.targets].filter(
+                  (r): r is string => r !== null
+                )
+              )
+            ]
+            const information = answerAiChecks(
+              plan.checks,
+              facts.state,
+              actions,
+              retainedEvents,
+              identity.expectedRevision
+            )
+            followup = aiJson({
+              challenge: true,
+              proposedAction: { id: proposed.id, move: proposed.description, intent },
+              information,
+              relevantFacts: answerAiChecks(
+                relevantRefs.map((ref) => ({
+                  topic: 'entity',
+                  ref,
+                  question: 'Which current facts govern this proposed action?',
+                  decisionImpact:
+                    'Recheck prerequisites and expected result before committing.'
+                })),
+                facts.state,
+                actions,
+                retainedEvents,
+                identity.expectedRevision
+              )
+            })
+            this.log('plan-challenge', { ...identity, ...followup })
+            planning = false
+            // Planning repairs must not consume the action phase's recovery budget.
+            repairCount = 0
+            continue
           }
-        : {})
-    })
-    this.options.logger.info('[Game AI] selected policy', {
-      revision: state.revision,
-      phase,
-      source,
-      reasonCode,
-      policyId: policy.id,
-      actions: policy.view.actions,
-      rationale,
-      considered: considered.map((candidate) => ({
-        id: candidate.id,
-        actions: candidate.view.actions,
-        completeTurn: candidate.view.completeTurn,
-        stopsAtNewInformation: candidate.view.stopsAtNewInformation,
-        result: candidate.view.result,
-        evidence: candidate.view.evidence
-      }))
-    })
-    return {
-      expectedRevision: state.revision,
-      actionId: policy.id,
-      command,
-      source
-    }
-  }
-
-  private async choosePolicy(
-    phase: 'mulligan' | 'turn',
-    policies: readonly CandidatePolicy[]
-  ): Promise<AiActionDecision> {
-    if (this.disposed) throw new Error('AI controller was disposed.')
-    const lethal = policies.filter(
-      (policy) =>
-        policy.assessment?.guaranteedLethal === true ||
-        policy.outcome?.winner === 'self'
-    )
-    const considered = lethal.length > 0 ? lethal : safePolicyPool(policies)
-    const fallback = this.fallback(considered)
-    if (!this.options.api || considered.length === 1) {
-      return this.decisionFrom(
-        fallback,
-        'fallback',
-        lethal.length > 0
-          ? 'Engine-verified lethal.'
-          : !this.options.api
-            ? 'Remote choice unavailable.'
-            : 'Only one safe policy remains.',
-        phase,
-        considered,
-        lethal.length > 0
-          ? 'engine-guaranteed-lethal'
-          : !this.options.api
-            ? 'api-unavailable'
-            : 'single-safe-policy'
-      )
-    }
-
-    const plan = await this.ensureDeckPlan()
-    const logMatchId = await this.options.recorder?.ready
-    const request: AiDecisionRequest = {
-      requestId: this.decisionId,
-      ...(logMatchId ? { logMatchId } : {}),
-      phase,
-      deadlineAtMs: Date.now() + DECISION_DEADLINE_MS,
-      plan,
-      state: this.modelState(),
-      policies: considered.map((policy) => policy.view)
-    }
-    try {
-      const response = await this.options.api.decide(request)
-      if (response.requestId !== request.requestId) {
-        throw new Error('AI returned a stale request ID.')
-      }
-      if (!response.modelId.toLowerCase().includes('gpt-5.4-nano')) {
-        throw new Error(`Decision used disallowed model ${response.modelId}.`)
-      }
-      const selected = considered.find((policy) => policy.id === response.policyId)
-      if (!selected) throw new Error(`AI selected unknown policy ${response.policyId}.`)
-      const liveAssessment = selected.commands[0]
-        ? assessPolicyCommand(
-            this.options.session.match,
-            this.options.session.remoteParticipantId,
-            selected.commands[0]
+          if ('plan' in response.choice)
+            throw new Error('AI returned a plan instead of an action.')
+          if ('inspect' in response.choice) {
+            this.inspectionBudget.used++
+            this.inspectionBudget.revisions.add(identity.expectedRevision)
+            const information = answerAiChecks(
+              response.choice.inspect,
+              facts.state,
+              actions,
+              retainedEvents,
+              identity.expectedRevision
+            )
+            this.log('fact-inspection', {
+              ...response,
+              information,
+              extraExchangesUsed: this.inspectionBudget.used
+            })
+            decisionConversation.push(user, {
+              role: 'assistant',
+              content: JSON.stringify(reply)
+            })
+            decisionHistory.push([
+              {
+                role: 'user',
+                content: JSON.stringify({
+                  turn,
+                  ...followup,
+                  instruction: 'Resolve a decision-critical fact, then commit.'
+                })
+              },
+              { role: 'assistant', content: JSON.stringify(reply) }
+            ])
+            followup = { challenge: true, information }
+            continue
+          }
+          const action = actions.find(
+            (action) =>
+              action.id ===
+              ('actionId' in response.choice ? response.choice.actionId : '')
           )
-        : null
-      const selectedIsWinning =
-        selected.assessment?.guaranteedLethal === true ||
-        selected.outcome?.winner === 'self'
-      if (
-        !selectedIsWinning &&
-        policyAssessmentHasSafetyRisk(liveAssessment ?? selected.assessment)
-      ) {
-        const replacements = policies.filter(
-          (candidate) =>
-            candidate.id !== selected.id &&
-            !policyAssessmentHasSafetyRisk(candidate.assessment)
-        )
-        if (replacements.length > 0) {
-          const replacement = this.fallback(replacements)
-          this.options.logger.warn('[Game AI] live safety recheck replaced policy', {
-            selectedPolicyId: selected.id,
-            replacementPolicyId: replacement.id,
-            riskFlags: liveAssessment?.riskFlags ?? selected.assessment?.riskFlags ?? []
+          if (!action) throw new Error('AI returned unknown action ID.')
+          if (response.choice.planUpdate) {
+            this.turnPlan = { turn, note: response.choice.planUpdate }
+            this.log('plan-updated', { ...identity, turnPlan: this.turnPlan.note })
+          }
+          this.log('response-received', {
+            ...response,
+            repairCount,
+            selectedAction: action,
+            phase: 'action'
           })
-          return this.decisionFrom(
-            replacement,
-            'fallback',
-            'Live engine safety recheck rejected the provider selection.',
-            phase,
-            considered,
-            'safety-recheck'
-          )
+          this.exchanges.push(...decisionHistory, [
+            {
+              role: 'user',
+              content: JSON.stringify({
+                turn: session.getState().turnNumber,
+                events,
+                actualActionResults: facts.actualActionResults,
+                ...(followup ?? {})
+              })
+            },
+            {
+              role: 'assistant',
+              content: JSON.stringify({
+                move: action.description,
+                reason: response.reason,
+                expectedResult: response.choice.expectedResult
+              })
+            }
+          ])
+          this.messages({ role: 'user', content: '{}' })
+          this.eventCursor = cursor
+          session.acknowledgeAiEvents(cursor)
+          this.actualResults.length = 0
+          selected = action.command
+          actionId = action.id
+          source = 'model'
+          reason = response.reason
+          expectedResult = response.choice.expectedResult
+          break
         }
+      } catch (error) {
+        if (!this.current(identity) || this.active?.identity !== identity) return null
+        if (
+          error instanceof AiRequestError &&
+          error.details?.failureKind === 'timeout'
+        ) {
+          const legal = this.legalCommands()
+          if (!legal.length) return null
+          const index = Math.floor(Math.random() * legal.length)
+          selected = legal[index]!
+          actionId = 'a' + index
+          source = 'random-timeout'
+          reason = 'Provider timed out; selected a current legal input at random.'
+          this.turnPlan = undefined
+          this.plannedTurn = undefined
+          this.log('timeout-fallback', {
+            ...identity,
+            actionId,
+            command: selected,
+            source,
+            reason,
+            diagnostics: error.details
+          })
+        } else {
+          this.pause(error, identity)
+          return null
+        }
+      } finally {
+        if (this.active?.identity === identity) this.active = null
       }
-      return this.decisionFrom(selected, 'model', response.rationale, phase, considered)
-    } catch (error) {
-      this.options.logger.warn(
-        '[Game AI] decision failed; using transparent fallback',
-        {
-          error: error instanceof Error ? error.message : String(error),
-          fallbackPolicyId: fallback.id,
-          fallbackActions: fallback.view.actions
-        }
-      )
-      return this.decisionFrom(
-        fallback,
-        'fallback',
-        'Provider failed; selected by the small public-state fallback.',
-        phase,
-        considered,
-        'provider-failed'
-      )
+    }
+    if (!this.current(identity)) return null
+    if (this.options.recorder) this.options.recorder.decisionId = identity.requestId
+    return {
+      ...identity,
+      actionId,
+      command: selected,
+      source,
+      ...(reason ? { reason } : {}),
+      ...(expectedResult ? { expectedResult } : {})
     }
   }
-
-  private async measure(
-    phase: 'mulligan' | 'turn',
-    operation: () => Promise<AiActionDecision>
-  ): Promise<AiActionDecision> {
-    const startedAt = performance.now()
-    let continuation = false
-    try {
-      const decision = await operation()
-      continuation = decision.actionId.endsWith(':continuation')
-      return decision
-    } finally {
-      this.options.recorder?.record(
-        'decisions',
-        continuation ? 'continuation-timing' : 'decision-timing',
-        {
-          phase,
-          elapsedMs: Number((performance.now() - startedAt).toFixed(2))
-        }
-      )
-      this.options.logger.info('[Game AI] decision timing', {
-        phase,
-        elapsedMs: Number((performance.now() - startedAt).toFixed(2))
-      })
+  /** Called immediately after the normal engine dispatch, before presentation. */
+  recordExecution(decision: AiActionDecision, result: TurnMatchResult): void {
+    this.lastExpectation = result.accepted ? decision.expectedResult : undefined
+    const events =
+      this.options.session.match.getPublicEvents?.(
+        this.options.session.remoteParticipantId,
+        result.events
+      ) ?? []
+    const actualResult = aiJson({
+      ...decision,
+      accepted: result.accepted,
+      // Public outcomes are supplied once through the chronological event feed.
+      ...(result.accepted ? {} : { code: result.code, message: result.message })
+    })
+    this.actualResults.push({
+      source: decision.source,
+      accepted: result.accepted,
+      // Model moves already appear in the preceding assistant message.
+      ...(decision.source === 'model' ? {} : { command: decision.command }),
+      ...(result.accepted ? {} : { code: result.code, message: result.message })
+    })
+    if (this.actualResults.length > AI_CONVERSATION_LIMITS.maxExchanges) {
+      this.actualResults.shift()
+      if (!this.trimmed) {
+        this.trimmed = true
+        this.log('history-trim', {
+          reason:
+            'Older action results retained on disk; recent results and current facts remain in context.'
+        })
+      }
     }
+    this.log(
+      'action-executed',
+      { ...actualResult, rawEvents: events },
+      !result.accepted
+    )
+  }
+  isCurrent(decision: AiActionDecision): boolean {
+    return (
+      this.current(decision) &&
+      decision.matchId === this.matchId &&
+      this.legalCommands().some(
+        (command) =>
+          canonicalCommandKey(command) === canonicalCommandKey(decision.command)
+      )
+    )
   }
 }

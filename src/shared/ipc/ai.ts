@@ -1,504 +1,258 @@
-export const AI_IPC_CHANNELS = {
-  planDeck: 'ai:plan-deck',
-  decide: 'ai:decide'
-} as const
+import { parseAiDecisionChoice, type AiDecisionChoice } from './ai-deliberation'
 
+export const AI_LOG_SCHEMA_VERSION = 7
+
+export const AI_IPC_CHANNELS = {
+  decide: 'ai:decide',
+  cancel: 'ai:cancel',
+  progress: 'ai:progress',
+  settings: 'ai:settings'
+} as const
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[]
 export interface JsonObject {
   readonly [key: string]: JsonValue
 }
-
-export interface AiDeckCard {
-  readonly cardId: string
-  readonly count: number
-  readonly name: string
-  readonly type: string
-  readonly cost: number
-  readonly rulesText: string
-  readonly keywords: readonly string[]
-  readonly effects: JsonValue
+export interface AiMessage {
+  readonly role: 'system' | 'user' | 'assistant'
+  readonly content: string
 }
-
-export interface AiDeckPlan {
-  readonly strategy: string
-  readonly winConditions: readonly string[]
-  readonly priorities: readonly string[]
-  readonly preserve: readonly Readonly<{
-    readonly cardId: string
-    readonly reason: string
-    readonly releaseWhen: string
-  }>[]
-  readonly mulligan: readonly string[]
+export type AiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh'
+export type AiProviderId = 'azure-openai' | 'openrouter' | 'none'
+export const AI_REQUEST_LIMITS = {
+  timeoutMs: 45_000,
+  maxContextBytes: 200_000,
+  schemaAllowanceBytes: 50_000
+} as const
+export function isAiReasoningEffort(value: unknown): value is AiReasoningEffort {
+  return (
+    typeof value === 'string' &&
+    ['none', 'low', 'medium', 'high', 'xhigh'].includes(value)
+  )
 }
-
-export interface AiDeckPlanRequest {
-  readonly logMatchId?: string
-  readonly requestId: string
-  readonly deadlineAtMs: number
-  readonly deck: Readonly<{
-    readonly heroId: string
-    readonly cards: readonly AiDeckCard[]
-  }>
-}
-
-export interface AiDeckPlanResponse {
-  readonly requestId: string
-  readonly plan: AiDeckPlan
-  readonly rationale: string
+export interface AiSettings {
+  readonly enabled: boolean
+  readonly provider: AiProviderId
   readonly modelId: string
-  readonly debug?: AiProviderDebug
+  readonly reasoningEffort: AiReasoningEffort
+  readonly maxCompletionTokens: number
+  readonly maxContextBytes?: number
 }
-
-export const AI_POLICY_RISK_FLAGS = [
-  'no-effect',
-  'ineffective-hero-freeze',
-  'immediate-loss',
-  'draws-from-empty-deck',
-  'hand-overflow',
-  'burns-card',
-  'fatigue-lethal'
+export interface AiDecisionIdentity {
+  readonly matchId: string
+  readonly requestId: string
+  readonly expectedRevision: number
+}
+export const AI_REQUEST_STAGES = [
+  'transport-started',
+  'socket-assigned',
+  'dns-resolved',
+  'tcp-connected',
+  'tls-connected',
+  'request-sent',
+  'response-headers',
+  'response-body',
+  'response-complete',
+  'response-validated',
+  'waiting',
+  'failed',
+  'cancelled'
 ] as const
-
-export type AiPolicyRiskFlag = (typeof AI_POLICY_RISK_FLAGS)[number]
-export type AiPolicyCertainty = 'proven' | 'bounded' | 'unknown'
-
-export interface AiPolicyEffectSummary {
-  readonly manaSpent: number
-  readonly damageDealt: number
-  readonly damageToSelf: number
-  readonly damageToOpponent: number
-  readonly healthRestored: number
-  readonly armorGained: number
-  readonly cardsDrawn: number
-  readonly cardsGenerated: number
-  readonly cardsBurned: number
-  readonly fatigueDamage: number
-  readonly triggeredEffects: number
+export type AiRequestStage = (typeof AI_REQUEST_STAGES)[number]
+export interface AiRequestProgress extends AiDecisionIdentity {
+  readonly stage: AiRequestStage
+  readonly elapsedMs: number
+  readonly lastStage?: AiRequestStage
+  readonly receivedBytes?: number
+  readonly httpStatus?: number
+  readonly providerRequestId?: string
 }
-
-export interface AiPolicyActionEvidence {
-  readonly index: number
-  readonly action: string
-  readonly manaSpent: number
-  readonly damageDealt: number
-  readonly healthRestored: number
-  readonly cardsDrawn: number
-  readonly cardsGenerated: number
-  readonly cardsBurned: number
-  readonly fatigueDamage: number
-  readonly riskFlags: readonly AiPolicyRiskFlag[]
-  readonly hasBeneficialEffect: boolean
-  readonly beneficialTrigger: boolean
+export interface AiDecisionRequest extends AiDecisionIdentity {
+  readonly phase?: 'plan' | 'action'
+  readonly allowInspection?: boolean
+  readonly messages: readonly AiMessage[]
+  readonly actionIds: readonly string[]
 }
-
-export interface AiPolicyDeferredEffects {
-  readonly trigger: 'next-own-turn-draw'
-  readonly cardsDrawn: number
-  readonly cardsBurned: number
-  readonly fatigueDamage: number
-  readonly riskFlags: readonly AiPolicyRiskFlag[]
+export type AiChoice = {
+  readonly reason: string
+  readonly choice: AiDecisionChoice
 }
-
-export interface AiPolicyEvidence {
-  readonly certainty: AiPolicyCertainty
-  readonly riskFlags: readonly AiPolicyRiskFlag[]
-  readonly effectSummary: AiPolicyEffectSummary
-  readonly actions: readonly AiPolicyActionEvidence[]
-  readonly deferredEffects?: AiPolicyDeferredEffects
-  readonly guaranteedLethal: boolean
-  readonly immediateLoss: boolean
-  readonly hasBeneficialEffect: boolean
-  readonly rejectable: boolean
-}
-
-export interface AiPolicyOption {
-  readonly id: string
-  readonly actions: readonly string[]
-  readonly completeTurn: boolean
-  readonly stopsAtNewInformation: boolean
-  readonly result?: JsonObject
-  readonly evidence?: AiPolicyEvidence
-}
-
-export interface AiDecisionRequest {
-  readonly logMatchId?: string
-  readonly requestId: string
-  readonly phase: 'mulligan' | 'turn'
-  readonly deadlineAtMs: number
-  readonly plan: AiDeckPlan
-  readonly state: JsonObject
-  readonly policies: readonly AiPolicyOption[]
-}
-
-export interface AiDecisionResponse {
-  readonly requestId: string
-  readonly policyId: string
-  readonly rationale: string
+export interface AiDecisionResponse extends AiDecisionIdentity, AiChoice {
   readonly modelId: string
-  readonly debug?: AiProviderDebug
-}
-
-export interface AiProviderDebug {
   readonly durationMs: number
-  readonly url: string
-  readonly requestBody: JsonObject
-  readonly responseBody: JsonValue
+  readonly finishReason: string
   readonly usage?: JsonObject
 }
-
 export interface AiDecisionApi {
-  planDeck(request: AiDeckPlanRequest): Promise<AiDeckPlanResponse>
+  onProgress?(listener: (progress: AiRequestProgress) => void): () => void
+  settings(): Promise<AiSettings>
   decide(request: AiDecisionRequest): Promise<AiDecisionResponse>
+  cancel(identity: AiDecisionIdentity): Promise<void>
 }
-
+/** Expected decision failures cross contextBridge as data, never custom Errors. */
+export interface AiDecisionBridge extends Omit<AiDecisionApi, 'decide'> {
+  decide(request: AiDecisionRequest): Promise<AiIpcResult<AiDecisionResponse>>
+}
+/** Whitelist diagnostics fields; provider headers and response bodies never cross here. */
+export function parseAiRequestProgress(value: unknown): AiRequestProgress {
+  const identity = parseAiIdentity(value)
+  const data = value as Record<string, unknown>
+  if (
+    !AI_REQUEST_STAGES.includes(data.stage as AiRequestStage) ||
+    typeof data.elapsedMs !== 'number' ||
+    !Number.isFinite(data.elapsedMs) ||
+    data.elapsedMs < 0 ||
+    (data.lastStage !== undefined &&
+      !AI_REQUEST_STAGES.includes(data.lastStage as AiRequestStage))
+  )
+    throw new Error('Invalid AI request progress.')
+  for (const key of ['receivedBytes', 'httpStatus'] as const)
+    if (
+      data[key] !== undefined &&
+      (!Number.isSafeInteger(data[key]) || Number(data[key]) < 0)
+    )
+      throw new Error('Invalid AI request progress counter.')
+  if (
+    data.providerRequestId !== undefined &&
+    (typeof data.providerRequestId !== 'string' || data.providerRequestId.length > 200)
+  )
+    throw new Error('Invalid provider request ID.')
+  return {
+    ...identity,
+    stage: data.stage as AiRequestStage,
+    elapsedMs: data.elapsedMs,
+    ...(data.lastStage === undefined
+      ? {}
+      : { lastStage: data.lastStage as AiRequestStage }),
+    ...(data.receivedBytes === undefined
+      ? {}
+      : { receivedBytes: data.receivedBytes as number }),
+    ...(data.httpStatus === undefined ? {} : { httpStatus: data.httpStatus as number }),
+    ...(data.providerRequestId === undefined
+      ? {}
+      : { providerRequestId: data.providerRequestId as string })
+  }
+}
 export type AiIpcResult<T> =
   | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: string }
-
+  | { readonly ok: false; readonly error: string; readonly details?: JsonObject }
+export class AiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly details?: JsonObject
+  ) {
+    super(message)
+    this.name = 'AiRequestError'
+  }
+}
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
-
 function requiredString(value: unknown, label: string): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`${label} must be a non-empty string.`)
-  }
-  return value.trim()
-}
-
-function requiredNumber(value: unknown, label: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`${label} must be a finite number.`)
-  }
+  if (typeof value !== 'string' || !value.trim())
+    throw new Error(label + ' must be a non-empty string.')
   return value
 }
-
-function stringArray(value: unknown, label: string, maximum = 16): readonly string[] {
-  if (!Array.isArray(value) || value.length > maximum) {
-    throw new Error(`${label} must be an array with at most ${maximum} entries.`)
-  }
-  return value.map((entry, index) => requiredString(entry, `${label}[${index}]`))
-}
-
-function jsonValue(value: unknown, label: string): JsonValue {
+export function parseAiIdentity(value: unknown): AiDecisionIdentity {
   if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    return value
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry, index) => jsonValue(entry, `${label}[${index}]`))
-  }
-  if (!isRecord(value)) throw new Error(`${label} must be JSON-compatible.`)
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      jsonValue(entry, `${label}.${key}`)
-    ])
+    !isRecord(value) ||
+    !Number.isSafeInteger(value.expectedRevision) ||
+    Number(value.expectedRevision) < 0
   )
-}
-
-function jsonObject(value: unknown, label: string): JsonObject {
-  const parsed = jsonValue(value, label)
-  if (!isRecord(parsed)) throw new Error(`${label} must be an object.`)
-  return parsed as JsonObject
-}
-
-function policyCertainty(value: unknown, label: string): AiPolicyCertainty {
-  if (value !== 'proven' && value !== 'bounded' && value !== 'unknown') {
-    throw new Error(`${label} must be proven, bounded, or unknown.`)
-  }
-  return value
-}
-
-function policyRiskFlags(value: unknown, label: string): readonly AiPolicyRiskFlag[] {
-  if (!Array.isArray(value) || value.length > 8) {
-    throw new Error(`${label} must be an array with at most 8 entries.`)
-  }
-  return value.map((entry, index) => {
-    const flag = requiredString(entry, `${label}[${index}]`)
-    if (!(AI_POLICY_RISK_FLAGS as readonly string[]).includes(flag)) {
-      throw new Error(`${label}[${index}] is not a recognized policy risk flag.`)
-    }
-    return flag as AiPolicyRiskFlag
-  })
-}
-
-function policyNumber(
-  value: Record<string, unknown>,
-  key: string,
-  label: string
-): number {
-  const result = requiredNumber(value[key], `${label}.${key}`)
-  if (result < 0) throw new Error(`${label}.${key} must be non-negative.`)
-  return result
-}
-
-function policyEffectSummary(value: unknown, label: string): AiPolicyEffectSummary {
-  if (!isRecord(value)) throw new Error(`${label} must be an object.`)
+    throw new Error('Invalid AI decision identity.')
   return {
-    manaSpent: policyNumber(value, 'manaSpent', label),
-    damageDealt: policyNumber(value, 'damageDealt', label),
-    damageToSelf: policyNumber(value, 'damageToSelf', label),
-    damageToOpponent: policyNumber(value, 'damageToOpponent', label),
-    healthRestored: policyNumber(value, 'healthRestored', label),
-    armorGained: policyNumber(value, 'armorGained', label),
-    cardsDrawn: policyNumber(value, 'cardsDrawn', label),
-    cardsGenerated: policyNumber(value, 'cardsGenerated', label),
-    cardsBurned: policyNumber(value, 'cardsBurned', label),
-    fatigueDamage: policyNumber(value, 'fatigueDamage', label),
-    triggeredEffects: policyNumber(value, 'triggeredEffects', label)
+    matchId: requiredString(value.matchId, 'matchId'),
+    requestId: requiredString(value.requestId, 'requestId'),
+    expectedRevision: value.expectedRevision as number
   }
 }
-
-function policyActionEvidence(value: unknown, label: string): AiPolicyActionEvidence {
-  if (!isRecord(value)) throw new Error(`${label} must be an object.`)
-  const index = requiredNumber(value['index'], `${label}.index`)
-  if (!Number.isSafeInteger(index) || index < 0) {
-    throw new Error(`${label}.index must be a non-negative integer.`)
-  }
-  for (const key of ['hasBeneficialEffect', 'beneficialTrigger']) {
-    if (typeof value[key] !== 'boolean') {
-      throw new Error(`${label}.${key} must be a boolean.`)
-    }
-  }
+export function parseAiSettings(value: unknown): AiSettings {
+  if (
+    !isRecord(value) ||
+    typeof value.enabled !== 'boolean' ||
+    !['azure-openai', 'openrouter', 'none'].includes(String(value.provider)) ||
+    !isAiReasoningEffort(value.reasoningEffort) ||
+    !Number.isSafeInteger(value.maxCompletionTokens) ||
+    Number(value.maxCompletionTokens) < 1 ||
+    Number(value.maxCompletionTokens) > 128000 ||
+    (value.maxContextBytes !== undefined &&
+      (!Number.isSafeInteger(value.maxContextBytes) ||
+        Number(value.maxContextBytes) < 1000 ||
+        Number(value.maxContextBytes) > 200_000))
+  )
+    throw new Error('Invalid AI settings.')
   return {
-    index,
-    action: requiredString(value['action'], `${label}.action`),
-    manaSpent: policyNumber(value, 'manaSpent', label),
-    damageDealt: policyNumber(value, 'damageDealt', label),
-    healthRestored: policyNumber(value, 'healthRestored', label),
-    cardsDrawn: policyNumber(value, 'cardsDrawn', label),
-    cardsGenerated: policyNumber(value, 'cardsGenerated', label),
-    cardsBurned: policyNumber(value, 'cardsBurned', label),
-    fatigueDamage: policyNumber(value, 'fatigueDamage', label),
-    riskFlags: policyRiskFlags(value['riskFlags'] ?? [], `${label}.riskFlags`),
-    hasBeneficialEffect: value['hasBeneficialEffect'] as boolean,
-    beneficialTrigger: value['beneficialTrigger'] as boolean
+    enabled: value.enabled,
+    provider: value.provider as AiProviderId,
+    reasoningEffort: value.reasoningEffort,
+    modelId: requiredString(value.modelId, 'modelId'),
+    maxCompletionTokens: value.maxCompletionTokens as number,
+    maxContextBytes:
+      (value.maxContextBytes as number | undefined) ?? AI_REQUEST_LIMITS.maxContextBytes
   }
 }
-
-function policyDeferredEffects(value: unknown, label: string): AiPolicyDeferredEffects {
-  if (!isRecord(value)) throw new Error(`${label} must be an object.`)
-  const trigger = requiredString(value['trigger'], `${label}.trigger`)
-  if (trigger !== 'next-own-turn-draw') {
-    throw new Error(`${label}.trigger is not recognized.`)
-  }
-  return {
-    trigger,
-    cardsDrawn: policyNumber(value, 'cardsDrawn', label),
-    cardsBurned: policyNumber(value, 'cardsBurned', label),
-    fatigueDamage: policyNumber(value, 'fatigueDamage', label),
-    riskFlags: policyRiskFlags(value['riskFlags'] ?? [], `${label}.riskFlags`)
-  }
-}
-
-function policyEvidence(value: unknown, label: string): AiPolicyEvidence {
-  if (!isRecord(value)) throw new Error(`${label} must be an object.`)
-  const actionValues = value['actions']
-  if (!Array.isArray(actionValues) || actionValues.length > 12) {
-    throw new Error(`${label}.actions must contain at most 12 entries.`)
-  }
-  for (const key of [
-    'guaranteedLethal',
-    'immediateLoss',
-    'hasBeneficialEffect',
-    'rejectable'
-  ]) {
-    if (typeof value[key] !== 'boolean') {
-      throw new Error(`${label}.${key} must be a boolean.`)
-    }
-  }
-  const deferredEffects =
-    value['deferredEffects'] === undefined
-      ? undefined
-      : policyDeferredEffects(value['deferredEffects'], `${label}.deferredEffects`)
-  return {
-    certainty: policyCertainty(value['certainty'], `${label}.certainty`),
-    riskFlags: policyRiskFlags(value['riskFlags'] ?? [], `${label}.riskFlags`),
-    effectSummary: policyEffectSummary(
-      value['effectSummary'],
-      `${label}.effectSummary`
-    ),
-    actions: actionValues.map((entry, index) =>
-      policyActionEvidence(entry, `${label}.actions[${index}]`)
-    ),
-    ...(deferredEffects ? { deferredEffects } : {}),
-    guaranteedLethal: value['guaranteedLethal'] as boolean,
-    immediateLoss: value['immediateLoss'] as boolean,
-    hasBeneficialEffect: value['hasBeneficialEffect'] as boolean,
-    rejectable: value['rejectable'] as boolean
-  }
-}
-
-function parseDeckCard(value: unknown, label: string): AiDeckCard {
-  if (!isRecord(value)) throw new Error(`${label} must be an object.`)
-  const count = requiredNumber(value['count'], `${label}.count`)
-  const cost = requiredNumber(value['cost'], `${label}.cost`)
-  if (!Number.isSafeInteger(count) || count < 1 || count > 2) {
-    throw new Error(`${label}.count must be 1 or 2.`)
-  }
-  if (!Number.isSafeInteger(cost) || cost < 0) {
-    throw new Error(`${label}.cost must be a non-negative integer.`)
-  }
-  return {
-    cardId: requiredString(value['cardId'], `${label}.cardId`),
-    count,
-    name: requiredString(value['name'], `${label}.name`),
-    type: requiredString(value['type'], `${label}.type`),
-    cost,
-    rulesText: typeof value['rulesText'] === 'string' ? value['rulesText'] : '',
-    keywords: stringArray(value['keywords'] ?? [], `${label}.keywords`),
-    effects: jsonValue(value['effects'] ?? [], `${label}.effects`)
-  }
-}
-
-export function parseAiDeckPlan(value: unknown): AiDeckPlan {
-  if (!isRecord(value)) throw new Error('AI deck plan must be an object.')
-  const preserveValue = value['preserve']
-  if (!Array.isArray(preserveValue) || preserveValue.length > 16) {
-    throw new Error('AI deck plan preserve must have at most 16 entries.')
-  }
-  return {
-    strategy: requiredString(value['strategy'], 'AI deck plan strategy'),
-    winConditions: stringArray(value['winConditions'], 'AI deck plan winConditions', 8),
-    priorities: stringArray(value['priorities'], 'AI deck plan priorities', 10),
-    preserve: preserveValue.map((entry, index) => {
-      if (!isRecord(entry)) {
-        throw new Error(`AI deck plan preserve[${index}] must be an object.`)
-      }
-      return {
-        cardId: requiredString(
-          entry['cardId'],
-          `AI deck plan preserve[${index}].cardId`
-        ),
-        reason: requiredString(
-          entry['reason'],
-          `AI deck plan preserve[${index}].reason`
-        ),
-        releaseWhen: requiredString(
-          entry['releaseWhen'],
-          `AI deck plan preserve[${index}].releaseWhen`
-        )
-      }
-    }),
-    mulligan: stringArray(value['mulligan'], 'AI deck plan mulligan', 10)
-  }
-}
-
-export function parseAiDeckPlanRequest(value: unknown): AiDeckPlanRequest {
-  if (!isRecord(value) || !isRecord(value['deck'])) {
-    throw new Error('AI deck-plan request must be an object with a deck.')
-  }
-  const cards = value['deck']['cards']
-  if (!Array.isArray(cards) || cards.length === 0 || cards.length > 30) {
-    throw new Error('AI deck-plan request cards must contain 1 to 30 entries.')
-  }
-  return {
-    requestId: requiredString(value['requestId'], 'AI deck-plan requestId'),
-    ...(value['logMatchId'] === undefined
-      ? {}
-      : { logMatchId: requiredString(value['logMatchId'], 'AI log match ID') }),
-    deadlineAtMs: requiredNumber(value['deadlineAtMs'], 'AI deck-plan deadlineAtMs'),
-    deck: {
-      heroId: requiredString(value['deck']['heroId'], 'AI deck-plan heroId'),
-      cards: cards.map((entry, index) => parseDeckCard(entry, `AI deck card ${index}`))
-    }
-  }
-}
-
-export function parseAiDeckPlanResponse(value: unknown): AiDeckPlanResponse {
-  if (!isRecord(value)) throw new Error('AI deck-plan response must be an object.')
-  return {
-    requestId: requiredString(value['requestId'], 'AI deck-plan response requestId'),
-    plan: parseAiDeckPlan(value['plan']),
-    rationale: requiredString(value['rationale'], 'AI deck-plan rationale'),
-    modelId: requiredString(value['modelId'], 'AI deck-plan modelId'),
-    ...(value['debug'] === undefined
-      ? {}
-      : { debug: parseProviderDebug(value['debug']) })
-  }
-}
-
-function parsePolicy(value: unknown, label: string): AiPolicyOption {
-  if (!isRecord(value)) throw new Error(`${label} must be an object.`)
-  if (typeof value['completeTurn'] !== 'boolean') {
-    throw new Error(`${label}.completeTurn must be a boolean.`)
-  }
-  if (typeof value['stopsAtNewInformation'] !== 'boolean') {
-    throw new Error(`${label}.stopsAtNewInformation must be a boolean.`)
-  }
-  return {
-    id: requiredString(value['id'], `${label}.id`),
-    actions: stringArray(value['actions'], `${label}.actions`, 12),
-    completeTurn: value['completeTurn'],
-    stopsAtNewInformation: value['stopsAtNewInformation'],
-    ...(value['result'] === undefined
-      ? {}
-      : { result: jsonObject(value['result'], `${label}.result`) }),
-    ...(value['evidence'] === undefined
-      ? {}
-      : { evidence: policyEvidence(value['evidence'], `${label}.evidence`) })
-  }
-}
-
 export function parseAiDecisionRequest(value: unknown): AiDecisionRequest {
-  if (!isRecord(value)) throw new Error('AI decision request must be an object.')
-  if (value['phase'] !== 'mulligan' && value['phase'] !== 'turn') {
-    throw new Error('AI decision phase must be mulligan or turn.')
-  }
-  const policies = value['policies']
-  if (!Array.isArray(policies) || policies.length === 0 || policies.length > 128) {
-    throw new Error('AI decision policies must contain 1 to 128 entries.')
-  }
-  const parsedPolicies = policies.map((entry, index) =>
-    parsePolicy(entry, `AI decision policy ${index}`)
-  )
+  const identity = parseAiIdentity(value)
+  const data = value as Record<string, unknown>
+  if (data.phase !== undefined && data.phase !== 'plan' && data.phase !== 'action')
+    throw new Error('Invalid AI request phase.')
+  if (data.allowInspection !== undefined && typeof data.allowInspection !== 'boolean')
+    throw new Error('Invalid inspection allowance.')
   if (
-    new Set(parsedPolicies.map((policy) => policy.id)).size !== parsedPolicies.length
-  ) {
-    throw new Error('AI decision policy IDs must be unique.')
-  }
+    !Array.isArray(data.messages) ||
+    !data.messages.length ||
+    !Array.isArray(data.actionIds) ||
+    !data.actionIds.length
+  )
+    throw new Error('AI request requires messages and legal action IDs.')
+  const messages = data.messages.map((message): AiMessage => {
+    if (
+      !isRecord(message) ||
+      !['system', 'user', 'assistant'].includes(String(message.role))
+    )
+      throw new Error('Invalid AI message.')
+    return {
+      role: message.role as AiMessage['role'],
+      content: requiredString(message.content, 'message content')
+    }
+  })
+  const actionIds = data.actionIds.map((id) => requiredString(id, 'actionId'))
+  if (new Set(actionIds).size !== actionIds.length)
+    throw new Error('Duplicate AI action IDs.')
   return {
-    requestId: requiredString(value['requestId'], 'AI decision requestId'),
-    ...(value['logMatchId'] === undefined
-      ? {}
-      : { logMatchId: requiredString(value['logMatchId'], 'AI log match ID') }),
-    phase: value['phase'],
-    deadlineAtMs: requiredNumber(value['deadlineAtMs'], 'AI decision deadlineAtMs'),
-    plan: parseAiDeckPlan(value['plan']),
-    state: jsonObject(value['state'], 'AI decision state'),
-    policies: parsedPolicies
+    ...identity,
+    phase: data.phase as 'plan' | 'action' | undefined,
+    allowInspection: data.allowInspection === true,
+    messages,
+    actionIds
   }
 }
-
+export function parseAiChoice(value: unknown): AiChoice {
+  if (!isRecord(value) || Object.keys(value).length !== 2 || !isRecord(value.choice))
+    throw new Error('AI response must contain reason and exactly one choice.')
+  const reason = requiredString(value.reason, 'reason')
+  if (reason.length > 600) throw new Error('AI reason exceeds 600 characters.')
+  return { reason, choice: parseAiDecisionChoice(value.choice) }
+}
 export function parseAiDecisionResponse(value: unknown): AiDecisionResponse {
-  if (!isRecord(value)) throw new Error('AI decision response must be an object.')
+  const identity = parseAiIdentity(value)
+  const data = value as Record<string, unknown>
+  if (
+    typeof data.durationMs !== 'number' ||
+    !Number.isFinite(data.durationMs) ||
+    data.durationMs < 0 ||
+    (data.usage !== undefined && !isRecord(data.usage))
+  )
+    throw new Error('Invalid AI response metadata.')
   return {
-    requestId: requiredString(value['requestId'], 'AI decision response requestId'),
-    policyId: requiredString(value['policyId'], 'AI decision policyId'),
-    rationale: requiredString(value['rationale'], 'AI decision rationale'),
-    modelId: requiredString(value['modelId'], 'AI decision modelId'),
-    ...(value['debug'] === undefined
+    ...identity,
+    ...parseAiChoice({ choice: data.choice, reason: data.reason }),
+    modelId: requiredString(data.modelId, 'modelId'),
+    durationMs: data.durationMs,
+    finishReason: requiredString(data.finishReason, 'finishReason'),
+    ...(data.usage === undefined
       ? {}
-      : { debug: parseProviderDebug(value['debug']) })
-  }
-}
-
-function parseProviderDebug(value: unknown): AiProviderDebug {
-  if (!isRecord(value)) throw new Error('AI provider debug must be an object.')
-  return {
-    durationMs: requiredNumber(value['durationMs'], 'AI provider debug durationMs'),
-    url: requiredString(value['url'], 'AI provider debug url'),
-    requestBody: jsonObject(value['requestBody'], 'AI provider debug requestBody'),
-    responseBody: jsonValue(value['responseBody'], 'AI provider debug responseBody'),
-    ...(value['usage'] === undefined
-      ? {}
-      : { usage: jsonObject(value['usage'], 'AI provider debug usage') })
+      : { usage: JSON.parse(JSON.stringify(data.usage)) as JsonObject })
   }
 }
 
@@ -507,18 +261,39 @@ export function aiIpcSuccess<T>(value: T): AiIpcResult<T> {
 }
 
 export function aiIpcFailure(error: unknown): AiIpcResult<never> {
-  return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  return {
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+    ...(error instanceof AiRequestError && error.details
+      ? { details: error.details }
+      : {})
+  }
+}
+
+export function parseAiIpcResult<T>(
+  value: unknown,
+  parse: (candidate: unknown) => T
+): AiIpcResult<T> {
+  if (!isRecord(value) || typeof value['ok'] !== 'boolean') {
+    throw new Error('AI IPC returned an invalid envelope.')
+  }
+  if (!value['ok']) {
+    return {
+      ok: false,
+      error: requiredString(value['error'], 'AI IPC error'),
+      ...(isRecord(value['details'])
+        ? { details: JSON.parse(JSON.stringify(value['details'])) as JsonObject }
+        : {})
+    }
+  }
+  return aiIpcSuccess(parse(value['value']))
 }
 
 export function unwrapAiIpcResult<T>(
   value: unknown,
   parse: (candidate: unknown) => T
 ): T {
-  if (!isRecord(value) || typeof value['ok'] !== 'boolean') {
-    throw new Error('AI IPC returned an invalid envelope.')
-  }
-  if (!value['ok']) {
-    throw new Error(requiredString(value['error'], 'AI IPC error'))
-  }
-  return parse(value['value'])
+  const result = parseAiIpcResult(value, parse)
+  if (!result.ok) throw new AiRequestError(result.error, result.details)
+  return result.value
 }

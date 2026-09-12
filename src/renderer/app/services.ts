@@ -1,51 +1,64 @@
 import { PersistentDeckStore, type DeckStore } from './deck-store'
 import { createAppLogger, type AppLogger } from './logger'
 import type { AiDecisionApi } from '../../shared/ipc/ai'
+import { createAiDecisionApi } from './ai-decision-api'
 import type { MatchLogsApi } from '../../shared/ipc/match-logs'
 import { PersistentPlayerStatsStore } from './player-stats-store'
 import type { PlayerStatsStore } from '../ui/player-stats-store'
 import { PersistentArenaStore } from './arena-store'
 import type { ArenaStore } from '../ui/arena-store'
+import { resolveAssetDefinition } from '../ui/asset-registry'
 
 export type { AppLogger } from './logger'
 
 export interface DialogService {
   confirm(message: string): boolean
-  error(message: string): void
+  error(message: string, retry?: () => void): void
 }
 
-class BrowserDialogService implements DialogService {
+export class BrowserDialogService implements DialogService {
   confirm(message: string): boolean {
     return typeof window.confirm === 'function' ? window.confirm(message) : true
   }
 
-  error(message: string): void {
+  error(message: string, retry?: () => void): void {
     const existing = document.getElementById('app-error-notice')
     const notice = existing ?? document.createElement('div')
     notice.id = 'app-error-notice'
     notice.setAttribute('role', 'alert')
-    notice.style.position = 'fixed'
-    notice.style.left = '50%'
-    notice.style.bottom = '24px'
-    notice.style.zIndex = '1000'
-    notice.style.maxWidth = 'min(720px, calc(100vw - 48px))'
-    notice.style.padding = '14px 18px'
-    notice.style.transform = 'translateX(-50%)'
-    notice.style.border = '1px solid #d29b60'
-    notice.style.borderRadius = '6px'
-    notice.style.background = '#241b22'
-    notice.style.color = '#fff4df'
-    notice.style.fontFamily = 'Arial, sans-serif'
-    notice.textContent = message
+    notice.className = 'app-error-notice'
+    notice.style.backgroundImage = `url("${resolveAssetDefinition('ui.generic-dialog').source.src}")`
+    notice.textContent = ''
+    const text = document.createElement('div')
+    text.className = 'app-error-notice-message'
+    text.textContent = message
+    text.tabIndex = 0
+    notice.appendChild(text)
 
-    if (!existing) {
+    if (retry) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.textContent = 'Retry AI'
+      button.className = 'app-error-notice-button app-error-notice-retry'
+      button.addEventListener(
+        'click',
+        () => {
+          button.disabled = true
+          notice.remove()
+          retry()
+        },
+        { once: true }
+      )
+      notice.appendChild(button)
+    }
+    {
       const dismiss = document.createElement('button')
       dismiss.type = 'button'
       dismiss.textContent = 'Dismiss'
-      dismiss.style.marginLeft = '16px'
+      dismiss.className = 'app-error-notice-button app-error-notice-dismiss'
       dismiss.addEventListener('click', () => notice.remove())
       notice.appendChild(dismiss)
-      document.body.appendChild(notice)
+      if (!existing) document.body.appendChild(notice)
     }
   }
 }
@@ -66,11 +79,12 @@ export function createAppServices(overrides: Partial<AppServices> = {}): AppServ
   const ai =
     overrides.ai ??
     (typeof window !== 'undefined' && window.api?.ai
-      ? window.api.ai
+      ? createAiDecisionApi(window.api.ai)
       : {
-          planDeck: async () => {
-            throw new Error('The AI deck-plan bridge is unavailable.')
+          settings: async () => {
+            throw new Error('The AI settings bridge is unavailable.')
           },
+          cancel: async () => {},
           decide: async () => {
             throw new Error('The AI decision bridge is unavailable.')
           }

@@ -11,6 +11,10 @@ import {
   type ClassFrameMaskChannel,
   type ClassFrameTemplate
 } from '../../../rendering/cards/class-frame-colors'
+import { CARD_CATALOG, type CardDefinition } from '../../../../game/content/cards'
+
+export const CARD_LAB_TEMPLATES = ['minion', 'spell', 'weapon', 'hero'] as const
+export type CardLabTemplate = (typeof CARD_LAB_TEMPLATES)[number]
 
 export type NumericControlKey =
   'hue' | 'saturation' | 'lightness' | 'opacity' | 'offsetX' | 'offsetY'
@@ -31,7 +35,7 @@ export const NUMERIC_CONTROL_SPECS = [
     label: 'Hue',
     min: 0,
     max: 360,
-    step: 0.1,
+    step: 1,
     displayScale: 1,
     suffix: '°'
   },
@@ -40,7 +44,7 @@ export const NUMERIC_CONTROL_SPECS = [
     label: 'Saturation',
     min: 0,
     max: 1,
-    step: 0.001,
+    step: 0.01,
     displayScale: 100,
     suffix: '%'
   },
@@ -49,7 +53,7 @@ export const NUMERIC_CONTROL_SPECS = [
     label: 'Lightness',
     min: 0,
     max: 1,
-    step: 0.001,
+    step: 0.01,
     displayScale: 100,
     suffix: '%'
   },
@@ -58,7 +62,7 @@ export const NUMERIC_CONTROL_SPECS = [
     label: 'Opacity',
     min: 0,
     max: 1,
-    step: 0.001,
+    step: 0.01,
     displayScale: 100,
     suffix: '%'
   },
@@ -67,7 +71,7 @@ export const NUMERIC_CONTROL_SPECS = [
     label: 'Offset X',
     min: -200,
     max: 200,
-    step: 0.1,
+    step: 1,
     displayScale: 1,
     suffix: 'px'
   },
@@ -76,7 +80,7 @@ export const NUMERIC_CONTROL_SPECS = [
     label: 'Offset Y',
     min: -200,
     max: 200,
-    step: 0.1,
+    step: 1,
     displayScale: 1,
     suffix: 'px'
   }
@@ -115,24 +119,57 @@ function replaceClassLayer(
 export class CardInspectorModel {
   readonly classes = CARD_CLASS_BUILDER_CLASSES
   selectedClass: ClassFrameClassId = CARD_CLASS_BUILDER_CLASSES[0]
-  private template: ClassFrameTemplate = 'minion'
-  activeChannel: ClassFrameMaskChannel = 'primary'
-  linked = false
+  private template: CardLabTemplate = 'minion'
+  private premium = false
 
   get config(): CardClassBuilderConfig {
     return getClassFrameConfig()
   }
 
-  get selectedTemplate(): ClassFrameTemplate {
+  get selectedTemplate(): CardLabTemplate {
     return this.template
   }
 
-  set selectedTemplate(template: ClassFrameTemplate) {
+  set selectedTemplate(template: CardLabTemplate) {
     this.template = template
-    if (template === 'spell') {
-      this.activeChannel = 'primary'
-      this.linked = false
+    if (!this.hasCardForClass(this.selectedClass)) {
+      const availableClass = this.classes.find((classId) =>
+        this.hasCardForClass(classId)
+      )
+      if (availableClass) this.selectedClass = availableClass
     }
+  }
+
+  get selectedPremium(): boolean {
+    return this.template !== 'hero' && this.premium
+  }
+
+  set selectedPremium(premium: boolean) {
+    this.premium = premium
+  }
+
+  get hasSecondaryMask(): boolean {
+    return !this.premium && this.template === 'minion'
+  }
+
+  get maskTemplate(): ClassFrameTemplate | undefined {
+    return this.template === 'minion' || this.template === 'spell'
+      ? this.template
+      : undefined
+  }
+
+  hasCardForClass(classId: ClassFrameClassId): boolean {
+    return CARD_CATALOG.all.some(
+      (card) => card.cardClass === classId && card.type.toLowerCase() === this.template
+    )
+  }
+
+  get selectedCard(): CardDefinition | undefined {
+    return CARD_CATALOG.all.find(
+      (card) =>
+        card.cardClass === this.selectedClass &&
+        card.type.toLowerCase() === this.template
+    )
   }
 
   getLayer(channel: ClassFrameMaskChannel): CardClassColorLayer {
@@ -140,9 +177,12 @@ export class CardInspectorModel {
   }
 
   getNumeric(channel: ClassFrameMaskChannel, key: NumericControlKey): number {
+    const template = this.maskTemplate
+    if (!template) return 0
     if (key === 'offsetX' || key === 'offsetY') {
-      const offset =
-        this.selectedTemplate === 'spell'
+      const offset = this.selectedPremium
+        ? this.config.offsets.premium[template].primary
+        : this.selectedTemplate === 'spell'
           ? this.config.offsets.spell.primary
           : this.config.offsets.minion[channel]
       return key === 'offsetX' ? offset.x : offset.y
@@ -155,18 +195,12 @@ export class CardInspectorModel {
     key: NumericControlKey,
     value: number
   ): void {
-    const previous = this.getNumeric(channel, key)
     const next = this.normalize(key, value)
     this.setNumericDirect(channel, key, next)
-    if (!this.linked || this.selectedTemplate === 'spell') return
-
-    const other = channel === 'primary' ? 'secondary' : 'primary'
-    const delta =
-      key === 'hue' ? ((next - previous + 540) % 360) - 180 : next - previous
-    this.setNumericDirect(other, key, this.getNumeric(other, key) + delta)
   }
 
   setBlendMode(channel: ClassFrameMaskChannel, blendMode: ClassFrameBlendMode): void {
+    if (!this.maskTemplate) return
     const config = this.config
     updateClassFrameConfig(
       replaceClassLayer(config, this.selectedClass, channel, {
@@ -176,23 +210,11 @@ export class CardInspectorModel {
     )
   }
 
-  moveActiveMask(deltaX: number, deltaY: number): void {
-    this.setNumeric(
-      this.activeChannel,
-      'offsetX',
-      this.getNumeric(this.activeChannel, 'offsetX') + deltaX
-    )
-    this.setNumeric(
-      this.activeChannel,
-      'offsetY',
-      this.getNumeric(this.activeChannel, 'offsetY') + deltaY
-    )
-  }
-
   private normalize(key: NumericControlKey, value: number): number {
     const spec = SPEC_BY_KEY.get(key)!
-    if (key === 'hue') return rounded(normalizedHue(value))
-    return rounded(clamp(value, spec.min, spec.max))
+    const normalized =
+      key === 'hue' ? normalizedHue(value) : clamp(value, spec.min, spec.max)
+    return rounded(Math.round(normalized / spec.step) * spec.step)
   }
 
   private setNumericDirect(
@@ -200,11 +222,14 @@ export class CardInspectorModel {
     key: NumericControlKey,
     value: number
   ): void {
+    const template = this.maskTemplate
+    if (!template) return
     const normalized = this.normalize(key, value)
     const config = this.config
     if (key === 'offsetX' || key === 'offsetY') {
-      const current =
-        this.selectedTemplate === 'spell'
+      const current = this.selectedPremium
+        ? config.offsets.premium[template].primary
+        : this.selectedTemplate === 'spell'
           ? config.offsets.spell.primary
           : config.offsets.minion[channel]
       const next =
@@ -213,8 +238,15 @@ export class CardInspectorModel {
           : { ...current, y: normalized }
       updateClassFrameConfig({
         ...config,
-        offsets:
-          this.selectedTemplate === 'spell'
+        offsets: this.selectedPremium
+          ? {
+              ...config.offsets,
+              premium: {
+                ...config.offsets.premium,
+                [this.selectedTemplate]: { primary: next }
+              }
+            }
+          : this.selectedTemplate === 'spell'
             ? { ...config.offsets, spell: { primary: next } }
             : {
                 ...config.offsets,

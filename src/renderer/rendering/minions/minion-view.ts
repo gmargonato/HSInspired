@@ -5,6 +5,8 @@ import { MINION_CANVAS, MINION_HIT_AREA, MINION_LAYOUT } from './minion-layout'
 import { SleepingZs } from './sleeping-zs'
 import { AnimationScope } from '../../animation/animations'
 import { minionAttackColor, minionHealthColor } from './minion-stat-presentation'
+import { isPremiumEnabled, subscribeToPremiumAppearance } from '../premium-appearance'
+import { PremiumArtworkBreath } from '../effects/premium-artwork-breath'
 
 export interface MinionViewModel {
   readonly label: string
@@ -36,8 +38,11 @@ export interface MinionViewTextures {
   readonly elusive: Texture
   readonly immune: Texture
   readonly frame: Texture
+  readonly premiumFrame: Texture
   readonly legendaryFrame: Texture
+  readonly premiumLegendaryFrame: Texture
   readonly taunt: Texture
+  readonly premiumTaunt: Texture
   readonly divineShield: Texture
   readonly frozen: Texture
   readonly stealth: Texture
@@ -99,6 +104,8 @@ function createStatGroup(
 
 /** Feature-agnostic board minion presentation. The caller owns its position. */
 export class MinionView extends Container {
+  private readonly unsubscribePremium: () => void
+  private readonly artworkBreath: PremiumArtworkBreath
   private readonly legendaryFrame: Sprite
   private readonly taunt: Sprite
   private readonly divineShield: Sprite
@@ -169,6 +176,8 @@ export class MinionView extends Container {
     }
     this.artworkImage.label = 'minion.artwork-image'
     artworkLayer.addChild(this.artworkImage)
+    this.artworkBreath = new PremiumArtworkBreath(this.artworkImage)
+    this.artworkBreath.setEnabled(isPremiumEnabled() && artwork !== undefined)
     this.artworkPlaceholder = new Graphics()
     this.artworkPlaceholder.ellipse(center.x, center.y, radiusX, radiusY).fill(0x535b65)
     this.artworkPlaceholder.label = 'minion.artwork-placeholder'
@@ -182,18 +191,30 @@ export class MinionView extends Container {
     artworkLayer.addChild(mask)
     this.addChild(artworkLayer)
 
-    this.taunt = new Sprite(textures.taunt)
+    this.taunt = new Sprite(isPremiumEnabled() ? textures.premiumTaunt : textures.taunt)
     applyAnchoredPlacement(this.taunt, MINION_LAYOUT.taunt)
     this.taunt.visible = model.taunt
     this.taunt.label = 'minion.taunt'
     this.addChild(this.taunt)
 
-    const frame = new Sprite(textures.frame)
+    const frame = new Sprite(
+      isPremiumEnabled() ? textures.premiumFrame : textures.frame
+    )
+    this.unsubscribePremium = subscribeToPremiumAppearance((enabled) => {
+      this.artworkBreath.setEnabled(enabled && this.artworkImage.visible)
+      frame.texture = enabled ? textures.premiumFrame : textures.frame
+      this.taunt.texture = enabled ? textures.premiumTaunt : textures.taunt
+      this.legendaryFrame.texture = enabled
+        ? textures.premiumLegendaryFrame
+        : textures.legendaryFrame
+    })
     applyAnchoredPlacement(frame, MINION_LAYOUT.frame)
     frame.label = 'minion.frame'
     this.addChild(frame)
 
-    this.legendaryFrame = new Sprite(textures.legendaryFrame)
+    this.legendaryFrame = new Sprite(
+      isPremiumEnabled() ? textures.premiumLegendaryFrame : textures.legendaryFrame
+    )
     applyAnchoredPlacement(this.legendaryFrame, MINION_LAYOUT.legendaryFrame)
     this.legendaryFrame.visible = model.legendary
     this.legendaryFrame.label = 'minion.frame-legendary'
@@ -350,6 +371,7 @@ export class MinionView extends Container {
     this.healthLabel.text = String(health)
     this.setAttackColor(attack)
     this.setHealthColor(health)
+    if (health <= 0) this.setCanAttack(false)
   }
 
   setBaseStats(attack: number, health: number): void {
@@ -367,6 +389,7 @@ export class MinionView extends Container {
     )
     this.artworkImage.scale.set(coverScale)
     this.artworkImage.visible = true
+    this.artworkBreath.setEnabled(isPremiumEnabled())
     this.artworkPlaceholder.visible = false
   }
 
@@ -379,6 +402,7 @@ export class MinionView extends Container {
     this.maxHealth = maxHealth
     this.healthLabel.text = String(health)
     this.setHealthColor(health)
+    if (health <= 0) this.setCanAttack(false)
   }
 
   private setAttackColor(attack: number): void {
@@ -601,6 +625,8 @@ export class MinionView extends Container {
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.unsubscribePremium()
+    this.artworkBreath.destroy()
     this.animationScope.kill()
     for (const pulse of this.activeAbilityPulses) {
       if (!pulse.destroyed) pulse.destroy({ children: true })

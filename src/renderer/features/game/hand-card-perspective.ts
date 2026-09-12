@@ -7,6 +7,7 @@ import {
   type OutlinePresetName
 } from '../../rendering/effects/animated-outline'
 import type { Texture } from 'pixi.js'
+import { isArtworkVisible } from '../../rendering/effects/premium-artwork-breath'
 
 export interface PerspectivePoint {
   readonly x: number
@@ -99,11 +100,11 @@ export class HandCardPerspective {
     )
     const width = frame.width
     const height = frame.height
-    this.texture = renderer.generateTexture({
-      target: cardView,
+    this.texture = cardView.createAppearanceSnapshot(
+      renderer,
       frame,
-      antialias: true
-    })
+      () => !this.destroyed && isArtworkVisible(this.mesh)
+    )
     this.mesh = new PerspectiveMesh({
       texture: this.texture,
       verticesX: 10,

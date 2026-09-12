@@ -1,12 +1,21 @@
 import type { CardId } from '../../content/cards'
 import type { Deck } from '../../decks'
-import type { OpeningMatchState, OpeningPlayerState } from '../opening-match-types'
+import type {
+  OpeningCard,
+  OpeningMatchState,
+  OpeningPlayerState
+} from '../opening-match-types'
 import type { PlayerId } from '../match-types'
 
 /** Normal opponents receive exactly the information available to their player. */
 export type AiInformationPolicy = 'fair'
 
 export interface AiObservedCard {
+  readonly instanceId: string
+  readonly modifications?: Pick<
+    OpeningCard,
+    'attack' | 'health' | 'enchantments' | 'costAdjustments'
+  >
   readonly cardId: CardId
   readonly baseCost: number | null
   readonly currentCost: number | null
@@ -31,8 +40,20 @@ export interface AiObservedPlayer {
   > | null
   readonly mana: OpeningPlayerState['mana']
   readonly heroPower: Omit<OpeningPlayerState['heroPower'], 'creationOrdinal'>
+  readonly effects: Pick<
+    OpeningPlayerState,
+    | 'cthun'
+    | 'cthunDied'
+    | 'overload'
+    | 'pendingCostModifiers'
+    | 'counters'
+    | 'lockAndLoadCount'
+    | 'lockAndLoadTurn'
+    | 'heroPowerCostOverride'
+  >
   readonly fatigueDamage: number
   readonly secrets: readonly Readonly<{
+    readonly instanceId: string
     readonly revealed: boolean
     readonly cardId: CardId | null
   }>[]

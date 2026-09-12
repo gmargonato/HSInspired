@@ -2,16 +2,17 @@ import { Container, type Renderer } from 'pixi.js'
 import { GAME_HEIGHT, GAME_WIDTH } from '../../../rendering/layout'
 import {
   CLASS_FRAME_BLEND_MODES,
-  type ClassFrameMaskChannel,
-  type ClassFrameTemplate
+  type ClassFrameMaskChannel
 } from '../../../rendering/cards/class-frame-colors'
 import {
   CardInspectorModel,
+  CARD_LAB_TEMPLATES,
+  type CardLabTemplate,
   NUMERIC_CONTROL_SPECS,
   type NumericControlSpec
 } from './card-inspector-model'
 
-const CONTROL_BOUNDS = { x: 20, y: 20, width: 1010, height: 1040 } as const
+const CONTROL_BOUNDS = { x: 20, y: 60, width: 1010, height: 1000 } as const
 
 interface FieldState {
   readonly channel: ClassFrameMaskChannel
@@ -46,13 +47,19 @@ export class CardInspectorControls extends Container {
   private readonly model: CardInspectorModel
   private readonly fields: FieldState[] = []
   private readonly classButtons = new Map<string, HTMLButtonElement>()
-  private readonly templateButtons = new Map<ClassFrameTemplate, HTMLButtonElement>()
+  private readonly templateButtons = new Map<CardLabTemplate, HTMLButtonElement>()
+  private readonly premiumButtons = new Map<boolean, HTMLButtonElement>()
   private readonly channelPanels = new Map<ClassFrameMaskChannel, HTMLElement>()
   private readonly blendSelects = new Map<ClassFrameMaskChannel, HTMLSelectElement>()
   private readonly rootElement = element('section', 'card-color-lab')
   private readonly status = element('div', 'card-color-lab__status')
-  private readonly linkInput = element('input', 'card-color-lab__link-input')
-  private readonly linkLabel = element('label', 'card-color-lab__link')
+  private readonly previewNotice = element('p', 'card-color-lab__notice')
+  private readonly columns = element('div', 'card-color-lab__columns')
+  private readonly subtitle = element(
+    'p',
+    'card-color-lab__subtitle',
+    'Autosaved · Colors shared between variants · Offsets apply to the selected variant and template across all classes'
+  )
   private readonly resizeHandler = (): void => this.updatePosition()
 
   constructor(private readonly options: CardInspectorControlsOptions) {
@@ -67,22 +74,36 @@ export class CardInspectorControls extends Container {
   }
 
   refresh(): void {
-    const isSpell = this.model.selectedTemplate === 'spell'
-    this.rootElement.classList.toggle('is-spell', isSpell)
+    const singleMask = !this.model.hasSecondaryMask
+    this.rootElement.classList.toggle('is-single-mask', singleMask)
     for (const [classId, button] of this.classButtons) {
       button.classList.toggle('is-selected', classId === this.model.selectedClass)
+      button.disabled = !this.model.hasCardForClass(
+        classId as typeof this.model.selectedClass
+      )
     }
     for (const [template, button] of this.templateButtons) {
       button.classList.toggle('is-selected', template === this.model.selectedTemplate)
     }
+    for (const [premium, button] of this.premiumButtons) {
+      button.classList.toggle('is-selected', premium === this.model.selectedPremium)
+      button.hidden = premium && this.model.selectedTemplate === 'hero'
+    }
+    const hasMask = this.model.maskTemplate !== undefined
+    this.rootElement.style.height = hasMask ? `${CONTROL_BOUNDS.height}px` : 'auto'
+    this.subtitle.hidden = !hasMask
+    this.status.hidden = !hasMask
+    this.columns.hidden = !hasMask
+    this.previewNotice.hidden = hasMask
+    this.previewNotice.textContent =
+      this.model.selectedTemplate === 'hero'
+        ? 'Hero cards use the standard frame and have no editable class mask.'
+        : 'Weapon cards have no editable class mask. Switch between Standard and Premium to preview both frames.'
     for (const [channel, panel] of this.channelPanels) {
-      panel.hidden = isSpell && channel === 'secondary'
-      panel.classList.toggle('is-active', channel === this.model.activeChannel)
+      panel.hidden = singleMask && channel === 'secondary'
       this.blendSelects.get(channel)!.value = this.model.getLayer(channel).blendMode
     }
     for (const field of this.fields) this.refreshField(field)
-    this.linkLabel.hidden = isSpell
-    this.linkInput.checked = this.model.linked
   }
 
   setVisible(visible: boolean): void {
@@ -99,13 +120,8 @@ export class CardInspectorControls extends Container {
   }
 
   private build(): void {
-    const title = element('h1', 'card-color-lab__title', 'CARD CLASS COLOR LAB')
-    const subtitle = element(
-      'p',
-      'card-color-lab__subtitle',
-      'Production card colors · changes save automatically'
-    )
-    this.rootElement.append(title, subtitle)
+    const title = element('h1', 'card-color-lab__title', 'CARD LAB')
+    this.rootElement.append(title, this.subtitle)
 
     const toolbar = element('div', 'card-color-lab__toolbar')
     const classPicker = element('div', 'card-color-lab__classes')
@@ -122,11 +138,11 @@ export class CardInspectorControls extends Container {
     }
 
     const templatePicker = element('div', 'card-color-lab__templates')
-    for (const template of ['minion', 'spell'] as const) {
+    for (const template of CARD_LAB_TEMPLATES) {
       const button = element(
         'button',
         'card-color-lab__button',
-        template === 'minion' ? 'Minion' : 'Spell'
+        template[0].toUpperCase() + template.slice(1)
       )
       button.type = 'button'
       button.addEventListener('click', () => {
@@ -138,25 +154,31 @@ export class CardInspectorControls extends Container {
       templatePicker.appendChild(button)
     }
 
-    this.linkInput.type = 'checkbox'
-    this.linkInput.addEventListener('change', () => {
-      this.model.linked = this.linkInput.checked
-      this.setStatus(
-        this.model.linked
-          ? 'Masks linked: numeric changes preserve their differences.'
-          : 'Masks unlinked.'
+    const premiumPicker = element('div', 'card-color-lab__templates')
+    for (const premium of [false, true]) {
+      const button = element(
+        'button',
+        'card-color-lab__button',
+        premium ? 'Premium' : 'Standard'
       )
-    })
-    this.linkLabel.append(this.linkInput, document.createTextNode(' Link mask deltas'))
-    toolbar.append(classPicker, templatePicker, this.linkLabel)
+      button.type = 'button'
+      button.addEventListener('click', () => {
+        this.model.selectedPremium = premium
+        this.options.onSelectionChanged()
+        this.refresh()
+      })
+      this.premiumButtons.set(premium, button)
+      premiumPicker.appendChild(button)
+    }
+
+    toolbar.append(classPicker, templatePicker, premiumPicker)
     this.rootElement.appendChild(toolbar)
 
-    const columns = element('div', 'card-color-lab__columns')
-    columns.append(
+    this.columns.append(
       this.createChannelPanel('primary', 'PRIMARY MASK'),
       this.createChannelPanel('secondary', 'SECONDARY MASK')
     )
-    this.rootElement.append(columns, this.status)
+    this.rootElement.append(this.columns, this.previewNotice, this.status)
     this.status.textContent = 'Saved production configuration.'
   }
 
@@ -165,16 +187,7 @@ export class CardInspectorControls extends Container {
     title: string
   ): HTMLElement {
     const panel = element('section', 'card-color-lab__mask')
-    panel.addEventListener('pointerdown', () => {
-      this.model.activeChannel = channel
-      this.refresh()
-    })
-    const heading = element('button', 'card-color-lab__mask-title', title)
-    heading.type = 'button'
-    heading.addEventListener('click', () => {
-      this.model.activeChannel = channel
-      this.refresh()
-    })
+    const heading = element('h2', 'card-color-lab__mask-title', title)
     panel.appendChild(heading)
 
     const blendLabel = element('label', 'card-color-lab__blend-label', 'Blend mode')
@@ -213,9 +226,9 @@ export class CardInspectorControls extends Container {
     const caption = element('span', 'card-color-lab__field-label', spec.label)
     const range = element('input', 'card-color-lab__range')
     range.type = 'range'
-    range.min = String(spec.min)
-    range.max = String(spec.max)
-    range.step = String(spec.step)
+    range.min = String(spec.min * spec.displayScale)
+    range.max = String(spec.max * spec.displayScale)
+    range.step = '1'
     const number = element('input', 'card-color-lab__number')
     number.type = 'number'
     number.min = String(spec.min * spec.displayScale)
@@ -227,7 +240,7 @@ export class CardInspectorControls extends Container {
     this.fields.push(state)
 
     range.addEventListener('input', () => {
-      this.model.setNumeric(channel, spec.key, Number(range.value))
+      this.model.setNumeric(channel, spec.key, Number(range.value) / spec.displayScale)
       this.options.onAppearanceChanged()
       this.refresh()
     })
@@ -265,8 +278,9 @@ export class CardInspectorControls extends Container {
 
   private refreshField(field: FieldState): void {
     const value = this.model.getNumeric(field.channel, field.spec.key)
-    field.range.value = String(value)
-    field.number.value = String(Number((value * field.spec.displayScale).toFixed(4)))
+    const displayed = String(Math.round(value * field.spec.displayScale))
+    field.range.value = displayed
+    field.number.value = displayed
   }
 
   private updatePosition(): void {
@@ -281,7 +295,9 @@ export class CardInspectorControls extends Container {
     this.rootElement.style.left = `${canvasBounds.left - parentBounds.left + offsetX + CONTROL_BOUNDS.x * scale}px`
     this.rootElement.style.top = `${canvasBounds.top - parentBounds.top + offsetY + CONTROL_BOUNDS.y * scale}px`
     this.rootElement.style.width = `${CONTROL_BOUNDS.width}px`
-    this.rootElement.style.height = `${CONTROL_BOUNDS.height}px`
+    this.rootElement.style.height = this.model.maskTemplate
+      ? `${CONTROL_BOUNDS.height}px`
+      : 'auto'
     this.rootElement.style.transform = `scale(${scale})`
   }
 }

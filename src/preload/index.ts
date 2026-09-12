@@ -11,6 +11,7 @@ import { isSceneRequest, SCENE_REQUEST_CHANNEL } from '../shared/scene-navigatio
 import type { SceneRequest } from '../shared/scene-navigation'
 import {
   DEV_COLLECTIBLE_SYNC_CHANNEL,
+  DEV_PREMIUM_SYNC_CHANNEL,
   DEV_COMMAND_CHANNEL,
   DEV_SCENE_CHANGED_CHANNEL,
   isCollectibleMode,
@@ -22,15 +23,18 @@ import {
 } from '../shared/dev-menu'
 import {
   AI_IPC_CHANNELS,
-  parseAiDeckPlanRequest,
-  parseAiDeckPlanResponse,
+  parseAiIdentity,
+  parseAiRequestProgress,
+  type AiRequestProgress,
+  parseAiSettings,
+  type AiDecisionIdentity,
   parseAiDecisionRequest,
   parseAiDecisionResponse,
+  parseAiIpcResult,
   unwrapAiIpcResult,
-  type AiDeckPlanRequest,
-  type AiDeckPlanResponse,
   type AiDecisionRequest,
-  type AiDecisionResponse
+  type AiDecisionResponse,
+  type AiIpcResult
 } from '../shared/ipc/ai'
 import {
   DECK_IPC_CHANNELS,
@@ -151,16 +155,25 @@ const api = {
   },
 
   ai: {
-    planDeck: async (request: AiDeckPlanRequest): Promise<AiDeckPlanResponse> =>
+    onProgress(listener: (progress: AiRequestProgress) => void): () => void {
+      const handle = (_event: IpcRendererEvent, value: unknown): void => {
+        listener(parseAiRequestProgress(value))
+      }
+      ipcRenderer.on(AI_IPC_CHANNELS.progress, handle)
+      return () => ipcRenderer.removeListener(AI_IPC_CHANNELS.progress, handle)
+    },
+    settings: async () =>
       unwrapAiIpcResult(
-        await ipcRenderer.invoke(
-          AI_IPC_CHANNELS.planDeck,
-          parseAiDeckPlanRequest(request)
-        ),
-        parseAiDeckPlanResponse
+        await ipcRenderer.invoke(AI_IPC_CHANNELS.settings),
+        parseAiSettings
       ),
-    decide: async (request: AiDecisionRequest): Promise<AiDecisionResponse> =>
-      unwrapAiIpcResult(
+    cancel: async (identity: AiDecisionIdentity): Promise<void> => {
+      await ipcRenderer.invoke(AI_IPC_CHANNELS.cancel, parseAiIdentity(identity))
+    },
+    decide: async (
+      request: AiDecisionRequest
+    ): Promise<AiIpcResult<AiDecisionResponse>> =>
+      parseAiIpcResult(
         await ipcRenderer.invoke(
           AI_IPC_CHANNELS.decide,
           parseAiDecisionRequest(request)
@@ -186,6 +199,10 @@ const api = {
   },
 
   devMenu: {
+    notifyPremiumMode(enabled: boolean): void {
+      if (typeof enabled !== 'boolean') return
+      ipcRenderer.send(DEV_PREMIUM_SYNC_CHANNEL, enabled)
+    },
     notifySceneChanged(sceneId: DevSceneId): void {
       if (process.env.NODE_ENV !== 'production' && !isDevSceneId(sceneId)) {
         console.warn('[DevMenu][preload] rejected scene id', sceneId)

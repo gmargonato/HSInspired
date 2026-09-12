@@ -1,17 +1,25 @@
 import armorImage from '@assets/images/cards/armor.png'
 import attackImage from '@assets/images/cards/attack.png'
 import cardNameImage from '@assets/images/cards/card-name.png'
+import premiumCardNameImage from '@assets/images/cards/premium-card-name.png'
+import premiumFrameMinionImage from '@assets/images/cards/premium-frame-minion.png'
+import premiumLegendaryImage from '@assets/images/cards/premium-legendary.png'
+import premiumMaskImage from '@assets/images/cards/color-mask-premium-frame-minion.png'
 import colorMask1FrameMinionImage from '@assets/images/cards/color-mask-1-frame-minion.png'
 import colorMask1FrameSpellImage from '@assets/images/cards/color-mask-1-frame-spell.png'
 import colorMask2FrameMinionImage from '@assets/images/cards/color-mask-2-frame-minion.png'
 import frameHeroImage from '@assets/images/cards/frame-hero.png'
 import frameMinionImage from '@assets/images/cards/frame-minion.png'
 import frameSpellImage from '@assets/images/cards/frame-spell.png'
+import premiumFrameSpellImage from '@assets/images/cards/premium-frame-spell.png'
+import premiumSpellMaskImage from '@assets/images/cards/color-mask-premium-frame-spell.png'
 import frameWeaponImage from '@assets/images/cards/frame-weapon.png'
+import premiumFrameWeaponImage from '@assets/images/cards/premium-frame-weapon.png'
 import healthImage from '@assets/images/cards/health.png'
 import legendaryImage from '@assets/images/cards/legendary.png'
 import manaImage from '@assets/images/cards/mana.png'
 import raceBannerImage from '@assets/images/cards/race-banner.png'
+import premiumRaceBannerImage from '@assets/images/cards/premium-race-banner.png'
 import rarityCommonImage from '@assets/images/cards/rarity-common.png'
 import rarityEpicImage from '@assets/images/cards/rarity-epic.png'
 import rarityLegendaryImage from '@assets/images/cards/rarity-legendary.png'
@@ -41,6 +49,55 @@ function cardAsset(
 }
 
 export const CARD_ASSET_DEFINITIONS = [
+  cardAsset(
+    'card.frame.weapon.premium',
+    'premium-frame-weapon.png',
+    premiumFrameWeaponImage,
+    620,
+    905
+  ),
+  cardAsset(
+    'card.frame.spell.premium',
+    'premium-frame-spell.png',
+    premiumFrameSpellImage,
+    620,
+    905
+  ),
+  cardAsset(
+    'card.frame.spell.premium.class-mask',
+    'color-mask-premium-frame-spell.png',
+    premiumSpellMaskImage,
+    245,
+    905
+  ),
+  cardAsset(
+    'card.name.premium',
+    'premium-card-name.png',
+    premiumCardNameImage,
+    663,
+    187
+  ),
+  cardAsset(
+    'card.frame.minion.premium',
+    'premium-frame-minion.png',
+    premiumFrameMinionImage,
+    620,
+    913
+  ),
+  cardAsset(
+    'card.frame.legendary.premium',
+    'premium-legendary.png',
+    premiumLegendaryImage,
+    436,
+    317
+  ),
+  cardAsset(
+    'card.frame.minion.premium.class-mask',
+    'color-mask-premium-frame-minion.png',
+    premiumMaskImage,
+    250,
+    383
+  ),
   cardAsset('card.stat.armor', 'armor.png', armorImage, 163, 200),
   cardAsset('card.stat.attack', 'attack.png', attackImage, 175, 214),
   cardAsset('card.name', 'card-name.png', cardNameImage, 665, 198),
@@ -74,6 +131,13 @@ export const CARD_ASSET_DEFINITIONS = [
   cardAsset('card.stat.mana', 'mana.png', manaImage, 174, 165),
   cardAsset('card.shadow.mana', 'shadow-mana.png', shadowManaImage, 267, 270),
   cardAsset('card.race-banner', 'race-banner.png', raceBannerImage, 408, 69),
+  cardAsset(
+    'card.race-banner.premium',
+    'premium-race-banner.png',
+    premiumRaceBannerImage,
+    408,
+    81
+  ),
   cardAsset('card.rarity.common', 'rarity-common.png', rarityCommonImage, 58, 79),
   cardAsset('card.rarity.epic', 'rarity-epic.png', rarityEpicImage, 58, 79),
   cardAsset(

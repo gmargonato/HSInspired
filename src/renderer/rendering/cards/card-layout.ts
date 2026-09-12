@@ -80,6 +80,12 @@ const LEGENDARY_FRAME_OFFSET = { x: 60, y: -35 } as const
 /** The source frame is 620x905 but the shared render canvas is 620x900. */
 const FRAME_SOURCE_TO_CANVAS_Y = CARD_CANVAS.height / 905
 
+/** The premium minion mask spans both silver strips and ends at the frame bottom. */
+const PREMIUM_MINION_FRAME_SOURCE_HEIGHT = 913
+const PREMIUM_MINION_MASK_SOURCE_SIZE = { width: 250, height: 383 } as const
+const PREMIUM_MINION_SOURCE_TO_CANVAS_Y =
+  CARD_CANVAS.height / PREMIUM_MINION_FRAME_SOURCE_HEIGHT
+
 /**
  * Per-template positions in the 620x905 source-frame space. Every mask gets
  * independent X/Y controls; add a new template here when its masks are
@@ -230,6 +236,34 @@ function classFrameMasks(
     return []
   }
 
+  if (options.premium) {
+    const minion = card.type === 'Minion'
+    return [
+      image(
+        'class-frame-mask-1',
+        minion
+          ? 'card.frame.minion.premium.class-mask'
+          : 'card.frame.spell.premium.class-mask',
+        minion
+          ? {
+              x: (CARD_CANVAS.width - PREMIUM_MINION_MASK_SOURCE_SIZE.width) / 2,
+              y:
+                (PREMIUM_MINION_FRAME_SOURCE_HEIGHT -
+                  PREMIUM_MINION_MASK_SOURCE_SIZE.height) *
+                PREMIUM_MINION_SOURCE_TO_CANVAS_Y
+            }
+          : classFrameMaskPosition({ x: (620 - 245) / 2, y: 0 }),
+        CLASS_FRAME_MASK_Z_INDEX,
+        {
+          scale: {
+            x: 1,
+            y: minion ? PREMIUM_MINION_SOURCE_TO_CANVAS_Y : FRAME_SOURCE_TO_CANVAS_Y
+          }
+        }
+      )
+    ]
+  }
+
   const template = card.type === 'Minion' ? 'minion' : 'spell'
   const primaryPlacement =
     template === 'minion'
@@ -287,11 +321,16 @@ function artwork(profile: CardProfile): Extract<CardRenderNode, { kind: 'artwork
 
 function nameBanner(
   card: CardDefinition,
-  profile: CardProfile
+  profile: CardProfile,
+  premium: boolean
 ): Extract<CardRenderNode, { kind: 'image' }> {
   return image(
     'name-banner',
-    card.type === 'Weapon' ? 'card.name.weapon' : 'card.name',
+    premium
+      ? 'card.name.premium'
+      : card.type === 'Weapon'
+        ? 'card.name.weapon'
+        : 'card.name',
     {
       x: profile.nameBox.x + profile.nameBox.width / 2 - 10,
       y: profile.nameBox.y + profile.nameBox.height / 2
@@ -304,10 +343,10 @@ function nameBanner(
   )
 }
 
-function raceBanner(): Extract<CardRenderNode, { kind: 'image' }> {
+function raceBanner(premium: boolean): Extract<CardRenderNode, { kind: 'image' }> {
   return image(
     'race-banner',
-    'card.race-banner',
+    premium ? 'card.race-banner.premium' : 'card.race-banner',
     RACE_BANNER_POSITION,
     RACE_BANNER_Z_INDEX,
     { size: RACE_BANNER_SIZE, anchor: { x: 0.5, y: 0.5 } }
@@ -479,13 +518,14 @@ function rarity(card: CardDefinition, profile: CardProfile): CardGroupNode | nul
 }
 
 function legendaryFrame(
-  card: CardDefinition
+  card: CardDefinition,
+  premium: boolean
 ): Extract<CardRenderNode, { kind: 'image' }> | null {
   if (card.type !== 'Minion' || card.rarity !== 'Legendary') return null
 
   return image(
     'legendary-frame',
-    'card.frame.legendary',
+    premium ? 'card.frame.legendary.premium' : 'card.frame.legendary',
     {
       x: CARD_CANVAS.width / 2 + LEGENDARY_FRAME_OFFSET.x,
       y: LEGENDARY_FRAME_OFFSET.y
@@ -518,19 +558,23 @@ export function buildCardRenderTree(
   options: CardRenderOptions = {}
 ): { readonly root: CardGroupNode } {
   const profile = CARD_PROFILES[visualTemplateFor(card.type)]
-  const legendaryFrameNode = legendaryFrame(card)
+  const premium =
+    (card.type === 'Minion' || card.type === 'Spell' || card.type === 'Weapon') &&
+    options.premium === true
+  const frameKey = premium ? `${profile.frame}.premium` : profile.frame
+  const legendaryFrameNode = legendaryFrame(card, premium)
   const children: CardRenderNode[] = [
     artwork(profile),
-    image('frame', profile.frame, { x: 0, y: 0 }, 100, { size: CARD_CANVAS }),
+    image('frame', frameKey, { x: 0, y: 0 }, 100, { size: CARD_CANVAS }),
     ...classFrameMasks(card, options),
     ...(legendaryFrameNode ? [legendaryFrameNode] : []),
     image('mana-shadow', 'card.shadow.mana', { x: 0, y: 0 }, MANA_SHADOW_Z_INDEX, {
       alphaMask: {
-        assetKey: profile.frame,
+        assetKey: frameKey,
         transform: { position: { x: 0, y: 0 }, size: CARD_CANVAS }
       }
     }),
-    nameBanner(card, profile),
+    nameBanner(card, profile, premium),
     text(
       'name',
       card.name,
@@ -551,7 +595,15 @@ export function buildCardRenderTree(
         'rules',
         formatCardRulesText(card),
         profile.rulesBox,
-        card.type === 'Weapon' ? WEAPON_RULES_STYLE : RULES_STYLE_BASE,
+        card.type === 'Weapon'
+          ? WEAPON_RULES_STYLE
+          : premium
+            ? {
+                ...RULES_STYLE_BASE,
+                fill: 0xffffff,
+                stroke: { color: 0xffffff, width: 0.75 }
+              }
+            : RULES_STYLE_BASE,
         220
       )
     )
@@ -560,7 +612,7 @@ export function buildCardRenderTree(
   const label = raceLabel(card)
   if (label) {
     children.push(
-      raceBanner(),
+      raceBanner(premium),
       text('race', label, RACE_TEXT_BOX, RACE_STYLE, RACE_TEXT_Z_INDEX)
     )
   }
@@ -577,6 +629,8 @@ export function buildCardRenderTree(
 }
 
 export interface CardRenderOptions {
+  /** Presentation-only variant for minions, spells, and weapons. */
+  readonly premium?: boolean
   readonly opponent?: boolean
   readonly debug?: boolean
   readonly elite?: boolean

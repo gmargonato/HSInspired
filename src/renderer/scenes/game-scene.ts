@@ -29,9 +29,8 @@ import {
 import { GameBoardSession } from '../features/game/game-board-session'
 import {
   AiTurnController,
-  AI_DECISION_LIMITS
+  AI_CONVERSATION_LIMITS
 } from '../features/game/ai-turn-controller'
-import { AI_POLICY_LIMITS } from '../../game/match/ai/policy-planner'
 import { MatchRecorder, logObject } from '../features/game/match-recorder'
 import type { MatchLogsApi } from '../../shared/ipc/match-logs'
 
@@ -52,7 +51,10 @@ export class GameScene extends Scene {
     private readonly router?: SceneRouter,
     private readonly ai?: AiDecisionApi,
     private readonly matchLogs?: MatchLogsApi,
-    private readonly reportLogError: (message: string) => void = console.error
+    private readonly reportLogError: (
+      message: string,
+      retry?: () => void
+    ) => void = console.error
   ) {
     super()
     this.route = route
@@ -101,7 +103,7 @@ export class GameScene extends Scene {
       this.matchLogs,
       logObject({
         mode: this.route.mode ?? 'standard',
-        aiRuntimeSettings: { ...AI_POLICY_LIMITS, ...AI_DECISION_LIMITS }
+        aiRuntimeSettings: { ...AI_CONVERSATION_LIMITS }
       }),
       this.reportLogError
     )
@@ -120,12 +122,10 @@ export class GameScene extends Scene {
     const aiController = new AiTurnController({
       api: this.ai,
       session: aiSession,
-      decks,
       logger: aiLogger,
-      recorder: this.recorder
+      recorder: this.recorder,
+      onFailure: this.reportLogError
     })
-    aiController.prewarmDeckPlan()
-    this.logger?.info('[GameScene] AI deck planning started')
 
     const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
     this.logger?.info('[GameScene] game assets acquired')

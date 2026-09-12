@@ -483,6 +483,8 @@ export interface OpeningMatchState {
 }
 
 export interface PendingDiscoverChoice {
+  /** Public source for a bonus with no physical played card. */
+  readonly publicSourceCardId?: CardId
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
   readonly candidates: readonly OpeningCard[]
@@ -532,6 +534,7 @@ export interface PendingCardChoice {
   readonly sourceCardId: CardId
   readonly options: readonly CardChoiceOption[]
   readonly resolution?:
+    | { readonly type: 'bonus-spell' }
     | {
         readonly type: 'hero-power'
         readonly heroPowerIds: readonly HeroPowerId[]
@@ -1334,6 +1337,8 @@ export type OpeningPublicPlayerState = Omit<
 }
 
 export interface PlayCardInput {
+  /** Own-hand condition facts only; not a prediction of targets or intervening effects. */
+  readonly battlecryConditions?: readonly BattlecryConditionFact[]
   readonly participantId: PlayerId
   readonly cardInstanceId: string
   readonly cardId: CardId
@@ -1353,6 +1358,13 @@ export interface PlayCardInput {
   readonly choiceTiming: 'before-play' | 'after-placement'
   /** Whether the current condition enhances the card's active effect. */
   readonly effectPreview: CardPlayEffectPreview | null
+}
+
+export interface BattlecryConditionFact {
+  readonly effectIndex: number
+  readonly status: 'met' | 'not-met' | 'unknown'
+  readonly requirement: string
+  readonly qualifyingCardInstanceIds?: readonly string[]
 }
 
 /** Domain-derived presentation data for a card about to be played. */

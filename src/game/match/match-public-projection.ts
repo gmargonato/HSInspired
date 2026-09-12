@@ -166,6 +166,11 @@ export function getOpeningMatchPublicEvents(
     .filter((event) => event.type !== 'history-effect-recorded')
     .map((event) => {
       switch (event.type) {
+        case 'trigger-activated':
+          return event.participantId !== viewerId &&
+            (event.source.kind === 'card' || event.source.kind === 'secret')
+            ? { ...event, source: { ...event.source, cardId: null } }
+            : event
         case 'effect-resolved':
           return maskPublicEffectEvent(event, viewerId)
         case 'mulligan-resolved':
@@ -187,6 +192,7 @@ export function getOpeningMatchPublicEvents(
           }
         case 'card-choice-started':
           return event.participantId === viewerId ? event : { ...event, options: [] }
+        case 'card-generated':
         case 'coin-granted':
         case 'opening-card-drawn':
         case 'card-drawn':

@@ -1,4 +1,4 @@
-import { Texture } from 'pixi.js'
+import { Sprite, Texture } from 'pixi.js'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../effects/animated-outline', () => ({
@@ -20,6 +20,7 @@ import {
   type MinionViewModel,
   type MinionViewTextures
 } from './minion-view'
+import { setPremiumEnabled } from '../premium-appearance'
 
 const textures: MinionViewTextures = {
   windfury: Texture.EMPTY,
@@ -27,8 +28,11 @@ const textures: MinionViewTextures = {
   elusive: Texture.EMPTY,
   immune: Texture.EMPTY,
   frame: Texture.EMPTY,
+  premiumFrame: Texture.WHITE,
   legendaryFrame: Texture.EMPTY,
+  premiumLegendaryFrame: Texture.WHITE,
   taunt: Texture.EMPTY,
+  premiumTaunt: Texture.WHITE,
   divineShield: Texture.EMPTY,
   frozen: Texture.EMPTY,
   stealth: Texture.EMPTY,
@@ -61,6 +65,58 @@ const tauntMinion: MinionViewModel = {
 }
 
 describe('MinionView outline layering', () => {
+  it('swaps existing and new board frames without disturbing minion state', async () => {
+    const view = await MinionView.create(
+      { ...tauntMinion, legendary: true },
+      textures,
+      undefined
+    )
+    const frame = view.children.find(
+      (child) => child.label === 'minion.frame'
+    ) as Sprite
+    const placement = { x: frame.x, y: frame.y, scale: frame.scale.x }
+    const legendary = view.children.find(
+      (child) => child.label === 'minion.frame-legendary'
+    ) as Sprite
+    try {
+      view.setCanAttack(true)
+      setPremiumEnabled(true)
+      expect(frame.texture).toBe(textures.premiumFrame)
+      const taunt = view.children.find(
+        (child) => child.label === 'minion.taunt'
+      ) as Sprite
+      expect(taunt.texture).toBe(textures.premiumTaunt)
+      view.setTaunt(false)
+      expect(taunt.visible).toBe(false)
+      view.setTaunt(true)
+      expect(taunt.visible).toBe(true)
+      expect(legendary.texture).toBe(textures.premiumLegendaryFrame)
+      expect(legendary.visible).toBe(true)
+      expect({ x: frame.x, y: frame.y, scale: frame.scale.x }).toEqual(placement)
+      expect(view.isCanAttack()).toBe(true)
+      const next = await MinionView.create(tauntMinion, textures, undefined)
+      const nextLegendary = next.children.find(
+        (child) => child.label === 'minion.frame-legendary'
+      ) as Sprite
+      expect(nextLegendary.texture).toBe(textures.premiumLegendaryFrame)
+      expect(nextLegendary.visible).toBe(false)
+      expect(
+        (next.children.find((child) => child.label === 'minion.frame') as Sprite)
+          .texture
+      ).toBe(textures.premiumFrame)
+      next.destroy({ children: true })
+      setPremiumEnabled(false)
+      expect(frame.texture).toBe(textures.frame)
+      expect(taunt.texture).toBe(textures.taunt)
+      expect(legendary.texture).toBe(textures.legendaryFrame)
+      view.destroy({ children: true })
+      expect(() => setPremiumEnabled(true)).not.toThrow()
+    } finally {
+      if (!view.destroyed) view.destroy({ children: true })
+      setPremiumEnabled(false)
+    }
+  })
+
   it('toggles all new ability sprites without rebuilding the minion', async () => {
     const view = await MinionView.create(tauntMinion, textures, undefined)
     const sprites = ['windfury', 'spell-damage', 'elusive', 'immune'].map((name) =>

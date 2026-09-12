@@ -1,55 +1,73 @@
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import {
   AI_IPC_CHANNELS,
   aiIpcFailure,
   aiIpcSuccess,
-  parseAiDeckPlanRequest,
-  parseAiDecisionRequest,
-  type AiIpcResult
+  parseAiIdentity,
+  parseAiDecisionRequest
 } from '../../shared/ipc/ai'
-import { AzureOpenAiDecisionService } from './azure-openai-ai-service'
-import type { MatchLogRepository } from './match-log-repository'
+import type { AiDecisionServiceContract } from './ai-decision-service'
 
-export function registerAiIpc(
-  service: AzureOpenAiDecisionService,
-  logs?: MatchLogRepository
-): void {
-  const settle = async <T>(
-    owner: number,
-    request: { logMatchId?: string; requestId: string },
-    operation: () => Promise<T>
-  ): Promise<AiIpcResult<T>> => {
-    const startedAt = performance.now()
-    if (request.logMatchId) logs?.assertOwner(request.logMatchId, owner)
+export function registerAiIpc(service: AiDecisionServiceContract): void {
+  const active = new Map<
+    number,
+    { requestId: string; matchId: string; controller: AbortController }
+  >()
+  const watched = new Set<number>()
+  const cancel = (owner: number): void => {
+    active.get(owner)?.controller.abort()
+    active.delete(owner)
+  }
+  app.on('before-quit', () => {
+    for (const owner of active.keys()) cancel(owner)
+  })
+  ipcMain.handle(AI_IPC_CHANNELS.settings, async () => {
     try {
-      return aiIpcSuccess(await operation())
+      return aiIpcSuccess(await service.settings())
     } catch (error) {
-      if (request.logMatchId) {
-        const message = error instanceof Error ? error.message : String(error)
-        void logs
-          ?.append(request.logMatchId, {
-            stream: 'decisions',
-            kind: 'provider-failure',
-            timestamp: new Date().toISOString(),
-            decisionId: request.requestId,
-            data: {
-              error: message,
-              timeout: /timed out|deadline.*elapsed/i.test(message),
-              durationMs: performance.now() - startedAt
-            }
-          })
-          .catch((logError) => console.error('Failed to record AI failure:', logError))
-      }
       return aiIpcFailure(error)
     }
-  }
-
-  ipcMain.handle(AI_IPC_CHANNELS.decide, (event, value: unknown) => {
-    const request = parseAiDecisionRequest(value)
-    return settle(event.sender.id, request, () => service.decide(request))
   })
-  ipcMain.handle(AI_IPC_CHANNELS.planDeck, (event, value: unknown) => {
-    const request = parseAiDeckPlanRequest(value)
-    return settle(event.sender.id, request, () => service.planDeck(request))
+  ipcMain.handle(AI_IPC_CHANNELS.decide, async (event, value: unknown) => {
+    try {
+      const request = parseAiDecisionRequest(value)
+      const owner = event.sender.id
+      if (!watched.has(owner)) {
+        watched.add(owner)
+        event.sender.once('destroyed', () => {
+          cancel(owner)
+          watched.delete(owner)
+        })
+        event.sender.on('render-process-gone', () => cancel(owner))
+        event.sender.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => {
+          if (mainFrame) cancel(owner)
+        })
+      }
+      cancel(owner)
+      const entry = {
+        requestId: request.requestId,
+        matchId: request.matchId,
+        controller: new AbortController()
+      }
+      active.set(owner, entry)
+      try {
+        return aiIpcSuccess(
+          await service.decide(request, entry.controller.signal, (progress) => {
+            if (active.get(owner) === entry && !event.sender.isDestroyed())
+              event.sender.send(AI_IPC_CHANNELS.progress, progress)
+          })
+        )
+      } finally {
+        if (active.get(owner) === entry) active.delete(owner)
+      }
+    } catch (error) {
+      return aiIpcFailure(error)
+    }
+  })
+  ipcMain.handle(AI_IPC_CHANNELS.cancel, (event, value: unknown) => {
+    const identity = parseAiIdentity(value)
+    const entry = active.get(event.sender.id)
+    if (entry?.requestId === identity.requestId && entry.matchId === identity.matchId)
+      cancel(event.sender.id)
   })
 }

@@ -3,8 +3,14 @@ import type { AppLogger } from './logger'
 import type { DevCommand } from '../../shared/dev-menu'
 import { CollectionScene } from '../scenes/collection-scene'
 import { GameScene } from '../scenes/game-scene'
+import {
+  isPremiumEnabled,
+  setPremiumEnabled,
+  subscribeToPremiumAppearance
+} from '../rendering/premium-appearance'
 
 type DevMenuBridge = {
+  notifyPremiumMode?: (enabled: boolean) => void
   onDevCommand?: (listener: (command: DevCommand) => void) => () => void
 }
 
@@ -24,6 +30,10 @@ export function installDevCommandHandler(
   }
 
   const handleCommand = (command: DevCommand): void => {
+    if (command.type === 'cards:set-premium') {
+      setPremiumEnabled(command.enabled)
+      return
+    }
     const current = sceneManager.current
 
     if (command.type === 'collection:set-collectible') {
@@ -129,5 +139,13 @@ export function installDevCommandHandler(
     }
   }
 
-  return bridge.onDevCommand(handleCommand)
+  const unsubscribeCommands = bridge.onDevCommand(handleCommand)
+  const unsubscribePremium = subscribeToPremiumAppearance((enabled) =>
+    bridge.notifyPremiumMode?.(enabled)
+  )
+  bridge.notifyPremiumMode?.(isPremiumEnabled())
+  return () => {
+    unsubscribeCommands()
+    unsubscribePremium()
+  }
 }

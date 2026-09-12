@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { isDevCommand, isDevSceneId } from './dev-menu'
 
 describe('dev deck menu commands', () => {
+  it('accepts only boolean premium settings', () => {
+    for (const enabled of [true, false]) {
+      expect(isDevCommand({ type: 'cards:set-premium', enabled })).toBe(true)
+    }
+    for (const enabled of [undefined, null, 'true', 1, {}]) {
+      expect(isDevCommand({ type: 'cards:set-premium', enabled })).toBe(false)
+    }
+  })
   it('accepts Arena as a development scene id', () => {
     expect(isDevSceneId('arena')).toBe(true)
   })

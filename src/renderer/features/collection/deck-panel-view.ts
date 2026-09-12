@@ -421,10 +421,7 @@ export class DeckPanelView extends Actor {
     }
 
     this.optimisticDeck = prediction.deck
-    const sourceTexture = this.options.renderer.generateTexture({
-      target: source.view,
-      antialias: true
-    })
+    const sourceTexture = source.view.createAppearanceSnapshot(this.options.renderer)
 
     return new Promise<void>((resolve) => {
       this.cardAddQueue.push({

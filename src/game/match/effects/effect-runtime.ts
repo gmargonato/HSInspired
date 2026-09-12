@@ -8007,7 +8007,18 @@ export class EffectRuntime {
       legalChoices: Array.from({ length: choiceCount }, (_, index) => index),
       choiceOptions,
       choiceTiming,
-      effectPreview: this.playEffectPreview(definition, targetFrame)
+      effectPreview: this.playEffectPreview(definition, targetFrame),
+      battlecryConditions: definition.effects.flatMap((block, effectIndex) =>
+        block.trigger === 'battlecry' && block.condition
+          ? [
+              this.queries.previewHandCondition(
+                block.condition,
+                targetFrame,
+                effectIndex
+              )
+            ]
+          : []
+      )
     }
   }
 
@@ -10445,15 +10456,22 @@ export class EffectRuntime {
           'play-card',
           options.deferChoice === true
         )
-      if (this.currentMinion(minion))
+      // currentMinion also resolves graveyard sources; presentation requires a live board entry.
+      if (player.board.find((candidate) => candidate.instanceId === minion.instanceId))
         this.emitCardPlayedSemantic(minion, minion, card, 'minion-played', 'play', {
           minionCountBeforePlay
         })
-      if (this.currentMinion(minion)) {
+      if (
+        player.board.find((candidate) => candidate.instanceId === minion.instanceId)
+      ) {
         this.events.push({
           type: 'minion-summoned',
           participantId: options.participantId,
-          minion: clonePlain(this.currentMinion(minion)!) as BoardMinion,
+          minion: clonePlain(
+            player.board.find(
+              (candidate) => candidate.instanceId === minion.instanceId
+            )!
+          ) as BoardMinion,
           position: player.board.findIndex(
             (candidate) => candidate.instanceId === card.instanceId
           )
@@ -10466,7 +10484,9 @@ export class EffectRuntime {
           card.instanceId
         )
       }
-      const currentMinion = this.currentMinion(minion)
+      const currentMinion = player.board.find(
+        (candidate) => candidate.instanceId === minion.instanceId
+      )
       if (currentMinion) {
         this.events.push({
           type: 'minion-played',
@@ -11116,6 +11136,35 @@ export class EffectRuntime {
           'stale-target',
           'The Choice source is unavailable.'
         )
+      if (pending.resolution?.type === 'bonus-spell') {
+        this.advancePendingCardChoice(pending)
+        const source: EntityRef = {
+          instanceId: pending.sourceCardInstanceId,
+          kind: 'card',
+          participantId: options.participantId,
+          zone: 'hand',
+          cardId: pending.sourceCardId
+        }
+        const frame = {
+          ...this.frameFor(source, null, []),
+          choiceIndex: options.choice
+        }
+        for (const [index, block] of definition.effects.entries()) {
+          if (block.trigger === 'cast' && block.choice)
+            this.runBlock(block, frame, `turn-bonus.cast[${index}]`)
+        }
+        if (this.draft.pendingDiscover)
+          this.draft.pendingDiscover.publicSourceCardId = pending.sourceCardId
+        this.processDeaths()
+        return {
+          accepted: true,
+          state: clonePlain(this.commitResolution()) as OpeningMatchState,
+          events: clonePlain(this.events) as OpeningMatchEvent[],
+          trace: copyPlainArray(this.trace),
+          nextEntityOrdinal: this.nextEntityOrdinal,
+          triggerEvents: copyPlainArray(this.triggerEvents)
+        }
+      }
       const source = this.findEntity(
         options.sourceCardInstanceId,
         options.participantId

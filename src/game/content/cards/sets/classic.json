@@ -8700,6 +8700,7 @@
       {
         "trigger": "on-attack",
         "event": {
+          "type": "character-attacked",
           "source": {
             "type": "hero",
             "controller": "self"

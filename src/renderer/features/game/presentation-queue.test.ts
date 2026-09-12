@@ -893,7 +893,8 @@ describe('board lifecycle preservation', () => {
     }
     const card = Object.assign(new Container(), {
       plan: { width: 620 },
-      renderedHeight: 900
+      renderedHeight: 900,
+      createAppearanceSnapshot: () => RenderTexture.create({ width: 620, height: 900 })
     })
     card.addChild(new Sprite(Texture.WHITE))
     const slot = Object.assign(mulliganSlot('held-card'), {

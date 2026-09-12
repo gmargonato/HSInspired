@@ -7,6 +7,8 @@ import {
   weaponTemporaryAbilityBadgePlacement
 } from './weapon-layout'
 import { AnimationScope } from '../../animation/animations'
+import { isPremiumEnabled, subscribeToPremiumAppearance } from '../premium-appearance'
+import { PremiumArtworkBreath } from '../effects/premium-artwork-breath'
 
 export interface WeaponViewModel {
   readonly label: string
@@ -19,6 +21,7 @@ export interface WeaponViewModel {
 
 export interface WeaponViewTextures {
   readonly frame: Texture
+  readonly premiumFrame: Texture
   readonly trigger: Texture
   readonly deathrattle: Texture
   readonly attack: Texture
@@ -75,6 +78,8 @@ function createStatGroup(
 
 /** Feature-agnostic equipped weapon presentation. The caller owns its position. */
 export class WeaponView extends Container {
+  private readonly unsubscribePremium: () => void
+  private readonly artworkBreath: PremiumArtworkBreath | null
   private readonly attackLabel: Text
   private readonly durabilityLabel: Text
   private readonly deathrattle: Sprite
@@ -97,6 +102,8 @@ export class WeaponView extends Container {
     const artworkLayer = new Container()
     applyPlacement(artworkLayer, WEAPON_LAYOUT.artwork)
     artworkLayer.label = 'weapon.artwork'
+    this.artworkBreath = artwork ? new PremiumArtworkBreath(artworkLayer) : null
+    this.artworkBreath?.setEnabled(isPremiumEnabled())
 
     const { radiusX, radiusY, center } = WEAPON_LAYOUT.artworkOval
     if (artwork) {
@@ -126,7 +133,13 @@ export class WeaponView extends Container {
     artworkLayer.addChild(mask)
     this.addChild(artworkLayer)
 
-    const frame = new Sprite(textures.frame)
+    const frame = new Sprite(
+      isPremiumEnabled() ? textures.premiumFrame : textures.frame
+    )
+    this.unsubscribePremium = subscribeToPremiumAppearance((enabled) => {
+      frame.texture = enabled ? textures.premiumFrame : textures.frame
+      this.artworkBreath?.setEnabled(enabled)
+    })
     applyAnchoredPlacement(frame, WEAPON_LAYOUT.frame)
     frame.label = 'weapon.frame'
     this.addChild(frame)
@@ -282,6 +295,8 @@ export class WeaponView extends Container {
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.unsubscribePremium()
+    this.artworkBreath?.destroy()
     this.animationScope.kill()
     for (const pulse of this.activeAbilityPulses) {
       if (!pulse.destroyed) pulse.destroy({ children: true })

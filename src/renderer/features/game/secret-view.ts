@@ -90,6 +90,7 @@ export class SecretRevealView extends Container {
     const artwork = await this.resolver.loadArtwork(cardId)
     if (sequence !== this.presentationSequence || this.destroyed) return
     const card = await CardView.create(definition, this.resolver, {
+      animatePremiumArtwork: true,
       artwork: artwork ?? undefined
     })
     if (sequence !== this.presentationSequence || this.destroyed) {

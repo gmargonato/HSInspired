@@ -4,6 +4,18 @@
 - This is not a OneDrive folder, even though the path to this project makes you believe that. It is a left-over, and OneDrive is not installed.
 - If running tests, and any test fails because of the live-numbers are different from the test files, assume that the human made manual adjustments and those are the correct values he wants.
 
+## Engineering preference
+When investigating or fixing technical problems:
+* Prefer clean, targeted, reliable fixes that address the actual problem.
+* Do not over-engineer solutions or introduce unnecessary complexity.
+* Do not turn a focused fix into a broad rewrite, refactor, redesign, migration, or cleanup unless that is specifically the goal or clearly necessary.
+* Preserve working behavior and existing architecture when possible.
+* Investigate and gather evidence before making speculative changes.
+* Favor the smallest complete solution, not a shortcut that only hides the symptom.
+* Separate necessary fixes from optional improvements.
+* Suggestions for broader improvements are welcome, but do not automatically implement them.
+* Optimize for reliability, clarity, maintainability, and low complexity.
+
 ## Windows Codex Sandbox ACL Failure
 
   If `apply_patch` or normal `exec_command` fails before launching with:

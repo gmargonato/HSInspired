@@ -3,6 +3,16 @@ import type { PlayerId } from '../match-types'
 import type { ManaActionName, ManaCardAction } from '../../content/cards'
 import { MAX_MANA } from './effect-primitives'
 
+/** The immediate mana result of a temporary gain, before any other triggers. */
+export function temporaryManaAfterGain(
+  mana: { readonly available: number; readonly temporary?: number },
+  amount: number
+): { available: number; temporary: number } {
+  const gain = Math.max(0, Math.floor(amount))
+  const temporary = (mana.temporary ?? 0) + gain
+  return { temporary, available: Math.min(MAX_MANA + temporary, mana.available + gain) }
+}
+
 /** Dynamic runtime effects use the same handler without claiming content validation.
  * Amount evaluation stays lazy so per-player RNG consumption remains unchanged.
  */
@@ -66,11 +76,7 @@ export function runManaAction<Amount>(
           player.mana.maximum += gained
           player.mana.available = Math.min(MAX_MANA, player.mana.available + gained)
         } else if (duration === 'this-turn') {
-          player.mana.temporary = (player.mana.temporary ?? 0) + amount
-          player.mana.available = Math.min(
-            MAX_MANA + (player.mana.temporary ?? 0),
-            player.mana.available + amount
-          )
+          Object.assign(player.mana, temporaryManaAfterGain(player.mana, amount))
         } else {
           player.mana.available = Math.min(
             player.mana.maximum,

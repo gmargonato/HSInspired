@@ -1,6 +1,5 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
-import { readFile } from 'node:fs/promises'
 import { parseMatchLogObject } from '../shared/ipc/match-logs'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import icon from '../../assets/icon.png?asset'
@@ -12,9 +11,9 @@ import {
 } from './services/window-settings-ipc'
 import { WindowSettingsRepository } from './services/window-settings-repository'
 import { installSceneMenu } from './menu/dev-menu'
-import { loadAzureOpenAiConfig } from './services/ai-config'
+import { loadAiConfig } from './services/ai-config'
 import { registerAiIpc } from './services/ai-ipc'
-import { AzureOpenAiDecisionService } from './services/azure-openai-ai-service'
+import { AiDecisionService } from './services/ai-decision-service'
 import { registerPlayerStatsIpc } from './services/player-stats-ipc'
 import { PlayerStatsRepository } from './services/player-stats-repository'
 import { ArenaRepository } from './services/arena-repository'
@@ -135,6 +134,20 @@ void app
     electronApp.setAppUserModelId('com.hsinspired.app')
 
     const appPath = app.getAppPath()
+    const aiService = new AiDecisionService({
+      loadConfig: () =>
+        loadAiConfig({
+          configPath: join(appPath, 'config', 'ai.json'),
+          azureKeyPaths: [
+            join(appPath, 'config', 'ai-key.local.txt'),
+            join(app.getPath('userData'), 'ai-key.local.txt')
+          ],
+          openRouterKeyPaths: [
+            join(appPath, 'config', 'openrouter-key.local.txt'),
+            join(app.getPath('userData'), 'openrouter-key.local.txt')
+          ]
+        })
+    })
     matchLogs = new MatchLogRepository(
       is.dev
         ? join(appPath, 'artifacts', 'match-logs')
@@ -144,9 +157,7 @@ void app
       .initialize()
       .catch((error) => console.error('Could not initialize match logging:', error))
     registerMatchLogIpc(matchLogs, async () =>
-      parseMatchLogObject(
-        JSON.parse(await readFile(join(appPath, 'config', 'ai.json'), 'utf8'))
-      )
+      parseMatchLogObject(await aiService.settings())
     )
     if (is.dev) {
       registerCardClassBuilderIpc(
@@ -158,32 +169,7 @@ void app
         new OutlineTuningRepository(join(appPath, 'config', 'outline-tunings.json'))
       )
     }
-    registerAiIpc(
-      new AzureOpenAiDecisionService({
-        record: (matchId, requestId, kind, data) => {
-          void matchLogs!
-            .append(matchId, {
-              stream: 'decisions',
-              kind,
-              timestamp: new Date().toISOString(),
-              decisionId: requestId,
-              data
-            })
-            .catch((error) =>
-              console.error('Could not record AI provider data:', error)
-            )
-        },
-        loadConfig: () =>
-          loadAzureOpenAiConfig({
-            configPath: join(appPath, 'config', 'ai.json'),
-            keyPaths: [
-              join(appPath, 'config', 'ai-key.local.txt'),
-              join(app.getPath('userData'), 'ai-key.local.txt')
-            ]
-          })
-      }),
-      matchLogs
-    )
+    registerAiIpc(aiService)
     registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))
     registerPlayerStatsIpc(
       new PlayerStatsRepository(join(app.getPath('userData'), 'player-stats.json'))

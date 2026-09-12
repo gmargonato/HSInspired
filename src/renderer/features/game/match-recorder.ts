@@ -97,20 +97,28 @@ export class MatchRecorder {
     return {
       info: (message, ...details) => {
         base.info(message, ...details)
-        if (
-          message.includes('policy diverged') ||
-          message.includes('continuing engine-verified policy')
-        ) {
-          this.record('decisions', 'diagnostic', { message, details })
-        }
       },
       warn: (message, ...details) => {
         base.warn(message, ...details)
-        this.record('decisions', 'warning', { message, details })
+        if (
+          ![
+            '[Game AI] failure',
+            '[Game AI] action-executed',
+            '[Game AI] invariant-error'
+          ].includes(message)
+        )
+          this.record('decisions', 'warning', { message, details })
       },
       error: (message, ...details) => {
         base.error(message, ...details)
-        this.record('decisions', 'error', { message, details })
+        if (
+          ![
+            '[Game AI] failure',
+            '[Game AI] action-executed',
+            '[Game AI] invariant-error'
+          ].includes(message)
+        )
+          this.record('decisions', 'error', { message, details })
       }
     }
   }

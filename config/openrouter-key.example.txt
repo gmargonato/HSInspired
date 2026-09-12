@@ -1,0 +1,1 @@
+Paste only the OpenRouter API key in openrouter-key.local.txt in this directory.

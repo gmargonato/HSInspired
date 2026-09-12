@@ -109,7 +109,10 @@ export class CardPreviewView extends Actor {
     this.addChild(this.detailsPanel)
 
     const artwork = await this.resolver.loadArtwork(this.card.id)
-    this.cardView = await CardView.create(this.card, this.resolver, { artwork })
+    this.cardView = await CardView.create(this.card, this.resolver, {
+      artwork,
+      animatePremiumArtwork: true
+    })
     this.cardView.eventMode = 'static'
 
     this.cardMotion = new Container()

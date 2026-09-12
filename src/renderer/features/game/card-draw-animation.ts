@@ -1,6 +1,7 @@
 import { Container, PerspectiveMesh, Rectangle, Sprite, type Renderer } from 'pixi.js'
 import type { GameCardSlot } from './game-card-slot'
 import { CARD_DRAW_LAYOUT } from './card-draw-layout'
+import { isArtworkVisible } from '../../rendering/effects/premium-artwork-breath'
 
 type Point = { x: number; y: number }
 export type DrawCorners = readonly [Point, Point, Point, Point]
@@ -353,11 +354,14 @@ export class CardDrawAnimation {
         profile
       )
     if (slot)
-      this.frontTexture = renderer.generateTexture({
-        target: face,
+      this.frontTexture = slot.card.createAppearanceSnapshot(
+        renderer,
         frame,
-        antialias: true
-      })
+        () =>
+          !this.disposed &&
+          isArtworkVisible(this.mesh) &&
+          this.mesh.texture === this.frontTexture
+      )
     this.mesh = new PerspectiveMesh({
       texture: backTexture,
       verticesX: 10,

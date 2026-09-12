@@ -371,6 +371,7 @@ export class GameCombatPresentation {
             ? this.context.weaponView(death.participantId)
             : undefined
       if (!view || view.destroyed) continue
+      if (view instanceof MinionView) view.setCanAttack(false)
       if (death.hasDeathrattle && !this.deathGhostTemplates.has(death.instanceId)) {
         view.setDeathrattle(true)
         const snapshot = view.getAbilityMarkerSnapshot('deathrattle')

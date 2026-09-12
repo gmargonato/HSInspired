@@ -157,7 +157,7 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
         dependencies.router,
         dependencies.services.ai,
         dependencies.services.matchLogs,
-        (message) => dependencies.services.dialogs.error(message)
+        (message, retry) => dependencies.services.dialogs.error(message, retry)
       )
     }
 
@@ -176,7 +176,7 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       dependencies.router,
       dependencies.services.ai,
       dependencies.services.matchLogs,
-      (message) => dependencies.services.dialogs.error(message)
+      (message, retry) => dependencies.services.dialogs.error(message, retry)
     )
   }
 }
@@ -490,7 +490,7 @@ export class SceneNavigator implements SceneRouter {
           this,
           this.services.ai,
           this.services.matchLogs,
-          (message) => this.services.dialogs.error(message)
+          (message, retry) => this.services.dialogs.error(message, retry)
         )
       case 'card-preview':
         return new CardViewScene({

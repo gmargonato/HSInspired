@@ -4,7 +4,7 @@ import {
   Rectangle,
   Sprite,
   Text,
-  type Texture,
+  Texture,
   type FederatedPointerEvent,
   type FederatedWheelEvent
 } from 'pixi.js'
@@ -20,6 +20,7 @@ import type {
 import { CardView } from '../../rendering/cards/card-view'
 import { HeroPowerCardView } from '../../rendering/hero-powers/hero-power-presentation'
 import { DamageIndicatorView } from './damage-indicator-view'
+import { HealIndicatorView } from './heal-indicator-view'
 import { applyPlacement, applyAnchoredPlacement } from '../../rendering/layout'
 import { Actor } from '../../ui/components/actor'
 import type { DeckPresentationAssets, HeroPowerAssetKey } from '../../ui/asset-registry'
@@ -38,10 +39,15 @@ import {
 export interface MatchHistoryTextures {
   readonly local: Texture
   readonly remote: Texture
+  readonly localAttack: Texture
+  readonly localTrigger: Texture
+  readonly remoteAttack: Texture
+  readonly remoteTrigger: Texture
   readonly arrow: Texture
   readonly burnCard: Texture
   readonly burnThumb: Texture
   readonly damageIndicator: Texture
+  readonly healIndicator: Texture
   readonly willDie: Texture
   readonly secretCard: Texture
   readonly secretThumb: Texture
@@ -193,11 +199,21 @@ export class MatchHistoryView extends Actor {
       slot.container.visible = !!entry
       const generation = ++slot.generation
       if (!entry) return
-      slot.frame.texture =
-        entry.participantId === this.localParticipantId
-          ? this.textures.local
-          : this.textures.remote
-      this.showThumbnail(slot.artwork, this.textures.secretThumb)
+      const side = entry.participantId === this.localParticipantId ? 'local' : 'remote'
+      switch (entry.action) {
+        case 'combat':
+          slot.frame.texture = this.textures[`${side}Attack`]
+          break
+        case 'trigger':
+          slot.frame.texture = this.textures[`${side}Trigger`]
+          break
+        default:
+          slot.frame.texture = this.textures[side]
+      }
+      this.showThumbnail(slot.artwork, Texture.WHITE)
+      slot.artwork.tint = 0x000000
+      if (entry.kind !== 'burn' && entry.source.concealedAs === 'secret')
+        this.showThumbnail(slot.artwork, this.textures.secretThumb)
       if (entry.kind === 'burn')
         this.showThumbnail(slot.artwork, this.textures.burnThumb)
       else if (entry.action === 'fatigue')
@@ -224,6 +240,7 @@ export class MatchHistoryView extends Actor {
   private showThumbnail(sprite: Sprite, texture: Texture): void {
     const size = MATCH_HISTORY_LAYOUT.rail.artworkSize
     sprite.texture = texture
+    sprite.tint = 0xffffff
     const scale = Math.max(size / texture.width, size / texture.height)
     sprite.scale.set(scale)
     sprite.position.set(
@@ -398,6 +415,7 @@ export class MatchHistoryView extends Actor {
       .catch(() => undefined)
     if (!this.current(id, sequence)) return
     const card = await CardView.create(definition, this.resolver, {
+      animatePremiumArtwork: true,
       artwork,
       snapshot,
       silenced: snapshot.silenced
@@ -468,8 +486,9 @@ export class MatchHistoryView extends Actor {
       container.addChild(label)
     }
     if (heal > 0) {
-      const label = this.makeLabel('+' + heal, 105, 0x6cff47)
-      applyAnchoredPlacement(
+      const label = new HealIndicatorView(this.textures.healIndicator, heal)
+      label.label = 'game.history.heal'
+      applyPlacement(
         label,
         damage > 0 ? HISTORY_CARD_DETAILS.mixedHeal : HISTORY_CARD_DETAILS.heal
       )

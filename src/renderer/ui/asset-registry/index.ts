@@ -35,6 +35,7 @@ import collectionCoverLockImage from '@assets/images/ui/collection/collection-co
 import playButtonImage from '@assets/images/ui/deck-selection/play-button.png'
 import uiBackButtonImage from '@assets/images/ui/common/ui-back-button.png'
 import uiDoneButtonImage from '@assets/images/ui/common/ui-done-button.png'
+import genericDialogImage from '@assets/images/ui/common/generic-dialog.png'
 import loadDeckButtonImage from '@assets/images/ui/collection/load-deck-button.png'
 import newDeckButtonImage from '@assets/images/ui/deck-builder/new-deck-button.png'
 import newDeckHeroSelectionImage from '@assets/images/ui/deck-builder/new-deck-hero-selection.png'
@@ -71,6 +72,10 @@ import toggleViewButtonImage from '@assets/images/match/toggle-view-button.png'
 import mulliganCoinAnnouncementImage from '@assets/images/match/mulligan-coin-announcement.png'
 import historyLocalImage from '@assets/images/match/history-local.png'
 import historyRemoteImage from '@assets/images/match/history-remote.png'
+import historyLocalAttackImage from '@assets/images/match/history-local-attack.png'
+import historyLocalTriggerImage from '@assets/images/match/history-local-trigger.png'
+import historyRemoteAttackImage from '@assets/images/match/history-remote-attack.png'
+import historyRemoteTriggerImage from '@assets/images/match/history-remote-trigger.png'
 import historyArrowImage from '@assets/images/match/history-arrow.png'
 import historyBurnCardImage from '@assets/images/match/burn.png'
 import historyBurnThumbImage from '@assets/images/match/history-burn-thumb.png'
@@ -85,8 +90,11 @@ import heroPowerFrontImage from '@assets/images/heroes/hero-power/hero-power-fro
 import heroPowerManaImage from '@assets/images/heroes/hero-power/hero-power-mana.png'
 import discoverHistoryHeroPowerImage from '@assets/images/match/discover-history-hero-power.png'
 import minionFrameImage from '@assets/images/board/minion-frame.png'
+import premiumMinionFrameImage from '@assets/images/board/premium-minion-frame.png'
 import minionFrameLegendaryImage from '@assets/images/board/minion-frame-legendary.png'
+import premiumMinionFrameLegendaryImage from '@assets/images/board/premium-minion-frame-legendary.png'
 import minionTauntImage from '@assets/images/board/minion-taunt.png'
+import premiumMinionTauntImage from '@assets/images/board/premium-minion-taunt.png'
 import minionDivineShieldImage from '@assets/images/board/minion-divine-shield.png'
 import heroFrozenImage from '@assets/images/board/hero-frozen.png'
 import heroImmuneImage from '@assets/images/board/hero-immune.png'
@@ -105,6 +113,7 @@ import minionHealthImage from '@assets/images/board/minion-health.png'
 import heroArmorImage from '@assets/images/cards/armor.png'
 import minionWillDieImage from '@assets/images/board/character-will-die.png'
 import weaponImage from '@assets/images/board/weapon.png'
+import premiumWeaponImage from '@assets/images/board/premium-weapon.png'
 import searchClearImage from '@assets/images/cards/silence.png'
 import searchNoResultsImage from '@assets/images/ui/collection/search-no-results.png'
 import expansionButtonToggleImage from '@assets/images/ui/collection/expansion-button-toggle.png'
@@ -472,6 +481,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.minion-frame-premium',
+    ASSET_BUNDLE_IDS.game,
+    'premiumMinionFrame',
+    premiumMinionFrameImage,
+    119,
+    161,
+    'game-scene'
+  ),
+  asset(
     'scene.game.fatigue',
     ASSET_BUNDLE_IDS.game,
     'fatigue',
@@ -512,6 +530,42 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'historyRemote',
     historyRemoteImage,
+    75,
+    75,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-local-attack',
+    ASSET_BUNDLE_IDS.game,
+    'historyLocalAttack',
+    historyLocalAttackImage,
+    75,
+    75,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-local-trigger',
+    ASSET_BUNDLE_IDS.game,
+    'historyLocalTrigger',
+    historyLocalTriggerImage,
+    75,
+    75,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-remote-attack',
+    ASSET_BUNDLE_IDS.game,
+    'historyRemoteAttack',
+    historyRemoteAttackImage,
+    75,
+    75,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-remote-trigger',
+    ASSET_BUNDLE_IDS.game,
+    'historyRemoteTrigger',
+    historyRemoteTriggerImage,
     75,
     75,
     'game-scene'
@@ -607,10 +661,28 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.minion-frame-legendary-premium',
+    ASSET_BUNDLE_IDS.game,
+    'premiumMinionFrameLegendary',
+    premiumMinionFrameLegendaryImage,
+    136,
+    99,
+    'game-scene'
+  ),
+  asset(
     'scene.game.minion-taunt',
     ASSET_BUNDLE_IDS.game,
     'minionTaunt',
     minionTauntImage,
+    136,
+    183,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-taunt-premium',
+    ASSET_BUNDLE_IDS.game,
+    'premiumMinionTaunt',
+    premiumMinionTauntImage,
     136,
     183,
     'game-scene'
@@ -773,6 +845,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'weapon',
     weaponImage,
+    172,
+    146,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.weapon-premium',
+    ASSET_BUNDLE_IDS.game,
+    'premiumWeapon',
+    premiumWeaponImage,
     172,
     146,
     'game-scene'
@@ -1472,6 +1553,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     47,
     'shared-ui'
   ),
+  asset(
+    'ui.generic-dialog',
+    ASSET_BUNDLE_IDS.sharedUI,
+    'genericDialog',
+    genericDialogImage,
+    1237,
+    355,
+    'shared-ui'
+  ),
   ...Object.entries(HERO_ASSET_SOURCES).map(([key, source]) =>
     asset(
       `hero.${key}`,
@@ -1607,6 +1697,10 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   healIndicator: Texture
   historyLocal: Texture
   historyRemote: Texture
+  historyLocalAttack: Texture
+  historyLocalTrigger: Texture
+  historyRemoteAttack: Texture
+  historyRemoteTrigger: Texture
   historyArrow: Texture
   historyBurnCard: Texture
   historyBurnThumb: Texture
@@ -1617,8 +1711,11 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   secret: Texture
   secretRevealedScreen: Texture
   minionFrame: Texture
+  premiumMinionFrame: Texture
   minionFrameLegendary: Texture
+  premiumMinionFrameLegendary: Texture
   minionTaunt: Texture
+  premiumMinionTaunt: Texture
   minionDivineShield: Texture
   heroFrozen: Texture
   heroImmune: Texture
@@ -1637,6 +1734,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   heroArmor: Texture
   minionWillDie: Texture
   weapon: Texture
+  premiumWeapon: Texture
   minionSummonRays: Texture
   spellPlayAura: Texture
   minionPlayAura: Texture
@@ -1692,6 +1790,7 @@ export interface GameSettingsAssets {
 export interface SharedUIAssets {
   backButton: Texture
   doneButton: Texture
+  genericDialog: Texture
 }
 
 export interface CollectionAssets {

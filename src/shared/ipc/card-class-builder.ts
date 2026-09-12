@@ -59,6 +59,9 @@ export interface CardClassBuilderConfig {
       readonly secondary: CardClassOffset
     }
     readonly spell: { readonly primary: CardClassOffset }
+    readonly premium: Readonly<
+      Record<CardClassTemplate, { readonly primary: CardClassOffset }>
+    >
   }
 }
 
@@ -129,7 +132,10 @@ export function parseCardClassBuilderConfig(value: unknown): CardClassBuilderCon
     !isRecord(value.classes) ||
     !hasExactKeys(value.classes, CARD_CLASS_BUILDER_CLASSES) ||
     !isRecord(value.offsets) ||
-    !hasExactKeys(value.offsets, ['minion', 'spell'])
+    !(
+      hasExactKeys(value.offsets, ['minion', 'spell']) ||
+      hasExactKeys(value.offsets, ['minion', 'spell', 'premium'])
+    )
   ) {
     throw new Error('Invalid card class builder configuration')
   }
@@ -159,6 +165,22 @@ export function parseCardClassBuilderConfig(value: unknown): CardClassBuilderCon
     throw new Error('Invalid card class template offsets')
   }
 
+  const premium =
+    'premium' in value.offsets
+      ? value.offsets.premium
+      : { minion: { primary: { x: 0, y: 0 } }, spell: { primary: { x: 0, y: 0 } } }
+  if (!isRecord(premium) || !hasExactKeys(premium, ['minion', 'spell'])) {
+    throw new Error('Invalid premium card class offsets')
+  }
+  const parsePremiumTemplate = (
+    entry: unknown
+  ): { readonly primary: CardClassOffset } => {
+    if (!isRecord(entry) || !hasExactKeys(entry, ['primary'])) {
+      throw new Error('Invalid premium card class template offset')
+    }
+    return { primary: parseOffset(entry.primary) }
+  }
+
   return {
     version: 1,
     classes,
@@ -167,7 +189,11 @@ export function parseCardClassBuilderConfig(value: unknown): CardClassBuilderCon
         primary: parseOffset(minion.primary),
         secondary: parseOffset(minion.secondary)
       },
-      spell: { primary: parseOffset(spell.primary) }
+      spell: { primary: parseOffset(spell.primary) },
+      premium: {
+        minion: parsePremiumTemplate(premium.minion),
+        spell: parsePremiumTemplate(premium.spell)
+      }
     }
   }
 }

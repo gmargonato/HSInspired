@@ -154,13 +154,27 @@
       },
       "secondary": {
         "x": -22.4,
-        "y": -30.6
+        "y": -28.2
       }
     },
     "spell": {
       "primary": {
         "x": 0,
-        "y": 2.6
+        "y": 2
+      }
+    },
+    "premium": {
+      "minion": {
+        "primary": {
+          "x": 2,
+          "y": 0
+        }
+      },
+      "spell": {
+        "primary": {
+          "x": -2,
+          "y": 0
+        }
       }
     }
   }

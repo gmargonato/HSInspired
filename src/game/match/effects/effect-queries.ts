@@ -6,7 +6,8 @@ import type {
   OpeningPlayerState,
   OpeningCard,
   BoardMinion,
-  BoardWeapon
+  BoardWeapon,
+  BattlecryConditionFact
 } from '../opening-match-types'
 import type { PlayerId } from '../match-types'
 import type { DeterministicRng } from '../rng'
@@ -50,6 +51,64 @@ export interface EffectQueryContext {
 /** Deterministic selectors, numeric expressions, and conditions for one resolution. */
 export class EffectQueries {
   constructor(private readonly context: EffectQueryContext) {}
+
+  private conditionHand(
+    player: OpeningPlayerState,
+    frame: EffectFrame
+  ): readonly OpeningCard[] {
+    return frame.prospectiveCardPlay && player.participantId === frame.controllerId
+      ? player.hand.filter((card) => card.instanceId !== frame.source.instanceId)
+      : player.hand
+  }
+
+  /** Whitelisted own-hand checks cannot inspect an opponent's hidden cards or consume RNG. */
+  previewHandCondition(
+    value: unknown,
+    frame: EffectFrame,
+    effectIndex: number
+  ): BattlecryConditionFact {
+    const unknown: BattlecryConditionFact = {
+      effectIndex,
+      status: 'unknown',
+      requirement:
+        'See authored battlecry condition; not evaluated by this hand-only preview.'
+    }
+    if (
+      !isRecord(value) ||
+      value.type !== 'player-has-card-in-hand' ||
+      (value.player !== undefined && value.player !== 'self') ||
+      Object.keys(value).some((key) => !['type', 'player', 'filter'].includes(key))
+    )
+      return unknown
+    const filter = value.filter
+    if (
+      filter !== undefined &&
+      (!isRecord(filter) ||
+        Object.keys(filter).some((key) => key !== 'tribe') ||
+        (filter.tribe !== undefined && typeof filter.tribe !== 'string'))
+    )
+      return unknown
+    const player = this.context.player(frame.controllerId)
+    const qualifying = this.conditionHand(player, frame).filter((card) =>
+      this.matchesFilter(
+        {
+          instanceId: card.instanceId,
+          kind: 'card',
+          participantId: player.participantId,
+          zone: 'hand',
+          cardId: card.cardId
+        },
+        filter,
+        frame
+      )
+    )
+    return {
+      effectIndex,
+      status: this.conditionMatches(value, frame) ? 'met' : 'not-met',
+      requirement: `Hold ${isRecord(filter) && filter.tribe ? 'a ' + String(filter.tribe) : 'a card'} in your hand after playing this card; board minions do not count.`,
+      qualifyingCardInstanceIds: qualifying.map((card) => card.instanceId)
+    }
+  }
 
   frameFor(
     source: EntityRef,
@@ -835,12 +894,7 @@ export class EffectQueries {
       targetPlayer.participantId === frame.controllerId
     const cardsInConditionHand = (
       targetPlayer: OpeningPlayerState
-    ): readonly OpeningCard[] =>
-      isProspectiveController(targetPlayer)
-        ? targetPlayer.hand.filter(
-            (card) => card.instanceId !== frame.source.instanceId
-          )
-        : targetPlayer.hand
+    ): readonly OpeningCard[] => this.conditionHand(targetPlayer, frame)
     const cardsPlayedEarlierThisTurn = Math.max(
       0,
       (this.context.draft.history?.cardsPlayedThisTurn.length ?? 0) -

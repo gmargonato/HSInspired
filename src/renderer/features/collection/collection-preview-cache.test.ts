@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { Container } from 'pixi.js'
+import { isArtworkVisible } from '../../rendering/effects/premium-artwork-breath'
 import {
   COLLECTION_PREVIEW_CACHE_OPTIONS,
   setCollectionPreviewCached
@@ -15,6 +17,29 @@ function cacheTarget(initiallyCached = false) {
 }
 
 describe('collection preview cache', () => {
+  it('pauses grid artwork behind a preview and resumes after closing it', () => {
+    const stage = new Container()
+    const collection = new Container()
+    const artwork = new Container()
+    const preview = new Container()
+    const previewArtwork = new Container()
+    stage.addChild(collection, preview)
+    collection.addChild(artwork)
+    preview.addChild(previewArtwork)
+    try {
+      expect(isArtworkVisible(artwork)).toBe(true)
+      setCollectionPreviewCached(collection, true)
+      expect(isArtworkVisible(artwork)).toBe(false)
+      expect(isArtworkVisible(previewArtwork)).toBe(true)
+      setCollectionPreviewCached(collection, false)
+      expect(isArtworkVisible(artwork)).toBe(true)
+      collection.visible = false
+      expect(isArtworkVisible(artwork)).toBe(false)
+    } finally {
+      stage.destroy({ children: true })
+    }
+  })
+
   it('enables a bounded static texture once', () => {
     const target = cacheTarget()
 

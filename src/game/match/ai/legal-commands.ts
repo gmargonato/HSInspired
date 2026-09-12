@@ -3,7 +3,6 @@ import type {
   CardPlayTargetRef,
   OpeningMatchAnalysis,
   OpeningMatchCommand,
-  OpeningMatchState,
   PlayCardInput
 } from '../opening-match-types'
 import type { PlayerId } from '../match-types'
@@ -55,10 +54,22 @@ function targetAssignments(input: PlayCardInput): readonly CardPlayTargetRef[][]
 
 /** Produces every command the engine currently accepts for this player. */
 export function enumerateLegalCommands(
-  match: OpeningMatchAnalysis,
+  match: Pick<OpeningMatchAnalysis, 'getState' | 'getPlayInput' | 'getLegality'>,
   participantId: PlayerId
 ): readonly OpeningMatchCommand[] {
   const state = match.getState()
+  if (state.phase === 'ended' || state.pendingResolution) return []
+  if (state.phase === 'mulligan') {
+    const player = state.players.find((entry) => entry.participantId === participantId)
+    if (!player || player.mulliganConfirmed) return []
+    return Array.from({ length: 2 ** player.hand.length }, (_, mask) => ({
+      type: 'confirm-mulligan' as const,
+      participantId,
+      replaceInstanceIds: player.hand
+        .filter((_card, index) => (mask & (1 << index)) !== 0)
+        .map((card) => card.instanceId)
+    }))
+  }
   if (state.pendingDiscover?.participantId === participantId) {
     return state.pendingDiscover.candidates.map((card) => ({
       type: 'choose-discover-card',
@@ -75,6 +86,12 @@ export function enumerateLegalCommands(
     }))
   }
 
+  if (
+    state.pendingDiscover ||
+    state.pendingCardChoice ||
+    state.activePlayerId !== participantId
+  )
+    return []
   const player = state.players.find(
     (candidate) => candidate.participantId === participantId
   )
@@ -139,42 +156,5 @@ export function enumerateLegalCommands(
   if (legality.canEndTurn) commands.push({ type: 'end-turn', participantId })
   return commands.sort((left, right) =>
     canonicalCommandKey(left).localeCompare(canonicalCommandKey(right))
-  )
-}
-
-/** Removes copy-identical hand actions without collapsing different targets. */
-export function canonicalizeEquivalentRootActions<
-  T extends Readonly<{
-    readonly actionId: string
-    readonly command: OpeningMatchCommand
-  }>
->(state: OpeningMatchState, roots: readonly T[]): readonly T[] {
-  const seen = new Set<string>()
-  return roots.filter((root) => {
-    const command = root.command
-    let key = canonicalCommandKey(command)
-    if (command.type === 'play-card') {
-      const card = state.players
-        .find((player) => player.participantId === command.participantId)
-        ?.hand.find((candidate) => candidate.instanceId === command.cardInstanceId)
-      if (card) {
-        key = stable({
-          ...command,
-          cardInstanceId: { cardId: card.cardId, currentCost: card.currentCost }
-        })
-      }
-    }
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-export function activeParticipant(state: OpeningMatchState): PlayerId | null {
-  if (state.phase !== 'turns') return null
-  return (
-    state.pendingDiscover?.participantId ??
-    state.pendingCardChoice?.participantId ??
-    state.activePlayerId
   )
 }

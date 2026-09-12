@@ -1,12 +1,11 @@
+import { describeAiEvents } from '../../../game/match/ai/event-narrative'
 import type { Deck } from '../../../game/decks'
 import type { JsonObject } from '../../../shared/ipc/ai'
 import {
   createTurnMatch,
   type OpeningMatchAnalysis,
   type AiObservation,
-  type OpeningMatchEvent,
   type OpeningMatchPublicEvent,
-  type OpeningMatchPublicState,
   type TurnMatchInstance,
   type TurnMatchResult,
   type TurnMatchState
@@ -14,57 +13,6 @@ import {
 import type { MatchSetup, PlayerId } from '../../../game/match'
 import type { MatchRecorder } from './match-recorder'
 import { captureMatchCommand, captureMatchStart } from './match-log-capture'
-
-function delayedAiEffects(
-  events: readonly OpeningMatchEvent[],
-  participantId: PlayerId,
-  sourceParticipantId: PlayerId | undefined,
-  commandType: string,
-  beforeTurnNumber: number,
-  afterTurnNumber: number
-): JsonObject | undefined {
-  let cardsDrawn = 0
-  let cardsBurned = 0
-  let fatigueDamage = 0
-  const eventTypes = new Set<string>()
-  const drawnCardIds: string[] = []
-  const burnedCardIds: string[] = []
-
-  for (const event of events) {
-    if (!('participantId' in event) || event.participantId !== participantId) continue
-    switch (event.type) {
-      case 'card-drawn':
-        cardsDrawn += 1
-        eventTypes.add(event.type)
-        drawnCardIds.push(String(event.card.cardId))
-        break
-      case 'card-burned':
-        cardsBurned += 1
-        eventTypes.add(event.type)
-        burnedCardIds.push(String(event.card.cardId))
-        break
-      case 'fatigue':
-        fatigueDamage += Math.max(0, event.amount)
-        eventTypes.add(event.type)
-        break
-    }
-  }
-
-  if (cardsDrawn === 0 && cardsBurned === 0 && fatigueDamage === 0) return undefined
-  return {
-    participantId,
-    ...(sourceParticipantId ? { sourceParticipantId } : {}),
-    commandType,
-    beforeTurnNumber,
-    afterTurnNumber,
-    eventTypes: [...eventTypes],
-    cardsDrawn,
-    cardsBurned,
-    fatigueDamage,
-    ...(drawnCardIds.length ? { drawnCardIds } : {}),
-    ...(burnedCardIds.length ? { burnedCardIds } : {})
-  }
-}
 
 export interface GameBoardSessionOptions {
   readonly recorder?: MatchRecorder
@@ -84,6 +32,38 @@ export class GameBoardSession {
   readonly localPlayerNumber: 1 | 2
   readonly remotePlayerNumber: 1 | 2
   private readonly aiObservedEvents: OpeningMatchPublicEvent[] = []
+  private readonly listeners = new Set<(result: TurnMatchResult) => void>()
+  private readonly revealedCards = new Map<string, string>()
+  private eventOffset = 0
+
+  subscribe(listener: (result: TurnMatchResult) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  acknowledgeAiEvents(cursor: number): void {
+    const remove = Math.max(
+      0,
+      Math.min(cursor - this.eventOffset, this.aiObservedEvents.length - 64)
+    )
+    this.aiObservedEvents.splice(0, remove)
+    this.eventOffset += remove
+  }
+  getAiEventCursor(): number {
+    return this.eventOffset + this.aiObservedEvents.length
+  }
+  getAiEventsSince(cursor: number): readonly OpeningMatchPublicEvent[] {
+    return this.aiObservedEvents.slice(Math.max(0, cursor - this.eventOffset))
+  }
+  getAiPublicHistory(): JsonObject {
+    return {
+      revealedCards: Object.fromEntries(this.revealedCards),
+      recentEvents: describeAiEvents(
+        this.aiObservedEvents.slice(-64),
+        this.remoteParticipantId
+      )
+    }
+  }
 
   constructor(options: GameBoardSessionOptions) {
     const match = createTurnMatch(options.setup, options.decks)
@@ -113,14 +93,6 @@ export class GameBoardSession {
         const before = logState
         const result = match.dispatch(command)
         logState = result.state
-        const input =
-          command && typeof command === 'object'
-            ? (command as { readonly participantId?: unknown; readonly type?: unknown })
-            : {}
-        const commandParticipantId =
-          typeof input.participantId === 'string'
-            ? (input.participantId as PlayerId)
-            : undefined
         options.recorder?.record(
           'events',
           'command',
@@ -132,22 +104,21 @@ export class GameBoardSession {
             ? options.recorder?.decisionId
             : ''
         )
-        if (result.accepted && commandParticipantId !== remote.participantId) {
-          const effects = delayedAiEffects(
-            result.events,
-            remote.participantId,
-            commandParticipantId,
-            typeof input.type === 'string' ? input.type : 'unknown',
-            before.turnNumber,
-            result.state.turnNumber
-          )
-          if (effects)
-            options.recorder?.record('decisions', 'boundary-effects', effects, '')
-        }
         if (result.accepted) {
-          this.aiObservedEvents.push(
-            ...(match.getPublicEvents?.(remote.participantId, result.events) ?? [])
-          )
+          const events = (
+            match.getPublicEvents?.(remote.participantId, result.events) ?? []
+          ).filter((event) => event.type !== 'effect-resolved')
+          this.aiObservedEvents.push(...events)
+          const collect = (value: unknown): void => {
+            if (!value || typeof value !== 'object') return
+            const entry = value as Record<string, unknown>
+            const id = entry.instanceId ?? entry.id
+            if (typeof id === 'string' && typeof entry.cardId === 'string')
+              this.revealedCards.set(id, entry.cardId)
+            Object.values(entry).forEach(collect)
+          }
+          collect(events)
+          for (const listener of this.listeners) listener(result)
         }
         if (result.accepted && result.state.phase === 'ended')
           options.recorder?.finish('completed')
@@ -177,23 +148,11 @@ export class GameBoardSession {
     return this.match.dispatch(command)
   }
 
-  getAiPublicState(): OpeningMatchPublicState {
-    const state = this.match.getPublicState?.(this.remoteParticipantId)
-    if (!state) throw new Error('The match engine does not expose public AI state.')
-    return state
-  }
-
   getAiObservation(): AiObservation {
     const observation = this.match.getAiObservation?.(this.remoteParticipantId, 'fair')
     if (!observation)
       throw new Error('The match engine does not expose AI observations.')
     return observation
-  }
-
-  getAiObservedEvents(limit?: number): readonly OpeningMatchPublicEvent[] {
-    return limit === undefined
-      ? [...this.aiObservedEvents]
-      : this.aiObservedEvents.slice(-Math.max(0, limit))
   }
 
   findPlayer(state: TurnMatchState, participantId: PlayerId) {

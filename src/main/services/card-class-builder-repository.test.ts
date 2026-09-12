@@ -23,6 +23,13 @@ describe('CardClassBuilderRepository', () => {
     const first = parseCardClassBuilderConfig(rawConfig)
     const second = parseCardClassBuilderConfig({
       ...first,
+      offsets: {
+        ...first.offsets,
+        premium: {
+          minion: { primary: { x: 12.5, y: -7 } },
+          spell: { primary: { x: -3, y: 8 } }
+        }
+      },
       classes: {
         ...first.classes,
         Druid: {

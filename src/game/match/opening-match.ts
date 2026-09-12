@@ -679,7 +679,9 @@ export function createOpeningMatch(
       mana: {
         available: 0,
         maximum:
-          participant.controllerKind === 'ai' ? AI_BONUS_SETTINGS.startingMana : 0
+          participant.controllerKind === 'ai'
+            ? AI_BONUS_SETTINGS.startingManaCrystals
+            : 0
       },
       deckHasNoDuplicates: deckDefinitionHasNoDuplicates(deck),
       heroPower: {
@@ -1015,7 +1017,7 @@ export function createOpeningMatch(
             id: pending.sourceCardInstanceId,
             participantId: command.participantId,
             kind: 'card',
-            cardId: null
+            cardId: pending.publicSourceCardId ?? null
           },
           outcomes: [
             {
@@ -1068,8 +1070,9 @@ export function createOpeningMatch(
         player = removed.player
         continue
       }
-      const destination =
-        candidate.instanceId === command.cardInstanceId ? 'hand' : 'discarded'
+      const isSelected = candidate.instanceId === command.cardInstanceId
+      const burned = isSelected && player.hand.length >= MAX_HAND_SIZE
+      const destination = isSelected && !burned ? 'hand' : 'discarded'
       const moved = moveCardForPlayer(player, candidate.instanceId, destination)
       if (!moved || moved.from !== 'revealed')
         return reject(
@@ -1078,11 +1081,13 @@ export function createOpeningMatch(
           'A Discover candidate is no longer available.'
         )
       player = moved.player
-      if (destination === 'hand') {
+      if (isSelected) {
         events.push({
-          type: 'card-drawn',
+          type: burned ? 'card-burned' : 'card-drawn',
           participantId: command.participantId,
-          card: moved.card
+          card: burned
+            ? { ...moved.card, zone: 'discarded', revealed: false }
+            : moved.card
         })
       }
     }
@@ -1121,7 +1126,7 @@ export function createOpeningMatch(
           id: pending.sourceCardInstanceId,
           participantId: command.participantId,
           kind: 'card',
-          cardId: null
+          cardId: pending.publicSourceCardId ?? null
         },
         outcomes: [
           {

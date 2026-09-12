@@ -9,14 +9,18 @@ import {
   unlink
 } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { JsonObject, JsonValue } from '../../shared/ipc/ai'
+import {
+  AI_LOG_SCHEMA_VERSION,
+  type JsonObject,
+  type JsonValue
+} from '../../shared/ipc/ai'
 import type { MatchLogRecord, MatchLogStatus } from '../../shared/ipc/match-logs'
 import { MatchLogTranscript } from './match-log-transcript'
-import { CompactAiLog, compactAiRecord } from './compact-ai-log'
+import { AiLog } from './ai-log'
+import { AiConversationTranscript } from './ai-conversation-transcript'
 
 const FLUSH_INTERVAL_MS = 250
 const MAX_PENDING_RECORDS = 256
-const AI_LOG_SCHEMA_VERSION = 5
 
 interface PendingRecord {
   record: MatchLogRecord & { sequence: number }
@@ -33,7 +37,8 @@ interface Recording {
   sequence: number
   summary: Record<string, JsonValue>
   transcript: MatchLogTranscript
-  ai: CompactAiLog
+  conversation: AiConversationTranscript
+  ai: AiLog
   pending: PendingRecord[]
   timer?: ReturnType<typeof setTimeout>
   flushQueued: boolean
@@ -95,6 +100,8 @@ export class MatchLogRepository {
         }
         if (
           (summary.schemaVersion === 4 ||
+            summary.schemaVersion === 5 ||
+            summary.schemaVersion === 6 ||
             summary.schemaVersion === AI_LOG_SCHEMA_VERSION) &&
           summary.status === 'in-progress'
         ) {
@@ -134,12 +141,16 @@ export class MatchLogRepository {
       recordingIncomplete: false,
       participants: [],
       decisions: [],
-      boundaryEffects: [],
       ...(typeof (metadata.aiConfig as JsonObject | undefined)?.modelId === 'string'
         ? { model: (metadata.aiConfig as JsonObject).modelId }
         : {})
     }
     await writeFile(join(directory, 'match.txt'), 'Match started.\n', { flag: 'wx' })
+    await writeFile(
+      join(directory, 'ai-conversation.txt'),
+      'AI conversation\nA readable view of the context supplied, questions, choices, and results.\nAI explanations are returned explanations, not private internal reasoning.\nPrevious conversation is retained within the configured limits and is not repeated here.\n\n',
+      { flag: 'wx' }
+    )
     await atomicJson(directory, 'ai.json', summary)
     this.recordings.set(id, {
       id,
@@ -150,7 +161,8 @@ export class MatchLogRepository {
       sequence: 0,
       summary,
       transcript: new MatchLogTranscript(),
-      ai: new CompactAiLog(summary),
+      ai: new AiLog(summary),
+      conversation: new AiConversationTranscript(),
       pending: [],
       flushQueued: false
     })
@@ -190,8 +202,7 @@ export class MatchLogRepository {
   append(id: string, input: MatchLogRecord): Promise<void> {
     const recording = this.get(id)
     if (recording.failure) return Promise.reject(new Error(recording.failure))
-    const record = compactAiRecord(input)
-    if (!record) return Promise.resolve()
+    const record = input
     if (recording.pending.length >= MAX_PENDING_RECORDS) {
       recording.failure =
         'Match logging backlog exceeded its limit; recording is incomplete.'
@@ -249,9 +260,11 @@ export class MatchLogRepository {
     recording: Recording,
     records: Array<MatchLogRecord & { sequence: number }>
   ): Promise<void> {
+    const conversation: string[] = []
     const text: string[] = []
     for (const snapshot of records) {
       text.push(recording.transcript.format(snapshot))
+      conversation.push(recording.conversation.format(snapshot))
       if (snapshot.kind === 'match-start') {
         recording.summary.participants = snapshot.data.participants ?? []
         continue
@@ -275,6 +288,19 @@ export class MatchLogRepository {
       const execution = snapshot.kind === 'command' && data.actor === remote
       if (execution || snapshot.stream === 'decisions') recording.ai.accept(snapshot)
     }
+    const decisions = records.filter((entry) => entry.stream === 'decisions')
+    if (decisions.length && process.env['HSINSPIRED_AI_FULL_TRANSCRIPT'] === '1')
+      await appendFile(
+        join(recording.directory, 'decisions.jsonl'),
+        decisions.map((entry) => serializeMatchLog(entry)).join('\n') + '\n',
+        'utf8'
+      )
+    if (conversation.some(Boolean))
+      await appendFile(
+        join(recording.directory, 'ai-conversation.txt'),
+        conversation.join(''),
+        'utf8'
+      )
     if (text.some(Boolean))
       await appendFile(join(recording.directory, 'match.txt'), text.join(''), 'utf8')
     if (records.length) await this.writeSummary(recording)
@@ -312,7 +338,6 @@ export class MatchLogRepository {
           'utf8'
         )
       }
-      recording.ai.finish(Boolean(recording.failure))
       await this.writeSummary(recording)
     })
   }

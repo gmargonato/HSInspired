@@ -1,31 +1,42 @@
 import { readFile } from 'node:fs/promises'
+import {
+  AI_REQUEST_LIMITS,
+  isAiReasoningEffort,
+  type AiReasoningEffort
+} from '../../shared/ipc/ai'
 
-export type AiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh'
-
-export interface AzureOpenAiConfig {
+interface AiProviderConfigBase {
   readonly enabled: boolean
+  readonly modelId: string
+  readonly reasoningEffort: AiReasoningEffort
+  readonly maxCompletionTokens: number
+  readonly apiKey: string
+  readonly requestTimeoutMs?: number
+  readonly maxContextBytes?: number
+}
+
+export interface AzureOpenAiConfig extends AiProviderConfigBase {
   readonly provider: 'azure-openai'
-  readonly modelId: 'gpt-5.4-nano'
   readonly deploymentName: string
   readonly endpoint: string
   readonly apiVersion: string
-  readonly planTimeoutMs: number
-  readonly decisionTimeoutMs: number
-  readonly reasoningEffort: AiReasoningEffort
-  readonly planMaxCompletionTokens: number
-  readonly decisionMaxCompletionTokens: number
-  readonly prompts: Readonly<{
-    readonly system: string
-    readonly deckPlan: string
-    readonly decision: string
-  }>
-  readonly debug: boolean
-  readonly apiKey: string
 }
+
+export interface OpenRouterConfig extends AiProviderConfigBase {
+  readonly provider: 'openrouter'
+}
+
+export type AiProviderConfig = AzureOpenAiConfig | OpenRouterConfig
 
 interface AiConfigPaths {
   readonly configPath: string
-  readonly keyPaths: readonly string[]
+  readonly azureKeyPaths: readonly string[]
+  readonly openRouterKeyPaths: readonly string[]
+}
+
+export interface AiConfigCredentials {
+  readonly azureOpenAi: string
+  readonly openRouter: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,72 +70,82 @@ function boundedInteger(
   return value as number
 }
 
-function reasoningEffort(value: unknown): AiReasoningEffort {
-  if (!['none', 'low', 'medium', 'high', 'xhigh'].includes(String(value))) {
-    throw new Error('AI configuration reasoningEffort is invalid.')
-  }
-  return value as AiReasoningEffort
-}
-
-export function parseAzureOpenAiConfig(
+function parseProvider(
   value: unknown,
-  apiKey: string
-): AzureOpenAiConfig {
-  if (!isRecord(value)) throw new Error('AI configuration must be a JSON object.')
-  if (value['provider'] !== 'azure-openai') {
-    throw new Error('AI configuration provider must be azure-openai.')
+  credentials: AiConfigCredentials,
+  index: number
+): AiProviderConfig {
+  if (!isRecord(value)) {
+    throw new Error(`AI configuration providers[${index}] must be an object.`)
   }
-  if (requiredString(value, 'modelId').toLowerCase() !== 'gpt-5.4-nano') {
-    throw new Error('AI configuration modelId must be GPT-5.4-nano.')
+  if (typeof value['enabled'] !== 'boolean') {
+    throw new Error(`AI configuration providers[${index}].enabled must be a boolean.`)
   }
-  const deploymentName = requiredString(value, 'deploymentName')
-  if (!deploymentName.toLowerCase().includes('gpt-5.4-nano')) {
-    throw new Error('AI deploymentName must identify GPT-5.4-nano.')
+  if (!isAiReasoningEffort(value['reasoningEffort'])) {
+    throw new Error(
+      `AI configuration providers[${index}].reasoningEffort must be none, low, medium, high, or xhigh.`
+    )
   }
-  if (typeof value['enabled'] !== 'boolean' || typeof value['debug'] !== 'boolean') {
-    throw new Error('AI configuration enabled and debug must be booleans.')
-  }
-  const prompts = value['prompts']
-  if (!isRecord(prompts)) throw new Error('AI configuration prompts must be an object.')
-  const endpoint = new URL(requiredString(value, 'endpoint'))
-  if (endpoint.protocol !== 'https:') {
-    throw new Error('AI configuration endpoint must use HTTPS.')
-  }
-  return {
+  const common = {
     enabled: value['enabled'],
-    provider: 'azure-openai',
-    modelId: 'gpt-5.4-nano',
-    deploymentName,
-    endpoint: endpoint.toString(),
-    apiVersion: requiredString(value, 'apiVersion'),
-    planTimeoutMs: boundedInteger(value, 'planTimeoutMs', 1_000, 120_000),
-    decisionTimeoutMs: boundedInteger(value, 'decisionTimeoutMs', 1_000, 120_000),
-    reasoningEffort: reasoningEffort(value['reasoningEffort']),
-    planMaxCompletionTokens: boundedInteger(
-      value,
-      'planMaxCompletionTokens',
-      256,
-      16_384
-    ),
-    decisionMaxCompletionTokens: boundedInteger(
-      value,
-      'decisionMaxCompletionTokens',
-      256,
-      16_384
-    ),
-    prompts: {
-      system: requiredString(prompts, 'system'),
-      deckPlan: requiredString(prompts, 'deckPlan'),
-      decision: requiredString(prompts, 'decision')
-    },
-    debug: value['debug'],
-    apiKey: apiKey.trim()
+    modelId: requiredString(value, 'modelId'),
+    reasoningEffort: value['reasoningEffort'],
+    maxCompletionTokens: boundedInteger(value, 'maxCompletionTokens', 1, 128_000),
+    requestTimeoutMs:
+      value.requestTimeoutMs === undefined
+        ? AI_REQUEST_LIMITS.timeoutMs
+        : boundedInteger(value, 'requestTimeoutMs', 1000, 600_000),
+    maxContextBytes:
+      value.maxContextBytes === undefined
+        ? AI_REQUEST_LIMITS.maxContextBytes
+        : boundedInteger(value, 'maxContextBytes', 1000, 200_000)
   }
+  if (value['provider'] === 'azure-openai') {
+    const endpoint = new URL(requiredString(value, 'endpoint'))
+    if (endpoint.protocol !== 'https:') {
+      throw new Error('AI configuration endpoint must use HTTPS.')
+    }
+    return {
+      ...common,
+      provider: 'azure-openai',
+      deploymentName: requiredString(value, 'deploymentName'),
+      endpoint: endpoint.toString(),
+      apiVersion: requiredString(value, 'apiVersion'),
+      apiKey: credentials.azureOpenAi.trim()
+    }
+  }
+  if (value['provider'] === 'openrouter') {
+    return {
+      ...common,
+      provider: 'openrouter',
+      apiKey: credentials.openRouter.trim()
+    }
+  }
+  throw new Error(
+    `AI configuration providers[${index}].provider must be azure-openai or openrouter.`
+  )
 }
 
-async function readFirstKey(paths: readonly string[]): Promise<string> {
-  const environmentKey = process.env['HSINSPIRED_AI_API_KEY']?.trim()
-  if (environmentKey) return environmentKey
+/** Validates every profile and returns the first enabled one. */
+export function parseAiConfig(
+  value: unknown,
+  credentials: AiConfigCredentials
+): AiProviderConfig | null {
+  if (!isRecord(value) || !Array.isArray(value['providers'])) {
+    throw new Error('AI configuration must contain a providers array.')
+  }
+  const providers = value['providers'].map((provider, index) =>
+    parseProvider(provider, credentials, index)
+  )
+  return providers.find((provider) => provider.enabled) ?? null
+}
+
+async function readFirstKey(
+  paths: readonly string[],
+  providerEnvironmentName: string
+): Promise<string> {
+  const providerKey = process.env[providerEnvironmentName]?.trim()
+  if (providerKey) return providerKey
   for (const path of paths) {
     try {
       const key = (await readFile(path, 'utf8')).trim()
@@ -133,12 +154,12 @@ async function readFirstKey(paths: readonly string[]): Promise<string> {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
   }
-  return ''
+  return process.env['HSINSPIRED_AI_API_KEY']?.trim() ?? ''
 }
 
-export async function loadAzureOpenAiConfig(
+export async function loadAiConfig(
   paths: AiConfigPaths
-): Promise<AzureOpenAiConfig> {
+): Promise<AiProviderConfig | null> {
   let parsed: unknown
   try {
     parsed = JSON.parse(await readFile(paths.configPath, 'utf8'))
@@ -147,5 +168,11 @@ export async function loadAzureOpenAiConfig(
       cause: error
     })
   }
-  return parseAzureOpenAiConfig(parsed, await readFirstKey(paths.keyPaths))
+  const selected = parseAiConfig(parsed, { azureOpenAi: '', openRouter: '' })
+  if (!selected) return null
+  const apiKey =
+    selected.provider === 'azure-openai'
+      ? await readFirstKey(paths.azureKeyPaths, 'HSINSPIRED_AZURE_OPENAI_API_KEY')
+      : await readFirstKey(paths.openRouterKeyPaths, 'HSINSPIRED_OPENROUTER_API_KEY')
+  return { ...selected, apiKey }
 }
