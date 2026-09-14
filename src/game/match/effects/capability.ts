@@ -168,6 +168,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'copy',
       'counter-event',
       'damage',
+      'damage-group',
       'destroy',
       'destroy-all-but-highest-attack',
       'destroy-and-gain-stats',
@@ -288,6 +289,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'turn-started'
     ],
     condition: [
+      'player-turn',
       'card-died-this-game',
       'board-has-minion-count',
       'event-player-had-minion-count',

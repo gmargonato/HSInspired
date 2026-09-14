@@ -80,6 +80,17 @@ export class GameHandDrag {
   setOutlineEnabled(enabled: boolean): void {
     this.dragPerspective?.setOutlineEnabled(enabled)
   }
+
+  setDropAllowed(allowed: boolean): void {
+    if (this.draggingIndex === null) return
+    const entry = this.context.entryAt(this.draggingIndex)
+    if (!entry) return
+    this.dragPerspective?.setOutlinePalette(
+      allowed && !this.dragReturning && entry.slot.isPlayableOutlineEnabled()
+        ? 'blue'
+        : entry.slot.getPlayableOutlinePalette()
+    )
+  }
   /** Benchmark movement does not synthesize a browser gesture. */
   moveForBenchmark(pointer: HandPointer): void {
     this.dragPointer = pointer
@@ -144,7 +155,7 @@ export class GameHandDrag {
     this.context.beginTargetGesture(entry, pointer, pointerId)
     // Start from the card's current (hovered) position so the pickup glides up
     // toward the cursor instead of snapping back to the resting baseline.
-    this.dragState = initialDragState(entry.slot.x, entry.slot.y)
+    this.dragState = initialDragState(entry.slot.x, entry.slot.y, entry.slot.scale.x)
     this.dragPerspective?.destroy()
     this.dragPerspective = null
     const outlineEnabled = entry.slot.isPlayableOutlineEnabled()
@@ -153,9 +164,8 @@ export class GameHandDrag {
       this.dragPerspective = new HandCardPerspective(this.renderer, entry.slot.card, {
         outlineTexture: entry.slot.playableOutlineTexture,
         outlineEnabled,
-        // Playable cards switch to blue once selected while retaining the
-        // normal or conditionally enhanced motion preset from the hand.
-        outlinePalette: 'blue',
+        // Keep the hand color until the pointer reaches a valid drop area.
+        outlinePalette: entry.slot.getPlayableOutlinePalette(),
         outlinePreset: entry.slot.getPlayableOutlinePreset()
       })
     } catch (error) {
@@ -172,19 +182,13 @@ export class GameHandDrag {
       ease: 'power2.out',
       overwrite: 'auto'
     })
-    this.animations.to(entry.slot.scale, {
-      x: DEFAULT_HAND_DRAG.dragScale,
-      y: DEFAULT_HAND_DRAG.dragScale,
-      duration: OPENING_TIMING.hover,
-      ease: 'power2.out',
-      overwrite: 'auto'
-    })
     entry.slot.zIndex = 1000
 
     const tick = (_time: number, deltaMS: number): void => this.stepDragFrame(deltaMS)
     this.dragTick = tick
     gsap.ticker.add(tick)
     this.context.syncMana()
+    this.context.updateBoardPreview(pointer)
   }
 
   private stepDragFrame(deltaMS: number): void {
@@ -207,6 +211,7 @@ export class GameHandDrag {
       DEFAULT_HAND_DRAG
     )
     entry.slot.position.set(this.dragState.x, this.dragState.y)
+    entry.slot.scale.set(this.dragState.scale)
     this.dragPerspective?.setTarget({
       x: -this.dragState.tiltX,
       y: -this.dragState.tiltY
@@ -216,6 +221,7 @@ export class GameHandDrag {
 
   end(): void {
     if (this.draggingIndex === null || this.dragReturning) return
+    this.setDropAllowed(false)
     const index = this.draggingIndex
     this.dragPointer = null
     this.dragStartPointer = null

@@ -13,6 +13,7 @@ import {
   HeroPowerIconView
 } from '../../rendering/hero-powers/hero-power-presentation'
 import { Actor } from '../../ui/components/actor'
+import { attachShadow } from '../../rendering/shadows/shadow-caster'
 
 /** Feature-local flip timing for the hero power reveal/exhaust animations. */
 const FLIP_TIMING = {
@@ -171,6 +172,15 @@ export class HeroPowerView extends Actor {
     this.backFace.label = 'hero-power-back'
     this.card.addChild(this.frontFace, this.backFace)
     this.addChild(this.card)
+    attachShadow(
+      this,
+      {
+        x: -HERO_POWER_ICON_CANVAS.width * cardPlacement.anchor.x,
+        y: -HERO_POWER_ICON_CANVAS.height * cardPlacement.anchor.y,
+        ...HERO_POWER_ICON_CANVAS
+      },
+      { visual: this.card, shape: 'ellipse' }
+    )
     this.baseScaleX = this.card.scale.x
 
     this.manaCrystal = new Sprite(options.manaTexture)

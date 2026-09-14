@@ -1,4 +1,6 @@
 import { PresentationQueue } from './presentation-queue'
+import { randomSpellPresentationStates } from './random-spell-presentation'
+import type { RemoteCardPlayPreview } from './remote-card-play-preview'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   Container,
@@ -29,7 +31,10 @@ import { TargetGestureController } from './target-gesture'
 import { asCardId } from '../../../game/content/cards'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { OPENING_TIMING } from './game-presentation-timing'
-import { layoutHand } from './hand-layout'
+import { DEFAULT_HAND_LAYOUT, layoutHand } from './hand-layout'
+import { attachShadow } from '../../rendering/shadows/shadow-caster'
+import { layoutBoardRow } from './board-layout'
+import type { BoardPositionController } from './board-position-controller'
 import type { HandEntry } from './game-hand-entry'
 import type { PlayCardInput } from '../../../game/match'
 import {
@@ -40,7 +45,15 @@ import type { MinionPreviewPresentation } from './game-card-targeting-types'
 import type { CardSelectionOverlay } from './card-selection-overlay'
 
 function mulliganSlot(instanceId: string): GameCardSlot {
-  return Object.assign(new Container(), {
+  const slot = new Container()
+  return Object.assign(slot, {
+    shadow: attachShadow(
+      slot,
+      { x: 0, y: 0, width: 620, height: 900 },
+      {
+        restingScale: DEFAULT_HAND_LAYOUT.cardScale
+      }
+    ),
     instanceId,
     setSelected: vi.fn(),
     setPlayableOutlineEnabled: vi.fn(),
@@ -83,7 +96,898 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('random spell playback', () => {
+  function playback() {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      hand: GameHandView
+      presentAcceptedMinionPlay(
+        entry: HandEntry,
+        result: Extract<ReturnType<GameBoardSession['dispatch']>, { accepted: true }>
+      ): Promise<void>
+      randomSpellRevision: number | null
+      randomSpellState: OpeningMatchState | null
+      presentationState(): OpeningMatchState
+      dispatchCommand(command: unknown): ReturnType<GameBoardSession['dispatch']>
+      enqueuePresentation(
+        state: OpeningMatchState,
+        job: () => Promise<void>
+      ): Promise<void>
+      presentResolutionEvents(events: readonly OpeningMatchEvent[]): Promise<void>
+      presentEffectResolved(event: OpeningMatchEvent): Promise<void>
+      reconcileRandomSpellState(state: OpeningMatchState): Promise<void>
+      reconcileWeaponViews(state: OpeningMatchState): Promise<void>
+      reconcileEffectMovement(state: OpeningMatchState): Promise<void>
+      syncBoardMinionPresentation(state: OpeningMatchState): void
+      syncBoardHeroPresentation(state: OpeningMatchState): void
+      syncBoardAttackability(state: OpeningMatchState): void
+      syncTurnHud(state: OpeningMatchState): void
+      syncTurnControls(state: OpeningMatchState): void
+      waitForResolutionIdle(): Promise<void>
+      remoteCardPlayPreview: RemoteCardPlayPreview
+    }
+    const state = internal.session.getState()
+    const owner = internal.session.localParticipantId
+    const before = { ...state, revision: state.revision + 1 }
+    const middle = { ...before, turnNumber: 10 }
+    const after = { ...before, turnNumber: 20 }
+    const boundary = (
+      type: 'random-spell-started' | 'random-spell-completed',
+      castId: string,
+      snapshot: OpeningMatchState
+    ): OpeningMatchEvent => ({
+      type,
+      castId,
+      state: snapshot,
+      participantId: owner,
+      cardId: asCardId('basic_hellfire')
+    })
+    const effect: OpeningMatchEvent = {
+      type: 'effect-resolved',
+      revision: before.revision,
+      sourceInstanceId: 'first',
+      sourceCardId: asCardId('basic_hellfire'),
+      controllerId: owner,
+      action: 'damage',
+      actionPath: 'cast.damage',
+      data: {}
+    }
+    const events: OpeningMatchEvent[] = [
+      boundary('random-spell-started', 'first', before),
+      effect,
+      boundary('random-spell-completed', 'first', middle),
+      boundary('random-spell-started', 'second', middle),
+      { ...effect, sourceInstanceId: 'second' },
+      boundary('random-spell-completed', 'second', after)
+    ]
+    for (const method of [
+      'reconcileWeaponViews',
+      'reconcileEffectMovement',
+      'reconcileRandomSpellState'
+    ] as const)
+      vi.spyOn(internal, method).mockResolvedValue()
+    for (const method of [
+      'syncBoardMinionPresentation',
+      'syncBoardHeroPresentation',
+      'syncBoardAttackability',
+      'syncTurnHud',
+      'syncTurnControls'
+    ] as const)
+      vi.spyOn(internal, method).mockImplementation(() => undefined)
+    return { value, internal, state, before, middle, after, events, owner }
+  }
+
+  async function flush() {
+    for (let tick = 0; tick < 30; tick++) await Promise.resolve()
+  }
+
+  it('waits for each reveal and effect, uses intermediate states, and locks actions immediately', async () => {
+    const { internal, state, middle, after, events } = playback()
+    const dispatch = vi
+      .spyOn(internal.session, 'dispatch')
+      .mockReturnValue({ accepted: true, state: after, events })
+    internal.dispatchCommand({ type: 'play-card' })
+    expect(internal.randomSpellRevision).toBe(after.revision)
+    expect(internal.presentationState()).toEqual(state)
+    expect(internal.dispatchCommand({ type: 'end-turn' }).accepted).toBe(false)
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    const reveals: Array<() => void> = []
+    const effects: Array<() => void> = []
+    const preview = vi
+      .spyOn(internal.remoteCardPlayPreview, 'present')
+      .mockImplementation(() => new Promise((resolve) => reveals.push(resolve)))
+    const seen: OpeningMatchState[] = []
+    vi.spyOn(internal, 'presentEffectResolved').mockImplementation(() => {
+      seen.push(internal.presentationState())
+      return new Promise((resolve) => effects.push(resolve))
+    })
+    let idle = false
+    const waiting = internal.waitForResolutionIdle().then(() => {
+      idle = true
+    })
+    const job = internal.enqueuePresentation(after, () =>
+      internal.presentResolutionEvents(events)
+    )
+    await flush()
+    expect(reveals).toHaveLength(1)
+    expect(effects).toHaveLength(0)
+    expect(idle).toBe(false)
+    expect(preview.mock.calls[0][2]).toEqual({ side: 'local', concealSecret: false })
+    reveals[0]()
+    await flush()
+    expect(seen).toEqual([middle])
+    expect(reveals).toHaveLength(1)
+    effects[0]()
+    await flush()
+    expect(reveals).toHaveLength(2)
+    expect(seen).toHaveLength(1)
+    reveals[1]()
+    await flush()
+    expect(seen).toEqual([middle, after])
+    effects[1]()
+    await job
+    await waiting
+    expect(internal.randomSpellRevision).toBeNull()
+    expect(internal.randomSpellState).toBeNull()
+    expect(idle).toBe(true)
+  })
+
+  it('continues after preview failure and releases the barrier after a failed presentation', async () => {
+    const { internal, after, events } = playback()
+    vi.spyOn(internal.session, 'dispatch').mockReturnValue({
+      accepted: true,
+      state: after,
+      events
+    })
+    internal.dispatchCommand({ type: 'play-card' })
+    vi.spyOn(internal.remoteCardPlayPreview, 'present').mockRejectedValue(
+      new Error('artwork')
+    )
+    const effect = vi.spyOn(internal, 'presentEffectResolved').mockResolvedValue()
+    await internal.enqueuePresentation(after, () =>
+      internal.presentResolutionEvents(events)
+    )
+    expect(effect).toHaveBeenCalledTimes(2)
+    expect(internal.randomSpellRevision).toBeNull()
+    internal.dispatchCommand({ type: 'play-card' })
+    await expect(
+      internal.enqueuePresentation(after, async () => {
+        throw new Error('entrance')
+      })
+    ).rejects.toThrow('entrance')
+    expect(internal.randomSpellRevision).toBeNull()
+  })
+
+  it('stops a local minion sequence on scene exit and releases AI waiters', async () => {
+    const { value, internal, after, events } = playback()
+    const result = { accepted: true as const, state: after, events }
+    vi.spyOn(internal.session, 'dispatch').mockReturnValue(result)
+    internal.dispatchCommand({ type: 'play-card' })
+    const card = new Container()
+    vi.spyOn(
+      internal.remoteCardPlayPreview as unknown as {
+        createCard(): Promise<Container>
+      },
+      'createCard'
+    ).mockResolvedValue(card)
+    vi.spyOn(internal.hand, 'applyLayout').mockResolvedValue()
+    const effect = vi.spyOn(internal, 'presentEffectResolved').mockResolvedValue()
+    const entry: HandEntry = {
+      card: {
+        instanceId: 'yogg',
+        cardId: asCardId('whispers_of_the_old_gods_yogg_saron_hopes_end')
+      },
+      slot: mulliganSlot('yogg'),
+      displaced: false,
+      restTransform: undefined
+    }
+    const idle = internal.waitForResolutionIdle()
+    const job = internal.enqueuePresentation(after, () =>
+      internal.presentAcceptedMinionPlay(entry, result)
+    )
+    await flush()
+    expect(internal.remoteCardPlayPreview.children).toHaveLength(1)
+    value.dispose()
+    await job
+    await idle
+    expect(effect).not.toHaveBeenCalled()
+    expect(card.destroyed).toBe(true)
+    expect(internal.randomSpellState).toBeNull()
+  })
+
+  it('bounds nested effects by the next boundary, not the outer spell final state', () => {
+    const { before, middle, after, events } = playback()
+    const nested = [
+      events[0],
+      events[1],
+      events[3],
+      events[4],
+      events[5],
+      events[1],
+      events[2]
+    ]
+    expect(randomSpellPresentationStates(nested, after)).toEqual([
+      before,
+      middle,
+      middle,
+      after,
+      after,
+      middle,
+      middle
+    ])
+    expect(randomSpellPresentationStates([events[1]], after)).toBeNull()
+  })
+})
+
 describe('board lifecycle preservation', () => {
+  it('opens a fresh gap for a queued hand entrance and waits for a token summon gap', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      boardPositions: BoardPositionController
+      animationScope: AnimationScope
+      resolver: { loadArtwork(): Promise<Texture> }
+      cardPlayAnimation: {
+        createMinionAura(): Container
+        detachMinionAura(): void
+        emitMinionParticles(): Container
+        alignMinionArtwork(): void
+      }
+      localMinionViews: readonly MinionView[]
+      selectedCombatView: MinionView | null
+      combatInProgress: boolean
+      deselectAttacker(animate: boolean): void
+      presentMinionPlayed(
+        event: Extract<OpeningMatchEvent, { type: 'dev-minion-summoned' }>,
+        slot?: GameCardSlot,
+        removedFromHand?: boolean
+      ): Promise<MinionPreviewPresentation | null>
+    }
+    vi.spyOn(internal.resolver, 'loadArtwork').mockResolvedValue(Texture.WHITE)
+    vi.spyOn(internal.cardPlayAnimation, 'createMinionAura').mockImplementation(
+      () => new Container()
+    )
+    vi.spyOn(internal.cardPlayAnimation, 'detachMinionAura').mockImplementation(
+      () => undefined
+    )
+    vi.spyOn(internal.cardPlayAnimation, 'emitMinionParticles').mockImplementation(
+      () => new Container()
+    )
+    vi.spyOn(internal.cardPlayAnimation, 'alignMinionArtwork').mockImplementation(
+      () => undefined
+    )
+    const animations: gsap.core.Animation[] = []
+    const makeTimeline = internal.animationScope.timeline.bind(internal.animationScope)
+    const makeTween = internal.animationScope.to.bind(internal.animationScope)
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const result = makeTimeline(vars)
+      animations.push(result)
+      return result
+    })
+    vi.spyOn(internal.animationScope, 'to').mockImplementation((target, vars) => {
+      const result = makeTween(target, vars)
+      animations.push(result)
+      return result
+    })
+    const finish = async (job: Promise<unknown>): Promise<void> => {
+      let done = false
+      void job.then(() => {
+        done = true
+      })
+      for (let pass = 0; pass < 60 && !done; pass++) {
+        for (const animation of animations)
+          if (animation.progress() < 1) animation.progress(1)
+        await Promise.resolve()
+      }
+      expect(done).toBe(true)
+      await job
+    }
+    const event = (cardId: string, position: number) => {
+      const result = internal.session.dispatch({
+        type: 'dev-summon-minion',
+        participantId: internal.session.localParticipantId,
+        cardId: asCardId(cardId)
+      })
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) throw new Error(result.message)
+      const events: readonly OpeningMatchEvent[] = result.events
+      const summoned = events.find(
+        (
+          candidate
+        ): candidate is Extract<OpeningMatchEvent, { type: 'dev-minion-summoned' }> =>
+          candidate.type === 'dev-minion-summoned'
+      )!
+      expect(summoned).toBeDefined()
+      return { ...summoned, position }
+    }
+    for (const player of internal.session.getState().players)
+      expect(
+        internal.session.dispatch({
+          type: 'confirm-mulligan',
+          participantId: player.participantId,
+          replaceInstanceIds: []
+        }).accepted
+      ).toBe(true)
+    await finish(
+      internal.presentMinionPlayed(event('naxxramas_undertaker', 0), undefined, false)
+    )
+    await finish(
+      internal.presentMinionPlayed(event('classic_leper_gnome', 0), undefined, false)
+    )
+    const alleycat = event('mean_streets_of_gadgetzan_alleycat', 1)
+    const slot = Object.assign(mulliganSlot(alleycat.minion.instanceId), {
+      card: new Container(),
+      beginMinionPlayTransition: vi.fn()
+    })
+    // Simulate the preceding action closing the earlier hover gap before the
+    // accepted card's entrance gets its turn in the presentation queue.
+    internal.boardPositions.preview('local', 'drag', 1)
+    internal.boardPositions.preview('local', 'drag', null)
+    const arriving = internal.presentMinionPlayed(alleycat, slot, false)
+    // Committing Undertaker's queued attack must leave its row slide running
+    // while Alleycat is using that slide to make room for its entrance.
+    internal.selectedCombatView = internal.localMinionViews[1]
+    internal.combatInProgress = true
+    internal.deselectAttacker(false)
+    await finish(arriving)
+    const [leper, cat, undertaker] = internal.localMinionViews
+    const step = GAME_BOARD_LAYOUT.boardMinions.local.maxStep
+    expect(cat.x - leper.x).toBeCloseTo(step)
+    expect(undertaker.x - cat.x).toBeCloseTo(step)
+    const summon = internal.presentMinionPlayed(
+      event('mean_streets_of_gadgetzan_tabbycat', 2),
+      undefined,
+      false
+    )
+    await Promise.resolve()
+    expect(internal.localMinionViews).toHaveLength(3)
+    await finish(summon)
+    const row = internal.localMinionViews
+    for (let index = 1; index < row.length; index++)
+      expect(row[index].x - row[index - 1].x).toBeCloseTo(step)
+  })
+
+  it.each(['leper-gnome', 'haunted-creeper', 'fiery-bat'])(
+    'preserves Alleycat space after %s cleanup and opens space for Tabbycat',
+    async (deathrattle) => {
+      const value = board()
+      const internal = value as unknown as {
+        boardPositions: BoardPositionController
+        animationScope: AnimationScope
+      }
+      const positions = internal.boardPositions
+      const tweens: gsap.core.Tween[] = []
+      const makeTween = internal.animationScope.to.bind(internal.animationScope)
+      vi.spyOn(internal.animationScope, 'to').mockImplementation((target, vars) => {
+        const tween = makeTween(target, vars)
+        tweens.push(tween)
+        return tween
+      })
+      const minion = (instanceId: string): MinionView =>
+        Object.assign(new Container(), {
+          instanceId,
+          setBaseScale: vi.fn(),
+          isSelected: () => false
+        }) as unknown as MinionView
+      const advance = (): void => {
+        for (const tween of tweens) if (tween.progress() < 1) tween.progress(1)
+      }
+      const undertaker = minion('undertaker')
+      const first = minion(deathrattle)
+      positions.insert('local', 0, first)
+      positions.insert('local', 1, undertaker)
+      const initial = positions.layout('local')
+      advance()
+      await initial
+
+      // The next gesture happens while the preceding play still owns queued effects.
+      positions.preview('local', 'alleycat', 1)
+      positions.preview('local', deathrattle, null)
+      positions.finishEntrance('local', deathrattle)
+      advance()
+      const config = GAME_BOARD_LAYOUT.boardMinions.local
+      const expected = layoutBoardRow(3, config)
+      expect(first.x).toBe(expected[0].x)
+      expect(undertaker.x).toBe(expected[2].x)
+
+      positions.reserve('local', 'alleycat', 1)
+      const ready = positions.layout('local')
+      // Older cleanup cannot cancel an active entrance with the same numeric index.
+      positions.finishEntrance('local', deathrattle)
+      await ready
+      const alleycat = minion('alleycat')
+      const landing = positions.entrancePosition('local', 'alleycat')
+      alleycat.position.set(landing.x, landing.y)
+      positions.insert('local', 1, alleycat)
+      positions.finishEntrance('local', 'alleycat')
+      expect(alleycat.x - first.x).toBe(config.maxStep)
+      expect(undertaker.x - alleycat.x).toBe(config.maxStep)
+
+      positions.reserve('local', 'tabbycat', 2)
+      let spaceReady = false
+      const space = positions.layout('local').then(() => {
+        spaceReady = true
+      })
+      await Promise.resolve()
+      expect(spaceReady).toBe(false)
+      // Repeated cleanup/layout requests must await the existing movement, not
+      // interrupt it and report an early completion to the incoming summon.
+      const repeated = positions.layout('local')
+      advance()
+      await Promise.all([space, repeated])
+      const tabbycat = minion('tabbycat')
+      const tabbyLanding = positions.entrancePosition('local', 'tabbycat')
+      tabbycat.position.set(tabbyLanding.x, tabbyLanding.y)
+      positions.insert('local', 2, tabbycat)
+      positions.finishEntrance('local', 'tabbycat')
+      expect(tabbycat.x - alleycat.x).toBe(config.maxStep)
+      expect(undertaker.x - tabbycat.x).toBe(config.maxStep)
+    }
+  )
+
+  it('defers placement previews during travel and releases cancelled entrances', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      boardPositions: BoardPositionController
+      animationScope: AnimationScope
+    }
+    const positions = internal.boardPositions
+    const attacker = Object.assign(new Container(), {
+      instanceId: 'attacker',
+      setBaseScale: vi.fn(),
+      isSelected: () => false
+    }) as unknown as MinionView
+    positions.insert('local', 0, attacker)
+    const center = GAME_BOARD_LAYOUT.boardMinions.local.centerX
+    attacker.position.set(center, GAME_BOARD_LAYOUT.boardMinions.local.baselineY)
+    positions.beginMotion(attacker)
+    positions.preview('local', 'next-card', 0)
+    expect(positions.restingPosition(attacker)?.x).toBe(center)
+    positions.endMotion(attacker)
+    expect(positions.restingPosition(attacker)?.x).toBeGreaterThan(center)
+    positions.reserve('local', 'next-card', 0)
+    positions.finishEntrance('local', 'next-card')
+    expect(positions.restingPosition(attacker)?.x).toBe(center)
+    positions.reserve('local', 'replacement', 0)
+    const waiting = positions.layout('local')
+    // Disposal resolves movement waiters without leaving a reservation or tween.
+    value.dispose()
+    await waiting
+    expect(positions.views('local')).toHaveLength(0)
+  })
+
+  function trackingBoard() {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      cardSelectionOverlay: CardSelectionOverlay
+      createSlot(card: OpeningCard): Promise<GameCardSlot>
+      handleWindowBlur(): void
+      handleWindowPointerDown(event: PointerEvent): void
+      toRendererPoint(x: number, y: number): { x: number; y: number }
+      restorePendingChoice(): Promise<void>
+      presentResolutionEvents(events: readonly OpeningMatchEvent[]): Promise<void>
+      syncTurnHud(): void
+      syncTurnControls(): void
+      createHeroes(state: OpeningMatchState): void
+    }
+    const session = internal.session
+    const owner = session.localParticipantId
+    for (const player of session.getState().players)
+      session.dispatch({
+        type: 'confirm-mulligan',
+        participantId: player.participantId,
+        replaceInstanceIds: []
+      })
+    if (session.getState().activePlayerId !== owner)
+      session.dispatch({ type: 'end-turn', participantId: session.remoteParticipantId })
+    session.dispatch({
+      type: 'dev-set-mana',
+      participantId: owner,
+      available: 10,
+      maximum: 10
+    })
+    session.dispatch({
+      type: 'dev-add-card',
+      participantId: owner,
+      cardId: asCardId('basic_tracking')
+    })
+    const card = session
+      .getState()
+      .players.find((player) => player.participantId === owner)!
+      .hand.find((card) => card.cardId === 'basic_tracking')!
+    expect(
+      session.dispatch({
+        type: 'play-card',
+        participantId: owner,
+        cardInstanceId: card.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(session.getState().pendingDiscover?.candidates).toHaveLength(3)
+    vi.spyOn(internal, 'createSlot').mockImplementation(async (card) =>
+      mulliganSlot(card.instanceId)
+    )
+    vi.spyOn(internal, 'syncTurnHud').mockImplementation(() => undefined)
+    vi.spyOn(internal, 'syncTurnControls').mockImplementation(() => undefined)
+    // Exercise command dispatch without rendering the hand animation.
+    vi.spyOn(internal, 'presentResolutionEvents').mockImplementation(async () => {
+      const pending = session.getState().pendingDiscover
+      if (pending) await internal.cardSelectionOverlay.show(pending.candidates)
+      else internal.cardSelectionOverlay.clear()
+    })
+    return { value, internal, session, owner }
+  }
+
+  it.each(['blur', 'right-click'] as const)(
+    'keeps Tracking selectable after %s, including artwork loading',
+    async (action) => {
+      const { internal, session, owner } = trackingBoard()
+      const overlay = internal.cardSelectionOverlay
+      const pending = session.getState().pendingDiscover!
+      const releases: Array<() => void> = []
+      vi.mocked(internal.createSlot).mockImplementation(
+        (card) =>
+          new Promise((resolve) =>
+            releases.push(() => resolve(mulliganSlot(card.instanceId)))
+          )
+      )
+      const interrupt = () => {
+        if (action === 'blur') internal.handleWindowBlur()
+        else {
+          vi.spyOn(internal, 'toRendererPoint').mockReturnValue({ x: 0, y: 0 })
+          internal.handleWindowPointerDown({
+            button: 2,
+            clientX: 0,
+            clientY: 0
+          } as PointerEvent)
+        }
+      }
+      const showing = overlay.show(pending.candidates)
+      interrupt()
+      releases.forEach((release) => release())
+      await showing
+      interrupt()
+      expect(overlay.visible).toBe(true)
+      expect(session.getState().pendingDiscover).toEqual(pending)
+      expect(
+        session.dispatch({ type: 'end-turn', participantId: owner }).accepted
+      ).toBe(false)
+      const cards = overlay.getChildByLabel('game.card-selection.cards')!
+      expect(cards.children).toHaveLength(3)
+      cards.children[0].emit('pointertap', { button: 0 } as FederatedPointerEvent)
+      expect(session.getState().pendingDiscover).toBeUndefined()
+      expect(
+        session
+          .getState()
+          .players.find((player) => player.participantId === owner)!
+          .hand.some((card) => card.instanceId === pending.candidates[0].instanceId)
+      ).toBe(true)
+      expect(
+        session.dispatch({ type: 'end-turn', participantId: owner }).accepted
+      ).toBe(true)
+      await Promise.resolve()
+    }
+  )
+
+  it('restores Tracking after a rejected selection and allows retry', async () => {
+    const { internal, session } = trackingBoard()
+    const overlay = internal.cardSelectionOverlay
+    await internal.restorePendingChoice()
+    const restore = vi.spyOn(internal, 'restorePendingChoice')
+    vi.spyOn(session, 'dispatch').mockReturnValueOnce({
+      accepted: false,
+      state: session.getState(),
+      events: [],
+      code: 'invalid-command',
+      message: 'Rejected for regression test'
+    })
+    overlay
+      .getChildByLabel('game.card-selection.cards')!
+      .children[0].emit('pointertap', { button: 0 } as FederatedPointerEvent)
+    await restore.mock.results[0].value
+    expect(overlay.visible).toBe(true)
+    overlay
+      .getChildByLabel('game.card-selection.cards')!
+      .children[1].emit('pointertap', { button: 0 } as FederatedPointerEvent)
+    expect(session.getState().pendingDiscover).toBeUndefined()
+    await Promise.resolve()
+  })
+
+  it('preserves mandatory card options on blur and restores them after rejection', async () => {
+    const { internal, session, owner } = trackingBoard()
+    const state = {
+      ...session.getState(),
+      pendingDiscover: undefined,
+      pendingCardChoice: {
+        participantId: owner,
+        sourceCardInstanceId: 'mandatory-choice',
+        sourceCardId: asCardId('basic_fireball'),
+        options: [0, 1].map((choice) => ({
+          choice,
+          label: `Option ${choice}`,
+          presentationCardId: asCardId('basic_fireball')
+        }))
+      }
+    }
+    vi.spyOn(session.match, 'getState').mockReturnValue(state)
+    await internal.restorePendingChoice()
+    internal.handleWindowBlur()
+    const overlay = internal.cardSelectionOverlay
+    expect(overlay.visible).toBe(true)
+    const restore = vi.spyOn(internal, 'restorePendingChoice')
+    const dispatch = vi.spyOn(session, 'dispatch').mockReturnValue({
+      accepted: false,
+      state,
+      events: [],
+      code: 'invalid-command',
+      message: 'Rejected for regression test'
+    })
+    overlay
+      .getChildByLabel('game.card-selection.cards')!
+      .children[0].emit('pointertap', { button: 0 } as FederatedPointerEvent)
+    await restore.mock.results[0].value
+    overlay
+      .getChildByLabel('game.card-selection.cards')!
+      .children[1].emit('pointertap', { button: 0 } as FederatedPointerEvent)
+    await restore.mock.results[1].value
+    expect(dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'choose-card-option', choice: 1 })
+    )
+    vi.mocked(session.match.getState).mockReturnValue({
+      ...state,
+      pendingCardChoice: undefined
+    })
+    await internal.restorePendingChoice()
+    expect(overlay.visible).toBe(false)
+  })
+
+  it('cancels a temporary card choice on blur and returns its card', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      cardPlay: GameCardTargeting
+      hand: GameHandView
+      cardSelectionOverlay: CardSelectionOverlay
+      createSlot(card: OpeningCard): Promise<GameCardSlot>
+      handleWindowBlur(): void
+    }
+    const slot = Object.assign(mulliganSlot('temporary-choice'), {
+      suppressPlayableOutline: vi.fn()
+    })
+    const card = { instanceId: slot.instanceId, cardId: asCardId('basic_fireball') }
+    internal.hand.append({ card, slot, displaced: false, restTransform: undefined })
+    internal.hand.layer.addChild(slot)
+    vi.spyOn(internal, 'createSlot').mockImplementation(async (card) =>
+      mulliganSlot(card.instanceId)
+    )
+    internal.cardPlay.beginCardTargeting(
+      { card, slot, displaced: false, restTransform: undefined },
+      {
+        participantId: internal.session.localParticipantId,
+        cardInstanceId: card.instanceId,
+        cardId: card.cardId,
+        currentCost: 4,
+        requiresPosition: false,
+        legalPositions: [],
+        targetSelectors: [],
+        legalTargetOptions: [],
+        choiceCount: 1,
+        legalChoices: [0],
+        choiceOptions: [
+          { choice: 0, label: 'Temporary option', presentationCardId: card.cardId }
+        ],
+        choiceTiming: 'before-play',
+        skipTargetedBattlecry: false,
+        effectPreview: null
+      }
+    )
+    expect(internal.cardSelectionOverlay.visible).toBe(true)
+    expect(slot.visible).toBe(false)
+    internal.handleWindowBlur()
+    await Promise.resolve()
+    expect(internal.cardSelectionOverlay.visible).toBe(false)
+    expect(internal.cardPlay.current).toBeNull()
+    expect(slot.visible).toBe(true)
+  })
+
+  it.each(['concede', 'dispose'] as const)(
+    'clears mandatory choices on %s while artwork loads',
+    async (action) => {
+      const { value, internal } = trackingBoard()
+      internal.createHeroes(internal.session.getState())
+      const releases: Array<() => void> = []
+      const slots: GameCardSlot[] = []
+      vi.mocked(internal.createSlot).mockImplementation(
+        (card) =>
+          new Promise((resolve) =>
+            releases.push(() => {
+              const slot = mulliganSlot(card.instanceId)
+              slots.push(slot)
+              resolve(slot)
+            })
+          )
+      )
+      const showing = internal.restorePendingChoice()
+      if (action === 'concede') value.concede()
+      else value.dispose()
+      releases.forEach((release) => release())
+      await showing
+      expect(internal.cardSelectionOverlay.visible).toBe(false)
+      expect(slots.every((slot) => slot.destroyed)).toBe(true)
+    }
+  )
+
+  it.each(['local', 'remote'] as const)(
+    'returns a %s attacker to its slot after an interrupted row shift',
+    async (side) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        combat: GameCombatPresentation
+        animationScope: AnimationScope
+        localMinionViews: MinionView[]
+        remoteMinionViews: MinionView[]
+        insertLocalMinionView(position: number, view: MinionView): void
+        insertRemoteMinionView(position: number, view: MinionView): void
+        removeMinionView(view: MinionView): void
+        applyLocalBoardLayout(): void
+        applyRemoteBoardLayout(): void
+      }
+      const owner =
+        side === 'local'
+          ? internal.session.localParticipantId
+          : internal.session.remoteParticipantId
+      const opponent =
+        side === 'local'
+          ? internal.session.remoteParticipantId
+          : internal.session.localParticipantId
+      const insert =
+        side === 'local'
+          ? internal.insertLocalMinionView.bind(internal)
+          : internal.insertRemoteMinionView.bind(internal)
+      const layout =
+        side === 'local'
+          ? internal.applyLocalBoardLayout.bind(internal)
+          : internal.applyRemoteBoardLayout.bind(internal)
+      const config = GAME_BOARD_LAYOUT.boardMinions[side]
+      const views: MinionView[] = []
+      for (let index = 0; index < 6; index++) {
+        const view = await MinionView.create(
+          {
+            label: `regression-${index}`,
+            attack: 2,
+            health: 3,
+            maxHealth: 3,
+            legendary: false,
+            taunt: false,
+            divineShield: false,
+            frozen: false,
+            stealth: false,
+            deathrattle: false,
+            poisonous: false,
+            trigger: false,
+            inspire: false,
+            windfury: false,
+            spellDamage: false,
+            elusive: false,
+            immune: false
+          },
+          new Proxy({} as MinionViewTextures, { get: () => Texture.WHITE }),
+          Texture.WHITE
+        )
+        view.instanceId = `regression-${index}`
+        view.ownerId = index === 4 ? opponent : owner
+        views.push(view)
+        if (index < 4) {
+          insert(index, view)
+          const position = layoutBoardRow(4, config)[index]
+          view.position.set(position.x, position.y)
+        } else if (index === 4) {
+          if (side === 'local') internal.insertRemoteMinionView(0, view)
+          else internal.insertLocalMinionView(0, view)
+        }
+      }
+      const attacker = views[1]
+      const parent = attacker.parent!
+      const timelines: gsap.core.Timeline[] = []
+      const tweens: gsap.core.Tween[] = []
+      const makeTimeline = internal.animationScope.timeline.bind(
+        internal.animationScope
+      )
+      const makeTween = internal.animationScope.to.bind(internal.animationScope)
+      vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+        const animation = makeTimeline(vars)
+        timelines.push(animation)
+        return animation
+      })
+      vi.spyOn(internal.animationScope, 'to').mockImplementation((target, vars) => {
+        const animation = makeTween(target, vars)
+        tweens.push(animation)
+        return animation
+      })
+      const finish = async (job: Promise<void>): Promise<void> => {
+        let done = false
+        void job.then(() => {
+          done = true
+        })
+        for (let pass = 0; pass < 40 && !done; pass++) {
+          for (const animation of timelines) animation.progress(1)
+          await Promise.resolve()
+        }
+        expect(done).toBe(true)
+        await job
+      }
+      // Boar dies; commit Crocolisk's attack only 25 ms into the resulting slide.
+      internal.removeMinionView(views[3])
+      layout()
+      for (const tween of tweens) tween.time(0.025)
+      const interruptedX = attacker.x
+      const attackerRef = {
+        participantId: owner,
+        character: { kind: 'minion' as const, instanceId: attacker.instanceId! },
+        attack: 2,
+        healthBefore: 3,
+        armorBefore: 0
+      }
+      const defenderRef = {
+        participantId: opponent,
+        character: { kind: 'minion' as const, instanceId: views[4].instanceId! },
+        attack: 1,
+        healthBefore: 3,
+        armorBefore: 0
+      }
+      await finish(
+        internal.combat.presentCombatStarted({
+          type: 'combat-started',
+          combatId: 'row-shift',
+          attacker: attackerRef,
+          defender: defenderRef
+        })
+      )
+      const contact = { x: attacker.x, y: attacker.y }
+      layout()
+      for (const tween of tweens) if (tween.progress() < 1) tween.progress(1)
+      expect({ x: attacker.x, y: attacker.y }).toEqual(contact)
+      await finish(internal.combat.returnLatestAttacker()!)
+      const resting = layoutBoardRow(3, config)[1]
+      expect(attacker.parent).toBe(parent)
+      expect(attacker.x).toBeCloseTo(resting.x)
+      expect(attacker.x).not.toBeCloseTo(interruptedX)
+      expect(attacker.x - views[0].x).toBeCloseTo(config.maxStep)
+
+      // A later summon changes the slot again; cleanup must not replay the return.
+      insert(3, views[5])
+      layout()
+      for (const tween of tweens) if (tween.progress() < 1) tween.progress(1)
+      const afterSummon = attacker.x
+      await finish(
+        internal.combat.presentCombatResolved({
+          type: 'character-combat-resolved',
+          combatId: 'row-shift',
+          weapon: null,
+          attacker: {
+            ...attackerRef,
+            damageDealt: 2,
+            attemptedDamage: 1,
+            healthAfter: 2,
+            armorAfter: 0,
+            destroyed: false
+          },
+          defender: {
+            ...defenderRef,
+            damageDealt: 1,
+            attemptedDamage: 2,
+            healthAfter: 1,
+            armorAfter: 0,
+            destroyed: false
+          }
+        })
+      )
+      expect(attacker.x).toBeCloseTo(afterSummon)
+    }
+  )
+
   it.each([
     [0, false],
     [0, true],
@@ -168,6 +1072,7 @@ describe('board lifecycle preservation', () => {
       internal.cardPlay.beginCardTargeting(entry, input, 0)
       expect(present).not.toHaveBeenCalled()
       internal.cardPlay.chooseCardPlayOption(choice)
+      await Promise.resolve() // Targeted entrances use the same presentation queue.
       expect(present).toHaveBeenCalledTimes(1)
       expect(slot.visible).toBe(true)
       const preview = internal.cardPlay.minionTargetPreview()!
@@ -424,6 +1329,7 @@ describe('board lifecycle preservation', () => {
         0
       )
       const preview = internal.cardPlay.minionTargetPreview()!
+      await Promise.resolve() // Start the queued preview before testing late artwork.
       if (action === 'cancel') {
         internal.cardPlay.cancelCardTargeting()
         await preview.reversePromise
@@ -555,137 +1461,160 @@ describe('board lifecycle preservation', () => {
     expect(combat.layer.destroyed).toBe(true)
   })
 
-  it('promotes and restores a combat attacker using the queued snapshot for final stats', async () => {
-    const value = board()
-    const internal = value as unknown as {
-      session: GameBoardSession
-      animationScope: AnimationScope
-      createHeroes(state: OpeningMatchState): void
-      heroViews: Map<PlayerId, HeroView>
-      combat: GameCombatPresentation
-      enqueuePresentation(
-        state: OpeningMatchState,
-        present: () => Promise<void>
-      ): Promise<void>
-    }
-    for (const player of internal.session.getState().players) {
-      const result = internal.session.dispatch({
-        type: 'confirm-mulligan',
-        participantId: player.participantId,
-        replaceInstanceIds: []
+  it.each([false, true])(
+    'restores a combat attacker using queued stats and immunity (persistent: %s)',
+    async (persistentImmune) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        animationScope: AnimationScope
+        createHeroes(state: OpeningMatchState): void
+        heroViews: Map<PlayerId, HeroView>
+        combat: GameCombatPresentation
+        enqueuePresentation(
+          state: OpeningMatchState,
+          present: () => Promise<void>
+        ): Promise<void>
+      }
+      for (const player of internal.session.getState().players) {
+        const result = internal.session.dispatch({
+          type: 'confirm-mulligan',
+          participantId: player.participantId,
+          replaceInstanceIds: []
+        })
+        expect(result.accepted).toBe(true)
+      }
+      const state = internal.session.getState()
+      internal.createHeroes(state)
+      const [first, second] = state.players
+      const attacker = internal.heroViews.get(first.participantId)!
+      const defender = internal.heroViews.get(second.participantId)!
+      const origin = {
+        x: attacker.x,
+        y: attacker.y,
+        zIndex: attacker.zIndex,
+        parent: attacker.parent,
+        index: attacker.parent!.getChildIndex(attacker)
+      }
+      const beforeAttacker = {
+        participantId: first.participantId,
+        character: { kind: 'hero' } as const,
+        attack: 3,
+        healthBefore: 30,
+        armorBefore: 0,
+        immune: true
+      }
+      const beforeDefender = {
+        participantId: second.participantId,
+        character: { kind: 'hero' } as const,
+        attack: 2,
+        healthBefore: 30,
+        armorBefore: 0
+      }
+      if (persistentImmune) {
+        expect(
+          internal.session.dispatch({
+            type: 'dev-summon-minion',
+            participantId: first.participantId,
+            cardId: 'goblins_vs_gnomes_malganis'
+          }).accepted
+        ).toBe(true)
+      }
+      const captured = internal.session.dispatch({
+        type: 'dev-set-hero',
+        participantId: first.participantId,
+        health: 27
       })
-      expect(result.accepted).toBe(true)
-    }
-    const state = internal.session.getState()
-    internal.createHeroes(state)
-    const [first, second] = state.players
-    const attacker = internal.heroViews.get(first.participantId)!
-    const defender = internal.heroViews.get(second.participantId)!
-    const origin = {
-      x: attacker.x,
-      y: attacker.y,
-      zIndex: attacker.zIndex,
-      parent: attacker.parent,
-      index: attacker.parent!.getChildIndex(attacker)
-    }
-    const beforeAttacker = {
-      participantId: first.participantId,
-      character: { kind: 'hero' } as const,
-      attack: 3,
-      healthBefore: 30,
-      armorBefore: 0
-    }
-    const beforeDefender = {
-      participantId: second.participantId,
-      character: { kind: 'hero' } as const,
-      attack: 2,
-      healthBefore: 30,
-      armorBefore: 0
-    }
-    const captured = internal.session.dispatch({
-      type: 'dev-set-hero',
-      participantId: first.participantId,
-      health: 27
-    })
-    expect(captured.accepted).toBe(true)
-    const setStats = vi.spyOn(attacker, 'setStats')
-    const timelines: gsap.core.Timeline[] = []
-    const timeline = internal.animationScope.timeline.bind(internal.animationScope)
-    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
-      const result = timeline(vars)
-      timelines.push(result)
-      return result
-    })
-    let completed = false
-    const job = internal.enqueuePresentation(captured.state, async () => {
-      await internal.combat.presentCombatStarted({
+      expect(captured.accepted).toBe(true)
+      const setStats = vi.spyOn(attacker, 'setStats')
+      const timelines: gsap.core.Timeline[] = []
+      const timeline = internal.animationScope.timeline.bind(internal.animationScope)
+      vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+        const result = timeline(vars)
+        timelines.push(result)
+        return result
+      })
+      let completed = false
+      const job = internal.enqueuePresentation(
+        internal.session.getState(),
+        async () => {
+          await internal.combat.presentCombatStarted({
+            type: 'combat-started',
+            combatId: 'baseline-combat',
+            attacker: beforeAttacker,
+            defender: beforeDefender
+          })
+          expect(attacker.parent).toBe(internal.combat.layer)
+          expect(attacker.zIndex).toBe(100)
+          expect(attacker.getChildByLabel('hero.immune')!.visible).toBe(true)
+          // An intervening HUD refresh uses the final state, where Longbow expired.
+          attacker.setImmune(false)
+          expect(attacker.getChildByLabel('hero.immune')!.visible).toBe(true)
+          expect(defender.parent).toBe(origin.parent)
+          await internal.combat.presentCombatResolved({
+            type: 'character-combat-resolved',
+            combatId: 'baseline-combat',
+            weapon: null,
+            attacker: {
+              ...beforeAttacker,
+              damageDealt: 3,
+              attemptedDamage: 2,
+              healthAfter: 28,
+              armorAfter: 0,
+              destroyed: false
+            },
+            defender: {
+              ...beforeDefender,
+              damageDealt: 2,
+              attemptedDamage: 3,
+              healthAfter: 27,
+              armorAfter: 0,
+              destroyed: false
+            }
+          })
+          expect(attacker.getChildByLabel('hero.immune')!.visible).toBe(
+            persistentImmune
+          )
+          completed = true
+        }
+      )
+      // A newer authoritative command must not replace the running job's snapshot.
+      const newer = internal.session.dispatch({
+        type: 'dev-set-hero',
+        participantId: first.participantId,
+        health: 15
+      })
+      expect(newer.accepted).toBe(true)
+      for (let pass = 0; pass < 30 && !completed; pass++) {
+        await Promise.resolve()
+        for (const animation of timelines) animation.progress(1)
+      }
+      expect(completed).toBe(true)
+      await job
+      expect(setStats).toHaveBeenLastCalledWith(0, 27, 0, 30)
+      expect(attacker.parent).toBe(origin.parent)
+      expect(attacker.parent!.getChildIndex(attacker)).toBe(origin.index)
+      expect({ x: attacker.x, y: attacker.y, zIndex: attacker.zIndex }).toEqual({
+        x: origin.x,
+        y: origin.y,
+        zIndex: origin.zIndex
+      })
+      expect(internal.combat.layer.children).not.toContain(attacker)
+      const exiting = internal.combat.presentCombatStarted({
         type: 'combat-started',
-        combatId: 'baseline-combat',
+        combatId: 'exit-combat',
         attacker: beforeAttacker,
         defender: beforeDefender
       })
       expect(attacker.parent).toBe(internal.combat.layer)
-      expect(attacker.zIndex).toBe(100)
-      expect(defender.parent).toBe(origin.parent)
-      await internal.combat.presentCombatResolved({
-        type: 'character-combat-resolved',
-        combatId: 'baseline-combat',
-        weapon: null,
-        attacker: {
-          ...beforeAttacker,
-          damageDealt: 3,
-          attemptedDamage: 2,
-          healthAfter: 28,
-          armorAfter: 0,
-          destroyed: false
-        },
-        defender: {
-          ...beforeDefender,
-          damageDealt: 2,
-          attemptedDamage: 3,
-          healthAfter: 27,
-          armorAfter: 0,
-          destroyed: false
-        }
-      })
-      completed = true
-    })
-    // A newer authoritative command must not replace the running job's snapshot.
-    const newer = internal.session.dispatch({
-      type: 'dev-set-hero',
-      participantId: first.participantId,
-      health: 15
-    })
-    expect(newer.accepted).toBe(true)
-    for (let pass = 0; pass < 30 && !completed; pass++) {
-      await Promise.resolve()
-      for (const animation of timelines) animation.progress(1)
+      const timelinesAtExit = timelines.length
+      value.dispose()
+      await exiting
+      expect(timelines).toHaveLength(timelinesAtExit)
+      expect(attacker.destroyed).toBe(true)
+      expect(defender.destroyed).toBe(true)
     }
-    expect(completed).toBe(true)
-    await job
-    expect(setStats).toHaveBeenLastCalledWith(0, 27, 0, 30)
-    expect(attacker.parent).toBe(origin.parent)
-    expect(attacker.parent!.getChildIndex(attacker)).toBe(origin.index)
-    expect({ x: attacker.x, y: attacker.y, zIndex: attacker.zIndex }).toEqual({
-      x: origin.x,
-      y: origin.y,
-      zIndex: origin.zIndex
-    })
-    expect(internal.combat.layer.children).not.toContain(attacker)
-    const exiting = internal.combat.presentCombatStarted({
-      type: 'combat-started',
-      combatId: 'exit-combat',
-      attacker: beforeAttacker,
-      defender: beforeDefender
-    })
-    expect(attacker.parent).toBe(internal.combat.layer)
-    const timelinesAtExit = timelines.length
-    value.dispose()
-    await exiting
-    expect(timelines).toHaveLength(timelinesAtExit)
-    expect(attacker.destroyed).toBe(true)
-    expect(defender.destroyed).toBe(true)
-  })
+  )
 
   it('updates a hero immediately for a set-health effect event', async () => {
     const value = board()

@@ -222,12 +222,6 @@ const object = (properties: Record<string, Schema>): Schema => ({
   required: Object.keys(properties),
   additionalProperties: false
 })
-const checkSchema = object({
-  topic: { type: 'string', enum: [...AI_FACT_TOPICS] },
-  ref: string,
-  question: string,
-  decisionImpact: string
-})
 const noteSchema = object({
   objective: string,
   continuation: string,
@@ -239,6 +233,32 @@ export function aiChoiceSchema(request: {
   readonly actionIds: readonly string[]
 }): Schema {
   const actionId = { type: 'string', enum: [...request.actionIds] }
+  const checkSchema = {
+    anyOf: [
+      object({
+        topic: { type: 'string', enum: ['resources', 'history'] },
+        ref: { type: 'string', enum: ['self', 'opponent'] },
+        question: string,
+        decisionImpact: string
+      }),
+      object({
+        topic: { type: 'string', enum: ['action'] },
+        ref: actionId,
+        question: string,
+        decisionImpact: string
+      }),
+      object({
+        topic: { type: 'string', enum: ['entity', 'mechanics', 'condition'] },
+        ref: {
+          type: 'string',
+          description:
+            'Copy an exact visible entity ref. For public mechanics also accept catalog:<exact card name or ID>. Never use a state path or append labels.'
+        },
+        question: string,
+        decisionImpact: string
+      })
+    ]
+  }
   if (request.phase === 'plan')
     return object({
       plan: object({

@@ -1,6 +1,8 @@
 import { Container, Graphics, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import type { HeroPowerDefinition } from '../../../game/content/hero-powers'
 import { applyAnchoredPlacement, type LayoutPlacement } from '../layout'
+import { attachShadow } from '../shadows/shadow-caster'
+import { MATCH_SHADOW_CONFIG } from '../shadows/match-shadow-config'
 import {
   HERO_POWER_CARD_CANVAS,
   HERO_POWER_ICON_CANVAS,
@@ -62,6 +64,13 @@ export class HeroPowerIconView extends Container {
 
 /** Full 620x903 hero-power card used by discovery and history previews. */
 export class HeroPowerCardView extends Container {
+  readonly shadow = attachShadow(
+    this,
+    { x: 0, y: 0, ...HERO_POWER_CARD_CANVAS },
+    {
+      restingHeight: MATCH_SHADOW_CONFIG.heldCardHeight
+    }
+  )
   constructor(
     definition: HeroPowerDefinition,
     cost: number,

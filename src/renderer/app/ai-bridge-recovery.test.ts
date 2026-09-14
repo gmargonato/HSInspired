@@ -5,15 +5,19 @@ import {
   aiIpcFailure,
   aiIpcSuccess,
   type AiDecisionBridge,
-  type AiDecisionRequest
+  type AiDecisionRequest,
+  type JsonObject
 } from '../../shared/ipc/ai'
 import { createAiDecisionApi } from './ai-decision-api'
 import { AiTurnController } from '../features/game/ai-turn-controller'
 import type { GameBoardSession } from '../features/game/game-board-session'
 import { aiActionIntent } from '../features/game/ai-action-intent'
 import type { AiDecisionChoice } from '../../shared/ipc/ai-deliberation'
+import type { OpeningMatchPublicEvent } from '../../game/match'
+import { asPlayerId } from '../../game/match/match-types'
 
 const electron = vi.hoisted(() => ({ invoke: vi.fn(), expose: vi.fn() }))
+const modelSnapshot = vi.hoisted(() => ({ value: { mana: 7 } as JsonObject }))
 const legal = vi.hoisted(() => ({
   commands: [{ type: 'end-turn' }, { type: 'use-hero-power' }]
 }))
@@ -34,7 +38,7 @@ vi.mock('../features/game/ai-context', () => ({
       intent: aiActionIntent(command, 'human')
     })),
   aiActionFacts: (actions) => actions,
-  aiModelState: () => ({ mana: 7 }),
+  aiModelState: () => modelSnapshot.value,
   aiJson: (value) => JSON.parse(JSON.stringify(value))
 }))
 
@@ -51,6 +55,7 @@ beforeAll(async () => {
   }
 })
 afterEach(() => {
+  modelSnapshot.value = { mana: 7 }
   electron.invoke.mockReset()
   legal.commands = [{ type: 'end-turn' }, { type: 'use-hero-power' }]
 })
@@ -118,6 +123,7 @@ function setup(
   choose?: (request: AiDecisionRequest, count: number) => AiDecisionChoice
 ) {
   const requests: AiDecisionRequest[] = []
+  const publicEvents: OpeningMatchPublicEvent[] = []
   electron.invoke.mockImplementation(async (channel, request) => {
     if (channel === AI_IPC_CHANNELS.settings)
       return aiIpcSuccess({
@@ -183,7 +189,7 @@ function setup(
     getState: () => state,
     subscribe: () => () => {},
     getAiEventCursor: () => 0,
-    getAiEventsSince: () => [],
+    getAiEventsSince: () => publicEvents,
     getAiPublicHistory: () => ({ recentEvents: [] }),
     acknowledgeAiEvents: () => {},
     match: { getState: () => ({}), getPlayInput: () => {}, getLegality: () => ({}) }
@@ -194,9 +200,161 @@ function setup(
     logger,
     onFailure
   })
-  return { controller, requests, logger, onFailure, state }
+  return { controller, requests, logger, onFailure, state, publicEvents }
 }
 describe('preload to renderer recovery', () => {
+  it.each([true, false])(
+    'reviews an unused-resource pass once and permits a strategic pass (change=%s)',
+    async (change) => {
+      modelSnapshot.value = {
+        players: [
+          { role: 'opponent', mana: { available: 1, maximum: 8 } },
+          { role: 'self', mana: { available: 8, maximum: 8 }, hero: { health: 13 } }
+        ]
+      }
+      const test = setup('plan', (request, count) => {
+        if (request.phase === 'plan') return planChoice()
+        if (count === 2)
+          return {
+            ...commitChoice(),
+            intent: { ...commitChoice().intent, targets: ['wrong-target'] }
+          }
+        if (count === 4 && change)
+          return {
+            ...commitChoice(),
+            actionId: 'a1',
+            intent: aiActionIntent(legal.commands[1] as never, 'human')
+          }
+        return commitChoice()
+      })
+      try {
+        expect(await test.controller.chooseTurnAction()).toMatchObject({
+          actionId: change ? 'a1' : 'a0'
+        })
+        expect(test.requests).toHaveLength(4)
+        for (const request of test.requests) {
+          const latest = JSON.parse(request.messages.at(-1)!.content)
+          expect(latest.currentDecision).toMatchObject({
+            self: { mana: { available: 8 } },
+            opponent: { mana: { available: 1 } }
+          })
+          expect(latest.actions.map((a) => a.id)).toEqual(['a0', 'a1'])
+        }
+        expect(test.requests[2].messages.at(-1)!.content).toContain(
+          'reconsider any premise'
+        )
+        expect(
+          JSON.parse(test.requests[3].messages.at(-1)!.content).endTurnReview
+        ).toBe(true)
+        expect(test.requests[3].allowInspection).toBe(false)
+        expect(
+          test.logger.info.mock.calls.filter(
+            ([kind]) => kind === '[Game AI] end-turn-review'
+          )
+        ).toHaveLength(1)
+        expect(test.onFailure).not.toHaveBeenCalled()
+      } finally {
+        test.controller.dispose()
+      }
+    }
+  )
+  it('discards an End Turn review response after a revision change', async () => {
+    modelSnapshot.value = { players: [{ role: 'self', mana: { available: 8 } }] }
+    const test = setup('plan', (request, count) => {
+      if (count === 3) test.state.revision++
+      return request.phase === 'plan' ? planChoice() : commitChoice()
+    })
+    try {
+      expect(await test.controller.chooseTurnAction()).toBeNull()
+      expect(test.requests).toHaveLength(3)
+      expect(test.onFailure).not.toHaveBeenCalled()
+    } finally {
+      test.controller.dispose()
+    }
+  })
+  it('silently recovers with fresh facts after a failed correction and drops stale action IDs', async () => {
+    const { controller, requests, state, onFailure, logger, publicEvents } = setup(
+      'plan',
+      (request, count) =>
+        request.phase === 'plan'
+          ? planChoice()
+          : count === 3 || count === 4
+            ? {
+                ...commitChoice(),
+                intent: { ...commitChoice().intent, targets: ['wrong-target'] }
+              }
+            : commitChoice()
+    )
+    publicEvents.push({
+      type: 'character-healed',
+      participantId: asPlayerId('ai'),
+      character: { kind: 'hero' },
+      amount: 0,
+      healthBefore: 30,
+      healthAfter: 30
+    })
+    try {
+      expect(await controller.chooseTurnAction()).toMatchObject({ source: 'model' })
+      publicEvents.length = 0
+      state.revision++
+      expect(await controller.chooseTurnAction()).toMatchObject({
+        source: 'model',
+        expectedRevision: 44
+      })
+      expect(requests).toHaveLength(6)
+      expect(
+        requests[2].messages
+          .slice(1, -1)
+          .some((m) => m.content.includes('firstActionId'))
+      ).toBe(false)
+      expect(requests[4].requestId).not.toBe(requests[3].requestId)
+      expect(requests[4].messages).toHaveLength(2)
+      expect(JSON.parse(requests[4].messages[1].content)).toMatchObject({
+        state: { mana: 7 },
+        revision: 44,
+        recentPublicEvents: []
+      })
+      expect(JSON.parse(requests[4].messages[1].content).observedCorrections).toEqual([
+        expect.objectContaining({
+          evidence: expect.objectContaining({
+            healthBefore: 30,
+            healthAfter: 30,
+            restored: 0
+          })
+        })
+      ])
+      expect(requests[4].messages.some((m) => m.content.includes('wrong-target'))).toBe(
+        false
+      )
+      expect(requests[5].allowInspection).toBe(false)
+      expect(onFailure).not.toHaveBeenCalled()
+      expect(
+        logger.info.mock.calls.filter(
+          ([kind]) => kind === '[Game AI] fresh-context-retry'
+        )
+      ).toHaveLength(1)
+    } finally {
+      controller.dispose()
+    }
+  })
+  it('discards a fresh recovery response when its revision becomes stale', async () => {
+    const test = setup('plan', (request, count) => {
+      if (count === 4) test.state.revision++
+      return request.phase === 'plan'
+        ? planChoice()
+        : {
+            ...commitChoice(),
+            intent: { ...commitChoice().intent, targets: ['wrong-target'] }
+          }
+    })
+    try {
+      expect(await test.controller.chooseTurnAction()).toBeNull()
+      expect(test.requests).toHaveLength(4)
+      expect(test.onFailure).not.toHaveBeenCalled()
+    } finally {
+      test.controller.dispose()
+    }
+  })
   const check = {
     topic: 'action' as const,
     ref: 'a0',
@@ -279,11 +437,11 @@ describe('preload to renderer recovery', () => {
     )
     try {
       expect(await controller.chooseTurnAction()).toBeNull()
-      expect(requests).toHaveLength(4)
+      expect(requests).toHaveLength(6)
       expect(onFailure).toHaveBeenCalledOnce()
       onFailure.mock.calls[0][1]()
       expect(await controller.chooseTurnAction()).toBeNull()
-      expect(requests).toHaveLength(6)
+      expect(requests).toHaveLength(11)
       expect(requests.slice(4).every((r) => !r.allowInspection)).toBe(true)
     } finally {
       controller.dispose()
@@ -304,7 +462,7 @@ describe('preload to renderer recovery', () => {
       )
       try {
         const decision = await controller.chooseTurnAction()
-        expect(requests).toHaveLength(3)
+        expect(requests).toHaveLength(correct ? 3 : 5)
         expect(requests[2].messages.at(-1)?.content).toContain(
           'Action ID and intent disagree'
         )
@@ -545,7 +703,7 @@ describe('preload to renderer recovery', () => {
     }
   })
   it.each([
-    ['reject', 2],
+    ['reject', 3],
     ['provider', 1]
   ] as const)('pauses without a retry loop for %s', async (mode, count) => {
     const { controller, requests, onFailure } = setup(mode)

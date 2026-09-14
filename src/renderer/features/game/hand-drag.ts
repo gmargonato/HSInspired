@@ -6,8 +6,13 @@ export interface HandDragConfig {
   readonly followResponseMS: number
   /** Card velocity in px/s that produces the maximum normalized tilt. */
   readonly velocityForFullTilt: number
-  /** Scale the card settles at while held. */
+  /** Minimum held scale, reached at the board-side limit. */
   readonly dragScale: number
+  /** Maximum held scale, reached near the hand. */
+  readonly nearHandScale: number
+  /** Pointer Y limits on the 1920x1080 design canvas. */
+  readonly nearHandY: number
+  readonly boardY: number
   /** Horizontal wobble amplitude (px) of the unaffordable shake. */
   readonly shakeDistance: number
   /** Total duration of one shake. */
@@ -18,6 +23,7 @@ export interface HandDragConfig {
 export interface HandDragState {
   readonly x: number
   readonly y: number
+  readonly scale: number
   /** Normalized rigid-plane tilt target derived from horizontal velocity. */
   readonly tiltX: number
   /** Normalized rigid-plane tilt target derived from vertical velocity. */
@@ -26,8 +32,11 @@ export interface HandDragState {
 
 export const DEFAULT_HAND_DRAG: HandDragConfig = {
   followResponseMS: 65,
-  velocityForFullTilt: 1400,
-  dragScale: 0.25,
+  velocityForFullTilt: 1100,
+  dragScale: 0.2,
+  nearHandScale: 0.3,
+  nearHandY: 950,
+  boardY: 540,
   shakeDistance: 4,
   shakeDuration: 0.1
 }
@@ -39,8 +48,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
-export function initialDragState(x: number, y: number): HandDragState {
-  return { x, y, tiltX: 0, tiltY: 0 }
+export function initialDragState(
+  x: number,
+  y: number,
+  scale: number = DEFAULT_HAND_DRAG.dragScale
+): HandDragState {
+  return { x, y, scale, tiltX: 0, tiltY: 0 }
 }
 
 /**
@@ -57,10 +70,19 @@ export function stepDrag(
   deltaMS: number,
   config: HandDragConfig = DEFAULT_HAND_DRAG
 ): HandDragState {
-  const halfHeight = (CARD_CANVAS.height * config.dragScale) / 2
-  const targetX = pointerX
-  const targetY = pointerY + halfHeight
+  const progress = clamp(
+    (config.nearHandY - pointerY) / (config.nearHandY - config.boardY),
+    0,
+    1
+  )
+  const targetScale =
+    config.nearHandScale + (config.dragScale - config.nearHandScale) * progress
   const smoothing = resolveDragSmoothing(deltaMS, config.followResponseMS)
+  const nextScale = state.scale + (targetScale - state.scale) * smoothing
+  const halfHeight = (CARD_CANVAS.height * nextScale) / 2
+  const targetX = pointerX
+  // Interpolate position and scale together so resizing keeps the same centre.
+  const targetY = pointerY + (CARD_CANVAS.height * targetScale) / 2
 
   const nextX = clamp(state.x + (targetX - state.x) * smoothing, 0, BOUNDS.width)
   const nextY = clamp(
@@ -69,16 +91,24 @@ export function stepDrag(
     BOUNDS.height + halfHeight
   )
   const elapsedSeconds = Math.max(1, deltaMS) / 1000
+  // Resizing moves the bottom-centre origin even when the visual centre is still.
+  const previousCenterY = state.y - (CARD_CANVAS.height * state.scale) / 2
+  const nextCenterY = nextY - halfHeight
 
   return {
     x: nextX,
     y: nextY,
+    scale: nextScale,
     tiltX: clamp(
       (nextX - state.x) / elapsedSeconds / config.velocityForFullTilt,
       -1,
       1
     ),
-    tiltY: clamp((nextY - state.y) / elapsedSeconds / config.velocityForFullTilt, -1, 1)
+    tiltY: clamp(
+      (nextCenterY - previousCenterY) / elapsedSeconds / config.velocityForFullTilt,
+      -1,
+      1
+    )
   }
 }
 

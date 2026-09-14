@@ -1350,7 +1350,10 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": { "reference": "target.attack" }
+            "amount": {
+              "reference": "target.attack"
+            },
+            "damageResolution": "per-target"
           }
         ]
       }

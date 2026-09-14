@@ -39,6 +39,40 @@ const plan = {
 }
 
 describe('bounded AI deliberation contract', () => {
+  it('constrains resource and action check references in the provider schema', () => {
+    const schema = aiChoiceSchema({ phase: 'plan', actionIds: ['a2', 'a5'] })
+    expect(schema).toMatchObject({
+      properties: {
+        plan: {
+          properties: {
+            checks: {
+              items: {
+                anyOf: [
+                  {
+                    properties: {
+                      topic: { enum: ['resources', 'history'] },
+                      ref: { enum: ['self', 'opponent'] }
+                    }
+                  },
+                  {
+                    properties: {
+                      topic: { enum: ['action'] },
+                      ref: { enum: ['a2', 'a5'] }
+                    }
+                  },
+                  {
+                    properties: {
+                      topic: { enum: ['entity', 'mechanics', 'condition'] }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    })
+  })
   it('round-trips each choice while rejecting the obsolete bare action contract', () => {
     for (const choice of [commit, { plan }, { inspect: [check] }])
       expect(parseAiChoice({ reason: 'Brief.', choice })).toEqual({

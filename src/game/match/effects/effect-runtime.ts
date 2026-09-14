@@ -650,6 +650,9 @@ export class EffectRuntime {
   private automaticChoiceDepth = 0
   private deathBatchSequence = 0
   private deathResolutionDepth = 0
+  private effectPhaseDepth = 0
+  private pendingDamageConsequences:
+    ({ event: SemanticEvent; frame: EffectFrame | null } | (() => void))[] | null = null
   private deriving = false
 
   constructor(
@@ -1606,7 +1609,12 @@ export class EffectRuntime {
       correlation: queued.correlation!
     })
     if (this.activeFrame) this.activeFrame.lastEvent = queued
-    this.resolveEvent(queued)
+    if (
+      this.pendingDamageConsequences &&
+      (queued.type === 'damage-dealt' || queued.type === 'hero-damaged')
+    )
+      this.pendingDamageConsequences.push({ event: queued, frame: this.activeFrame })
+    else this.resolveEvent(queued)
     if (queued.type === 'spell-cast' && queued.controllerId) {
       const player = this.player(queued.controllerId)
       const count =
@@ -2078,9 +2086,26 @@ export class EffectRuntime {
     })
   }
 
-  private resolveEvent(event: SemanticEvent): void {
+  private resolveEvent(
+    event: SemanticEvent,
+    frames = this.collectTriggerFrames(event)
+  ): void {
+    // Interrupts and nested reactions own their damage steps, even when the
+    // parent is still applying a batch (for example lethal-damage prevention).
+    const previous = this.pendingDamageConsequences
+    this.pendingDamageConsequences = null
+    try {
+      this.withEffectPhase(() => this.resolveCapturedEvent(event, frames))
+    } finally {
+      this.pendingDamageConsequences = previous
+    }
+  }
+
+  private resolveCapturedEvent(
+    event: SemanticEvent,
+    frames: ReturnType<EffectRuntime['collectTriggerFrames']>
+  ): void {
     this.step(`trigger.dispatch:${event.type}:${event.sequence}`, 'trigger')
-    const frames = this.collectTriggerFrames(event)
     const deathEvent = event.type === 'minion-died' || event.type === 'weapon-died'
     if (deathEvent) {
       // Deathrattles, death triggers, and Secrets share one queue. Deathrattle
@@ -2205,7 +2230,7 @@ export class EffectRuntime {
     if (ref.kind === 'hero' || ref.kind === 'hero-power') return true
     if (ref.kind === 'minion')
       return this.player(ref.participantId).board.some(
-        (minion) => minion.instanceId === ref.instanceId
+        (minion) => minion.instanceId === ref.instanceId && minion.health > 0
       )
     if (ref.kind === 'card') return this.currentCard(ref) !== null
     if (ref.kind === 'weapon')
@@ -2216,6 +2241,18 @@ export class EffectRuntime {
   }
 
   private runBlock(
+    block: CardEffectBlock,
+    frame: EffectFrame,
+    path: string,
+    emitTriggerPresentation = false
+  ): void {
+    this.withEffectPhase(() =>
+      this.runBlockInPhase(block, frame, path, emitTriggerPresentation)
+    )
+    this.processDeaths()
+  }
+
+  private runBlockInPhase(
     block: CardEffectBlock,
     frame: EffectFrame,
     path: string,
@@ -2397,7 +2434,65 @@ export class EffectRuntime {
     return true
   }
 
+  private withEffectPhase<T>(run: () => T): T {
+    this.effectPhaseDepth += 1
+    try {
+      return run()
+    } finally {
+      this.effectPhaseDepth -= 1
+    }
+  }
+
+  /** Damage application is atomic; its reactions resolve before the next step. */
+  private runDamageStep<T>(run: () => T): T {
+    return this.withEffectPhase(() => {
+      const previous = this.pendingDamageConsequences
+      const consequences: NonNullable<EffectRuntime['pendingDamageConsequences']> = []
+      this.pendingDamageConsequences = consequences
+      try {
+        const result = run()
+        this.pendingDamageConsequences = null
+        // Capture all eligible listeners before any reaction can summon new ones.
+        const resolutions = consequences.map((entry) => {
+          if (typeof entry === 'function') return entry
+          const frames = this.collectTriggerFrames(entry.event)
+          return () => {
+            const prior = this.activeFrame
+            this.activeFrame = entry.frame
+            try {
+              if (entry.frame) entry.frame.lastEvent = entry.event
+              this.resolveEvent(entry.event, frames)
+            } finally {
+              this.activeFrame = prior
+            }
+          }
+        })
+        for (const resolve of resolutions) resolve()
+        return result
+      } finally {
+        this.pendingDamageConsequences = previous
+      }
+    })
+  }
+
   private runActions<Action>(
+    actions: readonly Action[],
+    frame: EffectFrame,
+    path: string,
+    runAction: (
+      action: Action,
+      frame: EffectFrame,
+      path: string
+    ) => void = this.runAction.bind(this)
+  ): boolean {
+    const paused = this.withEffectPhase(() =>
+      this.runActionsInPhase(actions, frame, path, runAction)
+    )
+    this.processDeaths()
+    return paused
+  }
+
+  private runActionsInPhase<Action>(
     actions: readonly Action[],
     frame: EffectFrame,
     path: string,
@@ -2415,7 +2510,6 @@ export class EffectRuntime {
         actionPath,
         () => {
           runAction(action, frame, actionPath)
-          this.processDeaths()
           if (
             isRecord(action) &&
             action.action === 'discover' &&
@@ -2930,6 +3024,24 @@ export class EffectRuntime {
         ...(frame.continuous ? { continuous: true } : {})
       }
       this.addEnchantment(ref, enchantment)
+      if (ref.kind === 'hero' && keyword === 'immune') {
+        // Continuous auras run after base flags are derived. Publish immunity
+        // immediately for damage checks and the renderer, including attack buffs.
+        const hero = this.player(ref.participantId).hero
+        hero.immune = effectiveBoardMinionKeywords(
+          { ...hero, keywords: hero.baseKeywords ?? hero.keywords },
+          this.draft.turnNumber
+        ).includes('immune')
+      }
+      if (ref.kind === 'minion' && keyword === 'spell-immune') {
+        // Auras are applied after base flags are derived, so publish Elusive now.
+        this.updateMinion(ref, (minion) => {
+          minion.spellImmune = effectiveBoardMinionKeywords(
+            minion,
+            this.draft.turnNumber
+          ).includes('spell-immune')
+        })
+      }
       if (ref.kind === 'hero' && keyword === 'spell-damage') {
         const hero = this.player(ref.participantId).hero
         hero.spellDamage = enabled ? (hero.spellDamage ?? 0) + amount : 0
@@ -3021,6 +3133,17 @@ export class EffectRuntime {
     amount: number,
     frame: EffectFrame,
     path: string,
+    options: Parameters<EffectRuntime['applyDamageNow']>[4] = {}
+  ): number {
+    const apply = (): number => this.applyDamageNow(ref, amount, frame, path, options)
+    return this.pendingDamageConsequences ? apply() : this.runDamageStep(apply)
+  }
+
+  private applyDamageNow(
+    ref: EntityRef,
+    amount: number,
+    frame: EffectFrame,
+    path: string,
     options: {
       readonly skipSpellScaling?: boolean
       readonly spellDamageBonusMultiplier?: number
@@ -3047,10 +3170,8 @@ export class EffectRuntime {
       })
       return 0
     }
-    if (
-      this.hasKeyword(ref, 'immune') ||
-      (this.sourceIsSpell(frame) && this.hasKeyword(ref, 'spell-immune'))
-    ) {
+    // Elusive (spell-immune) restricts chosen targets, not damage resolution.
+    if (this.hasKeyword(ref, 'immune')) {
       this.emit(frame, 'damage', path, {
         target: ref.instanceId,
         amount: requested,
@@ -3220,24 +3341,28 @@ export class EffectRuntime {
         ...cloneFrame(frame, `${path}.lifesteal`),
         skipLifesteal: true
       }
-      this.applyRestore(
-        {
-          instanceId: `${frame.controllerId}:hero`,
-          kind: 'hero',
-          participantId: frame.controllerId,
-          zone: 'hero'
-        },
-        effectiveDamage,
-        lifestealFrame,
-        `${path}.lifesteal`,
-        {
-          forceHealthReplacement: this.hasHealthReplacement(
-            frame.controllerId,
-            frame,
-            true
-          )
-        }
-      )
+      const restore = (): void => {
+        this.applyRestore(
+          {
+            instanceId: `${frame.controllerId}:hero`,
+            kind: 'hero',
+            participantId: frame.controllerId,
+            zone: 'hero'
+          },
+          effectiveDamage,
+          lifestealFrame,
+          `${path}.lifesteal`,
+          {
+            forceHealthReplacement: this.hasHealthReplacement(
+              frame.controllerId,
+              frame,
+              true
+            )
+          }
+        )
+      }
+      if (this.pendingDamageConsequences) this.pendingDamageConsequences.push(restore)
+      else restore()
     }
     return effectiveDamage
   }
@@ -3363,10 +3488,11 @@ export class EffectRuntime {
     return healed
   }
 
-  private processDeaths(): void {
+  private processDeaths(force = false): void {
     // Death effects can create new lethal minions, but those deaths are not
     // checked until the current death event has finished resolving.
-    if (this.deathResolutionDepth > 0) return
+    // Only explicit intermediate checkpoints may bypass the enclosing phase.
+    if (this.deathResolutionDepth > 0 || (!force && this.effectPhaseDepth > 0)) return
 
     type DeadMinionEntry = {
       readonly player: DraftPlayer
@@ -4608,7 +4734,7 @@ export class EffectRuntime {
     // not yet entered resurrection history.
     const current = this.currentMinion(ref)
     if (index < 0 && current && current.health <= 0) {
-      this.processDeaths()
+      this.processDeaths(true)
       index = (entryPlayer.graveyard ?? []).findIndex(
         (entry) => entry.minion.instanceId === ref.instanceId
       )
@@ -4986,6 +5112,24 @@ export class EffectRuntime {
           chosenTargets.push(selected)
           usedTargets.add(entityKey(selected))
         }
+        const presentCast = (
+          type: 'random-spell-started' | 'random-spell-completed'
+        ): void => {
+          this.events.push({
+            type,
+            castId: source.instanceId,
+            participantId: frame.controllerId,
+            cardId: definition.id,
+            // Playback needs live zones, not a duplicate of accumulated history/trace.
+            // Cloning never advances RNG, derives auras, or runs rule checkpoints.
+            state: clonePlain({
+              ...this.draft,
+              history: undefined,
+              effectTrace: undefined
+            }) as unknown as OpeningMatchState
+          })
+        }
+        presentCast('random-spell-started')
         const resolvedTargets = [...chosenTargets]
         for (
           let targetIndex = 0;
@@ -5015,7 +5159,10 @@ export class EffectRuntime {
           instanceId: source.instanceId,
           cardId: definition.id
         })
-        if (castEvent.cancelled) continue
+        if (castEvent.cancelled) {
+          presentCast('random-spell-completed')
+          continue
+        }
         this.runCardBlocks(
           definition,
           'cast',
@@ -5025,7 +5172,9 @@ export class EffectRuntime {
           },
           `${path}[${index}]`
         )
-        this.processDeaths()
+        // Each automatically cast spell is a complete resolution, even inside
+        // another effect's phase (for example a multi-spell Battlecry).
+        this.processDeaths(true)
         this.emitCardPlayedSemantic(
           source,
           resolvedTargets[0] ?? source,
@@ -5033,6 +5182,7 @@ export class EffectRuntime {
           'spell-resolved',
           'cast'
         )
+        presentCast('random-spell-completed')
       }
     } finally {
       this.automaticChoiceDepth -= 1
@@ -5092,6 +5242,64 @@ export class EffectRuntime {
         participantId,
         costs: costOptions.map((option) => option.cost)
       })
+    }
+  }
+
+  private damageTargets(
+    action: Record<string, unknown>,
+    frame: EffectFrame
+  ): EntityRef[] {
+    if (isRecord(action.target) && action.target.selection === 'random') {
+      for (const player of this.draft.players)
+        for (const minion of player.board)
+          if (minion.health <= 0)
+            frame.randomDamageExcluded.add(
+              entityKey({
+                kind: 'minion',
+                participantId: player.participantId,
+                instanceId: minion.instanceId,
+                zone: 'board'
+              })
+            )
+    }
+    const targets = [...this.actionTargets(action, frame)]
+    if (!isRecord(action.target) || action.target.selection !== 'random') {
+      targets.sort(
+        (left, right) =>
+          (this.playOrderFor(left) ?? -1) - (this.playOrderFor(right) ?? -1)
+      )
+      if (action.damageOrder === 'reverse-play-order') targets.reverse()
+    }
+    return targets
+  }
+
+  private prepareDamage(
+    action: Record<string, unknown>,
+    target: EntityRef,
+    frame: EffectFrame,
+    path: string,
+    skipSpellScaling = false
+  ): () => void {
+    const amount = this.queries.withTarget(frame, target, () => {
+      const minimum =
+        typeof action.minimum === 'number' ? Math.floor(action.minimum) : null
+      const maximum =
+        typeof action.maximum === 'number' ? Math.floor(action.maximum) : null
+      return minimum !== null && maximum !== null && maximum >= minimum
+        ? minimum + Math.floor(this.rng.next() * (maximum - minimum + 1))
+        : this.queries.evaluate(action.amount, frame)
+    })
+    return () => {
+      this.queries.withTarget(frame, target, () => {
+        frame.lastDamageAmount = amount
+        this.applyDamage(target, amount, frame, path, {
+          skipSpellScaling,
+          ...(typeof action.spellDamageBonusMultiplier === 'number'
+            ? { spellDamageBonusMultiplier: action.spellDamageBonusMultiplier }
+            : {})
+        })
+      })
+      frame.lastActionTarget = target
     }
   }
 
@@ -5340,7 +5548,7 @@ export class EffectRuntime {
                 this.frameFor(copiedSource, null, [copiedTarget]),
                 `${path}.cast-copy`
               )
-              this.processDeaths()
+              this.processDeaths(true)
               this.emitSemantic({ ...castEvent, type: 'spell-resolved' })
             }
           }
@@ -5418,6 +5626,18 @@ export class EffectRuntime {
         if (frame.event) frame.event.cancelled = true
         this.emit(frame, name, path, { eventType: frame.event?.type ?? null })
         return
+      case 'damage-group': {
+        const packets = asArray(action.actions).flatMap((value, index) => {
+          const damage = asRecord(value)
+          return this.damageTargets(damage, frame).map((target) =>
+            this.prepareDamage(damage, target, frame, `${path}.actions[${index}].hit0`)
+          )
+        })
+        this.runDamageStep(() => {
+          for (const apply of packets) apply()
+        })
+        return
+      }
       case 'damage': {
         const baseHits =
           action.hits === undefined
@@ -5425,7 +5645,7 @@ export class EffectRuntime {
             : Math.max(0, Math.floor(this.queries.evaluate(action.hits, frame)))
         const randomTarget =
           isRecord(action.target) && action.target.selection === 'random'
-        const targets = randomTarget ? [] : this.actionTargets(action, frame)
+        const targets = randomTarget ? [] : this.damageTargets(action, frame)
         const randomSplitSpell =
           this.sourceIsSpell(frame) && randomTarget && action.amount === 1
         const hits = randomSplitSpell
@@ -5440,33 +5660,40 @@ export class EffectRuntime {
               )
             )
           : baseHits
-        const tracksMortallyWoundedRandomTargets =
-          randomTarget && (action.hits !== undefined || randomSplitSpell)
+        const tracksMortallyWoundedRandomTargets = randomTarget
         const previousRandomDamageExcluded = frame.randomDamageExcluded
         if (tracksMortallyWoundedRandomTargets) frame.randomDamageExcluded = new Set()
         try {
           for (let hit = 0; hit < hits; hit += 1) {
             const selectedTargets = randomTarget
-              ? this.actionTargets(action, frame)
+              ? this.damageTargets(action, frame)
               : targets
-            for (const target of selectedTargets) {
-              this.queries.withTarget(frame, target, () => {
-                const minimum =
-                  typeof action.minimum === 'number' ? Math.floor(action.minimum) : null
-                const maximum =
-                  typeof action.maximum === 'number' ? Math.floor(action.maximum) : null
-                const amount =
-                  minimum !== null && maximum !== null && maximum >= minimum
-                    ? minimum + Math.floor(this.rng.next() * (maximum - minimum + 1))
-                    : this.queries.evaluate(action.amount, frame)
-                frame.lastDamageAmount = amount
-                this.applyDamage(target, amount, frame, path + '.hit' + hit, {
-                  skipSpellScaling: randomSplitSpell,
-                  ...(typeof action.spellDamageBonusMultiplier === 'number'
-                    ? { spellDamageBonusMultiplier: action.spellDamageBonusMultiplier }
-                    : {})
-                })
+            if (action.damageResolution === 'per-target') {
+              for (const target of selectedTargets)
+                this.runDamageStep(
+                  this.prepareDamage(
+                    action,
+                    target,
+                    frame,
+                    `${path}.hit${hit}`,
+                    randomSplitSpell
+                  )
+                )
+            } else {
+              const packets = selectedTargets.map((target) =>
+                this.prepareDamage(
+                  action,
+                  target,
+                  frame,
+                  `${path}.hit${hit}`,
+                  randomSplitSpell
+                )
+              )
+              this.runDamageStep(() => {
+                for (const apply of packets) apply()
               })
+            }
+            for (const target of selectedTargets) {
               const minion =
                 target.kind === 'minion' ? this.currentMinion(target) : null
               if (tracksMortallyWoundedRandomTargets && minion && minion.health <= 0)
@@ -6084,6 +6311,14 @@ export class EffectRuntime {
         if (!targetType) return
         for (const target of this.actionTargets(action, frame)) {
           if (target.kind !== 'hero-power') continue
+          const powerId = this.player(target.participantId).heroPower.id
+          if (
+            frame.sourceCardId === 'goblins_vs_gnomes_steamwheedle_sniper' &&
+            powerId !== 'hunter-steady-shot' &&
+            powerId !== 'hunter-ballista-shot'
+          ) {
+            continue
+          }
           const duration = stringValue(action.duration) ?? 'permanent'
           const enchantment: RuntimeEnchantment = {
             id: frame.continuous
@@ -6362,13 +6597,13 @@ export class EffectRuntime {
             action.target === undefined
               ? []
               : this.queries.select(action.target, sourceFrame)
-          for (const target of targets) {
-            this.queries.withTarget(sourceFrame, target, () => {
-              const amount = this.queries.evaluate(action.amount, sourceFrame)
-              this.applyDamage(target, amount, sourceFrame, path)
-            })
-            frame.lastActionTarget = target
-          }
+          const packets = targets.map((target) =>
+            this.prepareDamage(action, target, sourceFrame, path)
+          )
+          this.runDamageStep(() => {
+            for (const apply of packets) apply()
+          })
+          frame.lastActionTarget = sourceFrame.lastActionTarget
         }
         return
       }
@@ -6494,15 +6729,24 @@ export class EffectRuntime {
           }
         }
         return
-      case 'restore':
-        for (const target of this.actionTargets(action, frame)) {
-          this.queries.withTarget(frame, target, () => {
-            const amount = this.queries.evaluate(action.amount, frame, true)
-            this.applyRestore(target, amount, frame, path)
-          })
-          frame.lastActionTarget = target
+      case 'restore': {
+        // Healing converted to damage shares the same area-damage boundary.
+        // Ordinary healing events retain their existing resolution behavior.
+        const targets = this.actionTargets(action, frame)
+        const restore = (): void => {
+          for (const target of targets) {
+            this.queries.withTarget(frame, target, () => {
+              const amount = this.queries.evaluate(action.amount, frame, true)
+              this.applyRestore(target, amount, frame, path)
+            })
+            frame.lastActionTarget = target
+          }
         }
+        if (this.hasHealthReplacement(frame.controllerId, frame))
+          this.runDamageStep(restore)
+        else restore()
         return
+      }
       case 'return-to-play':
         for (const target of this.actionTargets(action, frame)) {
           if (target.kind === 'minion') {
@@ -6592,13 +6836,13 @@ export class EffectRuntime {
             action.target === undefined
               ? []
               : this.queries.select(action.target, sourceFrame)
-          for (const target of targets) {
-            this.queries.withTarget(sourceFrame, target, () => {
-              const amount = this.queries.evaluate(action.amount, sourceFrame)
-              this.applyDamage(target, amount, sourceFrame, path + '.damage')
-            })
-            frame.lastActionTarget = target
-          }
+          const packets = targets.map((target) =>
+            this.prepareDamage(action, target, sourceFrame, path + '.damage')
+          )
+          this.runDamageStep(() => {
+            for (const apply of packets) apply()
+          })
+          frame.lastActionTarget = sourceFrame.lastActionTarget
         }
         return
       }
@@ -8030,6 +8274,10 @@ export class EffectRuntime {
     return this.playInput(participantId, cardInstanceId, choice)
   }
 
+  private isEnemyStealthed(target: EntityRef, controllerId: PlayerId): boolean {
+    return target.participantId !== controllerId && this.hasKeyword(target, 'stealth')
+  }
+
   private legalInputCandidates(
     selectorValue: Readonly<Record<string, unknown>>,
     frame: EffectFrame
@@ -8046,7 +8294,9 @@ export class EffectRuntime {
       count: preservesPositionRange ? selectorValue.count : undefined,
       preserve: undefined
     }
-    const candidates = this.queries.selectorCandidates(selector, frame)
+    const candidates = this.queries
+      .selectorCandidates(selector, frame)
+      .filter((candidate) => !this.isEnemyStealthed(candidate, frame.controllerId))
     if (!this.sourceIsSpell(frame)) return candidates
     return candidates.filter(
       (candidate) =>
@@ -8286,6 +8536,7 @@ export class EffectRuntime {
       if (
         !matchesTargetType ||
         !this.liveCombatTarget(target) ||
+        this.isEnemyStealthed(target, participantId) ||
         this.hasKeyword(target, 'immune') ||
         this.hasKeyword(target, 'spell-immune')
       )
@@ -8508,6 +8759,12 @@ export class EffectRuntime {
         throw new ResolutionInputError(
           'illegal-target',
           'A selected target does not satisfy the card selector.'
+        )
+      }
+      if (this.isEnemyStealthed(current, targetFrame.controllerId)) {
+        throw new ResolutionInputError(
+          'illegal-target',
+          'An enemy in Stealth cannot be targeted.'
         )
       }
       if (
@@ -9036,10 +9293,8 @@ export class EffectRuntime {
       }
       if (actualDefender.kind === 'minion' && !this.liveCombatTarget(actualDefender))
         actualDefender = defender
-      if (
-        !this.liveCombatTarget(actualDefender) ||
-        this.hasKeyword(actualDefender, 'stealth')
-      ) {
+      // Redirection can hit Stealth; the player's original choice was checked above.
+      if (!this.liveCombatTarget(actualDefender)) {
         this.processDeaths()
         const nextState = this.commitResolution()
         return {
@@ -9078,10 +9333,7 @@ export class EffectRuntime {
             zone: 'board' as const,
             cardId: minion.cardId
           }))
-        ].filter(
-          (candidate) =>
-            this.liveCombatTarget(candidate) && !this.hasKeyword(candidate, 'stealth')
-        )
+        ].filter((candidate) => this.liveCombatTarget(candidate))
         const alternatives = candidates.filter(
           (candidate) => entityKey(candidate) !== entityKey(actualDefender)
         )
@@ -9188,7 +9440,8 @@ export class EffectRuntime {
               : { kind: 'minion', instanceId: attacker.instanceId },
           attack: attackerAttack,
           healthBefore: attackerHealthBefore,
-          armorBefore: attackerArmorBefore
+          armorBefore: attackerArmorBefore,
+          immune: this.hasKeyword(attacker, 'immune')
         },
         defender: {
           participantId: actualDefender.participantId,
@@ -9198,7 +9451,8 @@ export class EffectRuntime {
               : { kind: 'minion', instanceId: actualDefender.instanceId },
           attack: defenderAttack,
           healthBefore: defenderHealthBefore,
-          armorBefore: defenderArmorBefore
+          armorBefore: defenderArmorBefore,
+          immune: this.hasKeyword(actualDefender, 'immune')
         }
       }
       this.events.push(combatStarted)
@@ -9217,22 +9471,31 @@ export class EffectRuntime {
         defenderAttack,
         defenderFrame
       ).displayAmount
-      const attackerDamage = this.applyDamage(
-        actualDefender,
-        attackerAttack,
-        attackerFrame,
-        'combat.attacker'
-      )
-      const defenderDivineShieldConsumed =
-        defenderHadDivineShield && !this.hasKeyword(actualDefender, 'divine-shield')
-      const defenderDamage = this.applyDamage(
-        attacker,
-        defenderAttack,
-        defenderFrame,
-        'combat.defender'
-      )
-      const attackerDivineShieldConsumed =
-        attackerHadDivineShield && !this.hasKeyword(attacker, 'divine-shield')
+      const [
+        attackerDamage,
+        defenderDamage,
+        defenderDivineShieldConsumed,
+        attackerDivineShieldConsumed
+      ] = this.runDamageStep(() => {
+        const dealt = this.applyDamage(
+          actualDefender,
+          attackerAttack,
+          attackerFrame,
+          'combat.attacker'
+        )
+        const retaliated = this.applyDamage(
+          attacker,
+          defenderAttack,
+          defenderFrame,
+          'combat.defender'
+        )
+        return [
+          dealt,
+          retaliated,
+          defenderHadDivineShield && !this.hasKeyword(actualDefender, 'divine-shield'),
+          attackerHadDivineShield && !this.hasKeyword(attacker, 'divine-shield')
+        ] as const
+      })
 
       const attackerDied =
         attacker.kind === 'hero'
@@ -9477,6 +9740,11 @@ export class EffectRuntime {
           throw new ResolutionInputError(
             'invalid-target',
             'The selected target is not a minion.'
+          )
+        if (this.isEnemyStealthed(target, options.participantId))
+          throw new ResolutionInputError(
+            'invalid-target',
+            'An enemy in Stealth cannot be targeted.'
           )
         if (
           this.hasKeyword(target, 'immune') ||

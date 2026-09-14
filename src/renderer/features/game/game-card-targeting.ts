@@ -37,8 +37,8 @@ interface CardTargetingContext {
   presentMinionPreview(
     preview: PendingMinionTargetPreview
   ): Promise<MinionPreviewPresentation | null>
-  showBoardPreview(position: number): void
-  clearBoardPreview(position: number): void
+  showBoardPreview(position: number, owner: string): void
+  clearBoardPreview(position: number, owner: string): void
   releaseSummonSlot(slot: GameCardSlot): void
   syncAttackability(): void
   syncControls(): void
@@ -160,7 +160,8 @@ export class GameCardTargeting {
     const children = this.cardChoiceLayer.removeChildren()
     for (const child of children) child.destroy({ children: true })
     this.cardChoiceLayer.visible = false
-    this.cardSelectionOverlay.clear()
+    // Mandatory match choices share this surface but do not belong to targeting.
+    if (this.cardTargeting) this.cardSelectionOverlay.clear()
   }
 
   private showCardChoiceOverlay(input: PlayCardInput): void {
@@ -275,7 +276,7 @@ export class GameCardTargeting {
 
     this.hand.drag.releaseForTargeting(preview.entry)
     preview.entry.slot.visible = true
-    this.context.showBoardPreview(preview.position)
+    this.context.showBoardPreview(preview.position, preview.entry.card.instanceId)
     this.cursor?.setTargeting(true)
     if (this.assets.arrowBody) {
       this.attackLine.setBodyTexture(this.assets.arrowBody)
@@ -407,7 +408,7 @@ export class GameCardTargeting {
       } finally {
         this.context.releaseSummonSlot(preview.entry.slot)
         if (this.minionTargetPreview() === preview) this.cardTargeting = null
-        this.context.clearBoardPreview(preview.position)
+        this.context.clearBoardPreview(preview.position, preview.entry.card.instanceId)
         this.hand.setReflowing(false)
         if (!this.disposed && !this.context.isDisposed()) {
           this.hand.activate()

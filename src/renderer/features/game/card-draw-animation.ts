@@ -2,6 +2,12 @@ import { Container, PerspectiveMesh, Rectangle, Sprite, type Renderer } from 'pi
 import type { GameCardSlot } from './game-card-slot'
 import { CARD_DRAW_LAYOUT } from './card-draw-layout'
 import { isArtworkVisible } from '../../rendering/effects/premium-artwork-breath'
+import {
+  getShadowCaster,
+  shadowBodyCorners,
+  type ShadowCaster
+} from '../../rendering/shadows/shadow-caster'
+import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
 
 type Point = { x: number; y: number }
 export type DrawCorners = readonly [Point, Point, Point, Point]
@@ -10,7 +16,12 @@ const mix = (a: number, b: number, t: number): number => a + (b - a) * t
 const smooth = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10)
 
 export type CardDrawProfile = 'direct' | 'local-reveal' | 'mulligan-reveal'
-type FlightPose = { corners: DrawCorners; front: boolean; edgeOn: boolean }
+type FlightPose = {
+  corners: DrawCorners
+  front: boolean
+  edgeOn: boolean
+  magnification: number
+}
 type FlightFrame = {
   at: number
   x: number
@@ -173,8 +184,15 @@ export function createLocalDrawFlight(
 
   const finalCorners = project(last)
   return (progress): FlightPose => {
-    if (progress <= 0) return { corners: departureCorners, front: false, edgeOn: false }
-    if (progress >= 1) return { corners: end, front: true, edgeOn: false }
+    if (progress <= 0)
+      return {
+        corners: departureCorners,
+        front: false,
+        edgeOn: false,
+        magnification: first.scale / last.scale
+      }
+    if (progress >= 1)
+      return { corners: end, front: true, edgeOn: false, magnification: 1 }
     const index = frames.findIndex(
       (_, i) => i < frames.length - 1 && progress < frames[i + 1].at
     )
@@ -220,7 +238,12 @@ export function createLocalDrawFlight(
         (end[i].y - finalCorners[i].y) * arrival
     })) as unknown as DrawCorners
     const cosine = Math.cos(pose.yaw)
-    return { corners, front: cosine < 0, edgeOn: Math.abs(cosine) < 0.012 }
+    return {
+      corners,
+      front: cosine < 0,
+      edgeOn: Math.abs(cosine) < 0.012,
+      magnification: pose.scale / last.scale
+    }
   }
 }
 
@@ -230,7 +253,7 @@ export function drawFlightPose(
   end: DrawCorners,
   progress: number,
   reveal: boolean
-): { corners: DrawCorners; front: boolean; edgeOn: boolean } {
+): FlightPose {
   const t = smooth(Math.max(0, Math.min(1, progress)))
   const center = (corners: DrawCorners): Point => ({
     x: corners.reduce((sum, p) => sum + p.x, 0) / 4,
@@ -305,7 +328,8 @@ export function drawFlightPose(
             project(3, -0.5, 0.5)
           ],
     front: reveal && cosine < 0,
-    edgeOn: Math.abs(cosine) < 0.012
+    edgeOn: Math.abs(cosine) < 0.012,
+    magnification: scale
   }
 }
 
@@ -318,6 +342,11 @@ export class CardDrawAnimation {
   private readonly wasVisible: boolean
   private readonly localFlight?: (progress: number) => FlightPose
   private disposed = false
+  private readonly shadow: ShadowCaster | undefined
+  private readonly previousShadowVisual: Container | undefined
+  private readonly previousShadowMinimum: number
+  private readonly destinationMagnification: number
+  private readonly shadowFrame: Rectangle
 
   constructor(
     renderer: Renderer,
@@ -337,8 +366,14 @@ export class CardDrawAnimation {
       )
     ) as unknown as DrawCorners
     const face = slot ? slot.card : target
+    this.shadow = getShadowCaster(target)
+    this.previousShadowVisual = this.shadow?.visual
+    this.previousShadowMinimum = this.shadow?.minimumHeight ?? 0
+    this.destinationMagnification =
+      Math.abs(target.scale.y) / (this.shadow?.restingScale ?? 1)
     const bounds = face.getLocalBounds()
     const frame = new Rectangle(bounds.minX, bounds.minY, bounds.width, bounds.height)
+    this.shadowFrame = frame
     this.end = [
       { x: frame.x, y: frame.y },
       { x: frame.right, y: frame.y },
@@ -372,6 +407,7 @@ export class CardDrawAnimation {
     this.wasVisible = target.visible
     target.visible = false
     layer.addChild(this.mesh)
+    if (this.shadow) this.shadow.visual = this.mesh
     this.update(0)
   }
 
@@ -384,11 +420,31 @@ export class CardDrawAnimation {
     this.mesh.visible = !pose.edgeOn
     const [a, b, c, d] = pose.corners
     this.mesh.setCorners(a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y)
+    if (this.shadow?.visual === this.mesh) {
+      this.shadow.corners = shadowBodyCorners(
+        pose.corners,
+        this.shadowFrame,
+        this.shadow.bounds
+      )
+      this.shadow.magnification = pose.magnification * this.destinationMagnification
+      // The existing flight arc also lifts direct draws that do not enlarge.
+      this.shadow.minimumHeight = Math.max(
+        this.previousShadowMinimum,
+        MATCH_SHADOW_CONFIG.heldCardHeight *
+          Math.sin(Math.PI * Math.max(0, Math.min(1, progress)))
+      )
+    }
   }
 
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    if (this.shadow?.visual === this.mesh && this.previousShadowVisual) {
+      this.shadow.visual = this.previousShadowVisual
+      this.shadow.corners = null
+      this.shadow.magnification = null
+      this.shadow.minimumHeight = this.previousShadowMinimum
+    }
     if (!this.target.destroyed) this.target.visible = this.wasVisible
     this.mesh.removeFromParent()
     this.mesh.destroy()

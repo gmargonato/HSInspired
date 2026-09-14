@@ -48,6 +48,50 @@ Individual focused commands:
 
 ---
 
+## Gameplay: Stealth and Elusive
+
+- **Stealth:** Opponents cannot choose this minion for attacks, spells, Hero Powers,
+  or targeted minion abilities. Its owner can still target it. Stealth ends when
+  the minion attacks; taking damage or dealing damage through an ability does not
+  reveal it. Taunt does not restrict enemy attacks while its minion is in Stealth.
+- **Elusive:** Neither player can choose this minion for spells or Hero Powers,
+  including friendly buffs and healing. Attacks and targeted minion abilities are
+  allowed. Elusive is not consumed by attacking or taking damage.
+- Both remain vulnerable to area effects and random damage or destruction.
+  Divine Shield and Immune still prevent damage normally. Random attack
+  redirection can hit Stealth even though the player cannot choose it directly.
+- Conceal and Master of Disguise grant Stealth until the start of your next turn,
+  unless the minion attacks first. Aura-granted Elusive lasts while the aura
+  applies. Silence removes abilities, but a chosen silence must first obey
+  targeting restrictions; an external aura can still apply to a silenced minion.
+- Board markers show active abilities. Keyword explanations and a remaining-duration
+  display are not currently provided by the card hover UI.
+
+These rules follow [Blizzard's Stealth damage update](https://hearthstone.blizzard.com/en-gb/news/21694420),
+the [Elusive board-clear clarification](https://hearthstone.blizzard.com/en-us/cards/59601-robes-of-protection/),
+and [current Master of Disguise text](https://hearthstone.blizzard.com/en-us/cards/887-master-of-disguise/).
+The internal `spell-immune` keyword means Elusive, not immunity to spell damage.
+
+## Damage and trigger timing
+
+The engine applies an ordinary area-damage step to its captured targets before
+resolving damage triggers. Combat uses the same boundary for attack and retaliation.
+Damage reactions finish before the next sequential step; ordinary deaths wait until
+the enclosing effect phase finishes. Nested triggers do not open their own death
+checkpoint. Resurrection and separate automatically cast spells retain explicit
+intermediate death checkpoints.
+
+Card action arrays remain sequential. Use `damage-group` with an `actions` array
+of single-hit `damage` actions when different amounts or selectors belong to one
+damage step (Swipe and Explosive Shot). Normal `damage` actions already group all
+their targets. Repeated hits resolve reactions and select random targets between
+hits. `damageResolution: "per-target"` captures the target list but resolves each
+target's damage separately, as authored for Lightbomb, Lightning Storm and Elemental
+Destruction. `damageOrder: "reverse-play-order"` describes Swipe's splash ordering.
+
+These boundaries follow the documented [damage rules](https://hearthstone.wiki.gg/wiki/Damage-related)
+and [resolution phases](https://hearthstone.wiki.gg/wiki/Advanced_rulebook).
+
 ## 3. Architecture & AI Agent Instructions
 
 All architectural boundaries, file naming standards, layout contracts, asset pipelines, and engineering invariants are documented in **[AGENTS.md](AGENTS.md)**.
@@ -111,12 +155,18 @@ non-streaming requests cannot expose internal generation progress.
 Malformed decision JSON, invalid response structures, invalid action IDs and
 action-ID/intent mismatches receive
 at most one format-correction attempt for planning and a separate attempt for action
-selection, using the same board and legal actions. Refusals, provider/network errors
+selection, using the same board and legal actions. Mismatch corrections show the
+selected input's exact intent and the conflicting returned intent. If correction
+fails, one automatic fresh-context attempt drops old conversation and plans, rebuilds
+current fair facts/legal actions, and carries recent public events and observed
+outcomes. This attempt can plan then commit, but cannot inspect or retry its own
+invalid responses. It is recorded as `fresh-context-retry`; it may add provider cost.
+Refusals, provider/network errors
 and truncated completions do not trigger format repair. If a non-timeout request still fails,
 the AI pauses and an on-screen notice explains that the game menu can restart or
 leave the match; no random fallback move is played. The notice also offers
 `Retry AI`, which resumes the current turn or mulligan with fresh state and legal
-actions. Manual retries may incur additional provider charges. Leaving the match
+actions and a reset conversation. Manual retries may incur additional provider charges. Leaving the match
 cancels pending work and invalidates its retry button.
 
 Rejected decision content and its validation category/error are retained in both AI
@@ -189,7 +239,8 @@ Unsupported requests are explicit, not assumed true. Initial plan checks (up to
 three) are answered in the mandatory exchange. Later inspection allows one batch
 per decision and at most two extra exchanges per turn, shared across revisions
 and manual retries. The final response after inspection must commit; another
-question receives only the existing bounded format repair, not an endless loop.
+question receives bounded format correction and at most one fresh-context recovery,
+without replenishing the inspection allowance.
 The 45-second default is per provider call, not per entire turn; extra exchanges
 can increase waiting time.
 
@@ -212,6 +263,31 @@ prompt rationale, limits, and examples; gameplay quality still requires human te
 Historical model moves and execution feedback omit duplicate commands,
 reasons, and request identifiers. Card mechanics use compact text notation while
 preserving conditions, targets, amounts, and timing.
+Completed decisions retain only executed move descriptions and outcome feedback;
+intermediate plans, proposed IDs and fact-check payloads remain in logs rather than
+future conversation history. Kazakus's generated-card recipe lookup table is omitted
+from requests while costs and ingredient rules remain. Board characters expose
+maximum and missing health; heroes expose effective weapon-inclusive attack and
+current legal attack readiness. A bounded match-local record retains observed
+zero-healing and shield-consumption outcomes across context resets. These are factual
+reminders, not general tactical learning or memory shared between matches.
+Every decision exchange and format correction repeats a compact `currentDecision`
+with resources explicitly keyed by `self` and `opponent`, labeled board stats,
+current hand costs, and the current legal action list. Resource/history checks use
+schema-constrained `self`/`opponent` refs, and action checks use current IDs. Failed
+lookups supply usable visible refs; malformed resource lookups still return both
+players' labeled facts without guessing which was requested.
+An End Turn choice with other legal inputs receives at most one `end-turn-review`
+per revision, asking the model to reconsider unfinished plays or confirm a strategic
+pass. This adds a provider call when needed; it never forces spending resources,
+does not replenish inspection, and is skipped during fresh-context recovery.
+Recent non-End-Turn predictions are paired with bounded public outcome excerpts
+in `outcomeReviews` (four actions, twelve events each; omissions are labeled).
+Standalone historical forecasts are no longer retained as conversational facts.
+Prompts distinguish attack from health, spell from hero-power modifiers, reciprocal
+combat damage, and action timing. These checks improve grounding but do not certify
+model forecasts or simulate hidden outcomes. Format repair permits correcting strategy
+when its premises contradict the current facts.
 Event narration uses `you/your opponent` directly from participant identities.
 Hero powers use their authored names, instance IDs stay unchanged, and combat
 summaries describe health/armor/durability changes without raw internal damage labels.

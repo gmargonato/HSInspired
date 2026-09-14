@@ -2,6 +2,7 @@ import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
 import { AnimatedOutline } from '../effects/animated-outline'
 import { MINION_CANVAS, MINION_HIT_AREA, MINION_LAYOUT } from './minion-layout'
+import { attachShadow } from '../shadows/shadow-caster'
 import { SleepingZs } from './sleeping-zs'
 import { AnimationScope } from '../../animation/animations'
 import { minionAttackColor, minionHealthColor } from './minion-stat-presentation'
@@ -104,6 +105,15 @@ function createStatGroup(
 
 /** Feature-agnostic board minion presentation. The caller owns its position. */
 export class MinionView extends Container {
+  readonly shadow = attachShadow(
+    this,
+    {
+      x: MINION_LAYOUT.frame.position.x - MINION_LAYOUT.frame.size.width / 2,
+      y: MINION_LAYOUT.frame.position.y - MINION_LAYOUT.frame.size.height / 2,
+      ...MINION_LAYOUT.frame.size
+    },
+    { shape: 'ellipse' }
+  )
   private readonly unsubscribePremium: () => void
   private readonly artworkBreath: PremiumArtworkBreath
   private readonly legendaryFrame: Sprite
@@ -607,6 +617,7 @@ export class MinionView extends Container {
 
   setBaseScale(scale: number): void {
     this.baseScale = scale
+    this.shadow.restingScale = scale
     const targetScale = this.selected ? scale * MINION_LAYOUT.selectionScale : scale
     // Board reflow should feel snappy; selected keeps its lift via scale.
     this.animationScope.kill(this.scale)

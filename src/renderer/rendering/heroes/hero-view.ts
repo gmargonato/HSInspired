@@ -3,6 +3,7 @@ import { applyAnchoredPlacement, applyPlacement } from '../layout'
 import { AnimatedOutline } from '../effects/animated-outline'
 import { AnimationScope } from '../../animation/animations'
 import { HERO_CANVAS, HERO_LAYOUT } from './hero-layout'
+import { attachShadow } from '../shadows/shadow-caster'
 
 export interface HeroViewModel {
   readonly label: string
@@ -77,9 +78,16 @@ function setEventModeNone(container: Container): void {
 
 /** Feature-agnostic board hero presentation. The feature owns its position. */
 export class HeroView extends Container {
+  readonly shadow = attachShadow(
+    this,
+    { x: 0, y: 0, ...HERO_CANVAS },
+    { restingHeight: 0 }
+  )
   private readonly frame: Sprite
   private readonly frozen: Sprite
   private readonly immune: Sprite
+  private immuneVisible = false
+  private transientImmune = false
   private readonly attackGroup: Container
   private readonly attackLabel: Text
   private readonly healthGroup: Container
@@ -121,7 +129,7 @@ export class HeroView extends Container {
 
     this.immune = new Sprite(textures.immune)
     applyAnchoredPlacement(this.immune, HERO_LAYOUT.immune)
-    this.immune.visible = model.immune
+    this.setImmune(model.immune)
     this.immune.label = 'hero.immune'
     this.addChild(this.immune)
 
@@ -256,7 +264,14 @@ export class HeroView extends Container {
   }
 
   setImmune(visible: boolean): void {
-    this.immune.visible = visible
+    this.immuneVisible = visible
+    this.immune.visible = visible || this.transientImmune
+  }
+
+  /** Keeps brief immunity visible while an animation outlives its domain state. */
+  setTransientImmune(visible: boolean): void {
+    this.transientImmune = visible
+    this.immune.visible = this.immuneVisible || visible
   }
 
   /** Controls whether the health badge is shown independently of its value. */
@@ -329,6 +344,7 @@ export class HeroView extends Container {
 
   setBaseScale(scale: number): void {
     this.baseScale = scale
+    this.shadow.restingScale = scale
     this.scale.set(scale * (this.selected ? HERO_LAYOUT.selectionScale : 1))
   }
 

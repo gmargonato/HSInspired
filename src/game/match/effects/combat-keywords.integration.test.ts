@@ -619,6 +619,298 @@ describe('combat keyword matrix', () => {
   })
 })
 
+describe('Stealth and Elusive', () => {
+  function setup(cardId: string) {
+    const scenario = createMatchScenario({
+      seed: 8201,
+      cardId,
+      firstHeroId: 'jaina',
+      secondHeroId: 'jaina'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const card = player(scenario, participantId).hand.find(
+      (entry) => entry.cardId === cardId
+    )!
+    return { scenario, participantId, opponentId, card }
+  }
+
+  it.each([
+    ['basic_arcane_shot', 'classic_stranglethorn_tiger', false, false],
+    ['basic_arcane_shot', 'classic_stranglethorn_tiger', true, true],
+    ['basic_elven_archer', 'classic_stranglethorn_tiger', false, false],
+    ['basic_elven_archer', 'classic_stranglethorn_tiger', true, true],
+    ['basic_arcane_shot', 'classic_faerie_dragon', false, false],
+    ['basic_arcane_shot', 'classic_faerie_dragon', true, false],
+    ['basic_elven_archer', 'classic_faerie_dragon', false, true],
+    ['basic_elven_archer', 'classic_faerie_dragon', true, true]
+  ] as const)(
+    '%s targeting %s (friendly=%s) is legal=%s',
+    (cardId, minionId, friendly, legal) => {
+      const { scenario, participantId, opponentId, card } = setup(cardId)
+      const owner = friendly ? participantId : opponentId
+      const minion = summon(scenario, owner, minionId)
+      const target = {
+        kind: 'minion' as const,
+        participantId: owner,
+        instanceId: minion.instanceId
+      }
+      const input = scenario.match.getPlayInput!(participantId, card.instanceId)!
+      expect(
+        input.legalTargetOptions
+          .flat()
+          .some(
+            (entry) => entry.kind === 'minion' && entry.instanceId === minion.instanceId
+          )
+      ).toBe(legal)
+      const before = scenario.match.getState()
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId,
+        ...(input.requiresPosition
+          ? { position: player(scenario, participantId).board.length }
+          : {}),
+        targets: [target]
+      })
+      expect(result.accepted).toBe(legal)
+      if (!legal) expect(scenario.match.getState()).toEqual(before)
+    }
+  )
+
+  it.each([
+    ['classic_stranglethorn_tiger', false, false],
+    ['classic_stranglethorn_tiger', true, true],
+    ['classic_faerie_dragon', false, false],
+    ['classic_faerie_dragon', true, false]
+  ] as const)(
+    'Fireblast targeting %s (friendly=%s) is legal=%s',
+    (minionId, friendly, legal) => {
+      const { scenario, participantId, opponentId } = setup('basic_acidic_swamp_ooze')
+      const owner = friendly ? participantId : opponentId
+      const minion = summon(scenario, owner, minionId)
+      const target = {
+        kind: 'minion' as const,
+        participantId: owner,
+        instanceId: minion.instanceId
+      }
+      const targets = scenario.match.getLegality!(participantId).legalHeroPowerTargets
+      expect(
+        targets.some(
+          (entry) => entry.kind === 'minion' && entry.instanceId === minion.instanceId
+        )
+      ).toBe(legal)
+      expect(
+        scenario.match.dispatch({ type: 'use-hero-power', participantId, target })
+          .accepted
+      ).toBe(legal)
+    }
+  )
+
+  it.each(['classic_stranglethorn_tiger', 'classic_faerie_dragon'])(
+    'area spell damage hits %s without removing its ability',
+    (minionId) => {
+      const { scenario, participantId, opponentId, card } = setup('basic_whirlwind')
+      const minion = summon(scenario, opponentId, minionId)
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId,
+          cardInstanceId: card.instanceId
+        }).accepted
+      ).toBe(true)
+      const after = player(scenario, opponentId).board[0]!
+      expect(after.health).toBe(minion.health - 1)
+      expect(after.stealth).toBe(minion.stealth)
+      expect(after.spellImmune).toBe(minion.spellImmune)
+    }
+  )
+
+  it('random spell damage can kill an Elusive minion', () => {
+    const { scenario, participantId, opponentId, card } = setup(
+      'goblins_vs_gnomes_bouncing_blade'
+    )
+    // Bouncing Blade selects random minions; with one target its hits are deterministic.
+    summon(scenario, opponentId, 'classic_faerie_dragon')
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, opponentId).board).toHaveLength(0)
+  })
+
+  it('Elusive does not prevent area damage from consuming Divine Shield', () => {
+    const { scenario, participantId, opponentId, card } = setup('basic_whirlwind')
+    summon(scenario, participantId, 'classic_argent_squire')
+    summon(scenario, participantId, 'goblins_vs_gnomes_wee_spellstopper')
+    beginNextTurn(scenario, participantId, opponentId)
+    expect(player(scenario, participantId).board[0]!.spellImmune).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).board[0]).toMatchObject({
+      health: 1,
+      divineShield: false,
+      spellImmune: true
+    })
+    expect(player(scenario, opponentId).board).toHaveLength(0)
+  })
+
+  it('Master of Disguise protects through the opponent turn and expires on the next friendly turn', () => {
+    const { scenario, participantId, opponentId, card } = setup(
+      'classic_master_of_disguise'
+    )
+    const minion = summon(scenario, participantId, 'basic_acidic_swamp_ooze')
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId,
+        position: 1,
+        targets: [{ kind: 'minion', participantId, instanceId: minion.instanceId }]
+      }).accepted
+    ).toBe(true)
+    expect(
+      player(scenario, participantId).board.find(
+        (entry) => entry.instanceId === minion.instanceId
+      )?.stealth
+    ).toBe(true)
+    expect(scenario.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
+      true
+    )
+    expect(
+      player(scenario, participantId).board.find(
+        (entry) => entry.instanceId === minion.instanceId
+      )?.stealth
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: opponentId }).accepted
+    ).toBe(true)
+    expect(
+      player(scenario, participantId).board.find(
+        (entry) => entry.instanceId === minion.instanceId
+      )?.stealth
+    ).toBe(false)
+  })
+
+  it('silencing an Elusive aura source restores spell targeting of its neighbors', () => {
+    const { scenario, participantId, opponentId, card } = setup('classic_silence')
+    const neighbor = summon(scenario, opponentId, 'basic_acidic_swamp_ooze')
+    const source = summon(scenario, opponentId, 'goblins_vs_gnomes_wee_spellstopper')
+    beginNextTurn(scenario, participantId, opponentId)
+    expect(player(scenario, opponentId).board[0]!.spellImmune).toBe(true)
+    const targets = () =>
+      scenario.match.getPlayInput!(
+        participantId,
+        card.instanceId
+      )!.legalTargetOptions.flat()
+    expect(
+      targets().some(
+        (entry) => entry.kind === 'minion' && entry.instanceId === neighbor.instanceId
+      )
+    ).toBe(false)
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId,
+        targets: [
+          { kind: 'minion', participantId: opponentId, instanceId: source.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, opponentId).board[0]!.spellImmune).toBe(false)
+    expect(
+      scenario.match.getLegality!(participantId).legalHeroPowerTargets
+    ).toContainEqual({
+      kind: 'minion',
+      participantId: opponentId,
+      instanceId: neighbor.instanceId
+    })
+  })
+
+  it('attacking consumes Stealth, which can be granted again and removed by Flare', () => {
+    const { scenario, participantId, opponentId, card } = setup('classic_conceal')
+    const tiger = summon(scenario, participantId, 'classic_stranglethorn_tiger')
+    beginNextTurn(scenario, participantId, opponentId)
+    expect(
+      attack(
+        scenario,
+        participantId,
+        { kind: 'minion', instanceId: tiger.instanceId },
+        { kind: 'hero' }
+      ).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).board[0]!.stealth).toBe(false)
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).board[0]!.stealth).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'classic_flare'
+      }).accepted
+    ).toBe(true)
+    const flare = player(scenario, participantId).hand.find(
+      (entry) => entry.cardId === 'classic_flare'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: flare.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).board[0]!.stealth).toBe(false)
+  })
+
+  it('an Ogre can redirect onto Stealth despite being unable to choose it', () => {
+    const { scenario, participantId, opponentId } = setup('basic_acidic_swamp_ooze')
+    const ogre = summon(scenario, participantId, 'goblins_vs_gnomes_ogre_brute')
+    const tiger = summon(scenario, opponentId, 'classic_stranglethorn_tiger')
+    beginNextTurn(scenario, participantId, opponentId)
+    expect(
+      scenario.match.getLegality!(participantId).legalAttackTargets[ogre.instanceId]
+    ).not.toContainEqual({ kind: 'minion', instanceId: tiger.instanceId })
+    const state = scenario.match.getState()
+    const result = resolveAttack({
+      state,
+      participantId,
+      attacker: { kind: 'minion', instanceId: ogre.instanceId },
+      defender: { kind: 'hero' },
+      rng: { ...scenario.rng, next: () => 0 },
+      nextEntityOrdinal: 1000
+    })
+    expect(result.accepted).toBe(true)
+    expect(
+      result.state.players
+        .find((entry) => entry.participantId === opponentId)!
+        .board.find((entry) => entry.instanceId === tiger.instanceId)
+    ).toMatchObject({ health: tiger.health - ogre.attack, stealth: true })
+  })
+})
+
 describe('Rush', () => {
   it('attacks minions immediately and heroes on the next friendly turn', () => {
     const scenario = createMatchScenario({ seed: 8101 })

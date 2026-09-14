@@ -258,7 +258,29 @@ export function aiModelState(
       return {
         role: player.role,
         heroId: player.heroId,
-        hero: player.hero,
+        hero: {
+          ...player.hero,
+          missingHealth: Math.max(0, player.hero.maxHealth - player.hero.health),
+          combat: {
+            effectiveAttack:
+              Math.max(0, player.hero.attack) + (player.weapon?.attack ?? 0),
+            canAttackNow: commands.some(
+              (command) =>
+                command.type === 'attack-character' &&
+                command.participantId === player.participantId &&
+                command.attacker.kind === 'hero'
+            ),
+            canAttackHeroNow: commands.some(
+              (command) =>
+                command.type === 'attack-character' &&
+                command.participantId === player.participantId &&
+                command.attacker.kind === 'hero' &&
+                command.defender.kind === 'hero'
+            ),
+            availabilityScope:
+              'Current legal attacks only; opponent readiness changes on their turn.'
+          }
+        },
         hand: player.hand.map((card) => ({
           ref: card.instanceId,
           ...cardFacts(card.cardId),
@@ -342,9 +364,8 @@ export function aiModelState(
               attacksRemaining: remaining,
               restrictions
             },
-            ...(minion.maxHealth !== minion.health
-              ? { maxHealth: minion.maxHealth }
-              : {}),
+            maxHealth: minion.maxHealth,
+            missingHealth: Math.max(0, minion.maxHealth - minion.health),
             keywords: undefined,
             text: undefined,
             implementedMechanics: undefined,

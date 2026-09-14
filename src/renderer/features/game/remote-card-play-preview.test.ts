@@ -4,14 +4,94 @@ import {
   type OpeningCard,
   type TurnMatchCommand
 } from '../../../game/match'
-import { describe, expect, it } from 'vitest'
-import { isRemoteSecret, playedRemoteCard } from './remote-card-play-preview'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  isRemoteSecret,
+  playedRemoteCard,
+  RemoteCardPlayPreview
+} from './remote-card-play-preview'
+import { Container, Texture } from 'pixi.js'
+import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
+import { gsap } from '../../animation/animations'
+import { MATCH_HISTORY_LAYOUT } from './match-history-layout'
 
 const remoteId = asPlayerId('remote')
 const spell: OpeningCard = {
   instanceId: 'spell-instance',
   cardId: asCardId('basic_fireball')
 }
+
+describe('automatic spell preview', () => {
+  it.each(['local', 'remote'] as const)(
+    'flies from the %s hero and waits through the reveal',
+    async (side) => {
+      const preview = new RemoteCardPlayPreview(new CardAssetResolver(), Texture.WHITE)
+      const card = new Container()
+      const internal = preview as unknown as { createCard(): Promise<Container> }
+      const create = vi.spyOn(internal, 'createCard').mockResolvedValue(card)
+      const definition = CARD_CATALOG.require('classic_counterspell')
+      let done = false
+      const job = preview
+        .present(definition, undefined, { side, concealSecret: side === 'remote' })
+        .then(() => {
+          done = true
+        })
+      for (let tick = 0; tick < 6; tick++) await Promise.resolve()
+      expect(create).toHaveBeenCalledWith(definition, undefined, side === 'remote')
+      const origin =
+        side === 'local'
+          ? MATCH_HISTORY_LAYOUT.remoteCardPlay.localOrigin
+          : MATCH_HISTORY_LAYOUT.remoteCardPlay.origin
+      expect(card.x).toBe(origin.position.x - (origin.size.width * origin.scale!.x) / 2)
+      expect(card.y).toBe(
+        origin.position.y - (origin.size.height * origin.scale!.y) / 2
+      )
+      expect(card.scale.x).toBe(origin.scale!.x)
+      const timeline = gsap.getTweensOf(card)[0]!.parent!
+      expect(timeline.duration()).toBeCloseTo(1.3)
+      preview.pauseAnimations()
+      expect(timeline.paused()).toBe(true)
+      preview.resumeAnimations()
+      timeline.time(0.2)
+      expect(card.x).toBeCloseTo(MATCH_HISTORY_LAYOUT.preview.source.position.x)
+      expect(card.y).toBeCloseTo(MATCH_HISTORY_LAYOUT.preview.source.position.y)
+      expect(card.scale.x).toBeCloseTo(MATCH_HISTORY_LAYOUT.preview.source.scale!.x)
+      expect(done).toBe(false)
+      timeline.progress(1)
+      await job
+      expect(card.destroyed).toBe(true)
+      preview.dispose()
+    }
+  )
+
+  it('releases pending artwork and animation waits on disposal', async () => {
+    const preview = new RemoteCardPlayPreview(new CardAssetResolver(), Texture.WHITE)
+    let release!: (card: Container) => void
+    vi.spyOn(
+      preview as unknown as { createCard(): Promise<Container> },
+      'createCard'
+    ).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        })
+    )
+    const pending = preview.present(CARD_CATALOG.require('basic_fireball'))
+    preview.dispose()
+    await pending
+    const lateCard = new Container()
+    release(lateCard)
+    await Promise.resolve()
+    expect(lateCard.destroyed).toBe(true)
+
+    const playing = new RemoteCardPlayPreview(new CardAssetResolver(), Texture.WHITE)
+    const visible = playing.present(CARD_CATALOG.require('classic_counterspell'))
+    for (let tick = 0; tick < 6; tick++) await Promise.resolve()
+    expect(playing.children).toHaveLength(1)
+    playing.dispose()
+    await visible
+  })
+})
 
 describe('playedRemoteCard', () => {
   it('does not preview potion ingredient choices as casts', () => {

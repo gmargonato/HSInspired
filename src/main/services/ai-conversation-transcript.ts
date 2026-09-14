@@ -142,7 +142,16 @@ export class AiConversationTranscript {
           text += '\nINFORMATION SUPPLIED\n' + this.readable(facts.information) + '\n'
         if (facts.turnPlan)
           text += '\nCURRENT TURN PLAN\n' + this.readable(facts.turnPlan) + '\n'
-        for (const field of ['proposedAction', 'relevantFacts', 'previousExpectation'])
+        for (const field of [
+          'proposedAction',
+          'relevantFacts',
+          'previousExpectation',
+          'observedCorrections',
+          'recentPublicEvents',
+          'currentDecision',
+          'outcomeReviews',
+          'instructionNote'
+        ])
           if (facts[field])
             text +=
               '\n' +
@@ -236,6 +245,15 @@ export class AiConversationTranscript {
           `REJECTED RESPONSE\n${d.reason}\n` +
           this.readable(d.diagnostics) +
           '\n'
+        )
+      case 'fresh-context-retry':
+        return (
+          heading +
+          `FRESH CONTEXT RETRY\n${d.reason}\nConversation reset; current fair facts and observed outcomes retained. No move executed.\n`
+        )
+      case 'end-turn-review':
+        return (
+          heading + 'END TURN REVIEW (no action executed)\n' + this.readable(d) + '\n'
         )
       case 'format-repair':
         return (

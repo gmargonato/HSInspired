@@ -35,6 +35,11 @@ export const MATCH_HISTORY_LAYOUT = {
     )
   },
   remoteCardPlay: {
+    localOrigin: placement({ x: 985, y: 825 }, CARD_CANVAS, {
+      anchor: CENTER,
+      scale: 0.12,
+      note: 'Automatic local spell appears at the local hero portrait.'
+    }),
     origin: placement({ x: 985, y: 180 }, CARD_CANVAS, {
       anchor: CENTER,
       scale: 0.12,

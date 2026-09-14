@@ -163,6 +163,8 @@ const ACTION_FIELDS = new Set([
   'appliesToFutureHeroPowers',
   'amount',
   'actions',
+  'damageResolution',
+  'damageOrder',
   'attachedToTarget',
   'asNewAttackTarget',
   'asNewSpellTarget',
@@ -259,6 +261,7 @@ const ACTION_FIELDS = new Set([
 
 const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>> = {
   damage: ['target', 'amount'],
+  'damage-group': ['actions'],
   restore: ['target', 'amount'],
   destroy: ['target'],
   'destroy-and-gain-stats': ['target', 'destination'],
@@ -821,6 +824,38 @@ function actionsValue(value: unknown, path: string): void {
       booleanValue(record['storeStats'], `${actionPath}.storeStats`, false)
     const actionName = actionRecord(record, actionPath)
     validateActionShape(actionName, record, actionPath)
+    if (record['damageResolution'] !== undefined) {
+      if (actionName !== 'damage') fail(actionPath, 'damageResolution requires damage')
+      enumValue(
+        record['damageResolution'],
+        ['simultaneous', 'per-target'],
+        `${actionPath}.damageResolution`
+      )
+    }
+    if (record['damageOrder'] !== undefined) {
+      if (actionName !== 'damage') fail(actionPath, 'damageOrder requires damage')
+      enumValue(
+        record['damageOrder'],
+        ['play-order', 'reverse-play-order'],
+        `${actionPath}.damageOrder`
+      )
+    }
+    if (actionName === 'damage-group') {
+      actionsValue(record['actions'], `${actionPath}.actions`)
+      for (const child of record['actions'] as Record<string, unknown>[]) {
+        if (
+          child.action !== 'damage' ||
+          child.hits !== undefined ||
+          child.damageResolution === 'per-target'
+        )
+          fail(
+            actionPath,
+            'damage-group requires simultaneous single-hit damage actions'
+          )
+      }
+      if (Object.keys(record).some((key) => key !== 'action' && key !== 'actions'))
+        fail(actionPath, 'damage-group only supports actions')
+    }
     if (actionName === 'draw-until' && record['stopWhen'] !== undefined) {
       enumValue(
         record['stopWhen'],

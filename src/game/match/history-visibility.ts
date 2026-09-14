@@ -27,7 +27,7 @@ export function projectHistoryAction(
     ? CARD_CATALOG.get(event.source.cardId)
     : undefined
   const hideSecret =
-    event.action === 'card' &&
+    (event.action === 'card' || event.source.secretCast === true) &&
     event.participantId !== viewerId &&
     definition !== undefined &&
     isSecretCardPlay(definition)
@@ -48,6 +48,12 @@ export function projectHistoryAction(
     : unknownSource
       ? conceal(event.source)
       : { ...event.source }
+  const hiddenSecrets = new Set(
+    event.outcomes
+      .filter(({ target }) => target.participantId !== viewerId && target.secretCast)
+      .map(({ target }) => target.id)
+  )
+  if (hideSecret) hiddenSecrets.add(source.id)
   // Grouped outcome previews must not recover a hidden identity from another
   // outcome on the same hand card (for example a generated card plus a buff).
   const hiddenTargets = new Set(
@@ -70,16 +76,25 @@ export function projectHistoryAction(
     source,
     outcomes: event.outcomes.map((outcome) => ({
       ...outcome,
-      before: hiddenTargets.has(outcome.target.id) ? undefined : outcome.before,
-      target: hiddenTargets.has(outcome.target.id)
+      before:
+        hiddenTargets.has(outcome.target.id) || hiddenSecrets.has(outcome.target.id)
+          ? undefined
+          : outcome.before,
+      target: hiddenSecrets.has(outcome.target.id)
         ? {
             id: outcome.target.id,
             participantId: outcome.target.participantId,
-            kind: 'hidden',
-            cardId: null
+            kind: outcome.target.kind,
+            cardId: null,
+            concealedAs: 'secret'
           }
-        : hideSecret && outcome.target.id === source.id
-          ? { ...source }
+        : hiddenTargets.has(outcome.target.id)
+          ? {
+              id: outcome.target.id,
+              participantId: outcome.target.participantId,
+              kind: 'hidden',
+              cardId: null
+            }
           : { ...outcome.target }
     }))
   }

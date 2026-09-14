@@ -3143,23 +3143,28 @@
         "trigger": "cast",
         "actions": [
           {
-            "action": "damage",
-            "target": {
-              "controller": "any",
-              "type": "minion",
-              "selection": "chosen"
-            },
-            "amount": 5
-          },
-          {
-            "action": "damage",
-            "target": {
-              "controller": "any",
-              "type": "minion",
-              "selection": "adjacent",
-              "adjacentTo": "event-target"
-            },
-            "amount": 2
+            "action": "damage-group",
+            "actions": [
+              {
+                "action": "damage",
+                "target": {
+                  "controller": "any",
+                  "type": "minion",
+                  "selection": "chosen"
+                },
+                "amount": 5
+              },
+              {
+                "action": "damage",
+                "target": {
+                  "controller": "any",
+                  "type": "minion",
+                  "selection": "adjacent",
+                  "adjacentTo": "event-target"
+                },
+                "amount": 2
+              }
+            ]
           }
         ]
       }
@@ -3789,9 +3794,7 @@
     "attack": 2,
     "health": 2,
     "rulesText": "Taunt.",
-    "keywords": [
-      "taunt"
-    ],
+    "keywords": ["taunt"],
     "effects": []
   },
   {
@@ -5216,7 +5219,8 @@
             },
             "amount": {
               "random": [2, 3]
-            }
+            },
+            "damageResolution": "per-target"
           },
           {
             "action": "overload",
@@ -5710,7 +5714,7 @@
     "cost": 4,
     "attack": 4,
     "health": 4,
-    "rulesText": "Battlecry: Give a friendly minion Stealth.",
+    "rulesText": "Battlecry: Give a friendly minion Stealth until your next turn.",
     "keywords": [],
     "effects": [
       {
@@ -5723,7 +5727,8 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "keyword": "stealth"
+            "keyword": "stealth",
+            "duration": "until-next-turn"
           }
         ]
       }
@@ -8623,10 +8628,7 @@
               "selection": "random",
               "exclude": "source"
             },
-            "pool": [
-              "classic_devilsaur",
-              "classic_squirrel"
-            ]
+            "pool": ["classic_devilsaur", "classic_squirrel"]
           }
         ]
       }

@@ -19,7 +19,8 @@ import {
   type AiPlanNote
 } from '../../../shared/ipc/ai-deliberation'
 import { aiActionIntent } from './ai-action-intent'
-import { answerAiChecks } from './ai-fact-checks'
+import { answerAiChecks, aiDecisionFacts } from './ai-fact-checks'
+import { observedAiCorrections } from './ai-feedback'
 import {
   AI_PLAN_INSTRUCTION,
   AI_VERIFY_INSTRUCTION,
@@ -72,13 +73,21 @@ export class AiTurnController {
   private pauseGeneration = 0
   private turnPlan?: { turn: number; note: AiPlanNote }
   private plannedTurn?: number
-  private lastExpectation?: string
   private inspectionBudget = { turn: -1, used: 0, revisions: new Set<number>() }
   private maxMessageBytes: number = AI_REQUEST_LIMITS.maxContextBytes
   private trimmed = false
   private active: { identity: AiDecisionIdentity; cancel: () => void } | null = null
   private pending: Promise<AiActionDecision | null> | null = null
   private readonly actualResults: unknown[] = []
+  private readonly outcomeReviews: JsonObject[] = []
+  private endTurnReviewRevision?: number
+  private readonly corrections: ReturnType<typeof observedAiCorrections> = {}
+
+  private resetConversation(): void {
+    this.exchanges.length = 0
+    this.turnPlan = undefined
+    this.plannedTurn = undefined
+  }
 
   constructor(private readonly options: AiTurnControllerOptions) {
     this.system = aiSystemContext(options.session)
@@ -110,6 +119,7 @@ export class AiTurnController {
     this.unsubscribeProgress?.()
     this.exchanges.length = 0
     this.actualResults.length = 0
+    this.outcomeReviews.length = 0
   }
   private cancel(reason: string): void {
     const active = this.active
@@ -200,10 +210,11 @@ export class AiTurnController {
       true
     )
     this.options.onFailure?.(
-      'The AI could not complete its turn. The match is paused; no random move was played. Retry AI to request a new decision (another provider charge may apply), or use the game menu to leave. Details were recorded in the match logs.',
+      'The AI couldn’t finish its turn. The match is paused.\nRetry AI to continue, or leave through the game menu.\nRetrying may incur another provider charge.',
       () => {
         if (this.disposed || !this.failed || generation !== this.pauseGeneration) return
         this.failed = false
+        this.resetConversation()
         this.log('manual-retry', {
           reason: 'User requested a new decision from the current board.'
         })
@@ -242,7 +253,7 @@ export class AiTurnController {
       throw new Error('Current AI facts exceed the configured context allowance.')
     return assemble()
   }
-  private async choose(): Promise<AiActionDecision | null> {
+  private async choose(freshContext = false): Promise<AiActionDecision | null> {
     if (this.disposed || this.failed) return null
     const session = this.options.session
     const identity = {
@@ -264,6 +275,10 @@ export class AiTurnController {
       return null
     }
     const cursor = session.getAiEventCursor()
+    Object.assign(
+      this.corrections,
+      observedAiCorrections(session.getAiEventsSince(this.eventCursor))
+    )
     const events = describeAiEvents(
       session.getAiEventsSince(this.eventCursor),
       session.remoteParticipantId
@@ -300,11 +315,15 @@ export class AiTurnController {
           state: aiModelState(session, commands),
           eventsSincePreviousDecision: events,
           actualActionResults: [...this.actualResults],
-          previousExpectation: this.lastExpectation,
+          outcomeReviews: this.outcomeReviews,
+          observedCorrections: Object.values(this.corrections),
+          ...(this.exchanges.length === 0
+            ? { recentPublicEvents: retainedEvents }
+            : {}),
           actions: aiActionFacts(actions)
         }
         const decisionConversation: AiMessage[] = []
-        const decisionHistory: [AiMessage, AiMessage][] = []
+        const currentDecision = aiDecisionFacts(facts.state)
         const turn = session.getState().turnNumber
         if (this.turnPlan?.turn !== turn) this.turnPlan = undefined
         if (this.inspectionBudget.turn !== turn)
@@ -319,6 +338,8 @@ export class AiTurnController {
         let repairCount = 0
         for (;;) {
           const allowInspection =
+            !followup?.endTurnReview &&
+            !freshContext &&
             !planning &&
             session.getState().phase === 'turns' &&
             !session.getState().pendingDiscover &&
@@ -334,6 +355,8 @@ export class AiTurnController {
             role: 'user',
             content: JSON.stringify({
               ...(followup ?? facts),
+              currentDecision,
+              actions: facts.actions,
               revision: identity.expectedRevision,
               ...(this.turnPlan ? { turnPlan: this.turnPlan.note } : {}),
               instruction
@@ -355,6 +378,7 @@ export class AiTurnController {
             ...identity,
             ...settings,
             phase: request.phase,
+            freshContext,
             allowInspection,
             extraExchangesUsed: this.inspectionBudget.used,
             actionCount: actions.length,
@@ -391,7 +415,20 @@ export class AiTurnController {
                       )
                     )
                       throw new Error(
-                        'Action ID and intent disagree. Copy the intended current input and its exact source/targets/position/option; do not execute an ambiguous choice.'
+                        'Action ID and intent disagree. Selected ' +
+                          selectedId +
+                          ' resolves to ' +
+                          JSON.stringify(
+                            action
+                              ? aiActionIntent(
+                                  action.command,
+                                  session.localParticipantId
+                                )
+                              : null
+                          ) +
+                          '; you returned ' +
+                          JSON.stringify(response.choice.intent) +
+                          '. Choose the intended current action ID and copy its exact intent, including its selected position.'
                       )
                   }
                 } catch (error) {
@@ -425,12 +462,12 @@ export class AiTurnController {
                 reason: error.message,
                 diagnostics: error.details
               })
-              if (repairCount >= 1) throw error
+              if (repairCount >= 1 || freshContext) throw error
               repairCount++
               const instruction =
                 'Your response failed validation: ' +
                 error.message +
-                '. Correct the response format, not the strategy. Keep your intended choice if legal. ' +
+                '. Correct the format and reconsider any premise contradicted by current facts. Keep your intended choice only if it still makes sense. ' +
                 'Return reason and exactly one choice matching the current response schema. Each text field is at most 600 characters; the choice is at most 8000 characters. ' +
                 (planning
                   ? 'Return choice.plan with 1–2 candidates, at most 6 steps each, and 0–3 checks. '
@@ -445,15 +482,23 @@ export class AiTurnController {
                   role: 'assistant',
                   content: String(error.details.rejectedContent ?? '') || 'null'
                 },
-                { role: 'user', content: JSON.stringify({ instruction }) }
+                {
+                  role: 'user',
+                  content: JSON.stringify({
+                    instruction,
+                    currentDecision,
+                    actions: facts.actions,
+                    revision: identity.expectedRevision
+                  })
+                }
               ]
               if (
                 new TextEncoder().encode(JSON.stringify(request.messages)).length >
                 this.maxMessageBytes
               )
-                throw new Error(
+                throw new AiRequestError(
                   'AI format correction exceeds the configured context allowance.',
-                  { cause: error }
+                  { repairable: true, failureKind: 'invalid-choice' }
                 )
               this.log('format-repair', {
                 ...identity,
@@ -498,10 +543,6 @@ export class AiTurnController {
               role: 'assistant',
               content: JSON.stringify(reply)
             })
-            decisionHistory.push([
-              { role: 'user', content: JSON.stringify({ turn, phase: 'plan' }) },
-              { role: 'assistant', content: JSON.stringify(reply) }
-            ])
             const proposed = actions.find((a) => a.id === plan.firstActionId)!
             const intent = aiActionIntent(proposed.command, session.localParticipantId)
             const relevantRefs = [
@@ -563,17 +604,6 @@ export class AiTurnController {
               role: 'assistant',
               content: JSON.stringify(reply)
             })
-            decisionHistory.push([
-              {
-                role: 'user',
-                content: JSON.stringify({
-                  turn,
-                  ...followup,
-                  instruction: 'Resolve a decision-critical fact, then commit.'
-                })
-              },
-              { role: 'assistant', content: JSON.stringify(reply) }
-            ])
             followup = { challenge: true, information }
             continue
           }
@@ -583,6 +613,28 @@ export class AiTurnController {
               ('actionId' in response.choice ? response.choice.actionId : '')
           )
           if (!action) throw new Error('AI returned unknown action ID.')
+          if (
+            action.command.type === 'end-turn' &&
+            currentDecision.self &&
+            !freshContext &&
+            this.endTurnReviewRevision !== identity.expectedRevision &&
+            session.getState().phase === 'turns' &&
+            actions.some((a) => a.command.type !== 'end-turn')
+          ) {
+            this.endTurnReviewRevision = identity.expectedRevision
+            this.log('end-turn-review', { ...response, currentDecision })
+            decisionConversation.push(user, {
+              role: 'assistant',
+              content: JSON.stringify(reply)
+            })
+            followup = {
+              challenge: true,
+              endTurnReview: true,
+              instructionNote:
+                'End Turn has not executed. Other current legal inputs exist and their costs are affordable now. Read self.mana (not opponent mana), and check any promised follow-up. Choose a useful current input, or confirm End Turn with a strategic reason for leaving those inputs unused. Spending mana is not mandatory. Do not assume an ID is stale: these IDs belong to this revision.'
+            }
+            continue
+          }
           if (response.choice.planUpdate) {
             this.turnPlan = { turn, note: response.choice.planUpdate }
             this.log('plan-updated', { ...identity, turnPlan: this.turnPlan.note })
@@ -593,22 +645,20 @@ export class AiTurnController {
             selectedAction: action,
             phase: 'action'
           })
-          this.exchanges.push(...decisionHistory, [
+          this.exchanges.push([
             {
               role: 'user',
               content: JSON.stringify({
                 turn: session.getState().turnNumber,
                 events,
-                actualActionResults: facts.actualActionResults,
-                ...(followup ?? {})
+                actualActionResults: facts.actualActionResults
               })
             },
             {
               role: 'assistant',
               content: JSON.stringify({
                 move: action.description,
-                reason: response.reason,
-                expectedResult: response.choice.expectedResult
+                status: 'Selected; actual outcomes follow in the public event feed.'
               })
             }
           ])
@@ -625,6 +675,16 @@ export class AiTurnController {
         }
       } catch (error) {
         if (!this.current(identity) || this.active?.identity !== identity) return null
+        if (
+          !freshContext &&
+          error instanceof AiRequestError &&
+          error.details?.repairable === true
+        ) {
+          this.log('fresh-context-retry', { ...identity, reason: error.message })
+          this.resetConversation()
+          this.active = null
+          return this.choose(true)
+        }
         if (
           error instanceof AiRequestError &&
           error.details?.failureKind === 'timeout'
@@ -667,16 +727,38 @@ export class AiTurnController {
   }
   /** Called immediately after the normal engine dispatch, before presentation. */
   recordExecution(decision: AiActionDecision, result: TurnMatchResult): void {
-    this.lastExpectation = result.accepted ? decision.expectedResult : undefined
     const events =
       this.options.session.match.getPublicEvents?.(
         this.options.session.remoteParticipantId,
         result.events
       ) ?? []
+    Object.assign(this.corrections, observedAiCorrections(events))
+    if (decision.expectedResult && decision.command.type !== 'end-turn') {
+      const observed = describeAiEvents(
+        events,
+        this.options.session.remoteParticipantId
+      )
+      this.outcomeReviews.push(
+        aiJson({
+          expectedRevision: decision.expectedRevision,
+          predictionToCheck: decision.expectedResult,
+          accepted: result.accepted,
+          observed: observed
+            .slice(-12)
+            .map((event) =>
+              event.length > 1000 ? event.slice(0, 1000) + ' [truncated]' : event
+            ),
+          omittedEarlierEvents: Math.max(0, observed.length - 12),
+          interpretation:
+            'Prediction is untrusted. Observations are what happened; do not repeat a contradicted forecast or infer a universal rule from one outcome.'
+        })
+      )
+      if (this.outcomeReviews.length > 4) this.outcomeReviews.shift()
+    }
     const actualResult = aiJson({
       ...decision,
       accepted: result.accepted,
-      // Public outcomes are supplied once through the chronological event feed.
+      // Full public outcomes remain in the chronological event feed and disk log.
       ...(result.accepted ? {} : { code: result.code, message: result.message })
     })
     this.actualResults.push({

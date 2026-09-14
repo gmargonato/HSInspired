@@ -3086,23 +3086,29 @@
         "trigger": "cast",
         "actions": [
           {
-            "action": "damage",
-            "target": {
-              "controller": "opponent",
-              "type": "character",
-              "selection": "chosen"
-            },
-            "amount": 4
-          },
-          {
-            "action": "damage",
-            "target": {
-              "controller": "opponent",
-              "type": "character",
-              "selection": "all",
-              "exclude": "event-target"
-            },
-            "amount": 1
+            "action": "damage-group",
+            "actions": [
+              {
+                "action": "damage",
+                "target": {
+                  "controller": "opponent",
+                  "type": "character",
+                  "selection": "chosen"
+                },
+                "amount": 4
+              },
+              {
+                "action": "damage",
+                "target": {
+                  "controller": "opponent",
+                  "type": "character",
+                  "selection": "all",
+                  "exclude": "event-target"
+                },
+                "amount": 1,
+                "damageOrder": "reverse-play-order"
+              }
+            ]
           }
         ]
       }

@@ -76,7 +76,15 @@ export function compactAiFacts(value: unknown): JsonValue {
         return []
       if (inactiveNumbers.has(key) && original === 0) return []
       if (multipliers.has(key) && original === 1) return []
-      const nested = compactAiFacts(original)
+      // Kazakus recipes map ingredient IDs to generated catalog IDs. They are
+      // implementation lookup tables, not additional rules or player choices.
+      const projected =
+        entry.action === 'create-kazakus-potion' &&
+        key === 'costOptions' &&
+        Array.isArray(original)
+          ? original.map(({ recipes: _recipes, ...option }) => option)
+          : original
+      const nested = compactAiFacts(projected)
       if (nested && typeof nested === 'object' && !Object.keys(nested).length) return []
       if (definition && key === 'effects') return [['mechanics', mechanicsText(nested)]]
       return [[key, nested]]

@@ -226,7 +226,9 @@ export class GameScene extends Scene {
     }
   }
 
-  update(_deltaMS: number): void {}
+  update(deltaMS: number): void {
+    this.view?.updateShadows(deltaMS)
+  }
 
   playOpeningReveal(): Promise<void> {
     return this.view?.playOpeningReveal() ?? Promise.resolve()

@@ -912,6 +912,8 @@ export interface CombatStartedCombatant {
   readonly attack: number
   readonly healthBefore: number
   readonly armorBefore: number
+  /** Immunity at impact, before this-attack enchantments expire. */
+  readonly immune?: boolean
 }
 
 export interface CombatStartedEvent {
@@ -1037,6 +1039,8 @@ export interface HistoryEntitySnapshot {
   readonly abilities?: readonly string[]
   /** Explicit placeholder for a concealed played Secret; null alone is ambiguous. */
   readonly concealedAs?: 'secret'
+  /** Cast-time identity of an automatic Secret, private even if previously known. */
+  readonly secretCast?: boolean
   /** Stable action-time identity used to group several effects on one target. */
   readonly id: string
   readonly participantId: PlayerId
@@ -1109,7 +1113,19 @@ export interface HistoryEffectRecordedEvent {
   readonly outcomes: readonly HistoryActionOutcome[]
 }
 
+/** Internal playback boundaries; snapshots must never enter viewer/AI projections. */
+export type RandomSpellPresentationEvent = (
+  | { readonly type: 'random-spell-started' }
+  | { readonly type: 'random-spell-completed' }
+) & {
+  readonly castId: string
+  readonly participantId: PlayerId
+  readonly cardId: CardId
+  readonly state: OpeningMatchState
+}
+
 export type OpeningMatchEvent =
+  | RandomSpellPresentationEvent
   | MulliganResolvedEvent
   | CoinGrantedEvent
   | OpeningTurnStartedEvent
@@ -1256,27 +1272,29 @@ export interface OpeningMatchInstance {
   ): readonly OpeningMatchPublicEvent[]
 }
 
-export type PublicizeOpeningMatchEvent<E> = E extends EffectDomainEvent
-  ? Omit<E, 'sourceCardId' | 'data'> & {
-      readonly sourceCardId: CardId | null
-      readonly data?: Readonly<Record<string, unknown>>
-    }
-  : E extends MulliganResolvedEvent
-    ? Omit<E, 'returnedCards' | 'replacementCards'> & {
-        readonly returnedCards: readonly OpeningPublicCard[]
-        readonly replacementCards: readonly OpeningPublicCard[]
+export type PublicizeOpeningMatchEvent<E> = E extends RandomSpellPresentationEvent
+  ? never
+  : E extends EffectDomainEvent
+    ? Omit<E, 'sourceCardId' | 'data'> & {
+        readonly sourceCardId: CardId | null
+        readonly data?: Readonly<Record<string, unknown>>
       }
-    : E extends DiscoverStartedEvent
-      ? Omit<E, 'candidates'> & { readonly candidates: readonly OpeningPublicCard[] }
-      : E extends
-            | CoinGrantedEvent
-            | OpeningCardDrawnEvent
-            | CardDrawnEvent
-            | CardGeneratedEvent
-            | CardBurnedEvent
-            | DevCardAddedEvent
-        ? Omit<E, 'card'> & { readonly card: OpeningPublicCard }
-        : E
+    : E extends MulliganResolvedEvent
+      ? Omit<E, 'returnedCards' | 'replacementCards'> & {
+          readonly returnedCards: readonly OpeningPublicCard[]
+          readonly replacementCards: readonly OpeningPublicCard[]
+        }
+      : E extends DiscoverStartedEvent
+        ? Omit<E, 'candidates'> & { readonly candidates: readonly OpeningPublicCard[] }
+        : E extends
+              | CoinGrantedEvent
+              | OpeningCardDrawnEvent
+              | CardDrawnEvent
+              | CardGeneratedEvent
+              | CardBurnedEvent
+              | DevCardAddedEvent
+          ? Omit<E, 'card'> & { readonly card: OpeningPublicCard }
+          : E
 
 export type OpeningMatchPublicEvent = PublicizeOpeningMatchEvent<OpeningMatchEvent>
 export interface OpeningMatchPublicState extends Omit<

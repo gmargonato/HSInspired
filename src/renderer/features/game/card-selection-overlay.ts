@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js'
+import { Container, Graphics, Sprite, Text, type Renderer, type Texture } from 'pixi.js'
 import type { HeroPowerId } from '../../../game/content/cards'
 import type { CardChoiceOption, OpeningCard, PlayerId } from '../../../game/match'
 import { AnimationScope } from '../../animation/animations'
@@ -9,6 +9,7 @@ import { applyAnchoredPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/button'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { GameCardSlot } from './game-card-slot'
+import { BoardShadowLayer } from '../../rendering/shadows/board-shadow-layer'
 
 export interface SelectedCardSlot {
   readonly card: OpeningCard
@@ -17,6 +18,7 @@ export interface SelectedCardSlot {
 }
 
 export interface CardSelectionOverlayOptions {
+  readonly renderer: Renderer
   readonly toggleTexture: Texture
   readonly createSlot: (card: OpeningCard) => Promise<GameCardSlot>
   readonly createHeroPowerChoice: (heroPowerId: HeroPowerId) => Container
@@ -27,6 +29,7 @@ export interface CardSelectionOverlayOptions {
 
 /** A modal three-card selector for Tracking and future Discover-style effects. */
 export class CardSelectionOverlay extends Container {
+  private readonly shadowLayer: BoardShadowLayer
   private readonly animationScope = new AnimationScope()
   private requestRevision = 0
   private readonly darkOverlay = new Graphics()
@@ -52,6 +55,9 @@ export class CardSelectionOverlay extends Container {
     this.darkOverlay.eventMode = 'static'
     this.darkOverlay.on('pointertap', (event) => event.stopPropagation())
     this.addChild(this.darkOverlay)
+    this.shadowLayer = new BoardShadowLayer(this, options.renderer)
+    this.shadowLayer.label = 'game.card-selection.shadows'
+    this.addChild(this.shadowLayer)
     this.cardsLayer.label = 'game.card-selection.cards'
     this.addChild(this.cardsLayer)
 
@@ -239,6 +245,10 @@ export class CardSelectionOverlay extends Container {
     this.selected = null
     selected.slot.removeFromParent()
     return selected
+  }
+
+  updateShadows(deltaMS: number): void {
+    if (this.visible) this.shadowLayer.update(deltaMS)
   }
 
   clear(): void {

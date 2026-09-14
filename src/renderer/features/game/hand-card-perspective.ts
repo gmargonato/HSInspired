@@ -1,6 +1,6 @@
 import { Container, PerspectiveMesh, Rectangle, Sprite, type Renderer } from 'pixi.js'
 import type { CardView } from '../../rendering/cards/card-view'
-import { resolveParallaxSmoothing } from '../../rendering/cards/card-parallax'
+import { resolveDragSmoothing } from './hand-drag'
 import {
   AnimatedOutline,
   type OutlinePaletteInput,
@@ -8,6 +8,12 @@ import {
 } from '../../rendering/effects/animated-outline'
 import type { Texture } from 'pixi.js'
 import { isArtworkVisible } from '../../rendering/effects/premium-artwork-breath'
+import {
+  getShadowCaster,
+  shadowBodyCorners,
+  type ShadowCaster
+} from '../../rendering/shadows/shadow-caster'
+import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
 
 export interface PerspectivePoint {
   readonly x: number
@@ -29,14 +35,24 @@ export interface HandCardPerspectiveOptions {
   readonly outlinePreset?: OutlinePresetName
 }
 
-const MAX_TILT_X = (22 * Math.PI) / 180
-const MAX_TILT_Y = (28 * Math.PI) / 180
+const MAX_TILT_X = (28 * Math.PI) / 180
+const MAX_TILT_Y = (35 * Math.PI) / 180
+const TILT_RESPONSE_MS = 50
+const TILT_RETURN_MS = 110
 const PERSPECTIVE_DEPTH = 950
 /** Leaves room for the playable-card outline and its blur when snapshotting. */
 const SNAPSHOT_PADDING = 40
 
 function clampUnit(value: number): number {
   return Math.max(-1, Math.min(1, value))
+}
+
+/** Relax more slowly on each axis; new motion and reversals respond quickly. */
+function stepTilt(current: number, target: number, deltaMS: number): number {
+  const returningToNeutral =
+    current * target >= 0 && Math.abs(target) < Math.abs(current)
+  const responseMS = returningToNeutral ? TILT_RETURN_MS : TILT_RESPONSE_MS
+  return current + (target - current) * resolveDragSmoothing(deltaMS, responseMS)
 }
 
 /** Projects a centred card rectangle into the four corners of a perspective plane. */
@@ -85,6 +101,10 @@ export class HandCardPerspective {
   private readonly target = { x: 0, y: 0 }
   private readonly wasVisible: boolean
   private destroyed = false
+  private readonly shadow: ShadowCaster | undefined
+  private readonly shadowFrame: Rectangle
+  private readonly previousShadowMinimum: number
+  private readonly previousShadowDepth: number
 
   constructor(
     renderer: Renderer,
@@ -100,6 +120,7 @@ export class HandCardPerspective {
     )
     const width = frame.width
     const height = frame.height
+    this.shadowFrame = frame
     this.texture = cardView.createAppearanceSnapshot(
       renderer,
       frame,
@@ -123,6 +144,9 @@ export class HandCardPerspective {
 
     const parent = cardView.parent
     if (!parent) throw new Error('Attached hand card must have a parent container.')
+    this.shadow = getShadowCaster(parent)
+    this.previousShadowMinimum = this.shadow?.minimumHeight ?? 0
+    this.previousShadowDepth = this.shadow?.depthMultiplier ?? 1
     const cardIndex = parent.getChildIndex(cardView)
 
     if (options.outlineTexture) {
@@ -172,6 +196,12 @@ export class HandCardPerspective {
     parent.addChildAt(this.mesh, cardIndex + (this.outlineMesh ? 1 : 0))
     this.wasVisible = cardView.visible
     cardView.visible = false
+    if (this.shadow) {
+      this.shadow.visual = this.mesh
+      this.shadow.minimumHeight = MATCH_SHADOW_CONFIG.heldCardHeight
+      this.shadow.depthMultiplier = MATCH_SHADOW_CONFIG.draggedCardDepth
+    }
+    this.update(0)
   }
 
   setTarget(target: PerspectivePoint): void {
@@ -203,10 +233,8 @@ export class HandCardPerspective {
 
   update(deltaMS: number): void {
     if (this.destroyed) return
-    const returningToNeutral = this.target.x === 0 && this.target.y === 0
-    const smoothing = resolveParallaxSmoothing(deltaMS * (returningToNeutral ? 0.5 : 1))
-    this.current.x += (this.target.x - this.current.x) * smoothing
-    this.current.y += (this.target.y - this.current.y) * smoothing
+    this.current.x = stepTilt(this.current.x, this.target.x, deltaMS)
+    this.current.y = stepTilt(this.current.y, this.target.y, deltaMS)
 
     const corners = resolvePerspectiveCorners(
       this.current,
@@ -229,9 +257,19 @@ export class HandCardPerspective {
     this.outlineEffect?.setEnabled(enabled)
   }
 
+  setOutlinePalette(palette: OutlinePaletteInput): void {
+    this.outlineEffect?.setPalette(palette)
+  }
+
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
+    if (this.shadow?.visual === this.mesh) {
+      this.shadow.visual = this.cardView
+      this.shadow.corners = null
+      this.shadow.minimumHeight = this.previousShadowMinimum
+      this.shadow.depthMultiplier = this.previousShadowDepth
+    }
     this.cardView.visible = this.wasVisible
     this.outlineEffect?.dispose()
     this.outlineMesh?.removeFromParent()
@@ -272,5 +310,17 @@ export class HandCardPerspective {
       bottomLeftX,
       bottomLeftY
     )
+    if (this.shadow?.visual === this.mesh) {
+      this.shadow.corners = shadowBodyCorners(
+        [
+          { x: topLeftX, y: topLeftY },
+          { x: topRightX, y: topRightY },
+          { x: bottomRightX, y: bottomRightY },
+          { x: bottomLeftX, y: bottomLeftY }
+        ],
+        this.shadowFrame,
+        this.shadow.bounds
+      )
+    }
   }
 }

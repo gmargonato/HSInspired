@@ -6,6 +6,8 @@ import {
   type aiActions
 } from './ai-context'
 import { compactAiFacts } from './ai-compact-context'
+import { observedAiCorrections } from './ai-feedback'
+import { enumerateLegalCommands } from '../../../game/match/ai'
 import { GameBoardSession } from './game-board-session'
 import { createMatchScenario } from '../../../game/match/testing/match-scenario-builder'
 import { CARD_CATALOG } from '../../../game/content/cards'
@@ -13,6 +15,134 @@ import { AiTurnController } from './ai-turn-controller'
 import { parseAiDecisionResponse, type AiDecisionApi } from '../../../shared/ipc/ai'
 
 describe('AI context fidelity', () => {
+  it('omits generated Kazakus recipe mappings while retaining choice rules', () => {
+    const effects = CARD_CATALOG.require('mean_streets_of_gadgetzan_kazakus').effects
+    const original = JSON.stringify(effects)
+    const compact = JSON.stringify(compactAiFacts(effects))
+    expect(original).toContain('recipes')
+    expect(compact).not.toContain('recipes')
+    expect(compact).toContain('costOptions')
+    expect(compact).toContain('ingredient')
+    expect(compact.length).toBeLessThan(original.length / 2)
+    expect(JSON.stringify(effects)).toBe(original)
+  })
+  it('shows full health and weapon attack readiness, and records real zero-healing outcomes', async () => {
+    const scenario = createMatchScenario({ secondHeroId: 'anduin' })
+    const session = new GameBoardSession({
+      setup: scenario.setup,
+      decks: scenario.decks
+    })
+    const dispatch = (command: unknown) => {
+      const result = session.match.dispatch(command)
+      expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+      return result
+    }
+    for (const participantId of scenario.participants)
+      dispatch({ type: 'confirm-mulligan', participantId, replaceInstanceIds: [] })
+    const participantId = session.remoteParticipantId
+    if (session.getState().activePlayerId !== participantId)
+      dispatch({ type: 'end-turn', participantId: session.getState().activePlayerId })
+    dispatch({ type: 'dev-set-mana', participantId, available: 10, maximum: 10 })
+    const play = (cardId: string, extra: object = {}) => {
+      dispatch({ type: 'dev-add-card', participantId, cardId })
+      const card = session
+        .getState()
+        .players.find((p) => p.participantId === participantId)!
+        .hand.find((c) => c.cardId === cardId)!
+      return dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId,
+        ...extra
+      })
+    }
+    play('basic_fiery_war_axe')
+    const commands = enumerateLegalCommands(
+      {
+        getState: session.match.getState,
+        getPlayInput: session.match.getPlayInput!,
+        getLegality: session.match.getLegality!
+      },
+      participantId
+    )
+    expect(aiModelState(session, commands)).toMatchObject({
+      players: expect.arrayContaining([
+        expect.objectContaining({
+          role: 'self',
+          hero: expect.objectContaining({
+            health: 30,
+            maxHealth: 30,
+            missingHealth: 0,
+            combat: expect.objectContaining({
+              effectiveAttack: 3,
+              canAttackNow: true,
+              canAttackHeroNow: true
+            })
+          })
+        })
+      ])
+    })
+    const healed = dispatch({
+      type: 'use-hero-power',
+      participantId,
+      target: { kind: 'hero', participantId }
+    })
+    const publicEvents = session.match.getPublicEvents!(participantId, healed.events)
+    expect(observedAiCorrections(publicEvents)).toMatchObject({
+      zeroHealing: { evidence: { healthBefore: 30, healthAfter: 30, restored: 0 } }
+    })
+    const captured: Record<string, unknown>[] = []
+    const controller = new AiTurnController({
+      session,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      api: {
+        settings: async () => ({
+          enabled: true,
+          provider: 'openrouter',
+          modelId: 'stub',
+          reasoningEffort: 'low',
+          maxCompletionTokens: 1000
+        }),
+        cancel: async () => {},
+        decide: async (request) => {
+          captured.push(JSON.parse(request.messages.at(-1)!.content))
+          throw new Error('Stop after capturing the fair request.')
+        }
+      }
+    })
+    try {
+      controller.recordExecution(
+        {
+          matchId: 'test',
+          requestId: 'heal',
+          expectedRevision: 1,
+          actionId: 'test',
+          command: {
+            type: 'use-hero-power',
+            participantId,
+            target: { kind: 'hero', participantId }
+          },
+          source: 'model',
+          expectedResult: 'Gain maximum health.'
+        },
+        healed
+      )
+      await controller.chooseTurnAction()
+      expect(captured[0]).toMatchObject({
+        outcomeReviews: [
+          {
+            predictionToCheck: 'Gain maximum health.',
+            accepted: true,
+            observed: expect.any(Array)
+          }
+        ]
+      })
+      expect(JSON.stringify(captured[0].outcomeReviews)).toContain('30')
+      expect(captured[0]).not.toHaveProperty('previousExpectation')
+    } finally {
+      controller.dispose()
+    }
+  })
   it('runs real session context, planning, inspection, intent validation and dispatch without a simulation preview', async () => {
     const scenario = createMatchScenario()
     const session = new GameBoardSession({
@@ -129,7 +259,7 @@ describe('AI context fidelity', () => {
     try {
       const decision = await controller.chooseTurnAction()
       expect(decision).not.toBeNull()
-      expect(count).toBe(3)
+      expect(count).toBe(4)
       expect(controller.isCurrent(decision!)).toBe(true)
       const result = session.match.dispatch(decision!.command)
       controller.recordExecution(decision!, result)
@@ -148,8 +278,17 @@ describe('AI context fidelity', () => {
       setup: scenario.setup,
       decks: scenario.decks
     })
-    const dispatch = (command: unknown) =>
-      expect(session.match.dispatch(command).accepted).toBe(true)
+    const outcomes: ReturnType<typeof observedAiCorrections> = {}
+    const dispatch = (command: unknown) => {
+      const result = session.match.dispatch(command)
+      expect(result.accepted).toBe(true)
+      Object.assign(
+        outcomes,
+        observedAiCorrections(
+          session.match.getPublicEvents!(session.remoteParticipantId, result.events)
+        )
+      )
+    }
     for (const participantId of scenario.participants)
       dispatch({ type: 'confirm-mulligan', participantId, replaceInstanceIds: [] })
     const participantId = session.getState().activePlayerId!
@@ -192,6 +331,8 @@ describe('AI context fidelity', () => {
       currentStatus: { shieldActive: false },
       health: 2
     })
+    expect(boardFact()).toMatchObject({ maxHealth: 2, missingHealth: 0 })
+    expect(outcomes.divineShield).toBeDefined()
     expect(boardFact().activeKeywords).toBeUndefined()
     expect(boardFact().keywords).toBeUndefined()
     expect(boardFact().text).toBeUndefined()

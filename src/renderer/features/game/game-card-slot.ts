@@ -7,8 +7,12 @@ import {
 } from '../../rendering/effects/animated-outline'
 import { BakedAnimatedOutline } from '../../rendering/effects/baked-animated-outline'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
+import { attachShadow, type ShadowCaster } from '../../rendering/shadows/shadow-caster'
+import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
+import { DEFAULT_HAND_LAYOUT } from './hand-layout'
 
 export class GameCardSlot extends Container {
+  readonly shadow: ShadowCaster
   readonly card: CardView
   readonly instanceId: string
   readonly playableOutlineTexture: Texture
@@ -32,6 +36,20 @@ export class GameCardSlot extends Container {
   ) {
     super()
     this.card = card
+    this.shadow = attachShadow(
+      this,
+      {
+        x: 0,
+        y: 0,
+        width: card.plan.width,
+        height: card.renderedHeight
+      },
+      {
+        visual: card,
+        restingScale: DEFAULT_HAND_LAYOUT.cardScale,
+        maximumHeight: MATCH_SHADOW_CONFIG.heldCardHeight
+      }
+    )
     this.instanceId = instanceId
     this.playableOutlineTexture = outlineTexture
     this.setMulliganInteractionEnabled(false)
@@ -148,6 +166,10 @@ export class GameCardSlot extends Container {
     return this.playableOutlinePreset
   }
 
+  getPlayableOutlinePalette(): OutlinePaletteInput {
+    return this.playableOutlinePalette
+  }
+
   isPlayableOutlineEnabled(): boolean {
     return this.playableOutlineRequested
   }
@@ -158,6 +180,7 @@ export class GameCardSlot extends Container {
   }
 
   beginMinionPlayTransition(): void {
+    this.shadow.maximumHeight = Infinity
     this.setMulliganInteractionEnabled(false)
     this.replaceCross.visible = false
     this.replacedLabel.visible = false

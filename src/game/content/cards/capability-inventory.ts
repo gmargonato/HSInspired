@@ -236,6 +236,7 @@ function actionPhase(name: CardActionName): CapabilityPhase {
   if (
     [
       'damage',
+      'damage-group',
       'destroy',
       'destroy-all-but-highest-attack',
       'destroy-and-gain-stats',

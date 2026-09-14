@@ -18,6 +18,8 @@ import { DamageIndicatorView } from './damage-indicator-view'
 import { HealIndicatorView } from './heal-indicator-view'
 import { BOARD_TIMING, RESOLUTION_TIMING } from './game-presentation-timing'
 import { completeTimeline } from './game-presentation-animation'
+import type { BoardPositionController } from './board-position-controller'
+import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
 
 export const COMBAT_ATTACKER_Z_INDEX = 100
 
@@ -65,6 +67,7 @@ interface CombatPresentationContext {
   removeWeapon(ownerId: PlayerId, view?: WeaponView): void
   layoutLocalRow(): void
   layoutRemoteRow(): void
+  positions: BoardPositionController
   screenShake(attack: number): Promise<void>
   onImpact(): void
 }
@@ -129,8 +132,10 @@ export class GameCombatPresentation {
     this.activeDeathGhosts.clear()
     // The board still owns and disposes borrowed character views.
     for (const child of [...this.layer.children]) {
-      if (child instanceof MinionView || child instanceof HeroView)
+      if (child instanceof MinionView || child instanceof HeroView) {
+        child.shadow.minimumHeight = 0
         child.removeFromParent()
+      }
     }
     this.layer.destroy({ children: true })
   }
@@ -190,6 +195,11 @@ export class GameCombatPresentation {
     )
     if (!attacker || !defender || !attacker.parent || !defender.parent) return
 
+    if (attacker instanceof HeroView)
+      attacker.setTransientImmune(event.attacker.immune === true)
+    if (defender instanceof HeroView)
+      defender.setTransientImmune(event.defender.immune === true)
+
     const attackerOrigin = { x: attacker.x, y: attacker.y }
     const defenderOrigin = { x: defender.x, y: defender.y }
     const attackerGlobal = attacker.parent.toGlobal(attacker.position)
@@ -236,6 +246,8 @@ export class GameCombatPresentation {
       this.context.onImpact()
     } catch (error) {
       this.activeCombatPresentations.delete(event.combatId)
+      this.restoreHeroImmunity(attacker, event.attacker.participantId)
+      this.restoreHeroImmunity(defender, event.defender.participantId)
       if (!attacker.destroyed)
         this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
       throw error
@@ -278,22 +290,24 @@ export class GameCombatPresentation {
         destroyed: boolean
       ): Promise<void> => {
         if (view.destroyed) return Promise.resolve()
-        const timeline = this.animations.timeline()
         const attackerAlreadyReturned = view === attacker && active.attackerReturned
+        if (attackerAlreadyReturned && !destroyed) return Promise.resolve()
+        const timeline = this.animations.timeline()
         if (view === attacker && !attackerAlreadyReturned) {
+          const destination = this.attackerReturnPosition(
+            view,
+            active.attackerPlacement,
+            origin
+          )
           timeline.to(view, {
-            x: origin.x,
-            y: origin.y,
+            x: destination.x,
+            y: destination.y,
             duration: BOARD_TIMING.combatReturn,
             ease: 'power2.out'
           })
         } else {
-          timeline.to(view, {
-            x: origin.x,
-            y: origin.y,
-            duration: BOARD_TIMING.combatReturn,
-            ease: 'power2.out'
-          })
+          // Returned attackers and stationary defenders already belong to the row.
+          timeline.to({}, { duration: BOARD_TIMING.combatReturn })
         }
         if (destroyed && view instanceof MinionView) {
           timeline
@@ -321,7 +335,6 @@ export class GameCombatPresentation {
                 : 0
             )
         }
-        if (attackerAlreadyReturned && !destroyed) return Promise.resolve()
         timeline.eventCallback('onUpdate', () => {
           this.updateCombatMarkerPositions()
           this.updateCombatDamageIndicators(active)
@@ -345,11 +358,21 @@ export class GameCombatPresentation {
       this.context.layoutLocalRow()
       this.context.layoutRemoteRow()
     } finally {
+      this.restoreHeroImmunity(attacker, event.attacker.participantId)
+      this.restoreHeroImmunity(defender, event.defender.participantId)
+      if (attacker.destroyed) this.context.positions.endMotion(attacker)
       active.attackerDamageIndicators.clear()
       active.deferredAttackerDeathInstanceIds.clear()
       if (!attacker.destroyed)
         this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)
       this.clearCombatPreview()
+    }
+  }
+
+  private restoreHeroImmunity(view: CombatView, ownerId: PlayerId): void {
+    if (view instanceof HeroView && !view.destroyed) {
+      view.setImmune(this.context.presentedPlayer(ownerId).hero.immune === true)
+      view.setTransientImmune(false)
     }
   }
 
@@ -566,9 +589,14 @@ export class GameCombatPresentation {
           view === attacker ? event.attacker.destroyed : event.defender.destroyed
 
         if (view === attacker) {
+          const destination = this.attackerReturnPosition(
+            view,
+            attackerPlacement!,
+            origin
+          )
           timeline.to(view, {
-            x: origin.x,
-            y: origin.y,
+            x: destination.x,
+            y: destination.y,
             duration: BOARD_TIMING.combatReturn,
             ease: 'power2.out'
           })
@@ -622,6 +650,7 @@ export class GameCombatPresentation {
       this.context.layoutLocalRow()
       this.context.layoutRemoteRow()
     } finally {
+      if (attacker.destroyed) this.context.positions.endMotion(attacker)
       if (!attacker.destroyed && attackerPlacement) {
         this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
       }
@@ -706,9 +735,14 @@ export class GameCombatPresentation {
         // Heroes remain visible at zero Health so the terminal state is clear;
         // attacking minions return home before their death collapse.
         if (view === attacker) {
+          const destination = this.attackerReturnPosition(
+            view,
+            attackerPlacement!,
+            origin
+          )
           timeline.to(view, {
-            x: origin.x,
-            y: origin.y,
+            x: destination.x,
+            y: destination.y,
             duration: BOARD_TIMING.combatReturn,
             ease: 'power2.out'
           })
@@ -765,6 +799,7 @@ export class GameCombatPresentation {
       this.context.layoutLocalRow()
       this.context.layoutRemoteRow()
     } finally {
+      if (attacker.destroyed) this.context.positions.endMotion(attacker)
       if (!attacker.destroyed && attackerPlacement) {
         this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
       }
@@ -900,10 +935,15 @@ export class GameCombatPresentation {
     const attacker = active.attacker
     if (active.attackerReturned || attacker.destroyed) return
 
+    const destination = this.attackerReturnPosition(
+      attacker,
+      active.attackerPlacement,
+      active.attackerOrigin
+    )
     const timeline = this.animations.timeline()
     timeline.to(attacker, {
-      x: active.attackerOrigin.x,
-      y: active.attackerOrigin.y,
+      x: destination.x,
+      y: destination.y,
       duration: BOARD_TIMING.combatReturn,
       ease: 'power2.out'
     })
@@ -913,6 +953,22 @@ export class GameCombatPresentation {
     })
     await completeTimeline(timeline)
     active.attackerReturned = true
+    if (!attacker.destroyed)
+      this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)
+  }
+
+  private attackerReturnPosition(
+    view: CombatView,
+    placement: CombatViewPlacement,
+    origin: { readonly x: number; readonly y: number }
+  ): { x: number; y: number } {
+    // The visible row, not the final match snapshot, owns slots during resolution.
+    const resting =
+      view instanceof MinionView
+        ? this.context.positions.restingPosition(view)
+        : undefined
+    if (resting) return resting
+    return view.parent!.toLocal(placement.parent.toGlobal(origin))
   }
 
   private setCombatViewStats(
@@ -983,6 +1039,8 @@ export class GameCombatPresentation {
       zIndex: view.zIndex
     }
     const global = view.getGlobalPosition()
+    this.context.positions.beginMotion(view)
+    view.shadow.minimumHeight = MATCH_SHADOW_CONFIG.combatHeight
     this.layer.addChild(view)
     const local = this.layer.toLocal(global)
     view.position.set(local.x, local.y)
@@ -994,8 +1052,10 @@ export class GameCombatPresentation {
     view: CombatView,
     placement: CombatViewPlacement
   ): void {
+    view.shadow.minimumHeight = 0
     if (view.destroyed || view.parent === placement.parent) {
       if (!view.destroyed) view.zIndex = placement.zIndex
+      this.context.positions.endMotion(view)
       return
     }
 
@@ -1007,6 +1067,7 @@ export class GameCombatPresentation {
     const local = placement.parent.toLocal(global)
     view.position.set(local.x, local.y)
     view.zIndex = placement.zIndex
+    this.context.positions.endMotion(view)
   }
 
   private wait(duration: number): Promise<void> {

@@ -12,6 +12,8 @@ type EventType = OpeningMatchEvent['type']
 export const EVENT_PRESENTATION_POLICY: Readonly<
   Record<EventType, EventPresentationPolicy>
 > = {
+  'random-spell-started': 'animation',
+  'random-spell-completed': 'state-refresh',
   'mulligan-resolved': 'animation',
   'coin-granted': 'animation',
   'opening-card-drawn': 'animation',

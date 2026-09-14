@@ -60,9 +60,9 @@ interface PendingEntry<T = unknown> extends ResolutionQueueEntry<T> {
  *
  * `enqueue` is useful for deferred work, while `execute` is the resolver's
  * normal boundary: nested work is inserted at the front and drained before
- * the parent continues.  This makes an action's trigger/deathrattle resolve
- * before the next authored action without relying on JavaScript call-stack
- * ordering alone.
+ * the parent continues. The effect runtime owns damage-step buffering and
+ * phase/death checkpoints; enqueuing work alone does not create a death
+ * checkpoint between authored actions.
  */
 export class ResolutionQueue {
   private readonly pending: PendingEntry[] = []

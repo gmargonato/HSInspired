@@ -35,11 +35,12 @@ export function isRemoteSecret(definition: CardDefinition): boolean {
 }
 
 /**
- * A non-blocking, face-up card flight that makes each remote play readable
- * without interrupting its normal board, weapon, or effect presentation.
+ * Shared card flight for remote hand plays and either player's automatic spells.
+ * Callers await it when a reveal must finish before its effects begin.
  */
 export class RemoteCardPlayPreview extends Actor {
   private sequence = 0
+  private cancelPending: (() => void) | null = null
 
   constructor(
     private readonly resolver: CardAssetResolver,
@@ -50,21 +51,45 @@ export class RemoteCardPlayPreview extends Actor {
     this.eventMode = 'none'
   }
 
-  async present(definition: CardDefinition, snapshot?: OpeningCard): Promise<void> {
+  async present(
+    definition: CardDefinition,
+    snapshot?: OpeningCard,
+    options: { readonly side: 'local' | 'remote'; readonly concealSecret: boolean } = {
+      side: 'remote',
+      concealSecret: true
+    }
+  ): Promise<void> {
     const sequence = ++this.sequence
     this.clearActiveCard()
+    if (this.destroyed) return
 
-    const card = await this.createCard(definition, snapshot)
+    const concealSecret = options.concealSecret && isRemoteSecret(definition)
+    const cancelled = new Promise<null>((resolve) => {
+      this.cancelPending = () => resolve(null)
+    })
+    const creating = this.createCard(definition, snapshot, concealSecret)
+    void creating.then(
+      (card) => {
+        if (sequence !== this.sequence || this.destroyed)
+          card.destroy({ children: true })
+      },
+      () => undefined
+    )
+    const card = await Promise.race([creating, cancelled])
+    if (!card) return
     if (sequence !== this.sequence || this.destroyed) {
-      card.destroy({ children: true })
+      if (!card.destroyed) card.destroy({ children: true })
       return
     }
 
-    const origin = MATCH_HISTORY_LAYOUT.remoteCardPlay.origin
+    const origin =
+      options.side === 'local'
+        ? MATCH_HISTORY_LAYOUT.remoteCardPlay.localOrigin
+        : MATCH_HISTORY_LAYOUT.remoteCardPlay.origin
     const destination = MATCH_HISTORY_LAYOUT.preview.source
     const originPosition = topLeftForCard(origin)
     const destinationPosition = topLeftForCard(destination)
-    card.label = isRemoteSecret(definition)
+    card.label = concealSecret
       ? 'game.remote-card-play-preview.secret'
       : `game.remote-card-play-preview.${definition.id}`
     card.eventMode = 'none'
@@ -96,11 +121,15 @@ export class RemoteCardPlayPreview extends Actor {
         ease: 'power1.in'
       })
 
-    await new Promise<void>((resolve) => {
-      timeline.eventCallback('onComplete', resolve)
-      timeline.eventCallback('onInterrupt', resolve)
-    })
+    await Promise.race([
+      cancelled,
+      new Promise<void>((resolve) => {
+        timeline.eventCallback('onComplete', resolve)
+        timeline.eventCallback('onInterrupt', resolve)
+      })
+    ])
     if (sequence !== this.sequence || card.destroyed) return
+    this.cancelPending = null
     card.removeFromParent()
     card.destroy({ children: true })
   }
@@ -112,15 +141,18 @@ export class RemoteCardPlayPreview extends Actor {
   }
 
   private clearActiveCard(): void {
+    this.cancelPending?.()
+    this.cancelPending = null
     this.killAnimations()
     for (const child of this.removeChildren()) child.destroy({ children: true })
   }
 
   private async createCard(
     definition: CardDefinition,
-    snapshot?: OpeningCard
+    snapshot?: OpeningCard,
+    concealSecret = isRemoteSecret(definition)
   ): Promise<Container> {
-    if (isRemoteSecret(definition)) {
+    if (concealSecret) {
       const container = new Container()
       const card = new Sprite(this.secretTexture)
       card.scale.set(MATCH_HISTORY_LAYOUT.preview.historyCard.scale)

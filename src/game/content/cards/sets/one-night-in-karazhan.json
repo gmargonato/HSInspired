@@ -1076,7 +1076,20 @@
     "health": 3,
     "rulesText": "During your turn, your hero is Immune.",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": { "type": "player-turn" },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "hero", "selection": "all" },
+            "keyword": "immune",
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true
   },
   {

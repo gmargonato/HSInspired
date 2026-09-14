@@ -34,6 +34,46 @@ function played(cardId: string, participantId = remote): HistoryActionResolvedEv
 }
 
 describe('MatchHistoryModel', () => {
+  it('conceals random Secret casts across grouped targets and associated sources, but shows activation', () => {
+    const secret = {
+      ...played('classic_counterspell').source,
+      id: 'random-secret',
+      publicIdentity: true,
+      secretCast: true,
+      rulesText: 'Counter a spell',
+      knownTo: [local, remote]
+    }
+    const source = played('whispers_of_the_old_gods_yogg_saron_hopes_end')
+    const cast: HistoryActionResolvedEvent = {
+      ...source,
+      outcomes: [
+        { kind: 'cast-spell', target: secret },
+        { kind: 'state', target: { ...secret, secretCast: undefined }, before: secret }
+      ]
+    }
+    const sourceEvent: HistoryActionResolvedEvent = {
+      ...source,
+      action: 'trigger',
+      source: secret,
+      outcomes: []
+    }
+    const concealed = getOpeningMatchPublicEvents([cast, sourceEvent], local)
+    expect(JSON.stringify(concealed)).not.toContain('classic_counterspell')
+    expect(JSON.stringify(concealed)).not.toContain('Counter a spell')
+    const model = new MatchHistoryModel(local)
+    const entry = model.record(cast)
+    expect(entry.kind).toBe('action')
+    if (entry.kind !== 'action') return
+    expect(entry.targets[0].target.concealedAs).toBe('secret')
+    expect(
+      JSON.stringify(getOpeningMatchPublicEvents([cast, sourceEvent], remote))
+    ).toContain('classic_counterspell')
+    const activation = { ...sourceEvent, source: { ...secret, secretCast: undefined } }
+    expect(JSON.stringify(getOpeningMatchPublicEvents([activation], local))).toContain(
+      'classic_counterspell'
+    )
+  })
+
   it('conceals every opponent Secret from raw engine events and public events', () => {
     const secrets = CARD_CATALOG.all.filter((card) => card.keywords.includes('secret'))
     expect(secrets.length).toBeGreaterThan(0)

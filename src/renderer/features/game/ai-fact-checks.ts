@@ -10,6 +10,39 @@ const object = (value: JsonValue | undefined): JsonObject =>
 const array = (value: JsonValue | undefined): readonly JsonValue[] =>
   Array.isArray(value) ? value : []
 
+/** Repeated on every exchange so an old forecast cannot stand in for current resources. */
+export function aiDecisionFacts(snapshot: JsonObject): JsonObject {
+  return Object.fromEntries(
+    array(snapshot.players)
+      .map(object)
+      .map((p) => [
+        String(p.role),
+        {
+          hero: p.hero ?? null,
+          mana: p.mana ?? null,
+          board: array(p.board)
+            .map(object)
+            .map((c) => ({
+              ref: c.ref ?? null,
+              name: c.name ?? null,
+              attack: c.attack ?? null,
+              health: c.health ?? null,
+              maxHealth: c.maxHealth ?? null,
+              combat: c.combat ?? null,
+              currentStatus: c.currentStatus ?? null
+            })),
+          hand: array(p.hand)
+            .map(object)
+            .map((c) => ({
+              ref: c.ref ?? null,
+              name: c.name ?? null,
+              cost: c.cost ?? null
+            }))
+        }
+      ])
+  )
+}
+
 /** Accepts only the already-fair model snapshot, never a match instance, checkpoint or RNG. */
 export function answerAiChecks(
   checks: readonly AiFactCheck[],
@@ -50,7 +83,22 @@ export function answerAiChecks(
     const unavailable = (
       status: 'unknown' | 'unsupported',
       scope: string
-    ): JsonObject => ({ ...base, status, scope })
+    ): JsonObject => ({
+      ...base,
+      status,
+      scope,
+      availableRefs:
+        check.topic === 'resources' || check.topic === 'history'
+          ? ['self', 'opponent']
+          : check.topic === 'action'
+            ? actions.map((a) => a.id)
+            : entities
+                .map((e) => e.ref)
+                .filter((ref): ref is string => typeof ref === 'string'),
+      ...(check.topic === 'resources'
+        ? { currentResourcesByRole: aiDecisionFacts(snapshot) }
+        : {})
+    })
     const entity = entities.find((e) => e.ref === check.ref)
     switch (check.topic) {
       case 'action': {

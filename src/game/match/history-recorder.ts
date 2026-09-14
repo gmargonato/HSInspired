@@ -284,7 +284,14 @@ export class HistoryRecorder {
       action === 'buff-cthun'
         ? (data.snapshot as HistoryEntitySnapshot)
         : historySnapshot(state, participantId, id, cardId)
-    if (kind === 'cast-spell') target = { ...target, publicIdentity: true }
+    if (kind === 'cast-spell')
+      target = {
+        ...target,
+        publicIdentity: true,
+        ...(cardId && CARD_CATALOG.get(cardId)?.keywords.includes('secret')
+          ? { secretCast: true }
+          : {})
+      }
     if (!target.zone && before && action !== 'buff-cthun') target = { ...before }
     if (kind === 'destroy' || data.burned === true)
       target = {

@@ -7,6 +7,7 @@ import {
   weaponTemporaryAbilityBadgePlacement
 } from './weapon-layout'
 import { AnimationScope } from '../../animation/animations'
+import { attachShadow } from '../shadows/shadow-caster'
 import { isPremiumEnabled, subscribeToPremiumAppearance } from '../premium-appearance'
 import { PremiumArtworkBreath } from '../effects/premium-artwork-breath'
 
@@ -78,6 +79,15 @@ function createStatGroup(
 
 /** Feature-agnostic equipped weapon presentation. The caller owns its position. */
 export class WeaponView extends Container {
+  readonly shadow = attachShadow(
+    this,
+    {
+      x: WEAPON_LAYOUT.frame.position.x - WEAPON_LAYOUT.frame.size.width / 2,
+      y: WEAPON_LAYOUT.frame.position.y - WEAPON_LAYOUT.frame.size.height / 2,
+      ...WEAPON_LAYOUT.frame.size
+    },
+    { shape: 'ellipse' }
+  )
   private readonly unsubscribePremium: () => void
   private readonly artworkBreath: PremiumArtworkBreath | null
   private readonly attackLabel: Text

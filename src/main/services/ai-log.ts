@@ -15,6 +15,8 @@ export class AiLog {
         'response-received',
         'response-rejected',
         'format-repair',
+        'fresh-context-retry',
+        'end-turn-review',
         'timeout-retry',
         'timeout-fallback',
         'manual-retry',
@@ -76,6 +78,8 @@ export class AiLog {
       ...Object.fromEntries(
         [
           'allowInspection',
+          'freshContext',
+          'currentDecision',
           'extraExchangesUsed',
           'information',
           'relevantFacts',

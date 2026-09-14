@@ -20,6 +20,7 @@ import { isHandOwnedSlot } from './hand-play-gesture'
 import { GameHandDrag } from './game-hand-drag'
 import { OPENING_TIMING, RESOLUTION_TIMING } from './game-presentation-timing'
 import { completeTimeline } from './game-presentation-animation'
+import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
 
 interface HandCallbacks {
   beginTargetGesture(entry: HandEntry, pointer: HandPointer, pointerId: number): void
@@ -201,6 +202,7 @@ export class GameHandView {
         const transform = transforms[index]
         if (!transform) return Promise.resolve()
         entry.restTransform = transform
+        entry.slot.shadow.restingScale = transform.scale
         if (opts.preserveHover && entry.card.instanceId !== opts.delayedInstanceId) {
           // Existing cards remain hoverable while the incoming card travels.
           // Use interruptible tweens instead of a layout timeline so changing
@@ -374,6 +376,10 @@ export class GameHandView {
   }
 
   configureSlot(slot: GameCardSlot): void {
+    // A canceled minion preview reuses its original hand slot.
+    slot.shadow.restingScale = DEFAULT_HAND_LAYOUT.cardScale
+    slot.shadow.maximumHeight = MATCH_SHADOW_CONFIG.heldCardHeight
+    slot.shadow.minimumHeight = 0
     if (!import.meta.env.DEV || import.meta.env.VITE_MATCH_OUTLINE_MODE !== 'live') {
       slot.enableBakedPlayableOutline(DEFAULT_HAND_LAYOUT.cardScale)
     }

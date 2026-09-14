@@ -163,7 +163,12 @@ export function getOpeningMatchPublicEvents(
   viewerId: PlayerId
 ): readonly OpeningMatchPublicEvent[] {
   return events
-    .filter((event) => event.type !== 'history-effect-recorded')
+    .filter(
+      (event) =>
+        event.type !== 'history-effect-recorded' &&
+        event.type !== 'random-spell-started' &&
+        event.type !== 'random-spell-completed'
+    )
     .map((event) => {
       switch (event.type) {
         case 'trigger-activated':

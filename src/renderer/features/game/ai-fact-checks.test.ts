@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { answerAiChecks } from './ai-fact-checks'
+import { answerAiChecks, aiDecisionFacts } from './ai-fact-checks'
 import { aiActionIntent } from './ai-action-intent'
 import type { AiFactCheck } from '../../../shared/ipc/ai-deliberation'
 import type { JsonObject } from '../../../shared/ipc/ai'
@@ -42,6 +42,22 @@ const answer = (topic: AiFactCheck['topic'], ref: string) =>
   answerAiChecks([check(topic, ref)], snapshot, [], ['A public event.'], 51)[0]!
 
 describe('AI fair factual inspection', () => {
+  it('supplies role-labeled resources and usable refs even when a query uses a state path', () => {
+    expect(answer('resources', 'state.self.mana.available')).toMatchObject({
+      status: 'unsupported',
+      availableRefs: ['self', 'opponent'],
+      currentResourcesByRole: { self: { mana: { available: 2 } } }
+    })
+    expect(answer('entity', 'target (Tentacle) health')).toMatchObject({
+      status: 'unknown',
+      availableRefs: expect.arrayContaining(['target'])
+    })
+    expect(answer('entity', 'hidden').availableRefs).not.toContain('human:deck:0')
+    expect(aiDecisionFacts(snapshot)).toMatchObject({
+      self: { hand: [{ ref: 'live-copy', cost: 2 }] },
+      opponent: { hand: [], board: [{ ref: 'target', attack: 2, health: 2 }] }
+    })
+  })
   it('returns live references and scoped conditions, not a dead copy or a hypothetical effect', () => {
     expect(answer('entity', 'live-copy')).toMatchObject({
       status: 'known',

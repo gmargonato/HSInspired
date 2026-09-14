@@ -1044,7 +1044,7 @@ describe('Secret runtime', () => {
       expect(
         scenario.match.getLegality!(attacker).legalAttackTargets[
           attackingMinion.instanceId
-        ]?.some((target) => target.kind === 'hero')
+        ]?.some((target) => target.kind === 'hero') ?? false
       ).toBe(false)
       expect(
         scenario.match.dispatch({

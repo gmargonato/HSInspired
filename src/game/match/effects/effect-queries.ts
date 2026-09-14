@@ -458,8 +458,8 @@ export class EffectQueries {
       return false
     if (
       selector.exclude === 'event-target' &&
-      frame.event?.target &&
-      entityKey(candidate) === entityKey(frame.event.target)
+      this.eventTargetForFrame(frame) &&
+      entityKey(candidate) === entityKey(this.eventTargetForFrame(frame)!)
     )
       return false
     if (selector.excludeCardId && candidate.cardId === selector.excludeCardId)
@@ -520,7 +520,7 @@ export class EffectQueries {
           ? frame.source
           : selector.adjacentTo === 'event-source'
             ? (frame.event?.source ?? frame.source)
-            : (frame.event?.target ?? frame.source)
+            : (this.eventTargetForFrame(frame) ?? frame.source)
       candidates = this.adjacentTo(anchor).filter((candidate) =>
         this.selectorMatches(candidate, selector, frame)
       )
@@ -924,6 +924,8 @@ export class EffectQueries {
       )
     }
     switch (condition.type) {
+      case 'player-turn':
+        return this.context.draft.activePlayerId === player.participantId
       case 'board-has-minion-count':
         return this.compare(
           this.context.draft.players.reduce(
@@ -1043,7 +1045,8 @@ export class EffectQueries {
         )
           return true
         return Boolean(
-          target?.kind === 'minion' && this.context.currentMinion(target) === null
+          target?.kind === 'minion' &&
+          (this.context.currentMinion(target)?.health ?? 0) <= 0
         )
       case 'cthun-attack-at-least':
         return (

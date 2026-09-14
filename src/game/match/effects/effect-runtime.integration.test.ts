@@ -2,8 +2,372 @@ import { describe, expect, it } from 'vitest'
 import { CARD_CATALOG, type CardDefinition, type CardId } from '../../content/cards'
 import { createMatchScenario } from '../testing/match-scenario-builder'
 import { getDerivedState, getMatchLegality, resolveCardPlay } from './effect-runtime'
+import { getOpeningMatchPublicEvents } from '../match-public-projection'
+import { projectHistoryAction } from '../history-visibility'
+import { triggerHistoryEvents } from '../match-history'
+import type { OpeningMatchState } from '../opening-match-types'
+
+function randomSpellScenario(
+  spellId: string,
+  count = 3,
+  casterId = 'whispers_of_the_old_gods_yogg_saron_hopes_end'
+) {
+  const scenario = createMatchScenario({
+    seed: 93,
+    cardId: casterId
+  })
+  scenario.confirmBothMulligans()
+  const participantId = scenario.match.getState().activePlayerId!
+  scenario.match.dispatch({
+    type: 'dev-set-mana',
+    participantId,
+    available: 10,
+    maximum: 10
+  })
+  const state = scenario.match.getState()
+  const configured: OpeningMatchState = {
+    ...state,
+    history: {
+      ...state.history!,
+      spellsCastThisGameByPlayer: { [participantId]: count }
+    }
+  }
+  const pool = CARD_CATALOG.all.filter(
+    (card) => card.type === 'Spell' && card.collectible
+  )
+  const index = pool.findIndex((card) => card.id === spellId)
+  expect(index).toBeGreaterThanOrEqual(0)
+  let calls = 0
+  const rng = {
+    next: () => {
+      calls++
+      return (index + 0.5) / pool.length
+    },
+    snapshot: () => calls,
+    restore: (value: unknown) => {
+      calls = value as number
+    }
+  }
+  const card = state.players
+    .find((p) => p.participantId === participantId)!
+    .hand.find((card) => card.cardId === casterId)!
+  const resolve = (input = configured) =>
+    resolveCardPlay({
+      state: input,
+      rng,
+      participantId,
+      cardInstanceId: card.instanceId,
+      position: 0,
+      nextEntityOrdinal: input.nextEntityOrdinal
+    })
+  return { configured, participantId, card, resolve, rng }
+}
+
+describe('random spell presentation boundaries', () => {
+  it('also brackets Servant of Yogg-Saron’s single random spell', () => {
+    const fixture = randomSpellScenario(
+      'basic_hellfire',
+      3,
+      'whispers_of_the_old_gods_servant_of_yogg_saron'
+    )
+    const result = fixture.resolve()
+    expect(result.accepted).toBe(true)
+    expect(
+      result.events.filter((event) => event.type === 'random-spell-started')
+    ).toHaveLength(1)
+    expect(
+      result.events.filter((event) => event.type === 'random-spell-completed')
+    ).toHaveLength(1)
+  })
+
+  it.each(['classic_silence', 'basic_polymorph'])(
+    'keeps the original caster and count after %s',
+    (spellId) => {
+      const fixture = randomSpellScenario(spellId)
+      const result = fixture.resolve()
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) throw new Error(result.message)
+      const starts = result.events.filter(
+        (event) => event.type === 'random-spell-started'
+      )
+      expect(starts).toHaveLength(3)
+      expect(
+        starts.every((event) => event.participantId === fixture.participantId)
+      ).toBe(true)
+    }
+  )
+
+  it('places the match result after the complete spell sequence', () => {
+    const fixture = randomSpellScenario('basic_hellfire')
+    const result = fixture.resolve({
+      ...fixture.configured,
+      players: fixture.configured.players.map((p) => ({
+        ...p,
+        hero: { ...p.hero, health: 3 }
+      })) as unknown as OpeningMatchState['players']
+    })
+    expect(result.accepted).toBe(true)
+    const lastSpell = result.events.findLastIndex(
+      (event) => event.type === 'random-spell-completed'
+    )
+    expect(lastSpell).toBeGreaterThan(0)
+    expect(
+      result.events.findIndex((event) => event.type === 'match-ended')
+    ).toBeGreaterThan(lastSpell)
+  })
+
+  it('captures each spell and keeps casting after Yogg dies without extra RNG calls', () => {
+    const fixture = randomSpellScenario('basic_hellfire')
+    const result = fixture.resolve()
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    const boundaries = result.events.filter(
+      (event) =>
+        event.type === 'random-spell-started' || event.type === 'random-spell-completed'
+    )
+    expect(boundaries.map((event) => event.type)).toEqual([
+      'random-spell-started',
+      'random-spell-completed',
+      'random-spell-started',
+      'random-spell-completed',
+      'random-spell-started',
+      'random-spell-completed'
+    ])
+    expect(boundaries.map((event) => event.state.players[0].hero.health)).toEqual([
+      30, 27, 27, 24, 24, 21
+    ])
+    expect(
+      boundaries.every((event) => event.participantId === fixture.participantId)
+    ).toBe(true)
+    expect(
+      boundaries[4].state.players
+        .flatMap((p) => p.board)
+        .some((minion) => minion.instanceId === fixture.card.instanceId)
+    ).toBe(false)
+    expect(fixture.rng.snapshot()).toBe(3)
+    for (let index = 0; index < boundaries.length; index += 2) {
+      const start = boundaries[index]
+      const end = boundaries[index + 1]
+      expect(start.castId).toBe(end.castId)
+      const effects = result.events.slice(
+        result.events.indexOf(start) + 1,
+        result.events.indexOf(end)
+      )
+      expect(
+        effects.some(
+          (event) => event.type === 'effect-resolved' && event.action === 'damage'
+        )
+      ).toBe(true)
+    }
+    for (const viewer of fixture.configured.players) {
+      const projected = getOpeningMatchPublicEvents(result.events, viewer.participantId)
+      expect(projected.some((event) => 'state' in event)).toBe(false)
+    }
+    fixture.rng.restore(0)
+    expect(fixture.resolve()).toEqual(result)
+  })
+
+  it('emits no previews for zero casts and completes spells with no useful effect', () => {
+    expect(
+      randomSpellScenario('basic_deadly_poison', 0)
+        .resolve()
+        .events.some((event) => event.type === 'random-spell-started')
+    ).toBe(false)
+    const result = randomSpellScenario('basic_deadly_poison', 2).resolve()
+    expect(result.accepted).toBe(true)
+    expect(
+      result.events.filter((event) => event.type === 'random-spell-completed')
+    ).toHaveLength(2)
+  })
+
+  it('conceals automatic Secrets in cast history and associated effect sources', () => {
+    const fixture = randomSpellScenario('classic_counterspell', 1)
+    const result = fixture.resolve()
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    const opponent = fixture.configured.players.find(
+      (p) => p.participantId !== fixture.participantId
+    )!
+    const history = triggerHistoryEvents(
+      fixture.configured,
+      result.state,
+      result.events
+    )
+    expect(JSON.stringify(history)).toContain('classic_counterspell')
+    expect(
+      JSON.stringify(
+        history.map((event) => projectHistoryAction(event, opponent.participantId))
+      )
+    ).not.toContain('classic_counterspell')
+    expect(
+      JSON.stringify(
+        history.map((event) => projectHistoryAction(event, fixture.participantId))
+      )
+    ).toContain('classic_counterspell')
+  })
+
+  it('completes a countered cast before the next spell starts', () => {
+    const fixture = randomSpellScenario('basic_hellfire', 2)
+    const configured: OpeningMatchState = {
+      ...fixture.configured,
+      players: fixture.configured.players.map((p) =>
+        p.participantId === fixture.participantId
+          ? p
+          : {
+              ...p,
+              secrets: [
+                {
+                  cardId: CARD_CATALOG.require('classic_counterspell').id,
+                  instanceId: 'counterspell-fixture',
+                  ownerId: p.participantId,
+                  controllerId: p.participantId,
+                  creationOrdinal: 64,
+                  revealed: false
+                }
+              ]
+            }
+      ) as unknown as OpeningMatchState['players']
+    }
+    const result = fixture.resolve(configured)
+    if (!result.accepted) throw new Error(result.message)
+    expect(result.accepted).toBe(true)
+    const completed = result.events.filter(
+      (event) => event.type === 'random-spell-completed'
+    )
+    expect(completed).toHaveLength(2)
+    expect(completed.map((event) => event.state.players[0].hero.health)).toEqual([
+      30, 27
+    ])
+  })
+})
 
 describe('shared effect runtime', () => {
+  it('publishes Malganis hero immunity and removes it only after the last aura leaves', () => {
+    const scenario = createMatchScenario({ seed: 97, cardId: 'classic_silence' })
+    scenario.confirmBothMulligans()
+    const [owner, opponent] = activeParticipants(scenario)
+    for (let copy = 0; copy < 2; copy++) {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: owner,
+          cardId: 'goblins_vs_gnomes_malganis'
+        }).accepted
+      ).toBe(true)
+    }
+    expect(player(scenario, owner).hero.immune).toBe(true)
+    const health = player(scenario, owner).hero.health
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: owner,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId: owner,
+        cardId: 'basic_hellfire'
+      }).accepted
+    ).toBe(true)
+    const hellfire = player(scenario, owner).hand.find(
+      (c) => c.cardId === 'basic_hellfire'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: owner,
+        cardInstanceId: hellfire.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, owner).hero.health).toBe(health)
+    expect(player(scenario, opponent).hero.health).toBeLessThan(health)
+    const sources = [...player(scenario, owner).board]
+    for (const [index, source] of sources.entries()) {
+      const silence = player(scenario, owner).hand.find(
+        (c) => c.cardId === 'classic_silence'
+      )!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId: owner,
+          cardInstanceId: silence.instanceId,
+          targets: [
+            { kind: 'minion', participantId: owner, instanceId: source.instanceId }
+          ]
+        }).accepted
+      ).toBe(true)
+      expect(player(scenario, owner).hero.immune).toBe(index === 0)
+    }
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: owner,
+        cardId: 'goblins_vs_gnomes_malganis'
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, owner).hero.immune).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId: owner,
+        zone: 'board'
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, owner).hero.immune).toBe(false)
+  })
+
+  it('applies Violet Illusionist immunity only during its controller turn', () => {
+    const scenario = createMatchScenario({ seed: 97, cardId: 'basic_hellfire' })
+    scenario.confirmBothMulligans()
+    const [owner, opponent] = activeParticipants(scenario)
+    for (const participantId of [owner, opponent]) {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId,
+          cardId: 'one_night_in_karazhan_violet_illusionist'
+        }).accepted
+      ).toBe(true)
+    }
+    expect(player(scenario, owner).hero.immune).toBe(true)
+    expect(player(scenario, opponent).hero.immune).toBe(false)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: owner }).accepted
+    ).toBe(true)
+    expect(player(scenario, owner).hero.immune).toBe(false)
+    expect(player(scenario, opponent).hero.immune).toBe(true)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: opponent }).accepted
+    ).toBe(true)
+    expect(player(scenario, owner).hero.immune).toBe(true)
+    expect(player(scenario, opponent).hero.immune).toBe(false)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: owner,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const health = player(scenario, owner).hero.health
+    const hellfire = player(scenario, owner).hand.find(
+      (c) => c.cardId === 'basic_hellfire'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId: owner,
+        cardInstanceId: hellfire.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, owner).hero.health).toBe(health)
+    expect(player(scenario, owner).board).toHaveLength(0)
+    expect(player(scenario, owner).hero.immune).toBe(false)
+  })
+
   it('protects minions summoned after Commanding Shout and expires after the turn', () => {
     const scenario = createMatchScenario({ seed: 909, cardId: 'basic_fireball' })
     scenario.confirmBothMulligans()
@@ -2611,15 +2975,32 @@ describe('shared effect runtime', () => {
         cardInstanceId: longbow.instanceId
       }).accepted
     ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'basic_chillwind_yeti'
+      }).accepted
+    ).toBe(true)
+    const defender = player(scenario, opponentId).board[0]!
     const before = player(scenario, playerId).hero.health
     const attack = scenario.match.dispatch({
       type: 'attack-character',
       participantId: playerId,
       attacker: { kind: 'hero' },
-      defender: { kind: 'hero', participantId: opponentId }
+      defender: {
+        kind: 'minion',
+        participantId: opponentId,
+        instanceId: defender.instanceId
+      }
     })
     expect(attack.accepted).toBe(true)
     const hero = player(scenario, playerId).hero
+    expect(
+      attack.events.find((event) => event.type === 'combat-started')
+    ).toMatchObject({
+      attacker: { immune: true }
+    })
     expect(hero.health).toBe(before)
     expect(hero.immune).toBe(false)
     expect(hero.enchantments ?? []).not.toEqual(

@@ -94,6 +94,7 @@ export const CARD_EVENT_TYPES = [
 export type CardEventType = (typeof CARD_EVENT_TYPES)[number]
 
 export const CARD_CONDITIONS = [
+  'player-turn',
   'card-died-this-game',
   'combo',
   'combo-active',
@@ -304,6 +305,7 @@ export const CARD_ACTIONS = [
   'copy',
   'counter-event',
   'damage',
+  'damage-group',
   'destroy',
   'destroy-all-but-highest-attack',
   'destroy-and-gain-stats',
@@ -437,10 +439,28 @@ export type ManaCardAction = Readonly<Record<string, CardEffectValue>> &
     | { readonly action: 'unlock-overload' }
   )
 
+/** Multi-target damage is simultaneous unless explicitly resolved per target. */
+export type DamageCardAction = Readonly<Record<string, CardEffectValue>> & {
+  readonly action: 'damage'
+  readonly damageResolution?: 'simultaneous' | 'per-target'
+  readonly damageOrder?: 'play-order' | 'reverse-play-order'
+}
+
+/** Different damage amounts/selectors belonging to a single damage step. */
+export type DamageGroupCardAction = Readonly<Record<string, CardEffectValue>> & {
+  readonly action: 'damage-group'
+  readonly actions: readonly DamageCardAction[]
+}
+
 export type CardAction =
   | ManaCardAction
+  | DamageCardAction
+  | DamageGroupCardAction
   | (Readonly<Record<string, CardEffectValue>> & {
-      readonly action: Exclude<CardActionName, ManaActionName>
+      readonly action: Exclude<
+        CardActionName,
+        ManaActionName | 'damage' | 'damage-group'
+      >
     })
 
 export interface CardEffectBlock {
