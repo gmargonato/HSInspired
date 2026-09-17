@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_massive.jpg",
+  "source_name": "journey_to_ungoro_massive.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-16T14:45:39.805852",
+  "card_id": "journey_to_ungoro_massive",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

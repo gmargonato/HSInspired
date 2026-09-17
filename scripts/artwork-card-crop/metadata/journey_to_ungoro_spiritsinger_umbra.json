@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_spiritsinger_umbra.jpg",
+  "source_name": "journey_to_ungoro_spiritsinger_umbra.jpg",
+  "crop_box": [
+    31,
+    32,
+    486,
+    487
+  ],
+  "scale": 1.1,
+  "offset_x": -33.67692307692312,
+  "offset_y": -35.67692307692312,
+  "timestamp": "2026-09-16T14:46:23.581772",
+  "card_id": "journey_to_ungoro_spiritsinger_umbra",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

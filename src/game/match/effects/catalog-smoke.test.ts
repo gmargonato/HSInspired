@@ -229,6 +229,8 @@ function attemptCard(
 describe('catalog effect closure smoke', () => {
   it('resolves every live card deterministically through the public command boundary', () => {
     for (const [index, card] of CARD_CATALOG.all.entries()) {
+      // Quests are opening objectives, not cards that can be drawn and cast.
+      if (card.type === 'Spell' && card.quest) continue
       const seed = 0x5000 + index
       const firstAttempt = attemptCard(card.id, seed)
       expect(attemptCard(card.id, seed)).toEqual(firstAttempt)

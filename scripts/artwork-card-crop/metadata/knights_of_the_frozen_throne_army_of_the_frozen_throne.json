@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\knights_of_the_frozen_throne_army_of_the_frozen_throne.jpg",
+  "source_name": "knights_of_the_frozen_throne_army_of_the_frozen_throne.jpg",
+  "crop_box": [
+    25,
+    27,
+    480,
+    482
+  ],
+  "scale": 1.1,
+  "offset_x": -27.52307692307693,
+  "offset_y": -29.369230769230796,
+  "timestamp": "2026-09-16T15:05:29.178270",
+  "card_id": "knights_of_the_frozen_throne_army_of_the_frozen_throne",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

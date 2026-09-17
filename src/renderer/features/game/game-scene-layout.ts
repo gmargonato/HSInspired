@@ -15,6 +15,7 @@ import {
   BOTTOM_CENTER,
   CENTER,
   TOP_CENTER,
+  TOP_LEFT,
   placement,
   type LayoutPoint
 } from '../../rendering/layout'
@@ -28,14 +29,14 @@ export const GAME_BOARD_LAYOUT = {
     topLeft: { x: 0, y: 0 } satisfies LayoutPoint
   },
 
-  /** The wooden play surface; board art is centered on the canvas. */
+  /** Full-screen board art, including the wooden play surface. */
   board: placement(
-    { x: 960, y: 540 },
-    { width: 1573, height: 1080 },
+    { x: 0, y: 0 },
+    { width: 1920, height: 1080 },
     {
-      anchor: CENTER,
+      anchor: TOP_LEFT,
       scale: 1,
-      note: 'Board artwork.'
+      note: 'Full design-canvas board artwork with its table background.'
     }
   ),
 
@@ -63,7 +64,7 @@ export const GAME_BOARD_LAYOUT = {
   boardMinions: {
     /** Local row, raised toward the board center and aligned with its drop zone. */
     local: {
-      centerX: 980,
+      centerX: 985,
       baselineY: 610,
       maxSpan: 900,
       maxStep: 150,
@@ -71,8 +72,8 @@ export const GAME_BOARD_LAYOUT = {
     },
     /** Remote (top) minion row; presentation stays empty in this phase. */
     remote: {
-      centerX: 980,
-      baselineY: 415,
+      centerX: 985,
+      baselineY: 400,
       maxSpan: 900,
       maxStep: 150,
       minionScale: 1
@@ -95,7 +96,7 @@ export const GAME_BOARD_LAYOUT = {
   heroes: {
     /** Local hero portrait in its board slot (bottom of the screen). */
     local: placement(
-      { x: 985, y: 825 },
+      { x: 985, y: 830 },
       { width: 345, height: 433 },
       {
         anchor: CENTER,
@@ -104,7 +105,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote hero portrait in its board slot (top of the screen). */
     remote: placement(
-      { x: 985, y: 180 },
+      { x: 985, y: 175 },
       { width: 345, height: 433 },
       {
         anchor: CENTER,
@@ -159,7 +160,7 @@ export const GAME_BOARD_LAYOUT = {
     fatigueOffsetX: { local: -20, remote: -20 },
     /** Local player's deck pile. */
     local: placement(
-      { x: 1680, y: 643 },
+      { x: 1675, y: 645 },
       { width: 83, height: 181 },
       {
         anchor: CENTER,
@@ -168,7 +169,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote player's deck pile. */
     remote: placement(
-      { x: 1680, y: 347 },
+      { x: 1675, y: 340 },
       { width: 83, height: 181 },
       {
         anchor: CENTER,
@@ -177,7 +178,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Local deck card count label, just right of the pile. */
     localCount: placement(
-      { x: 1660, y: 770 },
+      { x: 1660, y: 775 },
       { width: 90, height: 60 },
       {
         anchor: CENTER
@@ -185,7 +186,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote deck card count label, just right of the pile. */
     remoteCount: placement(
-      { x: 1660, y: 215 },
+      { x: 1660, y: 205 },
       { width: 90, height: 60 },
       {
         anchor: CENTER
@@ -225,6 +226,21 @@ export const GAME_BOARD_LAYOUT = {
 
   /** End-of-match result frame, local hero portrait, and continuation prompt. */
   matchResult: {
+    dustText: placement(
+      { x: 935, y: 900 },
+      { width: 160, height: 60 },
+      { anchor: CENTER }
+    ),
+    dustIcon: placement(
+      { x: 1025, y: 900 },
+      { width: 180, height: 243 },
+      { anchor: CENTER, scale: 0.3 }
+    ),
+    rewardError: placement(
+      { x: 960, y: 880 },
+      { width: 800, height: 50 },
+      { anchor: CENTER }
+    ),
     frame: placement(
       { x: 960, y: 540 },
       { width: 1374, height: 1145 },
@@ -261,14 +277,14 @@ export const GAME_BOARD_LAYOUT = {
    */
   mana: {
     localLabel: placement(
-      { x: 1290, y: 1010 },
+      { x: 1280, y: 1010 },
       { width: 90, height: 50 },
       {
         anchor: CENTER
       }
     ),
     remoteLabel: placement(
-      { x: 1260, y: 50 },
+      { x: 1270, y: 47 },
       { width: 90, height: 50 },
       {
         anchor: CENTER
@@ -282,7 +298,7 @@ export const GAME_BOARD_LAYOUT = {
      * shares the local label's Y and starts just right of it.
      */
     crystals: {
-      firstCrystalCenter: { x: 1355, y: 1010 },
+      firstCrystalCenter: { x: 1345, y: 1015 },
       pendingRowOffsetY: 40,
       overloadCrystal: placement(
         { x: 0, y: 0 },
@@ -294,15 +310,15 @@ export const GAME_BOARD_LAYOUT = {
         }
       ),
       /** Center-to-center spacing between crystals. */
-      gap: 35,
+      gap: 33,
       /** Native crystal size with a uniform scale, local to each crystal. */
       crystal: placement(
         { x: 0, y: 0 },
-        { width: 171, height: 165 },
+        { width: 45, height: 47 },
         {
           anchor: CENTER,
-          scale: 0.224,
-          note: 'Native mana asset dimensions; placement is local to each crystal.'
+          scale: 1,
+          note: 'Native available/highlighted size; spent artwork is 44 x 45 at the same scale.'
         }
       )
     }
@@ -349,7 +365,7 @@ export const GAME_BOARD_LAYOUT = {
      * crystal. Both offsets are relative to the card center.
      */
     manaOverlay: {
-      crystalOffset: { x: 0, y: -48 } satisfies LayoutPoint,
+      crystalOffset: { x: 0, y: -54 } satisfies LayoutPoint,
       costOffset: { x: 0, y: 0 } satisfies LayoutPoint
     }
   },

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_jungle_giants.jpg",
+  "source_name": "journey_to_ungoro_jungle_giants.jpg",
+  "crop_box": [
+    29,
+    31,
+    484,
+    486
+  ],
+  "scale": 1.1,
+  "offset_x": -31.52307692307693,
+  "offset_y": -34.13846153846157,
+  "timestamp": "2026-09-16T14:45:12.147407",
+  "card_id": "journey_to_ungoro_jungle_giants",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

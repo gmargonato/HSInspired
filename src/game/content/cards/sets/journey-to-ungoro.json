@@ -1,0 +1,1446 @@
+[
+  {
+    "id": "journey_to_ungoro_elise_the_trailblazer",
+    "name": "Elise the Trailblazer",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Battlecry: Shuffle a Golden Monkey into your deck. If your deck has no duplicates, draw it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "self",
+            "cardId": "league_of_explorers_golden_monkey",
+            "count": 1
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "player-deck-has-no-duplicates",
+            "player": "self"
+          },
+          "actions": [
+            {
+              "action": "draw",
+              "player": "self",
+              "count": 1,
+              "filter": {
+                "cardId": "league_of_explorers_golden_monkey"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_spiritsinger_umbra",
+    "name": "Spiritsinger Umbra",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "After you summon a minion, trigger its Deathrattle effect.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self"
+        },
+        "actions": [
+          {
+            "action": "trigger-deathrattle",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_jungle_giants",
+    "quest": { "goal": "summon-attack-5", "target": 5, "rewardCardId": "journey_to_ungoro_barnabus_the_stomper" },
+    "name": "Jungle Giants",
+    "rarity": "Legendary",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Summon 5 minions with 5 or more Attack. Reward: Barnabus.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_barnabus_the_stomper",
+    "name": "Barnabus the Stomper",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 5,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Battlecry: Reduce the Cost of minions in your deck to (0).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "deck"
+            },
+            "amount": {
+              "operation": "set",
+              "value": 0
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_the_marsh_queen",
+    "quest": { "goal": "play-cost-1-minion", "target": 5, "rewardCardId": "journey_to_ungoro_queen_carnassa" },
+    "name": "The Marsh Queen",
+    "rarity": "Legendary",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Play 5 minions that cost (1). Reward: Queen Carnassa.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_queen_carnassa",
+    "name": "Queen Carnassa",
+    "rarity": "None",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 5,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Rush. Battlecry: Shuffle 20 random Beasts into your deck.",
+    "keywords": ["rush"],
+    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "shuffle-random-minions", "player": "self", "tribe": "Beast", "count": 20 }] }],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_open_the_waygate",
+    "quest": { "goal": "cast-generated-spell", "target": 5, "rewardCardId": "journey_to_ungoro_time_warp" },
+    "name": "Open the Waygate",
+    "rarity": "Legendary",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Cast 5 spells that didn't start in your deck. Reward: Time Warp.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_time_warp",
+    "name": "Time Warp",
+    "rarity": "None",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Refill your deck.",
+    "keywords": [],
+    "effects": [{ "trigger": "cast", "actions": [{ "action": "refill-original-decks", "player": "self" }] }],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_the_last_kaleidosaur",
+    "quest": { "goal": "target-friendly-minion", "target": 5, "rewardCardId": "journey_to_ungoro_galvadon" },
+    "name": "The Last Kaleidosaur",
+    "rarity": "Legendary",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Cast 5 spells on your minions. Reward: Galvadon.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_galvadon",
+    "name": "Galvadon",
+    "rarity": "None",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 5,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Battlecry: Adapt 5 times.",
+    "keywords": [],
+    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "adapt", "count": 5 }] }],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_awaken_the_makers",
+    "quest": { "goal": "summon-deathrattle", "target": 5, "rewardCardId": "journey_to_ungoro_amara_warden_of_hope" },
+    "name": "Awaken the Makers",
+    "rarity": "Legendary",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Summon 5 Deathrattle minions. Reward: Amara, Warden of Hope.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_amara_warden_of_hope",
+    "name": "Amara, Warden of Hope",
+    "rarity": "None",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Taunt. Battlecry: Set your hero's Health to 40.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "set-health",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 40
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_the_caverns_below",
+    "quest": { "goal": "play-same-name", "target": 5, "rewardCardId": "journey_to_ungoro_crystal_core" },
+    "name": "The Caverns Below",
+    "rarity": "Legendary",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Play 5 minions with the same name. Reward: Crystal Core.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_crystal_core",
+    "name": "Crystal Core",
+    "rarity": "None",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Set all minions in your deck and hand to 5/5.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "attack": {
+              "operation": "set",
+              "value": 5
+            },
+            "health": {
+              "operation": "set",
+              "value": 5
+            }
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "deck"
+            },
+            "attack": {
+              "operation": "set",
+              "value": 5
+            },
+            "health": {
+              "operation": "set",
+              "value": 5
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_kalimos_primal_lord",
+    "name": "Kalimos, Primal Lord",
+    "rarity": "Legendary",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "Elemental",
+    "cost": 7,
+    "attack": 7,
+    "health": 7,
+    "rulesText": "Battlecry: If you played an Elemental last turn, cast an Elemental Invocation.",
+    "keywords": [],
+    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "cast-random-spells", "count": 1, "onlyIfElementalLastTurn": true, "includeUncollectible": true, "pool": ["journey_to_ungoro_invocation_of_air", "journey_to_ungoro_invocation_of_earth", "journey_to_ungoro_invocation_of_fire", "journey_to_ungoro_invocation_of_water"] }] }],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_unite_the_murlocs",
+    "quest": {
+      "goal": "summon-murloc",
+      "target": 8,
+      "rewardCardId": "journey_to_ungoro_megafin"
+    },
+    "name": "Unite the Murlocs",
+    "rarity": "Legendary",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Summon 8 Murlocs. Reward: Megafin.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_megafin",
+    "name": "Megafin",
+    "rarity": "None",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 5,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Battlecry: Fill your hand with random Murlocs.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "tribe": "Murloc"
+            },
+            "count": 10
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_lakkari_sacrifice",
+    "quest": { "goal": "discard-card", "target": 6, "rewardCardId": "journey_to_ungoro_nether_portal" },
+    "name": "Lakkari Sacrifice",
+    "rarity": "Legendary",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Discard 6 cards. Reward: Nether Portal.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_nether_portal",
+    "name": "Nether Portal",
+    "rarity": "None",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Replace your deck with random Demons. Give them +2/+2.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "transform-random",
+            "includeUncollectible": true,
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "deck"
+            },
+            "filter": {
+              "cardType": "Minion",
+              "tribe": "Demon"
+            }
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "deck"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_fire_plumes_heart",
+    "quest": { "goal": "play-taunt-minion", "target": 7, "rewardCardId": "journey_to_ungoro_sulfuras" },
+    "name": "Fire Plume's Heart",
+    "rarity": "Legendary",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Play 7 Taunt minions. Reward: Sulfuras.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_sulfuras",
+    "name": "Sulfuras",
+    "rarity": "None",
+    "cardClass": "Warrior",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 4,
+    "health": 2,
+    "rulesText": "Battlecry: Your Hero Power becomes 'DIE, INSECT!'",
+    "keywords": [],
+    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "set-hero-power", "player": "self", "power": "ragnaros-die-insects" }] }],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_crackling_shield",
+    "name": "Crackling Shield",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Divine Shield",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "divine-shield"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_flaming_claws",
+    "name": "Flaming Claws",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "+3 Attack",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 3
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_living_spores",
+    "name": "Living Spores",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deathrattle: Summon two 1/1 Plants.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-deathrattle",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "actions": [
+              {
+                "action": "summon",
+                "cardId": "journey_to_ungoro_plant",
+                "count": 2
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_lightning_speed",
+    "name": "Lightning Speed",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Windfury",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "windfury"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_liquid_membrane",
+    "name": "Liquid Membrane",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Elusive",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "spell-immune"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_massive",
+    "name": "Massive",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Taunt",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_volcanic_might",
+    "name": "Volcanic Might",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "+1/+1",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_rocky_carapace",
+    "name": "Rocky Carapace",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "+3 Health",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "health": 3
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_shrouding_mist",
+    "name": "Shrouding Mist",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Stealth until your next turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "stealth",
+            "duration": "until-next-turn"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_poison_spit",
+    "name": "Poison Spit",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Poisonous",
+    "keywords": [],
+    "effects": [{ "trigger": "cast", "actions": [{ "action": "grant-keyword", "target": { "controller": "any", "type": "minion", "selection": "chosen" }, "keyword": "poisonous" }] }],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_plant",
+    "name": "Plant",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Plant",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_invocation_of_air",
+    "name": "Invocation of Air",
+    "rarity": "None",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your minions Windfury.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "keyword": "windfury"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_invocation_of_earth",
+    "name": "Invocation of Earth",
+    "rarity": "None",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your minions Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_invocation_of_fire",
+    "name": "Invocation of Fire",
+    "rarity": "None",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 6 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 6
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_invocation_of_water",
+    "name": "Invocation of Water",
+    "rarity": "None",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Restore 12 Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 12
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_untapped_potential",
+    "quest": {
+      "goal": "end-turn-unspent-mana",
+      "target": 4,
+      "rewardCardId": "journey_to_ungoro_ossirian_tear"
+    },
+    "name": "Untapped Potential",
+    "rarity": "Legendary",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: End 4 turns with any unspent Mana. Reward: Ossirian Tear.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_ossirian_tear",
+    "name": "Ossirian Tear",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Discover a Choose One card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "saviors_of_uldum_ossirian_tear"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_unseal_the_vault",
+    "quest": {
+      "goal": "summon-minion",
+      "target": 20,
+      "rewardCardId": "journey_to_ungoro_pharaohs_warmask"
+    },
+    "name": "Unseal the Vault",
+    "rarity": "Legendary",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Summon 20 minions. Reward: Pharaoh's Warmask.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_pharaohs_warmask",
+    "name": "Pharaoh's Warmask",
+    "rarity": "None",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your minions +2 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "saviors_of_uldum_pharaohs_warmask"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_raid_the_sky_temple",
+    "quest": {
+      "goal": "cast-spell",
+      "target": 10,
+      "rewardCardId": "journey_to_ungoro_ascendant_scroll"
+    },
+    "name": "Raid the Sky Temple",
+    "rarity": "Legendary",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Cast 10 spells. Reward: Ascendant Scroll.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_ascendant_scroll",
+    "name": "Ascendant Scroll",
+    "rarity": "None",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Add a random Mage spell to your hand. It costs (2) less.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "saviors_of_uldum_ascendant_scroll"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_making_mummies",
+    "quest": {
+      "goal": "play-deathrattle-minion",
+      "target": 5,
+      "rewardCardId": "journey_to_ungoro_emperor_wraps"
+    },
+    "name": "Making Mummies",
+    "rarity": "Legendary",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Play 5 Deathrattle minions. Reward: Emperor Wraps.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_emperor_wraps",
+    "name": "Emperor Wraps",
+    "rarity": "None",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon a 2/2 copy of a friendly minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "saviors_of_uldum_emperor_wraps"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_activate_the_obelisk",
+    "quest": {
+      "goal": "restore-health",
+      "target": 15,
+      "rewardCardId": "journey_to_ungoro_obelisks_eye"
+    },
+    "name": "Activate the Obelisk",
+    "rarity": "Legendary",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Restore 15 Health. Reward: Obelisk's Eye.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_obelisks_eye",
+    "name": "Obelisk's Eye",
+    "rarity": "None",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Restore 3 Health. If you target a minion, also give it +3/+3.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "saviors_of_uldum_obelisks_eye"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_bazaar_burglary",
+    "quest": {
+      "goal": "add-other-class-card",
+      "target": 4,
+      "rewardCardId": "journey_to_ungoro_ancient_blades"
+    },
+    "name": "Bazaar Burglary",
+    "rarity": "Legendary",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Add 4 cards from other classes to your hand. Reward: Ancient Blades.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_ancient_blades",
+    "name": "Ancient Blades",
+    "rarity": "None",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Equip a 3/2 Blade with Immune while attacking.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "saviors_of_uldum_ancient_blades"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_corrupt_the_waters",
+    "quest": {
+      "goal": "play-battlecry-minion",
+      "target": 6,
+      "rewardCardId": "journey_to_ungoro_heart_of_virnaal"
+    },
+    "name": "Corrupt the Waters",
+    "rarity": "Legendary",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Play 6 Battlecry cards. Reward: Heart of Vir'naal.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_heart_of_virnaal",
+    "name": "Heart of Vir'naal",
+    "rarity": "None",
+    "cardClass": "Shaman",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Your Battlecries trigger twice this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "saviors_of_uldum_heart_of_virnaal"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_supreme_archaeology",
+    "quest": {
+      "goal": "draw-card",
+      "target": 20,
+      "rewardCardId": "journey_to_ungoro_tome_of_origination"
+    },
+    "name": "Supreme Archaeology",
+    "rarity": "Legendary",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Draw 20 cards. Reward: Tome of Origination.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_tome_of_origination",
+    "name": "Tome of Origination",
+    "rarity": "None",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw a card. It costs (0).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "saviors_of_uldum_tome_of_origination"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_hack_the_system",
+    "quest": {
+      "goal": "hero-attack",
+      "target": 5,
+      "rewardCardId": "journey_to_ungoro_anraphets_core"
+    },
+    "name": "Hack the System",
+    "rarity": "Legendary",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Quest: Attack 5 times with your hero. Reward: Anraphet's Core.",
+    "keywords": [],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "journey_to_ungoro_anraphets_core",
+    "name": "Anraphet's Core",
+    "rarity": "None",
+    "cardClass": "Warrior",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 0,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon a 4/3 Golem. After your hero attacks, refresh this.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "saviors_of_uldum_anraphets_core"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_ancient_blade",
+    "name": "Ancient Blade",
+    "rarity": "None",
+    "cardClass": "Rogue",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 0,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "Immune while attacking.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "character-attacked",
+          "source": {
+            "type": "hero",
+            "controller": "self"
+          }
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "keyword": "immune",
+            "duration": "this-attack"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "journey_to_ungoro_stone_golem",
+    "name": "Stone Golem",
+    "rarity": "None",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  }
+]

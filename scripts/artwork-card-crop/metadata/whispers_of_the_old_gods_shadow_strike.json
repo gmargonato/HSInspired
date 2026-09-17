@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\whispers_of_the_old_gods_shadow_strike.jpg",
+  "source_name": "whispers_of_the_old_gods_shadow_strike.jpg",
+  "crop_box": [
+    33,
+    25,
+    488,
+    480
+  ],
+  "scale": 1.1,
+  "offset_x": -36.2923076923077,
+  "offset_y": -27.83076923076925,
+  "timestamp": "2026-09-16T15:45:13.973550",
+  "card_id": "whispers_of_the_old_gods_shadow_strike",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

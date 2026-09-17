@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_rocky_carapace.jpg",
+  "source_name": "journey_to_ungoro_rocky_carapace.jpg",
+  "crop_box": [
+    27,
+    27,
+    482,
+    482
+  ],
+  "scale": 1.1,
+  "offset_x": -29.676923076923117,
+  "offset_y": -29.215384615384636,
+  "timestamp": "2026-09-16T14:46:12.151947",
+  "card_id": "journey_to_ungoro_rocky_carapace",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

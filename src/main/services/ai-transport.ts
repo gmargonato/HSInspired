@@ -29,7 +29,41 @@ export function rejectedContent(content: unknown, apiKey: string): JsonObject {
   }
 }
 
+/** Extract only diagnostic fields, never the provider's arbitrary metadata/payload. */
+export function providerFailure(value: unknown, apiKey: string): JsonObject {
+  const data =
+    value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const firstChoice = Array.isArray(data.choices) ? data.choices[0] : undefined
+  const errorValue =
+    data.error ??
+    (firstChoice && typeof firstChoice === 'object' ? firstChoice.error : undefined)
+  const error =
+    errorValue && typeof errorValue === 'object'
+      ? (errorValue as Record<string, unknown>)
+      : {}
+  const metadata =
+    error.metadata && typeof error.metadata === 'object'
+      ? (error.metadata as Record<string, unknown>)
+      : {}
+  const result: Record<string, string | number> = {}
+  for (const [key, value] of Object.entries({
+    providerErrorCode: error.code,
+    providerNativeCode: metadata.provider_code,
+    providerErrorType: metadata.error_type ?? error.type,
+    providerErrorMessage: error.message,
+    generationId: data.id,
+    providerName: data.provider ?? metadata.provider_name
+  })) {
+    if (typeof value === 'string')
+      result[key] = redactDiagnosticText(value, apiKey).slice(0, 1000)
+    else if (typeof value === 'number' && Number.isFinite(value)) result[key] = value
+  }
+  return result
+}
+
 export type TransportProgress = {
+  recovery?: JsonObject
+  retryAfterMs?: number
   stage: AiRequestStage
   receivedBytes?: number
   httpStatus?: number
@@ -70,8 +104,18 @@ export const post: Post = (url, body, headers, apiKey, signal, progress, timeout
       (response) => {
         const requestId =
           response.headers['x-request-id'] ?? response.headers['apim-request-id']
+        const retryHeader = response.headers['retry-after']
+        const retryValue = typeof retryHeader === 'string' ? retryHeader : ''
+        const retryAfterMs = retryValue.trim()
+          ? Number.isFinite(Number(retryValue))
+            ? Number(retryValue) * 1000
+            : Date.parse(retryValue) - Date.now()
+          : NaN
         progress({
           stage: 'response-headers',
+          ...(Number.isFinite(retryAfterMs)
+            ? { retryAfterMs: Math.max(0, retryAfterMs) }
+            : {}),
           httpStatus: response.statusCode,
           ...(typeof requestId === 'string'
             ? {
@@ -110,9 +154,19 @@ export const post: Post = (url, body, headers, apiKey, signal, progress, timeout
             response.statusCode < 200 ||
             response.statusCode >= 300
           ) {
+            let envelope: unknown
+            try {
+              envelope = JSON.parse(text)
+            } catch {
+              /* Non-JSON HTTP errors remain diagnostic text. */
+            }
             finish(
               fail('provider-http', 'AI provider HTTP ' + response.statusCode + '.', {
                 httpStatus: response.statusCode ?? null,
+                ...providerFailure(envelope, apiKey),
+                ...(Number.isFinite(retryAfterMs)
+                  ? { retryAfterMs: Math.max(0, retryAfterMs) }
+                  : {}),
                 ...rejectedContent(text, apiKey)
               })
             )

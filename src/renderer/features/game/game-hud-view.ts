@@ -9,6 +9,7 @@ import {
 } from '../../rendering/layout'
 import { ManaTray, resolveManaCrystalStates } from './mana-tray'
 import { DeckTrackerView } from './deck-tracker-view'
+import { DeckInfoView } from './deck-info-view'
 import type { DeckTrackerSortMode } from './deck-tracker-model'
 import { Button } from '../../ui/components/button'
 import { AnimatedOutline } from '../../rendering/effects/animated-outline'
@@ -27,6 +28,8 @@ const YOUR_TURN_TIMING = {
 /** Owned HUD composition for turn controls, mana, deck counts, and tracker. */
 export class GameHudView {
   readonly turnLayer = new Container()
+  readonly deckInfoLayer = new Container()
+  deckInfo: DeckInfoView | null = null
   readonly turnButtonLayer = new Container()
   readonly deckTracker: DeckTrackerView
   endTurnButton: Button | null = null
@@ -47,6 +50,8 @@ export class GameHudView {
   ) {
     this.deckTracker = new DeckTrackerView(resolver)
     this.turnLayer.label = 'game.turn-hud'
+    this.deckInfoLayer.label = 'game.deck-info-layer'
+    this.deckInfoLayer.eventMode = 'none'
     this.turnButtonLayer.label = 'game.turn-button'
     // Keep the HUD container passive so its interactive children (notably the
     // End Turn button) still participate in Pixi hit testing. `none` skips the
@@ -57,16 +62,22 @@ export class GameHudView {
   }
 
   mount(
-    assets: Pick<GameAssets, 'endTurn' | 'manaCrystal' | 'manaOverload'>,
+    assets: Pick<
+      GameAssets,
+      | 'endTurn'
+      | 'manaAvailable'
+      | 'manaSpent'
+      | 'manaHighlighted'
+      | 'manaOverload'
+      | 'deckInfo'
+    >,
     onEndTurn: () => void,
     initialTurnTexture: Texture = assets.endTurn
   ): void {
+    this.deckInfo = new DeckInfoView(assets.deckInfo)
+    this.deckInfoLayer.addChild(this.deckInfo)
     this.endTurnOutlineTarget = new Sprite(initialTurnTexture)
-    applyPlacement(this.endTurnOutlineTarget, GAME_BOARD_LAYOUT.endTurnButton)
-    this.endTurnOutlineTarget.anchor.set(
-      GAME_BOARD_LAYOUT.endTurnButton.anchor.x,
-      GAME_BOARD_LAYOUT.endTurnButton.anchor.y
-    )
+    applyAnchoredPlacement(this.endTurnOutlineTarget, GAME_BOARD_LAYOUT.endTurnButton)
     this.endTurnOutlineTarget.eventMode = 'none'
     this.endTurnOutlineTarget.label = 'game.end-turn-exhausted-outline-target'
     this.endTurnOutline = new AnimatedOutline(this.endTurnOutlineTarget, {
@@ -87,18 +98,21 @@ export class GameHudView {
     this.turnButtonLayer.addChild(this.endTurnButton)
     this.endTurnTexture = initialTurnTexture
 
-    const localCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.localCount, 34)
-    const remoteCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.remoteCount, 34)
-    this.deckCountLabels = { local: localCount, remote: remoteCount }
-    this.turnLayer.addChild(localCount, remoteCount)
+    // Deck card-count labels are intentionally hidden for now.
+    // const localCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.localCount, 34)
+    // const remoteCount = this.createHudLabel(GAME_BOARD_LAYOUT.decks.remoteCount, 34)
+    // this.deckCountLabels = { local: localCount, remote: remoteCount }
+    // this.turnLayer.addChild(localCount, remoteCount)
 
-    const localMana = this.createHudLabel(GAME_BOARD_LAYOUT.mana.localLabel, 34)
-    const remoteMana = this.createHudLabel(GAME_BOARD_LAYOUT.mana.remoteLabel, 26)
+    const localMana = this.createHudLabel(GAME_BOARD_LAYOUT.mana.localLabel, 30)
+    const remoteMana = this.createHudLabel(GAME_BOARD_LAYOUT.mana.remoteLabel, 30)
     this.manaLabels = { local: localMana, remote: remoteMana }
     this.turnLayer.addChild(localMana, remoteMana)
 
     this.manaLocalTray = new ManaTray(
-      assets.manaCrystal,
+      assets.manaAvailable,
+      assets.manaSpent,
+      assets.manaHighlighted,
       assets.manaOverload,
       GAME_BOARD_LAYOUT.mana.crystals
     )
@@ -136,6 +150,7 @@ export class GameHudView {
     if (!ids) return
     const local = findPlayer(state, ids.local)
     const remote = findPlayer(state, ids.remote)
+    this.deckInfo?.sync(local, remote)
     if (this.deckCountLabels) {
       this.deckCountLabels.local.text = String(local.deck.length)
       this.deckCountLabels.remote.text = String(remote.deck.length)
@@ -232,6 +247,8 @@ export class GameHudView {
   }
 
   dispose(): void {
+    this.deckInfoLayer.destroy({ children: true })
+    this.deckInfo = null
     this.endTurnOutline?.dispose()
     this.endTurnOutline = null
     this.endTurnOutlineTarget = null

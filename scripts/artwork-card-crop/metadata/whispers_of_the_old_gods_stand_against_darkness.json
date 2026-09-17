@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\whispers_of_the_old_gods_stand_against_darkness.jpg",
+  "source_name": "whispers_of_the_old_gods_stand_against_darkness.jpg",
+  "crop_box": [
+    32,
+    28,
+    487,
+    483
+  ],
+  "scale": 1.1,
+  "offset_x": -34.90769230769234,
+  "offset_y": -31.061538461538476,
+  "timestamp": "2026-09-16T15:34:54.339231",
+  "card_id": "whispers_of_the_old_gods_stand_against_darkness",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

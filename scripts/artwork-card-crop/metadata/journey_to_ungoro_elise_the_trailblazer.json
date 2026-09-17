@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_elise_the_trailblazer.jpg",
+  "source_name": "journey_to_ungoro_elise_the_trailblazer.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-16T14:44:03.163370",
+  "card_id": "journey_to_ungoro_elise_the_trailblazer",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

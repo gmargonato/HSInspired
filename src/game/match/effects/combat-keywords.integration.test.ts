@@ -56,6 +56,110 @@ function beginNextTurn(scenario: Scenario, participantId: string, opponentId: st
 }
 
 describe('combat keyword matrix', () => {
+  it('summons a 1/1 Ooze from Bilefin Tidehunter and enforces its Taunt', () => {
+    const scenario = createMatchScenario({
+      seed: 1001,
+      cardId: 'whispers_of_the_old_gods_bilefin_tidehunter'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const card = player(scenario, participantId).hand.find(
+      (entry) => entry.cardId === 'whispers_of_the_old_gods_bilefin_tidehunter'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId,
+        position: 0
+      }).accepted
+    ).toBe(true)
+    const board = player(scenario, participantId).board
+    expect(board).toHaveLength(2)
+    const ooze = board.find(
+      (minion) => minion.cardId === 'whispers_of_the_old_gods_ooze'
+    )!
+    expect(ooze).toMatchObject({
+      attack: 1,
+      health: 1,
+      maxHealth: 1,
+      keywords: expect.arrayContaining(['taunt'])
+    })
+    expect(scenario.match.dispatch({ type: 'end-turn', participantId }).accepted).toBe(
+      true
+    )
+    const attacker = summon(scenario, opponentId, 'basic_stonetusk_boar')
+    for (const defender of [
+      { kind: 'hero' as const },
+      { kind: 'minion' as const, instanceId: card.instanceId }
+    ]) {
+      expect(
+        attack(
+          scenario,
+          opponentId,
+          { kind: 'minion', instanceId: attacker.instanceId },
+          defender
+        )
+      ).toMatchObject({ accepted: false, code: 'invalid-target' })
+    }
+    expect(
+      attack(
+        scenario,
+        opponentId,
+        { kind: 'minion', instanceId: attacker.instanceId },
+        { kind: 'minion', instanceId: ooze.instanceId }
+      ).accepted
+    ).toBe(true)
+  })
+
+  it('keeps Infested Tauren deathrattle Slime at 2/2 without Taunt', () => {
+    const scenario = createMatchScenario({ seed: 1001, cardId: 'basic_fireball' })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const tauren = summon(
+      scenario,
+      opponentId,
+      'whispers_of_the_old_gods_infested_tauren'
+    )
+    const fireball = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'basic_fireball'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: fireball.instanceId,
+        targets: [
+          { kind: 'minion', participantId: opponentId, instanceId: tauren.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, opponentId).board).toHaveLength(1)
+    expect(player(scenario, opponentId).board[0]).toMatchObject({
+      cardId: 'whispers_of_the_old_gods_slime',
+      attack: 2,
+      health: 2,
+      maxHealth: 2,
+      keywords: []
+    })
+  })
+
   it('enforces Taunt and Stealth target legality while allowing a Charge attacker immediately', () => {
     const scenario = createMatchScenario({ seed: 1001 })
     scenario.confirmBothMulligans()

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\one_night_in_karazhan_ironforge_portal.jpg",
+  "source_name": "one_night_in_karazhan_ironforge_portal.jpg",
+  "crop_box": [
+    31,
+    28,
+    486,
+    483
+  ],
+  "scale": 1.1,
+  "offset_x": -34.60000000000002,
+  "offset_y": -30.753846153846155,
+  "timestamp": "2026-09-16T14:39:50.753044",
+  "card_id": "one_night_in_karazhan_ironforge_portal",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\knights_of_the_frozen_throne_death_coil.jpg",
+  "source_name": "knights_of_the_frozen_throne_death_coil.jpg",
+  "crop_box": [
+    36,
+    17,
+    491,
+    472
+  ],
+  "scale": 1.1,
+  "offset_x": -39.67692307692312,
+  "offset_y": -19.215384615384636,
+  "timestamp": "2026-09-16T15:06:03.063089",
+  "card_id": "knights_of_the_frozen_throne_death_coil",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

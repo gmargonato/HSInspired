@@ -46,6 +46,8 @@ export interface SemanticEvent {
   /** Board size controlled by the event player before a played minion entered. */
   readonly minionCountBeforePlay?: number
   readonly card?: OpeningCard
+  /** Final chosen targets after spell-target redirects, before cast effects resolve. */
+  readonly spellTargets?: readonly EntityRef[]
   /** A minion recast this spell; it must not generate further spell copies. */
   readonly spellCopy?: boolean
   /** Combat-only facts consumed by explicit attack-resolved triggers. */

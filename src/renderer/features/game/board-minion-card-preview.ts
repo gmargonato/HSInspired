@@ -31,6 +31,8 @@ export interface BoardMinionCardPreviewLayout {
   readonly viewportHeight: number
 }
 
+export type BoardMinionCardPreviewSide = 'left' | 'right'
+
 export interface BoardMinionCardPreviewTargetingState {
   readonly cardTargeting: boolean
   readonly heroPowerTargeting: boolean
@@ -87,11 +89,12 @@ export function boardMinionCardPreviewKey(minion: BoardMinion): string {
   ].join(':')
 }
 
-/** Positions a scaled card to the minion's right and keeps it on the design canvas. */
+/** Positions a scaled card beside the source and keeps it on the design canvas. */
 export function positionBoardMinionCardPreview(
   source: BoardMinionCardPreviewBounds,
   cardSize: { readonly width: number; readonly height: number },
-  layout: BoardMinionCardPreviewLayout
+  layout: BoardMinionCardPreviewLayout,
+  side: BoardMinionCardPreviewSide = 'right'
 ): { readonly x: number; readonly y: number } {
   const previewWidth = cardSize.width * layout.scale
   const previewHeight = cardSize.height * layout.scale
@@ -101,7 +104,13 @@ export function positionBoardMinionCardPreview(
   const maxY = layout.viewportHeight - layout.viewportPadding - previewHeight
 
   return {
-    x: clamp(source.x + source.width + layout.gap, minX, maxX),
+    x: clamp(
+      side === 'left'
+        ? source.x - previewWidth - layout.gap
+        : source.x + source.width + layout.gap,
+      minX,
+      maxX
+    ),
     y: clamp(source.y + source.height / 2 - previewHeight / 2, minY, maxY)
   }
 }

@@ -1,9 +1,5 @@
-import { Sprite, Texture, type ColorMatrixFilter } from 'pixi.js'
+import { Sprite, Texture } from 'pixi.js'
 import { MAX_MANA, type PlayerMana } from '../../../game/match'
-import {
-  createManaConsumedFilter,
-  createManaHighlightFilter
-} from '../../rendering/filters/highlight'
 import {
   applyAnchoredPlacement,
   type LayoutPlacement,
@@ -78,28 +74,26 @@ const MANA_TRAY_POP_DURATION = 0.5
 /**
  * The local player's mana crystal tray: one pooled `Sprite` per crystal slot
  * up to the ten-crystal maximum. `sync` is the single entry point — it
- * reconciles visibility, full/consumed alpha, the collection-style highlight
- * filter, and the "refreshed" pop whenever a crystal turns full.
+ * reconciles visibility, state textures, and the "refreshed" pop whenever a
+ * crystal turns full.
  */
 export class ManaTray extends Actor {
   private readonly crystals: Sprite[]
   private readonly pendingCrystals: Sprite[]
-  private readonly highlightFilter: ColorMatrixFilter
-  private readonly consumedFilter: ColorMatrixFilter
   private previousStates: ManaCrystalState[] = []
 
   constructor(
-    private readonly texture: Texture,
+    private readonly availableTexture: Texture,
+    private readonly spentTexture: Texture,
+    private readonly highlightedTexture: Texture,
     private readonly overloadTexture: Texture,
     private readonly layout: ManaTrayLayout
   ) {
     super()
     this.label = 'game.mana-tray'
     this.eventMode = 'none'
-    this.highlightFilter = createManaHighlightFilter()
-    this.consumedFilter = createManaConsumedFilter()
     this.crystals = Array.from({ length: MAX_MANA }, (_, index) => {
-      const crystal = new Sprite(texture)
+      const crystal = new Sprite(availableTexture)
       applyAnchoredPlacement(crystal, layout.crystal)
       crystal.position.set(
         layout.firstCrystalCenter.x + index * layout.gap,
@@ -130,7 +124,6 @@ export class ManaTray extends Actor {
       if (!state) {
         this.killTweensOf(crystal.scale)
         crystal.visible = false
-        crystal.filters = null
         crystal.tint = 0xffffff
         return
       }
@@ -139,21 +132,21 @@ export class ManaTray extends Actor {
       crystal.tint = 0xffffff
       const placement =
         state.phase === 'locked' ? this.layout.overloadCrystal : this.layout.crystal
-      crystal.texture = state.phase === 'locked' ? this.overloadTexture : this.texture
+      crystal.texture =
+        state.phase === 'locked'
+          ? this.overloadTexture
+          : state.phase === 'consumed'
+            ? this.spentTexture
+            : state.highlighted
+              ? this.highlightedTexture
+              : this.availableTexture
       if (state.phase !== this.previousStates[index]?.phase) {
         this.killTweensOf(crystal.scale)
         crystal.anchor.set(placement.anchor.x, placement.anchor.y)
         crystal.scale.set(placement.scale?.x ?? 1, placement.scale?.y ?? 1)
       }
-      if (state.phase === 'locked') {
-        crystal.filters = null
-      } else if (state.phase === 'consumed') {
-        crystal.filters = [this.consumedFilter]
-      } else {
-        crystal.filters = state.highlighted ? [this.highlightFilter] : null
-        if (this.previousStates[index]?.phase !== 'full') {
-          this.popCrystal(crystal)
-        }
+      if (state.phase === 'full' && this.previousStates[index]?.phase !== 'full') {
+        this.popCrystal(crystal)
       }
     })
     const pendingCount = Math.max(

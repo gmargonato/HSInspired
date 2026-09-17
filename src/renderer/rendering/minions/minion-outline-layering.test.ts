@@ -20,11 +20,14 @@ import {
   type MinionViewModel,
   type MinionViewTextures
 } from './minion-view'
-import { setPremiumEnabled } from '../premium-appearance'
+import { WeaponView, type WeaponViewTextures } from '../weapons/weapon-view'
+import { setPremiumEnabled, setPremiumMode } from '../premium-appearance'
 
 const textures: MinionViewTextures = {
   windfury: Texture.EMPTY,
   spellDamage: Texture.EMPTY,
+  lifesteal: Texture.EMPTY,
+  aura: Texture.EMPTY,
   elusive: Texture.EMPTY,
   immune: Texture.EMPTY,
   frame: Texture.EMPTY,
@@ -33,6 +36,7 @@ const textures: MinionViewTextures = {
   premiumLegendaryFrame: Texture.WHITE,
   taunt: Texture.EMPTY,
   premiumTaunt: Texture.WHITE,
+  enrage: Texture.EMPTY,
   divineShield: Texture.EMPTY,
   frozen: Texture.EMPTY,
   stealth: Texture.EMPTY,
@@ -51,20 +55,102 @@ const tauntMinion: MinionViewModel = {
   maxHealth: 3,
   legendary: false,
   taunt: true,
+  enraged: false,
   divineShield: false,
   stealth: false,
   frozen: false,
   deathrattle: false,
   poisonous: true,
+  aura: false,
   trigger: false,
   inspire: false,
   windfury: false,
   spellDamage: false,
+  lifesteal: false,
   elusive: false,
   immune: false
 }
 
 describe('MinionView outline layering', () => {
+  it('refreshes equipped weapons for the selected player', async () => {
+    const weaponTextures: WeaponViewTextures = {
+      frame: Texture.EMPTY,
+      premiumFrame: Texture.WHITE,
+      trigger: Texture.EMPTY,
+      deathrattle: Texture.EMPTY,
+      attack: Texture.EMPTY,
+      durability: Texture.EMPTY
+    }
+    const model = {
+      label: 'test.weapon',
+      attack: 2,
+      durability: 2,
+      deathrattle: false,
+      trigger: false,
+      temporaryAbilityLabels: []
+    }
+    const views = await Promise.all([
+      WeaponView.create({ ...model, premiumSide: 'local' }, weaponTextures, undefined),
+      WeaponView.create({ ...model, premiumSide: 'remote' }, weaponTextures, undefined)
+    ])
+    const frames = () =>
+      views.map((view) => (view.getChildByLabel('weapon.frame') as Sprite).texture)
+    try {
+      setPremiumMode('remote')
+      expect(frames()).toEqual([Texture.EMPTY, Texture.WHITE])
+      setPremiumMode('local')
+      expect(frames()).toEqual([Texture.WHITE, Texture.EMPTY])
+      setPremiumMode('unlocked')
+      expect(frames()).toEqual([Texture.EMPTY, Texture.EMPTY])
+    } finally {
+      views.forEach((view) => view.destroy({ children: true }))
+      setPremiumMode('unlocked')
+    }
+  })
+
+  it('updates local and remote frames independently while retaining baseline premiums', async () => {
+    const views = await Promise.all([
+      MinionView.create({ ...tauntMinion, premiumSide: 'local' }, textures, undefined),
+      MinionView.create({ ...tauntMinion, premiumSide: 'remote' }, textures, undefined),
+      MinionView.create(
+        { ...tauntMinion, premiumSide: 'local', premium: true },
+        textures,
+        undefined
+      )
+    ])
+    const frames = () =>
+      views.map(
+        (view) =>
+          (view.children.find((child) => child.label === 'minion.frame') as Sprite)
+            .texture
+      )
+    try {
+      setPremiumMode('local')
+      expect(frames()).toEqual([
+        textures.premiumFrame,
+        textures.frame,
+        textures.premiumFrame
+      ])
+      setPremiumMode('remote')
+      expect(frames()).toEqual([
+        textures.frame,
+        textures.premiumFrame,
+        textures.premiumFrame
+      ])
+      setPremiumMode('all')
+      expect(frames()).toEqual([
+        textures.premiumFrame,
+        textures.premiumFrame,
+        textures.premiumFrame
+      ])
+      setPremiumMode('unlocked')
+      expect(frames()).toEqual([textures.frame, textures.frame, textures.premiumFrame])
+    } finally {
+      views.forEach((view) => view.destroy({ children: true }))
+      setPremiumMode('unlocked')
+    }
+  })
+
   it('swaps existing and new board frames without disturbing minion state', async () => {
     const view = await MinionView.create(
       { ...tauntMinion, legendary: true },
@@ -119,13 +205,20 @@ describe('MinionView outline layering', () => {
 
   it('toggles all new ability sprites without rebuilding the minion', async () => {
     const view = await MinionView.create(tauntMinion, textures, undefined)
-    const sprites = ['windfury', 'spell-damage', 'elusive', 'immune'].map((name) =>
-      view.children.find((child) => child.label === 'minion.' + name)!
-    )
+    const sprites = [
+      'windfury',
+      'spell-damage',
+      'lifesteal',
+      'aura',
+      'elusive',
+      'immune'
+    ].map((name) => view.children.find((child) => child.label === 'minion.' + name)!)
     expect(sprites.every((sprite) => !sprite.visible)).toBe(true)
     view.setAbilityEffects({
       windfury: true,
       spellDamage: true,
+      lifesteal: true,
+      aura: true,
       elusive: true,
       immune: true
     })
@@ -133,6 +226,8 @@ describe('MinionView outline layering', () => {
     view.setAbilityEffects({
       windfury: false,
       spellDamage: false,
+      lifesteal: false,
+      aura: false,
       elusive: false,
       immune: false
     })
@@ -161,12 +256,14 @@ describe('MinionView outline layering', () => {
     expect(childIndex('minion.frame-legendary')).toBeLessThan(
       childIndex('minion.frozen')
     )
-    expect(childIndex('minion.frozen')).toBeLessThan(childIndex('minion.stealth'))
+    expect(childIndex('minion.stealth')).toBeLessThan(childIndex('minion.frozen'))
     expect(childIndex('minion.deathrattle')).toBeLessThan(childIndex('minion.trigger'))
     expect(childIndex('minion.deathrattle')).toBeLessThan(
       childIndex('minion.poisonous')
     )
     expect(childIndex('minion.trigger')).toBeLessThan(childIndex('minion.inspire'))
+    expect(childIndex('minion.stat-health')).toBeLessThan(childIndex('minion.aura'))
+    expect(childIndex('minion.aura')).toBe(view.children.length - 2)
 
     view.setCanAttack(true)
     expect(view.children[childIndex('minion.attack-outline-proxy')].visible).toBe(true)

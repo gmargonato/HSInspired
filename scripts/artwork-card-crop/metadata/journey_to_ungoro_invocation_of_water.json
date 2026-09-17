@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_invocation_of_water.jpg",
+  "source_name": "journey_to_ungoro_invocation_of_water.jpg",
+  "crop_box": [
+    25,
+    29,
+    480,
+    484
+  ],
+  "scale": 1.1,
+  "offset_x": -27.83076923076925,
+  "offset_y": -31.369230769230796,
+  "timestamp": "2026-09-16T14:45:08.922182",
+  "card_id": "journey_to_ungoro_invocation_of_water",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

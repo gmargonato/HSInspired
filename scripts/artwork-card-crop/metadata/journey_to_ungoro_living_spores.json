@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_living_spores.jpg",
+  "source_name": "journey_to_ungoro_living_spores.jpg",
+  "crop_box": [
+    32,
+    28,
+    487,
+    483
+  ],
+  "scale": 1.1,
+  "offset_x": -35.52307692307693,
+  "offset_y": -30.292307692307702,
+  "timestamp": "2026-09-16T14:45:35.618699",
+  "card_id": "journey_to_ungoro_living_spores",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

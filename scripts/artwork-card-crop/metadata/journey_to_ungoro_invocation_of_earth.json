@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_invocation_of_earth.jpg",
+  "source_name": "journey_to_ungoro_invocation_of_earth.jpg",
+  "crop_box": [
+    36,
+    32,
+    491,
+    487
+  ],
+  "scale": 1.1,
+  "offset_x": -39.061538461538476,
+  "offset_y": -35.52307692307693,
+  "timestamp": "2026-09-16T14:45:02.956628",
+  "card_id": "journey_to_ungoro_invocation_of_earth",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

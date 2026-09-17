@@ -216,7 +216,9 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'destroy-mana-crystal',
       'overload',
       'unlock-overload',
-      'shuffle-into-deck'
+      'shuffle-into-deck',
+      'refill-original-decks',
+      'steal-minion-from-deck'
     ].includes(name)
   )
     return 6
@@ -261,7 +263,10 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'swap',
       'take-control',
       'transform',
-      'transform-random'
+      'transform-random',
+      'shuffle-random-minions',
+      'summon-weapon-kills',
+      'adapt'
     ].includes(name)
   )
     return 9

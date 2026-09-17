@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_cat_form.jpg",
+  "source_name": "classic_cat_form.jpg",
+  "crop_box": [
+    89,
+    52,
+    512,
+    475
+  ],
+  "scale": 1.181640625,
+  "offset_x": -105.0,
+  "offset_y": -61.30769230769233,
+  "timestamp": "2026-09-16T14:38:35.323568",
+  "card_id": "classic_cat_form",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

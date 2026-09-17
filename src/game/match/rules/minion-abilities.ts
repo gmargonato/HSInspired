@@ -1,17 +1,25 @@
 import { effectiveBoardMinionKeywords } from './minion-attack-state'
-import type { CardDefinition, CardEffectBlock, CardTrigger } from '../../content/cards'
+import {
+  isCardEffectObject,
+  type CardDefinition,
+  type CardEffectBlock,
+  type CardTrigger
+} from '../../content/cards'
 import type { BoardMinion } from '../opening-match-types'
 
 export interface BoardAbilityMarkers {
   readonly taunt: boolean
   readonly divineShield: boolean
+  readonly enraged: boolean
   readonly stealth: boolean
   readonly deathrattle: boolean
   readonly poisonous: boolean
+  readonly aura: boolean
   readonly trigger: boolean
   readonly inspire: boolean
   readonly windfury: boolean
   readonly spellDamage: boolean
+  readonly lifesteal: boolean
   readonly elusive: boolean
   readonly immune: boolean
 }
@@ -39,6 +47,16 @@ function isPoisonEffect(effect: CardEffectBlock): boolean {
   )
 }
 
+/** The board Aura badge represents effects that can affect another minion. */
+function isBoardMinionAuraEffect(effect: CardEffectBlock): boolean {
+  if (effect.trigger !== 'aura') return false
+
+  return (effect.actions ?? []).some((action) => {
+    const target = isCardEffectObject(action.target) ? action.target : undefined
+    return target?.type === 'minion' && target.selection !== 'source'
+  })
+}
+
 /** Maps authored gameplay metadata to the static indicators shown while in play. */
 export function boardAbilityMarkers(
   definition: Pick<CardDefinition, 'keywords' | 'effects'>
@@ -47,7 +65,8 @@ export function boardAbilityMarkers(
   const deathrattle = definition.effects.some(
     (effect) => effect.trigger === 'deathrattle'
   )
-  const poisonous = definition.effects.some(isPoisonEffect)
+  const poisonous = keywords.has('poisonous') || definition.effects.some(isPoisonEffect)
+  const aura = definition.effects.some(isBoardMinionAuraEffect)
   const inspire = definition.effects.some((effect) => effect.trigger === 'inspire')
   const trigger =
     definition.effects.some(
@@ -57,13 +76,16 @@ export function boardAbilityMarkers(
   return {
     taunt: keywords.has('taunt'),
     divineShield: keywords.has('divine-shield'),
+    enraged: false,
     stealth: keywords.has('stealth'),
     deathrattle,
     poisonous,
+    aura,
     trigger,
     inspire,
     windfury: keywords.has('windfury') || keywords.has('mega-windfury'),
     spellDamage: keywords.has('spell-damage'),
+    lifesteal: keywords.has('lifesteal'),
     elusive: keywords.has('spell-immune'),
     immune: keywords.has('immune')
   }
@@ -84,6 +106,7 @@ export function boardMinionRuntimeMarkers(
   | 'stealth'
   | 'windfury'
   | 'spellDamage'
+  | 'lifesteal'
   | 'elusive'
   | 'immune'
 > {
@@ -104,6 +127,7 @@ export function boardMinionRuntimeMarkers(
       (minion.spellDamage !== undefined
         ? minion.spellDamage !== 0
         : keywords.has('spell-damage')),
+    lifesteal: keywords.has('lifesteal'),
     elusive:
       (!minion.silenced || keywords.has('spell-immune')) &&
       (minion.spellImmune ?? keywords.has('spell-immune')),
@@ -149,7 +173,16 @@ export function boardMinionAbilityMarkers(
   return {
     ...authored,
     ...runtime,
+    enraged:
+      !minion.silenced &&
+      minion.health < minion.maxHealth &&
+      definition.effects.some((effect) =>
+        effect.actions?.some((action) => action.duration === 'while-damaged')
+      ),
     trigger: authored.trigger || grantedTrigger,
+    poisonous:
+      authored.poisonous ||
+      new Set(effectiveBoardMinionKeywords(minion, turnNumber)).has('poisonous'),
     inspire: authored.inspire || grantedInspire,
     deathrattle:
       authored.deathrattle ||

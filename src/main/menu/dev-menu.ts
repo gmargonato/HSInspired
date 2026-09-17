@@ -9,6 +9,11 @@ import {
 import {
   DEV_COLLECTIBLE_SYNC_CHANNEL,
   DEV_PREMIUM_SYNC_CHANNEL,
+  DEV_ARENA_SYNC_CHANNEL,
+  isDevArenaAvailability,
+  isPremiumMode,
+  type PremiumMode,
+  type DevArenaAvailability,
   DEV_COMMAND_CHANNEL,
   DEV_SCENE_CHANGED_CHANNEL,
   isCollectibleMode,
@@ -21,7 +26,8 @@ import {
 let cachedMainWindow: BrowserWindow | null = null
 let cachedCurrentSceneId: DevSceneId = 'unknown'
 let cachedCollectibleMode: CollectibleMode = 'collectible'
-let cachedPremiumEnabled = false
+let cachedPremiumMode: PremiumMode = 'unlocked'
+let cachedArenaAvailability: DevArenaAvailability = { retire: false, scores: false }
 let devSceneChangedHandlerInstalled = false
 let devOptionSyncHandlerInstalled = false
 
@@ -343,18 +349,65 @@ function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
     submenu: [
       { label: 'Collection', submenu: collectionSubmenu },
       {
-        label: 'Cards',
+        label: 'Arcane Dust',
         submenu: [
           {
-            label: 'Premium',
-            submenu: [true, false].map((enabled) => ({
-              label: enabled ? 'On' : 'Off',
-              type: 'radio' as const,
-              checked: cachedPremiumEnabled === enabled,
-              click: () =>
-                sendDevCommand(mainWindow, { type: 'cards:set-premium', enabled })
-            }))
-          }
+            label: 'Set custom amount…',
+            click: () =>
+              sendDevCommand(mainWindow, {
+                type: 'progression:set-dust',
+                amount: 'custom'
+              })
+          },
+          { type: 'separator' },
+          ...[0, 50, 100, 250, 500, 1000, 2000, 5000].map((amount) => ({
+            label: `Set to ${amount.toLocaleString('en-US')}`,
+            click: () =>
+              sendDevCommand(mainWindow, { type: 'progression:set-dust', amount })
+          }))
+        ]
+      },
+      {
+        label: 'Premium',
+        submenu: (
+          [
+            ['unlocked', 'Unlocked'],
+            ['all', 'All Cards'],
+            ['local', 'Local Player Only'],
+            ['remote', 'Remote Player Only']
+          ] as const
+        ).map(([mode, label]) => ({
+          label,
+          type: 'radio' as const,
+          checked: cachedPremiumMode === mode,
+          click: () => sendDevCommand(mainWindow, { type: 'cards:set-premium', mode })
+        }))
+      },
+      {
+        label: 'Arena',
+        enabled: cachedCurrentSceneId === 'arena',
+        submenu: [
+          {
+            label: 'Retire',
+            enabled: cachedArenaAvailability.retire,
+            click: () => sendDevCommand(mainWindow, { type: 'arena:retire' })
+          },
+          ...(['wins', 'defeats'] as const).map((counter) => ({
+            label: counter === 'wins' ? 'Set Wins' : 'Set Losses',
+            enabled: cachedArenaAvailability.scores,
+            submenu: Array.from(
+              { length: counter === 'wins' ? 13 : 4 },
+              (_, value) => ({
+                label: String(value),
+                click: () =>
+                  sendDevCommand(mainWindow, {
+                    type: 'arena:set-score',
+                    counter,
+                    value
+                  })
+              })
+            )
+          }))
         ]
       },
       { label: 'Match', submenu: matchSubmenu }
@@ -426,8 +479,13 @@ function installOptionSyncHandler(): void {
   if (devOptionSyncHandlerInstalled) return
   devOptionSyncHandlerInstalled = true
   ipcMain.on(DEV_PREMIUM_SYNC_CHANNEL, (_event, payload: unknown) => {
-    if (typeof payload !== 'boolean') return
-    cachedPremiumEnabled = payload
+    if (!isPremiumMode(payload)) return
+    cachedPremiumMode = payload
+    rebuildOptionsMenu()
+  })
+  ipcMain.on(DEV_ARENA_SYNC_CHANNEL, (_event, payload: unknown) => {
+    if (!isDevArenaAvailability(payload)) return
+    cachedArenaAvailability = payload
     rebuildOptionsMenu()
   })
   ipcMain.on(DEV_COLLECTIBLE_SYNC_CHANNEL, (_event, payload: unknown) => {

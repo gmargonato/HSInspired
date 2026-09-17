@@ -9,6 +9,7 @@ export const CARD_KEYWORDS = [
   'cannot-attack-heroes',
   'charge',
   'lifesteal',
+  'poisonous',
   'rush',
   'divine-shield',
   'immune',
@@ -296,11 +297,16 @@ export const CARD_ACTION_SOURCES = [
 ] as const
 export const CARD_ACTION_DESTINATIONS = ['cast-on-source', 'deck', 'hand'] as const
 export const CARD_ACTION_RESOURCES = ['weapon-durability'] as const
-export const CARD_ACTION_FIELDS = ['health'] as const
+export const CARD_ACTION_FIELDS = ['health', 'stats'] as const
 export const CARD_CRYSTAL_MODES = ['empty', 'full'] as const
 
 export const CARD_ACTIONS = [
   'add-to-hand',
+  'shuffle-random-minions',
+  'refill-original-decks',
+  'steal-minion-from-deck',
+  'summon-weapon-kills',
+  'adapt',
   'change-cost',
   'copy',
   'counter-event',

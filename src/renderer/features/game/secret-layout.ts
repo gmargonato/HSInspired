@@ -4,19 +4,28 @@ import { CARD_CANVAS } from '../../rendering/cards/card-layout'
 /** Authored dimensions of the temporary Secret presentation assets. */
 export const SECRET_CANVAS = { width: 112, height: 112 } as const
 
-/** One facedown Secret badge is centered over each hero. */
+/** Quest and Secret badges share a centered marker rail for each hero. */
 export const SECRET_LAYOUT = {
   name: 'Secrets',
+  preview: {
+    scale: 0.4,
+    gap: 18,
+    badgeGap: 18,
+    viewportPadding: 20,
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    fadeDuration: 0.12
+  },
   badges: {
     local: placement({ x: 985, y: 737 }, SECRET_CANVAS, {
       anchor: CENTER,
       scale: 1,
-      note: 'Centered 20px below the local hero top edge.'
+      note: 'Centered just below the local hero top edge.'
     }),
-    remote: placement({ x: 985, y: 288 }, SECRET_CANVAS, {
+    remote: placement({ x: 985, y: 100 }, SECRET_CANVAS, {
       anchor: CENTER,
       scale: 1,
-      note: 'Centered over the remote hero bottom edge, below the remote hand.'
+      note: 'Centered just above the remote hero top edge, mirroring the local rail.'
     })
   },
   count: placement(
@@ -34,6 +43,43 @@ export const SECRET_LAYOUT = {
     stroke: { color: 0x000000, width: 5 },
     align: 'center' as const
   },
+  questProgressTextStyle: {
+    fontFamily: 'Belwe',
+    fontSize: 32,
+    fill: 0xffffff,
+    stroke: { color: 0x000000, width: 4 },
+    align: 'center' as const
+  },
+  pairedBadgeOffset: 42,
+  questPreview: {
+    leftCard: { x: 540, y: 338 },
+    rightCard: { x: 1140, y: 338 },
+    arrow: placement(
+      { x: 960, y: 518 },
+      { width: 206, height: 198 },
+      {
+        anchor: CENTER,
+        scale: 1,
+        note: 'Full-size Quest reward arrow centered between the preview cards.'
+      }
+    ),
+    progress: placement(
+      { x: 960, y: 518 },
+      { width: 150, height: 60 },
+      {
+        anchor: CENTER,
+        note: 'Current Quest progress centered on the full-size arrow.'
+      }
+    ),
+    progressTextStyle: {
+      fontFamily: 'Belwe',
+      fontSize: 48,
+      fill: 0xffffff,
+      stroke: { color: 0x000000, width: 5 },
+      align: 'center' as const
+    },
+    scale: 0.4
+  },
   reveal: placement(
     { x: 960, y: 540 },
     { width: 1920, height: 1080 },
@@ -49,3 +95,34 @@ export const SECRET_LAYOUT = {
     note: 'Revealed Secret card displayed below the raised banner.'
   })
 } as const
+
+/** A count-driven, centered row in the game design canvas. */
+export function secretPreviewPositions(
+  count: number,
+  cardWidth: number,
+  cardHeight: number
+): readonly { x: number; y: number }[] {
+  const layout = SECRET_LAYOUT.preview
+  const badge = SECRET_LAYOUT.badges.local
+  const width = cardWidth * layout.scale
+  const height = cardHeight * layout.scale
+  const rowWidth = count * width + Math.max(0, count - 1) * layout.gap
+  const x = Math.max(
+    layout.viewportPadding,
+    Math.min(
+      badge.position.x - rowWidth / 2,
+      layout.viewportWidth - layout.viewportPadding - rowWidth
+    )
+  )
+  const y = Math.max(
+    layout.viewportPadding,
+    Math.min(
+      badge.position.y - badge.size.height / 2 - layout.badgeGap - height,
+      layout.viewportHeight - layout.viewportPadding - height
+    )
+  )
+  return Array.from({ length: count }, (_, index) => ({
+    x: x + index * (width + layout.gap),
+    y
+  }))
+}

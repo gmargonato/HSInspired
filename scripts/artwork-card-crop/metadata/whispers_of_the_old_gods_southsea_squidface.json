@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\whispers_of_the_old_gods_southsea_squidface.jpg",
+  "source_name": "whispers_of_the_old_gods_southsea_squidface.jpg",
+  "crop_box": [
+    12,
+    12,
+    512,
+    512
+  ],
+  "scale": 1.0,
+  "offset_x": -12.0,
+  "offset_y": -12.0,
+  "timestamp": "2026-09-16T15:44:11.415130",
+  "card_id": "whispers_of_the_old_gods_southsea_squidface",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

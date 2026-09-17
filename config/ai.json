@@ -16,6 +16,13 @@
       "modelId": "z-ai/glm-5.3-flash",
       "reasoningEffort": "low",
       "maxCompletionTokens": 128000
+    },
+	{
+      "enabled": false,
+      "provider": "openrouter",
+      "modelId": "google/gemini-3.8-flash",
+      "reasoningEffort": "low",
+      "maxCompletionTokens": 128000
     }
   ]
 }

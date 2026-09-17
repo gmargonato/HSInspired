@@ -7,6 +7,7 @@ import type {
 import { describe, expect, it } from 'vitest'
 import { CARD_CATALOG, asCardId, type CardDefinition } from '../../content/cards'
 import { createMatchScenario } from '../testing/match-scenario-builder'
+import { effectiveBoardMinionKeywords } from '../rules/minion-attack-state'
 import type { CardPlayTargetRef } from '../opening-match'
 import { asPlayerId, type PlayerId } from '../match-types'
 import { EffectRuntime, resolveCardPlay } from './effect-runtime'
@@ -85,6 +86,53 @@ function summon(scenario: Scenario, participantId: string, cardId: string): void
 }
 
 describe('effect-runtime query language', () => {
+  it('keeps both Defender of Argus effects on its original neighbors', () => {
+    const scenario = createMatchScenario({ seed: 410 })
+    scenario.confirmBothMulligans()
+    const [participantId] = activeParticipants(scenario)
+    const neighbors = [
+      'basic_acidic_swamp_ooze',
+      'basic_chillwind_yeti',
+      'basic_bloodfen_raptor'
+    ]
+    for (const cardId of neighbors) summon(scenario, participantId, cardId)
+    const before = player(scenario, participantId).board
+    setMana(scenario, participantId)
+    addCard(scenario, participantId, 'classic_defender_of_argus')
+    const argus = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_defender_of_argus'
+    )!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: argus.instanceId,
+      position: 1
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+
+    const after = player(scenario, participantId).board
+    expect(after.map((minion) => minion.cardId)).toEqual([
+      neighbors[0],
+      'classic_defender_of_argus',
+      neighbors[1],
+      neighbors[2]
+    ])
+    for (const [index, original] of before.entries()) {
+      const current = after.find((minion) => minion.instanceId === original.instanceId)!
+      const buffed = index < 2
+      expect(current.attack).toBe(original.attack + (buffed ? 1 : 0))
+      expect(current.health).toBe(original.health + (buffed ? 1 : 0))
+      expect(current.maxHealth).toBe(original.maxHealth + (buffed ? 1 : 0))
+      expect(
+        effectiveBoardMinionKeywords(current, result.state.turnNumber).includes('taunt')
+      ).toBe(buffed)
+    }
+    expect(
+      effectiveBoardMinionKeywords(after[1]!, result.state.turnNumber)
+    ).not.toContain('taunt')
+  })
+
   it('evaluates target.attack for every stable all-selector candidate', () => {
     const scenario = createMatchScenario({
       seed: 401,
@@ -624,6 +672,31 @@ describe('effect-runtime query language', () => {
         },
         assert: (actual, current) =>
           expectKeys(actual, [current.ownBoard[0]!, current.ownBoard[2]!])
+      },
+      {
+        name: 'adjacent defaults to source after another action targeted a minion',
+        selector: {
+          controller: 'self',
+          type: 'minion',
+          selection: 'adjacent'
+        },
+        prepare: (frame, current) => {
+          frame.lastActionTarget = current.ownBoard[2]!
+        },
+        assert: (actual, current) =>
+          expectKeys(actual, [current.ownBoard[0]!, current.ownBoard[2]!])
+      },
+      {
+        name: 'adjacent explicitly follows the event target',
+        selector: {
+          controller: 'opponent',
+          type: 'minion',
+          selection: 'adjacent',
+          adjacentTo: 'event-target'
+        },
+        event,
+        assert: (actual, current) =>
+          expectKeys(actual, [current.opponentBoard[0]!, current.opponentBoard[2]!])
       },
       {
         name: 'chosen target',

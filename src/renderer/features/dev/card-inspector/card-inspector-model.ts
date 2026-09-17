@@ -141,7 +141,7 @@ export class CardInspectorModel {
   }
 
   get selectedPremium(): boolean {
-    return this.template !== 'hero' && this.premium
+    return this.premium
   }
 
   set selectedPremium(premium: boolean) {

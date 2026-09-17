@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_fire_plumes_heart.jpg",
+  "source_name": "journey_to_ungoro_fire_plumes_heart.jpg",
+  "crop_box": [
+    32,
+    25,
+    487,
+    480
+  ],
+  "scale": 1.1,
+  "offset_x": -34.90769230769234,
+  "offset_y": -27.061538461538476,
+  "timestamp": "2026-09-16T14:44:45.380798",
+  "card_id": "journey_to_ungoro_fire_plumes_heart",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

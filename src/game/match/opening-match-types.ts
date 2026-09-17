@@ -17,6 +17,8 @@ export type OpeningPhase = 'mulligan' | 'turns' | 'ended'
 export interface OpeningCard {
   readonly instanceId: string
   readonly cardId: CardId
+  /** True only for cards copied from the original, submitted deck. */
+  readonly startedInDeck?: boolean
   /** The original owner remains stable when control-changing effects occur. */
   readonly ownerId?: PlayerId
   readonly controllerId?: PlayerId
@@ -79,7 +81,9 @@ export interface RuntimeEnchantment {
   /** Overrides the number of times a hero may attack in the current turn. */
   readonly maxAttacksPerTurn?: number
   readonly unlimitedAttacks?: boolean
-  readonly swapStats?: boolean
+  /** Captured swap values override earlier stat modifiers, but not later ones. */
+  readonly attackOverride?: number
+  readonly healthOverride?: number
   readonly targetingGranted?: string | null
   readonly minimumHealth?: number
   /** A hero enchantment protecting its controller's current and future minions. */
@@ -203,6 +207,21 @@ export interface EffectTraceEntry {
   readonly correlation?: ResolutionCorrelation
 }
 
+/** Resolved movement from a visible board minion, independent of the effect's card. */
+export interface MinionCardMovement {
+  readonly sourceInstanceId: string
+  readonly participantId: PlayerId
+  readonly destination: 'hand' | 'deck' | 'discarded'
+  readonly copy: boolean
+  readonly cards: readonly OpeningCard[]
+  /** Board/hand swaps consume a hand card and can retain its slot. */
+  readonly replacedHandCard?: {
+    readonly participantId: PlayerId
+    readonly instanceId: string
+  }
+  readonly handIndex?: number
+}
+
 export interface EffectDomainEvent {
   readonly type: 'effect-resolved'
   readonly revision: number
@@ -212,6 +231,7 @@ export interface EffectDomainEvent {
   readonly controllerId: PlayerId
   readonly action: string
   readonly actionPath: string
+  readonly cardMovement?: MinionCardMovement
   readonly eventType?: CardEventType
   readonly data?: Readonly<Record<string, unknown>>
   readonly correlation?: ResolutionCorrelation
@@ -326,6 +346,8 @@ export interface BoardMinion {
 export interface BoardWeapon {
   readonly instanceId: string
   readonly cardId: CardId
+  /** Minions this exact weapon entity killed in combat. */
+  readonly killedMinionCardIds?: readonly CardId[]
   readonly attack: number
   readonly durability: number
   readonly maxDurability: number
@@ -428,6 +450,20 @@ export interface OpeningPlayerState {
   readonly hero: PlayerHeroState
   readonly playerNumber: 1 | 2
   readonly deck: readonly OpeningCard[]
+  /** Original drawable cards, used by effects that rebuild the starting deck. */
+  readonly originalDeckCardIds?: readonly CardId[]
+  readonly elementalPlayedLastTurn?: boolean
+  readonly quest?: {
+    readonly cardId: CardId
+    readonly rewardCardId: CardId
+    readonly goal: NonNullable<
+      import('../content/cards/card-definition').SpellCardDefinition['quest']
+    >['goal']
+    readonly progress: number
+    readonly target: number
+    readonly seenCardInstanceIds?: readonly string[]
+    readonly playedNames?: Readonly<Record<string, number>>
+  } | null
   readonly hand: readonly OpeningCard[]
   readonly revealedCards?: readonly OpeningCard[]
   readonly board: readonly BoardMinion[]
@@ -536,8 +572,17 @@ export interface PendingCardChoice {
   readonly resolution?:
     | { readonly type: 'bonus-spell' }
     | {
+        readonly type: 'adapt'
+        readonly targetInstanceId: string
+        readonly remaining: number
+      }
+    | {
         readonly type: 'hero-power'
         readonly heroPowerIds: readonly HeroPowerId[]
+      }
+    | {
+        readonly type: 'hero-power-use'
+        readonly heroPowerId: HeroPowerId
       }
     | {
         readonly type: 'kazakus-potion'
@@ -578,6 +623,7 @@ export interface UseHeroPowerCommand {
   readonly type: 'use-hero-power'
   readonly participantId: PlayerId
   readonly target?: HeroPowerTargetRef
+  readonly choice?: number
 }
 
 export type HeroPowerTargetRef =
@@ -721,6 +767,7 @@ export interface DevDrawCommand {
 }
 
 export type OpeningMatchCommand =
+  | { readonly type: 'concede'; readonly participantId: PlayerId }
   | ConfirmMulliganCommand
   | EndTurnCommand
   | UseHeroPowerCommand
@@ -983,7 +1030,8 @@ export interface MatchEndedEvent {
   /** Both values are null when simultaneous hero lethal ends in a draw. */
   readonly winnerId: PlayerId | null
   readonly loserId: PlayerId | null
-  readonly reason: 'hero-health-depleted' | 'simultaneous-hero-lethal' | 'dev-forced'
+  readonly reason:
+    'hero-health-depleted' | 'simultaneous-hero-lethal' | 'dev-forced' | 'concede'
 }
 
 export interface DevCardAddedEvent {
@@ -1275,9 +1323,12 @@ export interface OpeningMatchInstance {
 export type PublicizeOpeningMatchEvent<E> = E extends RandomSpellPresentationEvent
   ? never
   : E extends EffectDomainEvent
-    ? Omit<E, 'sourceCardId' | 'data'> & {
+    ? Omit<E, 'sourceCardId' | 'data' | 'cardMovement'> & {
         readonly sourceCardId: CardId | null
         readonly data?: Readonly<Record<string, unknown>>
+        readonly cardMovement?: Omit<MinionCardMovement, 'cards'> & {
+          readonly cards: readonly OpeningPublicCard[]
+        }
       }
     : E extends MulliganResolvedEvent
       ? Omit<E, 'returnedCards' | 'replacementCards'> & {
@@ -1326,6 +1377,7 @@ export type OpeningPublicCard = Omit<
   | 'costAdjustments'
   | 'enchantments'
   | 'knownTo'
+  | 'startedInDeck'
 > & {
   readonly cardId: CardId | null
   readonly baseCost?: number | null
@@ -1344,6 +1396,7 @@ export type OpeningPublicPlayerState = Omit<
   | 'revealedCards'
   | 'discardedCards'
   | 'pendingCostModifiers'
+  | 'originalDeckCardIds'
 > & {
   readonly deck: readonly OpeningPublicCard[]
   readonly hand: readonly OpeningPublicCard[]

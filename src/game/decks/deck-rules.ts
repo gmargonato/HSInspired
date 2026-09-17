@@ -55,6 +55,11 @@ export class DeckRules {
       errors.push('Deck card counts must be positive integers.')
     }
     if (this.cards && this.heroes) {
+      const questCount = Object.entries(deck.cards).reduce((total, [cardId, count]) => {
+        const card = this.cards.get(cardId)
+        return total + (card?.type === 'Spell' && card.quest ? count : 0)
+      }, 0)
+      if (questCount > 1) errors.push('A deck cannot contain more than one Quest.')
       for (const [cardId, count] of Object.entries(deck.cards)) {
         const card = this.cards.get(cardId)
         if (!card) {
@@ -83,6 +88,20 @@ export class DeckRules {
     card: CardDefinition,
     updatedAt = new Date().toISOString()
   ): DeckMutationResult {
+    if (
+      card.type === 'Spell' &&
+      card.quest &&
+      Object.keys(deck.cards).some((cardId) => {
+        const existing = this.cards.get(cardId)
+        return existing?.type === 'Spell' && existing.quest !== undefined
+      })
+    ) {
+      return {
+        ok: false,
+        code: 'copy-limit',
+        message: 'A deck cannot contain more than one Quest.'
+      }
+    }
     if (!this.isCardAllowedInDeck(deck, card)) {
       return {
         ok: false,

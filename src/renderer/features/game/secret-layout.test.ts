@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
+import { CARD_CANVAS } from '../../rendering/cards/card-layout'
 import { SECRET_LAYOUT } from './secret-layout'
 
 function edge(
@@ -15,19 +16,18 @@ function edge(
 }
 
 describe('Secret layout', () => {
-  it('places badges clear of the local hero frame and remote hand', () => {
-    expect(
-      Math.abs(
-        SECRET_LAYOUT.badges.local.position.y -
-          (edge(GAME_BOARD_LAYOUT.heroes.local, 'top') + 20)
-      )
-    ).toBeLessThanOrEqual(0.5)
-    expect(
-      Math.abs(
-        SECRET_LAYOUT.badges.remote.position.y -
-          edge(GAME_BOARD_LAYOUT.heroes.remote, 'bottom')
-      )
-    ).toBeLessThanOrEqual(0.5)
+  it('mirrors the local marker rail above the remote hero portrait', () => {
+    const localTopGap =
+      SECRET_LAYOUT.badges.local.position.y -
+      edge(GAME_BOARD_LAYOUT.heroes.local, 'top')
+    const remoteTopGap =
+      edge(GAME_BOARD_LAYOUT.heroes.remote, 'top') -
+      SECRET_LAYOUT.badges.remote.position.y
+
+    expect(SECRET_LAYOUT.badges.remote.position.y).toBeLessThan(
+      edge(GAME_BOARD_LAYOUT.heroes.remote, 'top')
+    )
+    expect(Math.abs(localTopGap - remoteTopGap)).toBeLessThanOrEqual(0.5)
   })
 
   it('centers the Belwe count over each Secret badge', () => {
@@ -37,6 +37,22 @@ describe('Secret layout', () => {
       fill: 0xffffff,
       stroke: { color: 0x000000 }
     })
+  })
+
+  it('spaces the Quest cards around the full-size arrow and labels progress above it', () => {
+    const preview = SECRET_LAYOUT.questPreview
+    const arrowHalfWidth = preview.arrow.size.width / 2
+    const arrowTop = preview.arrow.position.y - preview.arrow.size.height / 2
+    expect(preview.arrow.position.x - arrowHalfWidth).toBeGreaterThan(
+      preview.leftCard.x + CARD_CANVAS.width * preview.scale + 50
+    )
+    expect(preview.rightCard.x).toBeGreaterThan(
+      preview.arrow.position.x + arrowHalfWidth + 50
+    )
+    expect(preview.progress.position.x).toBe(preview.arrow.position.x)
+    expect(preview.progress.position.y + preview.progress.size.height / 2).toBeLessThan(
+      arrowTop
+    )
   })
 
   it('centers the temporary reveal screen on the game canvas', () => {

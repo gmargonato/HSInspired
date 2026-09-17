@@ -516,11 +516,11 @@ export class EffectQueries {
     }
     if (selection === 'adjacent') {
       const anchor =
-        selector.adjacentTo === 'source'
-          ? frame.source
-          : selector.adjacentTo === 'event-source'
-            ? (frame.event?.source ?? frame.source)
-            : (this.eventTargetForFrame(frame) ?? frame.source)
+        selector.adjacentTo === 'event-source'
+          ? (frame.event?.source ?? frame.source)
+          : selector.adjacentTo === 'event-target'
+            ? (this.eventTargetForFrame(frame) ?? frame.source)
+            : frame.source
       candidates = this.adjacentTo(anchor).filter((candidate) =>
         this.selectorMatches(candidate, selector, frame)
       )

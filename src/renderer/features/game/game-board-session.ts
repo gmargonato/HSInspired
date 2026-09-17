@@ -1,5 +1,6 @@
 import { describeAiEvents } from '../../../game/match/ai/event-narrative'
 import type { Deck } from '../../../game/decks'
+import type { OpponentStrategyBrief } from '../../../game/decks/opponent-strategy'
 import type { JsonObject } from '../../../shared/ipc/ai'
 import {
   createTurnMatch,
@@ -18,6 +19,7 @@ export interface GameBoardSessionOptions {
   readonly recorder?: MatchRecorder
   readonly setup: MatchSetup
   readonly decks: readonly Deck[]
+  readonly opponentStrategy?: OpponentStrategyBrief
 }
 
 /**
@@ -26,6 +28,7 @@ export interface GameBoardSessionOptions {
  * code consumes snapshots and events without constructing the match itself.
  */
 export class GameBoardSession {
+  readonly opponentStrategy?: OpponentStrategyBrief
   readonly match: TurnMatchInstance
   readonly localParticipantId: PlayerId
   readonly remoteParticipantId: PlayerId
@@ -66,6 +69,7 @@ export class GameBoardSession {
   }
 
   constructor(options: GameBoardSessionOptions) {
+    this.opponentStrategy = options.opponentStrategy
     const match = createTurnMatch(options.setup, options.decks)
     let logState = match.getState()
     const human = options.setup.participants.find(

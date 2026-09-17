@@ -55,6 +55,7 @@ export class CollectionPageView extends Container {
   private disposed = false
   private loading = false
   private previewOpening = false
+  private premiumAppearancePaused = false
   private pageIndex = 0
 
   constructor(options: CollectionPageViewOptions) {
@@ -115,6 +116,13 @@ export class CollectionPageView extends Container {
     this.pages = pages
   }
 
+  setPremiumAppearancePaused(paused: boolean): void {
+    this.premiumAppearancePaused = paused
+    for (const child of this.cardLayerRoot.children[0]?.children ?? []) {
+      if (child instanceof CardView) child.setPremiumAppearancePaused(paused)
+    }
+  }
+
   async renderPage(page: CollectionPage, index: number): Promise<void> {
     const sequence = ++this.renderSequence
     this.loading = true
@@ -154,6 +162,7 @@ export class CollectionPageView extends Container {
           )
         }
         this.layoutCard(view, cardIndex)
+        view.setPremiumAppearancePaused(this.premiumAppearancePaused)
         // Keep the full authored card resolution for sharp thumbnails and card-add
         // snapshots, but composite its static masks and blends only once per page.
         view.enableTextureCache()

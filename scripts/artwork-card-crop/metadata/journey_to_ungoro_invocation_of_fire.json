@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_invocation_of_fire.jpg",
+  "source_name": "journey_to_ungoro_invocation_of_fire.jpg",
+  "crop_box": [
+    29,
+    28,
+    484,
+    483
+  ],
+  "scale": 1.1,
+  "offset_x": -31.676923076923117,
+  "offset_y": -30.907692307692344,
+  "timestamp": "2026-09-16T14:45:05.912487",
+  "card_id": "journey_to_ungoro_invocation_of_fire",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

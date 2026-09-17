@@ -8,6 +8,7 @@ import { createMatchScenario } from './testing/match-scenario-builder'
 import { createSeededRng } from './rng'
 import { enumerateLegalCommands } from './ai/legal-commands'
 import { CARD_CATALOG, asCardId, asHeroId } from '../content/cards'
+import { HERO_POWER_CATALOG } from '../content/hero-powers'
 import type { Deck } from '../decks'
 import { asPlayerId, type MatchSetup, type PlayerId } from './match-types'
 import {
@@ -23,6 +24,764 @@ import {
 
 const HUMAN_ID = asPlayerId('human-player')
 const OPPONENT_ID = asPlayerId('opponent-player')
+
+describe('opening Quests', () => {
+  it.each([
+    ['journey_to_ungoro_the_marsh_queen', 'basic_stonetusk_boar', 'rexxar'],
+    ['journey_to_ungoro_the_caverns_below', 'basic_acidic_swamp_ooze', 'valeera']
+  ])(
+    "%s ignores draws and counts only its owner's plays",
+    (questId, minionId, heroId) => {
+      const scenario = createMatchScenario({
+        cardId: questId,
+        firstHeroId: heroId,
+        secondHeroId: heroId,
+        secondController: 'human'
+      })
+      scenario.confirmBothMulligans()
+      const [firstId, secondId] = scenario.participants
+      const checkpoint = scenario.match.getCheckpoint()
+      const definition = CARD_CATALOG.require(minionId)
+      const state = {
+        ...checkpoint.state,
+        players: checkpoint.state.players.map((player) =>
+          player.participantId === secondId
+            ? {
+                ...player,
+                deck: [
+                  {
+                    ...player.deck[0]!,
+                    cardId: definition.id,
+                    baseCost: definition.cost,
+                    currentCost: definition.cost
+                  },
+                  ...player.deck.slice(1)
+                ]
+              }
+            : player
+        ) as unknown as typeof checkpoint.state.players
+      }
+      const match = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
+      const progress = (participantId: PlayerId) =>
+        match
+          .getState()
+          .players.find((player) => player.participantId === participantId)!.quest!
+          .progress
+
+      accept(match.dispatch({ type: 'end-turn', participantId: firstId }))
+      expect(progress(firstId)).toBe(0)
+      expect(progress(secondId)).toBe(0)
+
+      accept(
+        match.dispatch({
+          type: 'dev-set-mana',
+          participantId: secondId,
+          available: 10,
+          maximum: 10
+        })
+      )
+      const card = match
+        .getState()
+        .players.find((player) => player.participantId === secondId)!
+        .hand.findLast((entry) => entry.cardId === minionId)!
+      accept(
+        match.dispatch({
+          type: 'play-card',
+          participantId: secondId,
+          cardInstanceId: card.instanceId,
+          position: 0
+        })
+      )
+      expect(progress(firstId)).toBe(0)
+      expect(progress(secondId)).toBe(1)
+    }
+  )
+
+  it.each(['classic_counterspell', 'classic_spellbender'])(
+    'does not advance the Paladin Quest when %s prevents the friendly spell',
+    (secretId) => {
+      const scenario = createMatchScenario({
+        cardId: 'journey_to_ungoro_the_last_kaleidosaur',
+        firstHeroId: 'uther',
+        secondHeroId: 'jaina',
+        secondController: 'human'
+      })
+      scenario.confirmBothMulligans()
+      const [firstId, secondId] = scenario.participants
+      const match = scenario.match
+      accept(match.dispatch({ type: 'end-turn', participantId: firstId }))
+      accept(
+        match.dispatch({
+          type: 'dev-add-card',
+          participantId: secondId,
+          cardId: secretId
+        })
+      )
+      accept(
+        match.dispatch({
+          type: 'dev-set-mana',
+          participantId: secondId,
+          available: 10,
+          maximum: 10
+        })
+      )
+      const secret = match
+        .getState()
+        .players.find((player) => player.participantId === secondId)!
+        .hand.findLast((card) => card.cardId === secretId)!
+      accept(
+        match.dispatch({
+          type: 'play-card',
+          participantId: secondId,
+          cardInstanceId: secret.instanceId
+        })
+      )
+      accept(match.dispatch({ type: 'end-turn', participantId: secondId }))
+      accept(
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: firstId,
+          cardId: 'basic_acidic_swamp_ooze'
+        })
+      )
+      accept(
+        match.dispatch({
+          type: 'dev-add-card',
+          participantId: firstId,
+          cardId: 'basic_mark_of_the_wild'
+        })
+      )
+      accept(
+        match.dispatch({
+          type: 'dev-set-mana',
+          participantId: firstId,
+          available: 10,
+          maximum: 10
+        })
+      )
+      const player = match
+        .getState()
+        .players.find((entry) => entry.participantId === firstId)!
+      const spell = player.hand.findLast(
+        (card) => card.cardId === 'basic_mark_of_the_wild'
+      )!
+      const minion = player.board[0]!
+      accept(
+        match.dispatch({
+          type: 'play-card',
+          participantId: firstId,
+          cardInstanceId: spell.instanceId,
+          targets: [
+            { kind: 'minion', participantId: firstId, instanceId: minion.instanceId }
+          ]
+        })
+      )
+      expect(
+        match.getState().players.find((entry) => entry.participantId === firstId)!.quest
+          ?.progress
+      ).toBe(0)
+    }
+  )
+
+  it('counts only the Taunt minions played by the Quest owner', () => {
+    const questId = 'journey_to_ungoro_fire_plumes_heart'
+    const tauntId = asCardId('basic_senjin_shieldmasta')
+    const scenario = createMatchScenario({
+      cardId: questId,
+      firstHeroId: 'garrosh',
+      secondHeroId: 'garrosh',
+      secondController: 'human'
+    })
+    scenario.confirmBothMulligans()
+    const [firstId, secondId] = scenario.participants
+    const checkpoint = scenario.match.getCheckpoint()
+    const state = {
+      ...checkpoint.state,
+      players: checkpoint.state.players.map((player) =>
+        player.participantId === secondId
+          ? {
+              ...player,
+              deck: [
+                {
+                  ...player.deck[0]!,
+                  cardId: tauntId,
+                  baseCost: 4,
+                  currentCost: 4
+                },
+                ...player.deck.slice(1)
+              ]
+            }
+          : player
+      ) as unknown as typeof checkpoint.state.players
+    }
+    const match = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
+    const questProgress = (participantId: typeof firstId) =>
+      match.getState().players.find((player) => player.participantId === participantId)!
+        .quest!.progress
+
+    accept(match.dispatch({ type: 'end-turn', participantId: firstId }))
+    expect(questProgress(firstId)).toBe(0)
+    expect(questProgress(secondId)).toBe(0)
+
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: secondId,
+        available: 10,
+        maximum: 10
+      })
+    )
+    const taunt = match
+      .getState()
+      .players.find((player) => player.participantId === secondId)!
+      .hand.find((card) => card.cardId === tauntId)!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: secondId,
+        cardInstanceId: taunt.instanceId,
+        position: 0
+      })
+    )
+    expect(questProgress(firstId)).toBe(0)
+    expect(questProgress(secondId)).toBe(1)
+  })
+
+  it('starts outside the drawable deck, is public, and awards the reward after progress', () => {
+    const questId = 'journey_to_ungoro_fire_plumes_heart'
+    const scenario = createMatchScenario({
+      cardId: questId,
+      firstHeroId: 'garrosh',
+      secondHeroId: 'garrosh'
+    })
+    const initial = scenario.match.getState()
+    expect(initial.openingHistory).toBeUndefined()
+    for (const player of initial.players) {
+      expect(player.quest).toMatchObject({ cardId: questId, progress: 0, target: 7 })
+      expect(
+        [...player.deck, ...player.hand].some((card) => card.cardId === questId)
+      ).toBe(false)
+    }
+    expect(initial.players[0].deck.length + initial.players[0].hand.length).toBe(29)
+    const publicState = scenario.match.getPublicState!(scenario.participants[0])
+    expect(publicState.players[1].quest?.cardId).toBe(questId)
+    expect(publicState.players[1]).not.toHaveProperty('originalDeckCardIds')
+    expect(publicState.players[1].deck[0]).not.toHaveProperty('startedInDeck')
+    scenario.confirmBothMulligans()
+    const revealed = scenario.match.getState()
+    expect(revealed.openingHistory).toEqual(
+      revealed.players.map((player) =>
+        expect.objectContaining({
+          entryId: `${player.participantId}:quest-opening`,
+          action: 'trigger',
+          source: expect.objectContaining({ cardId: questId }),
+          outcomes: []
+        })
+      )
+    )
+    expect(revealed.players.every((player) => player.quest?.progress === 0)).toBe(true)
+    const checkpoint = scenario.match.getCheckpoint()
+    const activeId = checkpoint.state.activePlayerId!
+    const state = {
+      ...checkpoint.state,
+      players: checkpoint.state.players.map((player) =>
+        player.participantId === activeId
+          ? { ...player, quest: { ...player.quest!, progress: 6 } }
+          : player
+      ) as unknown as typeof checkpoint.state.players
+    }
+    const match = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: activeId,
+        cardId: 'basic_senjin_shieldmasta'
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: activeId,
+        available: 10,
+        maximum: 10
+      })
+    )
+    const card = match
+      .getState()
+      .players.find((player) => player.participantId === activeId)!
+      .hand.findLast((entry) => entry.cardId === 'basic_senjin_shieldmasta')!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        position: 0
+      })
+    )
+    const after = match
+      .getState()
+      .players.find((player) => player.participantId === activeId)!
+    expect(after.quest).toBeNull()
+    expect(
+      after.hand.some((entry) => entry.cardId === 'journey_to_ungoro_sulfuras')
+    ).toBe(true)
+  })
+
+  const completions = [
+    ['journey_to_ungoro_jungle_giants', 'basic_boulderfist_ogre', 'malfurion'],
+    ['journey_to_ungoro_the_marsh_queen', 'basic_stonetusk_boar', 'rexxar'],
+    ['journey_to_ungoro_open_the_waygate', 'basic_the_coin', 'jaina'],
+    ['journey_to_ungoro_the_last_kaleidosaur', 'basic_mark_of_the_wild', 'uther'],
+    ['journey_to_ungoro_awaken_the_makers', 'classic_leper_gnome', 'anduin'],
+    ['journey_to_ungoro_the_caverns_below', 'basic_acidic_swamp_ooze', 'valeera'],
+    ['journey_to_ungoro_lakkari_sacrifice', 'basic_soulfire', 'guldan']
+  ] as const
+  for (const [questId, playedId, heroId] of completions) {
+    it(`finishes ${questId} on its qualifying event`, () => {
+      const scenario = createMatchScenario({
+        cardId: questId,
+        firstHeroId: heroId,
+        secondHeroId: heroId
+      })
+      scenario.confirmBothMulligans()
+      const checkpoint = scenario.match.getCheckpoint()
+      const activeId = checkpoint.state.activePlayerId!
+      const opponentId = scenario.participants.find((id) => id !== activeId)!
+      const state = {
+        ...checkpoint.state,
+        players: checkpoint.state.players.map((player) =>
+          player.participantId === activeId
+            ? {
+                ...player,
+                quest: {
+                  ...player.quest!,
+                  progress: player.quest!.target - 1,
+                  ...(questId.endsWith('the_caverns_below')
+                    ? { playedNames: { 'Acidic Swamp Ooze': 3 } }
+                    : {})
+                }
+              }
+            : player
+        ) as unknown as typeof checkpoint.state.players
+      }
+      const match = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
+      let targets:
+        | readonly {
+            kind: 'minion' | 'hero'
+            participantId: PlayerId
+            instanceId?: string
+          }[]
+        | undefined
+      if (questId.endsWith('the_last_kaleidosaur')) {
+        accept(
+          match.dispatch({
+            type: 'dev-summon-minion',
+            participantId: activeId,
+            cardId: 'basic_acidic_swamp_ooze'
+          })
+        )
+        const minion = match
+          .getState()
+          .players.find((player) => player.participantId === activeId)!.board[0]!
+        targets = [
+          { kind: 'minion', participantId: activeId, instanceId: minion.instanceId }
+        ]
+      }
+      if (questId.endsWith('lakkari_sacrifice'))
+        targets = [{ kind: 'hero', participantId: opponentId }]
+      accept(
+        match.dispatch({
+          type: 'dev-add-card',
+          participantId: activeId,
+          cardId: playedId
+        })
+      )
+      accept(
+        match.dispatch({
+          type: 'dev-set-mana',
+          participantId: activeId,
+          available: 10,
+          maximum: 10
+        })
+      )
+      const card = match
+        .getState()
+        .players.find((player) => player.participantId === activeId)!
+        .hand.findLast((entry) => entry.cardId === playedId)!
+      accept(
+        match.dispatch({
+          type: 'play-card',
+          participantId: activeId,
+          cardInstanceId: card.instanceId,
+          ...(CARD_CATALOG.require(playedId).type === 'Minion' ? { position: 0 } : {}),
+          ...(targets ? { targets } : {})
+        })
+      )
+      const after = match
+        .getState()
+        .players.find((player) => player.participantId === activeId)!
+      expect(after.quest).toBeNull()
+      const rewardId = state.players.find(
+        (player) => player.participantId === activeId
+      )!.quest!.rewardCardId
+      expect(after.hand.some((entry) => entry.cardId === rewardId)).toBe(true)
+    })
+  }
+})
+
+describe("Un'Goro and Frozen Throne rewards", () => {
+  function readyCard(cardId: string) {
+    const scenario = createMatchScenario({
+      firstController: 'human',
+      secondController: 'human'
+    })
+    scenario.confirmBothMulligans()
+    const match = scenario.match
+    const activeId = match.getState().activePlayerId!
+    accept(match.dispatch({ type: 'dev-add-card', participantId: activeId, cardId }))
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: activeId,
+        available: 10,
+        maximum: 10
+      })
+    )
+    const card = match
+      .getState()
+      .players.find((player) => player.participantId === activeId)!
+      .hand.findLast((entry) => entry.cardId === cardId)!
+    return { match, scenario, activeId, card }
+  }
+
+  it("refills only the caster's original deck when Time Warp is cast", () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_time_warp')
+    expect(CARD_CATALOG.require(card.cardId).rulesText).toBe('Refill your deck.')
+    const opponentId = match
+      .getState()
+      .players.find((player) => player.participantId !== activeId)!.participantId
+    const opponentDeckBefore = match
+      .getState()
+      .players.find((player) => player.participantId === opponentId)!.deck
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    )
+    expect(
+      match.getState().players.find((player) => player.participantId === activeId)!.deck
+        .length
+    ).toBe(30)
+    expect(
+      match.getState().players.find((player) => player.participantId === opponentId)!
+        .deck
+    ).toEqual(opponentDeckBefore)
+  })
+
+  it('shuffles twenty Beasts from the full catalog for Queen Carnassa', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_queen_carnassa')
+    const before = match
+      .getState()
+      .players.find((player) => player.participantId === activeId)!.deck.length
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        position: 0
+      })
+    )
+    const deck = match
+      .getState()
+      .players.find((player) => player.participantId === activeId)!.deck
+    expect(deck).toHaveLength(before + 20)
+    expect(
+      deck
+        .filter((entry) => !entry.startedInDeck)
+        .every((entry) => CARD_CATALOG.require(entry.cardId).subtype === 'Beast')
+    ).toBe(true)
+  })
+
+  it('steals one actual card entity from the opponent deck with Death Grip', () => {
+    const { match, scenario, activeId, card } = readyCard(
+      'knights_of_the_frozen_throne_death_grip'
+    )
+    const opponentId = scenario.participants.find((id) => id !== activeId)!
+    const before = match
+      .getState()
+      .players.find((player) => player.participantId === opponentId)!.deck
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    )
+    const after = match
+      .getState()
+      .players.find((player) => player.participantId === activeId)!
+    expect(
+      match.getState().players.find((player) => player.participantId === opponentId)!
+        .deck
+    ).toHaveLength(before.length - 1)
+    expect(
+      after.hand.some((entry) =>
+        before.some((candidate) => candidate.instanceId === entry.instanceId)
+      )
+    ).toBe(true)
+  })
+
+  it('casts one Invocation only if an Elemental was played last turn', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_kalimos_primal_lord')
+    const inactive = createOpeningMatchFromCheckpoint(match.getCheckpoint())
+    const inactiveResult = accept(
+      inactive.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        position: 0
+      })
+    )
+    expect(
+      inactiveResult.events.some((event) => event.type === 'random-spell-started')
+    ).toBe(false)
+    const checkpoint = match.getCheckpoint()
+    const state = {
+      ...checkpoint.state,
+      players: checkpoint.state.players.map((player) =>
+        player.participantId === activeId
+          ? { ...player, elementalPlayedLastTurn: true }
+          : player
+      ) as unknown as typeof checkpoint.state.players
+    }
+    const replay = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
+    const result = accept(
+      replay.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        position: 0
+      })
+    )
+    expect(
+      result.events.some(
+        (event) =>
+          event.type === 'random-spell-started' &&
+          event.cardId.startsWith('journey_to_ungoro_invocation_of_')
+      )
+    ).toBe(true)
+  })
+
+  it("replaces Sulfuras owner's Hero Power with DIE, INSECT!", () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_sulfuras')
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    )
+    expect(
+      match.getState().players.find((player) => player.participantId === activeId)
+        ?.heroPower.id
+    ).toBe('ragnaros-die-insects')
+  })
+
+  it('uses the full Demon catalog when Nether Portal replaces the deck', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_nether_portal')
+    const before = match
+      .getState()
+      .players.find((player) => player.participantId === activeId)!.deck.length
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    )
+    const deck = match
+      .getState()
+      .players.find((player) => player.participantId === activeId)!.deck
+    expect(deck).toHaveLength(before)
+    expect(
+      deck.every((entry) => CARD_CATALOG.require(entry.cardId).subtype === 'Demon')
+    ).toBe(true)
+    expect(
+      deck.every((entry) => entry.attack !== undefined && entry.health !== undefined)
+    ).toBe(true)
+  })
+
+  it('offers five successive Adapt selections for Galvadon', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_galvadon')
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        position: 0
+      })
+    )
+    for (let index = 0; index < 5; index += 1) {
+      const choice = match.getState().pendingCardChoice!
+      expect(choice.resolution).toMatchObject({ type: 'adapt', remaining: 5 - index })
+      expect(choice.options).toHaveLength(3)
+      accept(
+        match.dispatch({
+          type: 'choose-card-option',
+          participantId: activeId,
+          sourceCardInstanceId: choice.sourceCardInstanceId,
+          choice: 0
+        })
+      )
+    }
+    expect(match.getState().pendingCardChoice).toBeUndefined()
+  })
+
+  it('grants a real Poisonous combat effect through Poison Spit', () => {
+    const { match, scenario, activeId, card } = readyCard(
+      'journey_to_ungoro_poison_spit'
+    )
+    const opponentId = scenario.participants.find((id) => id !== activeId)!
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: activeId,
+        cardId: 'basic_stonetusk_boar'
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'basic_boulderfist_ogre'
+      })
+    )
+    const attacker = match
+      .getState()
+      .players.find((player) => player.participantId === activeId)!.board[0]!
+    const defender = match
+      .getState()
+      .players.find((player) => player.participantId === opponentId)!.board[0]!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        targets: [
+          { kind: 'minion', participantId: activeId, instanceId: attacker.instanceId }
+        ]
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'attack-character',
+        participantId: activeId,
+        attacker: { kind: 'minion', instanceId: attacker.instanceId },
+        defender: { kind: 'minion', instanceId: defender.instanceId }
+      })
+    )
+    expect(
+      match.getState().players.find((player) => player.participantId === opponentId)
+        ?.board
+    ).toHaveLength(0)
+  })
+
+  it('lets Shadowmourne damage both adjacent minions in one attack', () => {
+    const { match, scenario, activeId, card } = readyCard(
+      'knights_of_the_frozen_throne_scourgelord_garrosh'
+    )
+    const opponentId = scenario.participants.find((id) => id !== activeId)!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    )
+    expect(
+      match.getState().players.find((player) => player.participantId === activeId)
+        ?.weapon
+    ).toMatchObject({
+      cardId: 'knights_of_the_frozen_throne_shadowmourne',
+      attack: 4,
+      durability: 3
+    })
+    for (let index = 0; index < 3; index += 1)
+      accept(
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: opponentId,
+          cardId: 'basic_acidic_swamp_ooze'
+        })
+      )
+    const defender = match
+      .getState()
+      .players.find((player) => player.participantId === opponentId)!.board[1]!
+    accept(
+      match.dispatch({
+        type: 'attack-character',
+        participantId: activeId,
+        attacker: { kind: 'hero' },
+        defender: { kind: 'minion', instanceId: defender.instanceId }
+      })
+    )
+    expect(
+      match.getState().players.find((player) => player.participantId === opponentId)
+        ?.board
+    ).toHaveLength(0)
+  })
+
+  it("summons this Frostmourne entity's kills when it breaks", () => {
+    const { match, scenario, activeId, card } = readyCard(
+      'knights_of_the_frozen_throne_frostmourne'
+    )
+    const opponentId = scenario.participants.find((id) => id !== activeId)!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'basic_acidic_swamp_ooze'
+      })
+    )
+    const checkpoint = match.getCheckpoint()
+    const state = {
+      ...checkpoint.state,
+      players: checkpoint.state.players.map((player) =>
+        player.participantId === activeId
+          ? { ...player, weapon: { ...player.weapon!, durability: 1 } }
+          : player
+      ) as unknown as typeof checkpoint.state.players
+    }
+    const replay = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
+    const defender = replay
+      .getState()
+      .players.find((player) => player.participantId === opponentId)!.board[0]!
+    accept(
+      replay.dispatch({
+        type: 'attack-character',
+        participantId: activeId,
+        attacker: { kind: 'hero' },
+        defender: { kind: 'minion', instanceId: defender.instanceId }
+      })
+    )
+    const after = replay
+      .getState()
+      .players.find((player) => player.participantId === activeId)!
+    expect(after.weapon).toBeNull()
+    expect(after.board.map((minion) => minion.cardId)).toContain(
+      'basic_acidic_swamp_ooze'
+    )
+  })
+})
 
 describe('AI turn bonuses', () => {
   it('casts a reproducible free Secret on even turns and conceals its history identity', () => {
@@ -1207,6 +1966,153 @@ describe('Hero cards', () => {
     expect(result.events).toContainEqual(
       expect.objectContaining({ type: 'hero-replaced', armorGained: 5 })
     )
+  })
+
+  it('Deathstalker Rexxar replaces the hero power with Build-A-Beast Discover', () => {
+    const match = startMatch('rexxar')
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: HUMAN_ID,
+        cardId: 'knights_of_the_frozen_throne_deathstalker_rexxar'
+      })
+    )
+    const rexxar = match
+      .getState()
+      .players[0].hand.find(
+        (card) => card.cardId === 'knights_of_the_frozen_throne_deathstalker_rexxar'
+      )!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: HUMAN_ID,
+        cardInstanceId: rexxar.instanceId
+      })
+    )
+
+    const heroPower = HERO_POWER_CATALOG.require(
+      'knights_of_the_frozen_throne_build_a_beast'
+    )
+    expect(heroPower).toMatchObject({
+      displayName: 'Build-A-Beast',
+      rulesText: 'Discover a Beast',
+      cost: 2,
+      targeting: 'none',
+      presentationAssetKey: 'hero-power-build-a-beast'
+    })
+    expect(match.getState().players[0].heroPower).toMatchObject({
+      id: heroPower.id,
+      cost: 2,
+      targetType: 'none',
+      available: true
+    })
+
+    const result = usePower(match)
+    const pending = match.getState().pendingDiscover
+    expect(result.events).toContainEqual(
+      expect.objectContaining({ type: 'discover-started', participantId: HUMAN_ID })
+    )
+    expect(pending?.participantId).toBe(HUMAN_ID)
+    expect(pending?.candidates).toHaveLength(3)
+    expect(new Set(pending?.candidates.map((card) => card.cardId))).toHaveLength(3)
+    expect(
+      pending?.candidates.every((card) => {
+        const definition = CARD_CATALOG.require(card.cardId)
+        return definition.type === 'Minion' && definition.subtype === 'Beast'
+      })
+    ).toBe(true)
+
+    const selected = pending!.candidates[0]!
+    accept(
+      match.dispatch({
+        type: 'choose-discover-card',
+        participantId: HUMAN_ID,
+        cardInstanceId: selected.instanceId
+      })
+    )
+    expect(match.getState().pendingDiscover).toBeUndefined()
+    expect(match.getState().players[0].hand).toContainEqual(
+      expect.objectContaining({
+        instanceId: selected.instanceId,
+        cardId: selected.cardId
+      })
+    )
+  })
+
+  it('Scourgelord Garrosh replaces the hero power with Bladestorm', () => {
+    const match = startMatch('garrosh')
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: HUMAN_ID,
+        cardId: 'basic_acidic_swamp_ooze'
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: OPPONENT_ID,
+        cardId: 'basic_acidic_swamp_ooze'
+      })
+    )
+    const friendlyMinion = match.getState().players[0].board[0]!
+    const enemyMinion = match.getState().players[1].board[0]!
+
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: HUMAN_ID,
+        cardId: 'knights_of_the_frozen_throne_scourgelord_garrosh'
+      })
+    )
+    const garrosh = match
+      .getState()
+      .players[0].hand.find(
+        (card) => card.cardId === 'knights_of_the_frozen_throne_scourgelord_garrosh'
+      )!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: HUMAN_ID,
+        cardInstanceId: garrosh.instanceId
+      })
+    )
+
+    const heroPower = HERO_POWER_CATALOG.require(
+      'knights_of_the_frozen_throne_bladestorm'
+    )
+    expect(heroPower).toMatchObject({
+      displayName: 'Bladestorm',
+      rulesText: 'Deal 1 damage to all minions.',
+      cost: 2,
+      targeting: 'none',
+      presentationAssetKey: 'hero-power-bladestorm'
+    })
+    expect(match.getState().players[0].heroPower).toMatchObject({
+      id: heroPower.id,
+      cost: 2,
+      targetType: 'none',
+      available: true
+    })
+
+    const result = usePower(match)
+    const state = match.getState()
+    const damageEvents = result.events.filter(
+      (event): event is Extract<OpeningMatchEvent, { type: 'effect-resolved' }> =>
+        event.type === 'effect-resolved' &&
+        event.action === 'damage' &&
+        event.actionPath.startsWith('hero-power.damage-all-minions.')
+    )
+    expect(damageEvents).toHaveLength(2)
+    expect(damageEvents.map((event) => event.data?.healthAfter)).toEqual([1, 1])
+    expect(state.players[0].board).toContainEqual(
+      expect.objectContaining({ instanceId: friendlyMinion.instanceId, health: 1 })
+    )
+    expect(state.players[1].board).toContainEqual(
+      expect.objectContaining({ instanceId: enemyMinion.instanceId, health: 1 })
+    )
+    expect(state.players[0].hero).toMatchObject({ health: 30 })
+    expect(state.players[1].hero).toMatchObject({ health: 30 })
   })
 })
 

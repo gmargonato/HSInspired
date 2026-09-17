@@ -21,12 +21,19 @@ export interface AiObservedCard {
   readonly currentCost: number | null
 }
 
+export type AiObservedQuest = Pick<
+  NonNullable<OpeningPlayerState['quest']>,
+  'cardId' | 'rewardCardId' | 'goal' | 'progress' | 'target'
+>
+
 export interface AiObservedPlayer {
   readonly participantId: PlayerId
   readonly role: 'self' | 'opponent'
   readonly playerNumber: 1 | 2
   readonly heroId: OpeningPlayerState['heroId']
   readonly hero: Omit<OpeningPlayerState['hero'], 'creationOrdinal'>
+  /** Quests are visible objectives for both players. */
+  readonly quest: AiObservedQuest | null
   readonly hand: readonly AiObservedCard[]
   readonly handSize: number
   readonly deckSize: number

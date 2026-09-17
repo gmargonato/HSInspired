@@ -7,7 +7,8 @@ import {
   type HeroPowerId
 } from '../cards/card-definition'
 
-export type HeroPowerTargeting = 'none' | 'any-character'
+export type HeroPowerTargeting =
+  'none' | 'any-character' | 'minion' | 'enemy-minion' | 'friendly-minion'
 
 export type HeroPowerEffect =
   | {
@@ -17,6 +18,7 @@ export type HeroPowerEffect =
     }
   | { readonly kind: 'damage-enemy-hero'; readonly amount: number }
   | { readonly kind: 'damage-character'; readonly amount: number }
+  | { readonly kind: 'damage-all-minions'; readonly amount: number }
   | { readonly kind: 'damage-random-enemy'; readonly amount: number }
   | { readonly kind: 'summon'; readonly cardId: CardId; readonly count?: number }
   | { readonly kind: 'restore-character'; readonly amount: number }
@@ -28,6 +30,36 @@ export type HeroPowerEffect =
       readonly amount: number
     }
   | { readonly kind: 'gain-armor'; readonly amount: number }
+  | { readonly kind: 'discover-beast' }
+  | { readonly kind: 'copy-last-card-this-turn' }
+  | { readonly kind: 'choose-one'; readonly attack: number; readonly armor: number }
+  | {
+      readonly kind: 'damage-and-summon-on-kill'
+      readonly amount: number
+      readonly cardId: CardId
+    }
+  | {
+      readonly kind: 'summon-horseman-and-destroy-if-complete'
+      readonly cardId: CardId
+      readonly requiredCount: number
+    }
+  | { readonly kind: 'damage-and-refresh-after-card'; readonly amount: number }
+  | {
+      readonly kind: 'transform-friendly-minion-random-more-expensive'
+      readonly costIncrease: number
+    }
+  | { readonly kind: 'lifesteal-damage'; readonly amount: number }
+  | { readonly kind: 'discover-choose-one' }
+  | { readonly kind: 'buff-friendly-minions'; readonly amount: number }
+  | { readonly kind: 'discover-spell-discount' }
+  | { readonly kind: 'summon-copy-with-stats' }
+  | { readonly kind: 'restore-and-buff-minion'; readonly amount: number }
+  | { readonly kind: 'double-battlecries-this-turn' }
+  | { readonly kind: 'draw-with-set-cost'; readonly cost: number }
+  | {
+      readonly kind: 'summon-and-refresh-after-hero-attack'
+      readonly cardId: CardId
+    }
 
 /** Basic powers that can be upgraded by Justicar Trueheart. */
 export const BASIC_HERO_POWER_UPGRADES: Readonly<Record<string, string>> = {
@@ -93,6 +125,16 @@ const HERO_POWER_DATA = [
     'hero-power-paladin',
     'none',
     { kind: 'summon', cardId: 'basic_silver_hand_recruit' }
+  ],
+  [
+    'paladin-the-tidal-hand',
+    'Paladin',
+    'The Tidal Hand',
+    2,
+    'Summon a 1/1 Silver Hand Murloc.',
+    'hero-power-paladin-tidal-hand',
+    'none',
+    { kind: 'summon', cardId: 'whispers_of_the_old_gods_silver_hand_murloc' }
   ],
   [
     'priest-lesser-heal',
@@ -163,6 +205,200 @@ const HERO_POWER_DATA = [
     { kind: 'damage-character', amount: 8 }
   ],
   [
+    'knights_of_the_frozen_throne_deaths_shadow',
+    'Rogue',
+    "Death's Shadow",
+    2,
+    'Add a copy of the last card you played this turn to your hand.',
+    'hero-power-deaths-shadow',
+    'none',
+    { kind: 'copy-last-card-this-turn' }
+  ],
+  [
+    'knights_of_the_frozen_throne_plague_lord',
+    'Druid',
+    'Plague Lord',
+    2,
+    'Choose One - +3 Attack this turn; or Gain 3 Armor.',
+    'hero-power-plague-lord',
+    'none',
+    { kind: 'choose-one', attack: 3, armor: 3 }
+  ],
+  [
+    'knights_of_the_frozen_throne_build_a_beast',
+    'Hunter',
+    'Build-A-Beast',
+    2,
+    'Discover a Beast',
+    'hero-power-build-a-beast',
+    'none',
+    { kind: 'discover-beast' }
+  ],
+  [
+    'knights_of_the_frozen_throne_bladestorm',
+    'Warrior',
+    'Bladestorm',
+    2,
+    'Deal 1 damage to all minions.',
+    'hero-power-bladestorm',
+    'none',
+    { kind: 'damage-all-minions', amount: 1 }
+  ],
+  [
+    'knights_of_the_frozen_throne_icy_touch',
+    'Mage',
+    'Icy Touch',
+    2,
+    'Deal 1 damage. If this kills a minion, summon a Water Elemental.',
+    'hero-power-icy-touch',
+    'any-character',
+    {
+      kind: 'damage-and-summon-on-kill',
+      amount: 1,
+      cardId: 'basic_water_elemental'
+    }
+  ],
+  [
+    'knights_of_the_frozen_throne_the_four_horsemen',
+    'Paladin',
+    'The Four Horsemen',
+    2,
+    'Summon a 2/2 Horseman. If you have all 4, destroy the enemy hero.',
+    'hero-power-the-four-horsemen',
+    'none',
+    {
+      kind: 'summon-horseman-and-destroy-if-complete',
+      cardId: 'knights_of_the_frozen_throne_four_horseman',
+      requiredCount: 4
+    }
+  ],
+  [
+    'knights_of_the_frozen_throne_voidform',
+    'Priest',
+    'Voidform',
+    2,
+    'Deal 2 damage. After you play a card, refresh this.',
+    'hero-power-voidform',
+    'any-character',
+    { kind: 'damage-and-refresh-after-card', amount: 2 }
+  ],
+  [
+    'knights_of_the_frozen_throne_transmute_spirit',
+    'Shaman',
+    'Transmute Spirit',
+    2,
+    'Transform a friendly minion into a random one that costs (1) more.',
+    'hero-power-transmute-spirit',
+    'friendly-minion',
+    {
+      kind: 'transform-friendly-minion-random-more-expensive',
+      costIncrease: 1
+    }
+  ],
+  [
+    'knights_of_the_frozen_throne_siphon_life',
+    'Warlock',
+    'Siphon Life',
+    2,
+    'Lifesteal. Deal 3 damage.',
+    'hero-power-siphon-life',
+    'any-character',
+    { kind: 'lifesteal-damage', amount: 3 }
+  ],
+  [
+    'saviors_of_uldum_ossirian_tear',
+    'Druid',
+    'Ossirian Tear',
+    2,
+    'Discover a Choose One card.',
+    'hero-power-ossirian-tear',
+    'none',
+    { kind: 'discover-choose-one' }
+  ],
+  [
+    'saviors_of_uldum_pharaohs_warmask',
+    'Hunter',
+    "Pharaoh's Warmask",
+    2,
+    'Give your minions +2 Attack.',
+    'hero-power-pharaohs-warmask',
+    'none',
+    { kind: 'buff-friendly-minions', amount: 2 }
+  ],
+  [
+    'saviors_of_uldum_ascendant_scroll',
+    'Mage',
+    'Ascendant Scroll',
+    2,
+    'Add a random Mage spell to your hand. It costs (2) less.',
+    'hero-power-ascendant-scroll',
+    'none',
+    { kind: 'discover-spell-discount' }
+  ],
+  [
+    'saviors_of_uldum_emperor_wraps',
+    'Paladin',
+    'Emperor Wraps',
+    2,
+    'Summon a 2/2 copy of a friendly minion.',
+    'hero-power-emperor-wraps',
+    'friendly-minion',
+    { kind: 'summon-copy-with-stats' }
+  ],
+  [
+    'saviors_of_uldum_obelisks_eye',
+    'Priest',
+    "Obelisk's Eye",
+    2,
+    "Restore 3 Health. If you target a minion, also give it +3/+3.",
+    'hero-power-obelisks-eye',
+    'any-character',
+    { kind: 'restore-and-buff-minion', amount: 3 }
+  ],
+  [
+    'saviors_of_uldum_ancient_blades',
+    'Rogue',
+    'Ancient Blades',
+    2,
+    'Equip a 3/2 Blade with Immune while attacking.',
+    'hero-power-ancient-blades',
+    'none',
+    { kind: 'equip-weapon', cardId: 'journey_to_ungoro_ancient_blade' }
+  ],
+  [
+    'saviors_of_uldum_heart_of_virnaal',
+    'Shaman',
+    "Heart of Vir'naal",
+    2,
+    'Your Battlecries trigger twice this turn.',
+    'hero-power-heart-of-virnaal',
+    'none',
+    { kind: 'double-battlecries-this-turn' }
+  ],
+  [
+    'saviors_of_uldum_tome_of_origination',
+    'Warlock',
+    'Tome of Origination',
+    2,
+    'Draw a card. It costs (0).',
+    'hero-power-tome-of-origination',
+    'none',
+    { kind: 'draw-with-set-cost', cost: 0 }
+  ],
+  [
+    'saviors_of_uldum_anraphets_core',
+    'Warrior',
+    "Anraphet's Core",
+    2,
+    'Summon a 4/3 Golem. After your hero attacks, refresh this.',
+    'hero-power-anraphets-core',
+    'none',
+    {
+      kind: 'summon-and-refresh-after-hero-attack',
+      cardId: 'journey_to_ungoro_stone_golem'
+    }
+  ],
+  [
     'warrior-armor-up',
     'Warrior',
     'Armor Up!',
@@ -182,14 +418,94 @@ const HERO_POWER_DATA = [
     'none',
     { kind: 'gain-attack-and-armor', attack: 2, armor: 2 }
   ],
-  ['hunter-ballista-shot', 'Hunter', 'Ballista Shot', 2, 'Deal 3 damage to the enemy hero.', 'hero-power-hunter-upgraded', 'none', { kind: 'damage-enemy-hero', amount: 3 }],
-  ['mage-fireblast-rank-2', 'Mage', 'Fireblast Rank 2', 2, 'Deal 2 damage.', 'hero-power-mage-upgraded', 'any-character', { kind: 'damage-character', amount: 2 }],
-  ['paladin-the-silver-hand', 'Paladin', 'The Silver Hand', 2, 'Summon two 1/1 Silver Hand Recruits.', 'hero-power-paladin-upgraded', 'none', { kind: 'summon', cardId: 'basic_silver_hand_recruit', count: 2 }],
-  ['priest-heal', 'Priest', 'Heal', 2, 'Restore 4 Health.', 'hero-power-priest-upgraded', 'any-character', { kind: 'restore-character', amount: 4 }],
-  ['rogue-poisoned-daggers', 'Rogue', 'Poisoned Daggers', 2, 'Equip a 2/2 Dagger.', 'hero-power-rogue-upgraded', 'none', { kind: 'equip-weapon', cardId: 'the_grand_tournament_poisoned_dagger' }],
-  ['shaman-totemic-slam', 'Shaman', 'Totemic Slam', 2, 'Summon a basic Totem.', 'hero-power-shaman-upgraded', 'none', { kind: 'summon-random-totem', cardIds: ['basic_healing_totem', 'basic_searing_totem', 'basic_stoneclaw_totem', 'basic_wrath_of_air_totem'] }],
-  ['warlock-soul-tap', 'Warlock', 'Soul Tap', 2, 'Draw 2 cards and take 2 damage.', 'hero-power-warlock-upgraded', 'none', { kind: 'draw-and-self-damage', count: 2, amount: 2 }],
-  ['warrior-tank-up', 'Warrior', 'Tank Up!', 2, 'Gain 4 Armor.', 'hero-power-warrior-upgraded', 'none', { kind: 'gain-armor', amount: 4 }]
+  [
+    'hunter-ballista-shot',
+    'Hunter',
+    'Ballista Shot',
+    2,
+    'Deal 3 damage to the enemy hero.',
+    'hero-power-hunter-upgraded',
+    'none',
+    { kind: 'damage-enemy-hero', amount: 3 }
+  ],
+  [
+    'mage-fireblast-rank-2',
+    'Mage',
+    'Fireblast Rank 2',
+    2,
+    'Deal 2 damage.',
+    'hero-power-mage-upgraded',
+    'any-character',
+    { kind: 'damage-character', amount: 2 }
+  ],
+  [
+    'paladin-the-silver-hand',
+    'Paladin',
+    'The Silver Hand',
+    2,
+    'Summon two 1/1 Silver Hand Recruits.',
+    'hero-power-paladin-upgraded',
+    'none',
+    { kind: 'summon', cardId: 'basic_silver_hand_recruit', count: 2 }
+  ],
+  [
+    'priest-heal',
+    'Priest',
+    'Heal',
+    2,
+    'Restore 4 Health.',
+    'hero-power-priest-upgraded',
+    'any-character',
+    { kind: 'restore-character', amount: 4 }
+  ],
+  [
+    'rogue-poisoned-daggers',
+    'Rogue',
+    'Poisoned Daggers',
+    2,
+    'Equip a 2/2 Dagger.',
+    'hero-power-rogue-upgraded',
+    'none',
+    { kind: 'equip-weapon', cardId: 'the_grand_tournament_poisoned_dagger' }
+  ],
+  [
+    'shaman-totemic-slam',
+    'Shaman',
+    'Totemic Slam',
+    2,
+    'Summon a basic Totem.',
+    'hero-power-shaman-upgraded',
+    'none',
+    {
+      kind: 'summon-random-totem',
+      cardIds: [
+        'basic_healing_totem',
+        'basic_searing_totem',
+        'basic_stoneclaw_totem',
+        'basic_wrath_of_air_totem'
+      ]
+    }
+  ],
+  [
+    'warlock-soul-tap',
+    'Warlock',
+    'Soul Tap',
+    2,
+    'Draw 2 cards and take 2 damage.',
+    'hero-power-warlock-upgraded',
+    'none',
+    { kind: 'draw-and-self-damage', count: 2, amount: 2 }
+  ],
+  [
+    'warrior-tank-up',
+    'Warrior',
+    'Tank Up!',
+    2,
+    'Gain 4 Armor.',
+    'hero-power-warrior-upgraded',
+    'none',
+    { kind: 'gain-armor', amount: 4 }
+  ]
 ] as const
 
 export const HERO_POWER_DEFINITIONS: readonly HeroPowerDefinition[] =
@@ -216,7 +532,11 @@ export const HERO_POWER_DEFINITIONS: readonly HeroPowerDefinition[] =
           ? { ...effect, cardIds: effect.cardIds.map(asCardId) }
           : effect.kind === 'summon' || effect.kind === 'equip-weapon'
             ? { ...effect, cardId: asCardId(effect.cardId) }
-            : effect
+            : effect.kind === 'damage-and-summon-on-kill' ||
+                effect.kind === 'summon-horseman-and-destroy-if-complete' ||
+                effect.kind === 'summon-and-refresh-after-hero-attack'
+              ? { ...effect, cardId: asCardId(effect.cardId) }
+              : effect
     })
   )
 

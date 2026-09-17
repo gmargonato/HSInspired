@@ -25,11 +25,19 @@ No per-instance registration with the match or destruction hook is needed.
 
 The registry contains physical roots only and releases them on destruction. The
 match samples only visible casters belonging to its gameplay root; it never scans
-their artwork children or measures live bounds. Each shadow layer lazily bakes at
-most two small shape textures, with a little blur and transparent edge padding.
+their artwork children or measures live bounds each frame. Each shadow layer lazily
+bakes two shared primitive textures, with blur and transparent edge padding.
+Board minions instead supply an offstage physical silhouette: filled portrait,
+frame, Taunt, legendary decoration, Frozen ice, stat badges and solid ability
+markers. Magical overlays, numbers, sleeping Zs, glows and pulses are excluded.
+Each visible minion caches its own texture (256 pixels along the longest body
+dimension, plus blur padding). Bounds measurement and baking happen only on first
+use or a silhouette revision, such as toggling Taunt or changing premium frames.
+Movement and stat-number changes reuse the texture. Replaced textures are destroyed;
+hidden/removed minions release their caches on the next shadow update.
 Ordinary shadows use sprites; perspective cards use a small 10x10 mesh sharing
-the same textures. There are no live blur filters,
-per-frame offscreen passes, or extra tickers. Scene update drives the layer, so
+the shared primitive textures. There are no live blur filters,
+continuous offscreen passes, or extra tickers. Scene update drives the layer, so
 pausing and unloading follow the game. Textures are released with their layer.
 
 Discover, Tracking, Choose One, and hero-power choices also cast shadows. The

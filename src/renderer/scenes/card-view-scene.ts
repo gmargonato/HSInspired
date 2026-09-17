@@ -1,6 +1,7 @@
 import type { CardDefinition } from '../../game/content/cards'
 import { CardAssetResolver } from '../ui/asset-registry/card-asset-resolver'
 import { Scene } from './scene'
+import type { ProgressionStore } from '../ui/progression-store'
 import {
   CardPreviewView,
   type CardPreviewSourceBounds
@@ -17,6 +18,7 @@ export interface CardViewSceneOptions {
   readonly card: CardDefinition
   readonly sourceBounds: CardPreviewSourceBounds
   readonly resolver?: CardAssetResolver
+  readonly progression?: ProgressionStore
 }
 
 /** Lifecycle adapter for the feature-owned enlarged card preview. */
@@ -33,6 +35,7 @@ export class CardViewScene extends Scene {
     this.view = new CardPreviewView({
       ...this.options,
       assetScope: this.assetScope,
+      onPresentationOffset: (x, y) => this.sceneManager.setPresentationOffset?.(x, y),
       onClose: async () => {
         await this.sceneManager.pop()
       }

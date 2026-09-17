@@ -20,7 +20,10 @@ export interface SelectedCardSlot {
 export interface CardSelectionOverlayOptions {
   readonly renderer: Renderer
   readonly toggleTexture: Texture
-  readonly createSlot: (card: OpeningCard) => Promise<GameCardSlot>
+  readonly createSlot: (
+    card: OpeningCard,
+    sourceInstanceId?: string
+  ) => Promise<GameCardSlot>
   readonly createHeroPowerChoice: (heroPowerId: HeroPowerId) => Container
   readonly onSelect: (card: OpeningCard) => void
   readonly onChooseOption: (choice: number) => void
@@ -126,12 +129,13 @@ export class CardSelectionOverlay extends Container {
       zone: 'revealed' as const,
       revealed: true
     }))
-    await this.showCards(cards, options)
+    await this.showCards(cards, options, sourceCardInstanceId)
   }
 
   private async showCards(
     candidates: readonly OpeningCard[],
-    choiceOptions: readonly CardChoiceOption[] = []
+    choiceOptions: readonly CardChoiceOption[] = [],
+    sourceInstanceId?: string
   ): Promise<void> {
     if (this.destroyed) return
     this.clear()
@@ -147,7 +151,7 @@ export class CardSelectionOverlay extends Container {
     const midpoint = (candidates.length - 1) / 2
     const created = await Promise.all(
       candidates.map(async (card, index) => {
-        const slot = await this.options.createSlot(card)
+        const slot = await this.options.createSlot(card, sourceInstanceId)
         if (this.destroyed || revision !== this.requestRevision) {
           slot.destroy({ children: true })
           return null
@@ -225,6 +229,23 @@ export class CardSelectionOverlay extends Container {
       view.cursor = 'pointer'
       view.on('pointertap', () => this.chooseOption(option, view))
       this.cardsLayer.addChild(view)
+      const label = new Text({
+        text: option.label,
+        style: {
+          fontFamily: 'Belwe',
+          fontSize: 24,
+          fill: 0xffffff,
+          stroke: { color: 0x000000, width: 5 },
+          align: 'center',
+          wordWrap: true,
+          wordWrapWidth: 275
+        }
+      })
+      label.anchor.set(0.5, 0)
+      label.position.set(view.x, view.y + 18)
+      label.eventMode = 'none'
+      label.label = `game.card-selection.hero-power-choice-label:${option.choice}`
+      this.cardsLayer.addChild(label)
       this.entries.push({ view })
       return view
     })

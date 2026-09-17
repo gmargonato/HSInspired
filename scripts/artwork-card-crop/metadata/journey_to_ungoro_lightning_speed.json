@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_lightning_speed.jpg",
+  "source_name": "journey_to_ungoro_lightning_speed.jpg",
+  "crop_box": [
+    36,
+    28,
+    491,
+    483
+  ],
+  "scale": 1.1,
+  "offset_x": -39.061538461538476,
+  "offset_y": -30.292307692307702,
+  "timestamp": "2026-09-16T14:45:28.002109",
+  "card_id": "journey_to_ungoro_lightning_speed",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

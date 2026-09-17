@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\knights_of_the_frozen_throne_death_grip.jpg",
+  "source_name": "knights_of_the_frozen_throne_death_grip.jpg",
+  "crop_box": [
+    34,
+    23,
+    489,
+    478
+  ],
+  "scale": 1.1,
+  "offset_x": -37.061538461538476,
+  "offset_y": -25.52307692307693,
+  "timestamp": "2026-09-16T15:06:09.936807",
+  "card_id": "knights_of_the_frozen_throne_death_grip",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

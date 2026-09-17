@@ -73,7 +73,7 @@ interface RailSlot {
 /** Only visible thumbnails and the active preview have Pixi objects. */
 export class MatchHistoryView extends Actor {
   private readonly model: MatchHistoryModel
-  private readonly rail = new Container()
+  readonly rail = new Container()
   private readonly preview = new Container()
   private readonly resolver = new CardAssetResolver()
   private readonly slots: RailSlot[] = []
@@ -85,7 +85,15 @@ export class MatchHistoryView extends Actor {
   constructor(
     private readonly textures: MatchHistoryTextures,
     private readonly localParticipantId: string,
-    private readonly setBoardDesaturated: (active: boolean) => void
+    private readonly setBoardDesaturated: (active: boolean) => void,
+    private readonly premiumFor: (snapshot: HistoryEntitySnapshot) => boolean = () =>
+      false,
+    private readonly premiumSideFor: (
+      snapshot: HistoryEntitySnapshot
+    ) => 'local' | 'remote' = (snapshot) =>
+      (snapshot.ownerId ?? snapshot.participantId) === localParticipantId
+        ? 'local'
+        : 'remote'
   ) {
     super()
     this.model = new MatchHistoryModel(localParticipantId)
@@ -126,11 +134,14 @@ export class MatchHistoryView extends Actor {
 
   record(event: HistoryActionResolvedEvent): void {
     const count = this.model.count
+    const knownIds = new Set(this.model.all().map((historyEntry) => historyEntry.id))
     const shown =
       this.hoveredIndex === null ? undefined : this.slots[this.hoveredIndex]?.entry
     const entry = this.model.record(event)
     if (this.offset > 0) this.offset += this.model.count - count
-    this.renderRail()
+    const enteringId =
+      this.offset === 0 && !knownIds.has(entry.id) ? entry.id : undefined
+    this.renderRail(enteringId)
     if (
       this.activeId === entry.id ||
       (this.hoveredIndex !== null && this.slots[this.hoveredIndex]?.entry !== shown)
@@ -138,9 +149,9 @@ export class MatchHistoryView extends Actor {
       this.openHovered()
   }
   recordBurn(event: CardBurnedEvent): void {
-    this.model.recordBurn(event)
+    const entry = this.model.recordBurn(event)
     if (this.offset > 0) this.offset++
-    this.renderRail()
+    this.renderRail(this.offset === 0 ? entry.id : undefined)
     if (this.hoveredIndex !== null) this.openHovered()
   }
 
@@ -190,52 +201,106 @@ export class MatchHistoryView extends Actor {
     this.rail.addChild(container)
     return { container, artwork, frame, generation: 0 }
   }
-  private renderRail(): void {
+  private renderRail(enteringId?: number): void {
     const entries = this.model.visible(this.offset, this.slots.length)
+    const previousSlots = [...this.slots]
+    const targetIds = new Set(entries.map((entry) => entry.id))
+    const available = [...previousSlots]
+    const orderedSlots = entries.map((entry) => {
+      const matchingIndex = available.findIndex((slot) => slot.entry?.id === entry.id)
+      const reusableIndex =
+        matchingIndex >= 0
+          ? matchingIndex
+          : available.findIndex(
+              (slot) => slot.entry === undefined || !targetIds.has(slot.entry.id)
+            )
+      if (reusableIndex < 0) throw new Error('History rail ran out of reusable slots.')
+      const slot = available.splice(reusableIndex, 1)[0]
+      if (!slot) throw new Error('History rail ran out of reusable slots.')
+      return slot
+    })
+    const unusedSlots = previousSlots.filter((slot) => !orderedSlots.includes(slot))
+    this.slots.splice(0, this.slots.length, ...orderedSlots, ...unusedSlots)
+
     this.slots.forEach((slot, index) => {
       const entry = entries[index]
-      if (slot.entry === entry) return
-      slot.entry = entry
-      slot.container.visible = !!entry
-      const generation = ++slot.generation
-      if (!entry) return
-      const side = entry.participantId === this.localParticipantId ? 'local' : 'remote'
-      switch (entry.action) {
-        case 'combat':
-          slot.frame.texture = this.textures[`${side}Attack`]
-          break
-        case 'trigger':
-          slot.frame.texture = this.textures[`${side}Trigger`]
-          break
-        default:
-          slot.frame.texture = this.textures[side]
+      if (!entry) {
+        slot.entry = undefined
+        slot.container.visible = false
+        this.killTweensOf(slot.container)
+        slot.container.position.set(0, index * MATCH_HISTORY_LAYOUT.rail.gap)
+        slot.generation++
+        return
       }
-      this.showThumbnail(slot.artwork, Texture.WHITE)
-      slot.artwork.tint = 0x000000
-      if (entry.kind !== 'burn' && entry.source.concealedAs === 'secret')
-        this.showThumbnail(slot.artwork, this.textures.secretThumb)
-      if (entry.kind === 'burn')
-        this.showThumbnail(slot.artwork, this.textures.burnThumb)
-      else if (entry.action === 'fatigue')
-        this.showThumbnail(slot.artwork, this.textures.fatigueThumb)
-      else if (entry.source.heroPowerId)
-        this.showThumbnail(
-          slot.artwork,
-          this.heroPowerTexture(entry.source.heroPowerId)
+
+      const contentChanged = slot.entry !== entry
+      slot.entry = entry
+      slot.container.visible = true
+      if (contentChanged) this.renderSlotContent(slot)
+
+      const targetY = index * MATCH_HISTORY_LAYOUT.rail.gap
+      if (entry.id === enteringId) {
+        this.killTweensOf(slot.container)
+        slot.container.position.set(
+          MATCH_HISTORY_LAYOUT.rail.entryAnimation.incomingOffsetX,
+          targetY
         )
-      else if (entry.source.heroId)
-        this.showThumbnail(slot.artwork, this.heroTexture(entry.source.heroId))
-      else if (entry.source.cardId)
-        void this.resolver
-          .loadArtwork(entry.source.cardId)
-          .then((texture) => {
-            if (!this.destroyed && generation === slot.generation && texture)
-              this.showThumbnail(slot.artwork, texture)
-          })
-          .catch(() => {
-            /* Keep the explicit placeholder if artwork fails. */
-          })
+        this.tweenTo(slot.container, {
+          x: 0,
+          duration: MATCH_HISTORY_LAYOUT.rail.entryAnimation.duration,
+          ease: 'power2.out',
+          overwrite: 'auto'
+        })
+      } else if (enteringId !== undefined) {
+        this.tweenTo(slot.container, {
+          x: 0,
+          y: targetY,
+          duration: MATCH_HISTORY_LAYOUT.rail.entryAnimation.duration,
+          ease: 'power2.out',
+          overwrite: 'auto'
+        })
+      } else {
+        this.killTweensOf(slot.container)
+        slot.container.position.set(0, targetY)
+      }
     })
+  }
+  private renderSlotContent(slot: RailSlot): void {
+    const entry = slot.entry
+    const generation = ++slot.generation
+    if (!entry) return
+    const side = entry.participantId === this.localParticipantId ? 'local' : 'remote'
+    switch (entry.action) {
+      case 'combat':
+        slot.frame.texture = this.textures[`${side}Attack`]
+        break
+      case 'trigger':
+        slot.frame.texture = this.textures[`${side}Trigger`]
+        break
+      default:
+        slot.frame.texture = this.textures[side]
+    }
+    this.showThumbnail(slot.artwork, Texture.WHITE)
+    slot.artwork.tint = 0x000000
+    if (entry.kind !== 'burn' && entry.source.concealedAs === 'secret')
+      this.showThumbnail(slot.artwork, this.textures.secretThumb)
+    if (entry.kind === 'burn') this.showThumbnail(slot.artwork, this.textures.burnThumb)
+    else if (entry.action === 'fatigue')
+      this.showThumbnail(slot.artwork, this.textures.fatigueThumb)
+    else if (entry.source.heroPowerId)
+      this.showThumbnail(slot.artwork, this.heroPowerTexture(entry.source.heroPowerId))
+    else if (entry.source.heroId)
+      this.showThumbnail(slot.artwork, this.heroTexture(entry.source.heroId))
+    else if (entry.source.cardId)
+      void this.resolver
+        .loadArtwork(entry.source.cardId)
+        .then((texture) => {
+          if (!this.destroyed && generation === slot.generation && texture)
+            this.showThumbnail(slot.artwork, texture)
+        })
+        .catch(() => {
+          /* Keep the explicit placeholder if artwork fails. */
+        })
   }
   private showThumbnail(sprite: Sprite, texture: Texture): void {
     const size = MATCH_HISTORY_LAYOUT.rail.artworkSize
@@ -262,9 +327,12 @@ export class MatchHistoryView extends Actor {
     super.dispose()
   }
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.killAnimations()
     this.activeId = null
     this.previewSequence++
     this.setBoardDesaturated(false)
+    // The board mounts the rail below the hand, separately from this preview.
+    if (!this.rail.destroyed) this.rail.destroy({ children: true })
     super.destroy(options)
   }
 
@@ -415,6 +483,8 @@ export class MatchHistoryView extends Actor {
       .catch(() => undefined)
     if (!this.current(id, sequence)) return
     const card = await CardView.create(definition, this.resolver, {
+      premium: this.premiumFor(snapshot),
+      premiumSide: this.premiumSideFor(snapshot),
       animatePremiumArtwork: true,
       artwork,
       snapshot,

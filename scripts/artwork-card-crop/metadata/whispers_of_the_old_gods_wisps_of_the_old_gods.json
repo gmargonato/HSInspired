@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\whispers_of_the_old_gods_wisps_of_the_old_gods.jpg",
+  "source_name": "whispers_of_the_old_gods_wisps_of_the_old_gods.jpg",
+  "crop_box": [
+    28,
+    20,
+    483,
+    475
+  ],
+  "scale": 1.1,
+  "offset_x": -30.44615384615389,
+  "offset_y": -21.83076923076925,
+  "timestamp": "2026-09-16T15:04:08.065927",
+  "card_id": "whispers_of_the_old_gods_wisps_of_the_old_gods",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

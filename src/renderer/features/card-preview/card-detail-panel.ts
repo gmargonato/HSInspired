@@ -1,6 +1,8 @@
 import { Container, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
 import { formatExpansionName, type CardDefinition } from '../../../game/content/cards'
+import { applyPlacement } from '../../rendering/layout'
+import { CARD_PREVIEW_LAYOUT } from './card-preview-layout'
 
 export interface CardDetailRow {
   readonly label: string
@@ -10,8 +12,6 @@ export interface CardDetailRow {
 const DETAIL_TEXT_COLOR = 0x1b130d
 
 const PANEL = {
-  x: 150,
-  y: 201,
   width: 447,
   height: 678,
   contentCenterX: 223.5,
@@ -107,7 +107,7 @@ export function createCardDetailPanel(
   rarityGemTexture?: Texture
 ): Container {
   const panel = new Container()
-  panel.position.set(PANEL.x, PANEL.y)
+  applyPlacement(panel, CARD_PREVIEW_LAYOUT.detailsPanel)
 
   const background = new Sprite(detailContainerTexture)
   background.eventMode = 'none'

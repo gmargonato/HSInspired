@@ -171,10 +171,17 @@ void app
     }
     registerAiIpc(aiService)
     registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))
-    registerPlayerStatsIpc(
-      new PlayerStatsRepository(join(app.getPath('userData'), 'player-stats.json'))
+    const playerStatsRepository = new PlayerStatsRepository(
+      join(app.getPath('userData'), 'player-stats.json')
     )
-    registerArenaIpc(new ArenaRepository(join(app.getPath('userData'), 'arena.json')))
+    const arenaRepository = new ArenaRepository(
+      join(app.getPath('userData'), 'arena.json'),
+      playerStatsRepository
+    )
+    // Recover an interrupted reward credit before any renderer can read progression.
+    await arenaRepository.get()
+    registerPlayerStatsIpc(playerStatsRepository)
+    registerArenaIpc(arenaRepository)
     const windowSettingsRepository = new WindowSettingsRepository(
       join(app.getPath('userData'), 'window-settings.json')
     )

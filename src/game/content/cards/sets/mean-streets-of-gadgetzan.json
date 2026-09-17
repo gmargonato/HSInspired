@@ -446,7 +446,7 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Divine Shield. Taunt. Damage dealt by this minion also heals your hero.",
+    "rulesText": "Divine Shield. Taunt. Lifesteal.",
     "keywords": ["divine-shield", "taunt", "lifesteal"],
     "effects": []
   },

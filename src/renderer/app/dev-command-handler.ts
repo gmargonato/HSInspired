@@ -1,16 +1,19 @@
 import type { SceneManager } from '../scenes/scene-manager'
 import type { AppLogger } from './logger'
-import type { DevCommand } from '../../shared/dev-menu'
+import type { DevCommand, PremiumMode } from '../../shared/dev-menu'
+import type { ProgressionStore } from '../ui/progression-store'
+import { requestDevDustAmount } from './dev-dust-dialog'
 import { CollectionScene } from '../scenes/collection-scene'
 import { GameScene } from '../scenes/game-scene'
+import { ArenaScene } from '../scenes/arena-scene'
 import {
-  isPremiumEnabled,
-  setPremiumEnabled,
+  getPremiumMode,
+  setPremiumMode,
   subscribeToPremiumAppearance
 } from '../rendering/premium-appearance'
 
 type DevMenuBridge = {
-  notifyPremiumMode?: (enabled: boolean) => void
+  notifyPremiumMode?: (mode: PremiumMode) => void
   onDevCommand?: (listener: (command: DevCommand) => void) => () => void
 }
 
@@ -22,19 +25,51 @@ function getDevMenuBridge(): DevMenuBridge | null {
 /** Forwards native `Options`/`Dev` menu commands to the current scene. */
 export function installDevCommandHandler(
   sceneManager: SceneManager,
-  logger: AppLogger
+  logger: AppLogger,
+  progression: ProgressionStore,
+  reportError: (message: string) => void = console.error
 ): () => void {
   const bridge = getDevMenuBridge()
   if (!bridge?.onDevCommand) {
     return () => undefined
   }
 
+  let dustCommandPending = false
   const handleCommand = (command: DevCommand): void => {
+    if (command.type === 'progression:set-dust') {
+      if (dustCommandPending) return
+      dustCommandPending = true
+      void (async () => {
+        await progression.load()
+        const amount =
+          command.amount === 'custom'
+            ? await requestDevDustAmount(progression.getSnapshot().dust)
+            : command.amount
+        if (amount !== null) await progression.setDust(amount)
+      })()
+        .catch((error) => {
+          logger.error('[DevMenu] failed to set Arcane Dust', error)
+          reportError('Could not save the Arcane Dust balance. Please try again.')
+        })
+        .finally(() => {
+          dustCommandPending = false
+        })
+      return
+    }
     if (command.type === 'cards:set-premium') {
-      setPremiumEnabled(command.enabled)
+      setPremiumMode(command.mode)
       return
     }
     const current = sceneManager.current
+    if (command.type === 'arena:retire' || command.type === 'arena:set-score') {
+      if (current instanceof ArenaScene) {
+        void current.runDevCommand(command).catch((error: unknown) => {
+          logger.error('[DevMenu] failed to update Arena', error)
+          reportError('Could not update the Arena run. Please try again.')
+        })
+      }
+      return
+    }
 
     if (command.type === 'collection:set-collectible') {
       if (current instanceof CollectionScene) {
@@ -140,10 +175,10 @@ export function installDevCommandHandler(
   }
 
   const unsubscribeCommands = bridge.onDevCommand(handleCommand)
-  const unsubscribePremium = subscribeToPremiumAppearance((enabled) =>
-    bridge.notifyPremiumMode?.(enabled)
+  const unsubscribePremium = subscribeToPremiumAppearance((mode) =>
+    bridge.notifyPremiumMode?.(mode)
   )
-  bridge.notifyPremiumMode?.(isPremiumEnabled())
+  bridge.notifyPremiumMode?.(getPremiumMode())
   return () => {
     unsubscribeCommands()
     unsubscribePremium()

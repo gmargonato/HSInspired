@@ -4,4 +4,5 @@ import type { CursorManager } from '../ui/components/cursor'
 export interface SceneManagerPort {
   readonly cursor: CursorManager | null
   pop(): Promise<unknown>
+  setPresentationOffset?(x: number, y: number): void
 }

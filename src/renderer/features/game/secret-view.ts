@@ -1,26 +1,37 @@
-import { Container, Sprite, Text, type Texture } from 'pixi.js'
+import { Container, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import { CARD_CATALOG } from '../../../game/content/cards'
 import { AnimationScope } from '../../animation/animations'
 import { CardView } from '../../rendering/cards/card-view'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { SECRET_LAYOUT } from './secret-layout'
+import type { OpeningPlayerState } from '../../../game/match'
 
 export type SecretPresentationSide = 'local' | 'remote'
 
 /** Projects authoritative Secret counts as one facedown badge over each hero. */
 export class SecretZoneView extends Container {
   private readonly badges: Record<SecretPresentationSide, Container>
+  private readonly animations = new AnimationScope()
 
-  constructor(private readonly texture: Texture) {
+  constructor(
+    private readonly texture: Texture,
+    onLocalHover?: (hovered: boolean) => void
+  ) {
     super()
     this.label = 'game.secrets'
-    this.eventMode = 'none'
+    this.eventMode = 'passive'
     this.badges = {
       local: this.createBadge('local'),
       remote: this.createBadge('remote')
     }
     this.addChild(this.badges.local, this.badges.remote)
+    const local = this.badges.local
+    local.eventMode = 'static'
+    const { width, height } = SECRET_LAYOUT.badges.local.size
+    local.hitArea = new Rectangle(-width / 2, -height / 2, width, height)
+    local.on('pointerover', () => onLocalHover?.(true))
+    local.on('pointerout', () => onLocalHover?.(false))
   }
 
   sync(side: SecretPresentationSide, count: number): void {
@@ -32,6 +43,24 @@ export class SecretZoneView extends Container {
       countLabel.visible = nextCount > 0
       countLabel.text = String(nextCount)
     }
+  }
+
+  setPaired(side: SecretPresentationSide, paired: boolean): void {
+    const badge = this.badges[side]
+    const x =
+      SECRET_LAYOUT.badges[side].position.x +
+      (paired ? SECRET_LAYOUT.pairedBadgeOffset : 0)
+    if (badge.x !== x)
+      this.animations.timeline().to(badge, {
+        x,
+        duration: 0.18,
+        ease: 'power2.out'
+      })
+  }
+
+  override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.animations.kill()
+    super.destroy(options)
   }
 
   private createBadge(side: SecretPresentationSide): Container {
@@ -61,6 +90,82 @@ export class SecretZoneView extends Container {
   }
 }
 
+/** Public Quest objective and progress, sharing the hero marker rail with Secrets. */
+export class QuestZoneView extends Container {
+  private readonly badges: Record<SecretPresentationSide, Container>
+  private readonly animations = new AnimationScope()
+
+  constructor(
+    texture: Texture,
+    onHover: (side: SecretPresentationSide, hovered: boolean) => void
+  ) {
+    super()
+    this.label = 'game.quests'
+    this.eventMode = 'passive'
+    this.badges = {
+      local: this.createBadge('local', texture, onHover),
+      remote: this.createBadge('remote', texture, onHover)
+    }
+    this.addChild(this.badges.local, this.badges.remote)
+  }
+
+  sync(
+    side: SecretPresentationSide,
+    quest: OpeningPlayerState['quest'],
+    paired: boolean
+  ): void {
+    const badge = this.badges[side]
+    badge.visible = !!quest
+    const count = badge.getChildByLabel(`game.quest.${side}.count`)
+    if (count instanceof Text && quest) count.text = `${quest.progress}/${quest.target}`
+    const x =
+      SECRET_LAYOUT.badges[side].position.x -
+      (paired ? SECRET_LAYOUT.pairedBadgeOffset : 0)
+    if (badge.x !== x)
+      this.animations.timeline().to(badge, {
+        x,
+        duration: 0.18,
+        ease: 'power2.out'
+      })
+  }
+
+  private createBadge(
+    side: SecretPresentationSide,
+    texture: Texture,
+    onHover: (side: SecretPresentationSide, hovered: boolean) => void
+  ): Container {
+    const badge = new Container()
+    applyPlacement(badge, SECRET_LAYOUT.badges[side])
+    badge.label = `game.quest.${side}`
+    badge.eventMode = 'static'
+    badge.visible = false
+    const { width, height } = SECRET_LAYOUT.badges[side].size
+    badge.hitArea = new Rectangle(-width / 2, -height / 2, width, height)
+    badge.on('pointerover', () => onHover(side, true))
+    badge.on('pointerout', () => onHover(side, false))
+    const marker = new Sprite(texture)
+    marker.anchor.set(0.5)
+    marker.label = `game.quest.${side}.icon`
+    marker.eventMode = 'none'
+    badge.addChild(marker)
+    const count = new Text({
+      text: '0/0',
+      style: SECRET_LAYOUT.questProgressTextStyle,
+      anchor: 0.5
+    })
+    applyAnchoredPlacement(count, SECRET_LAYOUT.count)
+    count.label = `game.quest.${side}.count`
+    count.eventMode = 'none'
+    badge.addChild(count)
+    return badge
+  }
+
+  override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.animations.kill()
+    super.destroy(options)
+  }
+}
+
 /** Brief full-screen card-independent acknowledgement of a consumed Secret. */
 export class SecretRevealView extends Container {
   private readonly screen: Sprite
@@ -82,7 +187,11 @@ export class SecretRevealView extends Container {
     this.addChild(this.screen)
   }
 
-  async present(cardId: string): Promise<void> {
+  async present(
+    cardId: string,
+    premium = false,
+    premiumSide: 'local' | 'remote' = 'local'
+  ): Promise<void> {
     this.finish()
     const sequence = ++this.presentationSequence
     const definition = CARD_CATALOG.get(cardId)
@@ -90,6 +199,8 @@ export class SecretRevealView extends Container {
     const artwork = await this.resolver.loadArtwork(cardId)
     if (sequence !== this.presentationSequence || this.destroyed) return
     const card = await CardView.create(definition, this.resolver, {
+      premium,
+      premiumSide,
       animatePremiumArtwork: true,
       artwork: artwork ?? undefined
     })

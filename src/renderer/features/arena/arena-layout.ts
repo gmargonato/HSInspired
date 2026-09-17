@@ -56,10 +56,25 @@ export const ARENA_LAYOUT = {
     { anchor: CENTER }
   ),
   statistics: {
-    x: 805,
-    labelsY: 360,
-    valuesY: 490,
-    columns: [570, 805, 1040] as const
+    key: placement(
+      { x: 815, y: 290 },
+      { width: 505, height: 195 },
+      {
+        anchor: CENTER,
+        scale: 1,
+        note: 'Shared key center; size describes key 0. Each key keeps its authored dimensions.'
+      }
+    ),
+    wins: placement(
+      { x: 815, y: 430 },
+      { width: 0, height: 0 },
+      { anchor: CENTER, note: 'Win count centered inside the gold medallion.' }
+    ),
+    defeats: [
+      placement({ x: 712, y: 597 }, { width: 74, height: 70 }, { anchor: CENTER }),
+      placement({ x: 814, y: 597 }, { width: 74, height: 70 }, { anchor: CENTER }),
+      placement({ x: 917, y: 597 }, { width: 74, height: 70 }, { anchor: CENTER })
+    ]
   },
   manaCurve: {
     centers: [688, 724, 759, 794, 829, 864, 900, 936] as const,

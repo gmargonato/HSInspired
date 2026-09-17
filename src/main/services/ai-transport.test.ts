@@ -36,6 +36,36 @@ function setup(status = 200) {
 }
 
 describe('AI transport safeguards', () => {
+  it.each(['2', 'Tue, 15 Sep 2026 12:00:02 GMT'])(
+    'preserves Retry-After %s and sanitized structured HTTP errors',
+    async (retryAfter) => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-09-15T12:00:00Z'))
+      const { promise, response, deliver } = setup(503)
+      Object.assign(response.headers, { 'retry-after': retryAfter })
+      deliver()
+      response.emit(
+        'data',
+        Buffer.from(
+          JSON.stringify({
+            error: {
+              code: 503,
+              message: 'secret-key unavailable',
+              metadata: { error_type: 'provider_overloaded' }
+            }
+          })
+        )
+      )
+      response.emit('end')
+      await expect(promise).rejects.toMatchObject({
+        details: {
+          retryAfterMs: 2000,
+          providerErrorType: 'provider_overloaded',
+          providerErrorMessage: '[redacted] unavailable'
+        }
+      })
+    }
+  )
   it('enforces a wall-clock deadline even while bytes arrive', async () => {
     vi.useFakeTimers()
     const { promise, request, response, deliver } = setup()

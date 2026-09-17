@@ -141,11 +141,34 @@ export class MatchLogRepository {
       recordingIncomplete: false,
       participants: [],
       decisions: [],
+      ...(metadata.generatedOpponent
+        ? { generatedOpponent: metadata.generatedOpponent }
+        : {}),
       ...(typeof (metadata.aiConfig as JsonObject | undefined)?.modelId === 'string'
         ? { model: (metadata.aiConfig as JsonObject).modelId }
         : {})
     }
-    await writeFile(join(directory, 'match.txt'), 'Match started.\n', { flag: 'wx' })
+    const generated = metadata.generatedOpponent as JsonObject | undefined
+    const construction = Array.isArray(generated?.construction)
+      ? generated.construction
+      : []
+    const constructionText = construction
+      .map((value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return ''
+        const step = value as JsonObject
+        return `[${String(step.layer)}] ${String(step.selected)} — ${String(step.reason)} (candidates: ${String(step.candidates)}; deck: ${String(step.deckSize)}/30)\n`
+      })
+      .join('')
+    await writeFile(
+      join(directory, 'match.txt'),
+      'Match started.\n' +
+        (constructionText
+          ? '\nOpponent deck construction (generator rules and selections)\n' +
+            constructionText +
+            '\n'
+          : ''),
+      { flag: 'wx' }
+    )
     await writeFile(
       join(directory, 'ai-conversation.txt'),
       'AI conversation\nA readable view of the context supplied, questions, choices, and results.\nAI explanations are returned explanations, not private internal reasoning.\nPrevious conversation is retained within the configured limits and is not repeated here.\n\n',

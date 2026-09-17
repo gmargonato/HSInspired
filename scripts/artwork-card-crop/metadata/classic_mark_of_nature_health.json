@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_mark_of_nature_health.jpg",
+  "source_name": "classic_mark_of_nature_health.jpg",
+  "crop_box": [
+    32,
+    28,
+    487,
+    483
+  ],
+  "scale": 1.1,
+  "offset_x": -35.215384615384664,
+  "offset_y": -31.061538461538476,
+  "timestamp": "2026-09-16T14:40:59.686643",
+  "card_id": "classic_mark_of_nature_health",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

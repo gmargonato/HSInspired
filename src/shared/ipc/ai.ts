@@ -56,10 +56,15 @@ export const AI_REQUEST_STAGES = [
   'response-validated',
   'waiting',
   'failed',
-  'cancelled'
+  'cancelled',
+  'attempt-failed',
+  'retry-scheduled',
+  'recovery-complete',
+  'recovery-exhausted'
 ] as const
 export type AiRequestStage = (typeof AI_REQUEST_STAGES)[number]
 export interface AiRequestProgress extends AiDecisionIdentity {
+  readonly recovery?: JsonObject
   readonly stage: AiRequestStage
   readonly elapsedMs: number
   readonly lastStage?: AiRequestStage
@@ -98,6 +103,11 @@ export function parseAiRequestProgress(value: unknown): AiRequestProgress {
   const identity = parseAiIdentity(value)
   const data = value as Record<string, unknown>
   if (
+    data.recovery !== undefined &&
+    (!isRecord(data.recovery) || JSON.stringify(data.recovery).length > 24_000)
+  )
+    throw new Error('Invalid AI recovery diagnostics.')
+  if (
     !AI_REQUEST_STAGES.includes(data.stage as AiRequestStage) ||
     typeof data.elapsedMs !== 'number' ||
     !Number.isFinite(data.elapsedMs) ||
@@ -119,6 +129,9 @@ export function parseAiRequestProgress(value: unknown): AiRequestProgress {
     throw new Error('Invalid provider request ID.')
   return {
     ...identity,
+    ...(data.recovery === undefined
+      ? {}
+      : { recovery: JSON.parse(JSON.stringify(data.recovery)) as JsonObject }),
     stage: data.stage as AiRequestStage,
     elapsedMs: data.elapsedMs,
     ...(data.lastStage === undefined

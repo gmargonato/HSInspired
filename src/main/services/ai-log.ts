@@ -10,6 +10,7 @@ export class AiLog {
     if (
       ![
         'request-started',
+        'decision-timing',
         'request-progress',
         'request-superseded',
         'response-received',
@@ -39,6 +40,7 @@ export class AiLog {
         turn: record.turnNumber ?? 0,
         requestId: record.decisionId ?? '',
         stage: data.stage ?? null,
+        recovery: data.recovery ?? null,
         lastStage: data.lastStage ?? null,
         elapsedMs: data.elapsedMs ?? null,
         receivedBytes: data.receivedBytes ?? null,
@@ -78,6 +80,10 @@ export class AiLog {
       ...Object.fromEntries(
         [
           'allowInspection',
+          'decisionMs',
+          'presentationOverlapMs',
+          'visibleWaitMs',
+          'presentationMs',
           'freshContext',
           'currentDecision',
           'extraExchangesUsed',

@@ -10,6 +10,8 @@ import { isPremiumEnabled, subscribeToPremiumAppearance } from '../premium-appea
 import { PremiumArtworkBreath } from '../effects/premium-artwork-breath'
 
 export interface MinionViewModel {
+  readonly premiumSide?: 'local' | 'remote'
+  readonly premium?: boolean
   readonly label: string
   readonly attack: number
   readonly health: number
@@ -20,15 +22,18 @@ export interface MinionViewModel {
   readonly baseHealth?: number
   readonly legendary: boolean
   readonly taunt: boolean
+  readonly enraged: boolean
   readonly divineShield: boolean
   readonly frozen: boolean
   readonly stealth: boolean
   readonly deathrattle: boolean
   readonly poisonous: boolean
+  readonly aura: boolean
   readonly trigger: boolean
   readonly inspire: boolean
   readonly windfury: boolean
   readonly spellDamage: boolean
+  readonly lifesteal: boolean
   readonly elusive: boolean
   readonly immune: boolean
 }
@@ -36,6 +41,8 @@ export interface MinionViewModel {
 export interface MinionViewTextures {
   readonly windfury: Texture
   readonly spellDamage: Texture
+  readonly lifesteal: Texture
+  readonly aura: Texture
   readonly elusive: Texture
   readonly immune: Texture
   readonly frame: Texture
@@ -44,6 +51,7 @@ export interface MinionViewTextures {
   readonly premiumLegendaryFrame: Texture
   readonly taunt: Texture
   readonly premiumTaunt: Texture
+  readonly enrage: Texture
   readonly divineShield: Texture
   readonly frozen: Texture
   readonly stealth: Texture
@@ -65,6 +73,7 @@ export interface AbilityMarkerSnapshot {
 
 interface StatGroup {
   readonly group: Container
+  readonly badge: Sprite
   readonly value: Text
 }
 
@@ -100,7 +109,7 @@ function createStatGroup(
   valueLabel.position.set(0, 0)
   valueLabel.label = `${label}-value`
   group.addChild(valueLabel)
-  return { group, value: valueLabel }
+  return { group, badge, value: valueLabel }
 }
 
 /** Feature-agnostic board minion presentation. The caller owns its position. */
@@ -115,12 +124,18 @@ export class MinionView extends Container {
     { shape: 'ellipse' }
   )
   private readonly unsubscribePremium: () => void
+  private readonly premiumSide: 'local' | 'remote'
+  private premium: boolean
+  private refreshPremium: () => void = () => undefined
   private readonly artworkBreath: PremiumArtworkBreath
   private readonly legendaryFrame: Sprite
   private readonly taunt: Sprite
+  private readonly enrage: Sprite
   private readonly divineShield: Sprite
   private readonly windfury: Sprite
   private readonly spellDamage: Sprite
+  private readonly lifesteal: Sprite
+  private readonly aura: Sprite
   private readonly elusive: Sprite
   private readonly immune: Sprite
   private readonly frozen: Sprite
@@ -159,6 +174,8 @@ export class MinionView extends Container {
     artwork: Texture | undefined
   ) {
     super()
+    this.premiumSide = model.premiumSide ?? 'local'
+    this.premium = model.premium ?? false
     this.label = model.label
     this.baseAttack = model.baseAttack ?? model.attack
     this.baseHealth = model.baseHealth ?? model.maxHealth
@@ -187,7 +204,9 @@ export class MinionView extends Container {
     this.artworkImage.label = 'minion.artwork-image'
     artworkLayer.addChild(this.artworkImage)
     this.artworkBreath = new PremiumArtworkBreath(this.artworkImage)
-    this.artworkBreath.setEnabled(isPremiumEnabled() && artwork !== undefined)
+    this.artworkBreath.setEnabled(
+      (this.premium || isPremiumEnabled(this.premiumSide)) && artwork !== undefined
+    )
     this.artworkPlaceholder = new Graphics()
     this.artworkPlaceholder.ellipse(center.x, center.y, radiusX, radiusY).fill(0x535b65)
     this.artworkPlaceholder.label = 'minion.artwork-placeholder'
@@ -201,29 +220,40 @@ export class MinionView extends Container {
     artworkLayer.addChild(mask)
     this.addChild(artworkLayer)
 
-    this.taunt = new Sprite(isPremiumEnabled() ? textures.premiumTaunt : textures.taunt)
+    this.taunt = new Sprite(
+      this.premium || isPremiumEnabled(this.premiumSide)
+        ? textures.premiumTaunt
+        : textures.taunt
+    )
     applyAnchoredPlacement(this.taunt, MINION_LAYOUT.taunt)
     this.taunt.visible = model.taunt
     this.taunt.label = 'minion.taunt'
     this.addChild(this.taunt)
 
     const frame = new Sprite(
-      isPremiumEnabled() ? textures.premiumFrame : textures.frame
+      this.premium || isPremiumEnabled(this.premiumSide)
+        ? textures.premiumFrame
+        : textures.frame
     )
-    this.unsubscribePremium = subscribeToPremiumAppearance((enabled) => {
+    this.refreshPremium = () => {
+      const enabled = this.premium || isPremiumEnabled(this.premiumSide)
       this.artworkBreath.setEnabled(enabled && this.artworkImage.visible)
       frame.texture = enabled ? textures.premiumFrame : textures.frame
       this.taunt.texture = enabled ? textures.premiumTaunt : textures.taunt
       this.legendaryFrame.texture = enabled
         ? textures.premiumLegendaryFrame
         : textures.legendaryFrame
-    })
+      if (this.shadow.silhouette) this.shadow.silhouette.revision++
+    }
+    this.unsubscribePremium = subscribeToPremiumAppearance(this.refreshPremium)
     applyAnchoredPlacement(frame, MINION_LAYOUT.frame)
     frame.label = 'minion.frame'
     this.addChild(frame)
 
     this.legendaryFrame = new Sprite(
-      isPremiumEnabled() ? textures.premiumLegendaryFrame : textures.legendaryFrame
+      this.premium || isPremiumEnabled(this.premiumSide)
+        ? textures.premiumLegendaryFrame
+        : textures.legendaryFrame
     )
     applyAnchoredPlacement(this.legendaryFrame, MINION_LAYOUT.legendaryFrame)
     this.legendaryFrame.visible = model.legendary
@@ -234,13 +264,14 @@ export class MinionView extends Container {
     applyAnchoredPlacement(this.frozen, MINION_LAYOUT.frozen)
     this.frozen.visible = model.frozen
     this.frozen.label = 'minion.frozen'
-    this.addChild(this.frozen)
 
     this.stealth = new Sprite(textures.stealth)
     applyAnchoredPlacement(this.stealth, MINION_LAYOUT.stealth)
     this.stealth.visible = model.stealth
     this.stealth.label = 'minion.stealth'
     this.addChild(this.stealth)
+    this.addChild(this.frozen)
+    this.updateTauntOpacity()
 
     this.elusive = new Sprite(textures.elusive)
     applyAnchoredPlacement(this.elusive, MINION_LAYOUT.elusive)
@@ -253,6 +284,12 @@ export class MinionView extends Container {
     this.immune.visible = model.immune
     this.immune.label = 'minion.immune'
     this.addChild(this.immune)
+
+    this.enrage = new Sprite(textures.enrage)
+    applyAnchoredPlacement(this.enrage, MINION_LAYOUT.enrage)
+    this.enrage.visible = model.enraged
+    this.enrage.label = 'minion.enrage'
+    this.addChild(this.enrage)
 
     this.divineShield = new Sprite(textures.divineShield)
     applyAnchoredPlacement(this.divineShield, MINION_LAYOUT.divineShield)
@@ -270,8 +307,9 @@ export class MinionView extends Container {
     this.deathrattle.label = 'minion.deathrattle'
     this.addChild(this.deathrattle)
 
+    let poisonous: Sprite | undefined
     if (model.poisonous) {
-      const poisonous = new Sprite(textures.poisonous)
+      poisonous = new Sprite(textures.poisonous)
       applyAnchoredPlacement(poisonous, MINION_LAYOUT.poisonous)
       poisonous.label = 'minion.poisonous'
       this.addChild(poisonous)
@@ -301,6 +339,12 @@ export class MinionView extends Container {
     this.spellDamage.label = 'minion.spell-damage'
     this.addChild(this.spellDamage)
 
+    this.lifesteal = new Sprite(textures.lifesteal)
+    applyAnchoredPlacement(this.lifesteal, MINION_LAYOUT.lifesteal)
+    this.lifesteal.visible = model.lifesteal
+    this.lifesteal.label = 'minion.lifesteal'
+    this.addChild(this.lifesteal)
+
     const attack = createStatGroup(
       'minion.stat-attack',
       textures.attack,
@@ -318,8 +362,61 @@ export class MinionView extends Container {
     )
     this.healthLabel = health.value
     this.addChild(health.group)
+
+    // Keep Aura as the final persistent marker layer so it remains above every
+    // other board mark, including the stat badge groups.
+    this.aura = new Sprite(textures.aura)
+    applyAnchoredPlacement(this.aura, MINION_LAYOUT.aura)
+    this.aura.visible = model.aura
+    this.aura.label = 'minion.aura'
+    this.addChild(this.aura)
+
     this.setAttackColor(model.attack)
     this.setHealthColor(model.health)
+
+    // Copy only physical surfaces into an offstage silhouette. Artwork motion,
+    // numbers, magical overlays and animated UI never invalidate this cache.
+    const surfaces = [
+      frame,
+      this.taunt,
+      this.legendaryFrame,
+      this.frozen,
+      this.deathrattle,
+      this.trigger,
+      this.inspire,
+      poisonous,
+      attack.badge,
+      health.badge
+    ]
+    this.shadow.silhouette = {
+      revision: 0,
+      create: () => {
+        const body = new Container()
+        body.label = 'minion.shadow-silhouette'
+        const portrait = new Graphics()
+        portrait.label = 'minion.shadow-portrait'
+        portrait.ellipse(center.x, center.y, radiusX, radiusY).fill(0x000000)
+        applyPlacement(portrait, MINION_LAYOUT.artwork)
+        body.addChild(portrait)
+        for (const source of surfaces) {
+          if (!source?.visible) continue
+          const copy = new Sprite(source.texture)
+          copy.label = `${source.label}.shadow-surface`
+          copy.anchor.copyFrom(source.anchor)
+          source.updateLocalTransform()
+          const transform = source.localTransform.clone()
+          // Stat badges are nested one level beneath their placement container.
+          if (source.parent && source.parent !== this) {
+            source.parent.updateLocalTransform()
+            transform.prepend(source.parent.localTransform)
+          }
+          copy.setFromMatrix(transform)
+          copy.tint = 0x000000
+          body.addChild(copy)
+        }
+        return body
+      }
+    }
 
     // Green attack-ready outline: solid oval proxy so the hollow frame does not create an inner glow.
     // The filter draws only the exterior glow; the white interior is discarded by the shader.
@@ -399,8 +496,14 @@ export class MinionView extends Container {
     )
     this.artworkImage.scale.set(coverScale)
     this.artworkImage.visible = true
-    this.artworkBreath.setEnabled(isPremiumEnabled())
+    this.artworkBreath.setEnabled(this.premium || isPremiumEnabled(this.premiumSide))
     this.artworkPlaceholder.visible = false
+  }
+
+  setPremium(premium: boolean): void {
+    if (premium === this.premium) return
+    this.premium = premium
+    this.refreshPremium()
   }
 
   setAttack(attack: number): void {
@@ -428,16 +531,27 @@ export class MinionView extends Container {
   }
 
   setAbilityEffects(
-    markers: Pick<MinionViewModel, 'windfury' | 'spellDamage' | 'elusive' | 'immune'>
+    markers: Pick<
+      MinionViewModel,
+      'windfury' | 'spellDamage' | 'lifesteal' | 'aura' | 'elusive' | 'immune'
+    >
   ): void {
     this.windfury.visible = markers.windfury
     this.spellDamage.visible = markers.spellDamage
+    this.lifesteal.visible = markers.lifesteal
+    this.aura.visible = markers.aura
     this.elusive.visible = markers.elusive
     this.immune.visible = markers.immune
   }
 
   setTaunt(visible: boolean): void {
+    this.invalidateShadowVisibility(this.taunt, visible)
     this.taunt.visible = visible
+    this.updateTauntOpacity()
+  }
+
+  setEnraged(visible: boolean): void {
+    this.enrage.visible = visible
   }
 
   setDivineShield(visible: boolean): void {
@@ -445,23 +559,37 @@ export class MinionView extends Container {
   }
 
   setFrozen(visible: boolean): void {
+    this.invalidateShadowVisibility(this.frozen, visible)
     this.frozen.visible = visible
   }
 
   setStealth(visible: boolean): void {
     this.stealth.visible = visible
+    this.updateTauntOpacity()
+  }
+
+  private updateTauntOpacity(): void {
+    this.taunt.alpha = this.taunt.visible && this.stealth.visible ? 0.5 : 1
   }
 
   setDeathrattle(visible: boolean): void {
+    this.invalidateShadowVisibility(this.deathrattle, visible)
     this.deathrattle.visible = visible
   }
 
   setTrigger(visible: boolean): void {
+    this.invalidateShadowVisibility(this.trigger, visible)
     this.trigger.visible = visible
   }
 
   setInspire(visible: boolean): void {
+    this.invalidateShadowVisibility(this.inspire, visible)
     this.inspire.visible = visible
+  }
+
+  private invalidateShadowVisibility(surface: Sprite, visible: boolean): void {
+    if (surface.visible !== visible && this.shadow.silhouette)
+      this.shadow.silhouette.revision++
   }
 
   private abilityMarker(kind: MinionAbilityMarkerKind): Sprite {

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_nourish_mana.jpg",
+  "source_name": "classic_nourish_mana.jpg",
+  "crop_box": [
+    26,
+    57,
+    481,
+    512
+  ],
+  "scale": 1.1,
+  "offset_x": -28.6,
+  "offset_y": -63.200000000000045,
+  "timestamp": "2026-09-16T14:41:26.596197",
+  "card_id": "classic_nourish_mana",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

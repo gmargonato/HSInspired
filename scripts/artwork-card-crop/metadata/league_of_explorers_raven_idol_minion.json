@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_raven_idol_minion.jpg",
+  "source_name": "league_of_explorers_raven_idol_minion.jpg",
+  "crop_box": [
+    30,
+    25,
+    485,
+    480
+  ],
+  "scale": 1.1,
+  "offset_x": -33.523076923076935,
+  "offset_y": -27.81538461538466,
+  "timestamp": "2026-09-16T15:08:20.697915",
+  "card_id": "league_of_explorers_raven_idol_minion",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

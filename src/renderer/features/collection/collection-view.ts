@@ -261,6 +261,7 @@ export class CollectionView extends Actor {
   }
 
   onPause(): void {
+    this.pageView.setPremiumAppearancePaused(true)
     this.setSearchInputVisible(false)
     for (const control of this.manaFilterControls) {
       control.eventMode = 'none'
@@ -272,6 +273,7 @@ export class CollectionView extends Actor {
   }
 
   onResume(): void {
+    this.pageView.setPremiumAppearancePaused(false)
     this.updateCollectionFilterModes()
   }
 

@@ -43,6 +43,303 @@ import {
 } from '../../rendering/minions/minion-view'
 import type { MinionPreviewPresentation } from './game-card-targeting-types'
 import type { CardSelectionOverlay } from './card-selection-overlay'
+import { CardDepartureAnimation } from './card-departure-animation'
+import { CARD_DEPARTURE_LAYOUT } from './card-departure-layout'
+import { CardPlayAnimation } from './card-play-animation'
+import type { MinionCardMovement } from '../../../game/match'
+
+describe('engine-driven minion card departures', () => {
+  function departureSlot(instanceId: string): GameCardSlot {
+    const slot = mulliganSlot(instanceId)
+    const card = Object.assign(new Container(), {
+      plan: { width: 620, cardId: 'basic_bloodfen_raptor' },
+      renderedHeight: 900,
+      setManaCost: vi.fn(),
+      setManaCostColor: vi.fn()
+    })
+    card.position.set(-310, -900)
+    const artwork = new Container()
+    artwork.label = 'basic_bloodfen_raptor:card.artwork'
+    const image = new Sprite(Texture.WHITE)
+    image.scale.set(300)
+    artwork.addChild(image)
+    artwork.position.set(150, 100)
+    card.addChild(artwork)
+    slot.addChild(card)
+    return Object.assign(slot, {
+      card,
+      suppressPlayableOutline: vi.fn()
+    }) as unknown as GameCardSlot
+  }
+
+  function setup() {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      hand: GameHandView
+      animationScope: AnimationScope
+      boardPositions: BoardPositionController
+      cardDepartureAnimation: CardDepartureAnimation
+      cardPlayAnimation: CardPlayAnimation
+      summonLayer: Container
+      remoteBacks: Sprite[]
+      remoteBackCount: number
+      localMinionViews: readonly MinionView[]
+      activeDepartureSlots: Set<GameCardSlot>
+      createSlot(card: OpeningCard): Promise<GameCardSlot>
+      presentEffectResolved(event: OpeningMatchEvent): Promise<void>
+      presentMinionCardMovement(movement: MinionCardMovement): Promise<void>
+      reconcileEffectMovement(state: OpeningMatchState): Promise<void>
+      presentDraw(participantId: PlayerId, card: OpeningCard): Promise<void>
+      animateSlotToDeck(
+        slot: GameCardSlot,
+        deck: unknown,
+        sequence: number
+      ): Promise<void>
+    }
+    const source = Object.assign(new Container(), {
+      instanceId: 'departure-source',
+      cardId: asCardId('basic_bloodfen_raptor'),
+      ownerId: internal.session.localParticipantId
+    }) as unknown as MinionView
+    Object.assign(source, {
+      shadow: attachShadow(source, { x: -90, y: -120, width: 180, height: 240 })
+    })
+    const art = new Sprite(Texture.WHITE)
+    art.label = 'minion.artwork-image'
+    art.anchor.set(0.5)
+    art.scale.set(180)
+    source.addChild(art)
+    internal.boardPositions.insert('local', 0, source)
+    source.position.set(850, 670)
+    source.scale.set(0.8)
+    vi.spyOn(internal, 'createSlot').mockImplementation(async (card) =>
+      departureSlot(card.instanceId)
+    )
+    vi.spyOn(internal.hand, 'configureSlot').mockImplementation(() => undefined)
+    const animations: gsap.core.Animation[] = []
+    const original = internal.animationScope.timeline.bind(internal.animationScope)
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const timeline = original(vars)
+      animations.push(timeline)
+      return timeline
+    })
+    const finish = async (job: Promise<unknown>) => {
+      let done = false
+      void job.then(() => {
+        done = true
+      })
+      for (let pass = 0; pass < 100 && !done; pass++) {
+        for (const animation of animations)
+          if (animation.progress() < 1) animation.progress(1)
+        await Promise.resolve()
+      }
+      expect(done).toBe(true)
+      await job
+    }
+    const movement = (
+      destination: MinionCardMovement['destination'],
+      copy = false,
+      count = 1
+    ): MinionCardMovement => ({
+      sourceInstanceId: source.instanceId!,
+      participantId: internal.session.localParticipantId,
+      destination,
+      copy,
+      cards: Array.from({ length: count }, (_, index) => ({
+        instanceId: copy ? `departing-copy-${index}` : source.instanceId!,
+        cardId: asCardId('basic_bloodfen_raptor'),
+        zone: destination
+      }))
+    })
+    return { value, internal, source, animations, finish, movement }
+  }
+
+  it('lifts, swaps to an artwork-aligned card, and inserts at the right without a second draw', async () => {
+    const { internal, source, animations, finish, movement } = setup()
+    const existing = departureSlot('existing')
+    internal.hand.layer.addChild(existing)
+    internal.hand.append({
+      card: { instanceId: 'existing', cardId: asCardId('basic_bloodfen_raptor') },
+      slot: existing,
+      restTransform: undefined,
+      displaced: false
+    })
+    const cue = movement('hand')
+    const job = internal.presentEffectResolved({
+      type: 'effect-resolved',
+      revision: 1,
+      sourceInstanceId: 'arbitrary-source',
+      sourceCardId: null,
+      controllerId: cue.participantId,
+      action: 'future-effect',
+      actionPath: 'fixture',
+      cardMovement: cue
+    })
+    for (let pass = 0; pass < 5; pass++) await Promise.resolve()
+    const slot = [...internal.activeDepartureSlots][0]
+    expect(slot.alpha).toBe(0)
+    const start = { x: source.x, y: source.y }
+    animations[0].progress(0.5)
+    expect(source.destroyed).toBe(true)
+    const body = internal.summonLayer.getChildByLabel(
+      'game.departing-minion.departure-source'
+    )!
+    expect(body.y).not.toBe(start.y)
+    expect(slot.alpha).toBe(0)
+    animations[0].progress(1)
+    await Promise.resolve()
+    expect(slot.alpha).toBe(1)
+    expect(body.visible).toBe(false)
+    const cardImage = slot.card.getChildByLabel('basic_bloodfen_raptor:card.artwork')!
+      .children[0]
+    const cardCenter = cardImage.toGlobal({ x: 0.5, y: 0.5 })
+    const minionCenter = body.toGlobal({ x: 0, y: 0 })
+    expect(minionCenter.x).toBeCloseTo(cardCenter.x)
+    expect(minionCenter.y).toBeCloseTo(cardCenter.y)
+    await finish(job)
+    expect(internal.hand.entries.map((entry) => entry.card.instanceId)).toEqual([
+      'existing',
+      'departure-source'
+    ])
+    expect(slot.parent).toBe(internal.hand.layer)
+    expect(internal.activeDepartureSlots.size).toBe(0)
+    expect(internal.summonLayer.children).toHaveLength(0)
+    const draw = vi.spyOn(internal, 'presentDraw').mockResolvedValue()
+    const state = internal.session.getState()
+    await internal.reconcileEffectMovement({
+      ...state,
+      players: state.players.map((player) => ({
+        ...player,
+        board: [],
+        hand:
+          player.participantId === cue.participantId
+            ? internal.hand.entries.map((entry) => entry.card)
+            : []
+      })) as unknown as OpeningMatchState['players']
+    })
+    expect(draw).not.toHaveBeenCalled()
+  })
+
+  it('destroys a full-hand return above the board without hand or deck travel', async () => {
+    const { internal, source, finish, movement } = setup()
+    const destroy = vi.spyOn(internal.cardDepartureAnimation, 'destroyCard')
+    const deck = vi.spyOn(internal, 'animateSlotToDeck')
+    const hand = vi.spyOn(internal.hand, 'applyLayout')
+    await finish(internal.presentMinionCardMovement(movement('discarded')))
+    expect(destroy).toHaveBeenCalledTimes(1)
+    expect(deck).not.toHaveBeenCalled()
+    expect(hand).not.toHaveBeenCalled()
+    expect(source.destroyed).toBe(true)
+    expect(internal.hand.entries).toHaveLength(0)
+    expect(internal.summonLayer.children).toHaveLength(0)
+  })
+
+  it.each([false, true])(
+    'uses the destination deck and keeps only copied sources (copy=%s)',
+    async (copy) => {
+      const { internal, source, finish, movement } = setup()
+      const pose = { x: source.x, y: source.y, scale: source.scale.x }
+      const materialize = vi.spyOn(internal.cardDepartureAnimation, 'materialize')
+      const deck = vi.spyOn(internal, 'animateSlotToDeck')
+      const cue = {
+        ...movement('deck', copy, copy ? 3 : 1),
+        participantId: internal.session.remoteParticipantId
+      }
+      await finish(internal.presentMinionCardMovement(cue))
+      expect(deck).toHaveBeenCalledTimes(cue.cards.length)
+      for (const [index, call] of deck.mock.calls.entries()) {
+        expect(call[1]).toBe(GAME_BOARD_LAYOUT.decks.remote)
+        expect(materialize.mock.calls[index][3]).toBe(
+          copy ? index * CARD_DEPARTURE_LAYOUT.copyStagger : 0
+        )
+        expect(call[0].destroyed).toBe(true)
+      }
+      expect(source.destroyed).toBe(!copy)
+      if (copy)
+        expect({ x: source.x, y: source.y, scale: source.scale.x }).toEqual(pose)
+      expect(internal.activeDepartureSlots.size).toBe(0)
+    }
+  )
+
+  it('turns a public returning minion into a back in the opponent hand', async () => {
+    const { internal, finish, movement } = setup()
+    const count = internal.remoteBackCount
+    await finish(
+      internal.presentMinionCardMovement({
+        ...movement('hand'),
+        participantId: internal.session.remoteParticipantId
+      })
+    )
+    expect(internal.remoteBackCount).toBe(count + 1)
+    expect(internal.remoteBacks[count].alpha).toBe(1)
+    expect(internal.hand.entries).toHaveLength(0)
+    expect(internal.activeDepartureSlots.size).toBe(0)
+  })
+
+  it('cleans up an interrupted lift and releases the awaiting presentation', async () => {
+    const { value, internal, animations, movement } = setup()
+    const job = internal.presentMinionCardMovement(movement('deck', true, 3))
+    for (let pass = 0; pass < 10; pass++) await Promise.resolve()
+    for (const animation of animations) animation.progress(0.4)
+    const slots = [...internal.activeDepartureSlots]
+    expect(slots).toHaveLength(3)
+    value.dispose()
+    await job
+    expect(slots.every((slot) => slot.destroyed)).toBe(true)
+    expect(internal.activeDepartureSlots.size).toBe(0)
+  })
+
+  it('destroys cards whose artwork finishes loading after disposal', async () => {
+    const { value, internal, movement } = setup()
+    let complete!: (slot: GameCardSlot) => void
+    vi.mocked(internal.createSlot).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve
+        })
+    )
+    const job = internal.presentMinionCardMovement(movement('hand'))
+    value.dispose()
+    const slot = departureSlot('late-card')
+    complete(slot)
+    await job
+    expect(slot.destroyed).toBe(true)
+  })
+
+  it('retains the replaced hand slot for generic board/hand swaps', async () => {
+    const { internal, finish, movement } = setup()
+    const replaced = departureSlot('replaced')
+    const last = departureSlot('last')
+    for (const slot of [replaced, last]) {
+      internal.hand.layer.addChild(slot)
+      internal.hand.append({
+        card: {
+          instanceId: slot.instanceId,
+          cardId: asCardId('basic_bloodfen_raptor')
+        },
+        slot,
+        restTransform: undefined,
+        displaced: false
+      })
+    }
+    await finish(
+      internal.presentMinionCardMovement({
+        ...movement('hand'),
+        replacedHandCard: {
+          participantId: internal.session.localParticipantId,
+          instanceId: 'replaced'
+        },
+        handIndex: 0
+      })
+    )
+    expect(replaced.destroyed).toBe(true)
+    expect(internal.hand.entries.map((entry) => entry.card.instanceId)).toEqual([
+      'departure-source',
+      'last'
+    ])
+  })
+})
 
 function mulliganSlot(instanceId: string): GameCardSlot {
   const slot = new Container()
@@ -91,9 +388,380 @@ function board() {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   for (const value of boards.splice(0)) if (!value.destroyed) value.dispose()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('skipped match opening', () => {
+  it('settles the board and both opening hands without an intro animation', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      openingLayer: Container
+      remoteHandLayer: Container
+      remoteBacks: Sprite[]
+      heroViews: Map<PlayerId, HeroView>
+      hand: GameHandView
+      prepareStartedMatch(): Promise<void>
+      wait(duration: number): Promise<void>
+      syncTurnHud(state: OpeningMatchState): void
+      handleTurnStarted(participantId: PlayerId): void
+    }
+    const scenario = createMatchScenario()
+    internal.session = new GameBoardSession({
+      setup: { ...scenario.setup, skipMulligan: true },
+      decks: scenario.decks
+    })
+    const state = internal.session.getState()
+    expect(state.phase).toBe('turns')
+
+    for (const player of state.players) {
+      const hero = Object.assign(new Container(), {
+        setBaseScale: vi.fn(),
+        setHealthVisible: vi.fn()
+      }) as unknown as HeroView
+      internal.heroViews.set(player.participantId, hero)
+    }
+    const remote = state.players.find(
+      (player) => player.participantId === internal.session.remoteParticipantId
+    )!
+    internal.remoteHandLayer.visible = false
+    for (let index = 0; index < remote.hand.length; index++) {
+      const back = new Sprite(Texture.WHITE)
+      back.alpha = 0
+      internal.remoteBacks.push(back)
+      internal.remoteHandLayer.addChild(back)
+    }
+    const slot = mulliganSlot('opening-local')
+    slot.alpha = 0
+    internal.hand.append({
+      card: {
+        instanceId: slot.instanceId,
+        cardId: asCardId('basic_acidic_swamp_ooze')
+      },
+      slot,
+      restTransform: undefined,
+      displaced: false
+    })
+    vi.spyOn(internal.hand, 'configureSlot').mockImplementation(() => undefined)
+
+    await internal.prepareStartedMatch()
+    expect(internal.openingLayer.visible).toBe(false)
+    expect(internal.remoteHandLayer.visible).toBe(true)
+    expect(internal.remoteBacks).toHaveLength(remote.hand.length)
+    expect(internal.remoteBacks.every((back) => back.alpha === 1)).toBe(true)
+    expect(slot.parent).toBe(internal.hand.layer)
+    expect(slot.alpha).toBe(1)
+    expect(internal.hand.entries[0].restTransform).toBeDefined()
+    expect(internal.hand.active).toBe(true)
+    for (const [participantId, hero] of internal.heroViews) {
+      const placement =
+        participantId === internal.session.localParticipantId
+          ? GAME_BOARD_LAYOUT.heroes.local
+          : GAME_BOARD_LAYOUT.heroes.remote
+      expect(hero.position).toMatchObject(placement.position)
+      expect(hero.scale.x).toBe(placement.scale?.x ?? 1)
+      expect(hero.setBaseScale).toHaveBeenCalledWith(placement.scale?.x ?? 1)
+      expect(hero.setHealthVisible).toHaveBeenCalledWith(true)
+    }
+
+    const wait = vi.spyOn(internal, 'wait')
+    const syncTurnHud = vi
+      .spyOn(internal, 'syncTurnHud')
+      .mockImplementation(() => undefined)
+    const handleTurnStarted = vi
+      .spyOn(internal, 'handleTurnStarted')
+      .mockImplementation(() => undefined)
+    await value.playOpeningReveal()
+    expect(wait).not.toHaveBeenCalled()
+    expect(syncTurnHud).toHaveBeenCalledWith(state)
+    expect(handleTurnStarted).toHaveBeenCalledWith(state.activePlayerId)
+  })
+})
+
+describe('character indicator tracking', () => {
+  function setup() {
+    const value = board()
+    const internal = value as unknown as {
+      combat: GameCombatPresentation
+      boardPositions: BoardPositionController
+      heroViews: Map<PlayerId, HeroView>
+      session: GameBoardSession
+      createHeroes(state: OpeningMatchState): void
+    }
+    internal.createHeroes(internal.session.getState())
+    const render = (): void => {
+      internal.combat.indicatorLayer.onRender?.(undefined as never)
+    }
+    const minion = (id: string): MinionView =>
+      Object.assign(new Container(), {
+        instanceId: id,
+        setBaseScale: vi.fn(),
+        isSelected: () => false
+      }) as unknown as MinionView
+    return { value, ...internal, render, minion }
+  }
+
+  it.each(['local', 'remote'] as const)(
+    'follows simultaneous damage and healing throughout a %s summon row shift',
+    async (side) => {
+      const { combat, boardPositions, render, minion } = setup()
+      const first = minion('first')
+      const second = minion('second')
+      boardPositions.insert(side, 0, first)
+      boardPositions.insert(side, 1, second)
+      const initial = boardPositions.layout(side)
+      for (const view of [first, second])
+        for (const tween of gsap.getTweensOf(view)) tween.progress(1)
+      await initial
+      const heal = combat.showHealIndicator(first, 2)!
+      const damage = combat.showDamageIndicator(second, 3)!
+      const startingX = heal.x
+      boardPositions.reserve(side, 'summon', 2)
+      const shifting = boardPositions.layout(side)
+      const shifts = [first, second].flatMap((view) => gsap.getTweensOf(view))
+      for (const progress of [0.25, 0.5, 1]) {
+        for (const tween of shifts) tween.progress(progress)
+        render()
+        expect(heal.x).toBeCloseTo(first.x)
+        expect(heal.y).toBeCloseTo(first.y - 15)
+        expect(damage.x).toBeCloseTo(second.x)
+        expect(damage.y).toBeCloseTo(second.y - 15)
+      }
+      await shifting
+      expect(heal.x).not.toBe(startingX)
+      const summoned = minion('summon')
+      const landing = boardPositions.entrancePosition(side, 'summon')
+      summoned.position.set(landing.x, landing.y)
+      boardPositions.insert(side, 2, summoned)
+      boardPositions.finishEntrance(side, 'summon')
+      render()
+      expect(heal.x).toBeCloseTo(first.x)
+      expect(damage.x).toBeCloseTo(second.x)
+    }
+  )
+
+  it('follows heroes through transformed combat parents and reparenting', () => {
+    const { combat, heroViews, render } = setup()
+    const [attacker, defender] = [...heroViews.values()]
+    const originalParent = attacker.parent!
+    const damage = combat.showDamageIndicator(attacker, 2)!
+    const heal = combat.showHealIndicator(defender, 2)!
+    combat.layer.position.set(100, -40)
+    combat.layer.scale.set(0.8)
+    combat.layer.rotation = 0.1
+    combat.indicatorLayer.position.set(-50, 25)
+    combat.indicatorLayer.scale.set(1.2)
+    combat.layer.reparentChild(attacker)
+    for (const returning of [false, true]) {
+      if (returning) originalParent.reparentChild(attacker)
+      attacker.x += 80
+      defender.y += 30
+      render()
+      for (const [view, indicator] of [
+        [attacker, damage],
+        [defender, heal]
+      ] as const) {
+        const expected = combat.indicatorLayer.toLocal(view.getGlobalPosition())
+        expect(indicator.x).toBeCloseTo(expected.x)
+        expect(indicator.y).toBeCloseTo(expected.y - 5)
+      }
+    }
+  })
+
+  it.each(['detach', 'destroy', 'ancestor-detach'] as const)(
+    'finishes at the last position after source %s without following replacements',
+    (removal) => {
+      const { combat, minion, render } = setup()
+      const parent = new Container()
+      combat.indicatorLayer.parent!.addChild(parent)
+      const source = minion('source')
+      parent.addChild(source)
+      source.position.set(500, 600)
+      const indicator = combat.showHealIndicator(source, 2)!
+      const timeline = gsap.getTweensOf(indicator)[0]!.parent!
+      timeline.progress(0.3)
+      source.x += 50
+      render()
+      const last = indicator.position.clone()
+      if (removal === 'destroy') source.destroy()
+      else if (removal === 'detach') source.removeFromParent()
+      else parent.removeFromParent()
+      render()
+      expect(combat.indicatorLayer.onRender).toBeTypeOf('function')
+      const replacement = minion('source')
+      combat.indicatorLayer.parent!.addChild(replacement)
+      replacement.position.set(1000, 200)
+      if (!source.destroyed) source.position.set(900, 100)
+      render()
+      expect(indicator.position).toMatchObject({ x: last.x, y: last.y })
+      expect(indicator.destroyed).toBe(false)
+      timeline.progress(1)
+      expect(indicator.destroyed).toBe(true)
+      if (!source.destroyed) source.destroy()
+      parent.destroy({ children: true })
+    }
+  )
+
+  it.each(['complete', 'interrupt', 'destroy', 'dispose'] as const)(
+    'releases tracking and animations on %s, preserving pause/resume',
+    (ending) => {
+      const { value, combat, heroViews, render } = setup()
+      const source = [...heroViews.values()][0]!
+      const indicator = combat.showDamageIndicator(source, 2)!
+      const scale = indicator.scale
+      const timeline = gsap.getTweensOf(indicator)[0]!.parent!
+      timeline.progress(0.3)
+      value.pauseAnimations()
+      expect(timeline.paused()).toBe(true)
+      render()
+      expect(indicator.destroyed).toBe(false)
+      value.resumeAnimations()
+      expect(timeline.paused()).toBe(false)
+      if (ending === 'complete') timeline.progress(1)
+      else if (ending === 'interrupt') timeline.kill()
+      else if (ending === 'destroy') indicator.destroy({ children: true })
+      else value.dispose()
+      expect(indicator.destroyed).toBe(true)
+      if (ending === 'dispose') expect(combat.indicatorLayer.onRender).toBeNull()
+      else expect(combat.indicatorLayer.onRender).toBeTypeOf('function')
+      expect(gsap.getTweensOf([indicator, scale])).toHaveLength(0)
+      if (ending !== 'dispose') {
+        const pause = vi.spyOn(timeline, 'pause')
+        value.pauseAnimations()
+        expect(pause).not.toHaveBeenCalled()
+      }
+    }
+  )
+
+  it('does not skip another render callback when the last source disappears', () => {
+    const { combat, heroViews } = setup()
+    const root = combat.indicatorLayer.parent!
+    root.enableRenderGroup()
+    const source = [...heroViews.values()][0]!
+    combat.showHealIndicator(source, 2)
+    const other = new Container()
+    root.addChild(other)
+    const rendered = vi.fn()
+    other.onRender = rendered
+    source.removeFromParent()
+    root.renderGroup!.runOnRender(undefined as never)
+    expect(rendered).toHaveBeenCalledOnce()
+  })
+})
+
+describe('AI decision overlap', () => {
+  it.each(['fast', 'slow', 'stale', 'exit', 'choice', 'failure', 'baseline'])(
+    'preserves execution barriers for a %s response',
+    async (mode) => {
+      vi.stubEnv('VITE_AI_OVERLAP', mode === 'baseline' ? '0' : '1')
+      let release!: () => void
+      const animation = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let reply!: (value: typeof decision | null) => void
+      const response = new Promise<typeof decision | null>((resolve) => {
+        reply = resolve
+      })
+      const decision = { command: { type: 'end-turn' }, expectedRevision: 0 }
+      let state = {
+        phase: 'turns',
+        activePlayerId: 'ai',
+        revision: 0,
+        pendingDiscover: undefined as object | undefined
+      }
+      const order: string[] = []
+      const controller = {
+        chooseTurnAction: vi
+          .fn()
+          .mockImplementationOnce(async () => decision)
+          .mockImplementation(() => {
+            order.push('request')
+            expect(state.revision).toBe(1)
+            expect(order).toContain('record')
+            return response
+          }),
+        recordExecution: vi.fn(() => {
+          order.push('record')
+        }),
+        recordTiming: vi.fn(),
+        isCurrent: vi.fn(() => {
+          if (mode === 'stale' && state.revision === 1) {
+            harness.turnLayer.visible = false
+            return false
+          }
+          return true
+        }),
+        isPaused: false,
+        hasLegalActions: () => false,
+        pause: vi.fn(() => {
+          controller.isPaused = true
+        }),
+        waitForResume: async () => false
+      }
+      const harness = {
+        destroyed: false,
+        aiTurnRunning: false,
+        aiController: controller,
+        remoteParticipantId: 'ai',
+        turnLayer: { visible: true },
+        match: { getState: () => state },
+        wait: async () => undefined,
+        waitForResolutionIdle: async () => undefined,
+        findPlayer: () => ({ hand: [] }),
+        dispatchCommand: vi.fn(() => {
+          state = {
+            ...state,
+            revision: state.revision + 1,
+            phase: state.revision ? 'ended' : 'turns',
+            pendingDiscover: mode === 'choice' ? { participantId: 'ai' } : undefined
+          }
+          return { accepted: true, state, events: [] }
+        }),
+        syncTurnHud: () => undefined,
+        syncTurnControls: () => undefined,
+        syncSecrets: () => undefined,
+        presentResolutionEvents: () => undefined,
+        enqueuePresentation: vi.fn(async () => {
+          order.push('animation')
+          if (state.revision === 1) await animation
+        })
+      }
+      const run = (
+        GameBoardView.prototype as unknown as { scheduleAiTurn(): Promise<void> }
+      ).scheduleAiTurn.call(harness)
+      await vi.waitFor(() =>
+        expect(harness.enqueuePresentation).toHaveBeenCalledTimes(1)
+      )
+      expect(controller.chooseTurnAction).toHaveBeenCalledTimes(
+        mode === 'choice' || mode === 'baseline' ? 1 : 2
+      )
+      if (mode === 'fast') reply(decision)
+      if (mode === 'exit') harness.destroyed = true
+      if (mode === 'failure') {
+        controller.pause()
+        reply(null)
+      }
+      await Promise.resolve()
+      expect(harness.dispatchCommand).toHaveBeenCalledTimes(1)
+      release()
+      if (mode === 'slow' || mode === 'choice' || mode === 'baseline') {
+        await vi.waitFor(() =>
+          expect(controller.chooseTurnAction).toHaveBeenCalledTimes(2)
+        )
+        expect(harness.dispatchCommand).toHaveBeenCalledTimes(1)
+      }
+      reply(decision)
+      await run
+      expect(harness.dispatchCommand).toHaveBeenCalledTimes(
+        ['fast', 'slow', 'choice', 'baseline'].includes(mode) ? 2 : 1
+      )
+      expect(controller.chooseTurnAction).toHaveBeenCalledTimes(2)
+      vi.unstubAllEnvs()
+    }
+  )
 })
 
 describe('random spell playback', () => {
@@ -861,15 +1529,18 @@ describe('board lifecycle preservation', () => {
             maxHealth: 3,
             legendary: false,
             taunt: false,
+            enraged: false,
             divineShield: false,
             frozen: false,
             stealth: false,
             deathrattle: false,
             poisonous: false,
+            aura: false,
             trigger: false,
             inspire: false,
             windfury: false,
             spellDamage: false,
+            lifesteal: false,
             elusive: false,
             immune: false
           },
@@ -1172,15 +1843,18 @@ describe('board lifecycle preservation', () => {
           maxHealth: minion.maxHealth,
           legendary: false,
           taunt: false,
+          enraged: false,
           divineShield: false,
           frozen: false,
           stealth: false,
           deathrattle: false,
           poisonous: false,
+          aura: false,
           trigger: false,
           inspire: false,
           windfury: false,
           spellDamage: false,
+          lifesteal: false,
           elusive: false,
           immune: false
         },
@@ -1342,15 +2016,18 @@ describe('board lifecycle preservation', () => {
           maxHealth: 1,
           legendary: false,
           taunt: false,
+          enraged: false,
           divineShield: false,
           frozen: false,
           stealth: false,
           deathrattle: false,
           poisonous: false,
+          aura: false,
           trigger: false,
           inspire: false,
           windfury: false,
           spellDamage: false,
+          lifesteal: false,
           elusive: false,
           immune: false
         },

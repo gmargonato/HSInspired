@@ -8,6 +8,8 @@ import {
   BLACKROCK_MOUNTAIN_CARD_SOURCE,
   CLASSIC_CARD_SOURCE,
   GOBLINS_VS_GNOMES_CARD_SOURCE,
+  JOURNEY_TO_UNGORO_CARD_SOURCE,
+  KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE,
   LEAGUE_OF_EXPLORERS_CARD_SOURCE,
   MEAN_STREETS_OF_GADGETZAN_CARD_SOURCE,
   NAXXRAMAS_CARD_SOURCE,
@@ -88,6 +90,18 @@ export const EXPANSION_DEFINITIONS: readonly ExpansionDefinition[] = [
     'Mean Streets of Gadgetzan',
     9,
     MEAN_STREETS_OF_GADGETZAN_CARD_SOURCE
+  ),
+  expansion(
+    'journey-to-ungoro',
+    "Journey to Un'Goro",
+    10,
+    JOURNEY_TO_UNGORO_CARD_SOURCE
+  ),
+  expansion(
+    'knights-of-the-frozen-throne',
+    'Knights of the Frozen Throne',
+    11,
+    KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE
   )
 ]
 

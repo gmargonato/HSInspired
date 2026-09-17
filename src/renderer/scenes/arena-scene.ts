@@ -8,7 +8,9 @@ import {
   type SharedUIAssets
 } from '../ui/asset-registry'
 import type { ArenaStore } from '../ui/arena-store'
+import type { ProgressionStore } from '../ui/progression-store'
 import { Scene } from './scene'
+import type { DevCommand, DevArenaAvailability } from '../../shared/dev-menu'
 
 export class ArenaScene extends Scene {
   private view: ArenaView | null = null
@@ -21,7 +23,8 @@ export class ArenaScene extends Scene {
       info: () => undefined,
       warn: () => undefined,
       error: () => undefined
-    }
+    },
+    private readonly progression?: ProgressionStore
   ) {
     super()
   }
@@ -37,6 +40,7 @@ export class ArenaScene extends Scene {
     ])
     await this.assetScope.acquire(ASSET_BUNDLE_IDS.cardRendering)
     await this.waitForFonts()
+    if (snapshot.rewards) await this.progression?.refresh()
 
     this.view = new ArenaView(
       this.arenaStore,
@@ -45,6 +49,13 @@ export class ArenaScene extends Scene {
       sharedAssets,
       this.appInstance.renderer,
       {
+        onDevAvailabilityChanged: (availability) => {
+          if (import.meta.env.DEV && this.state === 'active')
+            window.api?.devMenu?.notifyArenaAvailability(availability)
+        },
+        onRewardsSaved: async () => {
+          await this.progression?.refresh()
+        },
         onBack: () =>
           this.router?.navigate({ id: 'main-menu', entryMode: 'returning' }),
         onPlay: (route) => this.router?.navigate(route),
@@ -59,6 +70,16 @@ export class ArenaScene extends Scene {
   }
 
   update(_deltaMS: number): void {}
+
+  get devAvailability(): DevArenaAvailability {
+    return this.view?.devAvailability ?? { retire: false, scores: false }
+  }
+
+  async runDevCommand(
+    command: Extract<DevCommand, { type: 'arena:retire' | 'arena:set-score' }>
+  ): Promise<void> {
+    if (import.meta.env.DEV) await this.view?.runDevCommand(command)
+  }
 
   private async waitForFonts(): Promise<void> {
     if (typeof document === 'undefined' || !document.fonts) return

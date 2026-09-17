@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_time_warp.jpg",
+  "source_name": "journey_to_ungoro_time_warp.jpg",
+  "crop_box": [
+    33,
+    23,
+    488,
+    478
+  ],
+  "scale": 1.1,
+  "offset_x": -35.98461538461538,
+  "offset_y": -25.52307692307693,
+  "timestamp": "2026-09-16T15:05:12.233093",
+  "card_id": "journey_to_ungoro_time_warp",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

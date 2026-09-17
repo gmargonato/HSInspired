@@ -61,6 +61,7 @@ NAME_TEXT_MAX_HEIGHT = 64
 NAME_FONT_SIZE = 47
 NAME_FONT_PATH = REPO_ROOT / "assets" / "fonts" / "belwe_bold.ttf"
 THUMBNAIL_SIZE = 48
+ARTWORK_LIST_ROWS = 10
 JPEG_QUALITY = 95
 
 ZOOM_WHEEL_FACTOR = 1.1
@@ -587,6 +588,12 @@ class CropToolApp:
         self._thumbnails: dict[Path, ImageTk.PhotoImage | None] = {}
         self._frame_cache: dict[Path, Image.Image] = {}
         self._name_banner_cache: dict[Path, Image.Image] = {}
+        self._fixed_status_cache: dict[Path, bool] = {}
+        self._exported_status_cache: dict[Path, bool] = {}
+        self._status_cache: dict[Path, str] = {}
+        self._thumbnail_job: str | None = None
+        self._filters_dirty = True
+        self._rebuilding_tree = False
         self._is_dirty = False
         self._changed_paths: set[Path] = set()
 
@@ -595,8 +602,13 @@ class CropToolApp:
         self.frame_folder_var = tk.StringVar(value=str(self.frame_folder))
         self.fallback_frame_var = tk.StringVar(value=FALLBACK_FRAME_TYPES[0])
         self.search_var = tk.StringVar()
-        self.show_fixed_var = tk.BooleanVar(value=True)
+        self.show_fixed_var = tk.BooleanVar(value=False)
+        self.show_prepared_var = tk.BooleanVar(value=False)
         self.show_needs_fix_var = tk.BooleanVar(value=True)
+        self.show_unmatched_var = tk.BooleanVar(value=False)
+        self.filter_state_var = tk.StringVar(
+            value="Choose filters, then click Load matching files."
+        )
         self.collections_summary_var = tk.StringVar()
         self.card_info_var = tk.StringVar(value="Select an artwork file to preview it.")
         self.status_var = tk.StringVar(value="Loading...")
@@ -607,7 +619,6 @@ class CropToolApp:
 
         self._init_ui()
         self._update_collection_summary()
-        self._load_thumbnails()
         self._update_status_bar()
 
     def _init_ui(self) -> None:
@@ -671,7 +682,13 @@ class CropToolApp:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 8))
 
         self.list_frame = ttk.LabelFrame(main_frame, text="Artwork files")
-        self.list_frame.pack(side=tk.LEFT, fill=tk.Y, expand=False, padx=(0, 8))
+        self.list_frame.pack(
+            side=tk.LEFT,
+            fill=tk.NONE,
+            expand=False,
+            anchor="n",
+            padx=(0, 8),
+        )
 
         search_frame = ttk.Frame(self.list_frame)
         search_frame.pack(side=tk.TOP, fill=tk.X, padx=4, pady=(4, 0))
@@ -685,52 +702,103 @@ class CropToolApp:
         search_entry.bind("<Escape>", self._clear_search)
         self.search_entry = search_entry
 
-        filter_frame = ttk.Frame(self.list_frame)
+        filter_frame = ttk.LabelFrame(self.list_frame, text="Status filters")
         filter_frame.pack(side=tk.TOP, fill=tk.X, padx=4, pady=(4, 0))
-        ttk.Label(filter_frame, text="Show:").pack(side=tk.LEFT, padx=(0, 4))
+        filter_frame.columnconfigure(0, weight=1)
+        filter_frame.columnconfigure(1, weight=1)
+        ttk.Label(
+            filter_frame, text="Show these statuses:"
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=6, pady=(4, 0))
         ttk.Checkbutton(
             filter_frame,
             text="Fixed (500x500)",
             variable=self.show_fixed_var,
             command=self._on_status_filter_changed,
-        ).pack(side=tk.LEFT, padx=(0, 6))
+        ).grid(row=1, column=0, sticky="w", padx=(6, 4), pady=(2, 0))
+        ttk.Checkbutton(
+            filter_frame,
+            text="Saved crop",
+            variable=self.show_prepared_var,
+            command=self._on_status_filter_changed,
+        ).grid(row=1, column=1, sticky="w", padx=(4, 6), pady=(2, 0))
         ttk.Checkbutton(
             filter_frame,
             text="Needs fixing",
             variable=self.show_needs_fix_var,
             command=self._on_status_filter_changed,
-        ).pack(side=tk.LEFT, padx=(0, 6))
+        ).grid(row=2, column=0, sticky="w", padx=(6, 4), pady=(0, 0))
+        ttk.Checkbutton(
+            filter_frame,
+            text="No card match",
+            variable=self.show_unmatched_var,
+            command=self._on_status_filter_changed,
+        ).grid(row=2, column=1, sticky="w", padx=(4, 6), pady=(0, 0))
+
+        action_frame = ttk.Frame(filter_frame)
+        action_frame.grid(
+            row=3, column=0, columnspan=2, sticky="ew", padx=4, pady=(4, 0)
+        )
+        action_frame.columnconfigure(0, weight=1)
+        action_frame.columnconfigure(1, weight=1)
+        ttk.Label(
+            action_frame,
+            textvariable=self.filter_state_var,
+            foreground="#666666",
+            wraplength=310,
+            justify=tk.LEFT,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=2, pady=(0, 3))
         ttk.Button(
-            filter_frame, text="Show all", command=self._show_all_statuses
-        ).pack(side=tk.RIGHT)
+            action_frame,
+            text="Load matching files",
+            command=self._on_load_requested,
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 3), pady=(0, 4))
+        ttk.Button(
+            action_frame, text="Show all", command=self._show_all_statuses
+        ).grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=(0, 4))
 
         legend_frame = ttk.Frame(self.list_frame)
         legend_frame.pack(side=tk.TOP, fill=tk.X, padx=4, pady=(4, 0))
-        for prefix, label, color in (
-            (FIXED_PREFIX, "Fixed", FIXED_FG),
-            (PREPARED_PREFIX, "Saved crop", PREPARED_FG),
-            (NEEDS_FIX_PREFIX, "Needs fixing", NEEDS_FIX_FG),
-            (UNMATCHED_PREFIX, "No card match", UNMATCHED_FG),
+        for legend_index, (prefix, label, color) in enumerate(
+            (
+                (FIXED_PREFIX, "Fixed", FIXED_FG),
+                (PREPARED_PREFIX, "Saved crop", PREPARED_FG),
+                (NEEDS_FIX_PREFIX, "Needs fixing", NEEDS_FIX_FG),
+                (UNMATCHED_PREFIX, "No card match", UNMATCHED_FG),
+            )
         ):
             ttk.Label(
                 legend_frame,
                 text=f"{prefix}{label}",
                 foreground=color,
-            ).pack(side=tk.LEFT, padx=(0, 7))
+            ).grid(
+                row=legend_index // 2,
+                column=legend_index % 2,
+                sticky="w",
+                padx=(4, 12),
+                pady=(0, 1),
+            )
 
         self.tree = ttk.Treeview(
-            self.list_frame, show="tree", selectmode="browse", height=24
+            self.list_frame,
+            show="tree",
+            selectmode="browse",
+            height=ARTWORK_LIST_ROWS,
         )
         self.tree.column("#0", width=340, minwidth=240, stretch=True)
         ttk.Style().configure("Treeview", rowheight=THUMBNAIL_SIZE + 8)
         self.tree.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=(4, 0), pady=4)
 
         scrollbar = ttk.Scrollbar(
-            self.list_frame, orient=tk.VERTICAL, command=self.tree.yview
+            self.list_frame, orient=tk.VERTICAL, command=self._on_tree_scroll
         )
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 4), pady=4)
-        self.tree.configure(yscrollcommand=scrollbar.set)
+        self.tree_scrollbar = scrollbar
+        self.tree.configure(yscrollcommand=self._on_tree_scrollbar)
         self.tree.bind("<<TreeviewSelect>>", self._on_list_select)
+        self.tree.bind("<Configure>", self._on_tree_configure)
+        self.tree.bind("<MouseWheel>", self._on_tree_mouse_wheel)
+        self.tree.bind("<Button-4>", self._on_tree_mouse_wheel)
+        self.tree.bind("<Button-5>", self._on_tree_mouse_wheel)
 
         right_frame = ttk.Frame(main_frame)
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
@@ -866,6 +934,11 @@ class CropToolApp:
         if self.current_path is not None:
             self._redraw_canvas()
 
+    def _on_load_requested(self) -> None:
+        self.status_var.set("Loading matching artwork files...")
+        self.root.update_idletasks()
+        self._rebuild_file_tree()
+
     def _focus_search(self, _event: tk.Event | None = None) -> str:
         self.search_entry.focus_set()
         self.search_entry.selection_range(0, tk.END)
@@ -873,20 +946,27 @@ class CropToolApp:
 
     def _clear_search(self, _event: tk.Event | None = None) -> str:
         self.search_var.set("")
-        self._rebuild_file_tree()
+        self._mark_filters_dirty()
         self.search_entry.focus_set()
         return "break"
 
     def _on_search_changed(self, _event: tk.Event | None = None) -> None:
-        self._rebuild_file_tree()
+        self._mark_filters_dirty()
 
     def _on_status_filter_changed(self) -> None:
-        self._rebuild_file_tree()
+        self._mark_filters_dirty()
 
     def _show_all_statuses(self) -> None:
         self.show_fixed_var.set(True)
+        self.show_prepared_var.set(True)
         self.show_needs_fix_var.set(True)
-        self._rebuild_file_tree()
+        self.show_unmatched_var.set(True)
+        self._mark_filters_dirty()
+
+    def _mark_filters_dirty(self) -> None:
+        self._filters_dirty = True
+        self.filter_state_var.set("Pending - click Load matching files")
+        self.status_var.set("Filters changed - click Load matching files.")
 
     def _update_collection_summary(self) -> None:
         if not self.collection_paths:
@@ -923,13 +1003,16 @@ class CropToolApp:
         output_changed = new_output != self.output_folder
         frame_changed = new_frame != self.frame_folder
         if source_changed or output_changed or frame_changed:
-            self._save_current_if_dirty()
+            if not self._try_save_current_if_dirty():
+                return
 
         self.output_folder = new_output
         self.frame_folder = new_frame
         if frame_changed:
             self._frame_cache.clear()
             self._name_banner_cache.clear()
+        if output_changed:
+            self._clear_status_caches()
 
         if source_changed:
             self.source_folder = new_source
@@ -943,9 +1026,11 @@ class CropToolApp:
         self._update_status_bar()
 
     def _reload_source_files(self) -> None:
+        self._cancel_thumbnail_schedule()
         self.source_list = source_files(self.source_folder)
         self.total_files = len(self.source_list)
         self._thumbnails.clear()
+        self._clear_status_caches()
         self.current_image = None
         self.current_path = None
         self._current_card_photo = None
@@ -956,12 +1041,10 @@ class CropToolApp:
 
     def _filtered_source_files(self) -> list[Path]:
         query = normalize_match_text(self.search_var.get())
+        selected_statuses = self._selected_statuses()
         visible: list[Path] = []
         for path in self.source_list:
-            is_fixed = has_fixed_artwork(path, self.output_folder)
-            if is_fixed and not self.show_fixed_var.get():
-                continue
-            if not is_fixed and not self.show_needs_fix_var.get():
+            if self._status_for_path(path) not in selected_statuses:
                 continue
 
             if not query:
@@ -981,46 +1064,162 @@ class CropToolApp:
                 visible.append(path)
         return visible
 
+    def _selected_statuses(self) -> set[str]:
+        selected: set[str] = set()
+        if self.show_fixed_var.get():
+            selected.add("fixed")
+        if self.show_prepared_var.get():
+            selected.add("prepared")
+        if self.show_needs_fix_var.get():
+            selected.add("needs_fix")
+        if self.show_unmatched_var.get():
+            selected.add("unmatched")
+        return selected
+
     def _rebuild_file_tree(self) -> None:
         if not hasattr(self, "tree"):
             return
-        self._save_current_if_dirty()
-        selected_path = self.current_path
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        self._load_thumbnails()
-        if selected_path is not None and self.tree.exists(str(selected_path)):
-            self.tree.selection_set(str(selected_path))
-            self.tree.see(str(selected_path))
+        if self._rebuilding_tree:
+            return
 
-    def _load_thumbnails(self) -> None:
+        self._rebuilding_tree = True
+        try:
+            if not self._try_save_current_if_dirty():
+                return
+            self._cancel_thumbnail_schedule()
+            self._clear_status_caches()
+            selected_path = self.current_path
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+            self._load_filtered_rows()
+            if selected_path is not None and self.tree.exists(str(selected_path)):
+                self.tree.selection_set(str(selected_path))
+                self.tree.see(str(selected_path))
+            self._schedule_visible_thumbnails()
+            self._update_status_bar()
+        finally:
+            self._rebuilding_tree = False
+
+    def _load_filtered_rows(self) -> None:
         self.tree.tag_configure("fixed", foreground=FIXED_FG)
         self.tree.tag_configure("prepared", foreground=PREPARED_FG)
         self.tree.tag_configure("needs_fix", foreground=NEEDS_FIX_FG)
         self.tree.tag_configure("unmatched", foreground=UNMATCHED_FG)
         self.visible_source_list = self._filtered_source_files()
 
-        for index, path in enumerate(self.visible_source_list):
-            if path not in self._thumbnails:
-                self._thumbnails[path] = make_thumbnail(path)
+        for path in self.visible_source_list:
             self._update_tree_row(path, insert=True)
 
-            if (index + 1) % 50 == 0:
-                self.status_var.set(
-                    f"Loaded thumbnails: {index + 1}/{len(self.visible_source_list)}"
-                )
-                self.root.update()
         title = f"Artwork files ({len(self.visible_source_list)}/{self.total_files})"
         self.list_frame.configure(text=title)
+        self._filters_dirty = False
+        self.filter_state_var.set("Loaded")
+        self.root.update_idletasks()
+
+    def _clear_status_caches(self) -> None:
+        self._fixed_status_cache.clear()
+        self._exported_status_cache.clear()
+        self._status_cache.clear()
+
+    def _is_fixed_artwork(self, path: Path) -> bool:
+        key = self._path_key(path)
+        if key not in self._fixed_status_cache:
+            self._fixed_status_cache[key] = has_fixed_artwork(
+                path, self.output_folder
+            )
+        return self._fixed_status_cache[key]
+
+    def _is_exported_artwork(self, path: Path) -> bool:
+        key = self._path_key(path)
+        if key not in self._exported_status_cache:
+            self._exported_status_cache[key] = has_fixed_output(
+                path, self.output_folder
+            )
+        return self._exported_status_cache[key]
+
+    def _schedule_visible_thumbnails(self) -> None:
+        if not self.visible_source_list or self._thumbnail_job is not None:
+            return
+        self._thumbnail_job = self.root.after_idle(self._load_visible_thumbnails)
+
+    def _cancel_thumbnail_schedule(self) -> None:
+        if self._thumbnail_job is None:
+            return
+        try:
+            self.root.after_cancel(self._thumbnail_job)
+        except tk.TclError:
+            pass
+        finally:
+            self._thumbnail_job = None
+
+    def _load_visible_thumbnails(self) -> None:
+        self._thumbnail_job = None
+        if not self.visible_source_list:
+            return
+
+        try:
+            first, last = self.tree.yview()
+        except tk.TclError:
+            return
+
+        total = len(self.visible_source_list)
+        start = max(0, int(first * total) - 4)
+        end = min(total, math.ceil(last * total) + 4)
+        for path in self.visible_source_list[start:end]:
+            self._ensure_thumbnail(path)
+
+    def _ensure_thumbnail(self, path: Path) -> None:
+        if path not in self._thumbnails:
+            self._thumbnails[path] = make_thumbnail(path)
+        iid = str(path)
+        thumbnail = self._thumbnails[path]
+        if thumbnail is not None and self.tree.exists(iid):
+            self.tree.item(iid, image=thumbnail)
+
+    def _on_tree_scrollbar(self, first: str, last: str) -> None:
+        self.tree_scrollbar.set(first, last)
+        self._schedule_visible_thumbnails()
+
+    def _on_tree_scroll(self, *args: str) -> None:
+        self.tree.yview(*args)
+        self._schedule_visible_thumbnails()
+
+    def _on_tree_configure(self, _event: tk.Event) -> None:
+        self._schedule_visible_thumbnails()
+
+    def _on_tree_mouse_wheel(self, event: tk.Event) -> str:
+        if getattr(event, "num", None) == 4:
+            units = -3
+        elif getattr(event, "num", None) == 5:
+            units = 3
+        else:
+            delta = int(getattr(event, "delta", 0))
+            if delta > 0:
+                units = -max(1, round(delta / 120))
+            elif delta < 0:
+                units = max(1, round(-delta / 120))
+            else:
+                units = 0
+        self.tree.yview_scroll(units, "units")
+        self._schedule_visible_thumbnails()
+        return "break"
 
     def _status_for_path(self, path: Path) -> str:
-        if has_fixed_artwork(path, self.output_folder):
-            return "fixed"
-        if has_prepared_metadata(path, self.metadata_folder):
-            return "prepared"
-        if self.card_records and self._card_record_for_path(path) is None:
-            return "unmatched"
-        return "needs_fix"
+        key = self._path_key(path)
+        cached = self._status_cache.get(key)
+        if cached is not None:
+            return cached
+
+        if self._is_fixed_artwork(path):
+            status = "fixed"
+        elif has_prepared_metadata(path, self.metadata_folder):
+            status = "prepared"
+        elif self.card_records and self._card_record_for_path(path) is None:
+            status = "unmatched"
+        else:
+            status = "needs_fix"
+        self._status_cache[key] = status
+        return status
 
     def _card_record_for_path(self, path: Path) -> CollectionRecord | None:
         direct_match = self.card_records.get(normalize_card_id(path.stem))
@@ -1053,14 +1252,11 @@ class CropToolApp:
 
         iid = str(path)
         if insert:
-            self.tree.insert(
-                "",
-                "end",
-                iid=iid,
-                text=text,
-                image=self._thumbnails.get(path),
-                tags=tags,
-            )
+            options: dict[str, object] = {"iid": iid, "text": text, "tags": tags}
+            thumbnail = self._thumbnails.get(path)
+            if thumbnail is not None:
+                options["image"] = thumbnail
+            self.tree.insert("", "end", **options)
         elif self.tree.exists(iid):
             self.tree.item(iid, tags=tags, text=text)
 
@@ -1069,12 +1265,19 @@ class CropToolApp:
             self._update_tree_row(path)
 
     def _on_list_select(self, _event: tk.Event) -> None:
-        self._save_current_if_dirty()
-
         selection = self.tree.selection()
         if not selection:
             return
-        self._load_image(Path(selection[0]))
+        path = Path(selection[0])
+        if not self._try_save_current_if_dirty():
+            return
+        if not self.tree.exists(str(path)):
+            return
+        if self.tree.selection() != (str(path),):
+            self.tree.selection_set(str(path))
+        self.tree.see(str(path))
+        self._ensure_thumbnail(path)
+        self._load_image(path)
 
     def _load_image(self, path: Path) -> None:
         try:
@@ -1170,6 +1373,15 @@ class CropToolApp:
             self._save_metadata()
             self._mark_prepared(path)
 
+    def _try_save_current_if_dirty(self) -> bool:
+        try:
+            self._save_current_if_dirty()
+        except Exception as error:
+            self.status_var.set(f"Error saving metadata: {error}")
+            self.card_canvas.bell()
+            return False
+        return True
+
     def _frame_for_path(
         self, path: Path
     ) -> tuple[Image.Image | None, str | None]:
@@ -1263,7 +1475,7 @@ class CropToolApp:
         )
 
         source_details = f"Source: {width}x{height}"
-        if has_fixed_output(self.current_path, self.output_folder):
+        if self._is_exported_artwork(self.current_path):
             output_details = "Output: 500x500"
         elif has_any_output(self.current_path, self.output_folder):
             output_details = "Output exists but is not 500x500"
@@ -1294,10 +1506,10 @@ class CropToolApp:
 
     def _update_status_bar(self) -> None:
         fixed = sum(
-            1 for path in self.source_list if has_fixed_artwork(path, self.output_folder)
+            1 for path in self.source_list if self._is_fixed_artwork(path)
         )
         exported = sum(
-            1 for path in self.source_list if has_fixed_output(path, self.output_folder)
+            1 for path in self.source_list if self._is_exported_artwork(path)
         )
         prepared = sum(
             1
@@ -1310,12 +1522,18 @@ class CropToolApp:
             if self._path_key(path) in self._changed_paths
         )
         collection_text = f"Cards: {len(self.card_records)}"
+        filter_note = (
+            "  |  Filters pending - click Load matching files"
+            if self._filters_dirty
+            else ""
+        )
         if self.current_path is None or self.current_image is None:
             self.status_var.set(
                 f"Fixed: {fixed}/{self.total_files}  |  "
                 f"Exported 500x500: {exported}/{self.total_files}  |  "
                 f"Saved crops: {prepared}/{self.total_files}  |  "
                 f"Changed now: {changed}/{self.total_files}  |  {collection_text}"
+                f"{filter_note}"
             )
             return
 
@@ -1329,6 +1547,7 @@ class CropToolApp:
             f"Saved crops: {prepared}/{self.total_files}  |  "
             f"Changed now: {changed}/{self.total_files}  |  {collection_text}  |  "
             f"{self.current_path.name}{dirty_indicator}  |  Zoom: {zoom_pct}%"
+            f"{filter_note}"
         )
 
     def _on_save(self, _event: tk.Event | None = None) -> None:
@@ -1360,7 +1579,16 @@ class CropToolApp:
         self._is_dirty = False
 
     def _mark_prepared(self, path: Path) -> None:
-        self._update_tree_row(path)
+        self._status_cache.pop(self._path_key(path), None)
+        if self._rebuilding_tree:
+            return
+        if (
+            self._filters_dirty
+            or self._status_for_path(path) in self._selected_statuses()
+        ):
+            self._update_tree_row(path)
+        else:
+            self._rebuild_file_tree()
 
     def _on_export_all(self) -> None:
         """Export crops changed during the current application session."""
@@ -1416,7 +1644,7 @@ class CropToolApp:
                     self.status_var.set(
                         f"Exporting... {index + 1}/{len(prepared_files)}"
                     )
-                    self.root.update()
+                    self.root.update_idletasks()
 
             except Exception as error:
                 print(f"Error exporting {path.name}: {error}")

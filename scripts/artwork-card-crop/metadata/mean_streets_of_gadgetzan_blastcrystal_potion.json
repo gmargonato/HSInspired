@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\mean_streets_of_gadgetzan_blastcrystal_potion.jpg",
+  "source_name": "mean_streets_of_gadgetzan_blastcrystal_potion.jpg",
+  "crop_box": [
+    30,
+    23,
+    485,
+    478
+  ],
+  "scale": 1.1,
+  "offset_x": -32.60000000000002,
+  "offset_y": -24.907692307692315,
+  "timestamp": "2026-09-16T15:32:13.273482",
+  "card_id": "mean_streets_of_gadgetzan_blastcrystal_potion",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

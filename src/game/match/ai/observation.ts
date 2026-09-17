@@ -57,6 +57,15 @@ export function createAiObservation(
     playerNumber: player.playerNumber,
     heroId: player.heroId,
     hero: stripOrdering(player.hero),
+    quest: player.quest
+      ? {
+          cardId: player.quest.cardId,
+          rewardCardId: player.quest.rewardCardId,
+          goal: player.quest.goal,
+          progress: player.quest.progress,
+          target: player.quest.target
+        }
+      : null,
     hand:
       player.participantId === perspectivePlayerId
         ? player.hand.map((card) => observedCard(card, true))

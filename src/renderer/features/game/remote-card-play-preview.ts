@@ -44,7 +44,15 @@ export class RemoteCardPlayPreview extends Actor {
 
   constructor(
     private readonly resolver: CardAssetResolver,
-    private readonly secretTexture: Texture
+    private readonly secretTexture: Texture,
+    private readonly premiumFor: (
+      card: { instanceId: string; cardId: string; ownerId?: string },
+      side: 'local' | 'remote'
+    ) => boolean = () => false,
+    private readonly premiumSideFor: (
+      card: { instanceId: string; ownerId?: string },
+      side: 'local' | 'remote'
+    ) => 'local' | 'remote' = (_card, side) => side
   ) {
     super()
     this.label = 'game.remote-card-play-preview'
@@ -67,7 +75,22 @@ export class RemoteCardPlayPreview extends Actor {
     const cancelled = new Promise<null>((resolve) => {
       this.cancelPending = () => resolve(null)
     })
-    const creating = this.createCard(definition, snapshot, concealSecret)
+    const creating = this.createCard(
+      definition,
+      snapshot,
+      concealSecret,
+      this.premiumFor(
+        snapshot ?? {
+          instanceId: `automatic:${options.side}:${definition.id}`,
+          cardId: definition.id
+        },
+        options.side
+      ),
+      this.premiumSideFor(
+        snapshot ?? { instanceId: 'automatic:' + options.side + ':' + definition.id },
+        options.side
+      )
+    )
     void creating.then(
       (card) => {
         if (sequence !== this.sequence || this.destroyed)
@@ -150,7 +173,9 @@ export class RemoteCardPlayPreview extends Actor {
   private async createCard(
     definition: CardDefinition,
     snapshot?: OpeningCard,
-    concealSecret = isRemoteSecret(definition)
+    concealSecret = isRemoteSecret(definition),
+    premium = false,
+    premiumSide: 'local' | 'remote' = 'remote'
   ): Promise<Container> {
     if (concealSecret) {
       const container = new Container()
@@ -162,6 +187,8 @@ export class RemoteCardPlayPreview extends Actor {
 
     const artwork = await this.resolver.loadArtwork(definition.id)
     return CardView.create(definition, this.resolver, {
+      premium,
+      premiumSide,
       animatePremiumArtwork: true,
       artwork: artwork ?? undefined,
       snapshot: snapshot

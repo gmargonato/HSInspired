@@ -105,7 +105,12 @@ export class CardPlayAnimation extends Actor {
   }
 
   /** Match the actual image center and magnification across the two frames. */
-  alignMinionArtwork(card: CardView, view: MinionView, layer: Container): void {
+  alignMinionArtwork(
+    card: CardView,
+    view: MinionView,
+    layer: Container,
+    presentation: Container = view
+  ): boolean {
     const cardArt = card
       .getChildByLabel(`${card.plan.cardId}:card.artwork`, true)
       ?.children.find((child): child is Sprite => child instanceof Sprite)
@@ -129,13 +134,18 @@ export class CardPlayAnimation extends Actor {
           0.001,
           Math.hypot(boardBottom.x - boardTop.x, boardBottom.y - boardTop.y)
         )
-      view.scale.set(view.scale.x * ratio)
-      const destination = layer.toLocal(boardArt.toGlobal({ x: 0, y: 0 }))
-      view.position.set(
-        view.x + source.x - destination.x,
-        view.y + source.y - destination.y
+      presentation.scale.set(presentation.scale.x * ratio)
+      // A snapshot uses the same minion-local artwork point, transformed by
+      // its own pose. The live source can remain stationary during copying.
+      const artworkPoint = view.toLocal(boardArt.toGlobal({ x: 0, y: 0 }))
+      const destination = layer.toLocal(presentation.toGlobal(artworkPoint))
+      presentation.position.set(
+        presentation.x + source.x - destination.x,
+        presentation.y + source.y - destination.y
       )
+      return true
     }
+    return false
   }
 
   /** Samples the moving source at emission; released particles rise independently. */

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_the_caverns_below.jpg",
+  "source_name": "journey_to_ungoro_the_caverns_below.jpg",
+  "crop_box": [
+    30,
+    29,
+    485,
+    484
+  ],
+  "scale": 1.1,
+  "offset_x": -32.60000000000002,
+  "offset_y": -31.676923076923117,
+  "timestamp": "2026-09-16T14:46:32.724978",
+  "card_id": "journey_to_ungoro_the_caverns_below",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

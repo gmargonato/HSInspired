@@ -102,7 +102,11 @@ export class CardInspector extends Container {
     try {
       const artwork = await this.resolver.loadArtwork(card.id)
       if (sequence !== this.showSequence) return
-      nextView = await CardView.create(card, this.resolver, { artwork, premium })
+      nextView = await CardView.create(card, this.resolver, {
+        artwork,
+        premium,
+        ignorePremiumOverride: true
+      })
     } catch (error) {
       if (sequence !== this.showSequence) return
       console.error('[CardLab] Failed to load preview.', error)

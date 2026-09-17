@@ -87,7 +87,7 @@ export class CardInspectorControls extends Container {
     }
     for (const [premium, button] of this.premiumButtons) {
       button.classList.toggle('is-selected', premium === this.model.selectedPremium)
-      button.hidden = premium && this.model.selectedTemplate === 'hero'
+      button.hidden = false
     }
     const hasMask = this.model.maskTemplate !== undefined
     this.rootElement.style.height = hasMask ? `${CONTROL_BOUNDS.height}px` : 'auto'
@@ -97,7 +97,7 @@ export class CardInspectorControls extends Container {
     this.previewNotice.hidden = hasMask
     this.previewNotice.textContent =
       this.model.selectedTemplate === 'hero'
-        ? 'Hero cards use the standard frame and have no editable class mask.'
+        ? 'Hero cards use dedicated standard and premium frames and have no editable class mask.'
         : 'Weapon cards have no editable class mask. Switch between Standard and Premium to preview both frames.'
     for (const [channel, panel] of this.channelPanels) {
       panel.hidden = singleMask && channel === 'secondary'

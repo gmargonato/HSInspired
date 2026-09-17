@@ -9,6 +9,27 @@ export const DEV_SCENE_CHANGED_CHANNEL = 'debug:scene-changed'
 export const DEV_COMMAND_CHANNEL = 'debug:dev-command'
 export const DEV_COLLECTIBLE_SYNC_CHANNEL = 'debug:collectible-sync'
 export const DEV_PREMIUM_SYNC_CHANNEL = 'debug:premium-sync'
+export const DEV_ARENA_SYNC_CHANNEL = 'debug:arena-sync'
+
+export type PremiumMode = 'unlocked' | 'all' | 'local' | 'remote'
+export interface DevArenaAvailability {
+  readonly retire: boolean
+  readonly scores: boolean
+}
+
+export function isPremiumMode(value: unknown): value is PremiumMode {
+  return (
+    value === 'unlocked' || value === 'all' || value === 'local' || value === 'remote'
+  )
+}
+
+export function isDevArenaAvailability(value: unknown): value is DevArenaAvailability {
+  return (
+    isRecord(value) &&
+    typeof value.retire === 'boolean' &&
+    typeof value.scores === 'boolean'
+  )
+}
 
 export type DevSceneId =
   | 'main-menu'
@@ -34,7 +55,14 @@ export type DevDeckTrackerVisibility = 'hidden' | 'local'
 export type DevDeckTrackerSortMode = 'cost' | 'alphabetical' | 'draw-order'
 
 export type DevCommand =
-  | { readonly type: 'cards:set-premium'; readonly enabled: boolean }
+  | { readonly type: 'progression:set-dust'; readonly amount: number | 'custom' }
+  | { readonly type: 'cards:set-premium'; readonly mode: PremiumMode }
+  | { readonly type: 'arena:retire' }
+  | {
+      readonly type: 'arena:set-score'
+      readonly counter: 'wins' | 'defeats'
+      readonly value: number
+    }
   | { readonly type: 'collection:set-collectible'; readonly mode: CollectibleMode }
   | { readonly type: 'game:toggle-tracker' }
   | {
@@ -127,7 +155,22 @@ function isDevDeckAction(value: unknown): value is DevDeckAction {
 
 export function isDevCommand(value: unknown): value is DevCommand {
   if (!isRecord(value) || typeof value.type !== 'string') return false
-  if (value.type === 'cards:set-premium') return typeof value.enabled === 'boolean'
+  if (value.type === 'progression:set-dust')
+    return (
+      value.amount === 'custom' ||
+      (typeof value.amount === 'number' &&
+        Number.isSafeInteger(value.amount) &&
+        value.amount >= 0)
+    )
+  if (value.type === 'cards:set-premium') return isPremiumMode(value.mode)
+  if (value.type === 'arena:retire') return true
+  if (value.type === 'arena:set-score')
+    return (
+      (value.counter === 'wins' || value.counter === 'defeats') &&
+      Number.isInteger(value.value) &&
+      (value.value as number) >= 0 &&
+      (value.value as number) <= (value.counter === 'wins' ? 12 : 3)
+    )
   if (value.type === 'collection:set-collectible') {
     const mode = (value as { mode?: unknown }).mode
     return isCollectibleMode(mode)

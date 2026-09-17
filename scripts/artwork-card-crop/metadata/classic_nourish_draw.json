@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_nourish_draw.jpg",
+  "source_name": "classic_nourish_draw.jpg",
+  "crop_box": [
+    24,
+    57,
+    479,
+    512
+  ],
+  "scale": 1.1,
+  "offset_x": -26.138461538461566,
+  "offset_y": -63.200000000000045,
+  "timestamp": "2026-09-16T14:41:15.242529",
+  "card_id": "classic_nourish_draw",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

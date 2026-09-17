@@ -8,7 +8,7 @@ export const MATCH_HISTORY_LAYOUT = {
   name: 'Match history',
   rail: {
     frame: placement(
-      { x: 287, y: 280 },
+      { x: 287, y: 270 },
       { width: 75, height: 75 },
       {
         anchor: TOP_LEFT,
@@ -17,6 +17,10 @@ export const MATCH_HISTORY_LAYOUT = {
     ),
     capacity: 7,
     gap: 65,
+    entryAnimation: {
+      duration: 0.22,
+      incomingOffsetX: -75
+    },
     artworkInset: 9,
     artworkSize: 57
   },

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\knights_of_the_frozen_throne_doom_pact.jpg",
+  "source_name": "knights_of_the_frozen_throne_doom_pact.jpg",
+  "crop_box": [
+    27,
+    57,
+    482,
+    512
+  ],
+  "scale": 1.1,
+  "offset_x": -30.13846153846154,
+  "offset_y": -63.200000000000045,
+  "timestamp": "2026-09-16T15:06:27.682108",
+  "card_id": "knights_of_the_frozen_throne_doom_pact",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

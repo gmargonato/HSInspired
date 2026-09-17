@@ -19,11 +19,8 @@ import type { SceneId, SceneRequest } from '../../shared/scene-navigation'
 import type { SceneTransitionOptions } from '../scenes/scene-manager'
 import { SCENE_SELECTION_GAP } from '../scenes/main-menu-scene'
 import { MAX_DECK_CARDS, countDeckCards } from '../../game/decks'
-import {
-  chooseOpponentDeck,
-  createMatchSeed
-} from '../features/deck-selection/deck-selection-model'
-import { createHumanVsAiGameRoute } from './router'
+import { createMatchSeed } from '../features/deck-selection/deck-selection-model'
+import { createConstructedGameRoute } from './router'
 
 const FULL_VIEWPORT = {
   x: 0,
@@ -115,7 +112,8 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       dependencies.services.arenaStore,
       dependencies.router,
       dependencies.services.dialogs,
-      dependencies.services.logger
+      dependencies.services.logger,
+      dependencies.services.progressionStore
     ),
   'new-deck': (_request, dependencies) =>
     new NewDeckScene(dependencies.services.deckStore, dependencies.services.logger),
@@ -132,23 +130,13 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       ? decks.find((candidate) => candidate.id === requestedDeckId)
       : undefined
     const seed = createMatchSeed()
-    const opponent = requestedDeckId
-      ? chooseOpponentDeck(
-          decks,
-          requestedDeckId,
-          seed,
-          import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined
-        )
-      : undefined
-
-    if (deck && opponent) {
+    if (deck && countDeckCards(deck) === MAX_DECK_CARDS) {
       return new GameScene(
-        createHumanVsAiGameRoute(
-          {
-            humanDeck: { id: deck.id, heroId: deck.heroId },
-            aiDeck: { id: opponent.id, heroId: opponent.heroId }
-          },
-          seed
+        createConstructedGameRoute(
+          deck,
+          seed,
+          decks,
+          import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined
         ),
         dependencies.services.deckStore,
         dependencies.services.playerStatsStore,
@@ -157,7 +145,8 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
         dependencies.router,
         dependencies.services.ai,
         dependencies.services.matchLogs,
-        (message, retry) => dependencies.services.dialogs.error(message, retry)
+        (message, retry) => dependencies.services.dialogs.error(message, retry),
+        dependencies.services.progressionStore
       )
     }
 
@@ -165,7 +154,7 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
     // Production navigateRequest will reject with a clear error before reaching here.
     const fallbackRoute = createFallbackGameRoute(
       deck?.id ?? requestedDeckId,
-      opponent?.id
+      undefined
     )
     return new GameScene(
       fallbackRoute as unknown as ConstructorParameters<typeof GameScene>[0],
@@ -176,7 +165,8 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       dependencies.router,
       dependencies.services.ai,
       dependencies.services.matchLogs,
-      (message, retry) => dependencies.services.dialogs.error(message, retry)
+      (message, retry) => dependencies.services.dialogs.error(message, retry),
+      dependencies.services.progressionStore
     )
   }
 }
@@ -208,6 +198,7 @@ export class SceneNavigator implements SceneRouter {
   }
 
   async navigate(route: AppRoute): Promise<void> {
+    await this.services.progressionStore.load()
     const scene = this.createRouteScene(route)
 
     if (route.id === 'card-preview') {
@@ -257,22 +248,12 @@ export class SceneNavigator implements SceneRouter {
       }
 
       const seed = createMatchSeed()
-      const opponent = chooseOpponentDeck(
-        decks,
-        targetDeckId,
-        seed,
-        import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined
-      )
-      if (!opponent) {
-        throw new Error('At least one complete deck is required to start a game.')
-      }
       await this.navigate(
-        createHumanVsAiGameRoute(
-          {
-            humanDeck: { id: deck.id, heroId: deck.heroId },
-            aiDeck: { id: opponent.id, heroId: opponent.heroId }
-          },
+        createConstructedGameRoute(
+          deck,
           seed,
+          decks,
+          import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined,
           launchMode === 'first-player'
             ? { humanSeat: 'first' }
             : launchMode === 'second-player'
@@ -470,7 +451,8 @@ export class SceneNavigator implements SceneRouter {
           this.services.arenaStore,
           this,
           this.services.dialogs,
-          this.services.logger
+          this.services.logger,
+          this.services.progressionStore
         )
       case 'new-deck':
         return new NewDeckScene(this.services.deckStore, this.services.logger)
@@ -490,13 +472,15 @@ export class SceneNavigator implements SceneRouter {
           this,
           this.services.ai,
           this.services.matchLogs,
-          (message, retry) => this.services.dialogs.error(message, retry)
+          (message, retry) => this.services.dialogs.error(message, retry),
+          this.services.progressionStore
         )
       case 'card-preview':
         return new CardViewScene({
           card: CARD_CATALOG.require(route.cardId),
           sourceBounds: route.sourceBounds,
-          resolver: this.cardResolver
+          resolver: this.cardResolver,
+          progression: this.services.progressionStore
         })
     }
 

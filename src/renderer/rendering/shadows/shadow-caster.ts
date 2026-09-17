@@ -60,6 +60,8 @@ export interface ShadowCaster {
   visual: Container
   readonly shape: 'ellipse' | 'rounded-rect'
   readonly bounds: ShadowBounds
+  /** Local physical silhouette, rebuilt only when its appearance revision changes. */
+  silhouette: { revision: number; create: () => Container } | null
   restingScale: number
   restingHeight: number | null
   minimumHeight: number
@@ -92,6 +94,7 @@ export function attachShadow(
   const caster: ShadowCaster = {
     owner,
     bounds,
+    silhouette: null,
     visual: owner,
     shape: 'rounded-rect',
     restingScale: 1,

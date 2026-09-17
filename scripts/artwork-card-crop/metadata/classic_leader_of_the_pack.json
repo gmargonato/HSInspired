@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_leader_of_the_pack.jpg",
+  "source_name": "classic_leader_of_the_pack.jpg",
+  "crop_box": [
+    28,
+    23,
+    483,
+    478
+  ],
+  "scale": 1.1,
+  "offset_x": -31.215384615384608,
+  "offset_y": -25.83076923076925,
+  "timestamp": "2026-09-16T14:40:04.231180",
+  "card_id": "classic_leader_of_the_pack",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

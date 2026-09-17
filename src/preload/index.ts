@@ -12,6 +12,11 @@ import type { SceneRequest } from '../shared/scene-navigation'
 import {
   DEV_COLLECTIBLE_SYNC_CHANNEL,
   DEV_PREMIUM_SYNC_CHANNEL,
+  DEV_ARENA_SYNC_CHANNEL,
+  isDevArenaAvailability,
+  isPremiumMode,
+  type PremiumMode,
+  type DevArenaAvailability,
   DEV_COMMAND_CHANNEL,
   DEV_SCENE_CHANGED_CHANNEL,
   isCollectibleMode,
@@ -60,14 +65,26 @@ import {
   type PlayerStatsSnapshot
 } from '../shared/ipc/player-stats'
 import {
+  PROGRESSION_IPC_CHANNELS,
+  parseDustAmount,
+  parseDustRewardRequest,
+  parseDustRewardReceipt,
+  parseProgressionCardId,
+  parseProgressionSnapshot,
+  type ProgressionApi
+} from '../shared/ipc/progression'
+import {
   ARENA_IPC_CHANNELS,
   parseArenaCardId,
   parseArenaHeroId,
   parseArenaMatchResult,
   parseArenaRunSnapshot,
+  parseArenaScoreRequest,
+  type ArenaScoreRequest,
   type ArenaApi,
   type ArenaRunSnapshot
 } from '../shared/ipc/arena'
+import { parseArenaRunId } from '../shared/ipc/arena-rewards'
 import {
   CARD_CLASS_BUILDER_IPC_CHANNELS,
   parseCardClassBuilderConfig,
@@ -124,6 +141,17 @@ const api = {
       }
     : {}),
   arena: {
+    ...(process.env.NODE_ENV === 'development'
+      ? {
+          devSetScore: async (request: ArenaScoreRequest): Promise<ArenaRunSnapshot> =>
+            parseArenaRunSnapshot(
+              await ipcRenderer.invoke(
+                ARENA_IPC_CHANNELS.devSetScore,
+                parseArenaScoreRequest(request)
+              )
+            )
+        }
+      : {}),
     get: async (): Promise<ArenaRunSnapshot> =>
       parseArenaRunSnapshot(await ipcRenderer.invoke(ARENA_IPC_CHANNELS.get)),
     selectHero: async (
@@ -141,8 +169,17 @@ const api = {
       parseArenaRunSnapshot(
         await ipcRenderer.invoke(ARENA_IPC_CHANNELS.pickCard, parseArenaCardId(cardId))
       ),
-    retire: async (): Promise<ArenaRunSnapshot> =>
-      parseArenaRunSnapshot(await ipcRenderer.invoke(ARENA_IPC_CHANNELS.retire)),
+    retire: async (runId: string): Promise<ArenaRunSnapshot> =>
+      parseArenaRunSnapshot(
+        await ipcRenderer.invoke(ARENA_IPC_CHANNELS.retire, parseArenaRunId(runId))
+      ),
+    acknowledgeRewards: async (runId: string): Promise<ArenaRunSnapshot> =>
+      parseArenaRunSnapshot(
+        await ipcRenderer.invoke(
+          ARENA_IPC_CHANNELS.acknowledgeRewards,
+          parseArenaRunId(runId)
+        )
+      ),
     recordResult: async (
       result: Parameters<ArenaApi['recordResult']>[0]
     ): Promise<ArenaRunSnapshot> =>
@@ -199,9 +236,13 @@ const api = {
   },
 
   devMenu: {
-    notifyPremiumMode(enabled: boolean): void {
-      if (typeof enabled !== 'boolean') return
-      ipcRenderer.send(DEV_PREMIUM_SYNC_CHANNEL, enabled)
+    notifyArenaAvailability(availability: DevArenaAvailability): void {
+      if (!isDevArenaAvailability(availability)) return
+      ipcRenderer.send(DEV_ARENA_SYNC_CHANNEL, availability)
+    },
+    notifyPremiumMode(mode: PremiumMode): void {
+      if (!isPremiumMode(mode)) return
+      ipcRenderer.send(DEV_PREMIUM_SYNC_CHANNEL, mode)
     },
     notifySceneChanged(sceneId: DevSceneId): void {
       if (process.env.NODE_ENV !== 'production' && !isDevSceneId(sceneId)) {
@@ -246,6 +287,43 @@ const api = {
       await ipcRenderer.invoke(DECK_IPC_CHANNELS.delete, parseDeckId(deckId))
     }
   },
+
+  progression: {
+    ...(process.env.NODE_ENV !== 'production'
+      ? {
+          devSetDust: async (amount: number) =>
+            parseProgressionSnapshot(
+              await ipcRenderer.invoke(
+                PROGRESSION_IPC_CHANNELS.devSetDust,
+                parseDustAmount(amount)
+              )
+            )
+        }
+      : {}),
+    get: async () =>
+      parseProgressionSnapshot(await ipcRenderer.invoke(PROGRESSION_IPC_CHANNELS.get)),
+    reward: async (request) =>
+      parseDustRewardReceipt(
+        await ipcRenderer.invoke(
+          PROGRESSION_IPC_CHANNELS.reward,
+          parseDustRewardRequest(request)
+        )
+      ),
+    upgrade: async (cardId) =>
+      parseProgressionSnapshot(
+        await ipcRenderer.invoke(
+          PROGRESSION_IPC_CHANNELS.upgrade,
+          parseProgressionCardId(cardId)
+        )
+      ),
+    refund: async (cardId) =>
+      parseProgressionSnapshot(
+        await ipcRenderer.invoke(
+          PROGRESSION_IPC_CHANNELS.refund,
+          parseProgressionCardId(cardId)
+        )
+      )
+  } satisfies ProgressionApi,
 
   playerStats: {
     get: async (): Promise<PlayerStatsSnapshot> =>

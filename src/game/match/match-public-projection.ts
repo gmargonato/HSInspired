@@ -24,7 +24,12 @@ function maskPublicCard(
   viewerId: PlayerId,
   forceVisible = false
 ): OpeningPublicCard {
-  const { knownTo: _knownTo, ...withoutKnowledge } = cloneUnknown(card)
+  const {
+    knownTo: _knownTo,
+    startedInDeck: _startedInDeck,
+    ...withoutKnowledge
+  } = cloneUnknown(card)
+  void _startedInDeck
   const visible =
     forceVisible ||
     (card.zone !== 'deck' &&
@@ -57,30 +62,35 @@ export function getOpeningMatchPublicState(
     openingHistory,
     ...publicSnapshot
   } = snapshot
-  const players = snapshot.players.map((player) => ({
-    ...player,
-    // Deck order and identity are private even to its owner in a public snapshot.
-    deck: player.deck.map((card) => maskPublicCard(card, viewerId)),
-    hand: player.hand.map((card) => maskPublicCard(card, viewerId)),
-    ...(player.revealedCards
-      ? {
-          revealedCards: player.revealedCards.map((card) =>
-            maskPublicCard(card, viewerId)
-          )
-        }
-      : {}),
-    ...(player.discardedCards
-      ? {
-          discardedCards: player.discardedCards.map((card) =>
-            maskPublicCard(card, viewerId)
-          )
-        }
-      : {}),
-    secrets: (player.secrets ?? []).map((secret) => ({
-      ...secret,
-      cardId: secret.controllerId === viewerId || secret.revealed ? secret.cardId : null
-    }))
-  })) as unknown as [OpeningPublicPlayerState, OpeningPublicPlayerState]
+  const players = snapshot.players.map((player) => {
+    const { originalDeckCardIds: _originalDeckCardIds, ...visiblePlayer } = player
+    void _originalDeckCardIds
+    return {
+      ...visiblePlayer,
+      // Deck order and identity are private even to its owner in a public snapshot.
+      deck: player.deck.map((card) => maskPublicCard(card, viewerId)),
+      hand: player.hand.map((card) => maskPublicCard(card, viewerId)),
+      ...(player.revealedCards
+        ? {
+            revealedCards: player.revealedCards.map((card) =>
+              maskPublicCard(card, viewerId)
+            )
+          }
+        : {}),
+      ...(player.discardedCards
+        ? {
+            discardedCards: player.discardedCards.map((card) =>
+              maskPublicCard(card, viewerId)
+            )
+          }
+        : {}),
+      secrets: (player.secrets ?? []).map((secret) => ({
+        ...secret,
+        cardId:
+          secret.controllerId === viewerId || secret.revealed ? secret.cardId : null
+      }))
+    }
+  }) as unknown as [OpeningPublicPlayerState, OpeningPublicPlayerState]
   void _history
   void _effectTrace
   void _scheduledEffects
@@ -146,13 +156,25 @@ function maskPublicEffectEvent(
   event: EffectDomainEvent,
   viewerId: PlayerId
 ): OpeningMatchPublicEvent {
-  if (event.controllerId === viewerId) return { ...event }
+  // Only board-origin movements carry this cue. Their faces were already public;
+  // do not expose private knowledge lists or relax masking for other effects.
+  const cardMovement = event.cardMovement
+    ? {
+        ...event.cardMovement,
+        cards: event.cardMovement.cards.map((card) =>
+          maskPublicCard(card, viewerId, true)
+        )
+      }
+    : undefined
+  if (event.controllerId === viewerId)
+    return { ...event, ...(cardMovement ? { cardMovement } : {}) }
   const data = event.data
     ? (maskPublicEffectData(event.data, viewerId) as Readonly<Record<string, unknown>>)
     : undefined
   return {
     ...event,
     sourceCardId: null,
+    ...(cardMovement ? { cardMovement } : {}),
     ...(data ? { data } : {})
   }
 }

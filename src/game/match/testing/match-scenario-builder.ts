@@ -29,7 +29,10 @@ function createDeck(id: string, heroId: string, cardId: string): Deck {
     id,
     name: id,
     heroId: asHeroId(heroId),
-    cards: { [definition.id]: 30 },
+    cards:
+      definition.type === 'Spell' && definition.quest
+        ? { [definition.id]: 1, basic_acidic_swamp_ooze: 29 }
+        : { [definition.id]: 30 },
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z'
   }

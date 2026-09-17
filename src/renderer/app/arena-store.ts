@@ -1,5 +1,6 @@
 import type {
   ArenaApi,
+  ArenaScoreRequest,
   ArenaMatchResult,
   ArenaRunSnapshot
 } from '../../shared/ipc/arena'
@@ -20,12 +21,19 @@ export class PersistentArenaStore implements ArenaStore {
   constructor(private readonly apiProvider: () => ArenaApi = getArenaApi) {}
 
   async load(): Promise<ArenaRunSnapshot> {
-    if (!this.snapshot) this.snapshot = await this.apiProvider().get()
-    return this.snapshot
+    return this.enqueue(() => this.apiProvider().get())
   }
 
   getSnapshot(): ArenaRunSnapshot | null {
     return this.snapshot
+  }
+
+  devSetScore(request: ArenaScoreRequest): Promise<ArenaRunSnapshot> {
+    return this.enqueue(() => {
+      const api = this.apiProvider()
+      if (!api.devSetScore) throw new Error('Arena score editing is unavailable.')
+      return api.devSetScore(request)
+    })
   }
 
   selectHero(heroId: HeroId): Promise<ArenaRunSnapshot> {
@@ -36,8 +44,12 @@ export class PersistentArenaStore implements ArenaStore {
     return this.enqueue(() => this.apiProvider().pickCard(cardId))
   }
 
-  retire(): Promise<ArenaRunSnapshot> {
-    return this.enqueue(() => this.apiProvider().retire())
+  retire(runId: string): Promise<ArenaRunSnapshot> {
+    return this.enqueue(() => this.apiProvider().retire(runId))
+  }
+
+  acknowledgeRewards(runId: string): Promise<ArenaRunSnapshot> {
+    return this.enqueue(() => this.apiProvider().acknowledgeRewards(runId))
   }
 
   recordResult(result: ArenaMatchResult): Promise<ArenaRunSnapshot> {

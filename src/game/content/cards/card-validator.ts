@@ -7,6 +7,7 @@ import {
   CARD_RARITIES,
   CARD_TYPES,
   type CardDefinition,
+  type SpellCardDefinition,
   type CardRarity,
   type CardType,
   type ExpansionId
@@ -59,6 +60,7 @@ export interface RawCardRecord {
   readonly keywords?: unknown
   readonly effects?: unknown
   readonly playCondition?: unknown
+  readonly quest?: unknown
   readonly collectible?: unknown
   readonly deckLegal?: unknown
 }
@@ -207,6 +209,8 @@ const ACTION_FIELDS = new Set([
   'incrementOnFailedSummon',
   'ingredientChoices',
   'initialSize',
+  'includeUncollectible',
+  'onlyIfElementalLastTurn',
   'keyword',
   'keywords',
   'leaveUnchangedIfNoValidCost',
@@ -248,6 +252,7 @@ const ACTION_FIELDS = new Set([
   'target',
   'targetSelection',
   'targetType',
+  'tribe',
   'transformOverrides',
   'trigger',
   'unlimited',
@@ -1085,7 +1090,45 @@ export function validateCardRecord(
     if (raw.armor !== undefined && raw.armor !== null) {
       return fail(`${indexOrPath}.armor`, 'is not valid for spells')
     }
-    return { ...metadata, type }
+    let quest: SpellCardDefinition['quest']
+    if (raw.quest !== undefined) {
+      const data = recordObject(raw.quest, `${indexOrPath}.quest`)
+      const goal = enumValue(
+        data['goal'],
+        [
+          'summon-attack-5',
+          'play-cost-1-minion',
+          'cast-generated-spell',
+          'target-friendly-minion',
+          'summon-deathrattle',
+          'play-deathrattle-minion',
+          'play-same-name',
+          'discard-card',
+          'play-taunt-minion',
+          'end-turn-unspent-mana',
+          'summon-minion',
+          'summon-murloc',
+          'cast-spell',
+          'restore-health',
+          'add-other-class-card',
+          'play-battlecry-minion',
+          'draw-card',
+          'hero-attack'
+        ] as const,
+        `${indexOrPath}.quest.goal`
+      )
+      const target = statistic(data['target'], `${indexOrPath}.quest.target`, false)
+      if (target === null || target < 1 || !Number.isInteger(target))
+        return fail(`${indexOrPath}.quest.target`, 'must be a positive integer')
+      quest = {
+        goal,
+        target,
+        rewardCardId: asCardId(
+          stringValue(data['rewardCardId'], `${indexOrPath}.quest.rewardCardId`)
+        )
+      }
+    }
+    return { ...metadata, type, ...(quest ? { quest } : {}) }
   }
 
   if (type === 'Weapon') {
@@ -1159,5 +1202,19 @@ export function validateCardSet(
     ids.add(card.id)
     cards.push(card)
   })
+  for (const [index, card] of cards.entries()) {
+    if (card.type !== 'Spell' || !card.quest) continue
+    const reward = cards.find((candidate) => candidate.id === card.quest!.rewardCardId)
+    if (!reward)
+      return fail(
+        `${sourceName}[${index}].quest.rewardCardId`,
+        'references a missing reward card'
+      )
+    if (reward.collectible || reward.deckLegal)
+      return fail(
+        `${sourceName}[${index}].quest.rewardCardId`,
+        'must reference an uncollectible reward'
+      )
+  }
   return cards
 }

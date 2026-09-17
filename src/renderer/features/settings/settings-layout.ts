@@ -47,7 +47,7 @@ export const SETTINGS_LAYOUT = {
   ),
 
   resolutionButton: placement(
-    { x: 1050, y: 420 },
+    { x: 1058, y: 420 },
     { width: 62, height: 42 },
     {
       anchor: CENTER,

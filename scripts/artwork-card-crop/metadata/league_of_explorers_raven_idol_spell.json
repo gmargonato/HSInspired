@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\league_of_explorers_raven_idol_spell.jpg",
+  "source_name": "league_of_explorers_raven_idol_spell.jpg",
+  "crop_box": [
+    29,
+    26,
+    484,
+    481
+  ],
+  "scale": 1.1,
+  "offset_x": -32.44615384615389,
+  "offset_y": -28.13846153846157,
+  "timestamp": "2026-09-16T15:08:26.924607",
+  "card_id": "league_of_explorers_raven_idol_spell",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_wrath_draw.jpg",
+  "source_name": "classic_wrath_draw.jpg",
+  "crop_box": [
+    28,
+    30,
+    483,
+    485
+  ],
+  "scale": 1.1,
+  "offset_x": -30.600000000000023,
+  "offset_y": -33.369230769230796,
+  "timestamp": "2026-09-16T14:41:56.964516",
+  "card_id": "classic_wrath_draw",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\one_night_in_karazhan_firelands_portal.jpg",
+  "source_name": "one_night_in_karazhan_firelands_portal.jpg",
+  "crop_box": [
+    35,
+    30,
+    490,
+    485
+  ],
+  "scale": 1.1,
+  "offset_x": -38.738461538461536,
+  "offset_y": -32.892307692307696,
+  "timestamp": "2026-09-16T14:39:42.443090",
+  "card_id": "one_night_in_karazhan_firelands_portal",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -112,6 +112,33 @@ describe('board minion card preview', () => {
       )
     ).toEqual({ x: 1652, y: 700 })
   })
+
+  it('can place the card to the left while clamping it inside the viewport', () => {
+    const layout = {
+      scale: 0.4,
+      gap: 18,
+      viewportPadding: 20,
+      viewportWidth: 1920,
+      viewportHeight: 1080
+    }
+
+    expect(
+      positionBoardMinionCardPreview(
+        { x: 900, y: 500, width: 160, height: 180 },
+        { width: 620, height: 900 },
+        layout,
+        'left'
+      )
+    ).toEqual({ x: 634, y: 410 })
+    expect(
+      positionBoardMinionCardPreview(
+        { x: 100, y: 500, width: 160, height: 180 },
+        { width: 620, height: 900 },
+        layout,
+        'left'
+      )
+    ).toEqual({ x: 20, y: 410 })
+  })
 })
 
 describe('equipped weapon card preview', () => {

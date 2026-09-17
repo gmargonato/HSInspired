@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_liquid_membrane.jpg",
+  "source_name": "journey_to_ungoro_liquid_membrane.jpg",
+  "crop_box": [
+    35,
+    25,
+    490,
+    480
+  ],
+  "scale": 1.1,
+  "offset_x": -38.90769230769234,
+  "offset_y": -27.98461538461541,
+  "timestamp": "2026-09-16T14:45:32.241867",
+  "card_id": "journey_to_ungoro_liquid_membrane",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

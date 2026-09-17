@@ -2,8 +2,10 @@ import { Graphics, Sprite, Text, Texture } from 'pixi.js'
 import { Button, type ButtonOptions } from './button'
 
 const PORTRAIT_WIDTH = 210
-const PORTRAIT_HEIGHT = 49
-const PORTRAIT_Y = -13.5
+// Match the frame's 210 × 75 inner opening so portrait art is not reduced to a
+// narrow strip above the deck name.
+const PORTRAIT_HEIGHT = 75
+const PORTRAIT_Y = -2
 /** Moves every portrait inside the fixed artwork crop without moving the frame. */
 const PORTRAIT_ARTWORK_Y_OFFSET = 12
 const DECK_NAME_MAX_WIDTH = 190

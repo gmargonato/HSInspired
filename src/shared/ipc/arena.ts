@@ -3,6 +3,8 @@ import {
   ARENA_DECK_ID,
   ARENA_DECK_SIZE,
   ARENA_HERO_CHOICE_COUNT,
+  ARENA_MAX_WINS,
+  ARENA_MAX_DEFEATS,
   CARD_CATALOG,
   HERO_CATALOG,
   asCardId,
@@ -12,21 +14,41 @@ import {
   type CardId,
   type HeroId
 } from '../../game'
+import { parseArenaRewardReceipt, parseArenaRunId } from './arena-rewards'
 
 export const ARENA_IPC_CHANNELS = {
+  devSetScore: 'arena:dev-set-score',
   get: 'arena:get',
   selectHero: 'arena:select-hero',
   pickCard: 'arena:pick-card',
   retire: 'arena:retire',
+  acknowledgeRewards: 'arena:acknowledge-rewards',
   recordResult: 'arena:record-result'
 } as const
 
 export interface ArenaApi {
+  devSetScore?(request: ArenaScoreRequest): Promise<ArenaRunSnapshot>
   get(): Promise<ArenaRunSnapshot>
   selectHero(heroId: HeroId): Promise<ArenaRunSnapshot>
   pickCard(cardId: CardId): Promise<ArenaRunSnapshot>
-  retire(): Promise<ArenaRunSnapshot>
+  retire(runId: string): Promise<ArenaRunSnapshot>
+  acknowledgeRewards(runId: string): Promise<ArenaRunSnapshot>
   recordResult(result: ArenaMatchResult): Promise<ArenaRunSnapshot>
+}
+
+export interface ArenaScoreRequest {
+  readonly runId: string
+  readonly counter: 'wins' | 'defeats'
+  readonly value: number
+}
+
+export function parseArenaScoreRequest(value: unknown): ArenaScoreRequest {
+  if (!isRecord(value) || (value.counter !== 'wins' && value.counter !== 'defeats'))
+    throw new Error('Invalid Arena score counter.')
+  const score = parseCounter(value.value, 'Arena score')
+  if (score > (value.counter === 'wins' ? ARENA_MAX_WINS : ARENA_MAX_DEFEATS))
+    throw new Error('Arena score is out of range.')
+  return { runId: parseArenaRunId(value.runId), counter: value.counter, value: score }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -92,6 +114,16 @@ export function parseArenaRunSnapshot(value: unknown): ArenaRunSnapshot {
   if (!isRecord(value) || value.id !== ARENA_DECK_ID) {
     throw new Error('Invalid Arena run')
   }
+  const runId = parseArenaRunId(value.runId)
+  const rewards = value.rewards === null ? null : parseArenaRewardReceipt(value.rewards)
+  if (
+    rewards &&
+    (rewards.runId !== runId ||
+      rewards.wins !== value.wins ||
+      value.phase !== 'ready' ||
+      !value.gamesPlayed)
+  )
+    throw new Error('Inconsistent Arena reward receipt.')
   if (
     value.phase !== 'choosing-hero' &&
     value.phase !== 'drafting' &&
@@ -161,6 +193,8 @@ export function parseArenaRunSnapshot(value: unknown): ArenaRunSnapshot {
     throw new Error('Ready Arena state is inconsistent')
   }
   return {
+    runId,
+    rewards,
     id: ARENA_DECK_ID,
     phase: value.phase,
     heroChoices,

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\mean_streets_of_gadgetzan_backroom_bouncer.jpg",
+  "source_name": "mean_streets_of_gadgetzan_backroom_bouncer.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-16T15:31:57.165869",
+  "card_id": "mean_streets_of_gadgetzan_backroom_bouncer",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

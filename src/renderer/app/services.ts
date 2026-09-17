@@ -4,6 +4,8 @@ import type { AiDecisionApi } from '../../shared/ipc/ai'
 import { createAiDecisionApi } from './ai-decision-api'
 import type { MatchLogsApi } from '../../shared/ipc/match-logs'
 import { PersistentPlayerStatsStore } from './player-stats-store'
+import { PersistentProgressionStore } from './progression-store'
+import type { ProgressionStore } from '../ui/progression-store'
 import type { PlayerStatsStore } from '../ui/player-stats-store'
 import { PersistentArenaStore } from './arena-store'
 import type { ArenaStore } from '../ui/arena-store'
@@ -70,6 +72,7 @@ export interface AppServices {
   readonly arenaStore: ArenaStore
   readonly deckStore: DeckStore
   readonly playerStatsStore: PlayerStatsStore
+  readonly progressionStore: ProgressionStore
   readonly dialogs: DialogService
   readonly logger: AppLogger
 }
@@ -97,6 +100,7 @@ export function createAppServices(overrides: Partial<AppServices> = {}): AppServ
     arenaStore: overrides.arenaStore ?? new PersistentArenaStore(),
     deckStore: overrides.deckStore ?? new PersistentDeckStore(undefined, logger),
     playerStatsStore: overrides.playerStatsStore ?? new PersistentPlayerStatsStore(),
+    progressionStore: overrides.progressionStore ?? new PersistentProgressionStore(),
     dialogs: overrides.dialogs ?? new BrowserDialogService(),
     logger,
     ...overrides

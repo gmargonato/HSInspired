@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\knights_of_the_frozen_throne_malfurion_the_pestilent.jpg",
+  "source_name": "knights_of_the_frozen_throne_malfurion_the_pestilent.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-16T15:07:01.609752",
+  "card_id": "knights_of_the_frozen_throne_malfurion_the_pestilent",
+  "card_type": "Hero",
+  "frame_file": "frame-hero.png"
+}

@@ -2,6 +2,8 @@ import { BASIC_CARD_SOURCE } from './sets/basic'
 import { BLACKROCK_MOUNTAIN_CARD_SOURCE } from './sets/blackrock-mountain'
 import { CLASSIC_CARD_SOURCE } from './sets/classic'
 import { GOBLINS_VS_GNOMES_CARD_SOURCE } from './sets/goblins-vs-gnomes'
+import { JOURNEY_TO_UNGORO_CARD_SOURCE } from './sets/journey-to-ungoro'
+import { KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE } from './sets/knights-of-the-frozen-throne'
 import { LEAGUE_OF_EXPLORERS_CARD_SOURCE } from './sets/league-of-explorers'
 import { NAXXRAMAS_CARD_SOURCE } from './sets/naxxramas'
 import { THE_GRAND_TOURNAMENT_CARD_SOURCE } from './sets/the-grand-tournament'
@@ -98,7 +100,9 @@ export const CARD_SET_SOURCES = [
   THE_GRAND_TOURNAMENT_CARD_SOURCE,
   ONE_NIGHT_IN_KARAZHAN_CARD_SOURCE,
   WHISPERS_OF_THE_OLD_GODS_CARD_SOURCE,
-  MEAN_STREETS_OF_GADGETZAN_CARD_SOURCE
+  MEAN_STREETS_OF_GADGETZAN_CARD_SOURCE,
+  JOURNEY_TO_UNGORO_CARD_SOURCE,
+  KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE
 ] as const
 
 export function createCardCatalog(

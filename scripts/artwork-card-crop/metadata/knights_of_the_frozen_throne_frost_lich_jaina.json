@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\knights_of_the_frozen_throne_frost_lich_jaina.jpg",
+  "source_name": "knights_of_the_frozen_throne_frost_lich_jaina.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-16T15:06:31.253530",
+  "card_id": "knights_of_the_frozen_throne_frost_lich_jaina",
+  "card_type": "Hero",
+  "frame_file": "frame-hero.png"
+}

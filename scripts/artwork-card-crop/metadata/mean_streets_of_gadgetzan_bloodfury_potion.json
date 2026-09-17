@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\mean_streets_of_gadgetzan_bloodfury_potion.jpg",
+  "source_name": "mean_streets_of_gadgetzan_bloodfury_potion.jpg",
+  "crop_box": [
+    34,
+    26,
+    489,
+    481
+  ],
+  "scale": 1.1,
+  "offset_x": -37.52307692307693,
+  "offset_y": -28.600000000000023,
+  "timestamp": "2026-09-16T15:32:19.184667",
+  "card_id": "mean_streets_of_gadgetzan_bloodfury_potion",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

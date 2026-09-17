@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_starfall_single.jpg",
+  "source_name": "classic_starfall_single.jpg",
+  "crop_box": [
+    30,
+    33,
+    485,
+    488
+  ],
+  "scale": 1.1,
+  "offset_x": -33.215384615384664,
+  "offset_y": -36.2923076923077,
+  "timestamp": "2026-09-16T14:41:47.422545",
+  "card_id": "classic_starfall_single",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

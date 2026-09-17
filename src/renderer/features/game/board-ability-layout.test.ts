@@ -23,12 +23,14 @@ function expectInsideCanvas(
 }
 
 describe('board ability badge layouts', () => {
-  it('shares one bottom-center minion slot without clipping either badge', () => {
+  it('shares one bottom-center minion slot without clipping any badge', () => {
     expect(MINION_LAYOUT.trigger.position).toEqual({ x: 80, y: 160 })
     expect(MINION_LAYOUT.inspire.position).toEqual(MINION_LAYOUT.trigger.position)
+    expect(MINION_LAYOUT.lifesteal.position).toEqual(MINION_LAYOUT.trigger.position)
     expect(MINION_LAYOUT.deathrattle.position).toEqual({ x: 75, y: 160 })
     expectInsideCanvas(MINION_LAYOUT.trigger, MINION_CANVAS)
     expectInsideCanvas(MINION_LAYOUT.inspire, MINION_CANVAS)
+    expectInsideCanvas(MINION_LAYOUT.lifesteal, MINION_CANVAS)
     expectInsideCanvas(MINION_LAYOUT.deathrattle, MINION_CANVAS)
   })
 
@@ -52,6 +54,9 @@ describe('board ability badge layouts', () => {
     expect(MINION_LAYOUT.inspire).toMatchObject({
       size: { width: 43, height: 38 }
     })
+    expect(MINION_LAYOUT.lifesteal).toMatchObject({
+      size: { width: 43, height: 41 }
+    })
     expect(MINION_LAYOUT.deathrattle).toMatchObject({
       size: { width: 80, height: 53 }
     })
@@ -59,13 +64,21 @@ describe('board ability badge layouts', () => {
     expect(MINION_LAYOUT.divineShield.scale).toBeUndefined()
     expect(MINION_LAYOUT.trigger.scale).toEqual({ x: 0.75, y: 0.75 })
     expect(MINION_LAYOUT.inspire.scale).toEqual({ x: 0.75, y: 0.75 })
+    expect(MINION_LAYOUT.lifesteal.scale).toEqual({ x: 0.75, y: 0.75 })
     expect(MINION_LAYOUT.deathrattle.scale).toEqual({ x: 0.75, y: 0.75 })
     expect(WEAPON_LAYOUT.trigger.scale).toBeUndefined()
     expect(WEAPON_LAYOUT.deathrattle.scale).toBeUndefined()
   })
 
   it('keeps the new minion visuals inside the canvas', () => {
-    for (const key of ['windfury', 'spellDamage', 'elusive', 'immune'] as const) {
+    for (const key of [
+      'windfury',
+      'spellDamage',
+      'lifesteal',
+      'aura',
+      'elusive',
+      'immune'
+    ] as const) {
       expectInsideCanvas(MINION_LAYOUT[key], MINION_CANVAS)
     }
   })
@@ -80,5 +93,14 @@ describe('board ability badge layouts', () => {
       { x: 140, y: 190 }
     ])
     placements.forEach((value) => expectInsideCanvas(value, WEAPON_CANVAS))
+  })
+
+  it('places Aura at the top of the minion instead of in the bottom badge row', () => {
+    expect(MINION_LAYOUT.aura.position).toEqual({ x: 80, y: 35 })
+    expect(MINION_LAYOUT.aura).toMatchObject({
+      size: { width: 38, height: 38 }
+    })
+    expect(MINION_LAYOUT.aura.position.y).toBeLessThan(MINION_LAYOUT.trigger.position.y)
+    expectInsideCanvas(MINION_LAYOUT.aura, MINION_CANVAS)
   })
 })

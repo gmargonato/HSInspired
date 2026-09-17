@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_dark_wispers_buff.jpg",
+  "source_name": "goblins_vs_gnomes_dark_wispers_buff.jpg",
+  "crop_box": [
+    28,
+    22,
+    483,
+    477
+  ],
+  "scale": 1.1,
+  "offset_x": -30.907692307692344,
+  "offset_y": -24.446153846153862,
+  "timestamp": "2026-09-16T14:42:05.892290",
+  "card_id": "goblins_vs_gnomes_dark_wispers_buff",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

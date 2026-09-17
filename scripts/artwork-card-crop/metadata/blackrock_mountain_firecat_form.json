@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\blackrock_mountain_firecat_form.jpg",
+  "source_name": "blackrock_mountain_firecat_form.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-16T14:37:51.073440",
+  "card_id": "blackrock_mountain_firecat_form",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

@@ -8,16 +8,16 @@ import { TOP_LEFT, placement } from '../../rendering/layout'
  */
 export const DECK_TRACKER_LAYOUT = {
   panel: placement(
-    { x: 0, y: 0 },
-    { width: 300, height: GAME_HEIGHT },
+    { x: 10, y: 0 },
+    { width: 250, height: GAME_HEIGHT },
     {
       anchor: TOP_LEFT,
       note: 'Transparent row overlay anchored to the left edge of the board.'
     }
   ),
   viewport: placement(
-    { x: 0, y: 0 },
-    { width: 300, height: GAME_HEIGHT },
+    { x: 10, y: 0 },
+    { width: 250, height: GAME_HEIGHT },
     {
       anchor: TOP_LEFT,
       note: 'Full-height viewport for dynamic vertical centering and scrolling.'

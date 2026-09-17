@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_lakkari_sacrifice.jpg",
+  "source_name": "journey_to_ungoro_lakkari_sacrifice.jpg",
+  "crop_box": [
+    25,
+    57,
+    480,
+    512
+  ],
+  "scale": 1.1,
+  "offset_x": -27.215384615384643,
+  "offset_y": -63.200000000000045,
+  "timestamp": "2026-09-16T14:45:23.702048",
+  "card_id": "journey_to_ungoro_lakkari_sacrifice",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

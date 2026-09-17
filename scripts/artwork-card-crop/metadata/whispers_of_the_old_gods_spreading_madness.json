@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\whispers_of_the_old_gods_spreading_madness.jpg",
+  "source_name": "whispers_of_the_old_gods_spreading_madness.jpg",
+  "crop_box": [
+    34,
+    21,
+    489,
+    476
+  ],
+  "scale": 1.1,
+  "offset_x": -37.061538461538476,
+  "offset_y": -23.369230769230796,
+  "timestamp": "2026-09-16T15:35:03.897845",
+  "card_id": "whispers_of_the_old_gods_spreading_madness",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

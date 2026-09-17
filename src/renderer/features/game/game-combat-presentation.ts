@@ -40,7 +40,6 @@ interface ActiveCombatPresentation {
   readonly attackerPlacement: CombatViewPlacement
   readonly attackerAttack: number
   readonly deferredAttackerDeathInstanceIds: Set<string>
-  readonly attackerDamageIndicators: Set<DamageIndicatorView>
   impactStarted: boolean
   attackerReturned: boolean
   screenShake: Promise<void> | null
@@ -77,6 +76,7 @@ interface CombatPresentationContext {
  */
 export class GameCombatPresentation {
   readonly layer = new Container()
+  readonly indicatorLayer = new Container()
   private readonly activeCombatPresentations = new Map<
     string,
     ActiveCombatPresentation
@@ -85,16 +85,18 @@ export class GameCombatPresentation {
   private readonly deathBatchSources = new Map<string, readonly string[]>()
   private readonly activeDeathGhosts = new Set<Sprite>()
   private readonly combatPreviewMarkers = new Map<CombatView, Sprite>()
+  private readonly indicatorSources = new Map<
+    DamageIndicatorView | HealIndicatorView,
+    CombatView
+  >()
 
   constructor(
     private readonly assets: GameAssets,
-    private readonly animations: Pick<AnimationScope, 'timeline'>,
+    private readonly animations: Pick<AnimationScope, 'timeline' | 'cancel'>,
     private readonly context: CombatPresentationContext
-  ) {}
-
-  trackAttackerDamage(view: CombatView, indicator: DamageIndicatorView): void {
-    const activeCombat = this.activeCombatForAttacker(view)
-    activeCombat?.attackerDamageIndicators.add(indicator)
+  ) {
+    // Keep registration stable while Pixi iterates its render callbacks.
+    this.indicatorLayer.onRender = this.updateCharacterIndicators
   }
 
   beginLatestImpact(): void {
@@ -119,6 +121,8 @@ export class GameCombatPresentation {
   }
 
   dispose(): void {
+    this.indicatorLayer.onRender = null
+    this.indicatorSources.clear()
     this.clearCombatPreview()
     this.activeCombatPresentations.clear()
     this.deathGhostTemplates.clear()
@@ -138,6 +142,7 @@ export class GameCombatPresentation {
       }
     }
     this.layer.destroy({ children: true })
+    this.indicatorLayer.destroy({ children: true })
   }
 
   syncCombatPreviewMarkers(lethalViews: readonly CombatView[]): void {
@@ -214,7 +219,6 @@ export class GameCombatPresentation {
       attackerPlacement,
       attackerAttack: event.attacker.attack,
       deferredAttackerDeathInstanceIds: new Set(),
-      attackerDamageIndicators: new Set(),
       impactStarted: false,
       attackerReturned: false,
       screenShake: null
@@ -337,7 +341,6 @@ export class GameCombatPresentation {
         }
         timeline.eventCallback('onUpdate', () => {
           this.updateCombatMarkerPositions()
-          this.updateCombatDamageIndicators(active)
         })
         return completeTimeline(timeline)
       }
@@ -361,7 +364,6 @@ export class GameCombatPresentation {
       this.restoreHeroImmunity(attacker, event.attacker.participantId)
       this.restoreHeroImmunity(defender, event.defender.participantId)
       if (attacker.destroyed) this.context.positions.endMotion(attacker)
-      active.attackerDamageIndicators.clear()
       active.deferredAttackerDeathInstanceIds.clear()
       if (!attacker.destroyed)
         this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)
@@ -567,17 +569,8 @@ export class GameCombatPresentation {
       const defenderDamageTaken = event.defender.divineShieldConsumed
         ? 0
         : event.defender.attemptedDamage
-      const attackerDamageIndicator = this.showDamageIndicator(
-        attacker,
-        attackerDamageTaken
-      )
+      this.showDamageIndicator(attacker, attackerDamageTaken)
       this.showDamageIndicator(defender, defenderDamageTaken)
-      const followSettleOverlays = (): void => {
-        followDeathMarkers()
-        if (attackerDamageIndicator && !attackerDamageIndicator.destroyed) {
-          this.positionCharacterIndicator(attackerDamageIndicator, attacker)
-        }
-      }
 
       const settle = (
         view: MinionView,
@@ -631,7 +624,7 @@ export class GameCombatPresentation {
             ease: 'power2.out'
           })
         }
-        timeline.eventCallback('onUpdate', followSettleOverlays)
+        timeline.eventCallback('onUpdate', followDeathMarkers)
         return completeTimeline(timeline)
       }
 
@@ -713,17 +706,8 @@ export class GameCombatPresentation {
 
       const damageTaken = (combatant: CharacterCombatantResult): number =>
         combatant.divineShieldConsumed ? 0 : combatant.attemptedDamage
-      const attackerDamageIndicator = this.showDamageIndicator(
-        attacker,
-        damageTaken(event.attacker)
-      )
+      this.showDamageIndicator(attacker, damageTaken(event.attacker))
       this.showDamageIndicator(defender, damageTaken(event.defender))
-      const followSettleOverlays = (): void => {
-        followDeathMarkers()
-        if (attackerDamageIndicator && !attackerDamageIndicator.destroyed) {
-          this.positionCharacterIndicator(attackerDamageIndicator, attacker)
-        }
-      }
 
       const settle = (
         view: CombatView,
@@ -777,7 +761,7 @@ export class GameCombatPresentation {
             ease: 'power2.out'
           })
         }
-        timeline.eventCallback('onUpdate', followSettleOverlays)
+        timeline.eventCallback('onUpdate', followDeathMarkers)
         return completeTimeline(timeline)
       }
 
@@ -867,9 +851,17 @@ export class GameCombatPresentation {
     this.positionCharacterIndicator(indicator, view)
     indicator.scale.set(0)
     indicator.zIndex = 1100
-    this.layer.addChild(indicator)
+    this.indicatorLayer.addChild(indicator)
+    this.indicatorSources.set(indicator, view)
 
     const timeline = this.animations.timeline()
+    const finish = (): void => {
+      if (!indicator.destroyed) indicator.destroy({ children: true })
+    }
+    indicator.once('destroyed', () => {
+      this.indicatorSources.delete(indicator)
+      this.animations.cancel(timeline)
+    })
     timeline.to(indicator.scale, {
       x: 1,
       y: 1,
@@ -885,11 +877,24 @@ export class GameCombatPresentation {
       duration: BOARD_TIMING.characterIndicatorFade,
       ease: 'power2.in'
     })
-    timeline.eventCallback('onComplete', () => {
-      indicator.removeFromParent()
-      indicator.destroy({ children: true })
-    })
+    timeline.eventCallback('onComplete', finish)
+    timeline.eventCallback('onInterrupt', finish)
     return indicator
+  }
+
+  /** Follow the displayed character, independently of which animation moves it. */
+  private readonly updateCharacterIndicators = (): void => {
+    const board = this.indicatorLayer.parent
+    for (const [indicator, view] of this.indicatorSources) {
+      let ancestor: Container | null = view.destroyed ? null : view.parent
+      while (ancestor && ancestor !== board) ancestor = ancestor.parent
+      if (indicator.destroyed || !board || ancestor !== board) {
+        // A removed character leaves its burst at the last displayed position.
+        this.indicatorSources.delete(indicator)
+        continue
+      }
+      this.positionCharacterIndicator(indicator, view)
+    }
   }
 
   private positionCharacterIndicator(
@@ -899,7 +904,7 @@ export class GameCombatPresentation {
     const global = view.parent
       ? view.parent.toGlobal(view.position)
       : view.getGlobalPosition()
-    const local = this.layer.toLocal(global)
+    const local = this.indicatorLayer.toLocal(global)
     indicator.position.set(local.x, local.y - (view instanceof HeroView ? 5 : 15))
   }
 
@@ -917,16 +922,6 @@ export class GameCombatPresentation {
       if (presentation.attacker === view) return presentation
     }
     return undefined
-  }
-
-  private updateCombatDamageIndicators(active: ActiveCombatPresentation): void {
-    for (const indicator of active.attackerDamageIndicators) {
-      if (indicator.destroyed) {
-        active.attackerDamageIndicators.delete(indicator)
-        continue
-      }
-      this.positionCharacterIndicator(indicator, active.attacker)
-    }
   }
 
   private async returnActiveCombatAttacker(
@@ -949,7 +944,6 @@ export class GameCombatPresentation {
     })
     timeline.eventCallback('onUpdate', () => {
       this.updateCombatMarkerPositions()
-      this.updateCombatDamageIndicators(active)
     })
     await completeTimeline(timeline)
     active.attackerReturned = true

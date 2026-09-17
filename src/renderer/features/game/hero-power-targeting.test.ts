@@ -117,6 +117,35 @@ describe('hero-power target presentation', () => {
     view.dispose()
   })
 
+  it('keeps disabled powers out of Pixi gameplay hit testing', () => {
+    const view = new HeroPowerView({
+      layout: {
+        card: {
+          position: { x: 100, y: 100 },
+          size: { width: 150, height: 150 },
+          anchor: { x: 0.5, y: 0.5 },
+          scale: { x: 1, y: 1 }
+        },
+        crystalOffset: { x: 0, y: 0 },
+        costOffset: { x: 0, y: 0 }
+      },
+      backTexture: Texture.EMPTY,
+      frontFrameTexture: Texture.EMPTY,
+      artworkTexture: Texture.EMPTY,
+      manaTexture: Texture.EMPTY,
+      cost: 2
+    })
+
+    expect(view.eventMode).toBe('none')
+    expect(view.containsCanvasPoint(100, 100)).toBe(true)
+
+    view.setEnabled(true)
+    expect(view.eventMode).toBe('static')
+    view.setEnabled(false)
+    expect(view.eventMode).toBe('none')
+    view.dispose()
+  })
+
   it('swaps replacement artwork through a horizontal flip and refreshes face-up', async () => {
     const view = new HeroPowerView({
       layout: {

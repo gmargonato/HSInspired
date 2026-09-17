@@ -7,6 +7,414 @@ import { projectHistoryAction } from '../history-visibility'
 import { triggerHistoryEvents } from '../match-history'
 import type { OpeningMatchState } from '../opening-match-types'
 
+describe('Vilefin Inquisitor', () => {
+  const vilefinId = 'whispers_of_the_old_gods_vilefin_inquisitor'
+  const tokenId = 'whispers_of_the_old_gods_silver_hand_murloc'
+
+  function setup(heroId = 'uther') {
+    const scenario = createMatchScenario({ firstHeroId: heroId, secondHeroId: heroId })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    const player = () =>
+      scenario.match.getState().players.find((p) => p.participantId === participantId)!
+    const mana = (available = 10) => {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-set-mana',
+          participantId,
+          available,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+    }
+    const summon = (cardId: string) => {
+      expect(
+        scenario.match.dispatch({ type: 'dev-summon-minion', participantId, cardId })
+          .accepted
+      ).toBe(true)
+    }
+    const play = (cardId = vilefinId) => {
+      mana()
+      expect(
+        scenario.match.dispatch({ type: 'dev-add-card', participantId, cardId })
+          .accepted
+      ).toBe(true)
+      const card = player().hand.find((c) => c.cardId === cardId)!
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId,
+        position: player().board.length
+      })
+      expect(result.accepted).toBe(true)
+      return result
+    }
+    const use = () => scenario.match.dispatch({ type: 'use-hero-power', participantId })
+    return { scenario, participantId, player, mana, summon, play, use }
+  }
+
+  it('replaces and refreshes an exhausted power, including a second Tidal Hand', () => {
+    const s = setup()
+    s.mana()
+    expect(s.use().accepted).toBe(true)
+    for (const previousHeroPowerId of ['paladin-reinforce', 'paladin-the-tidal-hand']) {
+      expect(s.play().events).toContainEqual({
+        type: 'hero-power-replaced',
+        participantId: s.participantId,
+        previousHeroPowerId,
+        heroPowerId: 'paladin-the-tidal-hand'
+      })
+      expect(s.player().heroPower).toMatchObject({
+        id: 'paladin-the-tidal-hand',
+        cost: 2,
+        baseCost: 2,
+        available: true,
+        usesThisTurn: 0
+      })
+      const beforeMana = s.player().mana.available
+      expect(s.use().accepted).toBe(true)
+      expect(s.player().mana.available).toBe(beforeMana - 2)
+      expect(s.player().board.at(-1)).toMatchObject({
+        cardId: tokenId,
+        attack: 1,
+        health: 1
+      })
+      expect(s.use().accepted).toBe(false)
+    }
+    expect(CARD_CATALOG.get(tokenId)).toMatchObject({
+      collectible: false,
+      subtype: 'Murloc',
+      cost: 1
+    })
+  })
+
+  it.each(['uther', 'jaina'])(
+    'replaces upgraded powers for %s and cannot be upgraded by Justicar',
+    (heroId) => {
+      const s = setup(heroId)
+      s.play('the_grand_tournament_justicar_trueheart')
+      s.play()
+      expect(s.player().heroPower.id).toBe('paladin-the-tidal-hand')
+      const events = s.play('the_grand_tournament_justicar_trueheart').events
+      expect(s.player().heroPower.id).toBe('paladin-the-tidal-hand')
+      expect(events.some((event) => event.type === 'hero-power-replaced')).toBe(false)
+    }
+  )
+
+  it('does not trigger the battlecry when Vilefin is summoned', () => {
+    const s = setup()
+    s.summon(vilefinId)
+    expect(s.player().heroPower.id).toBe('paladin-reinforce')
+  })
+
+  it('requires mana and a free board slot', () => {
+    const s = setup()
+    s.play()
+    s.mana(1)
+    expect(s.use().accepted).toBe(false)
+    expect(s.player().heroPower.available).toBe(true)
+    s.mana()
+    while (s.player().board.length < 7) s.summon('basic_silver_hand_recruit')
+    expect(s.use().accepted).toBe(false)
+    expect(s.player().mana.available).toBe(10)
+  })
+
+  it('triggers Murloc synergy without receiving Silver Hand Recruit buffs', () => {
+    const s = setup()
+    s.play()
+    s.summon('classic_murloc_tidecaller')
+    s.summon('the_grand_tournament_warhorse_trainer')
+    const before = s
+      .player()
+      .board.find((m) => m.cardId === 'classic_murloc_tidecaller')!.attack
+    expect(s.use().accepted).toBe(true)
+    expect(s.player().board.at(-1)).toMatchObject({
+      cardId: tokenId,
+      attack: 1,
+      health: 1
+    })
+    expect(
+      s.player().board.find((m) => m.cardId === 'classic_murloc_tidecaller')!.attack
+    ).toBe(before + 1)
+  })
+})
+
+describe('conceding a match', () => {
+  it.each(['mulligan', 'own turn', 'opponent turn'])(
+    'ends during %s exactly once',
+    (phase) => {
+      const scenario = createMatchScenario({ seed: 778, cardId: 'basic_sap' })
+      if (phase !== 'mulligan') scenario.confirmBothMulligans()
+      const before = scenario.match.getState()
+      const loserId =
+        phase === 'opponent turn'
+          ? before.players.find((p) => p.participantId !== before.activePlayerId)!
+              .participantId
+          : (before.activePlayerId ?? before.players[0].participantId)
+      const winnerId = before.players.find(
+        (p) => p.participantId !== loserId
+      )!.participantId
+      const command = { type: 'concede', participantId: loserId }
+      const result = scenario.match.dispatch(command)
+      expect(result).toMatchObject({
+        accepted: true,
+        state: {
+          phase: 'ended',
+          activePlayerId: null,
+          winnerId,
+          loserId,
+          revision: before.revision + 1
+        },
+        events: [{ type: 'match-ended', winnerId, loserId, reason: 'concede' }]
+      })
+      expect(scenario.match.dispatch(command)).toMatchObject({
+        accepted: false,
+        code: 'match-ended',
+        events: []
+      })
+    }
+  )
+})
+
+describe('generic board-to-card movement cues', () => {
+  it('routes a stolen minion back to its owner rather than its current controller', () => {
+    const scenario = createMatchScenario({ seed: 778, cardId: 'basic_sap' })
+    scenario.confirmBothMulligans()
+    const owner = scenario.match.getState().activePlayerId!
+    const controller = scenario.match
+      .getState()
+      .players.find((p) => p.participantId !== owner)!.participantId
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: owner,
+      available: 10,
+      maximum: 10
+    })
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: controller,
+      cardId: 'basic_bloodfen_raptor'
+    })
+    const original = scenario.match.getState()
+    const target = original.players.find((p) => p.participantId === controller)!
+      .board[0]
+    const state = {
+      ...original,
+      players: original.players.map((p) => ({
+        ...p,
+        board: p.board.map((m) => ({ ...m, ownerId: owner }))
+      })) as unknown as OpeningMatchState['players']
+    }
+    const sap = state.players
+      .find((p) => p.participantId === owner)!
+      .hand.find((c) => c.cardId === 'basic_sap')!
+    const result = resolveCardPlay({
+      state,
+      participantId: owner,
+      cardInstanceId: sap.instanceId,
+      targets: [
+        { kind: 'minion', participantId: controller, instanceId: target.instanceId }
+      ]
+    })
+    expect(result.accepted).toBe(true)
+    const movement = result.events.find(
+      (event) => event.type === 'effect-resolved' && event.cardMovement
+    )
+    expect(movement).toMatchObject({
+      cardMovement: {
+        participantId: owner,
+        sourceInstanceId: target.instanceId,
+        destination: 'hand',
+        copy: false
+      }
+    })
+    expect(
+      result.state.players.find((p) => p.participantId === owner)!.hand.at(-1)
+        ?.instanceId
+    ).toBe(target.instanceId)
+  })
+
+  it.each([
+    { action: 'return-to-hand', trigger: 'cast', full: false, count: 1 },
+    { action: 'return-to-hand', trigger: 'cast', full: true, count: 1 },
+    { action: 'return-to-hand', trigger: 'battlecry', full: false, count: 1 },
+    { action: 'return-to-hand', trigger: 'deathrattle', full: false, count: 1 },
+    { action: 'shuffle-into-deck', trigger: 'cast', full: false, count: 1 },
+    { action: 'copy', trigger: 'cast', full: false, count: 3 },
+    { action: 'copy', trigger: 'battlecry', full: false, count: 2 }
+  ])(
+    'emits resolved $action/$trigger movement (full=$full, count=$count)',
+    ({ action, trigger, full, count }) => {
+      const id = 'movement_fixture' as CardId
+      const catalog = CARD_CATALOG as unknown as {
+        cardsById: Map<CardId, CardDefinition>
+      }
+      const fixture = {
+        ...CARD_CATALOG.require(
+          trigger === 'cast' ? 'basic_sap' : 'basic_acidic_swamp_ooze'
+        ),
+        id,
+        cost: 0,
+        effects: [
+          {
+            trigger,
+            actions: [
+              {
+                action,
+                target: {
+                  controller: 'opponent',
+                  type: 'minion',
+                  selection: trigger === 'deathrattle' ? 'all' : 'chosen'
+                },
+                ...(action === 'copy' ? { destination: 'deck', count } : {})
+              }
+            ]
+          }
+        ]
+      } as unknown as CardDefinition
+      catalog.cardsById.set(id, fixture)
+      try {
+        const scenario = createMatchScenario({ seed: 777 })
+        scenario.confirmBothMulligans()
+        const state = scenario.match.getState()
+        const caster = state.activePlayerId!
+        const owner = state.players.find(
+          (p) => p.participantId !== caster
+        )!.participantId
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId: caster,
+          cardId: id
+        })
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: owner,
+          cardId: 'basic_bloodfen_raptor'
+        })
+        if (full) {
+          scenario.match.dispatch({
+            type: 'dev-clear-zone',
+            participantId: owner,
+            zone: 'hand'
+          })
+          for (let index = 0; index < 10; index++)
+            scenario.match.dispatch({
+              type: 'dev-add-card',
+              participantId: owner,
+              cardId: 'basic_bloodfen_raptor'
+            })
+        }
+        const before = scenario.match.getState()
+        const target = before.players.find((p) => p.participantId === owner)!.board[0]
+        const card = before.players
+          .find((p) => p.participantId === caster)!
+          .hand.find((c) => c.cardId === id)!
+        let result = scenario.match.dispatch({
+          type: 'play-card',
+          participantId: caster,
+          cardInstanceId: card.instanceId,
+          ...(trigger !== 'cast' ? { position: 0 } : {}),
+          ...(trigger !== 'deathrattle'
+            ? {
+                targets: [
+                  {
+                    kind: 'minion' as const,
+                    participantId: owner,
+                    instanceId: target.instanceId
+                  }
+                ]
+              }
+            : {})
+        })
+        expect(result.accepted).toBe(true)
+        if (trigger === 'deathrattle') {
+          scenario.match.dispatch({
+            type: 'dev-add-card',
+            participantId: caster,
+            cardId: 'basic_fireball'
+          })
+          scenario.match.dispatch({
+            type: 'dev-set-mana',
+            participantId: caster,
+            available: 10,
+            maximum: 10
+          })
+          const fireball = scenario.match
+            .getState()
+            .players.find((p) => p.participantId === caster)!
+            .hand.find((c) => c.cardId === 'basic_fireball')!
+          result = scenario.match.dispatch({
+            type: 'play-card',
+            participantId: caster,
+            cardInstanceId: fireball.instanceId,
+            targets: [
+              { kind: 'minion', participantId: caster, instanceId: card.instanceId }
+            ]
+          })
+        }
+        expect(result.accepted).toBe(true)
+        if (!result.accepted) throw new Error(result.message)
+        const movements = result.events.flatMap((event) =>
+          event.type === 'effect-resolved' && event.cardMovement
+            ? [event.cardMovement]
+            : []
+        )
+        const destination =
+          action === 'return-to-hand' ? (full ? 'discarded' : 'hand') : 'deck'
+        expect(movements).toHaveLength(1)
+        expect(movements[0]).toMatchObject({
+          sourceInstanceId: target.instanceId,
+          participantId: action === 'copy' ? caster : owner,
+          destination,
+          copy: action === 'copy'
+        })
+        expect(movements[0].cards).toHaveLength(count)
+        const destinationPlayer = result.state.players.find(
+          (p) => p.participantId === movements[0].participantId
+        )!
+        const destinationCards =
+          destination === 'discarded'
+            ? destinationPlayer.discardedCards!
+            : destinationPlayer[destination]
+        for (const moved of movements[0].cards) {
+          expect(moved).toMatchObject({ cardId: target.cardId, zone: destination })
+          expect(
+            destinationCards.find((card) => card.instanceId === moved.instanceId)
+          ).toMatchObject(moved)
+        }
+        expect(
+          result.state.players
+            .find((p) => p.participantId === owner)!
+            .board.some((m) => m.instanceId === target.instanceId)
+        ).toBe(action === 'copy')
+        const publicEvents = getOpeningMatchPublicEvents(result.events, owner)
+        const publicMovement = publicEvents.find(
+          (event) => event.type === 'effect-resolved' && event.cardMovement
+        )
+        expect(publicMovement).toMatchObject({
+          cardMovement: {
+            cards: movements[0].cards.map((card) => ({
+              instanceId: card.instanceId,
+              cardId: card.cardId
+            }))
+          }
+        })
+        if (publicMovement?.type === 'effect-resolved')
+          for (const card of publicMovement.cardMovement!.cards)
+            expect(card).not.toHaveProperty('knownTo')
+        // Event snapshots must not alias the committed zone state.
+        expect(movements[0].cards[0]).not.toBe(
+          destinationCards.find(
+            (c) => c.instanceId === movements[0].cards[0].instanceId
+          )
+        )
+      } finally {
+        catalog.cardsById.delete(id)
+      }
+    }
+  )
+})
+
 function randomSpellScenario(
   spellId: string,
   count = 3,
@@ -5817,5 +6225,252 @@ describe('shared effect runtime', () => {
         (card) => card.cardId === 'classic_faerie_dragon'
       )?.currentCost
     ).toBe(0)
+  })
+})
+
+describe('current-stat swaps', () => {
+  function setup(targetCard = 'basic_chillwind_yeti', enemy = false) {
+    const { match, confirmBothMulligans } = createMatchScenario({
+      cardId: 'classic_moonfire'
+    })
+    confirmBothMulligans()
+    const participantId = match.getState().activePlayerId!
+    const opponent = match
+      .getState()
+      .players.find((p) => p.participantId !== participantId)!.participantId
+    const targetOwner = enemy ? opponent : participantId
+    const board = () => match.getState().players.flatMap((p) => p.board)
+    const summon = (cardId: string) => {
+      expect(
+        match.dispatch({ type: 'dev-summon-minion', participantId, cardId }).accepted
+      ).toBe(true)
+      return match
+        .getState()
+        .players.find((p) => p.participantId === participantId)!
+        .board.at(-1)!.instanceId
+    }
+    expect(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: targetOwner,
+        cardId: targetCard
+      }).accepted
+    ).toBe(true)
+    const targetId = board()[0].instanceId
+    const play = (cardId: string, id: string | null = targetId) => {
+      expect(
+        match.dispatch({
+          type: 'dev-set-mana',
+          participantId,
+          available: 10,
+          maximum: 10
+        }).accepted
+      ).toBe(true)
+      expect(
+        match.dispatch({ type: 'dev-add-card', participantId, cardId }).accepted
+      ).toBe(true)
+      const player = match
+        .getState()
+        .players.find((p) => p.participantId === participantId)!
+      const card = player.hand.find((c) => c.cardId === cardId)!
+      const owner = match
+        .getState()
+        .players.find((p) => p.board.some((m) => m.instanceId === id))?.participantId
+      const result = match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId,
+        ...(CARD_CATALOG.require(cardId).type === 'Minion'
+          ? { position: player.board.length }
+          : {}),
+        ...(id === null
+          ? {}
+          : {
+              targets: [
+                { kind: 'minion' as const, participantId: owner!, instanceId: id }
+              ]
+            })
+      })
+      expect(result.accepted).toBe(true)
+    }
+    const stats = (id = targetId) => {
+      const m = board().find((m) => m.instanceId === id)
+      return m
+        ? { attack: m.attack, health: m.health, maxHealth: m.maxHealth }
+        : undefined
+    }
+    const cardStats = (cardId: string) =>
+      stats(board().find((m) => m.cardId === cardId)!.instanceId)
+    const endTurn = () =>
+      expect(
+        match.dispatch({
+          type: 'end-turn',
+          participantId: match.getState().activePlayerId!
+        }).accepted
+      ).toBe(true)
+    const stable = () => {
+      const state = getDerivedState(match.getState())
+      expect(getDerivedState(state)).toEqual(state)
+    }
+    const keywords = (cardId: string) =>
+      board().find((m) => m.cardId === cardId)!.keywords
+    return { play, stats, cardStats, summon, endTurn, stable, targetId, keywords }
+  }
+  it.each([
+    'classic_crazed_alchemist',
+    'mean_streets_of_gadgetzan_kooky_chemist',
+    'goblins_vs_gnomes_spare_part_reversing_switch',
+    'the_grand_tournament_confuse'
+  ])('swaps current health with %s', (card) => {
+    const s = setup()
+    s.play('classic_moonfire')
+    s.play(card, card === 'the_grand_tournament_confuse' ? null : s.targetId)
+    expect(s.stats()).toEqual({ attack: 4, health: 4, maxHealth: 4 })
+    s.stable()
+  })
+  it('Darkspeaker exchanges both current stats', () => {
+    const s = setup()
+    s.play('classic_moonfire')
+    s.play('basic_blessing_of_might')
+    s.play('whispers_of_the_old_gods_darkspeaker')
+    expect(s.stats()).toEqual({ attack: 3, health: 6, maxHealth: 6 })
+    expect(s.cardStats('whispers_of_the_old_gods_darkspeaker')).toEqual({
+      attack: 7,
+      health: 4,
+      maxHealth: 4
+    })
+    s.stable()
+  })
+  it.each([false, true])(
+    'Voljin persistently exchanges remaining health (enemy=%s)',
+    (enemy) => {
+      const s = setup('basic_chillwind_yeti', enemy)
+      s.play('classic_moonfire')
+      s.play('goblins_vs_gnomes_voljin')
+      expect(s.stats()).toEqual({ attack: 4, health: 2, maxHealth: 2 })
+      expect(s.cardStats('goblins_vs_gnomes_voljin')).toEqual({
+        attack: 6,
+        health: 4,
+        maxHealth: 4
+      })
+      s.stable()
+    }
+  )
+  it('attack buffs after a swap increase attack', () => {
+    const s = setup()
+    s.play('classic_crazed_alchemist')
+    s.play('basic_blessing_of_might')
+    expect(s.stats()).toEqual({ attack: 8, health: 4, maxHealth: 4 })
+    s.stable()
+  })
+  it('health multipliers after a swap increase health', () => {
+    const s = setup()
+    s.play('classic_crazed_alchemist')
+    s.play('basic_divine_spirit')
+    expect(s.stats()).toEqual({ attack: 5, health: 8, maxHealth: 8 })
+    s.stable()
+  })
+  it('swapping twice retains damage converted into attack', () => {
+    const s = setup()
+    s.play('classic_moonfire')
+    s.play('classic_crazed_alchemist')
+    s.play('classic_crazed_alchemist')
+    expect(s.stats()).toEqual({ attack: 4, health: 4, maxHealth: 4 })
+  })
+  it('swapping again captures damage taken after the first swap', () => {
+    const s = setup()
+    s.play('classic_crazed_alchemist')
+    s.play('classic_moonfire')
+    s.play('classic_crazed_alchemist')
+    expect(s.stats()).toEqual({ attack: 3, health: 5, maxHealth: 5 })
+  })
+  it('silence removes swap and later buffs', () => {
+    const s = setup()
+    s.play('classic_crazed_alchemist')
+    s.play('basic_blessing_of_might')
+    s.play('classic_silence')
+    expect(s.stats()).toEqual({ attack: 4, health: 5, maxHealth: 5 })
+  })
+  it('temporary buffs captured before swapping remain after expiration', () => {
+    const s = setup()
+    s.play('classic_abusive_sergeant')
+    s.play('classic_crazed_alchemist')
+    s.endTurn()
+    expect(s.stats()).toEqual({ attack: 5, health: 6, maxHealth: 6 })
+    s.stable()
+  })
+  it('temporary buffs after swapping expire on the correct stat', () => {
+    const s = setup()
+    s.play('classic_crazed_alchemist')
+    s.play('classic_abusive_sergeant')
+    expect(s.stats()).toEqual({ attack: 7, health: 4, maxHealth: 4 })
+    s.endTurn()
+    expect(s.stats()).toEqual({ attack: 5, health: 4, maxHealth: 4 })
+  })
+  it('auras are captured then reapplied and can be removed', () => {
+    const s = setup()
+    const champion = s.summon('basic_stormwind_champion')
+    s.play('classic_crazed_alchemist')
+    expect(s.stats()).toEqual({ attack: 7, health: 6, maxHealth: 6 })
+    s.stable()
+    s.play('classic_silence', champion)
+    expect(s.stats()).toEqual({ attack: 6, health: 5, maxHealth: 5 })
+    s.stable()
+  })
+  it('zero attack becomes zero health and dies', () => {
+    const s = setup('classic_shieldbearer')
+    s.play('classic_crazed_alchemist')
+    expect(s.stats()).toBeUndefined()
+  })
+  it('Brann repeats swaps before zero-health deaths', () => {
+    const s = setup('classic_shieldbearer')
+    s.summon('league_of_explorers_brann_bronzebeard')
+    s.play('classic_crazed_alchemist')
+    expect(s.stats()).toEqual({ attack: 0, health: 4, maxHealth: 4 })
+  })
+  it('Confuse swaps both boards using each current value', () => {
+    const s = setup('basic_chillwind_yeti', true)
+    const ooze = s.summon('basic_acidic_swamp_ooze')
+    s.play('classic_moonfire')
+    s.play('the_grand_tournament_confuse', null)
+    expect(s.stats()).toEqual({ attack: 4, health: 4, maxHealth: 4 })
+    expect(s.stats(ooze)).toEqual({ attack: 2, health: 3, maxHealth: 3 })
+    s.stable()
+  })
+  it.each(['goblins_vs_gnomes_voljin', 'whispers_of_the_old_gods_darkspeaker'])(
+    'Brann repeats exchanges with %s',
+    (card) => {
+      const s = setup()
+      s.summon('league_of_explorers_brann_bronzebeard')
+      s.play(card)
+      expect(s.stats()).toEqual({ attack: 4, health: 5, maxHealth: 5 })
+      s.stable()
+    }
+  )
+  it('Voljin health swap can be silenced and buffed', () => {
+    const s = setup()
+    s.play('goblins_vs_gnomes_voljin')
+    s.play('basic_divine_spirit')
+    expect(s.stats()).toEqual({ attack: 4, health: 4, maxHealth: 4 })
+    s.play('classic_silence')
+    expect(s.stats()).toEqual({ attack: 4, health: 5, maxHealth: 5 })
+  })
+  it('Darkspeaker does not transfer keywords', () => {
+    const s = setup('classic_shieldbearer')
+    s.play('whispers_of_the_old_gods_darkspeaker')
+    expect(s.stats()).toEqual({ attack: 3, health: 6, maxHealth: 6 })
+    expect(s.cardStats('whispers_of_the_old_gods_darkspeaker')).toEqual({
+      attack: 0,
+      health: 4,
+      maxHealth: 4
+    })
+    expect(s.keywords('classic_shieldbearer')).toContain('taunt')
+    expect(s.keywords('whispers_of_the_old_gods_darkspeaker')).not.toContain('taunt')
+  })
+  it('damage protection cannot preserve a zero-health swap', () => {
+    const s = setup('classic_shieldbearer')
+    s.play('classic_commanding_shout', null)
+    s.play('classic_crazed_alchemist')
+    expect(s.stats()).toBeUndefined()
   })
 })

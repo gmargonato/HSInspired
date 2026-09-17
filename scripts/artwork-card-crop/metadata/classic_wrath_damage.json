@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_wrath_damage.jpg",
+  "source_name": "classic_wrath_damage.jpg",
+  "crop_box": [
+    30,
+    30,
+    485,
+    485
+  ],
+  "scale": 1.1,
+  "offset_x": -33.52307692307693,
+  "offset_y": -33.215384615384664,
+  "timestamp": "2026-09-16T14:41:52.107447",
+  "card_id": "classic_wrath_damage",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

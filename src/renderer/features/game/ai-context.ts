@@ -49,6 +49,46 @@ function cardNameCounts(cardIds: readonly string[]): JsonObject {
   return Object.fromEntries([...counts].sort(([a], [b]) => a.localeCompare(b)))
 }
 
+function heroCardDeckFacts(deck: {
+  readonly cards: readonly { readonly cardId: string; readonly count: number }[]
+}): JsonObject[] {
+  return deck.cards
+    .filter(({ cardId }) => CARD_CATALOG.require(cardId).type === 'Hero')
+    .map(({ cardId, count }) => ({
+      cardId,
+      originalCount: count,
+      ...cardFacts(cardId)
+    }))
+}
+
+function countCards(
+  cards: readonly { readonly cardId: string }[],
+  cardId: string
+): number {
+  return cards.filter((card) => card.cardId === cardId).length
+}
+
+function ownHeroCardFacts(
+  originalDeck: {
+    readonly cards: readonly { readonly cardId: string; readonly count: number }[]
+  },
+  currentDeck: readonly { readonly cardId: string }[],
+  hand: readonly { readonly cardId: string }[],
+  graveyardCardIds: readonly string[]
+): JsonObject[] {
+  return heroCardDeckFacts(originalDeck).map((card) => {
+    const cardId = String(card.cardId)
+    return {
+      ...card,
+      locations: {
+        deck: countCards(currentDeck, cardId),
+        hand: countCards(hand, cardId),
+        graveyard: graveyardCardIds.filter((entry) => entry === cardId).length
+      }
+    }
+  })
+}
+
 function positiveTraits(value: {
   readonly keywords?: readonly string[]
   readonly silenced?: boolean
@@ -81,13 +121,17 @@ export function aiSystemContext(session: GameBoardSession): AiMessage {
       'Board positions are zero-based, left to right. Insertion slot 0 is before the first minion; slot N is after N minions. Grouped positions map slot to action ID; select that ID. canAttackNow and canAttackHeroNow reflect current legal attacks. attacksRemaining is an allowance, not permission to attack. A stat buff alone does not remove summoning sickness or restore attacks.\n' +
       'An opponent restriction of not your turn does not imply they cannot attack on their next turn. Read the relevant restrictions and turn transition.\n' +
       'Board printedText and printedKeywords describe the original card, not active abilities. activeKeywords and currentStatus describe the current minion. Attack, health, cost and durability are current values with stat modifiers already applied; never add enchantment deltas again. Enchantment details explain sources and expiry, not extra stats.\n' +
-      'battlecryConditions evaluate only the stated requirement using your current hand after excluding the card being played. met does not guarantee an effect or target; not-met means do not expect that conditional effect unless the hand changes first. unknown is not confirmation. Intervening effects may change these facts. An inactive battlecry minion can still be a legal body-only play.\n' +
+      'battlecryConditions evaluate only the stated requirement using your current hand after excluding the card being played. met does not guarantee an effect or target; not-met means do not expect that conditional effect unless the hand changes first. unknown is not confirmation. Intervening effects may change these facts. An inactive battlecry minion can still be a legal body-only play. Quest state is public and appears under each player as quest, including its progress, target, objective card and reward. Your original deck also lists your Hero Cards under deck.heroCards; their current deck, hand and graveyard counts appear under their locations.\n' +
       JSON.stringify({
+        ...(session.opponentStrategy
+          ? { originalDeckStrategy: session.opponentStrategy }
+          : {}),
         deck: {
           ...deck,
           cards: cardNameCounts(
             deck.cards.flatMap(({ cardId, count }) => Array<string>(count).fill(cardId))
-          )
+          ),
+          heroCards: heroCardDeckFacts(deck)
         },
         aiBonuses: AI_BONUS_SETTINGS
       })
@@ -239,9 +283,10 @@ export function aiModelState(
   session: GameBoardSession,
   commands: readonly TurnMatchCommand[]
 ): JsonObject {
-  const { selfOriginalDeck: _originalDeck, ...observation } = session.getAiObservation()
+  const { selfOriginalDeck, ...observation } = session.getAiObservation()
   const state = session.getState()
   const selfId = session.remoteParticipantId
+  const selfState = session.findPlayer(state, selfId)
   const discover =
     state.pendingDiscover?.participantId === selfId ? state.pendingDiscover : undefined
   const choice =
@@ -281,6 +326,28 @@ export function aiModelState(
               'Current legal attacks only; opponent readiness changes on their turn.'
           }
         },
+        quest: player.quest
+          ? {
+              cardId: player.quest.cardId,
+              card: cardFacts(player.quest.cardId),
+              rewardCardId: player.quest.rewardCardId,
+              reward: cardFacts(player.quest.rewardCardId),
+              goal: player.quest.goal,
+              progress: player.quest.progress,
+              target: player.quest.target,
+              completed: player.quest.progress >= player.quest.target
+            }
+          : null,
+        ...(player.role === 'self'
+          ? {
+              heroCards: ownHeroCardFacts(
+                selfOriginalDeck,
+                selfState.deck,
+                player.hand,
+                player.graveyardCardIds
+              )
+            }
+          : {}),
         hand: player.hand.map((card) => ({
           ref: card.instanceId,
           ...cardFacts(card.cardId),

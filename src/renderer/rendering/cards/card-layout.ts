@@ -1,4 +1,5 @@
 import type { CardDefinition, CardId, CardType } from '../../../game/content/cards'
+import { supportsPremiumFormat } from '../../../game/progression/premium-support'
 import type {
   CardBounds,
   CardGroupNode,
@@ -521,11 +522,24 @@ function legendaryFrame(
   card: CardDefinition,
   premium: boolean
 ): Extract<CardRenderNode, { kind: 'image' }> | null {
-  if (card.type !== 'Minion' || card.rarity !== 'Legendary') return null
+  if (
+    (card.type !== 'Minion' && card.type !== 'Spell') ||
+    card.rarity !== 'Legendary'
+  ) {
+    return null
+  }
+
+  const spell = card.type === 'Spell'
 
   return image(
     'legendary-frame',
-    premium ? 'card.frame.legendary.premium' : 'card.frame.legendary',
+    spell
+      ? premium
+        ? 'card.frame.legendary.spell.premium'
+        : 'card.frame.legendary.spell'
+      : premium
+        ? 'card.frame.legendary.premium'
+        : 'card.frame.legendary',
     {
       x: CARD_CANVAS.width / 2 + LEGENDARY_FRAME_OFFSET.x,
       y: LEGENDARY_FRAME_OFFSET.y
@@ -558,9 +572,7 @@ export function buildCardRenderTree(
   options: CardRenderOptions = {}
 ): { readonly root: CardGroupNode } {
   const profile = CARD_PROFILES[visualTemplateFor(card.type)]
-  const premium =
-    (card.type === 'Minion' || card.type === 'Spell' || card.type === 'Weapon') &&
-    options.premium === true
+  const premium = supportsPremiumFormat(card.type) && options.premium === true
   const frameKey = premium ? `${profile.frame}.premium` : profile.frame
   const legendaryFrameNode = legendaryFrame(card, premium)
   const children: CardRenderNode[] = [
@@ -629,7 +641,7 @@ export function buildCardRenderTree(
 }
 
 export interface CardRenderOptions {
-  /** Presentation-only variant for minions, spells, and weapons. */
+  /** Presentation-only variant for supported collectible card formats. */
   readonly premium?: boolean
   readonly opponent?: boolean
   readonly debug?: boolean
@@ -663,7 +675,7 @@ export function buildCardLayout(
   ]
 
   if (card.type === 'Hero')
-    diagnostics.push('Hero uses the dedicated standard hero frame.')
+    diagnostics.push('Hero uses the dedicated hero frame with a premium variant.')
   if (options.elite) {
     diagnostics.push('Elite overlay request ignored by the simplified card design.')
   }

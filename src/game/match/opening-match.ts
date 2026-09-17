@@ -180,6 +180,7 @@ function expandDeck(
       cards.push({
         instanceId: `${participant.participantId}:deck:${ordinal}`,
         cardId: definition.id,
+        startedInDeck: true,
         ownerId: participant.participantId,
         controllerId: participant.participantId,
         creationOrdinal: ordinalOffset + ordinal,
@@ -640,7 +641,18 @@ export function createOpeningMatch(
         : hero.startingHealth
     const expanded = expandDeck(deck, participant, initialEntityOrdinal)
     initialEntityOrdinal += expanded.length
-    const shuffled = shuffle(expanded, rng)
+    const questCards = expanded.filter((card) => {
+      const definition = CARD_CATALOG.get(card.cardId)
+      return definition?.type === 'Spell' && definition.quest !== undefined
+    })
+    if (questCards.length > 1)
+      throw new Error(`Deck ${deck.id} cannot contain more than one Quest.`)
+    const questDefinition = questCards[0]
+      ? CARD_CATALOG.get(questCards[0].cardId)
+      : undefined
+    const quest = questDefinition?.type === 'Spell' ? questDefinition.quest : undefined
+    const drawable = expanded.filter((card) => !questCards.includes(card))
+    const shuffled = shuffle(drawable, rng)
     const initialCount = seatIndex === 0 ? 3 : 4
     const initialCards = shuffled.slice(0, initialCount).map((card) => ({
       ...card,
@@ -673,6 +685,17 @@ export function createOpeningMatch(
       },
       playerNumber: (seatIndex + 1) as 1 | 2,
       deck: shuffled.slice(initialCount),
+      originalDeckCardIds: drawable.map((card) => card.cardId),
+      quest:
+        questDefinition && quest
+          ? {
+              cardId: questDefinition.id,
+              rewardCardId: quest.rewardCardId,
+              goal: quest.goal,
+              progress: 0,
+              target: quest.target
+            }
+          : null,
       hand: initialCards,
       board: [],
       weapon: null,
@@ -832,6 +855,24 @@ export function createOpeningMatch(
       nextPlayers[index] = resolved.player
       return resolved.history ? [resolved.history] : []
     })
+    for (const player of nextPlayers) {
+      if (!player.quest) continue
+      openingHistory.push({
+        type: 'history-action-resolved',
+        entryId: `${player.participantId}:quest-opening`,
+        participantId: player.participantId,
+        action: 'trigger',
+        source: {
+          id: `${player.participantId}:quest-opening`,
+          participantId: player.participantId,
+          kind: 'card',
+          cardId: player.quest.cardId,
+          zone: 'revealed',
+          publicIdentity: true
+        },
+        outcomes: []
+      })
+    }
     events.push(...openingHistory)
     const playerOne = nextPlayers[0]
     const drawn = drawCards(playerOne, 1)
@@ -877,7 +918,10 @@ export function createOpeningMatch(
     if (!deck) throw new Error(`Deck ${participant.deckId} is not available.`)
     const refillId = devDeckRefillCounter
     devDeckRefillCounter += 1
-    const expanded = expandDeck(deck, participant, nextEntityOrdinal)
+    const expanded = expandDeck(deck, participant, nextEntityOrdinal).filter((card) => {
+      const definition = CARD_CATALOG.get(card.cardId)
+      return definition?.type !== 'Spell' || !definition.quest
+    })
     nextEntityOrdinal += expanded.length
     return shuffle(expanded, rng).map((card, ordinal) => ({
       ...card,
@@ -1300,6 +1344,28 @@ export function createOpeningMatch(
         )
       }
 
+      if (command.type === 'concede') {
+        if (state.phase === 'ended')
+          return reject(state, 'match-ended', 'The match has already ended.')
+        const winnerId = state.players[playerIndex === 0 ? 1 : 0].participantId
+        const loserId = command.participantId
+        commitState({
+          ...state,
+          phase: 'ended',
+          activePlayerId: null,
+          winnerId,
+          loserId,
+          pendingDiscover: undefined,
+          pendingCardChoice: undefined,
+          revision: state.revision + 1
+        })
+        return {
+          accepted: true,
+          state: cloneOpeningMatchState(state),
+          events: [{ type: 'match-ended', winnerId, loserId, reason: 'concede' }]
+        }
+      }
+
       if (state.pendingDiscover && command.type !== 'choose-discover-card') {
         return reject(
           state,
@@ -1341,6 +1407,7 @@ export function createOpeningMatch(
           rng,
           participantId: command.participantId,
           ...(command.target ? { target: command.target } : {}),
+          ...(command.choice === undefined ? {} : { choice: command.choice }),
           nextEntityOrdinal,
           recordTrace: recordEffectTrace
         })

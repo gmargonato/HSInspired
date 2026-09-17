@@ -77,6 +77,40 @@ function scenario(options: Parameters<typeof createMatchScenario>[0] = {}) {
 }
 
 describe('League of Explorers card effects', () => {
+  it('excludes opening-only Quests from generated Spell Discover choices', () => {
+    const value = scenario({ firstHeroId: 'malfurion' })
+    const [participantId] = activePlayers(value)
+    const pool = CARD_CATALOG.all.filter(
+      (card) =>
+        card.collectible &&
+        card.type === 'Spell' &&
+        (card.cardClass === 'Druid' || card.cardClass === 'Neutral')
+    )
+    const questIndex = pool.findIndex(
+      (card) => card.id === 'journey_to_ungoro_jungle_giants'
+    )
+    expect(questIndex).toBeGreaterThanOrEqual(0)
+    const weight = (card: (typeof pool)[number]) => (card.cardClass === 'Druid' ? 4 : 1)
+    const totalWeight = pool.reduce((sum, card) => sum + weight(card), 0)
+    const beforeQuest = pool
+      .slice(0, questIndex)
+      .reduce((sum, card) => sum + weight(card), 0)
+    value.rng.next = () => (beforeQuest + 0.5) / totalWeight
+
+    setMana(value, participantId)
+    addCard(value, participantId, 'league_of_explorers_raven_idol')
+    play(value, participantId, 'league_of_explorers_raven_idol', { choice: 1 })
+
+    const choices = value.match.getState().pendingDiscover?.candidates ?? []
+    expect(choices).toHaveLength(3)
+    expect(
+      choices.every((card) => {
+        const definition = CARD_CATALOG.require(card.cardId)
+        return definition.type !== 'Spell' || !definition.quest
+      })
+    ).toBe(true)
+  })
+
   it('uses generated Discover choices without consuming the deck', () => {
     const value = scenario({ firstHeroId: 'malfurion' })
     const [participantId] = activePlayers(value)

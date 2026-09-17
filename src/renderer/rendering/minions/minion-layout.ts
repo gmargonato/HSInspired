@@ -42,7 +42,7 @@ export const MINION_LAYOUT = {
     { width: 160, height: 210 },
     {
       anchor: CENTER,
-      note: 'Frozen overlay above minion frames and below Stealth and Divine Shield.'
+      note: 'Frozen overlay above minion frames and Stealth, below Divine Shield.'
     }
   ),
   taunt: placement(
@@ -53,11 +53,17 @@ export const MINION_LAYOUT = {
       note: 'Taunt ring surrounding the board minion.'
     }
   ),
+  enrage: placement(
+    { x: 80, y: 90 },
+    { width: 105, height: 141 },
+    { anchor: CENTER, note: 'Active Enrage overlay surrounding the portrait.' }
+  ),
   divineShield: placement(
-    { x: 80, y: 85 },
+    { x: 83, y: 88 },
     { width: 125, height: 167 },
     {
       anchor: CENTER,
+	  scale: 1.2,
       note: 'Divine Shield cocoon surrounding the portrait.'
     }
   ),
@@ -123,15 +129,35 @@ export const MINION_LAYOUT = {
       note: 'Bottom-center Spell Damage badge, sharing the Trigger position.'
     }
   ),
+  lifesteal: placement(
+    { x: 80, y: 160 },
+    { width: 43, height: 41 },
+    {
+      anchor: CENTER,
+      scale: 0.75,
+      note: 'Bottom-center Lifesteal badge, sharing the Trigger position.'
+    }
+  ),
+  aura: placement(
+    { x: 80, y: 20 },
+    { width: 38, height: 38 },
+    {
+      anchor: CENTER,
+      note: 'Top-center Aura badge, layered above every other minion mark.'
+    }
+  ),
   elusive: placement(
     { x: 80, y: 85 },
     { width: 113, height: 153 },
     { anchor: CENTER, note: 'Elusive portrait overlay.' }
   ),
   immune: placement(
-    { x: 80, y: 85 },
+    { x: 83, y: 88 },
     { width: 125, height: 167 },
-    { anchor: CENTER, note: 'Immune portrait overlay.' }
+    {
+      anchor: CENTER,
+	  scale: 1.2,
+	  note: 'Immune portrait overlay.' }
   ),
   attackBadge: placement(
     { x: 35, y: 130 },

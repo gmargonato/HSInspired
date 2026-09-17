@@ -77,6 +77,11 @@ export class SceneManager {
     return this.stack[this.stack.length - 1] ?? null
   }
 
+  /** Design-canvas shake, independent of viewport fitting and the cursor. */
+  setPresentationOffset(x: number, y: number): void {
+    this.world.pivot.set(-x, -y)
+  }
+
   subscribe(listener: () => void): () => void {
     this.sceneChangeListeners.add(listener)
     return () => this.sceneChangeListeners.delete(listener)

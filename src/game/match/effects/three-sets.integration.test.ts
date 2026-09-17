@@ -124,6 +124,36 @@ function attack(
 }
 
 describe('Goblins vs Gnomes and Mean Streets card corrections', () => {
+  it('I Know a Guy offers three Taunt minions to Discover', () => {
+    const scenario = ready({ seed: 1731, firstHeroId: 'garrosh' })
+    const [participantId] = activePlayers(scenario)
+    const cardId = 'mean_streets_of_gadgetzan_i_know_a_guy'
+    setMana(scenario, participantId)
+    addCard(scenario, participantId, cardId)
+
+    const result = play(scenario, participantId, cardId)
+    const pending = result.state.pendingDiscover
+    expect(result.events).toContainEqual(
+      expect.objectContaining({ type: 'discover-started', participantId })
+    )
+    expect(pending?.candidates).toHaveLength(3)
+    expect(
+      pending?.candidates.every((card) =>
+        CARD_CATALOG.require(card.cardId).keywords.includes('taunt')
+      )
+    ).toBe(true)
+    const selected = pending!.candidates[0]!
+    const choice = scenario.match.dispatch({
+      type: 'choose-discover-card',
+      participantId,
+      cardInstanceId: selected.instanceId
+    })
+    expect(choice.accepted).toBe(true)
+    expect(player(scenario, participantId).hand).toContainEqual(
+      expect.objectContaining({ instanceId: selected.instanceId })
+    )
+  })
+
   it('Imp-losion summons the rolled damage amount even when the target dies', () => {
     const scenario = ready({ seed: 1706 })
     const [participantId, opponentId] = activePlayers(scenario)
@@ -430,6 +460,32 @@ describe('One Night in Karazhan, Whispers of the Old Gods, and Mean Streets effe
 
     expect(resolve(false)).toBe(22)
     expect(resolve(true)).toBe(18)
+  })
+
+  it('uses the shared Lifesteal behavior for Mistress of Pain exactly once', () => {
+    const scenario = ready({
+      seed: 1713,
+      firstHeroId: 'anduin',
+      secondHeroId: 'anduin'
+    })
+    const [participantId, opponentId] = activePlayers(scenario)
+    setHealth(scenario, participantId, 20)
+    const mistress = summon(
+      scenario,
+      participantId,
+      'goblins_vs_gnomes_mistress_of_pain'
+    )
+    const target = summon(scenario, opponentId, 'classic_wisp')
+    cycleTurn(scenario, participantId, opponentId)
+
+    const result = attack(
+      scenario.match,
+      participantId,
+      { kind: 'minion', instanceId: mistress.instanceId },
+      { kind: 'minion', instanceId: target.instanceId }
+    )
+    if (!result.accepted) throw new Error(result.message)
+    expect(player(scenario, participantId).hero.health).toBe(21)
   })
 
   it('applies Lifesteal once when Auchenai replaces its healing event', () => {

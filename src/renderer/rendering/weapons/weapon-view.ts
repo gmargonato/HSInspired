@@ -12,6 +12,8 @@ import { isPremiumEnabled, subscribeToPremiumAppearance } from '../premium-appea
 import { PremiumArtworkBreath } from '../effects/premium-artwork-breath'
 
 export interface WeaponViewModel {
+  readonly premiumSide?: 'local' | 'remote'
+  readonly premium?: boolean
   readonly label: string
   readonly attack: number
   readonly durability: number
@@ -113,7 +115,9 @@ export class WeaponView extends Container {
     applyPlacement(artworkLayer, WEAPON_LAYOUT.artwork)
     artworkLayer.label = 'weapon.artwork'
     this.artworkBreath = artwork ? new PremiumArtworkBreath(artworkLayer) : null
-    this.artworkBreath?.setEnabled(isPremiumEnabled())
+    this.artworkBreath?.setEnabled(
+      model.premium === true || isPremiumEnabled(model.premiumSide)
+    )
 
     const { radiusX, radiusY, center } = WEAPON_LAYOUT.artworkOval
     if (artwork) {
@@ -144,9 +148,12 @@ export class WeaponView extends Container {
     this.addChild(artworkLayer)
 
     const frame = new Sprite(
-      isPremiumEnabled() ? textures.premiumFrame : textures.frame
+      model.premium || isPremiumEnabled(model.premiumSide)
+        ? textures.premiumFrame
+        : textures.frame
     )
-    this.unsubscribePremium = subscribeToPremiumAppearance((enabled) => {
+    this.unsubscribePremium = subscribeToPremiumAppearance(() => {
+      const enabled = model.premium === true || isPremiumEnabled(model.premiumSide)
       frame.texture = enabled ? textures.premiumFrame : textures.frame
       this.artworkBreath?.setEnabled(enabled)
     })

@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_old_murk_eye.jpg",
+  "source_name": "classic_old_murk_eye.jpg",
+  "crop_box": [
+    114,
+    114,
+    1254,
+    1254
+  ],
+  "scale": 0.4385964912280702,
+  "offset_x": -50.0,
+  "offset_y": -50.0,
+  "timestamp": "2026-09-16T14:39:08.213442",
+  "card_id": "classic_old_murk_eye",
+  "card_type": "Minion",
+  "frame_file": "frame-minion.png"
+}

@@ -72,7 +72,9 @@ export const EXPANSION_IDS = [
   'the-grand-tournament',
   'one-night-in-karazhan',
   'whispers-of-the-old-gods',
-  'mean-streets-of-gadgetzan'
+  'mean-streets-of-gadgetzan',
+  'journey-to-ungoro',
+  'knights-of-the-frozen-throne'
 ] as const
 export type KnownExpansionId = (typeof EXPANSION_IDS)[number]
 
@@ -105,6 +107,30 @@ export interface MinionCardDefinition extends CardMetadata {
 
 export interface SpellCardDefinition extends CardMetadata {
   readonly type: 'Spell'
+  /** Opening-match objective; Quests are removed from the drawable deck. */
+  readonly quest?: {
+    readonly goal:
+      | 'summon-attack-5'
+      | 'play-cost-1-minion'
+      | 'cast-generated-spell'
+      | 'target-friendly-minion'
+      | 'summon-deathrattle'
+      | 'play-deathrattle-minion'
+      | 'play-same-name'
+      | 'discard-card'
+      | 'play-taunt-minion'
+      | 'end-turn-unspent-mana'
+      | 'summon-minion'
+      | 'summon-murloc'
+      | 'cast-spell'
+      | 'restore-health'
+      | 'add-other-class-card'
+      | 'play-battlecry-minion'
+      | 'draw-card'
+      | 'hero-attack'
+    readonly target: number
+    readonly rewardCardId: CardId
+  }
 }
 
 export interface WeaponCardDefinition extends CardMetadata {
@@ -139,7 +165,9 @@ export function formatExpansionName(expansionId: ExpansionId | string): string {
     'the-grand-tournament': 'The Grand Tournament',
     'one-night-in-karazhan': 'One Night in Karazhan',
     'whispers-of-the-old-gods': 'Whispers of the Old Gods',
-    'mean-streets-of-gadgetzan': 'Mean Streets of Gadgetzan'
+    'mean-streets-of-gadgetzan': 'Mean Streets of Gadgetzan',
+    'journey-to-ungoro': "Journey to Un'Goro",
+    'knights-of-the-frozen-throne': 'Knights of the Frozen Throne'
   }
   const knownLabel = labels[expansionId]
   if (knownLabel) return knownLabel

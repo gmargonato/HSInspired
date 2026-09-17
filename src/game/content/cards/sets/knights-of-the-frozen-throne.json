@@ -1,0 +1,917 @@
+[
+  {
+    "id": "knights_of_the_frozen_throne_the_lich_king",
+    "name": "The Lich King",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Undead",
+    "cost": 8,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Taunt. At the end of your turn, add a random Lich King card to your hand.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "pool": [
+              "knights_of_the_frozen_throne_death_coil",
+              "knights_of_the_frozen_throne_death_grip",
+              "knights_of_the_frozen_throne_obliterate",
+              "knights_of_the_frozen_throne_death_and_decay",
+              "knights_of_the_frozen_throne_anti_magic_shell",
+              "knights_of_the_frozen_throne_doom_pact",
+              "knights_of_the_frozen_throne_army_of_the_frozen_throne",
+              "knights_of_the_frozen_throne_frostmourne"
+            ],
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "knights_of_the_frozen_throne_death_coil",
+    "name": "Death Coil",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 5 damage to an enemy, or restore 5 Health to a friendly character.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "damage",
+                  "target": {
+                    "controller": "opponent",
+                    "type": "character",
+                    "selection": "chosen"
+                  },
+                  "amount": 5
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "restore",
+                  "target": {
+                    "controller": "self",
+                    "type": "character",
+                    "selection": "chosen"
+                  },
+                  "amount": 5
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_death_grip",
+    "name": "Death Grip",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Steal a minion from your opponent's deck and add it to your hand.",
+    "keywords": [],
+    "effects": [{ "trigger": "cast", "actions": [{ "action": "steal-minion-from-deck" }] }],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_obliterate",
+    "name": "Obliterate",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Destroy a minion. Your hero takes damage equal to its Health.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "storeStats": true,
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": {
+              "reference": "destroyed-target.health"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_death_and_decay",
+    "name": "Death and Decay",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal 3 damage to all enemies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_anti_magic_shell",
+    "name": "Anti-Magic Shell",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 4,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give your minions +2/+2 and Elusive.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "attack": 2,
+            "health": 2
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "keyword": "spell-immune"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_doom_pact",
+    "name": "Doom Pact",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Destroy all minions. Remove the top card from your deck for each minion destroyed.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            }
+          },
+          {
+            "action": "discard",
+            "player": "self",
+            "source": "deck-top",
+            "count": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "any",
+                "type": "minion",
+                "selection": "all",
+                "filter": {
+                  "mortallyWounded": true
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_army_of_the_frozen_throne",
+    "name": "Army of the Frozen Throne",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 6,
+    "attack": null,
+    "health": null,
+    "rulesText": "Remove the top 5 cards of your deck. Summon any minions removed.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "deck",
+              "position": "top",
+              "count": 5
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_frostmourne",
+    "name": "Frostmourne",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 7,
+    "attack": 5,
+    "health": 3,
+    "rulesText": "Deathrattle: Summon every minion killed by this weapon.",
+    "keywords": [],
+    "effects": [{ "trigger": "deathrattle", "actions": [{ "action": "summon-weapon-kills" }] }],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_malfurion_the_pestilent",
+    "name": "Malfurion the Pestilent",
+    "rarity": "Legendary",
+    "cardClass": "Druid",
+    "type": "Hero",
+    "replacementHeroId": "malfurion-pestilent",
+    "subtype": "General",
+    "cost": 7,
+    "attack": null,
+    "armor": 5,
+    "rulesText": "Choose One - Summon 2 Poisonous Spiders; or 2 Scarabs with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "replace-hero",
+                  "heroId": "malfurion-pestilent"
+                },
+                {
+                  "action": "summon",
+                  "cardId": "knights_of_the_frozen_throne_frost_widow",
+                  "count": 2
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "replace-hero",
+                  "heroId": "malfurion-pestilent"
+                },
+                {
+                  "action": "summon",
+                  "cardId": "knights_of_the_frozen_throne_scarab_beetle",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "knights_of_the_frozen_throne_scarab_shell",
+    "name": "Scarab Shell",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "+3 Armor.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "gain-armor",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_spider_fangs",
+    "name": "Spider Fangs",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "+3 Attack this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "attack": 3,
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_scarab_plague",
+    "name": "Scarab Plague",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 7,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon two 1/5 Scarabs with Taunt.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_scarab_beetle",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_spider_plague",
+    "name": "Spider Plague",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 7,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon two 1/2 Spiders with Poisonous.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_frost_widow",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_frost_widow",
+    "name": "Frost Widow",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 1,
+    "attack": 1,
+    "health": 2,
+    "rulesText": "Poisonous.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "source": {
+            "selection": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "type": "minion",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_scarab_beetle",
+    "name": "Scarab Beetle",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 2,
+    "attack": 1,
+    "health": 5,
+    "rulesText": "Taunt.",
+    "keywords": ["taunt"],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_deathstalker_rexxar",
+    "name": "Deathstalker Rexxar",
+    "rarity": "Legendary",
+    "cardClass": "Hunter",
+    "type": "Hero",
+    "replacementHeroId": "rexxar-deathstalker",
+    "subtype": "General",
+    "cost": 6,
+    "attack": null,
+    "armor": 5,
+    "rulesText": "Battlecry: Deal 2 damage to all enemy minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "rexxar-deathstalker"
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "knights_of_the_frozen_throne_frost_lich_jaina",
+    "name": "Frost Lich Jaina",
+    "rarity": "Legendary",
+    "cardClass": "Mage",
+    "type": "Hero",
+    "replacementHeroId": "jaina-frost-lich",
+    "subtype": "General",
+    "cost": 9,
+    "attack": null,
+    "armor": 5,
+    "rulesText": "Battlecry: Summon a 3/6 Water Elemental.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "jaina-frost-lich"
+          },
+          {
+            "action": "summon",
+            "cardId": "basic_water_elemental",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "knights_of_the_frozen_throne_uther_of_the_ebon_blade",
+    "name": "Uther of the Ebon Blade",
+    "rarity": "Legendary",
+    "cardClass": "Paladin",
+    "type": "Hero",
+    "replacementHeroId": "uther-ebon-blade",
+    "subtype": "General",
+    "cost": 9,
+    "attack": null,
+    "armor": 5,
+    "rulesText": "Battlecry: Equip a 5/3 Lifesteal weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "uther-ebon-blade"
+          },
+          {
+            "action": "equip",
+            "cardId": "knights_of_the_frozen_throne_grave_vengeance"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "knights_of_the_frozen_throne_darion_mograine",
+    "name": "Darion Mograine",
+    "rarity": "None",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Undead",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_deathlord_nazgrim",
+    "name": "Deathlord Nazgrim",
+    "rarity": "None",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Undead",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_inquisitor_whitemane",
+    "name": "Inquisitor Whitemane",
+    "rarity": "None",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Undead",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_thoras_trollbane",
+    "name": "Thoras Trollbane",
+    "rarity": "None",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Undead",
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_grave_vengeance",
+    "name": "Grave Vengeance",
+    "rarity": "None",
+    "cardClass": "Paladin",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 8,
+    "attack": 5,
+    "health": 3,
+    "rulesText": "Lifesteal.",
+    "keywords": ["lifesteal"],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_shadowreaper_anduin",
+    "name": "Shadowreaper Anduin",
+    "rarity": "Legendary",
+    "cardClass": "Priest",
+    "type": "Hero",
+    "replacementHeroId": "anduin-shadowreaper",
+    "subtype": "General",
+    "cost": 8,
+    "attack": null,
+    "armor": 5,
+    "rulesText": "Battlecry: Destroy all minions with 5 or more Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "anduin-shadowreaper"
+          },
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "stat": "attack",
+                "operator": "gte",
+                "value": 5
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "knights_of_the_frozen_throne_valeera_the_hollow",
+    "name": "Valeera the Hollow",
+    "rarity": "Legendary",
+    "cardClass": "Rogue",
+    "type": "Hero",
+    "replacementHeroId": "valeera-hollow",
+    "subtype": "General",
+    "cost": 9,
+    "attack": null,
+    "armor": 5,
+    "rulesText": "Battlecry: Become immune until your next turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "valeera-hollow"
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "keyword": "immune",
+            "duration": "until-next-turn"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "knights_of_the_frozen_throne_thrall_deathseer",
+    "name": "Thrall, Deathseer",
+    "rarity": "Legendary",
+    "cardClass": "Shaman",
+    "type": "Hero",
+    "replacementHeroId": "thrall-deathseer",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "armor": 5,
+    "rulesText": "Battlecry: Transform your minions into random ones that cost (2) more.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "thrall-deathseer"
+          },
+          {
+            "action": "transform-random",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all"
+            },
+            "filter": {
+              "cardType": "Minion",
+              "cost": {
+                "reference": "target.baseCost",
+                "offset": 2
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "knights_of_the_frozen_throne_bloodreaver_guldan",
+    "name": "Bloodreaver Gul'dan",
+    "rarity": "Legendary",
+    "cardClass": "Warlock",
+    "type": "Hero",
+    "replacementHeroId": "guldan-bloodreaver",
+    "subtype": "General",
+    "cost": 10,
+    "attack": null,
+    "armor": 5,
+    "rulesText": "Battlecry: Summon all friendly Demons that died this game.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "guldan-bloodreaver"
+          },
+          {
+            "action": "resurrect",
+            "player": "self",
+            "source": "friendly-minions-died-this-game",
+            "selection": "all",
+            "filter": {
+              "tribe": "Demon"
+            },
+            "order": "random"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "knights_of_the_frozen_throne_shadowmourne",
+    "name": "Shadowmourne",
+    "rarity": "None",
+    "cardClass": "Warrior",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 8,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "Also damages minions next to whomever your hero attacks.",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "knights_of_the_frozen_throne_scourgelord_garrosh",
+    "name": "Scourgelord Garrosh",
+    "rarity": "Legendary",
+    "cardClass": "Warrior",
+    "type": "Hero",
+    "replacementHeroId": "garrosh-scourgelord",
+    "subtype": "General",
+    "cost": 8,
+    "attack": null,
+    "armor": 5,
+    "rulesText": "Battlecry: Equip a 4/3 Shadowmourne that also damages adjacent minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "garrosh-scourgelord"
+          },
+          {
+            "action": "equip",
+            "cardId": "knights_of_the_frozen_throne_shadowmourne"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  }
+]

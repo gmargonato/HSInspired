@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { withProviderRecovery } from './ai-provider-recovery'
 import {
   AiRequestError,
   AI_REQUEST_LIMITS,
@@ -103,7 +105,10 @@ export class AiDecisionService implements AiDecisionServiceContract {
     const report = (value: TransportProgress): void => {
       const repeatedBody =
         value.stage === 'response-body' && last.stage === 'response-body'
-      last = { ...last, ...value }
+      last =
+        value.stage === 'transport-started'
+          ? { ...value, receivedBytes: 0 }
+          : { ...last, ...value }
       if (repeatedBody) return
       // Diagnostics must never fail a decision or reveal request/response payloads.
       try {
@@ -132,6 +137,10 @@ export class AiDecisionService implements AiDecisionServiceContract {
     const transport = providerRequest(config)
     const body = {
       ...transport.body,
+      ...(config.provider === 'openrouter' &&
+      process.env.HSINSPIRED_AI_SESSION_AFFINITY !== '0'
+        ? { session_id: request.matchId }
+        : {}),
       messages: request.messages,
       ...(config.provider === 'openrouter'
         ? {
@@ -164,7 +173,6 @@ export class AiDecisionService implements AiDecisionServiceContract {
     ) {
       throw new Error('AI request exceeds the context allowance including its schema.')
     }
-    report(last)
     const heartbeat = setInterval(() => {
       try {
         progress?.({
@@ -183,7 +191,11 @@ export class AiDecisionService implements AiDecisionServiceContract {
     heartbeat.unref()
     const response = (await Promise.resolve()
       .then(() =>
-        (this.options.post ?? post)(
+        withProviderRecovery(
+          this.options.post ?? post,
+          randomUUID(),
+          request.phase ?? 'action'
+        )(
           transport.url,
           serializedBody,
           transport.headers,

@@ -139,7 +139,8 @@ export class AiTurnController {
       turn: this.options.session.getState().turnNumber,
       ...aiJson(data)
     })
-    this.options.logger[failure ? 'warn' : 'info']('[Game AI] ' + kind, snapshot)
+    if (kind !== 'request-progress' && kind !== 'decision-timing')
+      this.options.logger[failure ? 'warn' : 'info']('[Game AI] ' + kind, snapshot)
     this.options.recorder?.record(
       'decisions',
       kind,
@@ -159,6 +160,9 @@ export class AiTurnController {
       },
       this.options.session.remoteParticipantId
     )
+  }
+  recordTiming(decision: AiActionDecision, timing: JsonObject): void {
+    this.log('decision-timing', { ...decision, ...timing })
   }
   hasLegalActions(): boolean {
     return !this.disposed && !this.failed && this.legalCommands().length > 0

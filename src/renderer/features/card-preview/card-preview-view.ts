@@ -3,7 +3,7 @@ import type { FederatedPointerEvent } from 'pixi.js'
 import type { CardDefinition } from '../../../game/content/cards'
 import { AssetScope } from '../../ui/asset-registry/asset-scope'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
-import { CardView } from '../../rendering/cards/card-view'
+import { CardView, type CardPieceMotion } from '../../rendering/cards/card-view'
 import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 import {
   cardDetailRows,
@@ -17,6 +17,10 @@ import {
 } from '../../rendering/cards/card-parallax'
 import { ASSET_BUNDLE_IDS, type CardPreviewAssets } from '../../ui/asset-registry'
 import { Actor } from '../../ui/components/actor'
+import type { ProgressionStore } from '../../ui/progression-store'
+import { PremiumUpgradePanel } from './premium-upgrade-panel'
+import { CARD_ASSEMBLY } from './card-assembly-layout'
+import { CardAssemblyEffects } from './card-assembly-effects'
 
 export { cardDetailRows }
 export type { CardDetailRow }
@@ -34,11 +38,14 @@ export interface CardPreviewViewOptions {
   readonly resolver?: CardAssetResolver
   readonly assetScope: AssetScope
   readonly onClose: () => Promise<void> | void
+  readonly progression?: ProgressionStore
+  readonly onPresentationOffset?: (x: number, y: number) => void
 }
 
-const COLORS = {
-  backdrop: 0x080b12
-} as const
+// Optional backdrop tint (disabled; collection blur remains active).
+// const COLORS = {
+//   backdrop: 0x080b12
+// } as const
 
 const RARITY_GEM_ASSET_FILES: Partial<Record<CardDefinition['rarity'], string>> = {
   Common: 'rarity-common.png',
@@ -68,6 +75,12 @@ export class CardPreviewView extends Actor {
   private parallax: CardParallaxEffect | null = null
   private activeTimeline: { kill: () => void } | null = null
   private closing = false
+  private changing = false
+  private cancelAssembly: (() => void) | null = null
+  private readonly progression?: ProgressionStore
+  private upgradePanel?: PremiumUpgradePanel
+  private assemblyEffects?: CardAssemblyEffects
+  private readonly onPresentationOffset: (x: number, y: number) => void
 
   constructor(options: CardPreviewViewOptions) {
     super()
@@ -76,6 +89,8 @@ export class CardPreviewView extends Actor {
     this.resolver = options.resolver ?? new CardAssetResolver()
     this.assetScope = options.assetScope
     this.onClose = options.onClose
+    this.progression = options.progression
+    this.onPresentationOffset = options.onPresentationOffset ?? (() => undefined)
   }
 
   async init(): Promise<void> {
@@ -85,8 +100,10 @@ export class CardPreviewView extends Actor {
     await this.waitForFonts()
 
     this.backdrop = new Graphics()
-      .rect(0, 0, GAME_WIDTH, GAME_HEIGHT)
-      .fill({ color: COLORS.backdrop, alpha: 0.78 })
+    // Restore these calls and COLORS above to re-enable the dark overlay.
+    // this.backdrop
+    //   .rect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+    //   .fill({ color: COLORS.backdrop, alpha: 0.78 })
     this.backdrop.label = 'card-preview.backdrop'
     this.backdrop.alpha = 0
     this.backdrop.eventMode = 'static'
@@ -125,10 +142,27 @@ export class CardPreviewView extends Actor {
     }
     this.positionAtSource()
     this.addChild(this.cardMotion)
+    if (this.progression) {
+      await this.progression.load()
+      this.upgradePanel = new PremiumUpgradePanel(
+        this.card,
+        assets,
+        this.progression,
+        (action) => this.changePremium(action)
+      )
+      this.upgradePanel.alpha = 0
+      this.addChild(this.upgradePanel)
+    }
+    this.assemblyEffects = new CardAssemblyEffects(
+      assets.assemblySpark,
+      this.onPresentationOffset
+    )
+    this.addChild(this.assemblyEffects)
   }
 
   update(deltaMS: number): void {
     this.parallax?.update(deltaMS)
+    this.assemblyEffects?.update(deltaMS)
   }
 
   enter(canvas: HTMLCanvasElement): void {
@@ -139,6 +173,9 @@ export class CardPreviewView extends Actor {
   }
 
   exit(canvas: HTMLCanvasElement): void {
+    this.closing = true
+    this.cancelAssembly?.()
+    this.assemblyEffects?.clear()
     window.removeEventListener('keydown', this.handleKeyDown)
     window.removeEventListener('blur', this.handlePointerExit)
     canvas.removeEventListener('pointerleave', this.handlePointerExit)
@@ -150,6 +187,170 @@ export class CardPreviewView extends Actor {
     this.killTweensOf(this.cardMotion.scale)
     this.parallax?.destroy()
     this.parallax = null
+  }
+
+  private async changePremium(action: 'upgrade' | 'refund'): Promise<void> {
+    if (this.closing || this.changing || !this.progression) return
+    this.changing = true
+    this.assemblyEffects?.clear()
+    this.cardView.setPremiumPresentation(this.cardView.isPremium)
+    this.parallax?.destroy()
+    this.parallax = null
+    const card = this.cardView
+    const motions: CardPieceMotion[] = []
+    let animation: gsap.core.Timeline | null = null
+    let resolveAnimation: (() => void) | null = null
+    let cancelled = false
+    const restore = (): void => {
+      for (const motion of motions) motion.restore()
+      if (!card.destroyed) {
+        card.scale.set(1)
+        card.pivot.set(0)
+        card.position.set(0)
+        card.setPremiumPresentation(null)
+      }
+    }
+    this.cancelAssembly = () => {
+      cancelled = true
+      animation?.kill()
+      this.assemblyEffects?.clear()
+      restore()
+      resolveAnimation?.()
+    }
+    try {
+      await this.progression[action](this.card.id)
+      if (cancelled || this.closing || this.destroyed) return
+      // Finish the opening placement before rotating around the card's center.
+      this.activeTimeline?.kill()
+      this.activeTimeline = null
+      const target = this.positionAtPreview()
+      this.cardMotion.position.set(target.x, target.y)
+      this.cardMotion.scale.set(target.scale)
+      this.detailsPanel.alpha = 1
+      this.backdrop.alpha = 1
+      if (this.upgradePanel) this.upgradePanel.alpha = 1
+      card.pivot.set(card.plan.width / 2, card.renderedHeight / 2)
+      card.position.copyFrom(card.pivot)
+      await new Promise<void>((resolve) => {
+        resolveAnimation = resolve
+        const timeline = this.timeline({ paused: true, onComplete: resolve })
+        animation = timeline
+        timeline.to(card.scale, {
+          x: 0,
+          duration: CARD_ASSEMBLY.flipHalfDuration,
+          ease: 'power2.in'
+        })
+        timeline.call(() => {
+          card.setPremiumPresentation(action === 'upgrade')
+          for (const stage of stages) {
+            for (const piece of stage) {
+              piece.motion = card.createPieceMotion(piece.paths)
+              motions.push(piece.motion)
+              piece.motion.set({ ...piece.state, visible: false })
+            }
+          }
+        })
+        timeline.to(card.scale, {
+          x: 1,
+          duration: CARD_ASSEMBLY.flipHalfDuration,
+          ease: 'power2.out'
+        })
+        const stages = CARD_ASSEMBLY.stages
+          .map((stage) =>
+            stage
+              .filter((piece) => piece.paths.every((path) => card.hasLayer(path)))
+              .map((piece) => ({
+                paths: piece.paths,
+                impact: piece.impact,
+                state: {
+                  x: Number(piece.x),
+                  y: Number(piece.y),
+                  scale: Number(CARD_ASSEMBLY.initialScale),
+                  rotation: (piece.rotation * Math.PI) / 180
+                },
+                motion: null as CardPieceMotion | null
+              }))
+          )
+          .filter((stage) => stage.length > 0)
+        let start = CARD_ASSEMBLY.flipHalfDuration * 2
+        for (const stage of stages) {
+          for (const piece of stage) {
+            const update = (): void =>
+              piece.motion?.set({ ...piece.state, visible: true })
+            const travel = (): void => {
+              update()
+              if (piece.motion) this.assemblyEffects?.trail(piece.motion)
+            }
+            timeline.to(
+              piece.state,
+              {
+                x: 0,
+                y: 0,
+                scale: CARD_ASSEMBLY.landingScale,
+                rotation:
+                  (-Math.sign(piece.state.rotation) *
+                    CARD_ASSEMBLY.rotationOvershoot *
+                    Math.PI) /
+                  180,
+                duration: CARD_ASSEMBLY.travelDuration,
+                ease: 'power2.out',
+                onStart: travel,
+                onUpdate: travel,
+                onComplete: () => {
+                  if (piece.motion) this.assemblyEffects?.land(piece.motion)
+                }
+              },
+              start
+            )
+            timeline.to(
+              piece.state,
+              {
+                scale: 1,
+                rotation: 0,
+                duration: CARD_ASSEMBLY.settleDuration,
+                ease: 'power2.out',
+                onUpdate: update
+              },
+              start + CARD_ASSEMBLY.travelDuration
+            )
+          }
+          timeline.call(
+            () =>
+              this.assemblyEffects?.impact(
+                Math.max(...stage.map((piece) => piece.impact))
+              ),
+            [],
+            start + CARD_ASSEMBLY.travelDuration
+          )
+          start += CARD_ASSEMBLY.travelDuration + CARD_ASSEMBLY.settleDuration
+        }
+        // Let the last burst and kick finish before releasing the action buttons.
+        timeline.to(
+          {},
+          {
+            duration: CARD_ASSEMBLY.particles.lifetimeMax - CARD_ASSEMBLY.settleDuration
+          }
+        )
+        timeline.play()
+      })
+    } finally {
+      restore()
+      this.assemblyEffects?.clear()
+      this.cancelAssembly = null
+      this.changing = false
+      if (!this.closing && !this.destroyed && CARD_PREVIEW_PARALLAX_ENABLED)
+        this.parallax = new CardParallaxEffect(card)
+    }
+  }
+
+  override destroy(options?: Parameters<Actor['destroy']>[0]): void {
+    this.closing = true
+    this.cancelAssembly?.()
+    this.assemblyEffects?.clear()
+    this.parallax?.destroy()
+    this.parallax = null
+    this.killAnimations()
+    super.destroy(options)
   }
 
   private async waitForFonts(): Promise<void> {
@@ -173,8 +374,8 @@ export class CardPreviewView extends Actor {
   private positionAtPreview(): { scale: number; x: number; y: number } {
     const scale = Math.min(
       PREVIEW.maxScale,
-      (GAME_HEIGHT - 80) / this.cardView.renderedHeight,
-      (GAME_WIDTH - 760) / this.cardView.plan.width
+      PREVIEW.cardMaxSize.height / this.cardView.renderedHeight,
+      PREVIEW.cardMaxSize.width / this.cardView.plan.width
     )
     return {
       scale,
@@ -187,6 +388,12 @@ export class CardPreviewView extends Actor {
     const target = this.positionAtPreview()
     this.activeTimeline?.kill()
     const timeline = this.timeline()
+    if (this.upgradePanel)
+      timeline.to(
+        this.upgradePanel,
+        { alpha: 1, duration: PREVIEW.animationDuration },
+        0.08
+      )
     this.activeTimeline = timeline
     timeline.to(
       this.backdrop,
@@ -248,10 +455,17 @@ export class CardPreviewView extends Actor {
   private async close(): Promise<void> {
     if (this.closing) return
     this.closing = true
+    this.cancelAssembly?.()
     this.parallax?.release()
 
     this.activeTimeline?.kill()
     const timeline = this.timeline()
+    if (this.upgradePanel)
+      timeline.to(
+        this.upgradePanel,
+        { alpha: 0, duration: PREVIEW.animationDuration },
+        0
+      )
     this.activeTimeline = timeline
     timeline.to(
       this.backdrop,

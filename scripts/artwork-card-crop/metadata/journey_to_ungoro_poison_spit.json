@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_poison_spit.jpg",
+  "source_name": "journey_to_ungoro_poison_spit.jpg",
+  "crop_box": [
+    34,
+    27,
+    489,
+    482
+  ],
+  "scale": 1.1,
+  "offset_x": -37.215384615384664,
+  "offset_y": -29.215384615384636,
+  "timestamp": "2026-09-16T14:46:04.122142",
+  "card_id": "journey_to_ungoro_poison_spit",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

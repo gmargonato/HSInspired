@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_crackling_shield.jpg",
+  "source_name": "journey_to_ungoro_crackling_shield.jpg",
+  "crop_box": [
+    28,
+    34,
+    483,
+    489
+  ],
+  "scale": 1.1,
+  "offset_x": -30.753846153846155,
+  "offset_y": -37.52307692307693,
+  "timestamp": "2026-09-16T14:43:57.112442",
+  "card_id": "journey_to_ungoro_crackling_shield",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

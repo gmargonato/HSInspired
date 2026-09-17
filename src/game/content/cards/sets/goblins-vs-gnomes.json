@@ -1925,32 +1925,9 @@
     "cost": 2,
     "attack": 1,
     "health": 4,
-    "rulesText": "Whenever this minion deals damage, restore that much Health to your hero.",
-    "keywords": [],
-    "effects": [
-      {
-        "trigger": "on-damage",
-        "actions": [
-          {
-            "action": "restore",
-            "target": {
-              "controller": "self",
-              "type": "hero",
-              "selection": "all"
-            },
-            "amount": { "reference": "event.damage" }
-          }
-        ],
-        "event": {
-          "type": "damage-dealt",
-          "source": {
-            "controller": "self",
-            "type": "minion",
-            "selection": "source"
-          }
-        }
-      }
-    ]
+    "rulesText": "Lifesteal.",
+    "keywords": ["lifesteal"],
+    "effects": []
   },
   {
     "id": "goblins_vs_gnomes_fel_cannon",

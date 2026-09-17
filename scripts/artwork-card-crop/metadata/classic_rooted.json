@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_rooted.jpg",
+  "source_name": "classic_rooted.jpg",
+  "crop_box": [
+    25,
+    27,
+    480,
+    482
+  ],
+  "scale": 1.1,
+  "offset_x": -27.538461538461547,
+  "offset_y": -29.96923076923079,
+  "timestamp": "2026-09-16T14:41:35.505839",
+  "card_id": "classic_rooted",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

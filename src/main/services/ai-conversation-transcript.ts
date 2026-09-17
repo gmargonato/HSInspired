@@ -76,6 +76,16 @@ export class AiConversationTranscript {
     const heading = `\nTURN ${record.turnNumber ?? 0} - ${record.kind.toUpperCase().replaceAll('-', ' ')}\n${record.timestamp} | Request ${record.decisionId ?? 'none'}\n`
     switch (record.kind) {
       case 'request-progress':
+        if (
+          d.recovery &&
+          [
+            'attempt-failed',
+            'retry-scheduled',
+            'recovery-complete',
+            'recovery-exhausted'
+          ].includes(String(d.stage))
+        )
+          return `${record.timestamp} | Request ${record.decisionId ?? 'none'} | ${d.stage}: ${JSON.stringify(d.recovery)}\n`
         return (
           `${record.timestamp} | Request ${record.decisionId ?? 'none'} | ` +
           `Transport: ${d.stage}. Elapsed: ${(Number(d.elapsedMs) / 1000).toFixed(1)}s.` +

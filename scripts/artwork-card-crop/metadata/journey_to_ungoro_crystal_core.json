@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_crystal_core.jpg",
+  "source_name": "journey_to_ungoro_crystal_core.jpg",
+  "crop_box": [
+    26,
+    29,
+    481,
+    484
+  ],
+  "scale": 1.1,
+  "offset_x": -28.907692307692344,
+  "offset_y": -32.2923076923077,
+  "timestamp": "2026-09-16T14:44:00.262786",
+  "card_id": "journey_to_ungoro_crystal_core",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

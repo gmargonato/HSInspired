@@ -1,8 +1,13 @@
 import { Container, Texture, FederatedPointerEvent, FederatedWheelEvent } from 'pixi.js'
+import { gsap } from '../../animation/animations'
 import { MatchHistoryView } from './match-history-view'
 import { CardView } from '../../rendering/cards/card-view'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
-import { HISTORY_GRID, historyTargetPlacements } from './match-history-layout'
+import {
+  HISTORY_GRID,
+  MATCH_HISTORY_LAYOUT,
+  historyTargetPlacements
+} from './match-history-layout'
 import { describe, expect, it, vi } from 'vitest'
 import { CARD_CATALOG, asCardId } from '../../../game/content/cards'
 import { asPlayerId } from '../../../game/match/match-types'
@@ -351,6 +356,41 @@ describe('history retention and content layout', () => {
 })
 
 describe('history rail lifecycle', () => {
+  it('slides new entries in from the left while preserving existing slot content', () => {
+    const texture = Texture.WHITE
+    const textures = new Proxy({}, { get: () => texture }) as ConstructorParameters<
+      typeof MatchHistoryView
+    >[0]
+    const view = new MatchHistoryView(textures, local, vi.fn())
+    const settle = (): void => {
+      for (const child of view.rail.children)
+        for (const tween of gsap.getTweensOf(child)) tween.progress(1)
+    }
+
+    try {
+      const firstSlot = view.rail.children[0]
+      const secondSlot = view.rail.children[1]
+      view.record(played('basic_fireball', local))
+      expect(firstSlot.x).toBe(MATCH_HISTORY_LAYOUT.rail.entryAnimation.incomingOffsetX)
+
+      view.record({
+        ...played('basic_frostbolt', remote),
+        source: { ...played('basic_frostbolt', remote).source, id: 'second' }
+      })
+      expect(secondSlot.x).toBe(
+        MATCH_HISTORY_LAYOUT.rail.entryAnimation.incomingOffsetX
+      )
+      settle()
+
+      expect(secondSlot.x).toBe(0)
+      expect(secondSlot.y).toBe(0)
+      expect(firstSlot.x).toBe(0)
+      expect(firstSlot.y).toBe(MATCH_HISTORY_LAYOUT.rail.gap)
+    } finally {
+      if (!view.destroyed) view.destroy({ children: true })
+    }
+  })
+
   it('keeps seven reusable slots and closes pending previews on leaving the rail', async () => {
     const artwork = vi
       .spyOn(CardAssetResolver.prototype, 'loadArtwork')

@@ -27,17 +27,20 @@ import type { GameRoute } from '../game/game-route'
 import { createMatchSeed } from '../deck-selection/deck-selection-model'
 import { CardView } from '../../rendering/cards/card-view'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
-import type {
-  ArenaAssets,
-  DeckPresentationAssets,
-  SharedUIAssets
+import {
+  ARENA_KEY_ASSET_KEYS,
+  type ArenaAssets,
+  type DeckPresentationAssets,
+  type SharedUIAssets
 } from '../../ui/asset-registry'
 import type { ArenaStore } from '../../ui/arena-store'
+import type { DevArenaAvailability, DevCommand } from '../../../shared/dev-menu'
 import { Actor } from '../../ui/components/actor'
 import { Button } from '../../ui/components/button'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { ARENA_LAYOUT } from './arena-layout'
 import { buildArenaDeckEntries, buildArenaManaCurve } from './arena-model'
+import { ArenaRewardsView } from './arena-rewards-view'
 import {
   createCardAddFlightPath,
   resolveCardAddFlightPoint,
@@ -45,6 +48,8 @@ import {
 } from '../collection/choreography/card-add-flight'
 
 export interface ArenaViewCallbacks {
+  readonly onDevAvailabilityChanged?: (availability: DevArenaAvailability) => void
+  readonly onRewardsSaved?: () => Promise<void>
   readonly onBack: () => void | Promise<void>
   readonly onPlay: (route: GameRoute) => void | Promise<void>
   readonly onError?: (message: string, error?: unknown) => void
@@ -106,12 +111,14 @@ export class ArenaView extends Actor {
   private preview: CardView | null = null
   private activeCardAddEffect: ArenaCardAddEffect | null = null
   private heading!: Text
+  private background!: Sprite
   private deckCount!: Text
   private retireButton!: Button
   private playButton!: Button
   private backButton!: Button
   private slider!: Sprite
   private retireDialog!: Container
+  private retireCancel!: Button
   private snapshot!: ArenaRunSnapshot
   private renderSequence = 0
   private busy = false
@@ -120,6 +127,9 @@ export class ArenaView extends Actor {
   private sliderDragging = false
   private sliderDragOffset = 0
   private disposed = false
+  private rewardView: ArenaRewardsView | null = null
+  private claiming = false
+  private claimPending = false
 
   constructor(
     private readonly store: ArenaStore,
@@ -138,8 +148,19 @@ export class ArenaView extends Actor {
     await this.render(snapshot)
   }
 
+  get devAvailability(): DevArenaAvailability {
+    const enabled =
+      !this.disposed && !this.busy && !this.claimPending && !this.snapshot?.rewards
+    return {
+      retire: enabled && Boolean(this.snapshot?.heroId),
+      scores:
+        enabled && this.snapshot?.phase === 'ready' && Boolean(this.store.devSetScore)
+    }
+  }
+
   private createStaticPresentation(sharedAssets: SharedUIAssets): void {
     const background = new Sprite(this.assets.background)
+    this.background = background
     background.label = 'arena.background'
     applyAnchoredPlacement(background, ARENA_LAYOUT.background)
     background.eventMode = 'none'
@@ -255,6 +276,7 @@ export class ArenaView extends Actor {
     const cancel = new Button(this.assets.cancelButton, {
       onClick: () => this.closeRetireDialog()
     })
+    this.retireCancel = cancel
     cancel.label = 'arena.retire-cancel'
     applyPlacement(cancel, ARENA_LAYOUT.retireDialog.cancel)
     cancel.setBaseY(ARENA_LAYOUT.retireDialog.cancel.position.y)
@@ -264,6 +286,8 @@ export class ArenaView extends Actor {
   }
 
   private async render(snapshot: ArenaRunSnapshot, enable = true): Promise<void> {
+    this.rewardView?.dispose()
+    this.rewardView = null
     this.snapshot = snapshot
     const sequence = ++this.renderSequence
     this.clearChoices()
@@ -272,15 +296,20 @@ export class ArenaView extends Actor {
     this.renderManaCurve()
     this.renderStatistics()
 
+    this.background.texture =
+      snapshot.phase === 'ready'
+        ? this.assets.backgroundOngoing
+        : this.assets.background
+    this.heading.visible = snapshot.phase !== 'ready'
     this.heading.text =
       snapshot.phase === 'choosing-hero'
         ? 'Choose your Hero'
         : snapshot.phase === 'drafting'
           ? 'Choose a Card'
           : 'Statistics'
-    this.retireButton.visible = snapshot.heroId !== null
+    this.retireButton.visible = !snapshot.rewards && snapshot.heroId !== null
     this.playButton.visible =
-      snapshot.phase === 'ready' && !isArenaRunComplete(snapshot)
+      !snapshot.rewards && snapshot.phase === 'ready' && !isArenaRunComplete(snapshot)
     this.statisticsLayer.visible = snapshot.phase === 'ready'
     this.manaLayer.visible = snapshot.heroId !== null
     this.deckCount.text = `${snapshot.picksCompleted}/30`
@@ -291,6 +320,19 @@ export class ArenaView extends Actor {
       await this.renderCardChoices(snapshot.cardChoices, sequence)
     }
     if (enable) this.setEnabled(true)
+    if (snapshot.rewards) {
+      this.rewardView = new ArenaRewardsView(
+        snapshot.rewards,
+        this.assets,
+        async () => {
+          await this.callbacks.onRewardsSaved?.()
+          const next = await this.store.acknowledgeRewards(snapshot.runId)
+          if (!this.disposed) await this.render(next)
+        },
+        (message, error) => this.callbacks.onError?.(message, error)
+      )
+      this.addChild(this.rewardView)
+    }
   }
 
   private clearChoices(): void {
@@ -900,28 +942,26 @@ export class ArenaView extends Actor {
     for (const child of this.statisticsLayer.removeChildren()) {
       child.destroy({ children: true })
     }
-    const labels = ['Games Played', 'Games Won', 'Defeats']
-    const values = [
-      this.snapshot.gamesPlayed,
-      this.snapshot.wins,
-      this.snapshot.defeats
-    ]
-    labels.forEach((label, index) => {
-      const labelText = this.createOutlinedText(label, 28, 0xffffff)
-      labelText.label = `arena.stat-label.${index}`
-      labelText.anchor.set(0.5)
-      labelText.position.set(
-        ARENA_LAYOUT.statistics.columns[index],
-        ARENA_LAYOUT.statistics.labelsY
-      )
-      const valueText = this.createOutlinedText(String(values[index]), 82, 0xffffff)
-      valueText.label = `arena.stat-value.${index}`
-      valueText.anchor.set(0.5)
-      valueText.position.set(
-        ARENA_LAYOUT.statistics.columns[index],
-        ARENA_LAYOUT.statistics.valuesY
-      )
-      this.statisticsLayer.addChild(labelText, valueText)
+    if (this.snapshot.phase !== 'ready') return
+
+    const key = new Sprite(this.assets[ARENA_KEY_ASSET_KEYS[this.snapshot.wins]])
+    key.label = 'arena.key'
+    applyAnchoredPlacement(key, ARENA_LAYOUT.statistics.key)
+    key.eventMode = 'none'
+    this.statisticsLayer.addChild(key)
+
+    const wins = this.createOutlinedText(String(this.snapshot.wins), 58)
+    wins.label = 'arena.wins'
+    applyAnchoredPlacement(wins, ARENA_LAYOUT.statistics.wins)
+    this.statisticsLayer.addChild(wins)
+
+    ARENA_LAYOUT.statistics.defeats.forEach((value, index) => {
+      if (index >= this.snapshot.defeats) return
+      const defeat = new Sprite(this.assets.defeatX)
+      defeat.label = `arena.defeat.${index}`
+      applyAnchoredPlacement(defeat, value)
+      defeat.eventMode = 'none'
+      this.statisticsLayer.addChild(defeat)
     })
   }
 
@@ -990,43 +1030,102 @@ export class ArenaView extends Actor {
     this.sliderDragging = false
   }
 
+  async runDevCommand(
+    command: Extract<DevCommand, { type: 'arena:retire' | 'arena:set-score' }>
+  ): Promise<void> {
+    if (this.disposed || !this.snapshot || this.busy) return
+    if (command.type === 'arena:retire') {
+      this.openRetireDialog()
+      return
+    }
+    if (
+      this.snapshot.phase !== 'ready' ||
+      this.snapshot.rewards ||
+      !this.store.devSetScore
+    )
+      return
+    this.setEnabled(false)
+    try {
+      const next = await this.store.devSetScore({
+        runId: this.snapshot.runId,
+        counter: command.counter,
+        value: command.value
+      })
+      if (!this.disposed) await this.render(next)
+    } finally {
+      if (!this.disposed) this.setEnabled(true)
+    }
+  }
+
   private openRetireDialog(): void {
-    if (this.busy || !this.snapshot.heroId) return
+    if (this.busy || !this.snapshot.heroId || this.snapshot.rewards) return
+    if (isArenaRunComplete(this.snapshot)) {
+      void this.claimRewards()
+      return
+    }
     this.retireDialog.visible = true
     this.setEnabled(false)
     this.retireDialog.eventMode = 'static'
   }
 
   private closeRetireDialog(): void {
+    if (this.claimPending) return
     this.retireDialog.visible = false
     this.setEnabled(true)
   }
 
   private async confirmRetire(): Promise<void> {
     if (!this.retireDialog.visible) return
-    this.busy = true
+    await this.claimRewards()
+  }
+
+  private async claimRewards(): Promise<void> {
+    if (this.claiming) return
+    this.claiming = true
+    this.claimPending = true
+    this.retireCancel.setEnabled(false)
+    this.setEnabled(false)
+    this.retireDialog.eventMode = 'none'
+    this.retireDialog.interactiveChildren = false
     try {
-      const next = await this.store.retire()
+      const next = await this.store.retire(this.snapshot.runId)
+      this.claimPending = false
+      if (this.disposed) {
+        if (next.rewards) await this.callbacks.onRewardsSaved?.()
+        return
+      }
       this.retireDialog.visible = false
       await this.render(next)
+      if (next.rewards) await this.callbacks.onRewardsSaved?.()
     } catch (error) {
-      this.callbacks.onError?.('Failed to retire the Arena deck.', error)
+      if (this.disposed) return
+      this.callbacks.onError?.(
+        'Failed to finish the Arena reward operation. Please retry.',
+        error
+      )
+      if (this.claimPending) this.retireDialog.visible = true
       this.setEnabled(true)
     } finally {
-      this.busy = false
+      if (!this.disposed) {
+        this.claiming = false
+        this.retireDialog.eventMode = 'static'
+        this.retireDialog.interactiveChildren = true
+        this.retireCancel.setEnabled(!this.claimPending)
+      }
     }
   }
 
   private playArena(): void {
     if (
       this.busy ||
+      this.snapshot.rewards ||
       this.snapshot.phase !== 'ready' ||
       isArenaRunComplete(this.snapshot)
     )
       return
     const seed = createMatchSeed()
     const humanDeck = arenaRunToDeck(this.snapshot)
-    const aiDeck = createArenaOpponentDeck(seed)
+    const aiDeck = createArenaOpponentDeck(seed, humanDeck)
     const route: GameRoute = {
       id: 'game',
       mode: 'arena',
@@ -1057,7 +1156,9 @@ export class ArenaView extends Actor {
   }
 
   private setEnabled(enabled: boolean): void {
+    enabled = enabled && !this.snapshot?.rewards && !this.claimPending
     this.busy = !enabled
+    this.callbacks.onDevAvailabilityChanged?.(this.devAvailability)
     for (const choice of this.heroChoices) {
       choice.root.eventMode = enabled ? 'static' : 'none'
     }
@@ -1096,7 +1197,10 @@ export class ArenaView extends Actor {
   }
 
   override dispose(): void {
+    this.rewardView?.dispose()
+    this.rewardView = null
     this.disposed = true
+    this.callbacks.onDevAvailabilityChanged?.({ retire: false, scores: false })
     ++this.renderSequence
     this.hidePreview()
     if (this.activeCardAddEffect) {

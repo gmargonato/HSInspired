@@ -9,6 +9,8 @@ import {
 import { HERO_CATALOG } from '../content/heroes'
 import type { Deck } from '../decks'
 import { createSeededRng, type DeterministicRng } from '../match'
+import { ArenaOpponentPool, arenaRarityTier } from './arena-opponent-pool'
+import type { ArenaRewardReceipt } from './arena-rewards'
 
 export const ARENA_DECK_ID = 'arena-deck'
 export const ARENA_DECK_SIZE = 30
@@ -16,6 +18,9 @@ export const ARENA_HERO_CHOICE_COUNT = 3
 export const ARENA_CARD_CHOICE_COUNT = 3
 export const ARENA_MAX_WINS = 12
 export const ARENA_MAX_DEFEATS = 3
+export const ARENA_OPPONENT_RARITY_UPGRADE_CHANCE = 0.2
+
+const opponentPools = new Map<string, ArenaOpponentPool>()
 
 export type ArenaPhase = 'choosing-hero' | 'drafting' | 'ready'
 export type ArenaMatchResult = 'win' | 'defeat' | 'draw'
@@ -25,6 +30,8 @@ export type ArenaDraftRarity = Extract<
 >
 
 export interface ArenaRunSnapshot {
+  readonly runId: string
+  readonly rewards: ArenaRewardReceipt | null
   readonly id: typeof ARENA_DECK_ID
   readonly phase: ArenaPhase
   readonly heroChoices: readonly [HeroId, HeroId, HeroId]
@@ -136,14 +143,44 @@ export function createArenaCardChoices(
   return takeDistinct(ids, ARENA_CARD_CHOICE_COUNT, rng) as [CardId, CardId, CardId]
 }
 
-export function createArenaOpponentDeck(seed: number): Deck {
+export function createArenaOpponentDeck(seed: number, playerDeck: Deck): Deck {
+  const slots: CardDefinition[] = []
+  for (const cardId of Object.keys(playerDeck.cards).sort()) {
+    const count = playerDeck.cards[cardId]
+    if (!Number.isInteger(count) || count <= 0 || count > ARENA_DECK_SIZE) {
+      throw new Error(`Invalid Arena card count for ${cardId}.`)
+    }
+    const card = CARD_CATALOG.require(cardId)
+    arenaRarityTier(card.rarity)
+    if (slots.length + count > ARENA_DECK_SIZE) {
+      throw new Error('Arena opponent generation requires a 30-card player deck.')
+    }
+    for (let copy = 0; copy < count; copy += 1) slots.push(card)
+  }
+  if (slots.length !== ARENA_DECK_SIZE) {
+    throw new Error('Arena opponent generation requires a 30-card player deck.')
+  }
   const rng = createSeededRng(seed ^ 0x6172656e)
   const heroChoices = createArenaHeroChoices(rng)
   const heroId = heroChoices[Math.min(Math.floor(rng.next() * 3), 2)]
+  const heroClass = HERO_CATALOG.require(heroId).classId
+  let pool = opponentPools.get(heroClass)
+  if (!pool) {
+    pool = new ArenaOpponentPool(getArenaCardPool(heroId))
+    opponentPools.set(heroClass, pool)
+  }
+  const candidateCache = new Map<string, readonly CardDefinition[]>()
   const cards: Record<string, number> = {}
-  for (let pick = 0; pick < ARENA_DECK_SIZE; pick += 1) {
-    const choices = createArenaCardChoices(heroId, rng)
-    const cardId = choices[Math.min(Math.floor(rng.next() * 3), 2)]
+  for (const source of slots) {
+    const upgrade = rng.next() < ARENA_OPPONENT_RARITY_UPGRADE_CHANCE
+    const cacheKey = `${source.type}:${arenaRarityTier(source.rarity)}:${source.cost}:${upgrade}`
+    let choices = candidateCache.get(cacheKey)
+    if (!choices) {
+      choices = pool.candidates(source, upgrade)
+      candidateCache.set(cacheKey, choices)
+    }
+    const cardId =
+      choices[Math.min(Math.floor(rng.next() * choices.length), choices.length - 1)].id
     cards[cardId] = (cards[cardId] ?? 0) + 1
   }
   const timestamp = new Date(0).toISOString()

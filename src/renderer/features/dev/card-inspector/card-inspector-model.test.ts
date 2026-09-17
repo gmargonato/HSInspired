@@ -71,7 +71,7 @@ describe('CardInspectorModel', () => {
     model.setBlendMode('primary', 'add')
     model.selectedTemplate = 'hero'
     expect(model.selectedCard?.type).toBe('Hero')
-    expect(model.selectedPremium).toBe(false)
+    expect(model.selectedPremium).toBe(true)
     expect(model.maskTemplate).toBeUndefined()
     expect(model.config).toEqual(before)
     model.selectedTemplate = 'minion'

@@ -152,6 +152,11 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
   {
     action: [
       'add-to-hand',
+      'shuffle-random-minions',
+      'refill-original-decks',
+      'steal-minion-from-deck',
+      'summon-weapon-kills',
+      'adapt',
       'combine-choose-one',
       'spend-all-mana',
       'buff-cthun',
@@ -342,6 +347,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'cannot-attack-heroes',
       'charge',
       'lifesteal',
+      'poisonous',
       'rush',
       'divine-shield',
       'immune',
@@ -485,7 +491,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
     ],
     'action-destination': ['cast-on-source', 'deck', 'hand'],
     'action-resource': ['weapon-durability'],
-    'action-field': ['health'],
+    'action-field': ['health', 'stats'],
     'crystal-mode': ['empty', 'full']
   }
 

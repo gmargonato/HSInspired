@@ -2663,7 +2663,7 @@
         "actions": [
           {
             "action": "summon",
-            "cardId": "whispers_of_the_old_gods_slime",
+            "cardId": "whispers_of_the_old_gods_ooze",
             "count": 1
           }
         ]
@@ -3564,11 +3564,13 @@
         "trigger": "battlecry",
         "actions": [
           {
-            "action": "swap-stats",
+            "action": "swap",
+            "field": "stats",
             "target": {
               "controller": "self",
               "type": "minion",
-              "selection": "chosen"
+              "selection": "chosen",
+              "exclude": "source"
             }
           }
         ]
@@ -3742,6 +3744,21 @@
       }
     ],
     "collectible": true
+  },
+  {
+    "id": "whispers_of_the_old_gods_silver_hand_murloc",
+    "name": "Silver Hand Murloc",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Murloc",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false
   },
   {
     "id": "whispers_of_the_old_gods_vilefin_inquisitor",
@@ -4246,7 +4263,7 @@
     "cost": 9,
     "attack": 5,
     "health": 9,
-    "rulesText": "Taunt Can't be targeted by spells or Hero Powers.",
+    "rulesText": "Taunt. Elusive.",
     "keywords": ["taunt", "spell-immune"],
     "effects": [],
     "collectible": true
@@ -4464,6 +4481,21 @@
     "health": null,
     "rulesText": "Give your minions +2/+2.",
     "keywords": [],
+    "effects": [],
+    "collectible": false
+  },
+  {
+    "id": "whispers_of_the_old_gods_ooze",
+    "name": "Ooze",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Taunt.",
+    "keywords": ["taunt"],
     "effects": [],
     "collectible": false
   },

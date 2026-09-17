@@ -6,7 +6,11 @@ import {
   type BoardMinion,
   type RuntimeEnchantment
 } from '../../../game/match'
-import { boardAbilityMarkers, boardMinionRuntimeMarkers } from './board-ability-markers'
+import {
+  boardAbilityMarkers,
+  boardMinionAbilityMarkers,
+  boardMinionRuntimeMarkers
+} from './board-ability-markers'
 
 function markers(cardId: string) {
   return boardAbilityMarkers(CARD_CATALOG.require(cardId))
@@ -20,6 +24,30 @@ function markersForTrigger(trigger: CardTrigger) {
 }
 
 describe('board ability markers', () => {
+  it('shows Enrage only while an unsilenced Enrage minion is damaged', () => {
+    const grommash = CARD_CATALOG.require('classic_grommash_hellscream')
+    const minion = {
+      instanceId: 'grommash',
+      attack: 10,
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null,
+      cardId: grommash.id,
+      keywords: ['charge'],
+      health: 8,
+      maxHealth: 9
+    } as BoardMinion
+    expect(boardMinionAbilityMarkers(minion, grommash, 1).enraged).toBe(true)
+    expect(
+      boardMinionAbilityMarkers({ ...minion, health: 9 }, grommash, 1).enraged
+    ).toBe(false)
+    expect(
+      boardMinionAbilityMarkers({ ...minion, silenced: true }, grommash, 1).enraged
+    ).toBe(false)
+    expect(
+      boardMinionAbilityMarkers(minion, { keywords: [], effects: [] }, 1).enraged
+    ).toBe(false)
+  })
+
   it('uses resolved granted abilities and hides them after removal or silence', () => {
     const minion = {
       cardId: CARD_CATALOG.require('basic_stonetusk_boar').id,
@@ -243,6 +271,86 @@ describe('board ability markers', () => {
     })
   })
 
+  it('maps Lifesteal from the normalized minion keyword', () => {
+    expect(markers('goblins_vs_gnomes_mistress_of_pain').lifesteal).toBe(true)
+    expect(markers('mean_streets_of_gadgetzan_wickerflame_burnbristle').lifesteal).toBe(
+      true
+    )
+  })
+
+  it('maps board-targeting Auras independently from the Trigger badge', () => {
+    expect(markers('basic_grimscale_oracle')).toMatchObject({
+      aura: true,
+      trigger: false
+    })
+    expect(markers('classic_dire_wolf_alpha')).toMatchObject({
+      aura: true,
+      trigger: false
+    })
+    expect(markers('basic_stormwind_champion')).toMatchObject({
+      aura: true,
+      trigger: false
+    })
+    expect(markers('league_of_explorers_brann_bronzebeard')).toMatchObject({
+      aura: true,
+      trigger: false
+    })
+    expect(markers('naxxramas_baron_rivendare')).toMatchObject({
+      aura: true,
+      trigger: false
+    })
+    expect(markers('whispers_of_the_old_gods_bloodhoof_brave')).toMatchObject({
+      aura: false,
+      trigger: false
+    })
+    expect(markers('classic_lightspawn')).toMatchObject({
+      aura: false,
+      trigger: false
+    })
+    expect(markers('classic_sorcerers_apprentice')).toMatchObject({
+      aura: false,
+      trigger: false
+    })
+  })
+
+  it('hides a board Aura when its minion is silenced', () => {
+    const stormwind = CARD_CATALOG.require('basic_stormwind_champion')
+    if (stormwind.type !== 'Minion')
+      throw new Error('Expected Stormwind Champion to be a minion')
+    const minion = {
+      instanceId: 'stormwind',
+      cardId: stormwind.id,
+      attack: stormwind.attack,
+      health: stormwind.health,
+      maxHealth: stormwind.health,
+      keywords: [],
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null
+    } as BoardMinion
+
+    expect(boardMinionAbilityMarkers(minion, stormwind, 1).aura).toBe(true)
+    expect(
+      boardMinionAbilityMarkers({ ...minion, silenced: true }, stormwind, 1).aura
+    ).toBe(false)
+  })
+
+  it('keeps Aura and Trigger independent when a definition contains both', () => {
+    expect(
+      boardAbilityMarkers({
+        keywords: [],
+        effects: [
+          {
+            trigger: 'aura',
+            actions: [
+              { action: 'modify', target: { type: 'minion', selection: 'all' } }
+            ]
+          },
+          { trigger: 'on-attack' }
+        ]
+      })
+    ).toMatchObject({ aura: true, trigger: true })
+  })
+
   it('uses the Trigger asset for the persistent wrong-enemy attack effect', () => {
     expect(markers('goblins_vs_gnomes_ogre_brute')).toMatchObject({
       trigger: true,
@@ -307,10 +415,15 @@ it('uses modern bold keywords across matching card descriptions', () => {
     ['naxxramas_spectral_knight', 'Elusive.'],
     ['goblins_vs_gnomes_arcane_nullifier_x_21', 'Taunt. Elusive.'],
     ['goblins_vs_gnomes_wee_spellstopper', 'Adjacent minions have Elusive.'],
+    ['goblins_vs_gnomes_mistress_of_pain', 'Lifesteal.'],
+    [
+      'mean_streets_of_gadgetzan_wickerflame_burnbristle',
+      'Divine Shield. Taunt. Lifesteal.'
+    ],
     ['the_grand_tournament_icehowl', 'Rush.']
   ]) {
     expect(CARD_CATALOG.require(id!).rulesText).toBe(text)
-    const keyword = text!.match(/Poisonous|Elusive|Rush/)![0]
+    const keyword = text!.match(/Poisonous|Elusive|Lifesteal|Rush/)![0]
     expect(markHearthstoneKeywords(text!)).toContain(
       '<keyword>' + keyword + '</keyword>'
     )

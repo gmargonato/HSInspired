@@ -54,6 +54,10 @@ function parseCardPlayTarget(value: unknown): CardPlayTargetRef | null {
 export function parseCommand(value: unknown): OpeningMatchCommand | null {
   if (!isRecord(value) || typeof value.participantId !== 'string') return null
 
+  if (value.type === 'concede') {
+    return { type: 'concede', participantId: value.participantId as PlayerId }
+  }
+
   if (value.type === 'confirm-mulligan') {
     if (!Array.isArray(value.replaceInstanceIds)) return null
     if (!value.replaceInstanceIds.every((id) => typeof id === 'string')) return null
@@ -72,10 +76,16 @@ export function parseCommand(value: unknown): OpeningMatchCommand | null {
     const target =
       value.target === undefined ? undefined : parseHeroPowerTarget(value.target)
     if (value.target !== undefined && !target) return null
+    if (
+      value.choice !== undefined &&
+      (typeof value.choice !== 'number' || !Number.isInteger(value.choice))
+    )
+      return null
     return {
       type: 'use-hero-power',
       participantId: value.participantId as PlayerId,
-      ...(target ? { target } : {})
+      ...(target ? { target } : {}),
+      ...(value.choice === undefined ? {} : { choice: value.choice })
     }
   }
 

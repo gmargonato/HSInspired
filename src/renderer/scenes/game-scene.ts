@@ -2,6 +2,7 @@ import type { AppLogger } from '../app/services'
 import type { AppRoute, GameRoute, SceneRouter } from '../app/router'
 import type { DeckStore } from '../ui/deck-store'
 import type { PlayerStatsStore } from '../ui/player-stats-store'
+import type { ProgressionStore } from '../ui/progression-store'
 import type { ArenaStore } from '../ui/arena-store'
 import { createMatchSeed } from '../features/deck-selection/deck-selection-model'
 import { createRestartGameRoute } from '../features/game/game-route'
@@ -41,6 +42,8 @@ export class GameScene extends Scene {
   private readonly logger?: AppLogger
   private view: GameBoardView | null = null
   private recorder?: MatchRecorder
+  private readonly rewardMatchId = crypto.randomUUID()
+  private statisticsAttempted = false
 
   constructor(
     route: GameRoute,
@@ -54,7 +57,8 @@ export class GameScene extends Scene {
     private readonly reportLogError: (
       message: string,
       retry?: () => void
-    ) => void = console.error
+    ) => void = console.error,
+    private readonly progression?: ProgressionStore
   ) {
     super()
     this.route = route
@@ -76,6 +80,7 @@ export class GameScene extends Scene {
   }
 
   private async initMatch(): Promise<void> {
+    await this.progression?.load()
     this.logger?.info('[GameScene] init start', this.route)
     if (!this.route.deckSnapshots) {
       await this.deckStore.load()
@@ -103,6 +108,9 @@ export class GameScene extends Scene {
       this.matchLogs,
       logObject({
         mode: this.route.mode ?? 'standard',
+        ...(this.route.generatedOpponent
+          ? { generatedOpponent: this.route.generatedOpponent }
+          : {}),
         aiRuntimeSettings: { ...AI_CONVERSATION_LIMITS }
       }),
       this.reportLogError
@@ -117,6 +125,7 @@ export class GameScene extends Scene {
     const aiSession = new GameBoardSession({
       setup: this.route.setup,
       decks,
+      opponentStrategy: this.route.generatedOpponent?.strategy,
       recorder: this.recorder
     })
     const aiController = new AiTurnController({
@@ -200,7 +209,32 @@ export class GameScene extends Scene {
     }
   }
 
-  private async recordMatchResult(event: MatchEndedEvent): Promise<void> {
+  private async recordMatchResult(event: MatchEndedEvent): Promise<number> {
+    const human = this.route.setup.participants.find(
+      (participant) => participant.controllerKind === 'human'
+    )
+    if (!human) return 0
+
+    if (!this.statisticsAttempted) {
+      this.statisticsAttempted = true
+      await this.recordStatistics(event)
+    }
+    if (!this.progression) return 0
+    const receipt = await this.progression.reward({
+      matchId: this.rewardMatchId,
+      mode: this.route.mode ?? 'constructed',
+      result:
+        event.winnerId === null
+          ? 'draw'
+          : event.winnerId === human.participantId
+            ? 'win'
+            : 'defeat',
+      reason: event.reason
+    })
+    return receipt.earned
+  }
+
+  private async recordStatistics(event: MatchEndedEvent): Promise<void> {
     const human = this.route.setup.participants.find(
       (participant) => participant.controllerKind === 'human'
     )

@@ -20,6 +20,23 @@ import buttonCollectionImage from '@assets/images/ui/main-menu/menu-button-colle
 import buttonArenaImage from '@assets/images/ui/main-menu/menu-button-arena.png'
 import buttonTavernImage from '@assets/images/ui/main-menu/menu-button-tavern.png'
 import arenaBackgroundImage from '@assets/images/ui/arena/arena-background.png'
+import arenaRewardBoxImage from '@assets/images/ui/arena/reward-box.png'
+import arenaConfirmRewardImage from '@assets/images/ui/arena/arena-confirm-reward.png'
+import arenaBackgroundOngoingImage from '@assets/images/ui/arena/arena-background-ongoing.png'
+import arenaKey0Image from '@assets/images/ui/arena/key-0.png'
+import arenaKey1Image from '@assets/images/ui/arena/key-1.png'
+import arenaKey2Image from '@assets/images/ui/arena/key-2.png'
+import arenaKey3Image from '@assets/images/ui/arena/key-3.png'
+import arenaKey4Image from '@assets/images/ui/arena/key-4.png'
+import arenaKey5Image from '@assets/images/ui/arena/key-5.png'
+import arenaKey6Image from '@assets/images/ui/arena/key-6.png'
+import arenaKey7Image from '@assets/images/ui/arena/key-7.png'
+import arenaKey8Image from '@assets/images/ui/arena/key-8.png'
+import arenaKey9Image from '@assets/images/ui/arena/key-9.png'
+import arenaKey10Image from '@assets/images/ui/arena/key-10.png'
+import arenaKey11Image from '@assets/images/ui/arena/key-11.png'
+import arenaKey12Image from '@assets/images/ui/arena/key-12.png'
+import arenaDefeatXImage from '@assets/images/ui/arena/arena-defeat-x.png'
 import arenaPlayButtonImage from '@assets/images/ui/arena/arena-play-button.png'
 import arenaRetireButtonImage from '@assets/images/ui/arena/arena-retire-button.png'
 import arenaRetireContainerImage from '@assets/images/ui/arena/retire-arena-container.png'
@@ -50,8 +67,13 @@ import settingsBaseFrameLargeImage from '@assets/images/ui/settings/settings-bas
 import settingsConcedeImage from '@assets/images/ui/settings/settings-concede.png'
 import settingsRestartImage from '@assets/images/ui/settings/settings-restart.png'
 import settingsQuitImage from '@assets/images/ui/settings/settings-quit.png'
-import gameBoardImage from '@assets/images/match/BOARD.png'
+import gameBoard1Image from '@assets/images/match/BOARD-1.png'
+import gameBoard2Image from '@assets/images/match/BOARD-2.png'
+import gameBoard3Image from '@assets/images/match/BOARD-3.png'
+import gameBoard4Image from '@assets/images/match/BOARD-4.png'
+import gameBoard5Image from '@assets/images/match/BOARD-5.png'
 import gameDeckImage from '@assets/images/match/deck.png'
+import gameDeckInfoImage from '@assets/images/match/tray-number-of-cards-hand-deck.png'
 import gameFatigueDeckImage from '@assets/images/match/fatigue-deck.png'
 import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
 import gameEnemyTurnImage from '@assets/images/match/button-enemy-turn.png'
@@ -60,6 +82,8 @@ import fatigueImage from '@assets/images/match/fatigue.png'
 import damageIndicatorImage from '@assets/images/match/damage-indicator.png'
 import healIndicatorImage from '@assets/images/match/heal-indicator.png'
 import secretImage from '@assets/images/match/secret.png'
+import questImage from '@assets/images/match/quest.png'
+import questArrowImage from '@assets/images/match/quest-arrow.png'
 import secretRevealedScreenImage from '@assets/images/match/secret-revealed-screen.png'
 import cardBackImage from '@assets/images/cards/card-back.png'
 import startOfGameVsImage from '@assets/images/match/start-of-game-vs.png'
@@ -83,6 +107,9 @@ import historyFatigueCardImage from '@assets/images/match/history-fatigue-card.p
 import historyFatigueThumbImage from '@assets/images/match/history-fatigue-thumb.png'
 import manaCrystalImage from '@assets/images/cards/mana.png'
 import manaOverloadImage from '@assets/images/match/mana-overload.png'
+import manaAvailableImage from '@assets/images/match/mana-available.png'
+import manaSpentImage from '@assets/images/match/mana-spent.png'
+import manaHighlightedImage from '@assets/images/match/mana-highlighted.png'
 import historySecretCardImage from '@assets/images/match/history-secret-card.png'
 import historySecretThumbImage from '@assets/images/match/history-secret-thumb.png'
 import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
@@ -95,6 +122,7 @@ import minionFrameLegendaryImage from '@assets/images/board/minion-frame-legenda
 import premiumMinionFrameLegendaryImage from '@assets/images/board/premium-minion-frame-legendary.png'
 import minionTauntImage from '@assets/images/board/minion-taunt.png'
 import premiumMinionTauntImage from '@assets/images/board/premium-minion-taunt.png'
+import minionEnrageImage from '@assets/images/board/minion-enrage.png'
 import minionDivineShieldImage from '@assets/images/board/minion-divine-shield.png'
 import heroFrozenImage from '@assets/images/board/hero-frozen.png'
 import heroImmuneImage from '@assets/images/board/hero-immune.png'
@@ -102,6 +130,8 @@ import minionFrozenImage from '@assets/images/board/minion-frozen.png'
 import minionImmuneImage from '@assets/images/board/minion-immune.png'
 import minionElusiveImage from '@assets/images/board/minion-elusive.png'
 import minionSpellDamageImage from '@assets/images/board/minion-spell-damage.png'
+import minionLifestealImage from '@assets/images/board/minion-lifesteal.png'
+import minionAuraImage from '@assets/images/board/minion-aura.png'
 import minionWindfuryImage from '@assets/images/board/minion-windfury.png'
 import minionStealthImage from '@assets/images/board/minion-stealth.png'
 import minionTriggerImage from '@assets/images/board/minion-trigger.png'
@@ -129,6 +159,10 @@ import arrowBodyImage from '@assets/images/match/arrow-body.png'
 import arrowHeadImage from '@assets/images/match/arrow-head.png'
 import arrowCircleImage from '@assets/images/match/arrow-circle.png'
 import winScreenImage from '@assets/images/match/win-screen.png'
+import arcaneDustImage from '@assets/images/ui/common/arcane-dust.png'
+import upgradeWindowImage from '@assets/images/ui/collection/upgrade-window-base.png'
+import upgradeButtonImage from '@assets/images/ui/collection/upgrade-button.png'
+import disenchantButtonImage from '@assets/images/ui/collection/disenchant-button.png'
 import defeatScreenImage from '@assets/images/match/defeat-screen.png'
 import anduinDeckPortraitImage from '@assets/images/heroes/original-art-portrait/anduin.png'
 import garroshDeckPortraitImage from '@assets/images/heroes/original-art-portrait/garrosh.png'
@@ -271,6 +305,168 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     arenaBackgroundImage,
     1920,
     1080,
+    'arena'
+  ),
+  asset(
+    'scene.arena.reward-box',
+    ASSET_BUNDLE_IDS.arena,
+    'rewardBox',
+    arenaRewardBoxImage,
+    1254,
+    1254,
+    'arena'
+  ),
+  asset(
+    'scene.arena.confirm-reward',
+    ASSET_BUNDLE_IDS.arena,
+    'confirmReward',
+    arenaConfirmRewardImage,
+    235,
+    127,
+    'arena'
+  ),
+  asset(
+    'scene.arena.reward-dust',
+    ASSET_BUNDLE_IDS.arena,
+    'rewardDust',
+    arcaneDustImage,
+    180,
+    243,
+    'arena'
+  ),
+  asset(
+    'scene.arena.background-ongoing',
+    ASSET_BUNDLE_IDS.arena,
+    'backgroundOngoing',
+    arenaBackgroundOngoingImage,
+    1920,
+    1080,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-0',
+    ASSET_BUNDLE_IDS.arena,
+    'key0',
+    arenaKey0Image,
+    505,
+    195,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-1',
+    ASSET_BUNDLE_IDS.arena,
+    'key1',
+    arenaKey1Image,
+    510,
+    193,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-2',
+    ASSET_BUNDLE_IDS.arena,
+    'key2',
+    arenaKey2Image,
+    541,
+    205,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-3',
+    ASSET_BUNDLE_IDS.arena,
+    'key3',
+    arenaKey3Image,
+    543,
+    195,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-4',
+    ASSET_BUNDLE_IDS.arena,
+    'key4',
+    arenaKey4Image,
+    560,
+    225,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-5',
+    ASSET_BUNDLE_IDS.arena,
+    'key5',
+    arenaKey5Image,
+    535,
+    202,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-6',
+    ASSET_BUNDLE_IDS.arena,
+    'key6',
+    arenaKey6Image,
+    568,
+    195,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-7',
+    ASSET_BUNDLE_IDS.arena,
+    'key7',
+    arenaKey7Image,
+    558,
+    205,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-8',
+    ASSET_BUNDLE_IDS.arena,
+    'key8',
+    arenaKey8Image,
+    549,
+    188,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-9',
+    ASSET_BUNDLE_IDS.arena,
+    'key9',
+    arenaKey9Image,
+    585,
+    204,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-10',
+    ASSET_BUNDLE_IDS.arena,
+    'key10',
+    arenaKey10Image,
+    552,
+    191,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-11',
+    ASSET_BUNDLE_IDS.arena,
+    'key11',
+    arenaKey11Image,
+    589,
+    191,
+    'arena'
+  ),
+  asset(
+    'scene.arena.key-12',
+    ASSET_BUNDLE_IDS.arena,
+    'key12',
+    arenaKey12Image,
+    609,
+    249,
+    'arena'
+  ),
+  asset(
+    'scene.arena.defeat-x',
+    ASSET_BUNDLE_IDS.arena,
+    'defeatX',
+    arenaDefeatXImage,
+    74,
+    70,
     'arena'
   ),
   asset(
@@ -454,21 +650,48 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-settings'
   ),
   asset(
-    'scene.game.table',
+    'scene.game.board-1',
     ASSET_BUNDLE_IDS.game,
-    'table',
-    tableImage,
+    'board1',
+    gameBoard1Image,
     1920,
     1080,
     'game-scene'
   ),
   asset(
-    'scene.game.board',
+    'scene.game.board-2',
     ASSET_BUNDLE_IDS.game,
-    'board',
-    gameBoardImage,
-    1443,
-    1046,
+    'board2',
+    gameBoard2Image,
+    1920,
+    1080,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-3',
+    ASSET_BUNDLE_IDS.game,
+    'board3',
+    gameBoard3Image,
+    1920,
+    1080,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-4',
+    ASSET_BUNDLE_IDS.game,
+    'board4',
+    gameBoard4Image,
+    1920,
+    1080,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-5',
+    ASSET_BUNDLE_IDS.game,
+    'board5',
+    gameBoard5Image,
+    1920,
+    1080,
     'game-scene'
   ),
   asset(
@@ -643,6 +866,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.quest',
+    ASSET_BUNDLE_IDS.game,
+    'quest',
+    questImage,
+    95,
+    107,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.quest-arrow',
+    ASSET_BUNDLE_IDS.game,
+    'questArrow',
+    questArrowImage,
+    206,
+    198,
+    'game-scene'
+  ),
+  asset(
     'scene.game.secret-revealed-screen',
     ASSET_BUNDLE_IDS.game,
     'secretRevealedScreen',
@@ -685,6 +926,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     premiumMinionTauntImage,
     136,
     183,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-enrage',
+    ASSET_BUNDLE_IDS.game,
+    'minionEnrage',
+    minionEnrageImage,
+    105,
+    141,
     'game-scene'
   ),
   asset(
@@ -739,6 +989,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     minionSpellDamageImage,
     43,
     45,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-lifesteal',
+    ASSET_BUNDLE_IDS.game,
+    'minionLifesteal',
+    minionLifestealImage,
+    43,
+    41,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.minion-aura',
+    ASSET_BUNDLE_IDS.game,
+    'minionAura',
+    minionAuraImage,
+    38,
+    38,
     'game-scene'
   ),
   asset(
@@ -967,6 +1235,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.deck-info',
+    ASSET_BUNDLE_IDS.game,
+    'deckInfo',
+    gameDeckInfoImage,
+    246,
+    131,
+    'game-scene'
+  ),
+  asset(
     'scene.game.fatigue-deck',
     ASSET_BUNDLE_IDS.game,
     'fatigueDeck',
@@ -985,12 +1262,30 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
-    'scene.game.mana-crystal',
+    'scene.game.mana-available',
     ASSET_BUNDLE_IDS.game,
-    'manaCrystal',
-    manaCrystalImage,
-    171,
-    165,
+    'manaAvailable',
+    manaAvailableImage,
+    45,
+    47,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.mana-spent',
+    ASSET_BUNDLE_IDS.game,
+    'manaSpent',
+    manaSpentImage,
+    44,
+    45,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.mana-highlighted',
+    ASSET_BUNDLE_IDS.game,
+    'manaHighlighted',
+    manaHighlightedImage,
+    45,
+    47,
     'game-scene'
   ),
   asset(
@@ -1173,6 +1468,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     arrowCircleImage,
     112,
     112,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.arcane-dust',
+    ASSET_BUNDLE_IDS.game,
+    'arcaneDust',
+    arcaneDustImage,
+    180,
+    243,
     'game-scene'
   ),
   asset(
@@ -1363,6 +1667,42 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     500,
     500,
     'collection'
+  ),
+  asset(
+    'scene.card-preview.upgrade-window',
+    ASSET_BUNDLE_IDS.cardPreview,
+    'upgradeWindow',
+    upgradeWindowImage,
+    422,
+    250,
+    'card-preview'
+  ),
+  asset(
+    'scene.card-preview.upgrade-button',
+    ASSET_BUNDLE_IDS.cardPreview,
+    'upgradeButton',
+    upgradeButtonImage,
+    154,
+    88,
+    'card-preview'
+  ),
+  asset(
+    'scene.card-preview.disenchant-button',
+    ASSET_BUNDLE_IDS.cardPreview,
+    'disenchantButton',
+    disenchantButtonImage,
+    154,
+    88,
+    'card-preview'
+  ),
+  asset(
+    'scene.card-preview.assembly-spark',
+    ASSET_BUNDLE_IDS.cardPreview,
+    'assemblySpark',
+    playSpotlight1Image,
+    256,
+    256,
+    'card-preview'
   ),
   asset(
     'scene.card-preview.detail-container',
@@ -1650,8 +1990,32 @@ export interface TavernBrawlAssets {
   playButton: Texture
 }
 
-export interface ArenaAssets {
+export const ARENA_KEY_ASSET_KEYS = [
+  'key0',
+  'key1',
+  'key2',
+  'key3',
+  'key4',
+  'key5',
+  'key6',
+  'key7',
+  'key8',
+  'key9',
+  'key10',
+  'key11',
+  'key12'
+] as const
+
+export interface ArenaAssets extends Record<
+  (typeof ARENA_KEY_ASSET_KEYS)[number],
+  Texture
+> {
+  rewardBox: Texture
+  confirmReward: Texture
+  rewardDust: Texture
   background: Texture
+  backgroundOngoing: Texture
+  defeatX: Texture
   playButton: Texture
   retireButton: Texture
   retireContainer: Texture
@@ -1690,8 +2054,11 @@ export interface DeckPresentationAssets extends Record<HeroAssetKey, Texture> {
 }
 
 export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
-  table: Texture
-  board: Texture
+  board1: Texture
+  board2: Texture
+  board3: Texture
+  board4: Texture
+  board5: Texture
   fatigue: Texture
   damageIndicator: Texture
   healIndicator: Texture
@@ -1709,6 +2076,8 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   historyFatigueCard: Texture
   historyFatigueThumb: Texture
   secret: Texture
+  quest: Texture
+  questArrow: Texture
   secretRevealedScreen: Texture
   minionFrame: Texture
   premiumMinionFrame: Texture
@@ -1716,12 +2085,15 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   premiumMinionFrameLegendary: Texture
   minionTaunt: Texture
   premiumMinionTaunt: Texture
+  minionEnrage: Texture
   minionDivineShield: Texture
   heroFrozen: Texture
   heroImmune: Texture
   minionFrozen: Texture
   minionWindfury: Texture
   minionSpellDamage: Texture
+  minionLifesteal: Texture
+  minionAura: Texture
   minionElusive: Texture
   minionImmune: Texture
   minionStealth: Texture
@@ -1747,8 +2119,11 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   playSpotlight7: Texture
   playSpotlight8: Texture
   deck: Texture
+  deckInfo: Texture
   fatigueDeck: Texture
-  manaCrystal: Texture
+  manaAvailable: Texture
+  manaSpent: Texture
+  manaHighlighted: Texture
   manaOverload: Texture
   endTurn: Texture
   toggleViewButton: Texture
@@ -1770,6 +2145,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   arrowHead: Texture
   arrowCircle: Texture
   winScreen: Texture
+  arcaneDust: Texture
   defeatScreen: Texture
 }
 
@@ -1816,5 +2192,9 @@ export interface CollectionAssets {
 }
 
 export interface CardPreviewAssets {
+  assemblySpark: Texture
   detailContainer: Texture
+  upgradeWindow: Texture
+  upgradeButton: Texture
+  disenchantButton: Texture
 }

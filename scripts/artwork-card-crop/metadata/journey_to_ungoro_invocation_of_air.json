@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\journey_to_ungoro_invocation_of_air.jpg",
+  "source_name": "journey_to_ungoro_invocation_of_air.jpg",
+  "crop_box": [
+    30,
+    22,
+    485,
+    477
+  ],
+  "scale": 1.1,
+  "offset_x": -32.753846153846155,
+  "offset_y": -23.98461538461541,
+  "timestamp": "2026-09-16T14:44:59.652317",
+  "card_id": "journey_to_ungoro_invocation_of_air",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

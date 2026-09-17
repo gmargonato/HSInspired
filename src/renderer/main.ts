@@ -180,7 +180,12 @@ async function bootstrap(): Promise<void> {
         [import('./app/dev-scene-sync'), import('./app/dev-command-handler')]
       )
       unsubscribeDevSceneSync = installDevSceneSync(game, services.logger)
-      unsubscribeDevCommandHandler = installDevCommandHandler(game, services.logger)
+      unsubscribeDevCommandHandler = installDevCommandHandler(
+        game,
+        services.logger,
+        services.progressionStore,
+        (message) => services.dialogs.error(message)
+      )
     }
 
     const directInspectorStart =

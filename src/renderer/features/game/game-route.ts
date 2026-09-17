@@ -1,5 +1,6 @@
 import type { MatchSetup } from '../../../game/match'
 import type { Deck } from '../../../game/decks'
+import type { GeneratedOpponentMetadata } from '../../../game/decks/opponent-generator'
 
 /** Minimal route contract consumed by the game feature itself. */
 export interface GameRoute {
@@ -7,6 +8,7 @@ export interface GameRoute {
   readonly setup: MatchSetup
   readonly mode?: 'tavern-brawl' | 'arena'
   readonly deckSnapshots?: readonly Deck[]
+  readonly generatedOpponent?: GeneratedOpponentMetadata
 }
 
 /** Rebuilds the same matchup with a fresh deterministic match seed. */

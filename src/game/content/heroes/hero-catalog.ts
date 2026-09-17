@@ -30,6 +30,15 @@ export type HeroPresentationAssetKey =
   | 'hero-thrall'
   | 'hero-jaraxxus'
   | 'hero-ragnaros'
+  | 'hero-malfurion-pestilent'
+  | 'hero-rexxar-deathstalker'
+  | 'hero-jaina-frost-lich'
+  | 'hero-uther-ebon-blade'
+  | 'hero-anduin-shadowreaper'
+  | 'hero-valeera-hollow'
+  | 'hero-thrall-deathseer'
+  | 'hero-guldan-bloodreaver'
+  | 'hero-garrosh-scourgelord'
 
 const HERO_DATA = [
   ['guldan', 'Warlock', "Gul'dan", 'warlock-life-tap', 'hero-guldan', true],
@@ -69,6 +78,78 @@ const HERO_DATA = [
     'Ragnaros the Firelord',
     'ragnaros-die-insects',
     'hero-ragnaros',
+    false
+  ],
+  [
+    'malfurion-pestilent',
+    'Druid',
+    'Malfurion the Pestilent',
+    'knights_of_the_frozen_throne_plague_lord',
+    'hero-malfurion-pestilent',
+    false
+  ],
+  [
+    'rexxar-deathstalker',
+    'Hunter',
+    'Deathstalker Rexxar',
+    'knights_of_the_frozen_throne_build_a_beast',
+    'hero-rexxar-deathstalker',
+    false
+  ],
+  [
+    'jaina-frost-lich',
+    'Mage',
+    'Frost Lich Jaina',
+    'knights_of_the_frozen_throne_icy_touch',
+    'hero-jaina-frost-lich',
+    false
+  ],
+  [
+    'uther-ebon-blade',
+    'Paladin',
+    'Uther of the Ebon Blade',
+    'knights_of_the_frozen_throne_the_four_horsemen',
+    'hero-uther-ebon-blade',
+    false
+  ],
+  [
+    'anduin-shadowreaper',
+    'Priest',
+    'Shadowreaper Anduin',
+    'knights_of_the_frozen_throne_voidform',
+    'hero-anduin-shadowreaper',
+    false
+  ],
+  [
+    'valeera-hollow',
+    'Rogue',
+    'Valeera the Hollow',
+    'knights_of_the_frozen_throne_deaths_shadow',
+    'hero-valeera-hollow',
+    false
+  ],
+  [
+    'thrall-deathseer',
+    'Shaman',
+    'Thrall, Deathseer',
+    'knights_of_the_frozen_throne_transmute_spirit',
+    'hero-thrall-deathseer',
+    false
+  ],
+  [
+    'guldan-bloodreaver',
+    'Warlock',
+    "Bloodreaver Gul'dan",
+    'knights_of_the_frozen_throne_siphon_life',
+    'hero-guldan-bloodreaver',
+    false
+  ],
+  [
+    'garrosh-scourgelord',
+    'Warrior',
+    'Scourgelord Garrosh',
+    'knights_of_the_frozen_throne_bladestorm',
+    'hero-garrosh-scourgelord',
     false
   ]
 ] as const

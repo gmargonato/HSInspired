@@ -8,11 +8,12 @@ import { TavernBrawlScene } from '../scenes/tavern-brawl-scene'
 import { ArenaScene } from '../scenes/arena-scene'
 import { GameSettingsScene, MenuSettingsScene } from '../scenes/settings-scenes'
 import { CardViewScene } from '../scenes/card-view-scene'
-import type { DevSceneId } from '../../shared/dev-menu'
+import type { DevSceneId, DevArenaAvailability } from '../../shared/dev-menu'
 import type { AppLogger } from './logger'
 
 type DevMenuBridge = {
   notifySceneChanged?: (sceneId: DevSceneId) => void
+  notifyArenaAvailability?: (availability: DevArenaAvailability) => void
 }
 
 function getDevMenuBridge(): DevMenuBridge | null {
@@ -52,6 +53,11 @@ export function installDevSceneSync(
 
   let lastSceneId: DevSceneId | null = null
   const sync = (): void => {
+    bridge.notifyArenaAvailability?.(
+      sceneManager.current instanceof ArenaScene
+        ? sceneManager.current.devAvailability
+        : { retire: false, scores: false }
+    )
     const sceneId = getDevSceneId(sceneManager.current)
     if (sceneId === lastSceneId) return
     lastSceneId = sceneId

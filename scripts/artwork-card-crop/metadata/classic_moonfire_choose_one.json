@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_moonfire_choose_one.jpg",
+  "source_name": "classic_moonfire_choose_one.jpg",
+  "crop_box": [
+    36,
+    21,
+    491,
+    476
+  ],
+  "scale": 1.1,
+  "offset_x": -39.061538461538476,
+  "offset_y": -23.215384615384636,
+  "timestamp": "2026-09-16T14:41:05.282715",
+  "card_id": "classic_moonfire_choose_one",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

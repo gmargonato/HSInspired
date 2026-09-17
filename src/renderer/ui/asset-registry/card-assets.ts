@@ -9,6 +9,7 @@ import colorMask1FrameMinionImage from '@assets/images/cards/color-mask-1-frame-
 import colorMask1FrameSpellImage from '@assets/images/cards/color-mask-1-frame-spell.png'
 import colorMask2FrameMinionImage from '@assets/images/cards/color-mask-2-frame-minion.png'
 import frameHeroImage from '@assets/images/cards/frame-hero.png'
+import premiumFrameHeroImage from '@assets/images/cards/premium-frame-hero.png'
 import frameMinionImage from '@assets/images/cards/frame-minion.png'
 import frameSpellImage from '@assets/images/cards/frame-spell.png'
 import premiumFrameSpellImage from '@assets/images/cards/premium-frame-spell.png'
@@ -17,7 +18,9 @@ import frameWeaponImage from '@assets/images/cards/frame-weapon.png'
 import premiumFrameWeaponImage from '@assets/images/cards/premium-frame-weapon.png'
 import healthImage from '@assets/images/cards/health.png'
 import legendaryImage from '@assets/images/cards/legendary.png'
+import legendarySpellImage from '@assets/images/cards/legendary-spell.png'
 import manaImage from '@assets/images/cards/mana.png'
+import premiumLegendarySpellImage from '@assets/images/cards/premium-legendary-spell.png'
 import raceBannerImage from '@assets/images/cards/race-banner.png'
 import premiumRaceBannerImage from '@assets/images/cards/premium-race-banner.png'
 import rarityCommonImage from '@assets/images/cards/rarity-common.png'
@@ -92,6 +95,13 @@ export const CARD_ASSET_DEFINITIONS = [
     317
   ),
   cardAsset(
+    'card.frame.legendary.spell.premium',
+    'premium-legendary-spell.png',
+    premiumLegendarySpellImage,
+    476,
+    248
+  ),
+  cardAsset(
     'card.frame.minion.premium.class-mask',
     'color-mask-premium-frame-minion.png',
     premiumMaskImage,
@@ -101,6 +111,13 @@ export const CARD_ASSET_DEFINITIONS = [
   cardAsset('card.stat.armor', 'armor.png', armorImage, 163, 200),
   cardAsset('card.stat.attack', 'attack.png', attackImage, 175, 214),
   cardAsset('card.name', 'card-name.png', cardNameImage, 665, 198),
+  cardAsset(
+    'card.frame.hero.premium',
+    'premium-frame-hero.png',
+    premiumFrameHeroImage,
+    620,
+    905
+  ),
   cardAsset('card.frame.hero', 'frame-hero.png', frameHeroImage, 620, 905),
   cardAsset('card.frame.minion', 'frame-minion.png', frameMinionImage, 620, 905),
   cardAsset(
@@ -128,6 +145,13 @@ export const CARD_ASSET_DEFINITIONS = [
   cardAsset('card.frame.weapon', 'frame-weapon.png', frameWeaponImage, 620, 905),
   cardAsset('card.stat.health', 'health.png', healthImage, 136, 192),
   cardAsset('card.frame.legendary', 'legendary.png', legendaryImage, 436, 317),
+  cardAsset(
+    'card.frame.legendary.spell',
+    'legendary-spell.png',
+    legendarySpellImage,
+    476,
+    248
+  ),
   cardAsset('card.stat.mana', 'mana.png', manaImage, 174, 165),
   cardAsset('card.shadow.mana', 'shadow-mana.png', shadowManaImage, 267, 270),
   cardAsset('card.race-banner', 'race-banner.png', raceBannerImage, 408, 69),

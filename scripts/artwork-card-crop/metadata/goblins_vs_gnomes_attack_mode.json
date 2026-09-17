@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\goblins_vs_gnomes_attack_mode.jpg",
+  "source_name": "goblins_vs_gnomes_attack_mode.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-16T15:04:32.805623",
+  "card_id": "goblins_vs_gnomes_attack_mode",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

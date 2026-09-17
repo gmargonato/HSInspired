@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\classic_mark_of_nature_attack.jpg",
+  "source_name": "classic_mark_of_nature_attack.jpg",
+  "crop_box": [
+    51,
+    57,
+    506,
+    512
+  ],
+  "scale": 1.1,
+  "offset_x": -55.6769230769231,
+  "offset_y": -63.200000000000045,
+  "timestamp": "2026-09-16T14:40:54.772856",
+  "card_id": "classic_mark_of_nature_attack",
+  "card_type": "Spell",
+  "frame_file": "frame-spell.png"
+}

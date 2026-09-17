@@ -108,6 +108,9 @@ export class GameHandView {
   append(entry: HandEntry): void {
     this.handEntries.push(entry)
   }
+  insert(index: number, entry: HandEntry): void {
+    this.handEntries.splice(index, 0, entry)
+  }
   removeAt(index: number): HandEntry | undefined {
     return this.handEntries.splice(index, 1)[0]
   }

@@ -15,6 +15,7 @@ export type MatchResult = 'win' | 'defeat' | 'draw'
 export interface MatchResultOverlayOptions {
   readonly winScreen: Texture
   readonly defeatScreen: Texture
+  readonly arcaneDust: Texture
   readonly onContinue: () => Promise<void> | void
 }
 
@@ -24,6 +25,10 @@ export class MatchResultOverlay extends Container {
   private readonly heroLayer = new Container()
   private readonly continuePrompt: Text
   private continuationRequested = false
+  private readonly dustText: Text
+  private readonly dustIcon: Sprite
+  private readonly rewardError: Text
+  private retryReward: (() => Promise<void>) | null = null
 
   constructor(private readonly options: MatchResultOverlayOptions) {
     super()
@@ -61,6 +66,46 @@ export class MatchResultOverlay extends Container {
     this.continuePrompt.eventMode = 'none'
     this.addChild(this.continuePrompt)
 
+    this.dustText = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 48,
+        fill: 0xffffff,
+        stroke: { color: 0x000000, width: 5 }
+      }
+    })
+    this.dustText.label = 'game.match-result.dust-text'
+    applyAnchoredPlacement(this.dustText, GAME_BOARD_LAYOUT.matchResult.dustText)
+    this.dustIcon = new Sprite(options.arcaneDust)
+    this.dustIcon.label = 'game.match-result.dust-icon'
+    applyAnchoredPlacement(this.dustIcon, GAME_BOARD_LAYOUT.matchResult.dustIcon)
+    this.rewardError = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 26,
+        fill: 0xffffff,
+        align: 'center',
+        wordWrap: true,
+        wordWrapWidth: 800
+      }
+    })
+    this.rewardError.label = 'game.match-result.reward-error'
+    applyAnchoredPlacement(this.rewardError, GAME_BOARD_LAYOUT.matchResult.rewardError)
+    this.rewardError.eventMode = 'static'
+    this.rewardError.cursor = 'pointer'
+    this.rewardError.on('pointertap', (event: FederatedPointerEvent) => {
+      event.stopPropagation()
+      if (event.button !== 0 || !this.retryReward) return
+      const retry = this.retryReward
+      this.retryReward = null
+      this.rewardError.text = 'Saving reward…'
+      void retry()
+    })
+    this.addChild(this.dustText, this.dustIcon, this.rewardError)
+    this.setReward(0)
+
     this.on('pointertap', this.handleContinue)
   }
 
@@ -75,6 +120,19 @@ export class MatchResultOverlay extends Container {
     hero.eventMode = 'none'
     this.heroLayer.addChild(hero)
     this.visible = true
+  }
+
+  setReward(earned: number): void {
+    this.dustText.text = `+${earned}`
+    this.dustText.visible = this.dustIcon.visible = earned > 0
+    this.rewardError.text = ''
+    this.retryReward = null
+  }
+
+  setRewardFailure(retry: () => Promise<void>): void {
+    this.setReward(0)
+    this.rewardError.text = 'Could not save Arcane Dust. Click here to retry.'
+    this.retryReward = retry
   }
 
   private readonly handleContinue = (event: FederatedPointerEvent): void => {

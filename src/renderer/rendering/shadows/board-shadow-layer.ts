@@ -10,9 +10,20 @@ import {
   type Texture
 } from 'pixi.js'
 import { MATCH_SHADOW_CONFIG as config } from './match-shadow-config'
-import { shadowBodyCorners, shadowCasters, type ShadowCaster } from './shadow-caster'
+import {
+  shadowBodyCorners,
+  shadowCasters,
+  type ShadowBounds,
+  type ShadowCaster
+} from './shadow-caster'
 
 const SHAPE_SIZE = 256
+
+interface CachedSilhouette {
+  revision: number
+  texture: Texture
+  bounds: ShadowBounds
+}
 
 function destroyShadow(shadow: Sprite | PerspectiveMesh): void {
   // Mesh geometry is owned here; its baked texture is shared with other shadows.
@@ -60,11 +71,12 @@ function visibleAlpha(
   return 0
 }
 
-/** Shared soft shape textures; no live blur filters or offscreen passes during animation. */
+/** Cached soft silhouettes and primitive shapes; animation reuses baked textures. */
 export class BoardShadowLayer extends Container {
   private readonly shapes = new Map<ShadowCaster['shape'], Texture>()
   private readonly shapePadding = Math.ceil(Math.max(0, config.blur) * 3)
   private readonly shadows = new Map<ShadowCaster, Sprite | PerspectiveMesh>()
+  private readonly silhouettes = new Map<ShadowCaster, CachedSilhouette>()
   private readonly excludedRoots = new Set<Container>()
   private readonly inverseGround = new Matrix()
   private readonly transform = new Matrix()
@@ -114,6 +126,58 @@ export class BoardShadowLayer extends Container {
     }
   }
 
+  private silhouetteTexture(caster: ShadowCaster): CachedSilhouette | undefined {
+    const source = caster.silhouette
+    if (!source || caster.corners) return undefined
+    const previous = this.silhouettes.get(caster)
+    if (previous?.revision === source.revision) return previous
+    const body = source.create()
+    const target = new Container()
+    target.label = 'game.shadow-bake'
+    target.addChild(body)
+    let blur: BlurFilter | null = null
+    try {
+      const bounds = body.getLocalBounds()
+      const scale = SHAPE_SIZE / Math.max(1, bounds.width, bounds.height)
+      body.scale.set(scale)
+      blur =
+        config.blur > 0
+          ? new BlurFilter({ strength: config.blur, quality: 2, resolution: 1 })
+          : null
+      target.filters = blur ? [blur] : null
+      const pad = this.shapePadding
+      const frame = new Rectangle(
+        bounds.x * scale - pad,
+        bounds.y * scale - pad,
+        bounds.width * scale + pad * 2,
+        bounds.height * scale + pad * 2
+      )
+      const texture = this.renderer.generateTexture({
+        target,
+        frame,
+        resolution: 1,
+        antialias: true,
+        clearColor: [0, 0, 0, 0]
+      })
+      const cached = {
+        revision: source.revision,
+        texture,
+        bounds: {
+          x: frame.x / scale,
+          y: frame.y / scale,
+          width: texture.width / scale,
+          height: texture.height / scale
+        }
+      }
+      this.silhouettes.set(caster, cached)
+      previous?.texture.destroy(true)
+      return cached
+    } finally {
+      target.destroy({ children: true })
+      blur?.destroy()
+    }
+  }
+
   update(deltaMS: number): void {
     this.visible = config.enabled && config.depth > 0
     for (const [caster, shadow] of this.shadows) {
@@ -123,6 +187,8 @@ export class BoardShadowLayer extends Container {
       ) {
         destroyShadow(shadow)
         this.shadows.delete(caster)
+        this.silhouettes.get(caster)?.texture.destroy(true)
+        this.silhouettes.delete(caster)
       } else {
         shadow.visible = false
       }
@@ -153,13 +219,14 @@ export class BoardShadowLayer extends Container {
 
       let shadow = this.shadows.get(caster)
       const corners = caster.corners
+      const silhouette = this.silhouetteTexture(caster)
       if (shadow && shadow instanceof PerspectiveMesh !== !!corners) {
         destroyShadow(shadow)
         this.shadows.delete(caster)
         shadow = undefined
       }
       if (!shadow) {
-        const texture = this.shapeTexture(caster.shape)
+        const texture = silhouette?.texture ?? this.shapeTexture(caster.shape)
         shadow = corners
           ? new PerspectiveMesh({ texture, verticesX: 10, verticesY: 10 })
           : new Sprite(texture)
@@ -171,9 +238,13 @@ export class BoardShadowLayer extends Container {
         this.shadows.set(caster, shadow)
         this.addChild(shadow)
       }
+      if (silhouette && shadow instanceof Sprite) {
+        shadow.texture = silhouette.texture
+        shadow.anchor.set(0)
+      }
       caster.visual.getGlobalTransform(this.transform)
       this.transform.prepend(this.inverseGround)
-      const { x, y, width, height: bodyHeight } = caster.bounds
+      const { x, y, width, height: bodyHeight } = silhouette?.bounds ?? caster.bounds
       if (corners && shadow instanceof PerspectiveMesh) {
         const pad = this.shapePadding
         const [a, b, c, d] = shadowBodyCorners(
@@ -198,7 +269,14 @@ export class BoardShadowLayer extends Container {
         shadow.setCorners(a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y)
         this.footprint.copyFrom(this.transform)
       } else {
-        this.footprint.set(width / SHAPE_SIZE, 0, 0, bodyHeight / SHAPE_SIZE, x, y)
+        this.footprint.set(
+          width / (silhouette?.texture.width ?? SHAPE_SIZE),
+          0,
+          0,
+          bodyHeight / (silhouette?.texture.height ?? SHAPE_SIZE),
+          x,
+          y
+        )
         this.footprint.prepend(this.transform)
       }
       this.footprint.tx += height * config.lightOffset.x
@@ -225,6 +303,8 @@ export class BoardShadowLayer extends Container {
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     for (const shadow of this.shadows.values()) destroyShadow(shadow)
     this.shadows.clear()
+    for (const silhouette of this.silhouettes.values()) silhouette.texture.destroy(true)
+    this.silhouettes.clear()
     this.excludedRoots.clear()
     for (const shape of this.shapes.values()) shape.destroy(true)
     this.shapes.clear()

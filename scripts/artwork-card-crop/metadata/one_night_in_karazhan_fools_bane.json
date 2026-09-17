@@ -1,0 +1,17 @@
+{
+  "source_path": "assets\\images\\card-artwork\\one_night_in_karazhan_fools_bane.jpg",
+  "source_name": "one_night_in_karazhan_fools_bane.jpg",
+  "crop_box": [
+    6,
+    6,
+    506,
+    506
+  ],
+  "scale": 1.0,
+  "offset_x": -6.0,
+  "offset_y": -6.0,
+  "timestamp": "2026-09-16T14:39:45.494242",
+  "card_id": "one_night_in_karazhan_fools_bane",
+  "card_type": "Weapon",
+  "frame_file": "frame-weapon.png"
+}

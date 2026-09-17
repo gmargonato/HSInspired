@@ -2,6 +2,7 @@ import {
   Container,
   Graphics,
   Matrix,
+  Point,
   Rectangle,
   Sprite,
   Text,
@@ -10,6 +11,7 @@ import {
 } from 'pixi.js'
 import 'pixi.js/advanced-blend-modes'
 import type { CardDefinition } from '../../../game/content/cards'
+import { supportsPremiumFormat } from '../../../game/progression/premium-support'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import {
   CARD_NAME_FIT,
@@ -29,13 +31,19 @@ import {
   shouldRenderClassFrameColors
 } from './class-frame-colors'
 import type { ClassFrameLayerAppearance } from './class-frame-colors'
-import { isPremiumEnabled, subscribeToPremiumAppearance } from '../premium-appearance'
+import {
+  isCardPremium,
+  isPremiumEnabled,
+  subscribeToPremiumAppearance
+} from '../premium-appearance'
 import {
   PremiumArtworkBreath,
   isArtworkVisible
 } from '../effects/premium-artwork-breath'
 
 export interface CardViewOptions extends CardRenderOptions {
+  readonly premiumSide?: 'local' | 'remote'
+  readonly ignorePremiumOverride?: boolean
   readonly animatePremiumArtwork?: boolean
   readonly artwork?: Texture
   readonly snapshot?: {
@@ -54,6 +62,18 @@ export interface CardLayerAppearance {
   readonly alpha?: number
   readonly tint?: number
   readonly blendMode?: ClassFrameBlendMode
+}
+
+export interface CardPieceMotion {
+  set(state: {
+    x: number
+    y: number
+    scale: number
+    rotation?: number
+    visible: boolean
+  }): void
+  samplePoint(target: Container, u: number, v: number, out: Point): void
+  restore(): void
 }
 
 export type CardCostColor = 'normal' | 'reduced' | 'increased'
@@ -286,7 +306,11 @@ export class CardView extends Container {
   private readonly semanticOffsets = new Map<string, { x: number; y: number }>()
   private unsubscribeClassFrameConfig: (() => void) | null = null
   private unsubscribePremium: (() => void) | null = null
+  private premiumAppearancePaused = false
+  private pendingPremiumRefresh: (() => void) | null = null
   private premium = false
+  private premiumPresentation: boolean | null = null
+  private refreshPremiumPresentation: (() => void) | null = null
   private readonly alphaMasks = new Map<string, Sprite>()
   private readonly appearanceSnapshots = new Set<() => void>()
   private readonly content: Container
@@ -319,8 +343,7 @@ export class CardView extends Container {
   ): Promise<CardView> {
     // Start with both standard class-mask sprites mounted so switching is synchronous.
     const view = new CardView(buildCardLayout(card, { ...options, premium: false }))
-    const supportsPremium =
-      card.type === 'Minion' || card.type === 'Spell' || card.type === 'Weapon'
+    const supportsPremium = supportsPremiumFormat(card.type)
     try {
       await view.build(resolver, options.artwork)
       if (supportsPremium && options.animatePremiumArtwork && options.artwork) {
@@ -352,6 +375,15 @@ export class CardView extends Container {
     }
     if (this.isCachedAsTexture) return
     this.cacheAsTexture({ antialias: true, resolution: 1 })
+  }
+
+  /** Keep frozen backdrops unchanged; apply the latest appearance when resumed. */
+  setPremiumAppearancePaused(paused: boolean): void {
+    this.premiumAppearancePaused = paused
+    if (paused || this.destroyed) return
+    const refresh = this.pendingPremiumRefresh
+    this.pendingPremiumRefresh = null
+    refresh?.()
   }
 
   /** Avoid nested cache rendering when an ancestor composites live card layers. */
@@ -454,6 +486,7 @@ export class CardView extends Container {
     this.appearanceSnapshots.clear()
     this.unsubscribePremium?.()
     this.unsubscribePremium = null
+    this.pendingPremiumRefresh = null
     this.unsubscribeClassFrameConfig?.()
     this.unsubscribeClassFrameConfig = null
     super.destroy(options)
@@ -464,6 +497,111 @@ export class CardView extends Container {
     if (!objects) throw new Error(`Unknown card layer: ${layerId}`)
     for (const object of objects) object.visible = visible
     this.updateCacheTexture()
+  }
+
+  get isPremium(): boolean {
+    return this.premium
+  }
+
+  /** Pin a presentation during a transition; null resumes subscribed appearance. */
+  setPremiumPresentation(premium: boolean | null): void {
+    this.premiumPresentation = premium
+    this.refreshPremiumPresentation?.()
+  }
+
+  /** Animate sibling semantic nodes as one piece without reparenting their layers. */
+  createPieceMotion(paths: readonly string[]): CardPieceMotion {
+    const objects = paths.map((path) => {
+      const entry = this.treeObjects.get(path)
+      if (!entry) throw new Error(`Unknown card node: ${path}`)
+      return entry.object
+    })
+    if (
+      !objects.length ||
+      objects.some((object) => object.parent !== objects[0].parent)
+    )
+      throw new Error('Card piece nodes must be nonempty siblings.')
+    const masks = paths.flatMap((path) => {
+      const mask = this.alphaMasks.get(path)
+      return mask ? [mask] : []
+    })
+    const bases = [...objects, ...masks].map((object) => ({
+      object,
+      x: object.x,
+      y: object.y,
+      scaleX: object.scale.x,
+      scaleY: object.scale.y,
+      rotation: object.rotation,
+      visible: object.visible
+    }))
+    const bounds = objects.map((object) => {
+      const local = object.getLocalBounds()
+      return {
+        left: object.x + (local.x - object.pivot.x) * object.scale.x,
+        top: object.y + (local.y - object.pivot.y) * object.scale.y,
+        right: object.x + (local.x + local.width - object.pivot.x) * object.scale.x,
+        bottom: object.y + (local.y + local.height - object.pivot.y) * object.scale.y
+      }
+    })
+    const centerX =
+      (Math.min(...bounds.map((b) => b.left)) +
+        Math.max(...bounds.map((b) => b.right))) /
+      2
+    const centerY =
+      (Math.min(...bounds.map((b) => b.top)) +
+        Math.max(...bounds.map((b) => b.bottom))) /
+      2
+    const width =
+      Math.max(...bounds.map((b) => b.right)) - Math.min(...bounds.map((b) => b.left))
+    const height =
+      Math.max(...bounds.map((b) => b.bottom)) - Math.min(...bounds.map((b) => b.top))
+    const sample = new Point()
+    let current = { x: 0, y: 0, scale: 1, rotation: 0 }
+    return {
+      samplePoint: (target, u, v, out) => {
+        const x = (u - 0.5) * width * current.scale
+        const y = (v - 0.5) * height * current.scale
+        const cos = Math.cos(current.rotation)
+        const sin = Math.sin(current.rotation)
+        sample.set(
+          centerX + current.x + x * cos - y * sin,
+          centerY + current.y + x * sin + y * cos
+        )
+        target.toLocal(sample, objects[0].parent!, out)
+      },
+      set: ({ x, y, scale, rotation = 0, visible }) => {
+        if (this.destroyed) return
+        current.x = x
+        current.y = y
+        current.scale = scale
+        current.rotation = rotation
+        const cos = Math.cos(rotation)
+        const sin = Math.sin(rotation)
+        for (const base of bases) {
+          const dx = (base.x - centerX) * scale
+          const dy = (base.y - centerY) * scale
+          base.object.position.set(
+            centerX + dx * cos - dy * sin + x,
+            centerY + dx * sin + dy * cos + y
+          )
+          base.object.rotation = base.rotation + rotation
+          base.object.scale.set(base.scaleX * scale, base.scaleY * scale)
+          base.object.visible = base.visible && visible
+        }
+        this.updateCacheTexture()
+      },
+      restore: () => {
+        if (this.destroyed) return
+        current = { x: 0, y: 0, scale: 1, rotation: 0 }
+        for (const base of bases) {
+          base.object.position.set(base.x, base.y)
+          base.object.scale.set(base.scaleX, base.scaleY)
+          base.object.rotation = base.rotation
+          base.object.visible = base.visible
+        }
+        this.updateCacheTexture()
+      }
+    }
   }
 
   isLayerVisible(layerId: string): boolean {
@@ -545,6 +683,7 @@ export class CardView extends Container {
     )
     const apply = (enabled: boolean): void => {
       if (this.destroyed) return
+      enabled &&= supportsPremiumFormat(card.type)
       this.premium = enabled
       this.artworkBreath?.setEnabled(enabled)
       this.activePlan = enabled ? premium : standard
@@ -604,9 +743,30 @@ export class CardView extends Container {
       }
       for (const refresh of this.appearanceSnapshots) refresh()
     }
-    apply(options.premium ?? isPremiumEnabled())
-    if (options.premium === undefined)
-      this.unsubscribePremium = subscribeToPremiumAppearance(apply)
+    const refresh = (): void => {
+      if (
+        this.premiumPresentation !== null &&
+        this.premiumPresentation === this.premium
+      )
+        return
+      apply(
+        this.premiumPresentation ??
+          (options.ignorePremiumOverride
+            ? options.premium === true
+            : options.premium === undefined
+              ? isCardPremium(card.id, options.premiumSide)
+              : options.premium || isPremiumEnabled(options.premiumSide))
+      )
+    }
+    this.refreshPremiumPresentation = refresh
+    refresh()
+    this.unsubscribePremium = subscribeToPremiumAppearance(() => {
+      if (this.premiumAppearancePaused) {
+        this.pendingPremiumRefresh = refresh
+        return
+      }
+      refresh()
+    })
   }
 
   /** Updates match-specific text while preserving authored wrapping and keyword styles. */
