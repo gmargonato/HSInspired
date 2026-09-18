@@ -2148,10 +2148,10 @@
             "target": {
               "controller": "opponent",
               "type": "minion",
-              "selection": "random"
+              "selection": "random",
+              "count": 2
             },
-            "amount": 3,
-            "hits": 2
+            "amount": 3
           }
         ]
       }

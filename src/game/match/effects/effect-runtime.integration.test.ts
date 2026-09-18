@@ -1199,6 +1199,71 @@ describe('shared effect runtime', () => {
     expect(player(scenario, enemy).hero.health).toBe(health - 10)
   })
 
+  it('summons Beneath the Grounds Nerubians for the caster when Ambush is drawn', () => {
+    const scenario = createMatchScenario({
+      seed: 905,
+      cardId: 'the_grand_tournament_beneath_the_grounds',
+      firstHeroId: 'valeera',
+      secondHeroId: 'valeera'
+    })
+    scenario.confirmBothMulligans()
+    const caster = scenario.match.getState().activePlayerId!
+    const drawer = scenario.participants.find((id) => id !== caster)!
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: caster,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+
+    const grounds = player(scenario, caster).hand.find(
+      (card) => card.cardId === 'the_grand_tournament_beneath_the_grounds'
+    )!
+    const cast = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: caster,
+      cardInstanceId: grounds.instanceId
+    })
+    expect(cast.accepted, cast.accepted ? undefined : cast.message).toBe(true)
+    expect(
+      player(scenario, drawer).deck.some(
+        (card) => card.cardId === 'the_grand_tournament_ambush'
+      )
+    ).toBe(true)
+
+    let summoned = false
+    for (let turn = 0; turn < 80 && !summoned; turn += 1) {
+      const state = scenario.match.getState()
+      if (state.phase !== 'turns' || !state.activePlayerId) break
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-clear-zone',
+          participantId: drawer,
+          zone: 'hand'
+        }).accepted
+      ).toBe(true)
+      expect(
+        scenario.match.dispatch({
+          type: 'end-turn',
+          participantId: state.activePlayerId
+        }).accepted
+      ).toBe(true)
+      summoned = player(scenario, caster).board.some(
+        (minion) => minion.cardId === 'the_grand_tournament_ambush_nerubian'
+      )
+    }
+
+    expect(summoned).toBe(true)
+    expect(
+      player(scenario, drawer).board.some(
+        (minion) => minion.cardId === 'the_grand_tournament_ambush_nerubian'
+      )
+    ).toBe(false)
+  })
+
   it.each([12, 13])('resolves Revenge as one damage pulse at %s health', (health) => {
     const scenario = createMatchScenario({
       seed: 904,
@@ -2838,6 +2903,82 @@ describe('shared effect runtime', () => {
     })
     expect(resurrected.instanceId).not.toBe(target.instanceId)
     expect(player(scenario, opponentId).graveyard ?? []).toHaveLength(0)
+  })
+
+  it('resurrects a friendly minion that died earlier in the game', () => {
+    const scenario = createMatchScenario({
+      seed: 125,
+      cardId: 'blackrock_mountain_resurrect'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'basic_fireball'
+      }).accepted
+    ).toBe(true)
+
+    const target = player(scenario, participantId).board[0]!
+    const fireball = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'basic_fireball'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: fireball.instanceId,
+        targets: [
+          { kind: 'minion', participantId, instanceId: target.instanceId }
+        ]
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).board).toHaveLength(0)
+    expect(player(scenario, participantId).graveyard ?? []).toHaveLength(1)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const resurrect = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'blackrock_mountain_resurrect'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: resurrect.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).board).toMatchObject([
+      {
+        cardId: 'basic_acidic_swamp_ooze',
+        attack: 3,
+        health: 2,
+        maxHealth: 2
+      }
+    ])
+    expect(player(scenario, participantId).graveyard ?? []).toHaveLength(0)
   })
 
   it.each(['basic_mind_control', 'classic_shadow_madness'] as const)(

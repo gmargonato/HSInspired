@@ -60,7 +60,7 @@ export function ingredientChoiceOptions(
   }))
 }
 
-/** Shared seeded offers for normal Kazakus crafting and the AI turn bonus. */
+/** Shared seeded offers for normal Kazakus crafting. */
 export function potionIngredientOffers(
   pool: readonly CardId[],
   rng: DeterministicRng

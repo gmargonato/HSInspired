@@ -479,8 +479,6 @@ export const GAME_BOARD_LAYOUT = {
     backScale: { x: 0.08, y: 0.12 } satisfies LayoutPoint,
     /** Small, upright pose used when an effect generates a hand card. */
     generatedSlotScale: 0.12,
-    generatedBackScale: 0.1,
-    /** Fully clears a local hand card below the 1080p design canvas. */
-    handReplacementExitY: 1500
+    generatedBackScale: 0.1
   }
 } as const

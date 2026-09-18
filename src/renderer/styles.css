@@ -32,13 +32,27 @@ body {
   font-display: block;
 }
 
-body:has(.app-error-notice)::after {
+body:has(.app-error-notice:not(.app-error-notice-abandon))::after {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 999;
   background: rgb(0 0 0 / 50%);
   pointer-events: none;
+}
+
+.app-abandon-overlay {
+  --game-pixel: min(calc(100vw / 1920), calc(100vh / 1080));
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: calc((100vh - 1080 * var(--game-pixel)) / 2 + 24 * var(--game-pixel))
+    calc(24 * var(--game-pixel));
+  background: rgb(0 0 0 / 50%);
+  cursor: pointer;
 }
 
 /* Authored artwork: 1237 x 355 at 1x on the 1920 x 1080 game canvas.

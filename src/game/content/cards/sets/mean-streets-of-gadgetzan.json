@@ -4325,9 +4325,18 @@
             "action": "add-to-hand",
             "player": "self",
             "source": "random-card",
-            "filter": {
-              "type": "potion"
-            },
+            "pool": [
+              "mean_streets_of_gadgetzan_potion_of_polymorph",
+              "mean_streets_of_gadgetzan_volcanic_potion",
+              "mean_streets_of_gadgetzan_pint_size_potion",
+              "mean_streets_of_gadgetzan_potion_of_madness",
+              "mean_streets_of_gadgetzan_greater_healing_potion",
+              "mean_streets_of_gadgetzan_dragonfire_potion",
+              "mean_streets_of_gadgetzan_blastcrystal_potion",
+              "mean_streets_of_gadgetzan_felfire_potion",
+              "mean_streets_of_gadgetzan_freezing_potion",
+              "mean_streets_of_gadgetzan_bloodfury_potion"
+            ],
             "count": 1
           }
         ]

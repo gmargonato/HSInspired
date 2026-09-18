@@ -1,4 +1,4 @@
-import type { AppLogger } from '../app/services'
+import type { AppLogger, DialogService } from '../app/services'
 import type { AppRoute, GameRoute, SceneRouter } from '../app/router'
 import type { DeckStore } from '../ui/deck-store'
 import type { PlayerStatsStore } from '../ui/player-stats-store'
@@ -44,6 +44,7 @@ export class GameScene extends Scene {
   private recorder?: MatchRecorder
   private readonly rewardMatchId = crypto.randomUUID()
   private statisticsAttempted = false
+  private opponentLeftShown = false
 
   constructor(
     route: GameRoute,
@@ -58,7 +59,8 @@ export class GameScene extends Scene {
       message: string,
       retry?: () => void
     ) => void = console.error,
-    private readonly progression?: ProgressionStore
+    private readonly progression?: ProgressionStore,
+    private readonly dialogs?: DialogService
   ) {
     super()
     this.route = route
@@ -132,8 +134,7 @@ export class GameScene extends Scene {
       api: this.ai,
       session: aiSession,
       logger: aiLogger,
-      recorder: this.recorder,
-      onFailure: this.reportLogError
+      recorder: this.recorder
     })
 
     const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
@@ -159,7 +160,8 @@ export class GameScene extends Scene {
       ai: this.ai,
       aiRuntime: { session: aiSession, controller: aiController },
       onMatchEnded: (event) => this.recordMatchResult(event),
-      onMatchComplete: () => this.router?.navigate(this.createExitRoute())
+      onMatchComplete: () => this.router?.navigate(this.createExitRoute()),
+      onOpponentLeft: () => this.handleOpponentLeft()
     })
     this.logger?.info('[GameScene] GameBoardView created')
     try {
@@ -207,6 +209,14 @@ export class GameScene extends Scene {
         error
       )
     }
+  }
+
+  private handleOpponentLeft(): void {
+    if (this.opponentLeftShown) return
+    this.opponentLeftShown = true
+    this.dialogs?.abandon('Your opponent left.', () => {
+      void this.router?.navigate(this.createExitRoute())
+    })
   }
 
   private async recordMatchResult(event: MatchEndedEvent): Promise<number> {

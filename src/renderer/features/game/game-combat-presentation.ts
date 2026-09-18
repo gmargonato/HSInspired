@@ -39,7 +39,6 @@ interface ActiveCombatPresentation {
   readonly defenderOrigin: { readonly x: number; readonly y: number }
   readonly attackerPlacement: CombatViewPlacement
   readonly attackerAttack: number
-  readonly deferredAttackerDeathInstanceIds: Set<string>
   impactStarted: boolean
   attackerReturned: boolean
   screenShake: Promise<void> | null
@@ -218,7 +217,6 @@ export class GameCombatPresentation {
       defenderOrigin,
       attackerPlacement,
       attackerAttack: event.attacker.attack,
-      deferredAttackerDeathInstanceIds: new Set(),
       impactStarted: false,
       attackerReturned: false,
       screenShake: null
@@ -364,7 +362,6 @@ export class GameCombatPresentation {
       this.restoreHeroImmunity(attacker, event.attacker.participantId)
       this.restoreHeroImmunity(defender, event.defender.participantId)
       if (attacker.destroyed) this.context.positions.endMotion(attacker)
-      active.deferredAttackerDeathInstanceIds.clear()
       if (!attacker.destroyed)
         this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)
       this.clearCombatPreview()
@@ -405,15 +402,6 @@ export class GameCombatPresentation {
             sourceInstanceId: death.instanceId,
             snapshot
           })
-      }
-      // Combat damage resolves its death batch before the combat-resolved
-      // event. Keep a lethal attacker visible until that event can return it
-      // to its board position and play its collapse there.
-      const activeCombat =
-        view instanceof MinionView ? this.activeCombatForAttacker(view) : undefined
-      if (activeCombat) {
-        activeCombat.deferredAttackerDeathInstanceIds.add(death.instanceId)
-        continue
       }
       views.set(death.instanceId, view)
       const targetScale = view.scale.x * 0.72
@@ -913,15 +901,6 @@ export class GameCombatPresentation {
     for (const presentation of this.activeCombatPresentations.values())
       latest = presentation
     return latest
-  }
-
-  private activeCombatForAttacker(
-    view: CombatView
-  ): ActiveCombatPresentation | undefined {
-    for (const presentation of this.activeCombatPresentations.values()) {
-      if (presentation.attacker === view) return presentation
-    }
-    return undefined
   }
 
   private async returnActiveCombatAttacker(

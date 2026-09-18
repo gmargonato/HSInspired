@@ -25,12 +25,12 @@ import type {
   OpeningMatchState,
   PlayerId
 } from '../../../game/match'
-import type { HeroView } from '../../rendering/heroes/hero-view'
+import { HeroView } from '../../rendering/heroes/hero-view'
 import type { GameCardSlot } from './game-card-slot'
 import { TargetGestureController } from './target-gesture'
 import { asCardId } from '../../../game/content/cards'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
-import { OPENING_TIMING } from './game-presentation-timing'
+import { OPENING_TIMING, RESOLUTION_TIMING } from './game-presentation-timing'
 import { DEFAULT_HAND_LAYOUT, layoutHand } from './hand-layout'
 import { attachShadow } from '../../rendering/shadows/shadow-caster'
 import { layoutBoardRow } from './board-layout'
@@ -356,6 +356,9 @@ function mulliganSlot(instanceId: string): GameCardSlot {
     setPlayableOutlineEnabled: vi.fn(),
     setPlayableOutlineEnhanced: vi.fn(),
     setMulliganInteractionEnabled: vi.fn(),
+    prepareCardReplacement: vi.fn(),
+    flipToCardReplacement: vi.fn().mockResolvedValue(undefined),
+    refreshPlayableOutline: vi.fn(),
     disposePlayableOutline: vi.fn()
   }) as unknown as GameCardSlot
 }
@@ -392,6 +395,113 @@ afterEach(() => {
   for (const value of boards.splice(0)) if (!value.destroyed) value.dispose()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('Golden Monkey hand presentation', () => {
+  it('flips every existing slot in parallel and keeps transformed hand order', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      hand: GameHandView
+      activePresentationState: OpeningMatchState | null
+      createCardPresentation(
+        card: OpeningCard
+      ): Promise<{ card: unknown; outlineTexture: Texture }>
+      presentGoldenMonkeyHandReplacement(replacement: {
+        sourceInstanceId: string
+        targetInstanceIds: ReadonlySet<string>
+      }): Promise<void>
+    }
+    const initialState = internal.session.getState()
+    const localId = internal.session.localParticipantId
+    const localPlayer = initialState.players.find(
+      (player) => player.participantId === localId
+    )!
+    const transformedIds = localPlayer.hand.map((card) => card.instanceId)
+    const transformedState = {
+      ...initialState,
+      players: initialState.players.map((player) =>
+        player.participantId === localId
+          ? {
+              ...player,
+              hand: player.hand.map((card) => ({
+                ...card,
+                cardId: asCardId('classic_alakir_the_windlord')
+              }))
+            }
+          : player
+      )
+    } as unknown as OpeningMatchState
+    internal.activePresentationState = transformedState
+
+    const entries = localPlayer.hand.map((card) => {
+      const slot = mulliganSlot(card.instanceId)
+      internal.hand.append({
+        card: { ...card },
+        slot,
+        restTransform: undefined,
+        displaced: false
+      })
+      internal.hand.layer.addChild(slot)
+      return { card, slot }
+    })
+    const createCardPresentation = vi
+      .spyOn(internal, 'createCardPresentation')
+      .mockImplementation(async () => ({
+        card: Object.assign(new Container(), { enableTextureCache: vi.fn() }),
+        outlineTexture: Texture.WHITE
+      }))
+    vi.spyOn(internal.hand, 'configureSlot').mockImplementation(() => undefined)
+
+    await internal.presentGoldenMonkeyHandReplacement({
+      sourceInstanceId: 'golden-monkey',
+      targetInstanceIds: new Set(transformedIds)
+    })
+
+    expect(createCardPresentation).toHaveBeenCalledTimes(entries.length)
+    expect(internal.hand.entries.map((entry) => entry.card.cardId)).toEqual(
+      entries.map(() => asCardId('classic_alakir_the_windlord'))
+    )
+    expect(internal.hand.entries.map((entry) => entry.slot)).toEqual(
+      entries.map(({ slot }) => slot)
+    )
+    for (const { slot } of entries) {
+      expect(slot.prepareCardReplacement).toHaveBeenCalledTimes(1)
+      expect(slot.flipToCardReplacement).toHaveBeenCalledWith(
+        RESOLUTION_TIMING.handReplacementFlip
+      )
+      expect(slot.refreshPlayableOutline).toHaveBeenCalledTimes(1)
+    }
+  })
+})
+
+describe('remote card choices', () => {
+  it('hides the board inspection toggle while the remote Discover is active', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      cardSelectionOverlay: CardSelectionOverlay
+    }
+    const overlay = internal.cardSelectionOverlay
+    await overlay.showRemoteDiscover(
+      [0, 1, 2].map((index) => ({
+        instanceId: `remote-choice-${index}`,
+        cardId: asCardId('basic_fireball'),
+        zone: 'revealed' as const,
+        revealed: true
+      }))
+    )
+
+    expect(overlay.getChildByLabel('game.card-selection.toggle')?.visible).toBe(false)
+    expect(overlay.getChildByLabel('game.card-selection.toggle-outline')?.visible).toBe(
+      false
+    )
+
+    overlay.clear()
+    expect(overlay.getChildByLabel('game.card-selection.toggle')?.visible).toBe(true)
+    expect(overlay.getChildByLabel('game.card-selection.toggle-outline')?.visible).toBe(
+      true
+    )
+  })
 })
 
 describe('skipped match opening', () => {
@@ -694,12 +804,8 @@ describe('AI decision overlap', () => {
           }
           return true
         }),
-        isPaused: false,
-        hasLegalActions: () => false,
-        pause: vi.fn(() => {
-          controller.isPaused = true
-        }),
-        waitForResume: async () => false
+        isAbandoned: false,
+        hasLegalActions: () => false
       }
       const harness = {
         destroyed: false,
@@ -741,7 +847,7 @@ describe('AI decision overlap', () => {
       if (mode === 'fast') reply(decision)
       if (mode === 'exit') harness.destroyed = true
       if (mode === 'failure') {
-        controller.pause()
+        controller.isAbandoned = true
         reply(null)
       }
       await Promise.resolve()
@@ -762,6 +868,59 @@ describe('AI decision overlap', () => {
       vi.unstubAllEnvs()
     }
   )
+
+  it('starts the first AI request before turn-start presentation finishes', async () => {
+    vi.stubEnv('VITE_AI_OVERLAP', '1')
+    let releaseIdle!: () => void
+    const idle = new Promise<void>((resolve) => {
+      releaseIdle = resolve
+    })
+    const decision = { command: { type: 'end-turn' }, expectedRevision: 0 }
+    const controller = {
+      chooseTurnAction: vi.fn().mockResolvedValue(decision),
+      recordExecution: vi.fn(),
+      recordTiming: vi.fn(),
+      isCurrent: () => true,
+      isAbandoned: false,
+      hasLegalActions: () => false
+    }
+    const harness = {
+      destroyed: false,
+      aiTurnRunning: false,
+      aiController: controller,
+      remoteParticipantId: 'ai',
+      turnLayer: { visible: true },
+      match: {
+        getState: () => ({
+          phase: 'turns',
+          activePlayerId: 'ai',
+          revision: 0
+        })
+      },
+      wait: async () => undefined,
+      waitForResolutionIdle: () => idle,
+      findPlayer: () => ({ hand: [] }),
+      dispatchCommand: vi.fn(() => ({
+        accepted: true,
+        state: { phase: 'turns', activePlayerId: 'ai', revision: 1 },
+        events: []
+      })),
+      syncTurnHud: () => undefined,
+      syncTurnControls: () => undefined,
+      syncSecrets: () => undefined,
+      presentResolutionEvents: () => undefined,
+      enqueuePresentation: vi.fn(async () => undefined)
+    }
+    const run = (
+      GameBoardView.prototype as unknown as { scheduleAiTurn(): Promise<void> }
+    ).scheduleAiTurn.call(harness)
+    await vi.waitFor(() => expect(controller.chooseTurnAction).toHaveBeenCalledTimes(1))
+    expect(harness.dispatchCommand).not.toHaveBeenCalled()
+    releaseIdle()
+    await run
+    expect(harness.dispatchCommand).toHaveBeenCalledTimes(1)
+    vi.unstubAllEnvs()
+  })
 })
 
 describe('random spell playback', () => {
@@ -1659,6 +1818,152 @@ describe('board lifecycle preservation', () => {
     }
   )
 
+  it('removes a lethal combat attacker before presenting its Deathrattle', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      combat: GameCombatPresentation
+      animationScope: AnimationScope
+      findMinionView(ownerId: PlayerId, instanceId: string): MinionView | undefined
+      insertLocalMinionView(position: number, view: MinionView): void
+      insertRemoteMinionView(position: number, view: MinionView): void
+    }
+    const owner = internal.session.localParticipantId
+    const opponent = internal.session.remoteParticipantId
+    const createView = async (instanceId: string, ownerId: PlayerId) => {
+      const view = await MinionView.create(
+        {
+          label: `deathrattle-regression.${instanceId}`,
+          attack: 2,
+          health: 1,
+          maxHealth: 1,
+          legendary: false,
+          taunt: false,
+          enraged: false,
+          divineShield: false,
+          frozen: false,
+          stealth: false,
+          deathrattle: false,
+          poisonous: false,
+          aura: false,
+          trigger: false,
+          inspire: false,
+          windfury: false,
+          spellDamage: false,
+          lifesteal: false,
+          elusive: false,
+          immune: false
+        },
+        new Proxy({} as MinionViewTextures, { get: () => Texture.WHITE }),
+        Texture.WHITE
+      )
+      view.instanceId = instanceId
+      view.ownerId = ownerId
+      if (ownerId === owner) internal.insertLocalMinionView(0, view)
+      else internal.insertRemoteMinionView(0, view)
+      return view
+    }
+    const attacker = await createView('deathrattle-attacker', owner)
+    const defender = await createView('deathrattle-defender', opponent)
+    const animations: gsap.core.Timeline[] = []
+    const makeTimeline = internal.animationScope.timeline.bind(
+      internal.animationScope
+    )
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const animation = makeTimeline(vars)
+      animations.push(animation)
+      return animation
+    })
+    const finish = async (job: Promise<void>): Promise<void> => {
+      let done = false
+      void job.then(() => {
+        done = true
+      })
+      for (let pass = 0; pass < 60 && !done; pass++) {
+        for (const animation of animations) animation.progress(1)
+        await Promise.resolve()
+      }
+      expect(done).toBe(true)
+      await job
+    }
+    const attackerRef = {
+      participantId: owner,
+      character: { kind: 'minion' as const, instanceId: attacker.instanceId! },
+      attack: 2,
+      healthBefore: 1,
+      armorBefore: 0
+    }
+    const defenderRef = {
+      participantId: opponent,
+      character: { kind: 'minion' as const, instanceId: defender.instanceId! },
+      attack: 1,
+      healthBefore: 3,
+      armorBefore: 0
+    }
+
+    await finish(
+      internal.combat.presentCombatStarted({
+        type: 'combat-started',
+        combatId: 'deathrattle-order',
+        attacker: attackerRef,
+        defender: defenderRef
+      })
+    )
+    await finish(
+      internal.combat.presentDeathBatchStarted({
+        type: 'death-batch-started',
+        batchId: 'deathrattle-order-batch',
+        deaths: [
+          {
+            instanceId: attacker.instanceId!,
+            participantId: owner,
+            kind: 'minion',
+            cardId: asCardId('one_night_in_karazhan_kindly_grandmother'),
+            position: 0,
+            hasDeathrattle: true
+          }
+        ]
+      })
+    )
+
+    expect(attacker.destroyed).toBe(true)
+    expect(internal.findMinionView(owner, attacker.instanceId!)).toBeUndefined()
+
+    const ghostJob = internal.combat.presentDeathrattleGhost(attacker.instanceId!)
+    expect(
+      internal.combat.layer.getChildByLabel(
+        `game.deathrattle.${attacker.instanceId}`
+      )
+    ).toBeDefined()
+    expect(attacker.destroyed).toBe(true)
+    await finish(ghostJob)
+
+    await finish(
+      internal.combat.presentCombatResolved({
+        type: 'character-combat-resolved',
+        combatId: 'deathrattle-order',
+        weapon: null,
+        attacker: {
+          ...attackerRef,
+          damageDealt: 1,
+          attemptedDamage: 1,
+          healthAfter: 0,
+          armorAfter: 0,
+          destroyed: true
+        },
+        defender: {
+          ...defenderRef,
+          damageDealt: 2,
+          attemptedDamage: 2,
+          healthAfter: 1,
+          armorAfter: 0,
+          destroyed: false
+        }
+      })
+    )
+    expect(defender.destroyed).toBe(false)
+  })
+
   it.each([
     [0, false],
     [0, true],
@@ -1910,6 +2215,55 @@ describe('board lifecycle preservation', () => {
     )
     for (const view of internal.localMinionViews)
       expect(view.parent).toBe(internal.localMinionLayer)
+  })
+
+  it('defers the weapon HUD sync for a local hero attack', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      heroViews: Map<PlayerId, HeroView>
+      createHeroes(state: OpeningMatchState): void
+      attackCharacter(target: HeroView): Promise<void>
+      dispatchCommand(command: unknown): ReturnType<GameBoardSession['dispatch']>
+      syncTurnHud(
+        state: OpeningMatchState,
+        options?: { readonly skipWeaponSync?: boolean }
+      ): void
+      syncTurnControls(state: OpeningMatchState): void
+      updateCombatPreview(target: HeroView): void
+      enqueuePresentation(
+        state: OpeningMatchState,
+        present: () => Promise<void>
+      ): Promise<void>
+    }
+    for (const player of internal.session.getState().players) {
+      const result = internal.session.dispatch({
+        type: 'confirm-mulligan',
+        participantId: player.participantId,
+        replaceInstanceIds: []
+      })
+      expect(result.accepted).toBe(true)
+    }
+    const state = internal.session.getState()
+    internal.createHeroes(state)
+    const attacker = internal.heroViews.get(internal.session.localParticipantId)!
+    const target = internal.heroViews.get(internal.session.remoteParticipantId)!
+    Object.assign(value, { selectedCombatView: attacker })
+
+    const result = { accepted: true as const, state, events: [] as OpeningMatchEvent[] }
+    vi.spyOn(internal, 'dispatchCommand').mockReturnValue(result)
+    vi.spyOn(internal, 'updateCombatPreview').mockImplementation(() => undefined)
+    const syncTurnHud = vi
+      .spyOn(internal, 'syncTurnHud')
+      .mockImplementation(() => undefined)
+    vi.spyOn(internal, 'syncTurnControls').mockImplementation(() => undefined)
+    vi.spyOn(internal, 'enqueuePresentation').mockResolvedValue(undefined)
+
+    await internal.attackCharacter(target)
+
+    expect(syncTurnHud).toHaveBeenNthCalledWith(1, state, {
+      skipWeaponSync: true
+    })
   })
 
   it.each(['clear', 'dispose'])(

@@ -23,7 +23,7 @@ import { parseCommand } from './match-command-parser'
 import { CARD_CATALOG, asCardId } from '../content/cards'
 import { HERO_CATALOG } from '../content/heroes'
 import { HERO_POWER_CATALOG, BASIC_HERO_POWER_UPGRADES } from '../content/hero-powers'
-import { AI_BONUS_SETTINGS, createAiBonusChoice } from './ai-bonuses'
+import { selectAiHeroPowerBonus } from './ai-bonuses'
 import { countDeckCards, type Deck } from '../decks'
 import { createSeededRng, type DeterministicRng } from './rng'
 import {
@@ -620,6 +620,9 @@ export function createOpeningMatch(
         : 1
   const playerTwoIndex: 0 | 1 = playerOneIndex === 0 ? 1 : 0
   const order = [playerOneIndex, playerTwoIndex] as const
+  const bonusRngSnapshot = rng.snapshot()
+  const aiHeroPowerBonus = selectAiHeroPowerBonus(setup.participants, rng)
+  rng.restore(bonusRngSnapshot)
   let initialEntityOrdinal = 0
 
   const createPlayer = (
@@ -630,15 +633,14 @@ export function createOpeningMatch(
     const deck = decksById.get(participant.deckId)
     if (!deck) throw new Error(`Deck ${participant.deckId} is not available.`)
     const hero = HERO_CATALOG.require(participant.heroId)
+    const heroPowerBonus =
+      participant.controllerKind === 'ai' ? aiHeroPowerBonus : 'none'
     const heroPower = HERO_POWER_CATALOG.require(
-      participant.controllerKind === 'ai' && AI_BONUS_SETTINGS.upgradedHeroPower
+      heroPowerBonus === 'upgraded'
         ? (BASIC_HERO_POWER_UPGRADES[hero.heroPowerId] ?? hero.heroPowerId)
         : hero.heroPowerId
     )
-    const startingHealth =
-      participant.controllerKind === 'ai'
-        ? AI_BONUS_SETTINGS.startingHealth
-        : hero.startingHealth
+    const startingHealth = hero.startingHealth
     const expanded = expandDeck(deck, participant, initialEntityOrdinal)
     initialEntityOrdinal += expanded.length
     const questCards = expanded.filter((card) => {
@@ -701,22 +703,20 @@ export function createOpeningMatch(
       weapon: null,
       mana: {
         available: 0,
-        maximum:
-          participant.controllerKind === 'ai'
-            ? AI_BONUS_SETTINGS.startingManaCrystals
-            : 0
+        maximum: 0
       },
       deckHasNoDuplicates: deckDefinitionHasNoDuplicates(deck),
       heroPower: {
         id: heroPower.id,
         creationOrdinal: initialEntityOrdinal++,
-        cost: heroPower.cost,
+        cost: heroPowerBonus === 'cost-one' ? 1 : heroPower.cost,
         baseCost: heroPower.cost,
         available: false,
         targetType: heroPower.targeting,
         targetingGranted: null,
         enchantments: []
       },
+      ...(heroPowerBonus === 'cost-one' ? { heroPowerCostOverride: 1 } : {}),
       fatigueDamage: 1,
       mulliganConfirmed: false,
       secrets: [],
@@ -1190,16 +1190,6 @@ export function createOpeningMatch(
     return { accepted: true, state: cloneOpeningMatchState(state), events }
   }
   const dispatchTurnTransition = (participantId: PlayerId): OpeningCommandResult => {
-    const bonus = createAiBonusChoice(state, participantId, rng)
-    if (bonus) {
-      commitState({
-        ...state,
-        pendingCardChoice: bonus,
-        aiBonusTurn: state.turnNumber,
-        revision: state.revision + 1
-      })
-      return { accepted: true, state: cloneOpeningMatchState(state), events: [] }
-    }
     const before = state
     const rngSnapshot = rng.snapshot()
     const resolution = resolveTurnTransition({
@@ -1385,14 +1375,6 @@ export function createOpeningMatch(
       if (command.type === 'choose-card-option') return dispatchCardChoice(command)
       if (state.phase === 'ended') {
         return reject(state, 'match-ended', 'The match has already ended.')
-      }
-
-      if (state.aiBonusTurn === state.turnNumber && command.type !== 'end-turn') {
-        return reject(
-          state,
-          'invalid-command',
-          'Finish the committed end turn after resolving the bonus.'
-        )
       }
 
       if (command.type === 'end-turn') {

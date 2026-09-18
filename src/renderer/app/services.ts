@@ -16,6 +16,7 @@ export type { AppLogger } from './logger'
 export interface DialogService {
   confirm(message: string): boolean
   error(message: string, retry?: () => void): void
+  abandon(message: string, onContinue: () => void): void
 }
 
 export class BrowserDialogService implements DialogService {
@@ -62,6 +63,34 @@ export class BrowserDialogService implements DialogService {
       notice.appendChild(dismiss)
       if (!existing) document.body.appendChild(notice)
     }
+  }
+
+  abandon(message: string, onContinue: () => void): void {
+    document.getElementById('app-abandon-overlay')?.remove()
+    const overlay = document.createElement('div')
+    overlay.id = 'app-abandon-overlay'
+    overlay.className = 'app-abandon-overlay'
+    overlay.setAttribute('role', 'alertdialog')
+    overlay.setAttribute('aria-modal', 'true')
+
+    const notice = document.createElement('div')
+    notice.className = 'app-error-notice app-error-notice-abandon'
+    notice.style.backgroundImage = `url("${resolveAssetDefinition('ui.generic-dialog').source.src}")`
+    const text = document.createElement('div')
+    text.className = 'app-error-notice-message'
+    text.textContent = message
+    notice.appendChild(text)
+    overlay.appendChild(notice)
+
+    let continued = false
+    const finish = (): void => {
+      if (continued) return
+      continued = true
+      overlay.remove()
+      onContinue()
+    }
+    overlay.addEventListener('click', finish, { once: true })
+    document.body.appendChild(overlay)
   }
 }
 

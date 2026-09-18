@@ -14,12 +14,12 @@ export function registerAiIpc(service: AiDecisionServiceContract): void {
     { requestId: string; matchId: string; controller: AbortController }
   >()
   const watched = new Set<number>()
-  const cancel = (owner: number): void => {
-    active.get(owner)?.controller.abort()
+  const cancel = (owner: number, reason: string): void => {
+    active.get(owner)?.controller.abort(new Error(reason))
     active.delete(owner)
   }
   app.on('before-quit', () => {
-    for (const owner of active.keys()) cancel(owner)
+    for (const owner of active.keys()) cancel(owner, 'app-before-quit')
   })
   ipcMain.handle(AI_IPC_CHANNELS.settings, async () => {
     try {
@@ -35,15 +35,17 @@ export function registerAiIpc(service: AiDecisionServiceContract): void {
       if (!watched.has(owner)) {
         watched.add(owner)
         event.sender.once('destroyed', () => {
-          cancel(owner)
+          cancel(owner, 'window-destroyed')
           watched.delete(owner)
         })
-        event.sender.on('render-process-gone', () => cancel(owner))
+        event.sender.on('render-process-gone', () =>
+          cancel(owner, 'render-process-gone')
+        )
         event.sender.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => {
-          if (mainFrame) cancel(owner)
+          if (mainFrame) cancel(owner, 'main-frame-navigation')
         })
       }
-      cancel(owner)
+      cancel(owner, 'superseded-by-new-decide')
       const entry = {
         requestId: request.requestId,
         matchId: request.matchId,
@@ -68,6 +70,6 @@ export function registerAiIpc(service: AiDecisionServiceContract): void {
     const identity = parseAiIdentity(value)
     const entry = active.get(event.sender.id)
     if (entry?.requestId === identity.requestId && entry.matchId === identity.matchId)
-      cancel(event.sender.id)
+      cancel(event.sender.id, 'renderer-cancel')
   })
 }

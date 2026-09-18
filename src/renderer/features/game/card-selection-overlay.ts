@@ -10,6 +10,8 @@ import { Button } from '../../ui/components/button'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { GameCardSlot } from './game-card-slot'
 import { BoardShadowLayer } from '../../rendering/shadows/board-shadow-layer'
+import { attachShadow } from '../../rendering/shadows/shadow-caster'
+import { REMOTE_TIMING } from './game-presentation-timing'
 
 export interface SelectedCardSlot {
   readonly card: OpeningCard
@@ -20,6 +22,7 @@ export interface SelectedCardSlot {
 export interface CardSelectionOverlayOptions {
   readonly renderer: Renderer
   readonly toggleTexture: Texture
+  readonly cardBackTexture: Texture
   readonly createSlot: (
     card: OpeningCard,
     sourceInstanceId?: string
@@ -44,6 +47,10 @@ export class CardSelectionOverlay extends Container {
     readonly view: Container
     readonly card?: OpeningCard
     readonly slot?: GameCardSlot
+  }> = []
+  private readonly remoteEntries: Array<{
+    readonly instanceId: string
+    readonly view: Sprite
   }> = []
   private boardVisible = false
   private selecting = false
@@ -103,6 +110,135 @@ export class CardSelectionOverlay extends Container {
 
   async show(candidates: readonly OpeningCard[]): Promise<void> {
     await this.showCards(candidates)
+  }
+
+  /** Shows concealed remote Discover choices while the AI decides. */
+  async showRemoteDiscover(candidates: readonly OpeningCard[]): Promise<void> {
+    if (this.destroyed) return
+    this.clear()
+    const revision = this.requestRevision
+    this.visible = true
+    this.boardVisible = false
+    this.selecting = false
+    this.setToggleVisible(false)
+    this.syncView()
+
+    const midpoint = (candidates.length - 1) / 2
+    for (const [index, candidate] of candidates.entries()) {
+      const back = new Sprite(this.options.cardBackTexture)
+      back.anchor.set(0.5, 1)
+      back.position.set(
+        GAME_BOARD_LAYOUT.cardSelection.cards.centerX +
+          (index - midpoint) * GAME_BOARD_LAYOUT.cardSelection.cards.gap,
+        GAME_BOARD_LAYOUT.cardSelection.cards.baselineY
+      )
+      back.scale.set(GAME_BOARD_LAYOUT.cardSelection.cards.scale)
+      back.alpha = 0
+      back.eventMode = 'none'
+      back.label = `game.card-selection.remote-discover:${candidate.instanceId}`
+      attachShadow(
+        back,
+        {
+          x: -back.texture.width / 2,
+          y: -back.texture.height,
+          width: back.texture.width,
+          height: back.texture.height
+        },
+        { restingScale: GAME_BOARD_LAYOUT.cardSelection.cards.scale }
+      )
+      this.cardsLayer.addChild(back)
+      this.remoteEntries.push({ instanceId: candidate.instanceId, view: back })
+    }
+
+    if (this.destroyed || revision !== this.requestRevision) return
+    await Promise.all(
+      this.remoteEntries.map(({ view }) =>
+        completeTimeline(
+          this.animationScope.timeline().to(view, {
+            alpha: 1,
+            duration: REMOTE_TIMING.discoverFade
+          })
+        )
+      )
+    )
+  }
+
+  /** Resolves a concealed remote Discover and optionally hands its back to the remote hand. */
+  async resolveRemoteDiscover(
+    selectedInstanceId: string,
+    destination: {
+      readonly x: number
+      readonly y: number
+      readonly scale: number
+      readonly rotation: number
+    },
+    keepSelected: boolean
+  ): Promise<Sprite | null> {
+    if (this.destroyed) return null
+    const selected = this.remoteEntries.find(
+      (entry) => entry.instanceId === selectedInstanceId
+    )
+    if (!selected) return null
+    const revision = this.requestRevision
+    this.selecting = true
+    this.toggle.setEnabled(false)
+    for (const entry of this.remoteEntries) {
+      if (entry === selected) continue
+      entry.view.eventMode = 'none'
+      void this.animationScope.to(entry.view, {
+        alpha: 0,
+        scaleX: 0.2,
+        scaleY: 0.2,
+        duration: REMOTE_TIMING.discoverSelection,
+        ease: 'power2.in'
+      })
+    }
+
+    const selection = this.animationScope.timeline()
+    selection.to(selected.view, {
+      x: destination.x,
+      y: destination.y,
+      rotation: destination.rotation,
+      duration: REMOTE_TIMING.discoverSelection,
+      ease: 'power2.inOut'
+    })
+    selection.to(
+      selected.view.scale,
+      {
+        x: destination.scale,
+        y: destination.scale,
+        duration: REMOTE_TIMING.discoverSelection,
+        ease: 'power2.inOut'
+      },
+      0
+    )
+    if (!keepSelected) {
+      selection.to(selected.view, {
+        alpha: 0,
+        duration: REMOTE_TIMING.discoverFade,
+        ease: 'power1.in'
+      })
+    }
+    await completeTimeline(selection)
+    if (this.destroyed || revision !== this.requestRevision) return null
+    if (!keepSelected) {
+      this.clear()
+      return null
+    }
+
+    selected.view.removeFromParent()
+    for (const child of this.cardsLayer.removeChildren()) {
+      if (!child.destroyed) child.destroy({ children: true })
+    }
+    this.remoteEntries.length = 0
+    this.entries.length = 0
+    this.choicesByInstanceId.clear()
+    this.selected = null
+    this.selecting = false
+    this.toggle.setEnabled(true)
+    this.setToggleVisible(true)
+    this.visible = false
+    return selected.view
   }
 
   async showChoices(
@@ -278,12 +414,17 @@ export class CardSelectionOverlay extends Container {
     this.animationScope.kill()
     for (const entry of this.entries) entry.view.destroy({ children: true })
     this.entries.length = 0
+    for (const entry of this.remoteEntries) {
+      if (!entry.view.destroyed) entry.view.destroy({ children: true })
+    }
+    this.remoteEntries.length = 0
     for (const child of this.cardsLayer.removeChildren()) {
       if (!child.destroyed) child.destroy({ children: true })
     }
     this.choicesByInstanceId.clear()
     this.selected = null
     this.toggle.setEnabled(true)
+    this.setToggleVisible(true)
     this.visible = false
   }
 
@@ -341,6 +482,11 @@ export class CardSelectionOverlay extends Container {
 
   private inputBlocked(): boolean {
     return this.options.isInputBlocked?.() === true
+  }
+
+  private setToggleVisible(visible: boolean): void {
+    this.toggle.visible = visible
+    this.toggleOutline.setEnabled(visible)
   }
 
   private syncView(): void {

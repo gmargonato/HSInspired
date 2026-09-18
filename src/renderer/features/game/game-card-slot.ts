@@ -10,17 +10,27 @@ import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { attachShadow, type ShadowCaster } from '../../rendering/shadows/shadow-caster'
 import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
 import { DEFAULT_HAND_LAYOUT } from './hand-layout'
+import { completeTimeline } from './game-presentation-animation'
+import { Actor } from '../../ui/components/actor'
 
-export class GameCardSlot extends Container {
-  readonly shadow: ShadowCaster
+interface PendingCardReplacement {
   readonly card: CardView
+  readonly outlineTexture: Texture
+}
+
+export class GameCardSlot extends Actor {
+  readonly shadow: ShadowCaster
+  private activeCard: CardView
   readonly instanceId: string
-  readonly playableOutlineTexture: Texture
+  playableOutlineTexture: Texture
   private playableOutline: AnimatedOutline | BakedAnimatedOutline
   private readonly outlineTarget: Sprite
   private playableOutlineDisposed = false
   private readonly replaceCross: Sprite
   private readonly replacedLabel: Sprite
+  private pendingCardReplacement: PendingCardReplacement | null = null
+  private bakedOutlineDisplayScale: number | null = null
+  private bakedOutlineNeedsRefresh = false
   private playableOutlineRequested = false
   private playableOutlineSuppressed = false
   private playableOutlinePreset: OutlinePresetName = 'card'
@@ -35,7 +45,7 @@ export class GameCardSlot extends Container {
     private readonly renderer: Renderer
   ) {
     super()
-    this.card = card
+    this.activeCard = card
     this.shadow = attachShadow(
       this,
       {
@@ -106,6 +116,81 @@ export class GameCardSlot extends Container {
     this.addChild(this.replacedLabel)
   }
 
+  get card(): CardView {
+    return this.activeCard
+  }
+
+  /** Preloads a new face while keeping this slot and its hand position intact. */
+  prepareCardReplacement(card: CardView, outlineTexture: Texture): void {
+    this.discardCardReplacement()
+    card.eventMode = 'none'
+    card.position.set(
+      GAME_BOARD_LAYOUT.mulligan.slot.cardOffset.x,
+      GAME_BOARD_LAYOUT.mulligan.slot.cardOffset.y
+    )
+    card.enableTextureCache()
+    card.visible = false
+    this.pendingCardReplacement = { card, outlineTexture }
+  }
+
+  /** Flips this slot in place and reveals its preloaded replacement at halfway. */
+  flipToCardReplacement(duration: number): Promise<void> {
+    if (!this.pendingCardReplacement) return Promise.resolve()
+
+    this.setMulliganInteractionEnabled(false)
+    this.killTweensOf(this.scale)
+    const baseScaleX = this.scale.x
+    const halfDuration = Math.max(0, duration) / 2
+    const timeline = this.timeline()
+    timeline.to(this.scale, {
+      x: 0,
+      duration: halfDuration,
+      ease: 'power2.in'
+    })
+    timeline.call(() => this.commitCardReplacement())
+    timeline.to(this.scale, {
+      x: baseScaleX,
+      duration: halfDuration,
+      ease: 'power2.out'
+    })
+
+    return completeTimeline(timeline).then(() => {
+      // An interrupted presentation must still settle on the authoritative
+      // replacement instead of leaving a hidden pending face behind.
+      if (this.pendingCardReplacement) this.commitCardReplacement()
+      this.scale.x = baseScaleX
+    })
+  }
+
+  /** Rebuilds a baked outline after an in-place card face replacement settles. */
+  refreshPlayableOutline(): void {
+    if (
+      !this.bakedOutlineNeedsRefresh ||
+      this.playableOutlineDisposed ||
+      !(this.playableOutline instanceof BakedAnimatedOutline)
+    )
+      return
+
+    const previous = this.playableOutline
+    previous.removeFromParent()
+    previous.dispose()
+    const baked = new BakedAnimatedOutline(
+      this.renderer,
+      this.playableOutlineTexture,
+      this.activeCard.plan.width,
+      this.activeCard.renderedHeight,
+      this.bakedOutlineDisplayScale ?? DEFAULT_HAND_LAYOUT.cardScale,
+      this.playableOutlinePalette,
+      this.playableOutlinePreset
+    )
+    baked.position.copyFrom(this.outlineTarget.position)
+    baked.zIndex = this.outlineTarget.zIndex
+    this.playableOutline = baked
+    this.addChildAt(baked, this.getChildIndex(this.activeCard))
+    this.bakedOutlineNeedsRefresh = false
+    this.syncPlayableOutline()
+  }
+
   setSelected(selected: boolean): void {
     this.replaceCross.visible = selected
     this.replacedLabel.visible = selected
@@ -139,6 +224,7 @@ export class GameCardSlot extends Container {
 
   /** Settled hand cards share pre-rendered shader frames instead of ten filters. */
   enableBakedPlayableOutline(displayScale: number): void {
+    this.bakedOutlineDisplayScale = displayScale
     if (
       this.playableOutlineDisposed ||
       this.playableOutline instanceof BakedAnimatedOutline
@@ -195,8 +281,65 @@ export class GameCardSlot extends Container {
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.killAnimations()
+    this.discardCardReplacement()
     this.disposePlayableOutline()
     super.destroy(options)
+  }
+
+  private discardCardReplacement(): void {
+    const replacement = this.pendingCardReplacement
+    this.pendingCardReplacement = null
+    if (!replacement || replacement.card.destroyed) return
+    replacement.card.removeFromParent()
+    replacement.card.destroy({ children: true })
+  }
+
+  private commitCardReplacement(): void {
+    const replacement = this.pendingCardReplacement
+    if (!replacement) return
+    this.pendingCardReplacement = null
+
+    const previousCard = this.activeCard
+    const cardIndex = this.getChildIndex(previousCard)
+    replacement.card.visible = true
+    this.addChildAt(replacement.card, cardIndex)
+    this.activeCard = replacement.card
+    this.shadow.visual = replacement.card
+    this.outlineTarget.label = `${replacement.card.label}.playable-outline-target`
+    this.replacePlayableOutline(replacement.outlineTexture)
+
+    previousCard.removeFromParent()
+    previousCard.destroy({ children: true })
+  }
+
+  private replacePlayableOutline(outlineTexture: Texture): void {
+    this.playableOutlineTexture = outlineTexture
+    this.outlineTarget.texture = outlineTexture
+    this.outlineTarget.width = this.activeCard.plan.width
+    this.outlineTarget.height = this.activeCard.renderedHeight
+
+    if (this.playableOutlineDisposed) return
+
+    const wasBaked = this.playableOutline instanceof BakedAnimatedOutline
+    if (wasBaked) {
+      // Keep the already-baked silhouette visible through the short flip. The
+      // replacement bake is intentionally deferred until the reveal settles.
+      this.outlineTarget.visible = false
+      this.bakedOutlineNeedsRefresh = true
+      return
+    }
+
+    this.playableOutline.removeFromParent()
+    this.playableOutline.dispose()
+
+    this.outlineTarget.visible = true
+    this.playableOutline = new AnimatedOutline(this.outlineTarget, {
+      palette: this.playableOutlinePalette,
+      preset: this.playableOutlinePreset,
+      cacheDistance: true
+    })
+    this.syncPlayableOutline()
   }
 
   private syncPlayableOutline(): void {

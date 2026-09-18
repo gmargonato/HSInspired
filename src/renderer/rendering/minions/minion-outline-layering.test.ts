@@ -1,4 +1,4 @@
-import { Sprite, Texture } from 'pixi.js'
+import { Sprite, Text, Texture } from 'pixi.js'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../effects/animated-outline', () => ({
@@ -85,6 +85,7 @@ describe('MinionView outline layering', () => {
       label: 'test.weapon',
       attack: 2,
       durability: 2,
+      printedDurability: 2,
       deathrattle: false,
       trigger: false,
       temporaryAbilityLabels: []
@@ -105,6 +106,44 @@ describe('MinionView outline layering', () => {
     } finally {
       views.forEach((view) => view.destroy({ children: true }))
       setPremiumMode('unlocked')
+    }
+  })
+
+  it('colors durability relative to the printed weapon value', async () => {
+    const weaponTextures: WeaponViewTextures = {
+      frame: Texture.EMPTY,
+      premiumFrame: Texture.WHITE,
+      trigger: Texture.EMPTY,
+      deathrattle: Texture.EMPTY,
+      attack: Texture.EMPTY,
+      durability: Texture.EMPTY
+    }
+    const view = await WeaponView.create(
+      {
+        label: 'test.weapon.colors',
+        attack: 2,
+        durability: 2,
+        printedDurability: 3,
+        deathrattle: false,
+        trigger: false,
+        temporaryAbilityLabels: []
+      },
+      weaponTextures,
+      undefined
+    )
+    const durabilityLabel = view
+      .getChildByLabel('weapon.stat-durability')!
+      .getChildByLabel('weapon.stat-durability-value') as Text
+    try {
+      expect(durabilityLabel.style.fill).toBe(0xff4a4a)
+
+      view.setDurability(4)
+      expect(durabilityLabel.style.fill).toBe(0x6cff47)
+
+      view.setStats(2, 3)
+      expect(durabilityLabel.style.fill).toBe(0xffffff)
+    } finally {
+      view.destroy({ children: true })
     }
   })
 
@@ -253,6 +292,10 @@ describe('MinionView outline layering', () => {
     expect(childIndex('minion.targeting-outline-proxy')).toBeLessThan(
       childIndex('minion.frame')
     )
+    expect(childIndex('minion.artwork')).toBeLessThan(
+      childIndex('minion.stealth')
+    )
+    expect(childIndex('minion.stealth')).toBeLessThan(childIndex('minion.frame'))
     expect(childIndex('minion.frame-legendary')).toBeLessThan(
       childIndex('minion.frozen')
     )

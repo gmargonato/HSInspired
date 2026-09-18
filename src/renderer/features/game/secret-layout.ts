@@ -89,7 +89,7 @@ export const SECRET_LAYOUT = {
       note: 'Full-screen Secret reveal art at its authored 1x size.'
     }
   ),
-  revealCard: placement({ x: 960, y: 620 }, CARD_CANVAS, {
+  revealCard: placement({ x: 960, y: 750 }, CARD_CANVAS, {
     anchor: CENTER,
     scale: 0.4,
     note: 'Revealed Secret card displayed below the raised banner.'

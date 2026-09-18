@@ -230,6 +230,12 @@ export class MinionView extends Container {
     this.taunt.label = 'minion.taunt'
     this.addChild(this.taunt)
 
+    this.stealth = new Sprite(textures.stealth)
+    applyAnchoredPlacement(this.stealth, MINION_LAYOUT.stealth)
+    this.stealth.visible = model.stealth
+    this.stealth.label = 'minion.stealth'
+    this.addChild(this.stealth)
+
     const frame = new Sprite(
       this.premium || isPremiumEnabled(this.premiumSide)
         ? textures.premiumFrame
@@ -265,11 +271,6 @@ export class MinionView extends Container {
     this.frozen.visible = model.frozen
     this.frozen.label = 'minion.frozen'
 
-    this.stealth = new Sprite(textures.stealth)
-    applyAnchoredPlacement(this.stealth, MINION_LAYOUT.stealth)
-    this.stealth.visible = model.stealth
-    this.stealth.label = 'minion.stealth'
-    this.addChild(this.stealth)
     this.addChild(this.frozen)
     this.updateTauntOpacity()
 

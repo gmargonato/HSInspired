@@ -774,6 +774,7 @@
             "action": "draw",
             "player": "self",
             "count": 1,
+            "source": "deck",
             "filter": {
               "tribe": "Beast"
             }
@@ -782,6 +783,7 @@
             "action": "draw",
             "player": "self",
             "count": 1,
+            "source": "deck",
             "filter": {
               "tribe": "Dragon"
             }
@@ -790,6 +792,7 @@
             "action": "draw",
             "player": "self",
             "count": 1,
+            "source": "deck",
             "filter": {
               "tribe": "Murloc"
             }

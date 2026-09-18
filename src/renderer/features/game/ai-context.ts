@@ -1,7 +1,6 @@
 import { compactAiFacts, mechanicsText } from './ai-compact-context'
 import { CARD_CATALOG } from '../../../game/content/cards'
 import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
-import { AI_BONUS_SETTINGS } from '../../../game/match/ai-bonuses'
 import { canonicalCommandKey } from '../../../game/match/ai'
 import { temporaryManaAfterGain } from '../../../game/match/effects/mana-actions'
 import {
@@ -14,7 +13,7 @@ import type { TurnMatchCommand } from '../../../game/match'
 import type { AiMessage, JsonObject } from '../../../shared/ipc/ai'
 import type { GameBoardSession } from './game-board-session'
 import { aiActionIntent } from './ai-action-intent'
-import { AI_STRATEGY_INSTRUCTION } from './ai-prompts'
+import { AI_MULLIGAN_INSTRUCTION, AI_STRATEGY_INSTRUCTION } from './ai-prompts'
 
 export function aiJson(value: unknown): JsonObject {
   return JSON.parse(JSON.stringify(value)) as JsonObject
@@ -110,6 +109,50 @@ function positiveTraits(value: {
   ]
 }
 
+export function aiMulliganSystemContext(session: GameBoardSession): AiMessage {
+  const deck = session.getAiObservation().selfOriginalDeck
+  return {
+    role: 'system',
+    content:
+      AI_MULLIGAN_INSTRUCTION +
+      '\n' +
+      'The second player receives The Coin. Replacement draws are unknown; evaluate only the visible hand.\n' +
+      JSON.stringify({
+        ...(session.opponentStrategy
+          ? { originalDeckStrategy: session.opponentStrategy }
+          : {}),
+        deck: {
+          heroId: deck.heroId,
+          cards: cardNameCounts(
+            deck.cards.flatMap(({ cardId, count }) => Array<string>(count).fill(cardId))
+          )
+        }
+      })
+  }
+}
+
+/** Opening mulligan uses only hand, deck size and player order — not the full board snapshot. */
+export function aiMulliganModelState(session: GameBoardSession): JsonObject {
+  const observation = session.getAiObservation()
+  const self = observation.players.find((player) => player.role === 'self')
+  const opponent = observation.players.find((player) => player.role === 'opponent')
+  if (!self || !opponent) throw new Error('Mulligan facts require self and opponent.')
+  return compactAiFacts({
+    phase: 'mulligan',
+    self: {
+      playerNumber: self.playerNumber,
+      heroId: self.heroId,
+      deckSize: self.deckSize,
+      hand: self.hand.map((card) => ({
+        ref: card.instanceId,
+        ...cardFacts(card.cardId),
+        ...(card.currentCost !== null ? { cost: card.currentCost } : {})
+      }))
+    },
+    opponent: { handSize: opponent.handSize }
+  })
+}
+
 export function aiSystemContext(session: GameBoardSession): AiMessage {
   const deck = session.getAiObservation().selfOriginalDeck
   return {
@@ -117,7 +160,7 @@ export function aiSystemContext(session: GameBoardSession): AiMessage {
     content:
       AI_STRATEGY_INSTRUCTION +
       '\n' +
-      'Missing collections are empty; omitted inactive flags are false and omitted ordinary counters are zero. Normal limits are 10 cards in hand, 7 minions, and 10 mana. fatigueDamage is the next empty-deck draw damage; it increases after each such draw. The second player receives The Coin. Raven Idol bonuses occur at eligible AI turn end, cost no mana, and leave only End Turn after completion.\n' +
+      'Missing collections are empty; omitted inactive flags are false and omitted ordinary counters are zero. Normal limits are 10 cards in hand, 7 minions, and 10 mana. fatigueDamage is the next empty-deck draw damage; it increases after each such draw. The second player receives The Coin.\n' +
       'Board positions are zero-based, left to right. Insertion slot 0 is before the first minion; slot N is after N minions. Grouped positions map slot to action ID; select that ID. canAttackNow and canAttackHeroNow reflect current legal attacks. attacksRemaining is an allowance, not permission to attack. A stat buff alone does not remove summoning sickness or restore attacks.\n' +
       'An opponent restriction of not your turn does not imply they cannot attack on their next turn. Read the relevant restrictions and turn transition.\n' +
       'Board printedText and printedKeywords describe the original card, not active abilities. activeKeywords and currentStatus describe the current minion. Attack, health, cost and durability are current values with stat modifiers already applied; never add enchantment deltas again. Enchantment details explain sources and expiry, not extra stats.\n' +
@@ -132,8 +175,7 @@ export function aiSystemContext(session: GameBoardSession): AiMessage {
             deck.cards.flatMap(({ cardId, count }) => Array<string>(count).fill(cardId))
           ),
           heroCards: heroCardDeckFacts(deck)
-        },
-        aiBonuses: AI_BONUS_SETTINGS
+        }
       })
   }
 }
@@ -274,6 +316,11 @@ export function aiActionFacts(actions: ReturnType<typeof aiActions>): JsonObject
       result.push(group)
     }
     group.positions[String(command.position)] = action.id
+    const slots = Object.keys(group.positions)
+    group.intent = {
+      ...group.intent,
+      position: slots.length === 1 ? (command.position ?? null) : null
+    }
   }
   return result
 }
@@ -551,7 +598,6 @@ export function aiModelState(
               : choice.resolution?.type
         }
       : null,
-    endTurnCommitted: state.aiBonusTurn === state.turnNumber,
     scheduledEffects: (state.scheduledEffects ?? []).filter(
       (effect) =>
         effect.controllerId === selfId ||

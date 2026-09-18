@@ -17,6 +17,7 @@ export interface WeaponViewModel {
   readonly label: string
   readonly attack: number
   readonly durability: number
+  readonly printedDurability: number
   readonly deathrattle: boolean
   readonly trigger: boolean
   readonly temporaryAbilityLabels: readonly string[]
@@ -42,6 +43,18 @@ export interface WeaponAbilityMarkerSnapshot {
 interface StatGroup {
   readonly group: Container
   readonly value: Text
+}
+
+const WEAPON_DURABILITY_COLORS = {
+  normal: 0xffffff,
+  reduced: 0xff4a4a,
+  increased: 0x6cff47
+} as const
+
+function weaponDurabilityColor(current: number, printed: number): number {
+  if (current < printed) return WEAPON_DURABILITY_COLORS.reduced
+  if (current > printed) return WEAPON_DURABILITY_COLORS.increased
+  return WEAPON_DURABILITY_COLORS.normal
 }
 
 function setEventModeNone(container: Container): void {
@@ -94,6 +107,7 @@ export class WeaponView extends Container {
   private readonly artworkBreath: PremiumArtworkBreath | null
   private readonly attackLabel: Text
   private readonly durabilityLabel: Text
+  private readonly printedDurability: number
   private readonly deathrattle: Sprite
   private readonly trigger: Sprite
   private readonly animationScope = new AnimationScope()
@@ -110,6 +124,7 @@ export class WeaponView extends Container {
     this.label = model.label
     this.eventMode = 'none'
     this.pivot.set(WEAPON_CANVAS.width / 2, WEAPON_CANVAS.height / 2)
+    this.printedDurability = model.printedDurability
 
     const artworkLayer = new Container()
     applyPlacement(artworkLayer, WEAPON_LAYOUT.artwork)
@@ -204,6 +219,7 @@ export class WeaponView extends Container {
       model.durability
     )
     this.durabilityLabel = durability.value
+    this.setDurabilityLabel(model.durability)
     this.addChild(durability.group)
 
     this.hitArea = new Rectangle(0, 0, WEAPON_CANVAS.width, WEAPON_CANVAS.height)
@@ -220,7 +236,7 @@ export class WeaponView extends Container {
 
   setStats(attack: number, durability: number): void {
     this.attackLabel.text = String(attack)
-    this.durabilityLabel.text = String(durability)
+    this.setDurabilityLabel(durability)
   }
 
   setAttack(attack: number): void {
@@ -228,7 +244,15 @@ export class WeaponView extends Container {
   }
 
   setDurability(durability: number): void {
+    this.setDurabilityLabel(durability)
+  }
+
+  private setDurabilityLabel(durability: number): void {
     this.durabilityLabel.text = String(durability)
+    this.durabilityLabel.style.fill = weaponDurabilityColor(
+      durability,
+      this.printedDurability
+    )
   }
 
   setDeathrattle(visible: boolean): void {

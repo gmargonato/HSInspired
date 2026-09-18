@@ -72,7 +72,7 @@ export const MINION_LAYOUT = {
     { width: 113, height: 153 },
     {
       anchor: CENTER,
-      note: 'Stealth veil surrounding the portrait, below Divine Shield.'
+      note: 'Stealth veil surrounding the portrait, between artwork and minion frames.'
     }
   ),
   trigger: placement(

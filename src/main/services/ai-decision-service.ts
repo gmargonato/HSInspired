@@ -135,11 +135,14 @@ export class AiDecisionService implements AiDecisionServiceContract {
     }
     const choiceSchema = aiChoiceSchema(request)
     const transport = providerRequest(config)
+    const sessionAffinity = process.env.HSINSPIRED_AI_SESSION_AFFINITY !== '0'
     const body = {
       ...transport.body,
-      ...(config.provider === 'openrouter' &&
-      process.env.HSINSPIRED_AI_SESSION_AFFINITY !== '0'
+      ...(config.provider === 'openrouter' && sessionAffinity
         ? { session_id: request.matchId }
+        : {}),
+      ...(config.provider === 'azure-openai' && sessionAffinity
+        ? { prompt_cache_key: request.matchId }
         : {}),
       messages: request.messages,
       ...(config.provider === 'openrouter'

@@ -32,8 +32,8 @@ export const RESOLUTION_TIMING = {
   generatedCard: 0.45,
   /** Brief delay before a generated card leaves its source. */
   generatedCardDelay: 0.05,
-  /** Downward exit time for each card replaced by Golden Monkey. */
-  handReplacementExit: 0.2
+  /** Total horizontal flip time for each card replaced by Golden Monkey. */
+  handReplacementFlip: 0.3
 } as const
 
 /** Board-only timing knobs for row previews and minion entry presentation. */
@@ -49,4 +49,16 @@ export const BOARD_TIMING = {
   characterIndicatorGrow: 0.16,
   characterIndicatorHold: 1,
   characterIndicatorFade: 0.2
+} as const
+
+/** Short remote-player beats that keep hidden actions readable to the local player. */
+export const REMOTE_TIMING = {
+  discoverFade: 0.2,
+  discoverSelection: 0.32,
+  targetFadeIn: 0.08,
+  targetHold: 0.22,
+  targetFadeOut: 0.1,
+  minionFlight: 0.4,
+  minionFlipClose: 0.1,
+  minionFlipOpen: 0.2
 } as const

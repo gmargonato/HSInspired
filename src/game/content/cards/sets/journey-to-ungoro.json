@@ -451,7 +451,6 @@
         "actions": [
           {
             "action": "transform-random",
-            "includeUncollectible": true,
             "target": {
               "controller": "self",
               "type": "card",

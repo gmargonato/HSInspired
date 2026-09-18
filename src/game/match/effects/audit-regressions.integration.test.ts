@@ -57,6 +57,49 @@ describe('audit regression coverage', () => {
     expect(result.events.filter((event) => event.type === 'card-drawn')).toHaveLength(0)
   })
 
+  it('does not fatigue when The Curator has no matching cards to draw', () => {
+    const scenario = createMatchScenario({ cardId: 'basic_acidic_swamp_ooze' })
+    scenario.confirmBothMulligans()
+    const [participantId] = activePlayers(scenario)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'one_night_in_karazhan_the_curator'
+      }).accepted
+    ).toBe(true)
+    setMana(scenario, participantId)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-modify-deck',
+        participantId,
+        action: 'destroy'
+      }).accepted
+    ).toBe(true)
+
+    const fatigueBefore = player(scenario, participantId).fatigueDamage
+    const curator = player(scenario, participantId).hand[0]!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: curator.instanceId,
+      position: 0
+    })
+
+    expect(result.accepted).toBe(true)
+    expect(result.events.filter((event) => event.type === 'card-drawn')).toHaveLength(0)
+    expect(result.events.filter((event) => event.type === 'fatigue')).toHaveLength(0)
+    expect(player(scenario, participantId).fatigueDamage).toBe(fatigueBefore)
+  })
+
   it('applies spell damage to random split spells as additional sequential hits', () => {
     const scenario = createMatchScenario({ cardId: 'basic_arcane_missiles' })
     scenario.confirmBothMulligans()
@@ -105,6 +148,37 @@ describe('audit regression coverage', () => {
     ).toBe(true)
     expect(player(scenario, opponentId).board).toHaveLength(0)
     expect(player(scenario, opponentId).hero.health).toBe(28)
+  })
+
+  it('selects distinct enemy minions for Multi-Shot', () => {
+    const scenario = createMatchScenario({ seed: 1, cardId: 'basic_multi_shot' })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+
+    for (let index = 0; index < 2; index += 1) {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: opponentId,
+          cardId: 'basic_boulderfist_ogre'
+        }).accepted
+      ).toBe(true)
+    }
+    setMana(scenario, participantId)
+
+    const card = player(scenario, participantId).hand.find(
+      (candidate) => candidate.cardId === 'basic_multi_shot'
+    )!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: card.instanceId
+    })
+
+    expect(result.accepted).toBe(true)
+    expect(player(scenario, opponentId).board.map((minion) => minion.health)).toEqual([
+      4, 4
+    ])
   })
 
   it('draws the fixed missing count for draw-until, including fatigue attempts', () => {

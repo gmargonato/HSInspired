@@ -513,8 +513,6 @@ export interface OpeningMatchState {
   readonly pendingDiscover?: PendingDiscoverChoice
   /** A blocking after-placement Choice owned by one participant. */
   readonly pendingCardChoice?: PendingCardChoice
-  /** End Turn has been committed; only pending choices and the transition may follow. */
-  readonly aiBonusTurn?: number
   readonly scheduledEffects?: readonly ScheduledEffect[]
 }
 

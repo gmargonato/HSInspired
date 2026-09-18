@@ -244,13 +244,13 @@ exports[`opening match checkpoints > matches the pre-refactor seeded command, ev
     },
   ],
   "digests": {
-    "checkpoints": "a01ff7e7f91313b20f0a8f4a5f6e5ef43be90d147690a81c532b2cbd79012f98",
+    "checkpoints": "fbb31b7aeca6996a650876f5fa91f661cdd71ce6fcf1bb20d65df8dae6869b0a",
     "commands": "27b804fe2b22d674637c2dbd70f541ddf2c71dbbe634aea3e12427dc0af3cbf7",
     "legality": "e02dcef498531f50981eca6da8270a4b5283f61dd227576c8632ea7375bbf309",
-    "publicEvents": "3fb2dc46c94e9ab84fbd46a421d773ad615013c4f861009f853c8afd9e3d65df",
-    "publicState": "59e81c2bc6179543056bd7f3ea7aee4e1b3cdf6cca389955f3f9484fa2f9eead",
-    "results": "ef5f8e073e2b2c03c8960721f2af8b535159f0a711db4f61246d557c573a7067",
-    "trace": "6f9277bab5a076f7a968a330260a83441d6297a62ca61709305c1dbc53675b37",
+    "publicEvents": "5455e943eebc06bfc0e1395ce226e390427057fbe9f6d62fb9ee23c61f5927cc",
+    "publicState": "851e3adc92975939dcdd3ee6ac2431b213a925b2c45bd5280370242dd89f6b00",
+    "results": "67b8b27df10ade9845c024df94315d0b777e001366f74fff973d6bfa97cc4ee0",
+    "trace": "35024bb97da8a4d4348c063e1d97669db91c05ce1488fbdd7899e48f644f3313",
   },
 }
 `;
@@ -499,13 +499,13 @@ exports[`opening match checkpoints > matches the pre-refactor seeded command, ev
     },
   ],
   "digests": {
-    "checkpoints": "8d850d4063b46d1cd8fa7addeb82ae83edca02b18f0ac6b708155d9a15a27459",
+    "checkpoints": "96535f6828135f0d5421c7ae03a675315d6915f7208f701db2fa75cbdcef0dd6",
     "commands": "1df3500ff667fe5e400400a3846fef06b20472bb50e02d546cdda1d90574a273",
     "legality": "ea7e766d0e80dbe36bafbadec1da246845e2047de8159d96bd0e70a5b0b0f119",
-    "publicEvents": "fcef1f6834e5e99c58eb571e478cea962631bcc013fbd54f74c539f89a29579e",
-    "publicState": "61bed0cf4d07be5dbd7aa1ba5d8ba09f134305105957a6f10c0fa229bc3c7422",
-    "results": "419f3b2b87fc07edde3b0c46c5564457be03081ec386e6f243cd8bfc86f60510",
-    "trace": "95579aeae47e801ebc55dedb0cb49313d63ed242b3d4711fdc4ce6a7876c6b76",
+    "publicEvents": "36f69b9e0fcf66e4dcbce6aad85e570f69ff27c87f34c207fcb7e2042caa7ef8",
+    "publicState": "a67da8e566dc3c54cacb1edcf69288c9c27738f3f91cc633fb0c77ca5de626f7",
+    "results": "35a81cfa32bb9273f22e3aa060eedb88513560085f719a78ce9afc405d331a8a",
+    "trace": "464ae017dc4c1f1cc42781fce2b343c5523ab3b7fb51ae989904a80ab5481d83",
   },
 }
 `;

@@ -72,6 +72,10 @@ import gameBoard2Image from '@assets/images/match/BOARD-2.png'
 import gameBoard3Image from '@assets/images/match/BOARD-3.png'
 import gameBoard4Image from '@assets/images/match/BOARD-4.png'
 import gameBoard5Image from '@assets/images/match/BOARD-5.png'
+import gameBoard6Image from '@assets/images/match/BOARD-6.png'
+import gameBoard7Image from '@assets/images/match/BOARD-7.png'
+import gameBoard8Image from '@assets/images/match/BOARD-8.png'
+import gameBoard9Image from '@assets/images/match/BOARD-9.png'
 import gameDeckImage from '@assets/images/match/deck.png'
 import gameDeckInfoImage from '@assets/images/match/tray-number-of-cards-hand-deck.png'
 import gameFatigueDeckImage from '@assets/images/match/fatigue-deck.png'
@@ -690,6 +694,42 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'board5',
     gameBoard5Image,
+    1920,
+    1080,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-6',
+    ASSET_BUNDLE_IDS.game,
+    'board6',
+    gameBoard6Image,
+    1920,
+    1080,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-7',
+    ASSET_BUNDLE_IDS.game,
+    'board7',
+    gameBoard7Image,
+    1920,
+    1080,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-8',
+    ASSET_BUNDLE_IDS.game,
+    'board8',
+    gameBoard8Image,
+    1920,
+    1080,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.board-9',
+    ASSET_BUNDLE_IDS.game,
+    'board9',
+    gameBoard9Image,
     1920,
     1080,
     'game-scene'
@@ -2059,6 +2099,10 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   board3: Texture
   board4: Texture
   board5: Texture
+  board6: Texture
+  board7: Texture
+  board8: Texture
+  board9: Texture
   fatigue: Texture
   damageIndicator: Texture
   healIndicator: Texture

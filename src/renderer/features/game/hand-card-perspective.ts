@@ -1,6 +1,6 @@
 import { Container, PerspectiveMesh, Rectangle, Sprite, type Renderer } from 'pixi.js'
 import type { CardView } from '../../rendering/cards/card-view'
-import { resolveDragSmoothing } from './hand-drag'
+import { MAX_TILT_X_DEG, MAX_TILT_Y_DEG } from './drag-rotator'
 import {
   AnimatedOutline,
   type OutlinePaletteInput,
@@ -35,24 +35,13 @@ export interface HandCardPerspectiveOptions {
   readonly outlinePreset?: OutlinePresetName
 }
 
-const MAX_TILT_X = (28 * Math.PI) / 180
-const MAX_TILT_Y = (35 * Math.PI) / 180
-const TILT_RESPONSE_MS = 50
-const TILT_RETURN_MS = 110
-const PERSPECTIVE_DEPTH = 950
+/** Far fake camera: large tilt angles render as a clean rigid bank, Hearthstone-style. */
+const PERSPECTIVE_DEPTH = 3000
 /** Leaves room for the playable-card outline and its blur when snapshotting. */
 const SNAPSHOT_PADDING = 40
 
 function clampUnit(value: number): number {
   return Math.max(-1, Math.min(1, value))
-}
-
-/** Relax more slowly on each axis; new motion and reversals respond quickly. */
-function stepTilt(current: number, target: number, deltaMS: number): number {
-  const returningToNeutral =
-    current * target >= 0 && Math.abs(target) < Math.abs(current)
-  const responseMS = returningToNeutral ? TILT_RETURN_MS : TILT_RESPONSE_MS
-  return current + (target - current) * resolveDragSmoothing(deltaMS, responseMS)
 }
 
 /** Projects a centred card rectangle into the four corners of a perspective plane. */
@@ -61,8 +50,8 @@ export function resolvePerspectiveCorners(
   width: number,
   height: number
 ): PerspectiveCorners {
-  const rotateX = -clampUnit(tilt.y) * MAX_TILT_X
-  const rotateY = clampUnit(tilt.x) * MAX_TILT_Y
+  const rotateX = -clampUnit(tilt.y) * ((MAX_TILT_X_DEG * Math.PI) / 180)
+  const rotateY = clampUnit(tilt.x) * ((MAX_TILT_Y_DEG * Math.PI) / 180)
   const cosX = Math.cos(rotateX)
   const sinX = Math.sin(rotateX)
   const cosY = Math.cos(rotateY)
@@ -98,7 +87,6 @@ export class HandCardPerspective {
   private readonly outlineMaskTexture: ReturnType<Renderer['generateTexture']> | null
   private readonly outlineEffect: AnimatedOutline | null
   private readonly current = { x: 0, y: 0 }
-  private readonly target = { x: 0, y: 0 }
   private readonly wasVisible: boolean
   private destroyed = false
   private readonly shadow: ShadowCaster | undefined
@@ -141,7 +129,6 @@ export class HandCardPerspective {
     })
     this.mesh.position.set(cardView.position.x + frame.x, cardView.position.y + frame.y)
     this.mesh.eventMode = 'none'
-
     const parent = cardView.parent
     if (!parent) throw new Error('Attached hand card must have a parent container.')
     this.shadow = getShadowCaster(parent)
@@ -201,17 +188,17 @@ export class HandCardPerspective {
       this.shadow.minimumHeight = MATCH_SHADOW_CONFIG.heldCardHeight
       this.shadow.depthMultiplier = MATCH_SHADOW_CONFIG.draggedCardDepth
     }
-    this.update(0)
+    this.update()
   }
 
+  /**
+   * Applies the tilt for this frame directly; all smoothing lives in the drag
+   * rotator that feeds it, so the displayed warp never lags behind its input.
+   */
   setTarget(target: PerspectivePoint): void {
     if (this.destroyed) return
-    this.target.x = clampUnit(target.x)
-    this.target.y = clampUnit(target.y)
-  }
-
-  release(): void {
-    this.setTarget({ x: 0, y: 0 })
+    this.current.x = clampUnit(target.x)
+    this.current.y = clampUnit(target.y)
   }
 
   /** Snapshot the displayed warp in normalized texture coordinates. */
@@ -231,11 +218,8 @@ export class HandCardPerspective {
     }
   }
 
-  update(deltaMS: number): void {
+  update(): void {
     if (this.destroyed) return
-    this.current.x = stepTilt(this.current.x, this.target.x, deltaMS)
-    this.current.y = stepTilt(this.current.y, this.target.y, deltaMS)
-
     const corners = resolvePerspectiveCorners(
       this.current,
       this.texture.width,

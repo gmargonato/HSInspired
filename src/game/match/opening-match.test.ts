@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import {
-  AI_BONUS_SETTINGS,
-  createAiBonusChoice,
-  eligibleAiBonusSecrets
-} from './ai-bonuses'
+import { selectAiHeroPowerBonus } from './ai-bonuses'
 import { createMatchScenario } from './testing/match-scenario-builder'
 import { createSeededRng } from './rng'
-import { enumerateLegalCommands } from './ai/legal-commands'
 import { CARD_CATALOG, asCardId, asHeroId } from '../content/cards'
 import { HERO_POWER_CATALOG } from '../content/hero-powers'
 import type { Deck } from '../decks'
@@ -589,7 +584,7 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     ).toBe('ragnaros-die-insects')
   })
 
-  it('uses the full Demon catalog when Nether Portal replaces the deck', () => {
+  it('uses only collectible Demons when Nether Portal replaces the deck', () => {
     const { match, activeId, card } = readyCard('journey_to_ungoro_nether_portal')
     const before = match
       .getState()
@@ -607,6 +602,9 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     expect(deck).toHaveLength(before)
     expect(
       deck.every((entry) => CARD_CATALOG.require(entry.cardId).subtype === 'Demon')
+    ).toBe(true)
+    expect(
+      deck.every((entry) => CARD_CATALOG.require(entry.cardId).collectible)
     ).toBe(true)
     expect(
       deck.every((entry) => entry.attack !== undefined && entry.health !== undefined)
@@ -783,365 +781,153 @@ describe("Un'Goro and Frozen Throne rewards", () => {
   })
 })
 
-describe('AI turn bonuses', () => {
-  it('casts a reproducible free Secret on even turns and conceals its history identity', () => {
-    const { match, ai, participants } = ready()
-    const checkpoint = match.getCheckpoint()
-    const state = { ...checkpoint.state, turnNumber: 7 }
-    const game = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
-    const replay = createOpeningMatchFromCheckpoint(game.getCheckpoint())
-    const before = game.getState().players.find((p) => p.participantId === ai)!
-    const command = { type: 'end-turn' as const, participantId: ai }
-    const result = accept(game.dispatch(command))
-    expect(accept(replay.dispatch(command))).toEqual(result)
-    const after = result.state.players.find((p) => p.participantId === ai)!
-    expect(after.secrets).toHaveLength((before.secrets?.length ?? 0) + 1)
-    expect(after.hand).toEqual(before.hand)
-    expect(after.mana).toEqual(before.mana)
-    const entry = getOpeningMatchPublicEvents(result.events, participants[1]).find(
-      (event) => event.type === 'history-action-resolved' && event.action === 'card'
-    )
-    expect(entry).toMatchObject({
-      source: { cardId: null, concealedAs: 'secret' }
-    })
-    expect(result.state.activePlayerId).not.toBe(ai)
-  })
-
-  it('filters bonus Secrets across classes and seats without a total cap', () => {
-    const { match, ai } = ready()
-    const base = match.getState()
-    for (const seat of [1, 2])
-      for (let turn = 1; turn <= 8; turn++) {
-        expect(
-          eligibleAiBonusSecrets({ ...base, turnNumber: (turn - 1) * 2 + seat }, ai)
-            .length > 0
-        ).toBe(turn % 2 === 0)
-      }
-    const state = { ...base, turnNumber: 7 }
-    const pool = eligibleAiBonusSecrets(state, ai)
-    expect(
-      new Set(pool.map((id) => CARD_CATALOG.require(id).cardClass)).size
-    ).toBeGreaterThan(1)
-    for (const player of state.players)
-      for (const secret of player.secrets ?? []) {
-        if (player.participantId === ai) expect(pool).not.toContain(secret.cardId)
-      }
-    const full = {
-      ...state,
-      players: state.players.map((player) =>
-        player.participantId !== ai
-          ? player
-          : {
-              ...player,
-              secrets: pool.slice(0, 5).map((cardId, index) => ({
-                cardId,
-                instanceId: `secret-${index}`,
-                ownerId: ai,
-                controllerId: ai,
-                creationOrdinal: 1000 + index,
-                playOrder: 1100 + index,
-                revealed: false
-              }))
-            }
-      ) as unknown as typeof state.players
+describe('AI startup bonuses', () => {
+  function fixedRng(value: number) {
+    return {
+      next: () => value,
+      snapshot: () => 0,
+      restore: (_snapshot: unknown) => undefined
     }
-    const remaining = eligibleAiBonusSecrets(full, ai)
-    expect(remaining.length).toBeGreaterThan(0)
-    expect(remaining).toEqual(expect.arrayContaining(pool.slice(5)))
-    for (const cardId of pool.slice(0, 5)) expect(remaining).not.toContain(cardId)
-    AI_BONUS_SETTINGS.bonusSecretsEnabled = false
-    try {
-      expect(eligibleAiBonusSecrets(state, ai)).toEqual([])
-    } finally {
-      AI_BONUS_SETTINGS.bonusSecretsEnabled = true
-    }
-  })
-
-  it('offers bonuses on personal turns 3, 6 and 9 for either seat', () => {
-    const { match, ai } = ready()
-    for (const seat of [1, 2]) {
-      for (let personalTurn = 1; personalTurn <= 10; personalTurn++) {
-        const state = {
-          ...match.getState(),
-          turnNumber: (personalTurn - 1) * 2 + seat
-        }
-        expect(Boolean(createAiBonusChoice(state, ai, createSeededRng(1)))).toBe(
-          [3, 6, 9].includes(personalTurn)
-        )
-      }
-    }
-  })
-  function ready(seed = 1) {
-    const scenario = createMatchScenario({
-      seed,
-      firstController: 'ai',
-      secondController: 'human'
-    })
-    const ai = scenario.participants[0]
-    scenario.confirmBothMulligans()
-    while (
-      Math.ceil(scenario.match.getState().turnNumber / 2) < 3 ||
-      scenario.match.getState().activePlayerId !== ai
-    ) {
-      const state = scenario.match.getState()
-      accept(
-        scenario.match.dispatch({
-          type: 'end-turn',
-          participantId: state.activePlayerId!
-        })
-      )
-      expect(scenario.match.getState().pendingCardChoice).toBeUndefined()
-    }
-    return { ...scenario, ai }
   }
 
-  it('starts at 1 mana / 30 health with an independently switchable upgraded power', () => {
-    const scenario = createMatchScenario({ firstController: 'ai' })
-    const initial = scenario.match
-      .getState()
-      .players.find((p) => p.participantId === scenario.participants[0])!
-    expect(initial.mana.maximum).toBe(0)
-    expect(initial.hero.health).toBe(30)
-    expect(initial.heroPower.id).toBe('mage-fireblast-rank-2')
-    scenario.confirmBothMulligans()
-    const state = scenario.match.getState()
-    expect(
-      state.players.find((p) => p.participantId === state.activePlayerId)!.mana
-        .available
-    ).toBe(1)
-    AI_BONUS_SETTINGS.upgradedHeroPower = false
-    try {
-      expect(
-        createMatchScenario({ firstController: 'ai' })
-          .match.getState()
-          .players.find((p) => p.participantId === scenario.participants[0])!.heroPower
-          .id
-      ).toBe('mage-fireblast')
-    } finally {
-      AI_BONUS_SETTINGS.upgradedHeroPower = true
+  function createAiMatch(
+    roll: number,
+    aiHeroId = 'jaina',
+    humanHeroId = 'jaina'
+  ): OpeningMatchInstance {
+    const setup: MatchSetup = {
+      seed: 1,
+      startingParticipantId: HUMAN_ID,
+      participants: [
+        {
+          participantId: HUMAN_ID,
+          controllerKind: 'human',
+          heroId: asHeroId(humanHeroId),
+          deckId: 'human-deck'
+        },
+        {
+          participantId: OPPONENT_ID,
+          controllerKind: 'ai',
+          heroId: asHeroId(aiHeroId),
+          deckId: 'opponent-deck'
+        }
+      ]
     }
-  })
-
-  it('crafts tiered potions into hand, preserves checkpoints, and commits the turn', () => {
-    for (const [personalTurn, cost] of [
-      [3, 1],
-      [6, 5],
-      [9, 10],
-      [12, 10]
-    ]) {
-      const { match, ai } = ready()
-      const checkpoint = match.getCheckpoint()
-      const craftedMatch = createOpeningMatchFromCheckpoint({
-        ...checkpoint,
-        state: { ...checkpoint.state, turnNumber: personalTurn * 2 - 1 }
-      })
-      const before = craftedMatch
-        .getState()
-        .players.find((p) => p.participantId === ai)!
-      accept(craftedMatch.dispatch({ type: 'end-turn', participantId: ai }))
-      const first = craftedMatch.getState().pendingCardChoice!
-      expect(first.options).toHaveLength(3)
-      expect(first.resolution).toMatchObject({
-        type: 'kazakus-potion',
-        stage: 'first-ingredient',
-        selectedCostOption: { cost }
-      })
-      expect(
-        createAiBonusChoice(craftedMatch.getState(), ai, createSeededRng(1))
-      ).toBeUndefined()
-      accept(
-        craftedMatch.dispatch({
-          type: 'choose-card-option',
-          participantId: ai,
-          sourceCardInstanceId: first.sourceCardInstanceId,
-          choice: 0
-        })
-      )
-      const pending = craftedMatch.getState().pendingCardChoice!
-      expect(pending.resolution).toMatchObject({ stage: 'second-ingredient' })
-      expect(pending.options.map((o) => o.presentationCardId)).not.toContain(
-        first.options[0].presentationCardId
-      )
-      const restored = createOpeningMatchFromCheckpoint(craftedMatch.getCheckpoint())
-      const command = {
-        type: 'choose-card-option' as const,
-        participantId: ai,
-        sourceCardInstanceId: pending.sourceCardInstanceId,
-        choice: 0
-      }
-      const result = accept(craftedMatch.dispatch(command))
-      expect(accept(restored.dispatch(command))).toEqual(result)
-      const after = result.state.players.find((p) => p.participantId === ai)!
-      expect(after.hand).toHaveLength(before.hand.length + 1)
-      expect(after.mana).toEqual(before.mana)
-      expect(after.board).toEqual(before.board)
-      expect(after.hero).toEqual(before.hero)
-      const potion = after.hand[after.hand.length - 1]
-      expect(potion.cardId).toContain('kazakus_potion_')
-      expect(potion.baseCost).toBe(cost)
-      expect(potion.currentCost).toBe(cost)
-      expect(result.state.pendingCardChoice).toBeUndefined()
-      expect(craftedMatch.analyze((fork) => enumerateLegalCommands(fork, ai))).toEqual([
-        { type: 'end-turn', participantId: ai }
-      ])
-      expect(
-        craftedMatch.dispatch({
-          type: 'play-card',
-          participantId: ai,
-          cardInstanceId: potion.instanceId
-        }).accepted
-      ).toBe(false)
-      expect(after.secrets).toEqual(before.secrets)
-      accept(craftedMatch.dispatch({ type: 'end-turn', participantId: ai }))
-      expect(
-        craftedMatch.getState().players.find((p) => p.participantId === ai)!.secrets
-          ?.length ?? 0
-      ).toBe((before.secrets?.length ?? 0) + (personalTurn % 2 === 0 ? 1 : 0))
-      expect(craftedMatch.getState().activePlayerId).not.toBe(ai)
-    }
-  })
-
-  it('crafts targeted damage without choosing a target until a later paid cast', () => {
-    const { match, ai } = ready()
-    const checkpoint = match.getCheckpoint()
-    const heart = asCardId('mean_streets_of_gadgetzan_kazakus_1_heart_of_fire')
-    let seed = 1
-    while (
-      !createAiBonusChoice(checkpoint.state, ai, createSeededRng(seed))!.options.some(
-        (option) => option.presentationCardId === heart
-      )
+    return createOpeningMatch(
+      setup,
+      [deck('human-deck', humanHeroId), deck('opponent-deck', aiHeroId)],
+      fixedRng(roll)
     )
-      seed++
-    const pending = createAiBonusChoice(checkpoint.state, ai, createSeededRng(seed))!
-    const game = createOpeningMatchFromCheckpoint({
-      ...checkpoint,
-      state: {
-        ...checkpoint.state,
-        pendingCardChoice: pending,
-        aiBonusTurn: checkpoint.state.turnNumber
+  }
+
+  it.each([
+    [0.1, 'none'],
+    [1 / 3, 'upgraded'],
+    [0.6, 'upgraded'],
+    [2 / 3, 'cost-one'],
+    [0.9, 'cost-one']
+  ] as const)('maps roll %s to the expected startup bonus', (roll, expected) => {
+    const participants: MatchSetup['participants'] = [
+      {
+        participantId: HUMAN_ID,
+        controllerKind: 'human',
+        heroId: asHeroId('jaina'),
+        deckId: 'human-deck'
+      },
+      {
+        participantId: OPPONENT_ID,
+        controllerKind: 'ai',
+        heroId: asHeroId('jaina'),
+        deckId: 'opponent-deck'
       }
-    })
+    ]
+    expect(selectAiHeroPowerBonus(participants, fixedRng(roll))).toBe(expected)
+  })
+
+  it('selects the same bonus for the same match seed', () => {
+    const participants: MatchSetup['participants'] = [
+      {
+        participantId: HUMAN_ID,
+        controllerKind: 'human',
+        heroId: asHeroId('jaina'),
+        deckId: 'human-deck'
+      },
+      {
+        participantId: OPPONENT_ID,
+        controllerKind: 'ai',
+        heroId: asHeroId('jaina'),
+        deckId: 'opponent-deck'
+      }
+    ]
+
+    expect(selectAiHeroPowerBonus(participants, createSeededRng(42))).toBe(
+      selectAiHeroPowerBonus(participants, createSeededRng(42))
+    )
+  })
+
+  it.each([
+    [0.1, 'mage-fireblast', 2, undefined],
+    [0.4, 'mage-fireblast-rank-2', 2, undefined],
+    [0.7, 'mage-fireblast', 1, 1]
+  ] as const)(
+    'applies exactly one startup bonus for roll %s',
+    (roll, expectedPowerId, expectedCost, expectedOverride) => {
+      const match = createAiMatch(roll)
+      const ai = match.getState().players.find((p) => p.participantId === OPPONENT_ID)!
+
+      expect(ai.heroPower.id).toBe(expectedPowerId)
+      expect(ai.heroPower.cost).toBe(expectedCost)
+      expect(ai.heroPowerCostOverride).toBe(expectedOverride)
+      expect(ai.mana.maximum).toBe(0)
+      expect(ai.hero.health).toBe(30)
+    }
+  )
+
+  it('keeps the cost-one bonus after derived state recalculation', () => {
+    const match = createAiMatch(0.7)
+    match.getLegality!(OPPONENT_ID)
+    const ai = match.getState().players.find((p) => p.participantId === OPPONENT_ID)!
+
+    expect(ai.heroPower.cost).toBe(1)
+    expect(ai.heroPower.baseCost).toBe(1)
+    expect(ai.heroPowerCostOverride).toBe(1)
+  })
+
+  it('does not modify a human player with the AI startup bonus', () => {
+    const state = createAiMatch(0.7, 'jaina', 'ragnaros').getState()
+    const human = state.players.find((p) => p.participantId === HUMAN_ID)!
+
+    expect(human.hero.health).toBe(8)
+    expect(human.mana.maximum).toBe(0)
+    expect(human.heroPower.cost).toBe(2)
+  })
+
+  it('keeps later AI turns free of the removed turn-time bonuses', () => {
+    const match = createAiMatch(0.1)
     accept(
-      game.dispatch({
-        type: 'choose-card-option',
-        participantId: ai,
-        sourceCardInstanceId: pending.sourceCardInstanceId,
-        choice: pending.options.find((option) => option.presentationCardId === heart)!
-          .choice
+      match.dispatch({
+        type: 'confirm-mulligan',
+        participantId: HUMAN_ID,
+        replaceInstanceIds: []
       })
     )
     accept(
-      game.dispatch({
-        type: 'choose-card-option',
-        participantId: ai,
-        sourceCardInstanceId: pending.sourceCardInstanceId,
-        choice: 0
+      match.dispatch({
+        type: 'confirm-mulligan',
+        participantId: OPPONENT_ID,
+        replaceInstanceIds: []
       })
     )
-    const potion = game
-      .getState()
-      .players.find((p) => p.participantId === ai)!
-      .hand.at(-1)!
-    accept(game.dispatch({ type: 'end-turn', participantId: ai }))
-    accept(
-      game.dispatch({
-        type: 'end-turn',
-        participantId: game.getState().activePlayerId!
-      })
-    )
-    const before = game.getState().players.find((p) => p.participantId === ai)!
-    const input = game.getPlayInput!(ai, potion.instanceId)!
-    expect(input.legalTargetOptions[0].length).toBeGreaterThan(0)
-    expect(
-      game.dispatch({
-        type: 'play-card',
-        participantId: ai,
-        cardInstanceId: potion.instanceId
-      }).accepted
-    ).toBe(false)
-    const command = game
-      .analyze((fork) => enumerateLegalCommands(fork, ai))
-      .find(
-        (command) =>
-          command.type === 'play-card' && command.cardInstanceId === potion.instanceId
-      )!
-    expect(command).toBeDefined()
-    accept(game.dispatch(command))
-    const after = game.getState().players.find((p) => p.participantId === ai)!
-    expect(after.hand.some((card) => card.instanceId === potion.instanceId)).toBe(false)
-    expect(after.mana.available).toBe(before.mana.available - 1)
-  })
+    const before = match.getState().players.find((p) => p.participantId === OPPONENT_ID)!
 
-  it('uses normal full-hand overflow when crafting finishes', () => {
-    const { match, ai } = ready()
-    const checkpoint = match.getCheckpoint()
-    const game = createOpeningMatchFromCheckpoint({
-      ...checkpoint,
-      state: {
-        ...checkpoint.state,
-        players: checkpoint.state.players.map((player) =>
-          player.participantId !== ai
-            ? player
-            : {
-                ...player,
-                hand: [
-                  ...player.hand,
-                  ...player.deck
-                    .slice(0, 10 - player.hand.length)
-                    .map((card) => ({ ...card, zone: 'hand' as const }))
-                ],
-                deck: player.deck.slice(10 - player.hand.length)
-              }
-        ) as unknown as typeof checkpoint.state.players
-      }
-    })
-    accept(game.dispatch({ type: 'end-turn', participantId: ai }))
-    for (let index = 0; index < 2; index++) {
-      const pending = game.getState().pendingCardChoice!
-      accept(
-        game.dispatch({
-          type: 'choose-card-option',
-          participantId: ai,
-          sourceCardInstanceId: pending.sourceCardInstanceId,
-          choice: 0
-        })
-      )
-    }
-    const player = game.getState().players.find((p) => p.participantId === ai)!
-    expect(player.hand).toHaveLength(10)
-    expect(player.hand.some((card) => card.cardId.includes('kazakus_potion'))).toBe(
-      false
-    )
-    expect(game.getState().pendingCardChoice).toBeUndefined()
-    accept(game.dispatch({ type: 'end-turn', participantId: ai }))
-    expect(game.getState().activePlayerId).not.toBe(ai)
-  })
-
-  it('samples ingredients reproducibly without requiring a board target', () => {
-    const { match, ai } = ready()
-    const state = match.getState()
-    expect(createAiBonusChoice(state, ai, createSeededRng(50))).toEqual(
-      createAiBonusChoice(state, ai, createSeededRng(50))
-    )
-    const offered = new Set<string>()
-    for (let seed = 1; seed <= 30; seed++) {
-      for (const option of createAiBonusChoice(state, ai, createSeededRng(seed))!
-        .options)
-        offered.add(option.presentationCardId!)
-    }
-    expect(offered.has('mean_streets_of_gadgetzan_kazakus_1_heart_of_fire')).toBe(true)
-  })
-
-  it('can disable only the bonus while retaining the upgraded starting power', () => {
-    const { match, ai } = ready()
-    AI_BONUS_SETTINGS.ravenIdolEnabled = false
-    try {
-      accept(match.dispatch({ type: 'end-turn', participantId: ai }))
+    for (let turn = 0; turn < 6; turn++) {
+      const activePlayerId = match.getState().activePlayerId!
+      accept(match.dispatch({ type: 'end-turn', participantId: activePlayerId }))
       expect(match.getState().pendingCardChoice).toBeUndefined()
-      expect(match.getState().activePlayerId).not.toBe(ai)
-    } finally {
-      AI_BONUS_SETTINGS.ravenIdolEnabled = true
     }
+
+    const after = match.getState().players.find((p) => p.participantId === OPPONENT_ID)!
+    expect(after.secrets).toEqual(before.secrets)
   })
 })
 

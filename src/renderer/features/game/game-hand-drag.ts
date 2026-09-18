@@ -7,9 +7,18 @@ import type { HandCardTransform, HandPointer } from './hand-layout'
 import {
   DEFAULT_HAND_DRAG,
   initialDragState,
+  resolveDragCenter,
   stepDrag,
   type HandDragState
 } from './hand-drag'
+import {
+  DEFAULT_DRAG_ROTATOR,
+  MAX_TILT_X_DEG,
+  MAX_TILT_Y_DEG,
+  resetDragRotator,
+  stepDragRotator,
+  type DragRotatorState
+} from './drag-rotator'
 import { HandCardPerspective, type PerspectiveCorners } from './hand-card-perspective'
 import { OPENING_TIMING } from './game-presentation-timing'
 
@@ -40,6 +49,7 @@ export class GameHandDrag {
   private draggingIndex: number | null = null
   private dragPointer: HandPointer | null = null
   private dragState: HandDragState | null = null
+  private dragRotator: DragRotatorState | null = null
   private dragTick: ((time: number, deltaMS: number) => void) | null = null
   private dragPerspective: HandCardPerspective | null = null
   private dragReturning = false
@@ -139,6 +149,7 @@ export class GameHandDrag {
       this.dragStartPointer = null
       this.dragMovedBeyondThreshold = false
       this.dragState = null
+      this.dragRotator = null
       this.dragReturning = false
     }
   }
@@ -156,6 +167,8 @@ export class GameHandDrag {
     // Start from the card's current (hovered) position so the pickup glides up
     // toward the cursor instead of snapping back to the resting baseline.
     this.dragState = initialDragState(entry.slot.x, entry.slot.y, entry.slot.scale.x)
+    const center = resolveDragCenter(entry.slot.x, entry.slot.y, entry.slot.scale.x)
+    this.dragRotator = resetDragRotator(center.x, center.y)
     this.dragPerspective?.destroy()
     this.dragPerspective = null
     const outlineEnabled = entry.slot.isPlayableOutlineEnabled()
@@ -194,7 +207,18 @@ export class GameHandDrag {
   private stepDragFrame(deltaMS: number): void {
     if (this.draggingIndex === null) return
     if (this.dragReturning) {
-      this.dragPerspective?.update(deltaMS)
+      // Feed the anchored centre so the held tilt decays without new input.
+      if (this.dragRotator) {
+        this.dragRotator = stepDragRotator(
+          this.dragRotator,
+          this.dragRotator.prevX,
+          this.dragRotator.prevY,
+          deltaMS,
+          DEFAULT_DRAG_ROTATOR
+        )
+        this.applyTilt()
+      }
+      this.dragPerspective?.update()
       return
     }
     if (!this.dragPointer || !this.dragState) return
@@ -212,11 +236,29 @@ export class GameHandDrag {
     )
     entry.slot.position.set(this.dragState.x, this.dragState.y)
     entry.slot.scale.set(this.dragState.scale)
+    const center = resolveDragCenter(
+      this.dragState.x,
+      this.dragState.y,
+      this.dragState.scale
+    )
+    this.dragRotator = stepDragRotator(
+      this.dragRotator ?? resetDragRotator(center.x, center.y),
+      center.x,
+      center.y,
+      deltaMS,
+      DEFAULT_DRAG_ROTATOR
+    )
+    this.applyTilt()
+    this.dragPerspective?.update()
+  }
+
+  /** Maps rotator degrees onto the normalized tilt the projection consumes. */
+  private applyTilt(): void {
+    if (!this.dragRotator) return
     this.dragPerspective?.setTarget({
-      x: -this.dragState.tiltX,
-      y: -this.dragState.tiltY
+      x: this.dragRotator.rollDeg / MAX_TILT_Y_DEG,
+      y: -this.dragRotator.pitchDeg / MAX_TILT_X_DEG
     })
-    this.dragPerspective?.update(deltaMS)
   }
 
   end(): void {
@@ -228,7 +270,6 @@ export class GameHandDrag {
     this.dragMovedBeyondThreshold = false
     this.dragState = null
     this.dragReturning = true
-    this.dragPerspective?.release()
     this.cursor?.setContextVariant(null)
     this.context.clearHover()
     this.context.clearBoardPreview()
@@ -258,6 +299,7 @@ export class GameHandDrag {
     this.draggingIndex = null
     this.dragStartPointer = null
     this.dragMovedBeyondThreshold = false
+    this.dragRotator = null
     this.dragReturning = false
     if (entry) {
       entry.slot.suppressPlayableOutline(false)
@@ -277,6 +319,7 @@ export class GameHandDrag {
     this.dragStartPointer = null
     this.dragMovedBeyondThreshold = false
     this.dragState = null
+    this.dragRotator = null
     this.context.clearHover()
     entry.displaced = false
     entry.slot.suppressPlayableOutline(true)
@@ -295,6 +338,7 @@ export class GameHandDrag {
     this.dragStartPointer = null
     this.dragMovedBeyondThreshold = false
     this.dragState = null
+    this.dragRotator = null
     this.context.clearHover()
     this.cursor?.setContextVariant(null)
     this.context.clearBoardPreview()
@@ -307,6 +351,7 @@ export class GameHandDrag {
     this.dragStartPointer = null
     this.dragMovedBeyondThreshold = false
     this.dragState = null
+    this.dragRotator = null
     if (this.dragTick) gsap.ticker.remove(this.dragTick)
     this.dragTick = null
     onDetach?.()

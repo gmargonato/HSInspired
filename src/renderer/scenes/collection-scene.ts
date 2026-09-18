@@ -50,7 +50,8 @@ export class CollectionScene extends Scene {
     private readonly router?: SceneRouter,
     private readonly dialogs: DialogService = {
       confirm: () => true,
-      error: () => undefined
+      error: () => undefined,
+      abandon: () => undefined
     },
     private readonly logger: AppLogger = {
       info: () => undefined,

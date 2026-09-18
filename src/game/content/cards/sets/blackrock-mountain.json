@@ -328,7 +328,7 @@
         "actions": [
           {
             "action": "resurrect",
-            "source": "destroyed-minions",
+            "source": "friendly-minions-died-this-game",
             "selection": "random",
             "filter": { "cardType": "Minion" }
           }

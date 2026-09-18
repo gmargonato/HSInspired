@@ -7,7 +7,7 @@ import { AiDecisionService } from './ai-decision-service'
 import { AiRequestError, parseAiRequestProgress } from '../../shared/ipc/ai'
 import type { Post } from './ai-transport'
 import { parseAiConfig } from './ai-config'
-import type { OpenRouterConfig } from './ai-config'
+import type { AzureOpenAiConfig, OpenRouterConfig } from './ai-config'
 import { AiLog } from './ai-log'
 import { AiConversationTranscript } from './ai-conversation-transcript'
 import type { JsonValue, JsonObject } from '../../shared/ipc/ai'
@@ -16,6 +16,17 @@ const config: OpenRouterConfig = {
   enabled: true,
   provider: 'openrouter',
   modelId: 'test',
+  reasoningEffort: 'low',
+  maxCompletionTokens: 1000,
+  apiKey: 'secret-key'
+}
+const azureConfig: AzureOpenAiConfig = {
+  enabled: true,
+  provider: 'azure-openai',
+  modelId: 'gpt-5.4-nano',
+  deploymentName: 'test-deployment',
+  endpoint: 'https://example.openai.azure.com/',
+  apiVersion: '2024-12-01-preview',
   reasoningEffort: 'low',
   maxCompletionTokens: 1000,
   apiKey: 'secret-key'
@@ -326,6 +337,43 @@ describe('AI decision validation and diagnostics', () => {
     const baseline = JSON.parse(post.mock.calls[1]![1])
     expect(enabled).toEqual({ ...baseline, session_id: request.matchId })
     expect(baseline).not.toHaveProperty('session_id')
+    expect(baseline).not.toHaveProperty('prompt_cache_key')
+  })
+  it('routes Azure cache affinity through prompt_cache_key without session_id', async () => {
+    vi.stubEnv('HSINSPIRED_AI_SESSION_AFFINITY', '1')
+    const post = vi.fn<Post>(async () => ({
+      model: 'test',
+      choices: [{ finish_reason: 'stop', message: { content: commit() } }]
+    }))
+    const service = new AiDecisionService({ loadConfig: async () => azureConfig, post })
+    await service.decide(request, new AbortController().signal)
+    const body = JSON.parse(post.mock.calls[0]![1])
+    expect(body.prompt_cache_key).toBe(request.matchId)
+    expect(body).not.toHaveProperty('session_id')
+    expect(body).not.toHaveProperty('reasoning')
+    expect(body.reasoning_effort).toBe('low')
+  })
+  it('keeps OpenRouter session_id separate from Azure prompt_cache_key', async () => {
+    vi.stubEnv('HSINSPIRED_AI_SESSION_AFFINITY', '1')
+    const post = vi.fn<Post>(async () => ({
+      model: 'test',
+      choices: [{ finish_reason: 'stop', message: { content: commit() } }]
+    }))
+    await new AiDecisionService({ loadConfig: async () => config, post }).decide(
+      request,
+      new AbortController().signal
+    )
+    const openRouterBody = JSON.parse(post.mock.calls.at(-1)![1])
+    post.mockClear()
+    await new AiDecisionService({ loadConfig: async () => azureConfig, post }).decide(
+      request,
+      new AbortController().signal
+    )
+    const azureBody = JSON.parse(post.mock.calls.at(-1)![1])
+    expect(openRouterBody.session_id).toBe(request.matchId)
+    expect(openRouterBody).not.toHaveProperty('prompt_cache_key')
+    expect(azureBody.prompt_cache_key).toBe(request.matchId)
+    expect(azureBody).not.toHaveProperty('session_id')
   })
   it('keeps OpenRouter session identity across decisions without changing messages', async () => {
     vi.stubEnv('HSINSPIRED_AI_SESSION_AFFINITY', '1')

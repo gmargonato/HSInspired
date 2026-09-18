@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   aiActionFacts,
+  aiMulliganModelState,
+  aiMulliganSystemContext,
   aiModelState,
   aiSystemContext,
   type aiActions
@@ -249,11 +251,11 @@ describe('AI context fidelity', () => {
         })
       }
     }
-    const failure = vi.fn()
+    const abandoned = vi.fn()
     const controller = new AiTurnController({
       session,
       api,
-      onFailure: failure,
+      onAbandoned: abandoned,
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     })
     try {
@@ -265,7 +267,7 @@ describe('AI context fidelity', () => {
       controller.recordExecution(decision!, result)
       expect(result.accepted).toBe(true)
       expect(session.getState().activePlayerId).toBe(session.localParticipantId)
-      expect(failure).not.toHaveBeenCalled()
+      expect(abandoned).not.toHaveBeenCalled()
       for (const preview of previews) expect(preview).not.toHaveBeenCalled()
     } finally {
       controller.dispose()
@@ -476,10 +478,38 @@ describe('AI context fidelity', () => {
     const original = structuredClone(actions)
     const facts = aiActionFacts(actions)
     expect(facts).toHaveLength(3)
-    expect(facts[0]).toMatchObject({ positions: { '0': 'a0', '1': 'a1' } })
-    expect(facts[1]).toMatchObject({ positions: { '0': 'a2' } })
+    expect(facts[0]).toMatchObject({
+      positions: { '0': 'a0', '1': 'a1' },
+      intent: { position: null }
+    })
+    expect(facts[1]).toMatchObject({
+      positions: { '0': 'a2' },
+      intent: { position: 0 }
+    })
     expect(facts[2]).toMatchObject({ positions: { '0': 'a3' } })
     expect(actions).toEqual(original)
+  })
+  it('uses a smaller mulligan snapshot and system prompt than the full turn path', () => {
+    const scenario = createMatchScenario({ secondHeroId: 'anduin' })
+    const session = new GameBoardSession({
+      setup: scenario.setup,
+      decks: scenario.decks
+    })
+    const participantId = session.remoteParticipantId
+    const commands = enumerateLegalCommands(
+      {
+        getState: session.match.getState,
+        getPlayInput: session.match.getPlayInput!,
+        getLegality: session.match.getLegality!
+      },
+      participantId
+    )
+    expect(JSON.stringify(aiMulliganModelState(session)).length).toBeLessThan(
+      JSON.stringify(aiModelState(session, commands)).length / 2
+    )
+    expect(aiMulliganSystemContext(session).content.length).toBeLessThan(
+      aiSystemContext(session).content.length
+    )
   })
   it('preserves zero stats and false attack permission while omitting inactive metadata', () => {
     expect(

@@ -15,6 +15,7 @@ const intent = {
   option: null
 }
 const commit = { actionId: 'a0', intent, expectedResult: 'Pass.', planUpdate: null }
+const mulligan = { replace: ['hand:c1'], planUpdate: null }
 const check = {
   topic: 'action',
   ref: 'a0',
@@ -73,8 +74,19 @@ describe('bounded AI deliberation contract', () => {
       }
     })
   })
+  it('constrains mulligan replace refs to visible hand IDs', () => {
+    expect(aiChoiceSchema({ phase: 'mulligan', actionIds: ['hand:c1', 'hand:c2'] })).toEqual({
+      type: 'object',
+      properties: {
+        replace: { type: 'array', items: { type: 'string', enum: ['hand:c1', 'hand:c2'] } },
+        planUpdate: { type: 'null' }
+      },
+      required: ['replace', 'planUpdate'],
+      additionalProperties: false
+    })
+  })
   it('round-trips each choice while rejecting the obsolete bare action contract', () => {
-    for (const choice of [commit, { plan }, { inspect: [check] }])
+    for (const choice of [commit, mulligan, { plan }, { inspect: [check] }])
       expect(parseAiChoice({ reason: 'Brief.', choice })).toEqual({
         reason: 'Brief.',
         choice
@@ -118,6 +130,18 @@ describe('bounded AI deliberation contract', () => {
     ).toThrow()
     expect(() =>
       validateAiChoicePhase(parseAiDecisionChoice({ inspect: [check] }), request)
+    ).toThrow()
+    expect(() =>
+      validateAiChoicePhase(mulligan, {
+        phase: 'mulligan',
+        actionIds: ['hand:c1', 'hand:c2']
+      })
+    ).not.toThrow()
+    expect(() =>
+      validateAiChoicePhase(mulligan, {
+        phase: 'mulligan',
+        actionIds: ['hand:c2']
+      })
     ).toThrow()
     expect(() =>
       parseAiDecisionRequest({

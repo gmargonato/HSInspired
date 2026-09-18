@@ -1,0 +1,112 @@
+https://gamedev.stackexchange.com/questions/137265/how-to-make-card-movement-behave-like-those-in-hearthstone-and-eternal-ccg
+
+I've got the perfect solution, see the scripts at the end of the post.
+
+These scripts are those actually used in Hearthstone client. You need to attach a DragRotator script to the object you want to rotate. In the Awake() function of DragRotator.cd I just added a Reset() that wasn't here, but you need to to a Reset() before using the script anyway. You need to adapt it to your game, in my case when the object move one the y axis, there is a rotation following the x axis, and when it move on the x axis, the rotation follows the y axis (it wasn't the same on the hearthstone script).
+
+You also need a reference to a DragRotatorInfo script, made by the function SetInfo(DragRotatorInfo) info using the script. Personaly, I used a singleton to have one DragRotatorInfo script for all my DragRotator scripts. Thanks to that you can modify the values of the two DragRotatorAxisInfo of the DragRotatorInfos.
+
+These infos are very simple and they control the two rotations (when you move up/down and left/right).
+
+Force multiplier : the more it is, the less you have to move the object quickly to make it rotate. I use values of 10-15.
+
+Min Degrees/Max Degrees : obviously the min & max values of the rotation in degress. I use values of 40-50.
+
+Rest seconds : the time the object take to go back to its original position. I use values of 2-3.
+
+Hope it helps someone!
+
+DragRotator.cs
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class DragRotator : MonoBehaviour
+{
+    private const float EPSILON = 0.0001f;
+    private const float SMOOTH_DAMP_SEC_FUDGE = 0.1f;
+    private DragRotatorInfo m_info;
+    private float m_pitchDeg;
+    private float m_rollDeg;
+    private float m_pitchVel;
+    private float m_rollVel;
+    private Vector3 m_prevPos;
+    private Vector3 m_originalAngles;
+
+    private void Awake()
+    {
+        Reset();
+        this.m_prevPos = this.transform.position;
+        this.m_originalAngles = this.transform.localRotation.eulerAngles;
+
+    }
+
+    private void Update()
+    {
+        Vector3 position = this.transform.position;
+        Vector3 vector3 = position - this.m_prevPos;
+        if ((double)vector3.sqrMagnitude > 9.99999974737875E-05)
+        {
+            this.m_pitchDeg += vector3.y * this.m_info.m_PitchInfo.m_ForceMultiplier;
+            this.m_pitchDeg = Mathf.Clamp(this.m_pitchDeg, this.m_info.m_PitchInfo.m_MinDegrees, this.m_info.m_PitchInfo.m_MaxDegrees);
+            this.m_rollDeg -= vector3.x * this.m_info.m_RollInfo.m_ForceMultiplier;
+            this.m_rollDeg = Mathf.Clamp(this.m_rollDeg, this.m_info.m_RollInfo.m_MinDegrees, this.m_info.m_RollInfo.m_MaxDegrees);
+        }
+        this.m_pitchDeg = Mathf.SmoothDamp(this.m_pitchDeg, 0.0f, ref this.m_pitchVel, this.m_info.m_PitchInfo.m_RestSeconds * 0.1f);
+        this.m_rollDeg = Mathf.SmoothDamp(this.m_rollDeg, 0.0f, ref this.m_rollVel, this.m_info.m_RollInfo.m_RestSeconds * 0.1f);
+        this.transform.localRotation = Quaternion.Euler(this.m_originalAngles.x + this.m_pitchDeg, this.m_originalAngles.y + this.m_rollDeg, this.m_originalAngles.z);
+        this.m_prevPos = position;
+    }
+
+    public DragRotatorInfo GetInfo()
+    {
+        return this.m_info;
+    }
+
+    public void SetInfo(DragRotatorInfo info)
+    {
+        this.m_info = info;
+    }
+
+    public void Reset()
+    {
+        this.m_prevPos = this.transform.position;
+        this.transform.localRotation = Quaternion.Euler(this.m_originalAngles);
+        this.m_rollDeg = 0.0f;
+        this.m_rollVel = 0.0f;
+        this.m_pitchDeg = 0.0f;
+        this.m_pitchVel = 0.0f;
+    }
+}
+
+DragRotatorInfo.cs
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+using System;
+
+[Serializable]
+public class DragRotatorInfo
+{
+    public DragRotatorAxisInfo m_PitchInfo;
+    public DragRotatorAxisInfo m_RollInfo;
+}
+
+DragRotatorAxisInfo.cs
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using System;
+
+[Serializable]
+public class DragRotatorAxisInfo
+{
+    public float m_ForceMultiplier;
+    public float m_MinDegrees;
+    public float m_MaxDegrees;
+    public float m_RestSeconds;
+}

@@ -4,12 +4,16 @@ import { CARD_CANVAS } from '../../rendering/cards/card-layout'
 export interface HandDragConfig {
   /** Time constant for the pointer-follow lag. Higher values feel heavier. */
   readonly followResponseMS: number
-  /** Card velocity in px/s that produces the maximum normalized tilt. */
-  readonly velocityForFullTilt: number
   /** Minimum held scale, reached at the board-side limit. */
   readonly dragScale: number
   /** Maximum held scale, reached near the hand. */
   readonly nearHandScale: number
+  /**
+   * Normalized point of the card the cursor holds, Hearthstone-style: the card
+   * hangs from the grab spot instead of centring on the cursor. (0.5, 0.5) is
+   * the old centred behaviour; (0.65, 0.6) holds the card by its right side.
+   */
+  readonly grabAnchor: { readonly x: number; readonly y: number }
   /** Pointer Y limits on the 1920x1080 design canvas. */
   readonly nearHandY: number
   readonly boardY: number
@@ -24,17 +28,13 @@ export interface HandDragState {
   readonly x: number
   readonly y: number
   readonly scale: number
-  /** Normalized rigid-plane tilt target derived from horizontal velocity. */
-  readonly tiltX: number
-  /** Normalized rigid-plane tilt target derived from vertical velocity. */
-  readonly tiltY: number
 }
 
 export const DEFAULT_HAND_DRAG: HandDragConfig = {
-  followResponseMS: 65,
-  velocityForFullTilt: 1100,
+  followResponseMS: 85,
   dragScale: 0.2,
   nearHandScale: 0.3,
+  grabAnchor: { x: 0.65, y: 0.6 },
   nearHandY: 950,
   boardY: 540,
   shakeDistance: 4,
@@ -53,15 +53,26 @@ export function initialDragState(
   y: number,
   scale: number = DEFAULT_HAND_DRAG.dragScale
 ): HandDragState {
-  return { x, y, scale, tiltX: 0, tiltY: 0 }
+  return { x, y, scale }
 }
 
 /**
- * Advances the drag one frame. The card is pinned at its centre (its origin is
- * bottom-centre, so the centre sits `height/2` above that origin), follows the
- * pointer with frame-rate-independent resistance, and produces normalized tilt
- * from its velocity. Like the reference effect, half the card may leave the
- * canvas at an edge; this also keeps pickup from jumping out of the low hand.
+ * Card centre in canvas coordinates. The drag origin is bottom-centre, so the
+ * centre sits half a scaled card above it and shifts while the scale changes.
+ */
+export function resolveDragCenter(
+  x: number,
+  y: number,
+  scale: number
+): { x: number; y: number } {
+  return { x, y: y - (CARD_CANVAS.height * scale) / 2 }
+}
+
+/**
+ * Advances the drag one frame. The card is pinned at its centre, follows the
+ * pointer with frame-rate-independent resistance. Like the reference effect,
+ * half the card may leave the canvas at an edge; this also keeps pickup from
+ * jumping out of the low hand.
  */
 export function stepDrag(
   state: HandDragState,
@@ -80,9 +91,12 @@ export function stepDrag(
   const smoothing = resolveDragSmoothing(deltaMS, config.followResponseMS)
   const nextScale = state.scale + (targetScale - state.scale) * smoothing
   const halfHeight = (CARD_CANVAS.height * nextScale) / 2
-  const targetX = pointerX
+  // The cursor holds the card at its grab anchor instead of its centre.
+  const targetX =
+    pointerX - (config.grabAnchor.x - 0.5) * CARD_CANVAS.width * targetScale
   // Interpolate position and scale together so resizing keeps the same centre.
-  const targetY = pointerY + (CARD_CANVAS.height * targetScale) / 2
+  const targetY =
+    pointerY + (1 - config.grabAnchor.y) * CARD_CANVAS.height * targetScale
 
   const nextX = clamp(state.x + (targetX - state.x) * smoothing, 0, BOUNDS.width)
   const nextY = clamp(
@@ -90,25 +104,11 @@ export function stepDrag(
     halfHeight,
     BOUNDS.height + halfHeight
   )
-  const elapsedSeconds = Math.max(1, deltaMS) / 1000
-  // Resizing moves the bottom-centre origin even when the visual centre is still.
-  const previousCenterY = state.y - (CARD_CANVAS.height * state.scale) / 2
-  const nextCenterY = nextY - halfHeight
 
   return {
     x: nextX,
     y: nextY,
-    scale: nextScale,
-    tiltX: clamp(
-      (nextX - state.x) / elapsedSeconds / config.velocityForFullTilt,
-      -1,
-      1
-    ),
-    tiltY: clamp(
-      (nextCenterY - previousCenterY) / elapsedSeconds / config.velocityForFullTilt,
-      -1,
-      1
-    )
+    scale: nextScale
   }
 }
 

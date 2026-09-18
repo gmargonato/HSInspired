@@ -125,7 +125,13 @@ const GENERATED_CARD_RECORDS: readonly CardDefinition[] = [
     'Ambush!',
     'When drawn, summon a 4/4 Nerubian.',
     'on-draw',
-    [{ action: 'summon', cardId: 'the_grand_tournament_ambush_nerubian' }]
+    [
+      {
+        action: 'summon',
+        cardId: 'the_grand_tournament_ambush_nerubian',
+        controller: 'opponent'
+      }
+    ]
   ),
   generatedMinionWithKeywords('the_grand_tournament_bear', 'Bear', 3, 3, ['taunt']),
   generatedMinionWithKeywords('the_grand_tournament_boar', 'Boar', 4, 2, ['charge']),

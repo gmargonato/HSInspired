@@ -6,7 +6,6 @@ import {
   EMPTY_CTHUN
 } from '../cthun'
 import { HistoryRecorder } from '../history-recorder'
-import { eligibleAiBonusSecrets } from '../ai-bonuses'
 import {
   kazakusCostOptions,
   ingredientChoiceOptions,
@@ -553,7 +552,12 @@ function collectTargetSelectors(
     result.push({ selector: value, path })
   for (const [key, nested] of Object.entries(value)) {
     if (key === 'choice') continue
-    if (key === 'target' && value.allowEmptyTargets === true && isRecord(nested)) {
+    if (
+      key === 'target' &&
+      value.allowEmptyTargets === true &&
+      isRecord(nested) &&
+      (nested.selection === 'chosen' || nested.selection === 'chosen-and-adjacent')
+    ) {
       result.push({ selector: nested, path: `${path}.target`, optional: true })
       continue
     }
@@ -11414,91 +11418,6 @@ export class EffectRuntime {
   }
 
   /** Resolves the complete end/start turn boundary as one atomic command. */
-  private castAiBonusSecret(participantId: PlayerId): void {
-    const pool = eligibleAiBonusSecrets(
-      this.draft as unknown as OpeningMatchState,
-      participantId
-    )
-    if (pool.length === 0) return
-    const cardId = pool[Math.floor(this.rng.next() * pool.length)]!
-    const definition = CARD_CATALOG.require(cardId)
-    const player = this.player(participantId)
-    const card: DraftCard = {
-      instanceId: this.allocateId(`${participantId}:bonus-secret`),
-      cardId,
-      ownerId: participantId,
-      controllerId: participantId,
-      creationOrdinal: this.nextEntityOrdinal++,
-      baseCost: definition.cost,
-      currentCost: 0,
-      zone: 'discarded',
-      revealed: false,
-      knownTo: [participantId]
-    }
-    const source: EntityRef = {
-      instanceId: card.instanceId,
-      cardId,
-      participantId,
-      kind: 'card',
-      zone: 'discarded'
-    }
-    this.events.push({
-      type: 'history-action-resolved',
-      participantId,
-      action: 'card',
-      source: {
-        id: card.instanceId,
-        cardId,
-        participantId,
-        kind: 'card',
-        baseCost: definition.cost,
-        currentCost: 0
-      },
-      outcomes: []
-    })
-    this.historyUpdate((history) => {
-      history.cardsPlayedThisTurn = [...history.cardsPlayedThisTurn, cardId]
-      history.cardsPlayedThisGame = [...history.cardsPlayedThisGame, cardId]
-      history.cardsCastThisTurn = [...history.cardsCastThisTurn, cardId]
-      history.spellsCastThisGameByPlayer = {
-        ...history.spellsCastThisGameByPlayer,
-        [participantId]: (history.spellsCastThisGameByPlayer?.[participantId] ?? 0) + 1
-      }
-    })
-    this.emitCardPlayedSemantic(source, source, card, 'card-played')
-    const cast = this.emitCardPlayedSemantic(source, source, card, 'spell-cast', 'cast')
-    if (cast.cancelled) this.addToDiscardedCards(player, card)
-    else {
-      this.appendSecret(player, {
-        instanceId: card.instanceId,
-        cardId,
-        ownerId: participantId,
-        controllerId: participantId,
-        creationOrdinal: card.creationOrdinal!,
-        playOrder: this.nextEntityOrdinal++,
-        revealed: false
-      })
-      this.historyUpdate((history) => {
-        history.secretsPlayedThisGameByPlayer = {
-          ...history.secretsPlayedThisGameByPlayer,
-          [participantId]:
-            (history.secretsPlayedThisGameByPlayer?.[participantId] ?? 0) + 1
-        }
-      })
-      const secretSource: EntityRef = { ...source, kind: 'secret', zone: 'secret' }
-      this.emitCardPlayedSemantic(secretSource, secretSource, card, 'secret-played')
-      this.runCardBlocks(
-        definition,
-        'on-secret-played',
-        this.frameFor(source, null, []),
-        'bonus-secret'
-      )
-      this.processDeaths()
-      this.emitCardPlayedSemantic(source, source, card, 'spell-resolved', 'cast')
-    }
-    this.processDeaths()
-  }
-
   resolveTurnTransition(options: TurnTransitionRuntimeOptions): EffectResolutionResult {
     this.historyRecorder = new HistoryRecorder(
       this.draft as unknown as OpeningMatchState
@@ -11515,7 +11434,6 @@ export class EffectRuntime {
           'Only the active participant can end the turn.'
         )
       const endingPlayer = this.player(options.participantId)
-      this.castAiBonusSecret(options.participantId)
       if (this.draft.players.some((player) => player.hero.health <= 0)) {
         return {
           accepted: true,

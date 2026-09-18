@@ -17,6 +17,13 @@ export interface HandLayoutConfig {
   readonly denseHandStartCount: number
   /** Hand size at which dense-hand treatment reaches its maximum. */
   readonly denseHandFullCount: number
+  /**
+   * Hand size where fan compression and curvature begin easing toward their
+   * full-hand values. Below this count the fan keeps its wide small-hand
+   * spacing; from here on, every added card tightens the step and steepens
+   * the arc, reaching the full-hand look a few cards before `maxHandSize`.
+   */
+  readonly compressionStartCount: number
   /** Peak outer-card rotation for a full dense hand. */
   readonly denseHandMaxRotation: number
   /** Maximum upward lift applied to the complete dense hand. */
@@ -61,18 +68,20 @@ export const DEFAULT_HAND_LAYOUT: HandLayoutConfig = {
   // viewport, leaving only its upper portion visible until hover.
   baselineY: 1140,
   // Cards overlap at rest: `maxCardStep` steps on ~155px-wide cards leave
-  // about 55px of each card exposed. The fan compresses to this maximum width
-  // once the natural spacing would exceed it (a ten-card hand ends up ~55px
-  // apart, like Hearthstone's full hand). The right edge is clamped just
+  // about 55px of each card exposed. From `compressionStartCount` upward the
+  // step eases down toward the full-hand value (span / 9 ≈ 55.6px, matching
+  // Hearthstone's ten-card hand), so five- to seven-card hands already read
+  // as a dense arc instead of a wide row. The right edge is clamped just
   // inside the local hero power, before the mana label begins.
   span: 500,
   maxCardStep: 100,
   maxRotation: 0.2,
-  denseHandStartCount: 6,
+  denseHandStartCount: 3,
   denseHandFullCount: 10,
+  compressionStartCount: 4,
   denseHandMaxRotation: 0.32,
   denseHandLift: 28,
-  denseHandEdgeTuck: 18,
+  denseHandEdgeTuck: 40,
   cardScale: 0.2,
   hoverScale: 0.5,
   safeRightBoundaryX: 1257,
@@ -83,9 +92,14 @@ export const DEFAULT_HAND_LAYOUT: HandLayoutConfig = {
 }
 
 /**
- * Computes a symmetric fan for any hand size from zero to ten cards. Small
- * hands stay centred; once the fan would cross the HUD-safe right boundary,
- * its centre shifts left while the rightmost card remains anchored.
+ * Computes a symmetric fan for any hand size from zero to ten cards.
+ *
+ * One continuous formula drives every count: spacing eases from the wide
+ * small-hand step down to the full-hand step starting at
+ * `compressionStartCount`, rotation/lift ramp in alongside it, and the
+ * baseline bends from a straight line into an arc as the hand densifies.
+ * Small hands stay centred; once the fan would cross the HUD-safe right
+ * boundary, its centre shifts left while the rightmost card remains anchored.
  */
 export function layoutHand(
   count: number,
@@ -100,9 +114,9 @@ export function layoutHand(
       ? hoveredIndex
       : null
   const midpoint = (cardCount - 1) / 2
-  const handSpan =
-    cardCount === 1 ? 0 : Math.min(config.span, (cardCount - 1) * config.maxCardStep)
-  const denseHandProgress = resolveDenseHandProgress(cardCount, config)
+  const handSpan = resolveHandSpan(cardCount, config)
+  const denseHandBlend = resolveDenseHandBlend(cardCount, config)
+  const denseHandProgress = resolveDenseHandProgress(cardCount, config, denseHandBlend)
   const outerRotation =
     config.maxRotation +
     (config.denseHandMaxRotation - config.maxRotation) * denseHandProgress
@@ -124,7 +138,13 @@ export function layoutHand(
         : Math.sign(index - normalizedHover) * config.hoverSpread
 
     const handLift = config.denseHandLift * denseHandProgress
-    const edgeTuck = Math.abs(normalized) * config.denseHandEdgeTuck * denseHandProgress
+    // The tuck exponent bends the baseline: 1 keeps the small-hand straight
+    // V, easing to 2 at the full hand for a parabolic arc whose tangent
+    // matches the linear rotation falloff.
+    const edgeTuck =
+      Math.abs(normalized) ** (1 + denseHandBlend) *
+      config.denseHandEdgeTuck *
+      denseHandProgress
     return {
       x: centerX + xOffset + neighborOffset,
       y: config.baselineY - handLift + edgeTuck - (isHovered ? config.hoverLift : 0),
@@ -136,14 +156,50 @@ export function layoutHand(
 }
 
 /**
- * Returns the centre of the fan after accounting for the rotated outer card's
- * full painted bounds.
+ * Eased 0→1 ramp that tightens the fan between `compressionStartCount` and
+ * `denseHandFullCount`: zero for small hands, then an ease-out that front-
+ * loads the compression so mid hands (five to seven cards) receive most of
+ * the dense look before the curve settles into the full-hand anchor.
  */
-function resolveDenseHandProgress(cardCount: number, config: HandLayoutConfig): number {
+function resolveDenseHandBlend(cardCount: number, config: HandLayoutConfig): number {
+  const shoulder = Math.max(1, config.compressionStartCount)
+  const full = Math.max(shoulder, config.denseHandFullCount)
+  if (cardCount <= shoulder) return 0
+  const progress = (cardCount - shoulder) / (full - shoulder)
+  return 1 - (1 - progress) ** 3
+}
+
+/**
+ * Dense-hand treatment (rotation, lift, tuck) strength. Follows the original
+ * linear ramp for small hands so the gentle three- to four-card look is
+ * preserved, then the compression blend pulls mid hands toward the full-hand
+ * maximum much earlier than the linear ramp alone.
+ */
+function resolveDenseHandProgress(
+  cardCount: number,
+  config: HandLayoutConfig,
+  denseHandBlend: number
+): number {
   const start = Math.max(1, config.denseHandStartCount)
   const full = Math.max(start, config.denseHandFullCount)
   if (cardCount < start) return 0
-  return Math.min(1, (cardCount - start + 1) / (full - start + 1))
+  const linear = Math.min(1, (cardCount - start + 1) / (full - start + 1))
+  return linear + (1 - linear) * denseHandBlend
+}
+
+/**
+ * Center-to-center span of the fan. Small hands keep the wide `maxCardStep`
+ * spacing; past `compressionStartCount` the per-card step eases toward the
+ * full-hand value so the fan narrows with every added card while still
+ * growing overall, capped at `span` for the ten-card hand.
+ */
+function resolveHandSpan(cardCount: number, config: HandLayoutConfig): number {
+  if (cardCount === 1) return 0
+  const full = Math.max(2, config.denseHandFullCount)
+  const minStep = config.span / (full - 1)
+  const blend = resolveDenseHandBlend(cardCount, config)
+  const step = config.maxCardStep - (config.maxCardStep - minStep) * blend
+  return Math.min(config.span, (cardCount - 1) * step)
 }
 
 function resolveHandCenterX(

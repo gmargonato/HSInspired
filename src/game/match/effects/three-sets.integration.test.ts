@@ -187,6 +187,112 @@ describe('Goblins vs Gnomes and Mean Streets card corrections', () => {
       )
     ).toHaveLength(rolledAmount as number)
   })
+
+  it('Kabal Chemist adds one random potion to hand', () => {
+    const scenario = ready({ seed: 1732 })
+    const [participantId] = activePlayers(scenario)
+    const potionIds = [
+      'mean_streets_of_gadgetzan_potion_of_polymorph',
+      'mean_streets_of_gadgetzan_volcanic_potion',
+      'mean_streets_of_gadgetzan_pint_size_potion',
+      'mean_streets_of_gadgetzan_potion_of_madness',
+      'mean_streets_of_gadgetzan_greater_healing_potion',
+      'mean_streets_of_gadgetzan_dragonfire_potion',
+      'mean_streets_of_gadgetzan_blastcrystal_potion',
+      'mean_streets_of_gadgetzan_felfire_potion',
+      'mean_streets_of_gadgetzan_freezing_potion',
+      'mean_streets_of_gadgetzan_bloodfury_potion'
+    ]
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    setMana(scenario, participantId)
+    addCard(scenario, participantId, 'mean_streets_of_gadgetzan_kabal_chemist')
+
+    const result = play(
+      scenario,
+      participantId,
+      'mean_streets_of_gadgetzan_kabal_chemist'
+    )
+    const generated = player(scenario, participantId).hand[0]
+
+    expect(generated).toBeDefined()
+    expect(potionIds).toContain(generated?.cardId)
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'card-generated',
+        participantId,
+        card: expect.objectContaining({ cardId: generated?.cardId })
+      })
+    )
+  })
+
+  it.each([
+    {
+      name: "Smuggler's Crate",
+      cardId: 'mean_streets_of_gadgetzan_smugglers_crate',
+      targetCardId: 'basic_oasis_snapjaw',
+      attack: 4,
+      health: 9
+    },
+    {
+      name: 'Stolen Goods',
+      cardId: 'mean_streets_of_gadgetzan_stolen_goods',
+      targetCardId: 'basic_senjin_shieldmasta',
+      attack: 6,
+      health: 8
+    }
+  ])(
+    '$name resolves a random hand-card target without exposing it as play input',
+    ({ cardId, targetCardId, attack, health }) => {
+      const scenario = ready({ seed: 1733, cardId })
+      const [participantId] = activePlayers(scenario)
+      addCard(scenario, participantId, targetCardId)
+      setMana(scenario, participantId)
+
+      const card = player(scenario, participantId).hand.find(
+        (entry) => entry.cardId === cardId
+      )!
+      const input = scenario.match.getPlayInput!(participantId, card.instanceId)!
+      expect(input.targetSelectors).toEqual([])
+      expect(input.legalTargetOptions).toEqual([])
+
+      play(scenario, participantId, cardId)
+      expect(player(scenario, participantId).hand).toContainEqual(
+        expect.objectContaining({ cardId: targetCardId, attack, health })
+      )
+    }
+  )
+
+  it('Mind Vision resolves its random opponent-hand target without exposing it as play input', () => {
+    const scenario = ready({ seed: 1734, cardId: 'basic_mind_vision' })
+    const [participantId, opponentId] = activePlayers(scenario)
+    setMana(scenario, participantId)
+
+    const vision = player(scenario, participantId).hand.find(
+      (entry) => entry.cardId === 'basic_mind_vision'
+    )!
+    const input = scenario.match.getPlayInput!(participantId, vision.instanceId)!
+    expect(input.targetSelectors).toEqual([])
+    expect(input.legalTargetOptions).toEqual([])
+    const handSizeBefore = player(scenario, participantId).hand.length
+
+    const result = play(scenario, participantId, 'basic_mind_vision')
+
+    expect(player(scenario, opponentId).hand.length).toBeGreaterThan(0)
+    expect(player(scenario, participantId).hand).toHaveLength(handSizeBefore)
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'card-generated',
+        participantId
+      })
+    )
+  })
 })
 
 describe('One Night in Karazhan, Whispers of the Old Gods, and Mean Streets effects', () => {
@@ -371,6 +477,89 @@ describe('One Night in Karazhan, Whispers of the Old Gods, and Mean Streets effe
     if (!result.accepted) throw new Error(result.message)
     expect(player(scenario, participantId).mana.available).toBe(5)
     expect(player(scenario, participantId).hero.health).toBe(22)
+  })
+
+  it('checks Raza against the remaining deck at Battlecry time', () => {
+    const scenario = ready({
+      seed: 1715,
+      firstHeroId: 'anduin',
+      cardId: 'mean_streets_of_gadgetzan_raza_the_chained'
+    })
+    const [participantId] = activePlayers(scenario)
+
+    expect(player(scenario, participantId).deckHasNoDuplicates).toBe(false)
+    while (player(scenario, participantId).deck.length > 1) {
+      const result = scenario.match.dispatch({ type: 'dev-draw', participantId })
+      if (!result.accepted) throw new Error(result.message)
+    }
+    expect(player(scenario, participantId).deck).toHaveLength(1)
+    expect(player(scenario, participantId).deckHasNoDuplicates).toBe(false)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    setMana(scenario, participantId)
+    addCard(scenario, participantId, 'mean_streets_of_gadgetzan_raza_the_chained')
+
+    play(scenario, participantId, 'mean_streets_of_gadgetzan_raza_the_chained')
+
+    expect(player(scenario, participantId).heroPower.cost).toBe(0)
+  })
+
+  it('does not keep Raza active after a duplicate enters the deck', () => {
+    const scenario = ready({ seed: 1716, firstHeroId: 'anduin' })
+    const [participantId] = activePlayers(scenario)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-modify-deck',
+        participantId,
+        action: 'destroy'
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).deckHasNoDuplicates).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: 'basic_bloodfen_raptor'
+      }).accepted
+    ).toBe(true)
+    addCard(scenario, participantId, 'blackrock_mountain_gang_up')
+    setMana(scenario, participantId)
+    const target = player(scenario, participantId).board[0]!
+
+    play(scenario, participantId, 'blackrock_mountain_gang_up', {
+      targets: [
+        {
+          kind: 'minion',
+          participantId,
+          instanceId: target.instanceId
+        }
+      ]
+    })
+
+    expect(
+      player(scenario, participantId).deck.filter(
+        (card) => card.cardId === 'basic_bloodfen_raptor'
+      )
+    ).toHaveLength(3)
+    expect(player(scenario, participantId).deckHasNoDuplicates).toBe(true)
+    const normalHeroPowerCost = player(scenario, participantId).heroPower.cost
+    addCard(scenario, participantId, 'mean_streets_of_gadgetzan_raza_the_chained')
+    play(scenario, participantId, 'mean_streets_of_gadgetzan_raza_the_chained')
+
+    expect(player(scenario, participantId).heroPower.cost).toBe(normalHeroPowerCost)
   })
 
   it('discovers a copy from the opponent deck when Drakonid Operative holds a Dragon', () => {

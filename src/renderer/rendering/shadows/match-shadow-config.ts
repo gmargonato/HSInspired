@@ -18,6 +18,6 @@ export const MATCH_SHADOW_CONFIG = {
   /** Inspection zoom should not lift cards higher than a held card. */
   heldCardHeight: 38,
   /** Extra separation only while a hand card is held/dragged. */
-  draggedCardDepth: 5,
+  draggedCardDepth: 2.5,
   combatHeight: 26
 }

@@ -21,8 +21,9 @@ class Element {
   appendChild(child: Element): void {
     this.children.push(child)
   }
-  addEventListener(_event: string, callback: () => void): void {
+  addEventListener(_event: string, callback: () => void, options?: { once?: boolean }): void {
     this.clickHandler = callback
+    void options
   }
   remove = vi.fn()
   click(): void {
@@ -55,4 +56,27 @@ it('offers a single-use Retry AI action and replaces old controls on a new notic
     'Other error',
     'Dismiss'
   ])
+})
+it('exits the match when the opponent-left overlay is clicked once', () => {
+  let overlay: Element | null = null
+  vi.stubGlobal('document', {
+    getElementById: () => null,
+    createElement: () => new Element(),
+    body: {
+      appendChild: (element: Element) => {
+        overlay = element
+      }
+    }
+  })
+  const dialogs = new BrowserDialogService()
+  const onContinue = vi.fn()
+  dialogs.abandon('Your opponent left.', onContinue)
+  const current = overlay as unknown as Element
+  expect(
+    current.children[0]?.children.find((child) => child.textContent === 'Your opponent left.')
+  ).toBeTruthy()
+  current.click()
+  current.click()
+  expect(onContinue).toHaveBeenCalledOnce()
+  expect(current.remove).toHaveBeenCalledOnce()
 })

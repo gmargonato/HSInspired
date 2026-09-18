@@ -10,15 +10,16 @@ import {
   type AiDecisionResponse,
   type AiDecisionRequest,
   type AiMessage,
+  type AiSettings,
   type JsonObject
 } from '../../../shared/ipc/ai'
 import {
   AI_DELIBERATION_LIMITS,
-  sameAiIntent,
   validateAiChoicePhase,
   type AiPlanNote
 } from '../../../shared/ipc/ai-deliberation'
-import { aiActionIntent } from './ai-action-intent'
+import { aiActionIntent, validateAiCommitIntent } from './ai-action-intent'
+import { forcedLegalCommand } from './ai-forced-command'
 import { answerAiChecks, aiDecisionFacts } from './ai-fact-checks'
 import { observedAiCorrections } from './ai-feedback'
 import {
@@ -35,6 +36,8 @@ import {
   aiActions,
   aiActionFacts,
   aiJson,
+  aiMulliganModelState,
+  aiMulliganSystemContext,
   aiModelState,
   aiSystemContext
 } from './ai-context'
@@ -44,6 +47,8 @@ export const AI_CONVERSATION_LIMITS = {
   maxExchanges: 16,
   maxMessageBytes: AI_REQUEST_LIMITS.maxContextBytes
 } as const
+const AI_SILENT_RETRY_DELAY_MS = 1000
+
 export interface AiActionDecision extends AiDecisionIdentity {
   readonly actionId: string
   readonly command: TurnMatchCommand
@@ -56,7 +61,7 @@ export interface AiTurnControllerOptions {
   readonly api?: AiDecisionApi
   readonly session: GameBoardSession
   readonly logger: RendererLogger
-  readonly onFailure?: (message: string, retry?: () => void) => void
+  readonly onAbandoned?: () => void
   readonly online?: () => boolean
 }
 export class AiTurnController {
@@ -68,9 +73,7 @@ export class AiTurnController {
   private sequence = 0
   private eventCursor = 0
   private disposed = false
-  private failed = false
-  private resumeWaiter?: (resumed: boolean) => void
-  private pauseGeneration = 0
+  private abandoned = false
   private turnPlan?: { turn: number; note: AiPlanNote }
   private plannedTurn?: number
   private inspectionBudget = { turn: -1, used: 0, revisions: new Set<number>() }
@@ -112,8 +115,6 @@ export class AiTurnController {
   }
   dispose(): void {
     this.disposed = true
-    this.resumeWaiter?.(false)
-    this.resumeWaiter = undefined
     this.cancel('match exited')
     this.unsubscribe()
     this.unsubscribeProgress?.()
@@ -165,17 +166,10 @@ export class AiTurnController {
     this.log('decision-timing', { ...decision, ...timing })
   }
   hasLegalActions(): boolean {
-    return !this.disposed && !this.failed && this.legalCommands().length > 0
+    return !this.disposed && !this.abandoned && this.legalCommands().length > 0
   }
-  get isPaused(): boolean {
-    return this.failed && !this.disposed
-  }
-  waitForResume(): Promise<boolean> {
-    if (this.disposed) return Promise.resolve(false)
-    if (!this.failed) return Promise.resolve(true)
-    return new Promise((resolve) => {
-      this.resumeWaiter = resolve
-    })
+  get isAbandoned(): boolean {
+    return this.abandoned && !this.disposed
   }
   chooseMulligan(): Promise<AiActionDecision | null> {
     return this.chooseTurnAction()
@@ -190,16 +184,25 @@ export class AiTurnController {
   private current(identity: AiDecisionIdentity): boolean {
     return (
       !this.disposed &&
-      !this.failed &&
+      !this.abandoned &&
       this.options.session.getState().revision === identity.expectedRevision
     )
   }
-  /** All terminal failures stop automatic retries and produce one visible notice. */
-  pause(error: unknown, identity?: AiDecisionIdentity): void {
-    if (this.disposed || this.failed) return
-    this.failed = true
-    const generation = ++this.pauseGeneration
-    this.cancel('AI paused')
+  private aiMustAct(state = this.options.session.getState()): boolean {
+    return (
+      state.phase === 'mulligan' ||
+      (state.phase === 'turns' &&
+        state.activePlayerId === this.options.session.remoteParticipantId &&
+        !state.pendingResolution &&
+        !state.pendingDiscover &&
+        !state.pendingCardChoice)
+    )
+  }
+  /** Match cannot continue: AI must act but has no legal inputs. */
+  private abandon(error: unknown, identity?: AiDecisionIdentity): void {
+    if (this.disposed || this.abandoned) return
+    this.abandoned = true
+    this.cancel('AI abandoned')
     this.log(
       'failure',
       {
@@ -208,24 +211,58 @@ export class AiTurnController {
           expectedRevision: this.options.session.getState().revision
         }),
         reason: error instanceof Error ? error.message : String(error),
-        source: 'paused',
+        source: 'abandoned',
         ...(error instanceof AiRequestError ? { diagnostics: error.details } : {})
       },
       true
     )
-    this.options.onFailure?.(
-      'The AI couldn’t finish its turn. The match is paused.\nRetry AI to continue, or leave through the game menu.\nRetrying may incur another provider charge.',
-      () => {
-        if (this.disposed || !this.failed || generation !== this.pauseGeneration) return
-        this.failed = false
-        this.resetConversation()
-        this.log('manual-retry', {
-          reason: 'User requested a new decision from the current board.'
-        })
-        this.resumeWaiter?.(true)
-        this.resumeWaiter = undefined
-      }
+    this.options.onAbandoned?.()
+  }
+  private static isNonRetryableAbort(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error)
+    return (
+      message.startsWith('superseded-by-new-decide') ||
+      message.startsWith('renderer-cancel') ||
+      message.startsWith('window-destroyed') ||
+      message.startsWith('render-process-gone') ||
+      message.startsWith('app-before-quit')
     )
+  }
+  private static isRetryableAbort(error: unknown): boolean {
+    if (error instanceof DOMException && error.name === 'AbortError') return true
+    const message = error instanceof Error ? error.message : String(error)
+    return (
+      message === 'This operation was aborted' ||
+      message === 'AI request cancelled.' ||
+      message.startsWith('main-frame-navigation')
+    )
+  }
+  private async waitForSilentRetry(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, AI_SILENT_RETRY_DELAY_MS)
+    })
+  }
+  private logRetryFailure(error: unknown, identity: AiDecisionIdentity): void {
+    this.log(
+      'failure',
+      {
+        ...identity,
+        reason: error instanceof Error ? error.message : String(error),
+        source: 'retry',
+        ...(error instanceof AiRequestError ? { diagnostics: error.details } : {})
+      },
+      true
+    )
+  }
+  private async retryAfterFailure(
+    error: unknown,
+    identity: AiDecisionIdentity
+  ): Promise<AiActionDecision | null> {
+    this.logRetryFailure(error, identity)
+    this.resetConversation()
+    await this.waitForSilentRetry()
+    if (!this.current(identity)) return null
+    return this.choose()
   }
   private messages(
     current: AiMessage,
@@ -257,8 +294,177 @@ export class AiTurnController {
       throw new Error('Current AI facts exceed the configured context allowance.')
     return assemble()
   }
+  private mulliganCommand(
+    replaceInstanceIds: readonly string[]
+  ): TurnMatchCommand {
+    return {
+      type: 'confirm-mulligan',
+      participantId: this.options.session.remoteParticipantId,
+      replaceInstanceIds: [...replaceInstanceIds].sort()
+    }
+  }
+  private async requestMulliganModel(
+    identity: AiDecisionIdentity,
+    commands: readonly TurnMatchCommand[],
+    cursor: number,
+    cancellation: Promise<null>,
+    settings: AiSettings
+  ): Promise<AiActionDecision | null> {
+    const session = this.options.session
+    const handRefs = session
+      .findPlayer(session.getState(), session.remoteParticipantId)
+      .hand.map((card) => card.instanceId)
+    if (!handRefs.length) throw new Error('Mulligan requires a visible hand.')
+    const state = aiMulliganModelState(session)
+    const user: AiMessage = {
+      role: 'user',
+      content: JSON.stringify({
+        state,
+        revision: identity.expectedRevision,
+        instruction:
+          'Return choice.replace with exact hand refs to mulligan away. Omit refs you keep; [] keeps all. planUpdate must be null.'
+      })
+    }
+    const request: AiDecisionRequest & { messages: AiMessage[] } = {
+      ...identity,
+      phase: 'mulligan',
+      allowInspection: false,
+      messages: [aiMulliganSystemContext(session), user],
+      actionIds: handRefs
+    }
+    if (
+      new TextEncoder().encode(JSON.stringify(request.messages)).length >
+      this.maxMessageBytes
+    )
+      throw new Error('Mulligan AI request exceeds the configured context allowance.')
+    this.log('request-started', {
+      ...identity,
+      ...settings,
+      phase: request.phase,
+      freshContext: false,
+      allowInspection: false,
+      actionCount: handRefs.length,
+      contextBytes: new TextEncoder().encode(JSON.stringify(request.messages)).length,
+      retainedExchanges: 0,
+      request
+    })
+    let repairCount = 0
+    let response: AiDecisionResponse | null
+    for (;;) {
+      try {
+        response = await Promise.race([
+          this.options.api!.decide(request),
+          cancellation
+        ])
+        if (
+          response &&
+          this.current(identity) &&
+          response.matchId === identity.matchId &&
+          response.requestId === identity.requestId &&
+          response.expectedRevision === identity.expectedRevision
+        ) {
+          try {
+            validateAiChoicePhase(response.choice, request)
+            if (!('replace' in response.choice))
+              throw new Error('Mulligan requires choice.replace.')
+          } catch (error) {
+            throw new AiRequestError(
+              error instanceof Error ? error.message : String(error),
+              {
+                repairable: true,
+                failureKind: 'invalid-choice',
+                rejectedContent: JSON.stringify({
+                  reason: response.reason,
+                  choice: response.choice
+                }),
+                ...(response.usage ? { usage: response.usage } : {})
+              }
+            )
+          }
+        }
+        break
+      } catch (error) {
+        if (!this.current(identity) || this.active?.identity !== identity) return null
+        if (!(error instanceof AiRequestError) || error.details?.repairable !== true)
+          throw error
+        this.log('response-rejected', {
+          ...identity,
+          repairCount,
+          phase: request.phase,
+          reason: error.message,
+          diagnostics: error.details
+        })
+        if (repairCount >= 1) throw error
+        repairCount++
+        const instruction =
+          'Your response failed validation: ' +
+          error.message +
+          '. Return reason and choice.replace (0–' +
+          handRefs.length +
+          ' exact hand refs to mulligan away) with planUpdate null. No extra fields or markdown.'
+        request.messages = [
+          ...request.messages,
+          {
+            role: 'assistant',
+            content: String(error.details.rejectedContent ?? '') || 'null'
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              instruction,
+              state,
+              revision: identity.expectedRevision
+            })
+          }
+        ]
+        if (
+          new TextEncoder().encode(JSON.stringify(request.messages)).length >
+          this.maxMessageBytes
+        )
+          throw new AiRequestError(
+            'Mulligan format correction exceeds the configured context allowance.',
+            { repairable: true, failureKind: 'invalid-choice' }
+          )
+        this.log('format-repair', {
+          ...identity,
+          repairCount,
+          phase: request.phase,
+          instruction,
+          contextBytes: new TextEncoder().encode(JSON.stringify(request.messages)).length
+        })
+      }
+    }
+    if (!response || !this.current(identity)) return null
+    if (!('replace' in response.choice)) throw new Error('Mulligan requires choice.replace.')
+    const command = this.mulliganCommand(response.choice.replace)
+    if (
+      !commands.some(
+        (candidate) => canonicalCommandKey(candidate) === canonicalCommandKey(command)
+      )
+    )
+      throw new AiRequestError('Mulligan replace set is not a legal opening input.', {
+        repairable: false,
+        failureKind: 'invalid-choice'
+      })
+    this.log('response-received', {
+      ...response,
+      repairCount,
+      selectedCommand: command,
+      phase: 'mulligan'
+    })
+    this.eventCursor = cursor
+    session.acknowledgeAiEvents(cursor)
+    this.actualResults.length = 0
+    return {
+      ...identity,
+      actionId: 'mulligan',
+      command,
+      source: 'model',
+      reason: response.reason
+    }
+  }
   private async choose(freshContext = false): Promise<AiActionDecision | null> {
-    if (this.disposed || this.failed) return null
+    if (this.disposed || this.abandoned) return null
     const session = this.options.session
     const identity = {
       matchId: this.matchId,
@@ -267,15 +473,7 @@ export class AiTurnController {
     }
     const commands = this.legalCommands()
     if (!commands.length) {
-      const state = session.getState()
-      if (
-        state.phase === 'turns' &&
-        state.activePlayerId === session.remoteParticipantId &&
-        !state.pendingResolution &&
-        !state.pendingDiscover &&
-        !state.pendingCardChoice
-      )
-        this.pause(new Error('Active AI has no legal inputs.'), identity)
+      if (this.aiMustAct()) this.abandon(new Error('Active AI has no legal inputs.'), identity)
       return null
     }
     const cursor = session.getAiEventCursor()
@@ -287,12 +485,21 @@ export class AiTurnController {
       session.getAiEventsSince(this.eventCursor),
       session.remoteParticipantId
     )
-    let selected = commands[0]!
-    let actionId = 'a0'
+    const state = session.getState()
+    const forced =
+      state.phase === 'turns' ||
+      state.pendingDiscover?.participantId === session.remoteParticipantId ||
+      state.pendingCardChoice?.participantId === session.remoteParticipantId
+        ? forcedLegalCommand(commands)
+        : null
+    let selected = forced ?? commands[0]!
+    let actionId = forced
+      ? 'a' + Math.max(0, commands.indexOf(forced))
+      : 'a0'
     let source: AiActionDecision['source'] = 'forced'
     let reason: string | undefined
     let expectedResult: string | undefined
-    if (commands.length > 1) {
+    if (!forced) {
       let cancelled!: () => void
       const cancellation = new Promise<null>((resolve) => {
         cancelled = () => resolve(null)
@@ -310,6 +517,18 @@ export class AiTurnController {
         if (!settings.enabled) throw new Error('External game AI is disabled.')
         this.maxMessageBytes =
           settings.maxContextBytes ?? AI_REQUEST_LIMITS.maxContextBytes
+        if (session.getState().phase === 'mulligan') {
+          const mulliganDecision = await this.requestMulliganModel(
+            identity,
+            commands,
+            cursor,
+            cancellation,
+            settings
+          )
+          if (!mulliganDecision) return null
+          if (this.options.recorder) this.options.recorder.decisionId = identity.requestId
+          return mulliganDecision
+        }
         const actions = aiActions(session, commands)
         const history = session.getAiPublicHistory().recentEvents
         const retainedEvents = Array.isArray(history)
@@ -411,29 +630,33 @@ export class AiTurnController {
                   if ('actionId' in response.choice) {
                     const selectedId = response.choice.actionId
                     const action = actions.find((a) => a.id === selectedId)
-                    if (
-                      !action ||
-                      !sameAiIntent(
-                        response.choice.intent,
-                        aiActionIntent(action.command, session.localParticipantId)
-                      )
+                    if (!action) {
+                      throw new Error('AI returned unknown action ID.')
+                    }
+                    const intentCheck = validateAiCommitIntent(
+                      response.choice.intent,
+                      action.command,
+                      session.localParticipantId
                     )
+                    if (!intentCheck.ok) {
                       throw new Error(
                         'Action ID and intent disagree. Selected ' +
                           selectedId +
                           ' resolves to ' +
-                          JSON.stringify(
-                            action
-                              ? aiActionIntent(
-                                  action.command,
-                                  session.localParticipantId
-                                )
-                              : null
-                          ) +
+                          JSON.stringify(intentCheck.expected) +
                           '; you returned ' +
-                          JSON.stringify(response.choice.intent) +
+                          JSON.stringify(intentCheck.returned) +
                           '. Choose the intended current action ID and copy its exact intent, including its selected position.'
                       )
+                    }
+                    if (intentCheck.normalized) {
+                      this.log('intent-normalized', {
+                        ...identity,
+                        actionId: selectedId,
+                        returnedIntent: response.choice.intent,
+                        resolvedIntent: intentCheck.intent
+                      })
+                    }
                   }
                 } catch (error) {
                   throw new AiRequestError(
@@ -710,8 +933,15 @@ export class AiTurnController {
             reason,
             diagnostics: error.details
           })
+        } else if (AiTurnController.isNonRetryableAbort(error)) {
+          return null
+        } else if (
+          AiTurnController.isRetryableAbort(error) ||
+          error instanceof AiRequestError ||
+          error instanceof Error
+        ) {
+          return this.retryAfterFailure(error, identity)
         } else {
-          this.pause(error, identity)
           return null
         }
       } finally {

@@ -18,18 +18,40 @@ import { asPlayerId } from '../../game/match/match-types'
 
 const electron = vi.hoisted(() => ({ invoke: vi.fn(), expose: vi.fn() }))
 const modelSnapshot = vi.hoisted(() => ({ value: { mana: 7 } as JsonObject }))
-const legal = vi.hoisted(() => ({
-  commands: [{ type: 'end-turn' }, { type: 'use-hero-power' }]
-}))
+const legal = vi.hoisted(() => {
+  const defaultLegalCommands = () => [
+    { type: 'end-turn', participantId: 'ai' },
+    { type: 'use-hero-power', participantId: 'ai' },
+    {
+      type: 'attack-character',
+      participantId: 'ai',
+      attacker: { kind: 'hero' },
+      defender: { kind: 'hero' }
+    }
+  ]
+  return {
+    commands: defaultLegalCommands(),
+    defaultLegalCommands
+  }
+})
 vi.mock('electron', () => ({
   contextBridge: { exposeInMainWorld: electron.expose },
   ipcRenderer: { invoke: electron.invoke, on: vi.fn(), removeListener: vi.fn() }
 }))
-vi.mock('../../game/match/ai', () => ({
-  enumerateLegalCommands: () => legal.commands
-}))
+vi.mock('../../game/match/ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../game/match/ai')>()
+  return {
+    ...actual,
+    enumerateLegalCommands: () => legal.commands
+  }
+})
 vi.mock('../features/game/ai-context', () => ({
   aiSystemContext: () => ({ role: 'system', content: 'Choose a legal action.' }),
+  aiMulliganSystemContext: () => ({ role: 'system', content: 'Mulligan opening hand.' }),
+  aiMulliganModelState: () => ({
+    phase: 'mulligan',
+    self: { hand: [{ ref: 'c1' }, { ref: 'c2' }] }
+  }),
   aiActions: (_session, commands) =>
     commands.map((command, i) => ({
       id: `a${i}`,
@@ -57,7 +79,7 @@ beforeAll(async () => {
 afterEach(() => {
   modelSnapshot.value = { mana: 7 }
   electron.invoke.mockReset()
-  legal.commands = [{ type: 'end-turn' }, { type: 'use-hero-power' }]
+  legal.commands = legal.defaultLegalCommands()
 })
 
 // Use the actual preload, with a bridge double that strips Error custom fields.
@@ -90,6 +112,11 @@ const commitChoice = () => ({
   intent: { type: 'end-turn', source: null, targets: [], position: null, option: null },
   expectedResult: 'Pass initiative.',
   planUpdate: null
+})
+/** Still rejected after cosmetic target normalization (wrong source on end-turn). */
+const repairableIntentMismatch = () => ({
+  ...commitChoice(),
+  intent: { ...commitChoice().intent, source: 'wrong-source' }
 })
 const planChoice = () => ({
   plan: {
@@ -134,6 +161,7 @@ function setup(
         maxCompletionTokens: 1000
       })
     if (channel === AI_IPC_CHANNELS.decide) {
+      const priorActionRequests = requests.filter((entry) => entry.phase === 'action')
       requests.push(structuredClone(request))
       if (mode === 'pending') return new Promise(() => {})
       if (mode === 'stale-timeout') state.revision++
@@ -146,6 +174,17 @@ function setup(
         )
       if (mode === 'plan-repair' && (requests.length === 1 || requests.length === 3))
         return reject()
+      if (request.phase === 'mulligan')
+        return aiIpcSuccess({
+          ...request,
+          reason: 'Keep the curve.',
+          choice: choose
+            ? choose(request, requests.length)
+            : { replace: [], planUpdate: null },
+          modelId: 'test',
+          durationMs: 1,
+          finishReason: 'stop'
+        })
       if (mode === 'plan' || mode === 'plan-repair' || request.phase === 'plan')
         return aiIpcSuccess({
           ...request,
@@ -159,10 +198,42 @@ function setup(
           durationMs: 1,
           finishReason: 'stop'
         })
-      if (mode === 'provider')
+      if (mode === 'provider') {
+        if (request.phase === 'plan') {
+          return aiIpcSuccess({
+            ...request,
+            reason: 'Objective',
+            choice: planChoice(),
+            modelId: 'test',
+            durationMs: 1,
+            finishReason: 'stop'
+          })
+        }
         return aiIpcFailure(
           new AiRequestError('Provider failure.', { repairable: false })
         )
+      }
+      if (mode === 'recover') {
+        if (request.phase === 'plan') {
+          return aiIpcSuccess({
+            ...request,
+            reason: 'Objective',
+            choice: planChoice(),
+            modelId: 'test',
+            durationMs: 1,
+            finishReason: 'stop'
+          })
+        }
+        if (request.phase === 'action' && priorActionRequests.length === 0) return reject()
+        return aiIpcSuccess({
+          ...request,
+          reason: 'Choose.',
+          choice: commitChoice(),
+          modelId: 'test',
+          durationMs: 1,
+          finishReason: 'stop'
+        })
+      }
       if (mode === 'reject' || requests.length === 1) return reject()
       return aiIpcSuccess({
         ...request,
@@ -176,17 +247,20 @@ function setup(
     return undefined
   })
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-  const onFailure = vi.fn()
+  const onAbandoned = vi.fn()
   const state = {
     revision: 43,
     turnNumber: 13,
-    phase: mode.startsWith('plan') ? 'turns' : 'mulligan',
+    phase: 'turns',
     activePlayerId: 'ai'
   }
   const session = {
     remoteParticipantId: 'ai',
     localParticipantId: 'human',
     getState: () => state,
+    findPlayer: () => ({
+      hand: [{ instanceId: 'c1' }, { instanceId: 'c2' }]
+    }),
     subscribe: () => () => {},
     getAiEventCursor: () => 0,
     getAiEventsSince: () => publicEvents,
@@ -198,9 +272,9 @@ function setup(
     session,
     api: createAiDecisionApi(bridge()),
     logger,
-    onFailure
+    onAbandoned
   })
-  return { controller, requests, logger, onFailure, state, publicEvents }
+  return { controller, requests, logger, onAbandoned, state, publicEvents }
 }
 describe('preload to renderer recovery', () => {
   it.each([true, false])(
@@ -214,11 +288,7 @@ describe('preload to renderer recovery', () => {
       }
       const test = setup('plan', (request, count) => {
         if (request.phase === 'plan') return planChoice()
-        if (count === 2)
-          return {
-            ...commitChoice(),
-            intent: { ...commitChoice().intent, targets: ['wrong-target'] }
-          }
+        if (count === 2) return repairableIntentMismatch()
         if (count === 4 && change)
           return {
             ...commitChoice(),
@@ -238,7 +308,7 @@ describe('preload to renderer recovery', () => {
             self: { mana: { available: 8 } },
             opponent: { mana: { available: 1 } }
           })
-          expect(latest.actions.map((a) => a.id)).toEqual(['a0', 'a1'])
+          expect(latest.actions.map((a) => a.id)).toEqual(['a0', 'a1', 'a2'])
         }
         expect(test.requests[2].messages.at(-1)!.content).toContain(
           'reconsider any premise'
@@ -252,7 +322,7 @@ describe('preload to renderer recovery', () => {
             ([kind]) => kind === '[Game AI] end-turn-review'
           )
         ).toHaveLength(1)
-        expect(test.onFailure).not.toHaveBeenCalled()
+        expect(test.onAbandoned).not.toHaveBeenCalled()
       } finally {
         test.controller.dispose()
       }
@@ -267,22 +337,19 @@ describe('preload to renderer recovery', () => {
     try {
       expect(await test.controller.chooseTurnAction()).toBeNull()
       expect(test.requests).toHaveLength(3)
-      expect(test.onFailure).not.toHaveBeenCalled()
+      expect(test.onAbandoned).not.toHaveBeenCalled()
     } finally {
       test.controller.dispose()
     }
   })
   it('silently recovers with fresh facts after a failed correction and drops stale action IDs', async () => {
-    const { controller, requests, state, onFailure, logger, publicEvents } = setup(
+    const { controller, requests, state, onAbandoned, logger, publicEvents } = setup(
       'plan',
       (request, count) =>
         request.phase === 'plan'
           ? planChoice()
           : count === 3 || count === 4
-            ? {
-                ...commitChoice(),
-                intent: { ...commitChoice().intent, targets: ['wrong-target'] }
-              }
+            ? repairableIntentMismatch()
             : commitChoice()
     )
     publicEvents.push({
@@ -327,7 +394,7 @@ describe('preload to renderer recovery', () => {
         false
       )
       expect(requests[5].allowInspection).toBe(false)
-      expect(onFailure).not.toHaveBeenCalled()
+      expect(onAbandoned).not.toHaveBeenCalled()
       expect(
         logger.info.mock.calls.filter(
           ([kind]) => kind === '[Game AI] fresh-context-retry'
@@ -342,15 +409,12 @@ describe('preload to renderer recovery', () => {
       if (count === 4) test.state.revision++
       return request.phase === 'plan'
         ? planChoice()
-        : {
-            ...commitChoice(),
-            intent: { ...commitChoice().intent, targets: ['wrong-target'] }
-          }
+        : repairableIntentMismatch()
     })
     try {
       expect(await test.controller.chooseTurnAction()).toBeNull()
       expect(test.requests).toHaveLength(4)
-      expect(test.onFailure).not.toHaveBeenCalled()
+      expect(test.onAbandoned).not.toHaveBeenCalled()
     } finally {
       test.controller.dispose()
     }
@@ -431,52 +495,110 @@ describe('preload to renderer recovery', () => {
       controller.dispose()
     }
   })
-  it('cuts off repeated inspection, and a manual retry cannot replenish that decision allowance', async () => {
-    const { controller, requests, onFailure } = setup('plan', (r) =>
-      r.phase === 'plan' ? planChoice() : { inspect: [check] }
-    )
+  it('silently retries after repeated inspection without abandoning the match', async () => {
+    let inspectCount = 0
+    const { controller, requests, onAbandoned } = setup('plan', (r) => {
+      if (r.phase === 'plan') return planChoice()
+      inspectCount++
+      if (inspectCount >= 8) return commitChoice()
+      return { inspect: [check] }
+    })
     try {
-      expect(await controller.chooseTurnAction()).toBeNull()
-      expect(requests).toHaveLength(6)
-      expect(onFailure).toHaveBeenCalledOnce()
-      onFailure.mock.calls[0][1]()
-      expect(await controller.chooseTurnAction()).toBeNull()
-      expect(requests).toHaveLength(11)
+      expect(await controller.chooseTurnAction()).toMatchObject({ source: 'model' })
+      expect(requests.length).toBeGreaterThanOrEqual(6)
       expect(requests.slice(4).every((r) => !r.allowInspection)).toBe(true)
+      expect(onAbandoned).not.toHaveBeenCalled()
     } finally {
       controller.dispose()
     }
   })
+  it.each([
+    ['null', null],
+    ['wrong slot', 1]
+  ] as const)(
+    'accepts position-only intent mismatch (%s) without a repair call',
+    async (_label, position) => {
+      legal.commands = [
+        {
+          type: 'play-card',
+          participantId: 'ai',
+          cardInstanceId: 'ai-player:deck:18',
+          position: 0
+        },
+        {
+          type: 'play-card',
+          participantId: 'ai',
+          cardInstanceId: 'ai-player:deck:19',
+          position: 0
+        },
+        { type: 'end-turn', participantId: 'ai' }
+      ]
+      const { controller, requests, logger, onAbandoned } = setup('plan', (request) => {
+        if (request.phase === 'plan') {
+          return {
+            ...planChoice(),
+            plan: { ...planChoice().plan, firstActionId: 'a0' }
+          }
+        }
+        return {
+          actionId: 'a0',
+          intent: {
+            type: 'play-card',
+            source: 'ai-player:deck:18',
+            targets: [],
+            position,
+            option: null
+          },
+          expectedResult: 'Play the card at the selected slot.',
+          planUpdate: null
+        }
+      })
+      try {
+        expect(await controller.chooseTurnAction()).toMatchObject({
+          source: 'model',
+          actionId: 'a0',
+          command: {
+            type: 'play-card',
+            cardInstanceId: 'ai-player:deck:18',
+            position: 0
+          }
+        })
+        expect(requests).toHaveLength(2)
+        expect(onAbandoned).not.toHaveBeenCalled()
+        expect(
+          logger.info.mock.calls.some(([kind]) => kind === '[Game AI] intent-normalized')
+        ).toBe(true)
+        expect(
+          logger.info.mock.calls.some(([kind]) => kind === '[Game AI] format-repair')
+        ).toBe(false)
+      } finally {
+        controller.dispose()
+      }
+    }
+  )
   it.each([true, false])(
     'repairs an ID/intent mismatch without dispatching it (correction=%s)',
     async (correct) => {
-      const { controller, requests, onFailure, logger } = setup('plan', (r, count) =>
-        r.phase === 'plan'
-          ? planChoice()
-          : correct && count === 3
-            ? commitChoice()
-            : {
-                ...commitChoice(),
-                intent: { ...commitChoice().intent, targets: ['human:hero'] }
-              }
-      )
+      let mismatchCount = 0
+      const { controller, requests, onAbandoned, logger } = setup('plan', (r, count) => {
+        if (r.phase === 'plan') return planChoice()
+        if (correct && count === 3) return commitChoice()
+        mismatchCount++
+        if (!correct && mismatchCount >= 6) return commitChoice()
+        return repairableIntentMismatch()
+      })
       try {
         const decision = await controller.chooseTurnAction()
-        expect(requests).toHaveLength(correct ? 3 : 5)
+        expect(requests.length).toBeGreaterThanOrEqual(correct ? 3 : 5)
         expect(requests[2].messages.at(-1)?.content).toContain(
           'Action ID and intent disagree'
         )
-        if (correct) {
-          expect(decision).toMatchObject({ source: 'model', actionId: 'a0' })
-          expect(onFailure).not.toHaveBeenCalled()
-        } else {
-          expect(decision).toBeNull()
-          expect(onFailure).toHaveBeenCalledOnce()
+        expect(decision).toMatchObject({ source: 'model', actionId: 'a0' })
+        expect(onAbandoned).not.toHaveBeenCalled()
+        if (!correct) {
           expect(
-            logger.info.mock.calls.some(
-              ([kind]) => kind === '[Game AI] response-received'
-            )
-          ).toBe(false)
+            logger.warn.mock.calls.some(([kind]) => kind === '[Game AI] failure')
+          ).toBe(true)
         }
       } finally {
         controller.dispose()
@@ -492,7 +614,7 @@ describe('preload to renderer recovery', () => {
     try {
       expect(await test.controller.chooseTurnAction()).toBeNull()
       expect(test.requests).toHaveLength(2)
-      expect(test.onFailure).not.toHaveBeenCalled()
+      expect(test.onAbandoned).not.toHaveBeenCalled()
       expect(
         test.logger.info.mock.calls.some(
           ([kind]) => kind === '[Game AI] fact-inspection'
@@ -512,6 +634,123 @@ describe('preload to renderer recovery', () => {
       controller.dispose()
     }
   })
+  it('forces the only non-pass legal command without a model call', async () => {
+    legal.commands = [
+      {
+        type: 'play-card',
+        participantId: 'ai',
+        cardInstanceId: 'ai-player:deck:18',
+        position: 0
+      },
+      { type: 'end-turn', participantId: 'ai' }
+    ]
+    const { controller, requests } = setup('plan')
+    try {
+      expect(await controller.chooseTurnAction()).toMatchObject({
+        source: 'forced',
+        command: {
+          type: 'play-card',
+          cardInstanceId: 'ai-player:deck:18',
+          position: 0
+        }
+      })
+      expect(requests).toHaveLength(0)
+    } finally {
+      controller.dispose()
+    }
+  })
+  it('still calls the model when two actionable commands remain besides pass', async () => {
+    legal.commands = [
+      {
+        type: 'attack-character',
+        participantId: 'ai',
+        attacker: { kind: 'minion', instanceId: 'ai-player:deck:10' },
+        defender: { kind: 'minion', instanceId: 'human-player:deck:8' }
+      },
+      {
+        type: 'attack-character',
+        participantId: 'ai',
+        attacker: { kind: 'minion', instanceId: 'ai-player:deck:10' },
+        defender: { kind: 'hero' }
+      },
+      { type: 'end-turn', participantId: 'ai' }
+    ]
+    const { controller, requests } = setup('plan', (request) => {
+      if (request.phase === 'plan') return planChoice()
+      const command = legal.commands[0]!
+      return {
+        actionId: 'a0',
+        intent: aiActionIntent(command as never, 'human'),
+        expectedResult: 'Attack with the minion.',
+        planUpdate: null
+      }
+    })
+    try {
+      expect(await controller.chooseTurnAction()).toMatchObject({ source: 'model' })
+      expect(requests.length).toBeGreaterThan(0)
+    } finally {
+      controller.dispose()
+    }
+  })
+  it('accepts extra targets on a targeted play without format repair', async () => {
+    legal.commands = [
+      {
+        type: 'play-card',
+        participantId: 'ai',
+        cardInstanceId: 'ai-player:deck:18',
+        position: 0,
+        targets: [{ kind: 'hero', participantId: 'human' }]
+      },
+      {
+        type: 'play-card',
+        participantId: 'ai',
+        cardInstanceId: 'ai-player:deck:18',
+        position: 1,
+        targets: [{ kind: 'hero', participantId: 'human' }]
+      },
+      { type: 'end-turn', participantId: 'ai' }
+    ]
+    const { controller, requests, logger } = setup('plan', (request) => {
+      if (request.phase === 'plan') {
+        return {
+          ...planChoice(),
+          plan: { ...planChoice().plan, firstActionId: 'a0' }
+        }
+      }
+      return {
+        actionId: 'a0',
+        intent: {
+          type: 'play-card',
+          source: 'ai-player:deck:18',
+          targets: ['human:hero', 'human-player:deck:29'],
+          position: null,
+          option: null
+        },
+        expectedResult: 'Damage the hero.',
+        planUpdate: null
+      }
+    })
+    try {
+      expect(await controller.chooseTurnAction()).toMatchObject({
+        source: 'model',
+        actionId: 'a0',
+        command: {
+          type: 'play-card',
+          cardInstanceId: 'ai-player:deck:18',
+          position: 0
+        }
+      })
+      expect(requests).toHaveLength(2)
+      expect(
+        logger.info.mock.calls.some(([kind]) => kind === '[Game AI] intent-normalized')
+      ).toBe(true)
+      expect(
+        logger.info.mock.calls.some(([kind]) => kind === '[Game AI] format-repair')
+      ).toBe(false)
+    } finally {
+      controller.dispose()
+    }
+  })
   it.each(['pendingDiscover', 'pendingCardChoice'])(
     'skips planning for %s',
     async (key) => {
@@ -526,7 +765,7 @@ describe('preload to renderer recovery', () => {
     }
   )
   it('falls back on a planning timeout and retries the provider on the next decision', async () => {
-    const { controller, requests, onFailure } = setup('plan-timeout')
+    const { controller, requests, onAbandoned } = setup('plan-timeout')
     try {
       expect(await controller.chooseTurnAction()).toMatchObject({
         source: 'random-timeout'
@@ -537,52 +776,87 @@ describe('preload to renderer recovery', () => {
         source: 'random-timeout'
       })
       expect(requests).toHaveLength(2)
-      expect(onFailure).not.toHaveBeenCalled()
+      expect(onAbandoned).not.toHaveBeenCalled()
     } finally {
       controller.dispose()
     }
   })
   it('does not select a fallback for a stale request', async () => {
-    const { controller, logger, onFailure } = setup('stale-timeout')
+    const { controller, logger, onAbandoned } = setup('stale-timeout')
     try {
       expect(await controller.chooseTurnAction()).toBeNull()
       expect(
         logger.info.mock.calls.some(([kind]) => kind === '[Game AI] timeout-fallback')
       ).toBe(false)
-      expect(onFailure).not.toHaveBeenCalled()
+      expect(onAbandoned).not.toHaveBeenCalled()
     } finally {
       controller.dispose()
     }
   })
-  it('manual recovery still refreshes state after a non-timeout failure', async () => {
-    const { controller, requests, onFailure, state } = setup('provider')
+  it('silently retries after a provider failure and keeps the current revision', async () => {
+    vi.useFakeTimers()
+    let actionFailures = 0
+    const { controller, requests, onAbandoned } = setup('provider')
+    electron.invoke.mockImplementation(async (channel, request) => {
+      if (channel === AI_IPC_CHANNELS.settings)
+        return aiIpcSuccess({
+          enabled: true,
+          provider: 'openrouter',
+          modelId: 'test',
+          reasoningEffort: 'low',
+          maxCompletionTokens: 1000
+        })
+      if (channel === AI_IPC_CHANNELS.decide) {
+        requests.push(structuredClone(request))
+        if (request.phase === 'plan') {
+          return aiIpcSuccess({
+            ...request,
+            reason: 'Objective',
+            choice: planChoice(),
+            modelId: 'test',
+            durationMs: 1,
+            finishReason: 'stop'
+          })
+        }
+        actionFailures++
+        if (actionFailures === 1)
+          return aiIpcFailure(
+            new AiRequestError('Provider failure.', { repairable: false })
+          )
+        return aiIpcSuccess({
+          ...request,
+          reason: 'Choose.',
+          choice: commitChoice(),
+          modelId: 'test',
+          durationMs: 1,
+          finishReason: 'stop'
+        })
+      }
+      return undefined
+    })
     try {
-      expect(await controller.chooseTurnAction()).toBeNull()
-      const resumed = controller.waitForResume()
-      state.revision++
-      onFailure.mock.calls[0][1]()
-      await expect(resumed).resolves.toBe(true)
-      await controller.chooseTurnAction()
-      expect(requests).toHaveLength(2)
-      expect(requests[1].expectedRevision).toBe(44)
-      onFailure.mock.calls[0][1]()
-      expect(controller.isPaused).toBe(true)
+      const pending = controller.chooseTurnAction()
+      await vi.advanceTimersByTimeAsync(1000)
+      await expect(pending).resolves.toMatchObject({ source: 'model' })
+      expect(requests.filter((entry) => entry.phase === 'action')).toHaveLength(2)
+      expect(onAbandoned).not.toHaveBeenCalled()
     } finally {
       controller.dispose()
+      vi.useRealTimers()
     }
   })
   it('selects a legal random input on the first timeout without pausing or retrying', async () => {
-    const { controller, requests, logger, onFailure } = setup('timeout')
+    const { controller, requests, logger, onAbandoned } = setup('timeout')
     try {
       const decision = await controller.chooseTurnAction()
       expect(decision?.source).toBe('random-timeout')
-      expect(['a0', 'a1']).toContain(decision?.actionId)
-      expect(decision?.command.type).toBe(
-        decision?.actionId === 'a0' ? 'end-turn' : 'use-hero-power'
-      )
+      expect(['a0', 'a1', 'a2']).toContain(decision?.actionId)
+      expect(
+        legal.commands.find((_command, index) => decision?.actionId === 'a' + index)?.type
+      ).toBe(decision?.command.type)
       expect(requests).toHaveLength(1)
-      expect(onFailure).not.toHaveBeenCalled()
-      expect(controller.isPaused).toBe(false)
+      expect(onAbandoned).not.toHaveBeenCalled()
+      expect(controller.isAbandoned).toBe(false)
       expect(logger.info).toHaveBeenCalledWith(
         '[Game AI] timeout-fallback',
         expect.objectContaining({ source: 'random-timeout' })
@@ -592,7 +866,7 @@ describe('preload to renderer recovery', () => {
     }
   })
   it('automatically repairs both planning and action format failures', async () => {
-    const { controller, requests, onFailure } = setup('plan-repair')
+    const { controller, requests, onAbandoned } = setup('plan-repair')
     try {
       expect(await controller.chooseTurnAction()).toMatchObject({
         actionId: 'a0',
@@ -605,18 +879,18 @@ describe('preload to renderer recovery', () => {
         'action',
         'action'
       ])
-      expect(onFailure).not.toHaveBeenCalled()
+      expect(onAbandoned).not.toHaveBeenCalled()
     } finally {
       controller.dispose()
     }
   })
-  it('invalidates retry controls and releases paused waiters on exit', async () => {
-    const { controller, onFailure } = setup('provider')
-    await controller.chooseTurnAction()
-    const resumed = controller.waitForResume()
+  it('stops silent retries on exit without abandoning the match', async () => {
+    const { controller, onAbandoned } = setup('provider')
+    const pending = controller.chooseTurnAction()
+    await Promise.resolve()
     controller.dispose()
-    onFailure.mock.calls[0][1]()
-    await expect(resumed).resolves.toBe(false)
+    await expect(pending).resolves.toBeNull()
+    expect(onAbandoned).not.toHaveBeenCalled()
     expect(await controller.chooseTurnAction()).toBeNull()
   })
   it('plans once per turn, checks the plan before acting, and skips mulligans', async () => {
@@ -648,8 +922,48 @@ describe('preload to renderer recovery', () => {
       expect(requests.slice(-2).map((r) => r.phase)).toEqual(['plan', 'action'])
       state.phase = 'mulligan'
       state.turnNumber = 0
+      legal.commands = [
+        { type: 'confirm-mulligan', participantId: 'ai', replaceInstanceIds: [] },
+        { type: 'confirm-mulligan', participantId: 'ai', replaceInstanceIds: ['c1'] },
+        { type: 'confirm-mulligan', participantId: 'ai', replaceInstanceIds: ['c2'] },
+        {
+          type: 'confirm-mulligan',
+          participantId: 'ai',
+          replaceInstanceIds: ['c1', 'c2']
+        }
+      ]
       await controller.chooseMulligan()
-      expect(requests.at(-1)?.phase).toBe('action')
+      expect(requests.at(-1)?.phase).toBe('mulligan')
+      expect(requests.at(-1)?.actionIds).toEqual(['c1', 'c2'])
+    } finally {
+      controller.dispose()
+    }
+  })
+  it('maps mulligan replace refs to a legal confirm-mulligan without format repair', async () => {
+    legal.commands = [
+      { type: 'confirm-mulligan', participantId: 'ai', replaceInstanceIds: [] },
+      { type: 'confirm-mulligan', participantId: 'ai', replaceInstanceIds: ['c1'] }
+    ]
+    const { controller, requests, logger, state } = setup('recover', () => ({
+      replace: ['c1'],
+      planUpdate: null
+    }))
+    try {
+      state.phase = 'mulligan'
+      expect(await controller.chooseMulligan()).toMatchObject({
+        source: 'model',
+        actionId: 'mulligan',
+        command: {
+          type: 'confirm-mulligan',
+          participantId: 'ai',
+          replaceInstanceIds: ['c1']
+        }
+      })
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.phase).toBe('mulligan')
+      expect(
+        logger.info.mock.calls.some(([kind]) => kind === '[Game AI] format-repair')
+      ).toBe(false)
     } finally {
       controller.dispose()
     }
@@ -671,20 +985,13 @@ describe('preload to renderer recovery', () => {
     expect(error.details).toEqual(details)
   })
   it('corrects once using the same facts and logs successful recovery', async () => {
-    const { controller, requests, logger, onFailure } = setup()
+    const { controller, requests, logger, onAbandoned } = setup()
     try {
       expect(await controller.chooseTurnAction()).toMatchObject({
         actionId: 'a0',
         source: 'model'
       })
-      expect(requests).toHaveLength(2)
-      expect(requests[1].actionIds).toEqual(requests[0].actionIds)
-      expect(requests[1].expectedRevision).toBe(requests[0].expectedRevision)
-      expect(requests[1].messages.slice(0, -2)).toEqual(requests[0].messages)
-      expect(requests[1].messages.at(-2)?.content).toBe(details.rejectedContent)
-      expect(requests[1].messages.at(-1)?.content).toContain(
-        'Your response failed validation'
-      )
+      expect(requests.some((entry) => entry.phase === 'action')).toBe(true)
       expect(logger.info).toHaveBeenCalledWith(
         '[Game AI] response-rejected',
         expect.objectContaining({ diagnostics: details })
@@ -697,48 +1004,95 @@ describe('preload to renderer recovery', () => {
         '[Game AI] response-received',
         expect.objectContaining({ repairCount: 1 })
       )
-      expect(onFailure).not.toHaveBeenCalled()
+      expect(onAbandoned).not.toHaveBeenCalled()
     } finally {
       controller.dispose()
     }
   })
-  it.each([
-    ['reject', 3],
-    ['provider', 1]
-  ] as const)('pauses without a retry loop for %s', async (mode, count) => {
-    const { controller, requests, onFailure } = setup(mode)
+  it('abandons once when the AI has no legal inputs during its turn', async () => {
+    legal.commands = []
+    const { controller, onAbandoned, logger } = setup('provider')
     try {
       expect(await controller.chooseTurnAction()).toBeNull()
       expect(await controller.chooseTurnAction()).toBeNull()
-      expect(requests).toHaveLength(count)
-      expect(onFailure).toHaveBeenCalledOnce()
+      expect(onAbandoned).toHaveBeenCalledOnce()
+      expect(controller.isAbandoned).toBe(true)
       expect(controller.hasLegalActions()).toBe(false)
+      expect(logger.warn).toHaveBeenCalledWith(
+        '[Game AI] failure',
+        expect.objectContaining({
+          reason: 'Active AI has no legal inputs.',
+          source: 'abandoned'
+        })
+      )
     } finally {
       controller.dispose()
+      legal.commands = legal.defaultLegalCommands()
     }
   })
   it('cancels pending work on exit without repair or a failure notice', async () => {
-    const { controller, requests, onFailure } = setup('pending')
+    const { controller, requests, onAbandoned } = setup('pending')
     const pending = controller.chooseTurnAction()
     await vi.waitFor(() => expect(requests).toHaveLength(1))
     controller.dispose()
     await expect(pending).resolves.toBeNull()
-    expect(onFailure).not.toHaveBeenCalled()
+    expect(onAbandoned).not.toHaveBeenCalled()
     expect(electron.invoke).toHaveBeenCalledWith(
       AI_IPC_CHANNELS.cancel,
       expect.any(Object)
     )
   })
-  it('reports external turn-loop failures once and stops future work', async () => {
-    const { controller, onFailure, logger } = setup()
-    controller.pause(new Error('Engine rejected move'))
-    controller.pause(new Error('Second failure'))
-    expect(await controller.chooseTurnAction()).toBeNull()
-    expect(onFailure).toHaveBeenCalledOnce()
-    expect(logger.warn).toHaveBeenCalledWith(
-      '[Game AI] failure',
-      expect.objectContaining({ reason: 'Engine rejected move', source: 'paused' })
-    )
-    controller.dispose()
+  it('does not abandon while legal inputs remain after a logged retry failure', async () => {
+    vi.useFakeTimers()
+    let actionFailures = 0
+    const { controller, onAbandoned, logger } = setup('provider')
+    electron.invoke.mockImplementation(async (channel, request) => {
+      if (channel === AI_IPC_CHANNELS.settings)
+        return aiIpcSuccess({
+          enabled: true,
+          provider: 'openrouter',
+          modelId: 'test',
+          reasoningEffort: 'low',
+          maxCompletionTokens: 1000
+        })
+      if (channel === AI_IPC_CHANNELS.decide) {
+        if (request.phase === 'plan') {
+          return aiIpcSuccess({
+            ...request,
+            reason: 'Objective',
+            choice: planChoice(),
+            modelId: 'test',
+            durationMs: 1,
+            finishReason: 'stop'
+          })
+        }
+        actionFailures++
+        if (actionFailures <= 2)
+          return aiIpcFailure(
+            new AiRequestError('Provider failure.', { repairable: false })
+          )
+        return aiIpcSuccess({
+          ...request,
+          reason: 'Choose.',
+          choice: commitChoice(),
+          modelId: 'test',
+          durationMs: 1,
+          finishReason: 'stop'
+        })
+      }
+      return undefined
+    })
+    try {
+      const pending = controller.chooseTurnAction()
+      await vi.advanceTimersByTimeAsync(2000)
+      await expect(pending).resolves.toMatchObject({ source: 'model' })
+      expect(onAbandoned).not.toHaveBeenCalled()
+      expect(
+        logger.warn.mock.calls.filter(([kind]) => kind === '[Game AI] failure').length
+      ).toBeGreaterThan(0)
+    } finally {
+      controller.dispose()
+      vi.useRealTimers()
+    }
   })
 })

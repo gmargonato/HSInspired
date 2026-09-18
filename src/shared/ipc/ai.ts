@@ -73,7 +73,7 @@ export interface AiRequestProgress extends AiDecisionIdentity {
   readonly providerRequestId?: string
 }
 export interface AiDecisionRequest extends AiDecisionIdentity {
-  readonly phase?: 'plan' | 'action'
+  readonly phase?: 'plan' | 'action' | 'mulligan'
   readonly allowInspection?: boolean
   readonly messages: readonly AiMessage[]
   readonly actionIds: readonly string[]
@@ -207,7 +207,12 @@ export function parseAiSettings(value: unknown): AiSettings {
 export function parseAiDecisionRequest(value: unknown): AiDecisionRequest {
   const identity = parseAiIdentity(value)
   const data = value as Record<string, unknown>
-  if (data.phase !== undefined && data.phase !== 'plan' && data.phase !== 'action')
+  if (
+    data.phase !== undefined &&
+    data.phase !== 'plan' &&
+    data.phase !== 'action' &&
+    data.phase !== 'mulligan'
+  )
     throw new Error('Invalid AI request phase.')
   if (data.allowInspection !== undefined && typeof data.allowInspection !== 'boolean')
     throw new Error('Invalid inspection allowance.')
@@ -215,7 +220,7 @@ export function parseAiDecisionRequest(value: unknown): AiDecisionRequest {
     !Array.isArray(data.messages) ||
     !data.messages.length ||
     !Array.isArray(data.actionIds) ||
-    !data.actionIds.length
+    (data.phase !== 'mulligan' && !data.actionIds.length)
   )
     throw new Error('AI request requires messages and legal action IDs.')
   const messages = data.messages.map((message): AiMessage => {
@@ -234,7 +239,7 @@ export function parseAiDecisionRequest(value: unknown): AiDecisionRequest {
     throw new Error('Duplicate AI action IDs.')
   return {
     ...identity,
-    phase: data.phase as 'plan' | 'action' | undefined,
+    phase: data.phase as 'plan' | 'action' | 'mulligan' | undefined,
     allowInspection: data.allowInspection === true,
     messages,
     actionIds

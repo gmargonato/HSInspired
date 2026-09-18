@@ -246,13 +246,26 @@ strength and AI sequencing still need match playtesting.
 ## Game AI diagnostics
 
 AI decisions start from resolved engine state while the preceding action's animations
-finish. Execution still waits for presentation and checks the current revision and
-legality. Pending choices use the existing sequential path. Planning, challenges,
-inspection budgets, prompts, and animation pacing are unchanged.
+finish, and the first think of each AI turn also begins during turn-start visuals
+(hero-power flip and draw). Execution still waits for presentation idle and checks
+the current revision and legality. Pending choices use the existing sequential path.
+Planning, challenges, inspection budgets, prompts, and animation pacing are unchanged.
+Position-only commit intent mismatches are normalized locally from the selected action
+ID so they do not trigger a format-repair call. The same normalization also accepts
+extra or out-of-order targets when type, source and option already match the selected
+command; missing required targets or source/option mismatches still repair. When the
+only non-pass legal command is unique, the controller executes it without a provider
+call (`source: forced`). Opening mulligan uses a dedicated
+`mulligan` phase with a slim hand-only snapshot and a replace-list response
+(`choice.replace`) instead of enumerating every legal keep/replace combination.
+Mulligan thinking still starts at scene mount while the local deal runs; `decision-timing`
+now records turn 0 overlap and visible wait after local confirmation.
 
-OpenRouter requests use the AI match ID as `session_id` for provider cache affinity.
-This does not guarantee cache hits or change the model-facing conversation/schema.
-Provider fallback remains enabled; no explicit cache storage is requested.
+OpenRouter requests use the AI match ID as `session_id` for provider cache affinity;
+Azure OpenAI uses the same match ID as `prompt_cache_key`. Both are gated by
+`HSINSPIRED_AI_SESSION_AFFINITY` (set to `0` for baseline captures). This does not
+guarantee cache hits or change the model-facing conversation/schema. Provider fallback
+remains enabled; no explicit cache storage is requested.
 
 Run `node scripts/summarize-ai-telemetry.cjs [match-directory-or-ai.json]` for a
 read-only timing/cache summary (default: `artifacts/match-logs`). Save baseline and

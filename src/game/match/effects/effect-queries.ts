@@ -997,7 +997,6 @@ export class EffectQueries {
           Number(condition.value)
         )
       case 'player-deck-has-no-duplicates': {
-        if (player.deckHasNoDuplicates !== undefined) return player.deckHasNoDuplicates
         const counts = new Map<string, number>()
         for (const card of player.deck)
           counts.set(card.cardId, (counts.get(card.cardId) ?? 0) + 1)

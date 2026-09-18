@@ -33,8 +33,8 @@ export const OUTLINE_PALETTES = {
   },
   green: {
     baseColor: 0x6cff46,
-    outerColor: 0x219618,
-    highlightColor: 0xbfffa1
+    outerColor: 0x3fd93f,
+    highlightColor: 0xeaffd0
   },
   orange: {
     baseColor: 0xffff0a,

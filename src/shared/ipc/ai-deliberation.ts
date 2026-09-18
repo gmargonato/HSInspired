@@ -48,9 +48,14 @@ export interface AiActionIntent {
   readonly position: number | null
   readonly option: number | null
 }
+export type AiMulliganChoice = {
+  readonly replace: readonly string[]
+  readonly planUpdate: null
+}
 export type AiDecisionChoice =
   | { readonly plan: AiTurnPlan }
   | { readonly inspect: readonly AiFactCheck[] }
+  | AiMulliganChoice
   | {
       readonly actionId: string
       readonly intent: AiActionIntent
@@ -179,6 +184,19 @@ export function parseAiDecisionChoice(value: unknown): AiDecisionChoice {
   }
   if (value && typeof value === 'object' && 'inspect' in value)
     return { inspect: checks(record(value, ['inspect']).inspect, 1) }
+  if (value && typeof value === 'object' && 'replace' in value) {
+    const d = record(value, ['replace', 'planUpdate'])
+    if (d.planUpdate !== null)
+      throw new Error('Mulligan choice requires planUpdate to be null.')
+    const seen = new Set<string>()
+    const replace = array(d.replace, 0, 10, (v) => {
+      const ref = text(v)
+      if (seen.has(ref)) throw new Error('Duplicate mulligan replace ref.')
+      seen.add(ref)
+      return ref
+    })
+    return { replace, planUpdate: null }
+  }
   const d = record(value, ['actionId', 'intent', 'expectedResult', 'planUpdate'])
   return {
     actionId: text(d.actionId),
@@ -192,11 +210,19 @@ export function parseAiDecisionChoice(value: unknown): AiDecisionChoice {
 export function validateAiChoicePhase(
   choice: AiDecisionChoice,
   request: {
-    readonly phase?: 'plan' | 'action'
+    readonly phase?: 'plan' | 'action' | 'mulligan'
     readonly allowInspection?: boolean
     readonly actionIds: readonly string[]
   }
 ): void {
+  if (request.phase === 'mulligan') {
+    if (!('replace' in choice))
+      throw new Error('Mulligan requires choice.replace, not an executable action.')
+    const allowed = new Set(request.actionIds)
+    for (const ref of choice.replace)
+      if (!allowed.has(ref)) throw new Error('Unknown mulligan hand ref.')
+    return
+  }
   if (request.phase === 'plan') {
     if (!('plan' in choice))
       throw new Error('Planning requires choice.plan, not an executable action.')
@@ -228,11 +254,15 @@ const noteSchema = object({
   reconsiderIf: string
 })
 export function aiChoiceSchema(request: {
-  readonly phase?: 'plan' | 'action'
+  readonly phase?: 'plan' | 'action' | 'mulligan'
   readonly allowInspection?: boolean
   readonly actionIds: readonly string[]
 }): Schema {
   const actionId = { type: 'string', enum: [...request.actionIds] }
+  const handRef =
+    request.actionIds.length > 0
+      ? { type: 'string', enum: [...request.actionIds] }
+      : string
   const checkSchema = {
     anyOf: [
       object({
@@ -259,6 +289,11 @@ export function aiChoiceSchema(request: {
       })
     ]
   }
+  if (request.phase === 'mulligan')
+    return object({
+      replace: list(handRef),
+      planUpdate: { type: 'null' }
+    })
   if (request.phase === 'plan')
     return object({
       plan: object({

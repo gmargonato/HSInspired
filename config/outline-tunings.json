@@ -3,10 +3,10 @@
   "presets": {
     "card": {
       "ribbonWidth": 8,
-      "edgeSoftness": 2,
-      "rimWidth": 2,
+      "edgeSoftness": 10,
+      "rimWidth": 8,
       "glowWidth": 5,
-      "glowStrength": 1,
+      "glowStrength": 1.4,
       "highlightStrength": 2,
       "hotspotScale": 50,
       "hotspotDensity": 1,
@@ -14,7 +14,7 @@
       "motionSpeed": 0.7
     },
     "bonus-card": {
-      "ribbonWidth": 8,
+      "ribbonWidth": 10,
       "edgeSoftness": 2,
       "rimWidth": 2,
       "glowWidth": 5,
