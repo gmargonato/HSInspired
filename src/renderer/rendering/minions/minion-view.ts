@@ -5,6 +5,7 @@ import { MINION_CANVAS, MINION_HIT_AREA, MINION_LAYOUT } from './minion-layout'
 import { attachShadow } from '../shadows/shadow-caster'
 import { SleepingZs } from './sleeping-zs'
 import { AnimationScope } from '../../animation/animations'
+import { killDisplayTweens } from '../../animation/kill-display-tweens'
 import { minionAttackColor, minionHealthColor } from './minion-stat-presentation'
 import { isPremiumEnabled, subscribeToPremiumAppearance } from '../premium-appearance'
 import { PremiumArtworkBreath } from '../effects/premium-artwork-breath'
@@ -892,6 +893,7 @@ export class MinionView extends Container {
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    killDisplayTweens(this)
     this.unsubscribePremium()
     this.artworkBreath.destroy()
     // Release any pending banner waiter so presentation sequences cannot stall.

@@ -297,6 +297,7 @@ export class GameHandView {
     positionDuration = isHovered ? 0 : OPENING_TIMING.hover,
     scaleDuration = isHovered ? 0 : OPENING_TIMING.hover
   ): void {
+    if (slot.destroyed) return
     // Also cancel reflow tweens that have not started yet; overwrite:auto
     // only resolves active conflicts and can otherwise lower a new hover.
     gsap.killTweensOf(slot, 'x,y,rotation')
@@ -326,6 +327,7 @@ export class GameHandView {
     positionDuration: number,
     scaleDuration: number
   ): Promise<void> {
+    if (slot.destroyed) return Promise.resolve()
     gsap.killTweensOf(slot)
     gsap.killTweensOf(slot.scale)
     gsap.killTweensOf(slot.skew)

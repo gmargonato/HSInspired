@@ -7,6 +7,7 @@ import { SceneNavigator, type DevSceneFactory } from './app/scene-navigator'
 import { createAppServices } from './app/services'
 import type { AppLogger } from './app/services'
 import { GAME_HEIGHT, GAME_WIDTH } from './app/config'
+import { gsap } from './animation/animations'
 import { CursorManager } from './ui/components/cursor'
 import type { SceneRequest } from '../shared/scene-navigation'
 import './styles.css'
@@ -85,6 +86,46 @@ function mountFpsCounter(app: Application, container: HTMLElement): () => void {
   }
 }
 
+const ERROR_LOOP_THRESHOLD = 30
+const ERROR_LOOP_WINDOW_MS = 3000
+
+/**
+ * A per-frame throw from a ticker or tween re-fires on every frame, which can
+ * turn one broken view into an endless error loop. When the same uncaught
+ * error repeats within a short window, halt the animation and render loops so
+ * the failure stays visible instead of spinning forever.
+ */
+function installErrorLoopHalt(
+  app: Application,
+  logger: AppLogger
+): (error: unknown) => void {
+  let lastMessage: string | null = null
+  let count = 0
+  let windowStart = 0
+  let halted = false
+
+  return (error: unknown): void => {
+    if (halted) return
+    const message = error instanceof Error ? error.message : String(error)
+    const now = performance.now()
+    if (message !== lastMessage || now - windowStart > ERROR_LOOP_WINDOW_MS) {
+      lastMessage = message
+      count = 1
+      windowStart = now
+      return
+    }
+    count += 1
+    if (count < ERROR_LOOP_THRESHOLD) return
+    halted = true
+    logger.error(
+      `[Global] the same uncaught error repeated ${count} times in ${ERROR_LOOP_WINDOW_MS}ms; animation halted.`,
+      error
+    )
+    gsap.globalTimeline.pause()
+    app.ticker.stop()
+  }
+}
+
 async function bootstrap(): Promise<void> {
   const container = document.getElementById('game-container')
   if (!container) {
@@ -124,16 +165,16 @@ async function bootstrap(): Promise<void> {
   app.canvas.addEventListener('contextmenu', preventContextMenu)
 
   const services = createAppServices()
+  const haltOnErrorLoop = installErrorLoopHalt(app, services.logger)
   // Global error tracing for dev menu crashes
   window.addEventListener('error', (event) => {
-    services.logger.error(
-      '[Global] uncaught error',
-      event.error ?? event.message,
-      event
-    )
+    const error = event.error ?? event.message
+    services.logger.error('[Global] uncaught error', error, event)
+    haltOnErrorLoop(error)
   })
   window.addEventListener('unhandledrejection', (event) => {
     services.logger.error('[Global] unhandled rejection', event.reason)
+    haltOnErrorLoop(event.reason)
   })
   let sceneNavigator: SceneNavigator | null = null
   let removeSettingsShortcut = (): void => undefined

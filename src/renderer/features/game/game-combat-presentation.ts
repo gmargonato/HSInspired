@@ -242,7 +242,13 @@ export class GameCombatPresentation {
     try {
       this.updateCombatMarkerPositions()
       await this.wait(BOARD_TIMING.combatWindupPause)
-      if (this.layer.destroyed) return
+      if (
+        this.layer.destroyed ||
+        attacker.destroyed ||
+        defender.destroyed ||
+        !attacker.parent
+      )
+        return
 
       const lunge = this.animations.timeline()
       lunge.to(attacker, {
@@ -542,7 +548,13 @@ export class GameCombatPresentation {
 
       this.updateCombatMarkerPositions()
       await this.wait(BOARD_TIMING.combatWindupPause)
-      if (this.layer.destroyed) return
+      if (
+        this.layer.destroyed ||
+        attacker.destroyed ||
+        defender.destroyed ||
+        !attacker.parent
+      )
+        return
 
       const lunge = this.animations.timeline()
       lunge.to(attacker, {
@@ -679,7 +691,13 @@ export class GameCombatPresentation {
 
       this.updateCombatMarkerPositions()
       await this.wait(BOARD_TIMING.combatWindupPause)
-      if (this.layer.destroyed) return
+      if (
+        this.layer.destroyed ||
+        attacker.destroyed ||
+        defender.destroyed ||
+        !attacker.parent
+      )
+        return
 
       const lunge = this.animations.timeline()
       lunge.to(attacker, {

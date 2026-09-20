@@ -147,7 +147,8 @@ function setup(
     | 'stale-timeout'
     | 'plan-repair'
     | 'plan' = 'recover',
-  choose?: (request: AiDecisionRequest, count: number) => AiDecisionChoice
+  choose?: (request: AiDecisionRequest, count: number) => AiDecisionChoice,
+  handInstanceIds: readonly string[] = ['c1', 'c2']
 ) {
   const requests: AiDecisionRequest[] = []
   const publicEvents: OpeningMatchPublicEvent[] = []
@@ -259,7 +260,7 @@ function setup(
     localParticipantId: 'human',
     getState: () => state,
     findPlayer: () => ({
-      hand: [{ instanceId: 'c1' }, { instanceId: 'c2' }]
+      hand: handInstanceIds.map((instanceId) => ({ instanceId }))
     }),
     subscribe: () => () => {},
     getAiEventCursor: () => 0,
@@ -964,6 +965,48 @@ describe('preload to renderer recovery', () => {
       expect(
         logger.info.mock.calls.some(([kind]) => kind === '[Game AI] format-repair')
       ).toBe(false)
+    } finally {
+      controller.dispose()
+    }
+  })
+  it('accepts a mulligan replace set by ordering refs in hand order, not lexically', async () => {
+    const handOrder = ['c3', 'c1', 'c2']
+    legal.commands = [
+      { type: 'confirm-mulligan', participantId: 'ai', replaceInstanceIds: [] },
+      { type: 'confirm-mulligan', participantId: 'ai', replaceInstanceIds: ['c3'] },
+      { type: 'confirm-mulligan', participantId: 'ai', replaceInstanceIds: ['c1'] },
+      { type: 'confirm-mulligan', participantId: 'ai', replaceInstanceIds: ['c2'] },
+      {
+        type: 'confirm-mulligan',
+        participantId: 'ai',
+        replaceInstanceIds: ['c3', 'c1']
+      },
+      {
+        type: 'confirm-mulligan',
+        participantId: 'ai',
+        replaceInstanceIds: ['c3', 'c1', 'c2']
+      }
+    ]
+    const { controller, requests, state } = setup(
+      'recover',
+      () => ({
+        replace: ['c2', 'c1', 'c3'],
+        planUpdate: null
+      }),
+      handOrder
+    )
+    try {
+      state.phase = 'mulligan'
+      expect(await controller.chooseMulligan()).toMatchObject({
+        source: 'model',
+        actionId: 'mulligan',
+        command: {
+          type: 'confirm-mulligan',
+          participantId: 'ai',
+          replaceInstanceIds: ['c3', 'c1', 'c2']
+        }
+      })
+      expect(requests).toHaveLength(1)
     } finally {
       controller.dispose()
     }

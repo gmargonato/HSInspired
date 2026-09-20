@@ -23,12 +23,6 @@ const FLIP_TIMING = {
   open: 0.2
 } as const
 
-/**
- * Tilt of the coin-flip axis off horizontal, so the medallion turns edge-on
- * along a diagonal like Hearthstone's hero-power spin instead of a flat line.
- */
-const FLIP_AXIS_TILT = 0.55
-
 /** Matches the main-menu centerpiece's 400 ms horizontal identity flip. */
 const REPLACEMENT_FLIP_TIMING = {
   close: 0.2,
@@ -114,7 +108,7 @@ export class HeroPowerView extends Actor {
   private readonly outlineTarget: HeroPowerIconView
   private readonly hoverOutline: AnimatedOutline
   private readonly hoverOutlineTarget: HeroPowerIconView
-  private readonly flipAxis: Container
+  private readonly baseScaleX: number
   private readonly interactionRect: Rectangle
   private readonly onPointerDown?: (event: FederatedPointerEvent) => void
   private readonly onClick?: (event: FederatedPointerEvent) => void
@@ -192,9 +186,7 @@ export class HeroPowerView extends Actor {
     this.hoverOutline.setEnabled(false)
 
     this.card = new Container()
-    // Counter-rotation against the tilted flip-axis wrapper keeps the artwork
-    // upright while the wrapper's scale squeezes it along the diagonal axis.
-    this.card.rotation = -FLIP_AXIS_TILT
+    this.card.position.set(cardCenterX, cardCenterY)
     this.card.scale.set(cardPlacement.scale?.x ?? 1, cardPlacement.scale?.y ?? 1)
     this.card.eventMode = 'none'
     this.card.label = 'hero-power-face'
@@ -215,17 +207,7 @@ export class HeroPowerView extends Actor {
     this.backFace.eventMode = 'none'
     this.backFace.label = 'hero-power-back'
     this.card.addChild(this.frontFace, this.backFace)
-    // Rotated-axis sandwich: animating the wrapper's x scale squeezes the card
-    // along the tilted axis (R(tilt) * scaleX * R(-tilt)), the 2D stand-in for
-    // Hearthstone's diagonal coin spin. At scale 1 the card's world transform
-    // is identical to the untilted placement.
-    this.flipAxis = new Container()
-    this.flipAxis.position.set(cardCenterX, cardCenterY)
-    this.flipAxis.rotation = FLIP_AXIS_TILT
-    this.flipAxis.eventMode = 'none'
-    this.flipAxis.label = 'hero-power-flip-axis'
-    this.flipAxis.addChild(this.card)
-    this.addChild(this.flipAxis)
+    this.addChild(this.card)
     attachShadow(
       this,
       {
@@ -235,6 +217,7 @@ export class HeroPowerView extends Actor {
       },
       { visual: this.card, shape: 'ellipse' }
     )
+    this.baseScaleX = this.card.scale.x
 
     this.manaCrystal = new Sprite(options.manaTexture)
     this.manaCrystal.anchor.set(0.5)
@@ -293,11 +276,11 @@ export class HeroPowerView extends Actor {
     this.hoverOutline.setEnabled(enabled)
   }
 
-  /** Replaces this power through a diagonal flip and refreshes it face-up. */
+  /** Replaces this power through a horizontal flip and refreshes it face-up. */
   replaceArtwork(texture: Texture, premium: boolean = this.premium): Promise<void> {
     const restoreEnabled = this.interactivityEnabled
     this.setEnabled(false)
-    this.killTweensOf(this.flipAxis.scale)
+    this.killTweensOf(this.card.scale)
     const timeline = this.timeline()
     let swapped = false
     const applyReplacement = (): void => {
@@ -311,20 +294,20 @@ export class HeroPowerView extends Actor {
       this.manaCrystal.visible = true
       this.costLabel.visible = true
     }
-    timeline.to(this.flipAxis.scale, {
+    timeline.to(this.card.scale, {
       x: 0,
       duration: REPLACEMENT_FLIP_TIMING.close,
       ease: 'power2.in'
     })
     timeline.call(applyReplacement)
-    timeline.to(this.flipAxis.scale, {
-      x: 1,
+    timeline.to(this.card.scale, {
+      x: this.baseScaleX,
       duration: REPLACEMENT_FLIP_TIMING.open,
       ease: 'power2.out'
     })
     return this.completeTimeline(timeline, () => {
       applyReplacement()
-      this.flipAxis.scale.x = 1
+      this.card.scale.x = this.baseScaleX
       this.setEnabled(restoreEnabled)
       this.syncPlayableOutline()
     })
@@ -402,16 +385,15 @@ export class HeroPowerView extends Actor {
   }
 
   /**
-   * Classic two-half flip along the tilted diagonal axis: the current face
-   * turns edge-on (the flip axis wrapper's x scale collapses), the face and
-   * the cost gem swap, then the new face opens up. A flip that starts while
-   * one is running drops the previous flip.
+   * Classic two-half flip: the current face turns edge-on (the sprite's x
+   * scale collapses), the face and the cost gem swap, then the new face opens
+   * up. A flip that starts while one is running drops the previous flip.
    */
   private flipTo(showMana: boolean): Promise<void> {
     this.facingUp = showMana
-    this.killTweensOf(this.flipAxis.scale)
+    this.killTweensOf(this.card.scale)
     const timeline = this.timeline()
-    timeline.to(this.flipAxis.scale, {
+    timeline.to(this.card.scale, {
       x: 0,
       duration: FLIP_TIMING.close,
       ease: 'power2.in'
@@ -422,15 +404,12 @@ export class HeroPowerView extends Actor {
       this.manaCrystal.visible = showMana
       this.costLabel.visible = showMana
     })
-    timeline.to(this.flipAxis.scale, {
-      x: 1,
+    timeline.to(this.card.scale, {
+      x: this.baseScaleX,
       duration: FLIP_TIMING.open,
       ease: 'power2.out'
     })
-    return this.completeTimeline(timeline, () => {
-      this.flipAxis.scale.x = 1
-      this.syncPlayableOutline()
-    })
+    return this.completeTimeline(timeline, () => this.syncPlayableOutline())
   }
 
   private syncPlayableOutline(): void {

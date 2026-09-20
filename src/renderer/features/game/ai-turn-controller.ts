@@ -345,12 +345,18 @@ export class AiTurnController {
     return assemble()
   }
   private mulliganCommand(
-    replaceInstanceIds: readonly string[]
+    replaceInstanceIds: readonly string[],
+    handRefs: readonly string[]
   ): TurnMatchCommand {
+    const handOrder = new Map(handRefs.map((id, index) => [id, index]))
     return {
       type: 'confirm-mulligan',
       participantId: this.options.session.remoteParticipantId,
-      replaceInstanceIds: [...replaceInstanceIds].sort()
+      replaceInstanceIds: [...replaceInstanceIds].sort(
+        (left, right) =>
+          (handOrder.get(left) ?? handRefs.length) -
+          (handOrder.get(right) ?? handRefs.length)
+      )
     }
   }
   private async requestMulliganModel(
@@ -486,7 +492,7 @@ export class AiTurnController {
     }
     if (!response || !this.current(identity)) return null
     if (!('replace' in response.choice)) throw new Error('Mulligan requires choice.replace.')
-    const command = this.mulliganCommand(response.choice.replace)
+    const command = this.mulliganCommand(response.choice.replace, handRefs)
     if (
       !commands.some(
         (candidate) => canonicalCommandKey(candidate) === canonicalCommandKey(command)

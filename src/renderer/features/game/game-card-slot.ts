@@ -12,6 +12,7 @@ import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config
 import { DEFAULT_HAND_LAYOUT } from './hand-layout'
 import { completeTimeline } from './game-presentation-animation'
 import { Actor } from '../../ui/components/actor'
+import { killDisplayTweens } from '../../animation/kill-display-tweens'
 
 interface PendingCardReplacement {
   readonly card: CardView
@@ -303,6 +304,7 @@ export class GameCardSlot extends Actor {
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    killDisplayTweens(this)
     this.killAnimations()
     this.discardCardReplacement()
     this.disposePlayableOutline()

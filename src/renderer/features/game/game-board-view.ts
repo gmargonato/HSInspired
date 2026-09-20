@@ -6484,6 +6484,7 @@ export class GameBoardView extends Actor {
     duration: number,
     staggerIndex = index
   ): Promise<void> {
+    if (back.destroyed) return Promise.resolve()
     const midpoint = (count - 1) / 2
     const { gap, scale } = this.remoteHandMetrics(count)
     const normalized = midpoint === 0 ? 0 : (index - midpoint) / midpoint
