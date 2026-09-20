@@ -4855,7 +4855,7 @@
     "cost": 3,
     "attack": 4,
     "health": 3,
-    "rulesText": "Batttlecry: The next Secret you play this turn costs (0).",
+    "rulesText": "Battlecry: The next Secret you play this turn costs (0).",
     "keywords": [],
     "effects": [
       {
@@ -7647,7 +7647,7 @@
     "cost": 4,
     "attack": 3,
     "health": 3,
-    "rulesText": "Divine Sheild",
+    "rulesText": "Divine Shield",
     "keywords": ["divine-shield"],
     "effects": []
   },

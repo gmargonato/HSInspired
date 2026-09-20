@@ -3,6 +3,7 @@ import type { HeroPowerDefinition } from '../../../game/content/hero-powers'
 import { applyAnchoredPlacement, type LayoutPlacement } from '../layout'
 import { attachShadow } from '../shadows/shadow-caster'
 import { MATCH_SHADOW_CONFIG } from '../shadows/match-shadow-config'
+import { PremiumArtworkBreath } from '../effects/premium-artwork-breath'
 import {
   HERO_POWER_CARD_CANVAS,
   HERO_POWER_ICON_CANVAS,
@@ -35,11 +36,22 @@ function createCircularArtwork(
 /** Compact 150x150 artwork-and-frame composition used on the game board. */
 export class HeroPowerIconView extends Container {
   private readonly artworkImage: Sprite
+  private readonly frameSprite: Sprite
+  private readonly standardFrame: Texture
+  private readonly premiumFrame: Texture | null
+  private readonly artworkBreath: PremiumArtworkBreath
+  private premiumEnabled = false
 
-  constructor(artwork: Texture, frame: Texture) {
+  constructor(
+    artwork: Texture,
+    frame: Texture,
+    options: { readonly premiumFrame?: Texture; readonly premium?: boolean } = {}
+  ) {
     super()
     this.label = 'hero-power.icon'
     this.eventMode = 'none'
+    this.standardFrame = frame
+    this.premiumFrame = options.premiumFrame ?? null
     const layout = HERO_POWER_PRESENTATION_LAYOUT.icon
     const renderedArtwork = createCircularArtwork(
       artwork,
@@ -50,15 +62,33 @@ export class HeroPowerIconView extends Container {
     this.artworkImage = renderedArtwork.image
     this.addChild(renderedArtwork.layer)
 
-    const frameSprite = new Sprite(frame)
-    applyAnchoredPlacement(frameSprite, layout.frame)
-    frameSprite.label = 'hero-power.icon.frame'
-    frameSprite.eventMode = 'none'
-    this.addChild(frameSprite)
+    this.frameSprite = new Sprite(frame)
+    applyAnchoredPlacement(this.frameSprite, layout.frame)
+    this.frameSprite.label = 'hero-power.icon.frame'
+    this.frameSprite.eventMode = 'none'
+    this.addChild(this.frameSprite)
+
+    this.artworkBreath = new PremiumArtworkBreath(this.artworkImage)
+    this.setPremium(options.premium === true)
   }
 
   setArtwork(texture: Texture): void {
     this.artworkImage.texture = texture
+  }
+
+  /** Swaps the front plate and breathes the artwork when premium. */
+  setPremium(enabled: boolean): void {
+    if (this.premiumEnabled === enabled) return
+    this.premiumEnabled = enabled
+    if (this.premiumFrame) {
+      this.frameSprite.texture = enabled ? this.premiumFrame : this.standardFrame
+    }
+    this.artworkBreath.setEnabled(enabled)
+  }
+
+  override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.artworkBreath.destroy()
+    super.destroy(options)
   }
 }
 
@@ -71,11 +101,14 @@ export class HeroPowerCardView extends Container {
       restingHeight: MATCH_SHADOW_CONFIG.heldCardHeight
     }
   )
+  private readonly artworkImage: Sprite
+  private readonly artworkBreath: PremiumArtworkBreath
   constructor(
     definition: HeroPowerDefinition,
     cost: number,
     artwork: Texture,
-    frame: Texture
+    frame: Texture,
+    options: { readonly premium?: boolean } = {}
   ) {
     super()
     this.label = `hero-power.card.${definition.id}`
@@ -93,6 +126,7 @@ export class HeroPowerCardView extends Container {
       layout.artworkRadius,
       'hero-power.card.artwork'
     )
+    this.artworkImage = renderedArtwork.image
     this.addChild(renderedArtwork.layer)
 
     const frameSprite = new Sprite(frame)
@@ -156,6 +190,19 @@ export class HeroPowerCardView extends Container {
     rulesLabel.label = 'hero-power.card.rules'
     rulesLabel.eventMode = 'none'
     this.addChild(costLabel, titleLabel, rulesLabel)
+
+    this.artworkBreath = new PremiumArtworkBreath(this.artworkImage)
+    this.setPremium(options.premium === true)
+  }
+
+  /** The premium cue on the 620x903 card is the breathing artwork. */
+  setPremium(enabled: boolean): void {
+    this.artworkBreath.setEnabled(enabled)
+  }
+
+  override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.artworkBreath.destroy()
+    super.destroy(options)
   }
 }
 

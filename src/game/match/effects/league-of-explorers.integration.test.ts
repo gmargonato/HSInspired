@@ -384,12 +384,14 @@ describe('League of Explorers card effects', () => {
       available: true,
       usesThisTurn: 0
     })
-    expect(result.events).toContainEqual({
-      type: 'hero-power-replaced',
-      participantId,
-      previousHeroPowerId: 'mage-fireblast',
-      heroPowerId: pending!.resolution!.heroPowerIds[0]
-    })
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: 'hero-power-replaced',
+        participantId,
+        previousHeroPowerId: 'mage-fireblast',
+        heroPowerId: pending!.resolution!.heroPowerIds[0]
+      })
+    )
   })
 
   it('gives Tunnel Trogg Attack equal to newly applied Overload', () => {

@@ -12,6 +12,8 @@ import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/button'
 import { DeckEntryButton } from '../../ui/components/deck-entry-button'
 import { HERO_CATALOG } from '../../../game/content/heroes'
+import type { Deck } from '../../../game/decks'
+import type { PreferencesApi } from '../../../shared/ipc/preferences'
 import type { DeckStore } from '../../ui/deck-store'
 import type { PlayerStatsStore } from '../../ui/player-stats-store'
 import {
@@ -21,15 +23,14 @@ import {
 import {
   buildDeckSelectionEntries,
   formatClassWins,
-  getDeckSelectionPageCount
+  getDeckSelectionPageCount,
+  getDeckSelectionPageForDeck
 } from './deck-selection-model'
 import { DECK_SELECTION_LAYOUT } from './deck-selection-layout'
 
 export interface DeckSelectionViewCallbacks {
   readonly onBackPressed?: () => void | Promise<void>
-  readonly onPlayPressed?: (
-    deck: import('../../../game/decks').Deck
-  ) => void | Promise<void>
+  readonly onPlayPressed?: (deck: Deck) => void | Promise<void>
 }
 
 /** Feature-owned presentation and selection state for the player's complete decks. */
@@ -49,7 +50,7 @@ export class DeckSelectionView extends Container {
   private playOutlineTarget!: Sprite
   private playButton!: Button
   private playOutline!: AnimatedOutline
-  private selectedDeck: import('../../../game/decks').Deck | null = null
+  private selectedDeck: Deck | null = null
   private selectedDeckOutline: AnimatedOutline | null = null
   private navigationStarted = false
   private currentPageIndex = 0
@@ -62,7 +63,8 @@ export class DeckSelectionView extends Container {
       info: () => undefined,
       warn: () => undefined,
       error: () => undefined
-    }
+    },
+    private readonly preferencesApi?: PreferencesApi
   ) {
     super()
   }
@@ -93,6 +95,7 @@ export class DeckSelectionView extends Container {
       this.createSelectionDetails(assets)
       this.createDeckGrid(deckPresentationAssets)
       this.createNavigation(assets, sharedAssets)
+      await this.restoreLastPlayedSelection()
     } catch (error) {
       await this.assetScope.releaseAll()
       throw error
@@ -250,6 +253,45 @@ export class DeckSelectionView extends Container {
     this.playButton.setEnabled(!this.navigationStarted)
     this.playOutline.setEnabled(!this.navigationStarted)
     outline.setEnabled(!this.navigationStarted)
+  }
+
+  private async restoreLastPlayedSelection(): Promise<void> {
+    if (!this.preferencesApi) return
+
+    let lastPlayedDeckId: string | null = null
+    try {
+      lastPlayedDeckId = (await this.preferencesApi.get()).lastPlayedDeckId
+    } catch (error) {
+      this.logger.warn(
+        'Failed to load the last played deck; skipping pre-selection.',
+        error
+      )
+      return
+    }
+    if (!lastPlayedDeckId) return
+
+    const decks = this.deckStore.getDecks()
+    const pageIndex = getDeckSelectionPageForDeck(decks, lastPlayedDeckId)
+    if (pageIndex === null) {
+      try {
+        await this.preferencesApi.set({ lastPlayedDeckId: null })
+      } catch (error) {
+        this.logger.warn('Failed to clear the stale last played deck.', error)
+      }
+      return
+    }
+
+    if (pageIndex !== this.currentPageIndex) {
+      this.currentPageIndex = pageIndex
+      this.renderDeckGrid(this.deckPresentationAssets)
+      this.updatePaginationControls()
+    }
+
+    const entries = buildDeckSelectionEntries(decks, pageIndex)
+    const entryIndex = entries.findIndex((entry) => entry.deck.id === lastPlayedDeckId)
+    const outline = entryIndex >= 0 ? this.deckOutlines[entryIndex] : undefined
+    if (entryIndex === -1 || !outline) return
+    this.selectDeck(entries[entryIndex].deck, this.deckPresentationAssets, outline)
   }
 
   private createNavigation(

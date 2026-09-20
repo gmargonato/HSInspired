@@ -27,7 +27,12 @@ export interface CardSelectionOverlayOptions {
     card: OpeningCard,
     sourceInstanceId?: string
   ) => Promise<GameCardSlot>
-  readonly createHeroPowerChoice: (heroPowerId: HeroPowerId) => Container
+  readonly createHeroPowerChoice: (heroPowerId: HeroPowerId, premium: boolean) => Container
+  /** Premium lookups for the choice source (e.g. a premium Sir Finley). */
+  readonly heroPowerChoicePremium?: (
+    participantId: PlayerId,
+    sourceCardInstanceId: string
+  ) => boolean
   readonly onSelect: (card: OpeningCard) => void
   readonly onChooseOption: (choice: number) => void
   readonly isInputBlocked?: () => boolean
@@ -53,6 +58,7 @@ export class CardSelectionOverlay extends Container {
     readonly view: Sprite
   }> = []
   private boardVisible = false
+  private dimming = true
   private selecting = false
   private selected: SelectedCardSlot | null = null
   private readonly choicesByInstanceId = new Map<string, CardChoiceOption>()
@@ -62,6 +68,7 @@ export class CardSelectionOverlay extends Container {
     this.label = 'game.card-selection'
     this.eventMode = 'static'
     this.darkOverlay.rect(0, 0, 1920, 1080).fill({ color: 0x000000, alpha: 0.8 })
+    this.darkOverlay.label = 'game.card-selection.dark-overlay'
     this.darkOverlay.eventMode = 'static'
     this.darkOverlay.on('pointertap', (event) => event.stopPropagation())
     this.addChild(this.darkOverlay)
@@ -119,20 +126,21 @@ export class CardSelectionOverlay extends Container {
     const revision = this.requestRevision
     this.visible = true
     this.boardVisible = false
+    this.dimming = false
     this.selecting = false
     this.setToggleVisible(false)
     this.syncView()
 
     const midpoint = (candidates.length - 1) / 2
+    const remote = GAME_BOARD_LAYOUT.cardSelection.remoteDiscover
     for (const [index, candidate] of candidates.entries()) {
       const back = new Sprite(this.options.cardBackTexture)
       back.anchor.set(0.5, 1)
       back.position.set(
-        GAME_BOARD_LAYOUT.cardSelection.cards.centerX +
-          (index - midpoint) * GAME_BOARD_LAYOUT.cardSelection.cards.gap,
-        GAME_BOARD_LAYOUT.cardSelection.cards.baselineY
+        remote.centerX + (index - midpoint) * remote.gap,
+        remote.baselineY
       )
-      back.scale.set(GAME_BOARD_LAYOUT.cardSelection.cards.scale)
+      back.scale.set(remote.scale)
       back.alpha = 0
       back.eventMode = 'none'
       back.label = `game.card-selection.remote-discover:${candidate.instanceId}`
@@ -144,7 +152,7 @@ export class CardSelectionOverlay extends Container {
           width: back.texture.width,
           height: back.texture.height
         },
-        { restingScale: GAME_BOARD_LAYOUT.cardSelection.cards.scale }
+        { restingScale: remote.scale, restingHeight: remote.shadowHeight }
       )
       this.cardsLayer.addChild(back)
       this.remoteEntries.push({ instanceId: candidate.instanceId, view: back })
@@ -251,7 +259,11 @@ export class CardSelectionOverlay extends Container {
       options.length > 0 &&
       options.every((option) => option.presentationHeroPowerId !== undefined)
     ) {
-      await this.showHeroPowerChoices(options)
+      await this.showHeroPowerChoices(
+        options,
+        this.options.heroPowerChoicePremium?.(participantId, sourceCardInstanceId) ??
+          false
+      )
       return
     }
     const cards = options.map((option) => ({
@@ -282,6 +294,7 @@ export class CardSelectionOverlay extends Container {
     })
     this.visible = true
     this.boardVisible = false
+    this.dimming = true
     this.selecting = false
     this.syncView()
     const midpoint = (candidates.length - 1) / 2
@@ -340,18 +353,20 @@ export class CardSelectionOverlay extends Container {
   }
 
   private async showHeroPowerChoices(
-    options: readonly CardChoiceOption[]
+    options: readonly CardChoiceOption[],
+    premium: boolean
   ): Promise<void> {
     if (this.destroyed) return
     this.clear()
     this.visible = true
     this.boardVisible = false
+    this.dimming = true
     this.selecting = false
     this.syncView()
     const midpoint = (options.length - 1) / 2
     const views = options.map((option, index) => {
       const heroPowerId = option.presentationHeroPowerId!
-      const view = this.options.createHeroPowerChoice(heroPowerId)
+      const view = this.options.createHeroPowerChoice(heroPowerId, premium)
       view.label = `game.card-selection.hero-power-option:${heroPowerId}`
       view.pivot.set(HERO_POWER_CARD_CANVAS.width / 2, HERO_POWER_CARD_CANVAS.height)
       view.position.set(
@@ -423,6 +438,9 @@ export class CardSelectionOverlay extends Container {
     }
     this.choicesByInstanceId.clear()
     this.selected = null
+    this.boardVisible = false
+    this.dimming = true
+    this.syncView()
     this.toggle.setEnabled(true)
     this.setToggleVisible(true)
     this.visible = false
@@ -491,7 +509,9 @@ export class CardSelectionOverlay extends Container {
 
   private syncView(): void {
     this.cardsLayer.visible = !this.boardVisible
-    this.darkOverlay.alpha = this.boardVisible ? 0 : 1
+    const dimmed = !this.boardVisible && this.dimming
+    this.darkOverlay.alpha = dimmed ? 1 : 0
+    this.darkOverlay.eventMode = dimmed ? 'static' : 'none'
     this.toggleLabel.text = this.boardVisible ? 'SEE CARDS' : 'SEE BOARD'
   }
 }

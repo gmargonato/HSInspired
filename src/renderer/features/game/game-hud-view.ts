@@ -35,6 +35,9 @@ export class GameHudView {
   endTurnButton: Button | null = null
   private endTurnOutlineTarget: Sprite | null = null
   private endTurnOutline: AnimatedOutline | null = null
+  private endTurnHoverOutlineTarget: Sprite | null = null
+  private endTurnHoverOutline: AnimatedOutline | null = null
+  private endTurnHovered = false
   private endTurnTexture: Texture | null = null
   private endTurnEnabled = false
   private endTurnExhausted = false
@@ -87,6 +90,23 @@ export class GameHudView {
     this.endTurnOutline.setEnabled(false)
     this.turnButtonLayer.addChild(this.endTurnOutlineTarget)
 
+    this.endTurnHoverOutlineTarget = new Sprite(initialTurnTexture)
+    applyAnchoredPlacement(
+      this.endTurnHoverOutlineTarget,
+      GAME_BOARD_LAYOUT.endTurnButton
+    )
+    this.endTurnHoverOutlineTarget.eventMode = 'none'
+    this.endTurnHoverOutlineTarget.label = 'game.end-turn-hover-outline-target'
+    this.endTurnHoverOutline = new AnimatedOutline(
+      this.endTurnHoverOutlineTarget,
+      {
+        palette: 'white',
+        preset: 'button'
+      }
+    )
+    this.endTurnHoverOutline.setEnabled(false)
+    this.turnButtonLayer.addChild(this.endTurnHoverOutlineTarget)
+
     this.endTurnButton = new Button(initialTurnTexture, {
       highlightOnHover: false,
       onClick: onEndTurn
@@ -95,6 +115,14 @@ export class GameHudView {
     this.endTurnButton.label = 'game.end-turn'
     this.endTurnButton.setBaseY(GAME_BOARD_LAYOUT.endTurnButton.position.y)
     this.endTurnButton.setEnabled(false)
+    this.endTurnButton.on('pointerover', () => {
+      this.endTurnHovered = true
+      this.syncEndTurnVisualState()
+    })
+    this.endTurnButton.on('pointerout', () => {
+      this.endTurnHovered = false
+      this.syncEndTurnVisualState()
+    })
     this.turnButtonLayer.addChild(this.endTurnButton)
     this.endTurnTexture = initialTurnTexture
 
@@ -135,7 +163,11 @@ export class GameHudView {
     // The outline is hidden throughout the flip, so its texture can safely
     // advance to the next face before the button reaches its midpoint.
     this.endTurnOutline?.setEnabled(false)
+    this.endTurnHoverOutline?.setEnabled(false)
     if (this.endTurnOutlineTarget) this.endTurnOutlineTarget.texture = texture
+    if (this.endTurnHoverOutlineTarget) {
+      this.endTurnHoverOutlineTarget.texture = texture
+    }
     void button.flipTextureVertically(texture, END_TURN_FLIP_DURATION).then(() => {
       this.syncEndTurnVisualState()
     })
@@ -252,6 +284,9 @@ export class GameHudView {
     this.endTurnOutline?.dispose()
     this.endTurnOutline = null
     this.endTurnOutlineTarget = null
+    this.endTurnHoverOutline?.dispose()
+    this.endTurnHoverOutline = null
+    this.endTurnHoverOutlineTarget = null
     this.endTurnTexture = null
     this.deckTracker.dispose()
     this.manaLocalTray?.dispose()
@@ -282,13 +317,21 @@ export class GameHudView {
     const button = this.endTurnButton
     if (!button) return
     button.setEnabled(this.endTurnEnabled)
+    if (!this.endTurnEnabled || button.isTextureFlipping()) {
+      // Pixi stops hit testing a disabled button, so `pointerout` never fires.
+      this.endTurnHovered = false
+    }
     if (this.endTurnOutlineTarget) {
       this.endTurnOutlineTarget.texture = button.sprite.texture
     }
-    this.endTurnOutline?.setEnabled(
-      this.endTurnExhausted &&
-        button.sprite.texture === this.endTurnTexture &&
-        !button.isTextureFlipping()
+    if (this.endTurnHoverOutlineTarget) {
+      this.endTurnHoverOutlineTarget.texture = button.sprite.texture
+    }
+    const settled =
+      button.sprite.texture === this.endTurnTexture && !button.isTextureFlipping()
+    this.endTurnOutline?.setEnabled(this.endTurnExhausted && settled)
+    this.endTurnHoverOutline?.setEnabled(
+      this.endTurnEnabled && this.endTurnHovered && settled
     )
   }
 }

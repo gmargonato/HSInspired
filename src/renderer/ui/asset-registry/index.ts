@@ -117,7 +117,9 @@ import manaHighlightedImage from '@assets/images/match/mana-highlighted.png'
 import historySecretCardImage from '@assets/images/match/history-secret-card.png'
 import historySecretThumbImage from '@assets/images/match/history-secret-thumb.png'
 import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
+import premiumHeroPowerBackImage from '@assets/images/heroes/hero-power/premium-hero-power-back.png'
 import heroPowerFrontImage from '@assets/images/heroes/hero-power/hero-power-front.png'
+import premiumHeroPowerFrontImage from '@assets/images/heroes/hero-power/premium-hero-power-front.png'
 import heroPowerManaImage from '@assets/images/heroes/hero-power/hero-power-mana.png'
 import discoverHistoryHeroPowerImage from '@assets/images/match/discover-history-hero-power.png'
 import minionFrameImage from '@assets/images/board/minion-frame.png'
@@ -126,6 +128,7 @@ import minionFrameLegendaryImage from '@assets/images/board/minion-frame-legenda
 import premiumMinionFrameLegendaryImage from '@assets/images/board/premium-minion-frame-legendary.png'
 import minionTauntImage from '@assets/images/board/minion-taunt.png'
 import premiumMinionTauntImage from '@assets/images/board/premium-minion-taunt.png'
+import minionBattlecryImage from '@assets/images/board/minion-battlecry.png'
 import minionEnrageImage from '@assets/images/board/minion-enrage.png'
 import minionDivineShieldImage from '@assets/images/board/minion-divine-shield.png'
 import heroFrozenImage from '@assets/images/board/hero-frozen.png'
@@ -969,6 +972,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.minion-battlecry',
+    ASSET_BUNDLE_IDS.game,
+    'minionBattlecry',
+    minionBattlecryImage,
+    284,
+    274,
+    'game-scene'
+  ),
+  asset(
     'scene.game.minion-enrage',
     ASSET_BUNDLE_IDS.game,
     'minionEnrage',
@@ -1446,11 +1458,29 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.hero-power-back.premium',
+    ASSET_BUNDLE_IDS.game,
+    'premiumHeroPowerBack',
+    premiumHeroPowerBackImage,
+    145,
+    145,
+    'game-scene'
+  ),
+  asset(
     'scene.game.hero-power-front',
     ASSET_BUNDLE_IDS.game,
     'heroPowerFront',
     heroPowerFrontImage,
     150,
+    150,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.hero-power-front.premium',
+    ASSET_BUNDLE_IDS.game,
+    'premiumHeroPowerFront',
+    premiumHeroPowerFrontImage,
+    151,
     150,
     'game-scene'
   ),
@@ -2129,6 +2159,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   premiumMinionFrameLegendary: Texture
   minionTaunt: Texture
   premiumMinionTaunt: Texture
+  minionBattlecry: Texture
   minionEnrage: Texture
   minionDivineShield: Texture
   heroFrozen: Texture
@@ -2182,7 +2213,9 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   mulliganOpponentStillChoosing: Texture
   mulliganCoinAnnouncement: Texture
   heroPowerBack: Texture
+  premiumHeroPowerBack: Texture
   heroPowerFront: Texture
+  premiumHeroPowerFront: Texture
   heroPowerMana: Texture
   discoverHistoryHeroPower: Texture
   arrowBody: Texture

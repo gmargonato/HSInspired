@@ -10,6 +10,7 @@ import type { AiDecisionBridge } from '../shared/ipc/ai'
 import type { MatchLogsApi } from '../shared/ipc/match-logs'
 import type { DecksApi } from '../shared/ipc/decks'
 import type { WindowSettingsApi } from '../shared/ipc/window-settings'
+import type { PreferencesApi } from '../shared/ipc/preferences'
 import type { PlayerStatsApi } from '../shared/ipc/player-stats'
 import type { ProgressionApi } from '../shared/ipc/progression'
 import type { ArenaApi } from '../shared/ipc/arena'
@@ -34,6 +35,7 @@ interface AppAPI {
   playerStats: PlayerStatsApi
   progression: ProgressionApi
   windowSettings: WindowSettingsApi
+  preferences: PreferencesApi
 }
 
 declare global {

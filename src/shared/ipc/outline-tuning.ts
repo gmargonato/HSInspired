@@ -23,6 +23,10 @@ export interface OutlineTuning {
   readonly hotspotDensity: number
   readonly edgeWobble: number
   readonly motionSpeed: number
+  readonly innerEdgeWidth: number
+  readonly pulseRate: number
+  /** Organic thick/thin asymmetry along the contour, 0 (uniform) to 10. */
+  readonly contourVariation: number
 }
 
 export interface OutlineTuningConfig {
@@ -44,7 +48,10 @@ const TUNING_RANGES = {
   hotspotScale: [1, 120],
   hotspotDensity: [0, 4],
   edgeWobble: [0, 16],
-  motionSpeed: [0, 3]
+  motionSpeed: [0, 3],
+  innerEdgeWidth: [0, 8],
+  pulseRate: [0, 3],
+  contourVariation: [0, 10]
 } as const satisfies Record<keyof OutlineTuning, readonly [number, number]>
 
 const TUNING_KEYS = Object.keys(TUNING_RANGES) as (keyof OutlineTuning)[]

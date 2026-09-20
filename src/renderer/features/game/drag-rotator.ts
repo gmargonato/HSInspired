@@ -57,8 +57,39 @@ export const DEFAULT_DRAG_ROTATOR: DragRotatorConfig = {
   }
 }
 
+/**
+ * Combat return legs are a single short burst of movement: the minion banks
+ * at full hand-drag intensity almost immediately and relaxes while landing.
+ */
+export const COMBAT_DRAG_ROTATOR: DragRotatorConfig = {
+  pitch: {
+    forceMultiplier: 0.2,
+    minDegrees: -MAX_TILT_X_DEG,
+    maxDegrees: MAX_TILT_X_DEG,
+    restSeconds: 1.5
+  },
+  roll: {
+    forceMultiplier: 0.25,
+    minDegrees: -MAX_TILT_Y_DEG,
+    maxDegrees: MAX_TILT_Y_DEG,
+    restSeconds: 1.5
+  }
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+/** Rescales injection force so slowed playback still banks at the same intensity. */
+export function scaleDragRotatorForce(
+  config: DragRotatorConfig,
+  scale: number
+): DragRotatorConfig {
+  if (scale === 1) return config
+  return {
+    pitch: { ...config.pitch, forceMultiplier: config.pitch.forceMultiplier * scale },
+    roll: { ...config.roll, forceMultiplier: config.roll.forceMultiplier * scale }
+  }
 }
 
 /** Faithful port of Unity's Mathf.SmoothDamp (critically damped spring). */

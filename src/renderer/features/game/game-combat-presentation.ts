@@ -1,4 +1,5 @@
-import { Container, Sprite } from 'pixi.js'
+import { Container, Sprite, type Renderer } from 'pixi.js'
+import { gsap } from '../../animation/animations'
 import type { Texture } from 'pixi.js'
 import type { AnimationScope } from '../../animation/animations'
 import {
@@ -18,10 +19,14 @@ import { DamageIndicatorView } from './damage-indicator-view'
 import { HealIndicatorView } from './heal-indicator-view'
 import { BOARD_TIMING, RESOLUTION_TIMING } from './game-presentation-timing'
 import { completeTimeline } from './game-presentation-animation'
+import { CombatAttackWarp } from './combat-attack-warp'
 import type { BoardPositionController } from './board-position-controller'
 import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
 
 export const COMBAT_ATTACKER_Z_INDEX = 100
+
+/** Intentional pacing for the warp return leg: 1 = base timing, 2 = half speed. */
+const WARP_RETURN_SLOWMO = 2
 
 interface CombatViewPlacement {
   readonly parent: Container
@@ -68,6 +73,7 @@ interface CombatPresentationContext {
   positions: BoardPositionController
   screenShake(attack: number): Promise<void>
   onImpact(): void
+  renderer: Renderer
 }
 
 /** Owns combat animation state, overlays, death snapshots, and transient indicators.
@@ -88,6 +94,7 @@ export class GameCombatPresentation {
     DamageIndicatorView | HealIndicatorView,
     CombatView
   >()
+  private readonly activeWarps = new Map<MinionView, CombatAttackWarp>()
 
   constructor(
     private readonly assets: GameAssets,
@@ -126,6 +133,8 @@ export class GameCombatPresentation {
     this.activeCombatPresentations.clear()
     this.deathGhostTemplates.clear()
     this.deathBatchSources.clear()
+    for (const warp of this.activeWarps.values()) warp.dispose()
+    this.activeWarps.clear()
     for (const ghost of this.activeDeathGhosts) {
       if (!ghost.destroyed) {
         ghost.removeFromParent()
@@ -294,8 +303,17 @@ export class GameCombatPresentation {
         if (view.destroyed) return Promise.resolve()
         const attackerAlreadyReturned = view === attacker && active.attackerReturned
         if (attackerAlreadyReturned && !destroyed) return Promise.resolve()
+        const returningNow = view === attacker && !attackerAlreadyReturned
+        if (returningNow && view instanceof MinionView) {
+          return this.returnAttackerWithWarp(
+            view,
+            this.attackerReturnPosition(view, active.attackerPlacement, origin),
+            destroyed ? BOARD_TIMING.combatReturn : null,
+            () => this.updateCombatMarkerPositions()
+          )
+        }
         const timeline = this.animations.timeline()
-        if (view === attacker && !attackerAlreadyReturned) {
+        if (returningNow) {
           const destination = this.attackerReturnPosition(
             view,
             active.attackerPlacement,
@@ -320,9 +338,7 @@ export class GameCombatPresentation {
                 duration: BOARD_TIMING.combatDeath,
                 ease: 'power2.in'
               },
-              view === attacker && !attackerAlreadyReturned
-                ? BOARD_TIMING.combatReturn
-                : 0
+              returningNow ? BOARD_TIMING.combatReturn : 0
             )
             .to(
               view.scale,
@@ -332,9 +348,7 @@ export class GameCombatPresentation {
                 duration: BOARD_TIMING.combatDeath,
                 ease: 'power2.in'
               },
-              view === attacker && !attackerAlreadyReturned
-                ? BOARD_TIMING.combatReturn
-                : 0
+              returningNow ? BOARD_TIMING.combatReturn : 0
             )
         }
         timeline.eventCallback('onUpdate', () => {
@@ -565,25 +579,19 @@ export class GameCombatPresentation {
         origin: { x: number; y: number }
       ): Promise<void> => {
         if (view.destroyed) return Promise.resolve()
-        const timeline = this.animations.timeline()
         const destroyed =
           view === attacker ? event.attacker.destroyed : event.defender.destroyed
 
         if (view === attacker) {
-          const destination = this.attackerReturnPosition(
+          return this.returnAttackerWithWarp(
             view,
-            attackerPlacement!,
-            origin
+            this.attackerReturnPosition(view, attackerPlacement!, origin),
+            destroyed ? BOARD_TIMING.combatReturn : null,
+            followDeathMarkers
           )
-          timeline.to(view, {
-            x: destination.x,
-            y: destination.y,
-            duration: BOARD_TIMING.combatReturn,
-            ease: 'power2.out'
-          })
         }
+        const timeline = this.animations.timeline()
         if (destroyed) {
-          const deathStart = view === attacker ? BOARD_TIMING.combatReturn : 0
           timeline
             .to(
               view,
@@ -592,7 +600,7 @@ export class GameCombatPresentation {
                 duration: BOARD_TIMING.combatDeath,
                 ease: 'power2.in'
               },
-              deathStart
+              0
             )
             .to(
               view.scale,
@@ -602,9 +610,9 @@ export class GameCombatPresentation {
                 duration: BOARD_TIMING.combatDeath,
                 ease: 'power2.in'
               },
-              deathStart
+              0
             )
-        } else if (view !== attacker) {
+        } else {
           timeline.to(view, {
             x: origin.x,
             y: origin.y,
@@ -703,7 +711,6 @@ export class GameCombatPresentation {
         destroyed: boolean
       ): Promise<void> => {
         if (view.destroyed) return Promise.resolve()
-        const timeline = this.animations.timeline()
         // Heroes remain visible at zero Health so the terminal state is clear;
         // attacking minions return home before their death collapse.
         if (view === attacker) {
@@ -712,15 +719,26 @@ export class GameCombatPresentation {
             attackerPlacement!,
             origin
           )
+          if (view instanceof MinionView) {
+            return this.returnAttackerWithWarp(
+              view,
+              destination,
+              destroyed ? BOARD_TIMING.combatReturn : null,
+              followDeathMarkers
+            )
+          }
+          const timeline = this.animations.timeline()
           timeline.to(view, {
             x: destination.x,
             y: destination.y,
             duration: BOARD_TIMING.combatReturn,
             ease: 'power2.out'
           })
+          timeline.eventCallback('onUpdate', followDeathMarkers)
+          return completeTimeline(timeline)
         }
+        const timeline = this.animations.timeline()
         if (destroyed && view instanceof MinionView) {
-          const deathStart = view === attacker ? BOARD_TIMING.combatReturn : 0
           timeline
             .to(
               view,
@@ -729,7 +747,7 @@ export class GameCombatPresentation {
                 duration: BOARD_TIMING.combatDeath,
                 ease: 'power2.in'
               },
-              deathStart
+              0
             )
             .to(
               view.scale,
@@ -739,9 +757,9 @@ export class GameCombatPresentation {
                 duration: BOARD_TIMING.combatDeath,
                 ease: 'power2.in'
               },
-              deathStart
+              0
             )
-        } else if (view !== attacker) {
+        } else {
           timeline.to(view, {
             x: origin.x,
             y: origin.y,
@@ -914,20 +932,85 @@ export class GameCombatPresentation {
       active.attackerPlacement,
       active.attackerOrigin
     )
-    const timeline = this.animations.timeline()
-    timeline.to(attacker, {
-      x: destination.x,
-      y: destination.y,
-      duration: BOARD_TIMING.combatReturn,
-      ease: 'power2.out'
-    })
-    timeline.eventCallback('onUpdate', () => {
-      this.updateCombatMarkerPositions()
-    })
-    await completeTimeline(timeline)
+    if (attacker instanceof MinionView) {
+      await this.returnAttackerWithWarp(
+        attacker,
+        destination,
+        null,
+        () => this.updateCombatMarkerPositions()
+      )
+    } else {
+      const timeline = this.animations.timeline()
+      timeline.to(attacker, {
+        x: destination.x,
+        y: destination.y,
+        duration: BOARD_TIMING.combatReturn,
+        ease: 'power2.out'
+      })
+      timeline.eventCallback('onUpdate', () => {
+        this.updateCombatMarkerPositions()
+      })
+      await completeTimeline(timeline)
+    }
     active.attackerReturned = true
     if (!attacker.destroyed)
       this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)
+  }
+
+  /** Swaps a returning minion for its perspective warp; null keeps the plain return. */
+  private beginReturnWarp(view: MinionView, tiltScale = 1): CombatAttackWarp | null {
+    if (view.destroyed || !view.parent || this.activeWarps.has(view)) return null
+    try {
+      const warp = new CombatAttackWarp(this.context.renderer, view, tiltScale)
+      this.activeWarps.set(view, warp)
+      return warp
+    } catch (error) {
+      // A failed snapshot must never break the combat sequence; the attacker
+      // simply returns without warping, but the failure must be visible.
+      console.warn('[CombatWarp] snapshot failed — plain return fallback', error)
+      return null
+    }
+  }
+
+  private endReturnWarp(view: MinionView, warp: CombatAttackWarp): void {
+    if (this.activeWarps.get(view) === warp) this.activeWarps.delete(view)
+    warp.dispose()
+  }
+
+  /** Runs the attacker's return tween; a dying minion collapses onto the warp mesh. */
+  private returnAttackerWithWarp(
+    view: MinionView,
+    destination: { readonly x: number; readonly y: number },
+    deathStart: number | null,
+    onUpdate: () => void
+  ): Promise<void> {
+    const timeline = this.animations.timeline()
+    const warp = this.beginReturnWarp(view, WARP_RETURN_SLOWMO)
+    timeline.to(view, {
+      x: destination.x,
+      y: destination.y,
+      duration: BOARD_TIMING.combatReturn * WARP_RETURN_SLOWMO,
+      ease: 'power2.out'
+    })
+    if (warp && deathStart !== null) {
+      warp.collapse(
+        timeline,
+        deathStart * WARP_RETURN_SLOWMO,
+        BOARD_TIMING.combatDeath * WARP_RETURN_SLOWMO
+      )
+    }
+    timeline.eventCallback('onUpdate', onUpdate)
+    const settled = completeTimeline(timeline)
+    if (warp) {
+      // Linger briefly after landing so the tilt visibly relaxes before the
+      // real minion view is restored.
+      settled.then(() => {
+        gsap.delayedCall(BOARD_TIMING.combatWarpLinger * WARP_RETURN_SLOWMO, () =>
+          this.endReturnWarp(view, warp)
+        )
+      })
+    }
+    return settled
   }
 
   private attackerReturnPosition(

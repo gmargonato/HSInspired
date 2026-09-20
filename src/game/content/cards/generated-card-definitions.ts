@@ -152,7 +152,6 @@ const GENERATED_CARD_RECORDS: readonly CardDefinition[] = [
   generatedMinion('the_grand_tournament_nerubian', 'Nerubian', 4, 4),
   generatedMinion('the_grand_tournament_sapling', 'Sapling', 1, 1),
   generatedMinion('the_grand_tournament_war_kodo', 'War Kodo', 3, 5),
-  generatedMinion('knights_of_the_frozen_throne_four_horseman', 'Horseman', 2, 2),
   generatedWeapon('the_grand_tournament_poisoned_dagger', 'Poisoned Dagger', 2, 2),
   generatedSpell(
     'goblins_vs_gnomes_spare_part_armor_plating',

@@ -33,11 +33,17 @@ export const RESOLUTION_TIMING = {
   /** Brief delay before a generated card leaves its source. */
   generatedCardDelay: 0.05,
   /** Total horizontal flip time for each card replaced by Golden Monkey. */
-  handReplacementFlip: 0.3
+  handReplacementFlip: 0.3,
+  /** Travel time for a discarded card flying to the board center. */
+  discardFlight: 0.45,
+  /** Total scaleX turn-over flourish for a remote card back. */
+  discardFlip: 0.3
 } as const
 
 /** Board-only timing knobs for row previews and minion entry presentation. */
 export const BOARD_TIMING = {
+  /** Pointer dwell before a board information preview opens. */
+  previewHoverDelay: 0.6,
   minionSettle: 0.3,
   rowShift: 0.25,
   controlTransfer: 0.4,
@@ -45,6 +51,8 @@ export const BOARD_TIMING = {
   combatLunge: 0.18,
   combatImpact: 0.12,
   combatReturn: 0.2,
+  /** Extra time a warped attacker stays on screen so the un-warp reads. */
+  combatWarpLinger: 0.15,
   combatDeath: 0.28,
   characterIndicatorGrow: 0.16,
   characterIndicatorHold: 1,

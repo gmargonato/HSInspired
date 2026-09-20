@@ -15,7 +15,11 @@ export type SummonActionName =
 export interface SummonActionContext {
   readonly rng: Pick<DeterministicRng, 'next'>
   readonly queries: Pick<EffectQueries, 'evaluate' | 'otherPlayer' | 'matchesFilter'>
-  actionCardId(action: Readonly<Record<string, unknown>>): CardId | null
+  actionCardId(
+    action: Readonly<Record<string, unknown>>,
+    frame?: EffectFrame
+  ): CardId | null
+  storedSummonController(frame: EffectFrame): PlayerId | null
   actionTargets(
     action: Readonly<Record<string, unknown>>,
     frame: EffectFrame
@@ -52,13 +56,21 @@ export function runSummonAction(
 ): void {
   switch (name) {
     case 'summon': {
-      const cardId = context.actionCardId(action)
+      const cardId = context.actionCardId(action, frame)
       if (!cardId) return
       const count = Math.max(0, context.queries.evaluate(action.count ?? 1, frame))
+      const storedReference =
+        typeof action.cardId === 'object' &&
+        action.cardId !== null &&
+        (action.cardId as Record<string, unknown>).reference ===
+          'source.destroyed-card' &&
+        action.controller === undefined
       const controller =
         typeof action.controller === 'string' && action.controller === 'opponent'
           ? context.queries.otherPlayer(frame.controllerId)
-          : frame.controllerId
+          : storedReference
+            ? (context.storedSummonController(frame) ?? frame.controllerId)
+            : frame.controllerId
       const placement =
         typeof action.placement === 'string'
           ? (action.placement as CardSummonPlacement)
@@ -122,7 +134,7 @@ export function runSummonAction(
       return
     }
     case 'summon-for-each': {
-      const cardId = context.actionCardId(action)
+      const cardId = context.actionCardId(action, frame)
       if (!cardId) return
       const sources = context.sourceEntities(action, frame)
       const placement =

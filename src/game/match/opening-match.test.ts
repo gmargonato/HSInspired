@@ -352,7 +352,7 @@ describe('opening Quests', () => {
                   ...player.quest!,
                   progress: player.quest!.target - 1,
                   ...(questId.endsWith('the_caverns_below')
-                    ? { playedNames: { 'Acidic Swamp Ooze': 3 } }
+                    ? { playedNames: { 'Acidic Swamp Ooze': 4 } }
                     : {})
                 }
               }

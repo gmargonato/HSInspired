@@ -53,6 +53,14 @@ export const MINION_LAYOUT = {
       note: 'Taunt ring surrounding the board minion.'
     }
   ),
+  battlecry: placement(
+    { x: 80, y: 90 },
+    { width: 284, height: 274 },
+    {
+      anchor: CENTER,
+      note: 'Battlecry burst overlay, above taunt and artwork, below Stealth and the frame.'
+    }
+  ),
   enrage: placement(
     { x: 80, y: 90 },
     { width: 105, height: 141 },
@@ -197,6 +205,18 @@ export const MINION_LAYOUT = {
     duration: 2.9,
     startScale: 0.72,
     endScale: 1.32
+  },
+  /** Battlecry banner: grows to authored scale, then fades once the trigger resolves. */
+  battlecryBanner: {
+    startScale: 0.35,
+    growDuration: 0.3,
+    fadeDuration: 0.2
+  },
+  /** Taunt shield pop: grows from zero past authored scale, then settles. */
+  tauntPop: {
+    overshootScale: 1.1,
+    growDuration: 0.22,
+    settleDuration: 0.14
   },
   selectionScale: 1.15
 } as const

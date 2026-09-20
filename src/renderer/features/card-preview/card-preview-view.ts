@@ -11,6 +11,8 @@ import {
   type CardDetailRow
 } from './card-detail-panel'
 import { CARD_PREVIEW_LAYOUT } from './card-preview-layout'
+import { resolveGeneratedPreviewCard } from './generated-card-preview'
+import { applyPlacement } from '../../rendering/layout'
 import {
   CardParallaxEffect,
   resolveParallaxTarget
@@ -72,6 +74,7 @@ export class CardPreviewView extends Actor {
   private detailsPanel!: Container
   private cardMotion!: Container
   private cardView!: CardView
+  private generatedCardView: CardView | null = null
   private parallax: CardParallaxEffect | null = null
   private activeTimeline: { kill: () => void } | null = null
   private closing = false
@@ -142,6 +145,26 @@ export class CardPreviewView extends Actor {
     }
     this.positionAtSource()
     this.addChild(this.cardMotion)
+
+    const generatedCard = resolveGeneratedPreviewCard(this.card)
+    if (generatedCard) {
+      const generatedArtwork = await this.resolver.loadArtwork(generatedCard.id)
+      const generatedView = await CardView.create(generatedCard, this.resolver, {
+        artwork: generatedArtwork
+      })
+      generatedView.label = 'card-preview.generated-card'
+      generatedView.eventMode = 'none'
+      const generatedPlacement = PREVIEW.generatedCard
+      applyPlacement(generatedView, generatedPlacement)
+      generatedView.pivot.set(
+        generatedView.plan.width / 2,
+        generatedView.renderedHeight / 2
+      )
+      generatedView.alpha = 0
+      this.generatedCardView = generatedView
+      this.addChild(generatedView)
+    }
+
     if (this.progression) {
       await this.progression.load()
       this.upgradePanel = new PremiumUpgradePanel(
@@ -425,6 +448,12 @@ export class CardPreviewView extends Actor {
       { alpha: 1, duration: PREVIEW.animationDuration, ease: 'power2.out' },
       0.08
     )
+    if (this.generatedCardView)
+      timeline.to(
+        this.generatedCardView,
+        { alpha: 1, duration: PREVIEW.animationDuration, ease: 'power2.out' },
+        0.12
+      )
   }
 
   private readonly handleBackdropTap = (event: FederatedPointerEvent): void => {
@@ -477,6 +506,12 @@ export class CardPreviewView extends Actor {
       { alpha: 0, duration: PREVIEW.animationDuration, ease: 'power2.in' },
       0
     )
+    if (this.generatedCardView)
+      timeline.to(
+        this.generatedCardView,
+        { alpha: 0, duration: PREVIEW.animationDuration, ease: 'power2.in' },
+        0
+      )
     timeline.to(
       this.cardMotion,
       {

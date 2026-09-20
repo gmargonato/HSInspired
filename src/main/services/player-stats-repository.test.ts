@@ -261,7 +261,7 @@ describe('Arcane Dust and premium ownership', () => {
     const price = premiumUpgradeCost(hero)
     expect(price).toBe(200)
     expect(supportsPremiumFormat('Hero')).toBe(true)
-    expect(supportsPremiumFormat('HeroPower')).toBe(false)
+    expect(supportsPremiumFormat('HeroPower')).toBe(true)
     expect(await repository.changePremium(hero.id, 'upgrade')).toEqual({
       dust: 2000 - price!,
       premiumPurchases: { [hero.id]: price }
@@ -272,14 +272,14 @@ describe('Arcane Dust and premium ownership', () => {
     })
   })
 
-  it('allows premium Sir Finley while hero powers use the standard visual format', () => {
+  it('allows premium Sir Finley and premium hero power visuals', () => {
     const finley = CARD_CATALOG.all.find(
       (card) => card.name === 'Sir Finley Mrrgglton'
     )!
     expect(finley).toBeDefined()
     expect(premiumUpgradeCost(finley)).toBe(200)
     expect(supportsPremiumFormat(finley.type)).toBe(true)
-    expect(supportsPremiumFormat('HeroPower')).toBe(false)
+    expect(supportsPremiumFormat('HeroPower')).toBe(true)
   })
   it('awards constructed and arena victories exactly once, including after reloading', async () => {
     const { repository, filePath } = await createRepository()

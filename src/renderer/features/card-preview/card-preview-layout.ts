@@ -5,6 +5,7 @@
 
 import { CENTER, TOP_LEFT, placement, type LayoutPoint } from '../../rendering/layout'
 import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
+import { CARD_CANVAS } from '../../rendering/cards/card-layout'
 
 const DETAILS_SCALE = 0.9
 const UPGRADE_WIDTH = 422
@@ -80,6 +81,13 @@ export const CARD_PREVIEW_LAYOUT = {
     x: GAME_WIDTH / 2,
     y: CARD_CENTER_Y
   } satisfies LayoutPoint,
+
+  /** Optional smaller generated-card preview shown left of the enlarged card. */
+  generatedCard: placement({ x: 360, y: 435 }, CARD_CANVAS, {
+    anchor: CENTER,
+    scale: 0.7,
+    note: 'Generated card centered in the open space left of the main card.'
+  }),
 
   /** Reserve room below every card format for the full-size upgrade panel. */
   cardMaxSize: { width: 620, height: CARD_MAX_HEIGHT },

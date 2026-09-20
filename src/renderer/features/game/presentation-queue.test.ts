@@ -4,6 +4,7 @@ import type { RemoteCardPlayPreview } from './remote-card-play-preview'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   Container,
+  Graphics,
   Sprite,
   Texture,
   DOMAdapter,
@@ -32,7 +33,7 @@ import { asCardId } from '../../../game/content/cards'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { OPENING_TIMING, RESOLUTION_TIMING } from './game-presentation-timing'
 import { DEFAULT_HAND_LAYOUT, layoutHand } from './hand-layout'
-import { attachShadow } from '../../rendering/shadows/shadow-caster'
+import { attachShadow, getShadowCaster } from '../../rendering/shadows/shadow-caster'
 import { layoutBoardRow } from './board-layout'
 import type { BoardPositionController } from './board-position-controller'
 import type { HandEntry } from './game-hand-entry'
@@ -355,6 +356,7 @@ function mulliganSlot(instanceId: string): GameCardSlot {
     setSelected: vi.fn(),
     setPlayableOutlineEnabled: vi.fn(),
     setPlayableOutlineEnhanced: vi.fn(),
+    setOutlineLiveWhileHovered: vi.fn(),
     setMulliganInteractionEnabled: vi.fn(),
     prepareCardReplacement: vi.fn(),
     flipToCardReplacement: vi.fn().mockResolvedValue(undefined),
@@ -501,6 +503,50 @@ describe('remote card choices', () => {
     expect(overlay.getChildByLabel('game.card-selection.toggle-outline')?.visible).toBe(
       true
     )
+  })
+
+  it('shows remote Discover backs non-modally near the top edge without dimming', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      cardSelectionOverlay: CardSelectionOverlay
+    }
+    const overlay = internal.cardSelectionOverlay
+    await overlay.showRemoteDiscover(
+      [0, 1, 2].map((index) => ({
+        instanceId: `remote-choice-${index}`,
+        cardId: asCardId('basic_fireball'),
+        zone: 'revealed' as const,
+        revealed: true
+      }))
+    )
+
+    const { remoteDiscover } = GAME_BOARD_LAYOUT.cardSelection
+    const darkOverlay = overlay.getChildByLabel(
+      'game.card-selection.dark-overlay'
+    ) as Graphics
+    expect(darkOverlay.alpha).toBe(0)
+    expect(darkOverlay.eventMode).toBe('none')
+
+    const cardsLayer = overlay.getChildByLabel('game.card-selection.cards')!
+    const backs = ['remote-choice-0', 'remote-choice-1', 'remote-choice-2'].map(
+      (instanceId) =>
+        cardsLayer.getChildByLabel(
+          `game.card-selection.remote-discover:${instanceId}`
+        ) as Sprite
+    )
+    for (const [index, back] of backs.entries()) {
+      expect(back.x).toBe(remoteDiscover.centerX + (index - 1) * remoteDiscover.gap)
+      expect(back.y).toBe(remoteDiscover.baselineY)
+      expect(back.scale.x).toBe(remoteDiscover.scale)
+      expect(back.scale.y).toBe(remoteDiscover.scale)
+      expect(back.alpha).toBe(1)
+      expect(back.eventMode).toBe('none')
+      expect(getShadowCaster(back)?.restingHeight).toBe(remoteDiscover.shadowHeight)
+    }
+
+    overlay.clear()
+    expect(darkOverlay.alpha).toBe(1)
+    expect(darkOverlay.eventMode).toBe('static')
   })
 })
 
@@ -814,6 +860,12 @@ describe('AI decision overlap', () => {
         remoteParticipantId: 'ai',
         turnLayer: { visible: true },
         match: { getState: () => state },
+        logger: {
+          info: () => undefined,
+          warn: () => undefined,
+          error: () => undefined
+        },
+        showOpponentLeft: () => undefined,
         wait: async () => undefined,
         waitForResolutionIdle: async () => undefined,
         findPlayer: () => ({ hand: [] }),
@@ -876,6 +928,11 @@ describe('AI decision overlap', () => {
       releaseIdle = resolve
     })
     const decision = { command: { type: 'end-turn' }, expectedRevision: 0 }
+    let state = {
+      phase: 'turns',
+      activePlayerId: 'ai',
+      revision: 0
+    }
     const controller = {
       chooseTurnAction: vi.fn().mockResolvedValue(decision),
       recordExecution: vi.fn(),
@@ -891,20 +948,19 @@ describe('AI decision overlap', () => {
       remoteParticipantId: 'ai',
       turnLayer: { visible: true },
       match: {
-        getState: () => ({
-          phase: 'turns',
-          activePlayerId: 'ai',
-          revision: 0
-        })
+        getState: () => state
       },
       wait: async () => undefined,
       waitForResolutionIdle: () => idle,
       findPlayer: () => ({ hand: [] }),
-      dispatchCommand: vi.fn(() => ({
-        accepted: true,
-        state: { phase: 'turns', activePlayerId: 'ai', revision: 1 },
-        events: []
-      })),
+      dispatchCommand: vi.fn(() => {
+        state = {
+          phase: 'turns',
+          activePlayerId: 'human-player',
+          revision: 1
+        }
+        return { accepted: true, state, events: [] }
+      }),
       syncTurnHud: () => undefined,
       syncTurnControls: () => undefined,
       syncSecrets: () => undefined,
@@ -1866,9 +1922,7 @@ describe('board lifecycle preservation', () => {
     const attacker = await createView('deathrattle-attacker', owner)
     const defender = await createView('deathrattle-defender', opponent)
     const animations: gsap.core.Timeline[] = []
-    const makeTimeline = internal.animationScope.timeline.bind(
-      internal.animationScope
-    )
+    const makeTimeline = internal.animationScope.timeline.bind(internal.animationScope)
     vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
       const animation = makeTimeline(vars)
       animations.push(animation)
@@ -1931,9 +1985,7 @@ describe('board lifecycle preservation', () => {
 
     const ghostJob = internal.combat.presentDeathrattleGhost(attacker.instanceId!)
     expect(
-      internal.combat.layer.getChildByLabel(
-        `game.deathrattle.${attacker.instanceId}`
-      )
+      internal.combat.layer.getChildByLabel(`game.deathrattle.${attacker.instanceId}`)
     ).toBeDefined()
     expect(attacker.destroyed).toBe(true)
     await finish(ghostJob)
@@ -2862,6 +2914,7 @@ describe('board lifecycle preservation', () => {
       playableOutlineTexture: Texture.WHITE,
       suppressPlayableOutline: vi.fn(),
       isPlayableOutlineEnabled: () => true,
+      getPlayableOutlinePalette: () => 'blue',
       getPlayableOutlinePreset: () => 'card'
     })
     slot.addChild(card)
@@ -3027,7 +3080,7 @@ describe('board lifecycle preservation', () => {
         )
       expect(depart.mock.calls.map(([slot]) => slot)).toEqual(slots)
       expect(depart.mock.calls.map(([, , delay]) => delay)).toEqual(
-        count === 4 ? [0, 0.35, 0.7, 0] : [0, 0.35, 0.7]
+        count === 4 ? [0, 0.5, 1, 0] : [0, 0.5, 1]
       )
       const layout = GAME_BOARD_LAYOUT.mulligan.cards
       expect(slots.map((slot) => slot.x)).toEqual(
@@ -3267,6 +3320,42 @@ describe('shared board card hover preview', () => {
       source.destroy()
     }
   )
+})
+
+describe('hero power hover during mulligan', () => {
+  it('does not arm a hero-power preview while the match is in mulligan', () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      heroPowerViews: Map<
+        PlayerId,
+        {
+          toLocal(point: { readonly x: number; readonly y: number }): {
+            readonly x: number
+            readonly y: number
+          }
+          containsCanvasPoint(x: number, y: number): boolean
+          setHoverAura(enabled: boolean): void
+          dispose(): void
+        }
+      >
+      updateHeroPowerHover(point: { readonly x: number; readonly y: number }): void
+      hoveredHeroPowerParticipantId: PlayerId | null
+      hoverPreview: { currentKey(): string | null }
+    }
+    const participantId = internal.session.localParticipantId
+    internal.heroPowerViews.set(participantId, {
+      toLocal: () => ({ x: 0, y: 0 }),
+      containsCanvasPoint: () => true,
+      setHoverAura: vi.fn(),
+      dispose: vi.fn()
+    })
+
+    internal.updateHeroPowerHover({ x: 0, y: 0 })
+
+    expect(internal.hoveredHeroPowerParticipantId).toBeNull()
+    expect(internal.hoverPreview.currentKey()).toBeNull()
+  })
 })
 
 describe('board preview asynchronous cancellation', () => {

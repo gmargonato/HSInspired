@@ -523,7 +523,7 @@ function legendaryFrame(
   premium: boolean
 ): Extract<CardRenderNode, { kind: 'image' }> | null {
   if (
-    (card.type !== 'Minion' && card.type !== 'Spell') ||
+    (card.type !== 'Minion' && card.type !== 'Spell' && card.type !== 'Hero') ||
     card.rarity !== 'Legendary'
   ) {
     return null

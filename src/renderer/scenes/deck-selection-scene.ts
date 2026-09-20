@@ -6,6 +6,7 @@ import { createMatchSeed } from '../features/deck-selection/deck-selection-model
 import { createConstructedGameRoute } from '../app/router'
 import type { Deck } from '../../game/decks'
 import type { PlayerStatsStore } from '../ui/player-stats-store'
+import type { PreferencesApi } from '../../shared/ipc/preferences'
 import { Scene } from './scene'
 
 /** Route adapter for the feature-owned complete-deck selection view. */
@@ -13,16 +14,19 @@ export class DeckSelectionScene extends Scene {
   private readonly view: DeckSelectionView
   private readonly deckStore: DeckStore
   private readonly router?: SceneRouter
+  private readonly preferencesApi?: PreferencesApi
 
   constructor(
     deckStore: DeckStore,
     playerStatsStore: PlayerStatsStore,
     router?: SceneRouter,
-    logger?: AppLogger
+    private readonly logger?: AppLogger
   ) {
     super()
     this.deckStore = deckStore
     this.router = router
+    this.preferencesApi =
+      typeof window === 'undefined' ? undefined : window.api?.preferences
     this.view = new DeckSelectionView(
       deckStore,
       playerStatsStore,
@@ -32,7 +36,8 @@ export class DeckSelectionScene extends Scene {
           Promise.reject(new Error('Deck selection router is not configured')),
         onPlayPressed: (deck) => this.onPlayPressed(deck)
       },
-      logger
+      logger,
+      this.preferencesApi
     )
   }
 
@@ -51,6 +56,7 @@ export class DeckSelectionScene extends Scene {
     await this.deckStore.load()
     const seed = createMatchSeed()
     if (!this.router) throw new Error('Deck selection router is not configured')
+    this.rememberLastPlayedDeck(deck.id)
     await this.router.navigate(
       createConstructedGameRoute(
         deck,
@@ -59,5 +65,14 @@ export class DeckSelectionScene extends Scene {
         import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined
       )
     )
+  }
+
+  private rememberLastPlayedDeck(deckId: string): void {
+    if (!this.preferencesApi) return
+    void this.preferencesApi
+      .set({ lastPlayedDeckId: deckId })
+      .catch((error: unknown) => {
+        this.logger?.warn('Failed to remember the last played deck.', error)
+      })
   }
 }

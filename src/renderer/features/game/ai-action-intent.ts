@@ -99,8 +99,7 @@ export function validateAiCommitIntent(
   returned: AiActionIntent,
   command: TurnMatchCommand,
   opponentId: string
-): AiCommitIntentValidation {
-  const expected = aiActionIntent(command, opponentId)
+): AiCommitIntentValidation {  const expected = aiActionIntent(command, opponentId)
   if (sameAiIntent(returned, expected)) {
     return { ok: true, intent: expected, normalized: false }
   }

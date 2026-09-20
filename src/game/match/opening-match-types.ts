@@ -99,6 +99,10 @@ export interface RuntimeEnchantment {
   readonly removedKeywords?: readonly CardKeyword[]
   /** Controller restored when a temporary control enchantment ends or is silenced. */
   readonly returnControllerId?: PlayerId
+  /** Card id recorded by a destroy action so a later deathrattle can summon it. */
+  readonly storedCardId?: CardId | null
+  /** Controller the recorded card's minion belonged to when it was destroyed. */
+  readonly storedControllerId?: PlayerId | null
   readonly duration?: string
   readonly startsOnTurn?: number
   readonly expiresOnTurn?: number
@@ -216,6 +220,11 @@ export interface MinionCardMovement {
   readonly cards: readonly OpeningCard[]
   /** Board/hand swaps consume a hand card and can retain its slot. */
   readonly replacedHandCard?: {
+    readonly participantId: PlayerId
+    readonly instanceId: string
+  }
+  /** Board/deck swaps consume a deck card and can retain its slot. */
+  readonly replacedDeckCard?: {
     readonly participantId: PlayerId
     readonly instanceId: string
   }
@@ -871,6 +880,13 @@ export interface HeroPowerReplacedEvent {
   readonly participantId: PlayerId
   readonly previousHeroPowerId: HeroPowerId
   readonly heroPowerId: HeroPowerId
+  /**
+   * Presentation-safe identity of the effect source that replaced the power
+   * (e.g. the Justicar Trueheart instance). Optional so older history and
+   * tests stay valid; appearance lookups only.
+   */
+  readonly sourceInstanceId?: string
+  readonly sourceCardId?: CardId | null
 }
 
 export interface CharacterDamagedEvent {
@@ -930,6 +946,20 @@ export interface MinionPlayedEvent {
   readonly position: number
 }
 
+/**
+ * Emitted right before each repetition pass of a played minion's Battlecry so
+ * the presentation layer can gate the visible trigger behind an animation.
+ */
+export interface BattlecryRepetitionStartedEvent {
+  readonly type: 'battlecry-repetition-started'
+  readonly participantId: PlayerId
+  readonly minion: BoardMinion
+  /** Zero-based index of this repetition pass; 0 for single-trigger Battlecries. */
+  readonly repetition: number
+  /** Total number of passes the Battlecry will run (2 with Brann Bronzebeard). */
+  readonly repetitions: number
+}
+
 export interface WeaponEquippedEvent {
   readonly type: 'weapon-equipped'
   readonly participantId: PlayerId
@@ -943,6 +973,9 @@ export interface HeroReplacedEvent {
   readonly previousHeroId: HeroId
   readonly heroId: HeroId
   readonly armorGained: number
+  /** Presentation-safe identity of the hero card that replaced the hero. */
+  readonly sourceInstanceId?: string
+  readonly sourceCardId?: CardId | null
 }
 
 /**
@@ -1190,6 +1223,7 @@ export type OpeningMatchEvent =
   | HeroPowerMinionSummonedEvent
   | FatigueEvent
   | MinionPlayedEvent
+  | BattlecryRepetitionStartedEvent
   | WeaponEquippedEvent
   | HeroReplacedEvent
   | CombatStartedEvent

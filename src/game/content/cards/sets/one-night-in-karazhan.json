@@ -1056,11 +1056,25 @@
         "actions": [
           {
             "action": "destroy",
+            "storeCardId": true,
             "target": {
               "controller": "any",
               "type": "minion",
               "selection": "chosen"
             }
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "player": "self",
+            "cardId": {
+              "reference": "source.destroyed-card"
+            },
+            "count": 1
           }
         ]
       }

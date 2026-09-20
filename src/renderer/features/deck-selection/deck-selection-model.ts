@@ -21,6 +21,18 @@ export function getDeckSelectionPageCount(decks: readonly Deck[]): number {
   return Math.max(1, Math.ceil(completeDeckCount / DECK_SELECTION_PAGE_SIZE))
 }
 
+/** Returns the page index containing the given complete deck, or null when missing. */
+export function getDeckSelectionPageForDeck(
+  decks: readonly Deck[],
+  deckId: string
+): number | null {
+  const completeDeckIndex = decks
+    .filter((deck) => countDeckCards(deck) === MAX_DECK_CARDS)
+    .findIndex((deck) => deck.id === deckId)
+  if (completeDeckIndex === -1) return null
+  return Math.floor(completeDeckIndex / DECK_SELECTION_PAGE_SIZE)
+}
+
 /** Builds one stable 3x3 page of decks that are ready to play. */
 export function buildDeckSelectionEntries(
   decks: readonly Deck[],

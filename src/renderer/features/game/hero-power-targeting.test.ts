@@ -66,7 +66,9 @@ describe('hero-power target presentation', () => {
         costOffset: { x: 0, y: 0 }
       },
       backTexture: Texture.EMPTY,
+      premiumBackTexture: Texture.EMPTY,
       frontFrameTexture: Texture.EMPTY,
+      premiumFrameTexture: Texture.EMPTY,
       artworkTexture: Texture.EMPTY,
       manaTexture: Texture.EMPTY,
       cost: 2,
@@ -97,7 +99,9 @@ describe('hero-power target presentation', () => {
         costOffset: { x: 0, y: 0 }
       },
       backTexture: Texture.EMPTY,
+      premiumBackTexture: Texture.EMPTY,
       frontFrameTexture: Texture.EMPTY,
+      premiumFrameTexture: Texture.EMPTY,
       artworkTexture: Texture.EMPTY,
       manaTexture: Texture.EMPTY,
       cost: 2,
@@ -130,7 +134,9 @@ describe('hero-power target presentation', () => {
         costOffset: { x: 0, y: 0 }
       },
       backTexture: Texture.EMPTY,
+      premiumBackTexture: Texture.EMPTY,
       frontFrameTexture: Texture.EMPTY,
+      premiumFrameTexture: Texture.EMPTY,
       artworkTexture: Texture.EMPTY,
       manaTexture: Texture.EMPTY,
       cost: 2
@@ -159,7 +165,9 @@ describe('hero-power target presentation', () => {
         costOffset: { x: 0, y: 0 }
       },
       backTexture: Texture.EMPTY,
+      premiumBackTexture: Texture.EMPTY,
       frontFrameTexture: Texture.EMPTY,
+      premiumFrameTexture: Texture.EMPTY,
       artworkTexture: Texture.EMPTY,
       manaTexture: Texture.EMPTY,
       cost: 2

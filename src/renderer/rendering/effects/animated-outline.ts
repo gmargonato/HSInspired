@@ -23,6 +23,8 @@ export interface OutlinePalette {
   readonly outerColor: number
   /** Hottest animated regions inside the energy body. */
   readonly highlightColor: number
+  /** Optional diffuse tail color; falls back to outerColor. */
+  readonly glowColor?: number
 }
 
 export const OUTLINE_PALETTES = {
@@ -95,7 +97,7 @@ function writeColor(
 
 function writeVector(
   uniforms: UniformGroup,
-  name: 'uGeometry' | 'uDetail' | 'uMotion',
+  name: 'uGeometry' | 'uDetail' | 'uMotion' | 'uOrganic',
   values: readonly [number, number, number, number]
 ): void {
   const target = uniforms.uniforms[name] as unknown as number[]
@@ -106,10 +108,11 @@ function writeVector(
 }
 
 function outlinePadding(tuning: OutlineTuning): number {
+  const widthReach =
+    (tuning.ribbonWidth + tuning.rimWidth + tuning.glowWidth) *
+    (1 + (tuning.contourVariation / 10) * 0.55)
   return (
-    tuning.ribbonWidth +
-    tuning.rimWidth +
-    tuning.glowWidth +
+    widthReach +
     tuning.edgeWobble * 1.5 +
     4
   )
@@ -174,7 +177,16 @@ export class AnimatedOutline extends Actor {
         type: 'vec4<f32>'
       },
       uMotion: {
-        value: [this.tuning.motionSpeed, this.tuning.edgeSoftness, 0, 0],
+        value: [
+          this.tuning.motionSpeed,
+          this.tuning.edgeSoftness,
+          this.tuning.innerEdgeWidth,
+          this.tuning.pulseRate
+        ],
+        type: 'vec4<f32>'
+      },
+      uOrganic: {
+        value: [this.tuning.contourVariation, 0, 0, 0],
         type: 'vec4<f32>'
       },
       uTime: { value: 0, type: 'f32' }
@@ -227,7 +239,11 @@ export class AnimatedOutline extends Actor {
     const palette = resolvePalette(input)
     writeColor(this.uniforms, 'uBaseColor', toRgb01(palette.baseColor))
     writeColor(this.uniforms, 'uRimColor', toRgb01(palette.outerColor))
-    writeColor(this.uniforms, 'uGlowColor', toRgb01(palette.outerColor))
+    writeColor(
+      this.uniforms,
+      'uGlowColor',
+      toRgb01(palette.glowColor ?? palette.outerColor)
+    )
     writeColor(this.uniforms, 'uHotColor', toRgb01(palette.highlightColor))
   }
 
@@ -263,9 +279,10 @@ export class AnimatedOutline extends Actor {
     writeVector(this.uniforms, 'uMotion', [
       this.tuning.motionSpeed,
       this.tuning.edgeSoftness,
-      0,
-      0
+      this.tuning.innerEdgeWidth,
+      this.tuning.pulseRate
     ])
+    writeVector(this.uniforms, 'uOrganic', [this.tuning.contourVariation, 0, 0, 0])
     this.filter.padding = this.resolvePadding(this.filter.resolution)
   }
 

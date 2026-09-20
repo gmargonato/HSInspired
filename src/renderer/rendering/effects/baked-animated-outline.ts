@@ -38,7 +38,7 @@ function resolvePalette(input: OutlinePaletteInput): OutlinePalette {
 
 function paletteKey(input: OutlinePaletteInput): string {
   const palette = resolvePalette(input)
-  return `${palette.baseColor}:${palette.outerColor}:${palette.highlightColor}`
+  return `${palette.baseColor}:${palette.outerColor}:${palette.glowColor ?? palette.outerColor}:${palette.highlightColor}`
 }
 
 function cacheKey(options: {

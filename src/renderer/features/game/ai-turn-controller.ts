@@ -19,6 +19,8 @@ import {
   type AiPlanNote
 } from '../../../shared/ipc/ai-deliberation'
 import { aiActionIntent, validateAiCommitIntent } from './ai-action-intent'
+import { CARD_CATALOG } from '../../../game/content/cards'
+import { HERO_POWER_CATALOG } from '../../../game/content/hero-powers'
 import { forcedLegalCommand } from './ai-forced-command'
 import { answerAiChecks, aiDecisionFacts } from './ai-fact-checks'
 import { observedAiCorrections } from './ai-feedback'
@@ -187,6 +189,54 @@ export class AiTurnController {
       !this.abandoned &&
       this.options.session.getState().revision === identity.expectedRevision
     )
+  }
+  /**
+   * Beneficial (restore) effects pointed at the opposing side are always mistakes —
+   * the model may select a legal-but-wrong target while narrating "heal my hero".
+   */
+  private commitsRestoreOntoOpponent(command: TurnMatchCommand): boolean {
+    try {
+      const session = this.options.session
+      const opponentId = session.localParticipantId
+      const targets =
+        command.type === 'use-hero-power'
+          ? command.target
+            ? [command.target]
+            : []
+          : command.type === 'play-card'
+            ? (command.targets ?? [])
+            : []
+      if (!targets.some((target) => target.participantId === opponentId)) return false
+      if (command.type === 'use-hero-power') {
+        const self = session
+          .getAiObservation()
+          .players.find((player) => player.role === 'self')
+        return self
+          ? HERO_POWER_CATALOG.require(self.heroPower.id).effect.kind ===
+              'restore-character'
+          : false
+      }
+      if (command.type === 'play-card') {
+        const self = session
+          .getAiObservation()
+          .players.find((player) => player.role === 'self')
+        const card = self?.hand.find(
+          (entry) => entry.instanceId === command.cardInstanceId
+        )
+        const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
+        return (
+          definition?.effects.some(
+            (effect) =>
+              ['cast', 'battlecry'].includes(effect.trigger) &&
+              (effect.actions ?? []).some((action) => action.action === 'restore')
+          ) ?? false
+        )
+      }
+      return false
+    } catch {
+      // Observation gaps must never block a legal commit.
+      return false
+    }
   }
   private aiMustAct(state = this.options.session.getState()): boolean {
     return (
@@ -657,6 +707,11 @@ export class AiTurnController {
                         resolvedIntent: intentCheck.intent
                       })
                     }
+                    if (this.commitsRestoreOntoOpponent(action.command)) {
+                      throw new Error(
+                        'The selected action restores health on the opposing side, which is never correct. Choose an action that helps your own side, or End Turn.'
+                      )
+                    }
                   }
                 } catch (error) {
                   throw new AiRequestError(
@@ -854,11 +909,22 @@ export class AiTurnController {
               role: 'assistant',
               content: JSON.stringify(reply)
             })
+            const selfFacts = currentDecision.self as JsonObject | null
+            const mana = selfFacts?.mana as JsonObject | null | undefined
+            const unspentMana = Number(mana?.available ?? 0)
+            const affordableInputs = actions.filter(
+              (a) => a.command.type !== 'end-turn'
+            ).length
+            const spendDownNote =
+              unspentMana >= 2
+                ? `You still have ${unspentMana} unspent mana and ${affordableInputs} affordable legal input${affordableInputs === 1 ? '' : 's'}. Using your hero power or another useful input before ending the turn is usually mandatory; wasted mana loses games. Choose a useful current input, or confirm End Turn only with a concrete strategic reason that names the input you are skipping and why saving the mana beats using it.`
+                : 'End Turn has not executed. Other current legal inputs exist and their costs are affordable now. Read self.mana (not opponent mana), and check any promised follow-up. Choose a useful current input, or confirm End Turn with a strategic reason for leaving those inputs unused. Spending mana is not mandatory.'
             followup = {
               challenge: true,
               endTurnReview: true,
               instructionNote:
-                'End Turn has not executed. Other current legal inputs exist and their costs are affordable now. Read self.mana (not opponent mana), and check any promised follow-up. Choose a useful current input, or confirm End Turn with a strategic reason for leaving those inputs unused. Spending mana is not mandatory. Do not assume an ID is stale: these IDs belong to this revision.'
+                spendDownNote +
+                ' Do not assume an ID is stale: these IDs belong to this revision.'
             }
             continue
           }

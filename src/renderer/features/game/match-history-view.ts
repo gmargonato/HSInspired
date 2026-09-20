@@ -5,6 +5,7 @@ import {
   Sprite,
   Text,
   Texture,
+  type Renderer,
   type FederatedPointerEvent,
   type FederatedWheelEvent
 } from 'pixi.js'
@@ -18,6 +19,7 @@ import type {
   HistoryEntitySnapshot
 } from '../../../game/match'
 import { CardView } from '../../rendering/cards/card-view'
+import { PreviewGhostOutline } from '../../rendering/effects/preview-ghost-outline'
 import { HeroPowerCardView } from '../../rendering/hero-powers/hero-power-presentation'
 import { DamageIndicatorView } from './damage-indicator-view'
 import { HealIndicatorView } from './heal-indicator-view'
@@ -75,6 +77,7 @@ export class MatchHistoryView extends Actor {
   private readonly model: MatchHistoryModel
   readonly rail = new Container()
   private readonly preview = new Container()
+  private previewGhostOutline: PreviewGhostOutline | null = null
   private readonly resolver = new CardAssetResolver()
   private readonly slots: RailSlot[] = []
   private offset = 0
@@ -93,7 +96,8 @@ export class MatchHistoryView extends Actor {
     ) => 'local' | 'remote' = (snapshot) =>
       (snapshot.ownerId ?? snapshot.participantId) === localParticipantId
         ? 'local'
-        : 'remote'
+        : 'remote',
+    private readonly renderer: Renderer
   ) {
     super()
     this.model = new MatchHistoryModel(localParticipantId)
@@ -319,6 +323,8 @@ export class MatchHistoryView extends Actor {
   private close(): void {
     this.activeId = null
     this.previewSequence++
+    this.previewGhostOutline?.dispose()
+    this.previewGhostOutline = null
     this.preview.removeChildren().forEach((child) => child.destroy({ children: true }))
     this.setBoardDesaturated(false)
   }
@@ -331,6 +337,8 @@ export class MatchHistoryView extends Actor {
     this.activeId = null
     this.previewSequence++
     this.setBoardDesaturated(false)
+    this.previewGhostOutline?.dispose()
+    this.previewGhostOutline = null
     // The board mounts the rail below the hand, separately from this preview.
     if (!this.rail.destroyed) this.rail.destroy({ children: true })
     super.destroy(options)
@@ -386,7 +394,11 @@ export class MatchHistoryView extends Actor {
         this.indicators(source, entry.sourceOutcomes)
       }
     }
-    if (!this.current(entry.id, sequence) || targets.length === 0) return
+    if (!this.current(entry.id, sequence)) return
+    if (targets.length === 0) {
+      this.previewGhostOutline = new PreviewGhostOutline(this.renderer, this.preview)
+      return
+    }
     const arrow = new Sprite(this.textures.arrow)
     arrow.label = 'game.history.arrow'
     applyAnchoredPlacement(arrow, MATCH_HISTORY_LAYOUT.preview.arrow)
@@ -406,6 +418,8 @@ export class MatchHistoryView extends Actor {
         this.indicators(container, outcomes)
       })
     )
+    if (this.current(entry.id, sequence))
+      this.previewGhostOutline = new PreviewGhostOutline(this.renderer, this.preview)
   }
   private heroTexture(heroId: NonNullable<HistoryEntitySnapshot['heroId']>): Texture {
     return this.textures.heroFrames[HERO_CATALOG.require(heroId).presentationAssetKey]

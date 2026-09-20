@@ -33,6 +33,7 @@ export const EVENT_PRESENTATION_POLICY: Readonly<
   fatigue: 'animation',
   'hero-power-minion-summoned': 'animation',
   'minion-played': 'animation',
+  'battlecry-repetition-started': 'animation',
   'weapon-equipped': 'animation',
   'combat-started': 'animation',
   'minion-combat-resolved': 'animation',

@@ -3489,7 +3489,21 @@
             "amount": 1,
             "crystal": "empty"
           }
-        ]
+        ],
+        "then": {
+          "condition": {
+            "type": "player-maximum-mana-gte",
+            "player": "self",
+            "value": 10
+          },
+          "actions": [
+            {
+              "action": "draw",
+              "player": "self",
+              "count": 1
+            }
+          ]
+        }
       }
     ]
   },

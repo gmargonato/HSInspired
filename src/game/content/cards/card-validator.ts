@@ -248,6 +248,7 @@ const ACTION_FIELDS = new Set([
   'stats',
   'storeAs',
   'storeStats',
+  'storeCardId',
   'stopWhen',
   'target',
   'targetSelection',
@@ -827,6 +828,8 @@ function actionsValue(value: unknown, path: string): void {
     }
     if (record['storeStats'] !== undefined)
       booleanValue(record['storeStats'], `${actionPath}.storeStats`, false)
+    if (record['storeCardId'] !== undefined)
+      booleanValue(record['storeCardId'], `${actionPath}.storeCardId`, false)
     const actionName = actionRecord(record, actionPath)
     validateActionShape(actionName, record, actionPath)
     if (record['damageResolution'] !== undefined) {

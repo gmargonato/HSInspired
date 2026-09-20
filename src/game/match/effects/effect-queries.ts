@@ -1011,6 +1011,8 @@ export class EffectQueries {
         return player.hero.health > Number(condition.value)
       case 'player-health-lte':
         return player.hero.health <= Number(condition.value)
+      case 'player-maximum-mana-gte':
+        return player.mana.maximum >= Number(condition.value)
       case 'player-lacks-minion':
         return matchingMinions(player, condition.filter).length === 0
       case 'player-lacks-weapon':

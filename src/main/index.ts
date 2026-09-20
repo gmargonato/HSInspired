@@ -10,6 +10,8 @@ import {
   registerWindowSettingsIpc
 } from './services/window-settings-ipc'
 import { WindowSettingsRepository } from './services/window-settings-repository'
+import { PreferencesRepository } from './services/preferences-repository'
+import { registerPreferencesIpc } from './services/preferences-ipc'
 import { installSceneMenu } from './menu/dev-menu'
 import { loadAiConfig } from './services/ai-config'
 import { registerAiIpc } from './services/ai-ipc'
@@ -171,6 +173,9 @@ void app
     }
     registerAiIpc(aiService)
     registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))
+    registerPreferencesIpc(
+      new PreferencesRepository(join(app.getPath('userData'), 'preferences.json'))
+    )
     const playerStatsRepository = new PlayerStatsRepository(
       join(app.getPath('userData'), 'player-stats.json')
     )

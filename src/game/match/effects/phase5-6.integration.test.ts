@@ -490,7 +490,7 @@ describe('Phase 5/6 real-card integration', () => {
       temporary: 2
     })
 
-    const aura = createMatchScenario({
+  const aura = createMatchScenario({
       seed: 514,
       cardId: 'classic_sorcerers_apprentice'
     })
@@ -529,6 +529,27 @@ describe('Phase 5/6 real-card integration', () => {
     expect(
       handCard(aura, auraContext.participantId, 'basic_fireball').currentCost
     ).toBe(4)
+  })
+
+  it('grants Excess Mana draw instead of a crystal when cast at maximum mana', () => {
+    const scenario = createMatchScenario({ seed: 517, cardId: 'basic_wild_growth' })
+    scenario.confirmBothMulligans()
+    const { participantId } = context(scenario)
+    setMana(scenario, participantId, 10, 10)
+    const before = player(scenario.match.getState(), participantId)
+    const growthCard = handCard(scenario, participantId, 'basic_wild_growth')
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: growthCard.instanceId
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    expect(effectActions(result)).toContain('draw')
+    const nextPlayer = player(result.state, participantId)
+    expect(nextPlayer.mana).toMatchObject({ maximum: 10, available: 8 })
+    expect(nextPlayer.deck).toHaveLength(before.deck.length - 1)
+    expect(nextPlayer.hand).toHaveLength(before.hand.length)
   })
   it('activates Combo only after a previous card-play boundary and leaves a clean non-combo base', () => {
     const combo = createMatchScenario({ seed: 515, cardId: 'classic_edwin_vancleef' })

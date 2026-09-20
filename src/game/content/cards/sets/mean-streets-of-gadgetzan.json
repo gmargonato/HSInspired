@@ -3215,7 +3215,27 @@
     "health": 3,
     "rulesText": "Battlecry: Choose a friendly minion. Swap it with a minion in your deck.",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "swap",
+            "source": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "random",
+              "zone": "deck"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true
   },
   {
@@ -4246,6 +4266,20 @@
               "controller": "opponent",
               "type": "minion",
               "selection": "chosen"
+            },
+            "amount": 5
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
             },
             "amount": 5
           }

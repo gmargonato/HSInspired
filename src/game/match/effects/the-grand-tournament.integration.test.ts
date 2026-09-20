@@ -54,12 +54,14 @@ describe('The Grand Tournament', () => {
     const basicPlayer = basic.match.getState().activePlayerId!
     const basicEvents = playJusticar(basic, basicPlayer)
     expect(player(basic, basicPlayer).heroPower.id).toBe('mage-fireblast-rank-2')
-    expect(basicEvents).toContainEqual({
-      type: 'hero-power-replaced',
-      participantId: basicPlayer,
-      previousHeroPowerId: 'mage-fireblast',
-      heroPowerId: 'mage-fireblast-rank-2'
-    })
+    expect(basicEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'hero-power-replaced',
+        participantId: basicPlayer,
+        previousHeroPowerId: 'mage-fireblast',
+        heroPowerId: 'mage-fireblast-rank-2'
+      })
+    )
 
     const jaraxxus = createMatchScenario({ firstHeroId: 'jaraxxus' })
     jaraxxus.confirmBothMulligans()

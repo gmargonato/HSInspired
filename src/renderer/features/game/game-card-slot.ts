@@ -24,6 +24,8 @@ export class GameCardSlot extends Actor {
   readonly instanceId: string
   playableOutlineTexture: Texture
   private playableOutline: AnimatedOutline | BakedAnimatedOutline
+  private dormantPlayableOutline: AnimatedOutline | BakedAnimatedOutline | null =
+    null
   private readonly outlineTarget: Sprite
   private playableOutlineDisposed = false
   private readonly replaceCross: Sprite
@@ -164,12 +166,18 @@ export class GameCardSlot extends Actor {
 
   /** Rebuilds a baked outline after an in-place card face replacement settles. */
   refreshPlayableOutline(): void {
-    if (
-      !this.bakedOutlineNeedsRefresh ||
-      this.playableOutlineDisposed ||
-      !(this.playableOutline instanceof BakedAnimatedOutline)
-    )
+    if (this.playableOutlineDisposed) return
+    if (!(this.playableOutline instanceof BakedAnimatedOutline)) {
+      // A hover swap left the live outline active while the bake is stale
+      // from the replaced face; drop it instead of restoring it on leave.
+      if (this.dormantPlayableOutline instanceof BakedAnimatedOutline) {
+        this.dormantPlayableOutline.removeFromParent()
+        this.dormantPlayableOutline.dispose()
+        this.dormantPlayableOutline = null
+      }
       return
+    }
+    if (!this.bakedOutlineNeedsRefresh) return
 
     const previous = this.playableOutline
     previous.removeFromParent()
@@ -211,15 +219,8 @@ export class GameCardSlot extends Actor {
     this.playableOutlinePreset = enhanced ? 'bonus-card' : 'card'
     this.playableOutlinePalette = enhanced ? 'orange' : 'green'
     if (this.playableOutlineDisposed) return
-    if (this.playableOutline instanceof BakedAnimatedOutline) {
-      this.playableOutline.setAppearance(
-        this.playableOutlinePalette,
-        this.playableOutlinePreset
-      )
-      return
-    }
-    this.playableOutline.setPalette(this.playableOutlinePalette)
-    this.playableOutline.setPreset(this.playableOutlinePreset)
+    this.applyOutlineAppearance(this.playableOutline)
+    this.applyOutlineAppearance(this.dormantPlayableOutline)
   }
 
   /** Settled hand cards share pre-rendered shader frames instead of ten filters. */
@@ -230,8 +231,6 @@ export class GameCardSlot extends Actor {
       this.playableOutline instanceof BakedAnimatedOutline
     )
       return
-    this.playableOutline.dispose()
-    this.outlineTarget.visible = false
     const baked = new BakedAnimatedOutline(
       this.renderer,
       this.playableOutlineTexture,
@@ -244,8 +243,27 @@ export class GameCardSlot extends Actor {
     baked.position.copyFrom(this.outlineTarget.position)
     baked.zIndex = this.outlineTarget.zIndex
     this.addChildAt(baked, this.getChildIndex(this.card))
+    // The live filter stays constructed but dormant: hovering swaps back to
+    // it so the enlarged card keeps a crisp shader glow instead of a
+    // magnified bake.
+    this.dormantPlayableOutline = this.playableOutline
     this.playableOutline = baked
     this.syncPlayableOutline()
+  }
+
+  /**
+   * Hovering enlarges the card, which would magnify baked outline frames.
+   * Swapping to the live filter keeps the glow crisp at the hovered scale.
+   */
+  setOutlineLiveWhileHovered(hovered: boolean): void {
+    if (this.playableOutlineDisposed || this.dormantPlayableOutline === null)
+      return
+    if (hovered === (this.playableOutline instanceof BakedAnimatedOutline)) {
+      const active = this.playableOutline
+      this.playableOutline = this.dormantPlayableOutline
+      this.dormantPlayableOutline = active
+      this.syncPlayableOutline()
+    }
   }
 
   getPlayableOutlinePreset(): OutlinePresetName {
@@ -277,7 +295,11 @@ export class GameCardSlot extends Actor {
   disposePlayableOutline(): void {
     if (this.playableOutlineDisposed) return
     this.playableOutlineDisposed = true
+    this.playableOutline.removeFromParent()
     this.playableOutline.dispose()
+    this.dormantPlayableOutline?.removeFromParent()
+    this.dormantPlayableOutline?.dispose()
+    this.dormantPlayableOutline = null
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
@@ -332,6 +354,9 @@ export class GameCardSlot extends Actor {
 
     this.playableOutline.removeFromParent()
     this.playableOutline.dispose()
+    this.dormantPlayableOutline?.removeFromParent()
+    this.dormantPlayableOutline?.dispose()
+    this.dormantPlayableOutline = null
 
     this.outlineTarget.visible = true
     this.playableOutline = new AnimatedOutline(this.outlineTarget, {
@@ -342,9 +367,22 @@ export class GameCardSlot extends Actor {
     this.syncPlayableOutline()
   }
 
+  private applyOutlineAppearance(
+    outline: AnimatedOutline | BakedAnimatedOutline | null
+  ): void {
+    if (!outline) return
+    if (outline instanceof BakedAnimatedOutline) {
+      outline.setAppearance(this.playableOutlinePalette, this.playableOutlinePreset)
+      return
+    }
+    outline.setPalette(this.playableOutlinePalette)
+    outline.setPreset(this.playableOutlinePreset)
+  }
+
   private syncPlayableOutline(): void {
     this.playableOutline.setEnabled(
       this.playableOutlineRequested && !this.playableOutlineSuppressed
     )
+    this.dormantPlayableOutline?.setEnabled(false)
   }
 }

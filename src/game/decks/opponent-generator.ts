@@ -14,31 +14,18 @@ import {
 } from '../match/effects/capability'
 import { getCardCopyLimit, type Deck } from './deck'
 import { DeckRules } from './deck-rules'
-import { assessmentCounts } from './opponent-card-assessment'
-import {
-  dynamicOpponentPool,
-  assessDynamicCard,
-  dependencyRequirements,
-  isOpponentPowerCard
-} from './opponent-dynamic-pool'
-import { OPPONENT_GENERATION_CONFIG } from './opponent-generation-config'
 import { OPPONENT_ARCHETYPES } from './opponent-archetypes'
-import type { OpponentArchetype, CuratedPackage } from './opponent-archetype'
+import type { OpponentArchetype } from './opponent-archetype'
 import {
-  assessCuratedCard,
-  curatedCounts,
-  curatedRequirements,
-  validateCuratedComposition,
-  type CuratedCardFacts
-} from './opponent-curated-assessment'
-import {
-  OPPONENT_STRATEGIES,
-  opponentMetrics,
-  type OpponentMetric,
-  type OpponentStrategyBrief
-} from './opponent-strategy'
+  assessFillCard,
+  isOpponentPowerCard,
+  type OpponentFillCard
+} from './opponent-fill-pool'
+import { OPPONENT_FLOORS, type OpponentFloorRule } from './opponent-floors'
+import type { OpponentStrategyBrief } from './opponent-strategy'
 
-export const OPPONENT_GENERATOR_VERSION = 6
+export const OPPONENT_GENERATOR_VERSION = 7
+
 export interface OpponentConstructionStep {
   readonly layer: string
   readonly selected: string
@@ -47,7 +34,7 @@ export interface OpponentConstructionStep {
   readonly deckSize: number
 }
 export interface OpponentPowerCardSkip {
-  readonly kind: 'quest' | 'hero'
+  readonly kind: 'hero'
   readonly reason: string
 }
 export interface GeneratedOpponentPowerCards {
@@ -59,7 +46,6 @@ export interface GeneratedOpponentMetadata {
   readonly core: string
   readonly coreCards: OpponentArchetype['core']
   readonly archetype: string
-  readonly variant: string
   readonly construction: readonly OpponentConstructionStep[]
   readonly version: number
   readonly seed: number
@@ -69,20 +55,6 @@ export interface GeneratedOpponentMetadata {
   readonly strategy: OpponentStrategyBrief
   readonly diagnostics: {
     readonly attempts: number
-    readonly requestedTheme: string
-    readonly fallback: boolean
-    readonly metrics: Readonly<Record<OpponentMetric, number>>
-    readonly requirements: readonly {
-      tag: string
-      minimum: number
-      maximum: number
-      actual: number
-    }[]
-    readonly rejected: readonly {
-      candidate: string
-      attempts: number
-      reason: string
-    }[]
     readonly warnings: readonly string[]
   }
 }
@@ -90,8 +62,9 @@ export interface GeneratedOpponent {
   readonly deck: Deck
   readonly metadata: GeneratedOpponentMetadata
 }
+
 function pick<T>(values: readonly T[], rng: DeterministicRng): T {
-  if (!values.length) throw new Error('No eligible curated opponent candidates.')
+  if (!values.length) throw new Error('No eligible opponent candidates.')
   return values[Math.floor(rng.next() * values.length)]
 }
 function shuffled<T>(values: readonly T[], rng: DeterministicRng): T[] {
@@ -103,10 +76,10 @@ function shuffled<T>(values: readonly T[], rng: DeterministicRng): T[] {
   return result
 }
 function weightedPick(
-  values: readonly CuratedCardFacts[],
-  weight: (card: CuratedCardFacts) => number,
+  values: readonly OpponentFillCard[],
+  weight: (card: OpponentFillCard) => number,
   rng: DeterministicRng
-): CuratedCardFacts {
+): OpponentFillCard {
   const weights = values.map(weight)
   let roll = rng.next() * weights.reduce((a, b) => a + b, 0)
   for (let index = 0; index < values.length; index++) {
@@ -117,329 +90,11 @@ function weightedPick(
 }
 
 const supportedCapabilities = runtimeCapabilityKeys()
-const factsCache = new WeakMap<object, CuratedCardFacts>()
-function facts(id: string, catalog: CardCatalog): CuratedCardFacts {
-  const card = catalog.require(id)
-  const cached = factsCache.get(card)
-  if (cached) return cached
-  const capability = inspectCardCapabilities(card, supportedCapabilities)
-  if (!capability.supported)
-    throw new Error(`Curated card ${id} has unsupported runtime mechanics.`)
-  const raw = assessDynamicCard(card) ?? assessCuratedCard(card)
-  const result = {
-    ...raw,
-    tags: [
-      ...new Set([
-        ...raw.tags,
-        ...(raw.threat ? ['threat'] : []),
-        ...(card.cardClass !== 'Neutral' ? ['class-card'] : [])
-      ])
-    ]
-  }
-  factsCache.set(card, result)
-  return result
-}
 
-/** Power cards occupy deck slots but do not count as ordinary archetype support. */
-function powerFacts(card: CardDefinition): CuratedCardFacts {
-  const raw = assessCuratedCard(card)
-  return {
-    ...raw,
-    quality: 0,
-    board: false,
-    early: false,
-    interaction: false,
-    resource: false,
-    threat: false,
-    narrow: false,
-    dependent: false,
-    tags: [],
-    provides: [],
-    needs: []
-  }
-}
-
-interface PowerCardSelection {
-  readonly kind: 'quest' | 'hero'
-  readonly card: CuratedCardFacts | null
-  readonly cardId: CardId | null
-  readonly candidates: number
-  readonly warning?: string
-}
-
-interface ForcedCard {
-  readonly card: CuratedCardFacts
-  readonly layer: 'quest' | 'hero-card' | 'anchor'
+interface FixedCard {
+  readonly card: CardDefinition
+  readonly layer: string
   readonly reason: string
-  readonly candidates: number
-}
-
-function selectPowerCard(
-  kind: PowerCardSelection['kind'],
-  heroClass: string,
-  heroId: HeroId,
-  rng: DeterministicRng,
-  catalog: CardCatalog,
-  rules: DeckRules,
-  enabled: boolean
-): PowerCardSelection {
-  if (!enabled) return { kind, card: null, cardId: null, candidates: 0 }
-
-  const candidates = catalog.all
-    .filter((card) => {
-      const correctType =
-        kind === 'quest'
-          ? card.type === 'Spell' && card.quest !== undefined
-          : card.type === 'Hero'
-      return (
-        correctType &&
-        card.cardClass === heroClass &&
-        rules.isCardAllowedInDeck({ heroId }, card)
-      )
-    })
-    .sort((a, b) => a.id.localeCompare(b.id))
-
-  if (!candidates.length) {
-    return {
-      kind,
-      card: null,
-      cardId: null,
-      candidates: 0,
-      warning: `No legal ${kind} Card ID is available for ${heroClass}; skipped this bonus card.`
-    }
-  }
-
-  const selected = pick(candidates, rng)
-  return {
-    kind,
-    card: powerFacts(selected),
-    cardId: selected.id,
-    candidates: candidates.length
-  }
-}
-
-function configuredAnchorCards(
-  archetype: OpponentArchetype,
-  heroId: HeroId,
-  catalog: CardCatalog,
-  rules: DeckRules
-): ForcedCard[] {
-  const configured =
-    OPPONENT_GENERATION_CONFIG.archetypeExtraCardIds[archetype.id] ?? []
-  const seen = new Set<string>()
-  return configured.map((cardId) => {
-    if (seen.has(cardId))
-      throw new Error(
-        `Opponent generation config repeats anchor Card ID ${cardId} for ${archetype.id}.`
-      )
-    seen.add(cardId)
-    const card = catalog.get(cardId)
-    if (!card)
-      throw new Error(
-        `Opponent generation config references missing anchor Card ID ${cardId} for ${archetype.id}.`
-      )
-    if (isOpponentPowerCard(card))
-      throw new Error(
-        `Opponent generation anchor Card ID ${cardId} for ${archetype.id} must not be a Quest or Hero card.`
-      )
-    if (!rules.isCardAllowedInDeck({ heroId }, card))
-      throw new Error(
-        `Opponent generation anchor Card ID ${cardId} is not legal for ${archetype.classId}.`
-      )
-    return {
-      card: facts(cardId, catalog),
-      layer: 'anchor' as const,
-      reason: `Configured Card ID anchor for ${archetype.id}; the remaining deck is still filled from the live catalog.`,
-      candidates: 1
-    }
-  })
-}
-
-function assemble(
-  archetype: OpponentArchetype,
-  variant: CuratedPackage,
-  rng: DeterministicRng,
-  trace: OpponentConstructionStep[],
-  pool: readonly CuratedCardFacts[],
-  catalog: CardCatalog,
-  heroId: HeroId,
-  forcedCards: readonly ForcedCard[]
-): { cards: CuratedCardFacts[]; errors: string[] } {
-  const limit = (card: CuratedCardFacts): number =>
-    Math.min(getCardCopyLimit(card.card), archetype.maxCopies?.[card.card.id] ?? 2)
-  const cards: CuratedCardFacts[] = []
-  const counts = new Map<string, number>()
-  const add = (
-    card: CuratedCardFacts,
-    layer: string,
-    reason: string,
-    candidates: number
-  ): void => {
-    cards.push(card)
-    counts.set(card.card.id, (counts.get(card.card.id) ?? 0) + 1)
-    trace.push({
-      layer,
-      selected: card.card.id,
-      reason,
-      candidates,
-      deckSize: cards.length
-    })
-  }
-  for (const forced of forcedCards.filter((entry) => entry.layer !== 'anchor')) {
-    if ((counts.get(forced.card.card.id) ?? 0) >= limit(forced.card))
-      return {
-        cards,
-        errors: [`${forced.card.card.id}: mandatory/package copy conflict`]
-      }
-    add(forced.card, forced.layer, forced.reason, forced.candidates)
-  }
-  for (const [layer, slots] of [['core', archetype.core]] as const) {
-    for (const slot of slots)
-      for (let copy = 0; copy < slot.count; copy++) {
-        const card = facts(slot.id, catalog)
-        if ((counts.get(slot.id) ?? 0) >= limit(card))
-          return { cards, errors: [`${slot.id}: core/package copy conflict`] }
-        add(
-          card,
-          layer,
-          'Defining archetype card; supporting cards are chosen from live mechanics.',
-          1
-        )
-      }
-  }
-  for (const forced of forcedCards.filter((entry) => entry.layer === 'anchor')) {
-    if ((counts.get(forced.card.card.id) ?? 0) >= limit(forced.card))
-      return {
-        cards,
-        errors: [`${forced.card.card.id}: mandatory/package copy conflict`]
-      }
-    add(forced.card, forced.layer, forced.reason, forced.candidates)
-  }
-  const requirementsFor = (selected: readonly CuratedCardFacts[]) => {
-    const merged = new Map<string, { tag: string; minimum: number; maximum: number }>()
-    for (const rule of [
-      ...curatedRequirements(archetype, selected),
-      ...variant.requirements,
-      ...dependencyRequirements(selected, heroId)
-    ]) {
-      const previous = merged.get(rule.tag)
-      merged.set(rule.tag, {
-        tag: rule.tag,
-        minimum: Math.max(rule.minimum, previous?.minimum ?? 0),
-        maximum: Math.min(rule.maximum, previous?.maximum ?? 30)
-      })
-    }
-    return [...merged.values()]
-  }
-  while (cards.length < 30) {
-    const requirements = requirementsFor(cards)
-    const current = curatedCounts(cards)
-    const legal = pool.filter(
-      (card) =>
-        (counts.get(card.card.id) ?? 0) < limit(card) &&
-        requirements.every(
-          (rule) =>
-            (current[rule.tag] ?? 0) + Number(card.tags.includes(rule.tag)) <=
-            rule.maximum
-        )
-    )
-    const gaps = requirements.filter((rule) => (current[rule.tag] ?? 0) < rule.minimum)
-    // Resolve the most constrained unmet role before spending flexible slots.
-    const capacity = (tag: string): number =>
-      legal
-        .filter((card) => card.tags.includes(tag))
-        .reduce(
-          (total, card) => total + limit(card) - (counts.get(card.card.id) ?? 0),
-          0
-        )
-    gaps.sort(
-      (a, b) =>
-        capacity(a.tag) / (a.minimum - (current[a.tag] ?? 0)) -
-        capacity(b.tag) / (b.minimum - (current[b.tag] ?? 0))
-    )
-    const target = gaps[0]
-    const choices = legal
-      .filter((card) => !target || card.tags.includes(target.tag))
-      .filter((card) => {
-        const future = [...cards, card]
-        const totals = curatedCounts(future)
-        return requirementsFor(future).every((rule) => {
-          const actual = totals[rule.tag] ?? 0
-          if (actual > rule.maximum || rule.minimum - actual > 30 - future.length)
-            return false
-          const available = pool
-            .filter((entry) => entry.tags.includes(rule.tag))
-            .reduce(
-              (total, entry) =>
-                total +
-                Math.max(
-                  0,
-                  limit(entry) -
-                    (counts.get(entry.card.id) ?? 0) -
-                    Number(entry === card)
-                ),
-              0
-            )
-          return actual + available >= rule.minimum
-        })
-      })
-    if (!choices.length)
-      return {
-        cards,
-        errors: [
-          `No compatible slots remain for ${target?.tag ?? 'completion'} at ${cards.length}/30. Unreachable: ${requirements
-            .filter(
-              (rule) => (current[rule.tag] ?? 0) + capacity(rule.tag) < rule.minimum
-            )
-            .map(
-              (rule) =>
-                rule.tag +
-                ':' +
-                (current[rule.tag] ?? 0) +
-                '+' +
-                capacity(rule.tag) +
-                '<' +
-                rule.minimum
-            )
-            .join(', ')}.`
-        ]
-      }
-    // Avoid weak filler when stronger cards can satisfy the same role.
-    const best = Math.max(...choices.map((card) => card.quality))
-    const competitive = choices.filter((card) => card.quality >= best - 1)
-    const selected = weightedPick(
-      competitive,
-      (card) =>
-        card.quality ** 5 *
-        (archetype.preferences.some((tag) => card.tags.includes(tag)) ? 3 : 1) *
-        (variant.preferences.some((tag) => card.tags.includes(tag)) ? 1.8 : 1) *
-        (card.card.cardClass === archetype.classId ? 2 : 1) *
-        (1 + gaps.filter((rule) => card.tags.includes(rule.tag)).length * 2) *
-        ((counts.get(card.card.id) ?? 0) === 1 ? 1.5 : 1),
-      rng
-    )
-    add(
-      selected,
-      target ? 'support-role' : 'flex',
-      target
-        ? `${target.tag}: ${current[target.tag] ?? 0}/${target.minimum}; choose a live-catalog card by quality, archetype/variant affinity, overlapping gaps and copy consistency.`
-        : 'Live-catalog flexible slot; preserve dependencies and curve limits. Weighted by quality, archetype/variant affinity and copy consistency.',
-      competitive.length
-    )
-  }
-  return {
-    cards,
-    errors: validateCuratedComposition(
-      archetype,
-      cards,
-      requirementsFor(cards),
-      new Set([
-        ...pool.map((card) => card.card.id),
-        ...archetype.core.map((slot) => slot.id),
-        ...forcedCards.map((entry) => entry.card.card.id)
-      ])
-    )
-  }
 }
 
 /** Pure local generation. No human deck, clock, network, or match RNG is consulted. */
@@ -447,24 +102,18 @@ export function generateConstructedOpponent(
   seed: number,
   options: {
     readonly heroId?: HeroId
-    readonly strategy?: string
     readonly archetypeId?: string
-    readonly variantId?: string
     readonly catalog?: CardCatalog
   } = {}
 ): GeneratedOpponent {
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff)
     throw new Error('Opponent seed must be uint32.')
-  const strategy = OPPONENT_STRATEGIES[options.strategy ?? 'midrange-tempo']
-  if (!strategy) throw new Error(`Unsupported opponent strategy: ${options.strategy}`)
   const rng = createSeededRng(seed ^ 0x74656d70)
   const forced = options.archetypeId
     ? OPPONENT_ARCHETYPES.find((entry) => entry.id === options.archetypeId)
     : undefined
   if (options.archetypeId && !forced)
-    throw new Error(`Unknown curated archetype: ${options.archetypeId}`)
-  if (options.variantId && !forced)
-    throw new Error('A forced variant requires an archetype.')
+    throw new Error(`Unknown opponent archetype: ${options.archetypeId}`)
   const heroClass = options.heroId
     ? HERO_CATALOG.require(options.heroId).classId
     : (forced?.classId ?? pick(PLAYABLE_CLASSES, rng))
@@ -480,244 +129,245 @@ export function generateConstructedOpponent(
     throw new Error('Opponent hero is not deck selectable.')
   const catalog = options.catalog ?? CARD_CATALOG
   const rules = new DeckRules(catalog)
-  const powerSelections = [
-    selectPowerCard(
-      'quest',
-      heroClass,
-      heroId,
-      rng,
-      catalog,
-      rules,
-      OPPONENT_GENERATION_CONFIG.alwaysIncludeQuest
-    ),
-    selectPowerCard(
-      'hero',
-      heroClass,
-      heroId,
-      rng,
-      catalog,
-      rules,
-      OPPONENT_GENERATION_CONFIG.alwaysIncludeHero
+
+  const construction: OpponentConstructionStep[] = [
+    {
+      layer: 'class',
+      selected: heroClass,
+      reason:
+        options.heroId || forced
+          ? 'Explicit audit/development selection.'
+          : 'Uniform seeded playable-class selection.',
+      candidates: options.heroId || forced ? 1 : PLAYABLE_CLASSES.length,
+      deckSize: 0
+    }
+  ]
+
+  // Mandatory hero card: the one deliberate inclusion every generated deck carries.
+  const heroCandidates = catalog.all
+    .filter(
+      (card) =>
+        card.type === 'Hero' &&
+        card.cardClass === heroClass &&
+        rules.isCardAllowedInDeck({ heroId }, card)
     )
-  ] as const
-  const powerCards: ForcedCard[] = powerSelections.flatMap((selection) =>
-    selection.card
-      ? [
-          {
-            card: selection.card,
-            layer:
-              selection.kind === 'quest' ? ('quest' as const) : ('hero-card' as const),
-            reason: `Mandatory class-legal ${selection.kind} bonus selected from ${selection.candidates} seeded Card ID candidate${selection.candidates === 1 ? '' : 's'}.`,
-            candidates: selection.candidates
-          }
-        ]
-      : []
-  )
-  const skippedPowerCards: OpponentPowerCardSkip[] = powerSelections.flatMap(
-    (selection) =>
-      selection.warning ? [{ kind: selection.kind, reason: selection.warning }] : []
-  )
-  const warnings = skippedPowerCards.map((entry) => entry.reason)
-  const available = OPPONENT_ARCHETYPES.filter(
-    (entry) =>
-      entry.classId === heroClass &&
-      entry.strategy === strategy.id &&
-      (!forced || entry === forced)
-  )
-  if (!available.length)
-    throw new Error(`No curated ${strategy.id} archetypes for ${heroClass}.`)
-  const ordered = shuffled(available, rng)
-  const requested = ordered[0].id
-  let attempts = 0
-  const rejected: { candidate: string; attempts: number; reason: string }[] = []
-  for (const archetype of ordered) {
-    const variants = shuffled(
-      archetype.variants.filter(
-        (entry) => !options.variantId || entry.id === options.variantId
-      ),
-      rng
-    )
-    if (!variants.length)
-      throw new Error(`Unknown variant ${options.variantId} for ${archetype.id}.`)
-    for (const variant of variants) {
-      const anchors = configuredAnchorCards(archetype, heroId, catalog, rules)
-      const forcedCards = [...powerCards, ...anchors]
-      const pool = dynamicOpponentPool(archetype, catalog.all).filter(
-        (card) => !isOpponentPowerCard(card.card)
-      )
-      const ids = [
-        ...new Set([
-          ...archetype.core.map((slot) => slot.id),
-          ...forcedCards.map((entry) => entry.card.card.id),
-          ...pool.map((card) => card.card.id)
-        ])
+    .sort((a, b) => a.id.localeCompare(b.id))
+  const heroCard = heroCandidates.length ? pick(heroCandidates, rng) : undefined
+  const skipped: OpponentPowerCardSkip[] = heroCard
+    ? []
+    : [
+        {
+          kind: 'hero',
+          reason: `No legal Hero card is available for ${heroClass}; skipped this bonus card.`
+        }
       ]
-      const invalid = archetype.core.find(
-        (slot) =>
-          !catalog.get(slot.id) ||
-          !rules.isCardAllowedInDeck({ heroId }, facts(slot.id, catalog).card)
-      )?.id
-      if (invalid) {
-        rejected.push({
-          candidate: `${archetype.id}/${variant.id}`,
-          attempts: 0,
-          reason: `Ineligible curated card: ${invalid}`
-        })
-        continue
-      }
-      let lastError = ''
-      for (let attempt = 0; attempt < strategy.attempts; attempt++) {
-        attempts++
-        const construction: OpponentConstructionStep[] = [
-          {
-            layer: 'class',
-            selected: heroClass,
-            reason:
-              options.heroId || forced
-                ? 'Explicit audit/development selection.'
-                : 'Uniform seeded playable-class selection.',
-            candidates: options.heroId || forced ? 1 : PLAYABLE_CLASSES.length,
-            deckSize: 0
-          },
-          ...powerSelections.map((selection) => ({
-            layer: selection.kind === 'quest' ? 'quest' : 'hero-card',
-            selected: selection.cardId ?? 'skipped',
-            reason:
-              selection.warning ??
-              `Mandatory class-legal ${selection.kind} bonus selected from ${selection.candidates} seeded Card ID candidate${selection.candidates === 1 ? '' : 's'}.`,
-            candidates: selection.candidates,
-            deckSize: 0
-          })),
-          {
-            layer: 'strategy',
-            selected: strategy.id,
-            reason: strategy.objective,
-            candidates: 1,
-            deckSize: 0
-          },
-          {
-            layer: 'archetype',
-            selected: archetype.id,
-            reason: archetype.plan,
-            candidates: available.length,
-            deckSize: 0
-          },
-          {
-            layer: 'variant',
-            selected: variant.id,
-            reason: variant.reason,
-            candidates: variants.length,
-            deckSize: 0
-          },
-          {
-            layer: 'pool-filter',
-            selected: archetype.id,
-            reason:
-              'Scan the current catalog for legal, recognized mechanics that fit this archetype; filter weak cards and unrelated dependencies.',
-            candidates: ids.length,
-            deckSize: 0
-          }
-        ]
-        if (attempt > 0)
-          construction.push({
-            layer: 'retry',
-            selected: `${archetype.id}/${variant.id}`,
-            reason: `Previous assembly rejected: ${lastError}. Retry ${attempt + 1} keeps the same core and package.`,
-            candidates: 1,
-            deckSize: 0
-          })
-        for (const entry of rejected)
-          construction.push({
-            layer: 'fallback',
-            selected: entry.candidate,
-            reason: `Rejected after ${entry.attempts} attempts: ${entry.reason} Trying another curated package; no generic fallback.`,
-            candidates: 0,
-            deckSize: 0
-          })
-        const result = assemble(
-          archetype,
-          variant,
-          rng,
-          construction,
-          pool,
-          catalog,
-          heroId,
-          forcedCards
-        )
-        if (result.errors.length) {
-          lastError = result.errors.join('; ')
-          continue
-        }
-        const deck: Deck = {
-          id: `constructed-opponent-v${OPPONENT_GENERATOR_VERSION}-${seed}-${heroId}`,
-          name: 'Challenger',
-          heroId,
-          cards: assessmentCounts(result.cards),
-          createdAt: '1970-01-01T00:00:00.000Z',
-          updatedAt: '1970-01-01T00:00:00.000Z'
-        }
-        const errors = rules.validate(deck)
-        if (errors.length)
-          throw new Error(`Invalid curated opponent: ${errors.join('; ')}`)
-        const totals = curatedCounts(result.cards)
-        const requirements = [
-          ...curatedRequirements(archetype, result.cards),
-          ...variant.requirements,
-          ...dependencyRequirements(result.cards, heroId)
-        ].map((rule) => ({ ...rule, actual: totals[rule.tag] ?? 0 }))
-        construction.push({
-          layer: 'validation',
-          selected: 'accepted',
-          reason: `30 cards; class/copy legality, mandatory core and package support passed. ${requirements.map((rule) => `${rule.tag}=${rule.actual} [${rule.minimum}..${rule.maximum}]`).join('; ')}. Attempts: ${attempts}.`,
-          candidates: 1,
-          deckSize: 30
-        })
-        return {
-          deck,
-          metadata: {
-            core: archetype.core[0].id,
-            coreCards: archetype.core,
-            archetype: archetype.id,
-            variant: variant.id,
-            version: OPPONENT_GENERATOR_VERSION,
-            seed,
-            heroId,
-            cards: { ...deck.cards },
-            powerCards: {
-              questCardId:
-                powerSelections.find((selection) => selection.kind === 'quest')
-                  ?.cardId ?? null,
-              heroCardId:
-                powerSelections.find((selection) => selection.kind === 'hero')
-                  ?.cardId ?? null,
-              skipped: skippedPowerCards
-            },
-            construction,
-            strategy: {
-              strategy: strategy.id,
-              theme: archetype.id,
-              text: `Original deck: ${archetype.name} (${variant.id}). Current state overrides this plan. ${archetype.plan} Variant: ${variant.reason} Mulligan: ${archetype.mulligan} Selected support: ${[...new Set(result.cards.filter((card) => archetype.preferences.some((tag) => card.tags.includes(tag))).map((card) => card.card.name))].slice(0, 6).join(', ')}.`
-            },
-            diagnostics: {
-              attempts,
-              requestedTheme: requested,
-              fallback: rejected.length > 0,
-              metrics: opponentMetrics(result.cards),
-              requirements,
-              rejected,
-              warnings
-            }
-          }
-        }
-      }
-      rejected.push({
-        candidate: `${archetype.id}/${variant.id}`,
-        attempts: strategy.attempts,
-        reason: lastError
+  if (heroCard)
+    construction.push({
+      layer: 'hero',
+      selected: heroCard.id,
+      reason: `Mandatory class-legal Hero card selected from ${heroCandidates.length} candidate${heroCandidates.length === 1 ? '' : 's'}.`,
+      candidates: heroCandidates.length,
+      deckSize: 0
+    })
+  const warnings = skipped.map((entry) => entry.reason)
+
+  // Uniform seeded archetype pick.
+  const available = OPPONENT_ARCHETYPES.filter(
+    (entry) => entry.classId === heroClass && (!forced || entry === forced)
+  )
+  if (!available.length) throw new Error(`No opponent archetypes for ${heroClass}.`)
+  const archetype = shuffled(available, rng)[0]
+  construction.push({
+    layer: 'archetype',
+    selected: archetype.id,
+    reason: archetype.plan,
+    candidates: available.length,
+    deckSize: 0
+  })
+
+  const fixed: FixedCard[] = heroCard
+    ? [{ card: heroCard, layer: 'hero', reason: 'Mandatory Hero card.' }]
+    : []
+  const invalidCore = archetype.core.find((slot) => {
+    const card = catalog.get(slot.id)
+    return (
+      !card ||
+      !rules.isCardAllowedInDeck({ heroId }, card) ||
+      !inspectCardCapabilities(card, supportedCapabilities).supported
+    )
+  })
+  if (invalidCore)
+    throw new Error(`Ineligible opponent core card: ${invalidCore.id}`)
+  for (const slot of archetype.core) {
+    const card = catalog.require(slot.id)
+    const quest = card.type === 'Spell' && card.quest !== undefined
+    fixed.push({
+      card,
+      layer: quest ? 'quest' : 'core',
+      reason: quest
+        ? 'Quest archetype inclusion; the only quest this deck may carry.'
+        : 'Defining archetype card.'
+    })
+    if (quest)
+      construction.push({
+        layer: 'quest',
+        selected: card.id,
+        reason: 'Quest archetype: the quest enters through the core.',
+        candidates: 1,
+        deckSize: 0
       })
+  }
+
+  const pool: OpponentFillCard[] = []
+  for (const card of catalog.all) {
+    if (card.cardClass !== 'Neutral' && card.cardClass !== heroClass) continue
+    if (isOpponentPowerCard(card)) continue
+    if (!rules.isCardAllowedInDeck({ heroId }, card)) continue
+    const facts = assessFillCard(card)
+    if (facts) pool.push(facts)
+  }
+  const assembled = assemble(archetype, rng, construction, pool, fixed)
+  if (assembled.errors.length)
+    throw new Error(`Unable to assemble opponent: ${assembled.errors.join('; ')}`)
+
+  const deck: Deck = {
+    id: `constructed-opponent-v${OPPONENT_GENERATOR_VERSION}-${seed}-${heroId}`,
+    name: 'Challenger',
+    heroId,
+    cards: assembled.cards,
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z'
+  }
+  const deckErrors = rules.validate(deck)
+  if (deckErrors.length)
+    throw new Error(`Invalid generated opponent: ${deckErrors.join('; ')}`)
+
+  construction.push({
+    layer: 'validation',
+    selected: 'accepted',
+    reason: `30 cards; class/copy legality and universal floors passed. Floors: ${assembled.floorReport}.`,
+    candidates: 1,
+    deckSize: 30
+  })
+
+  return {
+    deck,
+    metadata: {
+      core: archetype.core[0]?.id ?? '',
+      coreCards: archetype.core,
+      archetype: archetype.id,
+      construction,
+      version: OPPONENT_GENERATOR_VERSION,
+      seed,
+      heroId,
+      cards: { ...deck.cards },
+      powerCards: {
+        questCardId: assembled.questCardId,
+        heroCardId: heroCard?.id ?? null,
+        skipped
+      },
+      strategy: {
+        strategy: 'midrange-tempo',
+        theme: archetype.id,
+        text: `Original deck: ${archetype.name}. Current state overrides this plan. ${archetype.plan} Mulligan: ${archetype.mulligan}`
+      },
+      diagnostics: {
+        attempts: 1,
+        warnings
+      }
     }
   }
-  throw new Error(
-    `Unable to assemble curated opponent for ${heroClass}: ${rejected.map((entry) => `${entry.candidate}: ${entry.reason}`).join('; ')}`
+}
+
+interface AssemblyResult {
+  readonly cards: Deck['cards']
+  readonly errors: readonly string[]
+  readonly questCardId: CardId | null
+  readonly floorReport: string
+}
+
+function assemble(
+  archetype: OpponentArchetype,
+  rng: DeterministicRng,
+  trace: OpponentConstructionStep[],
+  pool: readonly OpponentFillCard[],
+  fixed: readonly FixedCard[]
+): AssemblyResult {
+  const cards: CardDefinition[] = []
+  const counts = new Map<string, number>()
+  const tagCounts = new Map<string, number>()
+  const floors: readonly OpponentFloorRule[] = OPPONENT_FLOORS.filter((floor) =>
+    pool.some((entry) => entry.tags.includes(floor.tag))
   )
+  const errors: string[] = []
+  const add = (card: CardDefinition, layer: string, reason: string): void => {
+    cards.push(card)
+    counts.set(card.id, (counts.get(card.id) ?? 0) + 1)
+    for (const tag of assessFillCard(card)?.tags ?? [])
+      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1)
+    trace.push({ layer, selected: card.id, reason, candidates: 1, deckSize: cards.length })
+  }
+  for (const entry of fixed) {
+    // Hero and Quest cards are deliberate power cards, not pool candidates.
+    if (!isOpponentPowerCard(entry.card)) {
+      const facts = assessFillCard(entry.card)
+      if (!facts || (counts.get(entry.card.id) ?? 0) >= getCardCopyLimit(entry.card)) {
+        errors.push(`${entry.card.id}: ineligible or copy-conflicting fixed card`)
+        return { cards: {}, errors, questCardId: null, floorReport: '' }
+      }
+    }
+    add(entry.card, entry.layer, entry.reason)
+  }
+  const questCardId =
+    fixed.find((entry) => entry.card.type === 'Spell' && entry.card.quest !== undefined)
+      ?.card.id ?? null
+  const weight = (card: OpponentFillCard): number =>
+    card.quality ** 2 *
+    (card.card.cardClass !== 'Neutral' ? 2 : 1) *
+    (archetype.bias.some((tag) => card.tags.includes(tag)) ? 1.5 : 1) *
+    ((counts.get(card.card.id) ?? 0) === 1 ? 1.5 : 1)
+  const legal = (): OpponentFillCard[] =>
+    pool.filter(
+      (entry) =>
+        (counts.get(entry.card.id) ?? 0) < getCardCopyLimit(entry.card) &&
+        floors.every(
+          (floor) =>
+            !entry.tags.includes(floor.tag) ||
+            (tagCounts.get(floor.tag) ?? 0) + 1 <= floor.max
+        )
+    )
+  while (cards.length < 30) {
+    const current = legal()
+    if (!current.length) {
+      errors.push('No compatible fill slots remain.')
+      break
+    }
+    const target = floors.find((floor) => (tagCounts.get(floor.tag) ?? 0) < floor.min)
+    const roleCandidates = target
+      ? current.filter((entry) => entry.tags.includes(target.tag))
+      : []
+    const candidates = roleCandidates.length ? roleCandidates : current
+    const selected = weightedPick(candidates, weight, rng)
+    add(
+      selected.card,
+      target && roleCandidates.length ? `fill:${target.tag}` : 'fill',
+      target && roleCandidates.length
+        ? `Floor ${target.tag}: ${tagCounts.get(target.tag) ?? 0}/${target.min}; weighted by quality, class affinity and archetype bias.`
+        : 'Flexible slot; weighted by quality, class affinity and archetype bias.'
+    )
+  }
+  for (const floor of floors) {
+    const actual = tagCounts.get(floor.tag) ?? 0
+    if (actual < floor.min)
+      errors.push(`Floor unmet: ${floor.tag} (${actual}/${floor.min})`)
+  }
+  const deckCards: Record<string, number> = {}
+  for (const card of cards) deckCards[card.id] = (deckCards[card.id] ?? 0) + 1
+  const floorReport = floors
+    .map(
+      (floor) =>
+        `${floor.tag}=${tagCounts.get(floor.tag) ?? 0} [${floor.min}..${floor.max}]`
+    )
+    .join('; ')
+  return { cards: deckCards, errors, questCardId, floorReport }
 }

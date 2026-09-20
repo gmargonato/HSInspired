@@ -40,8 +40,7 @@ export type HeroPowerEffect =
     }
   | {
       readonly kind: 'summon-horseman-and-destroy-if-complete'
-      readonly cardId: CardId
-      readonly requiredCount: number
+      readonly cardIds: readonly CardId[]
     }
   | { readonly kind: 'damage-and-refresh-after-card'; readonly amount: number }
   | {
@@ -268,8 +267,12 @@ const HERO_POWER_DATA = [
     'none',
     {
       kind: 'summon-horseman-and-destroy-if-complete',
-      cardId: 'knights_of_the_frozen_throne_four_horseman',
-      requiredCount: 4
+      cardIds: [
+        'knights_of_the_frozen_throne_darion_mograine',
+        'knights_of_the_frozen_throne_deathlord_nazgrim',
+        'knights_of_the_frozen_throne_inquisitor_whitemane',
+        'knights_of_the_frozen_throne_thoras_trollbane'
+      ]
     }
   ],
   [
@@ -528,12 +531,12 @@ export const HERO_POWER_DEFINITIONS: readonly HeroPowerDefinition[] =
       presentationAssetKey,
       targeting,
       effect:
-        effect.kind === 'summon-random-totem'
+        effect.kind === 'summon-random-totem' ||
+        effect.kind === 'summon-horseman-and-destroy-if-complete'
           ? { ...effect, cardIds: effect.cardIds.map(asCardId) }
           : effect.kind === 'summon' || effect.kind === 'equip-weapon'
             ? { ...effect, cardId: asCardId(effect.cardId) }
             : effect.kind === 'damage-and-summon-on-kill' ||
-                effect.kind === 'summon-horseman-and-destroy-if-complete' ||
                 effect.kind === 'summon-and-refresh-after-hero-attack'
               ? { ...effect, cardId: asCardId(effect.cardId) }
               : effect

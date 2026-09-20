@@ -51,6 +51,7 @@ export interface MinionViewTextures {
   readonly premiumLegendaryFrame: Texture
   readonly taunt: Texture
   readonly premiumTaunt: Texture
+  readonly battlecry: Texture
   readonly enrage: Texture
   readonly divineShield: Texture
   readonly frozen: Texture
@@ -130,6 +131,7 @@ export class MinionView extends Container {
   private readonly artworkBreath: PremiumArtworkBreath
   private readonly legendaryFrame: Sprite
   private readonly taunt: Sprite
+  private readonly battlecryBanner: Sprite
   private readonly enrage: Sprite
   private readonly divineShield: Sprite
   private readonly windfury: Sprite
@@ -151,9 +153,14 @@ export class MinionView extends Container {
   private readonly attackOutline: AnimatedOutline
   private readonly targetingOutlineProxy: Graphics
   private readonly targetingOutline: AnimatedOutline
+  private readonly hoverOutlineProxy: Graphics
+  private readonly hoverOutline: AnimatedOutline
   private readonly sleepingZs: SleepingZs
   private readonly animationScope = new AnimationScope()
   private readonly activeAbilityPulses = new Set<Sprite>()
+  private battlecryBannerTimeline: ReturnType<AnimationScope['timeline']> | null = null
+  private settleBattlecryBanner: (() => void) | null = null
+  private tauntPresented: boolean
   private baseAttack: number
   private baseHealth: number
   private maxHealth: number
@@ -176,6 +183,7 @@ export class MinionView extends Container {
     super()
     this.premiumSide = model.premiumSide ?? 'local'
     this.premium = model.premium ?? false
+    this.tauntPresented = model.taunt
     this.label = model.label
     this.baseAttack = model.baseAttack ?? model.attack
     this.baseHealth = model.baseHealth ?? model.maxHealth
@@ -229,6 +237,15 @@ export class MinionView extends Container {
     this.taunt.visible = model.taunt
     this.taunt.label = 'minion.taunt'
     this.addChild(this.taunt)
+
+    this.battlecryBanner = new Sprite(textures.battlecry)
+    applyAnchoredPlacement(this.battlecryBanner, MINION_LAYOUT.battlecry)
+    this.battlecryBanner.visible = false
+    this.battlecryBanner.alpha = 0
+    this.battlecryBanner.label = 'minion.battlecry'
+    this.battlecryBanner.eventMode = 'none'
+    // Above Taunt and artwork, below Stealth and the frame.
+    this.addChild(this.battlecryBanner)
 
     this.stealth = new Sprite(textures.stealth)
     applyAnchoredPlacement(this.stealth, MINION_LAYOUT.stealth)
@@ -447,6 +464,18 @@ export class MinionView extends Container {
     })
     this.targetingOutline.setEnabled(false)
 
+    this.hoverOutlineProxy = new Graphics()
+    this.hoverOutlineProxy.label = 'minion.hover-outline-proxy'
+    this.hoverOutlineProxy.eventMode = 'none'
+    this.hoverOutlineProxy.ellipse(80, 90, 58, 79).fill({ color: 0xffffff })
+    this.hoverOutlineProxy.visible = false
+    this.addChildAt(this.hoverOutlineProxy, this.getChildIndex(frame))
+    this.hoverOutline = new AnimatedOutline(this.hoverOutlineProxy, {
+      palette: 'white',
+      preset: 'board'
+    })
+    this.hoverOutline.setEnabled(false)
+
     this.sleepingZs = new SleepingZs()
     this.sleepingZs.label = 'minion.sleeping-zs-root'
     this.addChild(this.sleepingZs)
@@ -546,9 +575,46 @@ export class MinionView extends Container {
   }
 
   setTaunt(visible: boolean): void {
+    const gained = visible && !this.tauntPresented
+    this.tauntPresented = visible
     this.invalidateShadowVisibility(this.taunt, visible)
     this.taunt.visible = visible
     this.updateTauntOpacity()
+    if (gained) this.presentTauntPop()
+  }
+
+  /**
+   * Plays the taunt shield pop: grows from zero past authored scale, then
+   * settles back. Optional startDelay lets callers hold the shield collapsed
+   * while the minion entrance impact finishes.
+   */
+  presentTauntPop(startDelay = 0): void {
+    const shield = this.taunt
+    if (shield.destroyed || !shield.visible) return
+    const timing = MINION_LAYOUT.tauntPop
+    this.animationScope.kill(shield.scale)
+    shield.scale.set(0)
+    if (this.shadow.silhouette) this.shadow.silhouette.revision++
+    const timeline = this.animationScope.timeline()
+    timeline.to(
+      shield.scale,
+      {
+        x: timing.overshootScale,
+        y: timing.overshootScale,
+        duration: timing.growDuration,
+        ease: 'power2.out'
+      },
+      startDelay
+    )
+    timeline.to(shield.scale, {
+      x: 1,
+      y: 1,
+      duration: timing.settleDuration,
+      ease: 'power2.inOut',
+      onComplete: () => {
+        if (this.shadow.silhouette) this.shadow.silhouette.revision++
+      }
+    })
   }
 
   setEnraged(visible: boolean): void {
@@ -671,6 +737,63 @@ export class MinionView extends Container {
     })
   }
 
+  /**
+   * Plays the Battlecry banner: grows from small and transparent to authored
+   * scale at full opacity, then fades away as the trigger resolves. The
+   * returned promise settles once the grow phase completes (the moment the
+   * Battlecry becomes visible to the board) while the fade keeps running.
+   * Repeated calls, one per Battlecry repetition, replay the whole cycle.
+   */
+  presentBattlecryBanner(): Promise<void> {
+    const banner = this.battlecryBanner
+    if (banner.destroyed) return Promise.resolve()
+    this.settleBattlecryBanner?.()
+    if (this.battlecryBannerTimeline)
+      this.animationScope.cancel(this.battlecryBannerTimeline)
+    this.battlecryBannerTimeline = null
+    this.settleBattlecryBanner = null
+
+    const timing = MINION_LAYOUT.battlecryBanner
+    banner.visible = true
+    banner.alpha = 0
+    banner.scale.set(timing.startScale)
+
+    const timeline = this.animationScope.timeline()
+    this.battlecryBannerTimeline = timeline
+    timeline.to(banner, {
+      alpha: 1,
+      duration: timing.growDuration,
+      ease: 'power2.out'
+    })
+    timeline.to(
+      banner.scale,
+      { x: 1, y: 1, duration: timing.growDuration, ease: 'power2.out' },
+      0
+    )
+    timeline.to(banner, {
+      alpha: 0,
+      duration: timing.fadeDuration,
+      ease: 'power2.in',
+      // The fade beginning marks the trigger moment: the caller stops waiting.
+      onStart: () => this.settleBattlecryBanner?.(),
+      onComplete: () => {
+        banner.visible = false
+      }
+    })
+    return new Promise<void>((resolve) => {
+      let settled = false
+      const settle = (): void => {
+        if (settled) return
+        settled = true
+        this.settleBattlecryBanner = null
+        resolve()
+      }
+      this.settleBattlecryBanner = settle
+      timeline.eventCallback('onComplete', settle)
+      timeline.eventCallback('onInterrupt', settle)
+    })
+  }
+
   private syncOutlineState(): void {
     const showAttackOutline = this.canAttackEnabled && !this.targetingOutlineEnabled
     this.attackOutline.setEnabled(showAttackOutline)
@@ -689,6 +812,10 @@ export class MinionView extends Container {
   setTargetingOutline(enabled: boolean): void {
     this.targetingOutlineEnabled = enabled
     this.syncOutlineState()
+  }
+
+  setHoverAura(enabled: boolean): void {
+    this.hoverOutline.setEnabled(enabled)
   }
 
   isCanAttack(): boolean {
@@ -767,6 +894,8 @@ export class MinionView extends Container {
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     this.unsubscribePremium()
     this.artworkBreath.destroy()
+    // Release any pending banner waiter so presentation sequences cannot stall.
+    this.settleBattlecryBanner?.()
     this.animationScope.kill()
     for (const pulse of this.activeAbilityPulses) {
       if (!pulse.destroyed) pulse.destroy({ children: true })
@@ -774,6 +903,7 @@ export class MinionView extends Container {
     this.activeAbilityPulses.clear()
     this.attackOutline.dispose()
     this.targetingOutline.dispose()
+    this.hoverOutline.dispose()
     this.sleepingZs.dispose()
     super.destroy(options)
   }

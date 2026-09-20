@@ -7,7 +7,7 @@ export const PREMIUM_FORMAT_SUPPORT: Readonly<Record<CardType | 'HeroPower', boo
     Spell: true,
     Weapon: true,
     Hero: true,
-    HeroPower: false
+    HeroPower: true
   }
 
 export function supportsPremiumFormat(type: CardType | 'HeroPower'): boolean {

@@ -490,6 +490,22 @@ export class CollectionScene extends Scene {
     } catch (error) {
       this.reportError(`Failed to delete ${deck.name}.`, error)
     }
+
+    void this.clearLastPlayedDeckPreference(deckId)
+  }
+
+  private async clearLastPlayedDeckPreference(deckId: string): Promise<void> {
+    if (typeof window === 'undefined') return
+    const preferences = window.api?.preferences
+    if (!preferences) return
+
+    try {
+      const { lastPlayedDeckId } = await preferences.get()
+      if (lastPlayedDeckId !== deckId) return
+      await preferences.set({ lastPlayedDeckId: null })
+    } catch (error) {
+      this.logger.warn('Failed to clear the last played deck preference.', error)
+    }
   }
 
   private async leaveCollection(): Promise<void> {

@@ -1,35 +1,19 @@
 import type { DeckClass } from '../content/cards'
 
-export interface CuratedCardSlot {
+export interface OpponentCoreSlot {
   readonly id: string
   readonly count: number
 }
 
-export interface CuratedPackage {
-  readonly id: string
-  readonly reason: string
-  readonly requirements: readonly CuratedRequirement[]
-  readonly preferences: readonly string[]
-}
-
-export interface CuratedRequirement {
-  readonly tag: string
-  readonly minimum: number
-  readonly maximum: number
-}
-
-/** Archetype knowledge: defining cards stay fixed; support is selected by live roles. */
+/** Archetype flavor: a few fixed cards plus a light bias. Everything else is random fill. */
 export interface OpponentArchetype {
   readonly id: string
   readonly name: string
   readonly classId: DeckClass
-  readonly strategy: 'midrange-tempo'
+  /** Quest archetypes carry their quest in the core; no other deck may include a quest. */
+  readonly quest: boolean
   readonly plan: string
   readonly mulligan: string
-  readonly core: readonly CuratedCardSlot[]
-  readonly variants: readonly CuratedPackage[]
-  readonly preferences: readonly string[]
-  readonly maxCopies?: Readonly<Record<string, number>>
-  readonly requirements: readonly CuratedRequirement[]
-  readonly sources: readonly string[]
+  readonly core: readonly OpponentCoreSlot[]
+  readonly bias: readonly string[]
 }

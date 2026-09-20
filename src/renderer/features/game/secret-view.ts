@@ -2,6 +2,7 @@ import { Container, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import { CARD_CATALOG } from '../../../game/content/cards'
 import { AnimationScope } from '../../animation/animations'
 import { CardView } from '../../rendering/cards/card-view'
+import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { SECRET_LAYOUT } from './secret-layout'
@@ -12,6 +13,7 @@ export type SecretPresentationSide = 'local' | 'remote'
 /** Projects authoritative Secret counts as one facedown badge over each hero. */
 export class SecretZoneView extends Container {
   private readonly badges: Record<SecretPresentationSide, Container>
+  private readonly hoverOutlines = new Map<SecretPresentationSide, AnimatedOutline>()
   private readonly animations = new AnimationScope()
 
   constructor(
@@ -58,8 +60,13 @@ export class SecretZoneView extends Container {
       })
   }
 
+  setHoverAura(side: SecretPresentationSide, enabled: boolean): void {
+    this.hoverOutlines.get(side)?.setEnabled(enabled)
+  }
+
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     this.animations.kill()
+    for (const outline of this.hoverOutlines.values()) outline.dispose()
     super.destroy(options)
   }
 
@@ -75,6 +82,19 @@ export class SecretZoneView extends Container {
     marker.eventMode = 'none'
     marker.label = `game.secret.${side}.icon`
     badge.addChild(marker)
+
+    const hoverTarget = new Sprite(this.texture)
+    hoverTarget.anchor.set(0.5)
+    hoverTarget.eventMode = 'none'
+    hoverTarget.visible = false
+    hoverTarget.label = `game.secret.${side}.hover-outline-target`
+    badge.addChildAt(hoverTarget, 0)
+    const hoverOutline = new AnimatedOutline(hoverTarget, {
+      palette: 'white',
+      preset: 'board'
+    })
+    hoverOutline.setEnabled(false)
+    this.hoverOutlines.set(side, hoverOutline)
 
     const count = new Text({
       text: '0',
@@ -93,6 +113,7 @@ export class SecretZoneView extends Container {
 /** Public Quest objective and progress, sharing the hero marker rail with Secrets. */
 export class QuestZoneView extends Container {
   private readonly badges: Record<SecretPresentationSide, Container>
+  private readonly hoverOutlines = new Map<SecretPresentationSide, AnimatedOutline>()
   private readonly animations = new AnimationScope()
 
   constructor(
@@ -129,6 +150,10 @@ export class QuestZoneView extends Container {
       })
   }
 
+  setHoverAura(side: SecretPresentationSide, enabled: boolean): void {
+    this.hoverOutlines.get(side)?.setEnabled(enabled)
+  }
+
   private createBadge(
     side: SecretPresentationSide,
     texture: Texture,
@@ -148,6 +173,19 @@ export class QuestZoneView extends Container {
     marker.label = `game.quest.${side}.icon`
     marker.eventMode = 'none'
     badge.addChild(marker)
+
+    const hoverTarget = new Sprite(texture)
+    hoverTarget.anchor.set(0.5)
+    hoverTarget.eventMode = 'none'
+    hoverTarget.visible = false
+    hoverTarget.label = `game.quest.${side}.hover-outline-target`
+    badge.addChildAt(hoverTarget, 0)
+    const hoverOutline = new AnimatedOutline(hoverTarget, {
+      palette: 'white',
+      preset: 'board'
+    })
+    hoverOutline.setEnabled(false)
+    this.hoverOutlines.set(side, hoverOutline)
     const count = new Text({
       text: '0/0',
       style: SECRET_LAYOUT.questProgressTextStyle,
@@ -162,6 +200,7 @@ export class QuestZoneView extends Container {
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     this.animations.kill()
+    for (const outline of this.hoverOutlines.values()) outline.dispose()
     super.destroy(options)
   }
 }

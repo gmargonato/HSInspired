@@ -1,6 +1,7 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
 import { createTemporaryAbilityBadge } from '../temporary-ability-badge'
+import { AnimatedOutline } from '../effects/animated-outline'
 import {
   WEAPON_CANVAS,
   WEAPON_LAYOUT,
@@ -110,6 +111,9 @@ export class WeaponView extends Container {
   private readonly printedDurability: number
   private readonly deathrattle: Sprite
   private readonly trigger: Sprite
+  private readonly hoverOutlineProxy: Container
+  private readonly hoverOutlineFrame: Sprite
+  private readonly hoverOutline: AnimatedOutline
   private readonly animationScope = new AnimationScope()
   private readonly activeAbilityPulses = new Set<Sprite>()
   public instanceId: string | null = null
@@ -167,14 +171,47 @@ export class WeaponView extends Container {
         ? textures.premiumFrame
         : textures.frame
     )
-    this.unsubscribePremium = subscribeToPremiumAppearance(() => {
-      const enabled = model.premium === true || isPremiumEnabled(model.premiumSide)
-      frame.texture = enabled ? textures.premiumFrame : textures.frame
-      this.artworkBreath?.setEnabled(enabled)
-    })
     applyAnchoredPlacement(frame, WEAPON_LAYOUT.frame)
     frame.label = 'weapon.frame'
     this.addChild(frame)
+
+    // The hover aura must trace the full frame plate. The frame texture is
+    // hollow at the artwork aperture, and the outline filter paints exterior
+    // glow into that hole over the artwork unless the silhouette is solid.
+    // A solid oval matching the artwork aperture completes the silhouette,
+    // mirroring the minion hover outline's aperture fill.
+    this.hoverOutlineProxy = new Container()
+    this.hoverOutlineProxy.label = 'weapon.hover-outline-proxy'
+    this.hoverOutlineProxy.eventMode = 'none'
+    this.hoverOutlineProxy.visible = false
+    this.hoverOutlineFrame = new Sprite(frame.texture)
+    applyAnchoredPlacement(this.hoverOutlineFrame, WEAPON_LAYOUT.frame)
+    this.hoverOutlineFrame.label = 'weapon.hover-outline-proxy.frame'
+    this.hoverOutlineProxy.addChild(this.hoverOutlineFrame)
+    const outlineAperture = new Graphics()
+    outlineAperture
+      .ellipse(
+        WEAPON_LAYOUT.artwork.position.x,
+        WEAPON_LAYOUT.artwork.position.y,
+        WEAPON_LAYOUT.artworkOval.radiusX,
+        WEAPON_LAYOUT.artworkOval.radiusY
+      )
+      .fill({ color: 0xffffff })
+    outlineAperture.label = 'weapon.hover-outline-proxy.aperture'
+    this.hoverOutlineProxy.addChild(outlineAperture)
+    this.addChildAt(this.hoverOutlineProxy, this.getChildIndex(frame))
+    this.hoverOutline = new AnimatedOutline(this.hoverOutlineProxy, {
+      palette: 'white',
+      preset: 'board'
+    })
+    this.hoverOutline.setEnabled(false)
+
+    this.unsubscribePremium = subscribeToPremiumAppearance(() => {
+      const enabled = model.premium === true || isPremiumEnabled(model.premiumSide)
+      frame.texture = enabled ? textures.premiumFrame : textures.frame
+      this.hoverOutlineFrame.texture = frame.texture
+      this.artworkBreath?.setEnabled(enabled)
+    })
 
     // Pixi renders later children on top: add the large Deathrattle badge first.
     // Keep hidden markers mounted so a runtime trigger can pulse the same
@@ -263,6 +300,10 @@ export class WeaponView extends Container {
     this.trigger.visible = visible
   }
 
+  setHoverAura(enabled: boolean): void {
+    this.hoverOutline.setEnabled(enabled)
+  }
+
   getAbilityMarkerSnapshot(
     kind: WeaponAbilityMarkerKind
   ): WeaponAbilityMarkerSnapshot | null {
@@ -339,6 +380,7 @@ export class WeaponView extends Container {
     this.unsubscribePremium()
     this.artworkBreath?.destroy()
     this.animationScope.kill()
+    this.hoverOutline.dispose()
     for (const pulse of this.activeAbilityPulses) {
       if (!pulse.destroyed) pulse.destroy({ children: true })
     }

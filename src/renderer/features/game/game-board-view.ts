@@ -35,7 +35,8 @@ import {
   type OpeningCard,
   type OpeningMatchEvent,
   type OpeningMatchInstance,
-  type OpeningMatchState
+  type OpeningMatchState,
+  type OpeningPlayerState
 } from '../../../game/match'
 import type { PlayerId } from '../../../game/match'
 import type { AiDecisionApi } from '../../../shared/ipc/ai'
@@ -52,6 +53,7 @@ import { randomSpellPresentationStates } from './random-spell-presentation'
 import { selectRandomBoardTexture } from './board-selection'
 import { isLegalHeroPowerTarget } from './hero-power-targeting'
 import type { RendererLogger } from '../../ui/logger'
+import { gsap } from '../../animation/animations'
 import { CardView } from '../../rendering/cards/card-view'
 import { CARD_CANVAS, CARD_PROFILES } from '../../rendering/cards/card-layout'
 import { cardCostColor } from '../../rendering/cards/card-cost-presentation'
@@ -62,6 +64,7 @@ import {
 } from '../../ui/asset-registry'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { Actor } from '../../ui/components/actor'
+import { PreviewGhostOutline } from '../../rendering/effects/preview-ghost-outline'
 import { BoardPositionController, type BoardSide } from './board-position-controller'
 import { BoardShadowLayer } from '../../rendering/shadows/board-shadow-layer'
 import { attachShadow, getShadowCaster } from '../../rendering/shadows/shadow-caster'
@@ -128,6 +131,7 @@ import {
 import { GameBoardSession } from './game-board-session'
 import { GameHudView } from './game-hud-view'
 import { GameMulliganView } from './game-mulligan-view'
+import { HoverPreviewController } from './hover-preview-controller'
 import {
   OPENING_TIMING,
   BOARD_TIMING,
@@ -153,7 +157,10 @@ import { SecretPreviewView } from './secret-preview-view'
 import { QuestPreviewView } from './quest-preview-view'
 import { MatchHistoryView } from './match-history-view'
 import { MatchPremiumAppearance } from './match-premium-appearance'
-import { isPurchasedPremium } from '../../rendering/premium-appearance'
+import {
+  isPurchasedPremium,
+  isPremiumEnabled
+} from '../../rendering/premium-appearance'
 import { RemoteCardPlayPreview, playedRemoteCard } from './remote-card-play-preview'
 import { RemoteTargetPreview } from './remote-target-preview'
 import { clearMatchResultCombatViews } from './match-result-state'
@@ -217,6 +224,28 @@ type BoardTargetGestureSource =
   | { readonly kind: 'hero-power' }
   | { readonly kind: 'card'; readonly cardInstanceId: string }
 
+type MatchHoverTarget =
+  | {
+      readonly kind: 'board-card'
+      readonly key: string
+      readonly view: MinionView | WeaponView
+    }
+  | {
+      readonly kind: 'hero-power'
+      readonly key: string
+      readonly participantId: PlayerId
+    }
+  | {
+      readonly kind: 'secret'
+      readonly key: string
+      readonly side: SecretPresentationSide
+    }
+  | {
+      readonly kind: 'quest'
+      readonly key: string
+      readonly side: SecretPresentationSide
+    }
+
 const COMBAT_SHAKE_DIRECTIONS = [
   { x: 1, y: -0.25 },
   { x: -0.75, y: 0.55 },
@@ -241,8 +270,9 @@ interface GoldenMonkeyHandReplacement {
 /** Feature-owned board, opening choreography, mulligan, and local hand interaction. */
 export class GameBoardView extends Actor {
   private readonly resolver = new CardAssetResolver()
-  private readonly secretPreviewView = new SecretPreviewView(this.resolver)
+  private readonly secretPreviewView: SecretPreviewView
   private readonly questPreviewView: QuestPreviewView
+  private readonly hoverPreview: HoverPreviewController<MatchHoverTarget>
   private localSecretHovered = false
   private questHoveredSide: SecretPresentationSide | null = null
   private historyPreviewDesaturated = false
@@ -272,10 +302,12 @@ export class GameBoardView extends Actor {
     return this.boardPositions.views('remote')
   }
   private boardCardPreview: CardView | null = null
+  private boardCardPreviewGhost: PreviewGhostOutline | null = null
   private hoveredBoardCardView: MinionView | WeaponView | null = null
   private boardCardPreviewRequest = 0
   private requestedBoardCardPreviewKey: string | null = null
   private heroPowerPreview: HeroPowerCardView | null = null
+  private heroPowerPreviewGhost: PreviewGhostOutline | null = null
   private hoveredHeroPowerParticipantId: PlayerId | null = null
   private requestedHeroPowerPreviewKey: string | null = null
   private readonly weaponViews = new Map<PlayerId, WeaponView>()
@@ -325,6 +357,8 @@ export class GameBoardView extends Actor {
   private readonly heroLayer = new Container()
   private readonly openingLayer = new Container()
   private readonly travelLayer = new Container()
+  /** Hosts discard flights above the hand, HUD, and summons. */
+  private readonly discardFlightLayer = new Container()
   private readonly deckLayer = new Container()
   private readonly deckViews = new Map<PlayerId, Sprite>()
   private readonly drawOrigins = new WeakMap<Container, Sprite>()
@@ -620,7 +654,8 @@ export class GameBoardView extends Actor {
       layoutRemoteRow: () => this.applyRemoteBoardLayout(),
       positions: this.boardPositions,
       screenShake: (attack) => this.runCombatScreenShake(attack),
-      onImpact: () => this.refreshCombatAttackabilityAfterImpact()
+      onImpact: () => this.refreshCombatAttackabilityAfterImpact(),
+      renderer: options.renderer
     })
     this.hand = new GameHandView(
       options.renderer,
@@ -755,6 +790,7 @@ export class GameBoardView extends Actor {
       warn: () => undefined,
       error: () => undefined
     }
+    this.secretPreviewView = new SecretPreviewView(this.resolver, options.renderer)
     const canvas = options.renderer.canvas
     const parent = canvas.parentElement
     this.addCardPicker =
@@ -800,31 +836,37 @@ export class GameBoardView extends Actor {
     this.gameplayLayer.addChild(this.heroLayer)
     this.questPreviewView = new QuestPreviewView(
       this.resolver,
-      options.gameAssets.questArrow
+      options.gameAssets.questArrow,
+      options.renderer
     )
+    this.hoverPreview = new HoverPreviewController<MatchHoverTarget>({
+      delayMs: BOARD_TIMING.previewHoverDelay * 1000,
+      key: (target) => target.key,
+      onEnter: (target) => this.setHoverAura(target, true),
+      onActivate: (target) => this.activateHoverPreview(target),
+      onLeave: (target) => this.clearHoverTarget(target)
+    })
     this.boardCardPreviewLayer.addChild(this.secretPreviewView, this.questPreviewView)
     this.secretZoneView = new SecretZoneView(options.gameAssets.secret, (hovered) => {
-      if (hovered) this.hideBoardCardPreview()
-      this.localSecretHovered = hovered
-      if (hovered) {
-        this.questHoveredSide = null
-        this.questPreviewView.hide()
+      const target: MatchHoverTarget = {
+        kind: 'secret',
+        key: 'secret:local',
+        side: 'local'
       }
-      this.refreshSecretPreview()
-      this.updateBadgeBoardDesaturation()
+      if (hovered) this.hoverPreview.enter(target)
+      else this.hoverPreview.leave(target)
     })
     this.gameplayLayer.addChild(this.secretZoneView)
     this.questZoneView = new QuestZoneView(
       options.gameAssets.quest,
       (side, hovered) => {
-        if (hovered) this.hideBoardCardPreview()
-        this.questHoveredSide = hovered ? side : null
-        if (hovered) {
-          this.localSecretHovered = false
-          this.secretPreviewView.hide()
+        const target: MatchHoverTarget = {
+          kind: 'quest',
+          key: `quest:${side}`,
+          side
         }
-        this.refreshQuestPreview()
-        this.updateBadgeBoardDesaturation()
+        if (hovered) this.hoverPreview.enter(target)
+        else this.hoverPreview.leave(target)
       }
     )
     this.gameplayLayer.addChild(this.questZoneView)
@@ -860,6 +902,10 @@ export class GameBoardView extends Actor {
       options.gameAssets.minionPlayAura
     )
     this.gameplayLayer.addChild(this.cardPlayAnimation)
+    // Discarded cards must read above the remaining hand fan, HUD, and summons.
+    this.discardFlightLayer.label = 'game.card-discard-flight'
+    this.discardFlightLayer.eventMode = 'none'
+    this.gameplayLayer.addChild(this.discardFlightLayer)
     this.cardDepartureAnimation = new CardDepartureAnimation(
       options.renderer,
       this.animationScope,
@@ -884,15 +930,18 @@ export class GameBoardView extends Actor {
       toggleTexture: options.gameAssets.toggleViewButton,
       cardBackTexture: options.gameAssets.cardBack,
       createSlot: (card, sourceInstanceId) => this.createSlot(card, sourceInstanceId),
-      createHeroPowerChoice: (heroPowerId) => {
+      createHeroPowerChoice: (heroPowerId, premium) => {
         const definition = HERO_POWER_CATALOG.require(heroPowerId)
         return new HeroPowerCardView(
           definition,
           definition.cost,
           options.gameAssets[definition.presentationAssetKey as HeroPowerAssetKey],
-          options.gameAssets.discoverHistoryHeroPower
+          options.gameAssets.discoverHistoryHeroPower,
+          { premium }
         )
       },
+      heroPowerChoicePremium: (participantId, sourceCardInstanceId) =>
+        this.heroPowerChoicePremium(participantId, sourceCardInstanceId),
       onSelect: (card) => this.chooseDiscoverCard(card),
       onChooseOption: (choice) => this.chooseVisibleCardOption(choice),
       isInputBlocked: () => this.cardChoiceInputGate.blocked
@@ -977,7 +1026,10 @@ export class GameBoardView extends Actor {
     this.on('globalpointermove', (event: FederatedPointerEvent) =>
       this.handleBoardPointerMove(event)
     )
-    this.on('pointerleave', () => this.updateHeroPowerHover(null))
+    this.on('pointerleave', () => {
+      this.updateHeroPowerHover(null)
+      this.hoverPreview.cancel()
+    })
     this.on('pointerup', this.handleBoardPointerUp)
     this.on('pointerupoutside', this.handleBoardPointerUp)
     this.on('pointerdown', (event: FederatedPointerEvent) => {
@@ -1110,7 +1162,8 @@ export class GameBoardView extends Actor {
         this.premiumAppearance.sideFor(
           { instanceId: snapshot.id, ownerId: snapshot.ownerId },
           snapshot.participantId
-        )
+        ),
+      this.options.renderer
     )
     this.matchBackdropLayer.addChild(this.historyView)
     // Keep expanded history above gameplay, but its rail below hand cards.
@@ -1322,6 +1375,8 @@ export class GameBoardView extends Actor {
       const artworkTexture =
         this.options.gameAssets[heroPower.presentationAssetKey as HeroPowerAssetKey]
       const isLocal = player.participantId === this.localParticipantId
+      const premium = this.heroPowerPremiumFor(player)
+      this.premiumAppearance.setHeroPowerPremium(player.participantId, premium)
       const layout: HeroPowerLayout = {
         card: isLocal
           ? GAME_BOARD_LAYOUT.heroPowers.local
@@ -1332,10 +1387,13 @@ export class GameBoardView extends Actor {
       const view = new HeroPowerView({
         layout,
         backTexture: this.options.gameAssets.heroPowerBack,
+        premiumBackTexture: this.options.gameAssets.premiumHeroPowerBack,
         frontFrameTexture: this.options.gameAssets.heroPowerFront,
+        premiumFrameTexture: this.options.gameAssets.premiumHeroPowerFront,
         artworkTexture,
         manaTexture: this.options.gameAssets.heroPowerMana,
         cost: player.heroPower.cost,
+        premium,
         onPointerDown: isLocal ? (event) => this.beginHeroPowerDrag(event) : undefined,
         onClick: isLocal
           ? (event) => {
@@ -3455,6 +3513,9 @@ export class GameBoardView extends Actor {
       case 'minion-played':
         await this.presentMinionPlayed(event)
         return
+      case 'battlecry-repetition-started':
+        await this.presentBattlecryRepetitionStarted(event)
+        return
       case 'weapon-equipped':
         await this.presentWeaponEquipped(event)
         return
@@ -3582,6 +3643,14 @@ export class GameBoardView extends Actor {
     }
   }
 
+  private async presentBattlecryRepetitionStarted(
+    event: Extract<OpeningMatchEvent, { type: 'battlecry-repetition-started' }>
+  ): Promise<void> {
+    const view = this.findMinionView(event.participantId, event.minion.instanceId)
+    if (!view) return
+    await view.presentBattlecryBanner()
+  }
+
   private async presentMinionSummoned(
     event: Extract<OpeningMatchEvent, { type: 'minion-summoned' }>
   ): Promise<void> {
@@ -3593,6 +3662,10 @@ export class GameBoardView extends Actor {
   ): Promise<void> {
     if (event.cardMovement) {
       await this.presentMinionCardMovement(event.cardMovement)
+      return
+    }
+    if (event.action === 'discard') {
+      await this.presentHandDiscard(event)
       return
     }
     this.syncSecrets(this.presentationState())
@@ -3894,7 +3967,17 @@ export class GameBoardView extends Actor {
     const secrets =
       state.players.find((player) => player.participantId === this.localParticipantId)
         ?.secrets ?? []
-    if (!secrets.length) this.localSecretHovered = false
+    if (!secrets.length) {
+      this.hoverPreview.leave({
+        kind: 'secret',
+        key: 'secret:local',
+        side: 'local'
+      })
+      this.localSecretHovered = false
+      this.secretPreviewView.hide()
+      this.updateBadgeBoardDesaturation()
+      return
+    }
     this.updateBadgeBoardDesaturation()
     void this.secretPreviewView
       .show(
@@ -3925,6 +4008,11 @@ export class GameBoardView extends Actor {
       (player) => player.participantId === participantId
     )?.quest
     if (!quest) {
+      this.hoverPreview.leave({
+        kind: 'quest',
+        key: `quest:${this.questHoveredSide}`,
+        side: this.questHoveredSide
+      })
       this.questHoveredSide = null
       this.questPreviewView.hide()
       this.updateBadgeBoardDesaturation()
@@ -4209,7 +4297,8 @@ export class GameBoardView extends Actor {
       view?.replaceFrame(this.options.heroAssets[hero.presentationAssetKey]) ??
         Promise.resolve(),
       heroPowerView?.replaceArtwork(
-        this.options.gameAssets[heroPower.presentationAssetKey as HeroPowerAssetKey]
+        this.options.gameAssets[heroPower.presentationAssetKey as HeroPowerAssetKey],
+        this.heroPowerPremiumForParticipant(event.participantId)
       ) ?? Promise.resolve()
     ])
     this.syncHeroPowerViews(this.presentationState())
@@ -4224,9 +4313,40 @@ export class GameBoardView extends Actor {
     const definition = HERO_POWER_CATALOG.require(event.heroPowerId)
     view.setCost(definition.cost)
     await view.replaceArtwork(
-      this.options.gameAssets[definition.presentationAssetKey as HeroPowerAssetKey]
+      this.options.gameAssets[definition.presentationAssetKey as HeroPowerAssetKey],
+      this.heroPowerPremiumForParticipant(event.participantId)
     )
     this.syncHeroPowerViews(this.presentationState())
+  }
+
+  /**
+   * Whether a participant's hero power should render premium: the dev
+   * override, the starting hero's own premium, or a premium minion that
+   * replaced the power (premium Justicar, Finley, or hero card).
+   */
+  private heroPowerPremiumForParticipant(participantId: PlayerId): boolean {
+    const side = participantId === this.localParticipantId ? 'local' : 'remote'
+    return (
+      isPremiumEnabled(side) || this.premiumAppearance.heroPowerPremium(participantId)
+    )
+  }
+
+  private heroPowerPremiumFor(player: OpeningPlayerState): boolean {
+    return (
+      this.heroPowerPremiumForParticipant(player.participantId) ||
+      isPurchasedPremium(player.heroId)
+    )
+  }
+
+  /** Premium discovery options when the choice source is premium (Sir Finley). */
+  private heroPowerChoicePremium(
+    participantId: PlayerId,
+    sourceCardInstanceId: string
+  ): boolean {
+    return (
+      this.heroPowerPremiumForParticipant(participantId) ||
+      this.premiumAppearance.instancePremium(sourceCardInstanceId)
+    )
   }
 
   private presentCharacterStateChange(
@@ -4686,8 +4806,9 @@ export class GameBoardView extends Actor {
     view.shadow.restingScale = targetScale.x
     view.scale.set(targetScale.x * 0.72, targetScale.y * 0.72)
     view.eventMode = 'static'
-    view.on('pointerover', () => void this.showBoardCardPreview(view))
-    view.on('pointerout', () => this.hideBoardCardPreview(view))
+    const hoverTarget = this.boardCardHoverTarget(view)
+    view.on('pointerover', () => this.hoverPreview.enter(hoverTarget))
+    view.on('pointerout', () => this.hoverPreview.leave(hoverTarget))
     this.weaponLayer.addChild(view)
 
     if (isRemote && adjustRemoteHand) {
@@ -5053,6 +5174,7 @@ export class GameBoardView extends Actor {
         premiumLegendaryFrame: this.options.gameAssets.premiumMinionFrameLegendary,
         taunt: this.options.gameAssets.minionTaunt,
         premiumTaunt: this.options.gameAssets.premiumMinionTaunt,
+        battlecry: this.options.gameAssets.minionBattlecry,
         enrage: this.options.gameAssets.minionEnrage,
         divineShield: this.options.gameAssets.minionDivineShield,
         frozen: this.options.gameAssets.minionFrozen,
@@ -5153,6 +5275,7 @@ export class GameBoardView extends Actor {
               overwrite: 'auto'
             })
           )
+          view.presentTauntPop()
           return null
         }
         // Remote (AI) board: same fade but on the top row.
@@ -5178,6 +5301,7 @@ export class GameBoardView extends Actor {
             overwrite: 'auto'
           })
         )
+        view.presentTauntPop()
         return null
       }
 
@@ -5282,6 +5406,10 @@ export class GameBoardView extends Actor {
           if (targetPreview) targetPreview.presentation = retainedPresentation
           this.cardPlay.syncPendingMinionTargetPreview()
         }
+
+        // Hold the shield collapsed during the fall, then pop once the
+        // minion lands on the board slot.
+        view.presentTauntPop(summon.settleDuration)
 
         impact = this.timeline()
         targetPreview?.activeTimelines.add(impact)
@@ -5456,16 +5584,109 @@ export class GameBoardView extends Actor {
     }
   }
 
+  private boardCardHoverTarget(view: MinionView | WeaponView): MatchHoverTarget {
+    return {
+      kind: 'board-card',
+      key: `board-card:${view.instanceId ?? String(view.label)}`,
+      view
+    }
+  }
+
+  private heroPowerHoverTarget(participantId: PlayerId): MatchHoverTarget {
+    return {
+      kind: 'hero-power',
+      key: `hero-power:${participantId}`,
+      participantId
+    }
+  }
+
+  private setHoverAura(target: MatchHoverTarget, enabled: boolean): void {
+    switch (target.kind) {
+      case 'board-card':
+        target.view.setHoverAura(enabled)
+        return
+      case 'hero-power':
+        this.heroPowerViews.get(target.participantId)?.setHoverAura(enabled)
+        return
+      case 'secret':
+        this.secretZoneView.setHoverAura(target.side, enabled)
+        return
+      case 'quest':
+        this.questZoneView.setHoverAura(target.side, enabled)
+        return
+    }
+  }
+
+  private activateHoverPreview(target: MatchHoverTarget): void {
+    switch (target.kind) {
+      case 'board-card':
+        void this.showBoardCardPreview(target.view)
+        return
+      case 'hero-power':
+        this.showHeroPowerPreview(target.participantId)
+        return
+      case 'secret':
+        this.hideBoardCardPreview(undefined, true)
+        this.localSecretHovered = true
+        this.questHoveredSide = null
+        this.questPreviewView.hide()
+        this.refreshSecretPreview()
+        this.updateBadgeBoardDesaturation()
+        return
+      case 'quest':
+        this.hideBoardCardPreview(undefined, true)
+        this.questHoveredSide = target.side
+        this.localSecretHovered = false
+        this.secretPreviewView.hide()
+        this.refreshQuestPreview()
+        this.updateBadgeBoardDesaturation()
+        return
+    }
+  }
+
+  private clearHoverTarget(target: MatchHoverTarget): void {
+    this.setHoverAura(target, false)
+    switch (target.kind) {
+      case 'board-card':
+        this.hideBoardCardPreview(target.view, true)
+        return
+      case 'hero-power':
+        this.hideHeroPowerPreview(target.participantId)
+        return
+      case 'secret':
+        this.localSecretHovered = false
+        this.secretPreviewView.hide()
+        this.updateBadgeBoardDesaturation()
+        return
+      case 'quest':
+        if (this.questHoveredSide !== target.side) return
+        this.questHoveredSide = null
+        this.questPreviewView.hide()
+        this.updateBadgeBoardDesaturation()
+        return
+    }
+  }
+
   private destroyBoardCardPreview(): void {
     const preview = this.boardCardPreview
+    const ghost = this.boardCardPreviewGhost
     this.boardCardPreview = null
+    this.boardCardPreviewGhost = null
+    ghost?.dispose()
     if (!preview || preview.destroyed) return
     this.killTweensOf(preview)
     preview.removeFromParent()
     preview.destroy({ children: true })
   }
 
-  private hideBoardCardPreview(view?: MinionView | WeaponView): void {
+  private hideBoardCardPreview(
+    view?: MinionView | WeaponView,
+    keepHoverIntent = false
+  ): void {
+    if (!keepHoverIntent) {
+      if (view) this.hoverPreview.leave(this.boardCardHoverTarget(view))
+      else this.hoverPreview.cancel()
+    }
     if (!view) {
       this.localSecretHovered = false
       this.secretPreviewView.hide()
@@ -5635,9 +5856,11 @@ export class GameBoardView extends Actor {
       preview.eventMode = 'none'
       preview.label = `game.board-card-preview.${view.instanceId}`
       this.positionBoardCardPreview(preview, view)
+      const ghost = new PreviewGhostOutline(this.options.renderer, preview)
 
       this.destroyBoardCardPreview()
       this.boardCardPreview = preview
+      this.boardCardPreviewGhost = ghost
       this.boardCardPreviewLayer.addChild(preview)
       this.tweenTo(preview, {
         alpha: 1,
@@ -5674,7 +5897,10 @@ export class GameBoardView extends Actor {
 
   private destroyHeroPowerPreview(): void {
     const preview = this.heroPowerPreview
+    const ghost = this.heroPowerPreviewGhost
     this.heroPowerPreview = null
+    this.heroPowerPreviewGhost = null
+    ghost?.dispose()
     if (!preview || preview.destroyed) return
     this.killTweensOf(preview)
     preview.removeFromParent()
@@ -5691,8 +5917,15 @@ export class GameBoardView extends Actor {
   private updateHeroPowerHover(
     globalPoint: { readonly x: number; readonly y: number } | null
   ): void {
-    if (!globalPoint || !this.isBoardCardPreviewEnabled()) {
-      this.hideHeroPowerPreview()
+    if (
+      !globalPoint ||
+      this.session?.getState().phase === 'mulligan' ||
+      !this.isBoardCardPreviewEnabled()
+    ) {
+      const participantId = this.hoveredHeroPowerParticipantId
+      if (participantId)
+        this.hoverPreview.leave(this.heroPowerHoverTarget(participantId))
+      else this.hideHeroPowerPreview()
       return
     }
 
@@ -5702,13 +5935,13 @@ export class GameBoardView extends Actor {
         return view.containsCanvasPoint(localPoint.x, localPoint.y)
       })?.[0] ?? null
 
-    if (
-      this.hoveredHeroPowerParticipantId &&
-      this.hoveredHeroPowerParticipantId !== participantId
-    ) {
-      this.hideHeroPowerPreview(this.hoveredHeroPowerParticipantId)
+    if (this.hoveredHeroPowerParticipantId !== participantId) {
+      const previousParticipantId = this.hoveredHeroPowerParticipantId
+      if (previousParticipantId)
+        this.hoverPreview.leave(this.heroPowerHoverTarget(previousParticipantId))
+      this.hoveredHeroPowerParticipantId = participantId
     }
-    if (participantId) this.showHeroPowerPreview(participantId)
+    if (participantId) this.hoverPreview.enter(this.heroPowerHoverTarget(participantId))
   }
 
   private positionHeroPowerPreview(
@@ -5734,6 +5967,7 @@ export class GameBoardView extends Actor {
     const view = this.heroPowerViews.get(participantId)
     const initialSource = this.heroPowerPreviewForParticipant(participantId)
     if (!view || !initialSource) {
+      this.hoverPreview.leave(this.heroPowerHoverTarget(participantId))
       this.hideHeroPowerPreview(participantId)
       return
     }
@@ -5744,7 +5978,7 @@ export class GameBoardView extends Actor {
       this.localSecretHovered ||
       this.questHoveredSide
     ) {
-      this.hideBoardCardPreview()
+      this.hideBoardCardPreview(undefined, true)
     }
 
     if (
@@ -5760,6 +5994,7 @@ export class GameBoardView extends Actor {
     this.destroyHeroPowerPreview()
 
     if (view.destroyed || !view.parent) {
+      this.hoverPreview.leave(this.heroPowerHoverTarget(participantId))
       this.hideHeroPowerPreview(participantId)
       return
     }
@@ -5768,13 +6003,15 @@ export class GameBoardView extends Actor {
       initialSource.definition,
       initialSource.cost,
       initialSource.artwork,
-      this.options.gameAssets.discoverHistoryHeroPower
+      this.options.gameAssets.discoverHistoryHeroPower,
+      { premium: this.heroPowerPremiumForParticipant(participantId) }
     )
     preview.scale.set(GAME_BOARD_LAYOUT.boardMinions.cardPreview.scale)
     preview.alpha = 0
     preview.eventMode = 'none'
     preview.label = `game.hero-power-preview.${participantId}`
     this.positionHeroPowerPreview(preview, view)
+    this.heroPowerPreviewGhost = new PreviewGhostOutline(this.options.renderer, preview)
 
     this.heroPowerPreview = preview
     this.boardCardPreviewLayer.addChild(preview)
@@ -5787,14 +6024,14 @@ export class GameBoardView extends Actor {
 
   private refreshHoveredHeroPowerPreview(): void {
     const participantId = this.hoveredHeroPowerParticipantId
-    if (!participantId) return
+    if (!participantId || !this.heroPowerPreview) return
     this.showHeroPowerPreview(participantId)
   }
 
   private refreshHoveredBoardCardPreview(): void {
     this.refreshSecretPreview()
     const view = this.hoveredBoardCardView
-    if (!view) return
+    if (!view || (!this.boardCardPreview && !this.requestedBoardCardPreviewKey)) return
     if (!this.boardCardPreviewForView(view)) {
       this.hideBoardCardPreview(view)
       return
@@ -5969,8 +6206,9 @@ export class GameBoardView extends Actor {
 
   private wireMinionView(view: MinionView): void {
     view.setHoverable(true)
-    view.on('pointerover', () => void this.showBoardCardPreview(view))
-    view.on('pointerout', () => this.hideBoardCardPreview(view))
+    const hoverTarget = this.boardCardHoverTarget(view)
+    view.on('pointerover', () => this.hoverPreview.enter(hoverTarget))
+    view.on('pointerout', () => this.hoverPreview.leave(hoverTarget))
     view.on('pointerdown', (event: FederatedPointerEvent) => {
       if (view.ownerId !== this.localParticipantId) return
       this.beginCombatDrag(view, event)
@@ -6842,6 +7080,7 @@ export class GameBoardView extends Actor {
   }
 
   updateShadows(deltaMS: number): void {
+    if (!this.isBoardCardPreviewEnabled()) this.hoverPreview.cancel()
     if (this.localSecretHovered && !this.isBoardCardPreviewEnabled()) {
       this.localSecretHovered = false
       this.secretPreviewView.hide()
@@ -6884,6 +7123,7 @@ export class GameBoardView extends Actor {
     this.options.cursor?.setContextVariant(null)
     this.options.cursor?.setTargeting(false)
     this.hideBoardCardPreview()
+    this.hoverPreview.dispose()
     this.matchResultBlurFilter?.destroy()
     this.matchResultBlurFilter = null
     this.matchResultGrayscaleFilter?.destroy()
@@ -6967,6 +7207,136 @@ export class GameBoardView extends Actor {
       },
       0
     )
+    return completeTimeline(timeline)
+  }
+
+  /**
+   * Presents a discard effect: the local hand card or one remote card back
+   * flies to the board center while fading to zero and is then destroyed.
+   * Removing the entry/back here transfers ownership out of the hand so the
+   * effect reconcile finds nothing left to prune.
+   */
+  private async presentHandDiscard(
+    event: Extract<OpeningMatchEvent, { type: 'effect-resolved' }>
+  ): Promise<void> {
+    this.syncSecrets(this.presentationState())
+    const targetId = event.data?.target
+    if (typeof targetId !== 'string') return
+    const entry = this.findEntry(targetId)
+    if (entry) {
+      await this.presentLocalHandDiscard(entry)
+      return
+    }
+
+    const count = this.remoteBackCount
+    const index = count > 0 ? Math.floor((count - 1) / 2) : -1
+    const back = index >= 0 ? this.remoteBacks[index] : undefined
+    if (!back) return
+    const backIndex = this.remoteBacks.indexOf(back)
+    if (backIndex >= 0) this.remoteBacks.splice(backIndex, 1)
+    this.remoteBackCount = Math.max(0, count - 1)
+    this.layoutRemoteHand()
+    await this.animateRemoteBackToDiscard(back)
+  }
+
+  /**
+   * Discards a local hand card with a snapshot ghost instead of flying the
+   * live slot: the card pose is taken from its rest transform, the slot is
+   * removed immediately, and a texture snapshot slides toward the board
+   * center while fading. This keeps the flight independent of hover state
+   * and reparent bookkeeping.
+   */
+  private async presentLocalHandDiscard(entry: HandEntry): Promise<void> {
+    this.removePresentedHandEntry(entry)
+    const slot = entry.slot
+    const rest = entry.restTransform ?? {
+      x: GAME_BOARD_LAYOUT.frame.center.x,
+      y: DEFAULT_HAND_LAYOUT.baselineY,
+      rotation: 0,
+      scale: DEFAULT_HAND_LAYOUT.cardScale,
+      zIndex: 0
+    }
+    // resetHover never restores the enlarged hover pose, so normalize the
+    // live card to its rest pose before capturing the snapshot.
+    gsap.killTweensOf(slot)
+    gsap.killTweensOf(slot.scale)
+    gsap.killTweensOf(slot.skew)
+    slot.position.set(rest.x, rest.y)
+    slot.rotation = rest.rotation
+    slot.scale.set(rest.scale)
+    slot.skew.set(0, 0)
+    const bounds = slot.getLocalBounds()
+    const texture = this.options.renderer.generateTexture({
+      target: slot,
+      frame: new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
+    })
+    slot.removeFromParent()
+    slot.destroy({ children: true })
+
+    const ghost = new Container()
+    ghost.label = 'game.card-discard.ghost'
+    ghost.eventMode = 'none'
+    const image = new Sprite(texture)
+    image.position.set(bounds.x, bounds.y)
+    image.eventMode = 'none'
+    ghost.addChild(image)
+    ghost.once('destroyed', () => texture.destroy(true))
+    ghost.position.set(rest.x, rest.y)
+    ghost.rotation = rest.rotation
+    ghost.scale.set(rest.scale)
+    this.discardFlightLayer.addChild(ghost)
+
+    const wasReflowing = this.hand.isReflowing
+    this.hand.setReflowing(true)
+    this.hand.resetHover()
+    try {
+      await Promise.all([
+        this.hand.applyLayout({
+          positionDuration: OPENING_TIMING.cardDeal,
+          scaleDuration: OPENING_TIMING.cardDeal
+        }),
+        this.flyToDiscard(ghost)
+      ])
+    } finally {
+      if (!this.destroyed) this.hand.setReflowing(wasReflowing)
+      if (!ghost.destroyed) ghost.destroy({ children: true })
+    }
+  }
+
+  private async animateRemoteBackToDiscard(back: Sprite): Promise<void> {
+    this.discardFlightLayer.reparentChild(back)
+    back.label = 'game.card-discard.remote-back'
+    const scale = back.scale.x
+    const flip = this.timeline()
+    flip.to(back.scale, {
+      x: 0,
+      duration: RESOLUTION_TIMING.discardFlip / 2,
+      ease: 'power2.in'
+    })
+    flip.to(back.scale, {
+      x: scale,
+      duration: RESOLUTION_TIMING.discardFlip / 2,
+      ease: 'power2.out'
+    })
+    await completeTimeline(flip)
+    if (this.destroyed || back.destroyed) return
+    await this.flyToDiscard(back)
+    if (!back.destroyed) back.destroy()
+  }
+
+  /** Flies a reparented card body toward the board center while fading out. */
+  private flyToDiscard(body: Container): Promise<void> {
+    const center = GAME_BOARD_LAYOUT.frame.center
+    const direction = body.x < center.x ? -1 : 1
+    const timeline = this.timeline()
+    timeline.to(body, {
+      x: center.x,
+      y: center.y,
+      alpha: 0,
+      rotation: direction * 0.16,
+      duration: RESOLUTION_TIMING.discardFlight,
+      ease: 'power2.in'
+    })
     return completeTimeline(timeline)
   }
 

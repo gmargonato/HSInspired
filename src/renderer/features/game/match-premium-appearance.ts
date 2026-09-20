@@ -36,6 +36,8 @@ export class MatchPremiumAppearance {
     string,
     { cardId: string; ownerId: string; premium: boolean }
   >()
+  /** Current per-participant hero-power premium, fed by replacement events. */
+  private readonly heroPowers = new Map<string, boolean>()
 
   constructor(
     private readonly localPlayer: () => string,
@@ -63,8 +65,10 @@ export class MatchPremiumAppearance {
     const previous = this.instances.get(card.instanceId)
     if (previous) {
       if (previous.cardId !== card.cardId) {
+        // A transform produces a fresh card: premium is re-derived from the
+        // new identity instead of being inherited from the replaced card.
         previous.cardId = card.cardId
-        previous.premium ||= this.identityPremium(card.cardId, previous.ownerId)
+        previous.premium = this.identityPremium(card.cardId, previous.ownerId)
       }
       return previous.premium
     }
@@ -84,6 +88,21 @@ export class MatchPremiumAppearance {
       card.controllerId ??
       participantId
     return ownerId === this.localPlayer() ? 'local' : 'remote'
+  }
+
+  /** Seeds the tracked hero-power premium before any replacement event. */
+  setHeroPowerPremium(participantId: string, premium: boolean): void {
+    this.heroPowers.set(participantId, premium)
+  }
+
+  /** Whether the participant's current hero power should render premium. */
+  heroPowerPremium(participantId: string): boolean {
+    return this.heroPowers.get(participantId) === true
+  }
+
+  /** Whether a tracked card instance renders premium; unknown means not. */
+  instancePremium(instanceId: string): boolean {
+    return this.instances.get(instanceId)?.premium === true
   }
 
   rememberState(state: OpeningMatchState): void {
@@ -122,6 +141,20 @@ export class MatchPremiumAppearance {
             outcome.target.participantId
           )
         }
+      }
+      if (
+        event.type === 'hero-power-replaced' ||
+        event.type === 'hero-replaced'
+      ) {
+        // A hero card's battlecry (e.g. Lord Jaraxxus) also installs its power.
+        const sourcePremium = event.sourceInstanceId
+          ? this.instances.get(event.sourceInstanceId)?.premium === true
+          : false
+        const identityPremium =
+          typeof event.sourceCardId === 'string'
+            ? this.identityPremium(event.sourceCardId, event.participantId)
+            : false
+        this.heroPowers.set(event.participantId, sourcePremium || identityPremium)
       }
       if (event.type !== 'effect-resolved') continue
       const data = event.data
@@ -171,11 +204,20 @@ export class MatchPremiumAppearance {
         )
       }
       if (
-        event.action === 'transform' &&
+        (event.action === 'transform' || event.action === 'transform-random') &&
         typeof data.target === 'string' &&
         typeof data.cardId === 'string'
       ) {
-        this.resolve({ instanceId: data.target, cardId: data.cardId }, participantId)
+        // Transforms mutate the instance in place but produce a fresh card:
+        // the result is premium only when the transforming source itself is
+        // premium, never inherited from the replaced card or from owned
+        // premium copies of the rolled card.
+        const previous = this.instances.get(data.target)
+        this.instances.set(data.target, {
+          cardId: data.cardId,
+          ownerId: previous?.ownerId ?? participantId,
+          premium: Boolean(sourcePremium)
+        })
       }
     }
   }

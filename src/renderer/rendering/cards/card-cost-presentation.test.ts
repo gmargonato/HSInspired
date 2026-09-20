@@ -43,6 +43,31 @@ describe('runtime card stat presentation', () => {
     })
   })
 
+  it('renders normal and premium legendary hero overlays', () => {
+    const hero = CARD_CATALOG.all.find(
+      (card) => card.type === 'Hero' && card.rarity === 'Legendary'
+    )
+    if (!hero) throw new Error('Expected a Legendary Hero card in the catalog')
+
+    const standard = buildCardRenderTree(hero)
+    const premium = buildCardRenderTree(hero, { premium: true })
+    const legendaryFrame = (tree: typeof standard) =>
+      tree.root.children.find((node) => node.id === 'legendary-frame')
+
+    expect(legendaryFrame(standard)).toMatchObject({
+      kind: 'image',
+      assetKey: 'card.frame.legendary',
+      transform: {
+        position: { x: 370, y: -35 },
+        anchor: { x: 0.5, y: 0 }
+      }
+    })
+    expect(legendaryFrame(premium)).toMatchObject({
+      kind: 'image',
+      assetKey: 'card.frame.legendary.premium'
+    })
+  })
+
   it('supports the premium Hero card frame without changing Hero Power support', () => {
     const hero = CARD_CATALOG.all.find((card) => card.type === 'Hero')
     if (!hero) throw new Error('Expected a Hero card in the catalog')
@@ -61,7 +86,7 @@ describe('runtime card stat presentation', () => {
       assetKey: 'card.frame.hero.premium'
     })
     expect(supportsPremiumFormat('Hero')).toBe(true)
-    expect(supportsPremiumFormat('HeroPower')).toBe(false)
+    expect(supportsPremiumFormat('HeroPower')).toBe(true)
   })
 
   it('refreshes full-card premium layouts by side and preserves explicit inspector previews', async () => {

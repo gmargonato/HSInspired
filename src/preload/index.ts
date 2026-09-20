@@ -58,6 +58,13 @@ import {
   type WindowResolutionSettings
 } from '../shared/ipc/window-settings'
 import {
+  PREFERENCES_IPC_CHANNELS,
+  parsePreferences,
+  parsePreferencesUpdateRequest,
+  type Preferences,
+  type PreferencesUpdateRequest
+} from '../shared/ipc/preferences'
+import {
   PLAYER_STATS_IPC_CHANNELS,
   parsePlayableClassId,
   parsePlayerStatsSnapshot,
@@ -355,6 +362,18 @@ const api = {
         await ipcRenderer.invoke(
           WINDOW_SETTINGS_IPC_CHANNELS.setResolution,
           parseWindowResolution(resolution)
+        )
+      )
+  },
+
+  preferences: {
+    get: async (): Promise<Preferences> =>
+      parsePreferences(await ipcRenderer.invoke(PREFERENCES_IPC_CHANNELS.get)),
+    set: async (request: PreferencesUpdateRequest): Promise<Preferences> =>
+      parsePreferences(
+        await ipcRenderer.invoke(
+          PREFERENCES_IPC_CHANNELS.set,
+          parsePreferencesUpdateRequest(request)
         )
       )
   }

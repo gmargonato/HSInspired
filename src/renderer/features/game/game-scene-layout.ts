@@ -442,6 +442,19 @@ export const GAME_BOARD_LAYOUT = {
       scale: 0.42,
       anchor: BOTTOM_CENTER
     },
+    /**
+     * Non-modal enemy Discover spread: no screen dimming, slightly smaller
+     * backs hugging the top edge while the AI decides.
+     */
+    remoteDiscover: {
+      centerX: 960,
+      baselineY: 360,
+      gap: 250,
+      scale: 0.35,
+      anchor: BOTTOM_CENTER,
+      /** Card-back elevation; the shadow offset scales with it (40 ≈ held-card lift). */
+      shadowHeight: 40
+    },
     toggleButton: placement(
       { x: 550, y: 830 },
       { width: 235, height: 127 },

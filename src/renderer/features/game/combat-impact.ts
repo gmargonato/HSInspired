@@ -13,25 +13,25 @@ export interface CombatImpactProfile {
 const COMBAT_IMPACT_PROFILES = {
   light: {
     bracket: 'light',
-    amplitude: 2,
+    amplitude: 4,
     pulses: 2,
     duration: 0.14
   },
   medium: {
     bracket: 'medium',
-    amplitude: 4,
+    amplitude: 8,
     pulses: 3,
     duration: 0.18
   },
   heavy: {
     bracket: 'heavy',
-    amplitude: 7,
+    amplitude: 14,
     pulses: 4,
     duration: 0.24
   },
   devastating: {
     bracket: 'devastating',
-    amplitude: 10,
+    amplitude: 20,
     pulses: 5,
     duration: 0.32
   }

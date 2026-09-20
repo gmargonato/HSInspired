@@ -58,12 +58,14 @@ describe('Vilefin Inquisitor', () => {
     s.mana()
     expect(s.use().accepted).toBe(true)
     for (const previousHeroPowerId of ['paladin-reinforce', 'paladin-the-tidal-hand']) {
-      expect(s.play().events).toContainEqual({
-        type: 'hero-power-replaced',
-        participantId: s.participantId,
-        previousHeroPowerId,
-        heroPowerId: 'paladin-the-tidal-hand'
-      })
+      expect(s.play().events).toContainEqual(
+        expect.objectContaining({
+          type: 'hero-power-replaced',
+          participantId: s.participantId,
+          previousHeroPowerId,
+          heroPowerId: 'paladin-the-tidal-hand'
+        })
+      )
       expect(s.player().heroPower).toMatchObject({
         id: 'paladin-the-tidal-hand',
         cost: 2,
@@ -441,7 +443,7 @@ function randomSpellScenario(
     }
   }
   const pool = CARD_CATALOG.all.filter(
-    (card) => card.type === 'Spell' && card.collectible
+    (card) => card.type === 'Spell' && card.collectible && !card.quest
   )
   const index = pool.findIndex((card) => card.id === spellId)
   expect(index).toBeGreaterThanOrEqual(0)
@@ -5824,6 +5826,121 @@ describe('shared effect runtime', () => {
         winnerId: participantId
       }).accepted
     ).toBe(false)
+  })
+
+  it('The Four Horsemen summons the missing Horseman and destroys the enemy hero when all four are present', () => {
+    const scenario = createMatchScenario({ seed: 423 })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activeParticipants(scenario)
+    const usePower = () =>
+      scenario.match.dispatch({ type: 'use-hero-power', participantId })
+
+    expect(
+      scenario.match
+        .dispatch({ type: 'dev-add-card', participantId, cardId: 'knights_of_the_frozen_throne_uther_of_the_ebon_blade' })
+        .accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const uther = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'knights_of_the_frozen_throne_uther_of_the_ebon_blade'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: uther.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(player(scenario, participantId).heroPower.id).toBe(
+      'knights_of_the_frozen_throne_the_four_horsemen'
+    )
+
+    for (const cardId of [
+      'knights_of_the_frozen_throne_darion_mograine',
+      'knights_of_the_frozen_throne_deathlord_nazgrim',
+      'knights_of_the_frozen_throne_inquisitor_whitemane'
+    ])
+      expect(
+        scenario.match.dispatch({ type: 'dev-summon-minion', participantId, cardId })
+          .accepted
+      ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(usePower().accepted).toBe(true)
+
+    const horsemenIds = [
+      'knights_of_the_frozen_throne_darion_mograine',
+      'knights_of_the_frozen_throne_deathlord_nazgrim',
+      'knights_of_the_frozen_throne_inquisitor_whitemane',
+      'knights_of_the_frozen_throne_thoras_trollbane'
+    ].sort()
+    expect(
+      player(scenario, participantId)
+        .board.map((minion) => minion.cardId)
+        .sort()
+    ).toEqual(horsemenIds)
+    expect(player(scenario, opponentId).hero.health).toBe(0)
+  })
+
+  it('The Four Horsemen hero power is unavailable while all four Horsemen are in play', () => {
+    const scenario = createMatchScenario({ seed: 424 })
+    scenario.confirmBothMulligans()
+    const [participantId] = activeParticipants(scenario)
+    const usePower = () =>
+      scenario.match.dispatch({ type: 'use-hero-power', participantId })
+
+    expect(
+      scenario.match
+        .dispatch({ type: 'dev-add-card', participantId, cardId: 'knights_of_the_frozen_throne_uther_of_the_ebon_blade' })
+        .accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    const uther = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'knights_of_the_frozen_throne_uther_of_the_ebon_blade'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: uther.instanceId
+      }).accepted
+    ).toBe(true)
+
+    for (const cardId of [
+      'knights_of_the_frozen_throne_darion_mograine',
+      'knights_of_the_frozen_throne_deathlord_nazgrim',
+      'knights_of_the_frozen_throne_inquisitor_whitemane',
+      'knights_of_the_frozen_throne_thoras_trollbane'
+    ])
+      expect(
+        scenario.match.dispatch({ type: 'dev-summon-minion', participantId, cardId })
+          .accepted
+      ).toBe(true)
+
+    const rejected = usePower()
+    expect(rejected.accepted).toBe(false)
+    if (rejected.accepted) return
+    expect(rejected.code).toBe('hero-power-unavailable')
   })
 
   it('Gang Up keeps its target in play and shuffles three copies into the caster deck', () => {

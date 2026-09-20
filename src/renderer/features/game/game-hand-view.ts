@@ -254,6 +254,7 @@ export class GameHandView {
       const shouldDisplace = hoveredIndex >= 0 && index === hoveredIndex
       if (!shouldDisplace && !entry.displaced) return
       if (shouldDisplace && entry.displaced) return
+      entry.slot.setOutlineLiveWhileHovered(shouldDisplace)
       const target = this.computeHoverTarget(entry.restTransform, index, hoveredIndex)
       if (shouldDisplace) {
         // Appear enlarged just below the final hover position, then settle upward.

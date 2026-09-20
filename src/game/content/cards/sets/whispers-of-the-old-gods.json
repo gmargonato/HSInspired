@@ -2463,9 +2463,26 @@
     "cost": 7,
     "attack": 4,
     "health": 6,
-    "rulesText": "Taunt.",
+    "rulesText": "Taunt. Battlecry: If your C'Thun has at least 10 Attack, summon another Emperor.",
     "keywords": ["taunt"],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "cthun-attack-at-least",
+          "player": "self",
+          "value": 10,
+          "cardId": "whispers_of_the_old_gods_cthun"
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "whispers_of_the_old_gods_twin_emperor_veklor",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": false
   },
   {
@@ -2517,7 +2534,23 @@
     "health": 4,
     "rulesText": "At the start of your opponent's turn, they have a 50% chance to draw an extra card.",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "event": {
+          "type": "turn-started",
+          "turnPlayer": "opponent"
+        },
+        "actions": [
+          {
+            "action": "draw",
+            "player": "opponent",
+            "count": 1,
+            "chance": 0.5
+          }
+        ]
+      }
+    ],
     "collectible": true
   },
   {
@@ -2917,7 +2950,42 @@
     "health": 9,
     "rulesText": "If you control two of these at the end of your turn, merge them into 'The Ancient One'.",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "condition": {
+          "type": "player-has-minion-count",
+          "player": "self",
+          "filter": {
+            "cardId": "whispers_of_the_old_gods_blood_of_the_ancient_one"
+          },
+          "operator": "gte",
+          "value": 2
+        },
+        "actions": [
+          {
+            "action": "transform",
+            "cardId": "whispers_of_the_old_gods_the_ancient_one",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            }
+          },
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "cardId": "whispers_of_the_old_gods_blood_of_the_ancient_one"
+              },
+              "exclude": "source"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true
   },
   {
@@ -3387,7 +3455,28 @@
     "health": 1,
     "rulesText": "Each turn this is in your hand, transform it into a random minion.",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "event": {
+          "type": "turn-started",
+          "turnPlayer": "self"
+        },
+        "actions": [
+          {
+            "action": "transform-random",
+            "filter": {
+              "cardType": "Minion"
+            },
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true
   },
   {
@@ -3675,7 +3764,28 @@
     "health": 4,
     "rulesText": "At the start of your turn, reduce this card's Cost by (1).",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "event": {
+          "type": "turn-started",
+          "turnPlayer": "self"
+        },
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": -1,
+            "minimum": 0,
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ],
     "collectible": true
   },
   {
@@ -3828,7 +3938,36 @@
     "health": null,
     "rulesText": "Discover a minion. Give it +1/+1.",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "cardType": "Minion",
+              "cardClass": "self-or-neutral"
+            },
+            "classBonus": 4,
+            "storeAs": "discoveredCard"
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "stored",
+              "reference": "discoveredCard"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
     "collectible": true
   },
   {
@@ -3949,7 +4088,36 @@
     "health": null,
     "rulesText": "Destroy all minions. Draw a card for each.",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            }
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "any",
+                "type": "minion",
+                "selection": "all",
+                "filter": {
+                  "mortallyWounded": true
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true
   },
   {

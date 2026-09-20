@@ -36,6 +36,7 @@ const textures: MinionViewTextures = {
   premiumLegendaryFrame: Texture.WHITE,
   taunt: Texture.EMPTY,
   premiumTaunt: Texture.WHITE,
+  battlecry: Texture.EMPTY,
   enrage: Texture.EMPTY,
   divineShield: Texture.EMPTY,
   frozen: Texture.EMPTY,
@@ -336,6 +337,69 @@ describe('MinionView outline layering', () => {
     expect(view.children.some((child) => child.label === 'minion.inspire.pulse')).toBe(
       false
     )
+
+    view.destroy({ children: true })
+  })
+
+  it('renders the battlecry banner between taunt and stealth', async () => {
+    const view = await MinionView.create(tauntMinion, textures, undefined)
+    const childIndex = (label: string): number =>
+      view.children.findIndex((child) => child.label === label)
+    const banner = view.children.find(
+      (child) => child.label === 'minion.battlecry'
+    ) as Sprite
+
+    expect(childIndex('minion.artwork')).toBeLessThan(childIndex('minion.taunt'))
+    expect(childIndex('minion.taunt')).toBeLessThan(childIndex('minion.battlecry'))
+    expect(childIndex('minion.battlecry')).toBeLessThan(childIndex('minion.stealth'))
+    expect(childIndex('minion.battlecry')).toBeLessThan(childIndex('minion.frame'))
+    expect(banner.visible).toBe(false)
+    expect(banner.alpha).toBe(0)
+
+    view.destroy({ children: true })
+  })
+
+  it('grows the battlecry banner, then fades it away after the trigger point', async () => {
+    const view = await MinionView.create(tauntMinion, textures, undefined)
+    const banner = view.children.find(
+      (child) => child.label === 'minion.battlecry'
+    ) as Sprite
+
+    const triggerPoint = view.presentBattlecryBanner()
+    expect(banner.visible).toBe(true)
+    expect(banner.alpha).toBe(0)
+    expect(banner.scale.x).toBeCloseTo(0.35)
+
+    await triggerPoint
+    expect(banner.scale.x).toBeCloseTo(1)
+    expect(banner.alpha).toBeGreaterThan(0.5)
+    expect(banner.alpha).toBeLessThanOrEqual(1)
+
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(banner.visible).toBe(false)
+    expect(banner.alpha).toBe(0)
+
+    view.destroy({ children: true })
+  })
+
+  it('replays the battlecry banner for repeated Battlecry repetitions', async () => {
+    const view = await MinionView.create(tauntMinion, textures, undefined)
+    const banner = view.children.find(
+      (child) => child.label === 'minion.battlecry'
+    ) as Sprite
+
+    await view.presentBattlecryBanner()
+    expect(banner.scale.x).toBeCloseTo(1)
+
+    const secondTriggerPoint = view.presentBattlecryBanner()
+    expect(banner.scale.x).toBeCloseTo(0.35)
+    expect(banner.visible).toBe(true)
+
+    await secondTriggerPoint
+    expect(banner.scale.x).toBeCloseTo(1)
+
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(banner.visible).toBe(false)
 
     view.destroy({ children: true })
   })

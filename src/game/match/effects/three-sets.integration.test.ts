@@ -453,6 +453,32 @@ describe('One Night in Karazhan, Whispers of the Old Gods, and Mean Streets effe
     ).toBe(true)
   })
 
+  it('does not re-fire Patches from the board when another Pirate is played', () => {
+    const scenario = ready({ seed: 1723 })
+    const [participantId] = activePlayers(scenario)
+    summon(scenario, participantId, 'mean_streets_of_gadgetzan_patches_the_pirate')
+    setMana(scenario, participantId)
+    const deckSizeBeforePlay = player(scenario, participantId).deck.length
+
+    addCard(scenario, participantId, 'classic_southsea_captain')
+    const result = play(scenario, participantId, 'classic_southsea_captain')
+
+    expect(
+      result.events.filter(
+        (event) =>
+          event.type === 'trigger-activated' &&
+          event.trigger === 'while-in-deck'
+      )
+    ).toHaveLength(0)
+    const patchesOnBoard = player(scenario, participantId).board.filter(
+      (minion) =>
+        minion.cardId === 'mean_streets_of_gadgetzan_patches_the_pirate'
+    )
+    expect(patchesOnBoard).toHaveLength(1)
+    expect(player(scenario, participantId).board).toHaveLength(2)
+    expect(player(scenario, participantId).deck.length).toBe(deckSizeBeforePlay)
+  })
+
   it("sets Raza's persistent zero-cost Hero Power for a duplicate-free deck", () => {
     const scenario = ready({ seed: 1714, firstHeroId: 'anduin' })
     const [participantId] = activePlayers(scenario)

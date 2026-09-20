@@ -170,6 +170,19 @@ export function describeAiEvents(
             event.minion.health +
             '.'
         ]
+      case 'battlecry-repetition-started':
+        return [
+          actor(event.participantId) +
+            ': Battlecry of ' +
+            cardName(event.minion.cardId) +
+            ' [' +
+            event.minion.instanceId +
+            '] triggers (' +
+            (event.repetition + 1) +
+            '/' +
+            event.repetitions +
+            ').'
+        ]
       case 'turn-started':
       case 'opening-turn-started':
         return [

@@ -30,6 +30,8 @@ const CANVAS_HEIGHT = 1080
 const PREVIEW_PANEL = { x: 40, y: 185, width: 1120, height: 850 } as const
 const CONTROLS_PANEL = { x: 1180, y: 185, width: 700, height: 850 } as const
 const SLIDER_WIDTH = 205
+const TUNING_ROW_HEIGHT = 112
+const GEOMETRY_COLUMN_COUNT = 6
 
 const PRESETS: readonly OutlinePresetName[] = [
   'card',
@@ -73,17 +75,18 @@ interface TuningControlSpec {
 }
 
 const CONTROL_SPECS = [
-  { key: 'ribbonWidth', label: 'Ribbon width', min: 0, max: 20, step: 0.1 },
-  { key: 'edgeSoftness', label: 'Edge softness', min: 0, max: 10, step: 0.1 },
-  { key: 'rimWidth', label: 'Rim width', min: 0, max: 15, step: 0.1 },
-  { key: 'glowWidth', label: 'Glow width', min: 0, max: 30, step: 0.25 },
-  { key: 'glowStrength', label: 'Glow strength', min: 0, max: 4, step: 0.01 },
+  { key: 'ribbonWidth', label: 'Ribbon width', min: 0, max: 20, step: 1 },
+  { key: 'edgeSoftness', label: 'Edge softness', min: 0, max: 10, step: 1 },
+  { key: 'rimWidth', label: 'Rim width', min: 0, max: 15, step: 1 },
+  { key: 'glowWidth', label: 'Glow width', min: 0, max: 30, step: 1 },
+  { key: 'glowStrength', label: 'Glow strength', min: 0, max: 4, step: 1 },
+  { key: 'innerEdgeWidth', label: 'Inner edge', min: 0, max: 8, step: 1 },
   {
     key: 'highlightStrength',
     label: 'Highlight strength',
     min: 0,
     max: 5,
-    step: 0.05
+    step: 1
   },
   { key: 'hotspotScale', label: 'Hotspot scale', min: 1, max: 120, step: 1 },
   {
@@ -91,10 +94,12 @@ const CONTROL_SPECS = [
     label: 'Hotspot density',
     min: 0,
     max: 4,
-    step: 0.05
+    step: 1
   },
-  { key: 'edgeWobble', label: 'Edge wobble', min: 0, max: 16, step: 0.1 },
-  { key: 'motionSpeed', label: 'Motion speed', min: 0, max: 3, step: 0.05 }
+  { key: 'edgeWobble', label: 'Edge wobble', min: 0, max: 16, step: 1 },
+  { key: 'motionSpeed', label: 'Motion speed', min: 0, max: 3, step: 1 },
+  { key: 'pulseRate', label: 'Pulse rate', min: 0, max: 3, step: 1 },
+  { key: 'contourVariation', label: 'Contour variation', min: 0, max: 10, step: 1 }
 ] as const satisfies readonly TuningControlSpec[]
 
 interface ButtonState {
@@ -306,9 +311,14 @@ export class OutlineLab extends Container {
 
   private createTuningControls(): void {
     for (const [index, spec] of CONTROL_SPECS.entries()) {
-      const column = index < 5 ? 0 : 1
-      const row = index % 5
-      this.createSlider(spec, 1202 + column * 330, 278 + row * 126)
+      const column = index < GEOMETRY_COLUMN_COUNT ? 0 : 1
+      const row =
+        column === 0 ? index : index - GEOMETRY_COLUMN_COUNT
+      this.createSlider(
+        spec,
+        1202 + column * 330,
+        278 + row * TUNING_ROW_HEIGHT
+      )
     }
   }
 
