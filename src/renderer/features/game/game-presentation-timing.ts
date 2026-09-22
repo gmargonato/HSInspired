@@ -16,6 +16,15 @@ export const OPENING_TIMING = {
   hoverSettle: 0.1
 } as const
 
+/** Sequential Secret reveal, totaling 1.6 seconds before the effect plays. */
+export const SECRET_REVEAL_TIMING = {
+  bannerGrow: 0.35,
+  bannerHold: 0.35,
+  bannerFade: 0.1,
+  cardGrow: 0.65,
+  cardFade: 0.15
+} as const
+
 /** Resolution pacing shared by every trigger/death/outcome presentation. */
 export const RESOLUTION_TIMING = {
   /** Full marker pulse for each concrete trigger frame. */
@@ -34,10 +43,10 @@ export const RESOLUTION_TIMING = {
   generatedCardDelay: 0.05,
   /** Total horizontal flip time for each card replaced by Golden Monkey. */
   handReplacementFlip: 0.3,
-  /** Travel time for a discarded card flying to the board center. */
-  discardFlight: 0.45,
-  /** Total scaleX turn-over flourish for a remote card back. */
-  discardFlip: 0.3
+  /** Steady vertical departure, followed by a stationary fade. */
+  discardFlight: 0.4,
+  discardFade: 0.18,
+  discardHandSettle: 0.2
 } as const
 
 /** Board-only timing knobs for row previews and minion entry presentation. */

@@ -635,7 +635,7 @@ describe('preload to renderer recovery', () => {
       controller.dispose()
     }
   })
-  it('forces the only non-pass legal command without a model call', async () => {
+  it('asks the model when pass remains a strategic alternative', async () => {
     legal.commands = [
       {
         type: 'play-card',
@@ -645,17 +645,26 @@ describe('preload to renderer recovery', () => {
       },
       { type: 'end-turn', participantId: 'ai' }
     ]
-    const { controller, requests } = setup('plan')
+    const { controller, requests } = setup('plan', (request) => {
+      if (request.phase === 'plan') return planChoice()
+      const command = legal.commands[0]!
+      return {
+        actionId: 'a0',
+        intent: aiActionIntent(command as never, 'human'),
+        expectedResult: 'Play the available card.',
+        planUpdate: null
+      }
+    })
     try {
       expect(await controller.chooseTurnAction()).toMatchObject({
-        source: 'forced',
+        source: 'model',
         command: {
           type: 'play-card',
           cardInstanceId: 'ai-player:deck:18',
           position: 0
         }
       })
-      expect(requests).toHaveLength(0)
+      expect(requests.length).toBeGreaterThan(0)
     } finally {
       controller.dispose()
     }

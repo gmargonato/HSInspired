@@ -3,7 +3,8 @@ import { CardView } from '../../rendering/cards/card-view'
 import {
   AnimatedOutline,
   type OutlinePaletteInput,
-  type OutlinePresetName
+  type OutlinePresetName,
+  type OutlineTuning
 } from '../../rendering/effects/animated-outline'
 import { BakedAnimatedOutline } from '../../rendering/effects/baked-animated-outline'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
@@ -25,8 +26,7 @@ export class GameCardSlot extends Actor {
   readonly instanceId: string
   playableOutlineTexture: Texture
   private playableOutline: AnimatedOutline | BakedAnimatedOutline
-  private dormantPlayableOutline: AnimatedOutline | BakedAnimatedOutline | null =
-    null
+  private dormantPlayableOutline: AnimatedOutline | BakedAnimatedOutline | null = null
   private readonly outlineTarget: Sprite
   private playableOutlineDisposed = false
   private readonly replaceCross: Sprite
@@ -38,6 +38,7 @@ export class GameCardSlot extends Actor {
   private playableOutlineSuppressed = false
   private playableOutlinePreset: OutlinePresetName = 'card'
   private playableOutlinePalette: OutlinePaletteInput = 'green'
+  private playableOutlineTuning?: OutlineTuning
 
   constructor(
     card: CardView,
@@ -190,7 +191,8 @@ export class GameCardSlot extends Actor {
       this.activeCard.renderedHeight,
       this.bakedOutlineDisplayScale ?? DEFAULT_HAND_LAYOUT.cardScale,
       this.playableOutlinePalette,
-      this.playableOutlinePreset
+      this.playableOutlinePreset,
+      this.playableOutlineTuning
     )
     baked.position.copyFrom(this.outlineTarget.position)
     baked.zIndex = this.outlineTarget.zIndex
@@ -239,7 +241,8 @@ export class GameCardSlot extends Actor {
       this.card.renderedHeight,
       displayScale,
       this.playableOutlinePalette,
-      this.playableOutlinePreset
+      this.playableOutlinePreset,
+      this.playableOutlineTuning
     )
     baked.position.copyFrom(this.outlineTarget.position)
     baked.zIndex = this.outlineTarget.zIndex
@@ -257,9 +260,8 @@ export class GameCardSlot extends Actor {
    * Swapping to the live filter keeps the glow crisp at the hovered scale.
    */
   setOutlineLiveWhileHovered(hovered: boolean): void {
-    if (this.playableOutlineDisposed || this.dormantPlayableOutline === null)
-      return
-    if (hovered === (this.playableOutline instanceof BakedAnimatedOutline)) {
+    if (this.playableOutlineDisposed || this.dormantPlayableOutline === null) return
+    if (hovered === this.playableOutline instanceof BakedAnimatedOutline) {
       const active = this.playableOutline
       this.playableOutline = this.dormantPlayableOutline
       this.dormantPlayableOutline = active
@@ -269,6 +271,21 @@ export class GameCardSlot extends Actor {
 
   getPlayableOutlinePreset(): OutlinePresetName {
     return this.playableOutlinePreset
+  }
+
+  /** Instance-local appearance for previews; never changes the production registry. */
+  setPlayableOutlineAppearance(
+    palette: OutlinePaletteInput,
+    tuning: OutlineTuning
+  ): void {
+    this.playableOutlinePalette = palette
+    this.playableOutlineTuning = tuning
+    this.applyOutlineAppearance(this.playableOutline)
+    this.applyOutlineAppearance(this.dormantPlayableOutline)
+  }
+
+  getPlayableOutlineTuning(): OutlineTuning | undefined {
+    return this.playableOutlineTuning
   }
 
   getPlayableOutlinePalette(): OutlinePaletteInput {
@@ -366,6 +383,7 @@ export class GameCardSlot extends Actor {
       preset: this.playableOutlinePreset,
       cacheDistance: true
     })
+    this.applyOutlineAppearance(this.playableOutline)
     this.syncPlayableOutline()
   }
 
@@ -374,11 +392,16 @@ export class GameCardSlot extends Actor {
   ): void {
     if (!outline) return
     if (outline instanceof BakedAnimatedOutline) {
-      outline.setAppearance(this.playableOutlinePalette, this.playableOutlinePreset)
+      outline.setAppearance(
+        this.playableOutlinePalette,
+        this.playableOutlinePreset,
+        this.playableOutlineTuning
+      )
       return
     }
     outline.setPalette(this.playableOutlinePalette)
     outline.setPreset(this.playableOutlinePreset)
+    if (this.playableOutlineTuning) outline.setTuning(this.playableOutlineTuning)
   }
 
   private syncPlayableOutline(): void {

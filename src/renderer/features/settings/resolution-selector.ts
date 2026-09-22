@@ -42,7 +42,8 @@ export class ResolutionSelector extends Container {
   constructor(
     assets: Pick<MenuSettingsAssets, 'resolutionField' | 'resolutionButton'>,
     private readonly api: WindowSettingsApi,
-    private readonly onError: (error: unknown) => void = console.error
+    private readonly onError: (error: unknown) => void = console.error,
+    private readonly onOpen: () => void = () => undefined
   ) {
     super()
     this.label = 'settings.resolution-selector'
@@ -124,13 +125,14 @@ export class ResolutionSelector extends Container {
 
   private openOptions(): void {
     if (this.open || this.applying || this.options.length === 0) return
+    this.onOpen()
     this.open = true
     this.dismissLayer.visible = true
     this.optionsLayer.visible = true
     window.addEventListener('keydown', this.handleKeyDown, true)
   }
 
-  private closeOptions(): void {
+  closeOptions(): void {
     if (!this.open) return
     this.open = false
     this.dismissLayer.visible = false

@@ -1,4 +1,11 @@
-import { Text, Texture, DOMAdapter } from 'pixi.js'
+import {
+  Text,
+  Texture,
+  DOMAdapter,
+  Rectangle,
+  RenderTexture,
+  type Renderer
+} from 'pixi.js'
 import { vi } from 'vitest'
 import { CARD_CATALOG, asCardId } from '../../../game/content/cards'
 import { CardView } from './card-view'
@@ -21,6 +28,85 @@ describe('card cost presentation', () => {
 })
 
 describe('runtime card stat presentation', () => {
+  it('coalesces opted-in card snapshots while preserving immediate appearance snapshots', async () => {
+    const canvas = vi
+      .spyOn(DOMAdapter.get(), 'createCanvas')
+      .mockReturnValue({ getContext: () => null } as unknown as HTMLCanvasElement)
+    const width = vi.spyOn(Text.prototype, 'width', 'get').mockReturnValue(100)
+    const height = vi.spyOn(Text.prototype, 'height', 'get').mockReturnValue(30)
+    const resolver = new CardAssetResolver()
+    const load = vi.spyOn(resolver, 'load').mockResolvedValue(Texture.WHITE)
+    const render = vi.fn()
+    const textures: RenderTexture[] = []
+    const renderer = {
+      render,
+      generateTexture: () => {
+        const texture = RenderTexture.create({ width: 620, height: 900 })
+        textures.push(texture)
+        return texture
+      }
+    } as unknown as Renderer
+    let view: CardView | undefined
+    try {
+      const definition = CARD_CATALOG.require(
+        asCardId('journey_to_ungoro_jungle_giants')
+      )
+      view = await CardView.create(definition, resolver, { premium: false })
+      const frame = new Rectangle(0, 0, 620, 900)
+      const deferred = view.createAppearanceSnapshot(renderer, frame, () => true, {
+        deferRefresh: true
+      })
+      const immediate = view.createAppearanceSnapshot(renderer, frame)
+      view.setManaCost(2)
+      view.setManaCostColor('reduced')
+      expect(render).not.toHaveBeenCalled()
+      view.flushAppearanceSnapshot(deferred)
+      view.flushAppearanceSnapshot(deferred)
+      expect(render).toHaveBeenCalledTimes(1)
+      expect(render.mock.lastCall?.[0].target).toBe(deferred)
+
+      render.mockClear()
+      setPremiumMode('all')
+      expect(render).toHaveBeenCalledTimes(1)
+      expect(render.mock.lastCall?.[0].target).toBe(immediate)
+      view.flushAppearanceSnapshot(deferred)
+      expect(render).toHaveBeenCalledTimes(2)
+
+      render.mockClear()
+      // Multiple premium animation notifications before a scene render share a pass.
+      const animated = (
+        view as unknown as {
+          animatedSnapshots: Map<Texture, { refresh(): void }>
+        }
+      ).animatedSnapshots.get(deferred)!
+      animated.refresh()
+      animated.refresh()
+      expect(render).not.toHaveBeenCalled()
+      view.visible = false
+      view.flushAppearanceSnapshot(deferred)
+      expect(view.visible).toBe(false)
+      expect(render).toHaveBeenCalledTimes(1)
+
+      render.mockClear()
+      deferred.source.emit('unload', deferred.source)
+      view.flushAppearanceSnapshot(deferred)
+      expect(render).toHaveBeenCalledTimes(1)
+      deferred.destroy(true)
+      render.mockClear()
+      view.setManaCost(3)
+      view.flushAppearanceSnapshot(deferred, true)
+      expect(render).not.toHaveBeenCalled()
+    } finally {
+      for (const texture of textures) if (!texture.destroyed) texture.destroy(true)
+      view?.destroy({ children: true })
+      setPremiumMode('unlocked')
+      load.mockRestore()
+      canvas.mockRestore()
+      width.mockRestore()
+      height.mockRestore()
+    }
+  })
+
   it('renders normal and premium legendary spell overlays', () => {
     const spell = CARD_CATALOG.require(asCardId('journey_to_ungoro_jungle_giants'))
 

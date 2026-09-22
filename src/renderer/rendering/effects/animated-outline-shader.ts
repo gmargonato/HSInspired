@@ -6,7 +6,8 @@ import { GlProgram, GpuProgram } from 'pixi.js'
  * ribbon needs subpixel precision, while the atmospheric tail can tolerate
  * wider steps. Alternating angular offsets avoid visible radial spokes.
  */
-const RING_COUNT = 18
+// Denser radial sampling reduces distance banding without blurring the solid core.
+const RING_COUNT = 48
 const DIRECTION_COUNT = 12
 const GLSL_DISTANCE_SAMPLES: string[] = []
 const WGSL_DISTANCE_SAMPLES: string[] = []
@@ -167,10 +168,11 @@ void main() {
     float edgeSoftness = max(0.75, uMotion.y);
     float innerEdgeWidth = max(0.0, uMotion.z);
     float pulseRate = max(0.0, uMotion.w);
+    float cardMaterial = clamp(uOrganic.y, 0.0, 1.0);
 
     vec4 source = texture(uTexture, vTextureCoord);
     // Fully covered source pixels contribute no exterior outline. Avoid the
-    // 216-sample distance search across the opaque interior of the proxy.
+    // radial distance search across the opaque interior of the proxy.
     if (source.a >= 0.78) {
         finalColor = vec4(0.0);
         return;
@@ -208,7 +210,15 @@ ${
     float wobbleNoise = outlineFbm(patternPixel / wobbleScale + vec2(time * 0.52, -time * 0.37));
     float lickNoise = outlineFbm(patternPixel / max(12.0, wobbleScale * 0.42) + vec2(-time * 1.18, time * 0.74));
     float flameLick = outlineSmooth((lickNoise - 0.56) / 0.34);
-    float wobble = ((wobbleNoise - 0.5) * 1.6 + (flameLick - 0.35) * 0.55) * edgeWobble;
+    float flameWobble = ((wobbleNoise - 0.5) * 1.6 + (flameLick - 0.35) * 0.55) * edgeWobble;
+    float liquidLobe = flameLick;
+    float wobble = flameWobble;
+    if (cardMaterial > 0.5) {
+        float broadLobe = outlineSmooth((wobbleNoise - 0.42) / 0.24);
+        float detailLobe = outlineSmooth((lickNoise - 0.49) / 0.25);
+        liquidLobe = broadLobe + detailLobe - broadLobe * detailLobe;
+        wobble = ((wobbleNoise - 0.5) * 1.2 + (liquidLobe - 0.42) * 0.9) * edgeWobble;
+    }
     float distanceToEdge = max(0.0, field.distance - wobble);
 
     // Widths follow the organic field so the aura thickens and thins along
@@ -222,12 +232,19 @@ ${
     // into a long soft tail. The core alone stays flat-bright across its
     // first stretch so a thin ribbon still reads as a solid hot band.
     float coreFlat = ribbon * 0.6;
-    float coreAlpha = (1.0 - smoothstep(coreFlat, ribbon + edgeSoftness, distanceToEdge)) * exterior;
-    float rimAlpha = pow(1.0 - clamp(distanceToEdge / (ribbon + rim + edgeSoftness * 1.2), 0.0, 1.0), 1.6) * exterior * 0.9;
+    float coreFalloff = 1.0 - smoothstep(coreFlat, ribbon + edgeSoftness, distanceToEdge);
+    float coreAlpha = coreFalloff * exterior;
+    float rimT = clamp(distanceToEdge / (ribbon + rim + edgeSoftness * 1.2), 0.0, 1.0);
+    float rimAlpha = pow(1.0 - rimT, 1.6) * exterior * 0.9;
     float tailStart = (ribbon + rim) * 0.35;
     float tailReach = max(ribbon + rim + glow, tailStart + 0.001);
     float tailT = clamp((distanceToEdge - tailStart) / (tailReach - tailStart), 0.0, 1.0);
     float tailAlpha = pow(1.0 - tailT, 2.4) * exterior;
+    if (cardMaterial > 0.5) {
+        coreAlpha = pow(coreFalloff, 0.65) * exterior;
+        rimAlpha = pow(1.0 - outlineSmooth(rimT), 1.6) * exterior * 0.9;
+        tailAlpha = pow(1.0 - outlineSmooth(tailT), 2.4) * exterior;
+    }
 
     // A continuous pale stroke hugging the silhouette boundary, like a heated
     // inner lip. It only exists within the ribbon's reach, so it never
@@ -267,7 +284,7 @@ ${
         float hotspotThreshold = mix(0.72, 0.54, hotspotDensity);
         float hotspotMask = smoothstep(hotspotThreshold, hotspotThreshold + 0.13, hotspotNoise);
         float filament = 0.14 + hotspotMask * 0.86;
-        hotspotMix = clamp(highlightLane * filament * highlightStrength * mix(0.80, 1.15, flameLick), 0.0, 1.0);
+        hotspotMix = clamp(highlightLane * filament * highlightStrength * mix(0.80, 1.15, liquidLobe), 0.0, 1.0);
     }
 
     // Premultiplied layer-over composition. The core stays dense; the tail
@@ -280,14 +297,16 @@ ${
     // Hotspots modify luminance only. Keeping alpha unchanged guarantees that
     // the bright layer can never enlarge the outline silhouette.
     result.rgb = mix(result.rgb, uHotColor.rgb * result.a, hotspotMix);
-    // Whole-aura breathing. Scaling the premultiplied result fades coverage
-    // and color together, dimming the glow instead of darkening it.
+    // Non-card breathing fades coverage and color together. Card breathing
+    // changes brightness only, so its dense body stays opaque.
     // pulseRate counts half-cycles per second: 1 gives a slow 2s breath.
     float breathe = 1.0;
     if (pulseRate != 0.0) {
         breathe = 1.0 - 0.12 * (0.5 - 0.5 * sin(uTime * pulseRate * 3.1415927));
     }
-    finalColor = result * breathe;
+    finalColor = cardMaterial > 0.5
+        ? vec4(result.rgb * breathe, result.a)
+        : result * breathe;
 `
 }
 }
@@ -345,6 +364,7 @@ fn layerOver(below: vec4<f32>, color: vec3<f32>, alpha: f32) -> vec4<f32> {
   let highlightStrength = outlineUniforms.uDetail.x; let hotspotScale = max(8.0, outlineUniforms.uDetail.y); let hotspotDensity = clamp(outlineUniforms.uDetail.z, 0.0, 1.0); let edgeWobble = max(0.0, outlineUniforms.uDetail.w);
   let speed = outlineUniforms.uMotion.x; let edgeSoftness = max(0.75, outlineUniforms.uMotion.y);
   let innerEdgeWidth = max(0.0, outlineUniforms.uMotion.z); let pulseRate = max(0.0, outlineUniforms.uMotion.w);
+  let cardMaterial = clamp(outlineUniforms.uOrganic.y, 0.0, 1.0);
   let source = textureSample(uTexture, uSampler, uv);
   // Matches sourceMask's opaque plateau below, where exterior is exactly zero.
   if (source.a >= 0.78) { return vec4<f32>(0.0); }
@@ -362,12 +382,27 @@ ${
   return vec4<f32>(bytes) / 255.0;
 `
     : `
-  let wobbleScale = max(18.0, hotspotScale * 1.2); let wobbleNoise = outlineFbm(patternPixel / wobbleScale + vec2<f32>(time * 0.52, -time * 0.37)); let lickNoise = outlineFbm(patternPixel / max(12.0, wobbleScale * 0.42) + vec2<f32>(-time * 1.18, time * 0.74)); let flameLick = outlineSmooth((lickNoise - 0.56) / 0.34); let wobble = ((wobbleNoise - 0.5) * 1.6 + (flameLick - 0.35) * 0.55) * edgeWobble; let distanceToEdge = max(0.0, field.distance - wobble);
+  let wobbleScale = max(18.0, hotspotScale * 1.2); let wobbleNoise = outlineFbm(patternPixel / wobbleScale + vec2<f32>(time * 0.52, -time * 0.37)); let lickNoise = outlineFbm(patternPixel / max(12.0, wobbleScale * 0.42) + vec2<f32>(-time * 1.18, time * 0.74)); let flameLick = outlineSmooth((lickNoise - 0.56) / 0.34);
+  let flameWobble = ((wobbleNoise - 0.5) * 1.6 + (flameLick - 0.35) * 0.55) * edgeWobble;
+  var liquidLobe = flameLick; var wobble = flameWobble;
+  if (cardMaterial > 0.5) {
+    let broadLobe = outlineSmooth((wobbleNoise - 0.42) / 0.24); let detailLobe = outlineSmooth((lickNoise - 0.49) / 0.25);
+    liquidLobe = broadLobe + detailLobe - broadLobe * detailLobe;
+    wobble = ((wobbleNoise - 0.5) * 1.2 + (liquidLobe - 0.42) * 0.9) * edgeWobble;
+  }
+  let distanceToEdge = max(0.0, field.distance - wobble);
   let ribbon = ribbonWidth * widthScale; let rim = rimWidth * widthScale; let glow = glowWidth * widthScale;
-  let coreFlat = ribbon * 0.6; let coreAlpha = (1.0 - smoothstep(coreFlat, ribbon + edgeSoftness, distanceToEdge)) * exterior;
-  let rimAlpha = pow(1.0 - clamp(distanceToEdge / (ribbon + rim + edgeSoftness * 1.2), 0.0, 1.0), 1.6) * exterior * 0.9;
+  let coreFlat = ribbon * 0.6; let coreFalloff = 1.0 - smoothstep(coreFlat, ribbon + edgeSoftness, distanceToEdge);
+  var coreAlpha = coreFalloff * exterior;
+  let rimT = clamp(distanceToEdge / (ribbon + rim + edgeSoftness * 1.2), 0.0, 1.0);
+  var rimAlpha = pow(1.0 - rimT, 1.6) * exterior * 0.9;
   let tailStart = (ribbon + rim) * 0.35; let tailReach = max(ribbon + rim + glow, tailStart + 0.001);
-  let tailT = clamp((distanceToEdge - tailStart) / (tailReach - tailStart), 0.0, 1.0); let tailAlpha = pow(1.0 - tailT, 2.4) * exterior;
+  let tailT = clamp((distanceToEdge - tailStart) / (tailReach - tailStart), 0.0, 1.0); var tailAlpha = pow(1.0 - tailT, 2.4) * exterior;
+  if (cardMaterial > 0.5) {
+    coreAlpha = pow(coreFalloff, 0.65) * exterior;
+    rimAlpha = pow(1.0 - outlineSmooth(rimT), 1.6) * exterior * 0.9;
+    tailAlpha = pow(1.0 - outlineSmooth(tailT), 2.4) * exterior;
+  }
   var innerEdgeAlpha = 0.0;
   if (innerEdgeWidth > 0.0) {
     innerEdgeAlpha = (1.0 - smoothstep(0.0, innerEdgeWidth, distanceToEdge)) * exterior;
@@ -381,12 +416,16 @@ ${
   let laneInner = smoothstep(ribbon * 0.10, ribbon * 0.32, distanceToEdge); let laneOuter = 1.0 - smoothstep(ribbon * 0.62, ribbon * 0.84, distanceToEdge); let highlightLane = laneInner * laneOuter * coreAlpha;
   var hotspotMix = 0.0;
   if (highlightLane != 0.0 && highlightStrength != 0.0) {
-    let hotspotNoise = outlineFbm(patternPixel / hotspotScale + vec2<f32>(-time * 1.10, time * 0.46)); let hotspotThreshold = mix(0.72, 0.54, hotspotDensity); let hotspotMask = smoothstep(hotspotThreshold, hotspotThreshold + 0.13, hotspotNoise); let filament = 0.14 + hotspotMask * 0.86; hotspotMix = clamp(highlightLane * filament * highlightStrength * mix(0.80, 1.15, flameLick), 0.0, 1.0);
+    let hotspotNoise = outlineFbm(patternPixel / hotspotScale + vec2<f32>(-time * 1.10, time * 0.46)); let hotspotThreshold = mix(0.72, 0.54, hotspotDensity); let hotspotMask = smoothstep(hotspotThreshold, hotspotThreshold + 0.13, hotspotNoise); let filament = 0.14 + hotspotMask * 0.86; hotspotMix = clamp(highlightLane * filament * highlightStrength * mix(0.80, 1.15, liquidLobe), 0.0, 1.0);
   }
   var result = vec4<f32>(0.0); result = layerOver(result, outlineUniforms.uGlowColor.rgb, haloAlpha); result = layerOver(result, outlineUniforms.uRimColor.rgb, rimAlpha); result = layerOver(result, outlineUniforms.uBaseColor.rgb, coreAlpha); result = layerOver(result, outlineUniforms.uHotColor.rgb, innerEdgeAlpha); result = vec4<f32>(mix(result.rgb, outlineUniforms.uHotColor.rgb * result.a, hotspotMix), result.a);
   var breathe = 1.0;
   if (pulseRate != 0.0) {
     breathe = 1.0 - 0.12 * (0.5 - 0.5 * sin(outlineUniforms.uTime * pulseRate * 3.1415927));
+  }
+  // Preserve card coverage through the brightness breath.
+  if (cardMaterial > 0.5) {
+    return vec4<f32>(result.rgb * breathe, result.a);
   }
   return result * breathe;
 `

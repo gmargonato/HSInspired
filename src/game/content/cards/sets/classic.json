@@ -905,11 +905,8 @@
           "actions": [
             {
               "action": "summon-random",
-              "pool": {
-                "type": "minion",
-                "filter": {
-                  "tribe": "Demon"
-                }
+              "filter": {
+                "tribe": "Demon"
               },
               "count": 1
             }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createMatchScenario } from '../testing/match-scenario-builder'
+import { getOpeningMatchPublicEvents } from '../match-public-projection'
 
 function player(
   scenario: ReturnType<typeof createMatchScenario>,
@@ -71,6 +72,111 @@ function armSecretsForOpponentTurn(
 }
 
 describe('Secret runtime', () => {
+  it.each(['basic_nightblade', 'whispers_of_the_old_gods_cthun'])(
+    'captures %s before its Battlecry and gates Polymorph after Battlecry damage',
+    (cardId) => {
+      const scenario = createMatchScenario({ seed: 1320, cardId })
+      scenario.confirmBothMulligans()
+      const caster = scenario.match.getState().activePlayerId!
+      const owner = scenario.participants.find((id) => id !== caster)!
+      armSecretsForOpponentTurn(scenario, caster, owner, [
+        'mean_streets_of_gadgetzan_potion_of_polymorph'
+      ])
+      const card = player(scenario, caster).hand.find(
+        (entry) => entry.cardId === cardId
+      )!
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId: caster,
+        cardInstanceId: card.instanceId,
+        position: 0
+      })
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) return
+      const entrance = result.events.find((event) => event.type === 'minion-played')!
+      const started = result.events.find(
+        (event) => event.type === 'secret-resolution-started'
+      )!
+      const completed = result.events.find(
+        (event) => event.type === 'secret-resolution-completed'
+      )!
+      expect(entrance.minion.cardId).toBe(cardId)
+      expect(
+        started.state.players.find((entry) => entry.participantId === caster)!.board[0]
+          .cardId
+      ).toBe(cardId)
+      expect(
+        started.state.players.find((entry) => entry.participantId === owner)!.secrets
+      ).toHaveLength(1)
+      expect(
+        completed.state.players.find((entry) => entry.participantId === owner)!.secrets
+      ).toHaveLength(0)
+      expect(
+        completed.state.players.find((entry) => entry.participantId === caster)!
+          .board[0]
+      ).toMatchObject({ attack: 1, health: 1 })
+      expect(
+        completed.state.players.find((entry) => entry.participantId === caster)!
+          .board[0].cardId
+      ).not.toBe(cardId)
+      const damage = result.events.findIndex(
+        (event) =>
+          event.type === 'effect-resolved' &&
+          event.action === 'damage' &&
+          event.sourceCardId === cardId
+      )
+      const transform = result.events.findIndex(
+        (event) => event.type === 'effect-resolved' && event.action === 'transform'
+      )
+      expect(damage).toBeGreaterThan(result.events.indexOf(entrance))
+      expect(damage).toBeLessThan(result.events.indexOf(started))
+      expect(transform).toBeGreaterThan(result.events.indexOf(started))
+      expect(transform).toBeLessThan(result.events.indexOf(completed))
+      expect(
+        getOpeningMatchPublicEvents(result.events, caster).some(
+          (event) => 'state' in event
+        )
+      ).toBe(false)
+    }
+  )
+
+  it.each([
+    ['mean_streets_of_gadgetzan_potion_of_polymorph', false],
+    ['classic_snipe', true]
+  ] as const)(
+    'only death, not transformation, activates the played minion Deathrattle (%s)',
+    (secretId, dies) => {
+      const scenario = createMatchScenario({
+        seed: 1321,
+        cardId: 'classic_loot_hoarder'
+      })
+      scenario.confirmBothMulligans()
+      const caster = scenario.match.getState().activePlayerId!
+      const owner = scenario.participants.find((id) => id !== caster)!
+      armSecretsForOpponentTurn(scenario, caster, owner, [secretId])
+      const card = player(scenario, caster).hand.find(
+        (entry) => entry.cardId === 'classic_loot_hoarder'
+      )!
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId: caster,
+        cardInstanceId: card.instanceId,
+        position: 0
+      })
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) return
+      expect(
+        result.events.some(
+          (event) =>
+            event.type === 'trigger-activated' && event.trigger === 'deathrattle'
+        )
+      ).toBe(dies)
+      expect(
+        result.events.find((event) => event.type === 'minion-played')?.minion.cardId
+      ).toBe('classic_loot_hoarder')
+    }
+  )
+
   it('masks a facedown Secret from its opponent and rejects a duplicate play', () => {
     const scenario = createMatchScenario({ seed: 1300 })
     scenario.confirmBothMulligans()

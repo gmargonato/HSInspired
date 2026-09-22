@@ -232,7 +232,9 @@ export function validateAiChoicePhase(
   else if ('inspect' in choice) {
     if (!request.allowInspection)
       throw new Error('Inspection is unavailable. Commit one current action.')
-  } else if (!request.actionIds.includes(choice.actionId))
+  } else if ('replace' in choice)
+    throw new Error('Action selection cannot return a mulligan.')
+  else if (!request.actionIds.includes(choice.actionId))
     throw new Error('Unknown action ID.')
 }
 

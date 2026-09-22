@@ -22,6 +22,8 @@ import {
 
 export const GAME_BOARD_LAYOUT = {
   name: 'Game board (opening sequence)',
+  /** Each discarded card keeps its own x position and moves toward the board. */
+  discard: { travelDistance: 120 },
 
   /** Reference frame: the design canvas is 1920x1080, origin top-left. */
   frame: {

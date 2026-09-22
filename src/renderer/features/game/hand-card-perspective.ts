@@ -4,7 +4,8 @@ import { MAX_TILT_X_DEG, MAX_TILT_Y_DEG } from './drag-rotator'
 import {
   AnimatedOutline,
   type OutlinePaletteInput,
-  type OutlinePresetName
+  type OutlinePresetName,
+  type OutlineTuning
 } from '../../rendering/effects/animated-outline'
 import type { Texture } from 'pixi.js'
 import { isArtworkVisible } from '../../rendering/effects/premium-artwork-breath'
@@ -33,6 +34,7 @@ export interface HandCardPerspectiveOptions {
   readonly outlineEnabled?: boolean
   readonly outlinePalette?: OutlinePaletteInput
   readonly outlinePreset?: OutlinePresetName
+  readonly outlineTuning?: OutlineTuning
 }
 
 /** Far fake camera: large tilt angles render as a clean rigid bank, Hearthstone-style. */
@@ -81,24 +83,53 @@ export function resolvePerspectiveCorners(
 
 /** A temporary, visibly perspective-warped snapshot of one attached hand card. */
 export class HandCardPerspective {
-  private readonly mesh: PerspectiveMesh
-  private readonly texture: ReturnType<Renderer['generateTexture']>
-  private readonly outlineMesh: PerspectiveMesh | null
-  private readonly outlineMaskTexture: ReturnType<Renderer['generateTexture']> | null
-  private readonly outlineEffect: AnimatedOutline | null
+  private mesh!: PerspectiveMesh
+  private texture!: ReturnType<Renderer['generateTexture']>
+  private outlineMesh: PerspectiveMesh | null = null
+  private outlineMaskTexture: ReturnType<Renderer['generateTexture']> | null = null
+  private outlineEffect: AnimatedOutline | null = null
   private readonly current = { x: 0, y: 0 }
-  private readonly wasVisible: boolean
+  private readonly applied = { x: Number.NaN, y: Number.NaN }
+  private wasVisible = true
   private destroyed = false
-  private readonly shadow: ShadowCaster | undefined
-  private readonly shadowFrame: Rectangle
-  private readonly previousShadowMinimum: number
-  private readonly previousShadowDepth: number
+  private active = false
+  private shadow: ShadowCaster | undefined
+  private shadowFrame!: Rectangle
+  private previousShadowMinimum = 0
+  private previousShadowDepth = 1
+  private resolution: number
+  private resourcesDirty = false
+  private outlineTexture: Texture | undefined
+  private options: HandCardPerspectiveOptions
+  private observedRevision: number
+  private readonly onCardDestroyed = (): void => this.destroy()
+  private readonly onResourceLost = (): void => {
+    this.resourcesDirty = true
+  }
 
   constructor(
-    renderer: Renderer,
+    private readonly renderer: Renderer,
     private readonly cardView: CardView,
-    options: HandCardPerspectiveOptions = {}
+    options: HandCardPerspectiveOptions = {},
+    activate = true
   ) {
+    this.resolution = renderer.resolution
+    this.options = options
+    this.observedRevision = cardView.appearanceRevision
+    try {
+      this.createResources(options)
+      cardView.once('destroyed', this.onCardDestroyed)
+      renderer.runners?.contextChange?.add(this)
+      if (activate) this.activate(options)
+    } catch (error) {
+      this.destroy()
+      throw error
+    }
+  }
+
+  private createResources(options: HandCardPerspectiveOptions): void {
+    const { renderer, cardView } = this
+    this.outlineTexture = options.outlineTexture
     const bounds = cardView.getLocalBounds()
     const frame = new Rectangle(
       bounds.minX - SNAPSHOT_PADDING,
@@ -112,7 +143,8 @@ export class HandCardPerspective {
     this.texture = cardView.createAppearanceSnapshot(
       renderer,
       frame,
-      () => !this.destroyed && isArtworkVisible(this.mesh)
+      () => this.active && !this.destroyed && isArtworkVisible(this.mesh),
+      { deferRefresh: true }
     )
     this.mesh = new PerspectiveMesh({
       texture: this.texture,
@@ -129,12 +161,8 @@ export class HandCardPerspective {
     })
     this.mesh.position.set(cardView.position.x + frame.x, cardView.position.y + frame.y)
     this.mesh.eventMode = 'none'
-    const parent = cardView.parent
-    if (!parent) throw new Error('Attached hand card must have a parent container.')
-    this.shadow = getShadowCaster(parent)
-    this.previousShadowMinimum = this.shadow?.minimumHeight ?? 0
-    this.previousShadowDepth = this.shadow?.depthMultiplier ?? 1
-    const cardIndex = parent.getChildIndex(cardView)
+    const geometry = this.mesh.geometry
+    this.mesh.once('destroyed', () => geometry.destroy(true))
 
     if (options.outlineTexture) {
       const maskContainer = new Container()
@@ -144,14 +172,16 @@ export class HandCardPerspective {
       maskSprite.height = cardView.renderedHeight
       maskSprite.eventMode = 'none'
       maskContainer.addChild(maskSprite)
-      this.outlineMaskTexture = renderer.generateTexture({
-        target: maskContainer,
-        frame: new Rectangle(0, 0, width, height),
-        antialias: true
-      })
-      maskSprite.removeFromParent()
-      maskSprite.destroy({ texture: false })
-      maskContainer.destroy()
+      try {
+        this.outlineMaskTexture = renderer.generateTexture({
+          target: maskContainer,
+          frame: new Rectangle(0, 0, width, height),
+          antialias: true
+        })
+      } finally {
+        maskContainer.destroy({ children: true })
+      }
+      this.outlineMaskTexture.source.on('unload', this.onResourceLost)
 
       this.outlineMesh = new PerspectiveMesh({
         texture: this.outlineMaskTexture,
@@ -168,27 +198,161 @@ export class HandCardPerspective {
       })
       this.outlineMesh.position.copyFrom(this.mesh.position)
       this.outlineMesh.eventMode = 'none'
+      const outlineGeometry = this.outlineMesh.geometry
+      this.outlineMesh.once('destroyed', () => outlineGeometry.destroy(true))
       this.outlineEffect = new AnimatedOutline(this.outlineMesh, {
         palette: options.outlinePalette ?? 'green',
         preset: options.outlinePreset ?? 'card'
       })
-      this.outlineEffect.setEnabled(options.outlineEnabled ?? true)
+      this.outlineEffect.setEnabled(false)
     } else {
       this.outlineMesh = null
       this.outlineMaskTexture = null
       this.outlineEffect = null
     }
 
+    this.observedRevision = cardView.appearanceRevision
+  }
+
+  get isDestroyed(): boolean {
+    return this.destroyed || this.mesh?.destroyed || !!this.outlineMesh?.destroyed
+  }
+
+  /** Geometry and targets are reusable while their silhouette fits the captured region. */
+  isCompatible(options: HandCardPerspectiveOptions): boolean {
+    if (this.destroyed || this.cardView.destroyed) return false
+    if (this.outlineTexture !== options.outlineTexture) return false
+    const bounds = this.cardView.getLocalBounds()
+    return (
+      this.shadowFrame.x === bounds.minX - SNAPSHOT_PADDING &&
+      this.shadowFrame.y === bounds.minY - SNAPSHOT_PADDING &&
+      this.shadowFrame.width === bounds.width + SNAPSHOT_PADDING * 2 &&
+      this.shadowFrame.height === bounds.height + SNAPSHOT_PADDING * 2
+    )
+  }
+
+  /** Attach a prepared presentation without allocating another texture or mesh. */
+  activate(options: HandCardPerspectiveOptions = {}): void {
+    if (this.destroyed || this.active) return
+    this.options = options
+    this.ensureCurrentBounds()
+    const parent = this.cardView.parent
+    if (!parent) throw new Error('Attached hand card must have a parent container.')
+    // Premium art can have animated on the original card since it was prepared.
+    this.refreshSnapshot(this.cardView.isPremium)
+    this.shadow = getShadowCaster(parent)
+    this.previousShadowMinimum = this.shadow?.minimumHeight ?? 0
+    this.previousShadowDepth = this.shadow?.depthMultiplier ?? 1
+    this.mesh.position.set(
+      this.cardView.position.x + this.shadowFrame.x,
+      this.cardView.position.y + this.shadowFrame.y
+    )
+    this.outlineMesh?.position.copyFrom(this.mesh.position)
+    this.outlineEffect?.setPalette(options.outlinePalette ?? 'green')
+    this.outlineEffect?.setPreset(options.outlinePreset ?? 'card')
+    if (options.outlineTuning) this.outlineEffect?.setTuning(options.outlineTuning)
+    this.outlineEffect?.setEnabled(options.outlineEnabled ?? true)
+    const cardIndex = parent.getChildIndex(this.cardView)
     if (this.outlineMesh) parent.addChildAt(this.outlineMesh, cardIndex)
     parent.addChildAt(this.mesh, cardIndex + (this.outlineMesh ? 1 : 0))
-    this.wasVisible = cardView.visible
-    cardView.visible = false
+    this.wasVisible = this.cardView.visible
+    this.cardView.visible = false
+    this.active = true
+    this.current.x = 0
+    this.current.y = 0
+    this.applied.x = Number.NaN
+    this.applied.y = Number.NaN
     if (this.shadow) {
       this.shadow.visual = this.mesh
       this.shadow.minimumHeight = MATCH_SHADOW_CONFIG.heldCardHeight
       this.shadow.depthMultiplier = MATCH_SHADOW_CONFIG.draggedCardDepth
     }
     this.update()
+  }
+
+  /** Restore the real card while retaining bounded, offstage drag resources. */
+  deactivate(): void {
+    if (!this.active) return
+    this.active = false
+    if (this.shadow?.visual === this.mesh) {
+      this.shadow.visual = this.cardView
+      this.shadow.corners = null
+      this.shadow.minimumHeight = this.previousShadowMinimum
+      this.shadow.depthMultiplier = this.previousShadowDepth
+    }
+    if (!this.cardView.destroyed) this.cardView.visible = this.wasVisible
+    this.outlineEffect?.setEnabled(false)
+    this.outlineMesh?.removeFromParent()
+    this.mesh.removeFromParent()
+    this.shadow = undefined
+  }
+
+  flushSnapshot(force = false): void {
+    if (!this.destroyed && this.active) {
+      this.ensureCurrentBounds()
+      this.refreshSnapshot(force)
+    }
+  }
+
+  private ensureCurrentBounds(): void {
+    if (this.observedRevision === this.cardView.appearanceRevision) return
+    this.observedRevision = this.cardView.appearanceRevision
+    if (this.isCompatible(this.options)) return
+    const active = this.active
+    const tilt = { ...this.current }
+    this.deactivate()
+    this.destroyResources()
+    this.createResources(this.options)
+    this.applied.x = Number.NaN
+    this.applied.y = Number.NaN
+    if (active) {
+      this.activate(this.options)
+      this.setTarget(tilt)
+      this.update()
+    }
+  }
+
+  /** Restored contexts need the generated mask and card pixels rendered again. */
+  contextChange(): void {
+    this.resourcesDirty = true
+  }
+
+  private refreshSnapshot(force: boolean): void {
+    if (this.resolution !== this.renderer.resolution) {
+      this.resolution = this.renderer.resolution
+      this.texture.source.resize(
+        this.texture.width,
+        this.texture.height,
+        this.resolution
+      )
+      this.outlineMaskTexture?.source.resize(
+        this.outlineMaskTexture.width,
+        this.outlineMaskTexture.height,
+        this.resolution
+      )
+      this.resourcesDirty = true
+    }
+    if (this.resourcesDirty && this.outlineMaskTexture && this.outlineTexture) {
+      const mask = new Sprite(this.outlineTexture)
+      mask.position.set(-this.shadowFrame.x, -this.shadowFrame.y)
+      mask.width = this.cardView.plan.width
+      mask.height = this.cardView.renderedHeight
+      const container = new Container()
+      container.addChild(mask)
+      try {
+        this.renderer.render({
+          container,
+          target: this.outlineMaskTexture,
+          clear: true
+        })
+        this.outlineMaskTexture.source.updateMipmaps()
+      } finally {
+        container.destroy({ children: true })
+      }
+    }
+    if (this.resourcesDirty) this.cardView.updateCacheTexture()
+    this.cardView.flushAppearanceSnapshot(this.texture, force || this.resourcesDirty)
+    this.resourcesDirty = false
   }
 
   /**
@@ -219,7 +383,11 @@ export class HandCardPerspective {
   }
 
   update(): void {
-    if (this.destroyed) return
+    if (this.destroyed || !this.active) return
+    this.ensureCurrentBounds()
+    if (this.applied.x === this.current.x && this.applied.y === this.current.y) return
+    this.applied.x = this.current.x
+    this.applied.y = this.current.y
     const corners = resolvePerspectiveCorners(
       this.current,
       this.texture.width,
@@ -238,30 +406,54 @@ export class HandCardPerspective {
   }
 
   setOutlineEnabled(enabled: boolean): void {
+    if (this.options.outlineEnabled === enabled) return
+    this.options = { ...this.options, outlineEnabled: enabled }
     this.outlineEffect?.setEnabled(enabled)
   }
 
   setOutlinePalette(palette: OutlinePaletteInput): void {
+    if (typeof palette === 'string' && this.options.outlinePalette === palette) return
+    this.options = { ...this.options, outlinePalette: palette }
     this.outlineEffect?.setPalette(palette)
+  }
+
+  setOutlineAppearance(
+    palette: OutlinePaletteInput,
+    preset: OutlinePresetName,
+    tuning?: OutlineTuning
+  ): void {
+    this.options = {
+      ...this.options,
+      outlinePalette: palette,
+      outlinePreset: preset,
+      outlineTuning: tuning
+    }
+    this.outlineEffect?.setPalette(palette)
+    this.outlineEffect?.setPreset(preset)
+    if (tuning) this.outlineEffect?.setTuning(tuning)
   }
 
   destroy(): void {
     if (this.destroyed) return
+    this.deactivate()
     this.destroyed = true
-    if (this.shadow?.visual === this.mesh) {
-      this.shadow.visual = this.cardView
-      this.shadow.corners = null
-      this.shadow.minimumHeight = this.previousShadowMinimum
-      this.shadow.depthMultiplier = this.previousShadowDepth
-    }
-    this.cardView.visible = this.wasVisible
+    this.cardView.off('destroyed', this.onCardDestroyed)
+    this.renderer.runners?.contextChange?.remove(this)
+    this.destroyResources()
+  }
+
+  private destroyResources(): void {
     this.outlineEffect?.dispose()
+    this.outlineEffect = null
     this.outlineMesh?.removeFromParent()
     this.outlineMesh?.destroy()
+    this.outlineMesh = null
+    this.outlineMaskTexture?.source?.off('unload', this.onResourceLost)
     this.outlineMaskTexture?.destroy(true)
-    this.mesh.removeFromParent()
-    this.mesh.destroy()
-    this.texture.destroy(true)
+    this.outlineMaskTexture = null
+    this.mesh?.removeFromParent()
+    this.mesh?.destroy()
+    this.texture?.destroy(true)
   }
 
   private setCorners(

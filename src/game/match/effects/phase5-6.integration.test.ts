@@ -276,6 +276,63 @@ describe('Phase 5/6 real-card integration', () => {
     expect(effectActions(result)).toEqual(expect.arrayContaining(['draw', 'burn']))
   })
 
+  it('marks Fel Reaver discards as deck-originated without changing the hand', () => {
+    const scenario = createMatchScenario({ seed: 509 })
+    scenario.confirmBothMulligans()
+    const [felReaverOwnerId, opponentId] = scenario.participants
+
+    setMana(scenario, felReaverOwnerId)
+    addCard(scenario, felReaverOwnerId, 'goblins_vs_gnomes_fel_reaver')
+    const felReaver = handCard(
+      scenario,
+      felReaverOwnerId,
+      'goblins_vs_gnomes_fel_reaver'
+    )
+    const playedFelReaver = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: felReaverOwnerId,
+      cardInstanceId: felReaver.instanceId,
+      position: 0
+    })
+    expect(playedFelReaver.accepted).toBe(true)
+
+    const endedTurn = scenario.match.dispatch({
+      type: 'end-turn',
+      participantId: felReaverOwnerId
+    })
+    expect(endedTurn.accepted).toBe(true)
+
+    setMana(scenario, opponentId)
+    addCard(scenario, opponentId, 'basic_acidic_swamp_ooze')
+    const opponentCard = handCard(scenario, opponentId, 'basic_acidic_swamp_ooze')
+    const before = player(scenario.match.getState(), felReaverOwnerId)
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: opponentId,
+      cardInstanceId: opponentCard.instanceId,
+      position: 0
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+
+    const after = player(result.state, felReaverOwnerId)
+    expect(after.deck).toHaveLength(before.deck.length - 3)
+    expect(after.hand).toHaveLength(before.hand.length)
+
+    const discardEvents = result.events.filter(
+      (event): event is Extract<typeof event, { type: 'effect-resolved' }> =>
+        event.type === 'effect-resolved' && event.action === 'discard'
+    )
+    expect(discardEvents).toHaveLength(3)
+    expect(
+      discardEvents.every(
+        (event) =>
+          event.data?.fromZone === 'deck' &&
+          event.data?.participantId === felReaverOwnerId
+      )
+    ).toBe(true)
+  })
+
   it('fatigues from an empty deck and discards Soulfire’s random hand card', () => {
     const fatigue = createMatchScenario({ seed: 507, cardId: 'basic_arcane_intellect' })
     fatigue.confirmBothMulligans()

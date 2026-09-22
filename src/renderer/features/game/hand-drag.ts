@@ -1,8 +1,9 @@
 import { CARD_CANVAS } from '../../rendering/cards/card-layout'
+import type { HandPointer } from './hand-layout'
 
 /** Tunables for the pick-up "weight" and the unaffordable shake. */
 export interface HandDragConfig {
-  /** Time constant for the pointer-follow lag. Higher values feel heavier. */
+  /** Time constant for pickup settling and scale; pointer translation is immediate. */
   readonly followResponseMS: number
   /** Minimum held scale, reached at the board-side limit. */
   readonly dragScale: number
@@ -28,6 +29,8 @@ export interface HandDragState {
   readonly x: number
   readonly y: number
   readonly scale: number
+  readonly pickupOffsetX: number
+  readonly pickupOffsetY: number
 }
 
 export const DEFAULT_HAND_DRAG: HandDragConfig = {
@@ -51,9 +54,30 @@ function clamp(value: number, min: number, max: number): number {
 export function initialDragState(
   x: number,
   y: number,
-  scale: number = DEFAULT_HAND_DRAG.dragScale
+  scale: number,
+  pointer: HandPointer,
+  config: HandDragConfig = DEFAULT_HAND_DRAG
 ): HandDragState {
-  return { x, y, scale }
+  const origin = dragOrigin(pointer.x, pointer.y, scale, config)
+  return {
+    x,
+    y,
+    scale,
+    pickupOffsetX: x - origin.x,
+    pickupOffsetY: y - origin.y
+  }
+}
+
+function dragOrigin(
+  pointerX: number,
+  pointerY: number,
+  scale: number,
+  config: HandDragConfig
+): HandPointer {
+  return {
+    x: pointerX - (config.grabAnchor.x - 0.5) * CARD_CANVAS.width * scale,
+    y: pointerY + (1 - config.grabAnchor.y) * CARD_CANVAS.height * scale
+  }
 }
 
 /**
@@ -69,10 +93,9 @@ export function resolveDragCenter(
 }
 
 /**
- * Advances the drag one frame. The card is pinned at its centre, follows the
- * pointer with frame-rate-independent resistance. Like the reference effect,
- * half the card may leave the canvas at an edge; this also keeps pickup from
- * jumping out of the low hand.
+ * Advances the drag one rendered frame. The grab anchor follows the latest pointer
+ * immediately while the initial pickup offset and scale settle independently.
+ * Half the card may leave the canvas at an edge, preserving the low-hand pickup.
  */
 export function stepDrag(
   state: HandDragState,
@@ -81,6 +104,7 @@ export function stepDrag(
   deltaMS: number,
   config: HandDragConfig = DEFAULT_HAND_DRAG
 ): HandDragState {
+  if (deltaMS <= 0) return state
   const progress = clamp(
     (config.nearHandY - pointerY) / (config.nearHandY - config.boardY),
     0,
@@ -91,24 +115,18 @@ export function stepDrag(
   const smoothing = resolveDragSmoothing(deltaMS, config.followResponseMS)
   const nextScale = state.scale + (targetScale - state.scale) * smoothing
   const halfHeight = (CARD_CANVAS.height * nextScale) / 2
-  // The cursor holds the card at its grab anchor instead of its centre.
-  const targetX =
-    pointerX - (config.grabAnchor.x - 0.5) * CARD_CANVAS.width * targetScale
-  // Interpolate position and scale together so resizing keeps the same centre.
-  const targetY =
-    pointerY + (1 - config.grabAnchor.y) * CARD_CANVAS.height * targetScale
-
-  const nextX = clamp(state.x + (targetX - state.x) * smoothing, 0, BOUNDS.width)
-  const nextY = clamp(
-    state.y + (targetY - state.y) * smoothing,
-    halfHeight,
-    BOUNDS.height + halfHeight
-  )
+  const pickupOffsetX = state.pickupOffsetX * (1 - smoothing)
+  const pickupOffsetY = state.pickupOffsetY * (1 - smoothing)
+  const origin = dragOrigin(pointerX, pointerY, nextScale, config)
+  const nextX = clamp(origin.x + pickupOffsetX, 0, BOUNDS.width)
+  const nextY = clamp(origin.y + pickupOffsetY, halfHeight, BOUNDS.height + halfHeight)
 
   return {
     x: nextX,
     y: nextY,
-    scale: nextScale
+    scale: nextScale,
+    pickupOffsetX,
+    pickupOffsetY
   }
 }
 

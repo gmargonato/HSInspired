@@ -18,7 +18,7 @@ import type { CardAssetResolver } from '../../ui/asset-registry/card-asset-resol
 
 type Player = OpeningMatchState['players'][number]
 
-const END_TURN_FLIP_DURATION = 0.32
+const END_TURN_FLIP_DURATION = 0.5
 const YOUR_TURN_TIMING = {
   yourTurnGrow: 0.35,
   yourTurnHold: 1,
@@ -109,6 +109,9 @@ export class GameHudView {
 
     this.endTurnButton = new Button(initialTurnTexture, {
       highlightOnHover: false,
+      pressFromLeft: true,
+      pressedScale: 0.98,
+      pressedBrightness: 1,
       onClick: onEndTurn
     })
     applyPlacement(this.endTurnButton, GAME_BOARD_LAYOUT.endTurnButton)

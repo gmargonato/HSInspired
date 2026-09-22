@@ -1,6 +1,7 @@
 import { Container, PerspectiveMesh, Rectangle, Sprite, type Renderer } from 'pixi.js'
 import type { GameCardSlot } from './game-card-slot'
 import { CARD_DRAW_LAYOUT } from './card-draw-layout'
+import { Burn } from '../../rendering/effects/burn'
 import { isArtworkVisible } from '../../rendering/effects/premium-artwork-breath'
 import {
   getShadowCaster,
@@ -15,7 +16,8 @@ export type DrawCorners = readonly [Point, Point, Point, Point]
 const mix = (a: number, b: number, t: number): number => a + (b - a) * t
 const smooth = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10)
 
-export type CardDrawProfile = 'direct' | 'local-reveal' | 'mulligan-reveal'
+export type CardDrawProfile =
+  'direct' | 'local-reveal' | 'remote-reveal' | 'mulligan-reveal'
 type FlightPose = {
   corners: DrawCorners
   front: boolean
@@ -108,7 +110,11 @@ export function createLocalDrawFlight(
   const reveal = layout.reveal.map((key): FlightFrame => ({
     at: key.at / layout.duration,
     ...key.pose.position,
-    y: mulligan ? key.mulliganY : key.pose.position.y,
+    y: mulligan
+      ? key.mulliganY
+      : profile === 'remote-reveal'
+        ? CARD_DRAW_LAYOUT.remoteRevealMirrorY - key.pose.position.y
+        : key.pose.position.y,
     scale: key.pose.scale?.x ?? 1,
     rotation: (mulligan ? key.mulliganRotation : key.rotation) * radians,
     planeRotation: key.planeRotation * radians,
@@ -335,6 +341,7 @@ export function drawFlightPose(
 
 /** Owns only flight visuals; the live target already holds its destination pose. */
 export class CardDrawAnimation {
+  private burn?: Burn
   private readonly mesh: PerspectiveMesh
   private readonly frontTexture?: ReturnType<Renderer['generateTexture']>
   private readonly start: DrawCorners
@@ -436,16 +443,38 @@ export class CardDrawAnimation {
     }
   }
 
+  updateBurn(progress: number, noise: Sprite['texture']): void {
+    if (this.disposed) return
+    if (!this.burn) {
+      this.burn = new Burn(noise)
+      this.mesh.filters = [...(this.mesh.filters ?? []), this.burn.filter]
+      // The geometric shadow cannot follow dissolved holes. Hide its original
+      // silhouette while burning instead of leaving a solid card-shaped shadow.
+      if (this.shadow) this.shadow.visual = this.target
+    }
+    this.burn.setProgress(progress)
+  }
+
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
-    if (this.shadow?.visual === this.mesh && this.previousShadowVisual) {
+    if (
+      this.shadow &&
+      (this.shadow.visual === this.mesh || this.burn) &&
+      this.previousShadowVisual
+    ) {
       this.shadow.visual = this.previousShadowVisual
       this.shadow.corners = null
       this.shadow.magnification = null
       this.shadow.minimumHeight = this.previousShadowMinimum
     }
     if (!this.target.destroyed) this.target.visible = this.wasVisible
+    if (this.burn) {
+      this.mesh.filters = (this.mesh.filters ?? []).filter(
+        (filter) => filter !== this.burn!.filter
+      )
+      this.burn.destroy()
+    }
     this.mesh.removeFromParent()
     this.mesh.destroy()
     this.frontTexture?.destroy(true)

@@ -64,6 +64,11 @@ export interface CardLayerAppearance {
   readonly blendMode?: ClassFrameBlendMode
 }
 
+export interface CardAppearanceSnapshotOptions {
+  /** Let a presentation refresh once immediately before the scene renders. */
+  readonly deferRefresh?: boolean
+}
+
 export interface CardPieceMotion {
   set(state: {
     x: number
@@ -313,6 +318,11 @@ export class CardView extends Container {
   private refreshPremiumPresentation: (() => void) | null = null
   private readonly alphaMasks = new Map<string, Sprite>()
   private readonly appearanceSnapshots = new Set<() => void>()
+  private readonly deferredSnapshots = new Map<
+    Texture,
+    { dirty: boolean; refresh: () => void }
+  >()
+  private snapshotRevision = 0
   private readonly content: Container
   private staticLayers: Container | null = null
   private artworkBreath: PremiumArtworkBreath | null = null
@@ -395,6 +405,13 @@ export class CardView extends Container {
   override updateCacheTexture = (): void => {
     Container.prototype.updateCacheTexture.call(this)
     this.staticLayers?.updateCacheTexture()
+    this.snapshotRevision += 1
+    for (const snapshot of this.deferredSnapshots.values()) snapshot.dirty = true
+  }
+
+  /** Lets prepared presentations validate their bounds only after semantic changes. */
+  get appearanceRevision(): number {
+    return this.snapshotRevision
   }
 
   private prepareArtworkBreathing(): void {
@@ -429,7 +446,8 @@ export class CardView extends Container {
   createAppearanceSnapshot(
     renderer: Renderer,
     frame?: Rectangle,
-    isVisible?: () => boolean
+    isVisible?: () => boolean,
+    options: CardAppearanceSnapshotOptions = {}
   ): ReturnType<Renderer['generateTexture']> {
     const region = frame?.clone() ?? this.getLocalBounds().rectangle.clone()
     const texture = renderer.generateTexture({
@@ -437,14 +455,16 @@ export class CardView extends Container {
       frame: region,
       antialias: true
     })
+    const transform = new Matrix().translate(-region.x, -region.y)
     const refresh = (): void => {
+      if (this.destroyed || texture.destroyed) return
       const visible = this.visible
       this.visible = true
       try {
         renderer.render({
           container: this,
           target: texture,
-          transform: new Matrix().translate(-region.x, -region.y),
+          transform,
           clear: true
         })
         texture.source.updateMipmaps()
@@ -452,13 +472,38 @@ export class CardView extends Container {
         this.visible = visible
       }
     }
-    this.appearanceSnapshots.add(refresh)
-    if (isVisible) this.animatedSnapshots.set(texture, { refresh, isVisible })
+    const deferred = { dirty: false, refresh }
+    const requestRefresh = options.deferRefresh
+      ? (): void => {
+          deferred.dirty = true
+        }
+      : refresh
+    if (options.deferRefresh) this.deferredSnapshots.set(texture, deferred)
+    this.appearanceSnapshots.add(requestRefresh)
+    if (isVisible)
+      this.animatedSnapshots.set(texture, { refresh: requestRefresh, isVisible })
+    const source = texture.source
+    if (options.deferRefresh) source.on('unload', requestRefresh)
     texture.once('destroy', () => {
-      this.appearanceSnapshots.delete(refresh)
+      source.off('unload', requestRefresh)
+      this.appearanceSnapshots.delete(requestRefresh)
       this.animatedSnapshots.delete(texture)
+      this.deferredSnapshots.delete(texture)
     })
     return texture
+  }
+
+  /** Flush an opted-in snapshot after animation/input changes and before rendering. */
+  flushAppearanceSnapshot(texture: Texture, force = false): void {
+    const snapshot = this.deferredSnapshots.get(texture)
+    if (!snapshot || (!force && !snapshot.dirty)) return
+    snapshot.dirty = false
+    try {
+      snapshot.refresh()
+    } catch (error) {
+      snapshot.dirty = true
+      throw error
+    }
   }
 
   setClassFrameAppearance(classId: string): void {
@@ -484,6 +529,7 @@ export class CardView extends Container {
     this.artworkBreath?.destroy()
     this.animatedSnapshots.clear()
     this.appearanceSnapshots.clear()
+    this.deferredSnapshots.clear()
     this.unsubscribePremium?.()
     this.unsubscribePremium = null
     this.pendingPremiumRefresh = null

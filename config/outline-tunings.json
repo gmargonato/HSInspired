@@ -1,12 +1,13 @@
 {
-  "version": 1,
+  "version": 3,
   "presets": {
     "card": {
-      "ribbonWidth": 12,
-      "edgeSoftness": 4,
+      "ribbonWidth": 5,
+      "edgeSoftness": 0,
+      "saturation": 2,
       "rimWidth": 4,
       "glowWidth": 10,
-      "glowStrength": 1,
+      "glowStrength": 2,
       "highlightStrength": 2,
       "hotspotScale": 50,
       "hotspotDensity": 1,
@@ -17,54 +18,58 @@
       "contourVariation": 6
     },
     "bonus-card": {
-      "ribbonWidth": 14,
+      "ribbonWidth": 6,
       "edgeSoftness": 3,
-      "rimWidth": 2,
-      "glowWidth": 8,
+      "saturation": 1,
+      "rimWidth": 5,
+      "glowWidth": 3,
       "glowStrength": 1,
       "highlightStrength": 2,
-      "hotspotScale": 50,
-      "hotspotDensity": 1,
-      "edgeWobble": 8,
+      "hotspotScale": 28,
+      "hotspotDensity": 0,
+      "edgeWobble": 6,
       "motionSpeed": 1,
-      "innerEdgeWidth": 3,
-      "pulseRate": 1,
-      "contourVariation": 6
+      "innerEdgeWidth": 1,
+      "pulseRate": 0,
+      "contourVariation": 0
     },
     "board": {
       "ribbonWidth": 10,
       "edgeSoftness": 5,
-      "rimWidth": 0,
+      "saturation": 2,
+      "rimWidth": 3,
       "glowWidth": 9,
       "glowStrength": 2,
       "highlightStrength": 5,
       "hotspotScale": 50,
-      "hotspotDensity": 0,
-      "edgeWobble": 3,
-      "motionSpeed": 1,
-      "innerEdgeWidth": 3,
-      "pulseRate": 1,
-      "contourVariation": 4
+      "hotspotDensity": 2,
+      "edgeWobble": 8,
+      "motionSpeed": 2,
+      "innerEdgeWidth": 1,
+      "pulseRate": 3,
+      "contourVariation": 10
     },
     "button": {
       "ribbonWidth": 10,
-      "edgeSoftness": 8,
-      "rimWidth": 6,
-      "glowWidth": 9,
-      "glowStrength": 0,
+      "edgeSoftness": 3,
+      "saturation": 2,
+      "rimWidth": 5,
+      "glowWidth": 10,
+      "glowStrength": 4,
       "highlightStrength": 1,
-      "hotspotScale": 46,
-      "hotspotDensity": 1,
-      "edgeWobble": 7,
+      "hotspotScale": 105,
+      "hotspotDensity": 4,
+      "edgeWobble": 6,
       "motionSpeed": 1,
-      "innerEdgeWidth": 3,
-      "pulseRate": 1,
-      "contourVariation": 4
+      "innerEdgeWidth": 1,
+      "pulseRate": 0,
+      "contourVariation": 0
     },
     "ghost": {
       "ribbonWidth": 3,
-      "edgeSoftness": 9,
-      "rimWidth": 13,
+      "edgeSoftness": 10,
+      "saturation": 0.8,
+      "rimWidth": 15,
       "glowWidth": 0,
       "glowStrength": 0,
       "highlightStrength": 2,
@@ -75,6 +80,44 @@
       "innerEdgeWidth": 0,
       "pulseRate": 0,
       "contourVariation": 10
+    }
+  },
+  "palettes": {
+    "blue": {
+      "baseColor": 7143423,
+      "outerColor": 22015,
+      "glowColor": 17612,
+      "highlightColor": 16777215
+    },
+    "green": {
+      "baseColor": 7143238,
+      "outerColor": 4184383,
+      "glowColor": 4184383,
+      "highlightColor": 15400912
+    },
+    "orange": {
+      "baseColor": 16776970,
+      "outerColor": 16362001,
+      "glowColor": 16360464,
+      "highlightColor": 16382137
+    },
+    "purple": {
+      "baseColor": 7375103,
+      "outerColor": 3102975,
+      "glowColor": 6712319,
+      "highlightColor": 13758719
+    },
+    "red": {
+      "baseColor": 16776043,
+      "outerColor": 16124169,
+      "glowColor": 15728640,
+      "highlightColor": 16777205
+    },
+    "white": {
+      "baseColor": 16119285,
+      "outerColor": 5131854,
+      "glowColor": 5131854,
+      "highlightColor": 16777215
     }
   }
 }

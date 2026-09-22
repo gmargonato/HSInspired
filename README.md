@@ -43,10 +43,85 @@ Individual focused commands:
 - `npm run lint` — Lint code with ESLint.
 - `npm run format:check` — Check code formatting with Prettier (`npm run format` to fix).
 - `npm run build:smoke` — Verify production build and check for development marker leaks.
+- `npm run test:local-ai` — Run the deterministic local-AI tactical and turn-planning scenarios plus seeded protocol checks.
+- `npm run analyze:ai-corpus` — Recalculate local-AI calibration statistics from every archived match log.
 - `npm run architecture:map`: Generate the code health atlas, audit report, and complete relationship evidence at `artifacts/architecture/`.
 - `npm run architecture:check`: Check the architecture analyzer against isolated fixtures without launching the app.
 
 ---
+
+## Match hand and drag performance
+
+Held cards follow the latest pointer position in the match render frame, before
+shadows are updated. Pickup settling, scale, tilt, and return animation retain
+their existing tuning. Two prepared card presentations are retained for reuse;
+hover preparation waits for the pointer to pause for 120 ms to avoid allocation churn
+during hand sweeps. Hover enlargement and actual pickup do not wait for that
+preparation delay. The production frame cap remains 60 FPS.
+
+`npm run perf:match` launches an isolated development match and drives real browser
+mouse input through Electron's debugging protocol. It checks normal and premium
+hands of 1, 4, 7, and 10 mixed cards, continuous hover sweeps and dragging, targeted
+spell cancellation, and a full board with the deck tracker. Each sustained case
+runs three 10-second samples; cold/warm pickups, 100 pickup/return cycles, restart,
+and disposal are recorded separately. Allow several minutes for the full run.
+
+```bash
+npm run perf:match -- --smoke --label smoke --no-fail
+npm run perf:match -- --label baseline --no-fail
+npm run perf:match -- --label optimized
+```
+
+The smoke preset uses 1-second samples, one repetition, 1/10-card hands, and five
+pickup cycles. It verifies the harness, not full performance acceptance. Override
+individual settings with `--sample-ms`, `--repetitions`, `--cycles`, `--hand-sizes`,
+or `--port`. `--outline-mode live|baked` retains the outline comparison option.
+Named JSON reports and a full-state screenshot are saved under
+`artifacts/match-performance`; distinct labels preserve before/after captures.
+Short uncapped idle/full-hand diagnostics temporarily remove the frame cap and
+restore it afterward; they are reported separately from acceptance gates.
+
+Reports separate frame submission intervals, CPU update/render work, pointer
+dispatch, pointer arrival cadence, receipt-to-submission latency, following error,
+and generated-texture lifetime counts. Submission is not physical display time:
+these measurements do not establish input-to-photon latency. Texture counters
+cover `renderer.generateTexture`, not every GPU allocation. Heap snapshots alone
+do not establish a leak. Compare matching viewport, display refresh, resolution,
+and scenario settings, all included in the report.
+Cold pickup means the first pickup after rebuilding a hand; its measured action
+includes 50 ms of preparatory hover and does not guarantee an uncached GPU/program.
+Postrender telemetry contributes to cadence but is outside the reported CPU span.
+
+The initial 60 FPS targets are frame p95 ≤18.5 ms, p99 ≤25 ms, frames over 33.4 ms
+≤0.1%, CPU p95 ≤8 ms, and pointer receipt-to-submission p95 ≤20 ms/p99 ≤33.4 ms.
+Only sustained cases use these performance gates; pickup and lifecycle scenarios
+also verify that actual input reaches the intended interaction. `--no-fail`
+preserves a report when performance targets fail; setup/input errors still fail.
+
+The runner creates a temporary profile and log directory, removed after shutdown.
+It uses a deterministic local mulligan fixture and never invokes an external AI
+provider. Saved decks, progression, and normal match logs remain isolated. Launch
+through this script: directly setting `VITE_DEV_START_ROUTE=match-performance`
+without the isolated runner is rejected before repositories initialize.
+Benchmark-only Chromium switches preserve foreground scheduling if another
+window covers the test, and the test window requests focus once. Normal launches
+retain their existing scheduling. GPU information is captured from the browser
+after renderer initialization, alongside the display's refresh rate.
+
+## Local hardware AI
+
+Main-menu Settings includes **AI Settings → Hardware/API**. Hardware mode uses a
+deterministic CPU evaluator with isolated engine lookahead and never contacts an
+AI provider; API mode keeps the remote deliberation path. The local evaluator is
+calibrated from every archived match under `artifacts/match-logs`. It checks
+visible opponent replies, preserves random-effect sampling (including Yogg), and
+is guarded by 92 tactical and complete-turn scenarios, two seeded protocol tests,
+and forced-command coverage.
+
+```bash
+npm run test:local-ai
+npm run analyze:ai-corpus
+```
 
 ## Arcane Dust and premium cards
 
@@ -151,6 +226,20 @@ and [current Master of Disguise text](https://hearthstone.blizzard.com/en-us/car
 The internal `spell-immune` keyword means Elusive, not immunity to spell damage.
 
 ## Damage and trigger timing
+
+Secret reveals play in sequence: the cropped banner grows and pauses, its badge
+count decreases as the banner disappears, then the revealed card grows from the
+badge to the center and fades before its effect appears. The sequence takes 1.6
+seconds; tune it in `game-presentation-timing.ts` and `secret-layout.ts` under
+`src/renderer/features/game`. Multiple Secrets reveal and resolve individually.
+
+The deterministic engine still calculates synchronously. Internal playback
+snapshots hold the visible board and controls at the appropriate resolution step;
+they are excluded from public/AI event projections and match logs. Minion entrance
+events capture the original body before Battlecry or Secret effects change it.
+Potion of Polymorph resolves after Battlecry (including C'Thun's damage), and
+transformation does not trigger Deathrattle. Existing death-trigger play ordering
+and Secret reveal listeners retain their rule timing.
 
 The engine applies an ordinary area-damage step to its captured targets before
 resolving damage triggers. Combat uses the same boundary for attack and retaliation.
@@ -352,12 +441,16 @@ that time out retain the existing random-timeout behavior and are not retried.
 Recovery preserves the plan, messages, schema, model, and phase. Cancellation
 aborts active transport or backoff; only a fully validated current decision can
 execute. No partial response executes. Retries can incur provider charges.
-If a non-timeout request still fails,
-the AI pauses and an on-screen notice explains that the game menu can restart or
-leave the match; no random fallback move is played. The notice also offers
-`Retry AI`, which resumes the current turn or mulligan with fresh state and legal
-actions and a reset conversation. Manual retries may incur additional provider charges. Leaving the match
-cancels pending work and invalidates its retry button.
+If the target-safety guard rejects a response that restores health on the opposing
+side even after its format correction, the controller executes the current legal
+End Turn as a deterministic safe fallback; if End Turn is unavailable, the AI
+pauses and an on-screen notice explains that the game menu can restart or leave the
+match. Other non-timeout failures retain the normal recovery and pause behavior,
+while timeout requests retain their separate random legal-input fallback. The notice
+also offers `Retry AI`, which resumes the current turn or mulligan with fresh state
+and legal actions and a reset conversation. Manual retries may incur additional
+provider charges. Leaving the match cancels pending work and invalidates its retry
+button.
 
 Progress logs include a per-call ID, phase, attempt number, sanitized provider
 error details, retry delay, failed-attempt usage/time, and recovery outcome.

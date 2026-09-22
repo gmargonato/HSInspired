@@ -25,7 +25,11 @@ describe('OutlineTuningRepository', () => {
       ...first,
       presets: {
         ...first.presets,
-        board: { ...first.presets.board, glowStrength: 2.25 }
+        board: { ...first.presets.board, glowStrength: 2.25, saturation: 1.25 }
+      },
+      palettes: {
+        ...first.palettes,
+        green: { ...first.palettes.green, baseColor: 0x123456 }
       }
     })
 

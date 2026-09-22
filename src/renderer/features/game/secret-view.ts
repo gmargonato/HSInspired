@@ -6,6 +6,7 @@ import { AnimatedOutline } from '../../rendering/effects/animated-outline'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { SECRET_LAYOUT } from './secret-layout'
+import { SECRET_REVEAL_TIMING } from './game-presentation-timing'
 import type { OpeningPlayerState } from '../../../game/match'
 
 export type SecretPresentationSide = 'local' | 'remote'
@@ -45,6 +46,13 @@ export class SecretZoneView extends Container {
       countLabel.visible = nextCount > 0
       countLabel.text = String(nextCount)
     }
+  }
+
+  revealOrigin(
+    side: SecretPresentationSide,
+    target: Container
+  ): { x: number; y: number } {
+    return target.toLocal(this.badges[side].getGlobalPosition())
   }
 
   setPaired(side: SecretPresentationSide, paired: boolean): void {
@@ -205,7 +213,7 @@ export class QuestZoneView extends Container {
   }
 }
 
-/** Brief full-screen card-independent acknowledgement of a consumed Secret. */
+/** Banner, badge consumption, then a card reveal that gates the Secret's effects. */
 export class SecretRevealView extends Container {
   private readonly screen: Sprite
   private readonly animations = new AnimationScope()
@@ -226,15 +234,48 @@ export class SecretRevealView extends Container {
     this.addChild(this.screen)
   }
 
-  async present(
+  present(
     cardId: string,
+    origin: { x: number; y: number },
+    onBannerComplete: () => void,
     premium = false,
     premiumSide: 'local' | 'remote' = 'local'
   ): Promise<void> {
     this.finish()
     const sequence = ++this.presentationSequence
+    return new Promise((resolve, reject) => {
+      // Install completion before loading so scene exit also cancels pending assets.
+      this.completion = resolve
+      void this.prepare(
+        sequence,
+        cardId,
+        origin,
+        onBannerComplete,
+        premium,
+        premiumSide
+      ).catch((error: unknown) => {
+        if (sequence !== this.presentationSequence || this.destroyed) return
+        this.completion = null
+        this.finish()
+        reject(error)
+      })
+    })
+  }
+
+  private async prepare(
+    sequence: number,
+    cardId: string,
+    origin: { x: number; y: number },
+    onBannerComplete: () => void,
+    premium: boolean,
+    premiumSide: 'local' | 'remote'
+  ): Promise<void> {
     const definition = CARD_CATALOG.get(cardId)
-    if (!definition) return
+    if (!definition) {
+      onBannerComplete()
+      this.finish()
+      return
+    }
     const artwork = await this.resolver.loadArtwork(cardId)
     if (sequence !== this.presentationSequence || this.destroyed) return
     const card = await CardView.create(definition, this.resolver, {
@@ -257,16 +298,63 @@ export class SecretRevealView extends Container {
     )
     this.revealedCard = card
     this.addChild(card)
+    card.position.set(origin.x, origin.y)
+    card.scale.set(SECRET_LAYOUT.revealMotion.cardStartScale)
+    card.visible = false
+    this.screen.visible = true
+    this.screen.alpha = 0
+    this.screen.scale.set(SECRET_LAYOUT.revealMotion.bannerStartScale)
     this.visible = true
-    this.alpha = 0
-    return new Promise((resolve) => {
-      this.completion = resolve
-      const timeline = this.animations.timeline()
-      timeline.to(this, { alpha: 1, duration: 0.14, ease: 'power2.out' })
-      timeline.to(this, { alpha: 1, duration: 0.8 })
-      timeline.to(this, { alpha: 0, duration: 0.2, ease: 'power2.in' })
-      timeline.eventCallback('onComplete', () => this.finish())
-    })
+    this.alpha = 1
+    const timeline = this.animations.timeline()
+    const timing = SECRET_REVEAL_TIMING
+    const cardStart = timing.bannerGrow + timing.bannerHold + timing.bannerFade
+    timeline.to(
+      this.screen,
+      { alpha: 1, duration: timing.bannerGrow, ease: 'power2.out' },
+      0
+    )
+    timeline.to(
+      this.screen.scale,
+      { x: 1, y: 1, duration: timing.bannerGrow, ease: 'power2.out' },
+      0
+    )
+    timeline.to(
+      this.screen,
+      { alpha: 0, duration: timing.bannerFade, ease: 'power2.in' },
+      timing.bannerGrow + timing.bannerHold
+    )
+    timeline.call(
+      () => {
+        this.screen.visible = false
+        onBannerComplete()
+        card.visible = true
+      },
+      [],
+      cardStart
+    )
+    timeline.to(
+      card,
+      {
+        x: placement.position.x,
+        y: placement.position.y,
+        duration: timing.cardGrow,
+        ease: 'power2.out'
+      },
+      cardStart
+    )
+    timeline.to(
+      card.scale,
+      {
+        x: placement.scale!.x,
+        y: placement.scale!.y,
+        duration: timing.cardGrow,
+        ease: 'power2.out'
+      },
+      cardStart
+    )
+    timeline.to(card, { alpha: 0, duration: timing.cardFade, ease: 'power2.in' })
+    timeline.eventCallback('onComplete', () => this.finish())
   }
 
   private finish(): void {
@@ -280,6 +368,7 @@ export class SecretRevealView extends Container {
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.presentationSequence++
     this.finish()
     super.destroy(options)
   }

@@ -136,6 +136,8 @@ export function captureMatchCommand(
         !redundantSummary(event) &&
         event.type !== 'history-action-resolved' &&
         event.type !== 'history-effect-recorded' &&
+        event.type !== 'secret-resolution-started' &&
+        event.type !== 'secret-resolution-completed' &&
         event.type !== 'random-spell-started' &&
         event.type !== 'random-spell-completed' &&
         event.type !== 'death-batch-completed' &&

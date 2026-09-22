@@ -5,32 +5,48 @@ import {
   Sprite,
   Text,
   Texture,
+  type Renderer,
   type FederatedPointerEvent
 } from 'pixi.js'
 import {
   ASSET_BUNDLE_IDS,
   type DeckPresentationAssets,
   type DeckSelectionAssets,
+  type GameAssets,
   AssetScope,
   CardAssetResolver
 } from '../../../ui/asset-registry'
 import {
   AnimatedOutline,
+  type OutlinePalette,
   type OutlinePaletteName,
   type OutlinePresetName,
   type OutlineTuning
 } from '../../../rendering/effects/animated-outline'
 import {
   getOutlineTuningConfig,
+  type OutlineTuningConfig,
   updateOutlineTuningConfig
 } from '../../../rendering/effects/outline-tuning'
+import { OutlineLabColorControls } from './outline-lab-color-controls'
+import { OutlineLabHand, clampHandCount } from './outline-lab-hand'
+import { OutlineLabBoard } from './outline-lab-board'
+import { OUTLINE_LAB_LAYOUT as LAYOUT } from './outline-lab-layout'
+import { OUTLINE_LAB_PALETTES } from './outline-lab-palettes'
+import type { CursorManager } from '../../../ui/components/cursor'
+import {
+  applyPlacement,
+  applyAnchoredPlacement,
+  placement,
+  type LayoutPlacement
+} from '../../../rendering/layout'
 
-const CANVAS_WIDTH = 1920
-const CANVAS_HEIGHT = 1080
-const PREVIEW_PANEL = { x: 40, y: 185, width: 1120, height: 850 } as const
-const CONTROLS_PANEL = { x: 1180, y: 185, width: 700, height: 850 } as const
+const CANVAS_WIDTH = LAYOUT.canvas.width
+const CANVAS_HEIGHT = LAYOUT.canvas.height
+const PREVIEW_PANEL = LAYOUT.preview
+const CONTROLS_PANEL = LAYOUT.controls
 const SLIDER_WIDTH = 205
-const TUNING_ROW_HEIGHT = 112
+const TUNING_ROW_HEIGHT = LAYOUT.tuningRowHeight
 const GEOMETRY_COLUMN_COUNT = 6
 
 const PRESETS: readonly OutlinePresetName[] = [
@@ -55,15 +71,6 @@ const PALETTES: readonly OutlinePaletteName[] = [
   'red',
   'white'
 ]
-const PALETTE_COLORS: Record<OutlinePaletteName, number> = {
-  green: 0x6cff46,
-  orange: 0xffff0a,
-  purple: 0xc56cff,
-  blue: 0x6cffff,
-  red: 0xff8a52,
-  white: 0xf5f5f5
-}
-
 type TuningKey = keyof OutlineTuning
 
 interface TuningControlSpec {
@@ -102,6 +109,14 @@ const CONTROL_SPECS = [
   { key: 'contourVariation', label: 'Contour variation', min: 0, max: 10, step: 1 }
 ] as const satisfies readonly TuningControlSpec[]
 
+const SATURATION_CONTROL = {
+  key: 'saturation',
+  label: 'Color saturation',
+  min: 0,
+  max: 2,
+  step: 0.05
+} as const satisfies TuningControlSpec
+
 interface ButtonState {
   readonly root: Container
   readonly background: Graphics
@@ -118,8 +133,9 @@ interface SliderState {
   value: number
 }
 
-function cloneTunings(): Record<OutlinePresetName, OutlineTuning> {
-  const tunings = getOutlineTuningConfig().presets
+function cloneTunings(
+  tunings: OutlineTuningConfig['presets']
+): Record<OutlinePresetName, OutlineTuning> {
   return {
     card: { ...tunings.card },
     'bonus-card': { ...tunings['bonus-card'] },
@@ -127,6 +143,26 @@ function cloneTunings(): Record<OutlinePresetName, OutlineTuning> {
     button: { ...tunings.button },
     ghost: { ...tunings.ghost }
   }
+}
+
+function clonePalettes(
+  palettes: OutlineTuningConfig['palettes']
+): Record<OutlinePaletteName, OutlinePalette> {
+  return {
+    blue: { ...palettes.blue },
+    green: { ...palettes.green },
+    orange: { ...palettes.orange },
+    purple: { ...palettes.purple },
+    red: { ...palettes.red },
+    white: { ...palettes.white }
+  }
+}
+
+export interface OutlineLabOptions {
+  readonly canvas: HTMLCanvasElement
+  readonly renderer: Renderer
+  readonly parent: HTMLElement
+  readonly cursor?: CursorManager | null
 }
 
 function addLabel(
@@ -151,7 +187,11 @@ function addLabel(
       }
     }
   })
-  label.position.set(x, y)
+  applyPlacement(
+    label,
+    placement({ x, y }, { width: label.width, height: label.height })
+  )
+  label.label = `outline-lab.label.${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   label.eventMode = 'none'
   parent.addChild(label)
   return label
@@ -171,6 +211,7 @@ function addPanel(
     .fill({ color: 0x17283d, alpha: 0.98 })
     .stroke({ color: 0xb08a5c, width: 2, alpha: 0.92 })
   panel.eventMode = 'none'
+  panel.label = `outline-lab.panel.${bounds.x}`
   parent.addChild(panel)
 }
 
@@ -188,11 +229,14 @@ function formatValue(value: number, step: number): string {
 export class OutlineLab extends Container {
   private readonly assetScope = new AssetScope()
   private readonly resolver = new CardAssetResolver()
-  private readonly drafts = cloneTunings()
+  private readonly initialConfig = getOutlineTuningConfig()
+  private readonly drafts = cloneTunings(this.initialConfig.presets)
+  private readonly paletteDrafts = clonePalettes(this.initialConfig.palettes)
   private readonly previewGroups = new Map<OutlinePresetName, Container>()
   private readonly outlines = new Map<OutlinePresetName, AnimatedOutline[]>()
   private readonly presetTabs = new Map<OutlinePresetName, ButtonState>()
   private readonly paletteButtons = new Map<OutlinePaletteName, ButtonState>()
+  private readonly paletteSwatches = new Map<OutlinePaletteName, Graphics>()
   private readonly sliders = new Map<TuningKey, SliderState>()
   private readonly selectedPalettes: Record<OutlinePresetName, OutlinePaletteName> = {
     card: 'green',
@@ -203,35 +247,69 @@ export class OutlineLab extends Container {
   }
   private selectedPreset: OutlinePresetName = 'card'
   private activeSlider: SliderState | null = null
-  private saveTimer: ReturnType<typeof setTimeout> | null = null
-  private saveRequested = false
+  private colorControls: OutlineLabColorControls | null = null
+  private saveButton!: ButtonState
+  private revision = 0
+  private savedRevision = 0
   private saveInFlight = false
   private disposed = false
   private statusLabel!: Text
+  private hand: OutlineLabHand | null = null
+  private board: OutlineLabBoard | null = null
+  private handCount = 5
+  private readonly handControls = new Container()
+  private handCountLabel!: Text
+  private countMinus!: ButtonState
+  private countPlus!: ButtonState
+  private controlsVisible = true
+  private countRevision = 0
+
+  constructor(private readonly options: OutlineLabOptions) {
+    super()
+  }
 
   async mount(): Promise<void> {
-    const [deckAssets, selectionAssets] = await Promise.all([
+    const results = await Promise.allSettled([
       this.assetScope.acquire<DeckPresentationAssets>(
         ASSET_BUNDLE_IDS.deckPresentation
       ),
-      this.assetScope.acquire<DeckSelectionAssets>(ASSET_BUNDLE_IDS.deckSelection)
+      this.assetScope.acquire<DeckSelectionAssets>(ASSET_BUNDLE_IDS.deckSelection),
+      this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
     ])
-    const [minionFrame, spellFrame] = await Promise.all([
-      this.resolver.load('card.frame.minion'),
-      this.resolver.load('card.frame.spell')
-    ])
+    const [deckResult, selectionResult, gameResult] = results
+    if (deckResult.status === 'rejected') throw deckResult.reason
+    if (selectionResult.status === 'rejected') throw selectionResult.reason
+    if (gameResult.status === 'rejected') throw gameResult.reason
+    const [deckAssets, selectionAssets, gameAssets] = [
+      deckResult.value,
+      selectionResult.value,
+      gameResult.value
+    ] as const
+    if (this.disposed) {
+      await this.assetScope.releaseAll()
+      return
+    }
 
     this.createChrome()
     this.createPresetTabs()
     this.createPaletteControls()
+    this.colorControls = new OutlineLabColorControls({
+      ...this.options,
+      onColorChange: (key, color) => this.updateSelectedColor(key, color)
+    })
     this.createTuningControls()
-    this.createPreviewGroups(minionFrame, spellFrame, deckAssets, selectionAssets)
+    await this.createPreviewGroups(gameAssets, deckAssets, selectionAssets)
+    if (this.disposed) return
+    this.createHandControls()
     this.selectPreset('card')
   }
 
   dispose(): void {
-    this.flushSave()
+    if (this.disposed) return
     this.disposed = true
+    this.colorControls?.dispose()
+    this.hand?.dispose()
+    this.board?.dispose()
     for (const outlines of this.outlines.values()) {
       for (const outline of outlines) outline.dispose()
     }
@@ -240,52 +318,81 @@ export class OutlineLab extends Container {
     this.destroy({ children: true })
   }
 
+  setControlsVisible(visible: boolean): void {
+    this.controlsVisible = visible
+    this.colorControls?.setVisible(visible)
+    if (visible) this.hand?.resume()
+    else this.hand?.pause()
+    if (!visible) this.board?.clearHover()
+  }
+
+  update(deltaMS: number): void {
+    if (this.disposed || !this.controlsVisible) return
+    this.hand?.update(deltaMS)
+    this.board?.update(deltaMS)
+  }
+
   private createChrome(): void {
     const background = new Graphics()
       .rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
       .fill(0x0f1c2d)
     background.eventMode = 'none'
+    background.label = 'outline-lab.background'
     this.addChild(background)
 
-    const header = new Graphics().rect(0, 0, CANVAS_WIDTH, 92).fill(0x294967)
+    const header = new Graphics()
+      .rect(0, 0, CANVAS_WIDTH, LAYOUT.header.height)
+      .fill(0x294967)
     header.eventMode = 'none'
+    header.label = 'outline-lab.header'
     this.addChild(header)
 
-    addLabel(this, 'OUTLINE SHADER LAB', 40, 24, 34)
     addLabel(
       this,
-      'Production outline tuning — changes save automatically.',
-      430,
-      35,
-      19,
-      0xc9d6e7
+      'SHADER LAB',
+      LAYOUT.header.titleX,
+      LAYOUT.header.titleY,
+      LAYOUT.header.titleSize
     )
     addPanel(this, PREVIEW_PANEL)
     addPanel(this, CONTROLS_PANEL)
 
-    addLabel(this, 'LIVE PREVIEW', 62, 202, 19, 0xf1d36a)
-    addLabel(this, 'TUNING', 1202, 202, 19, 0xf1d36a)
-    addLabel(this, 'GEOMETRY / GLOW', 1202, 242, 16, 0x9db5d1)
-    addLabel(this, 'DETAIL / MOTION', 1532, 242, 16, 0x9db5d1)
+    addLabel(this, 'LIVE PREVIEW', 62, LAYOUT.panelTitleY, 19, 0xf1d36a)
+    addLabel(this, 'TUNING', 1202, LAYOUT.panelTitleY, 19, 0xf1d36a)
+    addLabel(this, 'GEOMETRY / GLOW', 1202, LAYOUT.tuningHeadingY, 16, 0x9db5d1)
+    addLabel(this, 'DETAIL / MOTION', 1532, LAYOUT.tuningHeadingY, 16, 0x9db5d1)
+
+    const save = LAYOUT.save
+    this.saveButton = this.createButton(
+      save.x,
+      save.y,
+      save.width,
+      save.height,
+      'Save',
+      () => {
+        void this.save()
+      }
+    )
+    this.refreshSaveButton()
 
     this.statusLabel = addLabel(
       this,
-      'Saved production configuration.',
-      62,
-      992,
+      'No unsaved changes.',
+      LAYOUT.status.x,
+      LAYOUT.status.y,
       16,
       0x9db5d1
     )
   }
 
   private createPresetTabs(): void {
-    const tabWidth = 214
+    const tabs = LAYOUT.tabs
     for (const [index, preset] of PRESETS.entries()) {
       const tab = this.createButton(
-        40 + index * (tabWidth + 12),
-        108,
-        tabWidth,
-        54,
+        tabs.x + index * (tabs.width + tabs.gap),
+        tabs.y,
+        tabs.width,
+        tabs.height,
         PRESET_LABELS[preset],
         () => this.selectPreset(preset)
       )
@@ -294,32 +401,41 @@ export class OutlineLab extends Container {
   }
 
   private createPaletteControls(): void {
-    addLabel(this, 'Palette', 735, 202, 16, 0x9db5d1)
-    for (const [index, palette] of PALETTES.entries()) {
-      const button = this.createButton(805 + index * 64, 197, 54, 34, '', () =>
-        this.selectPalette(palette)
+    addLabel(this, 'Palette', 685, LAYOUT.panelTitleY, 16, 0x9db5d1)
+    const layout = LAYOUT.palettes
+    for (const palette of PALETTES) {
+      const button = this.createButton(
+        layout.x,
+        LAYOUT.panelTitleY - 5,
+        layout.width,
+        layout.height,
+        palette,
+        () => this.selectPalette(palette)
       )
+      button.label.x += 10
+      button.root.visible = false
       const swatch = new Graphics()
-        .circle(27, 17, 9)
-        .fill(PALETTE_COLORS[palette])
+        .circle(layout.swatchX, layout.swatchY, layout.swatchRadius)
+        .fill(this.paletteDrafts[palette].baseColor)
         .stroke({ color: 0xffffff, width: 1, alpha: 0.7 })
       swatch.eventMode = 'none'
       button.root.addChild(swatch)
       this.paletteButtons.set(palette, button)
+      this.paletteSwatches.set(palette, swatch)
     }
   }
 
   private createTuningControls(): void {
     for (const [index, spec] of CONTROL_SPECS.entries()) {
       const column = index < GEOMETRY_COLUMN_COUNT ? 0 : 1
-      const row =
-        column === 0 ? index : index - GEOMETRY_COLUMN_COUNT
+      const row = column === 0 ? index : index - GEOMETRY_COLUMN_COUNT
       this.createSlider(
         spec,
         1202 + column * 330,
-        278 + row * TUNING_ROW_HEIGHT
+        LAYOUT.tuningY + row * TUNING_ROW_HEIGHT
       )
     }
+    this.createSlider(SATURATION_CONTROL, 1202, LAYOUT.tuningY + 6 * TUNING_ROW_HEIGHT)
   }
 
   private createSlider(spec: TuningControlSpec, x: number, y: number): void {
@@ -379,102 +495,115 @@ export class OutlineLab extends Container {
     )
   }
 
-  private createPreviewGroups(
-    minionFrame: Texture,
-    spellFrame: Texture,
+  private async createPreviewGroups(
+    gameAssets: GameAssets,
     deckAssets: DeckPresentationAssets,
     selectionAssets: DeckSelectionAssets
-  ): void {
+  ): Promise<void> {
     const cardGroup = this.createPreviewGroup('card')
-    this.addOutlinedTexture(
-      cardGroup,
-      minionFrame,
-      'card',
-      330,
-      610,
-      0.52,
-      'Full-size card'
+    this.createPreviewGroup('bonus-card')
+    this.hand = new OutlineLabHand(
+      this.options.renderer,
+      this.options.canvas,
+      gameAssets,
+      this.resolver,
+      this.options.cursor
     )
-    this.addOutlinedTexture(
-      cardGroup,
-      spellFrame,
-      'card',
-      800,
-      595,
-      0.32,
-      'Hand-size card'
-    )
-
-    const bonusGroup = this.createPreviewGroup('bonus-card')
-    this.addOutlinedTexture(
-      bonusGroup,
-      minionFrame,
-      'bonus-card',
-      330,
-      610,
-      0.52,
-      'Enhanced card'
-    )
-    this.addOutlinedTexture(
-      bonusGroup,
-      spellFrame,
-      'bonus-card',
-      800,
-      595,
-      0.32,
-      'Selected enhanced card'
-    )
+    cardGroup.addChild(this.hand)
+    this.refreshHandAppearance()
+    await this.hand.setCount(this.handCount)
+    if (this.disposed) return
 
     const boardGroup = this.createPreviewGroup('board')
-    this.addOutlinedProxy(boardGroup, 'board', 260, 610, 'Minion', (graphics) => {
-      graphics.ellipse(0, 0, 92, 126).fill(0xffffff)
-    })
-    this.addOutlinedProxy(boardGroup, 'board', 570, 590, 'Hero', (graphics) => {
-      graphics.ellipse(0, 0, 125, 155).fill(0xffffff)
-    })
-    this.addOutlinedProxy(boardGroup, 'board', 900, 590, 'Hero power', (graphics) => {
-      graphics.circle(0, 0, 105).fill(0xffffff)
-    })
+    this.board = new OutlineLabBoard(this.options.renderer)
+    boardGroup.addChild(this.board)
+    await this.board.mount(gameAssets, deckAssets, this.resolver)
+    if (this.disposed) return
+    for (const [text, x] of [
+      ['Minion', LAYOUT.minion.position.x],
+      ['Jaina Proudmoore', LAYOUT.hero.position.x],
+      ['Hero power · click to flip', LAYOUT.power.position.x]
+    ] as const) {
+      addLabel(boardGroup, text, x, LAYOUT.captionY, 18, 0xd7e2ef).anchor.set(0.5, 0)
+    }
 
     const buttonGroup = this.createPreviewGroup('button')
-    this.addOutlinedTexture(
-      buttonGroup,
-      deckAssets.deckButtonFrame,
-      'button',
-      330,
-      575,
-      1.65,
-      'Deck frame'
+    const deck = new Container()
+    deck.label = 'outline-lab.button.deck'
+    deck.eventMode = 'none'
+    deck.interactiveChildren = false
+    applyPlacement(deck, LAYOUT.deck)
+
+    const portrait = new Sprite(deckAssets.jainaDeckPortrait)
+    portrait.label = 'outline-lab.button.deck-portrait'
+    portrait.eventMode = 'none'
+    applyAnchoredPlacement(portrait, LAYOUT.deckPortrait)
+    portrait.scale.set(
+      Math.max(
+        LAYOUT.deckPortrait.size.width / portrait.texture.width,
+        LAYOUT.deckPortrait.size.height / portrait.texture.height
+      )
     )
+    const crop = LAYOUT.deckPortraitCrop
+    const mask = new Graphics()
+      .rect(
+        -crop.size.width * crop.anchor.x,
+        -crop.size.height * crop.anchor.y,
+        crop.size.width,
+        crop.size.height
+      )
+      .fill(0xffffff)
+    mask.label = 'outline-lab.button.deck-portrait-mask'
+    mask.eventMode = 'none'
+    applyPlacement(mask, crop)
+    portrait.mask = mask
+    deck.addChild(portrait, mask)
+
+    const frame = new Sprite(deckAssets.deckButtonFrame)
+    frame.label = 'outline-lab.button.deck-frame'
+    frame.anchor.set(0.5)
+    frame.eventMode = 'none'
+    deck.addChild(frame)
+    const name = new Text({
+      text: 'Mage Deck',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 24,
+        fill: 0xffffff,
+        align: 'center'
+      }
+    })
+    name.label = 'outline-lab.button.deck-name'
+    name.eventMode = 'none'
+    applyAnchoredPlacement(name, LAYOUT.deckName)
+    if (name.width > LAYOUT.deckName.size.width)
+      name.scale.set(LAYOUT.deckName.size.width / name.width)
+    deck.addChild(name)
+
+    const outlineTarget = new Sprite(deckAssets.deckButtonFrame)
+    outlineTarget.label = 'outline-lab.button.deck-outline'
+    outlineTarget.anchor.set(0.5)
+    outlineTarget.eventMode = 'none'
+    deck.addChildAt(outlineTarget, 0)
+    this.registerOutline(outlineTarget, 'button')
+    buttonGroup.addChild(deck)
     this.addOutlinedTexture(
       buttonGroup,
       selectionAssets.playButton,
       'button',
-      800,
-      575,
-      0.92,
+      LAYOUT.play,
       'Play button'
     )
 
     const ghostGroup = this.createPreviewGroup('ghost')
     this.addOutlinedTexture(
       ghostGroup,
-      deckAssets.deckButtonFrame,
+      gameAssets.mulliganAnnouncement,
       'ghost',
-      330,
-      575,
-      1.65,
-      'Deck frame'
+      LAYOUT.banner,
+      'Mulligan announcement'
     )
-    this.addOutlinedTexture(
-      ghostGroup,
-      selectionAssets.playButton,
-      'ghost',
-      800,
-      575,
-      0.92,
-      'Play button'
-    )
+    this.refreshPreviewAppearance('board')
   }
 
   private createPreviewGroup(preset: OutlinePresetName): Container {
@@ -483,6 +612,19 @@ export class OutlineLab extends Container {
     group.label = `outline-lab.preview.${preset}`
     this.previewGroups.set(preset, group)
     this.addChild(group)
+    // Clip the bottom of the resting hand just as the match viewport does.
+    const mask = new Graphics()
+      .rect(
+        PREVIEW_PANEL.x + 2,
+        PREVIEW_PANEL.y + 220,
+        PREVIEW_PANEL.width - 4,
+        PREVIEW_PANEL.height - 222
+      )
+      .fill(0xffffff)
+    mask.eventMode = 'none'
+    mask.label = `outline-lab.preview.${preset}.mask`
+    this.addChild(mask)
+    group.mask = mask
     return group
   }
 
@@ -490,63 +632,35 @@ export class OutlineLab extends Container {
     group: Container,
     texture: Texture,
     preset: OutlinePresetName,
-    x: number,
-    y: number,
-    scale: number,
+    value: LayoutPlacement,
     label: string
   ): void {
     const target = new Sprite(texture)
-    target.anchor.set(0.5)
-    target.position.set(x, y)
-    target.scale.set(scale)
+    applyAnchoredPlacement(target, value)
     target.eventMode = 'none'
     target.label = `outline-lab.${preset}.${label}.target`
     group.addChild(target)
     this.registerOutline(target, preset)
 
     const body = new Sprite(texture)
-    body.anchor.set(0.5)
-    body.position.set(x, y)
-    body.scale.set(scale)
+    applyAnchoredPlacement(body, value)
     body.eventMode = 'none'
     body.label = `outline-lab.${preset}.${label}.body`
     group.addChild(body)
-    const labelY = Math.min(920, y + texture.height * scale * 0.5 + 24)
-    const caption = addLabel(group, label, x, labelY, 18, 0xd7e2ef)
-    caption.anchor.set(0.5, 0)
-  }
-
-  private addOutlinedProxy(
-    group: Container,
-    preset: OutlinePresetName,
-    x: number,
-    y: number,
-    label: string,
-    draw: (graphics: Graphics) => void
-  ): void {
-    const target = new Graphics()
-    draw(target)
-    target.position.set(x, y)
-    target.eventMode = 'none'
-    target.label = `outline-lab.${preset}.${label}.target`
-    group.addChild(target)
-    this.registerOutline(target, preset)
-
-    const body = new Graphics()
-    draw(body)
-    body.tint = 0x405b78
-    body.scale.set(0.88)
-    body.position.set(x, y)
-    body.eventMode = 'none'
-    body.label = `outline-lab.${preset}.${label}.body`
-    group.addChild(body)
-    const caption = addLabel(group, label, x, 800, 18, 0xd7e2ef)
+    const caption = addLabel(
+      group,
+      label,
+      value.position.x,
+      LAYOUT.captionY,
+      18,
+      0xd7e2ef
+    )
     caption.anchor.set(0.5, 0)
   }
 
   private registerOutline(target: Container, preset: OutlinePresetName): void {
     const outline = new AnimatedOutline(target, {
-      palette: this.selectedPalettes[preset],
+      palette: this.paletteDrafts[this.selectedPalettes[preset]],
       preset
     })
     outline.setTuning(this.drafts[preset])
@@ -556,24 +670,145 @@ export class OutlineLab extends Container {
   }
 
   private selectPreset(preset: OutlinePresetName): void {
+    this.hand?.cancel()
+    this.board?.clearHover()
     this.selectedPreset = preset
     for (const [candidate, group] of this.previewGroups) {
       group.visible = candidate === preset
     }
+    const isHand = preset === 'card' || preset === 'bonus-card'
+    this.handControls.visible = isHand
+    if (this.hand) {
+      this.hand.visible = isHand
+      if (isHand) this.previewGroups.get(preset)?.addChild(this.hand)
+    }
+    if (this.board) this.board.visible = preset === 'board'
+    this.refreshPreviewAppearance(preset)
     for (const slider of this.sliders.values()) {
       this.setSliderValue(slider, this.drafts[preset][slider.spec.key], false)
     }
     this.refreshPresetTabs()
     this.refreshPaletteButtons()
-    this.statusLabel.text = `${PRESET_LABELS[preset]} production values loaded. Changes save automatically.`
+    this.refreshColorControls()
   }
 
   private selectPalette(palette: OutlinePaletteName): void {
+    if (
+      !OUTLINE_LAB_PALETTES[this.selectedPreset].some(
+        (option) => option.palette === palette
+      )
+    )
+      return
     this.selectedPalettes[this.selectedPreset] = palette
-    for (const outline of this.outlines.get(this.selectedPreset) ?? []) {
-      outline.setPalette(palette)
-    }
+    this.refreshPreviewAppearance(this.selectedPreset)
     this.refreshPaletteButtons()
+    this.refreshColorControls()
+  }
+
+  private updateSelectedColor(key: keyof OutlinePalette, color: number): void {
+    const palette = this.selectedPalettes[this.selectedPreset]
+    if (this.paletteDrafts[palette][key] === color) return
+    this.paletteDrafts[palette] = { ...this.paletteDrafts[palette], [key]: color }
+    if (key === 'baseColor') {
+      this.paletteSwatches
+        .get(palette)
+        ?.clear()
+        .circle(
+          LAYOUT.palettes.swatchX,
+          LAYOUT.palettes.swatchY,
+          LAYOUT.palettes.swatchRadius
+        )
+        .fill(color)
+        .stroke({ color: 0xffffff, width: 1, alpha: 0.7 })
+    }
+    for (const preset of PRESETS) {
+      if (!OUTLINE_LAB_PALETTES[preset].some((option) => option.palette === palette))
+        continue
+      this.refreshPreviewAppearance(preset)
+    }
+    this.markDirty()
+  }
+
+  private refreshColorControls(): void {
+    const palette = this.selectedPalettes[this.selectedPreset]
+    this.colorControls?.setPalette(palette, this.paletteDrafts[palette])
+  }
+
+  private refreshHandAppearance(): void {
+    const preset = this.selectedPreset === 'bonus-card' ? 'bonus-card' : 'card'
+    this.hand?.setAppearance(
+      preset === 'bonus-card',
+      this.paletteDrafts[preset === 'bonus-card' ? 'orange' : 'green'],
+      this.drafts[preset],
+      this.paletteDrafts.blue
+    )
+  }
+
+  private refreshPreviewAppearance(preset: OutlinePresetName): void {
+    const palette = this.paletteDrafts[this.selectedPalettes[preset]]
+    const tuning = this.drafts[preset]
+    for (const outline of this.outlines.get(preset) ?? []) {
+      outline.setPalette(palette)
+      outline.setTuning(tuning)
+    }
+    if (preset === 'board') {
+      // Selecting the white editor must not replace the ready outline: hover layers it on top.
+      const base =
+        this.selectedPalettes.board === 'red'
+          ? this.paletteDrafts.red
+          : this.paletteDrafts.green
+      this.board?.setAppearance(base, tuning, this.paletteDrafts.white)
+    }
+    if (
+      preset === this.selectedPreset &&
+      (preset === 'card' || preset === 'bonus-card')
+    )
+      this.refreshHandAppearance()
+  }
+
+  private createHandControls(): void {
+    this.handControls.label = 'outline-lab.hand-controls'
+    this.addChild(this.handControls)
+    const { x, y, height } = LAYOUT.count
+    this.handCountLabel = addLabel(this.handControls, '', x + 48, y + 8, 18)
+    this.countMinus = this.createButton(x, y, 36, height, '−', () =>
+      this.changeHandCount(-1)
+    )
+    this.countPlus = this.createButton(x + 177, y, 36, height, '+', () =>
+      this.changeHandCount(1)
+    )
+    this.handControls.addChild(this.countMinus.root, this.countPlus.root)
+    addLabel(
+      this.handControls,
+      'Hover to inspect · drag and release to return',
+      x,
+      y + 55,
+      17,
+      0x9db5d1
+    )
+    this.refreshHandCount()
+  }
+
+  private refreshHandCount(): void {
+    this.handCountLabel.text = `Cards: ${this.handCount}`
+    for (const [button, enabled] of [
+      [this.countMinus, this.handCount > 1],
+      [this.countPlus, this.handCount < 10]
+    ] as const) {
+      button.root.eventMode = enabled ? 'static' : 'none'
+      button.root.alpha = enabled ? 1 : 0.45
+    }
+  }
+
+  private changeHandCount(delta: number): void {
+    this.handCount = clampHandCount(this.handCount + delta)
+    this.refreshHandCount()
+    const revision = ++this.countRevision
+    void this.hand?.setCount(this.handCount).catch((error: unknown) => {
+      if (this.disposed || revision !== this.countRevision) return
+      console.error('[OutlineLab] Failed to create hand.', error)
+      this.statusLabel.text = 'Unable to load hand. Change the count to retry.'
+    })
   }
 
   private updateSliderFromPointer(
@@ -602,17 +837,14 @@ export class OutlineLab extends Container {
 
   private updateSelectedTuning(key: TuningKey, value: number): void {
     const preset = this.selectedPreset
+    if (this.drafts[preset][key] === value) return
     this.drafts[preset] = { ...this.drafts[preset], [key]: value }
-    for (const outline of this.outlines.get(preset) ?? []) {
-      outline.setTuning(this.drafts[preset])
-    }
-    updateOutlineTuningConfig({ version: 1, presets: this.drafts })
-    this.scheduleSave()
+    this.refreshPreviewAppearance(preset)
+    this.markDirty()
   }
 
   private endSliderDrag(slider: SliderState): void {
     if (this.activeSlider === slider) this.activeSlider = null
-    this.flushSave()
   }
 
   private refreshPresetTabs(): void {
@@ -626,28 +858,32 @@ export class OutlineLab extends Container {
 
   private refreshPaletteButtons(): void {
     const selected = this.selectedPalettes[this.selectedPreset]
+    const options = OUTLINE_LAB_PALETTES[this.selectedPreset]
     for (const [palette, button] of this.paletteButtons) {
+      const index = options.findIndex((option) => option.palette === palette)
+      button.root.visible = index >= 0
+      if (index < 0) continue
+      button.root.x =
+        LAYOUT.palettes.x + index * (LAYOUT.palettes.width + LAYOUT.palettes.gap)
+      button.label.text = options[index].label
       this.drawButton(button, palette === selected)
     }
   }
 
-  private scheduleSave(): void {
-    this.saveRequested = true
-    this.statusLabel.text = 'Saving production configuration…'
-    if (this.saveTimer) clearTimeout(this.saveTimer)
-    this.saveTimer = setTimeout(() => this.flushSave(), 200)
+  private markDirty(): void {
+    this.revision += 1
+    this.statusLabel.text = 'Unsaved changes.'
+    this.refreshSaveButton()
   }
 
-  private flushSave(): void {
-    if (this.saveTimer) {
-      clearTimeout(this.saveTimer)
-      this.saveTimer = null
-    }
-    if (!this.saveRequested || this.saveInFlight) return
-    void this.drainSaves()
+  private refreshSaveButton(): void {
+    const enabled = this.revision !== this.savedRevision && !this.saveInFlight
+    this.saveButton.root.eventMode = enabled ? 'static' : 'none'
+    this.saveButton.root.alpha = enabled ? 1 : 0.5
   }
 
-  private async drainSaves(): Promise<void> {
+  private async save(): Promise<void> {
+    if (this.saveInFlight || this.revision === this.savedRevision) return
     const save = window.api.outlineTuning?.save
     if (!save) {
       this.statusLabel.text =
@@ -655,25 +891,32 @@ export class OutlineLab extends Container {
       return
     }
 
+    const savedRevision = this.revision
+    const snapshot: OutlineTuningConfig = {
+      version: 3,
+      presets: cloneTunings(this.drafts),
+      palettes: clonePalettes(this.paletteDrafts)
+    }
     this.saveInFlight = true
+    this.statusLabel.text = 'Saving production configuration…'
+    this.refreshSaveButton()
     try {
-      while (this.saveRequested) {
-        this.saveRequested = false
-        try {
-          await save(getOutlineTuningConfig())
-        } catch (error) {
-          this.saveRequested = true
-          console.error('[OutlineLab] Failed to save production configuration.', error)
-          if (!this.disposed) {
-            this.statusLabel.text =
-              'Save failed. The current values remain live; edit again to retry.'
-          }
-          return
-        }
+      await save(snapshot)
+      updateOutlineTuningConfig(snapshot)
+      this.savedRevision = savedRevision
+      if (!this.disposed) {
+        this.statusLabel.text =
+          this.revision === savedRevision
+            ? 'Saved production configuration.'
+            : 'Saved earlier edits. New changes are unsaved.'
       }
-      if (!this.disposed) this.statusLabel.text = 'Saved production configuration.'
+    } catch (error) {
+      console.error('[OutlineLab] Failed to save production configuration.', error)
+      if (!this.disposed)
+        this.statusLabel.text = 'Save failed. Changes remain unsaved; retry Save.'
     } finally {
       this.saveInFlight = false
+      if (!this.disposed) this.refreshSaveButton()
     }
   }
 
@@ -686,7 +929,8 @@ export class OutlineLab extends Container {
     onClick: (event: FederatedPointerEvent) => void
   ): ButtonState {
     const root = new Container()
-    root.position.set(x, y)
+    applyPlacement(root, placement({ x, y }, { width, height }))
+    root.label = `outline-lab.button.${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.${x}.${y}`
     root.hitArea = new Rectangle(0, 0, width, height)
     root.eventMode = 'static'
     root.cursor = 'pointer'

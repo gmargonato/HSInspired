@@ -1,0 +1,255 @@
+# Your next task: Improve the local hardware-powered AI opponent for this game
+
+## 1. Objective and project context
+
+Inspect this repository and improve the hardware-based AI opponent. Do not stop after a design proposal. Make the scoped code changes, run the available checks, and report the results.
+
+The game already works. It uses Electron, PixiJS, npm, and TypeScript/JavaScript. Confirm the actual architecture and package manager from the repository rather than assuming how these parts connect.
+
+The game is inspired by Hearthstone, especially its 2014–2017 era. However, some cards are custom. An earlier discussion assumed exact Hearthstone cards only to simplify the AI discussion. **The actual rules and card implementations in this repository are authoritative.**
+
+The first opponent should play midrange/tempo decks. It should develop its board, use mana sensibly, find favorable trades, protect itself when necessary, and recognize winning sequences. Do not reduce this to “always spend all mana” or “always trade.”
+
+The opponent must run locally, without a gameplay API or LLM. An earlier API-based LLM attempt was too slow or made poor decisions. The available machine has a 5070 Ti GPU and 32 GB RAM. Inspect the CPU and runtime if needed; do not invent their specifications.
+
+**Target: each complete AI turn should take no more than 10 seconds, including planning, replanning, action execution, and visible animations.** Simple turns should finish much sooner.
+
+“Opponent” means the other player slot in this local game. Do not add a remote server or multiplayer infrastructure for this task.
+
+## 2. Work within the existing project
+
+Read applicable repository instructions, including AGENTS.md files. Inspect the working tree before making changes. Preserve unrelated changes and do not reset, stash, delete, commit, or push them.
+
+This task authorizes ordinary local implementation work: inspect files, add scoped code and tests, run checks, and make small necessary refactors. Do not repeatedly ask for permission to perform these steps. Follow repository constraints and flag any genuinely destructive or out-of-scope requirement.
+
+Keep the working game intact. Do not rewrite the UI, replace the engine, change card balance, or introduce a large framework migration. Use the existing package manager, lockfile, test runner, and code conventions.
+
+Before editing, identify the actual files responsible for game state, card definitions, legal actions, effect resolution, randomness, turn progression, player controllers, animations, and any existing AI. Record these paths in a short implementation note.
+
+Run the relevant existing checks. Distinguish pre-existing failures from failures introduced by this work.
+
+## 3. Reuse existing work, but choose the implementation from evidence
+
+The objective is to avoid inventing a large AI system from scratch. Prefer a suitable existing implementation or a small, clearly documented adaptation.
+
+**Do not interpret this as a requirement to install Silverfish, reject MCTS, or introduce a second rules engine.** Choose the smallest approach that fits this repository and can be tested.
+
+Use these research starting points:
+
+**Silverfish search:** inspect its MiniSimulator implementation for bounded search over action sequences and candidate reduction. Treat it as reference material, not a drop-in TypeScript dependency.
+
+**Silverfish evaluation:** inspect BehaviorControl for reusable evaluation concepts. Separate rules based on current game properties from rules tied to named Hearthstone cards. Do not assume its original weights fit this game.
+
+**OpenSpiel MCTS:** inspect its separation between search, state transitions, and evaluation. Its standard Python MCTS implementation does not provide special handling for imperfect information. Do not assume that selecting it solves hidden-card reasoning.
+
+**SabberStone:** consider it a Hearthstone simulator and AI reference. Do not replace our working custom-card engine merely to use its example AI.
+
+Perform a focused dependency review. Check the actual API, license, runtime requirements, chance handling, player-turn assumptions, cancellation support, and copying requirements of any candidate. Prefer a small compatible JavaScript/TypeScript dependency when one fits.
+
+Verify permission and preserve required notices before copying or porting source. Record the repository, version or commit, files used, license, and modifications. A public repository is not, by itself, sufficient evidence of permission to copy its code. If permission is unclear, use another source or implement the general algorithm independently. Do not block the whole task on that source.
+
+Select **one** initial search implementation. A bounded action-sequence search with a property-based evaluator is a reasonable starting candidate. MCTS is also acceptable if it fits better. Explain the choice using actual integration requirements, not an unsupported claim that one will play better.
+
+If no suitable implementation fits, a compact, tested implementation of an established algorithm is acceptable. Document why this is less work or risk than adapting the available alternatives. Keep game rules outside that algorithm.
+
+## 4. Reuse the actual game rules for simulation
+
+The preferred architecture is:
+
+    Existing authoritative game rules
+        → copied simulation states
+        → legal action generation and effect resolution
+        → search and evaluation
+        → selected action
+        → normal live-game validation and execution
+
+First establish whether the rules can run without PixiJS, DOM objects, animation timers, or network calls. If they cannot, make the smallest necessary separation. Do not build a second approximate implementation of every card.
+
+Expose or adapt the operations needed to obtain a player observation, create an isolated simulation, list legal actions, apply an action, resolve pending effects, identify the next decision-maker, and report a terminal result. These are responsibilities, not mandatory new function names.
+
+A simulated action must use the same relevant rules as the live action: costs, targets, placement, buffs, auras, deaths, triggered effects, and turn transitions. Resolve effects to a valid decision boundary before asking the planner for another action.
+
+Simulation must not change the live match, its random generator, entity-ID allocator, event listeners, or UI. Do not share mutable card instances or global state between branches. Test branch isolation explicitly.
+
+Keep legal action generation separate from search pruning. The authoritative action list must be complete for the current decision. The planner can examine a subset, but it must not redefine what is legal.
+
+Include choices and placement where relevant. Do not assume every decision is simply a card plus a target. Support whatever the existing game exposes, including attacks, hero powers, pending choices, and ending the turn.
+
+Use the engine's actual turn owner. Multiple consecutive actions can belong to the same player. Do not alternate evaluation signs after every action as though each action passed control to the opponent.
+
+## 5. Keep hidden information out of the decision system
+
+**The AI must not use my hidden hand, secret identities, unknown deck order, or the live match's future random outcomes.** This restriction applies to the entire planning system, not just the evaluator.
+
+Define the information boundary before connecting the search. The AI can use its own visible hand, public state, revealed history, and information explicitly available under the game's rules. An unrevealed secret is not a revealed secret just because the local process stores its identity.
+
+Do not pass the real complete match to the planner and merely ask it to ignore hidden fields. Do not build hypothetical states by retaining the actual opposing hand or future draw order.
+
+Construct planning inputs from permitted observations. If simulations require unknown cards, use documented hypotheses or samples consistent with permitted information. Do not assume the opposing deck list is known unless that is an explicit game rule. Keep deck composition and deck order separate.
+
+For the first prototype, a limited public-information opponent-response model is acceptable. Label its omissions. Do not describe it as a complete hidden-hand model, and do not silently treat an unknown hand as a known empty hand.
+
+If an unknown draw or effect cannot yet be sampled fairly, stop that branch at the uncertainty boundary and use an explicitly documented approximation. Do not consult the real hidden result to make the simulation continue.
+
+Do not start by implementing a large belief-learning system. A fair, limited baseline is preferable to an apparently strong opponent that cheats.
+
+Add a test with two live positions that have the same AI-visible information but different hidden hands or deck orders. The planning observations must match. With a fixed search seed and work budget, decisions must not change because of those hidden differences. Ensure that caches and debug helpers do not reintroduce the leak.
+
+## 6. Search sequences, then execute one action at a time
+
+Search the AI's remaining turn as a sequence of legal actions. Do not choose each action solely from its immediate reward.
+
+Treat ending the turn as an actual transition. Resolve end-of-turn and start-of-turn effects according to the engine. Do not evaluate an invented “end turn” position that skips these consequences.
+
+Start with current-turn search. Once it works, add a bounded opponent-response pass for the most promising candidate lines. Prioritize replies available from public information. Extend into the AI's following turn only when justified by the remaining budget.
+
+Keep the distinction between a tactical guarantee and an estimate. A winning line that relies on an unknown secret or a favorable random outcome is not proven lethal.
+
+Have the planner retain a best-so-far legal action throughout its work. A suggested continuation can accompany it for reuse and diagnostics, but it is not an instruction to execute the whole sequence blindly.
+
+Execute one action through the normal game controller. Wait until its required effects resolve. Obtain the new observation and verify whether the continuation is still applicable. Replan after relevant new information, random outcomes, or choices.
+
+Attach a match ID, turn ID, request ID, and state revision to planning requests and responses. Reject stale results. Recheck legality immediately before execution. Search code must never bypass the live engine's validation.
+
+When time expires, use the best applicable legal action already available. If it is unavailable, use a cheap deterministic fallback. End the turn only when ending it is legal. A pending mandatory choice needs a valid choice, not an invalid end-turn command.
+
+Handle mulligan or other entry-phase decisions through the existing controller if they are required to start a playable match. Use a simple bounded fallback initially; do not let opening-hand optimization expand the main task.
+
+## 7. Build a small evaluator that supports custom cards
+
+Reuse appropriate evaluation concepts rather than importing an unchecked list of Hearthstone card scores.
+
+Evaluate resolved states from a consistent player perspective. Terminal outcomes must take priority over nonterminal heuristic scores. Do not report heuristic scores as calibrated win probabilities.
+
+Start with current properties: board attack and durability, hero safety, immediate threats, usable resources, cards in hand, weapons, and relevant keywords or persistent effects. Add complexity only when a test or observed failure justifies it.
+
+Read actual costs, damage, stats, and effects from the game's definitions and current state. Do not copy old Hearthstone constants or infer executable behavior from card text.
+
+Prefer a reusable feature for an effect over a card-name exception. For example, evaluate an aura through its actual impact where possible. Do not count its stat bonus again if that bonus is already present in the simulated board.
+
+Keep weights and search settings in a small configuration structure. Document what they represent. Label initial values as provisional and tune them against tests rather than making unsupported claims about their quality.
+
+Allow the AI to keep resources when that creates a better position. Do not impose unconditional rules to spend all mana, play the most expensive card, trade every minion, or always attack the opposing hero.
+
+If a custom mechanic has no useful evaluation feature yet, document that limitation. Do not pretend the planner understands its long-term value merely because the simulator executes it correctly.
+
+## 8. Handle chance explicitly
+
+Separate decision choices from random outcomes. The AI chooses actions; it does not choose which random damage target or draw will occur.
+
+Use exact outcome probabilities when cheap, or reproducible sampling when necessary. Use the game's actual random rules. Keep simulation randomness separate from live-match randomness.
+
+For search evaluation, aggregate sampled outcomes or apply a documented risk rule. Do not keep only the favorable outcome and score it as guaranteed. Separate reproducible test seeds from knowledge of a live game's future.
+
+If MCTS is selected, use bounded continuations or a suitable leaf evaluator. Do not assume uniform random play will meet the desired quality within the deadline. Keep evaluator scores and exploration settings on compatible scales.
+
+Do not treat an unfinished simulation as a draw solely because a rollout limit was reached. Mark the cutoff and evaluate the position appropriately.
+
+## 9. Enforce one budget for the complete turn
+
+Use a configurable total-turn target of 10,000 milliseconds. Start accounting when control passes to the AI. Include all planning requests, replanning, communication, action execution, and animation time until control passes back or the game ends.
+
+Do not allocate a fresh ten seconds to each action.
+
+Use a monotonic clock. Let the turn controller own the budget and send only the remaining allowance to each planning request. Do not assume independent processes have identical clock origins.
+
+Reserve time for execution and presentation. An initial split such as eight seconds for cumulative search and two seconds for execution is only a starting configuration. Measure it and adjust it. Do not present that split as a performance result.
+
+Add cooperative deadline checks, node or iteration caps, and memory limits. A long search must remain interruptible. Check the cost of individual simulation operations as well as the outer search loop.
+
+Keep a cheap fallback outside the expensive planner. A stalled or crashed worker must not leave the turn waiting indefinitely. Cancel stale requests and stop unnecessary work when a match ends, restarts, or leaves the game screen.
+
+Do not add artificial thinking delays. Bound AI animation time through an existing speed setting or a small scoped option. Do not silently change normal human animation behavior. Report any engine or presentation bottleneck that prevents the full-turn target.
+
+Treat ten seconds as a measured target, not a hard real-time guarantee provided by the operating system. Report deadline misses rather than hiding them in an average.
+
+## 10. Keep the interface responsive
+
+Run expensive search outside both the PixiJS renderer's UI thread and Electron's main event loop. Select a Web Worker, Node worker thread, or local helper process according to the architecture already present.
+
+Keep the initial implementation CPU-based unless profiling establishes a concrete reason to do otherwise. Do not add GPU infrastructure, model downloads, training jobs, Python, or .NET merely because the hardware is available.
+
+Keep the simulation loop inside the worker or helper. Do not send every simulated action across IPC. Exchange bounded snapshots, selected actions, cancellation messages, and compact diagnostics.
+
+Preserve Electron's existing security boundaries. Do not enable unsafe renderer privileges or disable isolation to make the worker easier to connect.
+
+Verify worker packaging in the actual application build, not only in development mode. Clean up workers and pending promises after cancellation or failure.
+
+## 11. Optimize only after the first measurements
+
+Measure cloning, action generation, effect resolution, evaluation, serialization, and search separately. Optimize the observed bottleneck.
+
+Use bounded candidate counts and state caching where appropriate. Do not merge states simply because their displayed minions and mana match. Equality must preserve all relevant rules, including ordering, pending effects, temporary statuses, attack availability, and history-dependent mechanics.
+
+Do not merge distinct hidden-information hypotheses into a cache entry that leaks information or changes their meaning. If safe state equivalence is unclear, omit that optimization initially.
+
+Preserve tactical diversity when pruning. A first action that scores poorly in isolation might enable a winning continuation. Add fixtures for these cases before aggressively narrowing the search.
+
+Guard against unbounded simulated effect chains and repeated action loops. A simulation limit should produce a reported cutoff, not silently alter the real game rules.
+
+## 12. Add tests and benchmarks that show what works
+
+Use the existing test infrastructure. Build fixtures from the real rules and card definitions. Do not change expected outcomes merely to make the AI pass.
+
+Cover these groups:
+
+- **Simulation correctness:** live-rule and simulation results match for the same supported inputs and controlled random outcomes; sibling branches do not mutate each other; planning does not consume live randomness.
+- **Tactics and custom cards:** straightforward lethal, lethal that needs action ordering, a necessary defensive trade, efficient trades, placement when relevant, and a custom cost, damage value, or effect that differs from Hearthstone. Include a case where spending all mana is worse.
+- **Uncertainty and execution:** random outcomes, secret uncertainty where implemented, a draw followed by replanning, pending choices, stale responses, invalidated continuations, and the hidden-information isolation test.
+- **Runtime and lifecycle:** an expired deadline, worker failure, cancellation, restart, legal fallback, and no-legal-action situations consistent with the game's rules. Use an injected clock for reproducible deadline unit tests and actual elapsed time for performance measurements.
+
+For deterministic search tests, use fixed seeds plus a fixed work budget. A seed alone does not control how much work fits into a wall-clock deadline.
+
+Add a reproducible headless benchmark. Use the existing bot if available; otherwise add simple random-legal and greedy baselines for comparison. Run a small smoke batch, and make a larger batch configurable rather than making every test run expensive.
+
+Rotate player sides and record seeds and deck versions. Report match counts, wins, losses, draws, invalid actions, failures, and timeouts. Do not claim superiority from a few games or invent an expected win rate.
+
+Measure average, median, 95th-percentile, and maximum complete-turn time, plus deadline violations and actions per turn. Also record search work and relevant memory usage. Distinguish worker decision time from actual visible turn time.
+
+Record the machine and runtime used. Do not claim the ten-second target has been verified on my machine if you have not measured it there.
+
+## 13. Deliver a working first milestone
+
+Implement in this order: inspect the repository; establish isolated simulation; connect a legal timed opponent; improve tactical search and evaluation; run tests and benchmarks.
+
+Keep the scope focused. Do not turn the first version into a training platform, a complete hidden-information research project, or a comparison of many search libraries. A second search method is a later experiment unless it is cheap and directly resolves the current implementation choice.
+
+The first milestone should include a selectable local opponent using the real rules, support for its required decisions, a clear information boundary, a shared turn budget, cancellation and fallback, an off-thread planner, and tests for the supported mechanics.
+
+Make unsupported cards or interactions explicit. Do not silently remove them from legal actions or approximate their effects without reporting it. If headless simulation needs more work, deliver the usable scoped changes and identify the exact remaining dependencies. Do not claim the opponent is finished when only scaffolding exists.
+
+At the end, provide: a short architecture summary; files changed; reused code and license details; commands to run the opponent, tests, and benchmark; actual results; known limitations; and the next most useful improvement supported by those results.
+
+Create or update one concise project document with the implementation decisions and tuning settings. Include a small diagnostic trace showing a selected action, its score components, and relevant search statistics. Do not request or store LLM reasoning.
+
+**Begin by inspecting the repository, then proceed with the smallest working implementation. Use the actual code and measurements to resolve implementation choices.**
+
+## Reference starting points
+
+These are references, not required dependencies. Inspect the exact version before reuse.
+
+```text
+Silverfish repository:
+https://github.com/noHero123/silverfish
+
+Silverfish search:
+https://github.com/noHero123/silverfish/blob/master/ai/MiniSimulator.cs
+
+Silverfish evaluation:
+https://github.com/noHero123/silverfish/blob/master/ai/BehaviorControl.cs
+
+OpenSpiel:
+https://github.com/google-deepmind/open_spiel
+
+OpenSpiel MCTS implementation:
+https://github.com/google-deepmind/open_spiel/blob/master/open_spiel/python/algorithms/mcts.py
+
+SabberStone:
+https://github.com/HearthSim/SabberStone
+
+Electron performance guidance:
+https://www.electronjs.org/docs/latest/tutorial/performance
+
+Node worker threads:
+https://nodejs.org/api/worker_threads.html
+```

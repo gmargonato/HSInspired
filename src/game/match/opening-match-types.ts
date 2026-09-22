@@ -830,6 +830,8 @@ export interface TurnStartedEvent {
 
 export interface CardDrawnEvent {
   readonly type: 'card-drawn'
+  /** Absent for choice results and other additions that are not deck draws. */
+  readonly origin?: 'deck'
   readonly participantId: PlayerId
   readonly card: OpeningCard
 }
@@ -856,11 +858,14 @@ export interface CardGeneratedEvent {
   readonly card: OpeningCard
   readonly origin:
     | { readonly kind: 'minion'; readonly instanceId: string }
+    | { readonly kind: 'deck'; readonly participantId: PlayerId }
     | { readonly kind: 'screen-center' }
 }
 
 export interface CardBurnedEvent {
   readonly type: 'card-burned'
+  /** Distinguishes overdraw from cards explicitly destroyed in the deck. */
+  readonly origin?: 'deck' | 'deck-destruction'
   readonly participantId: PlayerId
   readonly card: OpeningCard
 }
@@ -1203,7 +1208,19 @@ export type RandomSpellPresentationEvent = (
   readonly state: OpeningMatchState
 }
 
+/** Internal Secret playback gates; never expose their state to viewers or AI. */
+export type SecretPresentationEvent = (
+  | { readonly type: 'secret-resolution-started' }
+  | { readonly type: 'secret-resolution-completed' }
+) & {
+  readonly secretId: string
+  readonly participantId: PlayerId
+  readonly cardId: CardId
+  readonly state: OpeningMatchState
+}
+
 export type OpeningMatchEvent =
+  | SecretPresentationEvent
   | RandomSpellPresentationEvent
   | MulliganResolvedEvent
   | CoinGrantedEvent
@@ -1298,6 +1315,8 @@ export type OpeningCommandResult = OpeningAcceptedResult | OpeningRejectedResult
 
 export interface OpeningMatchAnalysis {
   getState(): OpeningMatchState
+  /** Returns the same fair, perspective-limited observation used by AI players. */
+  getAiObservation?(participantId: PlayerId, policy: AiInformationPolicy): AiObservation
   dispatch(command: unknown): OpeningCommandResult
   getPlayInput(
     participantId: PlayerId,
@@ -1305,6 +1324,8 @@ export interface OpeningMatchAnalysis {
     choice?: number
   ): PlayCardInput | null
   getLegality(participantId: PlayerId): MatchLegality
+  /** Runs a nested isolated branch from the analysis fork's current state. */
+  analyze<T>(operation: (fork: OpeningMatchAnalysis) => T): T
 }
 
 /**
@@ -1337,6 +1358,8 @@ export interface OpeningMatchInstance {
   previewSequence(commands: readonly unknown[]): OpeningCommandResult
   /** Runs bounded analysis against an isolated mutable fork, then restores all live state. */
   analyze<T>(operation: (fork: OpeningMatchAnalysis) => T): T
+  /** Runs bounded analysis with an independent deterministic RNG seed. */
+  analyzeWithSeed<T>(seed: number, operation: (fork: OpeningMatchAnalysis) => T): T
   getPlayInput?(
     participantId: PlayerId,
     cardInstanceId: string,
@@ -1352,7 +1375,8 @@ export interface OpeningMatchInstance {
   ): readonly OpeningMatchPublicEvent[]
 }
 
-export type PublicizeOpeningMatchEvent<E> = E extends RandomSpellPresentationEvent
+export type PublicizeOpeningMatchEvent<E> = E extends
+  RandomSpellPresentationEvent | SecretPresentationEvent
   ? never
   : E extends EffectDomainEvent
     ? Omit<E, 'sourceCardId' | 'data' | 'cardMovement'> & {

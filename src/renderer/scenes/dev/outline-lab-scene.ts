@@ -7,12 +7,35 @@ export class OutlineLabScene extends Scene {
   private lab!: OutlineLab
 
   async init(): Promise<void> {
-    this.lab = new OutlineLab()
+    const canvas = this.appInstance.canvas
+    const parent = canvas.parentElement
+    if (!parent) throw new Error('Shader Lab requires a canvas parent element')
+    this.lab = new OutlineLab({
+      canvas,
+      renderer: this.appInstance.renderer,
+      parent,
+      cursor: this.sceneManager.cursor
+    })
     this.root.addChild(this.lab)
-    await this.lab.mount()
+    try {
+      await this.lab.mount()
+    } catch (error) {
+      this.lab.dispose()
+      throw error
+    }
   }
 
-  update(_deltaMS: number): void {}
+  update(deltaMS: number): void {
+    this.lab?.update(deltaMS)
+  }
+
+  protected onPause(): void {
+    this.lab.setControlsVisible(false)
+  }
+
+  protected onResume(): void {
+    this.lab.setControlsVisible(true)
+  }
 
   protected onExit(): void {
     this.lab.dispose()

@@ -9,6 +9,10 @@ const mulliganCenterY =
 /** Flight-only geometry in design-canvas pixels; resting placements are unchanged. */
 export const CARD_DRAW_LAYOUT = {
   name: 'Card draw flight',
+  // Reflect reveal positions between the two authored deck origins.
+  remoteRevealMirrorY:
+    GAME_BOARD_LAYOUT.decks.local.position.y +
+    GAME_BOARD_LAYOUT.decks.remote.position.y,
   // Exposed back in deck.png (83 × 181). Gold to its right is stack thickness.
   deckFace: [
     { x: 0, y: 19 },
@@ -28,6 +32,7 @@ export const CARD_DRAW_LAYOUT = {
     normalDescentDuration: 10 / 21, // Preserve the existing ~0.476-second landing.
     // Normal draws hold the revealed card here; mulligan deals stay continuous.
     peakHold: 0.75,
+    burnDuration: 1,
     // Angles are authored in degrees: yaw 0 shows the back, 180 the front.
     // Plane rotation is applied before perspective; 90 starts the back landscape.
     // Taper is bottom width / top width before the sideways perspective turn.

@@ -49,6 +49,7 @@ import type {
 import type { GameRoute } from './game-route'
 import { dispatchDevMatchCommand } from './dev-match-command-dispatch'
 import { eventPresentationPolicy } from './event-presentation-policy'
+import { handDiscardBatch, isHandDiscard } from './hand-discard-presentation'
 import { randomSpellPresentationStates } from './random-spell-presentation'
 import { selectRandomBoardTexture } from './board-selection'
 import { isLegalHeroPowerTarget } from './hero-power-targeting'
@@ -202,6 +203,27 @@ export interface GameBoardViewOptions {
   readonly onOpponentLeft?: () => void
 }
 
+export interface HandInteractionSnapshot {
+  readonly ready: boolean
+  readonly localTurn: boolean
+  readonly hand: readonly {
+    readonly instanceId: string
+    readonly cardId: string
+    readonly x: number
+    readonly y: number
+  }[]
+  readonly dragging: boolean
+  readonly targeting: boolean
+  readonly boardPoint: HandPointer
+  readonly remoteHeroPoint: HandPointer
+  readonly dragged?: {
+    readonly x: number
+    readonly y: number
+    readonly targetX: number
+    readonly targetY: number
+  }
+}
+
 interface MulliganResolutionBatch {
   readonly state: OpeningMatchState
   readonly events: readonly OpeningMatchEvent[]
@@ -223,6 +245,8 @@ type BoardTargetGestureSource =
   | { readonly kind: 'combat'; readonly attacker: CombatView }
   | { readonly kind: 'hero-power' }
   | { readonly kind: 'card'; readonly cardInstanceId: string }
+
+type BoardPointerSample = Pick<FederatedPointerEvent, 'globalX' | 'globalY' | 'target'>
 
 type MatchHoverTarget =
   | {
@@ -269,6 +293,12 @@ interface GoldenMonkeyHandReplacement {
 
 /** Feature-owned board, opening choreography, mulligan, and local hand interaction. */
 export class GameBoardView extends Actor {
+  private pendingBoardPointer: BoardPointerSample | null = null
+  private canvasBounds: DOMRect | null = null
+  private canvasResizeObserver: ResizeObserver | null = null
+  private readonly invalidateCanvasBounds = (): void => {
+    this.canvasBounds = null
+  }
   private readonly resolver = new CardAssetResolver()
   private readonly secretPreviewView: SecretPreviewView
   private readonly questPreviewView: QuestPreviewView
@@ -381,6 +411,7 @@ export class GameBoardView extends Actor {
   private readonly presentationQueue = new PresentationQueue()
   /** Snapshot consumed by the presentation job currently at the queue head. */
   private activePresentationState: OpeningMatchState | null = null
+  /** Shared reveal barrier and intermediate state for random spells and Secrets. */
   private randomSpellRevision: number | null = null
   private randomSpellState: OpeningMatchState | null = null
   private get match(): OpeningMatchInstance {
@@ -401,7 +432,7 @@ export class GameBoardView extends Actor {
       return {
         accepted: false,
         code: 'resolution-failed',
-        message: 'Wait for the random spells to finish.',
+        message: 'Wait for the current reveal to finish.',
         state: this.match.getState(),
         events: []
       }
@@ -409,7 +440,11 @@ export class GameBoardView extends Actor {
     const result = this.session.dispatch(command)
     if (
       result.accepted &&
-      result.events.some((event) => event.type === 'random-spell-started')
+      result.events.some(
+        (event) =>
+          event.type === 'random-spell-started' ||
+          event.type === 'secret-resolution-started'
+      )
     ) {
       this.randomSpellRevision = result.state.revision
       this.randomSpellState = before
@@ -483,8 +518,14 @@ export class GameBoardView extends Actor {
       this.hand.drag.index !== null &&
       !this.hand.drag.returning
     ) {
+      if (!this.hand.drag.ownsPointer(event.pointerId)) return
       event.preventDefault()
       event.stopPropagation()
+      this.flushPointerAt(
+        this.toRendererPoint(event.clientX, event.clientY),
+        event.pointerId
+      )
+      if (this.hand.drag.index === null) return
       const index = this.hand.drag.index
       const entry = this.hand.entries[index]
       const input = entry
@@ -528,7 +569,14 @@ export class GameBoardView extends Actor {
       this.cardChoiceInputGate.release(event.pointerId)
     }
     if (event.button !== 0) return
+    if (
+      this.hand.drag.index !== null &&
+      !this.hand.drag.returning &&
+      !this.hand.drag.ownsPointer(event.pointerId)
+    )
+      return
     const releasePoint = this.toRendererPoint(event.clientX, event.clientY)
+    this.flushPointerAt(releasePoint, event.pointerId)
     // Pixi normally releases the gesture first through handleBoardPointerUp.
     // Keep this as a fallback for releases that occur outside the stage.
     if (this.releaseTargetGesture(event.pointerId, releasePoint)) return
@@ -563,10 +611,25 @@ export class GameBoardView extends Actor {
   }
   private readonly handleBoardPointerUp = (event: FederatedPointerEvent): void => {
     if (event.button !== 0) return
-    this.releaseTargetGesture(event.pointerId, {
+    if (
+      this.hand.drag.index !== null &&
+      !this.hand.drag.returning &&
+      !this.hand.drag.ownsPointer(event.pointerId)
+    )
+      return
+    const releasePoint = {
       x: event.globalX,
       y: event.globalY
-    })
+    }
+    this.flushPointerAt(releasePoint, event.pointerId)
+    this.releaseTargetGesture(event.pointerId, releasePoint)
+  }
+
+  private flushPointerAt(point: HandPointer, pointerId: number): void {
+    this.hand.drag.flushPointer(this.hand.layer.toLocal(point), pointerId)
+    this.updateTargetGesture({ pointerId, globalX: point.x, globalY: point.y })
+    this.pendingBoardPointer = { globalX: point.x, globalY: point.y, target: this }
+    this.flushBoardPointerVisuals()
   }
   /**
    * Resolves before Pixi synthesizes pointertap. A native window pointerup
@@ -588,6 +651,7 @@ export class GameBoardView extends Actor {
     return false
   }
   private readonly handleWindowBlur = (): void => {
+    this.pendingBoardPointer = null
     this.cardPlacementTapGuard.clear()
     this.cardChoiceInputGate.clear()
     this.targetGestures.clear()
@@ -1020,13 +1084,11 @@ export class GameBoardView extends Actor {
     this.deckLayer.sortableChildren = true
     this.eventMode = 'static'
     this.hitArea = new Rectangle(0, 0, 1920, 1080)
-    this.on('pointermove', (event: FederatedPointerEvent) =>
-      this.handleBoardPointerMove(event)
-    )
     this.on('globalpointermove', (event: FederatedPointerEvent) =>
       this.handleBoardPointerMove(event)
     )
     this.on('pointerleave', () => {
+      this.pendingBoardPointer = null
       this.updateHeroPowerHover(null)
       this.hoverPreview.cancel()
     })
@@ -1088,6 +1150,15 @@ export class GameBoardView extends Actor {
   }
 
   async mount(): Promise<void> {
+    window.addEventListener('resize', this.invalidateCanvasBounds)
+    window.addEventListener('scroll', this.invalidateCanvasBounds, true)
+    this.options.renderer.on('resize', this.invalidateCanvasBounds)
+    if (typeof ResizeObserver !== 'undefined') {
+      this.canvasResizeObserver = new ResizeObserver(this.invalidateCanvasBounds)
+      this.canvasResizeObserver.observe(
+        this.options.renderer.canvas as HTMLCanvasElement
+      )
+    }
     this.session =
       this.options.aiRuntime?.session ??
       new GameBoardSession({
@@ -1270,6 +1341,92 @@ export class GameBoardView extends Actor {
   /** Development benchmark hook that follows the normal mulligan command path. */
   async devConfirmMulligan(): Promise<void> {
     await this.confirmMulligan()
+  }
+
+  /** Read-only fixture geometry; the benchmark sends actual browser pointer events. */
+  devGetHandInteractionSnapshot(): HandInteractionSnapshot {
+    if (!import.meta.env.DEV)
+      throw new Error('Development interaction inspection is unavailable.')
+    const { localTurn } = this.session.getInteractionSnapshot()
+    const dragIndex = this.hand.drag.index
+    const entry = dragIndex === null ? undefined : this.hand.entries[dragIndex]
+    const pointer = this.hand.drag.pointer
+    const position = entry ? this.hand.layer.toGlobal(entry.slot.position) : null
+    const desired =
+      entry && pointer
+        ? this.hand.layer.toGlobal({
+            x:
+              pointer.x -
+              (DEFAULT_HAND_DRAG.grabAnchor.x - 0.5) *
+                CARD_CANVAS.width *
+                entry.slot.scale.x,
+            y:
+              pointer.y +
+              (1 - DEFAULT_HAND_DRAG.grabAnchor.y) *
+                CARD_CANVAS.height *
+                entry.slot.scale.x
+          })
+        : null
+    const row = GAME_BOARD_LAYOUT.boardMinions.local
+    const hero = this.heroViews.get(this.remoteParticipantId)
+    return {
+      ready:
+        this.hand.active &&
+        !this.hand.isReflowing &&
+        !this.presentationQueue.busy &&
+        !this.turnInProgress,
+      localTurn,
+      hand: this.hand.entries.flatMap((candidate) => {
+        const rest = candidate.restTransform
+        if (!rest || candidate.slot.parent !== this.hand.layer) return []
+        const point = this.hand.layer.toGlobal({
+          x: rest.x,
+          y: Math.min(rest.y - 40, GAME_HEIGHT - 20)
+        })
+        return [
+          {
+            instanceId: candidate.card.instanceId,
+            cardId: candidate.card.cardId,
+            x: point.x,
+            y: point.y
+          }
+        ]
+      }),
+      dragging: dragIndex !== null,
+      targeting: this.cardPlay.current !== null || this.heroPowerTargeting,
+      boardPoint: this.gameplayLayer.toGlobal({ x: row.centerX, y: row.baselineY }),
+      remoteHeroPoint:
+        hero?.getGlobalPosition() ??
+        this.gameplayLayer.toGlobal({ x: GAME_WIDTH / 2, y: 200 }),
+      ...(position && desired
+        ? {
+            dragged: {
+              x: position.x,
+              y: position.y,
+              targetX: desired.x,
+              targetY: desired.y
+            }
+          }
+        : {})
+    }
+  }
+
+  async devWaitForPresentationIdle(): Promise<void> {
+    if (!import.meta.env.DEV)
+      throw new Error('Development interaction inspection is unavailable.')
+    const deadline = performance.now() + 15_000
+    while (
+      !this.destroyed &&
+      (this.presentationQueue.busy ||
+        this.turnInProgress ||
+        this.hand.isReflowing ||
+        this.hand.drag.returning ||
+        this.resolutionPresentationDepth > 0)
+    ) {
+      if (performance.now() >= deadline)
+        throw new Error('Timed out waiting for match presentation to settle.')
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 16))
+    }
   }
 
   /** Exercises hover, drag snapshotting, and targeted-card presentation. */
@@ -2145,7 +2302,14 @@ export class GameBoardView extends Actor {
       const minion = player.board.find(
         (candidate) => candidate.instanceId === instanceId
       )
-      if (!minion) continue
+      if (!minion) {
+        // A removed minion can remain visible until its death animation finishes.
+        view.setCanAttack(false)
+        view.setTargetable(false)
+        view.setTargetingOutline(false)
+        if (this.selectedCombatView === view) this.deselectAttacker(false)
+        continue
+      }
       const canAttack =
         this.randomSpellRevision === null &&
         ownerId === this.localParticipantId &&
@@ -2295,12 +2459,25 @@ export class GameBoardView extends Actor {
 
   private handleBoardPointerMove(event: FederatedPointerEvent): void {
     if (this.matchResultShown) return
-    const canvasBounds = this.options.renderer.canvas.getBoundingClientRect()
+    // Pixi reuses event objects: retain only the sample, never the event itself.
+    this.pendingBoardPointer = {
+      globalX: event.globalX,
+      globalY: event.globalY,
+      target: event.target
+    }
+    // Threshold crossings must survive multiple pointer samples between frames.
+    this.updateTargetGesture(event)
+  }
+
+  private flushBoardPointerVisuals(): void {
+    const event = this.pendingBoardPointer
+    this.pendingBoardPointer = null
+    if (!event || this.matchResultShown) return
+    const canvasBounds = this.getCanvasBounds()
     this.options.cursor?.setTargetingVisualScale(
       Math.min(canvasBounds.width / GAME_WIDTH, canvasBounds.height / GAME_HEIGHT)
     )
     this.updateHeroPowerHover({ x: event.globalX, y: event.globalY })
-    this.updateTargetGesture(event)
     if (this.heroPowerTargeting) {
       const power = this.heroPowerViews.get(this.localParticipantId)
       if (!power) return
@@ -2390,7 +2567,7 @@ export class GameBoardView extends Actor {
   }
 
   /** Resolves the interactive character currently beneath a targeting pointer. */
-  private findTargetCharacter(event: FederatedPointerEvent): CombatView | null {
+  private findTargetCharacter(event: BoardPointerSample): CombatView | null {
     let target = event.target instanceof Container ? event.target : null
     while (target) {
       if (target instanceof MinionView || target instanceof HeroView) {
@@ -2455,7 +2632,9 @@ export class GameBoardView extends Actor {
   }
 
   /** Activates a combat or hero-power drag after one shared movement threshold. */
-  private updateTargetGesture(event: FederatedPointerEvent): void {
+  private updateTargetGesture(
+    event: Pick<FederatedPointerEvent, 'pointerId' | 'globalX' | 'globalY'>
+  ): void {
     const source = this.targetGestures.current?.source
     if (!source || source.kind === 'card') return
     if (
@@ -2498,22 +2677,24 @@ export class GameBoardView extends Actor {
 
   /** Converts a Pixi canvas point into the fixed-position cursor layer's coordinates. */
   private toCursorTargetPoint(x: number, y: number): { x: number; y: number } {
-    const canvas = this.options.renderer.canvas
-    const bounds = canvas.getBoundingClientRect()
+    const bounds = this.getCanvasBounds()
     return {
-      x: bounds.left + (x / this.options.renderer.width) * bounds.width,
-      y: bounds.top + (y / this.options.renderer.height) * bounds.height
+      x: bounds.left + (x / this.options.renderer.screen.width) * bounds.width,
+      y: bounds.top + (y / this.options.renderer.screen.height) * bounds.height
     }
   }
 
   /** Converts a fixed-position CSS point back into the renderer coordinate space. */
   private toRendererPoint(x: number, y: number): { x: number; y: number } {
-    const canvas = this.options.renderer.canvas
-    const bounds = canvas.getBoundingClientRect()
+    const bounds = this.getCanvasBounds()
     return {
-      x: ((x - bounds.left) / bounds.width) * this.options.renderer.width,
-      y: ((y - bounds.top) / bounds.height) * this.options.renderer.height
+      x: ((x - bounds.left) / bounds.width) * this.options.renderer.screen.width,
+      y: ((y - bounds.top) / bounds.height) * this.options.renderer.screen.height
     }
+  }
+
+  private getCanvasBounds(): DOMRect {
+    return (this.canvasBounds ??= this.options.renderer.canvas.getBoundingClientRect())
   }
 
   /**
@@ -3290,9 +3471,11 @@ export class GameBoardView extends Actor {
         state
       )
       let goldenMonkeyHandReplacementPresented = false
+      const presentedDiscards = new Set<OpeningMatchEvent>()
       for (const [index, event] of events.entries()) {
         if (this.destroyed) return
         if (event === alreadyPresented) continue
+        if (presentedDiscards.has(event)) continue
         if (spellStates) this.randomSpellState = spellStates[index]
         if (
           event.type === 'effect-resolved' ||
@@ -3311,7 +3494,13 @@ export class GameBoardView extends Actor {
           goldenMonkeyHandReplacementPresented = true
           await this.presentGoldenMonkeyHandReplacement(goldenMonkeyHandReplacement)
         }
-        await this.presentEvent(event)
+        if (isHandDiscard(event)) {
+          const batch = handDiscardBatch(events, index)
+          batch.forEach((discard) => presentedDiscards.add(discard))
+          await this.presentHandDiscards(batch)
+        } else {
+          await this.presentEvent(event)
+        }
       }
       if (this.destroyed) return
       if (spellStates) this.randomSpellState = state
@@ -3385,6 +3574,12 @@ export class GameBoardView extends Actor {
     // The typed registry makes this rendering decision exhaustive when the domain adds an event.
     void eventPresentationPolicy(event.type)
     switch (event.type) {
+      case 'secret-resolution-started':
+        await this.presentSecretResolution(event)
+        return
+      case 'secret-resolution-completed':
+        await this.reconcileRandomSpellState(event.state)
+        return
       case 'random-spell-started':
         await this.reconcileRandomSpellState(event.state)
         if (this.destroyed) return
@@ -3424,7 +3619,13 @@ export class GameBoardView extends Actor {
         return
       case 'opening-card-drawn':
       case 'card-drawn':
-        await this.presentDraw(event.participantId, event.card)
+        await this.presentDraw(
+          event.participantId,
+          event.card,
+          event.type === 'opening-card-drawn' || event.origin === 'deck'
+            ? event.participantId
+            : undefined
+        )
         return
       case 'discover-started':
         if (event.participantId === this.remoteParticipantId) void this.scheduleAiTurn()
@@ -3448,6 +3649,10 @@ export class GameBoardView extends Actor {
         await this.presentGeneratedCard(event)
         return
       case 'card-burned':
+        if (event.origin === 'deck' || event.origin === 'deck-destruction') {
+          await this.presentDeckBurn(event)
+          return
+        }
         this.historyView?.recordBurn(event)
         this.syncTurnHud(this.match.getState())
         return
@@ -3665,36 +3870,10 @@ export class GameBoardView extends Actor {
       return
     }
     if (event.action === 'discard') {
-      await this.presentHandDiscard(event)
+      if (event.data?.fromZone === 'hand') await this.presentHandDiscard(event)
       return
     }
     this.syncSecrets(this.presentationState())
-    if (this.isSecretReveal(event)) {
-      const cardId = event.data?.cardId
-      if (typeof cardId === 'string')
-        await this.secretRevealView.present(
-          cardId,
-          this.premiumAppearance.resolve(
-            {
-              instanceId:
-                typeof event.data?.instanceId === 'string'
-                  ? event.data.instanceId
-                  : event.sourceInstanceId,
-              cardId
-            },
-            event.controllerId
-          ),
-          this.premiumAppearance.sideFor(
-            {
-              instanceId:
-                typeof event.data?.instanceId === 'string'
-                  ? event.data.instanceId
-                  : event.sourceInstanceId
-            },
-            event.controllerId
-          )
-        )
-    }
     const data = event.data
     if (!data) return
     const targetId = typeof data.target === 'string' ? data.target : undefined
@@ -4024,10 +4203,47 @@ export class GameBoardView extends Actor {
     this.updateBadgeBoardDesaturation()
   }
 
-  private isSecretReveal(
-    event: Extract<OpeningMatchEvent, { type: 'effect-resolved' }>
-  ): boolean {
-    return event.action === 'reveal' && typeof event.data?.secretId === 'string'
+  private async presentSecretResolution(
+    event: Extract<OpeningMatchEvent, { type: 'secret-resolution-started' }>
+  ): Promise<void> {
+    await this.reconcileRandomSpellState(event.state)
+    if (this.destroyed) return
+    const side = event.participantId === this.localParticipantId ? 'local' : 'remote'
+    const origin = this.secretZoneView.revealOrigin(side, this.secretRevealView)
+    const removeSecret = (player: OpeningMatchState['players'][number]) =>
+      player.participantId === event.participantId
+        ? {
+            ...player,
+            secrets: (player.secrets ?? []).filter(
+              (secret) => secret.instanceId !== event.secretId
+            )
+          }
+        : player
+    const consumedState: OpeningMatchState = {
+      ...event.state,
+      players: [
+        removeSecret(event.state.players[0]),
+        removeSecret(event.state.players[1])
+      ]
+    }
+    const consumeBadge = (): void => {
+      if (this.destroyed) return
+      this.randomSpellState = consumedState
+      this.syncSecrets(consumedState)
+    }
+    const identity = { instanceId: event.secretId, cardId: event.cardId }
+    try {
+      await this.secretRevealView.present(
+        event.cardId,
+        origin,
+        consumeBadge,
+        this.premiumAppearance.resolve(identity, event.participantId),
+        this.premiumAppearance.sideFor(identity, event.participantId)
+      )
+    } catch (error) {
+      this.logger.warn('Failed to render Secret reveal.', error)
+      consumeBadge()
+    }
   }
 
   private async presentMinionCardMovement(movement: MinionCardMovement): Promise<void> {
@@ -4272,7 +4488,12 @@ export class GameBoardView extends Actor {
         this.hand.setReflowing(wasReflowing)
       }
     }
-    this.remoteBackCount = this.findPlayer(state, this.remoteParticipantId).hand.length
+    const remoteHand = this.findPlayer(state, this.remoteParticipantId).hand
+    while (this.remoteBackCount < remoteHand.length) {
+      if (this.destroyed) return
+      await this.presentDraw(this.remoteParticipantId, remoteHand[this.remoteBackCount])
+    }
+    this.remoteBackCount = remoteHand.length
     this.layoutRemoteHand()
   }
 
@@ -4377,11 +4598,20 @@ export class GameBoardView extends Actor {
       else this.applyRemoteBoardLayout()
       return
     }
-    const player = this.findPlayer(this.presentationState(), event.participantId)
+    const state = this.presentationState()
+    const player = this.findPlayer(state, event.participantId)
     const minion = player.board.find(
       (candidate) => candidate.instanceId === character.instanceId
     )
-    if (minion) view.setStats(minion.attack, event.healthAfter, minion.maxHealth)
+    if (!minion) return
+    view.setStats(minion.attack, event.healthAfter, minion.maxHealth)
+    view.setDivineShield(
+      boardMinionAbilityMarkers(
+        minion,
+        CARD_CATALOG.require(minion.cardId),
+        state.turnNumber
+      ).divineShield
+    )
   }
 
   async devAddCard(cardId: string, target: DevMatchTarget = 'local'): Promise<void> {
@@ -4643,6 +4873,14 @@ export class GameBoardView extends Actor {
   private async presentGeneratedCard(
     event: Extract<OpeningMatchEvent, { type: 'card-generated' }>
   ): Promise<void> {
+    if (event.origin.kind === 'deck') {
+      await this.presentDraw(
+        event.participantId,
+        event.card,
+        event.origin.participantId
+      )
+      return
+    }
     const origin = this.generatedCardOrigin(event.origin)
     if (event.participantId === this.localParticipantId) {
       if (this.findEntry(event.card.instanceId)) return
@@ -4711,20 +4949,63 @@ export class GameBoardView extends Actor {
     return GAME_BOARD_LAYOUT.frame.center
   }
 
-  private async presentDraw(participantId: PlayerId, card: OpeningCard): Promise<void> {
+  private async presentDeckBurn(
+    event: Extract<OpeningMatchEvent, { type: 'card-burned' }>
+  ): Promise<void> {
+    const slot = await this.createSlot(event.card)
+    if (this.destroyed) {
+      slot.destroy({ children: true })
+      return
+    }
+    this.activeDepartureSlots.add(slot)
+    this.travelLayer.addChild(slot)
+    this.prepareSlotAtDeck(
+      slot,
+      event.participantId === this.localParticipantId
+        ? GAME_BOARD_LAYOUT.decks.local
+        : GAME_BOARD_LAYOUT.decks.remote,
+      0
+    )
+    // This temporary card never belongs to the hand. Its destination transform
+    // only supplies snapshot dimensions; the flight stops at the authored peak.
+    slot.skew.set(0, 0)
+    slot.rotation = 0
+    slot.eventMode = 'none'
+    try {
+      await this.animateDeckDeparture(slot, 0, 0, 'local-reveal', () => {
+        // Deck destruction already belongs to its triggering action's history.
+        if (event.origin !== 'deck-destruction') this.historyView?.recordBurn(event)
+        this.syncTurnHud(this.match.getState())
+      })
+    } finally {
+      this.activeDepartureSlots.delete(slot)
+      if (!slot.destroyed) slot.destroy({ children: true })
+    }
+  }
+
+  private async presentDraw(
+    participantId: PlayerId,
+    card: OpeningCard,
+    sourceDeck?: PlayerId
+  ): Promise<void> {
     if (participantId === this.localParticipantId) {
-      await this.addLocalCard(card)
+      await this.addLocalCard(card, sourceDeck)
     } else {
       this.remoteBackCount += 1
       this.ensureRemoteBacks(this.remoteBackCount)
       const back = this.remoteBacks[this.remoteBackCount - 1]
       if (back) {
-        this.prepareBackAtDeck(back, this.remoteBackCount - 1)
+        if (sourceDeck) {
+          this.prepareBackAtDeck(back, this.remoteBackCount - 1)
+          const deck = this.deckViews.get(sourceDeck)
+          if (deck) this.drawOrigins.set(back, deck)
+        } else this.prepareBackAtGeneratedOrigin(back, GAME_BOARD_LAYOUT.frame.center)
         await this.animateBackToHand(
           back,
           this.remoteBackCount - 1,
           this.remoteBackCount,
-          OPENING_TIMING.cardDeal
+          sourceDeck ? OPENING_TIMING.cardDeal : RESOLUTION_TIMING.generatedCard,
+          0
         )
       }
     }
@@ -4734,7 +5015,7 @@ export class GameBoardView extends Actor {
 
   private async presentWeaponEquipped(
     event: Extract<OpeningMatchEvent, { type: 'weapon-equipped' }>,
-    adjustRemoteHand = true
+    adjustRemoteHand = false
   ): Promise<void> {
     const isLocal = event.participantId === this.localParticipantId
     const isRemote = event.participantId === this.remoteParticipantId
@@ -6189,6 +6470,8 @@ export class GameBoardView extends Actor {
   }
 
   private removeMinionView(view: MinionView): void {
+    // Pointer frames must never retain a selected view after it is destroyed.
+    if (this.selectedCombatView === view) this.deselectAttacker(false)
     if (this.hoveredBoardCardView === view) this.hideBoardCardPreview(view)
     this.detachMinionView(view)
     if (view.destroyed) return
@@ -6367,7 +6650,7 @@ export class GameBoardView extends Actor {
     await this.mulligan.dismiss()
   }
 
-  private async addLocalCard(card: OpeningCard): Promise<void> {
+  private async addLocalCard(card: OpeningCard, sourceDeck?: PlayerId): Promise<void> {
     if (this.findEntry(card.instanceId)) return
     const selected = this.cardSelectionOverlay.takeSelected(card.instanceId)
     if (selected) {
@@ -6392,10 +6675,16 @@ export class GameBoardView extends Actor {
       return
     }
 
+    if (!sourceDeck) {
+      await this.spawnLocalCard(card, GAME_BOARD_LAYOUT.frame.center)
+      return
+    }
     const slot = await this.createSlot(card)
     this.prepareSlotAtDeck(
       slot,
-      GAME_BOARD_LAYOUT.decks.local,
+      sourceDeck === this.localParticipantId
+        ? GAME_BOARD_LAYOUT.decks.local
+        : GAME_BOARD_LAYOUT.decks.remote,
       this.hand.entries.length
     )
     this.travelLayer.addChild(slot)
@@ -6562,23 +6851,25 @@ export class GameBoardView extends Actor {
     ) {
       return null
     }
-    const localPlayer = this.findPlayer(this.match.getState(), this.localParticipantId)
     const position = resolveBoardInsertionIndex(
       pointer.x,
-      localPlayer.board.length,
+      this.session.getInteractionSnapshot().localBoardCount,
       this.localBoardRowConfig()
     )
     return input.legalPositions.includes(position) ? position : null
   }
 
   private updateLocalBoardPreview(pointer: HandPointer): void {
-    this.updateDraggedCardDropOutline(pointer)
     const nextIndex = this.resolveLocalBoardPreview(pointer)
+    this.updateDraggedCardDropOutline(pointer, nextIndex)
     this.boardPositions.preview('local', 'drag', nextIndex)
   }
 
   /** Blue means releasing here can play the card or advance its input selection. */
-  private updateDraggedCardDropOutline(pointer: HandPointer): void {
+  private updateDraggedCardDropOutline(
+    pointer: HandPointer,
+    insertionIndex: number | null = this.resolveLocalBoardPreview(pointer)
+  ): void {
     const index = this.hand.drag.index
     const entry = index === null ? undefined : this.hand.entries[index]
     if (!entry) return
@@ -6589,7 +6880,7 @@ export class GameBoardView extends Actor {
     this.hand.drag.setDropAllowed(
       !!input &&
         isInDropZone(pointer, GAME_BOARD_LAYOUT.cardPlay.localDropZone) &&
-        (!input.requiresPosition || this.resolveLocalBoardPreview(pointer) !== null)
+        (!input.requiresPosition || insertionIndex !== null)
     )
   }
 
@@ -6878,6 +7169,23 @@ export class GameBoardView extends Actor {
       entry.slot.disposePlayableOutline()
       entry.slot.removeFromParent()
       entry.slot.destroy({ children: true })
+      if (result.events.some(isHandDiscard)) {
+        // Discard effects need not wait for the cast's decorative particles.
+        // Settle the remaining cards first so their discard origins are stable.
+        await Promise.all([
+          this.cardPlayAnimation.present('Spell', pose),
+          (async () => {
+            await this.hand.applyLayout({
+              positionDuration: RESOLUTION_TIMING.discardHandSettle,
+              scaleDuration: RESOLUTION_TIMING.discardHandSettle
+            })
+            if (this.destroyed) return
+            this.syncSecrets(result.state)
+            await this.presentResolutionEvents(result.events)
+          })()
+        ])
+        return
+      }
       await Promise.all([
         this.cardPlayAnimation.present('Spell', pose),
         this.hand.applyLayout({
@@ -7031,7 +7339,7 @@ export class GameBoardView extends Actor {
     if (event.button !== 0) return
     if (this.hand.drag.index !== null) return
     const local = event.getLocalPosition(this.hand.layer)
-    const transforms = this.hand.entries.map((entry) => entry.restTransform)
+    const transforms = this.hand.restTransforms
     const resolved = resolveHandHover(local, transforms, DEFAULT_HAND_LAYOUT)
     if (resolved === null) return
     const legality = this.match.getLegality?.(this.localParticipantId)
@@ -7095,6 +7403,13 @@ export class GameBoardView extends Actor {
     this.cardSelectionOverlay.updateShadows(deltaMS)
   }
 
+  /** Input pose, dependent presentation, and shadows belong to the same render. */
+  updateFrame(deltaMS: number): void {
+    this.hand.drag.update(deltaMS)
+    this.flushBoardPointerVisuals()
+    this.updateShadows(deltaMS)
+  }
+
   override resumeAnimations(): void {
     super.resumeAnimations()
     this.cardPlayAnimation.resumeAnimations()
@@ -7103,6 +7418,12 @@ export class GameBoardView extends Actor {
   }
 
   override dispose(): void {
+    window.removeEventListener('resize', this.invalidateCanvasBounds)
+    window.removeEventListener('scroll', this.invalidateCanvasBounds, true)
+    this.options.renderer.off?.('resize', this.invalidateCanvasBounds)
+    this.canvasResizeObserver?.disconnect()
+    this.canvasResizeObserver = null
+    this.pendingBoardPointer = null
     this.cardDepartureAnimation.dispose()
     for (const slot of this.activeDepartureSlots)
       if (!slot.destroyed) slot.destroy({ children: true })
@@ -7220,34 +7541,91 @@ export class GameBoardView extends Actor {
   private async presentHandDiscard(
     event: Extract<OpeningMatchEvent, { type: 'effect-resolved' }>
   ): Promise<void> {
-    this.syncSecrets(this.presentationState())
-    const targetId = event.data?.target
-    if (typeof targetId !== 'string') return
-    const entry = this.findEntry(targetId)
-    if (entry) {
-      await this.presentLocalHandDiscard(entry)
-      return
-    }
-
-    const count = this.remoteBackCount
-    const index = count > 0 ? Math.floor((count - 1) / 2) : -1
-    const back = index >= 0 ? this.remoteBacks[index] : undefined
-    if (!back) return
-    const backIndex = this.remoteBacks.indexOf(back)
-    if (backIndex >= 0) this.remoteBacks.splice(backIndex, 1)
-    this.remoteBackCount = Math.max(0, count - 1)
-    this.layoutRemoteHand()
-    await this.animateRemoteBackToDiscard(back)
+    await this.presentHandDiscards([event])
   }
 
-  /**
-   * Discards a local hand card with a snapshot ghost instead of flying the
-   * live slot: the card pose is taken from its rest transform, the slot is
-   * removed immediately, and a texture snapshot slides toward the board
-   * center while fading. This keeps the flight independent of hover state
-   * and reparent bookkeeping.
-   */
-  private async presentLocalHandDiscard(entry: HandEntry): Promise<void> {
+  private async presentHandDiscards(
+    events: readonly Extract<OpeningMatchEvent, { type: 'effect-resolved' }>[]
+  ): Promise<void> {
+    const discards = events.filter(isHandDiscard)
+    if (discards.length === 0 || this.destroyed) return
+    this.syncSecrets(this.presentationState())
+    const bodies: { body: Container; direction: number }[] = []
+    const seen = new Set<string>()
+    const wasReflowing = this.hand.isReflowing
+    const previousEventMode = this.hand.layer.eventMode
+    this.hand.setReflowing(true)
+    this.hand.layer.eventMode = 'none'
+    this.hand.resetHover()
+    let localChanged = false
+    let remoteChanged = false
+    try {
+      for (const event of discards) {
+        const targetId = event.data?.target
+        const participantId = event.data?.participantId
+        if (typeof targetId !== 'string' || seen.has(targetId)) continue
+        seen.add(targetId)
+        if (participantId === this.localParticipantId) {
+          const entry = this.findEntry(targetId)
+          if (!entry) continue
+          bodies.push({ body: this.createLocalDiscardGhost(entry), direction: -1 })
+          localChanged = true
+        } else if (participantId === this.remoteParticipantId) {
+          // Hidden remote hand entries have no public instance mapping.
+          const index = Math.floor((this.remoteBackCount - 1) / 2)
+          const back = index >= 0 ? this.remoteBacks[index] : undefined
+          if (!back) continue
+          gsap.killTweensOf(back)
+          gsap.killTweensOf(back.scale)
+          this.discardFlightLayer.reparentChild(back)
+          back.label = 'game.card-discard.remote-back'
+          this.remoteBacks.splice(index, 1)
+          this.remoteBackCount -= 1
+          bodies.push({ body: back, direction: 1 })
+          remoteChanged = true
+        }
+      }
+      if (bodies.length === 0) return
+      const timeline = this.timeline()
+      for (const { body, direction } of bodies) {
+        timeline.to(
+          body,
+          {
+            y: body.y + direction * GAME_BOARD_LAYOUT.discard.travelDistance,
+            duration: RESOLUTION_TIMING.discardFlight,
+            ease: 'none'
+          },
+          0
+        )
+      }
+      timeline.to(
+        bodies.map(({ body }) => body),
+        {
+          alpha: 0,
+          duration: RESOLUTION_TIMING.discardFade,
+          ease: 'none'
+        }
+      )
+      await completeTimeline(timeline)
+      if (this.destroyed) return
+      if (remoteChanged) this.layoutRemoteHand()
+      if (localChanged)
+        await this.hand.applyLayout({
+          positionDuration: RESOLUTION_TIMING.discardHandSettle,
+          scaleDuration: RESOLUTION_TIMING.discardHandSettle
+        })
+    } finally {
+      for (const { body } of bodies)
+        if (!body.destroyed) body.destroy({ children: true })
+      if (!this.destroyed) {
+        this.hand.setReflowing(wasReflowing)
+        this.hand.layer.eventMode = previousEventMode
+      }
+    }
+  }
+
+  /** Capture the resting pose so hover and drag cannot bend the discard flight. */
+  private createLocalDiscardGhost(entry: HandEntry): Container {
     this.removePresentedHandEntry(entry)
     const slot = entry.slot
     const rest = entry.restTransform ?? {
@@ -7287,58 +7665,7 @@ export class GameBoardView extends Actor {
     ghost.scale.set(rest.scale)
     this.discardFlightLayer.addChild(ghost)
 
-    const wasReflowing = this.hand.isReflowing
-    this.hand.setReflowing(true)
-    this.hand.resetHover()
-    try {
-      await Promise.all([
-        this.hand.applyLayout({
-          positionDuration: OPENING_TIMING.cardDeal,
-          scaleDuration: OPENING_TIMING.cardDeal
-        }),
-        this.flyToDiscard(ghost)
-      ])
-    } finally {
-      if (!this.destroyed) this.hand.setReflowing(wasReflowing)
-      if (!ghost.destroyed) ghost.destroy({ children: true })
-    }
-  }
-
-  private async animateRemoteBackToDiscard(back: Sprite): Promise<void> {
-    this.discardFlightLayer.reparentChild(back)
-    back.label = 'game.card-discard.remote-back'
-    const scale = back.scale.x
-    const flip = this.timeline()
-    flip.to(back.scale, {
-      x: 0,
-      duration: RESOLUTION_TIMING.discardFlip / 2,
-      ease: 'power2.in'
-    })
-    flip.to(back.scale, {
-      x: scale,
-      duration: RESOLUTION_TIMING.discardFlip / 2,
-      ease: 'power2.out'
-    })
-    await completeTimeline(flip)
-    if (this.destroyed || back.destroyed) return
-    await this.flyToDiscard(back)
-    if (!back.destroyed) back.destroy()
-  }
-
-  /** Flies a reparented card body toward the board center while fading out. */
-  private flyToDiscard(body: Container): Promise<void> {
-    const center = GAME_BOARD_LAYOUT.frame.center
-    const direction = body.x < center.x ? -1 : 1
-    const timeline = this.timeline()
-    timeline.to(body, {
-      x: center.x,
-      y: center.y,
-      alpha: 0,
-      rotation: direction * 0.16,
-      duration: RESOLUTION_TIMING.discardFlight,
-      ease: 'power2.in'
-    })
-    return completeTimeline(timeline)
+    return ghost
   }
 
   private async animateHeroToBoard(
@@ -7372,11 +7699,17 @@ export class GameBoardView extends Actor {
     target: GameCardSlot | Sprite,
     duration: number,
     delay: number,
-    profile: CardDrawProfile = 'direct'
+    profile: CardDrawProfile = 'direct',
+    onBurnStart?: () => void
   ): Promise<void> {
     const deck = this.drawOrigins.get(target)
     this.drawOrigins.delete(target)
     if (!deck || this.destroyed) return
+    if (
+      profile === 'local-reveal' &&
+      deck === this.deckViews.get(this.remoteParticipantId)
+    )
+      profile = 'remote-reveal'
     const animation = new CardDrawAnimation(
       this.options.renderer,
       this.travelLayer,
@@ -7404,15 +7737,27 @@ export class GameBoardView extends Actor {
           ease: 'none',
           onUpdate
         })
-        if (!mulligan) timeline.to({}, { duration: reveal.peakHold })
-        timeline.to(progress, {
-          value: 1,
-          duration: mulligan
-            ? reveal.mulliganDescentDuration
-            : reveal.normalDescentDuration,
-          ease: 'none',
-          onUpdate
-        })
+        if (onBurnStart) {
+          const burn = { progress: 0 }
+          timeline.call(onBurnStart)
+          timeline.to(burn, {
+            progress: 1,
+            duration: reveal.burnDuration,
+            ease: 'none',
+            onUpdate: () =>
+              animation.updateBurn(burn.progress, this.options.gameAssets.burnNoise)
+          })
+        } else {
+          if (!mulligan) timeline.to({}, { duration: reveal.peakHold })
+          timeline.to(progress, {
+            value: 1,
+            duration: mulligan
+              ? reveal.mulliganDescentDuration
+              : reveal.normalDescentDuration,
+            ease: 'none',
+            onUpdate
+          })
+        }
       } else {
         timeline.to(progress, {
           value: 1,

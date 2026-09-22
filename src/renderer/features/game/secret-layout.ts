@@ -82,17 +82,18 @@ export const SECRET_LAYOUT = {
   },
   reveal: placement(
     { x: 960, y: 540 },
-    { width: 1920, height: 1080 },
+    { width: 761, height: 409 },
     {
       anchor: CENTER,
       scale: 1,
-      note: 'Full-screen Secret reveal art at its authored 1x size.'
+      note: 'Cropped Secret banner at its authored 1x size.'
     }
   ),
-  revealCard: placement({ x: 960, y: 750 }, CARD_CANVAS, {
+  revealMotion: { bannerStartScale: 0.2, cardStartScale: 0.12 },
+  revealCard: placement({ x: 960, y: 540 }, CARD_CANVAS, {
     anchor: CENTER,
-    scale: 0.4,
-    note: 'Revealed Secret card displayed below the raised banner.'
+    scale: 0.6,
+    note: 'Revealed Secret card grows from its hero badge to the screen center.'
   })
 } as const
 

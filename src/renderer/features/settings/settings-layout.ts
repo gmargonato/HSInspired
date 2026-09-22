@@ -73,6 +73,42 @@ export const SETTINGS_LAYOUT = {
     }
   ),
 
+  aiModeTitle: placement(
+    { x: 790, y: 535 },
+    { width: 344, height: 54 },
+    { anchor: TOP_LEFT, note: 'AI mode heading below Resolution.' }
+  ),
+  aiModeField: placement(
+    { x: 960, y: 635 },
+    { width: 344, height: 76 },
+    { anchor: CENTER, note: 'Closed AI mode selector.' }
+  ),
+  aiModeValue: placement(
+    { x: 918, y: 635 },
+    { width: 208, height: 42 },
+    { anchor: CENTER, note: 'Selected AI mode within the field.' }
+  ),
+  aiModeButton: placement(
+    { x: 1058, y: 635 },
+    { width: 62, height: 42 },
+    { anchor: CENTER, note: 'AI mode selector arrow.' }
+  ),
+  aiModeOptions: placement(
+    { x: 840, y: 655 },
+    { width: 240, height: 104 },
+    { anchor: TOP_LEFT, note: 'Two-row AI mode dropdown.' }
+  ),
+  aiModeOption: placement(
+    { x: 20, y: 26 },
+    { width: 200, height: 52 },
+    { anchor: CENTER, note: 'Local text placement within an AI mode option.' }
+  ),
+  aiModeNote: placement(
+    { x: 960, y: 785 },
+    { width: 440, height: 25 },
+    { anchor: CENTER, note: 'Explains the saved local-versus-API AI routing choice.' }
+  ),
+
   /** Match-only action frames and buttons, centered inside the game settings panel. */
   gameActions: {
     concedeFrame: placement(

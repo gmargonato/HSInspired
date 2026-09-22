@@ -1,6 +1,10 @@
 import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
-import { AnimatedOutline } from '../effects/animated-outline'
+import {
+  AnimatedOutline,
+  type OutlinePaletteInput,
+  type OutlineTuning
+} from '../effects/animated-outline'
 import { AnimationScope } from '../../animation/animations'
 import { HERO_CANVAS, HERO_LAYOUT } from './hero-layout'
 import { attachShadow } from '../shadows/shadow-caster'
@@ -302,6 +306,12 @@ export class HeroView extends Container {
     this.canAttackEnabled = enabled
     this.syncOutlineState()
     if (!enabled && this.selected) this.setSelected(false)
+  }
+
+  setOutlineAppearance(palette: OutlinePaletteInput, tuning: OutlineTuning): void {
+    this.attackOutline.setPalette(palette)
+    this.attackOutline.setTuning(tuning)
+    this.targetingOutline.setTuning(tuning)
   }
 
   /** Shows the red outline while this hero is a valid targeting destination. */

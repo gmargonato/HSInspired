@@ -1,5 +1,6 @@
 import { Rectangle, Sprite, type Texture } from 'pixi.js'
 import { SETTINGS_LAYOUT } from '../features/settings/settings-layout'
+import { AiModeSelector } from '../features/settings/ai-mode-selector'
 import { ResolutionSelector } from '../features/settings/resolution-selector'
 import { applyAnchoredPlacement, applyPlacement } from '../rendering/layout'
 import {
@@ -18,7 +19,7 @@ export interface GameSettingsCallbacks {
 
 /** Shared presentation plumbing for the menu and match settings overlays. */
 abstract class SettingsScene extends Scene {
-  private resolutionSelector: ResolutionSelector | null = null
+  protected resolutionSelector: ResolutionSelector | null = null
 
   protected createBackground(texture: Texture, label: string): void {
     const background = new Sprite(texture)
@@ -38,10 +39,16 @@ abstract class SettingsScene extends Scene {
   }
 
   protected async createResolutionSelector(
-    assets: Pick<MenuSettingsAssets, 'resolutionField' | 'resolutionButton'>
+    assets: Pick<MenuSettingsAssets, 'resolutionField' | 'resolutionButton'>,
+    onOpen: () => void = () => undefined
   ): Promise<void> {
     await this.waitForFonts()
-    const selector = new ResolutionSelector(assets, window.api.windowSettings)
+    const selector = new ResolutionSelector(
+      assets,
+      window.api.windowSettings,
+      console.error,
+      onOpen
+    )
     await selector.init()
     this.resolutionSelector = selector
     this.root.addChild(selector)
@@ -62,15 +69,35 @@ abstract class SettingsScene extends Scene {
 
 /** Settings overlay used throughout the non-match menu flow. */
 export class MenuSettingsScene extends SettingsScene {
+  private aiModeSelector: AiModeSelector | null = null
+
   async init(): Promise<void> {
     const assets = await this.assetScope.acquire<MenuSettingsAssets>(
       ASSET_BUNDLE_IDS.menuSettings
     )
     this.createBackground(assets.background, 'menu-settings-background')
-    await this.createResolutionSelector(assets)
+    await this.waitForFonts()
+    const aiModeSelector = new AiModeSelector(
+      assets,
+      window.api.preferences,
+      console.error,
+      () => this.resolutionSelector?.closeOptions()
+    )
+    await aiModeSelector.init()
+    this.aiModeSelector = aiModeSelector
+    this.root.addChild(aiModeSelector)
+    await this.createResolutionSelector(assets, () =>
+      this.aiModeSelector?.closeOptions()
+    )
   }
 
   update(_deltaMS: number): void {}
+
+  protected override onExit(): void {
+    super.onExit()
+    this.aiModeSelector?.dispose()
+    this.aiModeSelector = null
+  }
 }
 
 /** Settings overlay used while a match is active. */

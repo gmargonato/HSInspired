@@ -18,7 +18,8 @@ export function registerPreferencesIpc(repository: PreferencesRepository): void 
       ...current,
       ...(update.lastPlayedDeckId === undefined
         ? {}
-        : { lastPlayedDeckId: update.lastPlayedDeckId })
+        : { lastPlayedDeckId: update.lastPlayedDeckId }),
+      ...(update.aiMode === undefined ? {} : { aiMode: update.aiMode })
     }
     await repository.set(next)
     return parsePreferences(next)

@@ -6,6 +6,7 @@ import {
   createTurnMatch,
   type OpeningMatchAnalysis,
   type AiObservation,
+  type OpeningMatchCheckpoint,
   type OpeningMatchPublicEvent,
   type TurnMatchInstance,
   type TurnMatchResult,
@@ -20,6 +21,8 @@ export interface GameBoardSessionOptions {
   readonly setup: MatchSetup
   readonly decks: readonly Deck[]
   readonly opponentStrategy?: OpponentStrategyBrief
+  /** Optional direct-load snapshot used by deterministic headless scenario tests. */
+  readonly checkpoint?: OpeningMatchCheckpoint
 }
 
 /**
@@ -38,6 +41,20 @@ export class GameBoardSession {
   private readonly listeners = new Set<(result: TurnMatchResult) => void>()
   private readonly revealedCards = new Map<string, string>()
   private eventOffset = 0
+  private interactionSnapshot!: {
+    readonly revision: number
+    readonly localBoardCount: number
+    readonly localTurn: boolean
+  }
+
+  /** Narrow authoritative input data; reading it does not clone the match. */
+  getInteractionSnapshot(): {
+    readonly revision: number
+    readonly localBoardCount: number
+    readonly localTurn: boolean
+  } {
+    return this.interactionSnapshot
+  }
 
   subscribe(listener: (result: TurnMatchResult) => void): () => void {
     this.listeners.add(listener)
@@ -70,7 +87,12 @@ export class GameBoardSession {
 
   constructor(options: GameBoardSessionOptions) {
     this.opponentStrategy = options.opponentStrategy
-    const match = createTurnMatch(options.setup, options.decks)
+    const match = createTurnMatch(
+      options.setup,
+      options.decks,
+      undefined,
+      options.checkpoint
+    )
     let logState = match.getState()
     const human = options.setup.participants.find(
       (participant) => participant.controllerKind === 'human'
@@ -93,10 +115,22 @@ export class GameBoardSession {
         match.previewSequence(commands),
       analyze: <T>(operation: (fork: OpeningMatchAnalysis) => T) =>
         match.analyze(operation),
+      analyzeWithSeed: <T>(
+        seed: number,
+        operation: (fork: OpeningMatchAnalysis) => T
+      ) => match.analyzeWithSeed(seed, operation),
       dispatch: (command: unknown) => {
         const before = logState
         const result = match.dispatch(command)
         logState = result.state
+        this.interactionSnapshot = {
+          revision: result.state.revision,
+          localBoardCount: this.findPlayer(result.state, this.localParticipantId).board
+            .length,
+          localTurn:
+            result.state.phase === 'turns' &&
+            result.state.activePlayerId === this.localParticipantId
+        }
         options.recorder?.record(
           'events',
           'command',
@@ -130,6 +164,11 @@ export class GameBoardSession {
       }
     }
     const state = match.getState()
+    this.interactionSnapshot = {
+      revision: state.revision,
+      localBoardCount: this.findPlayer(state, human.participantId).board.length,
+      localTurn: state.phase === 'turns' && state.activePlayerId === human.participantId
+    }
     this.localPlayerNumber = this.findPlayer(state, human.participantId).playerNumber
     this.remotePlayerNumber = this.findPlayer(state, remote.participantId).playerNumber
     options.recorder?.setContext(() => ({

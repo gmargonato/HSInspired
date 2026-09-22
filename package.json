@@ -22,6 +22,8 @@
     "build:smoke": "node scripts/build-smoke.cjs",
     "test": "vitest run",
     "perf:match": "node scripts/run-match-performance.cjs",
+    "analyze:ai-corpus": "node scripts/analyze-ai-corpus.cjs",
+    "test:local-ai": "vitest run --run src/renderer/features/game/local-ai-artifact-scenarios.test.ts src/renderer/features/game/local-ai-scenarios.test.ts src/renderer/features/game/local-ai-decision-api.test.ts src/renderer/features/game/local-ai-turn-planning.test.ts src/renderer/features/game/ai-forced-command.test.ts",
     "catalog:audit": "node scripts/catalog-audit.cjs",
     "verify": "npm run format:check && npm run lint && npm run test && npm run typecheck && npm run deps:check && npm run build:smoke",
     "dist": "electron-vite build && electron-builder",

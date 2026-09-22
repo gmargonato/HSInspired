@@ -5,10 +5,14 @@ export const PREFERENCES_IPC_CHANNELS = {
 
 export interface Preferences {
   readonly lastPlayedDeckId: string | null
+  readonly aiMode: AiMode
 }
+
+export type AiMode = 'hardware' | 'api'
 
 export interface PreferencesUpdateRequest {
   readonly lastPlayedDeckId?: string | null
+  readonly aiMode?: AiMode
 }
 
 export interface PreferencesApi {
@@ -26,10 +30,16 @@ export function parseLastPlayedDeckId(value: unknown): string | null {
   throw new Error('Invalid last played deck id')
 }
 
+export function parseAiMode(value: unknown): AiMode {
+  if (value === 'hardware' || value === 'api') return value
+  throw new Error('Invalid AI mode')
+}
+
 export function parsePreferences(value: unknown): Preferences {
   if (!isRecord(value)) throw new Error('Invalid preferences response')
   return {
-    lastPlayedDeckId: parseLastPlayedDeckId(value.lastPlayedDeckId)
+    lastPlayedDeckId: parseLastPlayedDeckId(value.lastPlayedDeckId),
+    aiMode: parseAiMode(value.aiMode)
   }
 }
 
@@ -37,8 +47,10 @@ export function parsePreferencesUpdateRequest(
   value: unknown
 ): PreferencesUpdateRequest {
   if (!isRecord(value)) throw new Error('Invalid preferences update request')
-  if (value.lastPlayedDeckId === undefined) return {}
   return {
-    lastPlayedDeckId: parseLastPlayedDeckId(value.lastPlayedDeckId)
+    ...(value.lastPlayedDeckId === undefined
+      ? {}
+      : { lastPlayedDeckId: parseLastPlayedDeckId(value.lastPlayedDeckId) }),
+    ...(value.aiMode === undefined ? {} : { aiMode: parseAiMode(value.aiMode) })
   }
 }

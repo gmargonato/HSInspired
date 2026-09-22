@@ -1,13 +1,19 @@
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { parseLastPlayedDeckId, type Preferences } from '../../shared/ipc/preferences'
+import {
+  parseAiMode,
+  parseLastPlayedDeckId,
+  type AiMode,
+  type Preferences
+} from '../../shared/ipc/preferences'
 
-const PREFERENCES_FILE_VERSION = 1
+const PREFERENCES_FILE_VERSION = 2
 
 interface PersistedPreferences {
   readonly version: typeof PREFERENCES_FILE_VERSION
   readonly lastPlayedDeckId: string | null
+  readonly aiMode: AiMode
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -19,7 +25,7 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 }
 
 function clonePreferences(preferences: Preferences): Preferences {
-  return { lastPlayedDeckId: preferences.lastPlayedDeckId }
+  return { lastPlayedDeckId: preferences.lastPlayedDeckId, aiMode: preferences.aiMode }
 }
 
 /** Small main-process repository for app-level player preferences. */
@@ -33,11 +39,14 @@ export class PreferencesRepository {
 
   async get(): Promise<Preferences> {
     await this.ensureLoaded()
-    return clonePreferences(this.preferences ?? { lastPlayedDeckId: null })
+    return clonePreferences(
+      this.preferences ?? { lastPlayedDeckId: null, aiMode: 'api' }
+    )
   }
 
   async set(preferences: Preferences): Promise<void> {
     parseLastPlayedDeckId(preferences.lastPlayedDeckId)
+    parseAiMode(preferences.aiMode)
     await this.ensureLoaded()
     await this.persist(preferences)
     this.preferences = clonePreferences(preferences)
@@ -66,10 +75,19 @@ export class PreferencesRepository {
       return
     }
 
-    if (isRecord(parsed) && parsed.version === PREFERENCES_FILE_VERSION) {
+    if (
+      isRecord(parsed) &&
+      (parsed.version === 1 || parsed.version === PREFERENCES_FILE_VERSION)
+    ) {
       try {
         this.preferences = {
-          lastPlayedDeckId: parseLastPlayedDeckId(parsed.lastPlayedDeckId)
+          lastPlayedDeckId: parseLastPlayedDeckId(parsed.lastPlayedDeckId),
+          aiMode:
+            parsed.version === 1
+              ? 'api'
+              : parsed.aiMode === 'hardware' || parsed.aiMode === 'api'
+                ? parsed.aiMode
+                : 'api'
         }
       } catch {
         console.warn('Saved preferences were invalid; using safe defaults.')
@@ -83,7 +101,8 @@ export class PreferencesRepository {
   private async persist(preferences: Preferences): Promise<void> {
     const payload: PersistedPreferences = {
       version: PREFERENCES_FILE_VERSION,
-      lastPlayedDeckId: preferences.lastPlayedDeckId
+      lastPlayedDeckId: preferences.lastPlayedDeckId,
+      aiMode: preferences.aiMode
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
     const write = this.writeQueue

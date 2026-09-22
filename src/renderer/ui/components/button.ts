@@ -7,6 +7,8 @@ const DEFAULT_VERTICAL_FLIP_DURATION = 0.32
 
 export interface ButtonOptions {
   pressedScale?: number
+  /** Keep the left edge in place while the button scales down. */
+  pressFromLeft?: boolean
   idleBrightness?: number
   highlightOnHover?: boolean
   hoverBrightness?: number
@@ -20,6 +22,7 @@ export interface ButtonOptions {
 export class Button extends Actor {
   readonly sprite: Sprite
   private readonly pressedScale: number
+  private readonly pressFromLeft: boolean
   private readonly idleBrightness: number
   private readonly highlightOnHover: boolean
   private readonly hoverBrightness: number
@@ -42,6 +45,7 @@ export class Button extends Actor {
     super()
 
     this.pressedScale = options.pressedScale ?? 0.95
+    this.pressFromLeft = options.pressFromLeft ?? false
     this.idleBrightness = options.idleBrightness ?? 1
     this.highlightOnHover = options.highlightOnHover ?? true
     this.hoverBrightness = options.hoverBrightness ?? DEFAULT_HOVER_BRIGHTNESS
@@ -122,9 +126,11 @@ export class Button extends Actor {
       this.hovered = false
       this.pressed = false
       this.killTweensOf(this.sprite.scale)
+      if (this.pressFromLeft) this.killTweensOf(this.sprite)
       this.killTweensOf(this)
       this.killTweensOf(this.brightnessState)
       this.sprite.scale.set(1)
+      if (this.pressFromLeft) this.sprite.x = 0
       this.y = this.baseY
       this.setBrightness(this.idleBrightness)
     }
@@ -211,6 +217,7 @@ export class Button extends Actor {
     if (!this.interactionEnabled || event.button !== 0) return
     this.pressed = true
     this.killTweensOf(this.sprite.scale)
+    if (this.pressFromLeft) this.killTweensOf(this.sprite)
     this.killTweensOf(this)
     this.tweenTo(this.sprite.scale, {
       x: this.pressedScale,
@@ -218,6 +225,13 @@ export class Button extends Actor {
       duration: 0.08,
       ease: 'power2.out'
     })
+    if (this.pressFromLeft) {
+      this.tweenTo(this.sprite, {
+        x: (-this.sprite.texture.width * (1 - this.pressedScale)) / 2,
+        duration: 0.08,
+        ease: 'power2.out'
+      })
+    }
     this.tweenBrightness(this.pressedBrightness, 0.08)
     this.tweenTo(this, {
       y: this.baseY + this.sinkPx,
@@ -239,6 +253,7 @@ export class Button extends Actor {
     if (!this.interactionEnabled) return
     this.pressed = false
     this.killTweensOf(this.sprite.scale)
+    if (this.pressFromLeft) this.killTweensOf(this.sprite)
     this.killTweensOf(this)
     this.tweenTo(this.sprite.scale, {
       x: 1,
@@ -246,6 +261,13 @@ export class Button extends Actor {
       duration: 0.12,
       ease: 'power2.out'
     })
+    if (this.pressFromLeft) {
+      this.tweenTo(this.sprite, {
+        x: 0,
+        duration: 0.12,
+        ease: 'power2.out'
+      })
+    }
     this.tweenBrightness(
       this.highlightOnHover && this.hovered
         ? this.hoverBrightness

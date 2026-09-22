@@ -103,4 +103,6 @@ export interface EffectFrame {
   readonly isHeroPower?: boolean
   /** Evaluates play-time conditions after the source leaves hand and enters play. */
   readonly prospectiveCardPlay?: boolean
+  /** Board size controlled by the event player before a played minion entered. */
+  readonly minionCountBeforePlay?: number
 }

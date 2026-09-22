@@ -7,7 +7,11 @@ import {
   type FederatedPointerEvent
 } from 'pixi.js'
 import type { LayoutPlacement, LayoutPoint } from '../../rendering/layout'
-import { AnimatedOutline } from '../../rendering/effects/animated-outline'
+import {
+  AnimatedOutline,
+  type OutlinePaletteInput,
+  type OutlineTuning
+} from '../../rendering/effects/animated-outline'
 import {
   HERO_POWER_ICON_CANVAS,
   HeroPowerIconView
@@ -267,13 +271,22 @@ export class HeroPowerView extends Actor {
     this.frontFace.setPremium(enabled)
     this.outlineTarget.setPremium(enabled)
     this.hoverOutlineTarget.setPremium(enabled)
-    this.backFace.texture = enabled
-      ? this.premiumBackTexture
-      : this.standardBackTexture
+    this.backFace.texture = enabled ? this.premiumBackTexture : this.standardBackTexture
   }
 
   setHoverAura(enabled: boolean): void {
     this.hoverOutline.setEnabled(enabled)
+  }
+
+  setOutlineAppearance(
+    palette: OutlinePaletteInput,
+    tuning: OutlineTuning,
+    hoverPalette?: OutlinePaletteInput
+  ): void {
+    this.playableOutline.setPalette(palette)
+    if (hoverPalette) this.hoverOutline.setPalette(hoverPalette)
+    this.playableOutline.setTuning(tuning)
+    this.hoverOutline.setTuning(tuning)
   }
 
   /** Replaces this power through a horizontal flip and refreshes it face-up. */

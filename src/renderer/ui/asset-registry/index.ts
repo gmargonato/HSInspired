@@ -1,4 +1,5 @@
 import { Texture, type AssetsManifest } from 'pixi.js'
+import burnNoiseImage from '@assets/images/effects/noise-01.jpg'
 import spellPlayAuraImage from '@assets/images/cards/play-aura-spell.png'
 import minionPlayAuraImage from '@assets/images/cards/play-aura-minion.png'
 import playSpotlight1Image from '@assets/images/effects/spotlight-01.png'
@@ -846,6 +847,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.burn-noise',
+    ASSET_BUNDLE_IDS.game,
+    'burnNoise',
+    burnNoiseImage,
+    512,
+    512,
+    'game-scene'
+  ),
+  asset(
     'scene.game.history-burn-card',
     ASSET_BUNDLE_IDS.game,
     'historyBurnCard',
@@ -931,8 +941,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'secretRevealedScreen',
     secretRevealedScreenImage,
-    1920,
-    1080,
+    761,
+    409,
     'game-scene'
   ),
   asset(
@@ -2143,6 +2153,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   historyRemoteAttack: Texture
   historyRemoteTrigger: Texture
   historyArrow: Texture
+  burnNoise: Texture
   historyBurnCard: Texture
   historyBurnThumb: Texture
   historySecretCard: Texture

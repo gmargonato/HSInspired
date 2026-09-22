@@ -557,7 +557,7 @@
         "trigger": "on-discard",
         "event": {
           "type": "card-discarded",
-          "source": {
+          "target": {
             "selection": "source"
           }
         },

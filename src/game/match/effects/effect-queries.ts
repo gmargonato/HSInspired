@@ -957,12 +957,19 @@ export class EffectQueries {
               ? [frame.event.target]
               : []
         ).some((card) => this.matchesFilter(card, condition.filter, frame))
-      case 'event-player-had-minion-count':
+      case 'event-player-had-minion-count': {
+        const minionCountBeforePlay =
+          frame.event?.minionCountBeforePlay ??
+          frame.minionCountBeforePlay ??
+          (frame.prospectiveCardPlay && prospectiveDefinition?.type === 'Minion'
+            ? player.board.length
+            : 0)
         return this.compare(
-          frame.event?.minionCountBeforePlay ?? 0,
+          minionCountBeforePlay,
           condition.operator,
           Number(condition.value)
         )
+      }
       case 'player-controls-secret':
       case 'player-has-secret':
         return (player.secrets ?? []).length > 0

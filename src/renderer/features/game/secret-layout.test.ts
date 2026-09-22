@@ -55,10 +55,10 @@ describe('Secret layout', () => {
     )
   })
 
-  it('centers the temporary reveal screen on the game canvas', () => {
+  it('centers the cropped reveal banner and readable card on the game canvas', () => {
     expect(SECRET_LAYOUT.reveal.position).toEqual({ x: 960, y: 540 })
-    expect(SECRET_LAYOUT.reveal.size).toEqual({ width: 1920, height: 1080 })
+    expect(SECRET_LAYOUT.reveal.size).toEqual({ width: 761, height: 409 })
     expect(SECRET_LAYOUT.reveal.scale).toEqual({ x: 1, y: 1 })
-    expect(SECRET_LAYOUT.revealCard.position).toEqual({ x: 960, y: 620 })
+    expect(SECRET_LAYOUT.revealCard.position).toEqual({ x: 960, y: 540 })
   })
 })

@@ -1,6 +1,10 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../layout'
-import { AnimatedOutline } from '../effects/animated-outline'
+import {
+  AnimatedOutline,
+  type OutlinePaletteInput,
+  type OutlineTuning
+} from '../effects/animated-outline'
 import { MINION_CANVAS, MINION_HIT_AREA, MINION_LAYOUT } from './minion-layout'
 import { attachShadow } from '../shadows/shadow-caster'
 import { SleepingZs } from './sleeping-zs'
@@ -807,6 +811,22 @@ export class MinionView extends Container {
     this.canAttackEnabled = enabled
     this.syncOutlineState()
     if (!enabled && this.selected) this.setSelected(false)
+  }
+
+  setOutlineAppearance(
+    palette: OutlinePaletteInput,
+    tuning: OutlineTuning,
+    hoverPalette?: OutlinePaletteInput
+  ): void {
+    this.attackOutline.setPalette(palette)
+    if (hoverPalette) this.hoverOutline.setPalette(hoverPalette)
+    for (const outline of [
+      this.attackOutline,
+      this.targetingOutline,
+      this.hoverOutline
+    ]) {
+      outline.setTuning(tuning)
+    }
   }
 
   /** Shows the red outline while this minion is a valid targeting destination. */

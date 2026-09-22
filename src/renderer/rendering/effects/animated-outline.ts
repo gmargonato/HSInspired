@@ -8,6 +8,9 @@ import {
 } from './animated-outline-shader'
 import {
   getOutlineTuning,
+  OUTLINE_PALETTES,
+  type OutlinePalette,
+  type OutlinePaletteName,
   type OutlinePresetName,
   type OutlineTuning
 } from './outline-tuning'
@@ -16,51 +19,8 @@ import {
   resolveExperimentalOutlineTuning
 } from '@outline-directions'
 
-export interface OutlinePalette {
-  /** Dense inner energy body. */
-  readonly baseColor: number
-  /** Darker exterior body and the bloom cast from it. */
-  readonly outerColor: number
-  /** Hottest animated regions inside the energy body. */
-  readonly highlightColor: number
-  /** Optional diffuse tail color; falls back to outerColor. */
-  readonly glowColor?: number
-}
-
-export const OUTLINE_PALETTES = {
-  blue: {
-    baseColor: 0x6cffff,
-    outerColor: 0x188cff,
-    highlightColor: 0xffffff
-  },
-  green: {
-    baseColor: 0x6cff46,
-    outerColor: 0x3fd93f,
-    highlightColor: 0xeaffd0
-  },
-  orange: {
-    baseColor: 0xffff0a,
-    outerColor: 0xf9aa11,
-    highlightColor: 0xfffc10
-  },
-  purple: {
-    baseColor: 0x5c76ff,
-    outerColor: 0x2f58ff,
-    highlightColor: 0xbbfffe
-  },
-  red: {
-    baseColor: 0xfffb6b,
-    outerColor: 0xdb6c2f,
-    highlightColor: 0xffffa4
-  },
-  white: {
-    baseColor: 0xf5f5f5,
-    outerColor: 0x4e4e4e,
-    highlightColor: 0xffffff
-  }
-} as const satisfies Record<string, OutlinePalette>
-
-export type OutlinePaletteName = keyof typeof OUTLINE_PALETTES
+export { OUTLINE_PALETTES } from './outline-tuning'
+export type { OutlinePalette, OutlinePaletteName } from './outline-tuning'
 export type OutlinePaletteInput = OutlinePaletteName | OutlinePalette
 export type { OutlinePresetName, OutlineTuning } from './outline-tuning'
 
@@ -77,6 +37,18 @@ type Rgb = readonly [number, number, number]
 
 function toRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255]
+}
+
+function saturateRgb(rgb: Rgb, saturation: number): [number, number, number] {
+  if (saturation === 1) return [...rgb]
+  const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722
+  return rgb.map((channel) =>
+    Math.min(1, Math.max(0, luminance + (channel - luminance) * saturation))
+  ) as [number, number, number]
+}
+
+function isCardPreset(preset: OutlinePresetName): boolean {
+  return preset === 'card' || preset === 'bonus-card'
 }
 
 function resolvePalette(input: OutlinePaletteInput): OutlinePalette {
@@ -111,11 +83,7 @@ function outlinePadding(tuning: OutlineTuning): number {
   const widthReach =
     (tuning.ribbonWidth + tuning.rimWidth + tuning.glowWidth) *
     (1 + (tuning.contourVariation / 10) * 0.55)
-  return (
-    widthReach +
-    tuning.edgeWobble * 1.5 +
-    4
-  )
+  return widthReach + tuning.edgeWobble * 1.5 + 4
 }
 
 function resolveTuning(preset: OutlinePresetName): OutlineTuning {
@@ -143,6 +111,8 @@ export class AnimatedOutline extends Actor {
   private readonly filter: Filter
   private readonly uniforms: UniformGroup
   private tuning: OutlineTuning
+  private preset: OutlinePresetName
+  private paletteInput: OutlinePaletteInput = 'blue'
   private readonly timeState = { value: 0 }
   private timeTween?: gsap.core.Tween
   private enabled = true
@@ -151,6 +121,7 @@ export class AnimatedOutline extends Actor {
     super()
     this.target = target
     const preset = options.preset ?? 'button'
+    this.preset = preset
     this.tuning = resolveTuning(preset)
 
     this.uniforms = new UniformGroup({
@@ -186,7 +157,7 @@ export class AnimatedOutline extends Actor {
         type: 'vec4<f32>'
       },
       uOrganic: {
-        value: [this.tuning.contourVariation, 0, 0, 0],
+        value: [this.tuning.contourVariation, Number(isCardPreset(preset)), 0, 0],
         type: 'vec4<f32>'
       },
       uTime: { value: 0, type: 'f32' }
@@ -236,18 +207,33 @@ export class AnimatedOutline extends Actor {
   }
 
   setPalette(input: OutlinePaletteInput): void {
+    this.paletteInput = input
     const palette = resolvePalette(input)
-    writeColor(this.uniforms, 'uBaseColor', toRgb01(palette.baseColor))
-    writeColor(this.uniforms, 'uRimColor', toRgb01(palette.outerColor))
+    const saturation = this.tuning.saturation
+    writeColor(
+      this.uniforms,
+      'uBaseColor',
+      saturateRgb(toRgb01(palette.baseColor), saturation)
+    )
+    writeColor(
+      this.uniforms,
+      'uRimColor',
+      saturateRgb(toRgb01(palette.outerColor), saturation)
+    )
     writeColor(
       this.uniforms,
       'uGlowColor',
-      toRgb01(palette.glowColor ?? palette.outerColor)
+      saturateRgb(toRgb01(palette.glowColor ?? palette.outerColor), saturation)
     )
-    writeColor(this.uniforms, 'uHotColor', toRgb01(palette.highlightColor))
+    writeColor(
+      this.uniforms,
+      'uHotColor',
+      saturateRgb(toRgb01(palette.highlightColor), saturation)
+    )
   }
 
   setPreset(preset: OutlinePresetName): void {
+    this.preset = preset
     this.setTuning(resolveTuning(preset))
   }
 
@@ -282,7 +268,13 @@ export class AnimatedOutline extends Actor {
       this.tuning.innerEdgeWidth,
       this.tuning.pulseRate
     ])
-    writeVector(this.uniforms, 'uOrganic', [this.tuning.contourVariation, 0, 0, 0])
+    writeVector(this.uniforms, 'uOrganic', [
+      this.tuning.contourVariation,
+      Number(isCardPreset(this.preset)),
+      0,
+      0
+    ])
+    this.setPalette(this.paletteInput)
     this.filter.padding = this.resolvePadding(this.filter.resolution)
   }
 
@@ -290,12 +282,15 @@ export class AnimatedOutline extends Actor {
     if (import.meta.env.DEV) {
       AnimatedOutline.debugInstances.delete(this)
       // Some callers reuse the silhouette sprite as a summon ghost.
-      if (this.debugRenderable !== null) this.target.renderable = this.debugRenderable
+      if (this.debugRenderable !== null && !this.target.destroyed)
+        this.target.renderable = this.debugRenderable
       this.debugRenderable = null
     }
-    this.target.filters = (this.target.filters ?? []).filter(
-      (filter) => filter !== this.filter
-    )
+    if (!this.target.destroyed) {
+      this.target.filters = (this.target.filters ?? []).filter(
+        (filter) => filter !== this.filter
+      )
+    }
     this.filter.destroy()
     super.dispose()
   }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CARD_CATALOG } from '../../content/cards'
 import type { PlayerId } from '../match-types'
 import {
   createMatchScenario,
@@ -148,6 +149,54 @@ describe('audit regression coverage', () => {
     ).toBe(true)
     expect(player(scenario, opponentId).board).toHaveLength(0)
     expect(player(scenario, opponentId).hero.health).toBe(28)
+  })
+
+  it('summons a Demon when Bane of Doom kills its target', () => {
+    const scenario = createMatchScenario({
+      cardId: 'classic_bane_of_doom',
+      seed: 1
+    })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'whispers_of_the_old_gods_disciple_of_cthun'
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'classic_bane_of_doom'
+      }).accepted
+    ).toBe(true)
+    setMana(scenario, participantId)
+
+    const bane = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'classic_bane_of_doom'
+    )!
+    const target = player(scenario, opponentId).board[0]!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: bane.instanceId,
+      targets: [
+        {
+          kind: 'minion',
+          participantId: opponentId,
+          instanceId: target.instanceId
+        }
+      ]
+    })
+
+    expect(result.accepted).toBe(true)
+    expect(player(scenario, opponentId).board).toHaveLength(0)
+    const summoned = player(scenario, participantId).board.at(-1)
+    expect(summoned).toBeDefined()
+    expect(CARD_CATALOG.require(summoned!.cardId).subtype).toBe('Demon')
   })
 
   it('selects distinct enemy minions for Multi-Shot', () => {

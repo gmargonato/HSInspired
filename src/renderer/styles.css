@@ -413,6 +413,72 @@ body:has(.app-error-notice:not(.app-error-notice-abandon))::after {
   text-align: right;
 }
 
+.outline-lab-colors {
+  position: absolute;
+  z-index: 30;
+  box-sizing: border-box;
+  transform-origin: top left;
+  padding: 10px 12px;
+  border: 1px solid #6682a5;
+  border-radius: 8px;
+  background: #17283d;
+  color: #dce4f5;
+  font:
+    16px Arial,
+    sans-serif;
+  pointer-events: auto;
+}
+
+.outline-lab-colors[hidden] {
+  display: none;
+}
+
+.outline-lab-colors__title {
+  margin-bottom: 9px;
+  color: #f1d36a;
+  font-size: 15px;
+}
+
+.outline-lab-colors__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px 12px;
+}
+
+.outline-lab-colors__row {
+  display: grid;
+  grid-template-columns: 68px 42px 1fr;
+  align-items: center;
+  gap: 5px;
+}
+
+.outline-lab-colors__row input[type='color'] {
+  width: 42px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #637398;
+  background: #080e18;
+  cursor: pointer;
+}
+
+.outline-lab-colors__row input[type='text'] {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 5px;
+  border: 1px solid #637398;
+  border-radius: 4px;
+  background: #080e18;
+  color: #fff;
+  font:
+    15px Consolas,
+    monospace;
+}
+
+.outline-lab-colors__row input:focus {
+  outline: 2px solid #f1d36a;
+}
+
 .add-card-picker {
   --add-card-picker-scale: 1;
   --add-card-picker-row-cost-width: 54px;

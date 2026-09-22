@@ -188,6 +188,8 @@ export function getOpeningMatchPublicEvents(
     .filter(
       (event) =>
         event.type !== 'history-effect-recorded' &&
+        event.type !== 'secret-resolution-started' &&
+        event.type !== 'secret-resolution-completed' &&
         event.type !== 'random-spell-started' &&
         event.type !== 'random-spell-completed'
     )

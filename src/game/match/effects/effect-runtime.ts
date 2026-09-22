@@ -1792,8 +1792,7 @@ export class EffectRuntime {
         break
       case 'play-deathrattle-minion':
         progressDelta =
-          playedMinion &&
-          this.actionBlocksFor(event.target!, 'deathrattle').length > 0
+          playedMinion && this.actionBlocksFor(event.target!, 'deathrattle').length > 0
             ? 1
             : 0
         break
@@ -1809,19 +1808,18 @@ export class EffectRuntime {
         progressDelta = event.type === 'card-discarded' ? 1 : 0
         break
       case 'play-taunt-minion':
-        progressDelta =
-          playedMinion && this.hasKeyword(event.target!, 'taunt') ? 1 : 0
+        progressDelta = playedMinion && this.hasKeyword(event.target!, 'taunt') ? 1 : 0
         break
       case 'end-turn-unspent-mana':
-        progressDelta =
-          event.type === 'turn-ended' && player.mana.available > 0 ? 1 : 0
+        progressDelta = event.type === 'turn-ended' && player.mana.available > 0 ? 1 : 0
         break
       case 'summon-minion':
         progressDelta = event.type === 'minion-summoned' ? 1 : 0
         break
       case 'summon-murloc':
         progressDelta =
-          event.type === 'minion-summoned' && definition?.type === 'Minion' &&
+          event.type === 'minion-summoned' &&
+          definition?.type === 'Minion' &&
           definition.subtype === 'Murloc'
             ? 1
             : 0
@@ -1840,14 +1838,12 @@ export class EffectRuntime {
         break
       case 'play-battlecry-minion':
         progressDelta =
-          playedMinion &&
-          minion!.effects.some((block) => block.trigger === 'battlecry')
+          playedMinion && minion!.effects.some((block) => block.trigger === 'battlecry')
             ? 1
             : 0
         break
       case 'draw-card':
-        progressDelta =
-          event.type === 'card-played' && event.kind === 'draw' ? 1 : 0
+        progressDelta = event.type === 'card-played' && event.kind === 'draw' ? 1 : 0
         break
       case 'hero-attack':
         progressDelta =
@@ -2384,6 +2380,27 @@ export class EffectRuntime {
     // also disappear after an earlier Secret in this same interrupt window.
     if (entry.source.kind === 'secret' && !this.secretCanTakeEffect(entry.block, frame))
       return
+    const secret = this.player(entry.source.participantId).secrets?.find(
+      (candidate) => candidate.instanceId === entry.source.instanceId
+    )
+    const presentSecret = (
+      type: 'secret-resolution-started' | 'secret-resolution-completed'
+    ): void => {
+      if (!secret) return
+      this.events.push({
+        type,
+        secretId: secret.instanceId,
+        participantId: entry.source.participantId,
+        cardId: secret.cardId,
+        state: clonePlain({
+          ...this.draft,
+          history: undefined,
+          effectTrace: undefined
+        }) as unknown as OpeningMatchState
+      })
+    }
+    if (consumeSecrets && entry.block.trigger === 'secret')
+      presentSecret('secret-resolution-started')
     const consumedSecret =
       consumeSecrets &&
       entry.source.kind === 'secret' &&
@@ -2392,6 +2409,7 @@ export class EffectRuntime {
         : null
     if (entry.source.kind === 'secret' && !consumedSecret) return
     this.runBlock(entry.block, frame, `trigger.${entry.block.trigger}`, true)
+    if (consumedSecret) presentSecret('secret-resolution-completed')
     if (consumedSecret)
       this.revealConsumedSecret(
         entry.source,
@@ -3233,6 +3251,13 @@ export class EffectRuntime {
     if (ref.kind === 'minion') {
       const minion = this.currentMinion(ref)
       if (!minion) return false
+      if (
+        keyword === 'lifesteal' &&
+        this.player(ref.participantId).heroId === 'jaina-frost-lich' &&
+        (cardDefinition(minion.cardId)?.subtype === 'Elemental' ||
+          minion.cardId === 'basic_water_elemental')
+      )
+        return true
       const keywords = effectiveBoardMinionKeywords(minion, this.draft.turnNumber)
       if (!keywords.includes(keyword)) return false
       if (keyword === 'divine-shield') return minion.divineShield === true
@@ -3241,8 +3266,22 @@ export class EffectRuntime {
       if (keyword === 'spell-immune') return minion.spellImmune === true
       return true
     }
+    if (ref.kind === 'weapon') {
+      const weapon = this.player(ref.participantId).weapon
+      return (
+        weapon?.instanceId === ref.instanceId &&
+        (cardDefinition(weapon.cardId)?.keywords ?? []).includes(keyword)
+      )
+    }
     if (ref.kind === 'hero') {
-      const hero = this.player(ref.participantId).hero
+      const player = this.player(ref.participantId)
+      const hero = player.hero
+      if (
+        keyword === 'lifesteal' &&
+        player.weapon !== null &&
+        cardDefinition(player.weapon.cardId)?.keywords.includes('lifesteal')
+      )
+        return true
       const keywords = new Set(hero.keywords ?? [])
       for (const enchantment of hero.enchantments ?? []) {
         if (
@@ -3608,7 +3647,9 @@ export class EffectRuntime {
     if (
       !options.skipLifesteal &&
       !frame.skipLifesteal &&
-      (frame.source.kind === 'minion' || frame.source.kind === 'hero') &&
+      (frame.source.kind === 'minion' ||
+        frame.source.kind === 'hero' ||
+        frame.source.kind === 'weapon') &&
       this.hasKeyword(frame.source, 'lifesteal')
     ) {
       const lifestealFrame = {
@@ -4439,6 +4480,7 @@ export class EffectRuntime {
       })
       this.events.push({
         type: 'card-burned',
+        origin: 'deck',
         participantId,
         card: clonePlain({
           ...card,
@@ -4473,6 +4515,7 @@ export class EffectRuntime {
     })
     this.events.push({
       type: 'card-drawn',
+      origin: 'deck',
       participantId,
       card: clonePlain(card) as OpeningCard
     })
@@ -5960,7 +6003,7 @@ export class EffectRuntime {
                 type: 'card-generated',
                 participantId: frame.controllerId,
                 card: clonePlain(moved) as OpeningCard,
-                origin: { kind: 'screen-center' }
+                origin: { kind: 'deck', participantId: opponentId }
               }
         )
         this.emit(frame, name, path, {
@@ -6429,12 +6472,11 @@ export class EffectRuntime {
           if (action.storeCardId === true && frame.source.kind === 'minion') {
             const victim = this.currentMinion(target)
             if (victim) {
-              const storedControllerId =
-                victim.controllerId ?? target.participantId
+              const storedControllerId = victim.controllerId ?? target.participantId
               this.updateMinion(frame.source, (sourceMinion) => {
-                sourceMinion.enchantments = (
-                  sourceMinion.enchantments ?? []
-                ).filter((enchantment) => enchantment.storedCardId === undefined)
+                sourceMinion.enchantments = (sourceMinion.enchantments ?? []).filter(
+                  (enchantment) => enchantment.storedCardId === undefined
+                )
               })
               this.addEnchantment(frame.source, {
                 id: this.allocateId(`${frame.source.instanceId}:stored-card`),
@@ -6521,9 +6563,18 @@ export class EffectRuntime {
             ? this.actionTargets(action, frame)
             : this.sourceEntities(action, frame)
         for (const target of targets) {
+          const fromZone = target.zone
+          const participantId = target.participantId
           const card = this.removeCard(target)
           if (card) {
             this.addToDiscardedCards(this.player(target.participantId), card)
+            if (fromZone === 'deck')
+              this.events.push({
+                type: 'card-burned',
+                origin: 'deck-destruction',
+                participantId,
+                card: clonePlain({ ...card, zone: 'discarded' }) as OpeningCard
+              })
             const discarded: EntityRef = {
               instanceId: card.instanceId,
               kind: 'card',
@@ -6533,7 +6584,9 @@ export class EffectRuntime {
             }
             this.emit(frame, name, path, {
               target: card.instanceId,
-              cardId: card.cardId
+              cardId: card.cardId,
+              fromZone,
+              participantId
             })
             this.emitSemantic({
               type: 'card-discarded',
@@ -11393,20 +11446,18 @@ export class EffectRuntime {
         const amount = reportedAsDamage
           ? Math.max(0, reportedBefore.health - healthAfter) +
             Math.max(0, reportedBefore.armor - armorAfter)
-          : effect.kind === 'restore-and-buff-minion' &&
-              reportedRestoreAmount !== null
+          : effect.kind === 'restore-and-buff-minion' && reportedRestoreAmount !== null
             ? reportedRestoreAmount
             : Math.max(0, healthAfter - reportedBefore.health)
-        const attemptedAmount =
-          isRestoreEffect
-            ? Math.max(
-                0,
-                integer(
-                  effect.amount *
-                    this.effectMultiplier(frame.controllerId, 'heroPowerMultiplier')
-                )
+        const attemptedAmount = isRestoreEffect
+          ? Math.max(
+              0,
+              integer(
+                effect.amount *
+                  this.effectMultiplier(frame.controllerId, 'heroPowerMultiplier')
               )
-            : this.damageAmounts(reportedTarget, effect.amount, frame).displayAmount
+            )
+          : this.damageAmounts(reportedTarget, effect.amount, frame).displayAmount
         this.events.push(
           reportedAsDamage
             ? {
@@ -11928,9 +11979,20 @@ export class EffectRuntime {
       // Continuous auras begin applying as soon as the minion enters play,
       // before its Battlecry resolves (for example Brann Bronzebeard).
       this.recomputeContinuousEffects()
+      // Capture entrance before Battlecry or Secrets can transform/remove the body.
+      // Semantic after-play and after-summon rules below keep their original timing.
+      this.events.push({
+        type: 'minion-played',
+        participantId: options.participantId,
+        minion: clonePlain(
+          player.board.find((entry) => entry.instanceId === minion.instanceId)!
+        ) as BoardMinion,
+        position: options.position ?? player.board.length - 1
+      })
       frame = {
         ...this.frameFor(minion, null, validated.chosenTargets),
-        choiceIndex: effectiveChoice
+        choiceIndex: effectiveChoice,
+        minionCountBeforePlay
       }
       const playedMinionsThisTurn = (this.draft.history?.cardsPlayedThisTurn ?? [])
         .map((cardId) => cardDefinition(cardId as CardId))
@@ -11982,17 +12044,6 @@ export class EffectRuntime {
           card.cardId,
           card.instanceId
         )
-      }
-      const currentMinion = player.board.find(
-        (candidate) => candidate.instanceId === minion.instanceId
-      )
-      if (currentMinion) {
-        this.events.push({
-          type: 'minion-played',
-          participantId: options.participantId,
-          minion: clonePlain(currentMinion) as BoardMinion,
-          position: options.position ?? player.board.length - 1
-        })
       }
     } else if (validated.definition.type === 'Weapon') {
       const replacedWeapon = player.weapon
@@ -12307,13 +12358,15 @@ export class EffectRuntime {
             card: clonePlain(handCard) as OpeningCard
           })
           if (selectedRef.cardId) {
-            const source =
-              this.findEntity(pending.sourceCardInstanceId, options.participantId) ?? {
-                instanceId: pending.sourceCardInstanceId,
-                kind: 'hero-power' as const,
-                participantId: options.participantId,
-                zone: 'hero-power' as const
-              }
+            const source = this.findEntity(
+              pending.sourceCardInstanceId,
+              options.participantId
+            ) ?? {
+              instanceId: pending.sourceCardInstanceId,
+              kind: 'hero-power' as const,
+              participantId: options.participantId,
+              zone: 'hero-power' as const
+            }
             this.advanceQuestForAddedCard(
               options.participantId,
               selectedRef.cardId,

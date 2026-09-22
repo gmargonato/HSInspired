@@ -12,7 +12,8 @@ import {
   OUTLINE_PALETTES,
   type OutlinePalette,
   type OutlinePaletteInput,
-  type OutlinePresetName
+  type OutlinePresetName,
+  type OutlineTuning
 } from './animated-outline'
 import { getExperimentalOutlineDirectionId } from '@outline-directions'
 import { getOutlineTuning } from './outline-tuning'
@@ -48,9 +49,10 @@ function cacheKey(options: {
   readonly palette: OutlinePaletteInput
   readonly preset: OutlinePresetName
   readonly resolution: number
+  readonly tuning?: OutlineTuning
 }): string {
   const texture = options.texture
-  const tuning = getOutlineTuning(options.preset)
+  const tuning = options.tuning ?? getOutlineTuning(options.preset)
   return [
     texture.uid,
     texture.source.uid,
@@ -64,6 +66,7 @@ function cacheKey(options: {
     paletteKey(options.palette),
     options.resolution,
     JSON.stringify(tuning),
+    options.tuning ? 'override' : 'preset',
     import.meta.env.DEV ? (getExperimentalOutlineDirectionId() ?? '') : ''
   ].join('|')
 }
@@ -77,6 +80,7 @@ function createEntry(
     readonly palette: OutlinePaletteInput
     readonly preset: OutlinePresetName
     readonly resolution: number
+    readonly tuning?: OutlineTuning
   },
   key: string
 ): BakedOutlineCacheEntry {
@@ -92,6 +96,7 @@ function createEntry(
     cacheDistance: true,
     resolution: options.resolution
   })
+  if (options.tuning) outline.setTuning(options.tuning)
   const padding = outline.getPadding()
   const frame = new Rectangle(
     -padding,
@@ -135,6 +140,7 @@ function acquireEntry(
     readonly palette: OutlinePaletteInput
     readonly preset: OutlinePresetName
     readonly resolution: number
+    readonly tuning?: OutlineTuning
   }
 ): BakedOutlineCacheEntry {
   let cache = rendererCaches.get(renderer)
@@ -180,6 +186,7 @@ export class BakedAnimatedOutline extends Actor {
   private preset: OutlinePresetName
   private enabled = true
   private disposed = false
+  private tuning?: OutlineTuning
 
   constructor(
     private readonly renderer: Renderer,
@@ -188,11 +195,13 @@ export class BakedAnimatedOutline extends Actor {
     private readonly displayHeight: number,
     private readonly displayScale: number,
     palette: OutlinePaletteInput = 'green',
-    preset: OutlinePresetName = 'card'
+    preset: OutlinePresetName = 'card',
+    tuning?: OutlineTuning
   ) {
     super()
     this.palette = palette
     this.preset = preset
+    this.tuning = tuning
     this.eventMode = 'none'
     this.label = 'baked-animated-outline'
     this.rebuild()
@@ -220,11 +229,18 @@ export class BakedAnimatedOutline extends Actor {
     this.rebuild()
   }
 
-  setAppearance(palette: OutlinePaletteInput, preset: OutlinePresetName): void {
+  setAppearance(
+    palette: OutlinePaletteInput,
+    preset: OutlinePresetName,
+    tuning = this.tuning
+  ): void {
     const changed =
-      paletteKey(this.palette) !== paletteKey(palette) || this.preset !== preset
+      paletteKey(this.palette) !== paletteKey(palette) ||
+      this.preset !== preset ||
+      JSON.stringify(this.tuning) !== JSON.stringify(tuning)
     this.palette = palette
     this.preset = preset
+    this.tuning = tuning
     if (changed) this.rebuild()
   }
 
@@ -248,6 +264,7 @@ export class BakedAnimatedOutline extends Actor {
       height: this.displayHeight,
       palette: this.palette,
       preset: this.preset,
+      tuning: this.tuning,
       resolution
     })
     if (nextEntry === this.entry) {

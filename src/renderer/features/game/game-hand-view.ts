@@ -47,6 +47,7 @@ export class GameHandView {
   readonly layer = new Container()
   readonly drag: GameHandDrag
   private readonly handEntries: HandEntry[] = []
+  private cachedRestTransforms: readonly (HandCardTransform | undefined)[] | null = null
   private localHoveredSlot: GameCardSlot | null = null
   private reflowing = false
   private handModeActive = false
@@ -75,6 +76,7 @@ export class GameHandView {
         onReturned: callbacks.onReturned,
         clearHover: () => {
           this.localHoveredSlot = null
+          this.drag.prepare(null)
         },
         beginReflow: () => {
           this.reflowing = true
@@ -95,6 +97,11 @@ export class GameHandView {
   get entries(): readonly HandEntry[] {
     return this.handEntries
   }
+  get restTransforms(): readonly (HandCardTransform | undefined)[] {
+    return (this.cachedRestTransforms ??= this.handEntries.map(
+      (entry) => entry.restTransform
+    ))
+  }
   get hoveredSlot(): GameCardSlot | null {
     return this.localHoveredSlot
   }
@@ -107,21 +114,30 @@ export class GameHandView {
 
   append(entry: HandEntry): void {
     this.handEntries.push(entry)
+    this.cachedRestTransforms = null
   }
   insert(index: number, entry: HandEntry): void {
     this.handEntries.splice(index, 0, entry)
+    this.cachedRestTransforms = null
   }
   removeAt(index: number): HandEntry | undefined {
-    return this.handEntries.splice(index, 1)[0]
+    this.cachedRestTransforms = null
+    const entry = this.handEntries.splice(index, 1)[0]
+    if (entry) this.drag.invalidate(entry.slot)
+    return entry
   }
   takeLast(): HandEntry | undefined {
-    return this.handEntries.pop()
+    this.cachedRestTransforms = null
+    const entry = this.handEntries.pop()
+    if (entry) this.drag.invalidate(entry.slot)
+    return entry
   }
   setReflowing(value: boolean): void {
     this.reflowing = value
   }
   resetHover(): void {
     this.localHoveredSlot = null
+    this.drag.prepare(null)
   }
   hoverForBenchmark(slot: GameCardSlot): void {
     this.localHoveredSlot = slot
@@ -136,6 +152,7 @@ export class GameHandView {
   clearHover(): void {
     if (this.localHoveredSlot === null) return
     this.localHoveredSlot = null
+    this.drag.prepare(null)
     if (this.drag.index === null) this.applyHoverDelta()
   }
 
@@ -155,7 +172,7 @@ export class GameHandView {
 
         const resolved = resolveHandHover(
           { x, y },
-          this.handEntries.map((entry) => entry.restTransform),
+          this.restTransforms,
           DEFAULT_HAND_LAYOUT
         )
         const entry = resolved !== null ? this.handEntries[resolved] : undefined
@@ -169,11 +186,11 @@ export class GameHandView {
         return
       const local = event.getLocalPosition(this.layer)
       if (this.drag.index !== null) return
+      this.drag.deferPreparation()
       // Include arriving slots in the fan geometry, but only let cards that
       // have reached the hand own hover. Missing edge transforms would make
       // the hit resolver reject the entire fan during a draw.
-      const transforms = this.handEntries.map((entry) => entry.restTransform)
-      const resolved = resolveHandHover(local, transforms, DEFAULT_HAND_LAYOUT)
+      const resolved = resolveHandHover(local, this.restTransforms, DEFAULT_HAND_LAYOUT)
       const candidate =
         resolved !== null ? (this.handEntries[resolved]?.slot ?? null) : null
       const nearest =
@@ -191,6 +208,11 @@ export class GameHandView {
       this.callbacks.onPointerDown(event)
     })
     this.drag.activate()
+    this.drag.prepare(
+      this.handEntries.find((entry) => isHandOwnedSlot(entry.slot, this.layer))?.slot ??
+        null,
+      true
+    )
   }
 
   async applyLayout(opts: {
@@ -200,6 +222,7 @@ export class GameHandView {
     readonly preserveHover?: boolean
   }): Promise<void> {
     const transforms = layoutHand(this.handEntries.length, DEFAULT_HAND_LAYOUT, null)
+    this.cachedRestTransforms = transforms
     await Promise.all(
       this.handEntries.map((entry, index) => {
         const transform = transforms[index]
@@ -272,6 +295,7 @@ export class GameHandView {
       )
       entry.displaced = shouldDisplace
     })
+    this.drag.prepare(this.localHoveredSlot)
     this.callbacks.syncMana()
   }
 

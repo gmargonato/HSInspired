@@ -3,6 +3,7 @@ import { createAppLogger, type AppLogger } from './logger'
 import type { AiDecisionApi } from '../../shared/ipc/ai'
 import { createAiDecisionApi } from './ai-decision-api'
 import type { MatchLogsApi } from '../../shared/ipc/match-logs'
+import type { PreferencesApi } from '../../shared/ipc/preferences'
 import { PersistentPlayerStatsStore } from './player-stats-store'
 import { PersistentProgressionStore } from './progression-store'
 import type { ProgressionStore } from '../ui/progression-store'
@@ -97,6 +98,7 @@ export class BrowserDialogService implements DialogService {
 /** Renderer-lifetime dependencies assembled once by the application root. */
 export interface AppServices {
   readonly matchLogs?: MatchLogsApi
+  readonly preferences?: PreferencesApi
   readonly ai: AiDecisionApi
   readonly arenaStore: ArenaStore
   readonly deckStore: DeckStore
@@ -123,6 +125,9 @@ export function createAppServices(overrides: Partial<AppServices> = {}): AppServ
         })
   return {
     ai,
+    preferences:
+      overrides.preferences ??
+      (typeof window !== 'undefined' ? window.api?.preferences : undefined),
     matchLogs:
       overrides.matchLogs ??
       (typeof window !== 'undefined' ? window.api?.matchLogs : undefined),

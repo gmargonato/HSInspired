@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow } from 'electron'
-import { join } from 'path'
+import { app, shell, screen, BrowserWindow } from 'electron'
+import { writeFile } from 'node:fs/promises'
+import { isAbsolute, join } from 'path'
 import { parseMatchLogObject } from '../shared/ipc/match-logs'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import icon from '../../assets/icon.png?asset'
@@ -29,6 +30,32 @@ import { registerOutlineTuningIpc } from './services/outline-tuning-ipc'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
+// The runner owns this temporary directory. Select it before any repository,
+// Chromium session, or recovery routine can touch the ordinary player profile.
+const matchPerformanceRoot =
+  is.dev && process.env['VITE_DEV_START_ROUTE'] === 'match-performance'
+    ? process.env['HSINSPIRED_MATCH_PERFORMANCE_ROOT']
+    : undefined
+if (is.dev && process.env['VITE_DEV_START_ROUTE'] === 'match-performance') {
+  if (!matchPerformanceRoot || !isAbsolute(matchPerformanceRoot)) {
+    throw new Error('Launch the isolated match benchmark with npm run perf:match.')
+  }
+  app.setPath('userData', join(matchPerformanceRoot, 'user-data'))
+  app.setPath('sessionData', join(matchPerformanceRoot, 'session-data'))
+  // Keep foreground scheduling when automation covers the benchmark window.
+  // These switches never apply to an ordinary game launch.
+  for (const flag of [
+    'disable-background-timer-throttling',
+    'disable-backgrounding-occluded-windows',
+    'disable-renderer-backgrounding'
+  ])
+    app.commandLine.appendSwitch(flag)
+  const disabledFeatures = app.commandLine.getSwitchValue('disable-features')
+  app.commandLine.appendSwitch(
+    'disable-features',
+    [disabledFeatures, 'CalculateNativeWinOcclusion'].filter(Boolean).join(',')
+  )
+}
 /**
  * Keep the native menu bar visible for development and testing.
  * Set this to false for the release build to restore Alt-to-reveal behavior.
@@ -109,6 +136,10 @@ async function createWindow(
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    if (matchPerformanceRoot) {
+      mainWindow.focus()
+      mainWindow.webContents.focus()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -151,9 +182,11 @@ void app
         })
     })
     matchLogs = new MatchLogRepository(
-      is.dev
-        ? join(appPath, 'artifacts', 'match-logs')
-        : join(app.getPath('userData'), 'match-logs')
+      matchPerformanceRoot
+        ? join(matchPerformanceRoot, 'match-logs')
+        : is.dev
+          ? join(appPath, 'artifacts', 'match-logs')
+          : join(app.getPath('userData'), 'match-logs')
     )
     await matchLogs
       .initialize()
@@ -210,6 +243,31 @@ void app
 
     const mainWindow = await createWindow(windowSettingsRepository)
     installSceneMenu(mainWindow)
+    if (matchPerformanceRoot) {
+      const display = screen.getDisplayMatching(mainWindow.getBounds())
+      await writeFile(
+        join(matchPerformanceRoot, 'environment.json'),
+        JSON.stringify({
+          electron: process.versions.electron,
+          chrome: process.versions.chrome,
+          platform: process.platform,
+          display: {
+            id: display.id,
+            refreshHz: display.displayFrequency,
+            scaleFactor: display.scaleFactor,
+            size: display.size
+          },
+          contentSize: mainWindow.getContentSize(),
+          benchmarkScheduling: [
+            'disable-background-timer-throttling',
+            'disable-backgrounding-occluded-windows',
+            'disable-renderer-backgrounding',
+            'CalculateNativeWinOcclusion disabled'
+          ],
+          isolatedProfile: true
+        })
+      )
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length !== 0) return

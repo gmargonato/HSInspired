@@ -34,6 +34,8 @@ import {
 } from '../features/game/ai-turn-controller'
 import { MatchRecorder, logObject } from '../features/game/match-recorder'
 import type { MatchLogsApi } from '../../shared/ipc/match-logs'
+import type { PreferencesApi, AiMode } from '../../shared/ipc/preferences'
+import { LocalAiDecisionApi } from '../features/game/local-ai-decision-api'
 
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
@@ -60,7 +62,8 @@ export class GameScene extends Scene {
       retry?: () => void
     ) => void = console.error,
     private readonly progression?: ProgressionStore,
-    private readonly dialogs?: DialogService
+    private readonly dialogs?: DialogService,
+    private readonly preferences?: PreferencesApi
   ) {
     super()
     this.route = route
@@ -106,6 +109,7 @@ export class GameScene extends Scene {
       decks.map((d) => `${d.id} — ${d.heroId}`)
     )
 
+    const aiMode = await this.readAiMode()
     this.recorder = new MatchRecorder(
       this.matchLogs,
       logObject({
@@ -113,7 +117,8 @@ export class GameScene extends Scene {
         ...(this.route.generatedOpponent
           ? { generatedOpponent: this.route.generatedOpponent }
           : {}),
-        aiRuntimeSettings: { ...AI_CONVERSATION_LIMITS }
+        aiRuntimeSettings: { ...AI_CONVERSATION_LIMITS },
+        aiMode
       }),
       this.reportLogError
     )
@@ -130,11 +135,14 @@ export class GameScene extends Scene {
       opponentStrategy: this.route.generatedOpponent?.strategy,
       recorder: this.recorder
     })
+    const aiApi = aiMode === 'hardware' ? new LocalAiDecisionApi(aiSession) : this.ai
     const aiController = new AiTurnController({
-      api: this.ai,
+      api: aiApi,
       session: aiSession,
       logger: aiLogger,
-      recorder: this.recorder
+      recorder: this.recorder,
+      // Hardware AI has no transport dependency and must remain playable offline.
+      ...(aiMode === 'hardware' ? { online: () => true } : {})
     })
 
     const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
@@ -157,7 +165,7 @@ export class GameScene extends Scene {
       renderer: this.appInstance.renderer,
       cursor: this.sceneManager.cursor,
       logger: aiLogger,
-      ai: this.ai,
+      ai: aiApi,
       aiRuntime: { session: aiSession, controller: aiController },
       onMatchEnded: (event) => this.recordMatchResult(event),
       onMatchComplete: () => this.router?.navigate(this.createExitRoute()),
@@ -174,6 +182,19 @@ export class GameScene extends Scene {
       this.view.dispose()
       this.view = null
       throw error
+    }
+  }
+
+  private async readAiMode(): Promise<AiMode> {
+    const preferences =
+      this.preferences ??
+      (typeof window !== 'undefined' ? window.api?.preferences : undefined)
+    if (!preferences) return 'api'
+    try {
+      return (await preferences.get()).aiMode
+    } catch (error) {
+      this.logger?.warn('[GameScene] AI mode preference unavailable; using API.', error)
+      return 'api'
     }
   }
 
@@ -271,7 +292,7 @@ export class GameScene extends Scene {
   }
 
   update(deltaMS: number): void {
-    this.view?.updateShadows(deltaMS)
+    this.view?.updateFrame(deltaMS)
   }
 
   playOpeningReveal(): Promise<void> {
@@ -296,6 +317,18 @@ export class GameScene extends Scene {
   async devExerciseHandInteraction(): Promise<void> {
     if (!this.view) throw new Error('Game view is not ready for dev commands.')
     await this.view.devExerciseHandInteraction()
+  }
+
+  devGetHandInteractionSnapshot(): ReturnType<
+    GameBoardView['devGetHandInteractionSnapshot']
+  > {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    return this.view.devGetHandInteractionSnapshot()
+  }
+
+  async devWaitForPresentationIdle(): Promise<void> {
+    if (!this.view) throw new Error('Game view is not ready for dev commands.')
+    await this.view.devWaitForPresentationIdle()
   }
 
   concede(): void {

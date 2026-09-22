@@ -44,17 +44,26 @@ import {
   aiSystemContext
 } from './ai-context'
 
+function effectTargetController(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return undefined
+  return (value as { readonly controller?: unknown }).controller
+}
+
 // Byte limits bound payload size; they are not model token-window guarantees.
 export const AI_CONVERSATION_LIMITS = {
   maxExchanges: 16,
   maxMessageBytes: AI_REQUEST_LIMITS.maxContextBytes
 } as const
 const AI_SILENT_RETRY_DELAY_MS = 1000
+const AI_OPPONENT_RESTORE_GUARD = 'opponent-restore'
+const AI_OPPONENT_RESTORE_MESSAGE =
+  'The selected action restores health on the opposing side, which is never correct. Choose an action that helps your own side, or End Turn.'
 
 export interface AiActionDecision extends AiDecisionIdentity {
   readonly actionId: string
   readonly command: TurnMatchCommand
-  readonly source: 'model' | 'forced' | 'random-timeout'
+  readonly source: 'model' | 'forced' | 'safe-fallback' | 'random-timeout'
   readonly reason?: string
   readonly expectedResult?: string
 }
@@ -228,7 +237,11 @@ export class AiTurnController {
           definition?.effects.some(
             (effect) =>
               ['cast', 'battlecry'].includes(effect.trigger) &&
-              (effect.actions ?? []).some((action) => action.action === 'restore')
+              (effect.actions ?? []).some(
+                (action) =>
+                  action.action === 'restore' &&
+                  effectTargetController(action.target) !== 'self'
+              )
           ) ?? false
         )
       }
@@ -313,6 +326,39 @@ export class AiTurnController {
     await this.waitForSilentRetry()
     if (!this.current(identity)) return null
     return this.choose()
+  }
+  private safeFallback(
+    error: unknown,
+    identity: AiDecisionIdentity
+  ): AiActionDecision | null {
+    if (!this.current(identity) || this.active?.identity !== identity) return null
+    const legal = this.legalCommands()
+    const endTurn = aiActions(this.options.session, legal).find(
+      (action) => action.command.type === 'end-turn'
+    )
+    if (!endTurn) {
+      this.abandon(new Error('AI recovery exhausted without a legal End Turn.'), identity)
+      return null
+    }
+    this.resetConversation()
+    const decision: AiActionDecision = {
+      ...identity,
+      actionId: endTurn.id,
+      command: endTurn.command,
+      source: 'safe-fallback',
+      reason: 'AI recovery was exhausted; ending the turn with a current legal action.'
+    }
+    this.log(
+      'safe-fallback',
+      {
+        ...decision,
+        ...(error instanceof AiRequestError ? { diagnostics: error.details } : {}),
+        recovery: 'automatic-recovery-exhausted'
+      },
+      true
+    )
+    if (this.options.recorder) this.options.recorder.decisionId = identity.requestId
+    return decision
   }
   private messages(
     current: AiMessage,
@@ -714,24 +760,24 @@ export class AiTurnController {
                       })
                     }
                     if (this.commitsRestoreOntoOpponent(action.command)) {
-                      throw new Error(
-                        'The selected action restores health on the opposing side, which is never correct. Choose an action that helps your own side, or End Turn.'
-                      )
+                      throw new Error(AI_OPPONENT_RESTORE_MESSAGE)
                     }
                   }
                 } catch (error) {
-                  throw new AiRequestError(
-                    error instanceof Error ? error.message : String(error),
-                    {
-                      repairable: true,
-                      failureKind: 'invalid-choice',
-                      rejectedContent: JSON.stringify({
-                        reason: response.reason,
-                        choice: response.choice
-                      }),
-                      ...(response.usage ? { usage: response.usage } : {})
-                    }
-                  )
+                  const reason =
+                    error instanceof Error ? error.message : String(error)
+                  throw new AiRequestError(reason, {
+                    repairable: true,
+                    failureKind: 'invalid-choice',
+                    ...(reason === AI_OPPONENT_RESTORE_MESSAGE
+                      ? { safetyGuard: AI_OPPONENT_RESTORE_GUARD }
+                      : {}),
+                    rejectedContent: JSON.stringify({
+                      reason: response.reason,
+                      choice: response.choice
+                    }),
+                    ...(response.usage ? { usage: response.usage } : {})
+                  })
                 }
               }
               break
@@ -974,6 +1020,11 @@ export class AiTurnController {
         }
       } catch (error) {
         if (!this.current(identity) || this.active?.identity !== identity) return null
+        if (
+          error instanceof AiRequestError &&
+          error.details?.safetyGuard === AI_OPPONENT_RESTORE_GUARD
+        )
+          return this.safeFallback(error, identity)
         if (
           !freshContext &&
           error instanceof AiRequestError &&

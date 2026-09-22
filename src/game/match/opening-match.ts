@@ -1308,10 +1308,40 @@ export function createOpeningMatch(
       try {
         return operation({
           getState: () => instance.getState(),
+          getAiObservation: (participantId, policy) =>
+            instance.getAiObservation!(participantId, policy),
           dispatch: (command: unknown) => instance.dispatch(command),
           getPlayInput: (participantId, cardInstanceId, choice) =>
             instance.getPlayInput!(participantId, cardInstanceId, choice),
-          getLegality: (participantId) => instance.getLegality!(participantId)
+          getLegality: (participantId) => instance.getLegality!(participantId),
+          analyze: (nestedOperation) => instance.analyze(nestedOperation)
+        })
+      } finally {
+        state = stateSnapshot
+        rng.restore(rngSnapshot)
+        nextEntityOrdinal = nextEntityOrdinalSnapshot
+        devDeckRefillCounter = devDeckRefillCounterSnapshot
+      }
+    },
+    analyzeWithSeed<T>(
+      seed: number,
+      operation: (fork: import('./opening-match-types').OpeningMatchAnalysis) => T
+    ): T {
+      const stateSnapshot = cloneOpeningMatchState(state)
+      const rngSnapshot = rng.snapshot()
+      const nextEntityOrdinalSnapshot = nextEntityOrdinal
+      const devDeckRefillCounterSnapshot = devDeckRefillCounter
+      try {
+        rng.restore(seed)
+        return operation({
+          getState: () => instance.getState(),
+          getAiObservation: (participantId, policy) =>
+            instance.getAiObservation!(participantId, policy),
+          dispatch: (command: unknown) => instance.dispatch(command),
+          getPlayInput: (participantId, cardInstanceId, choice) =>
+            instance.getPlayInput!(participantId, cardInstanceId, choice),
+          getLegality: (participantId) => instance.getLegality!(participantId),
+          analyze: (nestedOperation) => instance.analyze(nestedOperation)
         })
       } finally {
         state = stateSnapshot
@@ -1607,11 +1637,13 @@ export function createOpeningMatch(
             player.hand.length >= MAX_HAND_SIZE
               ? {
                   type: 'card-burned',
+                  origin: 'deck',
                   participantId: player.participantId,
                   card
                 }
               : {
                   type: 'card-drawn',
+                  origin: 'deck',
                   participantId: player.participantId,
                   card
                 }

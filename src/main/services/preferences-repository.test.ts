@@ -2,6 +2,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import {
+  parsePreferences,
+  parsePreferencesUpdateRequest
+} from '../../shared/ipc/preferences'
 import { PreferencesRepository } from './preferences-repository'
 
 const temporaryDirectories: string[] = []
@@ -33,41 +37,48 @@ describe('PreferencesRepository', () => {
   it('starts with no last played deck when no file exists', async () => {
     const { repository } = await createRepository()
 
-    expect(await repository.get()).toEqual({ lastPlayedDeckId: null })
+    expect(await repository.get()).toEqual({ lastPlayedDeckId: null, aiMode: 'api' })
   })
 
   it('persists the last played deck id across repository reloads', async () => {
     const { repository, filePath } = await createRepository()
 
-    await repository.set({ lastPlayedDeckId: 'deck-123' })
+    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'api' })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
-      lastPlayedDeckId: 'deck-123'
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'api'
     })
   })
 
   it('clears the last played deck id back to null', async () => {
     const { repository, filePath } = await createRepository()
 
-    await repository.set({ lastPlayedDeckId: 'deck-123' })
-    await repository.set({ lastPlayedDeckId: null })
+    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'hardware' })
+    await repository.set({ lastPlayedDeckId: null, aiMode: 'hardware' })
 
     const persisted = JSON.parse(await readFile(filePath, 'utf8'))
-    expect(persisted.version).toBe(1)
+    expect(persisted.version).toBe(2)
     expect(await new PreferencesRepository(filePath).get()).toEqual({
-      lastPlayedDeckId: null
+      lastPlayedDeckId: null,
+      aiMode: 'hardware'
     })
   })
 
   it('rejects invalid deck ids without modifying the saved file', async () => {
     const { repository, filePath } = await createRepository()
-    await repository.set({ lastPlayedDeckId: 'deck-123' })
+    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'api' })
     const saved = await readFile(filePath, 'utf8')
 
-    await expect(repository.set({ lastPlayedDeckId: '' })).rejects.toThrow()
     await expect(
-      repository.set({ lastPlayedDeckId: '   ' as string })
+      repository.set({ lastPlayedDeckId: '', aiMode: 'api' })
     ).rejects.toThrow()
-    expect(await repository.get()).toEqual({ lastPlayedDeckId: 'deck-123' })
+    await expect(
+      repository.set({ lastPlayedDeckId: '   ' as string, aiMode: 'api' })
+    ).rejects.toThrow()
+    expect(await repository.get()).toEqual({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'api'
+    })
     expect(await readFile(filePath, 'utf8')).toBe(saved)
   })
 
@@ -75,10 +86,11 @@ describe('PreferencesRepository', () => {
     const { filePath, repository } = await createRepository()
     await writeFile(filePath, '{not valid json', 'utf8')
 
-    expect(await repository.get()).toEqual({ lastPlayedDeckId: null })
-    await repository.set({ lastPlayedDeckId: 'deck-123' })
+    expect(await repository.get()).toEqual({ lastPlayedDeckId: null, aiMode: 'api' })
+    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'api' })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
-      lastPlayedDeckId: 'deck-123'
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'api'
     })
   })
 
@@ -91,7 +103,51 @@ describe('PreferencesRepository', () => {
     )
 
     expect(await new PreferencesRepository(filePath).get()).toEqual({
-      lastPlayedDeckId: null
+      lastPlayedDeckId: null,
+      aiMode: 'api'
     })
+  })
+
+  it('migrates version 1 preferences and preserves the deck id', async () => {
+    const { filePath, repository } = await createRepository()
+    await writeFile(
+      filePath,
+      JSON.stringify({ version: 1, lastPlayedDeckId: 'deck-123' }),
+      'utf8'
+    )
+
+    expect(await repository.get()).toEqual({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'api'
+    })
+    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'hardware' })
+    expect(await new PreferencesRepository(filePath).get()).toEqual({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'hardware'
+    })
+  })
+
+  it('falls back to API for an invalid saved AI mode without losing the deck id', async () => {
+    const { filePath, repository } = await createRepository()
+    await writeFile(
+      filePath,
+      JSON.stringify({ version: 2, lastPlayedDeckId: 'deck-123', aiMode: 'unknown' }),
+      'utf8'
+    )
+
+    expect(await repository.get()).toEqual({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'api'
+    })
+  })
+
+  it('accepts only the two AI modes in preferences requests and responses', () => {
+    expect(parsePreferencesUpdateRequest({ aiMode: 'hardware' })).toEqual({
+      aiMode: 'hardware'
+    })
+    expect(() => parsePreferencesUpdateRequest({ aiMode: 'unknown' })).toThrow()
+    expect(() =>
+      parsePreferences({ lastPlayedDeckId: null, aiMode: 'unknown' })
+    ).toThrow()
   })
 })
