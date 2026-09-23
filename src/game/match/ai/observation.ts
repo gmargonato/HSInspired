@@ -1,5 +1,6 @@
 import type { CardId } from '../../content/cards'
 import type { Deck } from '../../decks'
+import { cloneUnknown } from '../match-state-snapshot'
 import type { OpeningCard, OpeningMatchState } from '../opening-match-types'
 import type { MatchSetup, PlayerId } from '../match-types'
 import type {
@@ -14,7 +15,7 @@ function observedCard(card: OpeningCard, revealCost: boolean): AiObservedCard {
     instanceId: card.instanceId,
     ...(revealCost
       ? {
-          modifications: structuredClone({
+          modifications: cloneUnknown({
             attack: card.attack,
             health: card.health,
             enchantments: card.enchantments,
@@ -29,7 +30,7 @@ function observedCard(card: OpeningCard, revealCost: boolean): AiObservedCard {
 }
 
 function stripOrdering<T extends object>(value: T): T {
-  const result = structuredClone(value) as Record<string, unknown>
+  const result = cloneUnknown(value) as Record<string, unknown>
   delete result['creationOrdinal']
   delete result['playOrder']
   return result as T
@@ -78,7 +79,7 @@ export function createAiObservation(
     weapon: player.weapon ? stripOrdering(player.weapon) : null,
     mana: structuredClone(player.mana),
     heroPower: stripOrdering(player.heroPower),
-    effects: structuredClone({
+    effects: cloneUnknown({
       cthun: player.cthun,
       cthunDied: player.cthunDied,
       overload: player.overload,

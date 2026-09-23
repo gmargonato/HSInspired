@@ -7,7 +7,7 @@
  * Fanned layouts (mulligan hand of 3 or 4 cards, remote hand of card backs) are
  * NOT single placements: they are parameterized spreads. Only the parameters
  * are edited here; the per-card math lives in `hand-layout.ts` and
- * `GameBoardView.layoutRemoteHand`, so "three vs four cards" is never solved by
+ * `remote-hand-layout.ts`, so "three vs four cards" is never solved by
  * moving individual cards.
  */
 
@@ -478,11 +478,15 @@ export const GAME_BOARD_LAYOUT = {
     compactStartCount: 4,
     /** Hand size at which the compact fan reaches its maximum. */
     compactFullCount: 10,
-    /** Upward tuck applied to the outer cards. */
+    /** Upward tuck applied to the outer cards in small hands. */
     edgeTuck: 26,
+    /** Maximum upward edge tuck, eased in as the hand fills. */
+    compactEdgeTuck: 50,
     anchor: BOTTOM_CENTER,
-    /** Per-back rotation step around the fan (radians). */
-    rotationStep: 0.11
+    /** Outer-card rotation at four cards (radians); smaller hands ramp up to it. */
+    maxRotation: 0.25,
+    /** Maximum outer-card rotation, eased in as the hand fills (radians). */
+    compactMaxRotation: 0.42
   },
 
   /**

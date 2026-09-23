@@ -1,10 +1,7 @@
 import {
   Container,
-  DOMAdapter,
-  RenderTexture,
   Sprite,
   Texture,
-  type Renderer,
   FederatedPointerEvent,
   FederatedWheelEvent
 } from 'pixi.js'
@@ -29,19 +26,6 @@ import { MatchHistoryModel } from './match-history-model'
 
 const local = asPlayerId('local')
 const remote = asPlayerId('remote')
-
-function stubShaderCanvas(): () => void {
-  const canvas = vi.spyOn(DOMAdapter.get(), 'createCanvas').mockReturnValue({
-    getContext: () => null
-  } as unknown as HTMLCanvasElement)
-  return () => canvas.mockRestore()
-}
-
-function previewRenderer(): Renderer {
-  return {
-    generateTexture: () => RenderTexture.create({ width: 10, height: 10 })
-  } as unknown as Renderer
-}
 
 function played(cardId: string, participantId = remote): HistoryActionResolvedEvent {
   return {
@@ -383,14 +367,7 @@ describe('history rail lifecycle', () => {
     const textures = new Proxy({}, { get: () => texture }) as ConstructorParameters<
       typeof MatchHistoryView
     >[0]
-    const view = new MatchHistoryView(
-      textures,
-      local,
-      vi.fn(),
-      undefined,
-      undefined,
-      previewRenderer()
-    )
+    const view = new MatchHistoryView(textures, local, vi.fn())
     const settle = (): void => {
       for (const child of view.rail.children)
         for (const tween of gsap.getTweensOf(child)) tween.progress(1)
@@ -421,7 +398,6 @@ describe('history rail lifecycle', () => {
   })
 
   it('keeps seven reusable slots and closes pending previews on leaving the rail', async () => {
-    const restoreCanvas = stubShaderCanvas()
     const artwork = vi
       .spyOn(CardAssetResolver.prototype, 'loadArtwork')
       .mockResolvedValue(undefined)
@@ -438,14 +414,7 @@ describe('history rail lifecycle', () => {
       typeof MatchHistoryView
     >[0]
     const desaturate = vi.fn()
-    const view = new MatchHistoryView(
-      textures,
-      local,
-      desaturate,
-      undefined,
-      undefined,
-      previewRenderer()
-    )
+    const view = new MatchHistoryView(textures, local, desaturate)
     try {
       const rail = view.children[0]
       const slots = [...rail.children]
@@ -461,10 +430,8 @@ describe('history rail lifecycle', () => {
       pointer.global.set(rail.x + 20, rail.y + 20)
       rail.emit('pointerenter', pointer)
       await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(view.children[1].children).toHaveLength(2)
-      expect(view.children[1].children[0]?.label).toBe(
-        'game.history.preview.ghost-outline-target'
-      )
+      expect(view.children[1].children).toHaveLength(1)
+      expect(view.children[1].children[0]?.label).toBe('game.history.source')
       expect(desaturate).toHaveBeenLastCalledWith(true)
       const wheel = new FederatedWheelEvent(null!)
       wheel.deltaY = 1
@@ -481,7 +448,6 @@ describe('history rail lifecycle', () => {
       expect(desaturate).toHaveBeenLastCalledWith(false)
     } finally {
       if (!view.destroyed) view.destroy({ children: true })
-      restoreCanvas()
       artwork.mockRestore()
       create.mockRestore()
     }

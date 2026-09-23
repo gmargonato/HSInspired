@@ -10,6 +10,7 @@ import type {
   EffectDomainEvent,
   OpeningMatchPublicEvent,
   OpeningMatchEvent,
+  PendingDiscoverChoice,
   CoinGrantedEvent,
   OpeningCardDrawnEvent,
   CardDrawnEvent,
@@ -27,6 +28,7 @@ function maskPublicCard(
   const {
     knownTo: _knownTo,
     startedInDeck: _startedInDeck,
+    concealedDeathrattleChoice,
     ...withoutKnowledge
   } = cloneUnknown(card)
   void _startedInDeck
@@ -35,7 +37,13 @@ function maskPublicCard(
     (card.zone !== 'deck' &&
       (card.knownTo?.includes(viewerId) === true ||
         (card.zone === 'hand' && card.controllerId === viewerId)))
-  if (visible) return withoutKnowledge as OpeningPublicCard
+  if (visible)
+    return {
+      ...withoutKnowledge,
+      ...(card.ownerId === viewerId && concealedDeathrattleChoice !== undefined
+        ? { concealedDeathrattleChoice }
+        : {})
+    } as OpeningPublicCard
   return {
     ...withoutKnowledge,
     cardId: null,
@@ -67,6 +75,20 @@ export function getOpeningMatchPublicState(
     void _originalDeckCardIds
     return {
       ...visiblePlayer,
+      board: player.board.map((minion) => {
+        if (player.participantId === viewerId) return minion
+        const {
+          concealedDeathrattleChoice: _concealedDeathrattleChoice,
+          ...withoutPrivateChoice
+        } = minion
+        const deathrattles = minion.deathrattles ?? []
+        const visibleDeathrattles = deathrattles.filter(
+          (deathrattle) => deathrattle.concealed !== true
+        )
+        return visibleDeathrattles.length === deathrattles.length
+          ? withoutPrivateChoice
+          : { ...withoutPrivateChoice, deathrattles: visibleDeathrattles }
+      }),
       // Deck order and identity are private even to its owner in a public snapshot.
       deck: player.deck.map((card) => maskPublicCard(card, viewerId)),
       hand: player.hand.map((card) => maskPublicCard(card, viewerId)),
@@ -99,14 +121,27 @@ export function getOpeningMatchPublicState(
   const pendingDiscover =
     snapshot.pendingDiscover?.participantId === viewerId
       ? (() => {
-          const { continuation: _continuation, ...withoutContinuation } =
-            snapshot.pendingDiscover!
-          void _continuation
+          const projectEntry = (
+            entry: Omit<PendingDiscoverChoice, 'queued'>
+          ) => {
+            const {
+              continuation: _continuation,
+              correctCandidateInstanceId: _correctCandidateInstanceId,
+              ...withoutPrivateFields
+            } = entry
+            void _continuation
+            void _correctCandidateInstanceId
+            return {
+              ...withoutPrivateFields,
+              candidates: entry.candidates.map((card) =>
+                maskPublicCard(card, viewerId, true)
+              )
+            }
+          }
+          const { queued, ...current } = snapshot.pendingDiscover!
           return {
-            ...withoutContinuation,
-            candidates: snapshot.pendingDiscover.candidates.map((card) =>
-              maskPublicCard(card, viewerId, true)
-            )
+            ...projectEntry(current),
+            ...(queued ? { queued: queued.map(projectEntry) } : {})
           }
         })()
       : undefined

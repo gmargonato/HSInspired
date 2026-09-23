@@ -34,6 +34,8 @@ walk(rendererOutput)
 
 const devOnlyMarkers = [
   'CardInspectorScene',
+  'HeroPowerAnimScene',
+  'hero-power-anim.controls',
   'features/dev/card-inspector',
   'runMatchPerformanceBenchmark',
   'VITE_DEV_START_ROUTE'
@@ -47,7 +49,7 @@ const leakedMarkers = textFiles.flatMap((path) => {
 
 if (leakedMarkers.length > 0) {
   throw new Error(
-    `Production build contains dev-only Card Inspector markers: ${JSON.stringify(leakedMarkers)}`
+    `Production build contains development-only markers: ${JSON.stringify(leakedMarkers)}`
   )
 }
 

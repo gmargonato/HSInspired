@@ -65,13 +65,13 @@ import {
 } from '../../ui/asset-registry'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { Actor } from '../../ui/components/actor'
-import { PreviewGhostOutline } from '../../rendering/effects/preview-ghost-outline'
 import { BoardPositionController, type BoardSide } from './board-position-controller'
 import { BoardShadowLayer } from '../../rendering/shadows/board-shadow-layer'
 import { attachShadow, getShadowCaster } from '../../rendering/shadows/shadow-caster'
 import { TARGETING_ARROW_HEAD, type CursorManager } from '../../ui/components/cursor'
 import { GAME_HEIGHT, GAME_WIDTH } from '../../rendering/layout'
 import { DEFAULT_HAND_LAYOUT, HandPointer, resolveHandHover } from './hand-layout'
+import { remoteHandMetrics, remoteHandTransform } from './remote-hand-layout'
 import { DEFAULT_HAND_DRAG } from './hand-drag'
 import {
   OneShotPointerTapGuard,
@@ -97,11 +97,13 @@ import {
 import type { HandEntry } from './game-hand-entry'
 import { CardDrawAnimation, type CardDrawProfile } from './card-draw-animation'
 import { CARD_DRAW_LAYOUT } from './card-draw-layout'
+import { DeckStackView } from './deck-stack-view'
 import { CardPlayAnimation, type CardPlayPose } from './card-play-animation'
 import { CARD_PLAY_LAYOUT } from './card-play-layout'
 import { CardDepartureAnimation } from './card-departure-animation'
 import { CARD_DEPARTURE_LAYOUT } from './card-departure-layout'
 import { HeroPowerView, type HeroPowerLayout } from './hero-power-view'
+import { HeroPowerEffectsPresenter } from './hero-power-effects/hero-power-effects-presenter'
 import {
   MinionView,
   type MinionViewTextures
@@ -121,6 +123,7 @@ import {
 } from './board-layout'
 import { AttackLine } from './attack-line'
 import { getCombatImpactProfile } from './combat-impact'
+import { runScreenShake } from './screen-shake'
 import { hasAvailableTurnAction } from './turn-action-availability'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { MINION_CANVAS } from '../../rendering/minions/minion-layout'
@@ -270,14 +273,6 @@ type MatchHoverTarget =
       readonly side: SecretPresentationSide
     }
 
-const COMBAT_SHAKE_DIRECTIONS = [
-  { x: 1, y: -0.25 },
-  { x: -0.75, y: 0.55 },
-  { x: 0.55, y: -0.75 },
-  { x: -0.35, y: 0.3 },
-  { x: 0.2, y: -0.15 }
-] as const
-
 function cardDefinition(card: OpeningCard): CardDefinition {
   return CARD_CATALOG.require(card.cardId)
 }
@@ -308,6 +303,7 @@ export class GameBoardView extends Actor {
   private historyPreviewDesaturated = false
   private badgePreviewDesaturated = false
   private readonly combat: GameCombatPresentation
+  private readonly heroPowerEffects: HeroPowerEffectsPresenter
   private readonly cardPlay: GameCardTargeting
   private readonly hand: GameHandView
   private readonly mulligan: GameMulliganView
@@ -332,12 +328,10 @@ export class GameBoardView extends Actor {
     return this.boardPositions.views('remote')
   }
   private boardCardPreview: CardView | null = null
-  private boardCardPreviewGhost: PreviewGhostOutline | null = null
   private hoveredBoardCardView: MinionView | WeaponView | null = null
   private boardCardPreviewRequest = 0
   private requestedBoardCardPreviewKey: string | null = null
   private heroPowerPreview: HeroPowerCardView | null = null
-  private heroPowerPreviewGhost: PreviewGhostOutline | null = null
   private hoveredHeroPowerParticipantId: PlayerId | null = null
   private requestedHeroPowerPreviewKey: string | null = null
   private readonly weaponViews = new Map<PlayerId, WeaponView>()
@@ -390,7 +384,7 @@ export class GameBoardView extends Actor {
   /** Hosts discard flights above the hand, HUD, and summons. */
   private readonly discardFlightLayer = new Container()
   private readonly deckLayer = new Container()
-  private readonly deckViews = new Map<PlayerId, Sprite>()
+  private readonly deckViews = new Map<PlayerId, DeckStackView>()
   private readonly drawOrigins = new WeakMap<Container, Sprite>()
   private readonly drawAnimations = new Set<CardDrawAnimation>()
   private readonly turnLayer = this.hud.turnLayer
@@ -707,6 +701,12 @@ export class GameBoardView extends Actor {
       this.animationScope
     )
     this.shadowLayer = new BoardShadowLayer(this.gameplayLayer, options.renderer)
+    this.heroPowerEffects = new HeroPowerEffectsPresenter(
+      this.heroPowerViews,
+      options.gameAssets,
+      this.animationScope,
+      this
+    )
     this.combat = new GameCombatPresentation(options.gameAssets, this.animationScope, {
       findCharacter: (ownerId, character) => this.findCombatView(ownerId, character),
       findMinion: (ownerId, instanceId) => this.findMinionView(ownerId, instanceId),
@@ -717,7 +717,8 @@ export class GameBoardView extends Actor {
       layoutLocalRow: () => this.applyLocalBoardLayout(),
       layoutRemoteRow: () => this.applyRemoteBoardLayout(),
       positions: this.boardPositions,
-      screenShake: (attack) => this.runCombatScreenShake(attack),
+      screenShake: (attack) =>
+        runScreenShake(this, this.animationScope, getCombatImpactProfile(attack)),
       onImpact: () => this.refreshCombatAttackabilityAfterImpact(),
       renderer: options.renderer
     })
@@ -854,7 +855,7 @@ export class GameBoardView extends Actor {
       warn: () => undefined,
       error: () => undefined
     }
-    this.secretPreviewView = new SecretPreviewView(this.resolver, options.renderer)
+    this.secretPreviewView = new SecretPreviewView(this.resolver)
     const canvas = options.renderer.canvas
     const parent = canvas.parentElement
     this.addCardPicker =
@@ -898,10 +899,10 @@ export class GameBoardView extends Actor {
     this.gameplayLayer.addChild(this.hud.turnButtonLayer)
     this.gameplayLayer.addChild(this.openingLayer)
     this.gameplayLayer.addChild(this.heroLayer)
+    this.gameplayLayer.addChild(this.heroPowerEffects.layer)
     this.questPreviewView = new QuestPreviewView(
       this.resolver,
-      options.gameAssets.questArrow,
-      options.renderer
+      options.gameAssets.questArrow
     )
     this.hoverPreview = new HoverPreviewController<MatchHoverTarget>({
       delayMs: BOARD_TIMING.previewHoverDelay * 1000,
@@ -940,11 +941,6 @@ export class GameBoardView extends Actor {
     // the deck; they are reparented to their final layers after the animation.
     this.gameplayLayer.addChild(this.travelLayer)
     this.gameplayLayer.addChild(this.remoteHandLayer)
-    this.combat.indicatorLayer.label = 'game.character-indicators'
-    this.combat.indicatorLayer.eventMode = 'none'
-    this.combat.indicatorLayer.sortableChildren = true
-    // Hand cards cover damage and healing bursts, including while at rest.
-    this.gameplayLayer.addChild(this.combat.indicatorLayer)
     this.gameplayLayer.addChild(this.hand.layer)
     this.gameplayLayer.addChild(this.hud.deckInfoLayer)
     this.summonLayer.label = 'game.minion-summons'
@@ -982,6 +978,11 @@ export class GameBoardView extends Actor {
     this.combat.layer.eventMode = 'none'
     this.combat.layer.sortableChildren = true
     this.gameplayLayer.addChild(this.combat.layer)
+    // Damage and healing bursts stay above attackers and their return-warp meshes.
+    this.combat.indicatorLayer.label = 'game.character-indicators'
+    this.combat.indicatorLayer.eventMode = 'none'
+    this.combat.indicatorLayer.sortableChildren = true
+    this.gameplayLayer.addChild(this.combat.indicatorLayer)
     // Keep the Pixi arrow body above every other board layer. The cursor's
     // arrow head is rendered in the DOM above the canvas.
     this.attackLineLayer.label = 'game.attack-line-layer'
@@ -1233,8 +1234,7 @@ export class GameBoardView extends Actor {
         this.premiumAppearance.sideFor(
           { instanceId: snapshot.id, ownerId: snapshot.ownerId },
           snapshot.participantId
-        ),
-      this.options.renderer
+        )
     )
     this.matchBackdropLayer.addChild(this.historyView)
     // Keep expanded history above gameplay, but its rail below hand cards.
@@ -1495,7 +1495,10 @@ export class GameBoardView extends Actor {
       const view = HeroView.create(
         {
           label: `game.hero.${player.participantId}`,
-          attack: getHeroAttack(player),
+          attack:
+            state.activePlayerId === player.participantId
+              ? getHeroAttack(player)
+              : 0,
           health: player.hero.health,
           maxHealth: player.hero.maxHealth,
           armor: player.hero.armor,
@@ -1570,12 +1573,14 @@ export class GameBoardView extends Actor {
       [this.localParticipantId, GAME_BOARD_LAYOUT.decks.local],
       [this.remoteParticipantId, GAME_BOARD_LAYOUT.decks.remote]
     ] as const) {
-      const deck = new Sprite(this.options.gameAssets.deck)
-      applyAnchoredPlacement(deck, position)
-      deck.label = `game.deck.${participantId}`
-      deck.eventMode = 'static'
       const side = participantId === this.localParticipantId ? 'local' : 'remote'
-      deck.on('pointerover', () => this.hud.deckInfo?.show(side, deck))
+      const deck = new DeckStackView(
+        this.options.gameAssets,
+        position,
+        GAME_BOARD_LAYOUT.decks.fatigueOffsetX[side]
+      )
+      deck.label = `game.deck.${participantId}`
+      deck.on('pointerover', () => this.hud.deckInfo?.show(side, deck.drawOrigin))
       deck.on('pointerout', () => this.hud.deckInfo?.hide(side))
       this.deckViews.set(participantId, deck)
       this.deckLayer.addChild(deck)
@@ -1597,21 +1602,11 @@ export class GameBoardView extends Actor {
     this.syncTurnControls(state)
   }
 
-  /** Refreshes deck textures, positions, and card-count labels from the engine state. */
+  /** Refreshes deck stacks and card-count labels from the engine state. */
   private syncDeckCounts(state: OpeningMatchState): void {
     for (const player of state.players) {
       const deck = this.deckViews.get(player.participantId)
-      if (deck) {
-        const side =
-          player.participantId === this.localParticipantId ? 'local' : 'remote'
-        const empty = player.deck.length === 0
-        deck.texture = empty
-          ? this.options.gameAssets.fatigueDeck
-          : this.options.gameAssets.deck
-        deck.x =
-          GAME_BOARD_LAYOUT.decks[side].position.x +
-          (empty ? GAME_BOARD_LAYOUT.decks.fatigueOffsetX[side] : 0)
-      }
+      deck?.syncCount(player.deck.length)
     }
     this.hud.sync(
       state,
@@ -1743,6 +1738,9 @@ export class GameBoardView extends Actor {
           !this.isGameplayBlocked(state) &&
           legality?.legalHeroPower === true
       )
+      view.setTargeting(
+        player.participantId === this.localParticipantId && this.heroPowerTargeting
+      )
     }
     this.refreshHoveredHeroPowerPreview()
   }
@@ -1763,7 +1761,9 @@ export class GameBoardView extends Actor {
       local.heroPower.targetingGranted ??
       local.heroPower.targetType ??
       HERO_POWER_CATALOG.require(local.heroPower.id).targeting
-    if (targeting !== 'none') {
+    const targetSelectionRandomized =
+      this.match.getLegality?.(this.localParticipantId).targetSelectionRandomized === true
+    if (targeting !== 'none' && !targetSelectionRandomized) {
       if (this.heroPowerTargeting) {
         this.cancelHeroPowerTargeting()
         return
@@ -1771,6 +1771,8 @@ export class GameBoardView extends Actor {
       this.deselectAttacker()
       this.hand.clearHover()
       this.heroPowerTargeting = true
+      this.syncHeroPowerViews(this.match.getState())
+      this.heroPowerEffects.startTargeting(this.localParticipantId, local.heroPower.id)
       this.hideBoardCardPreview()
       this.options.cursor?.setTargeting(true)
       if (this.options.gameAssets.arrowBody) {
@@ -1798,7 +1800,7 @@ export class GameBoardView extends Actor {
       this.syncTurnControls(this.match.getState())
       return
     }
-    this.cancelHeroPowerTargeting()
+    this.cancelHeroPowerTargeting(true)
     this.syncTurnHud(result.state)
     try {
       await this.enqueuePresentation(result.state, () =>
@@ -1810,10 +1812,12 @@ export class GameBoardView extends Actor {
     }
   }
 
-  private cancelHeroPowerTargeting(): void {
+  private cancelHeroPowerTargeting(confirmed = false): void {
+    if (!confirmed) this.heroPowerEffects.cancelTargeting()
     this.targetGestures.cancel((source) => source.kind === 'hero-power')
     if (!this.heroPowerTargeting) return
     this.heroPowerTargeting = false
+    this.syncHeroPowerViews(this.match.getState())
     this.attackLine.clear()
     this.options.cursor?.setTargeting(false)
     if (this.session) {
@@ -2745,15 +2749,16 @@ export class GameBoardView extends Actor {
     }
 
     const player = this.findPlayer(this.match.getState(), target.ownerId as PlayerId)
+    const minion =
+      target instanceof MinionView
+        ? player.board.find((minion) => minion.instanceId === target.instanceId)
+        : undefined
     const health =
       target instanceof HeroView
         ? player.hero.health + player.hero.armor
-        : target.instanceId
-          ? player.board.find((minion) => minion.instanceId === target.instanceId)
-              ?.health
-          : undefined
+        : minion?.health
     this.combat.syncCombatPreviewMarkers(
-      health !== undefined && health <= damage ? [target] : []
+      !minion?.divineShield && health !== undefined && health <= damage ? [target] : []
     )
   }
 
@@ -2801,8 +2806,14 @@ export class GameBoardView extends Actor {
       target instanceof HeroView
         ? defenderPlayer.hero.health + defenderPlayer.hero.armor
         : (defenderMinion?.health ?? 0)
-    const attackerHealthAfter = Math.max(0, attackerHealth - defenderAttack)
-    const defenderHealthAfter = Math.max(0, defenderHealth - attackerAttack)
+    const attackerHealthAfter = Math.max(
+      0,
+      attackerHealth - (attackerMinion?.divineShield ? 0 : defenderAttack)
+    )
+    const defenderHealthAfter = Math.max(
+      0,
+      defenderHealth - (defenderMinion?.divineShield ? 0 : attackerAttack)
+    )
     const lethalViews: CombatView[] = []
     if (attackerHealthAfter === 0) lethalViews.push(attacker)
     if (defenderHealthAfter === 0) lethalViews.push(target)
@@ -3258,29 +3269,11 @@ export class GameBoardView extends Actor {
     index: number,
     count: number
   ): { x: number; y: number; rotation: number; scale: number } {
-    const midpoint = (count - 1) / 2
-    const { gap, scale } = this.remoteHandMetrics(count)
-    const normalized = midpoint === 0 ? 0 : (index - midpoint) / midpoint
-    return {
-      x: GAME_BOARD_LAYOUT.remoteHand.centerX + (index - midpoint) * gap,
-      y:
-        GAME_BOARD_LAYOUT.remoteHand.baselineY -
-        Math.abs(normalized) * GAME_BOARD_LAYOUT.remoteHand.edgeTuck,
-      rotation: -(index - midpoint) * GAME_BOARD_LAYOUT.remoteHand.rotationStep,
-      scale
-    }
+    return remoteHandTransform(index, count)
   }
 
   private remoteHandMetrics(count: number): { gap: number; scale: number } {
-    const layout = GAME_BOARD_LAYOUT.remoteHand
-    const start = Math.max(1, layout.compactStartCount)
-    const full = Math.max(start, layout.compactFullCount)
-    const progress =
-      count <= start ? 0 : Math.min(1, (count - start) / Math.max(1, full - start))
-    return {
-      gap: layout.gap + (layout.compactGap - layout.gap) * progress,
-      scale: layout.scale + (layout.compactScale - layout.scale) * progress
-    }
+    return remoteHandMetrics(count)
   }
 
   private async presentMulligan(): Promise<void> {
@@ -3504,6 +3497,8 @@ export class GameBoardView extends Actor {
       }
       if (this.destroyed) return
       if (spellStates) this.randomSpellState = state
+      await this.heroPowerEffects.finish()
+      if (this.destroyed) return
       await this.reconcileWeaponViews(state)
       if (!requiresStateReconcile) return
       await this.reconcileEffectMovement(state)
@@ -3659,16 +3654,16 @@ export class GameBoardView extends Actor {
       case 'opening-turn-started':
         this.syncTurnHud(this.match.getState())
         this.handleTurnStarted(event.participantId)
-        await this.presentHeroPowerReveal()
+        await this.heroPowerEffects.reveal()
         return
       case 'turn-started':
         this.syncTurnHud(this.match.getState())
         this.handleTurnStarted(event.participantId)
-        await this.presentHeroPowerFlip(event.participantId, true)
+        await this.heroPowerEffects.refresh(event.participantId)
         return
       case 'hero-power-used':
         this.syncTurnHud(this.match.getState())
-        await this.presentHeroPowerFlip(event.participantId, false)
+        await this.heroPowerEffects.use(event)
         return
       case 'hero-power-replaced':
         await this.presentHeroPowerReplaced(event)
@@ -3692,14 +3687,10 @@ export class GameBoardView extends Actor {
         await this.wait(RESOLUTION_TIMING.outcomePause)
         return
       case 'armor-gained': {
-        const player = this.findPlayer(this.presentationState(), event.participantId)
-        const view = this.heroViews.get(event.participantId)
-        view?.setStats(
-          getHeroAttack(player),
-          player.hero.health,
-          event.armorAfter,
-          player.hero.maxHealth
-        )
+        const state = this.presentationState()
+        this.syncHeroPresentation(state, event.participantId, {
+          armor: event.armorAfter
+        })
         await this.wait(RESOLUTION_TIMING.outcomePause)
         return
       }
@@ -3764,17 +3755,11 @@ export class GameBoardView extends Actor {
       case 'dev-minion-summoned':
         await this.presentDevMinionSummoned(event)
         return
-      case 'dev-state-changed':
-        this.syncTurnHud(this.match.getState())
-        for (const player of this.match.getState().players) {
-          this.heroViews
-            .get(player.participantId)
-            ?.setStats(
-              getHeroAttack(player),
-              player.hero.health,
-              player.hero.armor,
-              player.hero.maxHealth
-            )
+      case 'dev-state-changed': {
+        const state = this.match.getState()
+        this.syncTurnHud(state)
+        for (const player of state.players) {
+          this.syncHeroPresentation(state, player.participantId)
           if (player.board.length === 0) {
             const views =
               player.participantId === this.localParticipantId
@@ -3784,7 +3769,7 @@ export class GameBoardView extends Actor {
           }
         }
         if (
-          this.findPlayer(this.match.getState(), this.localParticipantId).hand
+          this.findPlayer(state, this.localParticipantId).hand
             .length === 0
         ) {
           while (this.hand.entries.length > 0) {
@@ -3794,13 +3779,14 @@ export class GameBoardView extends Actor {
           }
         }
         if (
-          this.findPlayer(this.match.getState(), this.remoteParticipantId).hand
+          this.findPlayer(state, this.remoteParticipantId).hand
             .length === 0
         ) {
           this.remoteBackCount = 0
           this.layoutRemoteHand()
         }
         return
+      }
       case 'history-action-resolved':
         this.recordOpeningHistory(event)
         return
@@ -4018,6 +4004,23 @@ export class GameBoardView extends Actor {
 
   /** Adds only the hover grayscale filter, preserving result filters when present. */
   private setHistoryBoardDesaturated(active: boolean): void {
+    const history = this.historyView
+    if (history && !history.rail.destroyed) {
+      if (active && history.rail.parent === this.gameplayLayer) {
+        // Keep the hovered rail in full colour alongside its expanded preview.
+        history.addChildAt(history.rail, 0)
+      } else if (
+        !active &&
+        history.rail.parent === history &&
+        this.hand.layer.parent === this.gameplayLayer &&
+        !this.gameplayLayer.destroyed
+      ) {
+        this.gameplayLayer.addChildAt(
+          history.rail,
+          this.gameplayLayer.getChildIndex(this.hand.layer)
+        )
+      }
+    }
     this.historyPreviewDesaturated = active
     this.updateBoardDesaturation()
   }
@@ -4095,10 +4098,12 @@ export class GameBoardView extends Actor {
     } = {}
   ): void {
     const player = this.findPlayer(state, ownerId)
+    const attack = overrides.attack ?? getHeroAttack(player)
+    const displayedAttack = state.activePlayerId === ownerId ? attack : 0
     this.heroViews
       .get(ownerId)
       ?.setStats(
-        overrides.attack ?? getHeroAttack(player),
+        displayedAttack,
         overrides.health ?? player.hero.health,
         overrides.armor ?? player.hero.armor,
         overrides.maxHealth ?? player.hero.maxHealth
@@ -4501,17 +4506,13 @@ export class GameBoardView extends Actor {
   private async presentHeroReplaced(
     event: Extract<OpeningMatchEvent, { type: 'hero-replaced' }>
   ): Promise<void> {
-    const player = this.findPlayer(this.presentationState(), event.participantId)
+    const state = this.presentationState()
+    const player = this.findPlayer(state, event.participantId)
     const hero = HERO_CATALOG.require(event.heroId)
     const heroPower = HERO_POWER_CATALOG.require(hero.heroPowerId)
     const view = this.heroViews.get(event.participantId)
     const heroPowerView = this.heroPowerViews.get(event.participantId)
-    view?.setStats(
-      getHeroAttack(player),
-      player.hero.health,
-      player.hero.armor,
-      player.hero.maxHealth
-    )
+    this.syncHeroPresentation(state, event.participantId)
     view?.setImmune(player.hero.immune === true)
     heroPowerView?.setCost(heroPower.cost)
     await Promise.all([
@@ -4577,15 +4578,15 @@ export class GameBoardView extends Actor {
     >
   ): void {
     if (event.character.kind === 'hero') {
-      const player = this.findPlayer(this.presentationState(), event.participantId)
-      this.heroViews
-        .get(event.participantId)
-        ?.setStats(
-          getHeroAttack(player),
-          event.healthAfter,
-          event.type === 'character-damaged' ? event.armorAfter : player.hero.armor,
-          player.hero.maxHealth
-        )
+      const state = this.presentationState()
+      const player = this.findPlayer(state, event.participantId)
+      this.syncHeroPresentation(state, event.participantId, {
+        health: event.healthAfter,
+        armor:
+          event.type === 'character-damaged'
+            ? event.armorAfter
+            : player.hero.armor
+      })
       return
     }
     const character = event.character
@@ -4770,25 +4771,6 @@ export class GameBoardView extends Actor {
     if (this.hud.deckTracker.visible) this.hud.deckTracker.update(localPlayer.deck)
   }
 
-  /** Keeps the opening event compatible with the normal turn presentation. */
-  private async presentHeroPowerReveal(): Promise<void> {
-    await Promise.all([...this.heroPowerViews.values()].map((view) => view.flipUp()))
-  }
-
-  /**
-   * Flips one player's hero power up after use on a previous turn, or down
-   * after use this turn. The view ignores a request for its current face.
-   */
-  private async presentHeroPowerFlip(
-    participantId: PlayerId,
-    up: boolean
-  ): Promise<void> {
-    const view = this.heroPowerViews.get(participantId)
-    if (!view) return
-    if (up) await view.flipUp()
-    else await view.flipDown()
-  }
-
   /** Replaces the local hand through one parallel in-place horizontal flip. */
   private async presentGoldenMonkeyHandReplacement(
     replacement: GoldenMonkeyHandReplacement
@@ -4862,7 +4844,6 @@ export class GameBoardView extends Actor {
         )
         if (!card) continue
         entry.card = cloneCard(card)
-        entry.slot.refreshPlayableOutline()
         this.hand.configureSlot(entry.slot)
       }
     } finally {
@@ -4998,7 +4979,7 @@ export class GameBoardView extends Actor {
         if (sourceDeck) {
           this.prepareBackAtDeck(back, this.remoteBackCount - 1)
           const deck = this.deckViews.get(sourceDeck)
-          if (deck) this.drawOrigins.set(back, deck)
+          if (deck) this.drawOrigins.set(back, deck.drawOrigin)
         } else this.prepareBackAtGeneratedOrigin(back, GAME_BOARD_LAYOUT.frame.center)
         await this.animateBackToHand(
           back,
@@ -5049,6 +5030,7 @@ export class GameBoardView extends Actor {
             : event.weapon.maxDurability,
         deathrattle: markers.deathrattle,
         trigger: markers.trigger,
+        lifesteal: markers.lifesteal,
         temporaryAbilityLabels: [
           ...(definition.keywords.includes('mega-windfury')
             ? ['Mega Windfury']
@@ -5065,6 +5047,7 @@ export class GameBoardView extends Actor {
         premiumFrame: this.options.gameAssets.premiumWeapon,
         trigger: this.options.gameAssets.boardTrigger,
         deathrattle: this.options.gameAssets.boardDeathrattle,
+        lifesteal: this.options.gameAssets.minionLifesteal,
         attack: attackTexture,
         durability: durabilityTexture
       },
@@ -5789,37 +5772,6 @@ export class GameBoardView extends Actor {
     }
   }
 
-  /** Applies a short, attack-scaled board shake and always restores its origin. */
-  private async runCombatScreenShake(attack: number): Promise<void> {
-    const profile = getCombatImpactProfile(attack)
-    const baseX = this.x
-    const baseY = this.y
-    const stepDuration = profile.duration / (profile.pulses * 2)
-    const timeline = this.timeline()
-
-    for (let index = 0; index < profile.pulses; index += 1) {
-      const direction = COMBAT_SHAKE_DIRECTIONS[index % COMBAT_SHAKE_DIRECTIONS.length]
-      timeline.to(this, {
-        x: baseX + direction.x * profile.amplitude,
-        y: baseY + direction.y * profile.amplitude,
-        duration: stepDuration,
-        ease: 'power1.out'
-      })
-      timeline.to(this, {
-        x: baseX,
-        y: baseY,
-        duration: stepDuration,
-        ease: 'power1.in'
-      })
-    }
-
-    try {
-      await completeTimeline(timeline)
-    } finally {
-      this.position.set(baseX, baseY)
-    }
-  }
-
   private findMinionView(
     ownerId: PlayerId,
     instanceId: string
@@ -5950,10 +5902,7 @@ export class GameBoardView extends Actor {
 
   private destroyBoardCardPreview(): void {
     const preview = this.boardCardPreview
-    const ghost = this.boardCardPreviewGhost
     this.boardCardPreview = null
-    this.boardCardPreviewGhost = null
-    ghost?.dispose()
     if (!preview || preview.destroyed) return
     this.killTweensOf(preview)
     preview.removeFromParent()
@@ -6137,11 +6086,9 @@ export class GameBoardView extends Actor {
       preview.eventMode = 'none'
       preview.label = `game.board-card-preview.${view.instanceId}`
       this.positionBoardCardPreview(preview, view)
-      const ghost = new PreviewGhostOutline(this.options.renderer, preview)
 
       this.destroyBoardCardPreview()
       this.boardCardPreview = preview
-      this.boardCardPreviewGhost = ghost
       this.boardCardPreviewLayer.addChild(preview)
       this.tweenTo(preview, {
         alpha: 1,
@@ -6178,10 +6125,7 @@ export class GameBoardView extends Actor {
 
   private destroyHeroPowerPreview(): void {
     const preview = this.heroPowerPreview
-    const ghost = this.heroPowerPreviewGhost
     this.heroPowerPreview = null
-    this.heroPowerPreviewGhost = null
-    ghost?.dispose()
     if (!preview || preview.destroyed) return
     this.killTweensOf(preview)
     preview.removeFromParent()
@@ -6292,7 +6236,6 @@ export class GameBoardView extends Actor {
     preview.eventMode = 'none'
     preview.label = `game.hero-power-preview.${participantId}`
     this.positionHeroPowerPreview(preview, view)
-    this.heroPowerPreviewGhost = new PreviewGhostOutline(this.options.renderer, preview)
 
     this.heroPowerPreview = preview
     this.boardCardPreviewLayer.addChild(preview)
@@ -6714,7 +6657,7 @@ export class GameBoardView extends Actor {
         ? this.localParticipantId
         : this.remoteParticipantId
     )
-    if (deckView) this.drawOrigins.set(slot, deckView)
+    if (deckView) this.drawOrigins.set(slot, deckView.drawOrigin)
     slot.setMulliganInteractionEnabled(false)
     slot.position.set(deck.position.x, deck.position.y)
     slot.scale.set(
@@ -6752,7 +6695,7 @@ export class GameBoardView extends Actor {
 
   private prepareBackAtDeck(back: Sprite, sequence: number): void {
     const deckView = this.deckViews.get(this.remoteParticipantId)
-    if (deckView) this.drawOrigins.set(back, deckView)
+    if (deckView) this.drawOrigins.set(back, deckView.drawOrigin)
     back.position.set(
       GAME_BOARD_LAYOUT.decks.remote.position.x,
       GAME_BOARD_LAYOUT.decks.remote.position.y
@@ -6774,17 +6717,10 @@ export class GameBoardView extends Actor {
     staggerIndex = index
   ): Promise<void> {
     if (back.destroyed) return Promise.resolve()
-    const midpoint = (count - 1) / 2
-    const { gap, scale } = this.remoteHandMetrics(count)
-    const normalized = midpoint === 0 ? 0 : (index - midpoint) / midpoint
-    const x = GAME_BOARD_LAYOUT.remoteHand.centerX + (index - midpoint) * gap
+    const { x, y, rotation, scale } = this.remoteHandTransform(index, count)
     if (this.drawOrigins.has(back)) {
-      back.position.set(
-        x,
-        GAME_BOARD_LAYOUT.remoteHand.baselineY -
-          Math.abs(normalized) * GAME_BOARD_LAYOUT.remoteHand.edgeTuck
-      )
-      back.rotation = -(index - midpoint) * GAME_BOARD_LAYOUT.remoteHand.rotationStep
+      back.position.set(x, y)
+      back.rotation = rotation
       back.scale.set(scale)
       return this.animateDeckDeparture(
         back,
@@ -6795,10 +6731,8 @@ export class GameBoardView extends Actor {
     const timeline = this.timeline()
     timeline.to(back, {
       x,
-      y:
-        GAME_BOARD_LAYOUT.remoteHand.baselineY -
-        Math.abs(normalized) * GAME_BOARD_LAYOUT.remoteHand.edgeTuck,
-      rotation: -(index - midpoint) * GAME_BOARD_LAYOUT.remoteHand.rotationStep,
+      y,
+      rotation,
       alpha: 1,
       duration,
       delay: staggerIndex * OPENING_TIMING.cardStagger,
@@ -7406,6 +7340,7 @@ export class GameBoardView extends Actor {
   /** Input pose, dependent presentation, and shadows belong to the same render. */
   updateFrame(deltaMS: number): void {
     this.hand.drag.update(deltaMS)
+    this.hud.setEndTurnHoverSuppressed(this.hand.drag.index !== null)
     this.flushBoardPointerVisuals()
     this.updateShadows(deltaMS)
   }
@@ -7418,6 +7353,7 @@ export class GameBoardView extends Actor {
   }
 
   override dispose(): void {
+    this.heroPowerEffects.dispose()
     window.removeEventListener('resize', this.invalidateCanvasBounds)
     window.removeEventListener('scroll', this.invalidateCanvasBounds, true)
     this.options.renderer.off?.('resize', this.invalidateCanvasBounds)
@@ -7707,7 +7643,7 @@ export class GameBoardView extends Actor {
     if (!deck || this.destroyed) return
     if (
       profile === 'local-reveal' &&
-      deck === this.deckViews.get(this.remoteParticipantId)
+      deck === this.deckViews.get(this.remoteParticipantId)?.drawOrigin
     )
       profile = 'remote-reveal'
     const animation = new CardDrawAnimation(

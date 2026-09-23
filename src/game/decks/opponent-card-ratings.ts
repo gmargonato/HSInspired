@@ -2,6 +2,7 @@
 export const OPPONENT_CARD_RATINGS: Readonly<Record<string, number>> = Object.freeze(
   Object.fromEntries(
     [
+      [2, `basic_stormpike_commando mean_streets_of_gadgetzan_wind_up_burglebot`],
       [
         5,
         `classic_azure_drake classic_savannah_highmane classic_tirion_fordring
@@ -24,6 +25,9 @@ export const OPPONENT_CARD_RATINGS: Readonly<Record<string, number>> = Object.fr
         classic_lightning_bolt classic_feral_spirit classic_siphon_soul
         classic_silver_hand_knight classic_stranglethorn_tiger
         classic_mana_wyrm classic_sorcerers_apprentice classic_kill_command
+        classic_abusive_sergeant classic_power_overwhelming
+        classic_noble_sacrifice classic_redemption naxxramas_avenge
+        classic_freezing_trap classic_explosive_trap classic_counterspell classic_mirror_entity
         basic_water_elemental basic_houndmaster basic_hex basic_shadow_bolt
         basic_korkron_elite basic_flametongue_totem basic_shattered_sun_cleric
         classic_truesilver_champion basic_consecration basic_arcane_intellect
@@ -67,6 +71,9 @@ export const OPPONENT_CARD_RATINGS: Readonly<Record<string, number>> = Object.fr
       [
         3,
         `basic_gnomish_inventor basic_boulderfist_ogre basic_senjin_shieldmasta
+        one_night_in_karazhan_runic_egg classic_repentance
+        whispers_of_the_old_gods_disciple_of_cthun whispers_of_the_old_gods_cthuns_chosen
+        whispers_of_the_old_gods_twilight_elder
         basic_murloc_tidehunter basic_razorfen_hunter basic_dragonling_mechanic
         basic_stormwind_champion basic_bloodlust basic_northshire_cleric
         classic_cult_master classic_earthen_ring_farseer classic_bloodsail_raider

@@ -79,6 +79,7 @@ describe('MinionView outline layering', () => {
       premiumFrame: Texture.WHITE,
       trigger: Texture.EMPTY,
       deathrattle: Texture.EMPTY,
+      lifesteal: Texture.EMPTY,
       attack: Texture.EMPTY,
       durability: Texture.EMPTY
     }
@@ -89,6 +90,7 @@ describe('MinionView outline layering', () => {
       printedDurability: 2,
       deathrattle: false,
       trigger: false,
+      lifesteal: false,
       temporaryAbilityLabels: []
     }
     const views = await Promise.all([
@@ -116,6 +118,7 @@ describe('MinionView outline layering', () => {
       premiumFrame: Texture.WHITE,
       trigger: Texture.EMPTY,
       deathrattle: Texture.EMPTY,
+      lifesteal: Texture.EMPTY,
       attack: Texture.EMPTY,
       durability: Texture.EMPTY
     }
@@ -127,6 +130,7 @@ describe('MinionView outline layering', () => {
         printedDurability: 3,
         deathrattle: false,
         trigger: false,
+        lifesteal: false,
         temporaryAbilityLabels: []
       },
       weaponTextures,

@@ -3,7 +3,6 @@ import { gsap } from '../../animation/animations'
 import type { Texture } from 'pixi.js'
 import type { AnimationScope } from '../../animation/animations'
 import {
-  getHeroAttack,
   type AttackCharacterRef,
   type CharacterCombatantResult,
   type CharacterCombatResolvedEvent,
@@ -1080,8 +1079,7 @@ export class GameCombatPresentation {
       const ownerId = view.ownerId
       if (ownerId) {
         const player = this.context.presentedPlayer(ownerId)
-        view.setStats(
-          getHeroAttack(player),
+        view.setHealthAndArmor(
           player.hero.health,
           player.hero.armor,
           player.hero.maxHealth

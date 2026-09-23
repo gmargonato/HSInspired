@@ -1,4 +1,5 @@
 import {
+  CanvasTextMetrics,
   Text,
   Texture,
   DOMAdapter,
@@ -29,6 +30,9 @@ describe('card cost presentation', () => {
 
 describe('runtime card stat presentation', () => {
   it('coalesces opted-in card snapshots while preserving immediate appearance snapshots', async () => {
+    const metrics = vi
+      .spyOn(CanvasTextMetrics, 'measureText')
+      .mockReturnValue({ lines: ['rules'] } as CanvasTextMetrics)
     const canvas = vi
       .spyOn(DOMAdapter.get(), 'createCanvas')
       .mockReturnValue({ getContext: () => null } as unknown as HTMLCanvasElement)
@@ -104,6 +108,7 @@ describe('runtime card stat presentation', () => {
       canvas.mockRestore()
       width.mockRestore()
       height.mockRestore()
+      metrics.mockRestore()
     }
   })
 
@@ -176,6 +181,9 @@ describe('runtime card stat presentation', () => {
   })
 
   it('refreshes full-card premium layouts by side and preserves explicit inspector previews', async () => {
+    const metrics = vi
+      .spyOn(CanvasTextMetrics, 'measureText')
+      .mockReturnValue({ lines: ['rules'] } as CanvasTextMetrics)
     const canvas = vi
       .spyOn(DOMAdapter.get(), 'createCanvas')
       .mockReturnValue({ getContext: () => null } as unknown as HTMLCanvasElement)
@@ -236,6 +244,7 @@ describe('runtime card stat presentation', () => {
       canvas.mockRestore()
       width.mockRestore()
       height.mockRestore()
+      metrics.mockRestore()
     }
   })
 

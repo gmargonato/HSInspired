@@ -78,6 +78,7 @@ import gameBoard7Image from '@assets/images/match/BOARD-7.png'
 import gameBoard8Image from '@assets/images/match/BOARD-8.png'
 import gameBoard9Image from '@assets/images/match/BOARD-9.png'
 import gameDeckImage from '@assets/images/match/deck.png'
+import gameDeckSlicedImage from '@assets/images/match/deck-sliced.png'
 import gameDeckInfoImage from '@assets/images/match/tray-number-of-cards-hand-deck.png'
 import gameFatigueDeckImage from '@assets/images/match/fatigue-deck.png'
 import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
@@ -163,6 +164,9 @@ import actionButtonConfirmImage from '@assets/images/ui/deck-builder/action-butt
 import actionButtonCancelImage from '@assets/images/ui/deck-builder/action-button-cancel.png'
 import cardPreviewDetailContainerImage from '@assets/images/ui/card-preview/card-preview-detail-container.png'
 import cardAddAuraImage from '@assets/images/effects/aura-01.png'
+import heroPowerAura2Image from '@assets/images/effects/aura-02.png'
+import heroPowerAura3Image from '@assets/images/effects/aura-03.png'
+import heroPowerAura4Image from '@assets/images/effects/aura-04.png'
 import arrowBodyImage from '@assets/images/match/arrow-body.png'
 import arrowHeadImage from '@assets/images/match/arrow-head.png'
 import arrowCircleImage from '@assets/images/match/arrow-circle.png'
@@ -1288,12 +1292,57 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.hero-power-aura-1',
+    ASSET_BUNDLE_IDS.game,
+    'heroPowerAura1',
+    cardAddAuraImage,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.hero-power-aura-2',
+    ASSET_BUNDLE_IDS.game,
+    'heroPowerAura2',
+    heroPowerAura2Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.hero-power-aura-3',
+    ASSET_BUNDLE_IDS.game,
+    'heroPowerAura3',
+    heroPowerAura3Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.hero-power-aura-4',
+    ASSET_BUNDLE_IDS.game,
+    'heroPowerAura4',
+    heroPowerAura4Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
     'scene.game.deck',
     ASSET_BUNDLE_IDS.game,
     'deck',
     gameDeckImage,
     83,
     181,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.deck-sliced',
+    ASSET_BUNDLE_IDS.game,
+    'deckSliced',
+    gameDeckSlicedImage,
+    47,
+    180,
     'game-scene'
   ),
   asset(
@@ -2134,6 +2183,10 @@ export interface DeckPresentationAssets extends Record<HeroAssetKey, Texture> {
 }
 
 export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
+  heroPowerAura1: Texture
+  heroPowerAura2: Texture
+  heroPowerAura3: Texture
+  heroPowerAura4: Texture
   board1: Texture
   board2: Texture
   board3: Texture
@@ -2205,6 +2258,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   playSpotlight7: Texture
   playSpotlight8: Texture
   deck: Texture
+  deckSliced: Texture
   deckInfo: Texture
   fatigueDeck: Texture
   manaAvailable: Texture

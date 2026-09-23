@@ -48,6 +48,92 @@ function playJusticar(
 }
 
 describe('The Grand Tournament', () => {
+  describe.each([
+    'the_grand_tournament_fjola_lightbane',
+    'the_grand_tournament_eydis_darkbane'
+  ])('%s spell targeting', (cardId) => {
+    it.each(['controller', 'opponent', 'other-minion', 'area'] as const)(
+      'only triggers when its controller targets it: %s',
+      (mode) => {
+        const scenario = createMatchScenario({ cardId: 'classic_moonfire' })
+        scenario.confirmBothMulligans()
+        const casterId = scenario.match.getState().activePlayerId!
+        const opponentId = scenario.participants.find((id) => id !== casterId)!
+        const controllerId = mode === 'opponent' ? opponentId : casterId
+        expect(
+          scenario.match.dispatch({
+            type: 'dev-summon-minion',
+            participantId: controllerId,
+            cardId: asCardId(cardId)
+          }).accepted
+        ).toBe(true)
+        const minion = player(scenario, controllerId).board[0]
+        let targetId = minion.instanceId
+        if (mode === 'other-minion') {
+          expect(
+            scenario.match.dispatch({
+              type: 'dev-summon-minion',
+              participantId: controllerId,
+              cardId: asCardId('basic_chillwind_yeti')
+            }).accepted
+          ).toBe(true)
+          targetId = player(scenario, controllerId).board[1].instanceId
+        }
+        const spellId = mode === 'area' ? 'basic_whirlwind' : 'classic_moonfire'
+        expect(
+          scenario.match.dispatch({
+            type: 'dev-add-card',
+            participantId: casterId,
+            cardId: asCardId(spellId)
+          }).accepted
+        ).toBe(true)
+        expect(
+          scenario.match.dispatch({
+            type: 'dev-set-mana',
+            participantId: casterId,
+            available: 10,
+            maximum: 10
+          }).accepted
+        ).toBe(true)
+        const spell = player(scenario, casterId).hand.find(
+          (card) => card.cardId === spellId
+        )!
+        const result = scenario.match.dispatch({
+          type: 'play-card',
+          participantId: casterId,
+          cardInstanceId: spell.instanceId,
+          targets:
+            mode === 'area'
+              ? []
+              : [
+                  {
+                    kind: 'minion',
+                    participantId: controllerId,
+                    instanceId: targetId
+                  }
+                ]
+        })
+        expect(result.accepted).toBe(true)
+        const shouldTrigger = mode === 'controller'
+        expect(
+          result.events.filter(
+            (event) =>
+              event.type === 'trigger-activated' &&
+              event.source.instanceId === minion.instanceId
+          )
+        ).toHaveLength(shouldTrigger ? 1 : 0)
+        if (cardId === 'the_grand_tournament_fjola_lightbane') {
+          expect(player(scenario, controllerId).board[0].divineShield === true).toBe(
+            shouldTrigger
+          )
+        } else {
+          expect(player(scenario, opponentId).hero.health).toBe(shouldTrigger ? 27 : 30)
+          expect(player(scenario, casterId).hero.health).toBe(30)
+        }
+      }
+    )
+  })
+
   it('upgrades a basic Hero Power but leaves Jaraxxus unchanged', () => {
     const basic = createMatchScenario({ firstHeroId: 'jaina' })
     basic.confirmBothMulligans()

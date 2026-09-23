@@ -35,6 +35,7 @@ import {
 import { MatchRecorder, logObject } from '../features/game/match-recorder'
 import type { MatchLogsApi } from '../../shared/ipc/match-logs'
 import type { PreferencesApi, AiMode } from '../../shared/ipc/preferences'
+import { ExpertAiDecisionApi } from '../features/game/expert-ai-decision-api'
 import { LocalAiDecisionApi } from '../features/game/local-ai-decision-api'
 
 /** Full-screen route adapter for the first playable opening sequence. */
@@ -43,6 +44,7 @@ export class GameScene extends Scene {
   private readonly route: GameRoute
   private readonly logger?: AppLogger
   private view: GameBoardView | null = null
+  private expertAiApi: ExpertAiDecisionApi | null = null
   private recorder?: MatchRecorder
   private readonly rewardMatchId = crypto.randomUUID()
   private statisticsAttempted = false
@@ -135,14 +137,24 @@ export class GameScene extends Scene {
       opponentStrategy: this.route.generatedOpponent?.strategy,
       recorder: this.recorder
     })
-    const aiApi = aiMode === 'hardware' ? new LocalAiDecisionApi(aiSession) : this.ai
+    let aiApi: AiDecisionApi | undefined
+    if (aiMode === 'hardware') {
+      aiApi = new LocalAiDecisionApi(aiSession)
+    } else if (aiMode === 'hardware-v2') {
+      this.expertAiApi = new ExpertAiDecisionApi(aiSession)
+      aiApi = this.expertAiApi
+    } else {
+      aiApi = this.ai
+    }
     const aiController = new AiTurnController({
       api: aiApi,
       session: aiSession,
       logger: aiLogger,
       recorder: this.recorder,
-      // Hardware AI has no transport dependency and must remain playable offline.
-      ...(aiMode === 'hardware' ? { online: () => true } : {})
+      // Local hardware modes have no transport dependency and remain playable offline.
+      ...(aiMode === 'hardware' || aiMode === 'hardware-v2'
+        ? { online: () => true }
+        : {})
     })
 
     const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
@@ -391,6 +403,8 @@ export class GameScene extends Scene {
 
   protected onExit(): void {
     this.recorder?.finish('abandoned')
+    this.expertAiApi?.dispose()
+    this.expertAiApi = null
     if (!this.view) return
     this.root.removeChild(this.view)
     this.view.dispose()

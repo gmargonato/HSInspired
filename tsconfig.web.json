@@ -15,6 +15,7 @@
       "@assets/*": ["assets/*"],
       "@dev-inspector": ["src/renderer/scenes/dev/card-inspector-scene.ts"],
       "@outline-lab": ["src/renderer/scenes/dev/outline-lab-scene.ts"],
+      "@hero-power-anim": ["src/renderer/scenes/dev/hero-power-anim-scene.ts"],
       "@dev-match-performance": ["src/renderer/app/dev-match-performance.ts"],
       "@dev-layout-inspector": ["src/renderer/features/dev/layout-inspector/index.ts"],
       "@outline-directions": [

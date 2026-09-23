@@ -8,7 +8,7 @@ export interface Preferences {
   readonly aiMode: AiMode
 }
 
-export type AiMode = 'hardware' | 'api'
+export type AiMode = 'hardware' | 'hardware-v2' | 'api'
 
 export interface PreferencesUpdateRequest {
   readonly lastPlayedDeckId?: string | null
@@ -31,7 +31,7 @@ export function parseLastPlayedDeckId(value: unknown): string | null {
 }
 
 export function parseAiMode(value: unknown): AiMode {
-  if (value === 'hardware' || value === 'api') return value
+  if (value === 'hardware' || value === 'hardware-v2' || value === 'api') return value
   throw new Error('Invalid AI mode')
 }
 

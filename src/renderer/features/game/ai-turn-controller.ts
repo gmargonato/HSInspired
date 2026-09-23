@@ -43,6 +43,7 @@ import {
   aiModelState,
   aiSystemContext
 } from './ai-context'
+import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
 
 function effectTargetController(value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
@@ -607,6 +608,7 @@ export class AiTurnController {
         cancelled = () => resolve(null)
       })
       this.active = { identity, cancel: cancelled }
+      let settings: AiSettings | null = null
       try {
         if (!this.options.api) throw new Error('AI API bridge unavailable.')
         if (!(
@@ -614,7 +616,7 @@ export class AiTurnController {
           (typeof navigator === 'undefined' || navigator.onLine !== false)
         ))
           throw new Error('Network is known offline.')
-        const settings = await Promise.race([this.options.api.settings(), cancellation])
+        settings = await Promise.race([this.options.api.settings(), cancellation])
         if (!settings || !this.current(identity)) return null
         if (!settings.enabled) throw new Error('External game AI is disabled.')
         this.maxMessageBytes =
@@ -1041,11 +1043,25 @@ export class AiTurnController {
         ) {
           const legal = this.legalCommands()
           if (!legal.length) return null
-          const index = Math.floor(Math.random() * legal.length)
-          selected = legal[index]!
-          actionId = 'a' + index
-          source = 'random-timeout'
-          reason = 'Provider timed out; selected a current legal input at random.'
+          if (settings?.modelId === 'hardware-local-v2') {
+            const fallbackAction =
+              selectExpertTimeoutFallbackAction(session, legal) ??
+              aiActions(session, legal).find(
+                (action) => action.command.type === 'end-turn'
+              ) ??
+              aiActions(session, legal)[0]
+            if (!fallbackAction) return null
+            selected = fallbackAction.command
+            actionId = fallbackAction.id
+            source = 'safe-fallback'
+            reason = `Hardware Expert reached its whole-turn search budget; used the deterministic fair-state fallback: ${fallbackAction.description}`
+          } else {
+            const index = Math.floor(Math.random() * legal.length)
+            selected = legal[index]!
+            actionId = 'a' + index
+            source = 'random-timeout'
+            reason = 'Provider timed out; selected a current legal input at random.'
+          }
           this.turnPlan = undefined
           this.plannedTurn = undefined
           this.log('timeout-fallback', {

@@ -387,6 +387,44 @@ describe('Phase 5/6 real-card integration', () => {
     )
   })
 
+  it('does not discard an opponent card when Darkshire Librarian’s controller has no cards', () => {
+    const scenario = createMatchScenario({ seed: 5081, cardId: 'basic_arcane_shot' })
+    scenario.confirmBothMulligans()
+    const { participantId, opponentId } = context(scenario)
+
+    for (const id of [participantId, opponentId])
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-clear-zone',
+          participantId: id,
+          zone: 'hand'
+        }).accepted
+      ).toBe(true)
+
+    addCard(scenario, participantId, 'whispers_of_the_old_gods_darkshire_librarian')
+    addCard(scenario, opponentId, 'basic_arcane_shot')
+    setMana(scenario, participantId, 2, 2)
+    const librarian = handCard(
+      scenario,
+      participantId,
+      'whispers_of_the_old_gods_darkshire_librarian'
+    )
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: librarian.instanceId,
+      position: 0
+    })
+
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    expect(player(result.state, participantId).discardedCards).toHaveLength(0)
+    expect(player(result.state, opponentId).hand).toEqual(
+      expect.arrayContaining([expect.objectContaining({ cardId: 'basic_arcane_shot' })])
+    )
+    expect(player(result.state, opponentId).discardedCards).toHaveLength(0)
+  })
+
   it('reveals Tracking’s top three, draws the chosen card, and discards the rest', () => {
     const scenario = createMatchScenario({ seed: 509, cardId: 'basic_tracking' })
     scenario.confirmBothMulligans()

@@ -1,6 +1,6 @@
 import { cthunSnapshot } from '../cthun'
 import { HERO_CATALOG } from '../../content/heroes'
-import type { CardDefinition, CardKeyword } from '../../content/cards'
+import { cardHasTribe, type CardDefinition, type CardKeyword } from '../../content/cards'
 import type {
   OpeningMatchState,
   OpeningPlayerState,
@@ -329,9 +329,9 @@ export class EffectQueries {
         condition =
           definition?.id.includes('spare') === value ||
           definition?.name.toLowerCase().includes('spare') === value
-      else if (key === 'tribe') condition = definition?.subtype === value
+      else if (key === 'tribe') condition = cardHasTribe(definition, String(value))
       else if (key === 'type')
-        condition = definition?.type === value || definition?.subtype === value
+        condition = definition?.type === value || cardHasTribe(definition, String(value))
       else if (key === 'stat') {
         const printedOnly = filter.printedOnly === true
         const actual =
@@ -446,6 +446,11 @@ export class EffectQueries {
     selector: Record<string, unknown>,
     frame: EffectFrame
   ): boolean {
+    if (
+      candidate.kind === 'minion' &&
+      this.context.currentMinion(candidate)?.dormant
+    )
+      return false
     const controller = this.relativeController(selector.controller, frame)
     if (controller && candidate.participantId !== controller) return false
     if (selector.zone && candidate.zone !== selector.zone) return false
@@ -599,6 +604,21 @@ export class EffectQueries {
       candidates = this.selectorCandidates(selector, frame)
     }
 
+    if (selector.order === 'lowest-cost' || selector.order === 'highest-cost') {
+      const direction = selector.order === 'lowest-cost' ? 1 : -1
+      candidates = candidates
+        .map((candidate, index) => ({
+          candidate,
+          index,
+          cost: this.context.costForEntity(candidate) ?? Number.POSITIVE_INFINITY
+        }))
+        .sort(
+          (left, right) =>
+            direction * (left.cost - right.cost) || left.index - right.index
+        )
+        .map(({ candidate }) => candidate)
+    }
+
     const count =
       typeof selector.count === 'number'
         ? clamp(selector.count, 0, candidates.length)
@@ -677,6 +697,26 @@ export class EffectQueries {
         return Math.max(
           0,
           (this.context.draft.history?.cardsPlayedThisTurn.length ?? 0) - 1
+        )
+      case 'elementals-played-last-turn':
+        return owner.elementalsPlayedLastTurn ?? (owner.elementalPlayedLastTurn ? 1 : 0)
+      case 'cards-discarded-this-game':
+        return (
+          this.context.draft.history?.cardsDiscardedThisGameByPlayer?.[
+            frame.controllerId
+          ] ?? 0
+        )
+      case 'mana-overloaded-this-game':
+        return (
+          this.context.draft.history?.overloadedManaThisGameByPlayer?.[
+            frame.controllerId
+          ] ?? 0
+        )
+      case 'off-class-cards-added-to-hand-this-game':
+        return (
+          this.context.draft.history?.offClassCardsAddedToHandThisGameByPlayer?.[
+            frame.controllerId
+          ] ?? 0
         )
       case 'damage-dealt':
         return frame.damageDealt
@@ -792,6 +832,8 @@ export class EffectQueries {
         return sourceMinion?.health ?? owner.hero.health
       case 'source.weapon.attack':
         return owner.weapon?.attack ?? 0
+      case 'source.weapon.durability':
+        return owner.weapon?.durability ?? 0
       case 'destroyed-target.attack':
       case 'destroyed-target.health':
         return frame.storedValues.get(reference) ?? 0
@@ -1009,6 +1051,38 @@ export class EffectQueries {
           counts.set(card.cardId, (counts.get(card.cardId) ?? 0) + 1)
         return [...counts.values()].every((count) => count === 1)
       }
+      case 'player-deck-has-no-cost-cards': {
+        const cost = Number(condition.cost ?? condition.value)
+        return Number.isFinite(cost) &&
+          player.deck.every((card) => cardDefinition(card.cardId)?.cost !== cost)
+      }
+      case 'player-deck-has-minion':
+        return player.deck.some((card) => {
+          if (cardDefinition(card.cardId)?.type !== 'Minion') return false
+          return this.matchesFilter(
+            {
+              instanceId: card.instanceId,
+              kind: 'card',
+              participantId: player.participantId,
+              zone: 'deck',
+              cardId: card.cardId
+            },
+            condition.filter,
+            frame
+          )
+        })
+      case 'player-played-elemental-last-turn':
+        return player.elementalPlayedLastTurn === true
+      case 'player-was-healed-this-turn':
+        return (this.context.draft.history?.healingThisTurn ?? 0) > 0
+      case 'opponent-has-more-minions':
+        return this.context.player(this.otherPlayer(player.participantId)).board.length >
+          player.board.length
+      case 'opponent-has-no-more-minions':
+        return this.context.player(this.otherPlayer(player.participantId)).board.length <=
+          player.board.length
+      case 'repeat-ended-without-minion-death':
+        return frame.storedValues.get('repeat.minions-died') === 0
       case 'player-has-weapon':
         return (
           player.weapon !== null ||
@@ -1094,7 +1168,7 @@ export class EffectQueries {
         return Boolean(
           target &&
           target.participantId === frame.controllerId &&
-          this.context.entityCard(target)?.subtype === 'Demon'
+          cardHasTribe(this.context.entityCard(target), 'Demon')
         )
       }
       case 'target-is-not-friendly-demon': {
@@ -1102,7 +1176,7 @@ export class EffectQueries {
           target &&
           !(
             target.participantId === frame.controllerId &&
-            this.context.entityCard(target)?.subtype === 'Demon'
+            cardHasTribe(this.context.entityCard(target), 'Demon')
           )
         )
       }

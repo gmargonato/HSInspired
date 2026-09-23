@@ -25,7 +25,13 @@ export function cardFacts(cardId: string): JsonObject {
     name: card.name,
     type: card.type,
     cost: card.cost,
-    ...(card.subtype ? { tribe: card.subtype } : {}),
+    ...((card.tribes?.length ?? 0) > 0 || card.subtype
+      ? {
+          tribes: [...new Set([...(card.tribes ?? []), card.subtype].filter(
+            (tribe): tribe is string => Boolean(tribe)
+          ))]
+        }
+      : {}),
     ...('attack' in card ? { attack: card.attack } : {}),
     ...('health' in card ? { health: card.health } : {}),
     ...('durability' in card ? { durability: card.durability } : {}),

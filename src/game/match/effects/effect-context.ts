@@ -50,6 +50,8 @@ export interface SemanticEvent {
   readonly spellTargets?: readonly EntityRef[]
   /** A minion recast this spell; it must not generate further spell copies. */
   readonly spellCopy?: boolean
+  /** True when the card was played from hand rather than put into play. */
+  readonly playedFromHand?: boolean
   /** Combat-only facts consumed by explicit attack-resolved triggers. */
   readonly defenderDied?: boolean
   readonly attackerDied?: boolean

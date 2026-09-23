@@ -68,8 +68,13 @@ export const OUTLINE_LAB_LAYOUT = {
     { anchor: CENTER, scale: 0.92 }
   ),
   banner: placement(
-    { x: 600, y: 590 },
+    { x: 450, y: 590 },
     { width: 721, height: 223 },
+    { anchor: CENTER }
+  ),
+  confirmMulligan: placement(
+    { x: 990, y: 590 },
+    { width: 235, height: 127 },
     { anchor: CENTER }
   ),
   captionY: 840

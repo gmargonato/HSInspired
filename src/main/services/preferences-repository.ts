@@ -85,7 +85,9 @@ export class PreferencesRepository {
           aiMode:
             parsed.version === 1
               ? 'api'
-              : parsed.aiMode === 'hardware' || parsed.aiMode === 'api'
+              : parsed.aiMode === 'hardware' ||
+                  parsed.aiMode === 'hardware-v2' ||
+                  parsed.aiMode === 'api'
                 ? parsed.aiMode
                 : 'api'
         }

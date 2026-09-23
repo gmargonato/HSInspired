@@ -36,10 +36,17 @@ describe('opening match checkpoints', () => {
     expect(result.accepted).toBe(true)
     const baseline = match.getCheckpoint()
     const query = match.getState()
+    const observation = match.getAiObservation!(participantId, 'fair')
     const hypothetical = match.analyze((fork) => {
       fork.dispatch({ type: 'dev-set-mana', participantId, available: 9, maximum: 9 })
       return fork.getState()
     })
+    const observedPlayer = observation.players.find(
+      (player) => player.participantId === participantId
+    )!
+    Object.assign(observedPlayer.hero, { health: -100 })
+    Object.assign(observedPlayer.hand[0]!, { cardId: 'corrupted' })
+    expect(match.getCheckpoint()).toEqual(baseline)
     for (const snapshot of [result.state, query, hypothetical]) {
       Object.assign(snapshot.players[0].hero, { health: -100 })
       Object.assign(snapshot.players[0].hand[0]!, { cardId: 'corrupted' })

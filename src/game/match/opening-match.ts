@@ -756,6 +756,9 @@ export function createOpeningMatch(
       totemsSummonedThisGameByPlayer: {},
       secretsPlayedThisGameByPlayer: {},
       cardsDiedThisGame: [],
+      cardsDiscardedThisGameByPlayer: {},
+      overloadedManaThisGameByPlayer: {},
+      offClassCardsAddedToHandThisGameByPlayer: {},
       beastsSummonedByPlayer: {},
       heroPowersUsedByPlayer: {}
     },
@@ -1248,6 +1251,9 @@ export function createOpeningMatch(
       legalityCache.set(participantId, legality)
       return legality
     },
+    getAttackLegality(participantId: PlayerId) {
+      return getQueryRuntime().getAttackLegality(participantId)
+    },
     getEffectTrace(): readonly EffectTraceEntry[] {
       return state.effectTrace ? state.effectTrace.map((entry) => ({ ...entry })) : []
     },
@@ -1314,6 +1320,8 @@ export function createOpeningMatch(
           getPlayInput: (participantId, cardInstanceId, choice) =>
             instance.getPlayInput!(participantId, cardInstanceId, choice),
           getLegality: (participantId) => instance.getLegality!(participantId),
+          getAttackLegality: (participantId) =>
+            instance.getAttackLegality!(participantId),
           analyze: (nestedOperation) => instance.analyze(nestedOperation)
         })
       } finally {
@@ -1341,6 +1349,8 @@ export function createOpeningMatch(
           getPlayInput: (participantId, cardInstanceId, choice) =>
             instance.getPlayInput!(participantId, cardInstanceId, choice),
           getLegality: (participantId) => instance.getLegality!(participantId),
+          getAttackLegality: (participantId) =>
+            instance.getAttackLegality!(participantId),
           analyze: (nestedOperation) => instance.analyze(nestedOperation)
         })
       } finally {

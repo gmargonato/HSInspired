@@ -30,6 +30,7 @@ export type HeroPowerEffect =
       readonly amount: number
     }
   | { readonly kind: 'gain-armor'; readonly amount: number }
+  | { readonly kind: 'buff-friendly-beast'; readonly attack: number; readonly health: number }
   | { readonly kind: 'discover-beast' }
   | { readonly kind: 'copy-last-card-this-turn' }
   | { readonly kind: 'choose-one'; readonly attack: number; readonly armor: number }
@@ -104,6 +105,16 @@ const HERO_POWER_DATA = [
     'hero-power-hunter',
     'none',
     { kind: 'damage-enemy-hero', amount: 2 }
+  ],
+  [
+    'hunter-dinomancy',
+    'Hunter',
+    'Dinomancy',
+    2,
+    'Give a Beast +3/+3.',
+    'hero-power-hunter',
+    'friendly-minion',
+    { kind: 'buff-friendly-beast', attack: 3, health: 3 }
   ],
   [
     'mage-fireblast',

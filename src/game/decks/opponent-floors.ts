@@ -9,6 +9,7 @@ export interface OpponentFloorRule {
 }
 
 export const OPPONENT_FLOORS: readonly OpponentFloorRule[] = [
+  { tag: 'early', min: 6, max: 30 },
   { tag: 'cost:cheap', min: 8, max: 14 },
   { tag: 'cost:6+', min: 4, max: 12 },
   { tag: 'cost:8+', min: 0, max: 3 },

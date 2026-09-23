@@ -1,78 +1,186 @@
 {
-  "version": 3,
-  "presets": {
-    "card": {
+  "version": 4,
+  "aura": {
+    "presets": {
+      "card": {
+        "smoothOutline": true,
+        "speed": 0.5,
+        "shimmer": 0.5,
+        "wobble": 4,
+        "baseWidth": 60,
+        "baseEdgeSoftness": 20,
+        "baseOpacity": 0.95,
+        "coreWidth": 5,
+        "coreIntensity": 0.3,
+        "glowWidth": 180,
+        "glowSoftness": 0.7,
+        "glowIntensity": 0.85,
+        "additive": 0.3,
+        "hotCount": 8,
+        "blobLength": 90,
+        "blobThickness": 12,
+        "blobOffset": 22,
+        "hotTravel": 1,
+        "hotLife": 0,
+        "hotBulge": 10,
+        "haloLength": 3.2,
+        "hotIntensity": 1,
+        "hotThreshold": 1,
+        "coreBrightness": 1,
+        "coreThreshold": 0.66,
+        "taperAmount": 0.6,
+        "taperStart": 0.5,
+        "bottomFade": 1,
+        "bottomFadeStart": 0.67
+      },
+      "bonus-card": {
+        "smoothOutline": true,
+        "speed": 1,
+        "shimmer": 1,
+        "wobble": 20,
+        "baseWidth": 60,
+        "baseEdgeSoftness": 20,
+        "baseOpacity": 0.95,
+        "coreWidth": 5,
+        "coreIntensity": 0.3,
+        "glowWidth": 150,
+        "glowSoftness": 0.7,
+        "glowIntensity": 0.85,
+        "additive": 0.3,
+        "hotCount": 5,
+        "blobLength": 90,
+        "blobThickness": 12,
+        "blobOffset": 22,
+        "hotTravel": 1,
+        "hotLife": 0,
+        "hotBulge": 10,
+        "haloLength": 3.2,
+        "hotIntensity": 1,
+        "hotThreshold": 1,
+        "coreBrightness": 1,
+        "coreThreshold": 0.66,
+        "taperAmount": 0.6,
+        "taperStart": 0.5,
+        "bottomFade": 1,
+        "bottomFadeStart": 0.67
+      },
+      "board": {
+        "smoothOutline": true,
+        "speed": 0.5,
+        "shimmer": 0.5,
+        "wobble": 4,
+        "baseWidth": 60,
+        "baseEdgeSoftness": 30,
+        "baseOpacity": 1,
+        "coreWidth": 5,
+        "coreIntensity": 0.3,
+        "glowWidth": 100,
+        "glowSoftness": 0.7,
+        "glowIntensity": 0.85,
+        "additive": 0.3,
+        "hotCount": 8,
+        "blobLength": 90,
+        "blobThickness": 12,
+        "blobOffset": 22,
+        "hotTravel": 1,
+        "hotLife": 0,
+        "hotBulge": 10,
+        "haloLength": 3.2,
+        "hotIntensity": 1,
+        "hotThreshold": 1,
+        "coreBrightness": 1,
+        "coreThreshold": 0.66,
+        "taperAmount": 0,
+        "taperStart": 0.5,
+        "bottomFade": 0,
+        "bottomFadeStart": 0.67
+      },
+      "button": {
+        "smoothOutline": true,
+        "speed": 0.5,
+        "shimmer": 0.5,
+        "wobble": 4,
+        "baseWidth": 60,
+        "baseEdgeSoftness": 20,
+        "baseOpacity": 0.95,
+        "coreWidth": 5,
+        "coreIntensity": 0.3,
+        "glowWidth": 180,
+        "glowSoftness": 0.7,
+        "glowIntensity": 0.85,
+        "additive": 0.3,
+        "hotCount": 8,
+        "blobLength": 90,
+        "blobThickness": 12,
+        "blobOffset": 22,
+        "hotTravel": 1,
+        "hotLife": 0,
+        "hotBulge": 10,
+        "haloLength": 3.2,
+        "hotIntensity": 1,
+        "hotThreshold": 1,
+        "coreBrightness": 1,
+        "coreThreshold": 0.66,
+        "taperAmount": 0,
+        "taperStart": 0.5,
+        "bottomFade": 0,
+        "bottomFadeStart": 0.67
+      }
+    },
+    "palettes": {
+      "blue": {
+        "baseColor": 7143423,
+        "coreColor": 22015,
+        "glowColor": 17612,
+        "hotColor": 16777215,
+        "blobCoreColor": 16777215
+      },
+      "green": {
+        "baseColor": 3997474,
+        "coreColor": 10354538,
+        "glowColor": 2076690,
+        "hotColor": 12386152,
+        "blobCoreColor": 16515040
+      },
+      "orange": {
+        "baseColor": 16776970,
+        "coreColor": 16337424,
+        "glowColor": 16753152,
+        "hotColor": 16382137,
+        "blobCoreColor": 16382137
+      },
+      "purple": {
+        "baseColor": 7389695,
+        "coreColor": 3102975,
+        "glowColor": 6712319,
+        "hotColor": 13758719,
+        "blobCoreColor": 13758719
+      },
+      "red": {
+        "baseColor": 16776043,
+        "coreColor": 16124169,
+        "glowColor": 15728640,
+        "hotColor": 16777205,
+        "blobCoreColor": 16777205
+      },
+      "white": {
+        "baseColor": 16119285,
+        "coreColor": 5131854,
+        "glowColor": 5131854,
+        "hotColor": 16777215,
+        "blobCoreColor": 16777215
+      }
+    }
+  },
+  "ghost": {
+    "tuning": {
       "ribbonWidth": 5,
-      "edgeSoftness": 0,
-      "saturation": 2,
-      "rimWidth": 4,
-      "glowWidth": 10,
-      "glowStrength": 2,
-      "highlightStrength": 2,
-      "hotspotScale": 50,
-      "hotspotDensity": 1,
-      "edgeWobble": 3,
-      "motionSpeed": 1,
-      "innerEdgeWidth": 0,
-      "pulseRate": 1,
-      "contourVariation": 6
-    },
-    "bonus-card": {
-      "ribbonWidth": 6,
-      "edgeSoftness": 3,
-      "saturation": 1,
-      "rimWidth": 5,
-      "glowWidth": 3,
-      "glowStrength": 1,
-      "highlightStrength": 2,
-      "hotspotScale": 28,
-      "hotspotDensity": 0,
-      "edgeWobble": 6,
-      "motionSpeed": 1,
-      "innerEdgeWidth": 1,
-      "pulseRate": 0,
-      "contourVariation": 0
-    },
-    "board": {
-      "ribbonWidth": 10,
-      "edgeSoftness": 5,
-      "saturation": 2,
-      "rimWidth": 3,
-      "glowWidth": 9,
-      "glowStrength": 2,
-      "highlightStrength": 5,
-      "hotspotScale": 50,
-      "hotspotDensity": 2,
-      "edgeWobble": 8,
-      "motionSpeed": 2,
-      "innerEdgeWidth": 1,
-      "pulseRate": 3,
-      "contourVariation": 10
-    },
-    "button": {
-      "ribbonWidth": 10,
-      "edgeSoftness": 3,
-      "saturation": 2,
-      "rimWidth": 5,
-      "glowWidth": 10,
-      "glowStrength": 4,
-      "highlightStrength": 1,
-      "hotspotScale": 105,
-      "hotspotDensity": 4,
-      "edgeWobble": 6,
-      "motionSpeed": 1,
-      "innerEdgeWidth": 1,
-      "pulseRate": 0,
-      "contourVariation": 0
-    },
-    "ghost": {
-      "ribbonWidth": 3,
       "edgeSoftness": 10,
-      "saturation": 0.8,
+      "saturation": 0.75,
       "rimWidth": 15,
       "glowWidth": 0,
       "glowStrength": 0,
-      "highlightStrength": 2,
+      "highlightStrength": 5,
       "hotspotScale": 1,
       "hotspotDensity": 4,
       "edgeWobble": 16,
@@ -80,44 +188,12 @@
       "innerEdgeWidth": 0,
       "pulseRate": 0,
       "contourVariation": 10
-    }
-  },
-  "palettes": {
-    "blue": {
-      "baseColor": 7143423,
-      "outerColor": 22015,
-      "glowColor": 17612,
-      "highlightColor": 16777215
     },
-    "green": {
-      "baseColor": 7143238,
-      "outerColor": 4184383,
-      "glowColor": 4184383,
-      "highlightColor": 15400912
-    },
-    "orange": {
-      "baseColor": 16776970,
-      "outerColor": 16362001,
-      "glowColor": 16360464,
-      "highlightColor": 16382137
-    },
-    "purple": {
-      "baseColor": 7375103,
+    "palette": {
+      "baseColor": 7389695,
       "outerColor": 3102975,
       "glowColor": 6712319,
       "highlightColor": 13758719
-    },
-    "red": {
-      "baseColor": 16776043,
-      "outerColor": 16124169,
-      "glowColor": 15728640,
-      "highlightColor": 16777205
-    },
-    "white": {
-      "baseColor": 16119285,
-      "outerColor": 5131854,
-      "glowColor": 5131854,
-      "highlightColor": 16777215
     }
   }
 }

@@ -1,4 +1,5 @@
 import {
+  CanvasTextMetrics,
   Container,
   Graphics,
   Matrix,
@@ -15,6 +16,7 @@ import { supportsPremiumFormat } from '../../../game/progression/premium-support
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import {
   CARD_NAME_FIT,
+  CARD_RULES_COMPACT_SPACING,
   formatCardRulesText,
   buildCardLayout,
   type CardBounds,
@@ -220,6 +222,14 @@ function cardTextLayer(node: Extract<CardRenderNode, { kind: 'text' }>): CardTex
     curve: node.curve,
     zIndex: node.zIndex
   }
+}
+
+function updateRulesLineHeight(text: Text, defaultLineHeight: number): void {
+  const { lines } = CanvasTextMetrics.measureText(text.text, text.style)
+  text.style.lineHeight =
+    lines.length >= CARD_RULES_COMPACT_SPACING.minimumLines
+      ? CARD_RULES_COMPACT_SPACING.lineHeight
+      : defaultLineHeight
 }
 
 function fitTitleToWidth(text: Text, boxWidth: number): void {
@@ -822,6 +832,12 @@ export class CardView extends Container {
     const text = formatCardRulesText({ id: this.plan.cardId, rulesText })
     if (entry.object.text === text) return
     entry.object.text = text
+    if (entry.node.kind === 'text') {
+      updateRulesLineHeight(
+        entry.object,
+        entry.node.style.lineHeight ?? entry.node.style.fontSize
+      )
+    }
     this.updateCacheTexture()
   }
 
@@ -950,7 +966,8 @@ export class CardView extends Container {
         height: node.box.height,
         text: node.text,
         fontSize: object instanceof Text ? object.style.fontSize : node.style.fontSize,
-        lineHeight: node.style.lineHeight
+        lineHeight:
+          object instanceof Text ? object.style.lineHeight : node.style.lineHeight
       }
     }
     if (node.kind === 'artwork') {
@@ -1079,6 +1096,9 @@ export class CardView extends Container {
       : new Text({ text: layer.text, style: layer.style, anchor: layer.anchor })
     if (layer.fit === 'width' && !node.curve && text instanceof Text) {
       fitTitleToWidth(text, node.box.width)
+    }
+    if (node.id === 'rules' && text instanceof Text) {
+      updateRulesLineHeight(text, node.style.lineHeight ?? node.style.fontSize)
     }
     if (!node.curve) text.position.set(layer.position.x, layer.position.y)
     text.zIndex = node.zIndex

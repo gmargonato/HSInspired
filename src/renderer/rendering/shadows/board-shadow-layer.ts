@@ -106,7 +106,12 @@ export class BoardShadowLayer extends Container {
     graphic.fill(0x000000)
     const blur =
       config.blur > 0
-        ? new BlurFilter({ strength: config.blur, quality: 2, resolution: 1 })
+        ? new BlurFilter({
+            strength: config.blur,
+            quality: 2,
+            resolution: 1,
+            legacy: true
+          })
         : null
     graphic.filters = blur ? [blur] : null
     const pad = this.shapePadding
@@ -142,7 +147,12 @@ export class BoardShadowLayer extends Container {
       body.scale.set(scale)
       blur =
         config.blur > 0
-          ? new BlurFilter({ strength: config.blur, quality: 2, resolution: 1 })
+          ? new BlurFilter({
+              strength: config.blur,
+              quality: 2,
+              resolution: 1,
+              legacy: true
+            })
           : null
       target.filters = blur ? [blur] : null
       const pad = this.shapePadding

@@ -1,8 +1,7 @@
-import { Container, Sprite, Text, type Renderer, type Texture } from 'pixi.js'
+import { Container, Sprite, Text, type Texture } from 'pixi.js'
 import { CARD_CATALOG } from '../../../game/content/cards'
 import { AnimationScope } from '../../animation/animations'
 import { CardView } from '../../rendering/cards/card-view'
-import { PreviewGhostOutline } from '../../rendering/effects/preview-ghost-outline'
 import { applyAnchoredPlacement } from '../../rendering/layout'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { SECRET_LAYOUT } from './secret-layout'
@@ -14,12 +13,10 @@ export class QuestPreviewView extends Container {
   private key: string | null = null
   private progressText: Text | null = null
   private latestProgress = ''
-  private previewGhostOutline: PreviewGhostOutline | null = null
 
   constructor(
     private readonly resolver: CardAssetResolver,
-    private readonly arrowTexture: Texture,
-    private readonly renderer: Renderer
+    private readonly arrowTexture: Texture
   ) {
     super()
     this.label = 'game.quest-preview'
@@ -32,8 +29,6 @@ export class QuestPreviewView extends Container {
     this.progressText = null
     this.latestProgress = ''
     this.animations.kill()
-    this.previewGhostOutline?.dispose()
-    this.previewGhostOutline = null
     this.alpha = 0
     for (const child of this.removeChildren()) child.destroy({ children: true })
   }
@@ -95,7 +90,6 @@ export class QuestPreviewView extends Container {
       progressText.eventMode = 'none'
       this.progressText = progressText
       this.addChild(...cards, arrow, progressText)
-      this.previewGhostOutline = new PreviewGhostOutline(this.renderer, this)
       this.alpha = 0
       this.animations
         .timeline()

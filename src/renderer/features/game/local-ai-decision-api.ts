@@ -1,13 +1,27 @@
-import { CARD_CATALOG, HERO_POWER_CATALOG } from '../../../game/content'
+import { CARD_CATALOG, HERO_POWER_CATALOG, cardHasTribe } from '../../../game/content'
 import {
   enumerateLegalCommands,
   canonicalCommandKey,
+  createSeededRng,
   type TurnMatchCommand,
   type TurnMatchState
 } from '../../../game/match'
-import { effectiveBoardMinionKeywords } from '../../../game/match/rules/minion-attack-state'
+import {
+  InformationSetMcts,
+  mctsRootRecommendationScore,
+  type MctsCandidate,
+  type MctsSelection
+} from '../../../game/match/ai/information-set-mcts'
+import {
+  boardMinionAttacksUsed,
+  effectiveBoardMinionKeywords
+} from '../../../game/match/rules/minion-attack-state'
 import type { OpeningMatchAnalysis } from '../../../game/match/opening-match-types'
 import type { AiObservation, AiObservedPlayer } from '../../../game/match/ai'
+import {
+  createFairHypothesisCheckpoint,
+  EXPERT_FAIR_HYPOTHESIS_PREFIX
+} from '../../../game/match/ai/fair-hypothesis-checkpoint'
 import type {
   AiDecisionApi,
   AiDecisionIdentity,
@@ -16,23 +30,85 @@ import type {
   JsonObject,
   AiSettings
 } from '../../../shared/ipc/ai'
-import type { AiDecisionChoice } from '../../../shared/ipc/ai-deliberation'
+import {
+  sameAiIntent,
+  type AiActionIntent,
+  type AiDecisionChoice
+} from '../../../shared/ipc/ai-deliberation'
 import { aiActionIntent } from './ai-action-intent'
 import { aiActions } from './ai-context'
 import { LOCAL_AI_POLICY } from './local-ai-policy'
-import type { GameBoardSession } from './game-board-session'
+import { GameBoardSession } from './game-board-session'
 
-const LOCAL_AI_MODEL_ID = 'hardware-local-v1'
-const MAX_THINK_MS = 2_850
-const SEQUENCE_THINK_MS = 900
-const ROOT_SEARCH_LIMIT = 14
-const SEQUENCE_BRANCH_LIMIT = 8
-const SEQUENCE_MAX_DEPTH = 7
-const SEQUENCE_NODE_LIMIT = 240
-const SEQUENCE_ROOT_NODE_LIMIT = 8
-const TRACE_CANDIDATE_LIMIT = 8
-const RANDOM_SAMPLE_SEEDS = [0x1f123bb5, 0x8a5cd789, 0xc3ef14a1, 0x5eeded42] as const
+const EASY_MODEL_ID = 'hardware-local-v1'
+const EXPERT_MODEL_ID = 'hardware-local-v2'
+const MCTS_POSITION_VALUE_SCALE = 900
+const MCTS_POSITION_VALUE_LIMIT = 0.9
+const MCTS_MAX_CACHED_INFORMATION_SETS = 4_096
+type LocalAiSearchProfile = 'easy' | 'expert'
 
+interface LocalAiSearchLimits {
+  readonly maxThinkMs: number
+  readonly sequenceThinkMs: number
+  readonly rootSearchLimit: number
+  readonly sequenceBranchLimit: number
+  readonly sequenceMaxDepth: number
+  readonly sequenceNodeLimit: number
+  readonly sequenceRootNodeLimit: number
+  readonly traceCandidateLimit: number
+  readonly randomSampleSeeds: readonly number[]
+}
+
+export interface LocalAiDecisionOptions {
+  readonly profile?: LocalAiSearchProfile
+  readonly budgetMs?: number
+  /** Deterministic test/benchmark cap; production requests use the wall-clock budget. */
+  readonly workBudget?: number
+  readonly preferredContinuation?: AiActionIntent
+  /** True only when the session was built from a fair-hypothesis checkpoint. */
+  readonly fairHypothesis?: boolean
+}
+
+const SEARCH_LIMITS: Readonly<Record<LocalAiSearchProfile, LocalAiSearchLimits>> = {
+  easy: {
+    maxThinkMs: 2_850,
+    sequenceThinkMs: 900,
+    rootSearchLimit: 14,
+    sequenceBranchLimit: 8,
+    sequenceMaxDepth: 7,
+    sequenceNodeLimit: 240,
+    sequenceRootNodeLimit: 8,
+    traceCandidateLimit: 8,
+    randomSampleSeeds: [0x1f123bb5, 0x8a5cd789, 0xc3ef14a1, 0x5eeded42]
+  },
+  expert: {
+    maxThinkMs: 7_000,
+    sequenceThinkMs: 7_000,
+    rootSearchLimit: 24,
+    sequenceBranchLimit: 12,
+    sequenceMaxDepth: 10,
+    sequenceNodeLimit: 4_000,
+    sequenceRootNodeLimit: 96,
+    traceCandidateLimit: 32,
+    randomSampleSeeds: [
+      0x1f123bb5, 0x8a5cd789, 0xc3ef14a1, 0x5eeded42, 0x73a9c21d, 0xb50d66f3,
+      0x2cae8841, 0xe1437b95
+    ]
+  }
+}
+const EXPERT_REPLY_ACTION_LIMIT = 16
+const EXPERT_REPLY_NODE_LIMIT = 24
+const EXPERT_ROOT_COMMAND_PREFERENCE_SCALE = 0.5
+
+export interface LocalAiScoreComponents {
+  readonly positionDelta: number
+  readonly commandPreference: number
+  readonly continuationPreference: number
+  readonly threatDefense: number
+  readonly opponentBoardRemoval: number
+  readonly friendlyBoardLoss: number
+  readonly sequenceRefinement: number
+}
 type LocalAction = ReturnType<typeof aiActions>[number]
 
 /** A compact, serializable explanation of one candidate considered by the CPU search. */
@@ -41,9 +117,15 @@ export interface LocalAiCandidateTrace {
   readonly type: TurnMatchCommand['type']
   readonly description: string
   readonly score: number
+  readonly scoreComponents: LocalAiScoreComponents
   readonly accepted: boolean
   readonly phase: TurnMatchState['phase'] | null
   readonly winnerId: string | null
+  readonly sequenceIntents?: readonly AiActionIntent[]
+  readonly visits?: number
+  readonly meanValue?: number
+  readonly prior?: number
+  readonly recommendationRiskAdjustment?: number
 }
 
 /** Diagnostics for one local decision; kept small enough to persist with a match log. */
@@ -61,10 +143,49 @@ export interface LocalAiDecisionTrace {
   readonly candidates: readonly LocalAiCandidateTrace[]
   readonly chosenSequence?: readonly string[]
   readonly chosenSequenceDepth?: number
+  /** Time spent scoring the current legal actions before sequence search. */
+  readonly rootEvaluationMs?: number
+  /** Full sequence-search duration, including any public-response scoring. */
+  readonly sequenceSearchMs?: number
+  /** Time spent inside public opponent-response evaluation; included above. */
+  readonly responseSearchMs?: number
+  readonly responseCandidateAnalysisMs?: number
+  readonly responseCandidateDispatchMs?: number
+  readonly responseCandidateObservationMs?: number
+  readonly responseCandidateScoringMs?: number
+  readonly responseActionGenerationMs?: number
+  readonly responseReplayMs?: number
   readonly sequenceNodes?: number
+  /** Public response branches evaluated after candidate turn endings. */
+  readonly responseNodes?: number
+  /** Sampled opponent card-play branches evaluated by Expert response search. */
+  readonly responseCardPlayNodes?: number
   readonly responseScore?: number | null
   readonly sampleCount?: number
   readonly sampleWinRate?: number
+  /** Count of root, sequence, and response branches processed in this decision. */
+  readonly workUnits?: number
+  /** True when the deterministic work cap was exhausted during this decision. */
+  readonly workBudgetHit?: boolean
+  readonly mctsProfile?: {
+    readonly hypothesisSetupMs: number
+    readonly analysisSnapshotRestoreMs: number
+    readonly observationMs: number
+    readonly informationKeyMs: number
+    readonly legalActionGenerationMs: number
+    readonly actionPriorMs: number
+    readonly treeSelectionMs: number
+    readonly rolloutSelectionMs: number
+    readonly simulationDispatchMs: number
+    readonly leafEvaluationMs: number
+    readonly candidateCacheHits: number
+    readonly candidateCacheMisses: number
+    readonly opponentActionsSimulated: number
+    readonly opponentCardPlaysSimulated: number
+    readonly averageTreeDepth: number
+    readonly averageRolloutDepth: number
+    readonly maximumRolloutDepth: number
+  }
 }
 
 export type LocalAiTraceListener = (trace: LocalAiDecisionTrace) => void
@@ -83,6 +204,7 @@ interface ScoredAction {
   readonly action: LocalAction
   score: number
   readonly reason: string
+  scoreComponents: LocalAiScoreComponents
   readonly simulation: Simulation
   readonly rootPreference?: number
   sequence?: readonly TurnMatchCommand[]
@@ -99,6 +221,31 @@ interface SequenceSearchResult {
   readonly responseScore: number | null
 }
 
+interface VisibleResponseScore {
+  readonly score: number | null
+  readonly nodes: number
+  readonly cardPlayNodes: number
+  readonly candidateAnalysisMs: number
+  readonly candidateDispatchMs: number
+  readonly candidateObservationMs: number
+  readonly candidateScoringMs: number
+  readonly actionGenerationMs: number
+  readonly replayMs: number
+}
+
+interface SequenceSearchSummary {
+  readonly candidates: ReadonlyMap<string, SequenceSearchResult>
+  readonly responseNodes: number
+  readonly responseCardPlayNodes: number
+  readonly responseSearchMs: number
+  readonly responseCandidateAnalysisMs: number
+  readonly responseCandidateDispatchMs: number
+  readonly responseCandidateObservationMs: number
+  readonly responseCandidateScoringMs: number
+  readonly responseActionGenerationMs: number
+  readonly responseReplayMs: number
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -109,10 +256,394 @@ function number(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+function stableSeed(value: string): number {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index++)
+    hash = Math.imul(hash ^ value.charCodeAt(index), 0x01000193)
+  return hash >>> 0
+}
+
+function stableObservation(value: unknown): string {
+  return (
+    JSON.stringify(value, (key, nested) => (key === 'revision' ? undefined : nested)) ??
+    'undefined'
+  )
+}
+
+function informationSetKey(observation: AiObservation): string {
+  return stableObservation(observation)
+}
+
+function directCharacterDamage(value: unknown): number {
+  if (Array.isArray(value))
+    return value.reduce((total, entry) => total + directCharacterDamage(entry), 0)
+  if (!value || typeof value !== 'object') return 0
+  const entry = value as Record<string, unknown>
+  const target = record(entry.target)
+  const ownDamage =
+    entry.action === 'damage' &&
+    target.type === 'character' &&
+    target.controller === 'any' &&
+    typeof entry.amount === 'number'
+      ? Math.max(0, entry.amount)
+      : 0
+  return (
+    ownDamage +
+    Object.entries(entry).reduce(
+      (total, [key, nested]) =>
+        key === 'target' || key === 'amount'
+          ? total
+          : total + directCharacterDamage(nested),
+      0
+    )
+  )
+}
+
+function directSpellDamageForPlayer(
+  effects: unknown,
+  player: TurnMatchState['players'][number]
+): number {
+  const triggeredEffects = (Array.isArray(effects) ? effects : [effects])
+    .map(record)
+    .filter((effect) => effect.trigger === 'cast')
+  let damage = 0
+  const uncertainAlternatives = new Map<string, number>()
+  for (const effect of triggeredEffects) {
+    const effectDamage = directCharacterDamage(effect.actions)
+    if (!effect.condition) {
+      damage += effectDamage
+      continue
+    }
+    const condition = record(effect.condition)
+    const filter = record(condition.filter)
+    const tribe = filter.tribe
+    const hasMinion =
+      typeof tribe === 'string' &&
+       player.board.some((minion) =>
+         cardHasTribe(CARD_CATALOG.get(minion.cardId), tribe)
+       )
+    if (condition.type === 'player-has-minion' && typeof tribe === 'string') {
+      if (hasMinion) damage += effectDamage
+      continue
+    }
+    if (condition.type === 'player-lacks-minion' && typeof tribe === 'string') {
+      if (!hasMinion) damage += effectDamage
+      continue
+    }
+    const trigger = String(effect.trigger)
+    uncertainAlternatives.set(
+      trigger,
+      Math.max(uncertainAlternatives.get(trigger) ?? 0, effectDamage)
+    )
+  }
+  return (
+    damage + [...uncertainAlternatives.values()].reduce((sum, value) => sum + value, 0)
+  )
+}
+
+function summonedMinionTribes(value: unknown): ReadonlySet<string> {
+  const tribes = new Set<string>()
+  const visit = (nested: unknown) => {
+    if (Array.isArray(nested)) {
+      nested.forEach(visit)
+      return
+    }
+    if (!nested || typeof nested !== 'object') return
+    const entry = record(nested)
+    if (entry.action === 'summon' && typeof entry.cardId === 'string') {
+      const definition = CARD_CATALOG.get(entry.cardId)
+       if (definition) {
+         if (definition.subtype) tribes.add(definition.subtype)
+         for (const tribe of definition.tribes ?? []) tribes.add(tribe)
+       }
+    }
+    Object.values(entry).forEach(visit)
+  }
+  visit(value)
+  return tribes
+}
+
+function hasPlayerMinionTribeCondition(value: unknown, tribe: string): boolean {
+  if (Array.isArray(value))
+    return value.some((nested) => hasPlayerMinionTribeCondition(nested, tribe))
+  if (!value || typeof value !== 'object') return false
+  const entry = record(value)
+  const condition = record(entry.condition)
+  if (
+    condition.type === 'player-has-minion' &&
+    record(condition.filter).tribe === tribe
+  )
+    return true
+  return Object.values(entry).some((nested) =>
+    hasPlayerMinionTribeCondition(nested, tribe)
+  )
+}
+
+function conditionalMinionPayoffPrior(
+  effects: unknown,
+  player: TurnMatchState['players'][number],
+  playedCardInstanceId: string,
+  playedCardCost: number
+): number {
+  const tribes = summonedMinionTribes(effects)
+  if (!tribes.size) return 0
+  const remainingMana = number(player.mana.available) - playedCardCost
+  if (remainingMana < 0) return 0
+  const enablesPayoff = player.hand.some((card) => {
+    if (card.instanceId === playedCardInstanceId) return false
+    const definition = CARD_CATALOG.get(card.cardId)
+    return (
+      definition !== undefined &&
+      number(card.currentCost, definition.cost) <= remainingMana &&
+      [...tribes].some((tribe) =>
+        hasPlayerMinionTribeCondition(definition.effects, tribe)
+      )
+    )
+  })
+  return enablesPayoff ? 8 : 0
+}
+
+function deathrattleAreaDamage(effects: unknown): number {
+  const findDamage = (value: unknown): number => {
+    if (Array.isArray(value)) return Math.max(0, ...value.map(findDamage))
+    if (!value || typeof value !== 'object') return 0
+    const entry = record(value)
+    const target = record(entry.target)
+    const ownDamage =
+      entry.action === 'damage' &&
+      target.controller === 'any' &&
+      target.type === 'minion' &&
+      target.selection === 'all'
+        ? number(entry.amount)
+        : 0
+    return Math.max(ownDamage, ...Object.values(entry).map(findDamage))
+  }
+
+  const triggers = (Array.isArray(effects) ? effects : [effects])
+    .map(record)
+    .filter((effect) => effect.trigger === 'deathrattle')
+  return Math.max(0, ...triggers.map((effect) => findDamage(effect.actions)))
+}
+
+function deathrattleClearPrior(
+  effects: unknown,
+  opponent: TurnMatchState['players'][number],
+  turnNumber: number
+): number {
+  const damage = deathrattleAreaDamage(effects)
+  if (!damage) return 0
+  const removableMinions = opponent.board.filter((minion) => {
+    const keywords = effectiveBoardMinionKeywords(minion, turnNumber)
+    return (
+      number(minion.health) <= damage &&
+      !keywords.includes('divine-shield') &&
+      !keywords.includes('immune')
+    )
+  }).length
+  return Math.min(12, removableMinions * 3)
+}
+
+function damageHeroPowerAmount(player: TurnMatchState['players'][number]): number {
+  const effect = HERO_POWER_CATALOG.get(player.heroPower.id)?.effect
+  return effect?.kind === 'damage-character' ? number(effect.amount) : 0
+}
+
+function deathrattleSetupPrior(
+  effects: unknown,
+  playedMinionHealth: number,
+  player: TurnMatchState['players'][number],
+  opponent: TurnMatchState['players'][number],
+  playedCardCost: number,
+  turnNumber: number
+): number {
+  const power = HERO_POWER_CATALOG.get(player.heroPower.id)
+  const remainingMana = number(player.mana.available) - playedCardCost
+  const heroPowerDamage = damageHeroPowerAmount(player)
+  if (
+    !power ||
+    !player.heroPower.available ||
+    heroPowerDamage <= 0 ||
+    playedMinionHealth > heroPowerDamage ||
+    remainingMana < number(player.heroPower.cost, power.cost)
+  )
+    return 0
+  return deathrattleClearPrior(effects, opponent, turnNumber)
+}
+
+function containsEffectAction(value: unknown, action: string): boolean {
+  if (Array.isArray(value))
+    return value.some((entry) => containsEffectAction(entry, action))
+  if (!value || typeof value !== 'object') return false
+  const entry = record(value)
+  return (
+    entry.action === action ||
+    Object.values(entry).some((nested) => containsEffectAction(nested, action))
+  )
+}
+
+function cthunAttackThresholds(value: unknown): readonly number[] {
+  if (Array.isArray(value))
+    return value.flatMap((entry) => cthunAttackThresholds(entry))
+  if (!value || typeof value !== 'object') return []
+  const entry = record(value)
+  const ownThreshold =
+    entry.type === 'cthun-attack-at-least' && typeof entry.value === 'number'
+      ? [entry.value]
+      : []
+  return [
+    ...ownThreshold,
+    ...Object.values(entry).flatMap((nested) => cthunAttackThresholds(nested))
+  ]
+}
+
+function cthunBuffAmount(effects: unknown): number {
+  if (Array.isArray(effects))
+    return effects.reduce((total, entry) => total + cthunBuffAmount(entry), 0)
+  if (!effects || typeof effects !== 'object') return 0
+  const entry = record(effects)
+  const ownBuff = entry.action === 'buff-cthun' ? number(entry.attack) : 0
+  return (
+    ownBuff +
+    Object.values(entry).reduce<number>(
+      (total, nested) => total + cthunBuffAmount(nested),
+      0
+    )
+  )
+}
+
+function cthunPayoffValue(
+  hand: readonly { readonly cardId: string }[],
+  attack: number
+): number {
+  if (attack <= 0) return 0
+  return hand.reduce((total, card) => {
+    const definition = CARD_CATALOG.get(card.cardId)
+    if (!definition || !containsEffectAction(definition.effects, 'summon')) return total
+    const thresholds = cthunAttackThresholds(definition.effects)
+    return (
+      total +
+      thresholds.reduce(
+        (value, threshold) =>
+          value +
+          Math.min(8, (attack / threshold) * 8) +
+          (attack >= threshold ? 20 : 0),
+        0
+      )
+    )
+  }, 0)
+}
+
+function cthunBuffPrior(
+  effects: unknown,
+  player: TurnMatchState['players'][number]
+): number {
+  const attackBuff = cthunBuffAmount(effects)
+  const attack = number(player.cthun?.attack)
+  if (!attackBuff || !attack || player.cthunDied) return 0
+  const before = cthunPayoffValue(player.hand, attack)
+  const after = cthunPayoffValue(player.hand, attack + attackBuff)
+  return Math.min(16, Math.max(0, after - before))
+}
+
+function hasMinionHealDrawTrigger(effects: unknown): boolean {
+  if (!Array.isArray(effects)) return false
+  return effects.some((effect) => {
+    const definition = record(effect)
+    const event = record(definition.event)
+    const target = record(event.target)
+    return (
+      event.type === 'health-restored' &&
+      target.type === 'minion' &&
+      containsEffectAction(definition.actions, 'draw')
+    )
+  })
+}
+
+function healingPowerAmount(player: TurnMatchState['players'][number]): number {
+  const effect = HERO_POWER_CATALOG.get(player.heroPower.id)?.effect
+  if (
+    effect?.kind === 'restore-character' ||
+    effect?.kind === 'restore-and-buff-minion'
+  )
+    return effect.amount
+  return 0
+}
+
+function hasDamagedFriendlyMinion(player: TurnMatchState['players'][number]): boolean {
+  return player.board.some(
+    (minion) => number(minion.health) < number(minion.maxHealth, minion.health)
+  )
+}
+
+function healingSynergyPrior(
+  player: TurnMatchState['players'][number],
+  effects: unknown,
+  cardCost: number
+): number {
+  const healAmount = healingPowerAmount(player)
+  const power = HERO_POWER_CATALOG.get(player.heroPower.id)
+  const availableAfterPlay = number(player.mana.available) - cardCost
+  if (
+    !hasMinionHealDrawTrigger(effects) ||
+    !player.heroPower.available ||
+    !healAmount ||
+    !power ||
+    availableAfterPlay < number(player.heroPower.cost, power.cost) ||
+    !hasDamagedFriendlyMinion(player)
+  )
+    return 0
+  return 8
+}
+
+function returnedMinionCostReduction(value: unknown): number {
+  if (Array.isArray(value))
+    return Math.max(0, ...value.map(returnedMinionCostReduction))
+  if (value === null || typeof value !== 'object') return 0
+  const entry = record(value)
+  const ownReduction =
+    entry.action === 'change-cost' && number(entry.amount) < 0
+      ? -number(entry.amount)
+      : 0
+  return Math.max(
+    ownReduction,
+    ...Object.values(entry).map(returnedMinionCostReduction)
+  )
+}
+
+function heroPowerBlocksDiscountedChargeReplay(
+  player: TurnMatchState['players'][number],
+  turnNumber: number,
+  heroPowerCost: number
+): boolean {
+  const availableMana = number(player.mana.available)
+  if (heroPowerCost <= 0 || availableMana < heroPowerCost) return false
+  return player.hand.some((card) => {
+    const definition = CARD_CATALOG.get(card.cardId)
+    if (!definition || !containsEffectAction(definition.effects, 'return-to-hand'))
+      return false
+    const costReduction = returnedMinionCostReduction(definition.effects)
+    if (costReduction <= 0) return false
+    return player.board.some((minion) => {
+      const minionDefinition = CARD_CATALOG.get(minion.cardId)
+      if (
+        minionDefinition?.type !== 'Minion' ||
+        !effectiveBoardMinionKeywords(minion, turnNumber).includes('charge') ||
+        boardMinionAttacksUsed(minion, turnNumber) === 0
+      )
+        return false
+      const replayCost = Math.max(0, minionDefinition.cost - costReduction)
+      return replayCost <= availableMana && replayCost > availableMana - heroPowerCost
+    })
+  })
+}
+
 function playerValue(player: AiObservedPlayer, turnNumber: number): number {
   const hero = record(player.hero)
   const armor = number(hero.armor)
   const health = number(hero.health)
+  const heroHealthValue =
+    Math.min(15, health) * LOCAL_AI_POLICY.weights.heroHealth +
+    Math.max(0, health - 15) * 2
   const board = player.board.reduce((total, minion) => {
     const entry = record(minion)
     const keywords = effectiveBoardMinionKeywords(minion, turnNumber)
@@ -163,12 +694,21 @@ function playerValue(player: AiObservedPlayer, turnNumber: number): number {
     : 0
   const secretValue = player.secrets.length * LOCAL_AI_POLICY.weights.secret
   const effects = record(player.effects)
+  const cthun = record(effects.cthun)
+  const cthunAttack = number(cthun.attack)
+  const cthunProgress =
+    effects.cthunDied === true || !cthunAttack
+      ? 0
+      : cthunAttack * 3 +
+        number(cthun.health) * 2 +
+        cthunPayoffValue(player.hand, cthunAttack)
   const overloadLocked = number(record(player.mana).overloadLocked)
   const handOverflow = Math.max(0, player.handSize - 8)
   return (
-    health * LOCAL_AI_POLICY.weights.heroHealth +
+    heroHealthValue +
     armor * LOCAL_AI_POLICY.weights.heroArmor +
     board +
+    cthunProgress +
     hand * LOCAL_AI_POLICY.weights.handCard +
     hiddenHand * LOCAL_AI_POLICY.weights.handCard * 0.6 +
     mana * LOCAL_AI_POLICY.weights.manaAvailable +
@@ -182,7 +722,11 @@ function playerValue(player: AiObservedPlayer, turnNumber: number): number {
   )
 }
 
-function stateScore(observation: AiObservation, selfId: string): number {
+function stateScore(
+  observation: AiObservation,
+  selfId: string,
+  profile: LocalAiSearchProfile
+): number {
   const self = observation.players.find((player) => player.participantId === selfId)
   const opponent = observation.players.find((player) => player.participantId !== selfId)
   if (!self || !opponent) return -Infinity
@@ -190,11 +734,25 @@ function stateScore(observation: AiObservation, selfId: string): number {
   const opponentHero = record(opponent.hero)
   const selfHealth = number(selfHero.health) + number(selfHero.armor) * 0.7
   const opponentHealth = number(opponentHero.health) + number(opponentHero.armor) * 0.7
-  const pressure = (30 - opponentHealth) * LOCAL_AI_POLICY.weights.faceDamage
-  const danger = (30 - selfHealth) * LOCAL_AI_POLICY.weights.heroHealth
+  // Hero health is already part of playerValue. Keep only a small face-pressure
+  // term for Expert so the same damage is not counted twice against trading.
+  const pressure =
+    (30 - opponentHealth) *
+    LOCAL_AI_POLICY.weights.faceDamage *
+    (profile === 'expert' ? 0.1 : 1)
+  const danger =
+    profile === 'expert'
+      ? Math.max(0, 12 - selfHealth) * LOCAL_AI_POLICY.weights.heroHealth
+      : (30 - selfHealth) * LOCAL_AI_POLICY.weights.heroHealth
+  const boardPresence =
+    profile === 'expert'
+      ? (Math.min(3, self.board.length) - Math.min(3, opponent.board.length)) *
+        LOCAL_AI_POLICY.weights.expertBoardPresence
+      : 0
   return (
     playerValue(self, observation.turnNumber) -
     playerValue(opponent, observation.turnNumber) +
+    boardPresence +
     pressure -
     danger
   )
@@ -251,11 +809,38 @@ function visibleHeroThreat(
 }
 
 /**
- * Builds only public opponent attacks. It deliberately does not enumerate the
- * opponent's hidden hand, secrets, or deck, so response search stays within
- * the same information boundary as the live AI.
+ * Builds only engine-legal attacks from the opponent's public board and hero.
+ * The attack-only legality query avoids enumerating hidden-hand actions.
  */
 function visibleOpponentAttackCommands(
+  fork: OpeningMatchAnalysis,
+  observation: AiObservation
+): readonly TurnMatchCommand[] {
+  const attacker = observation.players.find((player) => player.role === 'opponent')
+  if (!attacker || observation.activePlayerId !== attacker.participantId) return []
+
+  const legalTargets =
+    fork.getAttackLegality?.(attacker.participantId).legalAttackTargets ??
+    fork.getLegality(attacker.participantId).legalAttackTargets
+  const commands: TurnMatchCommand[] = []
+  for (const [attackerId, targets] of Object.entries(legalTargets)) {
+    const attackerRef =
+      attackerId === `${attacker.participantId}:hero`
+        ? { kind: 'hero' as const }
+        : { kind: 'minion' as const, instanceId: attackerId }
+    for (const defenderRef of targets)
+      commands.push({
+        type: 'attack-character',
+        participantId: attacker.participantId,
+        attacker: attackerRef,
+        defender: defenderRef
+      })
+  }
+  return commands
+}
+
+/** Keeps Easy/V1's existing approximate public-response generator unchanged. */
+function easyOpponentAttackCommands(
   observation: AiObservation,
   selfId: string
 ): readonly TurnMatchCommand[] {
@@ -316,6 +901,65 @@ function visibleOpponentAttackCommands(
         defender: defenderRef
       })
   return commands
+}
+
+function remainingPublicAttackDamage(
+  attacker: AiObservedPlayer,
+  command: Extract<TurnMatchCommand, { type: 'attack-character' }>,
+  turnNumber: number
+): number {
+  const attackerRef = command.attacker
+  if (attackerRef.kind === 'hero') {
+    const hero = record(attacker.hero)
+    const keywords = Array.isArray(hero.keywords) ? (hero.keywords as string[]) : []
+    const defaultAttackLimit = keywords.includes('mega-windfury')
+      ? 4
+      : keywords.includes('windfury')
+        ? 2
+        : 1
+    const attackLimit = Math.max(1, number(hero.maxAttacksPerTurn, defaultAttackLimit))
+    const attacksUsed = number(
+      hero.attacksUsedThisTurn,
+      number(hero.lastAttackedOnTurn, -1) === turnNumber ? 1 : 0
+    )
+    const weapon = record(attacker.weapon)
+    const weaponAttack = number(weapon.durability) > 0 ? number(weapon.attack) : 0
+    return Math.max(0, attackLimit - attacksUsed) * (number(hero.attack) + weaponAttack)
+  }
+
+  const minion = attacker.board.find(
+    (candidate) => candidate.instanceId === attackerRef.instanceId
+  )
+  if (!minion) return 0
+  const keywords = effectiveBoardMinionKeywords(minion, turnNumber)
+  const defaultAttackLimit = keywords.includes('mega-windfury')
+    ? 4
+    : keywords.includes('windfury')
+      ? 2
+      : 1
+  const attackLimit = Math.max(1, number(minion.maxAttacksPerTurn, defaultAttackLimit))
+  return (
+    Math.max(0, attackLimit - boardMinionAttacksUsed(minion, turnNumber)) *
+    number(minion.attack)
+  )
+}
+
+/** Builds legal public hero-power replies without enumerating the opponent's hand. */
+function visibleOpponentHeroPowerCommands(
+  fork: OpeningMatchAnalysis,
+  observation: AiObservation
+): readonly TurnMatchCommand[] {
+  const opponent = observation.players.find((player) => player.role === 'opponent')
+  if (!opponent || observation.activePlayerId !== opponent.participantId) return []
+  const legality = fork.getLegality(opponent.participantId)
+  if (!legality.legalHeroPower) return []
+  if (!legality.legalHeroPowerTargets.length)
+    return [{ type: 'use-hero-power', participantId: opponent.participantId }]
+  return legality.legalHeroPowerTargets.map((target) => ({
+    type: 'use-hero-power',
+    participantId: opponent.participantId,
+    target
+  }))
 }
 
 function containsRandomMechanic(value: unknown): boolean {
@@ -400,7 +1044,11 @@ function hasRandomText(cardId: string): boolean {
   )
 }
 
+const cardScoreCache = new Map<string, number>()
+
 function cardScore(cardId: string): number {
+  const cached = cardScoreCache.get(cardId)
+  if (cached !== undefined) return cached
   const definition = CARD_CATALOG.get(cardId)
   if (!definition) return 0
   const body =
@@ -421,7 +1069,9 @@ function cardScore(cardId: string): number {
     (mechanics.includes('restore') || mechanics.includes('heal') ? 4 : 0) +
     (mechanics.includes('summon') ? 4 : 0) +
     (mechanics.includes('choose one') ? 3 : 0)
-  return body + definition.effects.length * 3 + utility - definition.cost * 0.7
+  const score = body + definition.effects.length * 3 + utility - definition.cost * 0.7
+  cardScoreCache.set(cardId, score)
+  return score
 }
 
 function choiceOptionBias(
@@ -435,11 +1085,13 @@ function choiceOptionBias(
   if (!self || !opponent) return 0
   const presentationId = option.presentationCardId
   const definition = presentationId ? CARD_CATALOG.get(presentationId) : undefined
-  const text = `${definition?.name ?? option.label} ${definition?.rulesText ?? ''}`.toLowerCase()
+  const text =
+    `${definition?.name ?? option.label} ${definition?.rulesText ?? ''}`.toLowerCase()
 
-  if (pending.resolution?.type === 'adapt') {
+  const resolution = pending.resolution
+  if (resolution?.type === 'adapt') {
     const target = self.board.find(
-      (minion) => minion.instanceId === pending.resolution?.targetInstanceId
+      (minion) => minion.instanceId === resolution.targetInstanceId
     )
     if (!target) return 0
     const enemyMinions = opponent.board
@@ -451,9 +1103,7 @@ function choiceOptionBias(
       ...enemyMinions.map((minion) => number(minion.attack))
     )
     if (text.includes('windfury')) {
-      return enemyHeroHealth <= targetAttack * 2
-        ? 25_000
-        : targetAttack * 18
+      return enemyHeroHealth <= targetAttack * 2 ? 25_000 : targetAttack * 18
     }
     if (text.includes('poisonous')) {
       return enemyMinions.length > 0 ? 1_800 : -20
@@ -494,8 +1144,7 @@ function choiceOptionBias(
       })
       return hasNearTermPlay ? 600 : 40
     }
-    if (text.includes('draw'))
-      return self.deckSize >= 3 ? 20 : -120
+    if (text.includes('draw')) return self.deckSize >= 3 ? 20 : -120
   }
 
   return 0
@@ -524,11 +1173,7 @@ function commandReason(
   return `Select the highest scored legal action (${Math.round(score)}).`
 }
 
-function mulliganReplace(
-  session: GameBoardSession,
-  self: AiObservedPlayer,
-  state: TurnMatchState
-): readonly string[] {
+function mulliganReplace(self: AiObservedPlayer): readonly string[] {
   const hand = self.hand
   const ordered = hand.map((card) => {
     const definition = CARD_CATALOG.get(card.cardId)
@@ -547,11 +1192,7 @@ function mulliganReplace(
   })
   const low = ordered.filter((entry) => entry.cost <= 2).length
   const keepCount =
-    low === ordered.length
-      ? ordered.length
-      : low > 0
-        ? Math.min(3, low + 1)
-        : 1
+    low === ordered.length ? ordered.length : low > 0 ? Math.min(3, low + 1) : 1
   const keep = new Set(
     [...ordered]
       .sort((left, right) => right.keep - left.keep)
@@ -573,11 +1214,32 @@ function yieldToRenderer(): Promise<void> {
 export class LocalAiDecisionApi implements AiDecisionApi {
   private readonly cancelled = new Set<string>()
   private lastTrace: LocalAiDecisionTrace | null = null
+  private readonly profile: LocalAiSearchProfile
+  private readonly limits: LocalAiSearchLimits
+  private readonly budgetMs: number
+  private readonly workBudget?: number
+  private workUnits = 0
+  private workBudgetHit = false
+  private readonly preferredContinuation?: AiActionIntent
+  private readonly fairHypothesis: boolean
 
   constructor(
     private readonly session: GameBoardSession,
-    private readonly onTrace?: LocalAiTraceListener
-  ) {}
+    private readonly onTrace?: LocalAiTraceListener,
+    options: LocalAiDecisionOptions = {}
+  ) {
+    this.profile = options.profile ?? 'easy'
+    this.limits = SEARCH_LIMITS[this.profile]
+    this.budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY
+    if (
+      options.workBudget !== undefined &&
+      (!Number.isSafeInteger(options.workBudget) || options.workBudget < 1)
+    )
+      throw new RangeError('Local AI workBudget must be a positive safe integer.')
+    this.workBudget = options.workBudget
+    this.preferredContinuation = options.preferredContinuation
+    this.fairHypothesis = options.fairHypothesis ?? false
+  }
 
   /** Returns the last completed search for development diagnostics and scenario tests. */
   getLastTrace(): LocalAiDecisionTrace | null {
@@ -588,7 +1250,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     return {
       enabled: true,
       provider: 'none',
-      modelId: LOCAL_AI_MODEL_ID,
+      modelId: this.profile === 'expert' ? EXPERT_MODEL_ID : EASY_MODEL_ID,
       reasoningEffort: 'none',
       maxCompletionTokens: 1,
       maxContextBytes: 200_000
@@ -602,11 +1264,10 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       throw new Error('AI request cancelled.')
 
     if (request.phase === 'mulligan') {
-      const state = this.session.getState()
       const observation = this.session.getAiObservation()
       const self = observation.players.find((player) => player.role === 'self')
       if (!self) throw new Error('Local AI cannot find its fair player observation.')
-      const replace = mulliganReplace(this.session, self, state)
+      const replace = mulliganReplace(self)
       this.publishTrace({
         requestId: request.requestId,
         phase: 'mulligan',
@@ -642,11 +1303,18 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     )
     if (!legal.length) throw new Error('Local AI has no legal command.')
     const actions = aiActions(this.session, legal)
-    const search = await this.chooseAction(
-      actions,
-      request.requestId,
-      request.phase === 'plan' ? 'plan' : 'action'
-    )
+    const search =
+      this.profile === 'expert'
+        ? await this.chooseExpertMctsAction(
+            actions,
+            request.requestId,
+            request.phase === 'plan' ? 'plan' : 'action'
+          )
+        : await this.chooseAction(
+            actions,
+            request.requestId,
+            request.phase === 'plan' ? 'plan' : 'action'
+          )
     if (!search) throw new Error('Local AI could not score a legal command.')
     const { best } = search
 
@@ -696,15 +1364,857 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     this.cancelled.add(identity.requestId)
   }
 
+  private hasWorkRemaining(): boolean {
+    if (this.workBudget === undefined || this.workUnits < this.workBudget) return true
+    this.workBudgetHit = true
+    return false
+  }
+
+  private tryUseWorkUnit(): boolean {
+    if (!this.hasWorkRemaining()) {
+      if (this.workBudget !== undefined) this.workBudgetHit = true
+      return false
+    }
+    this.workUnits++
+    return true
+  }
+
+  private async chooseExpertMctsAction(
+    actions: readonly LocalAction[],
+    requestId: string,
+    phase: 'plan' | 'action'
+  ): Promise<{ best: ScoredAction; trace: LocalAiDecisionTrace } | null> {
+    this.workUnits = 0
+    this.workBudgetHit = false
+    const started = performance.now()
+    const deadline =
+      this.workBudget === undefined
+        ? started + Math.min(this.budgetMs, this.limits.maxThinkMs, 2_000)
+        : Number.POSITIVE_INFINITY
+    const rootId = this.session.remoteParticipantId
+    const mctsProfile = {
+      hypothesisSetupMs: 0,
+      analysisSnapshotRestoreMs: 0,
+      observationMs: 0,
+      informationKeyMs: 0,
+      legalActionGenerationMs: 0,
+      actionPriorMs: 0,
+      treeSelectionMs: 0,
+      rolloutSelectionMs: 0,
+      simulationDispatchMs: 0,
+      leafEvaluationMs: 0,
+      candidateCacheHits: 0,
+      candidateCacheMisses: 0,
+      opponentActionsSimulated: 0,
+      opponentCardPlaysSimulated: 0,
+      averageTreeDepth: 0,
+      averageRolloutDepth: 0,
+      maximumRolloutDepth: 0
+    }
+    const hypothesisSetupStarted = performance.now()
+    const simulationSession = this.fairHypothesis
+      ? this.session
+      : (() => {
+          const checkpoint = createFairHypothesisCheckpoint(
+            this.session.match.getCheckpoint(),
+            rootId,
+            stableSeed(requestId)
+          )
+          return new GameBoardSession({
+            setup: checkpoint.setup,
+            decks: checkpoint.decks,
+            opponentStrategy: this.session.opponentStrategy,
+            checkpoint
+          })
+        })()
+    mctsProfile.hypothesisSetupMs = performance.now() - hypothesisSetupStarted
+    const tree = new InformationSetMcts<TurnMatchCommand>()
+    const rootChoices = new Map(
+      actions.map((action) => [canonicalCommandKey(action.command), action])
+    )
+    const candidateCache = new Map<string, readonly MctsCandidate<TurnMatchCommand>[]>()
+    const rootCandidatePriors = new Map<string, number>()
+    const rootCandidateRiskAdjustments = new Map<string, number>()
+    const rootCandidatePreferenceAdjustments = new Map<string, number>()
+    const rootKeyStarted = performance.now()
+    const rootInformationKey = informationSetKey(simulationSession.getAiObservation())
+    mctsProfile.informationKeyMs += performance.now() - rootKeyStarted
+    const pathLimit = 48
+    const iterationLimit = 4_000
+    let iterations = 0
+    let totalDepth = 0
+    let totalTreeDepth = 0
+    let totalRolloutDepth = 0
+    let maximumRolloutDepth = 0
+    let cancelled = false
+
+    while (
+      iterations < iterationLimit &&
+      performance.now() < deadline &&
+      this.tryUseWorkUnit()
+    ) {
+      if (iterations > 0 && iterations % 8 === 0) {
+        await yieldToRenderer()
+        if (this.cancelled.has(requestId)) {
+          cancelled = true
+          break
+        }
+      }
+
+      const iterationSeed = stableSeed(`${requestId}:${iterations}`)
+      const selectedPath: MctsSelection<TurnMatchCommand>[] = []
+      let depth = 0
+      let treeDepth = 0
+      let rolloutDepth = 0
+      let ownTurnEnds = 0
+      let reward = 0
+      const analysisStarted = performance.now()
+      let callbackElapsedMs = 0
+      simulationSession.match.analyzeWithSeed(iterationSeed, (fork) => {
+        const callbackStarted = performance.now()
+        const rolloutRng = createSeededRng(iterationSeed ^ 0xa511e9b3)
+        let expanded = false
+        while (depth < pathLimit) {
+          const state = fork.getState()
+          if (state.phase === 'ended') {
+            reward = this.terminalMctsValue(state.winnerId, rootId, depth)
+            break
+          }
+          const actorId =
+            state.pendingDiscover?.participantId ??
+            state.pendingCardChoice?.participantId ??
+            state.activePlayerId
+          if (!actorId) break
+          const observationStarted = performance.now()
+          const observation = fork.getAiObservation?.(actorId, 'fair')
+          mctsProfile.observationMs += performance.now() - observationStarted
+          if (!observation) break
+          const informationKeyStarted = performance.now()
+          const nodeKey = informationSetKey(observation)
+          mctsProfile.informationKeyMs += performance.now() - informationKeyStarted
+          let candidates = candidateCache.get(nodeKey)
+          if (!candidates) {
+            const actionGenerationStarted = performance.now()
+            const commands = enumerateLegalCommands(fork, actorId)
+            mctsProfile.legalActionGenerationMs +=
+              performance.now() - actionGenerationStarted
+            if (!commands.length) break
+            const priorStarted = performance.now()
+            candidates = commands.map((command) => ({
+              key: canonicalCommandKey(command),
+              action: command,
+              prior: this.commandPrior(command, fork, actorId)
+            }))
+            if (nodeKey === rootInformationKey)
+              for (const candidate of candidates) {
+                rootCandidatePriors.set(candidate.key, candidate.prior)
+                rootCandidateRiskAdjustments.set(
+                  candidate.key,
+                  this.unrevealedSecretRisk(candidate.action, fork, actorId)
+                )
+                rootCandidatePreferenceAdjustments.set(
+                  candidate.key,
+                  -this.continuationPreference(candidate.action) * 0.1
+                )
+              }
+            mctsProfile.actionPriorMs += performance.now() - priorStarted
+            mctsProfile.candidateCacheMisses++
+            if (candidateCache.size < MCTS_MAX_CACHED_INFORMATION_SETS)
+              candidateCache.set(nodeKey, candidates)
+          } else mctsProfile.candidateCacheHits++
+
+          if (expanded) {
+            const rolloutStarted = performance.now()
+            const command = this.rolloutCommand(candidates, rolloutRng)
+            mctsProfile.rolloutSelectionMs += performance.now() - rolloutStarted
+            const dispatchStarted = performance.now()
+            const result = fork.dispatch(command)
+            mctsProfile.simulationDispatchMs += performance.now() - dispatchStarted
+            if (!result.accepted) break
+            if (actorId !== rootId) {
+              mctsProfile.opponentActionsSimulated++
+              if (command.type === 'play-card') mctsProfile.opponentCardPlaysSimulated++
+            }
+            depth++
+            rolloutDepth++
+            if (actorId === rootId && command.type === 'end-turn') ownTurnEnds++
+            else if (
+              actorId !== rootId &&
+              command.type === 'end-turn' &&
+              ownTurnEnds > 0
+            ) {
+              const responseState = fork.getState()
+              if (
+                responseState.phase === 'ended' ||
+                responseState.activePlayerId === rootId
+              )
+                break
+            }
+            continue
+          }
+
+          const selectionStarted = performance.now()
+          const selection = tree.select(
+            nodeKey,
+            candidates,
+            actorId === rootId,
+            nodeKey === rootInformationKey ? this.limits.rootSearchLimit : 1
+          )
+          mctsProfile.treeSelectionMs += performance.now() - selectionStarted
+          if (!selection) break
+          selectedPath.push(selection)
+          const dispatchStarted = performance.now()
+          const result = fork.dispatch(selection.candidate.action)
+          mctsProfile.simulationDispatchMs += performance.now() - dispatchStarted
+          if (!result.accepted) break
+          if (actorId !== rootId) {
+            mctsProfile.opponentActionsSimulated++
+            if (selection.candidate.action.type === 'play-card')
+              mctsProfile.opponentCardPlaysSimulated++
+          }
+          depth++
+          treeDepth++
+          if (actorId === rootId && selection.candidate.action.type === 'end-turn')
+            ownTurnEnds++
+          else if (
+            actorId !== rootId &&
+            selection.candidate.action.type === 'end-turn' &&
+            ownTurnEnds > 0
+          ) {
+            const responseState = fork.getState()
+            if (
+              responseState.phase === 'ended' ||
+              responseState.activePlayerId === rootId
+            )
+              break
+          }
+          expanded = selection.expanded
+        }
+
+        const state = fork.getState()
+        if (state.phase === 'ended')
+          reward = this.terminalMctsValue(state.winnerId, rootId, depth)
+        else {
+          const leafEvaluationStarted = performance.now()
+          const leafObservationStarted = performance.now()
+          const leafObservation = fork.getAiObservation?.(rootId, 'fair')
+          mctsProfile.observationMs += performance.now() - leafObservationStarted
+          reward = leafObservation
+            ? MCTS_POSITION_VALUE_LIMIT *
+              Math.tanh(
+                this.scoreObservation(leafObservation, state.winnerId) /
+                  MCTS_POSITION_VALUE_SCALE
+              )
+            : -MCTS_POSITION_VALUE_LIMIT
+          mctsProfile.leafEvaluationMs += performance.now() - leafEvaluationStarted
+        }
+        callbackElapsedMs = performance.now() - callbackStarted
+      })
+      const analysisElapsedMs = performance.now() - analysisStarted
+      mctsProfile.analysisSnapshotRestoreMs += Math.max(
+        0,
+        analysisElapsedMs - callbackElapsedMs
+      )
+
+      tree.backup(selectedPath, reward)
+      iterations++
+      totalDepth += depth
+      totalTreeDepth += treeDepth
+      totalRolloutDepth += rolloutDepth
+      maximumRolloutDepth = Math.max(maximumRolloutDepth, rolloutDepth)
+    }
+
+    if (cancelled || this.cancelled.has(requestId)) return null
+    const rootObservation = simulationSession.getAiObservation()
+    const rootStats = tree.rootStats(informationSetKey(rootObservation))
+    const visited = rootStats
+      .map((stat) => ({ stat, action: rootChoices.get(stat.key) }))
+      .filter(
+        (entry): entry is { stat: (typeof rootStats)[number]; action: LocalAction } =>
+          entry.action !== undefined
+      )
+    const selected = [...visited].sort(
+      (left, right) =>
+        mctsRootRecommendationScore(right.stat) +
+          Math.max(-8, Math.min(24, rootCandidatePriors.get(right.stat.key) ?? 0)) *
+            0.005 -
+          (rootCandidatePreferenceAdjustments.get(right.stat.key) ?? 0) -
+          (rootCandidateRiskAdjustments.get(right.stat.key) ?? 0) -
+          (mctsRootRecommendationScore(left.stat) +
+            Math.max(-8, Math.min(24, rootCandidatePriors.get(left.stat.key) ?? 0)) *
+              0.005 -
+            (rootCandidatePreferenceAdjustments.get(left.stat.key) ?? 0) -
+            (rootCandidateRiskAdjustments.get(left.stat.key) ?? 0)) ||
+        right.stat.visits - left.stat.visits ||
+        right.stat.meanValue - left.stat.meanValue ||
+        left.action.id.localeCompare(right.action.id)
+    )[0]
+    if (!selected) return null
+
+    const candidates: LocalAiCandidateTrace[] = [...visited]
+      .sort(
+        (left, right) =>
+          right.stat.visits - left.stat.visits ||
+          right.stat.meanValue - left.stat.meanValue
+      )
+      .slice(0, this.limits.traceCandidateLimit)
+      .map(({ stat, action }) => ({
+        actionId: action.id,
+        type: action.command.type,
+        description: action.description,
+        score: stat.meanValue,
+        scoreComponents: {
+          positionDelta: stat.meanValue,
+          commandPreference: 0,
+          continuationPreference: this.continuationPreference(action.command),
+          threatDefense: 0,
+          opponentBoardRemoval: 0,
+          friendlyBoardLoss: 0,
+          sequenceRefinement: 0
+        },
+        accepted: true,
+        phase: simulationSession.getState().phase,
+        winnerId: null,
+        visits: stat.visits,
+        meanValue: stat.meanValue,
+        prior: rootCandidatePriors.get(stat.key),
+        recommendationRiskAdjustment: rootCandidateRiskAdjustments.get(stat.key)
+      }))
+    const durationMs = performance.now() - started
+    mctsProfile.averageTreeDepth = totalTreeDepth / Math.max(1, iterations)
+    mctsProfile.averageRolloutDepth = totalRolloutDepth / Math.max(1, iterations)
+    mctsProfile.maximumRolloutDepth = maximumRolloutDepth
+    const reason =
+      `MCTS selected ${selected.action.description} after ${iterations} ` +
+      `iterations (mean value ${selected.stat.meanValue.toFixed(3)}).`
+    const best: ScoredAction = {
+      action: selected.action,
+      score: selected.stat.meanValue,
+      reason,
+      simulation: { accepted: true },
+      sequence: [selected.action.command],
+      sequenceLabels: [selected.action.description],
+      scoreComponents: {
+        positionDelta: selected.stat.meanValue,
+        commandPreference: 0,
+        continuationPreference: this.continuationPreference(selected.action.command),
+        threatDefense: 0,
+        opponentBoardRemoval: 0,
+        friendlyBoardLoss: 0,
+        sequenceRefinement: 0
+      }
+    }
+    const trace: LocalAiDecisionTrace = {
+      requestId,
+      phase,
+      durationMs,
+      evaluatedActions: visited.length,
+      refinedActions: visited.length,
+      continuations: 0,
+      timedOut: performance.now() >= deadline,
+      baseScore: null,
+      visibleThreat: null,
+      chosenActionId: selected.action.id,
+      candidates,
+      chosenSequence: [selected.action.description],
+      chosenSequenceDepth: Math.round(totalDepth / Math.max(1, iterations)),
+      sequenceSearchMs: durationMs,
+      sequenceNodes: iterations,
+      sampleCount: iterations,
+      workUnits: this.workUnits,
+      workBudgetHit: this.workBudgetHit,
+      mctsProfile
+    }
+    this.publishTrace(trace)
+    return { best, trace }
+  }
+
+  private commandPrior(
+    command: TurnMatchCommand,
+    fork: Pick<OpeningMatchAnalysis, 'getState'>,
+    actorId: string
+  ): number {
+    const continuationPreference = this.continuationPreference(command) * 2
+    if (command.type === 'end-turn') return -2 + continuationPreference
+    const state = fork.getState()
+    if (command.type === 'attack-character')
+      return this.attackCommandPrior(command, state, actorId) + continuationPreference
+    if (command.type === 'play-card') {
+      const player = state.players.find((entry) => entry.participantId === actorId)
+      const opponent = state.players.find((entry) => entry.participantId !== actorId)
+      const card = player?.hand.find(
+        (card) => card.instanceId === command.cardInstanceId
+      )
+      const cardId = card?.cardId
+      const definition = cardId ? CARD_CATALOG.get(cardId) : undefined
+      const adjacent = definition && containsAdjacentMechanic(definition.effects)
+      const boardLength = player?.board.length ?? 0
+      const neighbors =
+        adjacent && command.position !== undefined
+          ? Math.min(command.position, boardLength - command.position)
+          : 0
+      return (
+        3 +
+        Math.max(-2, Math.min(5, (definition ? cardScore(definition.id) : 0) * 0.04)) +
+        neighbors * 0.5 +
+        (player && definition
+          ? healingSynergyPrior(
+              player,
+              definition.effects,
+              number(card?.currentCost, definition.cost)
+            )
+          : 0) +
+        (player && definition ? cthunBuffPrior(definition.effects, player) : 0) +
+        (player && definition && card
+          ? conditionalMinionPayoffPrior(
+              definition.effects,
+              player,
+              card.instanceId,
+              number(card.currentCost, definition.cost)
+            )
+          : 0) +
+        (player && opponent && definition?.type === 'Minion' && card
+          ? deathrattleSetupPrior(
+              definition.effects,
+              number(definition.health),
+              player,
+              opponent,
+              number(card.currentCost, definition.cost),
+              state.turnNumber
+            )
+          : 0) +
+        Math.min(12, this.lethalBurstPrior(command, state, actorId) * 0.04) +
+        continuationPreference
+      )
+    }
+    if (command.type === 'use-hero-power') {
+      const player = state.players.find((entry) => entry.participantId === actorId)
+      if (!player) return 2.5 + continuationPreference
+      const power = HERO_POWER_CATALOG.get(player.heroPower.id)
+      const replayPenalty =
+        power &&
+        heroPowerBlocksDiscountedChargeReplay(
+          player,
+          state.turnNumber,
+          number(power.cost)
+        )
+          ? -6
+          : 0
+      const basePrior = 2.5 + replayPenalty + continuationPreference
+      const targetRef = command.target
+      if (targetRef?.kind !== 'minion') return basePrior
+      const targetPlayer = state.players.find(
+        (entry) => entry.participantId === targetRef.participantId
+      )
+      const target = targetPlayer?.board.find(
+        (entry) => entry.instanceId === targetRef.instanceId
+      )
+      const targetDefinition = target ? CARD_CATALOG.get(target.cardId) : undefined
+      const opponent = state.players.find((entry) => entry.participantId !== actorId)
+      const heroPowerDamage = damageHeroPowerAmount(player)
+      if (
+        target &&
+        targetDefinition?.type === 'Minion' &&
+        targetPlayer?.participantId === player.participantId &&
+        opponent &&
+        heroPowerDamage > 0 &&
+        number(target.health) <= heroPowerDamage
+      ) {
+        const clearPrior = deathrattleClearPrior(
+          targetDefinition.effects,
+          opponent,
+          state.turnNumber
+        )
+        if (clearPrior > 0) return basePrior + clearPrior
+      }
+      const healAmount = healingPowerAmount(player)
+      if (
+        !target ||
+        targetPlayer?.participantId !== player.participantId ||
+        !healAmount
+      )
+        return basePrior
+      const restored = Math.min(
+        healAmount,
+        Math.max(0, number(target.maxHealth, target.health) - number(target.health))
+      )
+      const hasDrawTrigger = player.board.some((minion) => {
+        const definition = CARD_CATALOG.get(minion.cardId)
+        return definition && hasMinionHealDrawTrigger(definition.effects)
+      })
+      return basePrior + restored * 1.5 + (restored > 0 && hasDrawTrigger ? 6 : 0)
+    }
+    return 2 + continuationPreference
+  }
+
+  private continuationPreference(command: TurnMatchCommand): number {
+    return this.profile === 'expert' &&
+      this.preferredContinuation &&
+      sameAiIntent(
+        this.preferredContinuation,
+        aiActionIntent(command, this.session.localParticipantId)
+      )
+      ? LOCAL_AI_POLICY.weights.expertContinuationPreference
+      : 0
+  }
+
+  private attackCommandPrior(
+    command: Extract<TurnMatchCommand, { readonly type: 'attack-character' }>,
+    state: TurnMatchState,
+    actorId: string
+  ): number {
+    const attackerPlayer = state.players.find(
+      (player) => player.participantId === actorId
+    )
+    const defenderPlayer = state.players.find(
+      (player) => player.participantId !== actorId
+    )
+    if (!attackerPlayer || !defenderPlayer) return 1
+    const attackerRef = command.attacker
+    const attacker =
+      attackerRef.kind === 'minion'
+        ? attackerPlayer?.board.find(
+            (minion) => minion.instanceId === attackerRef.instanceId
+          )
+        : undefined
+    if (command.defender.kind === 'hero') {
+      if (
+        command.attacker.kind !== 'minion' ||
+        !attacker ||
+        !defenderPlayer.secrets?.some((secret) => !secret.revealed)
+      )
+        return 3
+
+      const turnNumber = state.turnNumber
+      const readyAttackers = attackerPlayer.board.filter((minion) => {
+        const keywords = effectiveBoardMinionKeywords(minion, turnNumber)
+        return (
+          number(minion.attack) > 0 &&
+          number(minion.summonedOnTurn, -1) < turnNumber &&
+          number(minion.controllerChangedOnTurn, -1) < turnNumber &&
+          number(minion.frozenUntilTurn, -1) < turnNumber &&
+          boardMinionAttacksUsed(minion, turnNumber) <
+            Math.max(1, number(minion.maxAttacksPerTurn, 1)) &&
+          !keywords.includes('immune')
+        )
+      })
+      if (readyAttackers.length < 2) return 3
+
+      const threatValue = (minion: (typeof readyAttackers)[number]) =>
+        number(minion.attack) + number(minion.health) * 1.25
+      const leastValuableAttacker = Math.min(...readyAttackers.map(threatValue))
+      const excessValue = Math.max(0, threatValue(attacker) - leastValuableAttacker)
+      return excessValue === 0 ? 4.5 : 3 - Math.min(9, excessValue * 0.9)
+    }
+    const defenderRef = command.defender
+    if (defenderRef.kind !== 'minion') return 1
+    const defender = defenderPlayer.board.find(
+      (minion) => minion.instanceId === defenderRef.instanceId
+    )
+    if (!attackerPlayer || !defenderPlayer || !defender) return 1
+
+    const turnNumber = state.turnNumber
+    const attackerKeywords = attacker
+      ? effectiveBoardMinionKeywords(attacker, turnNumber)
+      : (attackerPlayer.hero.keywords ?? [])
+    const defenderKeywords = effectiveBoardMinionKeywords(defender, turnNumber)
+    const attackerAttack = attacker
+      ? number(attacker.attack)
+      : number(attackerPlayer.hero.attack) +
+        (attackerPlayer.weapon && attackerPlayer.weapon.durability > 0
+          ? attackerPlayer.weapon.attack
+          : 0)
+    const attackerHealth = attacker
+      ? number(attacker.health)
+      : number(attackerPlayer.hero.health) + number(attackerPlayer.hero.armor)
+    const defenderAttack = number(defender.attack)
+    const defenderHealth = number(defender.health)
+    const attackerShield = attackerKeywords.includes('divine-shield')
+    const defenderShield = defenderKeywords.includes('divine-shield')
+    const attackerPoisonous = attackerKeywords.includes('poisonous')
+    const defenderPoisonous = defenderKeywords.includes('poisonous')
+    const attackerImmune = attackerKeywords.includes('immune')
+    const defenderImmune = defenderKeywords.includes('immune')
+    const removesDefender =
+      !defenderShield &&
+      !defenderImmune &&
+      attackerAttack > 0 &&
+      (attackerPoisonous || attackerAttack >= defenderHealth)
+    const losesAttacker =
+      !attackerImmune &&
+      !attackerShield &&
+      ((defenderPoisonous && defenderAttack > 0) || defenderAttack >= attackerHealth)
+
+    let prior = defenderKeywords.includes('taunt') ? 3 : 2
+    if (defenderShield) {
+      if (attackerShield && attackerAttack <= 1) prior += 9
+      else if (attackerAttack <= 1) prior += 4
+      else prior += 1
+    }
+    if (removesDefender) {
+      prior += Math.min(6, 2 + (defenderAttack + defenderHealth) * 0.25)
+      if (!losesAttacker) prior += 2
+    }
+    if (losesAttacker) prior -= removesDefender ? 1 : 6
+    if (!removesDefender && !defenderShield && !defenderImmune) {
+      const remainingDamage = Math.max(0, attackerAttack)
+      const healthAfterAttack = defenderHealth - remainingDamage
+      const followUpAttack = attackerPlayer.board.reduce((total, minion) => {
+        if (minion.instanceId === attacker?.instanceId || number(minion.attack) <= 0)
+          return total
+        const keywords = effectiveBoardMinionKeywords(minion, turnNumber)
+        const ready =
+          number(minion.summonedOnTurn, -1) < turnNumber &&
+          number(minion.controllerChangedOnTurn, -1) < turnNumber &&
+          number(minion.frozenUntilTurn, -1) < turnNumber &&
+          boardMinionAttacksUsed(minion, turnNumber) <
+            Math.max(1, number(minion.maxAttacksPerTurn, 1)) &&
+          !keywords.includes('immune')
+        return total + (ready ? number(minion.attack) : 0)
+      }, 0)
+      if (healthAfterAttack > 0 && healthAfterAttack <= followUpAttack) prior += 8
+    }
+    return prior
+  }
+
+  private lethalBurstPrior(
+    command: TurnMatchCommand,
+    state: TurnMatchState,
+    actorId: string
+  ): number {
+    if (command.type !== 'play-card') return 0
+    const player = state.players.find((entry) => entry.participantId === actorId)
+    const opponent = state.players.find((entry) => entry.participantId !== actorId)
+    const current = player?.hand.find(
+      (card) => card.instanceId === command.cardInstanceId
+    )
+    const currentDefinition = current ? CARD_CATALOG.get(current.cardId) : undefined
+    const opponentHealth = opponent
+      ? number(record(opponent.hero).health) + number(record(opponent.hero).armor)
+      : Number.POSITIVE_INFINITY
+    if (!player || !opponent || !current || !currentDefinition) return 0
+
+    let availableMana = number(record(player.mana).available)
+    availableMana -= number(current.currentCost, currentDefinition.cost)
+    if (availableMana < 0) return 0
+
+    let spellPower = player.board.reduce(
+      (total, minion) =>
+        total +
+        (effectiveBoardMinionKeywords(minion, state.turnNumber).includes('spell-damage')
+          ? 1
+          : 0),
+      0
+    )
+    const isSpellPower = (definition: NonNullable<typeof currentDefinition>) =>
+      definition.keywords.includes('spell-damage') ||
+      definition.rulesText.toLowerCase().includes('spell damage +')
+    if (isSpellPower(currentDefinition)) spellPower++
+
+    const targetsEnemyHero =
+      command.targets?.some(
+        (target) =>
+          target.kind === 'hero' && target.participantId === opponent.participantId
+      ) === true
+    let candidateDamage = targetsEnemyHero
+      ? directSpellDamageForPlayer(currentDefinition.effects, player)
+      : 0
+    if (candidateDamage > 0) candidateDamage += spellPower
+    const currentEffects = JSON.stringify(currentDefinition.effects).toLowerCase()
+    if (
+      candidateDamage <= 0 &&
+      !isSpellPower(currentDefinition) &&
+      !currentEffects.includes('mana')
+    )
+      return 0
+
+    const burstCards = player.hand
+      .filter((card) => card.instanceId !== current.instanceId)
+      .map((card) => {
+        const definition = CARD_CATALOG.get(card.cardId)
+        return definition
+          ? {
+              card,
+              definition,
+              cost: number(card.currentCost, definition.cost),
+              damage: directSpellDamageForPlayer(definition.effects, player),
+              spellPower: isSpellPower(definition)
+            }
+          : null
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    const powerOptions = [
+      { extraPower: 0, extraCost: 0 },
+      ...burstCards
+        .filter((entry) => entry.spellPower)
+        .map((entry) => ({ extraPower: 1, extraCost: entry.cost }))
+    ]
+
+    for (const powerOption of powerOptions) {
+      const costLimit = availableMana - powerOption.extraCost
+      if (costLimit < 0) continue
+      const power = spellPower + powerOption.extraPower
+      const damageCards = burstCards.filter(
+        (entry) => entry.damage > 0 && !(powerOption.extraPower && entry.spellPower)
+      )
+      const bestAtCost = Array<number>(costLimit + 1).fill(Number.NEGATIVE_INFINITY)
+      bestAtCost[0] = candidateDamage
+      for (const entry of damageCards) {
+        for (let cost = costLimit; cost >= entry.cost; cost--) {
+          const previous = bestAtCost[cost - entry.cost]!
+          if (previous === Number.NEGATIVE_INFINITY) continue
+          bestAtCost[cost] = Math.max(
+            bestAtCost[cost]!,
+            previous + entry.damage + power
+          )
+        }
+      }
+      if (Math.max(...bestAtCost) >= opponentHealth) return 300
+    }
+    return 0
+  }
+
+  private unrevealedSecretRisk(
+    command: TurnMatchCommand,
+    fork: Pick<OpeningMatchAnalysis, 'getState'>,
+    actorId: string
+  ): number {
+    const attackerRef = command.type === 'attack-character' ? command.attacker : null
+    if (
+      command.type === 'attack-character' &&
+      command.defender.kind === 'hero' &&
+      attackerRef?.kind === 'minion'
+    ) {
+      const state = fork.getState()
+      const actor = state.players.find((player) => player.participantId === actorId)
+      const opponent = state.players.find((player) => player.participantId !== actorId)
+      const attacker = actor?.board.find(
+        (entry) => entry.instanceId === attackerRef.instanceId
+      )
+      if (!actor || !attacker || !opponent?.secrets?.some((secret) => !secret.revealed))
+        return 0
+
+      const readyAttackers = actor.board.filter((minion) => {
+        const keywords = effectiveBoardMinionKeywords(minion, state.turnNumber)
+        return (
+          number(minion.attack) > 0 &&
+          number(minion.summonedOnTurn, -1) < state.turnNumber &&
+          number(minion.controllerChangedOnTurn, -1) < state.turnNumber &&
+          number(minion.frozenUntilTurn, -1) < state.turnNumber &&
+          boardMinionAttacksUsed(minion, state.turnNumber) <
+            Math.max(1, number(minion.maxAttacksPerTurn, 1)) &&
+          !keywords.includes('immune')
+        )
+      })
+      if (readyAttackers.length < 2) return 0
+
+      const threatValue = (minion: (typeof readyAttackers)[number]) =>
+        number(minion.attack) + number(minion.health) * 1.25
+      const leastValuable = Math.min(...readyAttackers.map(threatValue))
+      return Math.min(0.2, Math.max(0, threatValue(attacker) - leastValuable) * 0.025)
+    }
+
+    if (command.type !== 'play-card') return 0
+    const state = fork.getState()
+    const actor = state.players.find((player) => player.participantId === actorId)
+    const opponent = state.players.find((player) => player.participantId !== actorId)
+    const card = actor?.hand.find(
+      (entry) => entry.instanceId === command.cardInstanceId
+    )
+    const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
+    const opponentHealth = opponent
+      ? number(record(opponent.hero).health) + number(record(opponent.hero).armor)
+      : Number.POSITIVE_INFINITY
+    const hasUnrevealedSecret =
+      opponent?.secrets?.some((secret) => !secret.revealed) ?? false
+    if (
+      !actor ||
+      !opponent ||
+      !card ||
+      definition?.type !== 'Spell' ||
+      !command.targets?.some(
+        (target) =>
+          target.kind === 'hero' && target.participantId === opponent.participantId
+      ) ||
+      !hasUnrevealedSecret ||
+      this.lethalBurstPrior(command, state, actorId) <= 0
+    )
+      return 0
+
+    const availableMana = number(actor.mana.available)
+    const hasFreeNonDamageSpell = actor.hand.some((entry) => {
+      if (entry.instanceId === card.instanceId) return false
+      const candidate = CARD_CATALOG.get(entry.cardId)
+      return (
+        candidate?.type === 'Spell' &&
+        number(entry.currentCost, candidate.cost) === 0 &&
+        availableMana >= number(card.currentCost, definition.cost) &&
+        directSpellDamageForPlayer(candidate.effects, actor) === 0
+      )
+    })
+    const lethalCost = number(card.currentCost, definition.cost)
+    const hasCheaperDamageProbe = actor.hand.some((entry) => {
+      if (entry.instanceId === card.instanceId) return false
+      const candidate = CARD_CATALOG.get(entry.cardId)
+      const candidateCost = number(entry.currentCost, candidate?.cost ?? Infinity)
+      return (
+        candidate?.type === 'Spell' &&
+        directSpellDamageForPlayer(candidate.effects, actor) > 0 &&
+        directSpellDamageForPlayer(candidate.effects, actor) < opponentHealth &&
+        candidateCost < lethalCost &&
+        availableMana >= lethalCost + candidateCost
+      )
+    })
+    if (hasFreeNonDamageSpell || hasCheaperDamageProbe) return 0.65
+    return 0
+  }
+
+  private rolloutCommand(
+    candidates: readonly MctsCandidate<TurnMatchCommand>[],
+    rng: ReturnType<typeof createSeededRng>
+  ): TurnMatchCommand {
+    const maximumPrior = Math.max(...candidates.map((candidate) => candidate.prior))
+    const weights = candidates.map((candidate) =>
+      Math.exp(Math.max(-30, (candidate.prior - maximumPrior) / 8))
+    )
+    const weightTotal = weights.reduce((sum, weight) => sum + weight, 0)
+    let draw = rng.next() * weightTotal
+    for (let index = 0; index < candidates.length; index++) {
+      draw -= weights[index]!
+      if (draw < 0) return candidates[index]!.action
+    }
+    return candidates[0]!.action
+  }
+
+  private terminalMctsValue(
+    winnerId: string | null,
+    rootId: string,
+    depth: number
+  ): number {
+    if (!winnerId) return 0
+    const speedPreference = Math.min(0.02, Math.max(0, depth) * 0.0004)
+    return winnerId === rootId ? 1 - speedPreference : -1 + speedPreference
+  }
+
   private async chooseAction(
     actions: readonly LocalAction[],
     requestId: string,
     phase: 'plan' | 'action'
   ): Promise<{ best: ScoredAction; trace: LocalAiDecisionTrace } | null> {
+    this.workUnits = 0
+    this.workBudgetHit = false
     const started = performance.now()
-    const deadline = started + Math.min(MAX_THINK_MS, SEQUENCE_THINK_MS)
+    const deadline =
+      this.workBudget === undefined
+        ? started +
+          Math.min(this.limits.maxThinkMs, this.limits.sequenceThinkMs, this.budgetMs)
+        : Number.POSITIVE_INFINITY
     const current = this.session.getAiObservation()
-    const baseScore = stateScore(current, this.session.remoteParticipantId)
+    const baseScore = stateScore(
+      current,
+      this.session.remoteParticipantId,
+      this.profile
+    )
     const currentSelf = current.players.find(
       (player) => player.participantId === this.session.remoteParticipantId
     )
@@ -718,17 +2228,26 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const currentHero = record(currentSelf?.hero)
     const currentHealth = number(currentHero.health) + number(currentHero.armor)
     const scored: ScoredAction[] = []
+    const preferredActionId =
+      this.profile === 'expert' && this.preferredContinuation
+        ? actions.find((action) =>
+            sameAiIntent(
+              this.preferredContinuation!,
+              aiActionIntent(action.command, this.session.localParticipantId)
+            )
+          )?.id
+        : undefined
+    const rootEvaluationStarted = performance.now()
 
     for (const [index, action] of actions.entries()) {
-      if (performance.now() >= deadline) break
+      if (performance.now() >= deadline || !this.tryUseWorkUnit()) break
       if (index > 0 && index % 8 === 0) {
         await yieldToRenderer()
         if (this.cancelled.has(requestId)) return null
       }
       let simulation: Simulation
       try {
-        if (this.isBeneficialHeroPowerAgainstOpponent(action.command, current))
-          continue
+        if (this.isBeneficialHeroPowerAgainstOpponent(action.command, current)) continue
         simulation = this.simulate(action.command)
       } catch {
         // A single unsupported/complex effect must not abandon the whole turn.
@@ -742,11 +2261,17 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         simulation.observation,
         current
       )
-      let score =
+      const positionDelta =
         (simulation.score ??
           this.scoreObservation(simulation.observation, simulation.winnerId)) -
         baseScore
+      let score = positionDelta
       score += rootPreference
+      const continuationPreference =
+        action.id === preferredActionId
+          ? LOCAL_AI_POLICY.weights.expertContinuationPreference
+          : 0
+      score += continuationPreference
       const afterSelf = simulation.observation.players.find(
         (player) => player.participantId === this.session.remoteParticipantId
       )
@@ -763,22 +2288,33 @@ export class LocalAiDecisionApi implements AiDecisionApi {
               simulation.observation!.turnNumber
             )
           : 0
-      if (threat >= currentHealth && threatAfter < threat)
-        score += (threat - threatAfter) * LOCAL_AI_POLICY.weights.preventVisibleLethal
-      if (threat >= currentHealth && afterHealth > currentHealth)
+      let threatDefense = 0
+      if (threat >= currentHealth && threatAfter < threat) {
+        const improvement =
+          (threat - threatAfter) * LOCAL_AI_POLICY.weights.preventVisibleLethal
+        score += improvement
+        threatDefense += improvement
+      }
+      if (threat >= currentHealth && afterHealth > currentHealth) {
         score += LOCAL_AI_POLICY.weights.preventVisibleLethal
-      if (threat >= currentHealth && afterHealth <= currentHealth - 4)
+        threatDefense += LOCAL_AI_POLICY.weights.preventVisibleLethal
+      }
+      if (threat >= currentHealth && afterHealth <= currentHealth - 4) {
         score -= LOCAL_AI_POLICY.weights.preventVisibleLethal
+        threatDefense -= LOCAL_AI_POLICY.weights.preventVisibleLethal
+      }
       const currentOpponentBoard = currentOpponent?.board.length ?? 0
       const afterOpponentBoard = afterOpponent?.board.length ?? 0
       const currentSelfBoard = currentSelf?.board.length ?? 0
       const afterSelfBoard = afterSelf?.board.length ?? 0
-      score +=
+      const opponentBoardRemoval =
         Math.max(0, currentOpponentBoard - afterOpponentBoard) *
         LOCAL_AI_POLICY.weights.enemyBoardRemoval
-      score +=
+      score += opponentBoardRemoval
+      const friendlyBoardLoss =
         Math.max(0, currentSelfBoard - afterSelfBoard) *
         LOCAL_AI_POLICY.weights.friendlyMinionLoss
+      score += friendlyBoardLoss
 
       scored.push({
         action,
@@ -791,34 +2327,63 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         ),
         simulation,
         rootPreference,
+        scoreComponents: {
+          positionDelta,
+          commandPreference: rootPreference,
+          continuationPreference,
+          threatDefense,
+          opponentBoardRemoval,
+          friendlyBoardLoss,
+          sequenceRefinement: 0
+        },
         sequence: [action.command],
         sequenceLabels: [action.description]
       })
     }
+    const rootEvaluationMs = performance.now() - rootEvaluationStarted
     if (!scored.length) return null
 
     scored.sort((left, right) => right.score - left.score)
-    const sequenceCandidates = scored.slice(0, ROOT_SEARCH_LIMIT)
+    const sequenceCandidates = scored.slice(0, this.limits.rootSearchLimit)
     const passCandidate = scored.find(
       (candidate) => candidate.action.command.type === 'end-turn'
     )
     if (passCandidate && !sequenceCandidates.includes(passCandidate))
       sequenceCandidates.push(passCandidate)
-    const sequenceStats = await this.searchSequences(
+    const sequenceSearchStarted = performance.now()
+    const sequenceSearch = await this.searchSequences(
       sequenceCandidates,
       baseScore,
       deadline,
       requestId
     )
+    const sequenceSearchMs = performance.now() - sequenceSearchStarted
+    const sequenceStats = sequenceSearch.candidates
     for (const candidate of sequenceCandidates) {
       const result = sequenceStats.get(candidate.action.id)
       if (!result) continue
-      // A deeper line may improve the position, but it must not erase the
-      // root action's hard tactical signals (lethal, removal, or survival).
-      candidate.score = Math.max(
-        candidate.score,
-        result.score + (candidate.rootPreference ?? 0)
-      )
+      const rootScore = candidate.score
+      const commandPreference = candidate.rootPreference ?? 0
+      const refinedScore =
+        result.score +
+        (this.profile === 'expert'
+          ? commandPreference * EXPERT_ROOT_COMMAND_PREFERENCE_SCALE
+          : commandPreference) +
+        candidate.scoreComponents.continuationPreference +
+        candidate.scoreComponents.threatDefense +
+        candidate.scoreComponents.opponentBoardRemoval +
+        candidate.scoreComponents.friendlyBoardLoss
+      // V1 retains its original root-score floor. Expert instead backs up the
+      // completed line so a strong-looking first move can be penalized after a
+      // public opponent reply; preserve its explicit tactical root signals.
+      candidate.score =
+        this.profile === 'expert'
+          ? refinedScore
+          : Math.max(candidate.score, result.score + (candidate.rootPreference ?? 0))
+      candidate.scoreComponents = {
+        ...candidate.scoreComponents,
+        sequenceRefinement: candidate.score - rootScore
+      }
       candidate.sequence = result.sequence
       candidate.sequenceLabels = result.labels
       candidate.sequenceNodes = result.nodes
@@ -840,18 +2405,42 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       chosenActionId: best.action.id,
       chosenSequence: best.sequenceLabels,
       chosenSequenceDepth: best.sequence?.length,
+      rootEvaluationMs,
+      sequenceSearchMs,
+      responseSearchMs: sequenceSearch.responseSearchMs,
       sequenceNodes: best.sequenceNodes,
+      responseNodes: sequenceSearch.responseNodes,
+      responseCardPlayNodes: sequenceSearch.responseCardPlayNodes,
       responseScore: best.sequenceResponseScore ?? null,
+      responseCandidateAnalysisMs: sequenceSearch.responseCandidateAnalysisMs,
+      responseCandidateDispatchMs: sequenceSearch.responseCandidateDispatchMs,
+      responseCandidateObservationMs: sequenceSearch.responseCandidateObservationMs,
+      responseCandidateScoringMs: sequenceSearch.responseCandidateScoringMs,
+      responseActionGenerationMs: sequenceSearch.responseActionGenerationMs,
+      responseReplayMs: sequenceSearch.responseReplayMs,
       sampleCount: best.simulation.sampleCount,
       sampleWinRate: best.simulation.sampleWinRate,
-      candidates: scored.slice(0, TRACE_CANDIDATE_LIMIT).map((candidate) => ({
+      workUnits: this.workUnits,
+      ...(this.workBudgetHit ? { workBudgetHit: true } : {}),
+      candidates: scored.slice(0, this.limits.traceCandidateLimit).map((candidate) => ({
         actionId: candidate.action.id,
         type: candidate.action.command.type,
         description: candidate.action.description.slice(0, 180),
         score: Math.round(candidate.score * 100) / 100,
+        scoreComponents: candidate.scoreComponents,
         accepted: candidate.simulation.accepted,
         phase: candidate.simulation.phase ?? null,
-        winnerId: candidate.simulation.winnerId ?? null
+        winnerId: candidate.simulation.winnerId ?? null,
+        ...(candidate.sequenceLabels ? { sequence: candidate.sequenceLabels } : {}),
+        ...(this.profile === 'expert' && candidate.sequence
+          ? {
+              sequenceIntents: candidate.sequence
+                .slice(0, 6)
+                .map((command) =>
+                  aiActionIntent(command, this.session.localParticipantId)
+                )
+            }
+          : {})
       }))
     }
     this.publishTrace(trace)
@@ -862,7 +2451,22 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     observation: AiObservation,
     winnerId: TurnMatchState['winnerId'] | undefined
   ): number {
-    const score = stateScore(observation, this.session.remoteParticipantId)
+    const score = stateScore(
+      observation,
+      this.session.remoteParticipantId,
+      this.profile
+    )
+    if (this.profile === 'expert') {
+      // Terminal results are fixed values in Expert. Keeping the positional
+      // score here let an immediate loss look better after dealing damage,
+      // even when the alternative was only a predicted loss next turn.
+      if (winnerId === this.session.remoteParticipantId)
+        return (
+          LOCAL_AI_POLICY.weights.terminalWin + LOCAL_AI_POLICY.weights.immediateLethal
+        )
+      if (winnerId) return LOCAL_AI_POLICY.weights.terminalLoss
+      return score
+    }
     if (winnerId === this.session.remoteParticipantId)
       return (
         score +
@@ -878,10 +2482,19 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     baseScore: number,
     deadline: number,
     requestId: string
-  ): Promise<Map<string, SequenceSearchResult>> {
+  ): Promise<SequenceSearchSummary> {
     const results = new Map<string, SequenceSearchResult>()
     let nodes = 0
     let rootNodes = 0
+    let responseNodes = 0
+    let responseCardPlayNodes = 0
+    let responseSearchMs = 0
+    let responseCandidateAnalysisMs = 0
+    let responseCandidateDispatchMs = 0
+    let responseCandidateObservationMs = 0
+    let responseCandidateScoringMs = 0
+    let responseActionGenerationMs = 0
+    let responseReplayMs = 0
     const selfId = this.session.remoteParticipantId
 
     const update = (
@@ -889,15 +2502,16 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       sequence: readonly TurnMatchCommand[],
       labels: readonly string[],
       fork: OpeningMatchAnalysis,
-      responseScore: number | null
+      response: VisibleResponseScore | null
     ): void => {
       const state = fork.getState()
       const observation = fork.getAiObservation?.(selfId, 'fair')
       if (!observation) return
       const ownScore = this.scoreObservation(observation, state.winnerId)
+      const responseScore = response?.score ?? null
       let score = (responseScore === null ? ownScore : responseScore) - baseScore
       if (state.winnerId === selfId)
-        score += Math.max(0, SEQUENCE_MAX_DEPTH - sequence.length) * 20_000
+        score += Math.max(0, this.limits.sequenceMaxDepth - sequence.length) * 20_000
       const previous = results.get(root.action.id)
       if (!previous || score > previous.score)
         results.set(root.action.id, {
@@ -917,10 +2531,11 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       depth: number
     ): void => {
       if (
-        nodes >= SEQUENCE_NODE_LIMIT ||
-        rootNodes >= SEQUENCE_ROOT_NODE_LIMIT ||
+        nodes >= this.limits.sequenceNodeLimit ||
+        rootNodes >= this.limits.sequenceRootNodeLimit ||
         performance.now() >= deadline ||
-        this.cancelled.has(requestId)
+        this.cancelled.has(requestId) ||
+        !this.tryUseWorkUnit()
       )
         return
       nodes++
@@ -933,12 +2548,24 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         state.phase === 'ended' ||
         state.activePlayerId !== selfId ||
         last?.type === 'end-turn' ||
-        depth >= SEQUENCE_MAX_DEPTH
+        depth >= this.limits.sequenceMaxDepth
       if (shouldStop) {
-        const response =
-          state.phase === 'turns' && state.activePlayerId !== selfId
-            ? this.scoreVisibleOpponentResponse(fork, observation, deadline)
-            : null
+        let response: VisibleResponseScore | null = null
+        if (state.phase === 'turns' && state.activePlayerId !== selfId) {
+          const responseStarted = performance.now()
+          response = this.scoreVisibleOpponentResponse(fork, observation, deadline)
+          responseSearchMs += performance.now() - responseStarted
+        }
+        responseNodes += response?.nodes ?? 0
+        responseCardPlayNodes += response?.cardPlayNodes ?? 0
+        if (response) {
+          responseCandidateAnalysisMs += response.candidateAnalysisMs
+          responseCandidateDispatchMs += response.candidateDispatchMs
+          responseCandidateObservationMs += response.candidateObservationMs
+          responseCandidateScoringMs += response.candidateScoringMs
+          responseActionGenerationMs += response.actionGenerationMs
+          responseReplayMs += response.replayMs
+        }
         update(root, sequence, labels, fork, response)
         return
       }
@@ -949,11 +2576,16 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         return
       }
       const orderedAll = this.orderSequenceCommands(commands, fork)
-      const ordered = orderedAll.slice(0, SEQUENCE_BRANCH_LIMIT)
+      const ordered = orderedAll.slice(0, this.limits.sequenceBranchLimit)
       const pass = orderedAll.find((command) => command.type === 'end-turn')
       if (pass && !ordered.includes(pass)) ordered.push(pass)
       for (const command of ordered) {
-        if (nodes >= SEQUENCE_NODE_LIMIT || performance.now() >= deadline) break
+        if (
+          nodes >= this.limits.sequenceNodeLimit ||
+          performance.now() >= deadline ||
+          !this.hasWorkRemaining()
+        )
+          break
         const label = this.commandLabel(fork, command)
         fork.analyze((child) => {
           const result = child.dispatch(command)
@@ -965,9 +2597,10 @@ export class LocalAiDecisionApi implements AiDecisionApi {
 
     for (const root of roots) {
       if (
-        nodes >= SEQUENCE_NODE_LIMIT ||
+        nodes >= this.limits.sequenceNodeLimit ||
         performance.now() >= deadline ||
-        this.cancelled.has(requestId)
+        this.cancelled.has(requestId) ||
+        !this.hasWorkRemaining()
       )
         break
       try {
@@ -985,7 +2618,18 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       await yieldToRenderer()
     }
 
-    return results
+    return {
+      candidates: results,
+      responseNodes,
+      responseCardPlayNodes,
+      responseSearchMs,
+      responseCandidateAnalysisMs,
+      responseCandidateDispatchMs,
+      responseCandidateObservationMs,
+      responseCandidateScoringMs,
+      responseActionGenerationMs,
+      responseReplayMs
+    }
   }
 
   private isBeneficialHeroPowerAgainstOpponent(
@@ -1001,6 +2645,104 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       power?.effect.kind === 'restore-character' &&
       command.target.participantId !== this.session.remoteParticipantId
     )
+  }
+
+  private hasFairOpponentHypothesis(
+    fork: OpeningMatchAnalysis,
+    opponentId: AiObservedPlayer['participantId']
+  ): boolean {
+    if (!this.fairHypothesis) return false
+    const opponent = fork
+      .getState()
+      .players.find((player) => player.participantId === opponentId)
+    if (!opponent) return false
+    return [...opponent.hand, ...opponent.deck].every(
+      (card) =>
+        card.knownTo?.includes(this.session.remoteParticipantId) === true ||
+        card.instanceId.startsWith(EXPERT_FAIR_HYPOTHESIS_PREFIX)
+    )
+  }
+
+  private orderExpertResponseCommands(
+    commands: readonly TurnMatchCommand[],
+    fork: OpeningMatchAnalysis,
+    opponentId: AiObservedPlayer['participantId']
+  ): readonly TurnMatchCommand[] {
+    const state = fork.getState()
+    const opponent = state.players.find((player) => player.participantId === opponentId)
+    const priority = (command: TurnMatchCommand): number => {
+      if (
+        command.type === 'choose-discover-card' ||
+        command.type === 'choose-card-option'
+      )
+        return 2_000
+      if (command.type === 'play-card') {
+        const card = opponent?.hand.find(
+          (entry) => entry.instanceId === command.cardInstanceId
+        )
+        const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
+        return 1_000 + (definition ? cardScore(definition.id) : 0)
+      }
+      if (command.type === 'use-hero-power') return 850
+      if (command.type === 'attack-character')
+        return command.defender.kind === 'hero' ? 800 : 750
+      if (command.type === 'end-turn') return -1_000
+      return 0
+    }
+    const group = (command: TurnMatchCommand): string => {
+      if (command.type === 'play-card') return `play:${command.cardInstanceId}`
+      if (command.type === 'attack-character')
+        return command.attacker.kind === 'hero'
+          ? `attack:${opponentId}:hero`
+          : `attack:${command.attacker.instanceId}`
+      if (command.type === 'use-hero-power') return 'hero-power'
+      if (command.type === 'choose-discover-card') return 'discover'
+      if (command.type === 'choose-card-option')
+        return `choice:${command.sourceCardInstanceId}`
+      return command.type
+    }
+    const groupLimit = (command: TurnMatchCommand): number => {
+      if (command.type === 'play-card') return 2
+      if (command.type === 'attack-character') return 4
+      if (command.type === 'use-hero-power') return 4
+      if (command.type === 'choose-discover-card') return 8
+      if (command.type === 'choose-card-option') return 8
+      return 1
+    }
+    const ordered = [...commands].sort(
+      (left, right) =>
+        priority(right) - priority(left) ||
+        canonicalCommandKey(left).localeCompare(canonicalCommandKey(right))
+    )
+    const selected: TurnMatchCommand[] = []
+    const counts = new Map<string, number>()
+    for (const command of ordered) {
+      const key = group(command)
+      const count = counts.get(key) ?? 0
+      if (count >= groupLimit(command)) continue
+      selected.push(command)
+      counts.set(key, count + 1)
+      if (selected.length >= EXPERT_REPLY_NODE_LIMIT) break
+    }
+    return selected
+  }
+
+  private expertResponseCommands(
+    fork: OpeningMatchAnalysis,
+    observation: AiObservation,
+    opponentId: AiObservedPlayer['participantId'],
+    sampledHandAvailable: boolean
+  ): readonly TurnMatchCommand[] {
+    if (sampledHandAvailable)
+      return this.orderExpertResponseCommands(
+        enumerateLegalCommands(fork, opponentId),
+        fork,
+        opponentId
+      )
+    return [
+      ...visibleOpponentAttackCommands(fork, observation),
+      ...visibleOpponentHeroPowerCommands(fork, observation)
+    ]
   }
 
   private orderSequenceCommands(
@@ -1056,24 +2798,279 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     fork: OpeningMatchAnalysis,
     observation: AiObservation,
     deadline: number
-  ): number | null {
-    const responses = visibleOpponentAttackCommands(
-      observation,
-      this.session.remoteParticipantId
-    )
-    if (!responses.length) return null
+  ): VisibleResponseScore {
+    const commandGenerationStarted = performance.now()
+    const attacks =
+      this.profile === 'expert'
+        ? visibleOpponentAttackCommands(fork, observation)
+        : easyOpponentAttackCommands(observation, this.session.remoteParticipantId)
+    const heroPowers =
+      this.profile === 'expert'
+        ? visibleOpponentHeroPowerCommands(fork, observation)
+        : []
+    const opponent = observation.players.find((player) => player.role === 'opponent')
+    const sampledHandAvailable =
+      this.profile === 'expert' &&
+      opponent !== undefined &&
+      this.hasFairOpponentHypothesis(fork, opponent.participantId)
+    const responses =
+      this.profile === 'expert' && sampledHandAvailable && opponent
+        ? this.expertResponseCommands(fork, observation, opponent.participantId, true)
+        : [...attacks, ...heroPowers]
+    const commandGenerationMs = performance.now() - commandGenerationStarted
+    let candidateScoringMs = 0
+    if (!responses.length)
+      return {
+        score: null,
+        nodes: 0,
+        cardPlayNodes: 0,
+        candidateAnalysisMs: 0,
+        candidateDispatchMs: 0,
+        candidateObservationMs: 0,
+        candidateScoringMs: 0,
+        actionGenerationMs: commandGenerationMs,
+        replayMs: 0
+      }
+
+    if (this.profile === 'expert') {
+      const defender = observation.players.find(
+        (player) => player.participantId === this.session.remoteParticipantId
+      )
+      const hasTaunt = defender?.board.some((minion) =>
+        effectiveBoardMinionKeywords(minion, observation.turnNumber).includes('taunt')
+      )
+      if (!hasTaunt) {
+        const scoringStarted = performance.now()
+        const lethalScore = this.projectedPublicAttackLethalScore(fork, observation)
+        candidateScoringMs += performance.now() - scoringStarted
+        if (lethalScore !== null)
+          return {
+            score: lethalScore,
+            nodes: 0,
+            cardPlayNodes: 0,
+            candidateAnalysisMs: 0,
+            candidateDispatchMs: 0,
+            candidateObservationMs: 0,
+            candidateScoringMs,
+            actionGenerationMs: commandGenerationMs,
+            replayMs: 0
+          }
+      }
+
+      const response = this.scoreExpertPublicResponse(
+        fork,
+        observation,
+        deadline,
+        responses,
+        sampledHandAvailable
+      )
+      return {
+        ...response,
+        actionGenerationMs: response.actionGenerationMs + commandGenerationMs
+      }
+    }
+
     let worst = Number.POSITIVE_INFINITY
+    let nodes = 0
+    let cardPlayNodes = 0
+    let candidateAnalysisMs = 0
+    let candidateDispatchMs = 0
+    let candidateObservationMs = 0
     for (const response of responses) {
-      if (performance.now() >= deadline) break
+      if (performance.now() >= deadline || !this.tryUseWorkUnit()) break
+      nodes++
+      if (response.type === 'play-card') cardPlayNodes++
+      const candidateStarted = performance.now()
       const score = fork.analyze((child) => {
+        const dispatchStarted = performance.now()
         const result = child.dispatch(response)
+        candidateDispatchMs += performance.now() - dispatchStarted
         if (!result.accepted) return null
+        const observationStarted = performance.now()
         const after = child.getAiObservation?.(this.session.remoteParticipantId, 'fair')
-        return after ? this.scoreObservation(after, result.state.winnerId) : null
+        candidateObservationMs += performance.now() - observationStarted
+        if (!after) return null
+        const scoringStarted = performance.now()
+        const score = this.scoreObservation(after, result.state.winnerId)
+        candidateScoringMs += performance.now() - scoringStarted
+        return score
       })
+      candidateAnalysisMs += performance.now() - candidateStarted
       if (score !== null) worst = Math.min(worst, score)
     }
-    return Number.isFinite(worst) ? worst : null
+    return {
+      score: Number.isFinite(worst) ? worst : null,
+      nodes,
+      cardPlayNodes,
+      candidateAnalysisMs,
+      candidateDispatchMs,
+      candidateObservationMs,
+      candidateScoringMs,
+      actionGenerationMs: commandGenerationMs,
+      replayMs: 0
+    }
+  }
+
+  private projectedPublicAttackLethalScore(
+    fork: OpeningMatchAnalysis,
+    observation: AiObservation
+  ): number | null {
+    const attacks = visibleOpponentAttackCommands(fork, observation)
+    const faceAttacks = attacks.filter(
+      (response): response is Extract<TurnMatchCommand, { type: 'attack-character' }> =>
+        response.type === 'attack-character' && response.defender.kind === 'hero'
+    )
+    if (!faceAttacks.length) return null
+    const attacker = observation.players.find((player) => player.role === 'opponent')
+    const defender = observation.players.find(
+      (player) => player.participantId === this.session.remoteParticipantId
+    )
+    if (!attacker || !defender) return null
+    const heroHealth =
+      number(record(defender.hero).health) + number(record(defender.hero).armor)
+    const publicThreat = faceAttacks.reduce(
+      (total, response) =>
+        total + remainingPublicAttackDamage(attacker, response, observation.turnNumber),
+      0
+    )
+    if (heroHealth <= 0 || publicThreat < heroHealth) return null
+    // This is a forecast, not an already-terminal result. Keep it slightly
+    // above the fixed terminal-loss floor so Expert won't choose an immediate
+    // loss just to improve the board before the opposing turn.
+    return (
+      LOCAL_AI_POLICY.weights.terminalLoss +
+      LOCAL_AI_POLICY.weights.preventVisibleLethal
+    )
+  }
+
+  private scoreExpertPublicResponse(
+    fork: OpeningMatchAnalysis,
+    observation: AiObservation,
+    deadline: number,
+    initialResponses: readonly TurnMatchCommand[],
+    sampledHandAvailable: boolean
+  ): VisibleResponseScore {
+    let nodes = 0
+    let cardPlayNodes = 0
+    let candidateAnalysisMs = 0
+    let candidateDispatchMs = 0
+    let candidateObservationMs = 0
+    let candidateScoringMs = 0
+    let actionGenerationMs = 0
+    let replayMs = 0
+    const score = fork.analyze((replyFork) => {
+      const originalAttacker = observation.players.find(
+        (player) => player.role === 'opponent'
+      )
+      if (!originalAttacker) {
+        const scoringStarted = performance.now()
+        const score = this.scoreObservation(observation, undefined)
+        candidateScoringMs += performance.now() - scoringStarted
+        return score
+      }
+
+      let currentObservation = observation
+      const initialScoringStarted = performance.now()
+      let currentScore = this.scoreObservation(currentObservation, undefined)
+      candidateScoringMs += performance.now() - initialScoringStarted
+      for (
+        let actionCount = 0;
+        actionCount < EXPERT_REPLY_ACTION_LIMIT &&
+        performance.now() < deadline &&
+        this.hasWorkRemaining();
+        actionCount++
+      ) {
+        let responses = initialResponses
+        if (actionCount > 0) {
+          const commandGenerationStarted = performance.now()
+          responses = this.expertResponseCommands(
+            replyFork,
+            currentObservation,
+            originalAttacker.participantId,
+            sampledHandAvailable
+          )
+          actionGenerationMs += performance.now() - commandGenerationStarted
+        }
+        if (!responses.length) break
+
+        let worstScore = Number.POSITIVE_INFINITY
+        let worstResponse: TurnMatchCommand | null = null
+        for (const response of responses) {
+          if (
+            nodes >= EXPERT_REPLY_NODE_LIMIT ||
+            performance.now() >= deadline ||
+            !this.tryUseWorkUnit()
+          )
+            break
+          nodes++
+          if (response.type === 'play-card') cardPlayNodes++
+          const candidateStarted = performance.now()
+          const candidateScore = replyFork.analyze((candidateFork) => {
+            const dispatchStarted = performance.now()
+            const result = candidateFork.dispatch(response)
+            candidateDispatchMs += performance.now() - dispatchStarted
+            if (!result.accepted) return null
+            const observationStarted = performance.now()
+            const after = candidateFork.getAiObservation?.(
+              this.session.remoteParticipantId,
+              'fair'
+            )
+            candidateObservationMs += performance.now() - observationStarted
+            if (!after) return null
+            const scoringStarted = performance.now()
+            const score =
+              this.projectedPublicAttackLethalScore(candidateFork, after) ??
+              this.scoreObservation(after, result.state.winnerId)
+            candidateScoringMs += performance.now() - scoringStarted
+            return score
+          })
+          candidateAnalysisMs += performance.now() - candidateStarted
+          if (candidateScore !== null && candidateScore < worstScore) {
+            worstScore = candidateScore
+            worstResponse = response
+          }
+        }
+        if (!worstResponse) break
+
+        const replayStarted = performance.now()
+        const result = replyFork.dispatch(worstResponse)
+        if (!result.accepted) {
+          replayMs += performance.now() - replayStarted
+          break
+        }
+        const after = replyFork.getAiObservation?.(
+          this.session.remoteParticipantId,
+          'fair'
+        )
+        if (!after) {
+          replayMs += performance.now() - replayStarted
+          break
+        }
+        currentObservation = after
+        const lethalScore = this.projectedPublicAttackLethalScore(replyFork, after)
+        currentScore =
+          lethalScore ?? this.scoreObservation(after, result.state.winnerId)
+        replayMs += performance.now() - replayStarted
+        if (lethalScore !== null) return currentScore
+        if (
+          result.state.phase === 'ended' ||
+          result.state.activePlayerId !== originalAttacker.participantId
+        )
+          return currentScore
+      }
+      return currentScore
+    })
+    return {
+      score,
+      nodes,
+      cardPlayNodes,
+      candidateAnalysisMs,
+      candidateDispatchMs,
+      candidateObservationMs,
+      candidateScoringMs,
+      actionGenerationMs,
+      replayMs
+    }
   }
 
   private simulate(command: TurnMatchCommand): Simulation {
@@ -1106,7 +3103,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       observation: AiObservation
       winnerId: TurnMatchState['winnerId']
     }[] = []
-    for (const seed of RANDOM_SAMPLE_SEEDS) {
+    for (const seed of this.limits.randomSampleSeeds) {
       const sample = this.session.match.analyzeWithSeed(seed, (fork) => {
         const result = fork.dispatch(command)
         if (!result.accepted) return null
@@ -1234,14 +3231,14 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           const definition = CARD_CATALOG.get(entry.cardId)
           const rulesText = definition?.rulesText.toLowerCase() ?? ''
           return (
-            definition?.subtype === 'Beast' &&
+            cardHasTribe(definition, 'Beast') &&
             rulesText.includes('friendly beast') &&
             rulesText.includes('dies')
           )
         }) === true
       const feedsFriendlyBeastDeathPayoff =
         losesFriendlyMinion &&
-        attackerDefinition?.subtype === 'Beast' &&
+        cardHasTribe(attackerDefinition, 'Beast') &&
         hasFriendlyBeastDeathPayoff
       const targetHealthAfterAttack = number(afterTarget?.health)
       const setsUpImmediateRemoval =
@@ -1257,28 +3254,42 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             number(entry.attack) >= targetHealthAfterAttack
         )
       const waitsForFriendlyBeastDeath =
-        attackerDefinition?.rulesText.toLowerCase().includes('friendly beast') === true &&
+        attackerDefinition?.rulesText.toLowerCase().includes('friendly beast') ===
+          true &&
         attackerDefinition.rulesText.toLowerCase().includes('dies') === true &&
         (beforeSelf?.board.some(
           (entry) =>
             entry.instanceId !== attacker?.instanceId &&
-            CARD_CATALOG.get(entry.cardId)?.subtype === 'Beast'
-        ) ?? false)
+            cardHasTribe(CARD_CATALOG.get(entry.cardId), 'Beast')
+        ) ??
+          false)
       const handDefinitions = self.hand
         .map((card) => CARD_CATALOG.get(card.cardId))
-        .filter((definition): definition is NonNullable<typeof definition> => definition !== undefined)
+        .filter(
+          (definition): definition is NonNullable<typeof definition> =>
+            definition !== undefined
+        )
       const healingReplacementCost = handDefinitions.find((definition) => {
         const text = definition.rulesText.toLowerCase()
-        return text.includes('restore') && text.includes('damage') && text.includes('instead')
+        return (
+          text.includes('restore') &&
+          text.includes('damage') &&
+          text.includes('instead')
+        )
       })?.cost
       const healingAreaCost = handDefinitions.find((definition) => {
         const text = definition.rulesText.toLowerCase()
         return text.includes('all minions') && text.includes('restore')
       })?.cost
-      const activeHealingReplacement = beforeSelf?.board.some((entry) => {
-        const text = CARD_CATALOG.get(entry.cardId)?.rulesText.toLowerCase() ?? ''
-        return text.includes('restore') && text.includes('damage') && text.includes('instead')
-      }) === true
+      const activeHealingReplacement =
+        beforeSelf?.board.some((entry) => {
+          const text = CARD_CATALOG.get(entry.cardId)?.rulesText.toLowerCase() ?? ''
+          return (
+            text.includes('restore') &&
+            text.includes('damage') &&
+            text.includes('instead')
+          )
+        }) === true
       const holdsForHealingAreaClear =
         (beforeOpponent?.board.length ?? 0) >= 2 &&
         healingAreaCost !== undefined &&
@@ -1294,15 +3305,11 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         attacker?.cardId === 'basic_water_elemental'
       return (
         score +
-        (removesEnemyMinion
-          ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 10
-          : 0) -
+        (removesEnemyMinion ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 10 : 0) -
         (waitsForFriendlyBeastDeath
           ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 20
           : 0) +
-        (setsUpImmediateRemoval
-          ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 12
-          : 0) +
+        (setsUpImmediateRemoval ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 12 : 0) +
         (feedsFriendlyBeastDeathPayoff
           ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 4
           : 0) +
@@ -1362,7 +3369,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       if (
         hasCthunPayoff &&
         cthunProgress !== undefined &&
-        JSON.stringify(definition?.effects ?? '').toLowerCase().includes('buff-cthun') &&
+        JSON.stringify(definition?.effects ?? '')
+          .toLowerCase()
+          .includes('buff-cthun') &&
         cthunProgress.attack < 10
       )
         targetBias += 600
@@ -1415,22 +3424,28 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       if (
         doomsayer &&
         definition?.type === 'Minion' &&
-        !(definition.keywords.includes('charge') && definition.attack >= number(doomsayer.health))
+        !(
+          definition.keywords.includes('charge') &&
+          definition.attack >= number(doomsayer.health)
+        )
       )
         targetBias -= LOCAL_AI_POLICY.weights.preventVisibleLethal
       if (hasHiddenSecret) {
         if (card.cardId === 'basic_the_coin') targetBias += 500
         else if (definition?.type === 'Minion' && definition.cost <= 4)
           targetBias += 220
-        else if (targetsEnemyMinion && definition?.type === 'Spell')
-          targetBias += 320
+        else if (targetsEnemyMinion && definition?.type === 'Spell') targetBias += 320
         else if (
           hasCheapSecretProbe &&
           definition?.type === 'Spell' &&
           command.targets?.some((target) => target.kind === 'hero')
         )
           targetBias -= 280
-        else if (hasCheapSecretProbe && definition?.type === 'Minion' && definition.cost >= 6)
+        else if (
+          hasCheapSecretProbe &&
+          definition?.type === 'Minion' &&
+          definition.cost >= 6
+        )
           targetBias -= 220
       }
       for (const target of command.targets ?? []) {
@@ -1449,21 +3464,22 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         )
         if (!beforeTarget) continue
         if (target.participantId === this.session.remoteParticipantId) {
-          const attackGain =
-            number(afterTarget?.attack) - number(beforeTarget.attack)
-          const healthGain =
-            number(afterTarget?.health) - number(beforeTarget.health)
+          const attackGain = number(afterTarget?.attack) - number(beforeTarget.attack)
+          const healthGain = number(afterTarget?.health) - number(beforeTarget.health)
           if (attackGain > 0)
-            targetBias +=
-              attackGain * LOCAL_AI_POLICY.weights.boardAttack * 12
+            targetBias += attackGain * LOCAL_AI_POLICY.weights.boardAttack * 12
           if (healthGain > 0)
-            targetBias +=
-              healthGain * LOCAL_AI_POLICY.weights.boardHealth * 12
+            targetBias += healthGain * LOCAL_AI_POLICY.weights.boardHealth * 12
           if (rulesText.includes('deathrattle'))
-            targetBias += 30 +
-              (number(beforeTarget.attack) + number(beforeTarget.health)) * 2
-          const effectText = definition ? JSON.stringify(definition.effects).toLowerCase() : ''
-          if (effectText.includes('grant-deathrattle') && effectText.includes('return-to-play'))
+            targetBias +=
+              30 + (number(beforeTarget.attack) + number(beforeTarget.health)) * 2
+          const effectText = definition
+            ? JSON.stringify(definition.effects).toLowerCase()
+            : ''
+          if (
+            effectText.includes('grant-deathrattle') &&
+            effectText.includes('return-to-play')
+          )
             targetBias += 100
           // A targeted transform of our own developed body is usually a
           // severe loss of board value; do not let a temporary Taunt hide it.
@@ -1476,7 +3492,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             targetBias += LOCAL_AI_POLICY.weights.enemyBoardRemoval * 10
           } else if (
             (!afterTarget || afterTarget.cardId !== beforeTarget.cardId) &&
-            card.currentCost <= 2
+            (card.currentCost ?? definition?.cost ?? 99) <= 2
           ) {
             // A cheap targeted removal can preserve a ready body for the next
             // trade; give it a modest tempo edge without overpowering lethal.
@@ -1542,7 +3558,11 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         beforeSelf?.hand.some((card) => {
           const definition = CARD_CATALOG.get(card.cardId)
           const text = definition?.rulesText.toLowerCase() ?? ''
-          return definition?.type === 'Minion' && text.includes('heal') && text.includes('draw')
+          return (
+            definition?.type === 'Minion' &&
+            text.includes('heal') &&
+            text.includes('draw')
+          )
         }) === true &&
         beforeSelf?.board.some(
           (minion) => number(minion.health) < number(minion.maxHealth)
@@ -1557,7 +3577,8 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           ? visibleHeroThreat(beforeOpponent, beforeSelf, before.turnNumber)
           : 0
       const targetsEnemyHero = command.target?.kind === 'hero'
-      const targetMinion = command.target?.kind === 'minion' ? command.target : undefined
+      const targetMinion =
+        command.target?.kind === 'minion' ? command.target : undefined
       const beforeTargetOwner = targetMinion
         ? before.players.find(
             (entry) => entry.participantId === targetMinion.participantId
@@ -1612,7 +3633,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 4 + enemyTargetValue * 3
             : 0) +
         (hiddenSecretProbe ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 50 : 0) +
-        (weakestHiddenSecretProbe ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 25 : 0) +
+        (weakestHiddenSecretProbe
+          ? LOCAL_AI_POLICY.weights.enemyBoardRemoval * 25
+          : 0) +
         (targetsFriendlyMinion
           ? targetHealthGain * LOCAL_AI_POLICY.weights.boardHealth * 12
           : 0) +
@@ -1639,7 +3662,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       matchId: request.matchId,
       requestId: request.requestId,
       expectedRevision: request.expectedRevision,
-      modelId: LOCAL_AI_MODEL_ID,
+      modelId: this.profile === 'expert' ? EXPERT_MODEL_ID : EASY_MODEL_ID,
       reason: reason.slice(0, 580),
       choice,
       durationMs: performance.now() - started,

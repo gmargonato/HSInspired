@@ -202,7 +202,16 @@ export class HandCardPerspective {
       this.outlineMesh.once('destroyed', () => outlineGeometry.destroy(true))
       this.outlineEffect = new AnimatedOutline(this.outlineMesh, {
         palette: options.outlinePalette ?? 'green',
-        preset: options.outlinePreset ?? 'card'
+        preset: options.outlinePreset ?? 'card',
+        silhouette: {
+          texture: options.outlineTexture,
+          bounds: new Rectangle(
+            -frame.x,
+            -frame.y,
+            cardView.plan.width,
+            cardView.renderedHeight
+          )
+        }
       })
       this.outlineEffect.setEnabled(false)
     } else {

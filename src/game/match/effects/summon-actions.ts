@@ -54,6 +54,11 @@ export function runSummonAction(
   path: string,
   context: SummonActionContext
 ): void {
+  const summonedForStorage: EntityRef[] = []
+  const storeSummons = (): void => {
+    if (typeof action.storeAs === 'string')
+      frame.stored.set(action.storeAs, summonedForStorage)
+  }
   switch (name) {
     case 'summon': {
       const cardId = context.actionCardId(action, frame)
@@ -85,7 +90,10 @@ export function runSummonAction(
           undefined,
           context.summonPosition(frame, controller, placement, summonIndex)
         )
-        if (summoned) summonIndex += 1
+        if (summoned) {
+          summonIndex += 1
+          summonedForStorage.push(summoned)
+        }
         if (
           summoned &&
           frame.event &&
@@ -94,6 +102,7 @@ export function runSummonAction(
           frame.event.redirectTarget = summoned
         }
       }
+      storeSummons()
       return
     }
     case 'summon-copy': {
@@ -110,27 +119,32 @@ export function runSummonAction(
           ? (action.placement as CardSummonPlacement)
           : undefined
       let summonIndex = 0
-      for (const target of targets)
-        for (let index = 0; index < count; index += 1)
-          if (target.cardId)
-            if (
-              context.createMinion(
-                frame.controllerId,
-                target.cardId,
+      for (const target of targets) {
+        for (let index = 0; index < count; index += 1) {
+          if (target.cardId) {
+            const summoned = context.createMinion(
+              frame.controllerId,
+              target.cardId,
+              frame,
+              path,
+              undefined,
+              context.summonPosition(
                 frame,
-                path,
-                undefined,
-                context.summonPosition(
-                  frame,
-                  frame.controllerId,
-                  placement,
-                  summonIndex
-                ),
-                context.currentMinion(target) ?? undefined,
-                action.modifications
-              )
+                frame.controllerId,
+                placement,
+                summonIndex
+              ),
+              context.currentMinion(target) ?? undefined,
+              action.modifications
             )
+            if (summoned) {
               summonIndex += 1
+              summonedForStorage.push(summoned)
+            }
+          }
+        }
+      }
+      storeSummons()
       return
     }
     case 'summon-for-each': {
@@ -142,23 +156,30 @@ export function runSummonAction(
           ? (action.placement as CardSummonPlacement)
           : undefined
       let summonIndex = 0
-      for (let index = 0; index < sources.length; index += 1)
-        if (
-          context.createMinion(
-            frame.controllerId,
-            cardId,
-            frame,
-            `${path}.${index}`,
-            undefined,
-            context.summonPosition(frame, frame.controllerId, placement, summonIndex)
-          )
+      for (let index = 0; index < sources.length; index += 1) {
+        const summoned = context.createMinion(
+          frame.controllerId,
+          cardId,
+          frame,
+          `${path}.${index}`,
+          undefined,
+          context.summonPosition(frame, frame.controllerId, placement, summonIndex)
         )
+        if (summoned) {
           summonIndex += 1
+          summonedForStorage.push(summoned)
+        }
+      }
+      storeSummons()
       return
     }
     case 'summon-random': {
       const count = Math.max(0, context.queries.evaluate(action.count ?? 1, frame))
-      const pool = Array.isArray(action.pool)
+      const pool = action.source === 'discarded-minions'
+        ? context
+            .sourceEntities(action, frame)
+            .flatMap((candidate) => candidate.cardId ? [candidate.cardId] : [])
+        : Array.isArray(action.pool)
         ? action.pool.filter((entry): entry is string => typeof entry === 'string')
         : CARD_CATALOG.all
             .filter(
@@ -186,19 +207,22 @@ export function runSummonAction(
       for (let index = 0; index < count; index += 1) {
         const cardId = pool[Math.floor(context.rng.next() * pool.length)] as
           CardId | undefined
-        if (cardId)
-          if (
-            context.createMinion(
-              frame.controllerId,
-              cardId,
-              frame,
-              `${path}.${index}`,
-              undefined,
-              context.summonPosition(frame, frame.controllerId, placement, summonIndex)
-            )
+        if (cardId) {
+          const summoned = context.createMinion(
+            frame.controllerId,
+            cardId,
+            frame,
+            `${path}.${index}`,
+            undefined,
+            context.summonPosition(frame, frame.controllerId, placement, summonIndex)
           )
+          if (summoned) {
             summonIndex += 1
+            summonedForStorage.push(summoned)
+          }
+        }
       }
+      storeSummons()
       return
     }
   }

@@ -87,6 +87,8 @@ export interface CardMetadata {
   readonly rarity: CardRarity
   readonly cardClass: ClassId
   readonly subtype: string | null
+  /** All tribes carried by the card. `subtype` remains the primary legacy tribe. */
+  readonly tribes?: readonly string[]
   readonly spellSchool: string | null
   readonly cost: number
   readonly spellDamage?: number
@@ -97,6 +99,14 @@ export interface CardMetadata {
   readonly playCondition?: Readonly<Record<string, CardEffectValue>>
   readonly collectible: boolean
   readonly deckLegal: boolean
+}
+
+/** Returns whether a card carries a tribe, including its legacy primary subtype. */
+export function cardHasTribe(
+  card: Pick<CardMetadata, 'subtype' | 'tribes'> | null | undefined,
+  tribe: string
+): boolean {
+  return Boolean(card && (card.subtype === tribe || card.tribes?.includes(tribe)))
 }
 
 export interface MinionCardDefinition extends CardMetadata {

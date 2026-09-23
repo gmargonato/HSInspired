@@ -21,6 +21,7 @@ export interface WeaponViewModel {
   readonly printedDurability: number
   readonly deathrattle: boolean
   readonly trigger: boolean
+  readonly lifesteal: boolean
   readonly temporaryAbilityLabels: readonly string[]
 }
 
@@ -29,6 +30,7 @@ export interface WeaponViewTextures {
   readonly premiumFrame: Texture
   readonly trigger: Texture
   readonly deathrattle: Texture
+  readonly lifesteal: Texture
   readonly attack: Texture
   readonly durability: Texture
 }
@@ -111,6 +113,7 @@ export class WeaponView extends Container {
   private readonly printedDurability: number
   private readonly deathrattle: Sprite
   private readonly trigger: Sprite
+  private readonly lifesteal: Sprite
   private readonly hoverOutlineProxy: Container
   private readonly hoverOutlineFrame: Sprite
   private readonly hoverOutline: AnimatedOutline
@@ -228,6 +231,12 @@ export class WeaponView extends Container {
     this.trigger.label = 'weapon.trigger'
     this.addChild(this.trigger)
 
+    this.lifesteal = new Sprite(textures.lifesteal)
+    applyAnchoredPlacement(this.lifesteal, WEAPON_LAYOUT.lifesteal)
+    this.lifesteal.visible = model.lifesteal
+    this.lifesteal.label = 'weapon.lifesteal'
+    this.addChild(this.lifesteal)
+
     model.temporaryAbilityLabels.forEach((text, index) => {
       const badge = createTemporaryAbilityBadge(
         text,
@@ -298,6 +307,10 @@ export class WeaponView extends Container {
 
   setTrigger(visible: boolean): void {
     this.trigger.visible = visible
+  }
+
+  setLifesteal(visible: boolean): void {
+    this.lifesteal.visible = visible
   }
 
   setHoverAura(enabled: boolean): void {

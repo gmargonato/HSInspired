@@ -12,7 +12,7 @@ import type { MenuSettingsAssets } from '../../ui/asset-registry'
 import { Button } from '../../ui/components/button'
 import { SETTINGS_LAYOUT } from './settings-layout'
 
-const MODES: readonly AiMode[] = ['hardware', 'api']
+const MODES: readonly AiMode[] = ['hardware', 'hardware-v2', 'api']
 const OPTION_HEIGHT = SETTINGS_LAYOUT.aiModeOption.size.height
 
 type ModeOption = {
@@ -21,7 +21,9 @@ type ModeOption = {
 }
 
 function modeLabel(mode: AiMode): string {
-  return mode === 'hardware' ? 'Hardware' : 'API'
+  if (mode === 'hardware') return 'Easy'
+  if (mode === 'hardware-v2') return 'Hardware V2'
+  return 'API'
 }
 
 /** Saves the future AI routing preference without changing the current AI service. */
@@ -95,7 +97,7 @@ export class AiModeSelector extends Container {
     this.addChild(this.arrowButton)
 
     const note = new Text({
-      text: 'Choose local CPU play or remote API play',
+      text: 'AI opponent: Easy, Hardware V2, or API',
       style: { fontFamily: 'Belwe', fontSize: 22, fill: 0xf5e3b6 }
     })
     note.label = 'settings.ai-mode-note'

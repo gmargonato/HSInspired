@@ -3,7 +3,7 @@ import type { HeroPowerId } from '../../../game/content/cards'
 import type { CardChoiceOption, OpeningCard, PlayerId } from '../../../game/match'
 import { AnimationScope } from '../../animation/animations'
 import { completeTimeline } from './game-presentation-animation'
-import { AnimatedOutline } from '../../rendering/effects/animated-outline'
+import { GhostAura } from '../../rendering/effects/ghost-aura'
 import { HERO_POWER_CARD_CANVAS } from '../../rendering/hero-powers/hero-power-presentation'
 import { applyAnchoredPlacement } from '../../rendering/layout'
 import { Button } from '../../ui/components/button'
@@ -27,7 +27,10 @@ export interface CardSelectionOverlayOptions {
     card: OpeningCard,
     sourceInstanceId?: string
   ) => Promise<GameCardSlot>
-  readonly createHeroPowerChoice: (heroPowerId: HeroPowerId, premium: boolean) => Container
+  readonly createHeroPowerChoice: (
+    heroPowerId: HeroPowerId,
+    premium: boolean
+  ) => Container
   /** Premium lookups for the choice source (e.g. a premium Sir Finley). */
   readonly heroPowerChoicePremium?: (
     participantId: PlayerId,
@@ -45,7 +48,7 @@ export class CardSelectionOverlay extends Container {
   private requestRevision = 0
   private readonly darkOverlay = new Graphics()
   private readonly cardsLayer = new Container()
-  private readonly toggleOutline: AnimatedOutline
+  private readonly toggleOutline: GhostAura
   private readonly toggle: Button
   private readonly toggleLabel: Text
   private readonly entries: Array<{
@@ -86,7 +89,7 @@ export class CardSelectionOverlay extends Container {
     toggleOutlineTarget.eventMode = 'none'
     toggleOutlineTarget.label = 'game.card-selection.toggle-outline'
     this.addChild(toggleOutlineTarget)
-    this.toggleOutline = new AnimatedOutline(toggleOutlineTarget, { preset: 'ghost' })
+    this.toggleOutline = new GhostAura(toggleOutlineTarget, {})
 
     this.toggle = new Button(options.toggleTexture, {
       onClick: () => {

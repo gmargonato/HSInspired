@@ -117,6 +117,8 @@ export class HeroPowerView extends Actor {
   private readonly onPointerDown?: (event: FederatedPointerEvent) => void
   private readonly onClick?: (event: FederatedPointerEvent) => void
   private interactivityEnabled = false
+  private targeting = false
+  private hoverAuraEnabled = false
   private facingUp = true
   private premium = false
 
@@ -275,7 +277,16 @@ export class HeroPowerView extends Actor {
   }
 
   setHoverAura(enabled: boolean): void {
-    this.hoverOutline.setEnabled(enabled)
+    this.hoverAuraEnabled = enabled
+    this.hoverOutline.setEnabled(enabled && !this.targeting)
+  }
+
+  /** Hides readiness and hover glows while keeping click-to-cancel available. */
+  setTargeting(targeting: boolean): void {
+    if (this.targeting === targeting) return
+    this.targeting = targeting
+    this.syncPlayableOutline()
+    this.hoverOutline.setEnabled(this.hoverAuraEnabled && !targeting)
   }
 
   setOutlineAppearance(
@@ -339,7 +350,7 @@ export class HeroPowerView extends Actor {
    * Enables or disables local interaction. The card is clickable only while
    * the local player's turn is active, the power is still available, and the
    * local player can afford its cost. The green playable outline follows the
-   * same condition and additionally requires the card to be facing up.
+   * same condition and additionally requires the card to be facing up and not targeting.
    */
   setEnabled(enabled: boolean): void {
     if (this.interactivityEnabled === enabled) return
@@ -426,7 +437,9 @@ export class HeroPowerView extends Actor {
   }
 
   private syncPlayableOutline(): void {
-    this.playableOutline.setEnabled(this.interactivityEnabled && this.facingUp)
+    this.playableOutline.setEnabled(
+      this.interactivityEnabled && this.facingUp && !this.targeting
+    )
   }
 
   private handlePointerDown = (event: FederatedPointerEvent): void => {

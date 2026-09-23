@@ -18,6 +18,8 @@ const HEARTHSTONE_KEYWORDS = [
   'Stealth',
   'Freeze',
   'Secret',
+  'Quest',
+  'Reward',
   'Combo',
   'Immune'
 ] as const

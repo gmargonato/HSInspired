@@ -64,6 +64,21 @@ describe('PreferencesRepository', () => {
     })
   })
 
+  it('persists Expert AI mode across repository reloads', async () => {
+    const { repository, filePath } = await createRepository()
+
+    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'hardware-v2' })
+
+    expect(JSON.parse(await readFile(filePath, 'utf8'))).toMatchObject({
+      version: 2,
+      aiMode: 'hardware-v2'
+    })
+    expect(await new PreferencesRepository(filePath).get()).toEqual({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'hardware-v2'
+    })
+  })
+
   it('rejects invalid deck ids without modifying the saved file', async () => {
     const { repository, filePath } = await createRepository()
     await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'api' })
@@ -141,10 +156,14 @@ describe('PreferencesRepository', () => {
     })
   })
 
-  it('accepts only the two AI modes in preferences requests and responses', () => {
-    expect(parsePreferencesUpdateRequest({ aiMode: 'hardware' })).toEqual({
-      aiMode: 'hardware'
-    })
+  it('accepts all AI modes in preferences requests and responses', () => {
+    for (const aiMode of ['hardware', 'hardware-v2', 'api'] as const) {
+      expect(parsePreferencesUpdateRequest({ aiMode })).toEqual({ aiMode })
+      expect(parsePreferences({ lastPlayedDeckId: null, aiMode })).toEqual({
+        lastPlayedDeckId: null,
+        aiMode
+      })
+    }
     expect(() => parsePreferencesUpdateRequest({ aiMode: 'unknown' })).toThrow()
     expect(() =>
       parsePreferences({ lastPlayedDeckId: null, aiMode: 'unknown' })

@@ -50,6 +50,7 @@ export interface SceneParamsById {
   'tavern-brawl': undefined
   'card-inspector': undefined
   'outline-lab': undefined
+  'hero-power-anim': undefined
   game: { deckId?: string; launchMode?: DevMatchLaunchMode } | undefined
 }
 
@@ -99,6 +100,7 @@ export const SCENE_MENU_ENTRIES = {
     request: { id: 'card-inspector' }
   },
   'outline-lab': { label: 'Shader Lab', request: { id: 'outline-lab' } },
+  'hero-power-anim': { label: 'Hero Power Anim', request: { id: 'hero-power-anim' } },
   game: { label: 'Match', request: { id: 'game' } }
 } as const satisfies SceneMenuCatalog
 

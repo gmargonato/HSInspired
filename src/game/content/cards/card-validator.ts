@@ -49,6 +49,7 @@ export interface RawCardRecord {
   readonly cardClass?: unknown
   readonly type?: unknown
   readonly subtype?: unknown
+  readonly tribes?: unknown
   readonly spellSchool?: unknown
   readonly cost?: unknown
   readonly spellDamage?: unknown
@@ -107,6 +108,17 @@ function optionalString(value: unknown, path: string): string | null {
   if (value === undefined || value === null || value === '') return null
   const normalized = stringValue(value, path)
   return normalized === 'General' ? null : normalized
+}
+
+function optionalStringArray(value: unknown, path: string): readonly string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) return fail(path, 'expected an array')
+  const values = value.map((entry, index) =>
+    stringValue(entry, `${path}[${index}]`)
+  )
+  if (new Set(values).size !== values.length)
+    return fail(path, 'must not contain duplicate entries')
+  return values
 }
 
 function textValue(value: unknown, path: string): string {
@@ -173,9 +185,11 @@ const ACTION_FIELDS = new Set([
   'attack',
   'cardId',
   'canAttackImmediately',
+  'castTarget',
   'chance',
   'classBonus',
   'continueAfterSourceLeaves',
+  'concealed',
   'copy',
   'count',
   'counter',
@@ -186,6 +200,7 @@ const ACTION_FIELDS = new Set([
   'deferUntil',
   'distinctDeathEvents',
   'distinctIngredients',
+  'disabled',
   'drawWonCard',
   'crystal',
   'destination',
@@ -241,6 +256,7 @@ const ACTION_FIELDS = new Set([
   'seconds',
   'selection',
   'source',
+  'reference',
   'snapshot',
   'spellDamageMultiplier',
   'spellDamageBonusMultiplier',
@@ -275,6 +291,9 @@ const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>>
   'destroy-secrets': ['player'],
   'change-cost': ['amount'],
   copy: ['target'],
+  'copy-stats': ['source', 'target'],
+  'replace-deck-with-copies': ['cardId'],
+  'resurrect-discovered-minion': ['reference'],
   draw: ['player', 'count'],
   discover: ['player', 'count', 'source'],
   'draw-until': ['player', 'handSize'],
@@ -284,6 +303,7 @@ const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>>
   'gain-armor': ['amount'],
   'gain-mana': ['player', 'amount'],
   'grant-deathrattle': ['target'],
+  'grant-extra-attack': ['target'],
   'grant-keyword': ['target', 'keyword'],
   'grant-keywords': ['target', 'keywords'],
   'grant-random-keyword': ['target', 'keywords'],
@@ -312,6 +332,7 @@ const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>>
   'swap-stats': ['target'],
   'take-control': ['target'],
   transform: ['target', 'cardId'],
+  'transform-card-random': ['target'],
   'transform-random': ['target'],
   'trigger-deathrattle': ['target']
 }
@@ -460,6 +481,36 @@ function validateActionShape(
   if (actionName === 'copy' && record['destination'] === undefined) {
     fail(`${path}.destination`, 'is required for this action')
   }
+  if (record['castTarget'] !== undefined) {
+    if (actionName !== 'copy' || record['destination'] !== 'cast-on-target')
+      fail(`${path}.castTarget`, 'requires copy to cast-on-target')
+    selectorValue(record['castTarget'], `${path}.castTarget`)
+  }
+  if (record['stats'] !== undefined) {
+    if (actionName === 'copy') {
+      if (
+        typeof record['stats'] !== 'object' ||
+        record['stats'] === null ||
+        Array.isArray(record['stats'])
+      )
+        fail(`${path}.stats`, 'requires an attack/health object for copy')
+      const stats = record['stats'] as Record<string, unknown>
+      for (const [key, value] of Object.entries(stats)) {
+        if (key !== 'attack' && key !== 'health')
+          fail(`${path}.stats.${key}`, 'unknown copied stat')
+        signedNumber(value, `${path}.stats.${key}`)
+      }
+    } else if (actionName === 'copy-stats') {
+      if (
+        !Array.isArray(record['stats']) ||
+        record['stats'].length === 0 ||
+        record['stats'].some((stat) => stat !== 'attack' && stat !== 'health')
+      )
+        fail(`${path}.stats`, 'requires attack and/or health for copy-stats')
+    } else {
+      fail(`${path}.stats`, 'is only supported by copy actions')
+    }
+  }
   if (record['allowEmptyTargets'] !== undefined)
     booleanValue(record['allowEmptyTargets'], `${path}.allowEmptyTargets`, false)
   if (
@@ -547,6 +598,8 @@ function validateActionShape(
 
 const CONDITION_FIELDS = [
   'cardId',
+  'castTarget',
+  'cost',
   'exclude',
   'filter',
   'minimum',
@@ -562,6 +615,7 @@ const EVENT_FIELDS = [
   'exclude',
   'filter',
   'phase',
+  'playedFromHand',
   'source',
   'target',
   'type',
@@ -593,7 +647,7 @@ function filterValue(value: unknown, path: string): void {
     } else if (key === 'operator') {
       enumValue(candidate, CARD_OPERATORS, `${path}.${key}`)
     } else if (key === 'value') {
-      finiteNumber(candidate, `${path}.${key}`)
+      numericEffectValue(candidate, `${path}.${key}`, false)
     } else if (key === 'cost') {
       if (typeof candidate === 'string') {
         if (candidate !== 'target-cost' && candidate !== 'event-card-cost') {
@@ -647,6 +701,8 @@ function conditionValue(value: unknown, path: string): void {
     stringValue(condition['player'], `${path}.player`)
   if (condition['cardId'] !== undefined)
     stringValue(condition['cardId'], `${path}.cardId`)
+  if (condition['cost'] !== undefined)
+    finiteNumber(condition['cost'], `${path}.cost`)
   if (condition['minimum'] !== undefined)
     finiteNumber(condition['minimum'], `${path}.minimum`)
   if (
@@ -679,6 +735,8 @@ function eventValue(value: unknown, path: string): void {
   }
   if (event['filter'] !== undefined) filterValue(event['filter'], `${path}.filter`)
   if (event['phase'] !== undefined) stringValue(event['phase'], `${path}.phase`)
+  if (event['playedFromHand'] !== undefined)
+    booleanValue(event['playedFromHand'], `${path}.playedFromHand`, false)
   if (event['source'] !== undefined) selectorValue(event['source'], `${path}.source`)
   if (event['target'] !== undefined) selectorValue(event['target'], `${path}.target`)
   if (event['turnPlayer'] !== undefined)
@@ -830,6 +888,13 @@ function actionsValue(value: unknown, path: string): void {
       booleanValue(record['storeStats'], `${actionPath}.storeStats`, false)
     if (record['storeCardId'] !== undefined)
       booleanValue(record['storeCardId'], `${actionPath}.storeCardId`, false)
+    if (record['disabled'] !== undefined)
+      booleanValue(record['disabled'], `${actionPath}.disabled`, false)
+    if (record['concealed'] !== undefined) {
+      if (record['action'] !== 'grant-deathrattle')
+        fail(`${actionPath}.concealed`, 'is only supported by grant-deathrattle')
+      booleanValue(record['concealed'], `${actionPath}.concealed`, false)
+    }
     const actionName = actionRecord(record, actionPath)
     validateActionShape(actionName, record, actionPath)
     if (record['damageResolution'] !== undefined) {
@@ -1039,6 +1104,7 @@ export function validateCardRecord(
   const playCondition = raw.playCondition as CardDefinition['playCondition'] | undefined
   const cost = normalizeCost(raw, id)
   const subtype = optionalString(raw.subtype, `${indexOrPath}.subtype`)
+  const tribes = optionalStringArray(raw.tribes, `${indexOrPath}.tribes`)
   const spellSchool = optionalString(raw.spellSchool, `${indexOrPath}.spellSchool`)
   const collectible = booleanValue(
     raw.collectible,
@@ -1059,6 +1125,7 @@ export function validateCardRecord(
     rarity,
     cardClass: asClassId(cardClass),
     subtype,
+    ...(tribes === undefined ? {} : { tribes }),
     spellSchool,
     cost,
     ...(raw.spellDamage !== undefined

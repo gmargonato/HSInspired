@@ -6,47 +6,52 @@ import {
   getOutlineTuningConfig,
   OUTLINE_PALETTES,
   OUTLINE_TUNINGS,
+  GHOST_AURA_CONFIG,
   updateOutlineTuningConfig
 } from './outline-tuning'
-
+import { inverseAuraProjection } from './aura-projection'
 const initialConfig = parseOutlineTuningConfig(rawConfig)
-
-describe('outline tuning registry', () => {
+describe('shader tuning registry', () => {
   afterEach(() => updateOutlineTuningConfig(initialConfig))
-
-  it('updates preset lookups and existing registry references together', () => {
-    const updated = parseOutlineTuningConfig({
-      ...initialConfig,
-      presets: {
-        ...initialConfig.presets,
-        card: {
-          ...initialConfig.presets.card,
-          motionSpeed: 1.25,
-          saturation: 1.25
-        }
-      }
-    })
-
-    updateOutlineTuningConfig(updated)
-
-    expect(getOutlineTuning('card').motionSpeed).toBe(1.25)
-    expect(getOutlineTuning('card').saturation).toBe(1.25)
-    expect(OUTLINE_TUNINGS.card.motionSpeed).toBe(1.25)
+  it('updates Aura and Ghost registries without crossing configurations', () => {
+    const updated = structuredClone(rawConfig)
+    updated.aura.presets.card.speed = 0.37
+    updated.aura.palettes.blue.glowColor = 0x123456
+    updated.ghost.tuning.motionSpeed = 1.5
+    updateOutlineTuningConfig(parseOutlineTuningConfig(updated))
+    expect(getOutlineTuning('card').speed).toBe(0.37)
+    expect(OUTLINE_TUNINGS.card.speed).toBe(0.37)
+    expect(OUTLINE_PALETTES.blue.glowColor).toBe(0x123456)
+    expect(GHOST_AURA_CONFIG.tuning.motionSpeed).toBe(1.5)
+    expect(GHOST_AURA_CONFIG.palette).toEqual(initialConfig.ghost.palette)
     expect(getOutlineTuningConfig()).toEqual(updated)
   })
-
-  it('updates shared palette lookups with a saved configuration', () => {
-    const updated = parseOutlineTuningConfig({
-      ...initialConfig,
-      palettes: {
-        ...initialConfig.palettes,
-        blue: { ...initialConfig.palettes.blue, glowColor: 0x123456 }
+})
+describe('Aura perspective projection', () => {
+  it.each([
+    [0, 0, 100, 0, 100, 200, 0, 200],
+    [-40, 30, 80, 0, 120, 160, -20, 190]
+  ])(
+    'maps corners and projective interior back into the source silhouette: %j',
+    (...corners) => {
+      const m = inverseAuraProjection(corners)
+      for (const [index, uv] of [
+        [0, [0, 0]],
+        [2, [1, 0]],
+        [4, [1, 1]],
+        [6, [0, 1]]
+      ] as const) {
+        const x = corners[index],
+          y = corners[index + 1],
+          w = m[6] * x + m[7] * y + m[8]
+        expect((m[0] * x + m[1] * y + m[2]) / w).toBeCloseTo(uv[0], 6)
+        expect((m[3] * x + m[4] * y + m[5]) / w).toBeCloseTo(uv[1], 6)
       }
-    })
-
-    updateOutlineTuningConfig(updated)
-
-    expect(OUTLINE_PALETTES.blue.glowColor).toBe(0x123456)
-    expect(getOutlineTuningConfig()).toEqual(updated)
+    }
+  )
+  it('returns finite coefficients for a fully collapsed flip', () => {
+    expect(
+      inverseAuraProjection([0, 0, 0, 0, 0, 100, 0, 100]).every(Number.isFinite)
+    ).toBe(true)
   })
 })

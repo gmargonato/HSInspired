@@ -194,6 +194,7 @@ function actionPhase(name: CardActionName): CapabilityPhase {
   if (
     [
       'add-to-hand',
+      'cast-discovered-spell',
       'combine-choose-one',
       'spend-all-mana',
       'buff-cthun',
@@ -205,11 +206,14 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'refresh-mana',
       'refresh-hero-power',
       'set-hero-power-cost',
+      'renounce-darkness',
       'create-kazakus-potion',
       'change-cost',
       'copy',
       'discard',
       'discover',
+      'discover-opponent-deck-guess',
+      'prevent-weapon-durability-loss',
       'draw',
       'draw-until',
       'gain-mana',
@@ -218,7 +222,14 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'unlock-overload',
       'shuffle-into-deck',
       'refill-original-decks',
-      'steal-minion-from-deck'
+      'steal-minion-from-deck',
+      'discard-weapons-and-gain-stats',
+      'replace-hand-spells-with-opponent-class-spells',
+      'record-spell-cast-on-source',
+      'return-recorded-spells',
+      'replace-deck-with-copies',
+      'living-mana',
+      'set-next-spell-costs-health'
     ].includes(name)
   )
     return 6
@@ -231,7 +242,8 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'modify',
       'remove-keyword',
       'silence',
-      'swap-stats'
+      'swap-stats',
+      'grant-extra-attack'
     ].includes(name)
   )
     return 7
@@ -246,7 +258,8 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'restore',
       'sacrifice-and-damage',
       'set-health',
-      'trigger-deathrattle'
+      'trigger-deathrattle',
+      'attack-target'
     ].includes(name)
   )
     return 8
@@ -263,10 +276,14 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'swap',
       'take-control',
       'transform',
+      'transform-card-random',
       'transform-random',
       'shuffle-random-minions',
       'summon-weapon-kills',
-      'adapt'
+      'adapt',
+      'resurrect-discovered-minion',
+      'go-dormant',
+      'revive-dormant'
     ].includes(name)
   )
     return 9
@@ -301,7 +318,8 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'set-hero-power-drawn-card-cost',
       'replace-hero',
       'set-hero-power',
-      'set-turn-limit'
+      'set-turn-limit',
+      'randomize-targets'
     ].includes(name)
   )
     return 14

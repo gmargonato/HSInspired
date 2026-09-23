@@ -526,34 +526,8 @@
     "attack": 2,
     "health": 1,
     "rulesText": "Poisonous.",
-    "keywords": [],
-    "effects": [
-      {
-        "trigger": "on-damage",
-        "event": {
-          "type": "damage-dealt",
-          "source": {
-            "type": "minion",
-            "selection": "source"
-          },
-          "target": {
-            "controller": "any",
-            "type": "minion",
-            "selection": "event-target"
-          }
-        },
-        "actions": [
-          {
-            "action": "destroy",
-            "target": {
-              "controller": "any",
-              "type": "minion",
-              "selection": "event-target"
-            }
-          }
-        ]
-      }
-    ]
+    "keywords": ["poisonous"],
+    "effects": []
   },
   {
     "id": "league_of_explorers_unearthed_raptor",
@@ -561,7 +535,8 @@
     "rarity": "Rare",
     "cardClass": "Rogue",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Beast",
+    "tribes": ["Undead"],
     "cost": 3,
     "attack": 3,
     "health": 4,
@@ -596,7 +571,7 @@
     "rarity": "Common",
     "cardClass": "Rogue",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 4,
     "attack": 5,
     "health": 4,
@@ -655,7 +630,7 @@
     "rarity": "Common",
     "cardClass": "Shaman",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 4,
     "attack": 2,
     "health": 6,
@@ -746,7 +721,7 @@
     "rarity": "Common",
     "cardClass": "Warlock",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 2,
     "attack": 2,
     "health": 2,
@@ -951,6 +926,7 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "Mech",
+    "tribes": ["Beast"],
     "cost": 4,
     "attack": 3,
     "health": 4,
@@ -1050,7 +1026,7 @@
     "rarity": "Epic",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Naga",
     "cost": 5,
     "attack": 5,
     "health": 5,
@@ -1084,7 +1060,7 @@
     "rarity": "Epic",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 5,
     "attack": 4,
     "health": 6,
@@ -1152,7 +1128,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 8,
     "attack": 8,
     "health": 8,
@@ -1435,7 +1411,7 @@
     "rarity": "Rare",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 4,
     "attack": 7,
     "health": 4,
@@ -1525,7 +1501,7 @@
     "rarity": "Summon",
     "cardClass": "Warrior",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Beast",
     "collectible": false,
     "cost": 1,
     "attack": 1,
@@ -1763,7 +1739,7 @@
     "rarity": "Summon",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "collectible": false,
     "cost": 3,
     "attack": 3,

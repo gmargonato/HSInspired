@@ -26,13 +26,16 @@ describe('character indicator presentation', () => {
         shieldConsumed: true
       })
     ).toBe(0)
+  })
+
+  it("suppresses damage prevented by immunity, including Gladiator's Longbow", () => {
     expect(
       effectDamageIndicatorAmount({
         displayAmount: 6,
         actualDamage: 0,
         prevented: true
       })
-    ).toBe(6)
+    ).toBe(0)
   })
 
   it('uses attempted healing even when no Health was restored', () => {

@@ -6,7 +6,7 @@ function nonNegativeNumber(value: unknown): number | null {
 
 /** Amount shown for one damage effect, independent of effective Health loss. */
 export function effectDamageIndicatorAmount(data: EffectPresentationData): number {
-  if (data.shieldConsumed === true) return 0
+  if (data.shieldConsumed === true || data.prevented === true) return 0
   return (
     nonNegativeNumber(data.displayAmount) ??
     nonNegativeNumber(data.amount) ??

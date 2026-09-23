@@ -84,7 +84,7 @@ function createFallbackGameRoute(
   }
 }
 
-type DevSceneId = 'card-inspector' | 'outline-lab'
+type DevSceneId = 'card-inspector' | 'outline-lab' | 'hero-power-anim'
 type StandardSceneId = Exclude<SceneId, DevSceneId>
 type StandardSceneRequest = Exclude<SceneRequest, { readonly id: DevSceneId }>
 export type DevSceneRequest = Extract<SceneRequest, { readonly id: DevSceneId }>
@@ -217,7 +217,11 @@ export class SceneNavigator implements SceneRouter {
   }
 
   async navigateRequest(request: SceneRequest): Promise<void> {
-    if (request.id === 'card-inspector' || request.id === 'outline-lab') {
+    if (
+      request.id === 'card-inspector' ||
+      request.id === 'outline-lab' ||
+      request.id === 'hero-power-anim'
+    ) {
       if (!this.createDevScene) {
         throw new Error('Development labs are available only in development builds.')
       }

@@ -363,11 +363,9 @@ function mulliganSlot(instanceId: string): GameCardSlot {
     setSelected: vi.fn(),
     setPlayableOutlineEnabled: vi.fn(),
     setPlayableOutlineEnhanced: vi.fn(),
-    setOutlineLiveWhileHovered: vi.fn(),
     setMulliganInteractionEnabled: vi.fn(),
     prepareCardReplacement: vi.fn(),
     flipToCardReplacement: vi.fn().mockResolvedValue(undefined),
-    refreshPlayableOutline: vi.fn(),
     disposePlayableOutline: vi.fn()
   }) as unknown as GameCardSlot
 }
@@ -525,6 +523,7 @@ describe('match interaction frame ordering', () => {
         suppressPlayableOutline: vi.fn(),
         isPlayableOutlineEnabled: () => true,
         getPlayableOutlinePalette: () => 'blue' as const,
+        getPlayableOutlineTuning: () => undefined,
         getPlayableOutlinePreset: () => 'card' as const
       })
       slot.addChild(card)
@@ -970,7 +969,6 @@ describe('Golden Monkey hand presentation', () => {
       expect(slot.flipToCardReplacement).toHaveBeenCalledWith(
         RESOLUTION_TIMING.handReplacementFlip
       )
-      expect(slot.refreshPlayableOutline).toHaveBeenCalledTimes(1)
     }
   })
 })
@@ -2749,8 +2747,7 @@ describe('board lifecycle preservation', () => {
       const enemy = state.players.find((player) => player.participantId === opponent)!
         .board[0]!
       const slot = Object.assign(mulliganSlot(card.instanceId), {
-        suppressPlayableOutline: vi.fn(),
-        enableBakedPlayableOutline: vi.fn()
+        suppressPlayableOutline: vi.fn()
       })
       const entry: HandEntry = {
         card,
@@ -3038,8 +3035,7 @@ describe('board lifecycle preservation', () => {
         commitPendingCardPlay(): void
       }
       const slot = Object.assign(mulliganSlot('pending-minion'), {
-        suppressPlayableOutline: vi.fn(),
-        enableBakedPlayableOutline: vi.fn()
+        suppressPlayableOutline: vi.fn()
       })
       const entry: HandEntry = {
         card: { instanceId: slot.instanceId, cardId: asCardId('basic_elven_archer') },
@@ -3724,6 +3720,7 @@ describe('board lifecycle preservation', () => {
       suppressPlayableOutline: vi.fn(),
       isPlayableOutlineEnabled: () => true,
       getPlayableOutlinePalette: () => 'blue',
+      getPlayableOutlineTuning: () => undefined,
       getPlayableOutlinePreset: () => 'card'
     })
     slot.addChild(card)

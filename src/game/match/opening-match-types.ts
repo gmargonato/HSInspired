@@ -35,6 +35,8 @@ export interface OpeningCard {
   readonly attack?: number
   readonly health?: number
   readonly enchantments?: readonly RuntimeEnchantment[]
+  /** Owner-only Fatespinner choice retained while it is bounced to hand. */
+  readonly concealedDeathrattleChoice?: number
 }
 
 export type RuntimeEntityKind =
@@ -182,6 +184,9 @@ export interface MatchHistory {
   readonly totemsSummonedThisGameByPlayer: Readonly<Record<string, number>>
   readonly secretsPlayedThisGameByPlayer: Readonly<Record<string, number>>
   readonly cardsDiedThisGame: readonly string[]
+  readonly cardsDiscardedThisGameByPlayer?: Readonly<Record<string, number>>
+  readonly overloadedManaThisGameByPlayer?: Readonly<Record<string, number>>
+  readonly offClassCardsAddedToHandThisGameByPlayer?: Readonly<Record<string, number>>
   readonly beastsSummonedByPlayer: Readonly<Record<string, number>>
   readonly heroPowersUsedByPlayer: Readonly<Record<string, number>>
 }
@@ -333,6 +338,8 @@ export interface BoardMinion {
   readonly grantedTriggers?: readonly RuntimeGrantedTrigger[]
   readonly attachedEffects?: readonly RuntimeAttachedEffect[]
   readonly deathrattles?: readonly CardEffectBlock[]
+  /** Private branch selected by a concealed Deathrattle effect. */
+  readonly concealedDeathrattleChoice?: number
   readonly silenced?: boolean
   readonly frozenUntilTurn?: number | null
   readonly divineShield?: boolean
@@ -343,12 +350,18 @@ export interface BoardMinion {
   readonly spellImmune?: boolean
   readonly attacksUsedThisTurn?: number
   readonly maxAttacksPerTurn?: number
+  /** Additional attacks earned this turn by effects such as Giant Sand Worm. */
+  readonly extraAttacksThisTurn?: number
   readonly damageTaken?: number
   readonly triggerMultipliers?: Readonly<Record<string, number>>
   readonly spellDamage?: number
   readonly spellDamageMultiplier?: number
   readonly healingMultiplier?: number
   readonly heroPowerMultiplier?: number
+  readonly dormant?: boolean
+  readonly dormantProgress?: number
+  readonly dormantProgressTurn?: number
+  readonly rememberedSpellIds?: readonly CardId[]
 }
 
 /** A weapon equipped to a hero. Durability is current and maxDurability is its original value. */
@@ -462,6 +475,7 @@ export interface OpeningPlayerState {
   /** Original drawable cards, used by effects that rebuild the starting deck. */
   readonly originalDeckCardIds?: readonly CardId[]
   readonly elementalPlayedLastTurn?: boolean
+  readonly elementalsPlayedLastTurn?: number
   readonly quest?: {
     readonly cardId: CardId
     readonly rewardCardId: CardId
@@ -491,6 +505,8 @@ export interface OpeningPlayerState {
   /** Cards that were discarded or burned and are no longer playable entities. */
   readonly discardedCards?: readonly OpeningCard[]
   readonly overload?: number
+  /** The next spell played this turn consumes Health instead of Mana. */
+  readonly nextSpellCostsHealth?: boolean
   /** One-shot discounts that apply when the next matching card is played. */
   readonly pendingCostModifiers?: readonly PendingCostModifier[]
   /** Turn-scoped count of Lock and Load rewards. */
@@ -531,7 +547,15 @@ export interface PendingDiscoverChoice {
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
   readonly candidates: readonly OpeningCard[]
-  readonly origin?: 'deck' | 'generated' | 'opponent-deck'
+  readonly origin?:
+    | 'deck'
+    | 'deck-copy'
+    | 'dead-minions'
+    | 'generated'
+    | 'opponent-deck'
+    | 'opponent-deck-guess'
+  /** Private answer for effects that offer a hidden correct Discover choice. */
+  readonly correctCandidateInstanceId?: string
   readonly continuation?: PendingDiscoverContinuation
   readonly queued?: readonly Omit<PendingDiscoverChoice, 'queued'>[]
 }
@@ -1324,6 +1348,9 @@ export interface OpeningMatchAnalysis {
     choice?: number
   ): PlayCardInput | null
   getLegality(participantId: PlayerId): MatchLegality
+  getAttackLegality?(
+    participantId: PlayerId
+  ): Pick<MatchLegality, 'legalAttackerInstanceIds' | 'legalAttackTargets'>
   /** Runs a nested isolated branch from the analysis fork's current state. */
   analyze<T>(operation: (fork: OpeningMatchAnalysis) => T): T
 }
@@ -1366,6 +1393,9 @@ export interface OpeningMatchInstance {
     choice?: number
   ): PlayCardInput | null
   getLegality?(participantId: PlayerId): MatchLegality
+  getAttackLegality?(
+    participantId: PlayerId
+  ): Pick<MatchLegality, 'legalAttackerInstanceIds' | 'legalAttackTargets'>
   getEffectTrace?(): readonly EffectTraceEntry[]
   getPublicState?(participantId: PlayerId): OpeningMatchPublicState
   getAiObservation?(participantId: PlayerId, policy: AiInformationPolicy): AiObservation
@@ -1404,6 +1434,13 @@ export type PublicizeOpeningMatchEvent<E> = E extends
           : E
 
 export type OpeningMatchPublicEvent = PublicizeOpeningMatchEvent<OpeningMatchEvent>
+type PublicPendingDiscoverEntry = Omit<
+  PendingDiscoverChoice,
+  'candidates' | 'continuation' | 'correctCandidateInstanceId' | 'queued'
+> & {
+  readonly candidates: readonly OpeningPublicCard[]
+}
+
 export interface OpeningMatchPublicState extends Omit<
   OpeningMatchState,
   | 'players'
@@ -1414,11 +1451,8 @@ export interface OpeningMatchPublicState extends Omit<
   | 'scheduledEffects'
 > {
   readonly players: readonly [OpeningPublicPlayerState, OpeningPublicPlayerState]
-  readonly pendingDiscover?: Omit<
-    PendingDiscoverChoice,
-    'candidates' | 'continuation'
-  > & {
-    readonly candidates: readonly OpeningPublicCard[]
+  readonly pendingDiscover?: PublicPendingDiscoverEntry & {
+    readonly queued?: readonly PublicPendingDiscoverEntry[]
   }
   readonly pendingCardChoice?: PendingCardChoice
 }
@@ -1434,8 +1468,10 @@ export type OpeningPublicCard = Omit<
   | 'enchantments'
   | 'knownTo'
   | 'startedInDeck'
+  | 'concealedDeathrattleChoice'
 > & {
   readonly cardId: CardId | null
+  readonly concealedDeathrattleChoice?: number
   readonly baseCost?: number | null
   readonly currentCost?: number | null
   readonly attack?: number | null
@@ -1475,6 +1511,9 @@ export interface PlayCardInput {
   readonly targetSelectors: readonly Readonly<Record<string, unknown>>[]
   /** Candidate references for each selector, in selector order, after immunity filtering. */
   readonly legalTargetOptions: readonly (readonly CardPlayTargetRef[])[]
+  /** Engine-selected targets when Mayor Noggenfogger's aura is active. */
+  readonly randomizedTargetSelectors?: readonly Readonly<Record<string, unknown>>[]
+  readonly targetSelectionRandomized?: boolean
   readonly choiceCount: number
   readonly skipTargetedBattlecry: boolean
   /** Zero-based choices accepted by the command, exposed for renderer input. */
@@ -1508,5 +1547,7 @@ export interface MatchLegality {
   readonly legalHeroPower: boolean
   /** Legal targets for the effective hero power, after aura-derived targeting changes. */
   readonly legalHeroPowerTargets: readonly HeroPowerTargetRef[]
+  /** Active Mayor Noggenfogger auras resolve manual target choices randomly. */
+  readonly targetSelectionRandomized?: boolean
   readonly legalTargets: Readonly<Record<string, readonly CardPlayTargetRef[]>>
 }

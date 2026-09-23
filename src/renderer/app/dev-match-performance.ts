@@ -11,7 +11,7 @@ import type { SceneManager } from '../scenes/scene-manager'
 import { GameScene } from '../scenes/game-scene'
 import { createTavernBrawlGameRoute } from '../features/tavern-brawl/tavern-brawl-model'
 import { GAME_HEIGHT, GAME_WIDTH } from './config'
-import { CachedOutlineFilter } from '../rendering/effects/cached-outline-filter'
+import { CachedOutlineFilter } from '../rendering/effects/cached-ghost-aura-filter'
 import { getPremiumMode, setPremiumMode } from '../rendering/premium-appearance'
 
 const BENCHMARK_SEED = 0x48535046
@@ -315,7 +315,7 @@ async function sampleFrames(
     draggedFrames,
     targetingFrames,
     dragStarts,
-    outlineCache: CachedOutlineFilter.getDiagnostics(),
+    ghostOutlineCache: CachedOutlineFilter.getDiagnostics(),
     resources: { before: resourcesBefore, after: readResources?.() },
     failures,
     status: failures.length ? ('fail' as const) : ('pass' as const)
@@ -341,10 +341,7 @@ export async function runMatchPerformanceBenchmark(options: {
   const handSizes = String(import.meta.env.VITE_MATCH_PERF_HAND_SIZES || '1,4,7,10')
     .split(',')
     .map(Number)
-  const outlineMode =
-    import.meta.env.VITE_MATCH_OUTLINE_MODE === 'live'
-      ? ('live' as const)
-      : ('baked' as const)
+  const outlineMode = 'live' as const
   const scenarios: Awaited<ReturnType<typeof sampleFrames>>[] = []
   const heap: { name: string; usedMiB: number | null }[] = []
   let scene: GameScene | undefined,

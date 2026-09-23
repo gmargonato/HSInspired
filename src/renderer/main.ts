@@ -21,6 +21,10 @@ type SceneMenuAPI = {
 const createDevScene: DevSceneFactory | undefined = import.meta.env.DEV
   ? async (request) => {
       switch (request.id) {
+        case 'hero-power-anim': {
+          const { HeroPowerAnimScene } = await import('@hero-power-anim')
+          return new HeroPowerAnimScene()
+        }
         case 'card-inspector': {
           const { CardInspectorScene } = await import('@dev-inspector')
           return new CardInspectorScene()
@@ -202,12 +206,15 @@ async function bootstrap(): Promise<void> {
   let unsubscribeDevSceneSync = (): void => undefined
   let unsubscribeDevCommandHandler = (): void => undefined
   let removeFpsCounter = (): void => undefined
+  let removeDevFilterToggle = (): void => undefined
 
   try {
     app.ticker.maxFPS = 60
     removeFpsCounter = mountFpsCounter(app, container)
-    // Keep the F3 GPU-effects toggle and its status readout disabled. Never
-    // restore either unless a user or human explicitly asks for them back.
+    if (import.meta.env.DEV) {
+      const { installDevFilterToggle } = await import('./app/dev-filter-toggle')
+      removeDevFilterToggle = installDevFilterToggle(app)
+    }
 
     const game = new SceneManager(app, {
       cursor,
@@ -307,6 +314,7 @@ async function bootstrap(): Promise<void> {
       'beforeunload',
       () => {
         removeFpsCounter()
+        removeDevFilterToggle()
         removeSettingsShortcut()
         unsubscribeFromSceneMenu()
         unsubscribeDevSceneSync()
@@ -319,6 +327,7 @@ async function bootstrap(): Promise<void> {
     )
   } catch (error) {
     removeFpsCounter()
+    removeDevFilterToggle()
     removeSettingsShortcut()
     unsubscribeFromSceneMenu()
     unsubscribeDevSceneSync()

@@ -38,6 +38,7 @@ export class GameHudView {
   private endTurnHoverOutlineTarget: Sprite | null = null
   private endTurnHoverOutline: AnimatedOutline | null = null
   private endTurnHovered = false
+  private endTurnHoverSuppressed = false
   private endTurnTexture: Texture | null = null
   private endTurnEnabled = false
   private endTurnExhausted = false
@@ -109,8 +110,7 @@ export class GameHudView {
 
     this.endTurnButton = new Button(initialTurnTexture, {
       highlightOnHover: false,
-      pressFromLeft: true,
-      pressedScale: 0.98,
+      pressedScale: 0.9,
       pressedBrightness: 1,
       onClick: onEndTurn
     })
@@ -149,6 +149,12 @@ export class GameHudView {
     )
     this.turnLayer.addChild(this.manaLocalTray)
     this.turnLayer.visible = false
+  }
+
+  setEndTurnHoverSuppressed(suppressed: boolean): void {
+    if (this.endTurnHoverSuppressed === suppressed) return
+    this.endTurnHoverSuppressed = suppressed
+    this.syncEndTurnVisualState()
   }
 
   syncEndTurnButton(texture: Texture, enabled: boolean, exhausted: boolean): void {
@@ -334,7 +340,10 @@ export class GameHudView {
       button.sprite.texture === this.endTurnTexture && !button.isTextureFlipping()
     this.endTurnOutline?.setEnabled(this.endTurnExhausted && settled)
     this.endTurnHoverOutline?.setEnabled(
-      this.endTurnEnabled && this.endTurnHovered && settled
+      this.endTurnEnabled &&
+        this.endTurnHovered &&
+        !this.endTurnHoverSuppressed &&
+        settled
     )
   }
 }

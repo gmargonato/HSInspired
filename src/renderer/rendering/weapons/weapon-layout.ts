@@ -30,6 +30,14 @@ export const WEAPON_LAYOUT = {
       note: 'Bottom-center Trigger badge, layered above Deathrattle.'
     }
   ),
+  lifesteal: placement(
+    { x: WEAPON_CANVAS.width / 2, y: 153 },
+    { width: 43, height: 41 },
+    {
+      anchor: CENTER,
+      note: 'Bottom-center Lifesteal badge, sharing the weapon ability slot.'
+    }
+  ),
   deathrattle: placement(
     { x: WEAPON_CANVAS.width / 2, y: 153 },
     { width: 80, height: 53 },

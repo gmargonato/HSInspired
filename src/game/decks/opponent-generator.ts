@@ -18,13 +18,16 @@ import { OPPONENT_ARCHETYPES } from './opponent-archetypes'
 import type { OpponentArchetype } from './opponent-archetype'
 import {
   assessFillCard,
+  assessOpponentCoreCard,
   isOpponentPowerCard,
   type OpponentFillCard
 } from './opponent-fill-pool'
 import { OPPONENT_FLOORS, type OpponentFloorRule } from './opponent-floors'
+import { OPPONENT_CARD_RATINGS } from './opponent-card-ratings'
+import { opponentSupportGaps, opponentSupportTags } from './opponent-support'
 import type { OpponentStrategyBrief } from './opponent-strategy'
 
-export const OPPONENT_GENERATOR_VERSION = 7
+export const OPPONENT_GENERATOR_VERSION = 10
 
 export interface OpponentConstructionStep {
   readonly layer: string
@@ -196,18 +199,19 @@ export function generateConstructedOpponent(
       !inspectCardCapabilities(card, supportedCapabilities).supported
     )
   })
-  if (invalidCore)
-    throw new Error(`Ineligible opponent core card: ${invalidCore.id}`)
+  if (invalidCore) throw new Error(`Ineligible opponent core card: ${invalidCore.id}`)
   for (const slot of archetype.core) {
     const card = catalog.require(slot.id)
     const quest = card.type === 'Spell' && card.quest !== undefined
-    fixed.push({
-      card,
-      layer: quest ? 'quest' : 'core',
-      reason: quest
-        ? 'Quest archetype inclusion; the only quest this deck may carry.'
-        : 'Defining archetype card.'
-    })
+    for (let copy = 0; copy < slot.count; copy++) {
+      fixed.push({
+        card,
+        layer: quest ? 'quest' : 'core',
+        reason: quest
+          ? 'Quest archetype inclusion; the only quest this deck may carry.'
+          : 'Defining archetype card.'
+      })
+    }
     if (quest)
       construction.push({
         layer: 'quest',
@@ -226,7 +230,22 @@ export function generateConstructedOpponent(
     const facts = assessFillCard(card)
     if (facts) pool.push(facts)
   }
-  const assembled = assemble(archetype, rng, construction, pool, fixed)
+  // Retry only this archetype, with the same seeded stream and unchanged quality rules.
+  let assembled: AssemblyResult = {
+    cards: {},
+    errors: ['No assembly attempted.'],
+    questCardId: null,
+    floorReport: ''
+  }
+  let attempts = 0
+  for (; attempts < 8; attempts++) {
+    const attemptTrace: OpponentConstructionStep[] = []
+    assembled = assemble(archetype, rng, attemptTrace, pool, fixed)
+    if (!assembled.errors.length) {
+      construction.push(...attemptTrace)
+      break
+    }
+  }
   if (assembled.errors.length)
     throw new Error(`Unable to assemble opponent: ${assembled.errors.join('; ')}`)
 
@@ -245,7 +264,7 @@ export function generateConstructedOpponent(
   construction.push({
     layer: 'validation',
     selected: 'accepted',
-    reason: `30 cards; class/copy legality and universal floors passed. Floors: ${assembled.floorReport}.`,
+    reason: `30 cards; class/copy legality, card support and universal floors passed. Floors: ${assembled.floorReport}.`,
     candidates: 1,
     deckSize: 30
   })
@@ -272,7 +291,7 @@ export function generateConstructedOpponent(
         text: `Original deck: ${archetype.name}. Current state overrides this plan. ${archetype.plan} Mulligan: ${archetype.mulligan}`
       },
       diagnostics: {
-        attempts: 1,
+        attempts: attempts + 1,
         warnings
       }
     }
@@ -303,14 +322,20 @@ function assemble(
   const add = (card: CardDefinition, layer: string, reason: string): void => {
     cards.push(card)
     counts.set(card.id, (counts.get(card.id) ?? 0) + 1)
-    for (const tag of assessFillCard(card)?.tags ?? [])
+    for (const tag of assessOpponentCoreCard(card)?.tags ?? [])
       tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1)
-    trace.push({ layer, selected: card.id, reason, candidates: 1, deckSize: cards.length })
+    trace.push({
+      layer,
+      selected: card.id,
+      reason,
+      candidates: 1,
+      deckSize: cards.length
+    })
   }
   for (const entry of fixed) {
     // Hero and Quest cards are deliberate power cards, not pool candidates.
     if (!isOpponentPowerCard(entry.card)) {
-      const facts = assessFillCard(entry.card)
+      const facts = assessOpponentCoreCard(entry.card)
       if (!facts || (counts.get(entry.card.id) ?? 0) >= getCardCopyLimit(entry.card)) {
         errors.push(`${entry.card.id}: ineligible or copy-conflicting fixed card`)
         return { cards: {}, errors, questCardId: null, floorReport: '' }
@@ -322,7 +347,7 @@ function assemble(
     fixed.find((entry) => entry.card.type === 'Spell' && entry.card.quest !== undefined)
       ?.card.id ?? null
   const weight = (card: OpponentFillCard): number =>
-    card.quality ** 2 *
+    card.quality ** 3 *
     (card.card.cardClass !== 'Neutral' ? 2 : 1) *
     (archetype.bias.some((tag) => card.tags.includes(tag)) ? 1.5 : 1) *
     ((counts.get(card.card.id) ?? 0) === 1 ? 1.5 : 1)
@@ -348,13 +373,87 @@ function assemble(
       : []
     const candidates = roleCandidates.length ? roleCandidates : current
     const selected = weightedPick(candidates, weight, rng)
+    const qualityReason = `Quality ${selected.quality}/5 (${OPPONENT_CARD_RATINGS[selected.card.id] === undefined ? 'automatically assessed' : 'explicitly rated'}); weighted by quality cubed, class affinity, archetype bias and second-copy preference.`
     add(
       selected.card,
       target && roleCandidates.length ? `fill:${target.tag}` : 'fill',
       target && roleCandidates.length
-        ? `Floor ${target.tag}: ${tagCounts.get(target.tag) ?? 0}/${target.min}; weighted by quality, class affinity and archetype bias.`
-        : 'Flexible slot; weighted by quality, class affinity and archetype bias.'
+        ? `Floor ${target.tag}: ${tagCounts.get(target.tag) ?? 0}/${target.min}; ${qualityReason}`
+        : `Flexible slot; ${qualityReason}`
     )
+  }
+  if (!errors.length) {
+    // Repair the finished list so a payoff can be supported by cards picked after it.
+    // Every replacement must reduce total missing support; the bound prevents loops.
+    for (let repair = 0; repair < 60; repair++) {
+      const gaps = opponentSupportGaps(cards)
+      if (!gaps.length) break
+      const target = gaps.find((gap) => gap.index < fixed.length) ?? gaps[0]
+      const missing = gaps.reduce((sum, gap) => sum + gap.min - gap.actual, 0)
+      const candidates = pool.filter(
+        (entry) =>
+          target.index >= fixed.length ||
+          opponentSupportTags(entry.card).includes(target.tag)
+      )
+      const replacements: { entry: OpponentFillCard; index: number }[] = []
+      for (const entry of candidates) {
+        // Fixed payoffs receive support. Unsupported filler is replaced directly.
+        const indices =
+          target.index < fixed.length
+            ? cards.map((_, index) => index).slice(fixed.length)
+            : [target.index]
+        for (const index of indices) {
+          const removed = cards[index]
+          if (
+            removed.id === entry.card.id ||
+            (counts.get(entry.card.id) ?? 0) >= getCardCopyLimit(entry.card)
+          )
+            continue
+          const removedTags = assessOpponentCoreCard(removed)?.tags ?? []
+          if (
+            !floors.every((floor) => {
+              const after =
+                (tagCounts.get(floor.tag) ?? 0) -
+                Number(removedTags.includes(floor.tag)) +
+                Number(entry.tags.includes(floor.tag))
+              return after >= floor.min && after <= floor.max
+            })
+          )
+            continue
+          const next = [...cards]
+          next[index] = entry.card
+          const nextGaps = opponentSupportGaps(next)
+          if (nextGaps.some((gap) => gap.index === index)) continue
+          if (nextGaps.reduce((sum, gap) => sum + gap.min - gap.actual, 0) >= missing)
+            continue
+          replacements.push({ entry, index })
+          break
+        }
+      }
+      if (!replacements.length) {
+        errors.push(
+          `Cannot support ${cards[target.index].id}: ${target.tag} ${target.actual}/${target.min}.`
+        )
+        break
+      }
+      const selected = weightedPick(
+        replacements.map(({ entry }) => entry),
+        weight,
+        rng
+      )
+      const index = replacements.find(({ entry }) => entry === selected)!.index
+      const [removed] = cards.splice(index, 1)
+      counts.set(removed.id, (counts.get(removed.id) ?? 0) - 1)
+      for (const tag of assessOpponentCoreCard(removed)?.tags ?? [])
+        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) - 1)
+      add(
+        selected.card,
+        'repair:support',
+        `Replaced ${removed.id}; missing ${target.tag} support (${target.actual}/${target.min}). Quality ${selected.quality}/5 (${OPPONENT_CARD_RATINGS[selected.card.id] === undefined ? 'automatically assessed' : 'explicitly rated'}).`
+      )
+    }
+    if (opponentSupportGaps(cards).length && !errors.length)
+      errors.push('Card support repair limit reached.')
   }
   for (const floor of floors) {
     const actual = tagCounts.get(floor.tag) ?? 0

@@ -20,7 +20,7 @@ import {
   AnimatedOutline,
   type OutlinePalette,
   type OutlinePaletteName,
-  type OutlinePresetName,
+  type OutlinePresetName as AuraPresetName,
   type OutlineTuning
 } from '../../../rendering/effects/animated-outline'
 import {
@@ -28,7 +28,13 @@ import {
   type OutlineTuningConfig,
   updateOutlineTuningConfig
 } from '../../../rendering/effects/outline-tuning'
-import { OutlineLabColorControls } from './outline-lab-color-controls'
+import { OutlineLabShaderControls } from './outline-lab-shader-controls'
+import { GhostAura } from '../../../rendering/effects/ghost-aura'
+import type {
+  GhostAuraTuning,
+  GhostAuraPalette
+} from '../../../../shared/ipc/outline-tuning'
+type OutlinePresetName = AuraPresetName | 'ghost'
 import { OutlineLabHand, clampHandCount } from './outline-lab-hand'
 import { OutlineLabBoard } from './outline-lab-board'
 import { OUTLINE_LAB_LAYOUT as LAYOUT } from './outline-lab-layout'
@@ -45,9 +51,6 @@ const CANVAS_WIDTH = LAYOUT.canvas.width
 const CANVAS_HEIGHT = LAYOUT.canvas.height
 const PREVIEW_PANEL = LAYOUT.preview
 const CONTROLS_PANEL = LAYOUT.controls
-const SLIDER_WIDTH = 205
-const TUNING_ROW_HEIGHT = LAYOUT.tuningRowHeight
-const GEOMETRY_COLUMN_COUNT = 6
 
 const PRESETS: readonly OutlinePresetName[] = [
   'card',
@@ -61,7 +64,7 @@ const PRESET_LABELS: Record<OutlinePresetName, string> = {
   'bonus-card': 'Bonus Card',
   board: 'Board',
   button: 'Button',
-  ghost: 'Ghost'
+  ghost: 'Ghost Aura Shader'
 }
 const PALETTES: readonly OutlinePaletteName[] = [
   'green',
@@ -71,52 +74,6 @@ const PALETTES: readonly OutlinePaletteName[] = [
   'red',
   'white'
 ]
-type TuningKey = keyof OutlineTuning
-
-interface TuningControlSpec {
-  readonly key: TuningKey
-  readonly label: string
-  readonly min: number
-  readonly max: number
-  readonly step: number
-}
-
-const CONTROL_SPECS = [
-  { key: 'ribbonWidth', label: 'Ribbon width', min: 0, max: 20, step: 1 },
-  { key: 'edgeSoftness', label: 'Edge softness', min: 0, max: 10, step: 1 },
-  { key: 'rimWidth', label: 'Rim width', min: 0, max: 15, step: 1 },
-  { key: 'glowWidth', label: 'Glow width', min: 0, max: 30, step: 1 },
-  { key: 'glowStrength', label: 'Glow strength', min: 0, max: 4, step: 1 },
-  { key: 'innerEdgeWidth', label: 'Inner edge', min: 0, max: 8, step: 1 },
-  {
-    key: 'highlightStrength',
-    label: 'Highlight strength',
-    min: 0,
-    max: 5,
-    step: 1
-  },
-  { key: 'hotspotScale', label: 'Hotspot scale', min: 1, max: 120, step: 1 },
-  {
-    key: 'hotspotDensity',
-    label: 'Hotspot density',
-    min: 0,
-    max: 4,
-    step: 1
-  },
-  { key: 'edgeWobble', label: 'Edge wobble', min: 0, max: 16, step: 1 },
-  { key: 'motionSpeed', label: 'Motion speed', min: 0, max: 3, step: 1 },
-  { key: 'pulseRate', label: 'Pulse rate', min: 0, max: 3, step: 1 },
-  { key: 'contourVariation', label: 'Contour variation', min: 0, max: 10, step: 1 }
-] as const satisfies readonly TuningControlSpec[]
-
-const SATURATION_CONTROL = {
-  key: 'saturation',
-  label: 'Color saturation',
-  min: 0,
-  max: 2,
-  step: 0.05
-} as const satisfies TuningControlSpec
-
 interface ButtonState {
   readonly root: Container
   readonly background: Graphics
@@ -125,28 +82,19 @@ interface ButtonState {
   readonly height: number
 }
 
-interface SliderState {
-  readonly spec: TuningControlSpec
-  readonly track: Container
-  readonly knob: Graphics
-  readonly valueLabel: Text
-  value: number
-}
-
 function cloneTunings(
-  tunings: OutlineTuningConfig['presets']
-): Record<OutlinePresetName, OutlineTuning> {
+  tunings: OutlineTuningConfig['aura']['presets']
+): Record<AuraPresetName, OutlineTuning> {
   return {
     card: { ...tunings.card },
     'bonus-card': { ...tunings['bonus-card'] },
     board: { ...tunings.board },
-    button: { ...tunings.button },
-    ghost: { ...tunings.ghost }
+    button: { ...tunings.button }
   }
 }
 
 function clonePalettes(
-  palettes: OutlineTuningConfig['palettes']
+  palettes: OutlineTuningConfig['aura']['palettes']
 ): Record<OutlinePaletteName, OutlinePalette> {
   return {
     blue: { ...palettes.blue },
@@ -215,29 +163,21 @@ function addPanel(
   parent.addChild(panel)
 }
 
-function snapped(value: number, spec: TuningControlSpec): number {
-  const clamped = Math.min(spec.max, Math.max(spec.min, value))
-  return Number((Math.round(clamped / spec.step) * spec.step).toFixed(4))
-}
-
-function formatValue(value: number, step: number): string {
-  const decimals = step.toString().split('.')[1]?.length ?? 0
-  return value.toFixed(decimals)
-}
-
 /** Development-only live editor for the persisted production outline presets. */
 export class OutlineLab extends Container {
   private readonly assetScope = new AssetScope()
   private readonly resolver = new CardAssetResolver()
   private readonly initialConfig = getOutlineTuningConfig()
-  private readonly drafts = cloneTunings(this.initialConfig.presets)
-  private readonly paletteDrafts = clonePalettes(this.initialConfig.palettes)
+  private readonly drafts = cloneTunings(this.initialConfig.aura.presets)
+  private readonly paletteDrafts = clonePalettes(this.initialConfig.aura.palettes)
   private readonly previewGroups = new Map<OutlinePresetName, Container>()
-  private readonly outlines = new Map<OutlinePresetName, AnimatedOutline[]>()
+  private readonly outlines = new Map<AuraPresetName, AnimatedOutline[]>()
+  private readonly ghostOutlines: GhostAura[] = []
+  private ghostTuning = { ...this.initialConfig.ghost.tuning }
+  private ghostPalette = { ...this.initialConfig.ghost.palette }
   private readonly presetTabs = new Map<OutlinePresetName, ButtonState>()
   private readonly paletteButtons = new Map<OutlinePaletteName, ButtonState>()
   private readonly paletteSwatches = new Map<OutlinePaletteName, Graphics>()
-  private readonly sliders = new Map<TuningKey, SliderState>()
   private readonly selectedPalettes: Record<OutlinePresetName, OutlinePaletteName> = {
     card: 'green',
     'bonus-card': 'orange',
@@ -246,8 +186,7 @@ export class OutlineLab extends Container {
     ghost: 'purple'
   }
   private selectedPreset: OutlinePresetName = 'card'
-  private activeSlider: SliderState | null = null
-  private colorControls: OutlineLabColorControls | null = null
+  private shaderControls: OutlineLabShaderControls | null = null
   private saveButton!: ButtonState
   private revision = 0
   private savedRevision = 0
@@ -293,11 +232,10 @@ export class OutlineLab extends Container {
     this.createChrome()
     this.createPresetTabs()
     this.createPaletteControls()
-    this.colorControls = new OutlineLabColorControls({
+    this.shaderControls = new OutlineLabShaderControls({
       ...this.options,
-      onColorChange: (key, color) => this.updateSelectedColor(key, color)
+      onShaderChange: (ghost) => this.selectPreset(ghost ? 'ghost' : 'card')
     })
-    this.createTuningControls()
     await this.createPreviewGroups(gameAssets, deckAssets, selectionAssets)
     if (this.disposed) return
     this.createHandControls()
@@ -307,7 +245,8 @@ export class OutlineLab extends Container {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
-    this.colorControls?.dispose()
+    this.shaderControls?.dispose()
+    for (const outline of this.ghostOutlines) outline.dispose()
     this.hand?.dispose()
     this.board?.dispose()
     for (const outlines of this.outlines.values()) {
@@ -320,7 +259,7 @@ export class OutlineLab extends Container {
 
   setControlsVisible(visible: boolean): void {
     this.controlsVisible = visible
-    this.colorControls?.setVisible(visible)
+    this.shaderControls?.setVisible(visible)
     if (visible) this.hand?.resume()
     else this.hand?.pause()
     if (!visible) this.board?.clearHover()
@@ -359,8 +298,6 @@ export class OutlineLab extends Container {
 
     addLabel(this, 'LIVE PREVIEW', 62, LAYOUT.panelTitleY, 19, 0xf1d36a)
     addLabel(this, 'TUNING', 1202, LAYOUT.panelTitleY, 19, 0xf1d36a)
-    addLabel(this, 'GEOMETRY / GLOW', 1202, LAYOUT.tuningHeadingY, 16, 0x9db5d1)
-    addLabel(this, 'DETAIL / MOTION', 1532, LAYOUT.tuningHeadingY, 16, 0x9db5d1)
 
     const save = LAYOUT.save
     this.saveButton = this.createButton(
@@ -387,7 +324,9 @@ export class OutlineLab extends Container {
 
   private createPresetTabs(): void {
     const tabs = LAYOUT.tabs
-    for (const [index, preset] of PRESETS.entries()) {
+    for (const [index, preset] of PRESETS.filter(
+      (preset) => preset !== 'ghost'
+    ).entries()) {
       const tab = this.createButton(
         tabs.x + index * (tabs.width + tabs.gap),
         tabs.y,
@@ -423,76 +362,6 @@ export class OutlineLab extends Container {
       this.paletteButtons.set(palette, button)
       this.paletteSwatches.set(palette, swatch)
     }
-  }
-
-  private createTuningControls(): void {
-    for (const [index, spec] of CONTROL_SPECS.entries()) {
-      const column = index < GEOMETRY_COLUMN_COUNT ? 0 : 1
-      const row = column === 0 ? index : index - GEOMETRY_COLUMN_COUNT
-      this.createSlider(
-        spec,
-        1202 + column * 330,
-        LAYOUT.tuningY + row * TUNING_ROW_HEIGHT
-      )
-    }
-    this.createSlider(SATURATION_CONTROL, 1202, LAYOUT.tuningY + 6 * TUNING_ROW_HEIGHT)
-  }
-
-  private createSlider(spec: TuningControlSpec, x: number, y: number): void {
-    addLabel(this, spec.label, x, y, 15, 0xffffff)
-    const valueLabel = addLabel(this, '', x + 292, y, 15, 0xd8c49a)
-    valueLabel.anchor.set(1, 0)
-
-    const track = new Container()
-    track.position.set(x, y + 37)
-    track.hitArea = new Rectangle(0, -10, SLIDER_WIDTH, 28)
-    track.eventMode = 'static'
-    track.cursor = 'pointer'
-    track.label = `outline-lab.control.${spec.key}`
-
-    const trackBackground = new Graphics()
-      .roundRect(0, 0, SLIDER_WIDTH, 8, 4)
-      .fill(0x080e18)
-      .stroke({ color: 0x637398, width: 1, alpha: 0.9 })
-    trackBackground.eventMode = 'none'
-    track.addChild(trackBackground)
-
-    const knob = new Graphics()
-      .circle(0, 4, 9)
-      .fill(0xf1d36a)
-      .stroke({ color: 0xffffff, width: 1, alpha: 0.7 })
-    knob.eventMode = 'none'
-    track.addChild(knob)
-    this.addChild(track)
-
-    const slider: SliderState = {
-      spec,
-      track,
-      knob,
-      valueLabel,
-      value: this.drafts[this.selectedPreset][spec.key]
-    }
-    this.sliders.set(spec.key, slider)
-
-    track.on('pointerdown', (event: FederatedPointerEvent) => {
-      if (event.button !== 0) return
-      this.activeSlider = slider
-      this.updateSliderFromPointer(slider, event)
-      event.stopPropagation()
-    })
-    track.on('globalpointermove', (event: FederatedPointerEvent) => {
-      if (this.activeSlider === slider) this.updateSliderFromPointer(slider, event)
-    })
-    track.on('pointerup', () => this.endSliderDrag(slider))
-    track.on('pointerupoutside', () => this.endSliderDrag(slider))
-    track.on('pointercancel', () => this.endSliderDrag(slider))
-
-    this.createButton(x + 220, y + 30, 30, 30, '−', () =>
-      this.adjustSlider(slider, -spec.step)
-    )
-    this.createButton(x + 260, y + 30, 30, 30, '+', () =>
-      this.adjustSlider(slider, spec.step)
-    )
   }
 
   private async createPreviewGroups(
@@ -603,6 +472,13 @@ export class OutlineLab extends Container {
       LAYOUT.banner,
       'Mulligan announcement'
     )
+    this.addOutlinedTexture(
+      ghostGroup,
+      gameAssets.confirmMulliganButton,
+      'ghost',
+      LAYOUT.confirmMulligan,
+      'Confirm mulligan'
+    )
     this.refreshPreviewAppearance('board')
   }
 
@@ -659,14 +535,21 @@ export class OutlineLab extends Container {
   }
 
   private registerOutline(target: Container, preset: OutlinePresetName): void {
-    const outline = new AnimatedOutline(target, {
-      palette: this.paletteDrafts[this.selectedPalettes[preset]],
-      preset
-    })
-    outline.setTuning(this.drafts[preset])
-    const outlines = this.outlines.get(preset) ?? []
-    outlines.push(outline)
-    this.outlines.set(preset, outlines)
+    if (preset === 'ghost') {
+      const outline = new GhostAura(target)
+      outline.setTuning(this.ghostTuning)
+      outline.setPalette(this.ghostPalette)
+      this.ghostOutlines.push(outline)
+    } else {
+      const outline = new AnimatedOutline(target, {
+        preset,
+        palette: this.paletteDrafts[this.selectedPalettes[preset]]
+      })
+      outline.setTuning(this.drafts[preset])
+      const outlines = this.outlines.get(preset) ?? []
+      outlines.push(outline)
+      this.outlines.set(preset, outlines)
+    }
   }
 
   private selectPreset(preset: OutlinePresetName): void {
@@ -684,15 +567,13 @@ export class OutlineLab extends Container {
     }
     if (this.board) this.board.visible = preset === 'board'
     this.refreshPreviewAppearance(preset)
-    for (const slider of this.sliders.values()) {
-      this.setSliderValue(slider, this.drafts[preset][slider.spec.key], false)
-    }
     this.refreshPresetTabs()
     this.refreshPaletteButtons()
     this.refreshColorControls()
   }
 
   private selectPalette(palette: OutlinePaletteName): void {
+    if (this.selectedPreset === 'ghost') return
     if (
       !OUTLINE_LAB_PALETTES[this.selectedPreset].some(
         (option) => option.palette === palette
@@ -730,8 +611,39 @@ export class OutlineLab extends Container {
   }
 
   private refreshColorControls(): void {
-    const palette = this.selectedPalettes[this.selectedPreset]
-    this.colorControls?.setPalette(palette, this.paletteDrafts[palette])
+    if (this.selectedPreset === 'ghost') {
+      this.shaderControls?.showGhost(
+        this.ghostTuning,
+        this.ghostPalette,
+        (key, value, color) => {
+          if (color)
+            this.ghostPalette = {
+              ...this.ghostPalette,
+              [key]: value
+            } as GhostAuraPalette
+          else
+            this.ghostTuning = { ...this.ghostTuning, [key]: value } as GhostAuraTuning
+          this.refreshPreviewAppearance('ghost')
+          this.markDirty()
+        }
+      )
+    } else {
+      const preset = this.selectedPreset
+      const palette = this.selectedPalettes[preset]
+      this.shaderControls?.showAura(
+        this.drafts[preset],
+        this.paletteDrafts[palette],
+        (key, value, color) => {
+          if (color)
+            this.updateSelectedColor(key as keyof OutlinePalette, value as number)
+          else {
+            this.drafts[preset] = { ...this.drafts[preset], [key]: value }
+            this.refreshPreviewAppearance(preset)
+            this.markDirty()
+          }
+        }
+      )
+    }
   }
 
   private refreshHandAppearance(): void {
@@ -745,6 +657,13 @@ export class OutlineLab extends Container {
   }
 
   private refreshPreviewAppearance(preset: OutlinePresetName): void {
+    if (preset === 'ghost') {
+      for (const outline of this.ghostOutlines) {
+        outline.setTuning(this.ghostTuning)
+        outline.setPalette(this.ghostPalette)
+      }
+      return
+    }
     const palette = this.paletteDrafts[this.selectedPalettes[preset]]
     const tuning = this.drafts[preset]
     for (const outline of this.outlines.get(preset) ?? []) {
@@ -811,46 +730,11 @@ export class OutlineLab extends Container {
     })
   }
 
-  private updateSliderFromPointer(
-    slider: SliderState,
-    event: FederatedPointerEvent
-  ): void {
-    const local = slider.track.toLocal(event.global)
-    const ratio = Math.min(1, Math.max(0, local.x / SLIDER_WIDTH))
-    this.setSliderValue(
-      slider,
-      slider.spec.min + ratio * (slider.spec.max - slider.spec.min)
-    )
-  }
-
-  private adjustSlider(slider: SliderState, amount: number): void {
-    this.setSliderValue(slider, slider.value + amount)
-  }
-
-  private setSliderValue(slider: SliderState, value: number, notify = true): void {
-    slider.value = snapped(value, slider.spec)
-    const ratio = (slider.value - slider.spec.min) / (slider.spec.max - slider.spec.min)
-    slider.knob.position.x = ratio * SLIDER_WIDTH
-    slider.valueLabel.text = formatValue(slider.value, slider.spec.step)
-    if (notify) this.updateSelectedTuning(slider.spec.key, slider.value)
-  }
-
-  private updateSelectedTuning(key: TuningKey, value: number): void {
-    const preset = this.selectedPreset
-    if (this.drafts[preset][key] === value) return
-    this.drafts[preset] = { ...this.drafts[preset], [key]: value }
-    this.refreshPreviewAppearance(preset)
-    this.markDirty()
-  }
-
-  private endSliderDrag(slider: SliderState): void {
-    if (this.activeSlider === slider) this.activeSlider = null
-  }
-
   private refreshPresetTabs(): void {
     for (const preset of PRESETS) {
       const tab = this.presetTabs.get(preset)
       if (!tab) continue
+      tab.root.visible = this.selectedPreset !== 'ghost'
       tab.label.text = PRESET_LABELS[preset]
       this.drawButton(tab, preset === this.selectedPreset)
     }
@@ -861,7 +745,7 @@ export class OutlineLab extends Container {
     const options = OUTLINE_LAB_PALETTES[this.selectedPreset]
     for (const [palette, button] of this.paletteButtons) {
       const index = options.findIndex((option) => option.palette === palette)
-      button.root.visible = index >= 0
+      button.root.visible = index >= 0 && this.selectedPreset !== 'ghost'
       if (index < 0) continue
       button.root.x =
         LAYOUT.palettes.x + index * (LAYOUT.palettes.width + LAYOUT.palettes.gap)
@@ -893,9 +777,12 @@ export class OutlineLab extends Container {
 
     const savedRevision = this.revision
     const snapshot: OutlineTuningConfig = {
-      version: 3,
-      presets: cloneTunings(this.drafts),
-      palettes: clonePalettes(this.paletteDrafts)
+      version: 4,
+      aura: {
+        presets: cloneTunings(this.drafts),
+        palettes: clonePalettes(this.paletteDrafts)
+      },
+      ghost: { tuning: { ...this.ghostTuning }, palette: { ...this.ghostPalette } }
     }
     this.saveInFlight = true
     this.statusLabel.text = 'Saving production configuration…'

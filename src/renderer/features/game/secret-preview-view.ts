@@ -1,8 +1,7 @@
-import { Container, type Renderer } from 'pixi.js'
+import { Container } from 'pixi.js'
 import { CARD_CATALOG } from '../../../game/content/cards'
 import { AnimationScope } from '../../animation/animations'
 import { CardView } from '../../rendering/cards/card-view'
-import { PreviewGhostOutline } from '../../rendering/effects/preview-ghost-outline'
 import { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { SECRET_LAYOUT, secretPreviewPositions } from './secret-layout'
 
@@ -18,12 +17,8 @@ export class SecretPreviewView extends Container {
   private readonly animations = new AnimationScope()
   private request = 0
   private key: string | null = null
-  private previewGhostOutline: PreviewGhostOutline | null = null
 
-  constructor(
-    private readonly resolver: CardAssetResolver,
-    private readonly renderer: Renderer
-  ) {
+  constructor(private readonly resolver: CardAssetResolver) {
     super()
     this.label = 'game.secret-preview'
     this.eventMode = 'none'
@@ -37,8 +32,6 @@ export class SecretPreviewView extends Container {
 
   private clearCards(): void {
     this.animations.kill()
-    this.previewGhostOutline?.dispose()
-    this.previewGhostOutline = null
     for (const child of this.removeChildren()) child.destroy({ children: true })
   }
 
@@ -83,7 +76,6 @@ export class SecretPreviewView extends Container {
         card.position.set(positions[index].x, positions[index].y)
         this.addChild(card)
       })
-      this.previewGhostOutline = new PreviewGhostOutline(this.renderer, this)
       this.alpha = 0
       this.animations.timeline().to(this, {
         alpha: 1,

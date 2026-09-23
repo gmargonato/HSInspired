@@ -95,8 +95,8 @@ export const SETTINGS_LAYOUT = {
   ),
   aiModeOptions: placement(
     { x: 840, y: 655 },
-    { width: 240, height: 104 },
-    { anchor: TOP_LEFT, note: 'Two-row AI mode dropdown.' }
+    { width: 240, height: 156 },
+    { anchor: TOP_LEFT, note: 'Three-row Easy, Hardware V2, and API mode dropdown.' }
   ),
   aiModeOption: placement(
     { x: 20, y: 26 },
@@ -104,7 +104,7 @@ export const SETTINGS_LAYOUT = {
     { anchor: CENTER, note: 'Local text placement within an AI mode option.' }
   ),
   aiModeNote: placement(
-    { x: 960, y: 785 },
+    { x: 960, y: 850 },
     { width: 440, height: 25 },
     { anchor: CENTER, note: 'Explains the saved local-versus-API AI routing choice.' }
   ),

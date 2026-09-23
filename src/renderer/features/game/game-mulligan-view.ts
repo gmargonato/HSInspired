@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, type FederatedPointerEvent } from 'pixi.js'
 import type { AnimationScope } from '../../animation/animations'
-import { AnimatedOutline } from '../../rendering/effects/animated-outline'
+import { GhostAura } from '../../rendering/effects/ghost-aura'
 import { applyAnchoredPlacement, applyPlacement } from '../../rendering/layout'
 import type { GameAssets } from '../../ui/asset-registry'
 import { Button } from '../../ui/components/button'
@@ -32,9 +32,9 @@ export class GameMulliganView {
   private mulliganInputReady = false
   private confirmButton!: Button
   private mulliganAnnouncementOutlineTarget: Sprite | null = null
-  private mulliganAnnouncementOutline: AnimatedOutline | null = null
-  private confirmMulliganOutline: AnimatedOutline | null = null
-  private opponentStillChoosingOutline: AnimatedOutline | null = null
+  private mulliganAnnouncementOutline: GhostAura | null = null
+  private confirmMulliganOutline: GhostAura | null = null
+  private opponentStillChoosingOutline: GhostAura | null = null
   private opponentStillChoosingOutlineTarget: Sprite | null = null
   private opponentStillChoosing: Sprite | null = null
 
@@ -118,9 +118,7 @@ export class GameMulliganView {
     announcementOutlineTarget.eventMode = 'none'
     this.layer.addChild(announcementOutlineTarget)
     this.mulliganAnnouncementOutlineTarget = announcementOutlineTarget
-    this.mulliganAnnouncementOutline = new AnimatedOutline(announcementOutlineTarget, {
-      preset: 'ghost'
-    })
+    this.mulliganAnnouncementOutline = new GhostAura(announcementOutlineTarget, {})
 
     const announcement = new Sprite(this.assets.mulliganAnnouncement)
     applyAnchoredPlacement(announcement, GAME_BOARD_LAYOUT.mulligan.announcement)
@@ -147,12 +145,11 @@ export class GameMulliganView {
     confirmOutlineTarget.eventMode = 'none'
     confirmOutlineTarget.label = 'game.mulligan.confirm-outline'
     this.layer.addChild(confirmOutlineTarget)
-    this.confirmMulliganOutline = new AnimatedOutline(confirmOutlineTarget, {
-      preset: 'ghost'
-    })
+    this.confirmMulliganOutline = new GhostAura(confirmOutlineTarget, {})
     this.confirmMulliganOutline.setEnabled(false)
 
     this.confirmButton = new Button(this.assets.confirmMulliganButton, {
+      pressedScale: 1,
       onClick: () => void this.onConfirm()
     })
     applyPlacement(this.confirmButton, GAME_BOARD_LAYOUT.mulligan.confirmButton)
@@ -173,9 +170,9 @@ export class GameMulliganView {
       'game.mulligan.opponent-still-choosing-outline'
     this.layer.addChild(opponentStillChoosingOutlineTarget)
     this.opponentStillChoosingOutlineTarget = opponentStillChoosingOutlineTarget
-    this.opponentStillChoosingOutline = new AnimatedOutline(
+    this.opponentStillChoosingOutline = new GhostAura(
       opponentStillChoosingOutlineTarget,
-      { preset: 'ghost' }
+      {}
     )
     this.opponentStillChoosingOutline.setEnabled(false)
 

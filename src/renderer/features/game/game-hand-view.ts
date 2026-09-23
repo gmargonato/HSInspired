@@ -277,7 +277,6 @@ export class GameHandView {
       const shouldDisplace = hoveredIndex >= 0 && index === hoveredIndex
       if (!shouldDisplace && !entry.displaced) return
       if (shouldDisplace && entry.displaced) return
-      entry.slot.setOutlineLiveWhileHovered(shouldDisplace)
       const target = this.computeHoverTarget(entry.restTransform, index, hoveredIndex)
       if (shouldDisplace) {
         // Appear enlarged just below the final hover position, then settle upward.
@@ -410,9 +409,6 @@ export class GameHandView {
     slot.shadow.restingScale = DEFAULT_HAND_LAYOUT.cardScale
     slot.shadow.maximumHeight = MATCH_SHADOW_CONFIG.heldCardHeight
     slot.shadow.minimumHeight = 0
-    if (!import.meta.env.DEV || import.meta.env.VITE_MATCH_OUTLINE_MODE !== 'live') {
-      slot.enableBakedPlayableOutline(DEFAULT_HAND_LAYOUT.cardScale)
-    }
     slot.setMulliganInteractionEnabled(false)
     slot.removeAllListeners('pointertap')
     slot.removeAllListeners('pointerover')

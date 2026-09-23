@@ -23,7 +23,12 @@ function getDevMenuBridge(): DevMenuBridge | null {
 
 function getDevSceneId(scene: unknown): DevSceneId {
   const devSceneId = (scene as { readonly devSceneId?: unknown } | null)?.devSceneId
-  if (devSceneId === 'card-inspector' || devSceneId === 'outline-lab') return devSceneId
+  if (
+    devSceneId === 'card-inspector' ||
+    devSceneId === 'outline-lab' ||
+    devSceneId === 'hero-power-anim'
+  )
+    return devSceneId
   if (scene instanceof MainMenuScene) return 'main-menu'
   if (scene instanceof DeckSelectionScene) return 'deck-selection'
   if (scene instanceof CollectionScene) return 'collection'

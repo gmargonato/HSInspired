@@ -5,7 +5,7 @@ import type {
 
 /** Only colors used by the effect's production states are offered in the lab. */
 export const OUTLINE_LAB_PALETTES: Record<
-  OutlinePresetName,
+  OutlinePresetName | 'ghost',
   readonly {
     readonly palette: OutlinePaletteName
     readonly label: string

@@ -13,7 +13,7 @@ const option = (name, fallback) => {
 const smoke = args.includes('--smoke')
 const port = Number(option('--port', 9333))
 const noFail = args.includes('--no-fail')
-const outlineMode = option('--outline-mode', 'baked')
+const outlineMode = option('--outline-mode', 'live')
 const sampleMs = Number(option('--sample-ms', smoke ? 1_000 : 10_000))
 const repetitions = Number(option('--repetitions', smoke ? 1 : 3))
 const cycles = Number(option('--cycles', smoke ? 5 : 100))
@@ -382,8 +382,7 @@ function printReport(report, artifactPath) {
 async function main() {
   if (!Number.isInteger(port) || port <= 0 || port > 65535)
     throw new Error(`Invalid debugger port: ${port}`)
-  if (!['live', 'baked'].includes(outlineMode))
-    throw new Error(`Invalid outline mode: ${outlineMode}`)
+  if (outlineMode !== 'live') throw new Error(`Invalid outline mode: ${outlineMode}`)
   if (!Number.isInteger(sampleMs) || sampleMs < 250 || sampleMs > 60_000)
     throw new Error('Sample duration must be 250–60000 ms.')
   if (!Number.isInteger(repetitions) || repetitions < 1 || repetitions > 10)

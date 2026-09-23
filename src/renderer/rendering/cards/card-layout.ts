@@ -71,7 +71,7 @@ const RACE_BANNER_POSITION = {
   y: CARD_CANVAS.height - 40 - RACE_BANNER_SIZE.height / 2
 } as const
 const RACE_TEXT_BOX = { x: 105, y: 795, width: 410, height: 62 } as const
-const RACE_BANNER_Z_INDEX = 230
+const RACE_BANNER_Z_INDEX = 210
 const RACE_TEXT_Z_INDEX = 231
 const LEGENDARY_FRAME_Z_INDEX = 105
 const CLASS_FRAME_MASK_Z_INDEX = 102
@@ -382,6 +382,11 @@ const RULES_STYLE_BASE: CardTextStyle = {
   tagStyles: { keyword: { fontWeight: 'bold' } }
 }
 
+export const CARD_RULES_COMPACT_SPACING = {
+  minimumLines: 5,
+  lineHeight: 40
+} as const
+
 /**
  * Display-only line-break hints for cards whose reference layout uses a
  * deliberate break that the generic greedy wrapper cannot reproduce.
@@ -405,7 +410,12 @@ export function formatCardRulesText(
 }
 
 function raceLabel(card: CardDefinition): string | null {
-  if (card.type === 'Minion') return card.subtype
+  if (card.type === 'Minion') {
+    const tribes = [...new Set([...(card.tribes ?? []), card.subtype].filter(
+      (tribe): tribe is string => Boolean(tribe)
+    ))]
+    return tribes.length > 0 ? tribes.join(' / ') : null
+  }
   if (card.type === 'Spell') return card.spellSchool ?? card.subtype
   return null
 }

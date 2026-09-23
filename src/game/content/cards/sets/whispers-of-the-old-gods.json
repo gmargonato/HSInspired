@@ -525,7 +525,7 @@
     "rarity": "Rare",
     "cardClass": "Paladin",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Draenei",
     "cost": 1,
     "attack": 2,
     "health": 1,
@@ -650,7 +650,7 @@
     "rarity": "Legendary",
     "cardClass": "Paladin",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 8,
     "attack": 8,
     "health": 8,
@@ -777,7 +777,7 @@
     "rarity": "Rare",
     "cardClass": "Priest",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 4,
     "attack": 4,
     "health": 3,
@@ -904,7 +904,7 @@
     "rarity": "Rare",
     "cardClass": "Rogue",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 2,
     "attack": 2,
     "health": 2,
@@ -1237,7 +1237,7 @@
     "rarity": "Legendary",
     "cardClass": "Shaman",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 5,
     "attack": 4,
     "health": 6,
@@ -1378,12 +1378,12 @@
         "actions": [
           {
             "action": "discard",
-            "player": "self",
-            "source": {
+            "target": {
+              "controller": "self",
+              "type": "card",
               "zone": "hand",
               "selection": "random"
-            },
-            "count": 1
+            }
           }
         ]
       },
@@ -1542,7 +1542,7 @@
     "rarity": "Common",
     "cardClass": "Warrior",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 3,
     "attack": 3,
     "health": 3,
@@ -2893,7 +2893,7 @@
     "attack": 3,
     "health": 5,
     "rulesText": "Can only attack if your hero attacked this turn.",
-    "keywords": [],
+    "keywords": ["requires-hero-attack-this-turn"],
     "effects": [],
     "collectible": true
   },
@@ -3075,7 +3075,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "Mechanical",
+    "subtype": "Mech",
     "cost": 5,
     "attack": 3,
     "health": 4,
@@ -3524,7 +3524,21 @@
     "health": 8,
     "rulesText": "Whenever this attacks and kills a minion, it may attack again.",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "condition": {
+          "type": "defender-died-from-combat",
+          "sourceMustSurvive": true
+        },
+        "actions": [
+          {
+            "action": "grant-extra-attack",
+            "target": { "controller": "self", "type": "minion", "selection": "source" }
+          }
+        ]
+      }
+    ],
     "collectible": true
   },
   {
@@ -3758,7 +3772,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 6,
     "attack": 4,
     "health": 4,
@@ -3902,7 +3916,7 @@
     "rarity": "Legendary",
     "cardClass": "Mage",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 8,
     "attack": 8,
     "health": 6,
@@ -4073,7 +4087,12 @@
     "health": null,
     "rulesText": "Replace your Hero Power and Warlock cards with another class's. The cards cost (1) less.",
     "keywords": [],
-    "effects": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [{ "action": "renounce-darkness" }]
+      }
+    ],
     "collectible": true
   },
   {
@@ -4388,7 +4407,7 @@
     "health": 7,
     "rulesText": "Battlecry: The next spell you cast this turn costs Health instead of Mana.",
     "keywords": [],
-    "effects": [],
+    "effects": [{"trigger":"battlecry","actions":[{"action":"set-next-spell-costs-health"}]}],
     "collectible": true
   },
   {
@@ -4397,7 +4416,7 @@
     "rarity": "Rare",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "Mechanical",
+    "subtype": "Mech",
     "cost": 5,
     "attack": 6,
     "health": 6,
@@ -4583,7 +4602,7 @@
     "rarity": "Epic",
     "cardClass": "Shaman",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 3,
     "attack": 4,
     "health": 2,
@@ -4613,7 +4632,7 @@
     "rarity": "Common",
     "cardClass": "Druid",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 0,
     "attack": 1,
     "health": 1,

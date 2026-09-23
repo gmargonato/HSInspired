@@ -49,6 +49,8 @@ export const LOCAL_AI_POLICY = {
     spentMana: 1.15,
     weaponAttack: 3.2,
     weaponDurability: 1.8,
+    expertBoardPresence: 8,
+    expertContinuationPreference: 6, // Provisional exact-match line preference.
     secret: 2.4,
     deckCard: 0.12,
     fatigueRisk: 8,

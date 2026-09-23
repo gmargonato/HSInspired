@@ -5,7 +5,7 @@
     "rarity": "Rare",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 5,
     "attack": 4,
     "health": 4,
@@ -95,7 +95,7 @@
     "rarity": "Legendary",
     "cardClass": "Shaman",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 8,
     "attack": 3,
     "health": 5,
@@ -142,7 +142,7 @@
     "rarity": "Rare",
     "cardClass": "Paladin",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Draenei",
     "cost": 3,
     "attack": 3,
     "health": 3,
@@ -752,7 +752,7 @@
     "rarity": "Rare",
     "cardClass": "Priest",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Draenei",
     "cost": 4,
     "attack": 3,
     "health": 5,
@@ -921,7 +921,7 @@
     "rarity": "Legendary",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 7,
     "attack": 7,
     "health": 5,
@@ -1464,7 +1464,7 @@
     "rarity": "Legendary",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 2,
     "attack": 1,
     "health": 1,
@@ -2032,7 +2032,7 @@
     "rarity": "Rare",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 2,
     "attack": 2,
     "health": 2,
@@ -2139,7 +2139,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 4,
     "attack": 4,
     "health": 2,
@@ -2170,7 +2170,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Mech",
     "cost": 1,
     "attack": 2,
     "health": 1,
@@ -2281,7 +2281,7 @@
     "rarity": "Common",
     "cardClass": "Paladin",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Draenei",
     "cost": 1,
     "attack": 2,
     "health": 1,
@@ -2295,7 +2295,7 @@
     "rarity": "Rare",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Draenei",
     "cost": 4,
     "attack": 2,
     "health": 3,
@@ -2745,7 +2745,7 @@
     "rarity": "Common",
     "cardClass": "Shaman",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 1,
     "attack": 3,
     "health": 1,
@@ -2805,7 +2805,7 @@
     "rarity": "Epic",
     "cardClass": "Shaman",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 5,
     "attack": 7,
     "health": 8,
@@ -2987,27 +2987,8 @@
     "attack": 2,
     "health": 3,
     "rulesText": "Poisonous.",
-    "keywords": [],
-    "effects": [
-      {
-        "trigger": "on-damage",
-        "event": {
-          "type": "damage-dealt",
-          "source": {
-            "selection": "source"
-          }
-        },
-        "actions": [
-          {
-            "action": "destroy",
-            "target": {
-              "type": "minion",
-              "selection": "event-target"
-            }
-          }
-        ]
-      }
-    ]
+    "keywords": ["poisonous"],
+    "effects": []
   },
   {
     "id": "classic_equality",
@@ -3459,7 +3440,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 1,
     "attack": 2,
     "health": 1,
@@ -3511,7 +3492,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": null,
+    "subtype": "Undead",
     "cost": 3,
     "attack": 2,
     "health": 3,
@@ -3658,7 +3639,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 6,
     "attack": 5,
     "health": 5,
@@ -4189,6 +4170,7 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "Mech",
+    "tribes": ["Beast"],
     "cost": 1,
     "attack": 0,
     "health": 1,
@@ -4720,7 +4702,7 @@
     "rarity": "Epic",
     "cardClass": "Rogue",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 6,
     "attack": 5,
     "health": 3,
@@ -5233,7 +5215,7 @@
     "rarity": "Common",
     "cardClass": "Priest",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 4,
     "attack": 0,
     "health": 5,
@@ -5263,7 +5245,7 @@
     "rarity": "Rare",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Draenei",
     "cost": 1,
     "attack": 1,
     "health": 2,
@@ -5769,6 +5751,7 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "Mech",
+    "tribes": ["Dragon"],
     "cost": 1,
     "attack": 2,
     "health": 1,
@@ -6427,27 +6410,8 @@
     "attack": 1,
     "health": 1,
     "rulesText": "Stealth. Poisonous.",
-    "keywords": ["stealth"],
-    "effects": [
-      {
-        "trigger": "on-damage",
-        "event": {
-          "type": "damage-dealt",
-          "source": {
-            "selection": "source"
-          }
-        },
-        "actions": [
-          {
-            "action": "destroy",
-            "target": {
-              "type": "minion",
-              "selection": "event-target"
-            }
-          }
-        ]
-      }
-    ]
+    "keywords": ["stealth", "poisonous"],
+    "effects": []
   },
   {
     "id": "classic_perditions_blade",
@@ -6756,7 +6720,7 @@
     "rarity": "Legendary",
     "cardClass": "Priest",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Draenei",
     "cost": 7,
     "attack": 7,
     "health": 7,
@@ -6889,7 +6853,7 @@
     "rarity": "Legendary",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 8,
     "attack": 8,
     "health": 8,
@@ -7495,7 +7459,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Draenei",
     "cost": 1,
     "attack": 0,
     "health": 4,
@@ -7692,7 +7656,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 1,
     "attack": 1,
     "health": 1,
@@ -7999,7 +7963,8 @@
     "rarity": "Rare",
     "cardClass": "Shaman",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Beast",
+    "tribes": ["Undead"],
     "cost": 2,
     "attack": 2,
     "health": 3,
@@ -8013,7 +7978,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 5,
     "attack": 4,
     "health": 6,
@@ -8411,7 +8376,7 @@
     "rarity": "Legendary",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 6,
     "attack": 5,
     "health": 5,
@@ -8501,6 +8466,9 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "Beast",
+    "tribes": [
+      "Elemental"
+    ],
     "cost": 6,
     "attack": 9,
     "health": 7,
@@ -8526,7 +8494,7 @@
     "rarity": "Legendary",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 6,
     "attack": 4,
     "health": 5,
@@ -8821,7 +8789,7 @@
     "rarity": "Common",
     "cardClass": "Shaman",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Elemental",
     "cost": 3,
     "attack": 2,
     "health": 4,
@@ -9134,7 +9102,7 @@
     "rarity": "Rare",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 2,
     "attack": 3,
     "health": 2,
@@ -9181,7 +9149,7 @@
     "rarity": "Common",
     "cardClass": "Neutral",
     "type": "Minion",
-    "subtype": "General",
+    "subtype": "Undead",
     "cost": 0,
     "attack": 1,
     "health": 1,

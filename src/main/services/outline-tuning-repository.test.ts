@@ -21,17 +21,11 @@ describe('OutlineTuningRepository', () => {
     const filePath = join(directory, 'config', 'outline-tunings.json')
     const repository = new OutlineTuningRepository(filePath)
     const first = parseOutlineTuningConfig(rawConfig)
-    const second = parseOutlineTuningConfig({
-      ...first,
-      presets: {
-        ...first.presets,
-        board: { ...first.presets.board, glowStrength: 2.25, saturation: 1.25 }
-      },
-      palettes: {
-        ...first.palettes,
-        green: { ...first.palettes.green, baseColor: 0x123456 }
-      }
-    })
+    const draft = structuredClone(rawConfig)
+    draft.aura.presets.board.glowIntensity = 0.35
+    draft.aura.palettes.green.baseColor = 0x123456
+    draft.ghost.tuning.motionSpeed = 1.5
+    const second = parseOutlineTuningConfig(draft)
 
     await Promise.all([repository.save(first), repository.save(second)])
 

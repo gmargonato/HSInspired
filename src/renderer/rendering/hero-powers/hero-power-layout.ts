@@ -23,7 +23,7 @@ export const HERO_POWER_PRESENTATION_LAYOUT = {
   },
   card: {
     artwork: placement(
-      { x: 310, y: 266 },
+      { x: 310, y: 254 },
       { width: 500, height: 500 },
       {
         anchor: CENTER,

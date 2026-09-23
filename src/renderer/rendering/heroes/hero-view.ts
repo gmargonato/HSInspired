@@ -216,8 +216,13 @@ export class HeroView extends Container {
   }
 
   setStats(attack: number, health: number, armor: number, maxHealth: number): void {
-    this.maxHealth = maxHealth
     this.setAttack(attack)
+    this.setHealthAndArmor(health, armor, maxHealth)
+  }
+
+  /** Updates hero health and armor without changing attack badge visibility. */
+  setHealthAndArmor(health: number, armor: number, maxHealth: number): void {
+    this.maxHealth = maxHealth
     this.healthLabel.text = String(health)
     this.setHealthColor(health)
     this.armorLabel.text = String(armor)

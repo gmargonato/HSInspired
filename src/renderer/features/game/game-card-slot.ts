@@ -6,11 +6,10 @@ import {
   type OutlinePresetName,
   type OutlineTuning
 } from '../../rendering/effects/animated-outline'
-import { BakedAnimatedOutline } from '../../rendering/effects/baked-animated-outline'
+import { DEFAULT_HAND_LAYOUT } from './hand-layout'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { attachShadow, type ShadowCaster } from '../../rendering/shadows/shadow-caster'
 import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
-import { DEFAULT_HAND_LAYOUT } from './hand-layout'
 import { completeTimeline } from './game-presentation-animation'
 import { Actor } from '../../ui/components/actor'
 import { killDisplayTweens } from '../../animation/kill-display-tweens'
@@ -25,15 +24,12 @@ export class GameCardSlot extends Actor {
   private activeCard: CardView
   readonly instanceId: string
   playableOutlineTexture: Texture
-  private playableOutline: AnimatedOutline | BakedAnimatedOutline
-  private dormantPlayableOutline: AnimatedOutline | BakedAnimatedOutline | null = null
+  private playableOutline: AnimatedOutline
   private readonly outlineTarget: Sprite
   private playableOutlineDisposed = false
   private readonly replaceCross: Sprite
   private readonly replacedLabel: Sprite
   private pendingCardReplacement: PendingCardReplacement | null = null
-  private bakedOutlineDisplayScale: number | null = null
-  private bakedOutlineNeedsRefresh = false
   private playableOutlineRequested = false
   private playableOutlineSuppressed = false
   private playableOutlinePreset: OutlinePresetName = 'card'
@@ -46,7 +42,7 @@ export class GameCardSlot extends Actor {
     replaceCrossTexture: Texture,
     replacedLabelTexture: Texture,
     outlineTexture: Texture,
-    private readonly renderer: Renderer
+    _renderer: Renderer
   ) {
     super()
     this.activeCard = card
@@ -166,42 +162,6 @@ export class GameCardSlot extends Actor {
     })
   }
 
-  /** Rebuilds a baked outline after an in-place card face replacement settles. */
-  refreshPlayableOutline(): void {
-    if (this.playableOutlineDisposed) return
-    if (!(this.playableOutline instanceof BakedAnimatedOutline)) {
-      // A hover swap left the live outline active while the bake is stale
-      // from the replaced face; drop it instead of restoring it on leave.
-      if (this.dormantPlayableOutline instanceof BakedAnimatedOutline) {
-        this.dormantPlayableOutline.removeFromParent()
-        this.dormantPlayableOutline.dispose()
-        this.dormantPlayableOutline = null
-      }
-      return
-    }
-    if (!this.bakedOutlineNeedsRefresh) return
-
-    const previous = this.playableOutline
-    previous.removeFromParent()
-    previous.dispose()
-    const baked = new BakedAnimatedOutline(
-      this.renderer,
-      this.playableOutlineTexture,
-      this.activeCard.plan.width,
-      this.activeCard.renderedHeight,
-      this.bakedOutlineDisplayScale ?? DEFAULT_HAND_LAYOUT.cardScale,
-      this.playableOutlinePalette,
-      this.playableOutlinePreset,
-      this.playableOutlineTuning
-    )
-    baked.position.copyFrom(this.outlineTarget.position)
-    baked.zIndex = this.outlineTarget.zIndex
-    this.playableOutline = baked
-    this.addChildAt(baked, this.getChildIndex(this.activeCard))
-    this.bakedOutlineNeedsRefresh = false
-    this.syncPlayableOutline()
-  }
-
   setSelected(selected: boolean): void {
     this.replaceCross.visible = selected
     this.replacedLabel.visible = selected
@@ -223,50 +183,6 @@ export class GameCardSlot extends Actor {
     this.playableOutlinePalette = enhanced ? 'orange' : 'green'
     if (this.playableOutlineDisposed) return
     this.applyOutlineAppearance(this.playableOutline)
-    this.applyOutlineAppearance(this.dormantPlayableOutline)
-  }
-
-  /** Settled hand cards share pre-rendered shader frames instead of ten filters. */
-  enableBakedPlayableOutline(displayScale: number): void {
-    this.bakedOutlineDisplayScale = displayScale
-    if (
-      this.playableOutlineDisposed ||
-      this.playableOutline instanceof BakedAnimatedOutline
-    )
-      return
-    const baked = new BakedAnimatedOutline(
-      this.renderer,
-      this.playableOutlineTexture,
-      this.card.plan.width,
-      this.card.renderedHeight,
-      displayScale,
-      this.playableOutlinePalette,
-      this.playableOutlinePreset,
-      this.playableOutlineTuning
-    )
-    baked.position.copyFrom(this.outlineTarget.position)
-    baked.zIndex = this.outlineTarget.zIndex
-    this.addChildAt(baked, this.getChildIndex(this.card))
-    // The live filter stays constructed but dormant: hovering swaps back to
-    // it so the enlarged card keeps a crisp shader glow instead of a
-    // magnified bake.
-    this.dormantPlayableOutline = this.playableOutline
-    this.playableOutline = baked
-    this.syncPlayableOutline()
-  }
-
-  /**
-   * Hovering enlarges the card, which would magnify baked outline frames.
-   * Swapping to the live filter keeps the glow crisp at the hovered scale.
-   */
-  setOutlineLiveWhileHovered(hovered: boolean): void {
-    if (this.playableOutlineDisposed || this.dormantPlayableOutline === null) return
-    if (hovered === this.playableOutline instanceof BakedAnimatedOutline) {
-      const active = this.playableOutline
-      this.playableOutline = this.dormantPlayableOutline
-      this.dormantPlayableOutline = active
-      this.syncPlayableOutline()
-    }
   }
 
   getPlayableOutlinePreset(): OutlinePresetName {
@@ -281,7 +197,6 @@ export class GameCardSlot extends Actor {
     this.playableOutlinePalette = palette
     this.playableOutlineTuning = tuning
     this.applyOutlineAppearance(this.playableOutline)
-    this.applyOutlineAppearance(this.dormantPlayableOutline)
   }
 
   getPlayableOutlineTuning(): OutlineTuning | undefined {
@@ -315,9 +230,6 @@ export class GameCardSlot extends Actor {
     this.playableOutlineDisposed = true
     this.playableOutline.removeFromParent()
     this.playableOutline.dispose()
-    this.dormantPlayableOutline?.removeFromParent()
-    this.dormantPlayableOutline?.dispose()
-    this.dormantPlayableOutline = null
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
@@ -362,20 +274,8 @@ export class GameCardSlot extends Actor {
 
     if (this.playableOutlineDisposed) return
 
-    const wasBaked = this.playableOutline instanceof BakedAnimatedOutline
-    if (wasBaked) {
-      // Keep the already-baked silhouette visible through the short flip. The
-      // replacement bake is intentionally deferred until the reveal settles.
-      this.outlineTarget.visible = false
-      this.bakedOutlineNeedsRefresh = true
-      return
-    }
-
     this.playableOutline.removeFromParent()
     this.playableOutline.dispose()
-    this.dormantPlayableOutline?.removeFromParent()
-    this.dormantPlayableOutline?.dispose()
-    this.dormantPlayableOutline = null
 
     this.outlineTarget.visible = true
     this.playableOutline = new AnimatedOutline(this.outlineTarget, {
@@ -387,18 +287,8 @@ export class GameCardSlot extends Actor {
     this.syncPlayableOutline()
   }
 
-  private applyOutlineAppearance(
-    outline: AnimatedOutline | BakedAnimatedOutline | null
-  ): void {
+  private applyOutlineAppearance(outline: AnimatedOutline | null): void {
     if (!outline) return
-    if (outline instanceof BakedAnimatedOutline) {
-      outline.setAppearance(
-        this.playableOutlinePalette,
-        this.playableOutlinePreset,
-        this.playableOutlineTuning
-      )
-      return
-    }
     outline.setPalette(this.playableOutlinePalette)
     outline.setPreset(this.playableOutlinePreset)
     if (this.playableOutlineTuning) outline.setTuning(this.playableOutlineTuning)
@@ -408,6 +298,5 @@ export class GameCardSlot extends Actor {
     this.playableOutline.setEnabled(
       this.playableOutlineRequested && !this.playableOutlineSuppressed
     )
-    this.dormantPlayableOutline?.setEnabled(false)
   }
 }

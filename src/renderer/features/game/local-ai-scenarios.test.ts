@@ -8,6 +8,7 @@ import type {
   AiDecisionRequest,
   AiDecisionResponse
 } from '../../../shared/ipc/ai'
+import { AiRequestError } from '../../../shared/ipc/ai'
 import { aiActionIntent } from './ai-action-intent'
 import { aiActions } from './ai-context'
 import { AiTurnController } from './ai-turn-controller'
@@ -913,6 +914,58 @@ describe('hardware local AI tactical scenarios', () => {
       expect(abandoned).not.toHaveBeenCalled()
       const result = session.match.dispatch(decision!.command)
       expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+    } finally {
+      controller.dispose()
+    }
+  })
+
+  it('uses a deterministic current legal action when Hardware Expert exhausts its budget', async () => {
+    const session = startAiTurn(
+      0x51c,
+      (current) => {
+        clearHand(current)
+        setMana(current, 2)
+        dispatch(current, {
+          type: 'dev-set-hero-power',
+          participantId: current.remoteParticipantId,
+          available: true
+        })
+      },
+      { firstHeroId: 'jaina', secondHeroId: 'garrosh' }
+    )
+    expect(
+      legal(session).filter((command) => command.type === 'end-turn')
+    ).toHaveLength(1)
+    expect(legal(session).length).toBeGreaterThan(1)
+
+    const api: AiDecisionApi = {
+      settings: async () => ({
+        enabled: true,
+        provider: 'none',
+        modelId: 'hardware-local-v2',
+        reasoningEffort: 'none',
+        maxCompletionTokens: 1
+      }),
+      cancel: async () => {},
+      decide: async () => {
+        throw new AiRequestError('Expert turn budget exhausted.', {
+          failureKind: 'timeout',
+          budgetMs: 10_000
+        })
+      }
+    }
+    const controller = new AiTurnController({
+      api,
+      session,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined }
+    })
+
+    try {
+      const decision = await controller.chooseTurnAction()
+      expect(decision?.source).toBe('safe-fallback')
+      expect(decision?.command.type).not.toBe('end-turn')
+      expect(legal(session)).toContainEqual(decision?.command)
+      dispatch(session, decision!.command)
     } finally {
       controller.dispose()
     }

@@ -24,6 +24,22 @@ npm run dev
 VITE_DEV_START_ROUTE=card-inspector npm run dev
 ```
 
+In development, **F3** toggles GPU filters, animated outlines, and board shadows
+for visual comparisons. Press F3 again to restore effects; reloading starts with
+effects on. Sprite animations and gameplay continue while effects are off.
+
+In development, **Alt → Scenes → Hero Power Anim** opens a visual practice board.
+Choose any catalog power in the sidebar, click a valid hero or minion target, and
+use **Play / Replay** or **Loop**. Powers without a custom animation are labeled
+**Not implemented yet**. The preview reuses match effects with fixed, damaged
+heroes and minions; it does not run a match or change saved data.
+
+Selecting Lesser Heal or Heal starts the Priest sunlight loop while choosing a
+target. **Play / Replay** confirms the power, showing its flip and sunlight fade.
+In matches, the same sunlight begins when hero-power targeting opens and stops on
+cancellation; confirmation carries it through the flip. Basic and upgraded powers
+share their animations.
+
 ---
 
 ## 2. Key Commands & Verification
@@ -50,6 +66,28 @@ Individual focused commands:
 
 ---
 
+## Dynamic match decks
+
+Both match decks display one shared-texture `deck-sliced.png` sprite per remaining
+card. Four-card groups share small, deterministic height offsets; groups farther
+to the right are more likely to shift. The exposed face stays aligned with card
+draws, and an empty deck retains the existing fatigue artwork. Decks above 30 cards
+compress their spacing to fit the same board slot.
+
+The original `deck.png` implementation remains available. Set `mode` to `'static'`
+in `src/renderer/features/game/deck-stack-layout.ts` to restore it, or launch a
+temporary comparison from PowerShell:
+
+```powershell
+$env:VITE_MATCH_DECK_MODE = 'static'
+npm.cmd run dev
+Remove-Item Env:VITE_MATCH_DECK_MODE
+```
+
+The same layout module controls card gaps, group size, height variation, and tint.
+Stack geometry updates only when the count changes; there are no per-card filters
+or continuously updated perspective meshes.
+
 ## Match hand and drag performance
 
 Held cards follow the latest pointer position in the match render frame, before
@@ -75,7 +113,7 @@ npm run perf:match -- --label optimized
 The smoke preset uses 1-second samples, one repetition, 1/10-card hands, and five
 pickup cycles. It verifies the harness, not full performance acceptance. Override
 individual settings with `--sample-ms`, `--repetitions`, `--cycles`, `--hand-sizes`,
-or `--port`. `--outline-mode live|baked` retains the outline comparison option.
+or `--port`. Card auras now animate live; the former baked outline mode is retired.
 Named JSON reports and a full-state screenshot are saved under
 `artifacts/match-performance`; distinct labels preserve before/after captures.
 Short uncapped idle/full-hand diagnostics temporarily remove the frame cap and
@@ -110,18 +148,26 @@ after renderer initialization, alongside the display's refresh rate.
 
 ## Local hardware AI
 
-Main-menu Settings includes **AI Settings → Hardware/API**. Hardware mode uses a
-deterministic CPU evaluator with isolated engine lookahead and never contacts an
-AI provider; API mode keeps the remote deliberation path. The local evaluator is
-calibrated from every archived match under `artifacts/match-logs`. It checks
-visible opponent replies, preserves random-effect sampling (including Yogg), and
-is guarded by 92 tactical and complete-turn scenarios, two seeded protocol tests,
-and forced-command coverage.
+Main-menu Settings offers Easy, Hardware V2, and API AI modes. Hardware V2 is
+the Expert search profile: it keeps the existing engine-backed planner and
+extends it with a wider, deeper search over class-legal hypotheses for concealed
+opponent cards. Its fair planning snapshot also randomizes both players'
+remaining deck orders, retaining the Expert's known deck composition but never
+the live next-card sequence. Expert detects lethal from cumulative visible
+attacks and simulates bounded engine-legal opponent replies, including sampled
+card plays, public attacks, and hero powers. It runs in a dedicated worker and
+never sends game state to a provider. Its cumulative search budget is capped at
+7.5 seconds within the plan's ten-second total-turn target, including
+presentation; each decision is capped at six seconds to preserve time for a
+replan. This is a configured target, not a measured runtime guarantee.
+API mode continues using remote deliberation.
 
-```bash
-npm run test:local-ai
-npm run analyze:ai-corpus
-```
+Run the seeded, mirrored Easy-versus-Expert headless match benchmark with:
+
+    npm run benchmark:local-ai -- --games 2 --seed 1279734066 --max-actions 300 --turn-budget-ms 10000
+
+Run focused local AI checks with npm run test:local-ai; archived-match analysis
+remains available through npm run analyze:ai-corpus.
 
 ## Arcane Dust and premium cards
 
@@ -272,65 +318,80 @@ copy limits. All nine classes are available, and the human deck never participat
 in generation. Only midrange-tempo is enabled; aggro/control remain commented-out
 extension points in the strategy registry.
 
-Generator version 6 selects from 27 curated class archetypes, with three packages per
-class: Secret, Recruit and Murloc Paladin; Totem/Overload, Jade and Classic
-Midrange/Overload Shaman; Beast, N'Zoth and Secret Hunter; C'Thun, Yogg Token and
-Classic Midrange/Ramp Druid; Dragon, C'Thun and N'Zoth Priest; Dragon, C'Thun and Grim
-Patron Warrior; Mech, Flamewaker and Medivh Mage; N'Zoth Raptor, Oil and Water/Tempo
-Rogue; and Demon Midrange, Handlock and Demon Zoo Warlock. Each has two role-based
-variants. Historical sources and defining Card IDs are recorded beside the definitions;
-current catalog costs and effects take precedence.
+Generator version 10 selects uniformly from 27 class archetypes, three per class.
+Each deck includes a legal class Hero card when available, a small defining core,
+and random fill from the live catalog. Quests enter only through quest archetype
+cores. Missing Hero candidates produce a diagnostic warning.
 
-The chain is class -> mandatory Quest and Hero Card bonuses -> strategy -> approved
-archetype -> variant priorities -> defining core -> live catalog candidates ->
-support/curve roles -> validation. The Quest and Hero Card each occupy one of the
-normal 30 deck slots, are selected from legal Card IDs for the chosen class, and do
-not count toward ordinary archetype support requirements. If a class has no eligible
-bonus card, generation skips it and records a warning.
+Core insertion honors each slot's configured count. Mechwarper, Flamewaker,
+Voidcaller and Grim Patron have two guaranteed copies in their respective
+archetypes. All other core entries start with one copy; eligible nonlegendary
+cards can receive a second copy through random fill. Every core copy occupies
+one of the 30 slots and appears separately in the construction trace.
 
-Only one to four defining card slots are fixed. Supporting cards are selected from
-the current catalog, using structured mechanics, quality scores, archetype and
-variant preferences, curve bounds and dependency requirements. There are no closed
-supporting-card pools or fixed variant card lists.
+Plain minions with no structured effects, keywords or positive Spell Damage are
+excluded, even when explicitly rated or carrying a tribe. War Golem and Boulderfist
+Ogre cannot enter generated decks. Runtime support and existing exclusions for
+problematic cards still apply.
 
-Selection fills the scarcest unmet role first, checks remaining capacity, and uses
-seeded weighted choices among competitive candidates. Class cards, overlapping
-support roles and consistent copies receive preference. Failed bounded assembly
-tries another curated variant/archetype in the same class and fails explicitly if
-none works. It never silently substitutes a generic deck.
+Filler needs quality 3 or higher. Explicit ratings take precedence, with no minimum
+clamp. Automatic scoring considers body efficiency, interaction, resources and
+beneficial effects, capped at 4. Immediate benefits and unconditional Deathrattles
+on minions with attack receive full credit; conditional or delayed benefits receive
+half credit. Deathrattle itself earns no bonus, so a drawing Deathrattle is counted
+once. Weak bodies and effects that help the opponent lose points. Stormpike
+Commando and Wind-up Burglebot are explicitly rated below the filler threshold.
+Delayed/conditional draw cannot satisfy the reliable-resource minimum, and decks
+need at least six credible early board plays in addition to their cheap-card bounds.
+These are conservative estimates, not measured win rates.
 
-New cards with recognized, supported mechanics automatically become candidates;
-they still must meet quality, legality and synergy checks. New mechanics or entirely
-new archetypes may require additional recognition and curation. Archetype targets,
-defining anchors, selected card ratings and a few conditional support rules remain
-explicit design knowledge. This is catalog-driven assembly, not automatic learning.
+Known synergy requirements are checked against the completed deck, including core
+cards. Dragon hand payoffs need five other Dragons; the covered Mech, Pirate,
+Murloc and Beast payoffs need five supporting minions. Secret payoffs need four
+Secrets. Eggs need three attack-buff or useful sacrifice cards. C'Thun payoffs need
+six cultists, and cultists require C'Thun. Mech and Mechanical catalog tribes share
+one support tag. Spell engines and Recruit payoffs also have explicit support
+minimums in `opponent-support.ts`. Requirements count real copies, exclude the
+payoff itself, and never infer support from an archetype name.
+
+After assembly, unsupported filler is replaced using seeded weighted choices;
+fixed core cards receive supporting replacements in other slots. Every replacement
+preserves class/copy legality and composition bounds and reduces missing support.
+Repair is bounded to 60 swaps, with up to eight assembly attempts for the same
+archetype. Failure is explicit; no quality or support requirement is relaxed.
+
+Selection satisfies the first unmet composition minimum in declared order, then
+fills flexible slots, enforcing composition maxima and copy limits. Every eligible
+candidate retains a chance: weight is quality cubed, multiplied by 2 for class
+cards, 1.5 for an archetype tag match and 1.5 when adding a second copy. There is no
+fixed best-card shortlist or guaranteed legendary beyond deliberate core/Hero
+inclusions. Failed assembly reports an error without relaxing quality requirements.
 
 Generated decks remain match-local snapshots. Restart retains the same decks with
 a new match seed; another match generates another opponent. The development
 `VITE_DEV_AI_DECK_ID` saved-deck override is preserved. Arena and Tavern Brawl retain
-their own opponent rules. The AI receives the selected archetype's plan, variant
+their own opponent rules. The AI receives the selected archetype's plan
 and mulligan guidance in its existing context, without extra provider calls.
 
-`ai.json` retains generator version, seed, exact cards, core, archetype, variant,
-requirements, retries/fallbacks and the construction trace under `generatedOpponent`.
-`match.txt` renders the successful 30 selections, candidate counts and rule-based
-reasons. Generation is deterministic for the same seed, explicit options, catalog
-and generator version.
+`ai.json` retains generator version, seed, exact cards, core, archetype, diagnostics
+and the construction trace under `generatedOpponent`. Filler selection reasons
+include quality and whether the rating is explicit or automatic. Generation is
+deterministic for the same seed, explicit options, catalog and generator version;
+version 10 changes the decks produced by earlier versions for the same seed.
+The construction trace records replacements, their reasons and quality ratings;
+the exact final card map is authoritative when an earlier selection was replaced.
 
-Tune the mandatory power-card policy and optional Card ID anchors in
-`src/game/decks/opponent-generation.json`. The `archetypeExtraCardIds` map is keyed
-by the existing archetype ID and accepts Card IDs only; leave it empty to rely on
-the existing archetype cores and live support selection. Tune archetypes and role
-priorities in `opponent-archetypes.ts`, mechanical admission in
-`opponent-dynamic-pool.ts`, role/support checks in `opponent-curated-assessment.ts`,
+Tune archetypes in `src/game/decks/opponent-archetypes.ts`, composition limits in
+`opponent-floors.ts`, explicit ratings in `opponent-card-ratings.ts`, structural
+scoring in `opponent-curated-assessment.ts`, admission in `opponent-fill-pool.ts`,
 and selection in `opponent-generator.ts`.
 Maintaining the human's saved decks requires no opponent documentation.
 
-See the [dynamic generation review](docs/dynamic-opponent-review.md). The earlier
+The [dynamic generation review](docs/dynamic-opponent-review.md), earlier
 [27-deck review](docs/curated-opponent-review.md) and
-[exact generated decks](docs/curated-opponent-decks.json) describe version 3 and are
-historical. Construction checks establish coherence and legality; competitive
-strength and AI sequencing still need match playtesting.
+[exact generated decks](docs/curated-opponent-decks.json) are historical.
+Construction checks establish eligibility and legality; competitive strength and
+AI sequencing still need match playtesting.
 
 ## Game AI diagnostics
 
@@ -586,3 +647,25 @@ Permanent AI regression tests cover transport bounds, phase/schema validation,
 bridge copying, bounded recovery/inspection, cancellation, intent agreement,
 fair factual access, plan replacement, and action grouping. These are maintained source
 tests; disposable test artifacts should still be removed after use.
+
+## Aura shaders and Shader Lab
+
+**Aura Shader** is the Metaball V5 effect ported from ShaderTest. Card and Bonus
+Card use its moving blobs, smoothed silhouette and bottom taper. Board and Button
+start from the same tuning with taper and bottom fade disabled. State palettes
+retain their gameplay meanings. Distance fields are cached by silhouette; resting,
+hovered and dragged cards all animate live, without a short baked loop.
+
+The Card baseline combines V5 defaults with matching saved V4 settings: eight
+blobs, pale threshold 1, taper 0.6, bottom fade 1, and fade start 0.67. V4-only
+settings are not translated into the new blob controls.
+
+**Ghost Aura Shader** retains the previous effect and tuning only for the mulligan
+announcement, confirm button, opponent-still-choosing banner and selection toggle.
+
+Shader Lab has separate Aura/Ghost selection and scrollable controls. Aura exposes
+all V5 inputs, including fractional values, five colors and the smooth-outline
+toggle. Ghost has independent controls and colors. Save writes both sections to
+`config/outline-tunings.json` (version 4) through the existing development bridge.
+The V5 distance padding covers the full slider range, and pixel controls keep the
+source's 1268-pixel reference width. F3 suppresses both effects.

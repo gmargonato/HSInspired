@@ -1,6 +1,14 @@
-import { CARD_CATALOG, type CardCatalog, type CardDefinition } from '../content/cards'
+import {
+  CARD_CATALOG,
+  cardHasTribe,
+  type CardCatalog,
+  type CardDefinition
+} from '../content/cards'
 import { isCollectibleDeckCard } from './deck-rules'
-import { assessCuratedCard } from './opponent-curated-assessment'
+import {
+  assessCuratedCard,
+  type OpponentCardFacts
+} from './opponent-curated-assessment'
 import { OPPONENT_CARD_RATINGS } from './opponent-card-ratings'
 import {
   inspectCardCapabilities,
@@ -13,7 +21,7 @@ export function isOpponentPowerCard(card: CardDefinition): boolean {
 }
 
 const capabilities = runtimeCapabilityKeys()
-const cache = new WeakMap<CardDefinition, OpponentFillCard | null>()
+const cache = new WeakMap<CardDefinition, OpponentCardFacts | null>()
 
 export interface OpponentFillCard {
   readonly card: CardDefinition
@@ -23,16 +31,34 @@ export interface OpponentFillCard {
 
 /**
  * Every legal, runtime-supported card the AI may draw as deck fill. Known-broken or
- * self-harmful cards stay out; quality comes from curated ratings, defaulting to solid.
+ * self-harmful cards stay out; only sufficiently strong candidates enter random fill.
  */
 export function assessFillCard(card: CardDefinition): OpponentFillCard | undefined {
+  const facts = assessOpponentCoreCard(card)
+  if (!facts || facts.quality < 3) return undefined
+  if (
+    OPPONENT_CARD_RATINGS[card.id] === undefined &&
+    card.type === 'Minion' &&
+    card.cost >= 6 &&
+    !facts.interaction &&
+    !facts.resource &&
+    !facts.usefulFeature
+  )
+    return undefined
+  return facts
+}
+
+/** Curated cores retain their deliberate inclusions, subject to the same safety rules. */
+export function assessOpponentCoreCard(
+  card: CardDefinition
+): OpponentCardFacts | undefined {
   if (cache.has(card)) return cache.get(card) ?? undefined
   const result = assess(card)
   cache.set(card, result ?? null)
   return result
 }
 
-function assess(card: CardDefinition): OpponentFillCard | undefined {
+function assess(card: CardDefinition): OpponentCardFacts | undefined {
   if (
     !isCollectibleDeckCard(card) ||
     isOpponentPowerCard(card) ||
@@ -40,11 +66,21 @@ function assess(card: CardDefinition): OpponentFillCard | undefined {
     card.playCondition
   )
     return undefined
+  // Printed text and tribes do not make a plain stat body an ability-bearing minion.
+  if (
+    card.type === 'Minion' &&
+    card.effects.length === 0 &&
+    card.keywords.length === 0 &&
+    (card.spellDamage ?? 0) <= 0
+  )
+    return undefined
   if (
     card.keywords.some((key) =>
-      ['cannot-attack', 'cannot-attack-heroes', 'attack-wrong-enemy-chance-50'].includes(
-        key
-      )
+      [
+        'cannot-attack',
+        'cannot-attack-heroes',
+        'attack-wrong-enemy-chance-50'
+      ].includes(key)
     )
   )
     return undefined
@@ -81,7 +117,7 @@ function assess(card: CardDefinition): OpponentFillCard | undefined {
     actions.some(
       (node) =>
         node.action === 'discard' &&
-        !(card.type === 'Minion' && card.subtype === 'Demon')
+        !(card.type === 'Minion' && cardHasTribe(card, 'Demon'))
     )
   )
     return undefined
