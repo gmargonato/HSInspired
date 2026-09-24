@@ -24,6 +24,11 @@ export interface AnimatedOutlineOptions {
   readonly cacheDistance?: boolean
   /** Original silhouette and its rectangle inside a padded perspective mesh. */
   readonly silhouette?: { readonly texture: Texture; readonly bounds: Rectangle }
+  /**
+   * Composed targets with identical, fixed geometry can share one cached
+   * silhouette field under this key instead of building one per instance.
+   */
+  readonly sharedShapeKey?: string
 }
 const startTime = performance.now()
 /** Metaball V5 Aura. The existing outline interface keeps callers small. */
@@ -46,7 +51,7 @@ export class AnimatedOutline extends Actor {
   ) {
     super()
     this.label = 'aura-shader'
-    this.filter = new AuraFilter(target, options.silhouette)
+    this.filter = new AuraFilter(target, options.silhouette, options.sharedShapeKey)
     this.setTuning(getOutlineTuning(options.preset ?? 'button'))
     this.setPalette(options.palette ?? 'blue')
     target.filters = [...(target.filters ?? []), this.filter]

@@ -9,7 +9,7 @@ import {
   hasBoardMinionEntryExhaustion,
   isBoardMinionSleeping
 } from '../../../game/match/rules/minion-attack-state'
-import type { TurnMatchCommand } from '../../../game/match'
+import type { PlayerId, TurnMatchCommand } from '../../../game/match'
 import type { AiMessage, JsonObject } from '../../../shared/ipc/ai'
 import type { GameBoardSession } from './game-board-session'
 import { aiActionIntent } from './ai-action-intent'
@@ -27,9 +27,13 @@ export function cardFacts(cardId: string): JsonObject {
     cost: card.cost,
     ...((card.tribes?.length ?? 0) > 0 || card.subtype
       ? {
-          tribes: [...new Set([...(card.tribes ?? []), card.subtype].filter(
-            (tribe): tribe is string => Boolean(tribe)
-          ))]
+          tribes: [
+            ...new Set(
+              [...(card.tribes ?? []), card.subtype].filter((tribe): tribe is string =>
+                Boolean(tribe)
+              )
+            )
+          ]
         }
       : {}),
     ...('attack' in card ? { attack: card.attack } : {}),
@@ -188,12 +192,16 @@ export function aiSystemContext(session: GameBoardSession): AiMessage {
 
 export function aiActions(
   session: GameBoardSession,
-  commands: readonly TurnMatchCommand[]
+  commands: readonly TurnMatchCommand[],
+  perspectiveParticipantId: PlayerId = session.remoteParticipantId
 ) {
   const state = session.getState()
-  const self = session.findPlayer(state, session.remoteParticipantId)
+  const self = session.findPlayer(state, perspectiveParticipantId)
+  const opponentId = state.players.find(
+    (player) => player.participantId !== perspectiveParticipantId
+  )!.participantId
   const names = new Map<string, string>()
-  for (const player of session.getAiObservation().players) {
+  for (const player of session.getAiObservation(perspectiveParticipantId).players) {
     for (const card of [...player.hand, ...player.board])
       names.set(card.instanceId, CARD_CATALOG.require(card.cardId).name)
   }
@@ -214,7 +222,7 @@ export function aiActions(
       const replace = new Set(command.replaceInstanceIds)
       return {
         id: 'a' + index,
-        intent: aiJson(aiActionIntent(command, session.localParticipantId)),
+        intent: aiJson(aiActionIntent(command, opponentId)),
         description:
           'confirm-mulligan: KEEP ' +
           (self.hand
@@ -243,7 +251,7 @@ export function aiActions(
     let manaHint = ''
     if (command.type === 'play-card' && card?.cardId === 'basic_the_coin') {
       const input = session.match.getPlayInput?.(
-        session.remoteParticipantId,
+        perspectiveParticipantId,
         card.instanceId
       )
       const gain = CARD_CATALOG.require(card.cardId)
@@ -272,7 +280,7 @@ export function aiActions(
       .join(': ')
     return {
       id: 'a' + index,
-      intent: aiJson(aiActionIntent(command, session.localParticipantId)),
+      intent: aiJson(aiActionIntent(command, opponentId)),
       // Intent carries the references once in model inputs; logs retain the full description.
       summary: title + manaHint,
       description:

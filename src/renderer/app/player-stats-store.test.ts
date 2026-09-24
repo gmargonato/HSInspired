@@ -15,7 +15,8 @@ describe('PersistentPlayerStatsStore', () => {
     let getCalls = 0
     let snapshot: PlayerStatsSnapshot = {
       winsByClass: { ...createEmptyClassWinTotals(), Mage: 7 },
-      tavernBrawlWins: 2
+      tavernBrawlWins: 2,
+      rank: { tier: 'rank', rank: 25, seasonKey: '2026-09' }
     }
     const api: PlayerStatsApi = {
       get: async () => {
@@ -39,6 +40,16 @@ describe('PersistentPlayerStatsStore', () => {
           tavernBrawlWins: snapshot.tavernBrawlWins + 1
         }
         return snapshot
+      },
+      recordConstructedResult: async (request) => {
+        snapshot = {
+          ...snapshot,
+          rank:
+            request.result === 'win'
+              ? { tier: 'rank', rank: 24, seasonKey: '2026-09' }
+              : snapshot.rank
+        }
+        return snapshot
       }
     }
     const store = new PersistentPlayerStatsStore(() => api)
@@ -49,6 +60,11 @@ describe('PersistentPlayerStatsStore', () => {
     expect(store.getWins(asClassId('Mage'))).toBe(8)
     expect(await store.recordTavernBrawlWin()).toBe(3)
     expect(store.getTavernBrawlWins()).toBe(3)
+    expect(store.getRank()).toEqual(snapshot.rank)
+    expect(
+      await store.recordConstructedResult({ matchId: 'm1', result: 'win' })
+    ).toEqual(snapshot.rank)
+    expect(store.getRank()).toMatchObject({ tier: 'rank', rank: 24 })
     expect(getCalls).toBe(1)
   })
 })

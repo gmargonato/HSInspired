@@ -5,6 +5,7 @@ import type { TurnMatchCommand } from '../../../game/match'
 import { effectiveBoardMinionKeywords } from '../../../game/match/rules/minion-attack-state'
 import { aiActions } from './ai-context'
 import type { GameBoardSession } from './game-board-session'
+import { expertCoinHeroPowerActionPenalty } from './expert-coin-hero-power-policy'
 
 type LocalAction = ReturnType<typeof aiActions>[number]
 type EffectRecord = Readonly<Record<string, unknown>>
@@ -16,6 +17,7 @@ interface FallbackContext {
   readonly opponent: AiObservedPlayer
   readonly facingLethal: boolean
   readonly enemyHealth: number
+  readonly coinPlayedThisTurn: boolean
 }
 
 function numeric(value: unknown, fallback = 0): number {
@@ -455,7 +457,26 @@ function scoreAction(action: LocalAction, context: FallbackContext): number {
   if (command.type === 'end-turn') return 0
   if (command.type === 'play-card') return scoreCardPlay(command, context)
   if (command.type === 'attack-character') return scoreAttack(command, context)
-  if (command.type === 'use-hero-power') return scoreHeroPower(command, context)
+  if (command.type === 'use-hero-power') {
+    if (context.coinPlayedThisTurn) {
+      const before = context.session.getState()
+      const after = context.session.match.analyze((fork) => {
+        fork.dispatch(command)
+        return fork.getState()
+      })
+      if (
+        expertCoinHeroPowerActionPenalty(
+          command,
+          before,
+          after,
+          context.session.remoteParticipantId,
+          true
+        ) > 0
+      )
+        return Number.NEGATIVE_INFINITY
+    }
+    return scoreHeroPower(command, context)
+  }
   if (command.type === 'choose-discover-card') {
     const card = context.session
       .getState()
@@ -505,7 +526,9 @@ export function selectExpertTimeoutFallbackAction(
     self,
     opponent,
     facingLethal,
-    enemyHealth
+    enemyHealth,
+    coinPlayedThisTurn:
+      session.getState().history?.cardsPlayedThisTurn.includes('basic_the_coin') === true
   }
   let best: LocalAction | undefined
   let bestScore = 0

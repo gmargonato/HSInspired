@@ -12,6 +12,35 @@ function player(
 }
 
 describe('aura-modified hero powers', () => {
+  it('reports hero powers unavailable while Mindbreaker disables them', () => {
+    const scenario = createMatchScenario({ seed: 1200 })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    const opponentId = scenario.participants.find((id) => id !== participantId)!
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'knights_of_the_frozen_throne_mindbreaker'
+      }).accepted
+    ).toBe(true)
+
+    expect(player(scenario, participantId).heroPower.available).toBe(true)
+    expect(scenario.match.getLegality!(participantId).legalHeroPower).toBe(false)
+    expect(
+      scenario.match.dispatch({ type: 'use-hero-power', participantId })
+    ).toMatchObject({ accepted: false, code: 'hero-power-unavailable' })
+  })
+
   it.each(['rexxar', 'jaina', 'garrosh', 'guldan', 'anduin'])(
     'only modifies Hunter powers, including upgrades, for %s',
     (heroId) => {

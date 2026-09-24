@@ -69,12 +69,21 @@ export function parseMatchSetup(value: unknown): MatchSetup {
   if (value.skipMulligan !== undefined && typeof value.skipMulligan !== 'boolean') {
     throw new Error('MatchSetup.skipMulligan must be a boolean')
   }
+  if (
+    value.aiHeroPowerBonusEnabled !== undefined &&
+    typeof value.aiHeroPowerBonusEnabled !== 'boolean'
+  ) {
+    throw new Error('MatchSetup.aiHeroPowerBonusEnabled must be a boolean')
+  }
   return {
     participants: [first, second],
     ...(typeof value.modeId === 'string' ? { modeId: value.modeId.trim() } : {}),
     ...(value.seed === undefined ? {} : { seed: value.seed }),
     ...(startingParticipantId === undefined ? {} : { startingParticipantId }),
-    ...(value.skipMulligan === true ? { skipMulligan: true } : {})
+    ...(value.skipMulligan === true ? { skipMulligan: true } : {}),
+    ...(typeof value.aiHeroPowerBonusEnabled === 'boolean'
+      ? { aiHeroPowerBonusEnabled: value.aiHeroPowerBonusEnabled }
+      : {})
   }
 }
 

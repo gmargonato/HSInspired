@@ -103,12 +103,6 @@ export const SETTINGS_LAYOUT = {
     { width: 200, height: 52 },
     { anchor: CENTER, note: 'Local text placement within an AI mode option.' }
   ),
-  aiModeNote: placement(
-    { x: 960, y: 850 },
-    { width: 440, height: 25 },
-    { anchor: CENTER, note: 'Explains the saved local-versus-API AI routing choice.' }
-  ),
-
   /** Match-only action frames and buttons, centered inside the game settings panel. */
   gameActions: {
     concedeFrame: placement(

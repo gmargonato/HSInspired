@@ -2,10 +2,14 @@ import type { SceneManager } from '../scenes/scene-manager'
 import type { AppLogger } from './logger'
 import type { DevCommand, PremiumMode } from '../../shared/dev-menu'
 import type { ProgressionStore } from '../ui/progression-store'
+import type { PlayerStatsStore } from '../ui/player-stats-store'
 import { requestDevDustAmount } from './dev-dust-dialog'
 import { CollectionScene } from '../scenes/collection-scene'
 import { GameScene } from '../scenes/game-scene'
 import { ArenaScene } from '../scenes/arena-scene'
+import { DeckSelectionScene } from '../scenes/deck-selection-scene'
+import { createSeasonKey } from '../../game/ranking/constructed-ranking'
+import type { ConstructedRankSnapshot } from '../../shared/ipc/player-stats'
 import {
   getPremiumMode,
   setPremiumMode,
@@ -27,6 +31,7 @@ export function installDevCommandHandler(
   sceneManager: SceneManager,
   logger: AppLogger,
   progression: ProgressionStore,
+  playerStats: PlayerStatsStore,
   reportError: (message: string) => void = console.error
 ): () => void {
   const bridge = getDevMenuBridge()
@@ -35,6 +40,7 @@ export function installDevCommandHandler(
   }
 
   let dustCommandPending = false
+  let rankCommandPending = false
   const handleCommand = (command: DevCommand): void => {
     if (command.type === 'progression:set-dust') {
       if (dustCommandPending) return
@@ -53,6 +59,40 @@ export function installDevCommandHandler(
         })
         .finally(() => {
           dustCommandPending = false
+        })
+      return
+    }
+    if (command.type === 'ranking:set-rank') {
+      if (rankCommandPending) return
+      rankCommandPending = true
+      const rank: ConstructedRankSnapshot =
+        command.tier === 'legend'
+          ? {
+              tier: 'legend',
+              legendRank: command.rank,
+              seasonKey: createSeasonKey(new Date())
+            }
+          : {
+              tier: 'rank',
+              rank: command.rank,
+              seasonKey: createSeasonKey(new Date())
+            }
+      void (async () => {
+        if (!playerStats.devSetRank) {
+          throw new Error('Rank overrides are only available in development')
+        }
+        await playerStats.load()
+        await playerStats.devSetRank(rank)
+        if (sceneManager.current instanceof DeckSelectionScene) {
+          sceneManager.current.refreshRank()
+        }
+      })()
+        .catch((error) => {
+          logger.error('[DevMenu] failed to set the constructed rank', error)
+          reportError('Could not set the rank. Please try again.')
+        })
+        .finally(() => {
+          rankCommandPending = false
         })
       return
     }

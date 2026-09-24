@@ -64,7 +64,8 @@ export function historySnapshot(
           boardMinionAbilityMarkers(
             minion,
             CARD_CATALOG.require(minion.cardId),
-            state.turnNumber
+            state.turnNumber,
+            player.heroId
           )
         )
           .filter(([, enabled]) => enabled)

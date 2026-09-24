@@ -1,5 +1,58 @@
-import { cardHasTribe, type CardDefinition } from '../content/cards'
-import { OPPONENT_CARD_RATINGS } from './opponent-card-ratings'
+import { CARD_CATALOG, cardHasTribe, type CardDefinition } from '../content/cards'
+import {
+  OPPONENT_CARD_RATINGS,
+  REVIEWED_FRIENDLY_DAMAGE
+} from './opponent-card-ratings'
+
+/** Disjoint mana-curve buckets; every drawable card belongs to exactly one. */
+export const OPPONENT_CURVE_TAGS = [
+  'cost:0-1',
+  'cost:2',
+  'cost:3',
+  'cost:4',
+  'cost:5',
+  'cost:6+'
+] as const
+export type OpponentCurveTag = (typeof OPPONENT_CURVE_TAGS)[number]
+
+/** Every tag the deck generator understands. Typos fail type checking. */
+export type OpponentTag =
+  | OpponentCurveTag
+  | 'cost:8+'
+  | 'board'
+  | 'early'
+  | 'interaction'
+  | 'resource'
+  | 'threat'
+  | 'minion'
+  | 'cost-1-minion'
+  | 'weapon'
+  | 'spell'
+  | 'cheap-spell'
+  | 'spell-damage'
+  | 'taunt'
+  | 'secret'
+  | 'heal'
+  | 'deathrattle'
+  | 'cthun-buff'
+  | 'ramp'
+  | 'jade'
+  | 'overload'
+  | 'totem'
+  | 'recruit-source'
+  | 'token-source'
+  | 'friendly-damage'
+  | 'discard'
+  | 'murloc-source'
+  | 'egg-enabler'
+  | `tribe:${string}`
+  | `card:${string}`
+
+export function opponentCurveTag(cost: number): OpponentCurveTag {
+  if (cost <= 1) return 'cost:0-1'
+  if (cost >= 6) return 'cost:6+'
+  return `cost:${cost}` as OpponentCurveTag
+}
 
 type Node = Record<string, unknown>
 const record = (value: unknown): Node =>
@@ -50,7 +103,7 @@ export function opponentActionSignals(card: CardDefinition): readonly {
 /** Structural facts every fill candidate carries. Tags drive floors and archetype bias. */
 export interface OpponentCardFacts {
   readonly card: CardDefinition
-  readonly tags: readonly string[]
+  readonly tags: readonly OpponentTag[]
   readonly quality: number
   readonly board: boolean
   readonly early: boolean
@@ -70,7 +123,7 @@ export function assessCuratedCard(card: CardDefinition): OpponentCardFacts {
     .filter((node) => typeof node.action === 'string')
   const has = (action: string): boolean =>
     actions.some((node) => node.action === action)
-  const tags = new Set<string>()
+  const tags = new Set<OpponentTag>()
   const minion = card.type === 'Minion'
   const body = minion && card.attack > 0
   const summons = immediate.filter((node) =>
@@ -150,9 +203,45 @@ export function assessCuratedCard(card: CardDefinition): OpponentCardFacts {
       tags.add('token-source')
   }
   if (card.id === 'classic_violet_teacher') tags.add('token-source')
-  if (card.cost <= 3) tags.add('cost:cheap')
+  tags.add(opponentCurveTag(card.cost))
   if (card.cost >= 8) tags.add('cost:8+')
-  if (card.cost >= 6) tags.add('cost:6+')
+  if (minion) tags.add('minion')
+  if (minion && card.cost === 1) tags.add('cost-1-minion')
+  if (body && card.cost >= 5) tags.add('threat')
+  if ((card.spellDamage ?? 0) > 0) tags.add('spell-damage')
+  if (
+    REVIEWED_FRIENDLY_DAMAGE.has(card.id) ||
+    actions.some((node) => {
+      const target = record(node.target)
+      return (
+        node.action === 'damage' &&
+        target.type === 'minion' &&
+        ['self', 'any'].includes(String(target.controller)) &&
+        typeof node.amount === 'number' &&
+        node.amount <= 2
+      )
+    })
+  )
+    tags.add('friendly-damage')
+  if (
+    actions.some(
+      (node) =>
+        node.action === 'discard' &&
+        (record(node.target).controller === 'self' || node.player === 'self')
+    )
+  )
+    tags.add('discard')
+  if (
+    (minion && cardHasTribe(card, 'Murloc')) ||
+    actions.some(
+      (node) =>
+        ['summon', 'summon-random'].includes(String(node.action)) &&
+        (record(node.filter).tribe === 'Murloc' ||
+          (typeof node.cardId === 'string' &&
+            cardHasTribe(CARD_CATALOG.get(node.cardId), 'Murloc')))
+    )
+  )
+    tags.add('murloc-source')
   const keywordBenefit =
     card.keywords.some((keyword) =>
       ['taunt', 'divine-shield', 'rush', 'charge', 'windfury'].includes(keyword)

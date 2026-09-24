@@ -230,3 +230,143 @@ describe('Hearthstone summon placement', () => {
     ])
   })
 })
+
+describe('grouped summon placement', () => {
+  it.each([0, 1])(
+    'places Cenarius Treants on both sides at position %i',
+    (position) => {
+      const scenario = createMatchScenario({
+        seed: 230,
+        cardId: 'classic_cenarius',
+        firstHeroId: 'malfurion'
+      })
+      scenario.confirmBothMulligans()
+      const participantId = scenario.match.getState().activePlayerId!
+      summon(scenario, participantId, 'basic_acidic_swamp_ooze')
+      summon(scenario, participantId, 'basic_boulderfist_ogre')
+      setMana(scenario, participantId, 10)
+      const card = player(scenario, participantId).hand.find(
+        (card) => card.cardId === 'classic_cenarius'
+      )!
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: card.instanceId,
+        position,
+        choice: 1
+      })
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) return
+      const expected = ['basic_acidic_swamp_ooze', 'basic_boulderfist_ogre']
+      expected.splice(
+        position,
+        0,
+        'basic_treant_cenarius',
+        'classic_cenarius',
+        'basic_treant_cenarius'
+      )
+      expect(
+        player(scenario, participantId).board.map((minion) => minion.cardId)
+      ).toEqual(expected)
+      const summons = result.events
+        .filter((event) => event.type === 'minion-summoned')
+        .filter((event) => !!event.summonGroupId)
+      expect(summons).toHaveLength(2)
+      expect(summons[0]!.summonGroupId).toBeTruthy()
+      expect(summons[1]!.summonGroupId).toBe(summons[0]!.summonGroupId)
+    }
+  )
+
+  it.each([0, 1, 5])('limits alternating summons to %i free slots', (free) => {
+    const scenario = createMatchScenario({ seed: 231, cardId: 'classic_onyxia' })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    for (let i = 0; i < 6 - free; i++)
+      summon(scenario, participantId, 'basic_acidic_swamp_ooze')
+    setMana(scenario, participantId, 10)
+    playCard(scenario, participantId, 'classic_onyxia', 0)
+    const row = player(scenario, participantId).board
+    expect(row).toHaveLength(7)
+    expect(row.findIndex((minion) => minion.cardId === 'classic_onyxia')).toBe(
+      Math.floor(free / 2)
+    )
+    expect(row.filter((minion) => minion.cardId === 'classic_whelp')).toHaveLength(free)
+  })
+
+  it("resurrects N'Zoth minions around him before his existing neighbor", () => {
+    const scenario = createMatchScenario({
+      seed: 232,
+      cardId: 'whispers_of_the_old_gods_nzoth_the_corruptor'
+    })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    for (let i = 0; i < 2; i++) {
+      summon(scenario, participantId, 'classic_leper_gnome')
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId,
+          cardId: 'basic_shadow_word_pain'
+        }).accepted
+      ).toBe(true)
+      setMana(scenario, participantId, 10)
+      const target = player(scenario, participantId).board[0]!
+      const spell = player(scenario, participantId).hand.find(
+        (card) => card.cardId === 'basic_shadow_word_pain'
+      )!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId,
+          cardInstanceId: spell.instanceId,
+          targets: [{ kind: 'minion', participantId, instanceId: target.instanceId }]
+        }).accepted
+      ).toBe(true)
+    }
+    summon(scenario, participantId, 'basic_boulderfist_ogre')
+    setMana(scenario, participantId, 10)
+    playCard(scenario, participantId, 'whispers_of_the_old_gods_nzoth_the_corruptor', 0)
+    expect(
+      player(scenario, participantId).board.map((minion) => minion.cardId)
+    ).toEqual([
+      'classic_leper_gnome',
+      'whispers_of_the_old_gods_nzoth_the_corruptor',
+      'classic_leper_gnome',
+      'basic_boulderfist_ogre'
+    ])
+  })
+})
+
+it('keeps repeated Battlecry summon groups distinct and seeded results deterministic', () => {
+  const run = () => {
+    const scenario = createMatchScenario({
+      seed: 241,
+      cardId: 'goblins_vs_gnomes_dr_boom'
+    })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    summon(scenario, participantId, 'league_of_explorers_brann_bronzebeard')
+    setMana(scenario, participantId, 10)
+    const card = player(scenario, participantId).hand.find(
+      (entry) => entry.cardId === 'goblins_vs_gnomes_dr_boom'
+    )!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: card.instanceId,
+      position: 0
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    const summons = result.events
+      .filter((event) => event.type === 'minion-summoned')
+      .filter((event) => event.minion.cardId === 'goblins_vs_gnomes_boom_bot')
+    expect(summons).toHaveLength(4)
+    const groups = summons.map((event) => event.summonGroupId)
+    expect(groups[0]).toBe(groups[1])
+    expect(groups[2]).toBe(groups[3])
+    expect(groups[0]).not.toBe(groups[2])
+    return result
+  }
+  expect(run()).toEqual(run())
+})

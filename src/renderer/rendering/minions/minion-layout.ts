@@ -155,8 +155,8 @@ export const MINION_LAYOUT = {
     }
   ),
   elusive: placement(
-    { x: 80, y: 85 },
-    { width: 113, height: 153 },
+    { x: 80, y: 88 },
+    { width: 113, height: 155 },
     { anchor: CENTER, note: 'Elusive portrait overlay.' }
   ),
   immune: placement(
@@ -183,6 +183,11 @@ export const MINION_LAYOUT = {
       note: 'Health badge.'
     }
   ),
+  /** Label nudges in minion-local pixels from each badge center; positive y moves down. */
+  statValueOffsets: {
+    attack: { x: 3, y: 3 },
+    health: { x: 0, y: 3 }
+  },
   artworkOval: {
     center: { x: 0, y: 10 },
     radiusX: 55,

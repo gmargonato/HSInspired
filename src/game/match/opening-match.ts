@@ -27,6 +27,7 @@ import { selectAiHeroPowerBonus } from './ai-bonuses'
 import { countDeckCards, type Deck } from '../decks'
 import { createSeededRng, type DeterministicRng } from './rng'
 import {
+  applyDrawScalingBuff,
   EffectRuntime,
   type EffectResolutionResult,
   type EffectResolutionSuccess,
@@ -40,6 +41,7 @@ import {
   resolveHeroPower,
   resolveTurnTransition
 } from './effects/effect-runtime'
+import type { DraftCard } from './effects/effect-context'
 import { assertOpeningMatchInvariants } from './rules/invariants'
 import { moveCardForPlayer, removeCardFromPlayer } from './rules/zone-state'
 import { createAiObservation } from './ai/observation'
@@ -621,7 +623,11 @@ export function createOpeningMatch(
   const playerTwoIndex: 0 | 1 = playerOneIndex === 0 ? 1 : 0
   const order = [playerOneIndex, playerTwoIndex] as const
   const bonusRngSnapshot = rng.snapshot()
-  const aiHeroPowerBonus = selectAiHeroPowerBonus(setup.participants, rng)
+  const aiHeroPowerBonus = selectAiHeroPowerBonus(
+    setup.participants,
+    rng,
+    setup.aiHeroPowerBonusEnabled !== false
+  )
   rng.restore(bonusRngSnapshot)
   let initialEntityOrdinal = 0
 
@@ -1635,16 +1641,30 @@ export function createOpeningMatch(
           }
         }
         const card = cloneCard(player.deck[0]!)
-        const nextPlayer =
-          player.hand.length >= MAX_HAND_SIZE
-            ? { ...player, deck: player.deck.slice(1) }
-            : drawCards(player, 1).player
+        const fullHand = player.hand.length >= MAX_HAND_SIZE
+        let counters = player.counters
+        let drawnCard = card
+        let nextPlayer: OpeningPlayerState
+        if (fullHand) {
+          nextPlayer = { ...player, deck: player.deck.slice(1) }
+        } else {
+          const drawn = drawCards(player, 1)
+          const handCard = drawn.cards[0]
+          if (handCard?.scalingCounter) {
+            counters = applyDrawScalingBuff(
+              handCard as unknown as DraftCard,
+              counters
+            )
+            drawnCard = { ...handCard }
+          }
+          nextPlayer = { ...drawn.player, counters }
+        }
         const result = applyDevStateChange(state, playerIndex, nextPlayer)
         commitState(result.state)
         return {
           ...result,
           events: [
-            player.hand.length >= MAX_HAND_SIZE
+            fullHand
               ? {
                   type: 'card-burned',
                   origin: 'deck',
@@ -1655,7 +1675,7 @@ export function createOpeningMatch(
                   type: 'card-drawn',
                   origin: 'deck',
                   participantId: player.participantId,
-                  card
+                  card: drawnCard
                 }
           ]
         }

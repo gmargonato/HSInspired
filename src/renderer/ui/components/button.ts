@@ -29,6 +29,7 @@ export class Button extends Actor {
   private readonly pressedBrightness: number
   private readonly sinkPx: number
   private readonly myFilter = new ColorMatrixFilter()
+  private filterAttached = false
   private readonly brightnessState = { value: 1 }
   private baseY = 0
   private hovered = false
@@ -58,7 +59,6 @@ export class Button extends Actor {
     this.sprite = new Sprite(texture)
     this.sprite.anchor.set(0.5)
     this.sprite.position.set(0, 0)
-    this.sprite.filters = [this.myFilter]
     this.addChild(this.sprite)
     this.setBrightness(this.idleBrightness)
 
@@ -185,6 +185,11 @@ export class Button extends Actor {
 
   private setBrightness(brightness: number): void {
     this.myFilter.brightness(brightness, false)
+    // Brightness 1 is an identity matrix; skip the offscreen filter pass while idle.
+    const filtered = Math.abs(brightness - 1) > 1e-4
+    if (filtered === this.filterAttached) return
+    this.filterAttached = filtered
+    this.sprite.filters = filtered ? [this.myFilter] : null
   }
 
   private tweenBrightness(to: number, duration: number): void {

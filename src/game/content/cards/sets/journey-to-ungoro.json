@@ -9,35 +9,36 @@
     "cost": 5,
     "attack": 5,
     "health": 5,
-    "rulesText": "Battlecry: Shuffle a Golden Monkey into your deck. If your deck has no duplicates, draw it.",
+    "rulesText": "Battlecry: Add 5 random Journey to Un'Goro cards to your hand.",
     "keywords": [],
     "effects": [
       {
         "trigger": "battlecry",
         "actions": [
           {
-            "action": "shuffle-into-deck",
+            "action": "add-to-hand",
             "player": "self",
-            "cardId": "league_of_explorers_golden_monkey",
-            "count": 1
-          }
-        ],
-        "then": {
-          "condition": {
-            "type": "player-deck-has-no-duplicates",
-            "player": "self"
-          },
-          "actions": [
-            {
-              "action": "draw",
-              "player": "self",
-              "count": 1,
-              "filter": {
-                "cardId": "league_of_explorers_golden_monkey"
-              }
+            "source": "random-card",
+            "count": 1,
+            "filter": {
+              "expansionId": "journey-to-ungoro",
+              "rarity": "Legendary",
+              "collectible": true
             }
-          ]
-        }
+          },
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "count": 4,
+            "filter": {
+              "expansionId": "journey-to-ungoro",
+              "rarityIn": ["Rare", "Epic", "Legendary"],
+              "excludeInHand": true,
+              "collectible": true
+            }
+          }
+        ]
       }
     ],
     "collectible": true,
@@ -443,12 +444,16 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Replace your deck with random Demons. Give them +2/+2.",
+    "rulesText": "Refill your deck with random Demons. Each Demon you draw gets +1/+1 more than the last.",
     "keywords": [],
     "effects": [
       {
         "trigger": "cast",
         "actions": [
+          {
+            "action": "refill-original-decks",
+            "player": "self"
+          },
           {
             "action": "transform-random",
             "target": {
@@ -463,15 +468,14 @@
             }
           },
           {
-            "action": "modify",
+            "action": "mark-draw-scaling",
             "target": {
               "controller": "self",
-              "type": "minion-card",
+              "type": "card",
               "selection": "all",
               "zone": "deck"
             },
-            "attack": 2,
-            "health": 2
+            "counter": "nether-portal-draw-buff"
           }
         ]
       }

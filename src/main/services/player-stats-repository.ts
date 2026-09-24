@@ -24,14 +24,25 @@ import {
 } from '../../shared/ipc/progression'
 import {
   createEmptyClassWinTotals,
+  parseConstructedMatchResult,
+  parseConstructedRankResultRequest,
+  parseConstructedRankSnapshot,
   parsePlayableClassId,
   parsePlayerStatsSnapshot,
   type ClassWinTotals,
+  type ConstructedRankSnapshot,
+  type ConstructedRankResultRequest,
   type PlayerStatsSnapshot
 } from '../../shared/ipc/player-stats'
+import {
+  applyConstructedResult,
+  applySeasonReset,
+  createInitialRankState,
+  type ConstructedRankState
+} from '../../game/ranking/constructed-ranking'
 import type { ClassId, DeckClass } from '../../game/content/cards'
 
-const PLAYER_STATS_FILE_VERSION = 4
+const PLAYER_STATS_FILE_VERSION = 5
 
 interface PersistedPlayerStats {
   readonly version: typeof PLAYER_STATS_FILE_VERSION
@@ -40,6 +51,8 @@ interface PersistedPlayerStats {
   readonly progression: ProgressionSnapshot
   readonly dustRewards: Readonly<Record<string, number>>
   readonly arenaRewards: Readonly<Record<string, ArenaRewardReceipt>>
+  readonly rank: ConstructedRankState
+  readonly rankResults: Readonly<Record<string, ConstructedRankResultRequest['result']>>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -50,10 +63,15 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error
 }
 
+function cloneRank(rank: ConstructedRankSnapshot): ConstructedRankSnapshot {
+  return { ...rank }
+}
+
 function cloneSnapshot(snapshot: PlayerStatsSnapshot): PlayerStatsSnapshot {
   return {
     winsByClass: { ...snapshot.winsByClass },
-    tavernBrawlWins: snapshot.tavernBrawlWins
+    tavernBrawlWins: snapshot.tavernBrawlWins,
+    rank: cloneRank(snapshot.rank)
   }
 }
 
@@ -62,9 +80,12 @@ export class PlayerStatsRepository {
   private progression: ProgressionSnapshot = { dust: 0, premiumPurchases: {} }
   private dustRewards: Record<string, number> = {}
   private arenaRewards: Record<string, ArenaRewardReceipt> = {}
+  private rankState: ConstructedRankState = createInitialRankState()
+  private rankResults: Record<string, ConstructedRankResultRequest['result']> = {}
   private snapshot: PlayerStatsSnapshot = {
     winsByClass: createEmptyClassWinTotals(),
-    tavernBrawlWins: 0
+    tavernBrawlWins: 0,
+    rank: createInitialRankState()
   }
   private loaded = false
   private loadPromise: Promise<void> | null = null
@@ -180,8 +201,43 @@ export class PlayerStatsRepository {
 
   async get(): Promise<PlayerStatsSnapshot> {
     await this.ensureLoaded()
-    await this.mutations.settled
-    return cloneSnapshot(this.snapshot)
+    return this.mutations.enqueue(async () => {
+      await this.refreshSeason()
+      return cloneSnapshot(this.snapshot)
+    })
+  }
+
+  /**
+   * Applies one constructed match result to the ladder. Results are
+   * idempotent: replaying the same match id never changes the rank again.
+   */
+  recordConstructedResult(
+    input: ConstructedRankResultRequest
+  ): Promise<PlayerStatsSnapshot> {
+    const request = parseConstructedRankResultRequest(input)
+    return this.mutations.enqueue(async () => {
+      await this.ensureLoaded()
+      const previous = Object.hasOwn(this.rankResults, request.matchId)
+        ? this.rankResults[request.matchId]
+        : undefined
+      if (previous !== undefined) return cloneSnapshot(this.snapshot)
+      await this.refreshSeason()
+      const nextRank = applyConstructedResult(this.rankState, request.result)
+      const next: PlayerStatsSnapshot = { ...this.snapshot, rank: cloneRank(nextRank) }
+      const receipts = { ...this.rankResults, [request.matchId]: request.result }
+      await this.persist(
+        next,
+        this.progression,
+        this.dustRewards,
+        this.arenaRewards,
+        nextRank,
+        receipts
+      )
+      this.rankState = nextRank
+      this.rankResults = receipts
+      this.snapshot = next
+      return cloneSnapshot(next)
+    })
   }
 
   setDust(amount: number): Promise<ProgressionSnapshot> {
@@ -234,6 +290,48 @@ export class PlayerStatsRepository {
     })
   }
 
+  /**
+   * Overrides the constructed rank outright. Development-only support for the
+   * dev menu's Set Rank entry.
+   */
+  setRank(input: ConstructedRankSnapshot): Promise<PlayerStatsSnapshot> {
+    const rank = parseConstructedRankSnapshot(input)
+    return this.mutations.enqueue(async () => {
+      await this.ensureLoaded()
+      const next: PlayerStatsSnapshot = { ...this.snapshot, rank: cloneRank(rank) }
+      await this.persist(
+        next,
+        this.progression,
+        this.dustRewards,
+        this.arenaRewards,
+        rank,
+        this.rankResults
+      )
+      this.rankState = rank
+      this.snapshot = next
+      return cloneSnapshot(next)
+    })
+  }
+
+  /**
+   * Applies the monthly season reset when the persisted rank belongs to a
+   * previous season, sending the player back to rank 25.
+   */
+  private async refreshSeason(): Promise<void> {
+    const next = applySeasonReset(this.rankState)
+    if (next === this.rankState) return
+    await this.persist(
+      this.snapshot,
+      this.progression,
+      this.dustRewards,
+      this.arenaRewards,
+      next,
+      this.rankResults
+    )
+    this.rankState = next
+    this.snapshot = { ...this.snapshot, rank: cloneRank(next) }
+  }
+
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return
     if (this.loadPromise) return this.loadPromise
@@ -272,10 +370,16 @@ export class PlayerStatsRepository {
       ) {
         throw new Error('Unsupported player stats version')
       }
+      const rank =
+        parsed.version === PLAYER_STATS_FILE_VERSION
+          ? parseConstructedRankSnapshot(parsed.rank)
+          : createInitialRankState()
       this.snapshot = parsePlayerStatsSnapshot({
         winsByClass: parsed.winsByClass,
-        tavernBrawlWins: parsed.version === 1 ? 0 : parsed.tavernBrawlWins
+        tavernBrawlWins: parsed.version === 1 ? 0 : parsed.tavernBrawlWins,
+        rank
       })
+      this.rankState = rank
       if (parsed.version === 3 || parsed.version === PLAYER_STATS_FILE_VERSION) {
         const progression = parseProgressionSnapshot(parsed.progression)
         if (!isRecord(parsed.dustRewards))
@@ -302,6 +406,17 @@ export class PlayerStatsRepository {
           receipts[id] = receipt
         }
         this.arenaRewards = receipts
+        if (!isRecord(parsed.rankResults)) {
+          throw new Error('Invalid constructed rank receipts')
+        }
+        const rankReceipts: Record<string, ConstructedRankResultRequest['result']> = {}
+        for (const [id, result] of Object.entries(parsed.rankResults)) {
+          if (!/^[a-zA-Z0-9-]{1,100}$/.test(id)) {
+            throw new Error('Invalid constructed rank receipt ID.')
+          }
+          rankReceipts[id] = parseConstructedMatchResult(result)
+        }
+        this.rankResults = rankReceipts
       }
     } catch (error) {
       // Future-version saves must not be replaced by an older application.
@@ -312,7 +427,13 @@ export class PlayerStatsRepository {
       )
         throw error
       await this.preserveCorruptSave()
-      this.snapshot = { winsByClass: createEmptyClassWinTotals(), tavernBrawlWins: 0 }
+      this.snapshot = {
+        winsByClass: createEmptyClassWinTotals(),
+        tavernBrawlWins: 0,
+        rank: createInitialRankState()
+      }
+      this.rankState = createInitialRankState()
+      this.rankResults = {}
       this.progression = { dust: 0, premiumPurchases: {} }
       this.dustRewards = {}
       this.arenaRewards = {}
@@ -328,7 +449,10 @@ export class PlayerStatsRepository {
     snapshot: PlayerStatsSnapshot,
     progression = this.progression,
     dustRewards = this.dustRewards,
-    arenaRewards = this.arenaRewards
+    arenaRewards = this.arenaRewards,
+    rank: ConstructedRankState = this.rankState,
+    rankResults: Readonly<Record<string, ConstructedRankResultRequest['result']>> = this
+      .rankResults
   ): Promise<void> {
     const payload: PersistedPlayerStats = {
       version: PLAYER_STATS_FILE_VERSION,
@@ -336,7 +460,9 @@ export class PlayerStatsRepository {
       tavernBrawlWins: snapshot.tavernBrawlWins,
       progression,
       dustRewards,
-      arenaRewards
+      arenaRewards,
+      rank,
+      rankResults
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
     await replaceFileAtomically(

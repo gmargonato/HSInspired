@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { createSeededRng } from '../rng'
+import { createOpeningMatch } from '../opening-match'
 import { createAiFixture } from '../testing/ai-scenario-builder'
 import { createFairHypothesisCheckpoint } from './fair-hypothesis-checkpoint'
 
@@ -92,6 +94,35 @@ describe('fair Expert AI checkpoints', () => {
         (player) => player.participantId === fixture.localParticipantId
       )?.originalDeckCardIds
     )
+  })
+
+  it('re-samples the generated Coin without counting it as an original-deck card', () => {
+    const fixture = createAiFixture({
+      seed: 0x5eed,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'garrosh',
+      aiDeck: ['basic_acidic_swamp_ooze'],
+      opponentDeck: ['basic_acidic_swamp_ooze']
+    })
+    const opening = createOpeningMatch(
+      fixture.setup,
+      fixture.decks,
+      createSeededRng(fixture.setup.seed)
+    )
+    const liveCheckpoint = opening.getCheckpoint()
+    const hiddenPlayer = liveCheckpoint.state.players.find(
+      (player) => player.participantId === fixture.aiParticipantId
+    )!
+    expect(hiddenPlayer.hand.some((card) => card.cardId === 'basic_the_coin')).toBe(true)
+
+    const firstWorld = createFairHypothesisCheckpoint(
+      liveCheckpoint,
+      fixture.localParticipantId,
+      0x1234
+    )
+    expect(() =>
+      createFairHypothesisCheckpoint(firstWorld, fixture.localParticipantId, 0x1235)
+    ).not.toThrow()
   })
 
   it('uses visible archetype cards to weight hidden deck hypotheses', () => {

@@ -35,6 +35,8 @@ export interface OpeningCard {
   readonly attack?: number
   readonly health?: number
   readonly enchantments?: readonly RuntimeEnchantment[]
+  /** Draw-scaling marker: when drawn, buff by the named counter's current value, then increment it. */
+  readonly scalingCounter?: string
   /** Owner-only Fatespinner choice retained while it is bounced to hand. */
   readonly concealedDeathrattleChoice?: number
 }
@@ -237,6 +239,8 @@ export interface MinionCardMovement {
 }
 
 export interface EffectDomainEvent {
+  /** Presentation-only identity of one summon-producing action execution. */
+  readonly summonGroupId?: string
   readonly type: 'effect-resolved'
   readonly revision: number
   readonly sourceInstanceId: string
@@ -298,6 +302,8 @@ export interface DeathBatchCompletedEvent {
 
 /** A generated minion entering play before its summon-trigger phase begins. */
 export interface MinionSummonedEvent {
+  /** Presentation-only identity of one summon-producing action execution. */
+  readonly summonGroupId?: string
   readonly type: 'minion-summoned'
   readonly participantId: PlayerId
   readonly minion: BoardMinion
@@ -507,6 +513,8 @@ export interface OpeningPlayerState {
   readonly overload?: number
   /** The next spell played this turn consumes Health instead of Mana. */
   readonly nextSpellCostsHealth?: boolean
+  /** The next Murloc played this turn consumes Health instead of Mana. */
+  readonly nextMurlocCostsHealth?: boolean
   /** One-shot discounts that apply when the next matching card is played. */
   readonly pendingCostModifiers?: readonly PendingCostModifier[]
   /** Turn-scoped count of Lock and Load rewards. */
@@ -1202,6 +1210,8 @@ export interface HistoryActionOutcome {
  * what the player saw in their action history.
  */
 export interface HistoryActionResolvedEvent {
+  /** Presentation-only identity of one summon-producing action execution. */
+  readonly summonGroupId?: string
   readonly entryId?: string
   readonly parentActionId?: string
   readonly append?: boolean

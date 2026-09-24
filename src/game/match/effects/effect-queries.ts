@@ -325,6 +325,21 @@ export class EffectQueries {
           ) === value
         )
       else if (key === 'rarity') condition = definition?.rarity === value
+      else if (key === 'rarityIn')
+        condition =
+          Array.isArray(value) &&
+          typeof definition?.rarity === 'string' &&
+          value.includes(definition.rarity)
+      else if (key === 'expansionId') condition = definition?.expansionId === value
+      else if (key === 'excludeInHand') {
+        const hand =
+          value === true
+            ? this.context.player(frame.controllerId).hand
+            : []
+        condition =
+          value !== true ||
+          !hand.some((card) => card.cardId === ref.cardId)
+      }
       else if (key === 'sparePart')
         condition =
           definition?.id.includes('spare') === value ||

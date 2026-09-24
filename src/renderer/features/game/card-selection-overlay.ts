@@ -12,6 +12,7 @@ import { GameCardSlot } from './game-card-slot'
 import { BoardShadowLayer } from '../../rendering/shadows/board-shadow-layer'
 import { attachShadow } from '../../rendering/shadows/shadow-caster'
 import { REMOTE_TIMING } from './game-presentation-timing'
+import type { CardPlayAnimation } from './card-play-animation'
 
 export interface SelectedCardSlot {
   readonly card: OpeningCard
@@ -37,7 +38,9 @@ export interface CardSelectionOverlayOptions {
     sourceCardInstanceId: string
   ) => boolean
   readonly onSelect: (card: OpeningCard) => void
-  readonly onChooseOption: (choice: number) => void
+  readonly onChooseOption: (choice: number, animated?: boolean) => void
+  readonly choiceAnimation?: CardPlayAnimation
+  readonly animateChoice?: (sourceCardId: OpeningCard['cardId']) => boolean
   readonly isInputBlocked?: () => boolean
 }
 
@@ -63,6 +66,7 @@ export class CardSelectionOverlay extends Container {
   private boardVisible = false
   private dimming = true
   private selecting = false
+  private animateSelection = false
   private selected: SelectedCardSlot | null = null
   private readonly choicesByInstanceId = new Map<string, CardChoiceOption>()
 
@@ -280,16 +284,23 @@ export class CardSelectionOverlay extends Container {
       zone: 'revealed' as const,
       revealed: true
     }))
-    await this.showCards(cards, options, sourceCardInstanceId)
+    await this.showCards(
+      cards,
+      options,
+      sourceCardInstanceId,
+      this.options.animateChoice?.(sourceCardId) ?? false
+    )
   }
 
   private async showCards(
     candidates: readonly OpeningCard[],
     choiceOptions: readonly CardChoiceOption[] = [],
-    sourceInstanceId?: string
+    sourceInstanceId?: string,
+    animateSelection = false
   ): Promise<void> {
     if (this.destroyed) return
     this.clear()
+    this.animateSelection = animateSelection
     const revision = this.requestRevision
     choiceOptions.forEach((option, index) => {
       const card = candidates[index]
@@ -426,10 +437,19 @@ export class CardSelectionOverlay extends Container {
     if (this.visible) this.shadowLayer.update(deltaMS)
   }
 
+  pauseAnimations(): void {
+    this.animationScope.pause()
+  }
+
+  resumeAnimations(): void {
+    this.animationScope.resume()
+  }
+
   clear(): void {
     if (this.destroyed) return
     this.requestRevision += 1
     this.animationScope.kill()
+    this.animateSelection = false
     for (const entry of this.entries) entry.view.destroy({ children: true })
     this.entries.length = 0
     for (const entry of this.remoteEntries) {
@@ -474,8 +494,38 @@ export class CardSelectionOverlay extends Container {
     }
     this.selected = { card, slot, globalPosition: slot.getGlobalPosition() }
     const choice = this.choicesByInstanceId.get(card.instanceId)
-    if (choice) this.options.onChooseOption(choice.choice)
+    if (choice) this.confirmChoice(choice.choice, slot)
     else this.options.onSelect(card)
+  }
+
+  selectChoice(choice: number): void {
+    const entry = this.entries.find(
+      (entry) =>
+        entry.card &&
+        this.choicesByInstanceId.get(entry.card.instanceId)?.choice === choice
+    )
+    if (entry?.card && entry.slot) this.choose(entry.card, entry.slot)
+  }
+
+  private confirmChoice(choice: number, slot: GameCardSlot): void {
+    const animation = this.options.choiceAnimation
+    if (this.animateSelection && animation) {
+      this.animationScope.kill(slot)
+      slot.alpha = 1
+      slot.setMulliganInteractionEnabled(false)
+      this.entries.splice(
+        this.entries.findIndex((entry) => entry.slot === slot),
+        1
+      )
+      this.selected = null
+      void animation.presentChoice(slot.card, slot).catch((error: unknown) => {
+        console.error('[CardSelectionOverlay] failed to animate choice', error)
+      })
+      this.clear()
+      this.options.onChooseOption(choice, true)
+      return
+    }
+    this.options.onChooseOption(choice)
   }
 
   private chooseOption(option: CardChoiceOption, view: Container): void {

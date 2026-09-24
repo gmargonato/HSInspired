@@ -1,4 +1,9 @@
 import { cpus, platform, release, totalmem } from 'node:os'
+import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import { readFileSync, readdirSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   generateConstructedOpponent,
@@ -13,21 +18,28 @@ import {
   type PlayerId,
   type TurnMatchCommand
 } from '../../../game/match'
-import { createFairHypothesisCheckpoint } from '../../../game/match/ai/fair-hypothesis-checkpoint'
 import { canonicalCommandKey } from '../../../game/match/ai/legal-commands'
-import type { AiDecisionRequest } from '../../../shared/ipc/ai'
-import { sameAiIntent, type AiActionIntent } from '../../../shared/ipc/ai-deliberation'
 import {
-  EXPERT_AI_DECISION_SEARCH_BUDGET_MS,
-  EXPERT_AI_DISPATCH_RESERVE_MS,
-  EXPERT_AI_PRESENTATION_RESERVE_MS,
-  EXPERT_AI_SEARCH_BUDGET_MS,
+  AiRequestError,
+  type AiDecisionRequest,
+  type AiDecisionResponse
+} from '../../../shared/ipc/ai'
+import {
+  expertAiBudgetForTurn,
   EXPERT_AI_TURN_BUDGET_MS
 } from './expert-ai-worker-protocol'
 import { aiActions } from './ai-context'
 import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
-import { aiActionIntent } from './ai-action-intent'
-import { chooseExpertConsensus, type ExpertEvaluatedWorld } from './expert-ai-consensus'
+import { forcedLegalCommand } from './ai-forced-command'
+import {
+  ExpertAiDecisionApi,
+  invalidatesExpertContinuation
+} from './expert-ai-decision-api'
+import { runExpertAiWorkerDecision } from './expert-ai.worker'
+import type {
+  ExpertAiWorkerRequest,
+  ExpertAiWorkerResponse
+} from './expert-ai-worker-protocol'
 import { GameBoardSession } from './game-board-session'
 import { LocalAiDecisionApi, type LocalAiDecisionTrace } from './local-ai-decision-api'
 
@@ -39,6 +51,9 @@ const FIRST_ID = asPlayerId('benchmark-player-one')
 const SECOND_ID = asPlayerId('benchmark-player-two')
 const DEFAULT_TURN_BUDGET_MS = EXPERT_AI_TURN_BUDGET_MS
 const EXPERT_MULLIGAN_BUDGET_MS = 3_000
+// The normal 24.5-second search allowance evaluates two worlds in parallel.
+// The headless benchmark evaluates those same worlds serially in Vitest.
+const SERIAL_BENCHMARK_WORKER_TIMEOUT_MULTIPLIER = 2
 
 interface BenchmarkOptions {
   readonly games: number
@@ -56,6 +71,14 @@ interface MutableProfileMetrics {
   draws: number
   cappedGames: number
   decisions: number
+  forcedActionCommands: number
+  searchedActionCommands: number
+  continuedActionCommands: number
+  fallbackActionCommands: number
+  fallbackTimeoutActions: number
+  fallbackWorkerFailureActions: number
+  fallbackInvalidActions: number
+  continuationInvalidations: number
   commands: number
   endTurns: number
   worldsEvaluated: number
@@ -64,11 +87,11 @@ interface MutableProfileMetrics {
   continuedLineFallbacks: number
   failedFallbacks: number
   failedDecisions: number
+  decisionFailureMessages: string[]
+  timeoutMessages: string[]
   invalidSelections: number
   rejectedCommands: number
   timedOutSearches: number
-  continuationPreferencesOffered: number
-  continuationPreferencesMatched: number
   evaluatedCandidates: number
   mctsIterations: number
   mctsOpponentActionsSimulated: number
@@ -94,8 +117,18 @@ interface MutableProfileMetrics {
   readonly responseActionGenerationMs: number[]
   readonly responseReplayMs: number[]
   readonly decisionMs: number[]
+  readonly workerDecisionMs: number[]
   readonly turnMs: number[]
+  readonly workerTurnMs: number[]
   readonly turnActions: number[]
+  readonly turnBudgetMisses: {
+    readonly participantId: string
+    readonly turn: number
+    readonly durationMs: number
+  }[]
+  readonly worldIterations: number[]
+  readonly rootActionCoverage: number[]
+  readonly topRootActionShare: number[]
 }
 
 interface MatchResult {
@@ -105,11 +138,34 @@ interface MatchResult {
     readonly id: string
     readonly heroId: string
     readonly archetype: string
+    readonly cards: readonly { readonly cardId: string; readonly count: number }[]
+    readonly sha256: string
   }[]
   readonly status: 'completed' | 'draw' | 'capped'
   readonly winner: LocalProfile | null
   readonly actions: number
   readonly turnNumber: number
+  readonly invalidSelections: number
+  readonly rejectedCommands: number
+}
+
+interface InvalidSelectionDiagnostic {
+  readonly gameIndex: number
+  readonly seed: number
+  readonly profile: LocalProfile
+  readonly phase: 'mulligan' | 'action'
+  readonly turnNumber: number
+  readonly revision: number
+  readonly participantId: string
+  readonly source: 'no-command' | 'rejected-command'
+  readonly actionSource: DecisionOutcome['actionSource'] | null
+  readonly fallbackKind: DecisionOutcome['fallbackKind'] | null
+  readonly selectedActionId: string | null
+  readonly selectedDescription: string | null
+  readonly failureMessage: string | null
+  readonly attemptedCommand: TurnMatchCommand | null
+  readonly rejectionCode?: string
+  readonly rejectionMessage?: string
 }
 
 interface ExpertDecisionDiagnostic {
@@ -157,6 +213,10 @@ interface ExpertDecisionDiagnostic {
   readonly selectedCommand: TurnMatchCommand | null
   readonly executedCommand: TurnMatchCommand
   readonly usedFallback: boolean
+  readonly actionSource: DecisionOutcome['actionSource'] | null
+  readonly fallbackKind: DecisionOutcome['fallbackKind'] | null
+  readonly timedOut: boolean
+  readonly failureMessage: string | null
   readonly worlds: readonly {
     readonly chosenActionId: string | null
     readonly chosenCandidate: {
@@ -213,11 +273,12 @@ interface DecisionOutcome {
   readonly traces: readonly LocalAiDecisionTrace[]
   readonly worlds: number
   readonly timedOut: boolean
+  readonly selectedActionId?: string | null
   readonly selectedDescription?: string | null
-  readonly plannedActionIntents?: readonly AiActionIntent[]
-  readonly continuedLineFallback?: boolean
-  readonly continuationPreferenceOffered?: boolean
-  readonly continuationPreferenceMatched?: boolean
+  readonly actionSource?: 'forced' | 'search' | 'continuation' | 'fallback'
+  readonly fallbackKind?: 'timeout' | 'worker-failure' | 'invalid' | 'continued-line'
+  readonly workerDurationMs?: number
+  readonly failureMessage?: string
   readonly failed?: boolean
 }
 
@@ -226,20 +287,132 @@ interface DecisionRequestOptions {
   readonly profile: LocalProfile
   readonly participantId: PlayerId
   readonly checkpoint: OpeningMatchCheckpoint
-  readonly remainingTurnMs: number
-  readonly remainingSearchMs: number
   readonly workBudget?: number
-  readonly preferredContinuation?: AiActionIntent
-  readonly exhaustedBudgetContinuation?: readonly AiActionIntent[]
   readonly phase: 'action' | 'mulligan'
   readonly liveLegalCommands?: readonly TurnMatchCommand[]
+  readonly liveSession?: GameBoardSession
+  readonly expertRuntime?: ExpertBenchmarkRuntime
+  readonly planBeforeAction?: boolean
 }
 
-interface BenchmarkContinuation {
-  readonly turn: number
-  readonly expectedRevision: number
-  readonly nextIndex: number
-  readonly actions: readonly AiActionIntent[]
+class InlineExpertWorker {
+  private readonly listeners = new Map<
+    string,
+    Set<EventListenerOrEventListenerObject>
+  >()
+  private readonly cancelled = new Set<string>()
+  private readonly activeApis = new Map<string, LocalAiDecisionApi[]>()
+  private readonly traces: LocalAiDecisionTrace[] = []
+
+  constructor(private readonly clock: BenchmarkWorkerClock) {}
+
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+    const listeners = this.listeners.get(type) ?? new Set()
+    listeners.add(listener)
+    this.listeners.set(type, listeners)
+  }
+
+  postMessage(message: ExpertAiWorkerRequest): void {
+    if (message.type === 'cancel') {
+      const requestId = message.identity.requestId
+      this.cancelled.add(requestId)
+      for (const api of this.activeApis.get(requestId) ?? [])
+        void api.cancel(message.identity)
+      return
+    }
+
+    const requestId = message.request.requestId
+    const apis: LocalAiDecisionApi[] = []
+    const firstTraceIndex = this.traces.length
+    this.activeApis.set(requestId, apis)
+    this.cancelled.delete(requestId)
+    void runExpertAiWorkerDecision(message, {
+      isCancelled: () => this.cancelled.has(requestId),
+      onApiCreated: (api) => apis.push(api),
+      onWorldCompleted: (_response, trace) => {
+        if (trace) this.traces.push(trace)
+      }
+    })
+      .then((response) => {
+        if (!response || this.cancelled.has(requestId)) return
+        const workerDurationMs = Math.max(
+          0,
+          ...this.traces.slice(firstTraceIndex).map((trace) => trace.durationMs)
+        )
+        this.clock.advance(workerDurationMs)
+        this.emit({
+          type: 'decision',
+          requestId,
+          response: { ...response, durationMs: workerDurationMs }
+        })
+      })
+      .catch((error: unknown) => {
+        if (this.cancelled.has(requestId)) return
+        this.emit({
+          type: 'failure',
+          requestId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      })
+      .finally(() => {
+        this.activeApis.delete(requestId)
+        this.cancelled.delete(requestId)
+      })
+  }
+
+  takeTraces(): LocalAiDecisionTrace[] {
+    return this.traces.splice(0)
+  }
+
+  terminate(): void {
+    for (const requestId of this.activeApis.keys()) this.cancelled.add(requestId)
+    this.listeners.clear()
+  }
+
+  private emit(message: ExpertAiWorkerResponse): void {
+    const event = { data: message } as MessageEvent<ExpertAiWorkerResponse>
+    for (const listener of this.listeners.get('message') ?? []) {
+      if (typeof listener === 'function') listener(event as MessageEvent)
+      else listener.handleEvent(event as MessageEvent)
+    }
+  }
+}
+
+interface ExpertBenchmarkRuntime {
+  readonly api: ExpertAiDecisionApi
+  readonly takeTraces: () => LocalAiDecisionTrace[]
+  readonly now: () => number
+}
+
+class BenchmarkWorkerClock {
+  private value = performance.now()
+
+  now = (): number => this.value
+
+  advance(milliseconds: number): void {
+    if (Number.isFinite(milliseconds)) this.value += Math.max(0, milliseconds)
+  }
+}
+
+function createExpertBenchmarkRuntime(
+  session: GameBoardSession,
+  perspectiveParticipantId: PlayerId,
+  turnBudgetMs: number
+): ExpertBenchmarkRuntime {
+  let worker: InlineExpertWorker | null = null
+  const clock = new BenchmarkWorkerClock()
+  const api = new ExpertAiDecisionApi(
+    session,
+    () => {
+      worker = new InlineExpertWorker(clock)
+      return worker as unknown as Worker
+    },
+    clock.now,
+    perspectiveParticipantId,
+    SERIAL_BENCHMARK_WORKER_TIMEOUT_MULTIPLIER,
+    expertAiBudgetForTurn(turnBudgetMs)
+  )
+  return { api, takeTraces: () => worker?.takeTraces() ?? [], now: clock.now }
 }
 
 function emptyProfileMetrics(): MutableProfileMetrics {
@@ -249,6 +422,14 @@ function emptyProfileMetrics(): MutableProfileMetrics {
     draws: 0,
     cappedGames: 0,
     decisions: 0,
+    forcedActionCommands: 0,
+    searchedActionCommands: 0,
+    continuedActionCommands: 0,
+    fallbackActionCommands: 0,
+    fallbackTimeoutActions: 0,
+    fallbackWorkerFailureActions: 0,
+    fallbackInvalidActions: 0,
+    continuationInvalidations: 0,
     commands: 0,
     endTurns: 0,
     worldsEvaluated: 0,
@@ -257,11 +438,11 @@ function emptyProfileMetrics(): MutableProfileMetrics {
     continuedLineFallbacks: 0,
     failedFallbacks: 0,
     failedDecisions: 0,
+    decisionFailureMessages: [],
+    timeoutMessages: [],
     invalidSelections: 0,
     rejectedCommands: 0,
     timedOutSearches: 0,
-    continuationPreferencesOffered: 0,
-    continuationPreferencesMatched: 0,
     evaluatedCandidates: 0,
     mctsIterations: 0,
     mctsOpponentActionsSimulated: 0,
@@ -298,8 +479,14 @@ function emptyProfileMetrics(): MutableProfileMetrics {
     responseActionGenerationMs: [],
     responseReplayMs: [],
     decisionMs: [],
+    workerDecisionMs: [],
     turnMs: [],
-    turnActions: []
+    workerTurnMs: [],
+    turnActions: [],
+    turnBudgetMisses: [],
+    worldIterations: [],
+    rootActionCoverage: [],
+    topRootActionShare: []
   }
 }
 
@@ -309,6 +496,151 @@ function percentile(values: readonly number[], percentileValue: number): number 
   return Math.round(
     sorted[Math.max(0, Math.ceil(sorted.length * percentileValue) - 1)]!
   )
+}
+
+const REPOSITORY_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
+
+function sourceProvenance() {
+  const sourceRoots = [
+    'src/renderer/features/game',
+    'src/game/match',
+    'src/game/content/cards',
+    'src/game/decks/opponent-generator.ts'
+  ]
+  const files: string[] = []
+  const visit = (absolutePath: string): void => {
+    const entries = readdirSync(absolutePath, { withFileTypes: true })
+    for (const entry of entries) {
+      const path = resolve(absolutePath, entry.name)
+      if (entry.isDirectory()) visit(path)
+      else if (
+        /\.(ts|tsx|json)$/.test(entry.name) &&
+        !/\.(test|spec)\.tsx?$/.test(entry.name) &&
+        !entry.name.endsWith('.d.ts')
+      )
+        files.push(path)
+    }
+  }
+  for (const relativePath of sourceRoots) {
+    const absolutePath = resolve(REPOSITORY_ROOT, relativePath)
+    if (relativePath.endsWith('.ts')) files.push(absolutePath)
+    else visit(absolutePath)
+  }
+  files.sort()
+  const hash = createHash('sha256')
+  for (const path of files) {
+    hash.update(path.slice(REPOSITORY_ROOT.length).replaceAll('\\', '/') + '\0')
+    hash.update(readFileSync(path))
+  }
+  return {
+    gitHead: execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: REPOSITORY_ROOT,
+      encoding: 'utf8'
+    }).trim(),
+    dirtyFiles: execFileSync('git', ['status', '--short'], {
+      cwd: REPOSITORY_ROOT,
+      encoding: 'utf8'
+    })
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean),
+    sourceFileCount: files.length,
+    sourceSha256: hash.digest('hex')
+  }
+}
+
+function deckManifest(deck: {
+  readonly id: string
+  readonly heroId: string
+  readonly cards: Readonly<Record<string, number>>
+}) {
+  const cards = Object.entries(deck.cards)
+    .map(([cardId, count]) => ({ cardId, count }))
+    .sort((left, right) => left.cardId.localeCompare(right.cardId))
+  const sha256 = createHash('sha256')
+    .update(JSON.stringify({ heroId: deck.heroId, cards }))
+    .digest('hex')
+  return { id: deck.id, heroId: deck.heroId, cards, sha256 }
+}
+
+function studentTCritical95(sampleCount: number): number {
+  const table: Record<number, number> = {
+    1: 12.706,
+    2: 4.303,
+    3: 3.182,
+    4: 2.776,
+    5: 2.571,
+    6: 2.447,
+    7: 2.365,
+    8: 2.306,
+    9: 2.262,
+    10: 2.228
+  }
+  const degreesOfFreedom = sampleCount - 1
+  if (degreesOfFreedom <= 0) return Number.POSITIVE_INFINITY
+  if (table[degreesOfFreedom]) return table[degreesOfFreedom]!
+  const z = 1.959963984540054
+  const df = degreesOfFreedom
+  return (
+    z +
+    (z ** 3 + z) / (4 * df) +
+    (5 * z ** 5 + 16 * z ** 3 + 3 * z) / (96 * df ** 2) +
+    (3 * z ** 7 + 19 * z ** 5 + 17 * z ** 3 - 15 * z) / (384 * df ** 3)
+  )
+}
+
+function pairedWinRate(matches: readonly MatchResult[]) {
+  const bySeed = new Map<number, MatchResult[]>()
+  for (const match of matches) {
+    const pair = bySeed.get(match.seed) ?? []
+    pair.push(match)
+    bySeed.set(match.seed, pair)
+  }
+  const scores: number[] = []
+  let omittedPairs = 0
+  for (const pair of bySeed.values()) {
+    if (
+      pair.length !== 2 ||
+      pair.some((match) => match.status === 'capped') ||
+      pair[0]!.expertPlayer === pair[1]!.expertPlayer
+    ) {
+      omittedPairs++
+      continue
+    }
+    scores.push(
+      pair.reduce(
+        (total, match) =>
+          total + (match.winner === 'expert' ? 1 : match.winner === null ? 0.5 : 0),
+        0
+      ) / pair.length
+    )
+  }
+  const mean = scores.length
+    ? scores.reduce((total, score) => total + score, 0) / scores.length
+    : null
+  const variance =
+    scores.length > 1 && mean !== null
+      ? scores.reduce((total, score) => total + (score - mean) ** 2, 0) /
+        (scores.length - 1)
+      : null
+  const margin =
+    mean !== null && variance !== null
+      ? (studentTCritical95(scores.length) * Math.sqrt(variance)) /
+        Math.sqrt(scores.length)
+      : null
+  return {
+    pairedSeedCount: scores.length,
+    omittedPairCount: omittedPairs,
+    pointEstimate: mean,
+    confidence95:
+      margin === null
+        ? null
+        : {
+            lower: Math.max(0, mean! - margin),
+            upper: Math.min(1, mean! + margin),
+            method: 'Student-t interval over paired seat-rotated seed scores.'
+          }
+  }
 }
 
 function latencySummary(values: readonly number[]) {
@@ -331,7 +663,30 @@ function countSummary(values: readonly number[]) {
       : null,
     median: percentile(values, 0.5),
     p95: percentile(values, 0.95),
+    min: values.length ? Math.min(...values) : null,
     max: values.length ? Math.max(...values) : null
+  }
+}
+
+function ratioSummary(values: readonly number[]) {
+  const sorted = [...values].sort((left, right) => left - right)
+  const at = (fraction: number): number | null =>
+    sorted.length
+      ? Math.round(
+          sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)]! * 1_000
+        ) / 1_000
+      : null
+  return {
+    count: sorted.length,
+    mean: sorted.length
+      ? Math.round(
+          (sorted.reduce((total, value) => total + value, 0) / sorted.length) * 1_000
+        ) / 1_000
+      : null,
+    p50: at(0.5),
+    p95: at(0.95),
+    min: sorted.length ? Math.round(sorted[0]! * 1_000) / 1_000 : null,
+    max: sorted.length ? Math.round(sorted[sorted.length - 1]! * 1_000) / 1_000 : null
   }
 }
 
@@ -346,37 +701,6 @@ function requestSeed(request: AiDecisionRequest): number {
   for (let index = 0; index < input.length; index++)
     hash = Math.imul(hash ^ input.charCodeAt(index), 0x01000193)
   return hash >>> 0
-}
-
-function nextWorldSeed(seed: number, index: number): number {
-  return (seed + Math.imul(index + 1, 0x9e3779b9)) >>> 0
-}
-
-function expertSearchBudget(
-  remainingTurnMs: number,
-  remainingSearchMs: number
-): {
-  readonly searchBudgetMs: number
-  readonly worldCount: number
-} {
-  const searchBudgetMs = Math.max(
-    0,
-    Math.min(
-      EXPERT_AI_SEARCH_BUDGET_MS,
-      EXPERT_AI_DECISION_SEARCH_BUDGET_MS,
-      remainingSearchMs,
-      remainingTurnMs -
-        EXPERT_AI_PRESENTATION_RESERVE_MS -
-        EXPERT_AI_DISPATCH_RESERVE_MS
-    )
-  )
-  return {
-    searchBudgetMs,
-    worldCount: Math.max(
-      1,
-      Math.min(3, Math.floor(Math.max(0, searchBudgetMs - 1_000) / 5_000) + 1)
-    )
-  }
 }
 
 function swapPerspective(
@@ -430,20 +754,173 @@ function legalCommands(session: GameBoardSession, participantId: PlayerId) {
   )
 }
 
+async function decideExpertProfile(
+  options: DecisionRequestOptions
+): Promise<DecisionOutcome> {
+  const runtime = options.expertRuntime
+  const session = options.liveSession
+  if (!runtime || !session)
+    throw new Error('Expert benchmark requires the live worker/API runtime.')
+
+  if (options.phase === 'action') {
+    const legal = options.liveLegalCommands ?? []
+    const forced = forcedLegalCommand(legal)
+    if (forced)
+      return {
+        command: forced,
+        traces: [],
+        worlds: 0,
+        timedOut: false,
+        actionSource: 'forced'
+      }
+  }
+
+  const actionSourceFrom = (response: AiDecisionResponse) => {
+    if (response.finishReason === 'expert-continuation-fallback')
+      return 'fallback' as const
+    if (
+      response.finishReason === 'expert-continuation' ||
+      response.finishReason === 'expert-plan-commit-cache'
+    )
+      return 'continuation' as const
+    return 'search' as const
+  }
+
+  try {
+    if (options.phase === 'mulligan') {
+      const response = await runtime.api.decide(options.request)
+      const traces = runtime.takeTraces()
+      const choice = response.choice
+      const command =
+        'replace' in choice
+          ? {
+              type: 'confirm-mulligan' as const,
+              participantId: options.participantId,
+              replaceInstanceIds: [...choice.replace]
+            }
+          : null
+      return {
+        command,
+        traces,
+        worlds: traces.length,
+        timedOut: false,
+        workerDurationMs: response.durationMs,
+        failed: !command
+      }
+    }
+
+    const liveLegal = options.liveLegalCommands ?? []
+    const actions = aiActions(session, liveLegal, options.participantId)
+    const request: AiDecisionRequest = {
+      ...options.request,
+      phase: 'action',
+      actionIds: actions.map((action) => action.id)
+    }
+    let response: AiDecisionResponse
+    let actionSource: DecisionOutcome['actionSource']
+    let traces: LocalAiDecisionTrace[] = []
+    let workerDurationMs = 0
+
+    if (options.planBeforeAction) {
+      const planResponse = await runtime.api.decide({ ...request, phase: 'plan' })
+      traces = runtime.takeTraces()
+      workerDurationMs = planResponse.durationMs
+      if (!('plan' in planResponse.choice))
+        throw new Error('Expert planning returned an executable action.')
+      response = await runtime.api.decide(request)
+      actionSource = actionSourceFrom(planResponse)
+    } else {
+      response = await runtime.api.decide(request)
+      traces = runtime.takeTraces()
+      workerDurationMs = response.durationMs
+      actionSource = actionSourceFrom(response)
+    }
+
+    if (!('actionId' in response.choice))
+      return {
+        command: null,
+        traces,
+        worlds: traces.length,
+        timedOut: false,
+        actionSource: 'fallback',
+        fallbackKind: 'invalid',
+        selectedActionId: null,
+        selectedDescription: response.reason,
+        failureMessage: 'Expert action response did not contain an actionId.'
+      }
+    const selectedActionId = response.choice.actionId
+    const selected = actions.find((action) => action.id === selectedActionId)
+    if (
+      !selected ||
+      !liveLegal.some(
+        (command) =>
+          canonicalCommandKey(command) === canonicalCommandKey(selected.command)
+      )
+    )
+      return {
+        command: null,
+        traces,
+        worlds: traces.length,
+        timedOut: false,
+        actionSource: 'fallback',
+        fallbackKind: 'invalid',
+        selectedActionId,
+        selectedDescription: selected?.description ?? null,
+        failureMessage: selected
+          ? 'Expert selected a command that was absent from the live legal set.'
+          : `Expert selected unknown action id ${selectedActionId}.`
+      }
+
+    return {
+      command: selected.command,
+      traces,
+      worlds: traces.length,
+      timedOut: false,
+      selectedActionId,
+      selectedDescription: selected.description,
+      actionSource,
+      workerDurationMs,
+      ...(response.finishReason === 'expert-continuation-fallback'
+        ? { fallbackKind: 'continued-line' as const }
+        : {})
+    }
+  } catch (error) {
+    const timedOut =
+      error instanceof AiRequestError && error.details?.failureKind === 'timeout'
+    return {
+      command: null,
+      traces: runtime.takeTraces(),
+      worlds: 0,
+      timedOut,
+      failed: !timedOut,
+      failureMessage: error instanceof Error ? error.message : String(error),
+      ...(options.phase === 'action'
+        ? {
+            actionSource: 'fallback' as const,
+            fallbackKind: timedOut ? ('timeout' as const) : ('worker-failure' as const)
+          }
+        : {})
+    }
+  }
+}
+
 async function decideProfile(
   options: DecisionRequestOptions
 ): Promise<DecisionOutcome> {
-  const {
-    request,
-    profile,
-    participantId,
-    checkpoint,
-    remainingTurnMs,
-    remainingSearchMs,
-    preferredContinuation,
-    phase,
-    liveLegalCommands
-  } = options
+  const { request, profile, participantId, checkpoint, phase, liveLegalCommands } =
+    options
+  if (phase === 'action') {
+    const forced = forcedLegalCommand(liveLegalCommands ?? [])
+    if (forced)
+      return {
+        command: forced,
+        traces: [],
+        worlds: 0,
+        timedOut: false,
+        actionSource: 'forced'
+      }
+  }
+  if (profile === 'expert') return decideExpertProfile(options)
   if (profile === 'random') {
     if (phase === 'mulligan')
       return {
@@ -469,106 +946,28 @@ async function decideProfile(
       selectedDescription: canonicalCommandKey(command)
     }
   }
-  if (
-    profile === 'expert' &&
-    phase === 'action' &&
-    options.workBudget === undefined &&
-    (remainingTurnMs <= 100 ||
-      remainingSearchMs <= 100 ||
-      remainingTurnMs <=
-        EXPERT_AI_PRESENTATION_RESERVE_MS + EXPERT_AI_DISPATCH_RESERVE_MS + 100)
-  ) {
-    const nextIntent = options.exhaustedBudgetContinuation?.[0]
-    const opponentId = checkpoint.setup.participants.find(
-      (participant) => participant.participantId !== participantId
-    )?.participantId
-    const continuedCommand =
-      phase === 'action' && nextIntent && opponentId
-        ? liveLegalCommands?.find((command) =>
-            sameAiIntent(nextIntent, aiActionIntent(command, opponentId))
-          )
-        : undefined
-    if (continuedCommand && options.exhaustedBudgetContinuation?.length)
-      return {
-        command: continuedCommand,
-        traces: [],
-        worlds: 0,
-        timedOut: false,
-        plannedActionIntents: options.exhaustedBudgetContinuation.slice(0, 6),
-        continuedLineFallback: true
-      }
-    return { command: null, traces: [], worlds: 0, timedOut: true }
-  }
-
-  const seed = requestSeed(request)
-  const initialFairCheckpoint = createFairHypothesisCheckpoint(
-    checkpoint,
-    participantId,
-    seed
-  )
-  const { searchBudgetMs, worldCount: suggestedWorldCount } =
-    profile === 'expert'
-      ? phase === 'mulligan'
-        ? { searchBudgetMs: EXPERT_MULLIGAN_BUDGET_MS - 500, worldCount: 1 }
-        : expertSearchBudget(
-            options.workBudget === undefined
-              ? remainingTurnMs
-              : EXPERT_AI_TURN_BUDGET_MS,
-            options.workBudget === undefined
-              ? remainingSearchMs
-              : EXPERT_AI_SEARCH_BUDGET_MS
-          )
-      : { searchBudgetMs: 2_850, worldCount: 1 }
-  const worldCount =
-    options.workBudget === undefined
-      ? suggestedWorldCount
-      : Math.min(suggestedWorldCount, options.workBudget)
-  const perWorldBudgetMs = Math.max(1, searchBudgetMs / worldCount)
-  const worldResults: ExpertEvaluatedWorld[] = []
-  const traces: LocalAiDecisionTrace[] = []
-  let firstActions: ReturnType<typeof aiActions> = []
+  // V1 is measured in its historical live-information mode; its known fairness
+  // limitation is the reason to retire it, not something to repair here.
+  const session = createPerspectiveSession(checkpoint, participantId)
+  const legal = legalCommands(session, participantId)
+  const actions = aiActions(session, legal)
+  const budgetMs = phase === 'mulligan' ? EXPERT_MULLIGAN_BUDGET_MS - 500 : 2_850
+  const api = new LocalAiDecisionApi(session, undefined, {
+    profile: 'easy',
+    budgetMs,
+    ...(options.workBudget !== undefined ? { workBudget: options.workBudget } : {}),
+    fairHypothesis: false
+  })
+  const response = await api.decide({
+    ...request,
+    actionIds: actions.map((action) => action.id)
+  })
+  const trace = api.getLastTrace()
+  const traces = trace ? [trace] : []
   let selectedCommand: TurnMatchCommand | null = null
 
-  for (let worldIndex = 0; worldIndex < worldCount; worldIndex++) {
-    const worldCheckpoint =
-      profile === 'expert'
-        ? createFairHypothesisCheckpoint(
-            initialFairCheckpoint,
-            participantId,
-            nextWorldSeed(seed, worldIndex)
-          )
-        : initialFairCheckpoint
-    const session = createPerspectiveSession(worldCheckpoint, participantId)
-    const legal = legalCommands(session, participantId)
-    const actions = aiActions(session, legal)
-    if (worldIndex === 0) firstActions = actions
-    const worldRequest = {
-      ...request,
-      actionIds: actions.map((action) => action.id)
-    }
-    const api = new LocalAiDecisionApi(session, undefined, {
-      profile,
-      budgetMs: perWorldBudgetMs,
-      ...(options.workBudget !== undefined
-        ? {
-            workBudget:
-              Math.floor(options.workBudget / worldCount) +
-              (worldIndex < options.workBudget % worldCount ? 1 : 0)
-          }
-        : {}),
-      fairHypothesis: profile === 'expert',
-      ...(profile === 'expert' && preferredContinuation
-        ? { preferredContinuation }
-        : {})
-    })
-    const response = await api.decide(worldRequest)
-    const trace = api.getLastTrace()
-    if (trace) traces.push(trace)
-    worldResults.push({ response, trace })
-  }
-
   if (phase === 'mulligan') {
-    const choice = worldResults[0]?.response.choice
+    const choice = response.choice
     if (choice && 'replace' in choice) {
       const currentHand = checkpoint.state.players.find(
         (player) => player.participantId === participantId
@@ -584,31 +983,21 @@ async function decideProfile(
     return {
       command: selectedCommand,
       traces,
-      worlds: worldResults.length,
+      worlds: 1,
       timedOut: false
     }
   }
 
-  if (!firstActions.length) {
+  if (!actions.length) {
     return {
       command: null,
       traces,
-      worlds: worldResults.length,
+      worlds: 1,
       timedOut: false
     }
   }
-  const legalIds = firstActions.map((action) => action.id)
-  const firstChoice = worldResults[0]?.response.choice
-  const consensus =
-    profile === 'expert' ? chooseExpertConsensus(worldResults, legalIds) : null
-  const selectedId =
-    consensus?.actionId ??
-    (firstChoice && 'plan' in firstChoice
-      ? firstChoice.plan.firstActionId
-      : firstChoice && 'actionId' in firstChoice
-        ? firstChoice.actionId
-        : null)
-  const selectedAction = firstActions.find((action) => action.id === selectedId)
+  const selectedId = 'actionId' in response.choice ? response.choice.actionId : null
+  const selectedAction = actions.find((action) => action.id === selectedId)
   selectedCommand = selectedAction?.command ?? null
 
   if (
@@ -621,41 +1010,12 @@ async function decideProfile(
   )
     selectedCommand = null
 
-  let plannedActionIntents: readonly AiActionIntent[] | undefined
-  if (profile === 'expert' && selectedCommand && selectedAction) {
-    const opponentId = checkpoint.setup.participants.find(
-      (participant) => participant.participantId !== participantId
-    )?.participantId
-    if (opponentId) {
-      const selectedIntent = aiActionIntent(selectedCommand, opponentId)
-      const candidateIntents = consensus?.scores.get(selectedAction.id)?.trace
-        ?.sequenceIntents
-      plannedActionIntents =
-        candidateIntents?.length && sameAiIntent(candidateIntents[0]!, selectedIntent)
-          ? candidateIntents.slice(0, 6)
-          : [selectedIntent]
-    }
-  }
-  const continuationPreferenceMatched =
-    Boolean(profile === 'expert' && preferredContinuation) &&
-    traces.some((trace) =>
-      trace.candidates.some(
-        (candidate) => candidate.scoreComponents.continuationPreference > 0
-      )
-    )
-
   return {
     command: selectedCommand,
     traces,
-    worlds: worldResults.length,
+    worlds: 1,
     timedOut: false,
-    ...(plannedActionIntents ? { plannedActionIntents } : {}),
-    ...(profile === 'expert' && preferredContinuation
-      ? {
-          continuationPreferenceOffered: true,
-          continuationPreferenceMatched
-        }
-      : {}),
+    workerDurationMs: trace?.durationMs ?? 0,
     selectedDescription: selectedAction?.description ?? null
   }
 }
@@ -667,11 +1027,21 @@ function recordDecision(
 ): void {
   metrics.decisions++
   metrics.decisionMs.push(elapsedMs)
+  if (outcome.workerDurationMs !== undefined)
+    metrics.workerDecisionMs.push(outcome.workerDurationMs)
   metrics.worldsEvaluated += outcome.worlds
-  if (outcome.continuationPreferenceOffered) metrics.continuationPreferencesOffered++
-  if (outcome.continuationPreferenceMatched) metrics.continuationPreferencesMatched++
-  if (outcome.continuedLineFallback) metrics.continuedLineFallbacks++
-  if (outcome.failed) metrics.failedDecisions++
+  if (outcome.failed) {
+    metrics.failedDecisions++
+    if (outcome.failureMessage && metrics.decisionFailureMessages.length < 12)
+      metrics.decisionFailureMessages.push(outcome.failureMessage)
+  }
+  if (
+    outcome.timedOut &&
+    outcome.failureMessage &&
+    metrics.timeoutMessages.length < 12 &&
+    !metrics.timeoutMessages.includes(outcome.failureMessage)
+  )
+    metrics.timeoutMessages.push(outcome.failureMessage)
   if (outcome.timedOut && !outcome.traces.length) metrics.timedOutSearches++
   for (const trace of outcome.traces) {
     metrics.evaluatedCandidates += trace.evaluatedActions
@@ -679,6 +1049,19 @@ function recordDecision(
       const profile = trace.mctsProfile
       const iterations = trace.sequenceNodes ?? 0
       metrics.mctsIterations += iterations
+      metrics.worldIterations.push(iterations)
+      if (trace.rootLegalActionCount && trace.rootLegalActionCount > 0) {
+        const distribution = trace.rootVisitDistribution ?? []
+        const visits = distribution.reduce((total, action) => total + action.visits, 0)
+        metrics.rootActionCoverage.push(
+          Math.min(1, distribution.length / trace.rootLegalActionCount)
+        )
+        metrics.topRootActionShare.push(
+          visits > 0
+            ? Math.max(...distribution.map((action) => action.visits)) / visits
+            : 0
+        )
+      }
       metrics.mctsOpponentActionsSimulated += profile.opponentActionsSimulated
       metrics.mctsOpponentCardPlaysSimulated += profile.opponentCardPlaysSimulated
       metrics.mctsCandidateCacheHits += profile.candidateCacheHits
@@ -722,6 +1105,33 @@ function recordDecision(
     if (trace.workBudgetHit) metrics.workBudgetHits++
     if (trace.timedOut) metrics.timedOutSearches++
   }
+}
+
+function recordActionSource(
+  metrics: MutableProfileMetrics,
+  source: NonNullable<DecisionOutcome['actionSource']>,
+  fallbackKind?: DecisionOutcome['fallbackKind']
+): void {
+  if (source === 'forced') {
+    metrics.forcedActionCommands++
+    return
+  }
+  if (source === 'search') {
+    metrics.searchedActionCommands++
+    return
+  }
+  if (source === 'continuation') {
+    metrics.continuedActionCommands++
+    return
+  }
+  metrics.fallbackActionCommands++
+  metrics.fallbacks++
+  if (fallbackKind === 'timeout') metrics.fallbackTimeoutActions++
+  else if (fallbackKind === 'worker-failure') metrics.fallbackWorkerFailureActions++
+  else if (fallbackKind === 'invalid') metrics.fallbackInvalidActions++
+  else if (fallbackKind === 'continued-line') metrics.continuedLineFallbacks++
+  if (fallbackKind === 'timeout') metrics.timeoutFallbacks++
+  else if (fallbackKind === 'worker-failure') metrics.failedFallbacks++
 }
 
 function profileForWinner(
@@ -831,6 +1241,10 @@ function expertDecisionDiagnostic(
     usedFallback:
       !outcome.command ||
       canonicalCommandKey(outcome.command) !== canonicalCommandKey(executedCommand),
+    actionSource: outcome.actionSource ?? null,
+    fallbackKind: outcome.fallbackKind ?? null,
+    timedOut: outcome.timedOut,
+    failureMessage: outcome.failureMessage ?? null,
     worlds: outcome.traces.map((trace) => {
       const chosenCandidate =
         trace.candidates.find(
@@ -950,6 +1364,8 @@ function publicActionDiagnostic(
 }
 
 async function runBenchmark(options: BenchmarkOptions) {
+  const benchmarkStartedAt = performance.now()
+  const provenance = sourceProvenance()
   const initialMemory = process.memoryUsage()
   let peakRssBytes = initialMemory.rss
   let peakHeapUsedBytes = initialMemory.heapUsed
@@ -966,6 +1382,7 @@ async function runBenchmark(options: BenchmarkOptions) {
     random: emptyProfileMetrics()
   }
   const matches: MatchResult[] = []
+  const invalidSelectionDiagnostics: InvalidSelectionDiagnostic[] = []
 
   for (let gameIndex = 0; gameIndex < options.games; gameIndex++) {
     const seed = uint32(options.seed + Math.floor(gameIndex / 2) * 0x9e3779b9)
@@ -1006,29 +1423,56 @@ async function runBenchmark(options: BenchmarkOptions) {
       setup,
       decks: [firstDeck, secondDeck]
     })
+    const expertRuntime = createExpertBenchmarkRuntime(
+      liveSession,
+      expertPlayerId,
+      options.turnBudgetMs
+    )
     const profileById = profileByParticipant as ReadonlyMap<string, LocalProfile>
     const currentTurnStart = new Map<string, number>()
     const currentTurnKey = new Map<string, string>()
     const currentTurnActions = new Map<string, number>()
-    const currentTurnSearchMs = new Map<string, number>()
-    const continuations = new Map<string, BenchmarkContinuation>()
+    const currentTurnWorkerMs = new Map<string, number>()
     const expertDecisionDiagnostics: ExpertDecisionDiagnostic[] = []
     const recentPublicActions: PublicActionDiagnostic[] = []
     let actions = 0
     let capped = false
+    let expertPlannedTurn: number | null = null
+    const gameInvalidSelectionDiagnostics: InvalidSelectionDiagnostic[] = []
+    const recordInvalidSelection = (
+      diagnostic: InvalidSelectionDiagnostic
+    ): void => {
+      invalidSelectionDiagnostics.push(diagnostic)
+      gameInvalidSelectionDiagnostics.push(diagnostic)
+      process.stderr.write(
+        'LOCAL_AI_BENCHMARK_INVALID ' + JSON.stringify(diagnostic) + '\n'
+      )
+    }
 
-    const finishTurn = (participantId: PlayerId, elapsedMs: number): void => {
+    const finishTurn = (
+      participantId: PlayerId,
+      turnNumber: number,
+      elapsedMs: number
+    ): void => {
       const profile = profileByParticipant.get(participantId)
       if (!profile) return
       profileMetrics[profile].turnMs.push(elapsedMs)
+      if (elapsedMs > options.turnBudgetMs)
+        profileMetrics[profile].turnBudgetMisses.push({
+          participantId,
+          turn: turnNumber,
+          durationMs: Math.round(elapsedMs)
+        })
       profileMetrics[profile].turnActions.push(
         currentTurnActions.get(participantId) ?? 0
       )
+      profileMetrics[profile].workerTurnMs.push(
+        currentTurnWorkerMs.get(participantId) ?? 0
+      )
       currentTurnActions.delete(participantId)
+      currentTurnWorkerMs.delete(participantId)
       currentTurnStart.delete(participantId)
       currentTurnKey.delete(participantId)
-      currentTurnSearchMs.delete(participantId)
-      continuations.delete(participantId)
     }
 
     while (liveSession.getState().phase !== 'ended' && actions < options.maxActions) {
@@ -1055,10 +1499,10 @@ async function runBenchmark(options: BenchmarkOptions) {
             profile,
             participantId: player.participantId,
             checkpoint: liveSession.match.getCheckpoint(),
-            remainingTurnMs: EXPERT_MULLIGAN_BUDGET_MS,
-            remainingSearchMs: EXPERT_MULLIGAN_BUDGET_MS,
             workBudget: options.workBudget,
-            phase: 'mulligan'
+            phase: 'mulligan',
+            liveSession,
+            expertRuntime
           })
         } catch {
           outcome = {
@@ -1075,18 +1519,54 @@ async function runBenchmark(options: BenchmarkOptions) {
           participantId: player.participantId,
           replaceInstanceIds: []
         }
-        if (!outcome.command) {
-          profileMetrics[profile].fallbacks++
-          if (outcome.timedOut) profileMetrics[profile].timeoutFallbacks++
-          else if (outcome.failed) profileMetrics[profile].failedFallbacks++
-          else profileMetrics[profile].invalidSelections++
-        }
-        let result = liveSession.match.dispatch(command)
-        if (!result.accepted) {
-          profileMetrics[profile].rejectedCommands++
-          profileMetrics[profile].fallbacks++
+      if (!outcome.command) {
+        profileMetrics[profile].fallbacks++
+        if (outcome.timedOut) profileMetrics[profile].timeoutFallbacks++
+        else if (outcome.failed) profileMetrics[profile].failedFallbacks++
+        else {
           profileMetrics[profile].invalidSelections++
-          result = liveSession.match.dispatch({
+          recordInvalidSelection({
+            gameIndex,
+            seed,
+            profile,
+            phase: 'mulligan',
+            turnNumber: state.turnNumber,
+            revision: state.revision,
+            participantId: player.participantId,
+            source: 'no-command',
+            actionSource: outcome.actionSource ?? null,
+            fallbackKind: outcome.fallbackKind ?? 'invalid',
+            selectedActionId: outcome.selectedActionId ?? null,
+            selectedDescription: outcome.selectedDescription ?? null,
+            failureMessage: outcome.failureMessage ?? null,
+            attemptedCommand: null
+          })
+        }
+      }
+      let result = liveSession.match.dispatch(command)
+      if (!result.accepted) {
+        profileMetrics[profile].rejectedCommands++
+        profileMetrics[profile].fallbacks++
+        profileMetrics[profile].invalidSelections++
+        recordInvalidSelection({
+          gameIndex,
+          seed,
+          profile,
+          phase: 'mulligan',
+          turnNumber: state.turnNumber,
+          revision: state.revision,
+          participantId: player.participantId,
+          source: 'rejected-command',
+          actionSource: outcome.actionSource ?? null,
+          fallbackKind: outcome.fallbackKind ?? null,
+          selectedActionId: outcome.selectedActionId ?? null,
+          selectedDescription: outcome.selectedDescription ?? null,
+          failureMessage: outcome.failureMessage ?? null,
+          attemptedCommand: command,
+          rejectionCode: result.code,
+          rejectionMessage: result.message
+        })
+        result = liveSession.match.dispatch({
             type: 'confirm-mulligan',
             participantId: player.participantId,
             replaceInstanceIds: []
@@ -1107,10 +1587,12 @@ async function runBenchmark(options: BenchmarkOptions) {
       const turnKey = String(participantId) + ':' + state.turnNumber
       if (currentTurnKey.get(participantId) !== turnKey) {
         currentTurnKey.set(participantId, turnKey)
-        currentTurnStart.set(participantId, performance.now())
+        currentTurnStart.set(
+          participantId,
+          profile === 'expert' ? expertRuntime.now() : performance.now()
+        )
         currentTurnActions.set(participantId, 0)
-        currentTurnSearchMs.set(participantId, 0)
-        continuations.delete(participantId)
+        currentTurnWorkerMs.set(participantId, 0)
       }
       const turnStarted = currentTurnStart.get(participantId)!
       const liveLegal = legalCommands(liveSession, participantId)
@@ -1118,29 +1600,9 @@ async function runBenchmark(options: BenchmarkOptions) {
         throw new Error(
           'No legal command for ' + participantId + ' on turn ' + state.turnNumber + '.'
         )
-      const opposingPlayerId = state.players.find(
-        (player) => player.participantId !== participantId
-      )?.participantId
-      const queuedContinuation = continuations.get(participantId)
-      const exhaustedBudgetContinuation =
-        profile === 'expert' &&
-        opposingPlayerId &&
-        queuedContinuation?.turn === state.turnNumber &&
-        state.revision > queuedContinuation.expectedRevision
-          ? queuedContinuation.actions.slice(
-              queuedContinuation.nextIndex,
-              queuedContinuation.nextIndex + 6
-            )
-          : undefined
-      const nextContinuation = exhaustedBudgetContinuation?.[0]
-      const preferredContinuation =
-        nextContinuation &&
-        opposingPlayerId &&
-        liveLegal.some((command) =>
-          sameAiIntent(nextContinuation, aiActionIntent(command, opposingPlayerId))
-        )
-          ? nextContinuation
-          : undefined
+      const actionIds = aiActions(liveSession, liveLegal, participantId).map(
+        (action) => action.id
+      )
       const request: AiDecisionRequest = {
         matchId: 'local-ai-benchmark-' + seed + '-' + gameIndex,
         requestId: 'benchmark-action-' + gameIndex + '-' + state.revision,
@@ -1148,18 +1610,10 @@ async function runBenchmark(options: BenchmarkOptions) {
         phase: 'action',
         allowInspection: false,
         messages: [],
-        actionIds: liveLegal.map((_command, index) => 'a' + index)
+        actionIds
       }
-      const decisionStarted = performance.now()
-      const searchBudgetForTurn = Math.max(
-        0,
-        Math.min(
-          EXPERT_AI_SEARCH_BUDGET_MS,
-          options.turnBudgetMs -
-            EXPERT_AI_PRESENTATION_RESERVE_MS -
-            EXPERT_AI_DISPATCH_RESERVE_MS
-        )
-      )
+      const decisionStarted =
+        profile === 'expert' ? expertRuntime.now() : performance.now()
       let outcome: DecisionOutcome
       try {
         outcome = await decideProfile({
@@ -1167,17 +1621,11 @@ async function runBenchmark(options: BenchmarkOptions) {
           profile,
           participantId,
           checkpoint: liveSession.match.getCheckpoint(),
-          remainingTurnMs:
-            options.workBudget === undefined
-              ? options.turnBudgetMs - (decisionStarted - turnStarted)
-              : options.turnBudgetMs,
-          remainingSearchMs:
-            options.workBudget === undefined
-              ? searchBudgetForTurn - (currentTurnSearchMs.get(participantId) ?? 0)
-              : searchBudgetForTurn,
           workBudget: options.workBudget,
-          preferredContinuation,
-          exhaustedBudgetContinuation,
+          liveSession,
+          expertRuntime,
+          planBeforeAction:
+            profile === 'expert' && expertPlannedTurn !== state.turnNumber,
           phase: 'action',
           liveLegalCommands: liveLegal
         })
@@ -1190,19 +1638,49 @@ async function runBenchmark(options: BenchmarkOptions) {
           failed: true
         }
       }
-      const decisionElapsedMs = performance.now() - decisionStarted
-      currentTurnSearchMs.set(
-        participantId,
-        (currentTurnSearchMs.get(participantId) ?? 0) + decisionElapsedMs
-      )
-      recordDecision(profileMetrics[profile], decisionElapsedMs, outcome)
+      const decisionElapsedMs =
+        (profile === 'expert' ? expertRuntime.now() : performance.now()) -
+        decisionStarted
+      if (outcome.actionSource !== 'forced') {
+        recordDecision(profileMetrics[profile], decisionElapsedMs, outcome)
+        currentTurnWorkerMs.set(
+          participantId,
+          (currentTurnWorkerMs.get(participantId) ?? 0) +
+            (outcome.workerDurationMs ?? 0)
+        )
+      }
+      if (profile === 'expert' && outcome.actionSource !== 'forced')
+        expertPlannedTurn = state.turnNumber
 
       let command = outcome.command
+      let actionSource = outcome.actionSource ?? 'search'
+      let fallbackKind = outcome.fallbackKind
       if (!command) {
-        profileMetrics[profile].fallbacks++
-        if (outcome.timedOut) profileMetrics[profile].timeoutFallbacks++
-        else if (outcome.failed) profileMetrics[profile].failedFallbacks++
-        else profileMetrics[profile].invalidSelections++
+        actionSource = 'fallback'
+        fallbackKind ??= outcome.timedOut
+          ? 'timeout'
+          : outcome.failed
+            ? 'worker-failure'
+            : 'invalid'
+        if (fallbackKind === 'invalid') {
+          profileMetrics[profile].invalidSelections++
+          recordInvalidSelection({
+            gameIndex,
+            seed,
+            profile,
+            phase: 'action',
+            turnNumber: state.turnNumber,
+            revision: state.revision,
+            participantId,
+            source: 'no-command',
+            actionSource: outcome.actionSource ?? null,
+            fallbackKind,
+            selectedActionId: outcome.selectedActionId ?? null,
+            selectedDescription: outcome.selectedDescription ?? null,
+            failureMessage: outcome.failureMessage ?? null,
+            attemptedCommand: null
+          })
+        }
         command =
           (profile === 'expert' && outcome.timedOut
             ? selectExpertTimeoutFallbackAction(liveSession, liveLegal)?.command
@@ -1213,8 +1691,27 @@ async function runBenchmark(options: BenchmarkOptions) {
       let result = liveSession.match.dispatch(command)
       if (!result.accepted) {
         profileMetrics[profile].rejectedCommands++
-        profileMetrics[profile].fallbacks++
         profileMetrics[profile].invalidSelections++
+        recordInvalidSelection({
+          gameIndex,
+          seed,
+          profile,
+          phase: 'action',
+          turnNumber: state.turnNumber,
+          revision: state.revision,
+          participantId,
+          source: 'rejected-command',
+          actionSource: outcome.actionSource ?? null,
+          fallbackKind: outcome.fallbackKind ?? null,
+          selectedActionId: outcome.selectedActionId ?? null,
+          selectedDescription: outcome.selectedDescription ?? null,
+          failureMessage: outcome.failureMessage ?? null,
+          attemptedCommand: command,
+          rejectionCode: result.code,
+          rejectionMessage: result.message
+        })
+        actionSource = 'fallback'
+        fallbackKind = 'invalid'
         const fallback =
           liveLegal.find((entry) => entry.type === 'end-turn') ?? liveLegal[0]!
         result = liveSession.match.dispatch(fallback)
@@ -1222,25 +1719,9 @@ async function runBenchmark(options: BenchmarkOptions) {
       }
       if (!result.accepted)
         throw new Error('Benchmark action fallback was rejected: ' + result.message)
-      if (
-        profile === 'expert' &&
-        outcome.command &&
-        outcome.plannedActionIntents?.length &&
-        opposingPlayerId &&
-        sameAiIntent(
-          outcome.plannedActionIntents[0]!,
-          aiActionIntent(command, opposingPlayerId)
-        )
-      ) {
-        continuations.set(participantId, {
-          turn: state.turnNumber,
-          expectedRevision: state.revision,
-          nextIndex: 1,
-          actions: outcome.plannedActionIntents
-        })
-      } else {
-        continuations.delete(participantId)
-      }
+      recordActionSource(profileMetrics[profile], actionSource, fallbackKind)
+      if (profile === 'expert' && invalidatesExpertContinuation(result.events))
+        profileMetrics.expert.continuationInvalidations++
       if (options.traceLosses) {
         recentPublicActions.push(
           publicActionDiagnostic(state, result.state, participantId, profile, command)
@@ -1259,11 +1740,21 @@ async function runBenchmark(options: BenchmarkOptions) {
       actions++
       if (command.type === 'end-turn') {
         profileMetrics[profile].endTurns++
-        finishTurn(participantId, performance.now() - turnStarted)
+        finishTurn(
+          participantId,
+          state.turnNumber,
+          (profile === 'expert' ? expertRuntime.now() : performance.now()) - turnStarted
+        )
       } else if (result.state.phase === 'ended') {
-        finishTurn(participantId, performance.now() - turnStarted)
+        finishTurn(
+          participantId,
+          state.turnNumber,
+          (profile === 'expert' ? expertRuntime.now() : performance.now()) - turnStarted
+        )
       }
     }
+
+    expertRuntime.api.dispose()
 
     const finalState = liveSession.getState()
     const complete = finalState.phase === 'ended'
@@ -1285,23 +1776,42 @@ async function runBenchmark(options: BenchmarkOptions) {
       expertPlayer: expertPlayerId,
       decks: [
         {
-          id: firstDeck.id,
-          heroId: firstDeck.heroId,
+          ...deckManifest(firstDeck),
           archetype: firstGenerated.metadata.archetype
         },
         {
-          id: secondDeck.id,
-          heroId: secondDeck.heroId,
+          ...deckManifest(secondDeck),
           archetype: secondGenerated.metadata.archetype
         }
       ],
       status: capped ? 'capped' : winner ? 'completed' : 'draw',
       winner,
       actions,
-      turnNumber: finalState.turnNumber
+      turnNumber: finalState.turnNumber,
+      invalidSelections: gameInvalidSelectionDiagnostics.length,
+      rejectedCommands: gameInvalidSelectionDiagnostics.filter(
+        (diagnostic) => diagnostic.source === 'rejected-command'
+      ).length
     })
-    console.log(
-      'LOCAL_AI_BENCHMARK_GAME ' + JSON.stringify(matches[matches.length - 1])
+    process.stderr.write(
+      'LOCAL_AI_BENCHMARK_GAME ' +
+        JSON.stringify({
+          completed: gameIndex + 1,
+          total: options.games,
+          match: {
+            seed,
+            expertPlayer: matches[matches.length - 1]!.expertPlayer,
+            status: matches[matches.length - 1]!.status,
+            winner,
+            actions,
+            turnNumber: finalState.turnNumber,
+            invalidSelections: gameInvalidSelectionDiagnostics.length,
+            rejectedCommands: gameInvalidSelectionDiagnostics.filter(
+              (diagnostic) => diagnostic.source === 'rejected-command'
+            ).length
+          }
+        }) +
+        '\n'
     )
     if (options.traceLosses && winner !== 'expert')
       console.log(
@@ -1332,84 +1842,123 @@ async function runBenchmark(options: BenchmarkOptions) {
       )
   }
 
-  const summarize = (metrics: MutableProfileMetrics) => ({
-    wins: metrics.wins,
-    losses: metrics.losses,
-    draws: metrics.draws,
-    cappedGames: metrics.cappedGames,
-    decisions: metrics.decisions,
-    commands: metrics.commands,
-    endTurns: metrics.endTurns,
-    worldsEvaluated: metrics.worldsEvaluated,
-    fallbacks: metrics.fallbacks,
-    timeoutFallbacks: metrics.timeoutFallbacks,
-    continuedLineFallbacks: metrics.continuedLineFallbacks,
-    failedFallbacks: metrics.failedFallbacks,
-    failedDecisions: metrics.failedDecisions,
-    invalidSelections: metrics.invalidSelections,
-    rejectedCommands: metrics.rejectedCommands,
-    timedOutSearches: metrics.timedOutSearches,
-    continuationPreferencesOffered: metrics.continuationPreferencesOffered,
-    continuationPreferencesMatched: metrics.continuationPreferencesMatched,
-    turnBudgetViolations: metrics.turnMs.filter(
-      (durationMs) => durationMs > options.turnBudgetMs
-    ).length,
-    evaluatedCandidates: metrics.evaluatedCandidates,
-    mcts: {
-      iterations: metrics.mctsIterations,
-      opponentActionsSimulated: metrics.mctsOpponentActionsSimulated,
-      opponentCardPlaysSimulated: metrics.mctsOpponentCardPlaysSimulated,
-      candidateCacheHits: metrics.mctsCandidateCacheHits,
-      candidateCacheMisses: metrics.mctsCandidateCacheMisses,
-      averageTreeDepth:
-        metrics.mctsIterations > 0
-          ? Math.round((metrics.mctsTreeDepthTotal / metrics.mctsIterations) * 100) /
-            100
-          : null,
-      averageRolloutDepth:
-        metrics.mctsIterations > 0
-          ? Math.round((metrics.mctsRolloutDepthTotal / metrics.mctsIterations) * 100) /
-            100
-          : null,
-      maximumRolloutDepth: metrics.mctsMaximumRolloutDepth,
-      profileTimingMs: metrics.mctsProfileTimingMs
-    },
-    sequenceNodes: metrics.sequenceNodes,
-    responseNodes: metrics.responseNodes,
-    responseCardPlayNodes: metrics.responseCardPlayNodes,
-    workUnits: metrics.workUnits,
-    workBudgetHits: metrics.workBudgetHits,
-    rootEvaluationLatency: latencySummary(metrics.rootEvaluationMs),
-    sequenceSearchLatency: latencySummary(metrics.sequenceSearchMs),
-    responseSearchLatency: latencySummary(metrics.responseSearchMs),
-    responseCandidateAnalysisLatency: latencySummary(
-      metrics.responseCandidateAnalysisMs
-    ),
-    responseCandidateDispatchLatency: latencySummary(
-      metrics.responseCandidateDispatchMs
-    ),
-    responseCandidateObservationLatency: latencySummary(
-      metrics.responseCandidateObservationMs
-    ),
-    responseCandidateScoringLatency: latencySummary(metrics.responseCandidateScoringMs),
-    responseActionGenerationLatency: latencySummary(metrics.responseActionGenerationMs),
-    responseReplayLatency: latencySummary(metrics.responseReplayMs),
-    decisionLatency: latencySummary(metrics.decisionMs),
-    fullTurnLatency: latencySummary(metrics.turnMs),
-    actionsPerTurn: countSummary(metrics.turnActions)
-  })
+  const summarize = (metrics: MutableProfileMetrics) => {
+    const actionDecisionCount =
+      metrics.searchedActionCommands +
+      metrics.continuedActionCommands +
+      metrics.fallbackActionCommands
+    return {
+      wins: metrics.wins,
+      losses: metrics.losses,
+      draws: metrics.draws,
+      cappedGames: metrics.cappedGames,
+      decisions: metrics.decisions,
+      actionSources: {
+        forced: metrics.forcedActionCommands,
+        search: metrics.searchedActionCommands,
+        savedContinuation: metrics.continuedActionCommands,
+        fallback: metrics.fallbackActionCommands,
+        timeoutFallback: metrics.fallbackTimeoutActions,
+        continuedLineFallback: metrics.continuedLineFallbacks,
+        workerFailureFallback: metrics.fallbackWorkerFailureActions,
+        invalidFallback: metrics.fallbackInvalidActions,
+        denominatorExcludesForcedCommandsAndMulligan:
+          metrics.searchedActionCommands +
+          metrics.continuedActionCommands +
+          metrics.fallbackActionCommands,
+        fallbackRate:
+          actionDecisionCount > 0
+            ? metrics.fallbackActionCommands / actionDecisionCount
+            : null
+      },
+      continuationInvalidations: metrics.continuationInvalidations,
+      commands: metrics.commands,
+      endTurns: metrics.endTurns,
+      worldsEvaluated: metrics.worldsEvaluated,
+      fallbacks: metrics.fallbacks,
+      timeoutFallbacks: metrics.timeoutFallbacks,
+      continuedLineFallbacks: metrics.continuedLineFallbacks,
+      failedFallbacks: metrics.failedFallbacks,
+      failedDecisions: metrics.failedDecisions,
+      decisionFailureMessages: metrics.decisionFailureMessages,
+      timeoutMessages: metrics.timeoutMessages,
+      invalidSelections: metrics.invalidSelections,
+      rejectedCommands: metrics.rejectedCommands,
+      timedOutSearches: metrics.timedOutSearches,
+      turnBudgetViolations: metrics.turnMs.filter(
+        (durationMs) => durationMs > options.turnBudgetMs
+      ).length,
+      turnBudgetMisses: metrics.turnBudgetMisses,
+      evaluatedCandidates: metrics.evaluatedCandidates,
+      mcts: {
+        iterations: metrics.mctsIterations,
+        opponentActionsSimulated: metrics.mctsOpponentActionsSimulated,
+        opponentCardPlaysSimulated: metrics.mctsOpponentCardPlaysSimulated,
+        candidateCacheHits: metrics.mctsCandidateCacheHits,
+        candidateCacheMisses: metrics.mctsCandidateCacheMisses,
+        averageTreeDepth:
+          metrics.mctsIterations > 0
+            ? Math.round((metrics.mctsTreeDepthTotal / metrics.mctsIterations) * 100) /
+              100
+            : null,
+        averageRolloutDepth:
+          metrics.mctsIterations > 0
+            ? Math.round(
+                (metrics.mctsRolloutDepthTotal / metrics.mctsIterations) * 100
+              ) / 100
+            : null,
+        maximumRolloutDepth: metrics.mctsMaximumRolloutDepth,
+        iterationsPerWorld: countSummary(metrics.worldIterations),
+        rootActionCoverage: ratioSummary(metrics.rootActionCoverage),
+        topRootActionVisitShare: ratioSummary(metrics.topRootActionShare),
+        profileTimingMs: metrics.mctsProfileTimingMs
+      },
+      sequenceNodes: metrics.sequenceNodes,
+      responseNodes: metrics.responseNodes,
+      responseCardPlayNodes: metrics.responseCardPlayNodes,
+      workUnits: metrics.workUnits,
+      workBudgetHits: metrics.workBudgetHits,
+      rootEvaluationLatency: latencySummary(metrics.rootEvaluationMs),
+      sequenceSearchLatency: latencySummary(metrics.sequenceSearchMs),
+      responseSearchLatency: latencySummary(metrics.responseSearchMs),
+      responseCandidateAnalysisLatency: latencySummary(
+        metrics.responseCandidateAnalysisMs
+      ),
+      responseCandidateDispatchLatency: latencySummary(
+        metrics.responseCandidateDispatchMs
+      ),
+      responseCandidateObservationLatency: latencySummary(
+        metrics.responseCandidateObservationMs
+      ),
+      responseCandidateScoringLatency: latencySummary(
+        metrics.responseCandidateScoringMs
+      ),
+      responseActionGenerationLatency: latencySummary(
+        metrics.responseActionGenerationMs
+      ),
+      responseReplayLatency: latencySummary(metrics.responseReplayMs),
+      decisionLatency: latencySummary(metrics.decisionMs),
+      workerDecisionLatency: latencySummary(metrics.workerDecisionMs),
+      fullTurnLatency: latencySummary(metrics.turnMs),
+      workerTimePerTurn: latencySummary(metrics.workerTurnMs),
+      actionsPerTurn: countSummary(metrics.turnActions)
+    }
+  }
 
   clearInterval(memorySampler)
   sampleMemory()
   const endingMemory = process.memoryUsage()
   return {
     benchmark: 'local-ai-midrange-vs-baseline',
-    benchmarkVersion: 3,
+    benchmarkVersion: 7,
     generatorVersion: OPPONENT_GENERATOR_VERSION,
     configuration: options,
+    source: provenance,
+    pairedWinRate: pairedWinRate(matches),
     measurement:
-      'Headless CPU decision plus synchronous domain dispatch; excludes Pixi rendering and animations.',
+      'Headless domain simulation. Expert hidden-world searches run serially in Vitest, while their turn-time budget models concurrent workers using the slowest world duration. Includes actual benchmark wall time; excludes nested worker startup, Pixi rendering, and animations.',
     runtime: {
+      benchmarkWallTimeMs: Math.round(performance.now() - benchmarkStartedAt),
       nodeVersion: process.version,
       platform: platform(),
       osRelease: release(),
@@ -1430,7 +1979,8 @@ async function runBenchmark(options: BenchmarkOptions) {
       matchup: summarize(profileMetrics[options.baseline]),
       expert: summarize(profileMetrics.expert)
     },
-    matches
+    matches,
+    invalidSelectionDiagnostics
   }
 }
 
@@ -1438,9 +1988,33 @@ describe.skipIf(!ENABLED)('local AI matchup benchmark', () => {
   it('compares seeded Midrange matches with a mirrored baseline assignment', async () => {
     const options = readOptions()
     const result = await runBenchmark(options)
+    const expert = result.profiles.expert
+    console.log(
+      'LOCAL_AI_BENCHMARK_SUMMARY ' +
+        JSON.stringify({
+          configuration: result.configuration,
+          pairedWinRate: result.pairedWinRate,
+          runtimeMs: result.runtime.benchmarkWallTimeMs,
+          expert: {
+            wins: expert.wins,
+            losses: expert.losses,
+            draws: expert.draws,
+            invalidSelections: expert.invalidSelections,
+            rejectedCommands: expert.rejectedCommands,
+            turnBudgetViolations: expert.turnBudgetViolations,
+            meanDecisionMs: expert.decisionLatency.meanMs,
+            meanFullTurnMs: expert.fullTurnLatency.meanMs
+          }
+        })
+    )
     console.log('LOCAL_AI_BENCHMARK_JSON ' + JSON.stringify(result))
     expect(result.matches).toHaveLength(options.games)
-    expect(result.profiles.expert.invalidSelections).toEqual(expect.any(Number))
-    expect(result.profiles.expert.rejectedCommands).toBe(0)
+    if (options.workBudget === undefined && options.maxActions >= 300) {
+      expect(result.matches.every((match) => match.status !== 'capped')).toBe(true)
+      expect(result.profiles.expert.invalidSelections).toBe(0)
+      expect(result.profiles.expert.rejectedCommands).toBe(0)
+      expect(result.profiles.expert.turnBudgetViolations).toBe(0)
+      expect(result.profiles.expert.actionSources.fallbackRate ?? 0).toBeLessThan(0.05)
+    }
   }, 3_600_000)
 })

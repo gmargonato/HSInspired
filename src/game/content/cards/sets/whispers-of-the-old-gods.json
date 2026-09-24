@@ -2051,6 +2051,7 @@
         "actions": [
           {
             "action": "resurrect",
+            "placement": "alternating-around-source",
             "player": "self",
             "source": "friendly-minions-died-this-game",
             "selection": "all",

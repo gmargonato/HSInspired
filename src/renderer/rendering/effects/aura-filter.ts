@@ -25,6 +25,90 @@ import {
 import { inverseAuraProjection } from './aura-projection'
 import type { AuraPalette, AuraTuning } from '../../../shared/ipc/outline-tuning'
 
+interface SharedShape {
+  readonly texture: Texture
+  /** Permanent lease so the field survives while no outline is using it. */
+  readonly lease: AuraFieldLease
+}
+const sharedShapes = new WeakMap<Renderer, Map<string, SharedShape>>()
+
+function snapshotComposition(
+  renderer: Renderer,
+  target: Container,
+  frame: Rectangle
+): Texture {
+  const filters = target.filters
+  const { visible, renderable, alpha } = target
+  target.filters = []
+  target.visible = true
+  target.renderable = true
+  target.alpha = 1
+  try {
+    return renderer.generateTexture({ target, frame, resolution: 1, antialias: true })
+  } finally {
+    target.filters = filters ? [...filters] : []
+    target.visible = visible
+    target.renderable = renderable
+    target.alpha = alpha
+  }
+}
+
+function sharedShapeKey(key: string, bounds: Rectangle): string {
+  return `${key}:${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}`
+}
+
+/**
+ * One snapshot and distance field for identical composed silhouettes, e.g.
+ * every minion's oval proxy. Building a field is a GPU readback plus a large
+ * CPU distance transform, so it must not run once per instance.
+ */
+function acquireSharedShape(
+  renderer: Renderer,
+  key: string,
+  target: Container,
+  bounds: Rectangle
+): SharedShape {
+  let shapes = sharedShapes.get(renderer)
+  if (!shapes) {
+    shapes = new Map()
+    sharedShapes.set(renderer, shapes)
+  }
+  const cacheKey = sharedShapeKey(key, bounds)
+  const existing = shapes.get(cacheKey)
+  if (existing?.lease.valid && !existing.texture.destroyed) return existing
+  if (existing) {
+    shapes.delete(cacheKey)
+    existing.lease.release()
+    existing.texture.destroy(true)
+  }
+  const texture = snapshotComposition(renderer, target, bounds)
+  const shared = { texture, lease: acquireAuraField(renderer, texture) }
+  shapes.set(cacheKey, shared)
+  return shared
+}
+
+function localSnapshotBounds(target: Container): Rectangle {
+  const bounds = target.getLocalBounds()
+  return new Rectangle(
+    bounds.minX,
+    bounds.minY,
+    Math.max(1, bounds.width),
+    Math.max(1, bounds.height)
+  )
+}
+
+/**
+ * Builds a shared silhouette field ahead of time (e.g. during scene load) so
+ * the first outline shown in play does not stall the frame.
+ */
+export function prebuildSharedAuraShape(
+  renderer: Renderer,
+  key: string,
+  target: Container
+): void {
+  acquireSharedShape(renderer, key, target, localSnapshotBounds(target))
+}
+
 /** V5 material over a cached local silhouette, reprojected for the current pose. */
 export class AuraFilter extends Filter {
   readonly auraUniforms = createAuraUniforms()
@@ -47,7 +131,9 @@ export class AuraFilter extends Filter {
     private readonly silhouette?: {
       readonly texture: Texture
       readonly bounds: Rectangle
-    }
+    },
+    /** Identical composed targets with the same key share one snapshot and field. */
+    private readonly sharedShape?: string
   ) {
     super({
       glProgram: createAuraGlProgram(),
@@ -56,7 +142,8 @@ export class AuraFilter extends Filter {
         uDistanceField: Texture.EMPTY.source,
         uDistanceSampler: Texture.EMPTY.source.style
       },
-      antialias: 'inherit',
+      // The aura shader never samples its input, so multisampling it is wasted work.
+      antialias: 'off',
       resolution: 'inherit'
     })
     this.resources.auraUniforms = this.auraUniforms
@@ -202,32 +289,18 @@ export class AuraFilter extends Filter {
     this.snapshot = null
     if (!texture) {
       const target = this.target
-      const bounds = target.getLocalBounds()
-      this.snapshotBounds = new Rectangle(
-        bounds.minX,
-        bounds.minY,
-        Math.max(1, bounds.width),
-        Math.max(1, bounds.height)
-      )
-      const filters = target.filters
-      const { visible, renderable, alpha } = target
-      target.filters = []
-      target.visible = true
-      target.renderable = true
-      target.alpha = 1
-      try {
-        this.snapshot = renderer.generateTexture({
+      this.snapshotBounds = localSnapshotBounds(target)
+      if (this.sharedShape) {
+        // Shared snapshots belong to the registry; never destroy them here.
+        texture = acquireSharedShape(
+          renderer,
+          this.sharedShape,
           target,
-          frame: this.snapshotBounds,
-          resolution: 1,
-          antialias: true
-        })
+          this.snapshotBounds
+        ).texture
+      } else {
+        this.snapshot = snapshotComposition(renderer, target, this.snapshotBounds)
         texture = this.snapshot
-      } finally {
-        target.filters = filters ? [...filters] : []
-        target.visible = visible
-        target.renderable = renderable
-        target.alpha = alpha
       }
     }
     this.field = acquireAuraField(renderer, texture)

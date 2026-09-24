@@ -494,7 +494,7 @@ export class GameCardTargeting {
     return true
   }
 
-  chooseCardPlayOption(choice: number): void {
+  chooseCardPlayOption(choice: number, choiceAnimated = false): void {
     const targeting = this.cardTargeting
     if (!targeting || !targeting.input.legalChoices.includes(choice)) return
     this.cardSelectionOverlay.clear()
@@ -507,7 +507,8 @@ export class GameCardTargeting {
       ...targeting,
       input,
       targets: [],
-      choice
+      choice,
+      choiceAnimated
     }
     const preview = this.minionTargetPreview()
     if (preview && !preview.presentationPromise) {

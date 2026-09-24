@@ -13,6 +13,11 @@ export function formatClassWins(wins: number): string {
   return `Wins: ${wins}`
 }
 
+/** Legend positions are plain numbers counted down from 999. */
+export function formatLegendRank(legendRank: number): string {
+  return String(legendRank)
+}
+
 /** Returns the number of completed-deck pages, including a stable empty page. */
 export function getDeckSelectionPageCount(decks: readonly Deck[]): number {
   const completeDeckCount = decks.filter(

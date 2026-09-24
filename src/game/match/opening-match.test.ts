@@ -475,7 +475,7 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     ).toEqual(opponentDeckBefore)
   })
 
-  it('shuffles twenty Beasts from the full catalog for Queen Carnassa', () => {
+  it('shuffles twenty collectible Beasts for Queen Carnassa', () => {
     const { match, activeId, card } = readyCard('journey_to_ungoro_queen_carnassa')
     const before = match
       .getState()
@@ -496,6 +496,11 @@ describe("Un'Goro and Frozen Throne rewards", () => {
       deck
         .filter((entry) => !entry.startedInDeck)
         .every((entry) => CARD_CATALOG.require(entry.cardId).subtype === 'Beast')
+    ).toBe(true)
+    expect(
+      deck
+        .filter((entry) => !entry.startedInDeck)
+        .every((entry) => CARD_CATALOG.require(entry.cardId).collectible)
     ).toBe(true)
   })
 
@@ -584,11 +589,12 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     ).toBe('ragnaros-die-insects')
   })
 
-  it('uses only collectible Demons when Nether Portal replaces the deck', () => {
+  it('refills the deck with collectible Demons that scale on each draw', () => {
     const { match, activeId, card } = readyCard('journey_to_ungoro_nether_portal')
-    const before = match
-      .getState()
-      .players.find((player) => player.participantId === activeId)!.deck.length
+    const findPlayer = () =>
+      match.getState().players.find((player) => player.participantId === activeId)!
+    const before = findPlayer().deck.length
+    expect(before).toBeLessThan(30)
     accept(
       match.dispatch({
         type: 'play-card',
@@ -596,10 +602,8 @@ describe("Un'Goro and Frozen Throne rewards", () => {
         cardInstanceId: card.instanceId
       })
     )
-    const deck = match
-      .getState()
-      .players.find((player) => player.participantId === activeId)!.deck
-    expect(deck).toHaveLength(before)
+    const deck = findPlayer().deck
+    expect(deck).toHaveLength(30)
     expect(
       deck.every((entry) => CARD_CATALOG.require(entry.cardId).subtype === 'Demon')
     ).toBe(true)
@@ -607,8 +611,76 @@ describe("Un'Goro and Frozen Throne rewards", () => {
       deck.every((entry) => CARD_CATALOG.require(entry.cardId).collectible)
     ).toBe(true)
     expect(
+      deck.every((entry) => entry.scalingCounter === 'nether-portal-draw-buff')
+    ).toBe(true)
+    expect(
       deck.every((entry) => entry.attack !== undefined && entry.health !== undefined)
     ).toBe(true)
+
+    const drawnBase = () => {
+      accept(match.dispatch({ type: 'dev-draw', participantId: activeId }))
+      const handCard = findPlayer().hand.at(-1)!
+      const definition = CARD_CATALOG.require(handCard.cardId)
+      if (definition.type !== 'Minion') throw new Error('Expected a Demon minion')
+      return { handCard, definition }
+    }
+    const first = drawnBase()
+    expect(first.handCard.attack).toBe(first.definition.attack + 1)
+    expect(first.handCard.health).toBe(first.definition.health + 1)
+    expect(findPlayer().counters?.['nether-portal-draw-buff']).toBe(2)
+    const second = drawnBase()
+    expect(second.handCard.attack).toBe(second.definition.attack + 2)
+    expect(second.handCard.health).toBe(second.definition.health + 2)
+    expect(findPlayer().counters?.['nether-portal-draw-buff']).toBe(3)
+
+    accept(match.dispatch({ type: 'dev-add-card', participantId: activeId, cardId: 'journey_to_ungoro_nether_portal' }))
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: activeId,
+        available: 10,
+        maximum: 10
+      })
+    )
+    const secondPortal = findPlayer().hand.findLast(
+      (entry) => entry.cardId === 'journey_to_ungoro_nether_portal'
+    )!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: secondPortal.instanceId
+      })
+    )
+    expect(findPlayer().deck).toHaveLength(30)
+    const third = drawnBase()
+    expect(third.handCard.attack).toBe(third.definition.attack + 3)
+    expect(third.handCard.health).toBe(third.definition.health + 3)
+    expect(findPlayer().counters?.['nether-portal-draw-buff']).toBe(4)
+
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: activeId,
+        available: 10,
+        maximum: 10
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: third.handCard.instanceId,
+        position: 0
+      })
+    )
+    const played = findPlayer().board[0]
+    expect(played.instanceId).toBe(third.handCard.instanceId)
+    expect(played.attack).toBe(third.definition.attack + 3)
+    expect(played.health).toBe(third.definition.health + 3)
+    expect(played.maxHealth).toBe(third.definition.health + 3)
+    expect(played.baseAttack).toBe(third.definition.attack)
+    expect(played.baseHealth).toBe(third.definition.health)
   })
 
   it('offers five successive Adapt selections for Galvadon', () => {

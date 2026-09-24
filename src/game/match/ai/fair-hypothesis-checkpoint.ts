@@ -301,7 +301,7 @@ export function createFairHypothesisCheckpoint(
     const definition = knownIdentity
       ? CARD_CATALOG.get(card.cardId)
       : startedInDeck
-        ? sampleOriginalCard()
+        ? sampleOriginalCard(zone)
         : sampleCard(cardPool, sampleRng)
     if (!definition) throw new Error('A known hidden card is missing its definition.')
     const {
@@ -362,11 +362,14 @@ export function createFairHypothesisCheckpoint(
       unknownOriginalCards.splice(index, 1)
     }
   }
-  const sampleOriginalCard = () => {
+  const sampleOriginalCard = (zone: string) => {
     const cardId = unknownOriginalCards.pop()
     const definition = cardId ? CARD_CATALOG.get(cardId) : undefined
     if (!definition)
-      throw new Error('Opponent hypothesis ran out of original-deck cards.')
+      throw new Error(
+        `Opponent hypothesis ran out of original-deck cards in ${zone} ` +
+          `(sample size ${sampledDeckCardIds.length}, remaining ${unknownOriginalCards.length}).`
+      )
     return definition
   }
 
@@ -401,18 +404,18 @@ export function createFairHypothesisCheckpoint(
       ...publicPlayer,
       deck: shuffleDeckOrder(
         player.deck.map((card, index) =>
-          hideCard(card, `deck:${index}`, pool, rng, true)
+          hideCard(card, `deck:${index}`, pool, rng, card.startedInDeck === true)
         ),
         () => hiddenDeckOrderRng.next()
       ),
       hand: player.hand.map((card, index) =>
-        hideCard(card, `hand:${index}`, pool, rng, card.startedInDeck ?? true)
+        hideCard(card, `hand:${index}`, pool, rng, card.startedInDeck === true)
       ),
       revealedCards: player.revealedCards?.map((card, index) =>
-        hideCard(card, `revealed:${index}`, pool, rng, card.startedInDeck ?? true)
+        hideCard(card, `revealed:${index}`, pool, rng, card.startedInDeck === true)
       ),
       discardedCards: player.discardedCards?.map((card, index) =>
-        hideCard(card, `discarded:${index}`, pool, rng, card.startedInDeck ?? true)
+        hideCard(card, `discarded:${index}`, pool, rng, card.startedInDeck === true)
       ),
       secrets: player.secrets?.map((secret, index) => {
         if (secret.revealed) return secret

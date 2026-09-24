@@ -560,7 +560,7 @@
     "cost": 9,
     "attack": null,
     "armor": 5,
-    "rulesText": "Battlecry: Summon a 3/6 Water Elemental.",
+    "rulesText": "Battlecry: Summon a 3/6 Water Elemental. Your Elementals have Lifesteal for the rest of the game.",
     "keywords": [],
     "effects": [
       {

@@ -49,6 +49,16 @@ export class AiLog {
       })
       return
     }
+    if (record.kind === 'response-received' && typeof data.modelId === 'string') {
+      const modelsUsed = Array.isArray(this.document.modelsUsed)
+        ? this.document.modelsUsed.filter(
+            (model): model is string => typeof model === 'string'
+          )
+        : []
+      if (!modelsUsed.includes(data.modelId)) modelsUsed.push(data.modelId)
+      this.document.modelsUsed = modelsUsed
+      this.document.model = modelsUsed.length === 1 ? modelsUsed[0]! : 'multiple'
+    }
     const summary: JsonObject = {
       kind: record.kind,
       timestamp: record.timestamp,

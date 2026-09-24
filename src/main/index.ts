@@ -30,6 +30,9 @@ import { registerOutlineTuningIpc } from './services/outline-tuning-ipc'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
+// Hybrid-GPU laptops otherwise run Chromium's GPU process on the integrated
+// adapter. Must be set before the app is ready.
+app.commandLine.appendSwitch('force_high_performance_gpu')
 // The runner owns this temporary directory. Select it before any repository,
 // Chromium session, or recovery routine can touch the ordinary player profile.
 const matchPerformanceRoot =

@@ -74,6 +74,28 @@ export class CardPlayAnimation extends Actor {
     }
   }
 
+  /** Retains a stationary choice while its cast fades, independently of the selector. */
+  async presentChoice(card: CardView, presentation: Container): Promise<void> {
+    const pose = this.capture(card)
+    this.reparentChild(presentation)
+    presentation.eventMode = 'none'
+    const aura = CARD_PLAY_LAYOUT.spell.aura
+    try {
+      await Promise.all([
+        this.present('Spell', pose),
+        completeTimeline(
+          this.timeline().to(presentation, {
+            alpha: 0,
+            delay: aura.brightenDuration + aura.holdDuration,
+            duration: aura.fadeDuration
+          })
+        )
+      ])
+    } finally {
+      if (!presentation.destroyed) presentation.destroy({ children: true })
+    }
+  }
+
   createMinionAura(card: CardView, parent: Container): Sprite {
     const profile = CARD_PLAY_LAYOUT.minion.aura
     const aura = new Sprite(this.minionAura)

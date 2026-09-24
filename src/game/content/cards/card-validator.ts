@@ -110,12 +110,13 @@ function optionalString(value: unknown, path: string): string | null {
   return normalized === 'General' ? null : normalized
 }
 
-function optionalStringArray(value: unknown, path: string): readonly string[] | undefined {
+function optionalStringArray(
+  value: unknown,
+  path: string
+): readonly string[] | undefined {
   if (value === undefined) return undefined
   if (!Array.isArray(value)) return fail(path, 'expected an array')
-  const values = value.map((entry, index) =>
-    stringValue(entry, `${path}[${index}]`)
-  )
+  const values = value.map((entry, index) => stringValue(entry, `${path}[${index}]`))
   if (new Set(values).size !== values.length)
     return fail(path, 'must not contain duplicate entries')
   return values
@@ -293,6 +294,7 @@ const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>>
   copy: ['target'],
   'copy-stats': ['source', 'target'],
   'replace-deck-with-copies': ['cardId'],
+  'mark-draw-scaling': ['target'],
   'resurrect-discovered-minion': ['reference'],
   draw: ['player', 'count'],
   discover: ['player', 'count', 'source'],
@@ -583,8 +585,8 @@ function validateActionShape(
     fail(path, 'requires target or resource')
   }
   if (record['placement'] !== undefined) {
-    if (!SUMMON_ACTIONS.has(actionName)) {
-      fail(`${path}.placement`, 'is only supported for summon actions')
+    if (!SUMMON_ACTIONS.has(actionName) && actionName !== 'resurrect') {
+      fail(`${path}.placement`, 'is only supported for summon and resurrect actions')
     }
     enumValue(record['placement'], CARD_SUMMON_PLACEMENTS, `${path}.placement`)
   }
@@ -635,6 +637,7 @@ function filterValue(value: unknown, path: string): void {
       key === 'hasBattlecry' ||
       key === 'hasDeathrattle' ||
       key === 'collectible' ||
+      key === 'excludeInHand' ||
       key === 'mortallyWounded' ||
       key === 'negate' ||
       key === 'overload' ||
@@ -648,6 +651,12 @@ function filterValue(value: unknown, path: string): void {
       enumValue(candidate, CARD_OPERATORS, `${path}.${key}`)
     } else if (key === 'value') {
       numericEffectValue(candidate, `${path}.${key}`, false)
+    } else if (key === 'rarityIn') {
+      if (!Array.isArray(candidate) || candidate.length === 0)
+        return fail(`${path}.${key}`, 'expected a non-empty array')
+      candidate.forEach((entry, index) => {
+        enumValue(entry, CARD_RARITIES, `${path}.${key}[${index}]`)
+      })
     } else if (key === 'cost') {
       if (typeof candidate === 'string') {
         if (candidate !== 'target-cost' && candidate !== 'event-card-cost') {
@@ -701,8 +710,7 @@ function conditionValue(value: unknown, path: string): void {
     stringValue(condition['player'], `${path}.player`)
   if (condition['cardId'] !== undefined)
     stringValue(condition['cardId'], `${path}.cardId`)
-  if (condition['cost'] !== undefined)
-    finiteNumber(condition['cost'], `${path}.cost`)
+  if (condition['cost'] !== undefined) finiteNumber(condition['cost'], `${path}.cost`)
   if (condition['minimum'] !== undefined)
     finiteNumber(condition['minimum'], `${path}.minimum`)
   if (

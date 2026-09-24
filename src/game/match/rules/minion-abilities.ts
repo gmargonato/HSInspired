@@ -1,8 +1,11 @@
 import { effectiveBoardMinionKeywords } from './minion-attack-state'
 import {
+  cardHasTribe,
+  CARD_CATALOG,
   isCardEffectObject,
   type CardDefinition,
   type CardEffectBlock,
+  type CardId,
   type CardTrigger
 } from '../../content/cards'
 import type { BoardMinion } from '../opening-match-types'
@@ -57,6 +60,22 @@ function isBoardMinionAuraEffect(effect: CardEffectBlock): boolean {
   })
 }
 
+/**
+ * Frost Lich Jaina grants her Elementals Lifesteal for the rest of the game.
+ * This is a hero-driven aura rather than a card keyword, so it is derived from
+ * the controller's hero state instead of enchantments.
+ */
+export function hasJainaElementalLifesteal(
+  cardId: CardId,
+  heroId: string | null | undefined
+): boolean {
+  if (heroId !== 'jaina-frost-lich') return false
+  return (
+    cardHasTribe(CARD_CATALOG.get(cardId), 'Elemental') ||
+    cardId === 'basic_water_elemental'
+  )
+}
+
 /** Maps authored gameplay metadata to the static indicators shown while in play. */
 export function boardAbilityMarkers(
   definition: Pick<CardDefinition, 'keywords' | 'effects'>
@@ -98,7 +117,8 @@ export function boardAbilityMarkers(
  */
 export function boardMinionRuntimeMarkers(
   minion: BoardMinion,
-  turnNumber: number
+  turnNumber: number,
+  heroId?: string | null
 ): Pick<
   BoardAbilityMarkers,
   | 'taunt'
@@ -127,7 +147,9 @@ export function boardMinionRuntimeMarkers(
       (minion.spellDamage !== undefined
         ? minion.spellDamage !== 0
         : keywords.has('spell-damage')),
-    lifesteal: keywords.has('lifesteal'),
+    lifesteal:
+      keywords.has('lifesteal') ||
+      hasJainaElementalLifesteal(minion.cardId, heroId),
     elusive:
       (!minion.silenced || keywords.has('spell-immune')) &&
       (minion.spellImmune ?? keywords.has('spell-immune')),
@@ -146,12 +168,13 @@ export function boardMinionRuntimeMarkers(
 export function boardMinionAbilityMarkers(
   minion: BoardMinion,
   definition: Pick<CardDefinition, 'keywords' | 'effects'>,
-  turnNumber: number
+  turnNumber: number,
+  heroId?: string | null
 ): BoardAbilityMarkers {
   const authored = boardAbilityMarkers(
     minion.silenced ? { keywords: [], effects: [] } : definition
   )
-  const runtime = boardMinionRuntimeMarkers(minion, turnNumber)
+  const runtime = boardMinionRuntimeMarkers(minion, turnNumber, heroId)
   const active = (startsOnTurn?: number, expiresOnTurn?: number): boolean =>
     (startsOnTurn === undefined || startsOnTurn <= turnNumber) &&
     (expiresOnTurn === undefined || expiresOnTurn >= turnNumber)

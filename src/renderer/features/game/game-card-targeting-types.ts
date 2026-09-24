@@ -37,4 +37,5 @@ export interface CardPlayTargetingState {
     | { readonly kind: 'hidden-hand-card' }
     | { readonly kind: 'minion-preview'; readonly preview: PendingMinionTargetPreview }
   choice?: number
+  readonly choiceAnimated?: boolean
 }

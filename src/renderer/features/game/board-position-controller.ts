@@ -127,6 +127,20 @@ export class BoardPositionController {
     }
   }
 
+  /** Event positions are sequential insertions; lay out only the completed row. */
+  insertBatch(
+    side: BoardSide,
+    entries: readonly { position: number; view: MinionView }[]
+  ): void {
+    const row = this.rows[side]
+    if (row.entrance) throw new Error('A board row already has an active entrance.')
+    row.preview = null
+    row.pendingPreview = undefined
+    // Reconciled members may already exist; rebuild this group in event order.
+    for (const { view } of entries) this.detach(view)
+    for (const { position, view } of entries) this.insert(side, position, view)
+  }
+
   detach(view: MinionView): void {
     this.shifts.get(view)?.cancel()
     for (const row of Object.values(this.rows)) {

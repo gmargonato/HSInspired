@@ -2,6 +2,8 @@ import { ipcMain } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import {
   PLAYER_STATS_IPC_CHANNELS,
+  parseConstructedRankResultRequest,
+  parseConstructedRankSnapshot,
   parsePlayableClassId,
   parsePlayerStatsSnapshot
 } from '../../shared/ipc/player-stats'
@@ -15,6 +17,10 @@ import {
 
 /** Registers the narrow player-statistics API exposed to the renderer. */
 export function registerPlayerStatsIpc(repository: PlayerStatsRepository): void {
+  if (is.dev)
+    ipcMain.handle(PLAYER_STATS_IPC_CHANNELS.devSetRank, (_event, rank: unknown) =>
+      repository.setRank(parseConstructedRankSnapshot(rank))
+    )
   if (is.dev)
     ipcMain.handle(PROGRESSION_IPC_CHANNELS.devSetDust, (_event, amount: unknown) =>
       repository.setDust(parseDustAmount(amount))
@@ -41,5 +47,14 @@ export function registerPlayerStatsIpc(repository: PlayerStatsRepository): void 
   )
   ipcMain.handle(PLAYER_STATS_IPC_CHANNELS.recordTavernBrawlWin, async () =>
     parsePlayerStatsSnapshot(await repository.recordTavernBrawlWin())
+  )
+  ipcMain.handle(
+    PLAYER_STATS_IPC_CHANNELS.recordConstructedResult,
+    async (_event, request: unknown) =>
+      parsePlayerStatsSnapshot(
+        await repository.recordConstructedResult(
+          parseConstructedRankResultRequest(request)
+        )
+      )
   )
 }

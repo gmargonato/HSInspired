@@ -191,8 +191,8 @@ export class GameBoardSession {
     return this.match.dispatch(command)
   }
 
-  getAiObservation(): AiObservation {
-    const observation = this.match.getAiObservation?.(this.remoteParticipantId, 'fair')
+  getAiObservation(participantId: PlayerId = this.remoteParticipantId): AiObservation {
+    const observation = this.match.getAiObservation?.(participantId, 'fair')
     if (!observation)
       throw new Error('The match engine does not expose AI observations.')
     return observation

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type {
   AiDecisionRequest,
   AiDecisionResponse,
@@ -18,11 +18,115 @@ import {
 } from './expert-ai-decision-api'
 import { GameBoardSession } from './game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
-import { EXPERT_AI_TURN_BUDGET_MS } from './expert-ai-worker-protocol'
+import { chooseExpertConsensus } from './expert-ai-consensus'
+import {
+  expertAiBudgetForTurn,
+  EXPERT_AI_TURN_BUDGET_MS
+} from './expert-ai-worker-protocol'
 import type {
   ExpertAiWorkerRequest,
   ExpertAiWorkerResponse
 } from './expert-ai-worker-protocol'
+
+describe('Expert hidden-world consensus', () => {
+  it('ranks an empty Coin into face hero power below ordinary legal moves', () => {
+    const candidate = (
+      actionId: string,
+      meanValue: number,
+      recommendationTacticalPenalty = 0
+    ) => ({
+      actionId,
+      type: 'play-card' as const,
+      description: actionId,
+      score: meanValue,
+      scoreComponents: {
+        positionDelta: meanValue,
+        commandPreference: 0,
+        continuationPreference: 0,
+        threatDefense: 0,
+        opponentBoardRemoval: 0,
+        friendlyBoardLoss: 0,
+        sequenceRefinement: 0
+      },
+      accepted: true as const,
+      phase: 'turns' as const,
+      winnerId: null,
+      visits: 100,
+      meanValue,
+      recommendationTacticalPenalty
+    })
+    const results = [
+      {
+        response: { choice: { actionId: 'coin-face-power' } },
+        trace: {
+          chosenActionId: 'coin-face-power',
+          candidates: [
+            candidate('coin-face-power', 0.9, 3),
+            candidate('hold-coin', 0.2)
+          ],
+          requestId: 'coin-face-power-regression',
+          phase: 'action',
+          durationMs: 1,
+          evaluatedActions: 2,
+          refinedActions: 2,
+          continuations: 0,
+          timedOut: false,
+          baseScore: null,
+          visibleThreat: null
+        }
+      }
+    ] as unknown as Parameters<typeof chooseExpertConsensus>[0]
+
+    expect(
+      chooseExpertConsensus(results, ['coin-face-power', 'hold-coin']).actionId
+    ).toBe('hold-coin')
+  })
+
+  it('keeps a one-visit lucky rollout below a repeatedly supported root action', () => {
+    const candidates = [
+      { actionId: 'lucky', score: 0.95, meanValue: 0.95, visits: 1 },
+      { actionId: 'supported', score: 0.7, meanValue: 0.7, visits: 100 }
+    ].map((candidate) => ({
+      ...candidate,
+      type: 'end-turn' as const,
+      description: candidate.actionId,
+      scoreComponents: {
+        positionDelta: candidate.score,
+        commandPreference: 0,
+        continuationPreference: 0,
+        threatDefense: 0,
+        opponentBoardRemoval: 0,
+        friendlyBoardLoss: 0,
+        sequenceRefinement: 0
+      },
+      accepted: true as const,
+      phase: 'turns' as const,
+      winnerId: null
+    }))
+    const results = [
+      {
+        response: { choice: { actionId: 'lucky' } },
+        trace: {
+          chosenActionId: 'lucky',
+          candidates,
+          requestId: 'consensus-regression',
+          phase: 'action',
+          durationMs: 1,
+          evaluatedActions: 2,
+          refinedActions: 2,
+          continuations: 0,
+          timedOut: false,
+          baseScore: null,
+          visibleThreat: null
+        }
+      }
+    ] as unknown as Parameters<typeof chooseExpertConsensus>[0]
+
+    expect(chooseExpertConsensus(results, ['lucky', 'supported']).actionId).toBe(
+      'supported'
+    )
+  })
+})
 
 describe('Expert AI worker boundary', () => {
   it('posts only a redacted checkpoint and reports the Expert model', async () => {
@@ -80,10 +184,17 @@ describe('Expert AI worker boundary', () => {
 
       const message = posted.find((entry) => entry.type === 'decide')!
       if (message.type !== 'decide') throw new Error('Expected a decide request.')
-      expect(EXPERT_AI_TURN_BUDGET_MS).toBe(10_000)
-      expect(EXPERT_AI_SEARCH_BUDGET_MS).toBe(7_500)
-      expect(EXPERT_AI_DECISION_SEARCH_BUDGET_MS).toBe(6_000)
-      expect(message.remainingSearchBudgetMs).toBeLessThanOrEqual(6_000)
+      expect(EXPERT_AI_TURN_BUDGET_MS).toBe(30_000)
+      expect(EXPERT_AI_SEARCH_BUDGET_MS).toBe(24_500)
+      expect(EXPERT_AI_DECISION_SEARCH_BUDGET_MS).toBe(23_000)
+      expect(expertAiBudgetForTurn(10_000)).toMatchObject({
+        turnBudgetMs: 10_000,
+        searchBudgetMs: 4_500,
+        decisionSearchBudgetMs: 3_000,
+        planSearchLimitMs: 2_000,
+        replanSearchLimitMs: 1_000
+      })
+      expect(message.remainingSearchBudgetMs).toBeLessThanOrEqual(23_000)
       const originalHidden = fixture.checkpoint.state.players.find(
         (player) => player.participantId === fixture.localParticipantId
       )!
@@ -165,7 +276,7 @@ describe('Expert AI worker boundary', () => {
         (message): message is Extract<ExpertAiWorkerRequest, { type: 'decide' }> =>
           message.type === 'decide'
       )
-      expect(decisionsPosted[0]?.remainingSearchBudgetMs).toBe(6_000)
+      expect(decisionsPosted[0]?.remainingSearchBudgetMs).toBe(11_000)
       expect(decisionsPosted[1]?.remainingSearchBudgetMs).toBe(1_500)
 
       const firstPlayerId = session.remoteParticipantId
@@ -193,7 +304,7 @@ describe('Expert AI worker boundary', () => {
       expect(nextTurnDecision?.type).toBe('decide')
       if (nextTurnDecision?.type !== 'decide')
         throw new Error('Expected the next-turn worker request.')
-      expect(nextTurnDecision.remainingSearchBudgetMs).toBe(6_000)
+      expect(nextTurnDecision.remainingSearchBudgetMs).toBe(11_000)
 
       now += 7_200
       await expect(
@@ -207,9 +318,68 @@ describe('Expert AI worker boundary', () => {
       expect(reserveDecision?.type).toBe('decide')
       if (reserveDecision?.type !== 'decide')
         throw new Error('Expected the presentation-reserve worker request.')
-      expect(reserveDecision.remainingSearchBudgetMs).toBe(300)
+      expect(reserveDecision.remainingSearchBudgetMs).toBe(5_300)
     } finally {
       api.dispose()
+    }
+  })
+
+  it('scales only the worker deadline for serialized benchmark worlds', async () => {
+    const fixture = createAiFixture({
+      seed: 0x5ef0,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'garrosh',
+      aiDeck: ['basic_acidic_swamp_ooze'],
+      opponentDeck: ['basic_acidic_swamp_ooze']
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const posted: ExpertAiWorkerRequest[] = []
+    const listeners = new Map<string, (event: unknown) => void>()
+    const worker = {
+      addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+        if (typeof listener === 'function')
+          listeners.set(type, listener as (event: unknown) => void)
+      },
+      postMessage(message: ExpertAiWorkerRequest) {
+        posted.push(message)
+      },
+      terminate() {}
+    } as unknown as Worker
+
+    vi.useFakeTimers()
+    const api = new ExpertAiDecisionApi(
+      session,
+      () => worker,
+      () => 1_000,
+      session.remoteParticipantId,
+      2
+    )
+    try {
+      const pending = api.decide({
+        matchId: 'serialized-benchmark-timeout-match',
+        requestId: 'serialized-benchmark-timeout-request',
+        expectedRevision: session.getState().revision,
+        phase: 'action',
+        allowInspection: false,
+        messages: [],
+        actionIds: ['a0']
+      })
+      const rejection = expect(pending).rejects.toThrow(
+        'Expert AI exceeded its allocated turn search budget.'
+      )
+
+      await vi.advanceTimersByTimeAsync(EXPERT_AI_SEARCH_BUDGET_MS * 2 - 1)
+      expect(posted.some((message) => message.type === 'cancel')).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      await rejection
+      expect(posted.some((message) => message.type === 'cancel')).toBe(true)
+    } finally {
+      api.dispose()
+      vi.useRealTimers()
     }
   })
 
@@ -420,18 +590,20 @@ describe('Expert AI worker boundary', () => {
       })
       expect(result.accepted).toBe(true)
 
-      await api.decide(makeRequest('expert-continuation-fae', 'action'))
-      const faerieRequest = posted.filter(
-        (message): message is Extract<ExpertAiWorkerRequest, { type: 'decide' }> =>
-          message.type === 'decide'
-      )[1]!
-      expect(faerieRequest.preferredContinuation).toEqual(faerieIntent)
+      const continuation = await api.decide(
+        makeRequest('expert-continuation-fae', 'action')
+      )
+      expect(continuation.finishReason).toBe('expert-continuation')
+      expect(
+        'actionId' in continuation.choice ? continuation.choice.intent : null
+      ).toEqual(faerieIntent)
+      expect(posted.filter((message) => message.type === 'decide')).toHaveLength(1)
     } finally {
       api.dispose()
     }
   })
 
-  it('uses a still-legal continuation when posting a worker request fails', async () => {
+  it('continues the searched line before a worker request can fail', async () => {
     const fixture = createAiFixture({
       seed: 0x5ef7,
       aiHeroId: 'garrosh',
@@ -554,11 +726,11 @@ describe('Expert AI worker boundary', () => {
       const continued = await api.decide(
         makeRequest('expert-post-failure-faerie', 'action')
       )
-      expect(continued.finishReason).toBe('expert-continuation-fallback')
+      expect(continued.finishReason).toBe('expert-continuation')
       expect('actionId' in continued.choice ? continued.choice.intent : null).toEqual(
         faerieIntent
       )
-      expect(posted.filter((message) => message.type === 'decide')).toHaveLength(2)
+      expect(posted.filter((message) => message.type === 'decide')).toHaveLength(1)
     } finally {
       api.dispose()
     }
@@ -683,20 +855,27 @@ describe('Expert AI worker boundary', () => {
 
     try {
       await api.decide(makeRequest('expert-stale-plan', 'plan'))
-      expect(session.match.dispatch(coinAction.command).accepted).toBe(true)
+      const commit = await api.decide(makeRequest('expert-stale-plan-commit', 'action'))
+      expect(commit.finishReason).toBe('expert-plan-commit-cache')
+      expect(
+        session.match.dispatch({
+          type: 'dev-draw',
+          participantId: session.remoteParticipantId
+        }).accepted
+      ).toBe(true)
 
       const decision = await api.decide(
         makeRequest('expert-stale-plan-action', 'action')
       )
       expect(decision.finishReason).toBe('fixture-worker-search')
-      const actionRequest = posted.filter(
+      const workerDecisions = posted.filter(
         (message): message is Extract<ExpertAiWorkerRequest, { type: 'decide' }> =>
           message.type === 'decide'
-      )[1]
-      expect(actionRequest?.request.phase).toBe('action')
-      if (actionRequest?.type !== 'decide')
-        throw new Error('Expected a fresh action search after the state changed.')
-      expect(actionRequest.preferredContinuation).toBeUndefined()
+      )
+      expect(workerDecisions.map((message) => message.request.phase)).toEqual([
+        'plan',
+        'action'
+      ])
     } finally {
       api.dispose()
     }
@@ -835,7 +1014,7 @@ describe('Expert AI worker boundary', () => {
       const faerieDecision = await api.decide(
         makeRequest('expert-exhausted-line-faerie', 'action')
       )
-      expect(faerieDecision.finishReason).toBe('expert-continuation-fallback')
+      expect(faerieDecision.finishReason).toBe('expert-continuation')
       expect(
         'actionId' in faerieDecision.choice ? faerieDecision.choice.intent : null
       ).toEqual(faerieIntent)
@@ -853,11 +1032,11 @@ describe('Expert AI worker boundary', () => {
       const endTurnDecision = await api.decide(
         makeRequest('expert-exhausted-line-end-turn', 'action')
       )
-      expect(endTurnDecision.finishReason).toBe('expert-continuation-fallback')
+      expect(endTurnDecision.finishReason).toBe('expert-continuation')
       expect(
         'actionId' in endTurnDecision.choice ? endTurnDecision.choice.intent : null
       ).toEqual(endTurnIntent)
-      expect(posted.filter((message) => message.type === 'decide')).toHaveLength(2)
+      expect(posted.filter((message) => message.type === 'decide')).toHaveLength(1)
     } finally {
       api.dispose()
     }
@@ -1103,12 +1282,10 @@ describe('Expert AI worker boundary', () => {
       messages: [],
       actionIds: actions.map((action) => action.id)
     })
-    expect(
-      api.getLastTrace()?.mctsProfile?.opponentActionsSimulated
-    ).toBeGreaterThan(0)
-    expect(
-      api.getLastTrace()?.mctsProfile?.opponentCardPlaysSimulated
-    ).toBeGreaterThan(0)
+    expect(api.getLastTrace()?.mctsProfile?.opponentActionsSimulated).toBeGreaterThan(0)
+    expect(api.getLastTrace()?.mctsProfile?.opponentCardPlaysSimulated).toBeGreaterThan(
+      0
+    )
   }, 15_000)
 
   it('uses The Coin to develop a playable minion instead of only taking armor', async () => {
@@ -1160,9 +1337,7 @@ describe('Expert AI worker boundary', () => {
 
     if (!('actionId' in firstDecision.choice))
       throw new Error('Expected an Expert action decision.')
-    const coin = actions.find(
-      (action) => action.id === firstDecision.choice.actionId
-    )
+    const coin = actions.find((action) => action.id === firstDecision.choice.actionId)
     expect(coin?.command.type).toBe('play-card')
     if (coin?.command.type !== 'play-card') return
     expect(

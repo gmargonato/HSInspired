@@ -6,6 +6,7 @@ import {
   EMPTY_CTHUN
 } from '../cthun'
 import { HistoryRecorder } from '../history-recorder'
+import { cardCostResource } from '../rules/card-cost-resource'
 import {
   kazakusCostOptions,
   ingredientChoiceOptions,
@@ -113,6 +114,7 @@ import {
 } from './capability'
 import { insertCardIntoPlayer, removeCardFromPlayer } from '../rules/zone-state'
 import { assertOpeningMatchInvariants } from '../rules/invariants'
+import { hasJainaElementalLifesteal } from '../rules/minion-abilities'
 import {
   boardMinionAttacksUsed,
   effectiveBoardMinionKeywords,
@@ -511,6 +513,9 @@ function makeEffectEvent(
 ): EffectDomainEvent {
   return {
     type: 'effect-resolved',
+    ...(action === 'summon' && frame.summonGroupId
+      ? { summonGroupId: frame.summonGroupId }
+      : {}),
     revision,
     sourceInstanceId: frame.source.instanceId,
     sourceCardId: frame.sourceCardId,
@@ -854,7 +859,13 @@ export class EffectRuntime {
           action,
           data
         )
-    if (history) this.events.push(history)
+    if (history)
+      this.events.push({
+        ...history,
+        ...(action === 'summon' && frame.summonGroupId
+          ? { summonGroupId: frame.summonGroupId }
+          : {})
+      })
     if (this.recordTrace)
       this.trace.push({
         revision: this.revision,
@@ -1754,11 +1765,7 @@ export class EffectRuntime {
         }
       })
     }
-    if (
-      queued.type === 'overload-applied' &&
-      queued.controllerId &&
-      queued.amount
-    ) {
+    if (queued.type === 'overload-applied' && queued.controllerId && queued.amount) {
       this.historyUpdate((history) => {
         history.overloadedManaThisGameByPlayer = {
           ...(history.overloadedManaThisGameByPlayer ?? {}),
@@ -2647,9 +2654,7 @@ export class EffectRuntime {
     if (ref.kind === 'minion')
       return this.player(ref.participantId).board.some(
         (minion) =>
-          minion.instanceId === ref.instanceId &&
-          minion.health > 0 &&
-          !minion.dormant
+          minion.instanceId === ref.instanceId && minion.health > 0 && !minion.dormant
       )
     if (ref.kind === 'card') return this.currentCard(ref) !== null
     if (ref.kind === 'weapon')
@@ -2772,16 +2777,14 @@ export class EffectRuntime {
                 repeat.until === 'repeat-ended-without-minion-death' ||
                 (isRecord(repeat.until) &&
                   repeat.until.type === 'repeat-ended-without-minion-death')
-              if (tracksMinionDeaths)
-                frame.storedValues.set('repeat.minions-died', -1)
+              if (tracksMinionDeaths) frame.storedValues.set('repeat.minions-died', -1)
               let count = 0
               while (
                 count < MAX_RESOLUTION_STEPS &&
                 !this.queries.conditionMatches(repeat.until, frame)
               ) {
                 const priorEventSequence = frame.lastEvent?.sequence
-                const deathsBefore =
-                  this.draft.history?.minionsDiedThisTurn.length ?? 0
+                const deathsBefore = this.draft.history?.minionsDiedThisTurn.length ?? 0
                 this.runActions(
                   asArray(repeat.actions),
                   frame,
@@ -3435,9 +3438,10 @@ export class EffectRuntime {
       if (!minion) return false
       if (
         keyword === 'lifesteal' &&
-        this.player(ref.participantId).heroId === 'jaina-frost-lich' &&
-        (cardHasTribe(cardDefinition(minion.cardId), 'Elemental') ||
-          minion.cardId === 'basic_water_elemental')
+        hasJainaElementalLifesteal(
+          minion.cardId,
+          this.player(ref.participantId).heroId
+        )
       )
         return true
       const keywords = effectiveBoardMinionKeywords(minion, this.draft.turnNumber)
@@ -3543,8 +3547,7 @@ export class EffectRuntime {
         const hero = this.player(ref.participantId).hero
         hero.spellDamage = enabled ? (hero.spellDamage ?? 0) + amount : 0
       }
-      if (lostDivineShield && !frame.continuous)
-        this.notifyDivineShieldLost(ref)
+      if (lostDivineShield && !frame.continuous) this.notifyDivineShieldLost(ref)
       if (ref.kind === 'minion' && enabled) {
         this.updateMinion(ref, (minion) => {
           if (keyword === 'divine-shield') minion.divineShieldConsumed = false
@@ -4424,7 +4427,7 @@ export class EffectRuntime {
     const insertion = this.insertBoardMinion(
       player,
       minion,
-      position === undefined ? undefined : position
+      position ?? this.summonPosition(frame, participantId, undefined, 0)
     )
     // A copied summon must have its final stats before summon listeners observe it.
     if (isRecord(initialModifications))
@@ -4453,6 +4456,7 @@ export class EffectRuntime {
     if (!deferSummonTriggers) {
       this.events.push({
         type: 'minion-summoned',
+        ...(frame.summonGroupId ? { summonGroupId: frame.summonGroupId } : {}),
         participantId,
         minion: clonePlain(minion) as BoardMinion,
         position: insertion
@@ -4711,6 +4715,8 @@ export class EffectRuntime {
       })
       return null
     }
+    if (card.scalingCounter)
+      player.counters = applyDrawScalingBuff(card, player.counters)
     card.ownerId = card.ownerId ?? participantId
     const updatedPlayer = insertCardIntoPlayer(
       player as unknown as OpeningPlayerState,
@@ -5542,7 +5548,8 @@ export class EffectRuntime {
     ref: EntityRef,
     frame: EffectFrame,
     path: string,
-    healthValue?: unknown
+    healthValue?: unknown,
+    placement?: { policy: CardSummonPlacement | undefined; index: number }
   ): EntityRef | null {
     const entryPlayer = this.player(ref.participantId)
     let index = (entryPlayer.graveyard ?? []).findIndex(
@@ -5584,7 +5591,9 @@ export class EffectRuntime {
       frame,
       path,
       undefined,
-      undefined,
+      placement
+        ? this.summonPosition(frame, controllerId, placement.policy, placement.index)
+        : this.player(controllerId).board.length,
       {
         ...snapshot,
         health:
@@ -6139,7 +6148,19 @@ export class EffectRuntime {
     }
   }
 
+  private summonGroupSequence = 0
+
   private runAction(actionValue: unknown, frame: EffectFrame, path: string): void {
+    const previous = frame.summonGroupId
+    frame.summonGroupId = `${this.resolutionId}:summons:${this.summonGroupSequence++}`
+    try {
+      this.runActionBody(actionValue, frame, path)
+    } finally {
+      frame.summonGroupId = previous
+    }
+  }
+
+  private runActionBody(actionValue: unknown, frame: EffectFrame, path: string): void {
     if (!isRecord(actionValue) || typeof actionValue.action !== 'string') return
     const action = actionValue
     const name = action.action as string
@@ -6174,12 +6195,29 @@ export class EffectRuntime {
         }
         return
       }
+      case 'mark-draw-scaling': {
+        const counterKey = stringValue(action.counter) ?? 'draw-scaling'
+        let marked = 0
+        for (const target of this.actionTargets(action, frame)) {
+          if (target.kind !== 'card') continue
+          const card = this.currentCard(target)
+          if (!card) continue
+          card.scalingCounter = counterKey
+          marked += 1
+        }
+        if (marked > 0)
+          this.emit(frame, name, path, { counter: counterKey, count: marked })
+        return
+      }
       case 'shuffle-random-minions': {
         const subtype = stringValue(action.tribe)
         if (!subtype) return
         const count = Math.max(0, Math.floor(Number(action.count ?? 0)))
         const pool = CARD_CATALOG.all.filter(
-          (card) => card.type === 'Minion' && cardHasTribe(card, subtype)
+          (card) =>
+            card.type === 'Minion' &&
+            cardHasTribe(card, subtype) &&
+            (action.includeUncollectible === true || card.collectible !== true)
         )
         if (pool.length === 0) return
         for (const participantId of this.targetPlayers(action, frame)) {
@@ -6258,7 +6296,9 @@ export class EffectRuntime {
       }
       case 'adapt': {
         const targets =
-          action.target === undefined ? [frame.source] : this.actionTargets(action, frame)
+          action.target === undefined
+            ? [frame.source]
+            : this.actionTargets(action, frame)
         for (const targetRef of targets) {
           if (targetRef.kind !== 'minion') continue
           const target = this.currentMinion(targetRef)
@@ -6477,8 +6517,7 @@ export class EffectRuntime {
         return
       }
       case 'go-dormant': {
-        if (frame.source.kind !== 'minion' || frame.source.zone !== 'graveyard')
-          return
+        if (frame.source.kind !== 'minion' || frame.source.zone !== 'graveyard') return
         const dormant = this.resurrect(frame.source, frame, path)
         if (dormant)
           this.updateMinion(dormant, (minion) => {
@@ -6679,7 +6718,8 @@ export class EffectRuntime {
           return
         }
         const removed = this.removeCard(selected)
-        if (removed) this.addToDiscardedCards(this.player(selected.participantId), removed)
+        if (removed)
+          this.addToDiscardedCards(this.player(selected.participantId), removed)
         this.castRandomSpells(
           { count: 1, pool: [card.cardId], includeUncollectible: true },
           frame,
@@ -7143,8 +7183,7 @@ export class EffectRuntime {
             (isRecord(action.source) && action.source.zone === 'deck')
           const fromOpponentDeck = action.source === 'opponent-deck'
           const fromDeckCopy = fromDeck && action.copy === true
-          const fromDeadMinions =
-            action.source === 'friendly-minions-died-this-game'
+          const fromDeadMinions = action.source === 'friendly-minions-died-this-game'
           let candidates: DraftCard[] = []
           if (fromDeckCopy) {
             const player = this.player(participantId)
@@ -7245,7 +7284,10 @@ export class EffectRuntime {
                   deadByCardId.set(entry.minion.cardId, entry)
               }
             }
-            const selectedDead = this.shuffle([...deadByCardId.values()]).slice(0, count)
+            const selectedDead = this.shuffle([...deadByCardId.values()]).slice(
+              0,
+              count
+            )
             const player = this.player(participantId)
             for (const entry of selectedDead) {
               const definition = cardDefinition(entry.minion.cardId)
@@ -7365,11 +7407,11 @@ export class EffectRuntime {
               ? ('deck-copy' as const)
               : fromDeadMinions
                 ? ('dead-minions' as const)
-              : fromDeck
-                ? ('deck' as const)
-                : fromOpponentDeck
-                  ? ('opponent-deck' as const)
-                  : ('generated' as const)
+                : fromDeck
+                  ? ('deck' as const)
+                  : fromOpponentDeck
+                    ? ('opponent-deck' as const)
+                    : ('generated' as const)
           }
           if (this.automaticChoiceDepth > 0) {
             const selected =
@@ -7411,16 +7453,16 @@ export class EffectRuntime {
       }
       case 'discover-opponent-deck-guess': {
         const opponent = this.player(this.queries.otherPlayer(frame.controllerId))
-        const originalDeckCardIds = opponent.originalDeckCardIds ?? opponent.deck.map(
-          (card) => card.cardId
-        )
+        const originalDeckCardIds =
+          opponent.originalDeckCardIds ?? opponent.deck.map((card) => card.cardId)
         const originalCards = originalDeckCardIds
           .map((cardId) => cardDefinition(cardId))
           .filter(
             (definition): definition is CardDefinition =>
               definition !== undefined && isGeneratableCard(definition)
           )
-        const correct = originalCards[Math.floor(this.rng.next() * originalCards.length)]
+        const correct =
+          originalCards[Math.floor(this.rng.next() * originalCards.length)]
         if (!correct) return
         const opponentClass = HERO_CATALOG.get(opponent.heroId)?.classId
         if (!opponentClass) return
@@ -7720,7 +7762,9 @@ export class EffectRuntime {
               : [
                   {
                     trigger: 'deathrattle',
-                    actions: asArray(action.actions) as unknown as readonly CardAction[],
+                    actions: asArray(
+                      action.actions
+                    ) as unknown as readonly CardAction[],
                     ...(action.concealed === true ? { concealed: true } : {})
                   }
                 ]
@@ -7773,6 +7817,9 @@ export class EffectRuntime {
       }
       case 'set-next-spell-costs-health':
         this.player(frame.controllerId).nextSpellCostsHealth = true
+        return
+      case 'set-next-murloc-costs-health':
+        this.player(frame.controllerId).nextMurlocCostsHealth = true
         return
       case 'grant-keyword': {
         const keyword = stringValue(action.keyword) as CardKeyword | null
@@ -8325,9 +8372,16 @@ export class EffectRuntime {
             action.count === undefined
               ? sources.length
               : Math.max(0, Math.floor(this.queries.evaluate(action.count, frame)))
+          let summonIndex = 0
           for (const source of sources.slice(0, count)) {
-            if (source.kind === 'minion')
-              this.resurrect(source, frame, path, action.health)
+            if (
+              source.kind === 'minion' &&
+              this.resurrect(source, frame, path, action.health, {
+                policy: action.placement as CardSummonPlacement | undefined,
+                index: summonIndex
+              })
+            )
+              summonIndex += 1
           }
         }
         return
@@ -10234,8 +10288,7 @@ export class EffectRuntime {
             const definition = cardDefinition(card.cardId)
             if (!definition) return false
             const cardCost = card.currentCost ?? card.baseCost ?? definition.cost
-            const canPayWithHealth =
-              definition.type === 'Spell' && player.nextSpellCostsHealth === true
+            const canPayWithHealth = cardCostResource(definition, player) === 'health'
             if (
               canPayWithHealth
                 ? player.hero.health < cardCost
@@ -10323,8 +10376,8 @@ export class EffectRuntime {
       participantId,
       effectiveTargeting
     )
-    const legalHeroPowerTargets: HeroPowerTargetRef[] = legalHeroPowerTargetEntities.map(
-      (target) =>
+    const legalHeroPowerTargets: HeroPowerTargetRef[] =
+      legalHeroPowerTargetEntities.map((target) =>
         target.kind === 'hero'
           ? { kind: 'hero', participantId: target.participantId }
           : {
@@ -10332,7 +10385,7 @@ export class EffectRuntime {
               participantId: target.participantId,
               instanceId: target.instanceId
             }
-    )
+      )
     const heroPowerBoardAvailable =
       power?.effect.kind === 'summon' ||
       power?.effect.kind === 'summon-random-totem' ||
@@ -10351,12 +10404,15 @@ export class EffectRuntime {
             (cardId) => !player.board.some((minion) => minion.cardId === cardId)
           )
         : true
+    const heroPowerUsesAvailable =
+      (player.heroPower.usesThisTurn ?? 0) < this.heroPowerUseLimit(participantId)
     const hasLegalHeroPowerTarget = legalHeroPowerTargetEntities.length > 0
     const heroPowerTargetSelectionRandomized =
       targetSelectionRandomized && effectiveTargeting !== 'none'
     const legalHeroPower =
       active &&
       player.heroPower.available &&
+      heroPowerUsesAvailable &&
       player.heroPower.cost <= player.mana.available &&
       heroPowerBoardAvailable &&
       heroPowerTotemAvailable &&
@@ -10451,8 +10507,7 @@ export class EffectRuntime {
           'A copy of that secret is already active.'
         )
     }
-    const paysWithHealth =
-      definition.type === 'Spell' && player.nextSpellCostsHealth === true
+    const paysWithHealth = cardCostResource(definition, player) === 'health'
     if (
       paysWithHealth
         ? player.hero.health < currentCost
@@ -10461,7 +10516,7 @@ export class EffectRuntime {
       throw new ResolutionInputError(
         'insufficient-mana',
         paysWithHealth
-          ? 'Not enough Health to play that spell.'
+          ? 'Not enough Health to play that card.'
           : 'Not enough mana to play that card.'
       )
     if (definition.type === 'Minion') {
@@ -10496,13 +10551,15 @@ export class EffectRuntime {
         : undefined)
     const selectors = input.randomizedTargetSelectors ?? input.targetSelectors
     const targets = input.randomizedTargetSelectors
-      ? (this.randomTargetAssignment(selectors, {
-          ...this.frameFor(source, null, []),
-          choiceIndex: effectiveChoice,
-          prospectiveCardPlay: true
-        }) ?? []).map((target) => publicTarget(target)).filter(
-          (target): target is CardPlayTargetRef => target !== null
+      ? (
+          this.randomTargetAssignment(selectors, {
+            ...this.frameFor(source, null, []),
+            choiceIndex: effectiveChoice,
+            prospectiveCardPlay: true
+          }) ?? []
         )
+          .map((target) => publicTarget(target))
+          .filter((target): target is CardPlayTargetRef => target !== null)
       : (options.targets ?? [])
     if (
       new Set(
@@ -10870,9 +10927,13 @@ export class EffectRuntime {
       if (!minion) return 0
       const keywords = effectiveBoardMinionKeywords(minion, this.draft.turnNumber)
       return (
-        minion.maxAttacksPerTurn ??
-        (keywords.includes('mega-windfury') ? 4 : keywords.includes('windfury') ? 2 : 1)
-      ) + (minion.extraAttacksThisTurn ?? 0)
+        (minion.maxAttacksPerTurn ??
+          (keywords.includes('mega-windfury')
+            ? 4
+            : keywords.includes('windfury')
+              ? 2
+              : 1)) + (minion.extraAttacksThisTurn ?? 0)
+      )
     }
     return 0
   }
@@ -10998,10 +11059,7 @@ export class EffectRuntime {
       const heroHasAttacked =
         (hero.attacksUsedThisTurn ??
           (hero.lastAttackedOnTurn === this.draft.turnNumber ? 1 : 0)) > 0
-      if (
-        keywords.includes('requires-hero-attack-this-turn') &&
-        !heroHasAttacked
-      )
+      if (keywords.includes('requires-hero-attack-this-turn') && !heroHasAttacked)
         return false
       if (
         !keywords.some((keyword) => keyword === 'charge' || keyword === 'rush') &&
@@ -11019,17 +11077,17 @@ export class EffectRuntime {
     const minion = this.currentMinion(ref)
     return Boolean(
       minion &&
-        minion.health > 0 &&
-        !minion.dormant &&
-        this.combatAttack(ref) > 0 &&
-        !this.hasKeyword(ref, 'cannot-attack') &&
-        (!this.hasKeyword(ref, 'requires-hero-attack-this-turn') ||
-          (this.player(ref.participantId).hero.attacksUsedThisTurn ??
-            (this.player(ref.participantId).hero.lastAttackedOnTurn ===
-            this.draft.turnNumber
-              ? 1
-              : 0)) > 0) &&
-        !this.isFrozen(ref)
+      minion.health > 0 &&
+      !minion.dormant &&
+      this.combatAttack(ref) > 0 &&
+      !this.hasKeyword(ref, 'cannot-attack') &&
+      (!this.hasKeyword(ref, 'requires-hero-attack-this-turn') ||
+        (this.player(ref.participantId).hero.attacksUsedThisTurn ??
+          (this.player(ref.participantId).hero.lastAttackedOnTurn ===
+          this.draft.turnNumber
+            ? 1
+            : 0)) > 0) &&
+      !this.isFrozen(ref)
     )
   }
 
@@ -11046,8 +11104,7 @@ export class EffectRuntime {
             if (action.disabled === true) return 0
             if (
               typeof action.heroPowerUsesPerTurn === 'number' &&
-              (action.player === 'each' ||
-                boardPlayer.participantId === participantId)
+              (action.player === 'each' || boardPlayer.participantId === participantId)
             )
               limit = Math.max(limit, Math.floor(action.heroPowerUsesPerTurn))
           }
@@ -11979,7 +12036,7 @@ export class EffectRuntime {
             remainingPowerEnchantments.reduce(
               (total, enchantment) => total + (enchantment.costDelta ?? 0),
               0
-          )
+            )
         )
       }
       const reportedHeroPowerTarget: HeroPowerTargetRef | null =
@@ -12536,13 +12593,12 @@ export class EffectRuntime {
           participantId: options.participantId,
           zone: 'hero-power'
         },
-        target:
-          reportedTarget ?? {
-            instanceId: `${options.participantId}:hero`,
-            kind: 'hero',
-            participantId: options.participantId,
-            zone: 'hero'
-          },
+        target: reportedTarget ?? {
+          instanceId: `${options.participantId}:hero`,
+          kind: 'hero',
+          participantId: options.participantId,
+          zone: 'hero'
+        },
         controllerId: options.participantId,
         targetControllerId: reportedTarget?.participantId ?? options.participantId,
         amount: cost
@@ -12968,12 +13024,12 @@ export class EffectRuntime {
       }
 
       endingPlayer.hero.attack = 0
-      const elementalsPlayed = (
-        this.draft.history?.cardsPlayedThisTurn ?? []
-      ).filter((cardId) => {
-        const definition = cardDefinition(cardId as CardId)
-        return definition?.type === 'Minion' && cardHasTribe(definition, 'Elemental')
-      }).length
+      const elementalsPlayed = (this.draft.history?.cardsPlayedThisTurn ?? []).filter(
+        (cardId) => {
+          const definition = cardDefinition(cardId as CardId)
+          return definition?.type === 'Minion' && cardHasTribe(definition, 'Elemental')
+        }
+      ).length
       endingPlayer.elementalPlayedLastTurn = elementalsPlayed > 0
       endingPlayer.elementalsPlayedLastTurn = elementalsPlayed
       endingPlayer.hero.attacksUsedThisTurn = 0
@@ -12982,6 +13038,7 @@ export class EffectRuntime {
         minion.extraAttacksThisTurn = 0
       }
       endingPlayer.nextSpellCostsHealth = false
+      endingPlayer.nextMurlocCostsHealth = false
       const nextPlayer = this.player(this.queries.otherPlayer(options.participantId))
       const nextTurnNumber = this.draft.turnNumber + 1
       this.draft.turnNumber = nextTurnNumber
@@ -13088,13 +13145,11 @@ export class EffectRuntime {
       this.addToDiscardedCards(player, card)
     }
     const paysWithHealth =
-      validated.definition.type === 'Spell' && player.nextSpellCostsHealth === true
+      cardCostResource(validated.definition, player) === 'health'
     if (paysWithHealth) {
-      player.hero.health = Math.max(
-        0,
-        player.hero.health - validated.input.currentCost
-      )
-      player.nextSpellCostsHealth = false
+      player.hero.health = Math.max(0, player.hero.health - validated.input.currentCost)
+      if (validated.definition.type === 'Spell') player.nextSpellCostsHealth = false
+      else player.nextMurlocCostsHealth = false
     } else {
       player.mana.available -= validated.input.currentCost
     }
@@ -14068,6 +14123,39 @@ function findRequestedTarget(
   )
     return null
   return current
+}
+
+export function applyDrawScalingBuff(
+  card: DraftCard,
+  counters: Readonly<Record<string, number>> | undefined
+): Readonly<Record<string, number>> {
+  const key = card.scalingCounter
+  if (!key) return counters ?? {}
+  const amount = Math.max(1, Math.floor(counters?.[key] ?? 1))
+  const definition = cardDefinition(card.cardId)
+  const baseAttack = definition?.type === 'Minion' ? definition.attack : 0
+  const baseHealth = definition?.type === 'Minion' ? definition.health : 1
+  card.attack = (card.attack ?? baseAttack) + amount
+  card.health = (card.health ?? baseHealth) + amount
+  const enchantmentId = `${card.instanceId}:${key}`
+  const enchantments = [...(card.enchantments ?? [])]
+  const existingIndex = enchantments.findIndex((entry) => entry.id === enchantmentId)
+  const previousDelta =
+    existingIndex >= 0 ? (enchantments[existingIndex].attackDelta ?? 0) : 0
+  const totalDelta = previousDelta + amount
+  const enchantment: RuntimeEnchantment = {
+    id: enchantmentId,
+    sourceInstanceId: card.instanceId,
+    sourceCardId: card.cardId,
+    attackDelta: totalDelta,
+    healthDelta: totalDelta,
+    maximumHealthDelta: totalDelta,
+    duration: 'permanent'
+  }
+  if (existingIndex >= 0) enchantments[existingIndex] = enchantment
+  else enchantments.push(enchantment)
+  card.enchantments = enchantments as unknown as DraftCard['enchantments']
+  return { ...(counters ?? {}), [key]: amount + 1 }
 }
 
 export function resolveCardPlay(options: EffectRuntimeOptions): EffectResolutionResult {

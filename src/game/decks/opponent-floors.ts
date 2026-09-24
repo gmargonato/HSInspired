@@ -1,17 +1,17 @@
+import type { OpponentTag } from './opponent-curated-assessment'
+
 /**
- * Universal deck floors: every generated deck carries "a little bit of everything".
- * Minima are satisfied before flexible slots; maxima constrain every pick.
+ * A deck-count window for one tag. Minima are satisfied before flexible slots;
+ * maxima constrain every pick.
  */
 export interface OpponentFloorRule {
-  readonly tag: string
+  readonly tag: OpponentTag
   readonly min: number
   readonly max: number
 }
 
-export const OPPONENT_FLOORS: readonly OpponentFloorRule[] = [
-  { tag: 'early', min: 6, max: 30 },
-  { tag: 'cost:cheap', min: 8, max: 14 },
-  { tag: 'cost:6+', min: 4, max: 12 },
+/** Role floors shared by every profile: every deck carries "a little bit of everything". */
+export const OPPONENT_ROLE_FLOORS: readonly OpponentFloorRule[] = [
   { tag: 'cost:8+', min: 0, max: 3 },
   { tag: 'taunt', min: 2, max: 6 },
   { tag: 'interaction', min: 4, max: 10 },

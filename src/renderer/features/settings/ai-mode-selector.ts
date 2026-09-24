@@ -22,7 +22,7 @@ type ModeOption = {
 
 function modeLabel(mode: AiMode): string {
   if (mode === 'hardware') return 'Easy'
-  if (mode === 'hardware-v2') return 'Hardware V2'
+  if (mode === 'hardware-v2') return 'Expert'
   return 'API'
 }
 
@@ -95,15 +95,6 @@ export class AiModeSelector extends Container {
     applyPlacement(this.arrowButton, SETTINGS_LAYOUT.aiModeButton)
     this.arrowButton.setBaseY(this.arrowButton.y)
     this.addChild(this.arrowButton)
-
-    const note = new Text({
-      text: 'AI opponent: Easy, Hardware V2, or API',
-      style: { fontFamily: 'Belwe', fontSize: 22, fill: 0xf5e3b6 }
-    })
-    note.label = 'settings.ai-mode-note'
-    note.eventMode = 'none'
-    applyAnchoredPlacement(note, SETTINGS_LAYOUT.aiModeNote)
-    this.addChild(note)
 
     this.optionsLayer.label = 'settings.ai-mode-options'
     this.optionsLayer.visible = false

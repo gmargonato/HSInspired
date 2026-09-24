@@ -228,8 +228,10 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'record-spell-cast-on-source',
       'return-recorded-spells',
       'replace-deck-with-copies',
+      'mark-draw-scaling',
       'living-mana',
-      'set-next-spell-costs-health'
+      'set-next-spell-costs-health',
+      'set-next-murloc-costs-health'
     ].includes(name)
   )
     return 6

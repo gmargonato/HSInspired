@@ -368,6 +368,39 @@ function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
         ]
       },
       {
+        label: 'Set Rank',
+        submenu: [
+          ...Array.from({ length: 25 }, (_, index) => 25 - index).map((rank) => ({
+            label: `Rank ${rank}`,
+            click: () =>
+              sendDevCommand(mainWindow, {
+                type: 'ranking:set-rank',
+                tier: 'rank' as const,
+                rank
+              })
+          })),
+          { type: 'separator' },
+          {
+            label: 'Legend 999',
+            click: () =>
+              sendDevCommand(mainWindow, {
+                type: 'ranking:set-rank',
+                tier: 'legend' as const,
+                rank: 999
+              })
+          },
+          {
+            label: 'Legend 2',
+            click: () =>
+              sendDevCommand(mainWindow, {
+                type: 'ranking:set-rank',
+                tier: 'legend' as const,
+                rank: 2
+              })
+          }
+        ]
+      },
+      {
         label: 'Premium',
         submenu: (
           [

@@ -278,6 +278,52 @@ describe('board ability markers', () => {
     )
   })
 
+  it('grants Frost Lich Jaina Elementals the Lifesteal badge', () => {
+    const waterElemental = CARD_CATALOG.require('basic_water_elemental')
+    const elementalMinion = {
+      instanceId: 'water-elemental',
+      cardId: waterElemental.id,
+      attack: waterElemental.attack,
+      health: waterElemental.health,
+      maxHealth: waterElemental.health,
+      keywords: [],
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null
+    } as BoardMinion
+
+    expect(
+      boardMinionAbilityMarkers(
+        elementalMinion,
+        waterElemental,
+        1,
+        'jaina-frost-lich'
+      ).lifesteal
+    ).toBe(true)
+    expect(
+      boardMinionAbilityMarkers(elementalMinion, waterElemental, 1, 'jaina')
+        .lifesteal
+    ).toBe(false)
+    expect(boardMinionAbilityMarkers(elementalMinion, waterElemental, 1).lifesteal).toBe(
+      false
+    )
+
+    const noElemental = CARD_CATALOG.require('basic_goldshire_footman')
+    const footmanMinion = {
+      instanceId: 'footman',
+      cardId: noElemental.id,
+      attack: noElemental.attack,
+      health: noElemental.health,
+      maxHealth: noElemental.health,
+      keywords: [],
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null
+    } as BoardMinion
+    expect(
+      boardMinionAbilityMarkers(footmanMinion, noElemental, 1, 'jaina-frost-lich')
+        .lifesteal
+    ).toBe(false)
+  })
+
   it('maps board-targeting Auras independently from the Trigger badge', () => {
     expect(markers('basic_grimscale_oracle')).toMatchObject({
       aura: true,

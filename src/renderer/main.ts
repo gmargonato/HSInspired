@@ -150,6 +150,7 @@ async function bootstrap(): Promise<void> {
       height: GAME_HEIGHT,
       backgroundColor: 0x0a0f1e,
       antialias: true,
+      powerPreference: 'high-performance',
       useBackBuffer: true,
       eventFeatures: { wheel: true },
       resolution: window.devicePixelRatio || 1,
@@ -232,6 +233,7 @@ async function bootstrap(): Promise<void> {
         game,
         services.logger,
         services.progressionStore,
+        services.playerStatsStore,
         (message) => services.dialogs.error(message)
       )
     }

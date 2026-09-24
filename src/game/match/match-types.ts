@@ -23,6 +23,8 @@ export interface MatchSetup {
   readonly startingParticipantId?: PlayerId
   /** Development launch option that keeps both opening hands unchanged. */
   readonly skipMulligan?: boolean
+  /** Defaults to enabled for legacy match routes and existing behavior. */
+  readonly aiHeroPowerBonusEnabled?: boolean
   /** Development/test diagnostics only; normal matches do not retain effect traces. */
   readonly recordEffectTrace?: boolean
 }

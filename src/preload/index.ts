@@ -66,8 +66,12 @@ import {
 } from '../shared/ipc/preferences'
 import {
   PLAYER_STATS_IPC_CHANNELS,
+  parseConstructedRankResultRequest,
+  parseConstructedRankSnapshot,
   parsePlayableClassId,
   parsePlayerStatsSnapshot,
+  type ConstructedRankResultRequest,
+  type ConstructedRankSnapshot,
   type PlayerStatsApi,
   type PlayerStatsSnapshot
 } from '../shared/ipc/player-stats'
@@ -347,6 +351,22 @@ const api = {
     recordTavernBrawlWin: async (): Promise<PlayerStatsSnapshot> =>
       parsePlayerStatsSnapshot(
         await ipcRenderer.invoke(PLAYER_STATS_IPC_CHANNELS.recordTavernBrawlWin)
+      ),
+    recordConstructedResult: async (
+      request: ConstructedRankResultRequest
+    ): Promise<PlayerStatsSnapshot> =>
+      parsePlayerStatsSnapshot(
+        await ipcRenderer.invoke(
+          PLAYER_STATS_IPC_CHANNELS.recordConstructedResult,
+          parseConstructedRankResultRequest(request)
+        )
+      ),
+    devSetRank: async (rank: ConstructedRankSnapshot): Promise<PlayerStatsSnapshot> =>
+      parsePlayerStatsSnapshot(
+        await ipcRenderer.invoke(
+          PLAYER_STATS_IPC_CHANNELS.devSetRank,
+          parseConstructedRankSnapshot(rank)
+        )
       )
   },
 

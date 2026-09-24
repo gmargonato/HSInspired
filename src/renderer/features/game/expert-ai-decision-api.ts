@@ -7,17 +7,22 @@ import {
   type AiSettings
 } from '../../../shared/ipc/ai'
 import { createFairHypothesisCheckpoint } from '../../../game/match/ai/fair-hypothesis-checkpoint'
-import { enumerateLegalCommands } from '../../../game/match'
+import {
+  enumerateLegalCommands,
+  type OpeningMatchCheckpoint,
+  type OpeningMatchEvent,
+  type PlayerId
+} from '../../../game/match'
+import { CARD_CATALOG } from '../../../game/content/cards'
 import { sameAiIntent, type AiActionIntent } from '../../../shared/ipc/ai-deliberation'
 import type { GameBoardSession } from './game-board-session'
 import { aiActionIntent } from './ai-action-intent'
 import { aiActions } from './ai-context'
 import {
-  EXPERT_AI_DECISION_SEARCH_BUDGET_MS,
+  EXPERT_AI_DEFAULT_BUDGET,
   EXPERT_AI_DISPATCH_RESERVE_MS,
   EXPERT_AI_PRESENTATION_RESERVE_MS,
-  EXPERT_AI_SEARCH_BUDGET_MS,
-  EXPERT_AI_TURN_BUDGET_MS
+  type ExpertAiBudget
 } from './expert-ai-worker-protocol'
 import type {
   ExpertAiWorkerRequest,
@@ -58,6 +63,36 @@ interface ExpertPlanCommit {
 
 type WorkerFactory = () => Worker
 
+function checkpointForPerspective(
+  checkpoint: OpeningMatchCheckpoint,
+  perspectiveParticipantId: PlayerId
+): OpeningMatchCheckpoint {
+  const participants = checkpoint.setup.participants.map((participant) => ({
+    ...participant,
+    controllerKind:
+      participant.participantId === perspectiveParticipantId
+        ? ('ai' as const)
+        : ('human' as const)
+  })) as unknown as typeof checkpoint.setup.participants
+  const controllerById = new Map(
+    participants.map((participant) => [
+      participant.participantId,
+      participant.controllerKind
+    ])
+  )
+  return {
+    ...checkpoint,
+    setup: { ...checkpoint.setup, participants },
+    state: {
+      ...checkpoint.state,
+      players: checkpoint.state.players.map((player) => ({
+        ...player,
+        controllerKind: controllerById.get(player.participantId)!
+      })) as unknown as typeof checkpoint.state.players
+    } as OpeningMatchCheckpoint['state']
+  }
+}
+
 function createExpertWorker(): Worker {
   return new Worker(new URL('./expert-ai.worker.ts', import.meta.url), {
     type: 'module'
@@ -86,6 +121,51 @@ function isAiActionIntent(value: unknown): value is AiActionIntent {
   )
 }
 
+function hasRandomEffect(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasRandomEffect)
+  if (!value || typeof value !== 'object') return false
+  const entry = value as Record<string, unknown>
+  const target = entry['target']
+  const source = entry['source']
+  if (
+    (target &&
+      typeof target === 'object' &&
+      'selection' in target &&
+      (target as { selection?: unknown }).selection === 'random') ||
+    (source &&
+      typeof source === 'object' &&
+      'selection' in source &&
+      (source as { selection?: unknown }).selection === 'random') ||
+    (typeof entry['action'] === 'string' && entry['action'].includes('random'))
+  )
+    return true
+  return Object.values(entry).some(hasRandomEffect)
+}
+
+export function invalidatesExpertContinuation(
+  events: readonly OpeningMatchEvent[]
+): boolean {
+  return events.some(
+    (event) =>
+      event.type === 'card-drawn' ||
+      event.type === 'card-generated' ||
+      event.type === 'card-burned' ||
+      event.type === 'discover-started' ||
+      event.type === 'card-choice-started' ||
+      event.type === 'random-spell-started' ||
+      event.type === 'random-spell-completed' ||
+      event.type === 'secret-resolution-started' ||
+      event.type === 'secret-resolution-completed' ||
+      (event.type === 'effect-resolved' &&
+        (event.action.includes('random') ||
+          hasRandomEffect(
+            event.sourceCardId
+              ? CARD_CATALOG.get(event.sourceCardId)?.effects
+              : undefined
+          )))
+  )
+}
+
 /**
  * Expert local AI runs only on a redacted match checkpoint in a disposable
  * module worker. The easy local opponent remains the in-renderer default.
@@ -100,14 +180,26 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   private continuation: ExpertContinuation | null = null
   private planCommit: ExpertPlanCommit | null = null
   private readonly unsubscribe: () => void
+  private readonly perspectiveParticipantId: PlayerId
 
   constructor(
     private readonly session: GameBoardSession,
     private readonly workerFactory: WorkerFactory = createExpertWorker,
-    private readonly now: () => number = () => performance.now()
+    private readonly now: () => number = () => performance.now(),
+    perspectiveParticipantId: PlayerId = session.remoteParticipantId,
+    /**
+     * Test harnesses may serialize fair-world searches that production runs in
+     * parallel. Scale only the real worker timer; the injected clock still owns
+     * the turn and cumulative search budgets.
+     */
+    private readonly workerTimeoutMultiplier = 1,
+    private readonly budget: ExpertAiBudget = EXPERT_AI_DEFAULT_BUDGET
   ) {
+    if (!Number.isFinite(workerTimeoutMultiplier) || workerTimeoutMultiplier < 1)
+      throw new RangeError('Expert AI worker timeout multiplier must be at least 1.')
+    this.perspectiveParticipantId = perspectiveParticipantId
     this.unsubscribe = session.subscribe((result) => {
-      this.observeTurn(result.state)
+      this.observeTurn(result.state, result.events)
     })
     this.observeTurn(session.getState())
   }
@@ -129,6 +221,8 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     else if (request.phase === 'action') {
       const cachedPlanAction = this.takePlanCommit(request)
       if (cachedPlanAction) return cachedPlanAction
+      const plannedContinuation = this.takeApplicableContinuation(request, false)
+      if (plannedContinuation) return plannedContinuation
     }
     const startedAt = this.now()
     let remainingBudgetMs = this.remainingBudget(request)
@@ -137,14 +231,17 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       if (continuedAction) return continuedAction
       throw new AiRequestError('Expert AI reached its allocated turn search budget.', {
         failureKind: 'timeout',
-        budgetMs: EXPERT_AI_TURN_BUDGET_MS
+        budgetMs: this.budget.turnBudgetMs
       })
     }
 
     const seed = requestSeed(request)
     const checkpoint = createFairHypothesisCheckpoint(
-      this.session.match.getCheckpoint(),
-      this.session.remoteParticipantId,
+      checkpointForPerspective(
+        this.session.match.getCheckpoint(),
+        this.perspectiveParticipantId
+      ),
+      this.perspectiveParticipantId,
       seed
     )
     const worker = this.getWorker()
@@ -154,7 +251,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       if (continuedAction) return continuedAction
       throw new AiRequestError('Expert AI reached its allocated turn search budget.', {
         failureKind: 'timeout',
-        budgetMs: EXPERT_AI_TURN_BUDGET_MS
+        budgetMs: this.budget.turnBudgetMs
       })
     }
     const preferredContinuation = this.preferredContinuation(request)
@@ -162,13 +259,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       type: 'decide',
       request,
       checkpoint,
-      perspectivePlayerId: this.session.remoteParticipantId,
+      perspectivePlayerId: this.perspectiveParticipantId,
       seed,
       remainingSearchBudgetMs: Math.min(
-        EXPERT_AI_DECISION_SEARCH_BUDGET_MS,
-        EXPERT_AI_SEARCH_BUDGET_MS,
+        this.budget.decisionSearchBudgetMs,
+        this.budget.searchBudgetMs,
         remainingBudgetMs
       ),
+      planSearchLimitMs: this.budget.planSearchLimitMs,
+      replanSearchLimitMs: this.budget.replanSearchLimitMs,
       ...(preferredContinuation ? { preferredContinuation } : {})
     }
 
@@ -178,7 +277,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         return
       }
 
-      const timeoutMs = remainingBudgetMs
+      const timeoutMs = remainingBudgetMs * this.workerTimeoutMultiplier
       const timer = setTimeout(() => {
         const pending = this.takePending(request.requestId)
         if (!pending) return
@@ -195,7 +294,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         reject(
           new AiRequestError('Expert AI exceeded its allocated turn search budget.', {
             failureKind: 'timeout',
-            budgetMs: EXPERT_AI_TURN_BUDGET_MS
+            budgetMs: this.budget.turnBudgetMs
           })
         )
       }, timeoutMs)
@@ -247,7 +346,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     const state = this.session.getState()
     if (
       state.phase !== 'turns' ||
-      state.activePlayerId !== this.session.remoteParticipantId
+      state.activePlayerId !== this.perspectiveParticipantId
     )
       return 0
 
@@ -255,14 +354,14 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     const elapsedTurnMs = Math.max(0, this.now() - this.turnStartedAt)
     const remainingTurnMs = Math.max(
       0,
-      EXPERT_AI_TURN_BUDGET_MS -
+      this.budget.turnBudgetMs -
         elapsedTurnMs -
         EXPERT_AI_PRESENTATION_RESERVE_MS -
         EXPERT_AI_DISPATCH_RESERVE_MS
     )
     const remainingSearchMs = Math.max(
       0,
-      EXPERT_AI_SEARCH_BUDGET_MS - this.searchUsedMs
+      this.budget.searchBudgetMs - this.searchUsedMs
     )
     return Math.min(remainingTurnMs, remainingSearchMs)
   }
@@ -276,7 +375,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     if (
       !continuation ||
       state.phase !== 'turns' ||
-      state.activePlayerId !== this.session.remoteParticipantId ||
+      state.activePlayerId !== this.perspectiveParticipantId ||
       state.turnNumber !== continuation.turn ||
       state.revision !== request.expectedRevision
     )
@@ -301,7 +400,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       cached.revision !== request.expectedRevision ||
       state.revision !== request.expectedRevision ||
       state.phase !== 'turns' ||
-      state.activePlayerId !== this.session.remoteParticipantId ||
+      state.activePlayerId !== this.perspectiveParticipantId ||
       cached.response.matchId !== request.matchId ||
       cached.response.expectedRevision !== request.expectedRevision ||
       !('plan' in cached.response.choice)
@@ -322,7 +421,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       expectedRevision: request.expectedRevision,
       choice: {
         actionId: selectedAction.id,
-        intent: aiActionIntent(selectedAction.command, this.session.localParticipantId),
+        intent: aiActionIntent(selectedAction.command, this.opponentParticipantId()),
         expectedResult: cached.response.reason,
         planUpdate: null
       },
@@ -334,7 +433,8 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   }
 
   private takeApplicableContinuation(
-    request: AiDecisionRequest
+    request: AiDecisionRequest,
+    fallback = true
   ): AiDecisionResponse | null {
     const continuation = this.continuation
     if (
@@ -352,7 +452,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         request.actionIds.includes(action.id) &&
         sameAiIntent(
           plannedIntent,
-          aiActionIntent(action.command, this.session.localParticipantId)
+          aiActionIntent(action.command, this.opponentParticipantId())
         )
     )
     if (!selectedAction) return null
@@ -366,18 +466,20 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       requestId: request.requestId,
       expectedRevision: request.expectedRevision,
       modelId: 'hardware-local-v2',
-      reason: 'Continue the still-legal selected line after the search budget expires.',
+      reason: fallback
+        ? 'Continue the still-legal selected line after the search budget expires.'
+        : 'Continue the still-legal searched line.',
       choice: {
         actionId: selectedAction.id,
-        intent: aiActionIntent(selectedAction.command, this.session.localParticipantId),
+        intent: aiActionIntent(selectedAction.command, this.opponentParticipantId()),
         expectedResult:
           'Continue the previously searched line while its next step remains legal.',
         planUpdate: null
       },
       durationMs: 0,
-      finishReason: 'expert-continuation-fallback',
+      finishReason: fallback ? 'expert-continuation-fallback' : 'expert-continuation',
       usage: {
-        mode: 'expert-continuation-fallback',
+        mode: fallback ? 'expert-continuation-fallback' : 'expert-continuation',
         plannedActionIntents: remainingLine.map((intent) => ({
           type: intent.type,
           source: intent.source,
@@ -399,9 +501,19 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
           this.session.match.getPlayInput!(participantId, cardInstanceId, choice),
         getLegality: (participantId) => this.session.match.getLegality!(participantId)
       },
-      this.session.remoteParticipantId
+      this.perspectiveParticipantId
     )
-    return aiActions(this.session, legal)
+    return aiActions(this.session, legal, this.perspectiveParticipantId)
+  }
+
+  private opponentParticipantId(): PlayerId {
+    const opponent = this.session
+      .getState()
+      .players.find(
+        (player) => player.participantId !== this.perspectiveParticipantId
+      )?.participantId
+    if (!opponent) throw new Error('Expert AI session is missing its opponent.')
+    return opponent
   }
 
   private rememberPlanCommit(
@@ -422,7 +534,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     const actionId = response.choice.plan.firstActionId
     if (
       state.phase !== 'turns' ||
-      state.activePlayerId !== this.session.remoteParticipantId ||
+      state.activePlayerId !== this.perspectiveParticipantId ||
       state.revision !== request.expectedRevision ||
       !request.actionIds.includes(actionId)
     )
@@ -447,7 +559,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     const state = this.session.getState()
     if (
       state.phase !== 'turns' ||
-      state.activePlayerId !== this.session.remoteParticipantId ||
+      state.activePlayerId !== this.perspectiveParticipantId ||
       state.revision !== request.expectedRevision
     )
       return
@@ -475,7 +587,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     if (!selectedAction) return
     const selectedIntent = aiActionIntent(
       selectedAction.command,
-      this.session.localParticipantId
+      this.opponentParticipantId()
     )
     if (!sameAiIntent(rawIntents[0]!, selectedIntent)) return
 
@@ -487,16 +599,20 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     }
   }
 
-  private observeTurn(state: ReturnType<GameBoardSession['getState']>): void {
+  private observeTurn(
+    state: ReturnType<GameBoardSession['getState']>,
+    events: readonly OpeningMatchEvent[] = []
+  ): void {
     if (
       state.phase !== 'turns' ||
-      state.activePlayerId !== this.session.remoteParticipantId
+      state.activePlayerId !== this.perspectiveParticipantId
     ) {
       this.activeTurn = null
       this.continuation = null
       this.planCommit = null
       return
     }
+    if (invalidatesExpertContinuation(events)) this.continuation = null
     if (this.activeTurn === state.turnNumber) return
     this.activeTurn = state.turnNumber
     this.turnStartedAt = this.now()

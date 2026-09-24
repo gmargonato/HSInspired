@@ -74,6 +74,8 @@ export interface SemanticEvent {
 }
 
 export interface EffectFrame {
+  /** Scoped by the runtime; never changes rules, entity IDs, or RNG. */
+  summonGroupId?: string
   readonly source: EntityRef
   readonly sourceCardId: CardId | null
   readonly correlation: ResolutionCorrelation

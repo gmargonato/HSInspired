@@ -6,8 +6,10 @@ export type AiHeroPowerBonus = 'none' | 'upgraded' | 'cost-one'
 /** Selects one startup bonus for matches that include an AI participant. */
 export function selectAiHeroPowerBonus(
   participants: readonly MatchParticipantSetup[],
-  rng: DeterministicRng
+  rng: DeterministicRng,
+  enabled = true
 ): AiHeroPowerBonus {
+  if (!enabled) return 'none'
   if (!participants.some((participant) => participant.controllerKind === 'ai'))
     return 'none'
 

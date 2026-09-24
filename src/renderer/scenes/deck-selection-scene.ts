@@ -48,6 +48,11 @@ export class DeckSelectionScene extends Scene {
 
   update(_deltaMS: number): void {}
 
+  /** Re-renders the rank medal after a dev-menu rank override. */
+  refreshRank(): void {
+    this.view.refreshRankMedal()
+  }
+
   protected onExit(): void {
     void this.view.dispose()
   }

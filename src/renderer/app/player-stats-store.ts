@@ -1,9 +1,12 @@
 import type { ClassId, DeckClass } from '../../game/content/cards'
 import {
   createEmptyClassWinTotals,
+  type ConstructedRankResultRequest,
+  type ConstructedRankSnapshot,
   type PlayerStatsApi,
   type PlayerStatsSnapshot
 } from '../../shared/ipc/player-stats'
+import { createInitialRankState } from '../../game/ranking/constructed-ranking'
 import type { PlayerStatsStore } from '../ui/player-stats-store'
 
 function getPlayerStatsApi(): PlayerStatsApi {
@@ -19,7 +22,8 @@ function getPlayerStatsApi(): PlayerStatsApi {
 export class PersistentPlayerStatsStore implements PlayerStatsStore {
   private snapshot: PlayerStatsSnapshot = {
     winsByClass: createEmptyClassWinTotals(),
-    tavernBrawlWins: 0
+    tavernBrawlWins: 0,
+    rank: createInitialRankState()
   }
   private loaded = false
   private loadPromise: Promise<void> | null = null
@@ -50,6 +54,10 @@ export class PersistentPlayerStatsStore implements PlayerStatsStore {
     return this.snapshot.tavernBrawlWins
   }
 
+  getRank(): ConstructedRankSnapshot {
+    return this.snapshot.rank
+  }
+
   recordWin(classId: ClassId): Promise<number> {
     return this.enqueue(async () => {
       await this.load()
@@ -63,6 +71,28 @@ export class PersistentPlayerStatsStore implements PlayerStatsStore {
       await this.load()
       this.snapshot = await this.apiProvider().recordTavernBrawlWin()
       return this.getTavernBrawlWins()
+    })
+  }
+
+  recordConstructedResult(
+    request: ConstructedRankResultRequest
+  ): Promise<ConstructedRankSnapshot> {
+    return this.enqueue(async () => {
+      await this.load()
+      this.snapshot = await this.apiProvider().recordConstructedResult(request)
+      return this.snapshot.rank
+    })
+  }
+
+  devSetRank(rank: ConstructedRankSnapshot): Promise<ConstructedRankSnapshot> {
+    return this.enqueue(async () => {
+      const api = this.apiProvider()
+      if (!api.devSetRank) {
+        throw new Error('Rank overrides are only available in development')
+      }
+      await this.load()
+      this.snapshot = await api.devSetRank(rank)
+      return this.snapshot.rank
     })
   }
 

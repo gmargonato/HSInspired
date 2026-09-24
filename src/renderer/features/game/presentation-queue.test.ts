@@ -1,3 +1,4 @@
+import { summonPresentationBatch } from './summon-presentation'
 import { PresentationQueue } from './presentation-queue'
 import { randomSpellPresentationStates } from './random-spell-presentation'
 import type { RemoteCardPlayPreview } from './remote-card-play-preview'
@@ -4315,5 +4316,218 @@ describe('Secret reveal choreography', () => {
     await Promise.resolve()
     expect(create).not.toHaveBeenCalled()
     expect(consume).not.toHaveBeenCalled()
+  })
+})
+
+describe('grouped summon presentation', () => {
+  function boomEvents() {
+    const scenario = createMatchScenario({
+      cardId: 'goblins_vs_gnomes_dr_boom',
+      seed: 240
+    })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId,
+      available: 10,
+      maximum: 10
+    })
+    const card = scenario.match
+      .getState()
+      .players.find((player) => player.participantId === participantId)!
+      .hand.find((card) => card.cardId === 'goblins_vs_gnomes_dr_boom')!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId,
+      cardInstanceId: card.instanceId,
+      position: 0
+    })
+    if (!result.accepted) throw new Error(result.message)
+    return result.events
+  }
+
+  it('groups a real Boom Battlecry across its summon bookkeeping', () => {
+    const events = boomEvents()
+    const start = events.findIndex(
+      (event) => event.type === 'minion-summoned' && !!event.summonGroupId
+    )
+    const batch = summonPresentationBatch(events, start)!
+    expect(batch.summons).toHaveLength(2)
+    expect(batch.bookkeeping.some((event) => event.type === 'effect-resolved')).toBe(
+      true
+    )
+    expect(batch.end).toBeGreaterThan(start)
+  })
+
+  it('stops at gameplay consequences and distinct action executions', () => {
+    const summons = boomEvents()
+      .filter((event) => event.type === 'minion-summoned')
+      .filter((event) => !!event.summonGroupId)
+    const first = summons[0]!
+    const second = summons[1]!
+    const barrier: OpeningMatchEvent = {
+      type: 'death-batch-completed',
+      batchId: 'death'
+    }
+    expect(summonPresentationBatch([first, barrier, second], 0)!.summons).toHaveLength(
+      1
+    )
+    expect(
+      summonPresentationBatch(
+        [first, { ...second, summonGroupId: 'another-action' }],
+        0
+      )!.summons
+    ).toHaveLength(1)
+    expect(
+      summonPresentationBatch([{ ...first, summonGroupId: undefined }, second], 0)
+    ).toBeNull()
+  })
+
+  it.each(['local', 'remote'] as const)(
+    'waits for all artwork and starts the %s entrances together',
+    async (side) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        animationScope: AnimationScope
+        boardPositions: BoardPositionController
+        createSummonedMinionView(event: unknown): Promise<MinionView>
+        presentMinionSummonBatch(events: readonly OpeningMatchEvent[]): Promise<void>
+        wireMinionView(view: MinionView): void
+        syncBoardAttackability(): void
+      }
+      vi.spyOn(internal, 'wireMinionView').mockImplementation(() => undefined)
+      vi.spyOn(internal, 'syncBoardAttackability').mockImplementation(() => undefined)
+      const fakeView = () =>
+        Object.assign(new Container(), {
+          setBaseScale: vi.fn(),
+          presentTauntPop: vi.fn(),
+          isSelected: () => false
+        }) as unknown as MinionView
+      const firstView = fakeView()
+      const secondView = fakeView()
+      let resolveSecond!: (view: MinionView) => void
+      vi.spyOn(internal, 'createSummonedMinionView')
+        .mockResolvedValueOnce(firstView)
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            resolveSecond = resolve
+          })
+        )
+      const participantId =
+        side === 'local'
+          ? internal.session.localParticipantId
+          : internal.session.remoteParticipantId
+      const events = boomEvents()
+        .filter((event) => event.type === 'minion-summoned')
+        .filter((event) => !!event.summonGroupId)
+        .map((event) => ({ ...event, participantId, position: 0 }))
+      const layout = vi.spyOn(internal.boardPositions, 'layout')
+      const timelines: gsap.core.Timeline[] = []
+      const makeTimeline = internal.animationScope.timeline.bind(
+        internal.animationScope
+      )
+      vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+        const timeline = makeTimeline(vars).pause()
+        timelines.push(timeline)
+        return timeline
+      })
+      const job = internal.presentMinionSummonBatch(events)
+      for (let i = 0; i < 8; i++) await Promise.resolve()
+      expect(firstView.parent).toBeNull()
+      expect(timelines).toHaveLength(0)
+      resolveSecond(secondView)
+      for (let i = 0; i < 15; i++) await Promise.resolve()
+      expect(internal.boardPositions.views(side)).toEqual([secondView, firstView])
+      expect(layout).toHaveBeenCalledTimes(1)
+      expect(timelines).toHaveLength(1)
+      const timeline = timelines[0]!
+      const starts = timeline.getChildren().map((child) => child.startTime())
+      expect(starts).toEqual([0, 0])
+      expect(firstView.alpha).toBe(0)
+      expect(secondView.alpha).toBe(0)
+      timeline.progress(0.5)
+      expect(firstView.alpha).toBeGreaterThan(0)
+      expect(firstView.alpha).toBe(secondView.alpha)
+      timeline.progress(1)
+      await job
+    }
+  )
+  it.each(['failure', 'disposal'] as const)(
+    'cleans prepared summon views on %s',
+    async (mode) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        createSummonedMinionView(event: unknown): Promise<MinionView>
+        presentMinionSummonBatch(events: readonly OpeningMatchEvent[]): Promise<void>
+      }
+      const firstView = new Container() as unknown as MinionView
+      const secondView = new Container() as unknown as MinionView
+      let resolveSecond!: (view: MinionView) => void
+      let rejectSecond!: (error: Error) => void
+      vi.spyOn(internal, 'createSummonedMinionView')
+        .mockResolvedValueOnce(firstView)
+        .mockReturnValueOnce(
+          new Promise((resolve, reject) => {
+            resolveSecond = resolve
+            rejectSecond = reject
+          })
+        )
+      const events = boomEvents()
+        .filter((event) => event.type === 'minion-summoned')
+        .filter((event) => !!event.summonGroupId)
+        .map((event) => ({
+          ...event,
+          participantId: internal.session.localParticipantId
+        }))
+      const job = internal.presentMinionSummonBatch(events)
+      if (mode === 'failure') {
+        const rejected = expect(job).rejects.toThrow('artwork failed')
+        rejectSecond(new Error('artwork failed'))
+        await rejected
+        secondView.destroy()
+      } else {
+        value.dispose()
+        resolveSecond(secondView)
+        await job
+        expect(secondView.destroyed).toBe(true)
+      }
+      expect(firstView.destroyed).toBe(true)
+    }
+  )
+
+  it('does not recreate or duplicate views already materialized by reconciliation', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      boardPositions: BoardPositionController
+      createSummonedMinionView(event: unknown): Promise<MinionView>
+      presentMinionSummoned(event: unknown): Promise<void>
+      presentMinionSummonBatch(events: readonly OpeningMatchEvent[]): Promise<void>
+    }
+    const events = boomEvents()
+      .filter((event) => event.type === 'minion-summoned')
+      .filter((event) => !!event.summonGroupId)
+      .map((event) => ({
+        ...event,
+        participantId: internal.session.localParticipantId
+      }))
+    const views = events.map(
+      (event) =>
+        Object.assign(new Container(), {
+          instanceId: event.minion.instanceId,
+          ownerId: event.participantId,
+          isSelected: () => false,
+          setBaseScale: vi.fn()
+        }) as unknown as MinionView
+    )
+    views.forEach((view, index) => internal.boardPositions.insert('local', index, view))
+    const create = vi.spyOn(internal, 'createSummonedMinionView')
+    vi.spyOn(internal, 'presentMinionSummoned').mockResolvedValue()
+    await internal.presentMinionSummonBatch(events)
+    expect(create).not.toHaveBeenCalled()
+    expect(internal.boardPositions.views('local')).toEqual(views)
   })
 })

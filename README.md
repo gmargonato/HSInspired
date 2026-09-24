@@ -148,8 +148,8 @@ after renderer initialization, alongside the display's refresh rate.
 
 ## Local hardware AI
 
-Main-menu Settings offers Easy, Hardware V2, and API AI modes. Hardware V2 is
-the Expert search profile: it keeps the existing engine-backed planner and
+Main-menu Settings offers Easy, Expert, and API AI modes. Expert is the deeper
+local search profile: it keeps the existing engine-backed planner and
 extends it with a wider, deeper search over class-legal hypotheses for concealed
 opponent cards. Its fair planning snapshot also randomizes both players'
 remaining deck orders, retaining the Expert's known deck composition but never
@@ -157,9 +157,10 @@ the live next-card sequence. Expert detects lethal from cumulative visible
 attacks and simulates bounded engine-legal opponent replies, including sampled
 card plays, public attacks, and hero powers. It runs in a dedicated worker and
 never sends game state to a provider. Its cumulative search budget is capped at
-7.5 seconds within the plan's ten-second total-turn target, including
-presentation; each decision is capped at six seconds to preserve time for a
-replan. This is a configured target, not a measured runtime guarantee.
+24.5 seconds within the 30-second total-turn target, leaving 5 seconds for
+presentation and 0.5 seconds for dispatch. The initial plan may search for up
+to 23 seconds, leaving a 1.5-second reserve for a later replan. This is a
+configured target, not a measured runtime guarantee.
 API mode continues using remote deliberation.
 
 Run the seeded, mirrored Easy-versus-Expert headless match benchmark with:

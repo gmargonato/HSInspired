@@ -144,8 +144,9 @@ export class MatchLogRepository {
       ...(metadata.generatedOpponent
         ? { generatedOpponent: metadata.generatedOpponent }
         : {}),
+      model: null,
       ...(typeof (metadata.aiConfig as JsonObject | undefined)?.modelId === 'string'
-        ? { model: (metadata.aiConfig as JsonObject).modelId }
+        ? { configuredModel: (metadata.aiConfig as JsonObject).modelId }
         : {})
     }
     const generated = metadata.generatedOpponent as JsonObject | undefined

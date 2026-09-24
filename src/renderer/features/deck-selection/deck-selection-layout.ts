@@ -65,6 +65,20 @@ export const DECK_SELECTION_LAYOUT = {
     }
   ),
 
+  /**
+   * Constructed rank medal seated in the hexagonal socket at the panel's top
+   * right. Medals render at authored size (1x); the numbered medals are
+   * slightly larger than the 116x130 socket on purpose.
+   */
+  rankMedal: placement(
+    { x: 1475, y: 216 },
+    { width: 123, height: 159 },
+    {
+      anchor: CENTER,
+      note: 'Legend medal (117x135) shares this center; nudge via LEGEND_MEDAL_Y_OFFSET.'
+    }
+  ),
+
   /** Current page label in the bottom-center footer recess. */
   pageLabel: placement(
     { x: 752, y: 1030 },

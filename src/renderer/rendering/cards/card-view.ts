@@ -333,6 +333,8 @@ export class CardView extends Container {
     { dirty: boolean; refresh: () => void }
   >()
   private snapshotRevision = 0
+  private costResource: 'mana' | 'health' = 'mana'
+  private costTextures!: Record<'mana' | 'health', Texture>
   private readonly content: Container
   private staticLayers: Container | null = null
   private artworkBreath: PremiumArtworkBreath | null = null
@@ -366,6 +368,11 @@ export class CardView extends Container {
     const supportsPremium = supportsPremiumFormat(card.type)
     try {
       await view.build(resolver, options.artwork)
+      const [mana, health] = await Promise.all([
+        resolver.load('card.stat.mana'),
+        resolver.load('card.stat.life-cost')
+      ])
+      view.costTextures = { mana, health }
       if (supportsPremium && options.animatePremiumArtwork && options.artwork) {
         view.prepareArtworkBreathing()
       }
@@ -839,6 +846,17 @@ export class CardView extends Container {
       )
     }
     this.updateCacheTexture()
+  }
+
+  /** Swaps the payment icon at its authored size without moving the cost label. */
+  setCostResource(resource: 'mana' | 'health'): void {
+    if (this.costResource === resource) return
+    const entry = this.treeObjects.get('card.stats.mana.icon')
+    if (!entry || !(entry.object instanceof Sprite)) return
+    this.costResource = resource
+    entry.object.texture = this.costTextures[resource]
+    this.updateCacheTexture()
+    for (const refresh of this.appearanceSnapshots) refresh()
   }
 
   /** Refreshes the visible mana value without rebuilding the card tree. */

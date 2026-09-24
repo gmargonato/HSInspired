@@ -12,6 +12,7 @@ import {
   type GameAssets
 } from '../ui/asset-registry'
 import { GameBoardView } from '../features/game/game-board-view'
+import { prebuildMinionOutlineShape } from '../rendering/minions/minion-outline-shape'
 import type {
   DevCommand,
   DevCardPickerAction,
@@ -21,6 +22,7 @@ import type {
 import { Scene } from './scene'
 import type { AiDecisionApi } from '../../shared/ipc/ai'
 import type { MatchEndedEvent } from '../../game/match'
+import type { ConstructedMatchResult } from '../../game/ranking/constructed-ranking'
 import { isArenaRunComplete } from '../../game/arena'
 import { HERO_CATALOG } from '../../game/content/heroes'
 import {
@@ -37,6 +39,9 @@ import type { MatchLogsApi } from '../../shared/ipc/match-logs'
 import type { PreferencesApi, AiMode } from '../../shared/ipc/preferences'
 import { ExpertAiDecisionApi } from '../features/game/expert-ai-decision-api'
 import { LocalAiDecisionApi } from '../features/game/local-ai-decision-api'
+
+/** Set true to restore the AI's randomized startup Hero Power bonus. */
+const AI_HERO_POWER_BONUS_ENABLED = false
 
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
@@ -112,6 +117,13 @@ export class GameScene extends Scene {
     )
 
     const aiMode = await this.readAiMode()
+    const matchRoute: GameRoute = {
+      ...this.route,
+      setup: {
+        ...this.route.setup,
+        aiHeroPowerBonusEnabled: AI_HERO_POWER_BONUS_ENABLED
+      }
+    }
     this.recorder = new MatchRecorder(
       this.matchLogs,
       logObject({
@@ -132,7 +144,7 @@ export class GameScene extends Scene {
       }
     )
     const aiSession = new GameBoardSession({
-      setup: this.route.setup,
+      setup: matchRoute.setup,
       decks,
       opponentStrategy: this.route.generatedOpponent?.strategy,
       recorder: this.recorder
@@ -169,8 +181,17 @@ export class GameScene extends Scene {
     await this.waitForFonts()
     this.logger?.info('[GameScene] fonts ready')
 
+    // Building the shared minion outline field is a GPU readback plus a large
+    // CPU transform; pay it during load instead of on the first outline in play.
+    try {
+      prebuildMinionOutlineShape(this.appInstance.renderer)
+    } catch (error) {
+      // Outlines still build lazily on first use.
+      this.logger?.warn('[GameScene] minion outline prebuild failed', error)
+    }
+
     this.view = new GameBoardView({
-      route: this.route,
+      route: matchRoute,
       decks,
       gameAssets,
       heroAssets,
@@ -262,19 +283,34 @@ export class GameScene extends Scene {
       this.statisticsAttempted = true
       await this.recordStatistics(event)
     }
+    const result =
+      event.winnerId === null
+        ? 'draw'
+        : event.winnerId === human.participantId
+          ? 'win'
+          : 'defeat'
+    await this.recordConstructedRank(result)
     if (!this.progression) return 0
     const receipt = await this.progression.reward({
       matchId: this.rewardMatchId,
       mode: this.route.mode ?? 'constructed',
-      result:
-        event.winnerId === null
-          ? 'draw'
-          : event.winnerId === human.participantId
-            ? 'win'
-            : 'defeat',
+      result,
       reason: event.reason
     })
     return receipt.earned
+  }
+
+  /** Arena and Tavern Brawl do not affect the constructed ladder. */
+  private async recordConstructedRank(result: ConstructedMatchResult): Promise<void> {
+    if (this.route.mode !== undefined) return
+    try {
+      await this.playerStatsStore.recordConstructedResult({
+        matchId: this.rewardMatchId,
+        result
+      })
+    } catch (error) {
+      this.logger?.warn('Failed to update the constructed rank.', error)
+    }
   }
 
   private async recordStatistics(event: MatchEndedEvent): Promise<void> {

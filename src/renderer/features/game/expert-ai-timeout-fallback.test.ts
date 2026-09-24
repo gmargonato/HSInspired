@@ -26,7 +26,90 @@ function legalCommands(session: GameBoardSession) {
   )
 }
 
+function playCoin(session: GameBoardSession): void {
+  const participantId = session.remoteParticipantId
+  const coin = session
+    .findPlayer(session.getState(), participantId)
+    .hand.find((card) => card.cardId === 'basic_the_coin')
+  if (!coin) throw new Error('Expected The Coin in the AI hand.')
+  const result = session.match.dispatch({
+    type: 'play-card',
+    participantId,
+    cardInstanceId: coin.instanceId
+  })
+  if (!result.accepted) throw new Error(result.message)
+}
+
 describe('Expert timeout fallback', () => {
+  it('ends the turn instead of using Hunter hero power after first-turn Coin', () => {
+    const session = createSession({
+      seed: 0xfab0,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'jaina',
+      aiHand: ['basic_the_coin'],
+      aiMana: 1,
+      aiMaximumMana: 1,
+      turnNumber: 2,
+      opponentHealth: 30,
+      aiDeck: ['basic_acidic_swamp_ooze'],
+      opponentDeck: ['basic_acidic_swamp_ooze']
+    })
+    playCoin(session)
+    expect(session.getState().history?.cardsPlayedThisTurn).toContain('basic_the_coin')
+
+    const action = selectExpertTimeoutFallbackAction(session, legalCommands(session))
+
+    expect(action?.command.type).toBe('end-turn')
+  })
+
+  it('allows Mage hero power when it kills an opposing minion after Coin', () => {
+    const session = createSession({
+      seed: 0xfab4,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'garrosh',
+      aiHand: ['basic_the_coin'],
+      aiMana: 1,
+      aiMaximumMana: 1,
+      turnNumber: 2,
+      opponentBoard: [{ cardId: 'basic_murloc_scout' }],
+      aiDeck: ['basic_acidic_swamp_ooze'],
+      opponentDeck: ['basic_acidic_swamp_ooze']
+    })
+    playCoin(session)
+
+    const action = selectExpertTimeoutFallbackAction(session, legalCommands(session))
+
+    expect(action?.command).toMatchObject({
+      type: 'use-hero-power',
+      target: { kind: 'minion', participantId: session.localParticipantId }
+    })
+  })
+
+  it('allows a non-Mage Coin hero power when it immediately wins the match', () => {
+    const session = createSession({
+      seed: 0xfab5,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'jaina',
+      aiHand: ['basic_the_coin'],
+      aiMana: 1,
+      aiMaximumMana: 1,
+      turnNumber: 2,
+      opponentHealth: 2,
+      aiDeck: ['basic_acidic_swamp_ooze'],
+      opponentDeck: ['basic_acidic_swamp_ooze']
+    })
+    playCoin(session)
+
+    const action = selectExpertTimeoutFallbackAction(session, legalCommands(session))
+
+    expect(action?.command).toMatchObject({ type: 'use-hero-power' })
+    if (action?.command.type !== 'use-hero-power')
+      throw new Error('Expected Hunter Steady Shot to take immediate lethal.')
+    const result = session.match.dispatch(action.command)
+    expect(result.accepted).toBe(true)
+    expect(session.getState().winnerId).toBe(session.remoteParticipantId)
+  })
+
   it('uses a playable minion instead of passing with an empty board', () => {
     const session = createSession({
       seed: 0xfab1,

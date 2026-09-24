@@ -4,6 +4,7 @@ import type {
   LocalAiCandidateTrace,
   LocalAiDecisionTrace
 } from './local-ai-decision-api'
+import { mctsRootRecommendationScore } from '../../../game/match/ai/information-set-mcts'
 
 export interface ExpertCandidateTrace extends LocalAiCandidateTrace {
   readonly sequence?: readonly string[]
@@ -13,6 +14,7 @@ export interface ExpertCandidateScore {
   score: number
   votes: number
   samples: number
+  visits: number
   trace?: ExpertCandidateTrace
 }
 
@@ -39,10 +41,22 @@ export function rankExpertCandidateWorlds(
       const score = scores.get(candidate.actionId) ?? {
         score: 0,
         votes: 0,
-        samples: 0
+        samples: 0,
+        visits: 0
       }
-      score.score += candidate.meanValue ?? candidate.score
+      const visits = candidate.visits ?? 0
+      const meanValue = candidate.meanValue ?? candidate.score
+      const recommendation =
+        visits > 0
+          ? mctsRootRecommendationScore({ visits, meanValue }) +
+            Math.max(-8, Math.min(24, candidate.prior ?? 0)) * 0.005 -
+            (candidate.recommendationRiskAdjustment ?? 0) -
+            (candidate.recommendationPreferenceAdjustment ?? 0) -
+            (candidate.recommendationTacticalPenalty ?? 0)
+          : meanValue
+      score.score += recommendation
       score.samples++
+      score.visits += visits
       score.trace =
         candidate.actionId === result.trace?.chosenActionId &&
         result.trace.chosenSequence?.length
@@ -56,7 +70,8 @@ export function rankExpertCandidateWorlds(
       const score = scores.get(chosenId) ?? {
         score: 0,
         votes: 0,
-        samples: 0
+        samples: 0,
+        visits: 0
       }
       score.votes++
       scores.set(chosenId, score)

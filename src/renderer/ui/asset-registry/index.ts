@@ -47,6 +47,32 @@ import tavernBrawlBackgroundImage from '@assets/images/ui/tavern-brawl/tavern-ba
 import tavernBrawlPlayButtonImage from '@assets/images/ui/tavern-brawl/brawl-play-buttom.png'
 import deckSelectionImage from '@assets/images/ui/deck-selection/deck-selection.png'
 import deckSelectionPaginationNextImage from '@assets/images/ui/deck-selection/pagination-button-next.png'
+import rankMedal1Image from '@assets/images/ui/deck-selection/ranks/1.png'
+import rankMedal2Image from '@assets/images/ui/deck-selection/ranks/2.png'
+import rankMedal3Image from '@assets/images/ui/deck-selection/ranks/3.png'
+import rankMedal4Image from '@assets/images/ui/deck-selection/ranks/4.png'
+import rankMedal5Image from '@assets/images/ui/deck-selection/ranks/5.png'
+import rankMedal6Image from '@assets/images/ui/deck-selection/ranks/6.png'
+import rankMedal7Image from '@assets/images/ui/deck-selection/ranks/7.png'
+import rankMedal8Image from '@assets/images/ui/deck-selection/ranks/8.png'
+import rankMedal9Image from '@assets/images/ui/deck-selection/ranks/9.png'
+import rankMedal10Image from '@assets/images/ui/deck-selection/ranks/10.png'
+import rankMedal11Image from '@assets/images/ui/deck-selection/ranks/11.png'
+import rankMedal12Image from '@assets/images/ui/deck-selection/ranks/12.png'
+import rankMedal13Image from '@assets/images/ui/deck-selection/ranks/13.png'
+import rankMedal14Image from '@assets/images/ui/deck-selection/ranks/14.png'
+import rankMedal15Image from '@assets/images/ui/deck-selection/ranks/15.png'
+import rankMedal16Image from '@assets/images/ui/deck-selection/ranks/16.png'
+import rankMedal17Image from '@assets/images/ui/deck-selection/ranks/17.png'
+import rankMedal18Image from '@assets/images/ui/deck-selection/ranks/18.png'
+import rankMedal19Image from '@assets/images/ui/deck-selection/ranks/19.png'
+import rankMedal20Image from '@assets/images/ui/deck-selection/ranks/20.png'
+import rankMedal21Image from '@assets/images/ui/deck-selection/ranks/21.png'
+import rankMedal22Image from '@assets/images/ui/deck-selection/ranks/22.png'
+import rankMedal23Image from '@assets/images/ui/deck-selection/ranks/23.png'
+import rankMedal24Image from '@assets/images/ui/deck-selection/ranks/24.png'
+import rankMedal25Image from '@assets/images/ui/deck-selection/ranks/25.png'
+import rankLegendImage from '@assets/images/ui/deck-selection/ranks/LEGEND.png'
 import collectionBackgroundImage from '@assets/images/ui/collection/collection-background.png'
 import collectionCoverImage from '@assets/images/ui/collection/collection-cover.png'
 import collectionCoverLockImage from '@assets/images/ui/collection/collection-cover-lock.png'
@@ -578,6 +604,240 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     playButtonImage,
     199,
     199,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-1',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal1',
+    rankMedal1Image,
+    124,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-2',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal2',
+    rankMedal2Image,
+    122,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-3',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal3',
+    rankMedal3Image,
+    123,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-4',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal4',
+    rankMedal4Image,
+    123,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-5',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal5',
+    rankMedal5Image,
+    123,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-6',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal6',
+    rankMedal6Image,
+    123,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-7',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal7',
+    rankMedal7Image,
+    124,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-8',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal8',
+    rankMedal8Image,
+    124,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-9',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal9',
+    rankMedal9Image,
+    122,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-10',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal10',
+    rankMedal10Image,
+    124,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-11',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal11',
+    rankMedal11Image,
+    122,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-12',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal12',
+    rankMedal12Image,
+    122,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-13',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal13',
+    rankMedal13Image,
+    123,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-14',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal14',
+    rankMedal14Image,
+    123,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-15',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal15',
+    rankMedal15Image,
+    123,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-16',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal16',
+    rankMedal16Image,
+    123,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-17',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal17',
+    rankMedal17Image,
+    124,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-18',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal18',
+    rankMedal18Image,
+    123,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-19',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal19',
+    rankMedal19Image,
+    122,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-20',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal20',
+    rankMedal20Image,
+    122,
+    159,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-21',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal21',
+    rankMedal21Image,
+    124,
+    159,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-22',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal22',
+    rankMedal22Image,
+    124,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-23',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal23',
+    rankMedal23Image,
+    124,
+    160,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-24',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal24',
+    rankMedal24Image,
+    123,
+    161,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-25',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankMedal25',
+    rankMedal25Image,
+    123,
+    159,
+    'deck-selection'
+  ),
+  asset(
+    'scene.deck-selection.rank-medal-legend',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankLegend',
+    rankLegendImage,
+    117,
+    135,
     'deck-selection'
   ),
   asset(
@@ -2154,7 +2414,39 @@ export interface ArenaAssets extends Record<
   cardAddAura: Texture
 }
 
-export interface DeckSelectionAssets {
+export const RANK_MEDAL_ASSET_KEYS = [
+  'rankMedal1',
+  'rankMedal2',
+  'rankMedal3',
+  'rankMedal4',
+  'rankMedal5',
+  'rankMedal6',
+  'rankMedal7',
+  'rankMedal8',
+  'rankMedal9',
+  'rankMedal10',
+  'rankMedal11',
+  'rankMedal12',
+  'rankMedal13',
+  'rankMedal14',
+  'rankMedal15',
+  'rankMedal16',
+  'rankMedal17',
+  'rankMedal18',
+  'rankMedal19',
+  'rankMedal20',
+  'rankMedal21',
+  'rankMedal22',
+  'rankMedal23',
+  'rankMedal24',
+  'rankMedal25',
+  'rankLegend'
+] as const
+
+export interface DeckSelectionAssets extends Record<
+  (typeof RANK_MEDAL_ASSET_KEYS)[number],
+  Texture
+> {
   panel: Texture
   paginationNextButton: Texture
   playButton: Texture

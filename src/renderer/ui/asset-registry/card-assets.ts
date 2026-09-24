@@ -20,6 +20,7 @@ import healthImage from '@assets/images/cards/health.png'
 import legendaryImage from '@assets/images/cards/legendary.png'
 import legendarySpellImage from '@assets/images/cards/legendary-spell.png'
 import manaImage from '@assets/images/cards/mana.png'
+import lifeCostImage from '@assets/images/cards/LIFE-COST.png'
 import premiumLegendarySpellImage from '@assets/images/cards/premium-legendary-spell.png'
 import raceBannerImage from '@assets/images/cards/race-banner.png'
 import premiumRaceBannerImage from '@assets/images/cards/premium-race-banner.png'
@@ -153,6 +154,7 @@ export const CARD_ASSET_DEFINITIONS = [
     248
   ),
   cardAsset('card.stat.mana', 'mana.png', manaImage, 174, 165),
+  cardAsset('card.stat.life-cost', 'LIFE-COST.png', lifeCostImage, 143, 210),
   cardAsset('card.shadow.mana', 'shadow-mana.png', shadowManaImage, 267, 270),
   cardAsset('card.race-banner', 'race-banner.png', raceBannerImage, 408, 69),
   cardAsset(

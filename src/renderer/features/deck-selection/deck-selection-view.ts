@@ -23,10 +23,16 @@ import {
 import {
   buildDeckSelectionEntries,
   formatClassWins,
+  formatLegendRank,
   getDeckSelectionPageCount,
   getDeckSelectionPageForDeck
 } from './deck-selection-model'
 import { DECK_SELECTION_LAYOUT } from './deck-selection-layout'
+import {
+  getRankMedalTexture,
+  LEGEND_MEDAL_Y_OFFSET
+} from '../../ui/asset-registry/rank-medals'
+import type { ConstructedRankSnapshot } from '../../../shared/ipc/player-stats'
 
 export interface DeckSelectionViewCallbacks {
   readonly onBackPressed?: () => void | Promise<void>
@@ -54,6 +60,9 @@ export class DeckSelectionView extends Container {
   private selectedDeckOutline: AnimatedOutline | null = null
   private navigationStarted = false
   private currentPageIndex = 0
+  private rankMedalSprite!: Sprite
+  private rankMedalNumber!: Text
+  private rankMedalAssets: DeckSelectionAssets | null = null
 
   constructor(
     private readonly deckStore: DeckStore,
@@ -92,6 +101,7 @@ export class DeckSelectionView extends Container {
       }
 
       this.createBackground(assets)
+      this.createRankMedal(assets)
       this.createSelectionDetails(assets)
       this.createDeckGrid(deckPresentationAssets)
       this.createNavigation(assets, sharedAssets)
@@ -107,6 +117,65 @@ export class DeckSelectionView extends Container {
     applyAnchoredPlacement(panel, DECK_SELECTION_LAYOUT.panel)
     panel.eventMode = 'none'
     this.addChild(panel)
+  }
+
+  /** Seat the player's constructed rank medal in the top-right socket. */
+  private createRankMedal(assets: DeckSelectionAssets): void {
+    this.rankMedalAssets = assets
+    const rank = this.playerStatsStore.getRank()
+    this.rankMedalSprite = new Sprite(getRankMedalTexture(assets, rank))
+    applyAnchoredPlacement(this.rankMedalSprite, DECK_SELECTION_LAYOUT.rankMedal)
+    this.rankMedalSprite.eventMode = 'none'
+    this.rankMedalSprite.label = 'deck-selection.rank-medal'
+    this.addChild(this.rankMedalSprite)
+
+    this.rankMedalNumber = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Belwe',
+        fontSize: 60,
+        fill: 0xf7e08c,
+        stroke: { color: 0x000000, width: 5 },
+        align: 'center'
+      }
+    })
+    applyAnchoredPlacement(this.rankMedalNumber, DECK_SELECTION_LAYOUT.rankMedal)
+    this.rankMedalNumber.eventMode = 'none'
+    this.rankMedalNumber.label = 'deck-selection.rank-medal-number'
+    this.rankMedalNumber.visible = false
+    this.addChild(this.rankMedalNumber)
+    this.applyRankMedal(rank)
+    this.refreshRankMedalNumber(rank)
+  }
+
+  /** Re-seats the medal after a dev-menu rank override. */
+  refreshRankMedal(): void {
+    const rank = this.playerStatsStore.getRank()
+    if (!this.rankMedalAssets) return
+    this.rankMedalSprite.texture = getRankMedalTexture(this.rankMedalAssets, rank)
+    this.applyRankMedal(rank)
+    this.refreshRankMedalNumber(rank)
+  }
+
+  private applyRankMedal(rank: ConstructedRankSnapshot): void {
+    applyAnchoredPlacement(this.rankMedalSprite, DECK_SELECTION_LAYOUT.rankMedal)
+    applyAnchoredPlacement(this.rankMedalNumber, DECK_SELECTION_LAYOUT.rankMedal)
+    if (rank.tier === 'legend') {
+	  this.rankMedalSprite.y += LEGEND_MEDAL_Y_OFFSET
+	  this.rankMedalNumber.y += LEGEND_MEDAL_Y_OFFSET
+	} else {
+	  this.rankMedalSprite.y += 10
+	}
+  }
+
+  private refreshRankMedalNumber(rank: ConstructedRankSnapshot): void {
+    if (rank.tier !== 'legend') {
+      this.rankMedalNumber.visible = false
+      this.rankMedalNumber.text = ''
+      return
+    }
+    this.rankMedalNumber.text = formatLegendRank(rank.legendRank)
+    this.rankMedalNumber.visible = true
   }
 
   private createSelectionDetails(assets: DeckSelectionAssets): void {
@@ -416,6 +485,7 @@ export class DeckSelectionView extends Container {
     if (typeof document === 'undefined' || !document.fonts) return
     await document.fonts.load('700 30px Belwe')
     await document.fonts.load('700 24px Belwe')
+    await document.fonts.load('700 40px Belwe')
   }
 
   async dispose(): Promise<void> {

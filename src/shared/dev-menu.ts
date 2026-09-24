@@ -57,6 +57,12 @@ export type DevDeckTrackerSortMode = 'cost' | 'alphabetical' | 'draw-order'
 
 export type DevCommand =
   | { readonly type: 'progression:set-dust'; readonly amount: number | 'custom' }
+  | {
+      readonly type: 'ranking:set-rank'
+      readonly tier: 'rank' | 'legend'
+      /** Numeric ladder rank (1..25) or Legend position (1..999) for `tier`. */
+      readonly rank: number
+    }
   | { readonly type: 'cards:set-premium'; readonly mode: PremiumMode }
   | { readonly type: 'arena:retire' }
   | {
@@ -164,6 +170,16 @@ export function isDevCommand(value: unknown): value is DevCommand {
         Number.isSafeInteger(value.amount) &&
         value.amount >= 0)
     )
+  if (value.type === 'ranking:set-rank') {
+    const rank = (value as { rank?: unknown }).rank
+    return (
+      (value.tier === 'rank' || value.tier === 'legend') &&
+      typeof rank === 'number' &&
+      Number.isSafeInteger(rank) &&
+      rank >= 1 &&
+      rank <= (value.tier === 'rank' ? 25 : 999)
+    )
+  }
   if (value.type === 'cards:set-premium') return isPremiumMode(value.mode)
   if (value.type === 'arena:retire') return true
   if (value.type === 'arena:set-score')

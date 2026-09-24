@@ -2829,21 +2829,7 @@
         "trigger": "battlecry",
         "actions": [
           {
-            "action": "change-cost",
-            "target": {
-              "controller": "self",
-              "type": "card",
-              "selection": "all",
-              "zone": "hand",
-              "filter": {
-                "tribe": "Murloc"
-              }
-            },
-            "amount": {
-              "operation": "set",
-              "value": 0
-            },
-            "duration": "this-turn"
+            "action": "set-next-murloc-costs-health"
           }
         ]
       }

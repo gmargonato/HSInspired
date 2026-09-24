@@ -13,6 +13,10 @@ import { killDisplayTweens } from '../../animation/kill-display-tweens'
 import { minionAttackColor, minionHealthColor } from './minion-stat-presentation'
 import { isPremiumEnabled, subscribeToPremiumAppearance } from '../premium-appearance'
 import { PremiumArtworkBreath } from '../effects/premium-artwork-breath'
+import {
+  MINION_OUTLINE_SHAPE_KEY,
+  createMinionOutlineProxy
+} from './minion-outline-shape'
 
 export interface MinionViewModel {
   readonly premiumSide?: 'local' | 'remote'
@@ -95,7 +99,8 @@ function createStatGroup(
   label: string,
   texture: Texture,
   placement: typeof MINION_LAYOUT.attackBadge,
-  value: number
+  value: number,
+  valueOffset: { readonly x: number; readonly y: number }
 ): StatGroup {
   const group = new Container()
   applyPlacement(group, placement)
@@ -112,7 +117,7 @@ function createStatGroup(
     style: MINION_LAYOUT.statText,
     anchor: 0.5
   })
-  valueLabel.position.set(0, 0)
+  valueLabel.position.set(valueOffset.x, valueOffset.y)
   valueLabel.label = `${label}-value`
   group.addChild(valueLabel)
   return { group, badge, value: valueLabel }
@@ -372,7 +377,8 @@ export class MinionView extends Container {
       'minion.stat-attack',
       textures.attack,
       MINION_LAYOUT.attackBadge,
-      model.attack
+      model.attack,
+      MINION_LAYOUT.statValueOffsets.attack
     )
     this.attackLabel = attack.value
     this.addChild(attack.group)
@@ -381,7 +387,8 @@ export class MinionView extends Container {
       'minion.stat-health',
       textures.health,
       MINION_LAYOUT.healthBadge,
-      model.health
+      model.health,
+      MINION_LAYOUT.statValueOffsets.health
     )
     this.healthLabel = health.value
     this.addChild(health.group)
@@ -443,41 +450,34 @@ export class MinionView extends Container {
 
     // Green attack-ready outline: solid oval proxy so the hollow frame does not create an inner glow.
     // The filter draws only the exterior glow; the white interior is discarded by the shader.
-    this.outlineProxy = new Graphics()
-    this.outlineProxy.label = 'minion.attack-outline-proxy'
-    this.outlineProxy.eventMode = 'none'
-    this.outlineProxy.ellipse(80, 90, 58, 79).fill({ color: 0xffffff })
-    this.outlineProxy.visible = false
+    this.outlineProxy = createMinionOutlineProxy('minion.attack-outline-proxy')
     // Keep every outline above Taunt but below the minion frame. The Taunt ring
     // is larger than the frame and would otherwise obscure the glow.
     this.addChildAt(this.outlineProxy, this.getChildIndex(frame))
     this.attackOutline = new AnimatedOutline(this.outlineProxy, {
       palette: 'green',
-      preset: 'board'
+      preset: 'board',
+      sharedShapeKey: MINION_OUTLINE_SHAPE_KEY
     })
     this.attackOutline.setEnabled(false)
 
-    this.targetingOutlineProxy = new Graphics()
-    this.targetingOutlineProxy.label = 'minion.targeting-outline-proxy'
-    this.targetingOutlineProxy.eventMode = 'none'
-    this.targetingOutlineProxy.ellipse(80, 90, 58, 79).fill({ color: 0xffffff })
-    this.targetingOutlineProxy.visible = false
+    this.targetingOutlineProxy = createMinionOutlineProxy(
+      'minion.targeting-outline-proxy'
+    )
     this.addChildAt(this.targetingOutlineProxy, this.getChildIndex(frame))
     this.targetingOutline = new AnimatedOutline(this.targetingOutlineProxy, {
       palette: 'red',
-      preset: 'board'
+      preset: 'board',
+      sharedShapeKey: MINION_OUTLINE_SHAPE_KEY
     })
     this.targetingOutline.setEnabled(false)
 
-    this.hoverOutlineProxy = new Graphics()
-    this.hoverOutlineProxy.label = 'minion.hover-outline-proxy'
-    this.hoverOutlineProxy.eventMode = 'none'
-    this.hoverOutlineProxy.ellipse(80, 90, 58, 79).fill({ color: 0xffffff })
-    this.hoverOutlineProxy.visible = false
+    this.hoverOutlineProxy = createMinionOutlineProxy('minion.hover-outline-proxy')
     this.addChildAt(this.hoverOutlineProxy, this.getChildIndex(frame))
     this.hoverOutline = new AnimatedOutline(this.hoverOutlineProxy, {
       palette: 'white',
-      preset: 'board'
+      preset: 'board',
+      sharedShapeKey: MINION_OUTLINE_SHAPE_KEY
     })
     this.hoverOutline.setEnabled(false)
 

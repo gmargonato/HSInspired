@@ -1730,7 +1730,8 @@
                 {
                   "action": "summon",
                   "cardId": "basic_treant_cenarius",
-                  "count": 2
+                  "count": 2,
+                  "placement": "alternating-around-source"
                 }
               ],
               "presentationCardId": "classic_shandos_lesson"
