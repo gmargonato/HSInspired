@@ -371,6 +371,19 @@ function isMindControlSpell(card: CardDefinition): boolean {
   )
 }
 
+function isDiscoverSummonSpell(card: CardDefinition): boolean {
+  if (card.type !== 'Spell') return false
+  const actions = card.effects
+    .filter((effect) => effect.trigger === 'cast')
+    .flatMap((effect) => effect.actions ?? [])
+  return (
+    actions.length === 1 &&
+    actions[0].action === 'discover' &&
+    actions[0].destination === 'board' &&
+    actions[0].player === 'self'
+  )
+}
+
 function sourceCardId(source: EntityRef | null): CardId | null {
   return source?.cardId ?? null
 }
@@ -4636,7 +4649,8 @@ export class EffectRuntime {
     participantId: PlayerId,
     frame: EffectFrame,
     path: string,
-    requested?: EntityRef
+    requested?: EntityRef,
+    reason?: 'turn-start'
   ): EntityRef | null {
     const player = this.player(participantId)
     const top =
@@ -4744,6 +4758,7 @@ export class EffectRuntime {
     this.events.push({
       type: 'card-drawn',
       origin: 'deck',
+      ...(reason ? { reason } : {}),
       participantId,
       card: clonePlain(card) as OpeningCard
     })
@@ -7403,6 +7418,9 @@ export class EffectRuntime {
             participantId,
             sourceCardInstanceId: frame.source.instanceId,
             candidates,
+            ...(action.destination === 'board'
+              ? { destination: 'board' as const }
+              : {}),
             origin: fromDeckCopy
               ? ('deck-copy' as const)
               : fromDeadMinions
@@ -9862,7 +9880,10 @@ export class EffectRuntime {
     if (!card) return null
     const definition = cardDefinition(card.cardId)
     if (!definition) return null
-    if (isMindControlSpell(definition) && player.board.length >= MAX_BOARD_SIZE)
+    if (
+      (isMindControlSpell(definition) || isDiscoverSummonSpell(definition)) &&
+      player.board.length >= MAX_BOARD_SIZE
+    )
       return null
     const requiresPosition = definition.type === 'Minion'
     const legalPositions =
@@ -10464,7 +10485,10 @@ export class EffectRuntime {
       throw new ResolutionInputError('stale-target', `Unknown card ${card.cardId}.`)
     const report = inspectCardCapabilities(definition, runtimeCapabilityKeys())
     if (!report.supported) throw new UnsupportedEffectCapabilityError(report)
-    if (isMindControlSpell(definition) && player.board.length >= MAX_BOARD_SIZE)
+    if (
+      (isMindControlSpell(definition) || isDiscoverSummonSpell(definition)) &&
+      player.board.length >= MAX_BOARD_SIZE
+    )
       throw new ResolutionInputError('board-full', 'The board is full.')
     const choiceCount = this.choiceCountFor(definition, options.participantId)
     const choiceTiming = this.choiceTimingFor(definition, options.participantId)
@@ -13075,7 +13099,13 @@ export class EffectRuntime {
       this.processDeaths()
       if (this.draft.players.every((player) => player.hero.health > 0)) {
         const drawFrame = this.frameFor(nextHero, null, [])
-        this.drawOne(nextPlayer.participantId, drawFrame, 'turn-start.draw')
+        this.drawOne(
+          nextPlayer.participantId,
+          drawFrame,
+          'turn-start.draw',
+          undefined,
+          'turn-start'
+        )
         this.processDeaths()
       }
       const nextState = this.commitResolution()
@@ -13534,7 +13564,27 @@ export class EffectRuntime {
           'A Discover candidate is no longer available.'
         )
       if (candidate.instanceId === selectedCandidate.instanceId) {
-        if (pending.origin === 'dead-minions') {
+        if (pending.destination === 'board') {
+          const source =
+            this.findEntity(pending.sourceCardInstanceId, options.participantId) ?? {
+              instanceId: pending.sourceCardInstanceId,
+              kind: 'card' as const,
+              participantId: options.participantId,
+              zone: 'discarded' as const,
+              cardId: pending.publicSourceCardId
+            }
+          // A full board consumes the selection without adding or burning a hand card.
+          selectedRef = this.createMinion(
+            options.participantId,
+            removed.cardId,
+            this.frameFor(source, null, []),
+            'discover.summon',
+            removed.instanceId,
+            undefined,
+            undefined,
+            removed
+          )
+        } else if (pending.origin === 'dead-minions') {
           selectedRef = candidateRef
         } else if (
           pending.origin === 'opponent-deck-guess' &&

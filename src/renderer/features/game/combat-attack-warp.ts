@@ -13,7 +13,6 @@ import {
   type DragRotatorConfig,
   type DragRotatorState
 } from './drag-rotator'
-import { BOARD_TIMING } from './game-presentation-timing'
 
 /** Extra room around the minion snapshot for status rings and the warp's blur. */
 const WARP_SNAPSHOT_PADDING = 24
@@ -86,33 +85,6 @@ export class CombatAttackWarp {
     this.tick = (_time: number, deltaMS: number): void => this.step(deltaMS)
     gsap.ticker.add(this.tick)
     this.applyTilt()
-  }
-
-  /** Moves the attacker's death collapse onto the mesh instead of the hidden view. */
-  collapse(
-    timeline: gsap.core.Timeline,
-    start: number,
-    duration = BOARD_TIMING.combatDeath
-  ): void {
-    timeline.to(
-      this.mesh,
-      {
-        alpha: 0,
-        duration,
-        ease: 'power2.in'
-      },
-      start
-    )
-    timeline.to(
-      this.mesh.scale,
-      {
-        x: this.baseScale.x * 0.7,
-        y: this.baseScale.y * 0.7,
-        duration,
-        ease: 'power2.in'
-      },
-      start
-    )
   }
 
   dispose(): void {

@@ -27,6 +27,8 @@ export const SECRET_REVEAL_TIMING = {
 
 /** Resolution pacing shared by every trigger/death/outcome presentation. */
 export const RESOLUTION_TIMING = {
+  /** Match the remote deck draw's travel time, without a reveal hold. */
+  cardDraw: OPENING_TIMING.cardDeal,
   /** Full marker pulse for each concrete trigger frame. */
   triggerPulse: 0.6,
   /** Small handoff while a captured death leaves the board. */
@@ -62,6 +64,8 @@ export const BOARD_TIMING = {
   combatReturn: 0.2,
   /** Extra time a warped attacker stays on screen so the un-warp reads. */
   combatWarpLinger: 0.15,
+  /** Total time for a dying minion's local side-to-side wiggle. */
+  minionDeathWiggle: 0.18,
   combatDeath: 0.28,
   characterIndicatorGrow: 0.16,
   characterIndicatorHold: 1,

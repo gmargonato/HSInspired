@@ -483,6 +483,9 @@ function validateActionShape(
   if (actionName === 'copy' && record['destination'] === undefined) {
     fail(`${path}.destination`, 'is required for this action')
   }
+  if (record['destination'] === 'board' && actionName !== 'discover') {
+    fail(`${path}.destination`, 'board is only supported for discover')
+  }
   if (record['castTarget'] !== undefined) {
     if (actionName !== 'copy' || record['destination'] !== 'cast-on-target')
       fail(`${path}.castTarget`, 'requires copy to cast-on-target')

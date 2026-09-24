@@ -141,3 +141,63 @@ describe('Elise the Trailblazer Un\'Goro pack', () => {
     }
   })
 })
+
+const HIVE_QUEEN_ID = 'journey_to_ungoro_emerald_hive_queen'
+
+describe('Emerald Hive Queen cost aura', () => {
+  function handMinionCosts(scenario: Scenario, participantId: string) {
+    return player(scenario, participantId)
+      .hand.filter((card) => CARD_CATALOG.require(card.cardId).type === 'Minion')
+      .map((card) => card.currentCost)
+  }
+
+  function clearBoard(scenario: Scenario, participantId: string) {
+    const result = scenario.match.dispatch({
+      type: 'dev-clear-zone',
+      participantId,
+      zone: 'board'
+    })
+    if (!result.accepted) throw new Error(result.message)
+  }
+
+  function expectAllCosts(
+    scenario: Scenario,
+    participantId: string,
+    expectedCost: number
+  ) {
+    const costs = handMinionCosts(scenario, participantId)
+    expect(costs).not.toHaveLength(0)
+    for (const cost of costs) expect(cost).toBe(expectedCost)
+  }
+
+  it('taxes only its owner’s hand minions, never the opponent’s', () => {
+    const scenario = ready({ seed: 7311, cardId: HIVE_QUEEN_ID })
+    const [own, other] = activePlayers(scenario)
+    setMana(scenario, own)
+
+    expectAllCosts(scenario, own, 1)
+    expectAllCosts(scenario, other, 1)
+
+    play(scenario, own, HIVE_QUEEN_ID)
+
+    expectAllCosts(scenario, own, 3)
+    expectAllCosts(scenario, other, 1)
+
+    clearBoard(scenario, own)
+    expectAllCosts(scenario, own, 1)
+  })
+
+  it('taxes only the second player’s hand when they play their Queen', () => {
+    const scenario = ready({ seed: 7311, cardId: HIVE_QUEEN_ID })
+    const [own, other] = activePlayers(scenario)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: own }).accepted
+    ).toBe(true)
+
+    setMana(scenario, other)
+    play(scenario, other, HIVE_QUEEN_ID)
+
+    expectAllCosts(scenario, other, 3)
+    expectAllCosts(scenario, own, 1)
+  })
+})

@@ -144,6 +144,7 @@ import manaSpentImage from '@assets/images/match/mana-spent.png'
 import manaHighlightedImage from '@assets/images/match/mana-highlighted.png'
 import historySecretCardImage from '@assets/images/match/history-secret-card.png'
 import historySecretThumbImage from '@assets/images/match/history-secret-thumb.png'
+import summonTotemImage from '@assets/images/match/summon-totem.png'
 import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
 import premiumHeroPowerBackImage from '@assets/images/heroes/hero-power/premium-hero-power-back.png'
 import heroPowerFrontImage from '@assets/images/heroes/hero-power/hero-power-front.png'
@@ -1821,6 +1822,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     903,
     'game-scene'
   ),
+  asset(
+    'scene.game.summon-totem',
+    ASSET_BUNDLE_IDS.game,
+    'summonTotem',
+    summonTotemImage,
+    242,
+    237,
+    'game-scene'
+  ),
   ...Object.entries(HERO_POWER_ASSET_SOURCES).map(([key, source]) =>
     asset(
       `scene.game.hero-power.${key}`,
@@ -2575,6 +2585,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   premiumHeroPowerFront: Texture
   heroPowerMana: Texture
   discoverHistoryHeroPower: Texture
+  summonTotem: Texture
   arrowBody: Texture
   arrowHead: Texture
   arrowCircle: Texture

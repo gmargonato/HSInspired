@@ -1,4 +1,4 @@
-import type { Container, Rectangle, Texture } from 'pixi.js'
+import type { Container, Rectangle, Renderer, Texture } from 'pixi.js'
 import { Actor } from '../../ui/components/actor'
 import { AuraFilter } from './aura-filter'
 import {
@@ -77,6 +77,9 @@ export class AnimatedOutline extends Actor {
       this.filter.syncPadding()
       this.timeTween.resume()
     } else this.timeTween.pause()
+  }
+  prebuild(renderer: Renderer): void {
+    this.filter.prebuild(renderer)
   }
   isEnabled(): boolean {
     return this.enabled

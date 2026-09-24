@@ -171,7 +171,8 @@ export class GameCardTargeting {
         this.context.localParticipantId(),
         input.cardInstanceId,
         input.cardId,
-        input.choiceOptions
+        input.choiceOptions,
+        this.minionTargetPreview() === null
       )
       .catch((error: unknown) => {
         this.logger.error('[GameBoardView] failed to present card choices', error)
@@ -204,7 +205,7 @@ export class GameCardTargeting {
     const isMinionTargetPreview =
       arrowOriginHint === 'card' &&
       cardDefinition(entry.card).type === 'Minion' &&
-      input.targetSelectors.length > 0 &&
+      (input.targetSelectors.length > 0 || input.choiceCount > 0) &&
       position !== undefined
     const previewResting = isMinionTargetPreview
       ? this.context.previewPosition(position!)
@@ -248,6 +249,10 @@ export class GameCardTargeting {
       this.cursor?.setTargeting(false)
       this.cursor?.setTargetingTarget(null)
       this.showCardChoiceOverlay(input)
+      if (minionPreview) {
+        this.beginMinionTargetPreview(targeting)
+        return
+      }
       this.hand.drag.hideForPendingPlay(entry)
       this.context.syncAttackability()
       this.context.syncControls()
@@ -277,7 +282,13 @@ export class GameCardTargeting {
     this.hand.drag.releaseForTargeting(preview.entry)
     preview.entry.slot.visible = true
     this.context.showBoardPreview(preview.position, preview.entry.card.instanceId)
-    this.cursor?.setTargeting(true)
+    this.cursor?.setTargeting(
+      pendingCardInputStage(
+        targeting.input,
+        targeting.choice,
+        targeting.targets.length
+      ) === 'target'
+    )
     if (this.assets.arrowBody) {
       this.attackLine.setBodyTexture(this.assets.arrowBody)
     }

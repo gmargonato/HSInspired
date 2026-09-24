@@ -184,12 +184,7 @@ export class AuraFilter extends Filter {
       ) + 2
   }
 
-  override apply(
-    system: FilterSystem,
-    input: Texture,
-    output: RenderSurface,
-    clear: boolean
-  ): void {
+  private silhouetteState(): { texture: Texture | null; revision: string } {
     const target = this.target
     const texture =
       this.silhouette?.texture ??
@@ -200,6 +195,25 @@ export class AuraFilter extends Filter {
     const revision = texture
       ? `${texture.uid}:${texture.source.uid}:${texture.frame.x}:${texture.frame.y}:${texture.frame.width}:${texture.frame.height}`
       : `${bounds.minX}:${bounds.minY}:${bounds.width}:${bounds.height}:${this.silhouetteRevision}`
+    return { texture, revision }
+  }
+
+  /** Prepare outside a render pass, retaining the field until this filter is disposed. */
+  prebuild(renderer: Renderer): void {
+    if (this.disposed || this.target.destroyed) return
+    const { texture, revision } = this.silhouetteState()
+    if (revision === this.revision && this.field?.valid) return
+    this.prepare(renderer, texture, revision)
+  }
+
+  override apply(
+    system: FilterSystem,
+    input: Texture,
+    output: RenderSurface,
+    clear: boolean
+  ): void {
+    const target = this.target
+    const { texture, revision } = this.silhouetteState()
     if (
       revision !== this.revision ||
       !this.field?.valid ||

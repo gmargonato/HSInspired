@@ -2145,7 +2145,7 @@
     "health": 3,
     "rulesText": "Your minions cost (2) more.",
     "keywords": [],
-    "effects": [{"trigger":"aura","actions":[{"action":"change-cost","target":{"controller":"opponent","type":"minion-card","selection":"all","zone":"hand"},"amount":2,"duration":"while-source-in-play"}]}],
+    "effects": [{"trigger":"aura","actions":[{"action":"change-cost","target":{"controller":"self","type":"minion-card","selection":"all","zone":"hand"},"amount":2,"duration":"while-source-in-play"}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -2982,7 +2982,7 @@
     "health": null,
     "rulesText": "Discover a minion that costs (8) or more. Summon it.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"discover","player":"self","count":3,"source":"random-card","filter":{"type":"Minion","cost":{"operator":"gte","value":8}},"storeAs":"discoveredCard"},{"action":"put-into-play","source":{"controller":"self","type":"minion-card","selection":"stored","zone":"hand","reference":"discoveredCard"}}]}],
+    "effects": [{"trigger":"cast","actions":[{"action":"discover","player":"self","count":3,"source":"random-card","destination":"board","filter":{"type":"Minion","cost":{"operator":"gte","value":8}}}]}],
     "collectible": true,
     "deckLegal": true
   },

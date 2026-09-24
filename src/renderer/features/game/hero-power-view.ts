@@ -4,7 +4,8 @@ import {
   Sprite,
   Text,
   Texture,
-  type FederatedPointerEvent
+  type FederatedPointerEvent,
+  type Renderer
 } from 'pixi.js'
 import type { LayoutPlacement, LayoutPoint } from '../../rendering/layout'
 import {
@@ -468,6 +469,11 @@ export class HeroPowerView extends Actor {
         resolve()
       })
     })
+  }
+
+  prebuildOutlines(renderer: Renderer): void {
+    this.playableOutline.prebuild(renderer)
+    this.hoverOutline.prebuild(renderer)
   }
 
   override dispose(): void {

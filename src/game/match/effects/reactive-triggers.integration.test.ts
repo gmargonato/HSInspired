@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createMatchScenario } from '../testing/match-scenario-builder'
 import type { PlayCardCommand } from '../opening-match-types'
 
@@ -30,6 +30,54 @@ function setMana(scenario: Scenario, participantId: string) {
 }
 
 describe('reactive trigger timing', () => {
+  it('distinguishes a triggered turn-start draw from the automatic draw', () => {
+    const scenario = createMatchScenario({ seed: 1101 })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'classic_nat_pagle'
+      }).accepted
+    ).toBe(true)
+    // Force Pagle's coin flip to draw, independently of opening shuffle consumption.
+    const roll = vi.spyOn(scenario.rng, 'next').mockReturnValue(0)
+    const result = scenario.match.dispatch({ type: 'end-turn', participantId })
+    roll.mockRestore()
+    expect(result.accepted).toBe(true)
+    const draws = result.events.filter((event) => event.type === 'card-drawn')
+    expect(draws).toHaveLength(2)
+    expect(draws[0]).not.toHaveProperty('reason')
+    expect(draws[1]).toMatchObject({ reason: 'turn-start' })
+  })
+
+  it('marks only the automatic draw as a turn-start draw', () => {
+    const scenario = createMatchScenario({
+      seed: 1100,
+      firstHeroId: 'guldan',
+      secondHeroId: 'guldan'
+    })
+    scenario.confirmBothMulligans()
+    const [participantId, opponentId] = activePlayers(scenario)
+    setMana(scenario, participantId)
+    const power = scenario.match.dispatch({ type: 'use-hero-power', participantId })
+    expect(power.accepted).toBe(true)
+    const powerDraw = power.events.find((event) => event.type === 'card-drawn')
+    expect(powerDraw).toMatchObject({ origin: 'deck' })
+    expect(powerDraw).not.toHaveProperty('reason')
+    const dev = scenario.match.dispatch({ type: 'dev-draw', participantId })
+    expect(dev.accepted).toBe(true)
+    expect(dev.events.find((event) => event.type === 'card-drawn')).not.toHaveProperty(
+      'reason'
+    )
+    const turn = scenario.match.dispatch({ type: 'end-turn', participantId })
+    expect(turn.accepted).toBe(true)
+    expect(turn.events.filter((event) => event.type === 'card-drawn')).toMatchObject([
+      { participantId: opponentId, origin: 'deck', reason: 'turn-start' }
+    ])
+  })
+
   it('resolves Floating Watcher when its controller damages their own hero', () => {
     const scenario = createMatchScenario({
       seed: 1100,

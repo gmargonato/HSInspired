@@ -58,6 +58,10 @@ import { isLegalHeroPowerTarget } from './hero-power-targeting'
 import type { RendererLogger } from '../../ui/logger'
 import { gsap } from '../../animation/animations'
 import { CardView } from '../../rendering/cards/card-view'
+import {
+  acquireAuraField,
+  type AuraFieldLease
+} from '../../rendering/effects/aura-field-cache'
 import { CARD_CANVAS, CARD_PROFILES } from '../../rendering/cards/card-layout'
 import { cardCostColor } from '../../rendering/cards/card-cost-presentation'
 import {
@@ -297,6 +301,7 @@ export class GameBoardView extends Actor {
     this.canvasBounds = null
   }
   private readonly resolver = new CardAssetResolver()
+  private readonly sceneAuraFields = new Map<Texture, AuraFieldLease>()
   private readonly secretPreviewView: SecretPreviewView
   private readonly questPreviewView: QuestPreviewView
   private readonly hoverPreview: HoverPreviewController<MatchHoverTarget>
@@ -389,6 +394,7 @@ export class GameBoardView extends Actor {
   private readonly deckLayer = new Container()
   private readonly deckViews = new Map<PlayerId, DeckStackView>()
   private readonly drawOrigins = new WeakMap<Container, Sprite>()
+  private readonly drawProfiles = new WeakMap<Container, CardDrawProfile>()
   private readonly drawAnimations = new Set<CardDrawAnimation>()
   private readonly turnLayer = this.hud.turnLayer
   private readonly remoteHandLayer = new Container()
@@ -816,8 +822,16 @@ export class GameBoardView extends Actor {
       },
       {
         hasDrawOrigin: (slot) => this.drawOrigins.has(slot),
-        departDeck: (slot, duration, delay) =>
-          this.animateDeckDeparture(slot, duration, delay, 'local-reveal')
+        departDeck: (slot, duration, delay) => {
+          const profile = this.drawProfiles.get(slot) ?? 'direct'
+          this.drawProfiles.delete(slot)
+          return this.animateDeckDeparture(
+            slot,
+            duration,
+            profile === 'direct' ? 0 : delay,
+            profile
+          )
+        }
       },
       options.cursor
     )
@@ -1538,6 +1552,7 @@ export class GameBoardView extends Actor {
       this.wireHeroView(view)
       this.heroViews.set(player.participantId, view)
       this.heroLayer.addChild(view)
+      this.prebuildAuraTexture(texture)
     }
   }
 
@@ -1578,6 +1593,11 @@ export class GameBoardView extends Actor {
       view.label = `game.hero-power.${player.participantId}`
       this.heroPowerViews.set(player.participantId, view)
       this.heroPowerLayer.addChild(view)
+      try {
+        view.prebuildOutlines(this.options.renderer)
+      } catch (error) {
+        this.logger.warn('[GameBoardView] hero power aura prebuild failed', error)
+      }
     }
   }
 
@@ -1613,6 +1633,8 @@ export class GameBoardView extends Actor {
     this.addChild(this.hud.deckTracker)
     this.syncTurnHud(state)
     this.syncTurnControls(state)
+    this.prebuildAuraTexture(this.options.gameAssets.endTurn)
+    this.prebuildAuraTexture(this.options.gameAssets.enemyTurn)
   }
 
   /** Refreshes deck stacks and card-count labels from the engine state. */
@@ -1949,6 +1971,8 @@ export class GameBoardView extends Actor {
   }
 
   private chooseDiscoverCard(card: OpeningCard): void {
+    const summonSelection =
+      this.match.getState().pendingDiscover?.destination === 'board'
     const result = this.dispatchCommand({
       type: 'choose-discover-card',
       participantId: this.localParticipantId,
@@ -1959,9 +1983,10 @@ export class GameBoardView extends Actor {
       void this.restorePendingChoice()
       return
     }
-    void this.enqueuePresentation(result.state, () =>
-      this.presentResolutionEvents(result.events)
-    ).finally(() => {
+    void this.enqueuePresentation(result.state, async () => {
+      if (summonSelection) this.cardSelectionOverlay.clear()
+      await this.presentResolutionEvents(result.events)
+    }).finally(() => {
       this.syncTurnHud(this.match.getState())
       this.syncTurnControls(this.match.getState())
     })
@@ -3193,6 +3218,24 @@ export class GameBoardView extends Actor {
     for (const { card, slot } of entries) {
       this.hand.append({ card, slot, restTransform: undefined, displaced: false })
     }
+    // Build each opening silhouette during mount, before the mulligan is shown.
+    // Keep a lease until disposal so hidden outlines can acquire the same field.
+    const textures = new Set(entries.map(({ slot }) => slot.playableOutlineTexture))
+    for (const texture of textures) {
+      this.prebuildAuraTexture(texture)
+    }
+  }
+
+  private prebuildAuraTexture(texture: Texture): void {
+    if (this.sceneAuraFields.has(texture)) return
+    try {
+      this.sceneAuraFields.set(
+        texture,
+        acquireAuraField(this.options.renderer, texture)
+      )
+    } catch (error) {
+      this.logger.warn('[GameBoardView] aura prebuild failed', error)
+    }
   }
 
   private async createCardPresentation(
@@ -3648,7 +3691,10 @@ export class GameBoardView extends Actor {
           event.card,
           event.type === 'opening-card-drawn' || event.origin === 'deck'
             ? event.participantId
-            : undefined
+            : undefined,
+          event.type === 'opening-card-drawn' || event.reason === 'turn-start'
+            ? 'local-reveal'
+            : 'direct'
         )
         return
       case 'discover-started':
@@ -5081,10 +5127,11 @@ export class GameBoardView extends Actor {
   private async presentDraw(
     participantId: PlayerId,
     card: OpeningCard,
-    sourceDeck?: PlayerId
+    sourceDeck?: PlayerId,
+    profile: CardDrawProfile = 'direct'
   ): Promise<void> {
     if (participantId === this.localParticipantId) {
-      await this.addLocalCard(card, sourceDeck)
+      await this.addLocalCard(card, sourceDeck, profile)
     } else {
       this.remoteBackCount += 1
       this.ensureRemoteBacks(this.remoteBackCount)
@@ -5105,7 +5152,12 @@ export class GameBoardView extends Actor {
       }
     }
     this.syncTurnHud(this.match.getState())
-    await this.wait(OPENING_TIMING.replacementPause)
+    if (
+      participantId !== this.localParticipantId ||
+      !sourceDeck ||
+      profile !== 'direct'
+    )
+      await this.wait(OPENING_TIMING.replacementPause)
   }
 
   private async presentWeaponEquipped(
@@ -6709,7 +6761,11 @@ export class GameBoardView extends Actor {
     await this.mulligan.dismiss()
   }
 
-  private async addLocalCard(card: OpeningCard, sourceDeck?: PlayerId): Promise<void> {
+  private async addLocalCard(
+    card: OpeningCard,
+    sourceDeck?: PlayerId,
+    profile: CardDrawProfile = 'direct'
+  ): Promise<void> {
     if (this.findEntry(card.instanceId)) return
     const selected = this.cardSelectionOverlay.takeSelected(card.instanceId)
     if (selected) {
@@ -6747,6 +6803,7 @@ export class GameBoardView extends Actor {
         : GAME_BOARD_LAYOUT.decks.remote,
       this.hand.entries.length
     )
+    this.drawProfiles.set(slot, profile)
     this.travelLayer.addChild(slot)
     this.hand.append({
       card: cloneCard(card),
@@ -6754,9 +6811,11 @@ export class GameBoardView extends Actor {
       restTransform: undefined,
       displaced: false
     })
+    const duration =
+      profile === 'direct' ? RESOLUTION_TIMING.cardDraw : OPENING_TIMING.cardDeal
     await this.hand.applyLayout({
-      positionDuration: OPENING_TIMING.cardDeal,
-      scaleDuration: OPENING_TIMING.cardDeal,
+      positionDuration: duration,
+      scaleDuration: duration,
       delayedInstanceId: card.instanceId,
       preserveHover: true
     })
@@ -7276,6 +7335,26 @@ export class GameBoardView extends Actor {
         (event): event is Extract<OpeningMatchEvent, { type: 'minion-played' }> =>
           event.type === 'minion-played'
       )
+      // Self-transforming choices are committed after placement by the engine.
+      // Show their options during the summon, then omit the already-shown event.
+      const concurrentChoice = result.events.find(
+        (event): event is Extract<OpeningMatchEvent, { type: 'card-choice-started' }> =>
+          event.type === 'card-choice-started' &&
+          event.participantId === this.localParticipantId &&
+          event.sourceCardInstanceId === entry.card.instanceId &&
+          cardDefinition(entry.card).effects.some((effect) =>
+            Array.isArray(effect.choice?.options)
+          )
+      )
+      const choicePresentation = concurrentChoice
+        ? this.cardSelectionOverlay.showChoices(
+            concurrentChoice.participantId,
+            concurrentChoice.sourceCardInstanceId,
+            concurrentChoice.sourceCardId,
+            concurrentChoice.options,
+            false
+          )
+        : Promise.resolve()
       const handReflow = this.hand.applyLayout({
         positionDuration: OPENING_TIMING.cardDeal,
         scaleDuration: OPENING_TIMING.cardDeal
@@ -7289,8 +7368,11 @@ export class GameBoardView extends Actor {
               entry.slot.removeFromParent()
               entry.slot.destroy({ children: true })
             })
-      await Promise.all([handReflow, summon])
-      await this.presentResolutionEvents(result.events, minionPlayed)
+      await Promise.all([handReflow, summon, choicePresentation])
+      await this.presentResolutionEvents(
+        result.events.filter((event) => event !== concurrentChoice),
+        minionPlayed
+      )
     } finally {
       if (!this.destroyed) {
         this.hand.setReflowing(false)
@@ -7526,6 +7608,8 @@ export class GameBoardView extends Actor {
     this.attackLine.clear()
     this.hand.dispose()
     this.mulligan.dispose()
+    for (const field of this.sceneAuraFields.values()) field.release()
+    this.sceneAuraFields.clear()
     for (const slot of this.activeSummonSlots) {
       slot.disposePlayableOutline()
     }

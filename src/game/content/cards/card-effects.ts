@@ -319,6 +319,7 @@ export const CARD_ACTION_SOURCES = [
   'random-card'
 ] as const
 export const CARD_ACTION_DESTINATIONS = [
+  'board',
   'cast-on-source',
   'cast-on-target',
   'deck',

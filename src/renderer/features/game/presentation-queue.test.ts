@@ -55,6 +55,7 @@ import { SecretRevealView, SecretZoneView } from './secret-view'
 import { SECRET_LAYOUT } from './secret-layout'
 import type { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { CardPlayAnimation } from './card-play-animation'
+import { drawFlightPose, type DrawCorners } from './card-draw-animation'
 import type { MinionCardMovement } from '../../../game/match'
 
 describe('engine-driven minion card departures', () => {
@@ -411,6 +412,139 @@ afterEach(() => {
   for (const value of boards.splice(0)) if (!value.destroyed) value.dispose()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('local draw profiles', () => {
+  it('flies continuously from the deck to a face-up hand card without growing past hand size', () => {
+    const start: DrawCorners = [
+      { x: 1700, y: 650 },
+      { x: 1740, y: 640 },
+      { x: 1742, y: 810 },
+      { x: 1700, y: 800 }
+    ]
+    const end: DrawCorners = [
+      { x: 1000, y: 880 },
+      { x: 1186, y: 880 },
+      { x: 1186, y: 1150 },
+      { x: 1000, y: 1150 }
+    ]
+    const first = drawFlightPose(start, end, 0, true)
+    first.corners.forEach((point, index) => {
+      expect(point.x).toBeCloseTo(start[index].x)
+      expect(point.y).toBeCloseTo(start[index].y)
+    })
+    expect(first.front).toBe(false)
+    const frames = [0.2, 0.4, 0.6, 0.8].map((progress) =>
+      drawFlightPose(start, end, progress, true)
+    )
+    frames.forEach((pose, index) => {
+      expect(pose.magnification).toBeLessThanOrEqual(1)
+      if (index > 0) expect(pose.corners).not.toEqual(frames[index - 1].corners)
+    })
+    expect(frames[2].front).toBe(true)
+    expect(drawFlightPose(start, end, 1, true)).toMatchObject({
+      corners: end,
+      front: true,
+      magnification: 1
+    })
+  })
+
+  it.each([0, 9])(
+    'inserts a fast draw into a hand of %i cards without a departure delay',
+    async (count) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        hand: GameHandView
+        drawOrigins: WeakMap<Container, Sprite>
+        createSlot(card: OpeningCard): Promise<GameCardSlot>
+        prepareSlotAtDeck(slot: GameCardSlot): void
+        addLocalCard(card: OpeningCard, sourceDeck: PlayerId): Promise<void>
+        animateDeckDeparture(
+          slot: GameCardSlot,
+          duration: number,
+          delay: number,
+          profile: string
+        ): Promise<void>
+      }
+      for (let i = 0; i < count; i++) {
+        const slot = mulliganSlot(`existing-${i}`)
+        internal.hand.layer.addChild(slot)
+        internal.hand.append({
+          card: { instanceId: `existing-${i}`, cardId: asCardId('classic_wisp') },
+          slot,
+          restTransform: undefined,
+          displaced: false
+        })
+      }
+      const card = { instanceId: 'fast-draw', cardId: asCardId('classic_wisp') }
+      const incoming = mulliganSlot(card.instanceId)
+      const deck = new Sprite(Texture.WHITE)
+      vi.spyOn(internal, 'createSlot').mockResolvedValue(incoming)
+      vi.spyOn(internal, 'prepareSlotAtDeck').mockImplementation((slot) => {
+        internal.drawOrigins.set(slot, deck)
+      })
+      vi.spyOn(internal.hand, 'configureSlot').mockImplementation(() => {})
+      const depart = vi.spyOn(internal, 'animateDeckDeparture').mockResolvedValue()
+      const layout = vi.spyOn(internal.hand, 'applyLayout')
+      await internal.addLocalCard(card, internal.session.localParticipantId)
+      expect(layout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          positionDuration: OPENING_TIMING.cardDeal,
+          scaleDuration: OPENING_TIMING.cardDeal
+        })
+      )
+      expect(depart).toHaveBeenCalledWith(
+        incoming,
+        OPENING_TIMING.cardDeal,
+        0,
+        'direct'
+      )
+      expect(incoming.parent).toBe(internal.hand.layer)
+      expect(internal.hand.entries).toHaveLength(count + 1)
+      deck.destroy()
+    }
+  )
+
+  it.each(['default', 'turn-start', 'opening'] as const)(
+    'routes the %s draw and pauses only for the automatic reveal',
+    async (kind) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        presentEvent(event: OpeningMatchEvent): Promise<void>
+        addLocalCard(
+          card: OpeningCard,
+          sourceDeck?: PlayerId,
+          profile?: string
+        ): Promise<void>
+        syncTurnHud(): void
+        wait(duration: number): Promise<void>
+      }
+      const participantId = internal.session.localParticipantId
+      const card = { instanceId: 'draw-profile', cardId: asCardId('classic_wisp') }
+      const add = vi.spyOn(internal, 'addLocalCard').mockResolvedValue()
+      vi.spyOn(internal, 'syncTurnHud').mockImplementation(() => {})
+      const wait = vi.spyOn(internal, 'wait').mockResolvedValue()
+      await internal.presentEvent(
+        kind === 'opening'
+          ? { type: 'opening-card-drawn', participantId, card }
+          : {
+              type: 'card-drawn',
+              participantId,
+              card,
+              origin: 'deck',
+              ...(kind === 'turn-start' ? { reason: 'turn-start' as const } : {})
+            }
+      )
+      expect(add).toHaveBeenCalledWith(
+        card,
+        participantId,
+        kind === 'default' ? 'direct' : 'local-reveal'
+      )
+      expect(wait).toHaveBeenCalledTimes(kind === 'default' ? 0 : 1)
+    }
+  )
 })
 
 describe('match interaction frame ordering', () => {
@@ -2685,6 +2819,239 @@ describe('board lifecycle preservation', () => {
       })
     )
     expect(defender.destroyed).toBe(false)
+  })
+
+  it('wiggles a dying minion after its lethal combat return', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      combat: GameCombatPresentation
+      animationScope: AnimationScope
+      boardPositions: BoardPositionController
+      insertLocalMinionView(position: number, view: MinionView): void
+      insertRemoteMinionView(position: number, view: MinionView): void
+    }
+    const owner = internal.session.localParticipantId
+    const opponent = internal.session.remoteParticipantId
+    const createView = async (instanceId: string, ownerId: PlayerId) => {
+      const view = await MinionView.create(
+        {
+          label: `death-wiggle.${instanceId}`,
+          attack: 2,
+          health: 1,
+          maxHealth: 1,
+          legendary: false,
+          taunt: false,
+          enraged: false,
+          divineShield: false,
+          frozen: false,
+          stealth: false,
+          deathrattle: false,
+          poisonous: false,
+          aura: false,
+          trigger: false,
+          inspire: false,
+          windfury: false,
+          spellDamage: false,
+          lifesteal: false,
+          elusive: false,
+          immune: false
+        },
+        new Proxy({} as MinionViewTextures, { get: () => Texture.WHITE }),
+        Texture.WHITE
+      )
+      view.instanceId = instanceId
+      view.ownerId = ownerId
+      if (ownerId === owner) internal.insertLocalMinionView(0, view)
+      else internal.insertRemoteMinionView(0, view)
+      return view
+    }
+    const attacker = await createView('wiggle-attacker', owner)
+    const defender = await createView('wiggle-defender', opponent)
+    const resting = internal.boardPositions.restingPosition(attacker)!
+    attacker.position.set(resting.x, resting.y)
+    const home = { x: resting.x, y: resting.y, parent: attacker.parent }
+    const animations: gsap.core.Timeline[] = []
+    const makeTimeline = internal.animationScope.timeline.bind(internal.animationScope)
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const animation = makeTimeline(vars)
+      animations.push(animation)
+      return animation
+    })
+    const finish = async (job: Promise<void>): Promise<void> => {
+      let done = false
+      void job.then(() => {
+        done = true
+      })
+      for (let pass = 0; pass < 60 && !done; pass++) {
+        for (const animation of animations)
+          if (animation.progress() < 1) animation.progress(1)
+        await Promise.resolve()
+      }
+      expect(done).toBe(true)
+      await job
+    }
+    const attackerRef = {
+      participantId: owner,
+      character: { kind: 'minion' as const, instanceId: attacker.instanceId! },
+      attack: 2,
+      healthBefore: 1,
+      armorBefore: 0
+    }
+    const defenderRef = {
+      participantId: opponent,
+      character: { kind: 'minion' as const, instanceId: defender.instanceId! },
+      attack: 1,
+      healthBefore: 1,
+      armorBefore: 0
+    }
+
+    await finish(
+      internal.combat.presentCombatStarted({
+        type: 'combat-started',
+        combatId: 'death-wiggle',
+        attacker: attackerRef,
+        defender: defenderRef
+      })
+    )
+    internal.combat.beginLatestImpact()
+    const damage = internal.combat.showDamageIndicator(attacker, 1)!
+    const damageTimeline = animations.at(-1)!
+    animations.splice(animations.indexOf(damageTimeline), 1)
+    await finish(internal.combat.returnLatestAttacker()!)
+    expect(attacker.parent).toBe(home.parent)
+    expect(attacker.x).toBeCloseTo(home.x)
+    expect(attacker.y).toBeCloseTo(home.y)
+    expect(damage.destroyed).toBe(false)
+
+    const resolution = internal.combat.presentCombatResolved({
+      type: 'minion-combat-resolved',
+      combatId: 'death-wiggle',
+      attacker: {
+        participantId: owner,
+        instanceId: attacker.instanceId!,
+        attack: 2,
+        damageDealt: 1,
+        attemptedDamage: 1,
+        healthBefore: 1,
+        healthAfter: 0,
+        destroyed: true
+      },
+      defender: {
+        participantId: opponent,
+        instanceId: defender.instanceId!,
+        attack: 1,
+        damageDealt: 1,
+        attemptedDamage: 1,
+        healthBefore: 1,
+        healthAfter: 0,
+        destroyed: true
+      }
+    })
+
+    const deathTimeline = animations.find((animation) =>
+      animation
+        .getChildren(false, true, false)
+        .some((child) => (child as gsap.core.Tween).vars.rotation !== undefined)
+    )!
+    const deathTweens = deathTimeline.getChildren(
+      false,
+      true,
+      false
+    ) as gsap.core.Tween[]
+    const wiggles = deathTweens.filter((tween) => tween.vars.rotation !== undefined)
+    const collapse = deathTweens.find((tween) => tween.vars.alpha === 0)!
+    deathTimeline.progress(0.2)
+    expect(wiggles).toHaveLength(4)
+    expect(collapse.startTime()).toBeGreaterThan(
+      wiggles.at(-1)!.startTime() + wiggles.at(-1)!.duration() - 0.001
+    )
+    expect(attacker.x).toBeCloseTo(home.x)
+    expect(attacker.y).toBeCloseTo(home.y)
+    expect(attacker.alpha).toBe(1)
+    expect(Math.abs(attacker.rotation)).toBeGreaterThan(0.01)
+    await finish(resolution)
+    expect(attacker.destroyed).toBe(true)
+  })
+
+  it('wiggles a minion before a regular death-batch collapse', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      combat: GameCombatPresentation
+      animationScope: AnimationScope
+      insertLocalMinionView(position: number, view: MinionView): void
+    }
+    const owner = internal.session.localParticipantId
+    const view = await MinionView.create(
+      {
+        label: 'death-wiggle.regular',
+        attack: 2,
+        health: 0,
+        maxHealth: 1,
+        legendary: false,
+        taunt: false,
+        enraged: false,
+        divineShield: false,
+        frozen: false,
+        stealth: false,
+        deathrattle: false,
+        poisonous: false,
+        aura: false,
+        trigger: false,
+        inspire: false,
+        windfury: false,
+        spellDamage: false,
+        lifesteal: false,
+        elusive: false,
+        immune: false
+      },
+      new Proxy({} as MinionViewTextures, { get: () => Texture.WHITE }),
+      Texture.WHITE
+    )
+    view.instanceId = 'wiggle-regular'
+    view.ownerId = owner
+    internal.insertLocalMinionView(0, view)
+    const animations: gsap.core.Timeline[] = []
+    const makeTimeline = internal.animationScope.timeline.bind(internal.animationScope)
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const animation = makeTimeline(vars)
+      animations.push(animation)
+      return animation
+    })
+
+    const job = internal.combat.presentDeathBatchStarted({
+      type: 'death-batch-started',
+      batchId: 'death-wiggle-regular',
+      deaths: [
+        {
+          instanceId: view.instanceId!,
+          participantId: owner,
+          kind: 'minion',
+          cardId: asCardId('basic_bloodfen_raptor'),
+          position: 0,
+          hasDeathrattle: false
+        }
+      ]
+    })
+    const deathTimeline = animations[0]!
+    const deathTweens = deathTimeline.getChildren(
+      false,
+      true,
+      false
+    ) as gsap.core.Tween[]
+    const wiggles = deathTweens.filter((tween) => tween.vars.rotation !== undefined)
+    const collapse = deathTweens.find((tween) => tween.vars.alpha === 0)!
+    expect(wiggles).toHaveLength(4)
+    expect(collapse.startTime()).toBeGreaterThan(
+      wiggles.at(-1)!.startTime() + wiggles.at(-1)!.duration() - 0.001
+    )
+    deathTimeline.progress(0.2)
+    expect(Math.abs(view.rotation)).toBeGreaterThan(0.01)
+    expect(view.alpha).toBe(1)
+    deathTimeline.progress(1)
+    await job
+    expect(view.destroyed).toBe(true)
   })
 
   it.each([

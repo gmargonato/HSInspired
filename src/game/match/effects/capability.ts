@@ -532,7 +532,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'opponent-deck',
       'random-card'
     ],
-    'action-destination': ['cast-on-source', 'cast-on-target', 'deck', 'hand'],
+    'action-destination': ['board', 'cast-on-source', 'cast-on-target', 'deck', 'hand'],
     'action-resource': ['weapon-durability'],
     'action-field': ['health', 'stats'],
     'crystal-mode': ['empty', 'full']

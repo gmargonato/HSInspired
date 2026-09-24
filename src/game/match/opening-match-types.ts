@@ -550,6 +550,8 @@ export interface OpeningMatchState {
 }
 
 export interface PendingDiscoverChoice {
+  /** Summoning choices never enter the hand. Omitted for ordinary Discover. */
+  readonly destination?: 'board'
   /** Public source for a bonus with no physical played card. */
   readonly publicSourceCardId?: CardId
   readonly participantId: PlayerId
@@ -862,6 +864,8 @@ export interface TurnStartedEvent {
 
 export interface CardDrawnEvent {
   readonly type: 'card-drawn'
+  /** Only the automatic turn draw; triggered draws omit this reason. */
+  readonly reason?: 'turn-start'
   /** Absent for choice results and other additions that are not deck draws. */
   readonly origin?: 'deck'
   readonly participantId: PlayerId

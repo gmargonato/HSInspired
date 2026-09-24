@@ -65,6 +65,7 @@ export class CardSelectionOverlay extends Container {
   }> = []
   private boardVisible = false
   private dimming = true
+  private dimBoard = true
   private selecting = false
   private animateSelection = false
   private selected: SelectedCardSlot | null = null
@@ -210,24 +211,25 @@ export class CardSelectionOverlay extends Container {
     }
 
     const selection = this.animationScope.timeline()
-    selection.to(selected.view, {
-      x: destination.x,
-      y: destination.y,
-      rotation: destination.rotation,
-      duration: REMOTE_TIMING.discoverSelection,
-      ease: 'power2.inOut'
-    })
-    selection.to(
-      selected.view.scale,
-      {
-        x: destination.scale,
-        y: destination.scale,
+    if (keepSelected) {
+      selection.to(selected.view, {
+        x: destination.x,
+        y: destination.y,
+        rotation: destination.rotation,
         duration: REMOTE_TIMING.discoverSelection,
         ease: 'power2.inOut'
-      },
-      0
-    )
-    if (!keepSelected) {
+      })
+      selection.to(
+        selected.view.scale,
+        {
+          x: destination.scale,
+          y: destination.scale,
+          duration: REMOTE_TIMING.discoverSelection,
+          ease: 'power2.inOut'
+        },
+        0
+      )
+    } else {
       selection.to(selected.view, {
         alpha: 0,
         duration: REMOTE_TIMING.discoverFade,
@@ -260,7 +262,8 @@ export class CardSelectionOverlay extends Container {
     participantId: PlayerId,
     sourceCardInstanceId: string,
     sourceCardId: OpeningCard['cardId'],
-    options: readonly CardChoiceOption[]
+    options: readonly CardChoiceOption[],
+    dimBoard = true
   ): Promise<void> {
     if (
       options.length > 0 &&
@@ -288,7 +291,8 @@ export class CardSelectionOverlay extends Container {
       cards,
       options,
       sourceCardInstanceId,
-      this.options.animateChoice?.(sourceCardId) ?? false
+      this.options.animateChoice?.(sourceCardId) ?? false,
+      dimBoard
     )
   }
 
@@ -296,7 +300,8 @@ export class CardSelectionOverlay extends Container {
     candidates: readonly OpeningCard[],
     choiceOptions: readonly CardChoiceOption[] = [],
     sourceInstanceId?: string,
-    animateSelection = false
+    animateSelection = false,
+    dimBoard = true
   ): Promise<void> {
     if (this.destroyed) return
     this.clear()
@@ -309,6 +314,7 @@ export class CardSelectionOverlay extends Container {
     this.visible = true
     this.boardVisible = false
     this.dimming = true
+    this.dimBoard = dimBoard
     this.selecting = false
     this.syncView()
     const midpoint = (candidates.length - 1) / 2
@@ -450,6 +456,7 @@ export class CardSelectionOverlay extends Container {
     this.requestRevision += 1
     this.animationScope.kill()
     this.animateSelection = false
+    this.dimBoard = true
     for (const entry of this.entries) entry.view.destroy({ children: true })
     this.entries.length = 0
     for (const entry of this.remoteEntries) {
@@ -563,7 +570,7 @@ export class CardSelectionOverlay extends Container {
   private syncView(): void {
     this.cardsLayer.visible = !this.boardVisible
     const dimmed = !this.boardVisible && this.dimming
-    this.darkOverlay.alpha = dimmed ? 1 : 0
+    this.darkOverlay.alpha = dimmed && this.dimBoard ? 1 : 0
     this.darkOverlay.eventMode = dimmed ? 'static' : 'none'
     this.toggleLabel.text = this.boardVisible ? 'SEE CARDS' : 'SEE BOARD'
   }

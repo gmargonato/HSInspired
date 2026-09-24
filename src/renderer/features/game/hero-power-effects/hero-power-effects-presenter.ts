@@ -8,6 +8,7 @@ import { runScreenShake } from '../screen-shake'
 import { WarriorArmorUpEffect } from './warrior-armor-up-effect'
 import { WARRIOR_ARMOR_UP } from './warrior-armor-up-layout'
 import { PriestHealEffect } from './priest-heal-effect'
+import { ShamanTotemEffect } from './shaman-totem-effect'
 import { WarlockLifeTapEffect } from './warlock-life-tap-effect'
 
 export type HeroPowerPlaybackRequest = Pick<
@@ -23,6 +24,14 @@ type EffectFactory = (
 ) => Container & { released: Promise<void>; finished: Promise<void>; dispose(): void }
 
 const EFFECTS = new Map<string, EffectFactory>([
+  [
+    'shaman-totemic-call',
+    (assets, animations) =>
+      new ShamanTotemEffect(
+        { artwork: assets.summonTotem, spotlight: assets.playSpotlight1 },
+        animations
+      )
+  ],
   [
     'warrior-armor-up',
     (assets, animations, board, onShake) =>
@@ -44,6 +53,8 @@ const EFFECTS = new Map<string, EffectFactory>([
       )
   ]
 ])
+
+const START_DURING_FLIP = new Set<string>(['shaman-totemic-call'])
 
 const TARGETING_EFFECTS = new Map<
   string,
@@ -69,6 +80,7 @@ const TARGETING_EFFECTS = new Map<
 for (const [basicId, upgradedId] of Object.entries(BASIC_HERO_POWER_UPGRADES)) {
   const factory = EFFECTS.get(basicId)
   if (factory) EFFECTS.set(upgradedId, factory)
+  if (START_DURING_FLIP.has(basicId)) START_DURING_FLIP.add(upgradedId)
   const targeting = TARGETING_EFFECTS.get(basicId)
   if (targeting) TARGETING_EFFECTS.set(upgradedId, targeting)
 }
@@ -158,8 +170,22 @@ export class HeroPowerEffectsPresenter {
       await effect.released
       return
     }
-    await view.flipDown()
     const factory = EFFECTS.get(event.heroPowerId)
+    if (factory && START_DURING_FLIP.has(event.heroPowerId)) {
+      const effect = factory(this.assets, this.animations, this.board, () => undefined)
+      effect.position.copyFrom(this.layer.toLocal(view.card.getGlobalPosition()))
+      effect.scale.set(1)
+      this.layer.addChild(effect)
+      this.active = effect
+      await view.flipDown()
+      if (this.disposed || view.destroyed) {
+        effect.dispose()
+        return
+      }
+      await effect.released
+      return
+    }
+    await view.flipDown()
     if (this.disposed || view.destroyed || !factory) return
 
     const effect = factory(this.assets, this.animations, this.board, (shake) => {
