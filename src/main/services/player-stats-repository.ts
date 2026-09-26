@@ -366,6 +366,7 @@ export class PlayerStatsRepository {
         (parsed.version !== 1 &&
           parsed.version !== 2 &&
           parsed.version !== 3 &&
+          parsed.version !== 4 &&
           parsed.version !== PLAYER_STATS_FILE_VERSION)
       ) {
         throw new Error('Unsupported player stats version')
@@ -380,7 +381,11 @@ export class PlayerStatsRepository {
         rank
       })
       this.rankState = rank
-      if (parsed.version === 3 || parsed.version === PLAYER_STATS_FILE_VERSION) {
+      if (
+        parsed.version === 3 ||
+        parsed.version === 4 ||
+        parsed.version === PLAYER_STATS_FILE_VERSION
+      ) {
         const progression = parseProgressionSnapshot(parsed.progression)
         if (!isRecord(parsed.dustRewards))
           throw new Error('Invalid dust reward receipts')
@@ -397,7 +402,7 @@ export class PlayerStatsRepository {
         this.progression = progression
         this.dustRewards = receipts
       }
-      if (parsed.version === PLAYER_STATS_FILE_VERSION) {
+      if (parsed.version === 4 || parsed.version === PLAYER_STATS_FILE_VERSION) {
         if (!isRecord(parsed.arenaRewards)) throw new Error('Invalid Arena receipts.')
         const receipts: Record<string, ArenaRewardReceipt> = {}
         for (const [id, value] of Object.entries(parsed.arenaRewards)) {
@@ -406,6 +411,8 @@ export class PlayerStatsRepository {
           receipts[id] = receipt
         }
         this.arenaRewards = receipts
+      }
+      if (parsed.version === PLAYER_STATS_FILE_VERSION) {
         if (!isRecord(parsed.rankResults)) {
           throw new Error('Invalid constructed rank receipts')
         }

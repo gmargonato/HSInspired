@@ -145,6 +145,8 @@ import manaHighlightedImage from '@assets/images/match/mana-highlighted.png'
 import historySecretCardImage from '@assets/images/match/history-secret-card.png'
 import historySecretThumbImage from '@assets/images/match/history-secret-thumb.png'
 import summonTotemImage from '@assets/images/match/summon-totem.png'
+import tankUpHammerImage from '@assets/images/match/tank-up.png'
+import effectCircle1Image from '@assets/images/effects/circle-01.png'
 import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
 import premiumHeroPowerBackImage from '@assets/images/heroes/hero-power/premium-hero-power-back.png'
 import heroPowerFrontImage from '@assets/images/heroes/hero-power/hero-power-front.png'
@@ -1831,6 +1833,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     237,
     'game-scene'
   ),
+  asset(
+    'scene.game.tank-up-hammer',
+    ASSET_BUNDLE_IDS.game,
+    'tankUpHammer',
+    tankUpHammerImage,
+    300,
+    474,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.effect-circle-1',
+    ASSET_BUNDLE_IDS.game,
+    'effectCircle1',
+    effectCircle1Image,
+    256,
+    256,
+    'game-scene'
+  ),
   ...Object.entries(HERO_POWER_ASSET_SOURCES).map(([key, source]) =>
     asset(
       `scene.game.hero-power.${key}`,
@@ -2586,6 +2606,8 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   heroPowerMana: Texture
   discoverHistoryHeroPower: Texture
   summonTotem: Texture
+  tankUpHammer: Texture
+  effectCircle1: Texture
   arrowBody: Texture
   arrowHead: Texture
   arrowCircle: Texture

@@ -1045,7 +1045,8 @@ export function createOpeningMatch(
         'wrong-controller',
         'Only the Discover owner may choose a card.'
       )
-    if (pending.continuation) {
+    // Board choices require the summon resolver even without follow-up actions.
+    if (pending.continuation || pending.destination === 'board') {
       const before = state
       const rngSnapshot = rng.snapshot()
       const resolution = resolvePendingDiscoverChoice({

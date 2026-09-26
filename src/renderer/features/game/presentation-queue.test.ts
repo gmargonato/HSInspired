@@ -55,7 +55,14 @@ import { SecretRevealView, SecretZoneView } from './secret-view'
 import { SECRET_LAYOUT } from './secret-layout'
 import type { CardAssetResolver } from '../../ui/asset-registry/card-asset-resolver'
 import { CardPlayAnimation } from './card-play-animation'
-import { drawFlightPose, type DrawCorners } from './card-draw-animation'
+import {
+  CardDrawAnimation,
+  createLocalDrawFlight,
+  drawFlightPose,
+  type DrawCorners
+} from './card-draw-animation'
+import { CARD_DRAW_LAYOUT } from './card-draw-layout'
+import { CARD_REVEAL_LAYOUT } from './card-reveal-layout'
 import type { MinionCardMovement } from '../../../game/match'
 
 describe('engine-driven minion card departures', () => {
@@ -506,7 +513,7 @@ describe('local draw profiles', () => {
     }
   )
 
-  it.each(['default', 'turn-start', 'opening'] as const)(
+  it.each(['default', 'turn-start', 'opening', 'public'] as const)(
     'routes the %s draw and pauses only for the automatic reveal',
     async (kind) => {
       const value = board()
@@ -534,15 +541,258 @@ describe('local draw profiles', () => {
               participantId,
               card,
               origin: 'deck',
+              ...(kind === 'public' ? { publicReveal: true } : {}),
               ...(kind === 'turn-start' ? { reason: 'turn-start' as const } : {})
             }
       )
       expect(add).toHaveBeenCalledWith(
         card,
         participantId,
-        kind === 'default' ? 'direct' : 'local-reveal'
+        kind === 'default'
+          ? 'direct'
+          : kind === 'public'
+            ? 'public-reveal'
+            : 'local-reveal'
       )
       expect(wait).toHaveBeenCalledTimes(kind === 'default' ? 0 : 1)
+    }
+  )
+})
+
+describe('Joust reveal choreography', () => {
+  it('uses a temporary face for a remote public draw and restores its hand back', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      remoteBackCount: number
+      remoteBacks: Sprite[]
+      activeDepartureSlots: Set<GameCardSlot>
+      deckViews: Map<PlayerId, { drawOrigin: Sprite }>
+      drawOrigins: WeakMap<GameCardSlot | Sprite, Sprite>
+      createSlot(card: OpeningCard): Promise<GameCardSlot>
+      animateDeckDeparture(
+        slot: GameCardSlot,
+        duration: number,
+        delay: number,
+        profile: string
+      ): Promise<void>
+      syncTurnHud(): void
+      wait(duration: number): Promise<void>
+      presentEvent(event: OpeningMatchEvent): Promise<void>
+    }
+    const remote = internal.session.remoteParticipantId
+    const deck = new Sprite(Texture.WHITE)
+    value.addChild(deck)
+    vi.spyOn(internal.deckViews, 'get').mockReturnValue({ drawOrigin: deck })
+    const slot = Object.assign(mulliganSlot('public-draw'), {
+      card: { renderedHeight: 900 }
+    })
+    vi.spyOn(internal, 'createSlot').mockResolvedValue(slot)
+    vi.spyOn(internal, 'syncTurnHud').mockImplementation(() => {})
+    vi.spyOn(internal, 'wait').mockResolvedValue()
+    let finish!: () => void
+    const animate = vi.spyOn(internal, 'animateDeckDeparture').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const count = internal.remoteBackCount
+    const pending = internal.presentEvent({
+      type: 'card-drawn',
+      participantId: remote,
+      publicReveal: true,
+      origin: 'deck',
+      card: { instanceId: 'public-draw', cardId: asCardId('classic_wisp') }
+    })
+    for (let i = 0; i < 4; i++) await Promise.resolve()
+    const back = internal.remoteBacks.at(-1)!
+    expect(animate).toHaveBeenCalledWith(slot, 0, 0, 'public-reveal')
+    expect(internal.drawOrigins.get(slot)).toBe(deck)
+    expect(internal.remoteBackCount).toBe(count + 1)
+    expect(back.visible).toBe(false)
+    finish()
+    await pending
+    expect(back.visible).toBe(true)
+    expect(slot.destroyed).toBe(true)
+    expect(internal.activeDepartureSlots.size).toBe(0)
+  })
+
+  it.each(['dispose', 'asset failure'] as const)(
+    'releases prepared cards after %s',
+    async (mode) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        activeDepartureSlots: Set<GameCardSlot>
+        createSlot(card: OpeningCard): Promise<GameCardSlot>
+        presentEffectResolved(event: OpeningMatchEvent): Promise<void>
+      }
+      const first = mulliganSlot('prepared')
+      const late = mulliganSlot('late')
+      let resolveLate!: (slot: GameCardSlot) => void
+      let rejectLate!: (error: Error) => void
+      vi.spyOn(internal, 'createSlot')
+        .mockResolvedValueOnce(first)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              resolveLate = resolve
+              rejectLate = reject
+            })
+        )
+      const local = internal.session.localParticipantId
+      const remote = internal.session.remoteParticipantId
+      const pending = internal.presentEffectResolved({
+        type: 'effect-resolved',
+        revision: 1,
+        sourceInstanceId: 'jouster',
+        sourceCardId: asCardId('the_grand_tournament_gadgetzan_jouster'),
+        controllerId: local,
+        action: 'joust',
+        actionPath: 'test',
+        cardReveal: {
+          id: 'cancelled-reveal',
+          comparison: { winnerId: null },
+          cards: [local, remote].map((participantId, index) => ({
+            participantId,
+            origin: 'deck',
+            card: { instanceId: `card-${index}`, cardId: asCardId('classic_wisp') }
+          }))
+        }
+      })
+      await Promise.resolve()
+      if (mode === 'dispose') value.dispose()
+      else rejectLate(new Error('Artwork unavailable'))
+      await pending
+      expect(first.destroyed).toBe(true)
+      expect(internal.activeDepartureSlots.size).toBe(0)
+      if (mode === 'dispose') {
+        resolveLate(late)
+        await Promise.resolve()
+        expect(late.destroyed).toBe(true)
+      } else late.destroy({ children: true })
+    }
+  )
+
+  it('keeps the two peaks separated even at the pulse maximum', () => {
+    const corners: DrawCorners = [
+      { x: 0, y: 0 },
+      { x: 620, y: 0 },
+      { x: 620, y: 900 },
+      { x: 0, y: 900 }
+    ]
+    const progress =
+      CARD_DRAW_LAYOUT.localReveal.reveal.at(-1)!.at /
+      CARD_DRAW_LAYOUT.localReveal.duration
+    const poses = [CARD_REVEAL_LAYOUT.remote, CARD_REVEAL_LAYOUT.local].map(
+      (placement, index) =>
+        createLocalDrawFlight(
+          corners,
+          corners,
+          620,
+          900,
+          index ? 'local-reveal' : 'remote-reveal',
+          placement.position
+        )(progress)
+    )
+    expect(poses.every((pose) => pose.front)).toBe(true)
+    const center = (pose: (typeof poses)[number]) =>
+      pose.corners.reduce((sum, p) => sum + p.y / 4, 0)
+    const half =
+      (900 * CARD_REVEAL_LAYOUT.local.scale!.y * CARD_REVEAL_LAYOUT.pulseScale) / 2
+    expect(center(poses[0]) + half).toBeLessThan(center(poses[1]) - half)
+  })
+
+  it.each(['local', 'remote', 'interrupt', null] as const)(
+    'waits for both faces, holds, and cleans up (winner=%s)',
+    async (winner) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        animationScope: AnimationScope
+        activeDepartureSlots: Set<GameCardSlot>
+        drawAnimations: Set<CardDrawAnimation>
+        deckViews: Map<PlayerId, { drawOrigin: Sprite }>
+        createSlot(card: OpeningCard): Promise<GameCardSlot>
+        presentEffectResolved(event: OpeningMatchEvent): Promise<void>
+      }
+      const local = internal.session.localParticipantId
+      const remote = internal.session.remoteParticipantId
+      const deck = new Sprite(Texture.WHITE)
+      value.addChild(deck)
+      vi.spyOn(internal.deckViews, 'get').mockReturnValue({ drawOrigin: deck })
+      const cards = [local, remote].map((id, index) => ({
+        participantId: id,
+        origin: 'deck' as const,
+        card: { instanceId: `reveal-${index}`, cardId: asCardId('classic_wisp') }
+      }))
+      const makeSlot = (id: string): GameCardSlot => {
+        const slot = mulliganSlot(id)
+        const face = new Sprite(Texture.WHITE)
+        face.width = 620
+        face.height = 900
+        face.position.set(-310, -900)
+        slot.addChild(face)
+        Object.assign(face, {
+          createAppearanceSnapshot: () =>
+            RenderTexture.create({ width: 620, height: 900 })
+        })
+        return Object.assign(slot, { card: face }) as unknown as GameCardSlot
+      }
+      const slots = cards.map((entry) => makeSlot(entry.card.instanceId))
+      let release!: (slot: GameCardSlot) => void
+      vi.spyOn(internal, 'createSlot')
+        .mockResolvedValueOnce(slots[0])
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = resolve
+            })
+        )
+      const timeline = vi.spyOn(internal.animationScope, 'timeline')
+      const update = vi.spyOn(CardDrawAnimation.prototype, 'update')
+      let finished = false
+      const pending = internal
+        .presentEffectResolved({
+          type: 'effect-resolved',
+          revision: 1,
+          sourceInstanceId: 'jouster',
+          sourceCardId: asCardId('the_grand_tournament_gadgetzan_jouster'),
+          controllerId: remote,
+          action: 'joust',
+          actionPath: 'test',
+          cardReveal: {
+            id: 'joust-1',
+            cards,
+            comparison: {
+              winnerId: winner === 'local' ? local : winner ? remote : null
+            }
+          }
+        })
+        .then(() => {
+          finished = true
+        })
+      await Promise.resolve()
+      expect(update).not.toHaveBeenCalled()
+      release(slots[1])
+      for (let i = 0; i < 8; i++) await Promise.resolve()
+      const flight = timeline.mock.results.at(-1)!.value as gsap.core.Timeline
+      flight.pause()
+      expect(internal.drawAnimations.size).toBe(2)
+      expect(flight.duration()).toBeCloseTo(1 + (winner ? 0.24 : 0) + 0.5)
+      flight.time(winner ? 1.12 : 1)
+      if (winner)
+        expect(
+          update.mock.calls.some((call) => Math.abs((call[1] ?? 1) - 1.1) < 0.001)
+        ).toBe(true)
+      expect(finished).toBe(false)
+      if (winner === 'interrupt') value.dispose()
+      else flight.progress(1)
+      await pending
+      expect(slots.every((slot) => slot.destroyed)).toBe(true)
+      expect(internal.drawAnimations.size).toBe(0)
+      expect(internal.activeDepartureSlots.size).toBe(0)
     }
   )
 })
@@ -1608,6 +1858,81 @@ describe('AI decision overlap', () => {
     expect(harness.dispatchCommand).toHaveBeenCalledTimes(1)
     vi.unstubAllEnvs()
   })
+})
+
+describe('post-combat choices', () => {
+  it.each(['choice', 'match ended', 'disposed'])(
+    'waits for combat return and reconciliation before showing Adapt (%s)',
+    async (ending) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        presentResolutionEvents(events: readonly OpeningMatchEvent[]): Promise<void>
+        presentEvent(event: OpeningMatchEvent): Promise<void>
+        reconcileWeaponViews(): Promise<void>
+        reconcileEffectMovement(): Promise<void>
+        syncLocalHandCards(): void
+        syncBoardMinionPresentation(): void
+        syncBoardHeroPresentation(): void
+        syncBoardAttackability(): void
+        matchResultShown: boolean
+      }
+      let returnHome!: () => void
+      const returning = new Promise<void>((resolve) => {
+        returnHome = resolve
+      })
+      const order: string[] = []
+      const present = vi
+        .spyOn(internal, 'presentEvent')
+        .mockImplementation(async (event) => {
+          if (event.type === 'character-combat-resolved') {
+            await returning
+            order.push('returned')
+          }
+          if (event.type === 'card-choice-started') order.push('choice')
+        })
+      vi.spyOn(internal, 'reconcileWeaponViews').mockResolvedValue()
+      vi.spyOn(internal, 'reconcileEffectMovement').mockImplementation(async () => {
+        order.push('reconciled')
+      })
+      for (const method of [
+        'syncLocalHandCards',
+        'syncBoardMinionPresentation',
+        'syncBoardHeroPresentation',
+        'syncBoardAttackability'
+      ] as const)
+        vi.spyOn(internal, method).mockImplementation(() => {})
+      if (ending === 'match ended') {
+        const state = internal.session.getState()
+        vi.spyOn(internal.session.match, 'getState').mockReturnValue({
+          ...state,
+          phase: 'ended'
+        })
+      }
+      const events = [
+        { type: 'combat-started', combatId: 'adapt-combat' },
+        {
+          type: 'card-choice-started',
+          participantId: internal.session.localParticipantId,
+          sourceCardInstanceId: 'fledgling',
+          sourceCardId: asCardId('journey_to_ungoro_vicious_fledgling'),
+          options: []
+        },
+        { type: 'character-combat-resolved', combatId: 'adapt-combat' }
+      ] as OpeningMatchEvent[]
+      const playing = internal.presentResolutionEvents(events)
+      await Promise.resolve()
+      expect(
+        present.mock.calls.some(([event]) => event.type === 'card-choice-started')
+      ).toBe(false)
+      if (ending === 'disposed') value.dispose()
+      returnHome()
+      await playing
+      if (ending === 'choice')
+        expect(order).toEqual(['returned', 'reconciled', 'choice'])
+      else expect(order).not.toContain('choice')
+    }
+  )
 })
 
 describe('random spell playback', () => {

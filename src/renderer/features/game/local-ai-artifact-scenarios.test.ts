@@ -5823,7 +5823,11 @@ describe('hardware local AI artifact scenarios', () => {
           },
           { choice: 2, label: 'Taunt', presentationCardId: 'journey_to_ungoro_massive' }
         ],
-        resolution: { type: 'adapt', targetInstanceId: 'fixture-target', remaining: 1 }
+        resolution: {
+          type: 'adapt',
+          targetInstanceIds: ['fixture-target'],
+          remaining: 1
+        }
       }
     }
     const reference = createSession(options)
@@ -5875,7 +5879,11 @@ describe('hardware local AI artifact scenarios', () => {
             presentationCardId: 'journey_to_ungoro_rocky_carapace'
           }
         ],
-        resolution: { type: 'adapt', targetInstanceId: 'fixture-target', remaining: 1 }
+        resolution: {
+          type: 'adapt',
+          targetInstanceIds: ['fixture-target'],
+          remaining: 1
+        }
       }
     }
     const reference = createSession(options)
@@ -5946,7 +5954,11 @@ describe('hardware local AI artifact scenarios', () => {
           },
           { choice: 2, label: 'Taunt', presentationCardId: 'journey_to_ungoro_massive' }
         ],
-        resolution: { type: 'adapt', targetInstanceId: 'fixture-target', remaining: 1 }
+        resolution: {
+          type: 'adapt',
+          targetInstanceIds: ['fixture-target'],
+          remaining: 1
+        }
       }
     }
     const reference = createSession(options)
@@ -6003,7 +6015,11 @@ describe('hardware local AI artifact scenarios', () => {
             presentationCardId: 'journey_to_ungoro_flaming_claws'
           }
         ],
-        resolution: { type: 'adapt', targetInstanceId: 'fixture-target', remaining: 1 }
+        resolution: {
+          type: 'adapt',
+          targetInstanceIds: ['fixture-target'],
+          remaining: 1
+        }
       }
     }
     const reference = createSession(options)

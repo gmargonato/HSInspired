@@ -143,7 +143,7 @@ function knownOriginalCardCounts(
   ].filter(
     (card) =>
       card.knownTo?.includes(perspectivePlayerId) === true &&
-      card.startedInDeck !== false
+      card.startedInDeck === true
   )
   for (const card of knownCards)
     counts.set(card.cardId, (counts.get(card.cardId) ?? 0) + 1)

@@ -150,6 +150,8 @@ export class GameMulliganView {
 
     this.confirmButton = new Button(this.assets.confirmMulliganButton, {
       pressedScale: 1,
+      highlightOnHover: false,
+      hoverScale: 1.05,
       onClick: () => void this.onConfirm()
     })
     applyPlacement(this.confirmButton, GAME_BOARD_LAYOUT.mulligan.confirmButton)

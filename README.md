@@ -158,9 +158,11 @@ attacks and simulates bounded engine-legal opponent replies, including sampled
 card plays, public attacks, and hero powers. It runs in a dedicated worker and
 never sends game state to a provider. Its cumulative search budget is capped at
 24.5 seconds within the 30-second total-turn target, leaving 5 seconds for
-presentation and 0.5 seconds for dispatch. The initial plan may search for up
-to 23 seconds, leaving a 1.5-second reserve for a later replan. This is a
-configured target, not a measured runtime guarantee.
+presentation and 0.5 seconds for dispatch. The initial plan runs up to three
+world searches concurrently, each limited to 18 seconds. This targets at most
+about 20 seconds of visible waiting after presentation while preserving a
+1.5-second reserve for a later replan. These are configured targets, not
+measured runtime guarantees.
 API mode continues using remote deliberation.
 
 Run the seeded, mirrored Easy-versus-Expert headless match benchmark with:

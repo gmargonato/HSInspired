@@ -51,9 +51,8 @@ const FIRST_ID = asPlayerId('benchmark-player-one')
 const SECOND_ID = asPlayerId('benchmark-player-two')
 const DEFAULT_TURN_BUDGET_MS = EXPERT_AI_TURN_BUDGET_MS
 const EXPERT_MULLIGAN_BUDGET_MS = 3_000
-// The normal 24.5-second search allowance evaluates two worlds in parallel.
-// The headless benchmark evaluates those same worlds serially in Vitest.
-const SERIAL_BENCHMARK_WORKER_TIMEOUT_MULTIPLIER = 2
+// The headless benchmark evaluates three concurrent production worlds serially.
+const SERIAL_BENCHMARK_WORKER_TIMEOUT_MULTIPLIER = 3
 
 interface BenchmarkOptions {
   readonly games: number

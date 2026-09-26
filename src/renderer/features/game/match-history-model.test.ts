@@ -1,5 +1,8 @@
+import 'pixi.js/events'
 import {
   Container,
+  EventBoundary,
+  Rectangle,
   Sprite,
   Texture,
   FederatedPointerEvent,
@@ -45,6 +48,96 @@ function played(cardId: string, participantId = remote): HistoryActionResolvedEv
 }
 
 describe('MatchHistoryModel', () => {
+  it('keeps repeated Joust pairs public, separate, and Local first', () => {
+    const model = new MatchHistoryModel(local)
+    const event = played('the_grand_tournament_gadgetzan_jouster')
+    const pair = (group: string): HistoryActionResolvedEvent['outcomes'] =>
+      [remote, local].map((participantId) => ({
+        kind: 'reveal' as const,
+        revealGroupId: group,
+        revealComparison: true,
+        target: {
+          id: participantId + ':same-card',
+          participantId,
+          kind: 'card' as const,
+          zone: 'deck' as const,
+          cardId: asCardId('classic_wisp'),
+          publicIdentity: true,
+          currentCost: 0
+        }
+      }))
+    const entry = model.record({
+      ...event,
+      outcomes: [...pair('first'), ...pair('second')]
+    })
+    if (entry.kind !== 'action') throw new Error('Expected action')
+    expect(entry.targets.map((t) => t.target.participantId)).toEqual([
+      local,
+      remote,
+      local,
+      remote
+    ])
+    expect(entry.targets.every((t) => t.target.cardId === 'classic_wisp')).toBe(true)
+    expect(entry.targets.map((t) => t.outcomes[0].revealGroupId)).toEqual([
+      'first',
+      'first',
+      'second',
+      'second'
+    ])
+  })
+
+  it('retains a public reveal face when a later private draw of that card is concealed', () => {
+    const event = played('the_grand_tournament_kings_elekk')
+    const target = {
+      id: 'revealed-remote',
+      participantId: remote,
+      kind: 'card' as const,
+      cardId: asCardId('basic_boulderfist_ogre'),
+      zone: 'deck' as const,
+      currentCost: 6
+    }
+    const entry = new MatchHistoryModel(local).record({
+      ...event,
+      outcomes: [
+        {
+          kind: 'reveal',
+          target: { ...target, publicIdentity: true },
+          revealGroupId: 'joust',
+          revealComparison: true
+        },
+        { kind: 'draw', target: { ...target, zone: 'hand' } }
+      ]
+    })
+    if (entry.kind !== 'action') throw new Error('Expected action')
+    expect(entry.targets).toHaveLength(1)
+    expect(entry.targets[0].target.cardId).toBe('basic_boulderfist_ogre')
+    expect(entry.targets[0].outcomes[1].target.cardId).toBeNull()
+    expect(entry.targets[0].target.currentCost).toBe(6)
+  })
+
+  it('coalesces a standalone reveal and its draw without replacing the reveal snapshot', () => {
+    const event = played('classic_holy_wrath')
+    const target = {
+      id: 'revealed',
+      participantId: remote,
+      kind: 'card' as const,
+      cardId: asCardId('classic_wisp'),
+      zone: 'deck' as const,
+      currentCost: 0,
+      publicIdentity: true
+    }
+    const entry = new MatchHistoryModel(local).record({
+      ...event,
+      outcomes: [
+        { kind: 'reveal', target, revealGroupId: 'single' },
+        { kind: 'draw', target: { ...target, zone: 'hand', currentCost: 3 } }
+      ]
+    })
+    if (entry.kind !== 'action') throw new Error('Expected action')
+    expect(entry.targets).toHaveLength(1)
+    expect(entry.targets[0].target.currentCost).toBe(0)
+  })
+
   it('conceals random Secret casts across grouped targets and associated sources, but shows activation', () => {
     const secret = {
       ...played('classic_counterspell').source,
@@ -362,6 +455,107 @@ describe('history retention and content layout', () => {
 })
 
 describe('history rail lifecycle', () => {
+  it('closes when reparenting causes Pixi to miss the rail leave event', () => {
+    const artwork = vi
+      .spyOn(CardAssetResolver.prototype, 'loadArtwork')
+      .mockResolvedValue(undefined)
+    const textures = new Proxy(
+      {},
+      { get: () => Texture.WHITE }
+    ) as ConstructorParameters<typeof MatchHistoryView>[0]
+    const root = new Container()
+    root.eventMode = 'static'
+    root.hitArea = new Rectangle(0, 0, 1920, 1080)
+    const gameplay = new Container()
+    gameplay.eventMode = 'passive'
+    const desaturate = vi.fn((active: boolean) => {
+      if (active) view.addChildAt(view.rail, 0)
+      else gameplay.addChild(view.rail)
+    })
+    const view = new MatchHistoryView(textures, local, desaturate)
+    root.addChild(gameplay, view)
+    gameplay.addChild(view.rail)
+    // No renderer runs here, so keep hit testing in the identity transform.
+    view.rail.position.set(0, 0)
+    const leave = vi.fn()
+    view.rail.on('pointerleave', leave)
+    const boundary = new EventBoundary(root)
+    const move = (x: number, y: number): void => {
+      const pointer = new FederatedPointerEvent(boundary)
+      pointer.type = 'pointermove'
+      pointer.pointerType = 'mouse'
+      pointer.pointerId = 1
+      pointer.global.set(x, y)
+      boundary.mapEvent(pointer)
+    }
+    try {
+      view.record(played('basic_fireball', local))
+      move(view.rail.x + 20, view.rail.y + 20)
+      expect(desaturate).toHaveBeenLastCalledWith(true)
+      move(view.rail.x + 100, view.rail.y + 20)
+      expect(leave).not.toHaveBeenCalled()
+      expect(desaturate).toHaveBeenLastCalledWith(false)
+      expect(view.children[0].children).toHaveLength(0)
+      view.record(played('basic_frostbolt', local))
+      expect(desaturate).toHaveBeenLastCalledWith(false)
+      move(view.rail.x + 20, view.rail.y + 20)
+      expect(desaturate).toHaveBeenLastCalledWith(true)
+    } finally {
+      view.destroy({ children: true })
+      root.destroy({ children: true })
+      artwork.mockRestore()
+    }
+  })
+
+  it.each(['blur', 'pointerout', 'visibilitychange'])(
+    'clears hover and pending previews on %s and removes listeners on destruction',
+    async (eventType) => {
+      const windowTarget = new EventTarget()
+      const documentTarget = Object.assign(new EventTarget(), { hidden: true })
+      vi.stubGlobal('window', windowTarget)
+      vi.stubGlobal('document', documentTarget)
+      let resolveArtwork!: (texture: undefined) => void
+      const pendingArtwork = new Promise<undefined>((resolve) => {
+        resolveArtwork = resolve
+      })
+      const artwork = vi
+        .spyOn(CardAssetResolver.prototype, 'loadArtwork')
+        .mockReturnValue(pendingArtwork)
+      const create = vi.spyOn(CardView, 'create')
+      const textures = new Proxy(
+        {},
+        { get: () => Texture.WHITE }
+      ) as ConstructorParameters<typeof MatchHistoryView>[0]
+      const desaturate = vi.fn()
+      const view = new MatchHistoryView(textures, local, desaturate)
+      const target = eventType === 'visibilitychange' ? documentTarget : windowTarget
+      try {
+        view.record(played('basic_fireball', local))
+        const pointer = new FederatedPointerEvent(null!)
+        pointer.global.set(view.rail.x + 20, view.rail.y + 20)
+        view.rail.emit('pointerenter', pointer)
+        expect(desaturate).toHaveBeenLastCalledWith(true)
+        target.dispatchEvent(new Event(eventType))
+        expect(desaturate).toHaveBeenLastCalledWith(false)
+        resolveArtwork(undefined)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(create).not.toHaveBeenCalled()
+        expect(view.children[1].children).toHaveLength(0)
+        view.record(played('basic_frostbolt', local))
+        expect(desaturate).toHaveBeenLastCalledWith(false)
+        view.destroy({ children: true })
+        desaturate.mockClear()
+        target.dispatchEvent(new Event(eventType))
+        expect(desaturate).not.toHaveBeenCalled()
+      } finally {
+        if (!view.destroyed) view.destroy({ children: true })
+        artwork.mockRestore()
+        create.mockRestore()
+        vi.unstubAllGlobals()
+      }
+    }
+  )
+
   it('slides new entries in from the left while preserving existing slot content', () => {
     const texture = Texture.WHITE
     const textures = new Proxy({}, { get: () => texture }) as ConstructorParameters<

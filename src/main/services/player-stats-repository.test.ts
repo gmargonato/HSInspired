@@ -504,15 +504,29 @@ describe('Constructed ladder', () => {
   })
 
   it('migrates version 4 saves with the default rank 25 entry state', async () => {
-    const { repository, filePath } = await createRepository()
+    const { repository, filePath, directory } = await createRepository()
     await repository.recordWin(asClassId('Mage'))
+    const card = CARD_CATALOG.all.find(
+      (entry) => entry.collectible && entry.rarity === 'Legendary'
+    )!
     const saved = JSON.parse(await readFile(filePath, 'utf8'))
     saved.version = 4
+    saved.progression = { dust: 490, premiumPurchases: { [card.id]: 200 } }
+    saved.dustRewards = { 'legacy-win': 25 }
+    saved.arenaRewards = {
+      'legacy-run': {
+        runId: 'legacy-run',
+        wins: 6,
+        prizes: [{ kind: 'dust', amount: 35 }]
+      }
+    }
     delete saved.rank
     delete saved.rankResults
     await writeFile(filePath, JSON.stringify(saved))
     const reloaded = new PlayerStatsRepository(filePath)
     expect((await reloaded.get()).rank).toMatchObject({ tier: 'rank', rank: 25 })
+    expect((await reloaded.get()).winsByClass.Mage).toBe(1)
+    expect(await reloaded.getProgression()).toEqual(saved.progression)
     await reloaded.recordConstructedResult({ matchId: 'm1', result: 'win' })
     const persisted = JSON.parse(await readFile(filePath, 'utf8'))
     expect(persisted.version).toBe(5)
@@ -521,6 +535,15 @@ describe('Constructed ladder', () => {
       rank: 24,
       seasonKey: createSeasonKey(new Date())
     })
+    expect(persisted.winsByClass.Mage).toBe(1)
+    expect(persisted.tavernBrawlWins).toBe(saved.tavernBrawlWins)
+    expect(persisted.progression).toEqual(saved.progression)
+    expect(persisted.dustRewards).toEqual({ 'legacy-win': 25 })
+    expect(persisted.arenaRewards).toEqual(saved.arenaRewards)
+    const corruptBackup = (await readdir(directory)).find((name) =>
+      name.startsWith('player-stats.json.corrupt-')
+    )
+    expect(corruptBackup).toBeUndefined()
   })
 
   it('resets a stale season back to rank 25 on read', async () => {

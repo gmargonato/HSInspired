@@ -56,6 +56,39 @@ export class MatchHistoryModel {
     const groups = new Map<string, number>()
     let source = event.source
     for (const outcome of event.outcomes) {
+      if (outcome.kind === 'reveal') {
+        const result = { target: outcome.target, outcomes: [outcome] }
+        const remoteIndex = targets.findIndex(
+          (candidate) =>
+            candidate.outcomes[0]?.revealGroupId === outcome.revealGroupId &&
+            candidate.target.participantId !== this.viewerId
+        )
+        if (outcome.target.participantId === this.viewerId && remoteIndex >= 0)
+          targets.splice(remoteIndex, 0, result)
+        else targets.push(result)
+        // Inserting a comparison can move existing target indexes.
+        groups.clear()
+        continue
+      }
+      if (outcome.kind === 'draw') {
+        const last = targets.at(-1)?.outcomes[0]
+        const revealed =
+          last?.kind === 'reveal'
+            ? targets.findIndex(
+                (candidate) =>
+                  candidate.target.id === outcome.target.id &&
+                  candidate.outcomes[0]?.kind === 'reveal' &&
+                  candidate.outcomes[0].revealGroupId === last.revealGroupId
+              )
+            : -1
+        if (revealed >= 0) {
+          targets[revealed] = {
+            target: targets[revealed].target,
+            outcomes: [...targets[revealed].outcomes, outcome]
+          }
+          continue
+        }
+      }
       if (outcome.kind === 'damage' && (outcome.amount ?? 0) <= 0) continue
       const self =
         outcome.target.id === source.id && outcome.target.cardId === source.cardId

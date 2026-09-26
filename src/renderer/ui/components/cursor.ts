@@ -30,6 +30,7 @@ export const TARGETING_ARROW_HEAD = {
 
 const LEFT_BUTTON = 0
 const LEFT_BUTTON_MASK = 1
+const PRESSED_CURSOR_ANGLE = -12
 const CUSTOM_CURSOR_CLASS = 'custom-cursor-enabled'
 const TARGET_CIRCLE_SIZE = 112
 const TARGET_CIRCLE_OFFSET_Y = -10
@@ -248,6 +249,7 @@ export class CursorManager {
     this.targeting = false
     this.targetingTargetPoint = null
     this.setVariant(resolveCursorVariant(this.contextVariant, this.overrideVariant))
+    this.applyCursorTransform()
     this.mounted = false
   }
 
@@ -361,6 +363,7 @@ export class CursorManager {
 
     this.pointerInsideHost = true
     this.leftButtonDown = true
+    this.applyCursorTransform(true)
     this.setPointerPosition(event.clientX, event.clientY)
     this.show()
   }
@@ -418,6 +421,7 @@ export class CursorManager {
     if (!this.leftButtonDown) return
 
     this.leftButtonDown = false
+    this.applyCursorTransform(true)
   }
 
   private isInsideHost(event: Event): boolean {
@@ -439,7 +443,21 @@ export class CursorManager {
   private applyVariant(): void {
     const asset = CURSOR_ASSETS[this.variant]
     this.element.src = asset.image
-    this.element.style.transform = asset.flipX ? 'scaleX(-1)' : ''
+    this.element.style.transformOrigin =
+      this.variant === 'default' ? '50% 100%' : '50% 50%'
+    this.applyCursorTransform()
+  }
+
+  private applyCursorTransform(animate = false): void {
+    const isDefault = this.variant === 'default'
+    // Animate presses only; variant changes must immediately discard the old transform.
+    this.element.style.transition =
+      animate && isDefault ? 'transform 80ms ease-out' : 'none'
+    this.element.style.transform = isDefault
+      ? `rotate(${this.leftButtonDown ? PRESSED_CURSOR_ANGLE : 0}deg)`
+      : CURSOR_ASSETS[this.variant].flipX
+        ? 'scaleX(-1)'
+        : ''
   }
 
   private applyScale(): void {

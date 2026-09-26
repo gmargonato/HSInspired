@@ -634,10 +634,13 @@ export function createAiFixture(options: AiFixtureOptions): AiFixture {
                 options.pendingCardChoice.targetCardId
                   ? {
                       ...options.pendingCardChoice.resolution,
-                      targetInstanceId:
+                      targetInstanceIds: [
                         aiWithPending.board.find(
-                          (entry) => entry.cardId === options.pendingCardChoice!.targetCardId
-                        )?.instanceId ?? options.pendingCardChoice.resolution.targetInstanceId
+                          (entry) =>
+                            entry.cardId === options.pendingCardChoice!.targetCardId
+                        )?.instanceId ??
+                          options.pendingCardChoice.resolution.targetInstanceIds[0]!
+                      ]
                     }
                   : options.pendingCardChoice.resolution
             }

@@ -7,6 +7,255 @@ import { projectHistoryAction } from '../history-visibility'
 import { triggerHistoryEvents } from '../match-history'
 import type { OpeningMatchState } from '../opening-match-types'
 
+describe('public reveal presentation facts', () => {
+  it.each(['the_grand_tournament_kings_elekk', 'the_grand_tournament_healing_wave'])(
+    'orders the %s reveal before its winning effect',
+    (cardId) => {
+      const scenario = createMatchScenario()
+      scenario.confirmBothMulligans()
+      const id = scenario.match.getState().activePlayerId!
+      const enemy = scenario.match
+        .getState()
+        .players.find((p) => p.participantId !== id)!.participantId
+      scenario.match.dispatch({
+        type: 'dev-modify-deck',
+        participantId: enemy,
+        action: 'destroy'
+      })
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: id,
+        available: 10,
+        maximum: 10
+      })
+      scenario.match.dispatch({ type: 'dev-set-hero', participantId: id, health: 10 })
+      scenario.match.dispatch({ type: 'dev-add-card', participantId: id, cardId })
+      const state = scenario.match.getState()
+      const owner = state.players.find((p) => p.participantId === id)!
+      const source = owner.hand.find((c) => c.cardId === cardId)!
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: source.instanceId,
+        ...(cardId.endsWith('healing_wave')
+          ? { targets: [{ kind: 'hero' as const, participantId: id }] }
+          : { position: 0 })
+      })
+      expect(result.accepted).toBe(true)
+      const revealIndex = result.events.findIndex(
+        (e) => e.type === 'effect-resolved' && !!e.cardReveal
+      )
+      const effectIndex = result.events.findIndex((e) =>
+        cardId.endsWith('healing_wave')
+          ? e.type === 'effect-resolved' && e.action === 'restore'
+          : e.type === 'card-drawn'
+      )
+      expect(revealIndex).toBeGreaterThanOrEqual(0)
+      expect(effectIndex).toBeGreaterThan(revealIndex)
+      const history = result.events.flatMap((e) =>
+        e.type === 'history-action-resolved' ? e.outcomes : []
+      )
+      expect(history.filter((o) => o.kind === 'reveal')).toHaveLength(1)
+      expect(
+        result.state.players.find((p) => p.participantId === id)!.deck.length
+      ).toBe(owner.deck.length - (cardId.endsWith('kings_elekk') ? 1 : 0))
+    }
+  )
+
+  it('attaches a deathrattle comparison to The Skeleton Knight history', () => {
+    const scenario = createMatchScenario()
+    scenario.confirmBothMulligans()
+    const id = scenario.match.getState().activePlayerId!
+    const enemy = scenario.match
+      .getState()
+      .players.find((p) => p.participantId !== id)!.participantId
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: id,
+      available: 10,
+      maximum: 10
+    })
+    scenario.match.dispatch({
+      type: 'dev-add-card',
+      participantId: id,
+      cardId: 'basic_assassinate'
+    })
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: enemy,
+      cardId: 'the_grand_tournament_the_skeleton_knight'
+    })
+    const state = scenario.match.getState()
+    const source = state.players
+      .find((p) => p.participantId === id)!
+      .hand.find((c) => c.cardId === 'basic_assassinate')!
+    const target = state.players.find((p) => p.participantId === enemy)!.board[0]
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: id,
+      cardInstanceId: source.instanceId,
+      targets: [{ kind: 'minion', participantId: enemy, instanceId: target.instanceId }]
+    })
+    expect(result.accepted).toBe(true)
+    const history = result.events.find(
+      (e) => e.type === 'history-action-resolved' && e.source.cardId === target.cardId
+    )
+    expect(history).toMatchObject({
+      action: 'trigger',
+      source: { id: target.instanceId }
+    })
+    if (history?.type === 'history-action-resolved')
+      expect(history.outcomes.filter((o) => o.kind === 'reveal')).toHaveLength(2)
+  })
+
+  it('does not turn Tracking private choices into public reveals', () => {
+    const scenario = createMatchScenario({ cardId: 'basic_tracking' })
+    scenario.confirmBothMulligans()
+    const state = scenario.match.getState()
+    const id = state.activePlayerId!
+    const card = state.players.find((p) => p.participantId === id)!.hand[0]
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: id,
+      cardInstanceId: card.instanceId
+    })
+    expect(result.accepted).toBe(true)
+    expect(
+      result.events.some((e) => e.type === 'effect-resolved' && e.cardReveal)
+    ).toBe(false)
+    expect(
+      result.events
+        .flatMap((e) => (e.type === 'history-action-resolved' ? e.outcomes : []))
+        .some((o) => o.kind === 'reveal')
+    ).toBe(false)
+  })
+
+  it.each([
+    ['basic_boulderfist_ogre', 'classic_wisp', 'own'],
+    ['classic_wisp', 'basic_boulderfist_ogre', 'opponent'],
+    ['classic_wisp', 'classic_wisp', null],
+    ['classic_wisp', null, 'own'],
+    [null, 'classic_wisp', 'opponent'],
+    [null, null, null]
+  ] as const)(
+    'captures Joust %s versus %s without moving cards',
+    (own, opposing, winner) => {
+      const scenario = createMatchScenario({
+        cardId: 'the_grand_tournament_gadgetzan_jouster'
+      })
+      scenario.confirmBothMulligans()
+      const initial = scenario.match.getState()
+      const id = initial.activePlayerId!
+      const enemy = initial.players.find((p) => p.participantId !== id)!.participantId
+      const state: OpeningMatchState = {
+        ...initial,
+        players: initial.players.map((p) => {
+          const selected = p.participantId === id ? own : opposing
+          return {
+            ...p,
+            mana: { ...p.mana, available: 10, maximum: 10 },
+            deck: selected
+              ? [{ ...p.deck[0], cardId: selected as CardId, currentCost: 99 }]
+              : []
+          }
+        }) as unknown as OpeningMatchState['players']
+      }
+      const source = state.players.find((p) => p.participantId === id)!.hand[0]
+      const result = resolveCardPlay({
+        state,
+        participantId: id,
+        cardInstanceId: source.instanceId,
+        position: 0
+      })
+      expect(result.accepted).toBe(true)
+      const event = result.events.find(
+        (e) => e.type === 'effect-resolved' && e.action === 'joust'
+      )
+      expect(event?.type).toBe('effect-resolved')
+      if (event?.type !== 'effect-resolved') return
+      expect(event.cardReveal?.comparison?.winnerId).toBe(
+        winner === 'own' ? id : winner === 'opponent' ? enemy : null
+      )
+      expect(event.cardReveal?.cards.map((c) => c.card.cardId)).toEqual(
+        [own, opposing].filter(Boolean)
+      )
+      for (const card of event.cardReveal!.cards) {
+        expect(card.card.currentCost).toBe(CARD_CATALOG.require(card.card.cardId).cost)
+        expect(card.card).not.toHaveProperty('knownTo')
+        expect(card.card).not.toHaveProperty('startedInDeck')
+      }
+      for (const viewer of [id, enemy]) {
+        const projected = getOpeningMatchPublicEvents(result.events, viewer)
+        expect(
+          projected.find((e) => e.type === 'effect-resolved' && e.action === 'joust')
+        ).toMatchObject({ cardReveal: event.cardReveal })
+        const revealed = result.events
+          .flatMap((e) => (e.type === 'history-effect-recorded' ? e.outcomes : []))
+          .filter((o) => o.kind === 'reveal')
+        expect(revealed.map((o) => o.target.cardId)).toEqual(
+          [own, opposing].filter(Boolean)
+        )
+        expect(
+          revealed.every((o) => o.target.publicIdentity && o.revealComparison)
+        ).toBe(true)
+      }
+      const identities = (value: OpeningMatchState) =>
+        value.players.map((p) =>
+          p.deck.map((card) => ({
+            id: card.instanceId,
+            cardId: card.cardId,
+            zone: card.zone
+          }))
+        )
+      expect(identities(result.state)).toEqual(identities(state))
+      expect(result.events.some((e) => e.type === 'card-drawn')).toBe(false)
+    }
+  )
+
+  it('publishes Holy Wrath draws to both viewers and records their public history', () => {
+    const scenario = createMatchScenario({ cardId: 'classic_holy_wrath' })
+    scenario.confirmBothMulligans()
+    const id = scenario.match.getState().activePlayerId!
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: id,
+      available: 10,
+      maximum: 10
+    })
+    scenario.match.dispatch({
+      type: 'dev-summon-minion',
+      participantId: id,
+      cardId: 'basic_boulderfist_ogre'
+    })
+    const initial = scenario.match.getState()
+    const owner = initial.players.find((p) => p.participantId === id)!
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: id,
+      cardInstanceId: owner.hand[0].instanceId,
+      targets: [
+        { kind: 'minion', participantId: id, instanceId: owner.board[0].instanceId }
+      ]
+    })
+    expect(result.accepted).toBe(true)
+    for (const viewer of initial.players.map((p) => p.participantId)) {
+      const projected = getOpeningMatchPublicEvents(result.events, viewer)
+      expect(projected.find((e) => e.type === 'card-drawn')).toMatchObject({
+        publicReveal: true,
+        card: { cardId: 'classic_holy_wrath' }
+      })
+      const history = projected.filter((e) => e.type === 'history-action-resolved')
+      expect(
+        history.flatMap((e) => e.outcomes).find((o) => o.kind === 'draw')?.target.cardId
+      ).toBe('classic_holy_wrath')
+    }
+    expect(result.events.filter((e) => e.type === 'card-drawn')).toHaveLength(1)
+    expect(
+      result.events.some((e) => e.type === 'effect-resolved' && e.cardReveal)
+    ).toBe(false)
+  })
+})
+
 describe('Vilefin Inquisitor', () => {
   const vilefinId = 'whispers_of_the_old_gods_vilefin_inquisitor'
   const tokenId = 'whispers_of_the_old_gods_silver_hand_murloc'
@@ -420,7 +669,8 @@ describe('generic board-to-card movement cues', () => {
 function randomSpellScenario(
   spellId: string,
   count = 3,
-  casterId = 'whispers_of_the_old_gods_yogg_saron_hopes_end'
+  casterId = 'whispers_of_the_old_gods_yogg_saron_hopes_end',
+  friendlyMinions: readonly string[] = []
 ) {
   const scenario = createMatchScenario({
     seed: 93,
@@ -434,6 +684,15 @@ function randomSpellScenario(
     available: 10,
     maximum: 10
   })
+  for (const cardId of friendlyMinions) {
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId
+      }).accepted
+    ).toBe(true)
+  }
   const state = scenario.match.getState()
   const configured: OpeningMatchState = {
     ...state,
@@ -488,6 +747,50 @@ describe('random spell presentation boundaries', () => {
     expect(
       result.events.filter((event) => event.type === 'random-spell-completed')
     ).toHaveLength(1)
+  })
+
+  it('resolves adapt randomly when Yogg-Saron casts Evolving Spores', () => {
+    const fixture = randomSpellScenario(
+      'journey_to_ungoro_evolving_spores',
+      1,
+      undefined,
+      ['basic_bloodfen_raptor', 'basic_bloodfen_raptor']
+    )
+    const result = fixture.resolve()
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    expect(
+      result.events.filter((event) => event.type === 'card-choice-started')
+    ).toHaveLength(0)
+    expect(result.state.pendingCardChoice).toBeUndefined()
+    const adaptations = result.events.filter(
+      (event) => event.type === 'effect-resolved' && event.action === 'adapt'
+    )
+    expect(adaptations).toHaveLength(3)
+    expect(
+      new Set(
+        adaptations.map((event) =>
+          event.type === 'effect-resolved' ? JSON.stringify(event.data?.cardIds) : ''
+        )
+      ).size
+    ).toBe(1)
+    fixture.rng.restore(0)
+    expect(fixture.resolve().state).toEqual(result.state)
+    const yogg = result.state.players
+      .find((p) => p.participantId === fixture.participantId)!
+      .board.find(
+        (minion) => minion.cardId === 'whispers_of_the_old_gods_yogg_saron_hopes_end'
+      )
+    expect(yogg).toBeDefined()
+    const base = CARD_CATALOG.require('whispers_of_the_old_gods_yogg_saron_hopes_end')
+    if (base.type !== 'Minion') throw new Error('Yogg-Saron must be a minion')
+    expect(
+      yogg!.attack !== (base.attack ?? 0) ||
+        yogg!.health !== (base.health ?? 0) ||
+        yogg!.maxHealth !== (base.health ?? 0) ||
+        (yogg!.keywords?.length ?? 0) > 0 ||
+        (yogg!.deathrattles?.length ?? 0) > 0
+    ).toBe(true)
   })
 
   it.each(['classic_silence', 'basic_polymorph'])(
@@ -2946,9 +3249,7 @@ describe('shared effect runtime', () => {
         type: 'play-card',
         participantId,
         cardInstanceId: fireball.instanceId,
-        targets: [
-          { kind: 'minion', participantId, instanceId: target.instanceId }
-        ]
+        targets: [{ kind: 'minion', participantId, instanceId: target.instanceId }]
       }).accepted
     ).toBe(true)
     expect(player(scenario, participantId).board).toHaveLength(0)
@@ -5836,9 +6137,11 @@ describe('shared effect runtime', () => {
       scenario.match.dispatch({ type: 'use-hero-power', participantId })
 
     expect(
-      scenario.match
-        .dispatch({ type: 'dev-add-card', participantId, cardId: 'knights_of_the_frozen_throne_uther_of_the_ebon_blade' })
-        .accepted
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'knights_of_the_frozen_throne_uther_of_the_ebon_blade'
+      }).accepted
     ).toBe(true)
     expect(
       scenario.match.dispatch({
@@ -5903,9 +6206,11 @@ describe('shared effect runtime', () => {
       scenario.match.dispatch({ type: 'use-hero-power', participantId })
 
     expect(
-      scenario.match
-        .dispatch({ type: 'dev-add-card', participantId, cardId: 'knights_of_the_frozen_throne_uther_of_the_ebon_blade' })
-        .accepted
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: 'knights_of_the_frozen_throne_uther_of_the_ebon_blade'
+      }).accepted
     ).toBe(true)
     expect(
       scenario.match.dispatch({

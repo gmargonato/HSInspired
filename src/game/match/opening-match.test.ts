@@ -5,6 +5,7 @@ import { createSeededRng } from './rng'
 import { CARD_CATALOG, asCardId, asHeroId } from '../content/cards'
 import { HERO_POWER_CATALOG } from '../content/hero-powers'
 import type { Deck } from '../decks'
+import type { OpeningPlayerState } from './opening-match-types'
 import { asPlayerId, type MatchSetup, type PlayerId } from './match-types'
 import {
   getOpeningMatchPublicEvents,
@@ -54,7 +55,7 @@ describe('opening Quests', () => {
                 ]
               }
             : player
-        ) as unknown as typeof checkpoint.state.players
+        ) as unknown as [OpeningPlayerState, OpeningPlayerState]
       }
       const match = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
       const progress = (participantId: PlayerId) =>
@@ -207,7 +208,7 @@ describe('opening Quests', () => {
               ]
             }
           : player
-      ) as unknown as typeof checkpoint.state.players
+      ) as unknown as [OpeningPlayerState, OpeningPlayerState]
     }
     const match = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
     const questProgress = (participantId: typeof firstId) =>
@@ -283,7 +284,7 @@ describe('opening Quests', () => {
         player.participantId === activeId
           ? { ...player, quest: { ...player.quest!, progress: 6 } }
           : player
-      ) as unknown as typeof checkpoint.state.players
+      ) as unknown as [OpeningPlayerState, OpeningPlayerState]
     }
     const match = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
     accept(
@@ -357,7 +358,7 @@ describe('opening Quests', () => {
                 }
               }
             : player
-        ) as unknown as typeof checkpoint.state.players
+        ) as unknown as [OpeningPlayerState, OpeningPlayerState]
       }
       const match = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
       let targets:
@@ -554,7 +555,7 @@ describe("Un'Goro and Frozen Throne rewards", () => {
         player.participantId === activeId
           ? { ...player, elementalPlayedLastTurn: true }
           : player
-      ) as unknown as typeof checkpoint.state.players
+      ) as unknown as [OpeningPlayerState, OpeningPlayerState]
     }
     const replay = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
     const result = accept(
@@ -683,8 +684,458 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     expect(played.baseHealth).toBe(third.definition.health)
   })
 
-  it('offers five successive Adapt selections for Galvadon', () => {
-    const { match, activeId, card } = readyCard('journey_to_ungoro_galvadon')
+  it.each([
+    ['journey_to_ungoro_evolving_spores', 'basic_bloodfen_raptor', true],
+    ['journey_to_ungoro_gentle_megasaur', 'basic_murloc_raider', false],
+    ['journey_to_ungoro_lightfused_stegodon', 'basic_silver_hand_recruit', false]
+  ])('%s offers one shared Adapt choice', (cardId, targetCardId, affectsOther) => {
+    const { match, activeId, card } = readyCard(cardId)
+    for (const id of [targetCardId, targetCardId, 'basic_boulderfist_ogre'])
+      accept(
+        match.dispatch({ type: 'dev-summon-minion', participantId: activeId, cardId: id })
+      )
+    const board = () =>
+      match.getState().players.find((p) => p.participantId === activeId)!.board
+    const before = board()
+    const result = accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        ...(affectsOther ? {} : { position: 3 })
+      })
+    )
+    const pending = match.getState().pendingCardChoice!
+    expect(pending.resolution).toMatchObject({
+      type: 'adapt',
+      targetInstanceIds: before.slice(0, affectsOther ? 3 : 2).map((m) => m.instanceId),
+      remaining: 1
+    })
+    expect(pending.queued ?? []).toHaveLength(0)
+    expect(result.events.filter((e) => e.type === 'card-choice-started')).toHaveLength(1)
+    const checkpoint = match.getCheckpoint()
+    const choose = (choice: number) => {
+      const branch = createOpeningMatchFromCheckpoint(checkpoint)
+      accept(
+        branch.dispatch({
+          type: 'choose-card-option',
+          participantId: activeId,
+          sourceCardInstanceId: pending.sourceCardInstanceId,
+          choice
+        })
+      )
+      expect(branch.getState().pendingCardChoice).toBeUndefined()
+      return branch.getState().players.find((p) => p.participantId === activeId)!.board
+    }
+    for (const option of pending.options) {
+      const after = choose(option.choice)
+      const bonus = (index: number) => ({
+        attack: after[index].attack - before[index].attack,
+        health: after[index].maxHealth - before[index].maxHealth,
+        keywords: after[index].keywords,
+        deathrattles: after[index].deathrattles,
+        stealth: after[index].stealth
+      })
+      expect(bonus(0)).toEqual(bonus(1))
+      expect(after[0]).not.toEqual(before[0])
+      if (!affectsOther) expect(after[2]).toEqual(before[2])
+    }
+  })
+
+  it('Feeding Time adapts only its newly summoned Pterrordaxes with one pick', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_feeding_time')
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: activeId,
+        cardId: 'basic_boulderfist_ogre'
+      })
+    )
+    const board = () =>
+      match.getState().players.find((p) => p.participantId === activeId)!.board
+    const target = board()[0]
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        targets: [
+          { kind: 'minion', participantId: activeId, instanceId: target.instanceId }
+        ]
+      })
+    )
+    const choice = match.getState().pendingCardChoice!
+    expect(choice.resolution).toMatchObject({
+      targetInstanceIds: board()
+        .slice(1)
+        .map((m) => m.instanceId)
+    })
+    expect(board()).toHaveLength(4)
+    expect(choice.queued ?? []).toHaveLength(0)
+    const damaged = board()[0]
+    accept(
+      match.dispatch({
+        type: 'choose-card-option',
+        participantId: activeId,
+        sourceCardInstanceId: choice.sourceCardInstanceId,
+        choice: 0
+      })
+    )
+    expect(board()[0]).toEqual(damaged)
+    expect(match.getState().pendingCardChoice).toBeUndefined()
+  })
+
+  it('Adaptation changes only its chosen friendly minion', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_adaptation')
+    for (let i = 0; i < 3; i++)
+      accept(
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: activeId,
+          cardId: 'basic_bloodfen_raptor'
+        })
+      )
+    const before = match
+      .getState()
+      .players.find((p) => p.participantId === activeId)!.board
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        targets: [
+          { kind: 'minion', participantId: activeId, instanceId: before[1].instanceId }
+        ]
+      })
+    )
+    const choice = match.getState().pendingCardChoice!
+    expect(choice.resolution).toMatchObject({ targetInstanceIds: [before[1].instanceId] })
+    accept(
+      match.dispatch({
+        type: 'choose-card-option',
+        participantId: activeId,
+        sourceCardInstanceId: choice.sourceCardInstanceId,
+        choice: 0
+      })
+    )
+    const after = match
+      .getState()
+      .players.find((p) => p.participantId === activeId)!.board
+    expect(after[0]).toEqual(before[0])
+    expect(after[1]).not.toEqual(before[1])
+    expect(after[2]).toEqual(before[2])
+    expect(match.getState().pendingCardChoice).toBeUndefined()
+  })
+
+  it('skips empty Adapt groups', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_evolving_spores')
+    const result = accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    )
+    expect(result.state.pendingCardChoice).toBeUndefined()
+    expect(result.events.some((e) => e.type === 'card-choice-started')).toBe(false)
+  })
+
+  it.each(['survives', 'missing', 'all missing'])(
+    'resolves a captured Adapt group with targets %s',
+    (mode) => {
+      const { match, activeId, card } = readyCard('journey_to_ungoro_evolving_spores')
+      for (let i = 0; i < 2; i++)
+        accept(
+          match.dispatch({
+            type: 'dev-summon-minion',
+            participantId: activeId,
+            cardId: 'basic_bloodfen_raptor'
+          })
+        )
+      accept(
+        match.dispatch({
+          type: 'play-card',
+          participantId: activeId,
+          cardInstanceId: card.instanceId
+        })
+      )
+      const checkpoint = match.getCheckpoint()
+      const choice = checkpoint.state.pendingCardChoice!
+      const original = checkpoint.state.players.find(
+        (p) => p.participantId === activeId
+      )!.board
+      const newcomer = {
+        ...original[0],
+        instanceId: 'newcomer',
+        creationOrdinal: checkpoint.nextEntityOrdinal
+      }
+      const kept =
+        mode === 'all missing' ? [] : mode === 'missing' ? original.slice(1) : original
+      const branch = createOpeningMatchFromCheckpoint({
+        ...checkpoint,
+        nextEntityOrdinal: checkpoint.nextEntityOrdinal + 1,
+        state: {
+          ...checkpoint.state,
+          nextEntityOrdinal: checkpoint.nextEntityOrdinal + 1,
+          players: checkpoint.state.players.map((p) =>
+            p.participantId === activeId ? { ...p, board: [...kept, newcomer] } : p
+          ) as [OpeningPlayerState, OpeningPlayerState]
+        }
+      })
+      accept(
+        branch.dispatch({
+          type: 'choose-card-option',
+          participantId: activeId,
+          sourceCardInstanceId: choice.sourceCardInstanceId,
+          choice: 0
+        })
+      )
+      expect(branch.getState().pendingCardChoice).toBeUndefined()
+      const after = branch
+        .getState()
+        .players.find((p) => p.participantId === activeId)!.board
+      expect(after.at(-1)).toEqual(newcomer)
+      if (kept.length) expect(after[0]).not.toEqual(kept[0])
+    }
+  )
+
+  it('does not Adapt when Explosive Trap kills Fledgling before combat', () => {
+    const { match, activeId } = readyCard('journey_to_ungoro_vicious_fledgling')
+    const opponentId = match
+      .getState()
+      .players.find((p) => p.participantId !== activeId)!.participantId
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: activeId,
+        cardId: 'journey_to_ungoro_vicious_fledgling'
+      })
+    )
+    accept(match.dispatch({ type: 'end-turn', participantId: activeId }))
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: opponentId,
+        cardId: 'classic_explosive_trap'
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: opponentId,
+        available: 10,
+        maximum: 10
+      })
+    )
+    const secret = match
+      .getState()
+      .players.find((p) => p.participantId === opponentId)!
+      .hand.findLast((c) => c.cardId === 'classic_explosive_trap')!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: opponentId,
+        cardInstanceId: secret.instanceId
+      })
+    )
+    accept(match.dispatch({ type: 'end-turn', participantId: opponentId }))
+    const checkpoint = match.getCheckpoint()
+    const branch = createOpeningMatchFromCheckpoint({
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        players: checkpoint.state.players.map((p) =>
+          p.participantId === activeId
+            ? { ...p, board: p.board.map((m) => ({ ...m, health: 2, damageTaken: 1 })) }
+            : p
+        ) as [OpeningPlayerState, OpeningPlayerState]
+      }
+    })
+    const attacker = branch.getState().players.find((p) => p.participantId === activeId)!
+      .board[0]
+    const result = accept(
+      branch.dispatch({
+        type: 'attack-character',
+        participantId: activeId,
+        attacker: { kind: 'minion', instanceId: attacker.instanceId },
+        defender: { kind: 'hero' }
+      })
+    )
+    expect(result.state.pendingCardChoice).toBeUndefined()
+    expect(result.events.some((e) => e.type === 'card-choice-started')).toBe(false)
+    expect(
+      result.state.players.find((p) => p.participantId === activeId)!.board
+    ).toHaveLength(0)
+  })
+
+  it('finishes repeated group Adapt rounds before advancing queued choices', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_evolving_spores')
+    for (let i = 0; i < 2; i++)
+      accept(
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: activeId,
+          cardId: 'basic_bloodfen_raptor'
+        })
+      )
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    )
+    const checkpoint = match.getCheckpoint()
+    const pending = checkpoint.state.pendingCardChoice!
+    if (pending.resolution?.type !== 'adapt') throw Error('Expected Adapt')
+    const targets = pending.resolution.targetInstanceIds
+    const branch = createOpeningMatchFromCheckpoint({
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        pendingCardChoice: {
+          ...pending,
+          resolution: { ...pending.resolution, remaining: 2 },
+          queued: [
+            {
+              ...pending,
+              sourceCardInstanceId: targets[1],
+              resolution: { type: 'adapt', targetInstanceIds: [targets[1]], remaining: 1 }
+            }
+          ]
+        }
+      }
+    })
+    for (const expected of [targets, targets, [targets[1]]]) {
+      const choice = branch.getState().pendingCardChoice!
+      expect(choice.resolution).toMatchObject({ targetInstanceIds: expected })
+      accept(
+        branch.dispatch({
+          type: 'choose-card-option',
+          participantId: activeId,
+          sourceCardInstanceId: choice.sourceCardInstanceId,
+          choice: 0
+        })
+      )
+    }
+    expect(branch.getState().pendingCardChoice).toBeUndefined()
+  })
+
+  it.each(['hero', 'minion', 'lethal'])(
+    'Fledgling adapts only after a surviving match hero attack (%s)',
+    (target) => {
+      const { match, activeId } = readyCard('journey_to_ungoro_vicious_fledgling')
+      const opponentId = match
+        .getState()
+        .players.find((p) => p.participantId !== activeId)!.participantId
+      accept(
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: activeId,
+          cardId: 'journey_to_ungoro_vicious_fledgling'
+        })
+      )
+      accept(
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: opponentId,
+          cardId: 'basic_bloodfen_raptor'
+        })
+      )
+      const checkpoint = match.getCheckpoint()
+      const branch = createOpeningMatchFromCheckpoint({
+        ...checkpoint,
+        state: {
+          ...checkpoint.state,
+          players: checkpoint.state.players.map((p) =>
+            p.participantId === activeId
+              ? { ...p, board: p.board.map((m) => ({ ...m, summonedOnTurn: 0 })) }
+              : {
+                  ...p,
+                  hero: {
+                    ...p.hero,
+                    health: target === 'lethal' ? 1 : 30,
+                    damageTaken: target === 'lethal' ? 29 : 0
+                  }
+                }
+          ) as [OpeningPlayerState, OpeningPlayerState]
+        }
+      })
+      const attacker = branch
+        .getState()
+        .players.find((p) => p.participantId === activeId)!.board[0]
+      const defender = branch
+        .getState()
+        .players.find((p) => p.participantId === opponentId)!.board[0]
+      const result = accept(
+        branch.dispatch({
+          type: 'attack-character',
+          participantId: activeId,
+          attacker: { kind: 'minion', instanceId: attacker.instanceId },
+          defender:
+            target === 'minion'
+              ? { kind: 'minion', instanceId: defender.instanceId }
+              : { kind: 'hero' }
+        })
+      )
+      if (target !== 'hero') {
+        expect(result.state.pendingCardChoice).toBeUndefined()
+        expect(result.events.some((e) => e.type === 'card-choice-started')).toBe(false)
+        return
+      }
+      expect(
+        result.state.players.find((p) => p.participantId === opponentId)!.hero.health
+      ).toBe(27)
+      expect(result.state.pendingCardChoice?.resolution).toMatchObject({
+        type: 'adapt',
+        targetInstanceIds: [attacker.instanceId]
+      })
+      expect(
+        result.events.findIndex((e) => e.type === 'card-choice-started')
+      ).toBeGreaterThan(result.events.findIndex((e) => e.type === 'combat-started'))
+      const pending = result.state.pendingCardChoice!
+      const nextCheckpoint = branch.getCheckpoint()
+      const windfury = createOpeningMatchFromCheckpoint({
+        ...nextCheckpoint,
+        state: {
+          ...nextCheckpoint.state,
+          pendingCardChoice: {
+            ...pending,
+            options: [
+              {
+                choice: 0,
+                label: 'Windfury',
+                presentationCardId: asCardId('journey_to_ungoro_lightning_speed')
+              }
+            ]
+          }
+        }
+      })
+      accept(
+        windfury.dispatch({
+          type: 'choose-card-option',
+          participantId: activeId,
+          sourceCardInstanceId: pending.sourceCardInstanceId,
+          choice: 0
+        })
+      )
+      const second = accept(
+        windfury.dispatch({
+          type: 'attack-character',
+          participantId: activeId,
+          attacker: { kind: 'minion', instanceId: attacker.instanceId },
+          defender: { kind: 'hero' }
+        })
+      )
+      expect(second.state.pendingCardChoice).toBeDefined()
+    }
+  )
+
+  it.each([
+    ['journey_to_ungoro_galvadon', 5],
+    ['journey_to_ungoro_volcanosaur', 2]
+  ] as const)('offers successive Adapt selections for %s', (cardId, rounds) => {
+    const { match, activeId, card } = readyCard(cardId)
     accept(
       match.dispatch({
         type: 'play-card',
@@ -693,9 +1144,12 @@ describe("Un'Goro and Frozen Throne rewards", () => {
         position: 0
       })
     )
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < rounds; index += 1) {
       const choice = match.getState().pendingCardChoice!
-      expect(choice.resolution).toMatchObject({ type: 'adapt', remaining: 5 - index })
+      expect(choice.resolution).toMatchObject({
+        type: 'adapt',
+        remaining: rounds - index
+      })
       expect(choice.options).toHaveLength(3)
       accept(
         match.dispatch({
@@ -829,7 +1283,7 @@ describe("Un'Goro and Frozen Throne rewards", () => {
         player.participantId === activeId
           ? { ...player, weapon: { ...player.weapon!, durability: 1 } }
           : player
-      ) as unknown as typeof checkpoint.state.players
+      ) as unknown as [OpeningPlayerState, OpeningPlayerState]
     }
     const replay = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
     const defender = replay

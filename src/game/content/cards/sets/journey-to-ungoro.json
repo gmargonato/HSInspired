@@ -262,6 +262,18 @@
         "trigger": "battlecry",
         "actions": [
           {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "all"
+            },
+            "health": {
+              "operation": "set",
+              "value": 40
+            }
+          },
+          {
             "action": "set-health",
             "target": {
               "controller": "self",
@@ -2033,7 +2045,7 @@
     "health": 3,
     "rulesText": "After this minion attacks a hero, Adapt.",
     "keywords": [],
-    "effects": [{"trigger":"on-attack","event":{"source":{"controller":"self","type":"minion","selection":"source"},"target":{"controller":"opponent","type":"hero","selection":"all"}},"actions":[{"action":"adapt"}]}],
+    "effects": [{"trigger":"on-attack","event":{"type":"attack-resolved","source":{"controller":"self","type":"minion","selection":"source"},"target":{"controller":"opponent","type":"hero","selection":"all"}},"actions":[{"action":"adapt"}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -2850,7 +2862,11 @@
     "effects": [
       {
         "trigger": "on-cast",
-        "event": { "type": "spell-targeted-minion", "controller": "self" },
+        "event": {
+          "type": "spell-resolved",
+          "controller": "self",
+          "target": { "type": "minion", "selection": "source" }
+        },
         "actions": [
           {
             "action": "summon",

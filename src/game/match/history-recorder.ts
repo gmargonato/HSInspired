@@ -119,6 +119,7 @@ export function historySnapshot(
 }
 
 const EFFECT_KINDS: Readonly<Record<string, HistoryActionOutcome['kind']>> = {
+  reveal: 'reveal',
   'cast-spell': 'cast-spell',
   damage: 'damage',
   restore: 'heal',
@@ -263,6 +264,7 @@ export class HistoryRecorder {
     data: Readonly<Record<string, unknown>> = {}
   ): HistoryEffectRecordedEvent | null {
     const kind = EFFECT_KINDS[action]
+    if (kind === 'reveal' && !data.snapshot) return null
     if (!kind || data.replaced === true || data.fatigue !== undefined) return null
     if (kind === 'damage' && data.amount === 0) return null
     const id =
@@ -282,7 +284,7 @@ export class HistoryRecorder {
         ? (data.before as HistoryEntitySnapshot)
         : this.previous.get(id)
     let target =
-      action === 'buff-cthun'
+      action === 'buff-cthun' || kind === 'reveal'
         ? (data.snapshot as HistoryEntitySnapshot)
         : historySnapshot(state, participantId, id, cardId)
     if (kind === 'cast-spell')
@@ -337,6 +339,12 @@ export class HistoryRecorder {
       kind: resultKind,
       target,
       before,
+      ...(kind === 'reveal'
+        ? {
+            revealGroupId: data.revealGroupId as string,
+            revealComparison: data.revealComparison === true
+          }
+        : {}),
       ...(kind === 'damage'
         ? { amount: healthDamage + armorDamage, healthDamage, armorDamage }
         : {}),
@@ -354,7 +362,7 @@ export class HistoryRecorder {
           : [])
       ]
     }
-    this.latest.set(id, fact)
+    if (kind !== 'reveal') this.latest.set(id, fact)
     return fact
   }
 }

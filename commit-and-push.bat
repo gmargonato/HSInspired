@@ -87,7 +87,7 @@ if errorlevel 1 goto :error_stage
 
 for /f "delims=" %%T in ('powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "COMMIT_TIMESTAMP=%%T"
 if not defined COMMIT_TIMESTAMP goto :error_timestamp
-set "COMMIT_MESSAGE=chore: save work %COMMIT_TIMESTAMP%"
+set "COMMIT_MESSAGE=Work done on %COMMIT_TIMESTAMP%"
 
 echo.
 echo Creating commit: %COMMIT_MESSAGE%

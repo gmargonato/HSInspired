@@ -11,13 +11,19 @@ import {
 import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
 
 type Point = { x: number; y: number }
+type RevealPeak = Point & { scale?: number }
 export type DrawCorners = readonly [Point, Point, Point, Point]
 
 const mix = (a: number, b: number, t: number): number => a + (b - a) * t
 const smooth = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10)
 
 export type CardDrawProfile =
-  'direct' | 'local-reveal' | 'remote-reveal' | 'mulligan-reveal'
+  | 'direct'
+  | 'local-reveal'
+  | 'remote-reveal'
+  | 'mulligan-reveal'
+  | 'public-reveal'
+  | 'remote-public-reveal'
 type FlightPose = {
   corners: DrawCorners
   front: boolean
@@ -85,7 +91,8 @@ export function createLocalDrawFlight(
   end: DrawCorners,
   width: number,
   height: number,
-  profile: Exclude<CardDrawProfile, 'direct'> = 'local-reveal'
+  profile: Exclude<CardDrawProfile, 'direct'> = 'local-reveal',
+  peakPosition?: RevealPeak
 ): (progress: number) => FlightPose {
   const layout = CARD_DRAW_LAYOUT.localReveal
   const mulligan = profile === 'mulligan-reveal'
@@ -112,7 +119,7 @@ export function createLocalDrawFlight(
     ...key.pose.position,
     y: mulligan
       ? key.mulliganY
-      : profile === 'remote-reveal'
+      : profile === 'remote-reveal' || profile === 'remote-public-reveal'
         ? CARD_DRAW_LAYOUT.remoteRevealMirrorY - key.pose.position.y
         : key.pose.position.y,
     scale: key.pose.scale?.x ?? 1,
@@ -122,6 +129,17 @@ export function createLocalDrawFlight(
     taper: key.taper
   }))
   const peak = reveal[reveal.length - 1]
+  if (peakPosition) {
+    const dx = peakPosition.x - peak.x
+    const dy = peakPosition.y - peak.y
+    const scaleRatio = (peakPosition.scale ?? peak.scale) / peak.scale
+    for (const frame of reveal) {
+      const weight = smooth(frame.at / peak.at)
+      frame.x += dx * weight
+      frame.y += dy * weight
+      frame.scale *= mix(1, scaleRatio, weight)
+    }
+  }
   const last: FlightFrame = {
     at: 1,
     ...b,
@@ -362,7 +380,8 @@ export class CardDrawAnimation {
     private readonly target: GameCardSlot | Sprite,
     private readonly backTexture: Sprite['texture'],
     slot?: GameCardSlot,
-    profile: CardDrawProfile = 'direct'
+    profile: CardDrawProfile = 'direct',
+    peakPosition?: RevealPeak
   ) {
     this.start = CARD_DRAW_LAYOUT.deckFace.map((p) =>
       layer.toLocal(
@@ -393,7 +412,8 @@ export class CardDrawAnimation {
         this.end,
         frame.width,
         frame.height,
-        profile
+        profile,
+        peakPosition
       )
     if (slot)
       this.frontTexture = slot.card.createAppearanceSnapshot(
@@ -418,18 +438,26 @@ export class CardDrawAnimation {
     this.update(0)
   }
 
-  update(progress: number): void {
+  update(progress: number, scale = 1): void {
     if (this.disposed) return
     const pose = this.localFlight
       ? this.localFlight(progress)
       : drawFlightPose(this.start, this.end, progress, !!this.frontTexture)
     this.mesh.texture = pose.front ? this.frontTexture! : this.backTexture
     this.mesh.visible = !pose.edgeOn
-    const [a, b, c, d] = pose.corners
+    const center = cornerCenter(pose.corners)
+    const corners =
+      scale === 1
+        ? pose.corners
+        : (pose.corners.map((point) => ({
+            x: center.x + (point.x - center.x) * scale,
+            y: center.y + (point.y - center.y) * scale
+          })) as unknown as DrawCorners)
+    const [a, b, c, d] = corners
     this.mesh.setCorners(a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y)
     if (this.shadow?.visual === this.mesh) {
       this.shadow.corners = shadowBodyCorners(
-        pose.corners,
+        corners,
         this.shadowFrame,
         this.shadow.bounds
       )

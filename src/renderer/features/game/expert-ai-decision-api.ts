@@ -649,7 +649,11 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
 
   private readonly handleWorkerError = (event: ErrorEvent): void => {
     if (event.currentTarget !== this.worker) return
-    const error = new Error(event.message || 'Expert AI worker failed.')
+    const detail = event.error instanceof Error ? event.error.message : event.message
+    const location = event.filename
+      ? ` (${event.filename}:${event.lineno}:${event.colno})`
+      : ''
+    const error = new Error((detail || 'Expert AI worker failed.') + location)
     this.worker?.terminate()
     this.worker = null
     for (const requestId of [...this.pending.keys()]) {

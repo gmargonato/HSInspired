@@ -72,6 +72,7 @@ import type {
   DeathBatchCompletedEvent,
   DeathBatchStartedEvent,
   EffectDomainEvent,
+  CardReveal,
   EffectTraceEntry,
   GraveyardMinion,
   MatchHistory,
@@ -844,7 +845,8 @@ export class EffectRuntime {
     action: string,
     actionPath: string,
     data?: Readonly<Record<string, unknown>>,
-    cardMovement?: MinionCardMovement
+    cardMovement?: MinionCardMovement,
+    cardReveal?: CardReveal
   ): void {
     if (this.deriving) return
     this.events.push({
@@ -856,7 +858,8 @@ export class EffectRuntime {
         frame.event?.type,
         data
       ),
-      ...(cardMovement ? { cardMovement: clonePlain(cardMovement) } : {})
+      ...(cardMovement ? { cardMovement: clonePlain(cardMovement) } : {}),
+      ...(cardReveal ? { cardReveal: clonePlain(cardReveal) } : {})
     })
     const history = actionPath.endsWith('.fatigue')
       ? null
@@ -879,6 +882,34 @@ export class EffectRuntime {
           ? { summonGroupId: frame.summonGroupId }
           : {})
       })
+    for (const revealed of cardReveal?.cards ?? []) {
+      const fact = this.historyRecorder?.capture(
+        this.draft as unknown as OpeningMatchState,
+        {
+          sourceId: frame.source.instanceId,
+          cardId: frame.sourceCardId,
+          participantId: frame.controllerId,
+          causeId: this.activeTriggerIds.at(-1) ?? `${this.resolutionId}:root`,
+          parentActionId: `${this.resolutionId}:root`
+        },
+        'reveal',
+        {
+          instanceId: revealed.card.instanceId,
+          participantId: revealed.participantId,
+          snapshot: {
+            ...revealed.card,
+            id: revealed.card.instanceId,
+            participantId: revealed.participantId,
+            kind: 'card',
+            zone: revealed.origin,
+            publicIdentity: true
+          },
+          revealGroupId: cardReveal!.id,
+          revealComparison: !!cardReveal!.comparison
+        }
+      )
+      if (fact) this.events.push(fact)
+    }
     if (this.recordTrace)
       this.trace.push({
         revision: this.revision,
@@ -1626,6 +1657,28 @@ export class EffectRuntime {
       })
     }
     return revealed
+  }
+
+  private publicRevealCard(
+    card: OpeningCard,
+    participantId: PlayerId,
+    origin: 'deck' | 'hand',
+    comparedCost?: number
+  ): CardReveal['cards'][number] {
+    const cost =
+      comparedCost ?? card.currentCost ?? cardDefinition(card.cardId)?.cost ?? 0
+    return {
+      participantId,
+      origin,
+      card: {
+        instanceId: card.instanceId,
+        cardId: card.cardId,
+        baseCost: card.baseCost ?? cardDefinition(card.cardId)?.cost,
+        currentCost: cost,
+        attack: card.attack,
+        health: card.health
+      }
+    }
   }
 
   private cardRefsFromSource(source: unknown, frame: EffectFrame): EntityRef[] {
@@ -3451,10 +3504,7 @@ export class EffectRuntime {
       if (!minion) return false
       if (
         keyword === 'lifesteal' &&
-        hasJainaElementalLifesteal(
-          minion.cardId,
-          this.player(ref.participantId).heroId
-        )
+        hasJainaElementalLifesteal(minion.cardId, this.player(ref.participantId).heroId)
       )
         return true
       const keywords = effectiveBoardMinionKeywords(minion, this.draft.turnNumber)
@@ -4650,7 +4700,8 @@ export class EffectRuntime {
     frame: EffectFrame,
     path: string,
     requested?: EntityRef,
-    reason?: 'turn-start'
+    reason?: 'turn-start',
+    publicReveal = false
   ): EntityRef | null {
     const player = this.player(participantId)
     const top =
@@ -4729,6 +4780,10 @@ export class EffectRuntime {
       })
       return null
     }
+    if (publicReveal) {
+      card.revealed = true
+      card.knownTo = this.players().map((entry) => entry.participantId)
+    }
     if (card.scalingCounter)
       player.counters = applyDrawScalingBuff(card, player.counters)
     card.ownerId = card.ownerId ?? participantId
@@ -4758,6 +4813,7 @@ export class EffectRuntime {
     this.events.push({
       type: 'card-drawn',
       origin: 'deck',
+      ...(publicReveal ? { publicReveal: true } : {}),
       ...(reason ? { reason } : {}),
       participantId,
       card: clonePlain(card) as OpeningCard
@@ -6310,31 +6366,76 @@ export class EffectRuntime {
         return
       }
       case 'adapt': {
-        const targets =
+        if (this.draft.players.some((player) => player.hero.health <= 0)) return
+        const targets = (
           action.target === undefined
             ? [frame.source]
             : this.actionTargets(action, frame)
-        for (const targetRef of targets) {
-          if (targetRef.kind !== 'minion') continue
-          const target = this.currentMinion(targetRef)
-          if (!target) continue
-          const pending = this.createAdaptChoice(
-            frame.controllerId,
-            target.instanceId,
-            target.cardId,
-            Math.max(1, Math.floor(Number(action.count ?? 1)))
-          )
-          if (this.draft.pendingCardChoice) {
-            this.draft.pendingCardChoice.queued = [
-              ...(this.draft.pendingCardChoice.queued ?? []),
-              clonePlain(pending) as Mutable<Omit<PendingCardChoice, 'queued'>>
-            ]
-          } else {
-            this.draft.pendingCardChoice = clonePlain(
-              pending
-            ) as DraftState['pendingCardChoice']
-            this.announcePendingCardChoice()
+        ).filter(
+          (target) =>
+            target.kind === 'minion' &&
+            target.zone === 'board' &&
+            (this.currentMinion(target)?.health ?? 0) > 0
+        )
+        if (!targets.length) return
+        const targetInstanceIds = [
+          ...new Set(targets.map((target) => target.instanceId))
+        ]
+        const source = this.currentMinion(targets[0]!)!
+        const picks = Math.max(1, Math.floor(Number(action.count ?? 1)))
+        if (this.automaticChoiceDepth > 0) {
+          // One random selection per round applies to the whole captured group.
+          for (let pick = 0; pick < picks; pick += 1) {
+            const liveTargets = this.liveAdaptTargets(
+              targetInstanceIds,
+              frame.controllerId
+            )
+            if (!liveTargets.length) break
+            const pending = this.createAdaptChoice(
+              frame.controllerId,
+              targetInstanceIds,
+              source.cardId,
+              1
+            )
+            const selected =
+              pending.options[Math.floor(this.rng.next() * pending.options.length)]
+            const definition = selected?.presentationCardId
+              ? CARD_CATALOG.get(selected.presentationCardId)
+              : undefined
+            if (!definition) break
+            for (const target of liveTargets) {
+              this.runCardBlocks(
+                definition,
+                'cast',
+                this.frameFor(target, null, [target]),
+                'automatic-choice.adapt'
+              )
+              this.emit(frame, name, path, {
+                participantId: frame.controllerId,
+                targetInstanceId: target.instanceId,
+                cardIds: [definition.id]
+              })
+            }
+            this.processDeaths()
           }
+          return
+        }
+        const pending = this.createAdaptChoice(
+          frame.controllerId,
+          targetInstanceIds,
+          source.cardId,
+          picks
+        )
+        if (this.draft.pendingCardChoice) {
+          this.draft.pendingCardChoice.queued = [
+            ...(this.draft.pendingCardChoice.queued ?? []),
+            clonePlain(pending) as Mutable<Omit<PendingCardChoice, 'queued'>>
+          ]
+        } else {
+          this.draft.pendingCardChoice = clonePlain(
+            pending
+          ) as DraftState['pendingCardChoice']
+          this.announcePendingCardChoice()
         }
         return
       }
@@ -6644,13 +6745,37 @@ export class EffectRuntime {
           : null
         const won =
           ownCost !== null && (opponentCost === null || ownCost > opponentCost)
-        this.emit(frame, name, path, {
-          ownCardId: own?.cardId ?? null,
-          opponentCardId: opponent?.cardId ?? null,
-          ownCost,
-          opponentCost,
-          won
-        })
+        this.emit(
+          frame,
+          name,
+          path,
+          {
+            ownCardId: own?.cardId ?? null,
+            opponentCardId: opponent?.cardId ?? null,
+            ownCost,
+            opponentCost,
+            won
+          },
+          undefined,
+          {
+            id: `${this.resolutionId}:${path}:${this.events.length}`,
+            cards: [
+              ...(own
+                ? [this.publicRevealCard(own, frame.controllerId, 'deck', ownCost!)]
+                : []),
+              ...(opponent
+                ? [this.publicRevealCard(opponent, opponentId, 'deck', opponentCost!)]
+                : [])
+            ],
+            comparison: {
+              winnerId: won
+                ? frame.controllerId
+                : opponentCost !== null && (ownCost === null || opponentCost > ownCost)
+                  ? opponentId
+                  : null
+            }
+          }
+        )
         if (won && action.drawWonCard === true && own)
           this.drawOne(frame.controllerId, frame, `${path}.won-card`, {
             instanceId: own.instanceId,
@@ -7219,6 +7344,7 @@ export class EffectRuntime {
               const generated: DraftCard = {
                 ...clonePlain(card),
                 instanceId: this.allocateId(`${participantId}:discover-copy`),
+                startedInDeck: false,
                 ownerId: participantId,
                 controllerId: participantId,
                 creationOrdinal: this.nextEntityOrdinal++,
@@ -7265,6 +7391,7 @@ export class EffectRuntime {
               const generated: DraftCard = {
                 ...clonePlain(card),
                 instanceId: this.allocateId(`${participantId}:discover`),
+                startedInDeck: false,
                 ownerId: participantId,
                 controllerId: participantId,
                 creationOrdinal: this.nextEntityOrdinal++,
@@ -7605,7 +7732,9 @@ export class EffectRuntime {
               participantId,
               frame,
               path + '.' + index,
-              draws[index]
+              draws[index],
+              undefined,
+              action.reveal === true
             )
             if (!drawn) continue
             if (
@@ -8432,7 +8561,26 @@ export class EffectRuntime {
               minion.stealth = false
             })
           }
-          this.emit(frame, name, path, { target: target.instanceId })
+          const card = target.kind === 'card' ? this.currentCard(target) : null
+          this.emit(
+            frame,
+            name,
+            path,
+            { target: target.instanceId },
+            undefined,
+            card
+              ? {
+                  id: `${this.resolutionId}:${path}:${this.events.length}`,
+                  cards: [
+                    this.publicRevealCard(
+                      card,
+                      target.participantId,
+                      target.zone === 'hand' ? 'hand' : 'deck'
+                    )
+                  ]
+                }
+              : undefined
+          )
         }
         return
       }
@@ -13174,8 +13322,7 @@ export class EffectRuntime {
     ) {
       this.addToDiscardedCards(player, card)
     }
-    const paysWithHealth =
-      cardCostResource(validated.definition, player) === 'health'
+    const paysWithHealth = cardCostResource(validated.definition, player) === 'health'
     if (paysWithHealth) {
       player.hero.health = Math.max(0, player.hero.health - validated.input.currentCost)
       if (validated.definition.type === 'Spell') player.nextSpellCostsHealth = false
@@ -13565,14 +13712,16 @@ export class EffectRuntime {
         )
       if (candidate.instanceId === selectedCandidate.instanceId) {
         if (pending.destination === 'board') {
-          const source =
-            this.findEntity(pending.sourceCardInstanceId, options.participantId) ?? {
-              instanceId: pending.sourceCardInstanceId,
-              kind: 'card' as const,
-              participantId: options.participantId,
-              zone: 'discarded' as const,
-              cardId: pending.publicSourceCardId
-            }
+          const source = this.findEntity(
+            pending.sourceCardInstanceId,
+            options.participantId
+          ) ?? {
+            instanceId: pending.sourceCardInstanceId,
+            kind: 'card' as const,
+            participantId: options.participantId,
+            zone: 'discarded' as const,
+            cardId: pending.publicSourceCardId
+          }
           // A full board consumes the selection without adding or burning a hand card.
           selectedRef = this.createMinion(
             options.participantId,
@@ -13763,9 +13912,23 @@ export class EffectRuntime {
       : undefined
   }
 
+  private liveAdaptTargets(
+    targetInstanceIds: readonly string[],
+    participantId: PlayerId
+  ): EntityRef[] {
+    return targetInstanceIds.flatMap((instanceId) => {
+      const target = this.findEntity(instanceId, participantId)
+      return target?.kind === 'minion' &&
+        target.zone === 'board' &&
+        (this.currentMinion(target)?.health ?? 0) > 0
+        ? [target]
+        : []
+    })
+  }
+
   private createAdaptChoice(
     participantId: PlayerId,
-    targetInstanceId: string,
+    targetInstanceIds: readonly string[],
     sourceCardId: CardId,
     remaining: number
   ): Omit<PendingCardChoice, 'queued'> {
@@ -13786,19 +13949,29 @@ export class EffectRuntime {
     ).slice(0, 3)
     return {
       participantId,
-      sourceCardInstanceId: targetInstanceId,
+      sourceCardInstanceId: targetInstanceIds[0]!,
       sourceCardId,
       options: options.map((definition, choice) => ({
         choice,
         label: definition.name,
         presentationCardId: definition.id
       })),
-      resolution: { type: 'adapt', targetInstanceId, remaining }
+      resolution: { type: 'adapt', targetInstanceIds, remaining }
     }
   }
 
   private announcePendingCardChoice(): void {
-    const pending = this.draft.pendingCardChoice
+    let pending = this.draft.pendingCardChoice
+    while (
+      pending?.resolution?.type === 'adapt' &&
+      !this.liveAdaptTargets(
+        pending.resolution.targetInstanceIds,
+        pending.participantId
+      ).length
+    ) {
+      this.advancePendingCardChoice(pending)
+      pending = this.draft.pendingCardChoice
+    }
     if (!pending) return
     this.events.push({
       type: 'card-choice-started',
@@ -13836,31 +14009,29 @@ export class EffectRuntime {
         const definition = selected?.presentationCardId
           ? CARD_CATALOG.get(selected.presentationCardId)
           : undefined
-        const target = this.findEntity(
-          pending.resolution.targetInstanceId,
+        const targets = this.liveAdaptTargets(
+          pending.resolution.targetInstanceIds,
           pending.participantId
         )
-        if (
-          !definition ||
-          !target ||
-          target.kind !== 'minion' ||
-          target.zone !== 'board'
-        )
+        if (!definition)
           throw new ResolutionInputError(
-            'stale-target',
-            'The Adapt target is no longer available.'
+            'extra-input',
+            'The Adapt option is unavailable.'
           )
-        const frame = this.frameFor(target, null, [target])
-        this.runCardBlocks(definition, 'cast', frame, 'pending-choice.adapt')
+        for (const target of targets) {
+          const frame = this.frameFor(target, null, [target])
+          this.runCardBlocks(definition, 'cast', frame, 'pending-choice.adapt')
+        }
         this.processDeaths()
-        if (
-          pending.resolution.remaining > 1 &&
-          (this.currentMinion(target)?.health ?? 0) > 0
-        ) {
+        const remainingTargets = this.liveAdaptTargets(
+          pending.resolution.targetInstanceIds,
+          pending.participantId
+        )
+        if (pending.resolution.remaining > 1 && remainingTargets.length > 0) {
           const nextAdapt = clonePlain(
             this.createAdaptChoice(
               pending.participantId,
-              pending.resolution.targetInstanceId,
+              remainingTargets.map((target) => target.instanceId),
               pending.sourceCardId,
               pending.resolution.remaining - 1
             )

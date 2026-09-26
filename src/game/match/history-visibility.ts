@@ -80,22 +80,26 @@ export function projectHistoryAction(
         hiddenTargets.has(outcome.target.id) || hiddenSecrets.has(outcome.target.id)
           ? undefined
           : outcome.before,
-      target: hiddenSecrets.has(outcome.target.id)
-        ? {
-            id: outcome.target.id,
-            participantId: outcome.target.participantId,
-            kind: outcome.target.kind,
-            cardId: null,
-            concealedAs: 'secret'
-          }
-        : hiddenTargets.has(outcome.target.id)
-          ? {
-              id: outcome.target.id,
-              participantId: outcome.target.participantId,
-              kind: 'hidden',
-              cardId: null
-            }
-          : { ...outcome.target }
+      target:
+        // A later hidden movement must not erase an earlier public reveal face.
+        outcome.kind === 'reveal' && outcome.target.publicIdentity
+          ? { ...outcome.target }
+          : hiddenSecrets.has(outcome.target.id)
+            ? {
+                id: outcome.target.id,
+                participantId: outcome.target.participantId,
+                kind: outcome.target.kind,
+                cardId: null,
+                concealedAs: 'secret'
+              }
+            : hiddenTargets.has(outcome.target.id)
+              ? {
+                  id: outcome.target.id,
+                  participantId: outcome.target.participantId,
+                  kind: 'hidden',
+                  cardId: null
+                }
+              : { ...outcome.target }
     }))
   }
 }

@@ -82,6 +82,15 @@ export class MatchHistoryView extends Actor {
   private activeId: number | null = null
   private previewSequence = 0
 
+  private readonly clearHover = (): void => {
+    this.hoveredIndex = null
+    this.close()
+  }
+
+  private readonly handleVisibilityChange = (): void => {
+    if (document.hidden) this.clearHover()
+  }
+
   constructor(
     private readonly textures: MatchHistoryTextures,
     private readonly localParticipantId: string,
@@ -112,10 +121,19 @@ export class MatchHistoryView extends Actor {
       this.slots.push(this.createSlot(index))
     this.rail.on('pointermove', (event: FederatedPointerEvent) => this.hover(event))
     this.rail.on('pointerenter', (event: FederatedPointerEvent) => this.hover(event))
-    this.rail.on('pointerleave', () => {
-      this.hoveredIndex = null
-      this.close()
+    this.rail.on('pointerleave', this.clearHover)
+    // Reparenting the rail for the preview can invalidate Pixi's leave target.
+    this.rail.on('globalpointermove', (event: FederatedPointerEvent) => {
+      if (this.hoveredIndex === null) return
+      const point = this.rail.toLocal(event.global)
+      if (!this.rail.hitArea?.contains(point.x, point.y)) this.clearHover()
     })
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blur', this.clearHover)
+      window.addEventListener('pointerout', this.clearHover)
+    }
+    if (typeof document !== 'undefined')
+      document.addEventListener('visibilitychange', this.handleVisibilityChange)
     this.rail.on('wheel', (event: FederatedWheelEvent) => {
       event.stopPropagation()
       event.preventDefault()
@@ -327,6 +345,12 @@ export class MatchHistoryView extends Actor {
     super.dispose()
   }
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('blur', this.clearHover)
+      window.removeEventListener('pointerout', this.clearHover)
+    }
+    if (typeof document !== 'undefined')
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange)
     this.killAnimations()
     this.activeId = null
     this.previewSequence++

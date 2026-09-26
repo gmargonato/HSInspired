@@ -97,6 +97,8 @@ export class CardSelectionOverlay extends Container {
     this.toggleOutline = new GhostAura(toggleOutlineTarget, {})
 
     this.toggle = new Button(options.toggleTexture, {
+      highlightOnHover: false,
+      hoverScale: 1.05,
       onClick: () => {
         if (!this.inputBlocked()) this.toggleView()
       }
@@ -108,17 +110,17 @@ export class CardSelectionOverlay extends Container {
     )
     this.toggle.setBaseY(GAME_BOARD_LAYOUT.cardSelection.toggleButton.position.y)
     this.toggleLabel = new Text({
-      text: 'SEE BOARD',
+      text: 'Hide',
       style: {
         fontFamily: 'Belwe',
-        fontSize: 25,
+        fontSize: 35,
         fill: 0xffffff,
         stroke: { color: 0x000000, width: 4 }
       }
     })
     this.toggleLabel.anchor.set(0.5)
     this.toggleLabel.eventMode = 'none'
-    this.toggle.addChild(this.toggleLabel)
+    this.toggle.sprite.addChild(this.toggleLabel)
     this.addChild(this.toggle)
     this.visible = false
   }
@@ -572,6 +574,6 @@ export class CardSelectionOverlay extends Container {
     const dimmed = !this.boardVisible && this.dimming
     this.darkOverlay.alpha = dimmed && this.dimBoard ? 1 : 0
     this.darkOverlay.eventMode = dimmed ? 'static' : 'none'
-    this.toggleLabel.text = this.boardVisible ? 'SEE CARDS' : 'SEE BOARD'
+    this.toggleLabel.text = this.boardVisible ? 'Show' : 'Hide'
   }
 }

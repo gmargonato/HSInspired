@@ -11,6 +11,7 @@ export const EXPERT_AI_TURN_BUDGET_MS = 30_000
 export const EXPERT_AI_PRESENTATION_RESERVE_MS = 5_000
 export const EXPERT_AI_DISPATCH_RESERVE_MS = 500
 export const EXPERT_AI_REPLAN_RESERVE_MS = 1_500
+export const EXPERT_AI_PLAN_SEARCH_LIMIT_MS = 18_000
 export const EXPERT_AI_SEARCH_BUDGET_MS =
   EXPERT_AI_TURN_BUDGET_MS -
   EXPERT_AI_PRESENTATION_RESERVE_MS -
@@ -34,7 +35,7 @@ export const EXPERT_AI_DEFAULT_BUDGET: ExpertAiBudget = {
   turnBudgetMs: EXPERT_AI_TURN_BUDGET_MS,
   searchBudgetMs: EXPERT_AI_SEARCH_BUDGET_MS,
   decisionSearchBudgetMs: EXPERT_AI_DECISION_SEARCH_BUDGET_MS,
-  planSearchLimitMs: EXPERT_AI_DECISION_SEARCH_BUDGET_MS,
+  planSearchLimitMs: EXPERT_AI_PLAN_SEARCH_LIMIT_MS,
   replanSearchLimitMs: 1_500
 }
 
@@ -60,7 +61,7 @@ export function expertAiBudgetForTurn(turnBudgetMs: number): ExpertAiBudget {
         ? 2_000
         : turnBudgetMs <= 15_000
           ? 3_500
-          : Math.min(26_000, decisionSearchBudgetMs),
+          : Math.min(EXPERT_AI_PLAN_SEARCH_LIMIT_MS, decisionSearchBudgetMs),
     replanSearchLimitMs: turnBudgetMs <= 10_000 ? 1_000 : 1_500
   }
 }

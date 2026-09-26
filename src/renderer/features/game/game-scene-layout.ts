@@ -91,7 +91,8 @@ export const GAME_BOARD_LAYOUT = {
       viewportPadding: 20,
       viewportWidth: 1920,
       viewportHeight: 1080,
-      fadeDuration: 0.12
+      fadeDuration: 0.12,
+      appearDuration: 0.18
     }
   },
 

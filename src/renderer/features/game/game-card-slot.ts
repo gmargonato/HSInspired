@@ -216,13 +216,19 @@ export class GameCardSlot extends Actor {
     this.syncPlayableOutline()
   }
 
-  beginMinionPlayTransition(): void {
+  beginMinionPlayTransition({
+    reversible = false
+  }: { reversible?: boolean } = {}): void {
     this.shadow.maximumHeight = Infinity
     this.setMulliganInteractionEnabled(false)
     this.replaceCross.visible = false
     this.replacedLabel.visible = false
-    this.disposePlayableOutline()
-    this.outlineTarget.visible = false
+    // Targeting previews can return this same slot to the hand.
+    if (reversible) this.suppressPlayableOutline(true)
+    else {
+      this.disposePlayableOutline()
+      this.outlineTarget.visible = false
+    }
   }
 
   disposePlayableOutline(): void {

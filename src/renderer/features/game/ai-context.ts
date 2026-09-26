@@ -578,7 +578,9 @@ export function aiModelState(
     pendingChoice: choice
       ? {
           source: choice.sourceCardId
-            ? CARD_CATALOG.require(choice.sourceCardId).name
+            ? (CARD_CATALOG.get(choice.sourceCardId)?.name ??
+              HERO_POWER_CATALOG.get(choice.sourceCardId)?.displayName ??
+              choice.sourceCardId)
             : undefined,
           options: choice.options.map((option) => ({
             ...option,

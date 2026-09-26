@@ -11,6 +11,7 @@ export interface ButtonOptions {
   pressFromLeft?: boolean
   idleBrightness?: number
   highlightOnHover?: boolean
+  hoverScale?: number
   hoverBrightness?: number
   pressedBrightness?: number
   sinkPx?: number
@@ -25,6 +26,7 @@ export class Button extends Actor {
   private readonly pressFromLeft: boolean
   private readonly idleBrightness: number
   private readonly highlightOnHover: boolean
+  private readonly hoverScale: number
   private readonly hoverBrightness: number
   private readonly pressedBrightness: number
   private readonly sinkPx: number
@@ -49,6 +51,7 @@ export class Button extends Actor {
     this.pressFromLeft = options.pressFromLeft ?? false
     this.idleBrightness = options.idleBrightness ?? 1
     this.highlightOnHover = options.highlightOnHover ?? true
+    this.hoverScale = options.hoverScale ?? 1
     this.hoverBrightness = options.hoverBrightness ?? DEFAULT_HOVER_BRIGHTNESS
     this.pressedBrightness = options.pressedBrightness ?? 0.8
     this.sinkPx = options.sinkPx ?? 0
@@ -205,6 +208,7 @@ export class Button extends Actor {
   private onHoverStart = (): void => {
     if (!this.interactionEnabled) return
     this.hovered = true
+    if (!this.pressed) this.tweenHoverScale()
     if (!this.pressed && this.highlightOnHover) {
       this.tweenBrightness(this.hoverBrightness, 0.15)
     }
@@ -213,6 +217,7 @@ export class Button extends Actor {
   private onHoverEnd = (): void => {
     if (!this.interactionEnabled) return
     this.hovered = false
+    if (!this.pressed) this.tweenHoverScale()
     if (!this.pressed && this.highlightOnHover) {
       this.tweenBrightness(this.idleBrightness, 0.15)
     }
@@ -261,8 +266,8 @@ export class Button extends Actor {
     if (this.pressFromLeft) this.killTweensOf(this.sprite)
     this.killTweensOf(this)
     this.tweenTo(this.sprite.scale, {
-      x: 1,
-      y: 1,
+      x: this.hovered ? this.hoverScale : 1,
+      y: this.hovered ? this.hoverScale : 1,
       duration: 0.12,
       ease: 'power2.out'
     })
@@ -297,5 +302,16 @@ export class Button extends Actor {
         this.onError?.(error)
       })
     }
+  }
+
+  private tweenHoverScale(): void {
+    if (this.hoverScale === 1) return
+    this.killTweensOf(this.sprite.scale)
+    this.tweenTo(this.sprite.scale, {
+      x: this.hovered ? this.hoverScale : 1,
+      y: this.hovered ? this.hoverScale : 1,
+      duration: 0.15,
+      ease: 'power2.out'
+    })
   }
 }

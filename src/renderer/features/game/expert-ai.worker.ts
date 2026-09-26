@@ -6,7 +6,10 @@ import {
   type ExpertCandidateTrace,
   type ExpertEvaluatedWorld
 } from './expert-ai-consensus'
-import { EXPERT_AI_SEARCH_BUDGET_MS } from './expert-ai-worker-protocol'
+import {
+  EXPERT_AI_PLAN_SEARCH_LIMIT_MS,
+  EXPERT_AI_SEARCH_BUDGET_MS
+} from './expert-ai-worker-protocol'
 import {
   cancelExpertAiWorlds,
   evaluateExpertAiWorldInWorker
@@ -174,7 +177,15 @@ export async function runExpertAiWorkerDecision(
     1,
     Math.min(3, Math.floor(Math.max(0, searchBudgetMs - 1_000) / 5_000) + 1)
   )
-  const worldBudgetMs = searchBudgetMs / worldCount
+  // Concurrent worlds share a wall-clock window, not a divided time allowance.
+  const worldBudgetMs = Math.min(
+    searchBudgetMs,
+    request.request.phase === 'plan'
+      ? (request.planSearchLimitMs ?? EXPERT_AI_PLAN_SEARCH_LIMIT_MS)
+      : request.request.phase === 'action'
+        ? (request.replanSearchLimitMs ?? 1_500)
+        : searchBudgetMs
+  )
   const runInlineWorld = (index: number) =>
     evaluateExpertAiWorld(request, index, worldBudgetMs, {
       isCancelled,

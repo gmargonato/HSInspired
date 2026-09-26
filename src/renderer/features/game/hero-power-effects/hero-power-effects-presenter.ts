@@ -7,6 +7,8 @@ import type { HeroPowerView } from '../hero-power-view'
 import { runScreenShake } from '../screen-shake'
 import { WarriorArmorUpEffect } from './warrior-armor-up-effect'
 import { WARRIOR_ARMOR_UP } from './warrior-armor-up-layout'
+import { WarriorTankUpEffect } from './warrior-tank-up-effect'
+import { WARRIOR_TANK_UP } from './warrior-tank-up-layout'
 import { PriestHealEffect } from './priest-heal-effect'
 import { ShamanTotemEffect } from './shaman-totem-effect'
 import { WarlockLifeTapEffect } from './warlock-life-tap-effect'
@@ -45,6 +47,20 @@ const EFFECTS = new Map<string, EffectFactory>([
       )
   ],
   [
+    'warrior-tank-up',
+    (assets, animations, board, onShake) =>
+      new WarriorTankUpEffect(
+        {
+          hammer: assets.tankUpHammer,
+          particle: assets.playSpotlight1,
+          shockwave: assets.effectCircle1,
+          flash: assets.playSpotlight1
+        },
+        animations,
+        () => onShake(runScreenShake(board, animations, WARRIOR_TANK_UP.shake))
+      )
+  ],
+  [
     'warlock-life-tap',
     (assets, animations) =>
       new WarlockLifeTapEffect(
@@ -77,9 +93,10 @@ const TARGETING_EFFECTS = new Map<
 ])
 
 // Register each animation once; its upgraded power shares the same factory.
+// Upgraded powers with an explicit entry above keep their unique effect.
 for (const [basicId, upgradedId] of Object.entries(BASIC_HERO_POWER_UPGRADES)) {
   const factory = EFFECTS.get(basicId)
-  if (factory) EFFECTS.set(upgradedId, factory)
+  if (factory && !EFFECTS.has(upgradedId)) EFFECTS.set(upgradedId, factory)
   if (START_DURING_FLIP.has(basicId)) START_DURING_FLIP.add(upgradedId)
   const targeting = TARGETING_EFFECTS.get(basicId)
   if (targeting) TARGETING_EFFECTS.set(upgradedId, targeting)

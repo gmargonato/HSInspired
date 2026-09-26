@@ -41,6 +41,7 @@ import {
 } from '../../../shared/ipc/ai-deliberation'
 import { aiActionIntent } from './ai-action-intent'
 import { aiActions } from './ai-context'
+import { EXPERT_AI_PLAN_SEARCH_LIMIT_MS } from './expert-ai-worker-protocol'
 import { LOCAL_AI_POLICY } from './local-ai-policy'
 import { GameBoardSession } from './game-board-session'
 
@@ -90,12 +91,12 @@ const SEARCH_LIMITS: Readonly<Record<LocalAiSearchProfile, LocalAiSearchLimits>>
   expert: {
     maxThinkMs: 26_000,
     sequenceThinkMs: 26_000,
-    rootSearchLimit: 24,
+    rootSearchLimit: 64,
     sequenceBranchLimit: 12,
     sequenceMaxDepth: 10,
     sequenceNodeLimit: 4_000,
     sequenceRootNodeLimit: 96,
-    traceCandidateLimit: 32,
+    traceCandidateLimit: 192,
     randomSampleSeeds: [
       0x1f123bb5, 0x8a5cd789, 0xc3ef14a1, 0x5eeded42, 0x73a9c21d, 0xb50d66f3,
       0x2cae8841, 0xe1437b95
@@ -105,7 +106,6 @@ const SEARCH_LIMITS: Readonly<Record<LocalAiSearchProfile, LocalAiSearchLimits>>
 const EXPERT_REPLY_ACTION_LIMIT = 16
 const EXPERT_REPLY_NODE_LIMIT = 24
 const EXPERT_ROOT_COMMAND_PREFERENCE_SCALE = 0.5
-const EXPERT_PLAN_SEARCH_LIMIT_MS = 23_000
 const EXPERT_REPLAN_SEARCH_LIMIT_MS = 1_500
 
 export interface LocalAiScoreComponents {
@@ -1133,35 +1133,39 @@ function choiceOptionBias(
 
   const resolution = pending.resolution
   if (resolution?.type === 'adapt') {
-    const target = self.board.find(
-      (minion) => minion.instanceId === resolution.targetInstanceId
+    const targets = self.board.filter((minion) =>
+      resolution.targetInstanceIds.includes(minion.instanceId)
     )
-    if (!target) return 0
-    const enemyMinions = opponent.board
-    const enemyHeroHealth = number(opponent.hero.health) + number(opponent.hero.armor)
-    const targetAttack = number(target.attack)
-    const targetHealth = number(target.health)
-    const largestEnemyAttack = Math.max(
-      0,
-      ...enemyMinions.map((minion) => number(minion.attack))
-    )
-    if (text.includes('windfury')) {
-      return enemyHeroHealth <= targetAttack * 2 ? 25_000 : targetAttack * 18
-    }
-    if (text.includes('poisonous')) {
-      return enemyMinions.length > 0 ? 1_800 : -20
-    }
-    if (text.includes('divine shield')) {
-      const canTrade = enemyMinions.some(
-        (minion) => targetAttack >= number(minion.health)
+    return targets.reduce((total, target) => {
+      const enemyMinions = opponent.board
+      const enemyHeroHealth = number(opponent.hero.health) + number(opponent.hero.armor)
+      const targetAttack = number(target.attack)
+      const targetHealth = number(target.health)
+      const largestEnemyAttack = Math.max(
+        0,
+        ...enemyMinions.map((minion) => number(minion.attack))
       )
-      const wouldDie = largestEnemyAttack >= targetHealth
-      return canTrade && wouldDie ? 1_800 : 80
-    }
-    if (text.includes('taunt')) {
-      const visibleThreat = visibleHeroThreat(opponent, self, before.turnNumber)
-      return visibleThreat >= number(self.hero.health) ? 1_800 : 60
-    }
+      if (text.includes('windfury')) {
+        return (
+          total + (enemyHeroHealth <= targetAttack * 2 ? 25_000 : targetAttack * 18)
+        )
+      }
+      if (text.includes('poisonous')) {
+        return total + (enemyMinions.length > 0 ? 1_800 : -20)
+      }
+      if (text.includes('divine shield')) {
+        const canTrade = enemyMinions.some(
+          (minion) => targetAttack >= number(minion.health)
+        )
+        const wouldDie = largestEnemyAttack >= targetHealth
+        return total + (canTrade && wouldDie ? 1_800 : 80)
+      }
+      if (text.includes('taunt')) {
+        const visibleThreat = visibleHeroThreat(opponent, self, before.turnNumber)
+        return total + (visibleThreat >= number(self.hero.health) ? 1_800 : 60)
+      }
+      return total
+    }, 0)
   }
 
   if (pending.sourceCardId === 'classic_druid_of_the_claw') {
@@ -1285,7 +1289,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     this.preferredContinuation = options.preferredContinuation
     this.fairHypothesis = options.fairHypothesis ?? false
     this.expertPlanSearchLimitMs =
-      options.expertPlanSearchLimitMs ?? EXPERT_PLAN_SEARCH_LIMIT_MS
+      options.expertPlanSearchLimitMs ?? EXPERT_AI_PLAN_SEARCH_LIMIT_MS
     this.expertReplanSearchLimitMs =
       options.expertReplanSearchLimitMs ?? EXPERT_REPLAN_SEARCH_LIMIT_MS
   }
@@ -1491,7 +1495,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const rootInformationKey = informationSetKey(simulationSession.getAiObservation())
     mctsProfile.informationKeyMs += performance.now() - rootKeyStarted
     const pathLimit = 48
-    const iterationLimit = 4_000
+    const iterationLimit = 12_000
     let iterations = 0
     let totalDepth = 0
     let totalTreeDepth = 0

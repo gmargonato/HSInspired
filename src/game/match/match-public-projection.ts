@@ -121,9 +121,7 @@ export function getOpeningMatchPublicState(
   const pendingDiscover =
     snapshot.pendingDiscover?.participantId === viewerId
       ? (() => {
-          const projectEntry = (
-            entry: Omit<PendingDiscoverChoice, 'queued'>
-          ) => {
+          const projectEntry = (entry: Omit<PendingDiscoverChoice, 'queued'>) => {
             const {
               continuation: _continuation,
               correctCandidateInstanceId: _correctCandidateInstanceId,
@@ -266,7 +264,8 @@ export function getOpeningMatchPublicEvents(
             card: maskPublicCard(
               cardForEvent(event),
               viewerId,
-              event.participantId === viewerId
+              event.participantId === viewerId ||
+                (event.type === 'card-drawn' && event.publicReveal === true)
             )
           }
         case 'card-burned':

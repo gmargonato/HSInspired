@@ -238,6 +238,20 @@ export interface MinionCardMovement {
   readonly handIndex?: number
 }
 
+/** Public, action-time faces only; contains no private card bookkeeping. */
+export interface CardReveal {
+  readonly id: string
+  readonly cards: readonly {
+    readonly participantId: PlayerId
+    readonly origin: 'deck' | 'hand'
+    readonly card: Pick<
+      OpeningCard,
+      'instanceId' | 'cardId' | 'baseCost' | 'currentCost' | 'attack' | 'health'
+    >
+  }[]
+  readonly comparison?: { readonly winnerId: PlayerId | null }
+}
+
 export interface EffectDomainEvent {
   /** Presentation-only identity of one summon-producing action execution. */
   readonly summonGroupId?: string
@@ -250,6 +264,7 @@ export interface EffectDomainEvent {
   readonly action: string
   readonly actionPath: string
   readonly cardMovement?: MinionCardMovement
+  readonly cardReveal?: CardReveal
   readonly eventType?: CardEventType
   readonly data?: Readonly<Record<string, unknown>>
   readonly correlation?: ResolutionCorrelation
@@ -614,7 +629,7 @@ export interface PendingCardChoice {
     | { readonly type: 'bonus-spell' }
     | {
         readonly type: 'adapt'
-        readonly targetInstanceId: string
+        readonly targetInstanceIds: readonly string[]
         readonly remaining: number
       }
     | {
@@ -863,6 +878,8 @@ export interface TurnStartedEvent {
 }
 
 export interface CardDrawnEvent {
+  /** An effect explicitly reveals this draw to both players. */
+  readonly publicReveal?: boolean
   readonly type: 'card-drawn'
   /** Only the automatic turn draw; triggered draws omit this reason. */
   readonly reason?: 'turn-start'
@@ -1175,7 +1192,11 @@ export interface HistoryEntitySnapshot {
 
 /** One public result belonging to a single played card, power, or combat action. */
 export interface HistoryActionOutcome {
+  /** Keeps repeated comparisons and their action-time faces separate. */
+  readonly revealGroupId?: string
+  readonly revealComparison?: boolean
   readonly kind:
+    | 'reveal'
     | 'cast-spell'
     | 'damage'
     | 'death'

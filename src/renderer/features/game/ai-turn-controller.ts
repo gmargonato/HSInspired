@@ -57,6 +57,7 @@ export const AI_CONVERSATION_LIMITS = {
   maxMessageBytes: AI_REQUEST_LIMITS.maxContextBytes
 } as const
 const AI_SILENT_RETRY_DELAY_MS = 1000
+const AI_MAX_FAILURES_PER_REVISION = 3
 const AI_OPPONENT_RESTORE_GUARD = 'opponent-restore'
 const AI_OPPONENT_RESTORE_MESSAGE =
   'The selected action restores health on the opposing side, which is never correct. Choose an action that helps your own side, or End Turn.'
@@ -96,6 +97,7 @@ export class AiTurnController {
   private readonly actualResults: unknown[] = []
   private readonly outcomeReviews: JsonObject[] = []
   private endTurnReviewRevision?: number
+  private failureStreak: { revision: number; count: number } | null = null
   private readonly corrections: ReturnType<typeof observedAiCorrections> = {}
 
   private resetConversation(): void {
@@ -323,6 +325,12 @@ export class AiTurnController {
     identity: AiDecisionIdentity
   ): Promise<AiActionDecision | null> {
     this.logRetryFailure(error, identity)
+    const count =
+      this.failureStreak?.revision === identity.expectedRevision
+        ? this.failureStreak.count + 1
+        : 1
+    this.failureStreak = { revision: identity.expectedRevision, count }
+    if (count >= AI_MAX_FAILURES_PER_REVISION) return this.safeFallback(error, identity)
     this.resetConversation()
     await this.waitForSilentRetry()
     if (!this.current(identity)) return null
@@ -334,27 +342,32 @@ export class AiTurnController {
   ): AiActionDecision | null {
     if (!this.current(identity) || this.active?.identity !== identity) return null
     const legal = this.legalCommands()
-    const endTurn = aiActions(this.options.session, legal).find(
-      (action) => action.command.type === 'end-turn'
-    )
-    if (!endTurn) {
-      this.abandon(new Error('AI recovery exhausted without a legal End Turn.'), identity)
+    const fallback =
+      legal.find((command) => command.type === 'end-turn') ??
+      legal.find(
+        (command) =>
+          command.type === 'confirm-mulligan' && command.replaceInstanceIds.length === 0
+      ) ??
+      legal[0]
+    if (!fallback) {
+      this.abandon(new Error('AI recovery exhausted without a legal action.'), identity)
       return null
     }
     this.resetConversation()
     const decision: AiActionDecision = {
       ...identity,
-      actionId: endTurn.id,
-      command: endTurn.command,
+      actionId: 'a' + legal.indexOf(fallback),
+      command: fallback,
       source: 'safe-fallback',
-      reason: 'AI recovery was exhausted; ending the turn with a current legal action.'
+      reason: 'AI recovery was exhausted; selected a current legal action.'
     }
     this.log(
       'safe-fallback',
       {
         ...decision,
         ...(error instanceof AiRequestError ? { diagnostics: error.details } : {}),
-        recovery: 'automatic-recovery-exhausted'
+        recovery: 'automatic-recovery-exhausted',
+        failureCount: this.failureStreak?.count ?? 0
       },
       true
     )
@@ -455,10 +468,7 @@ export class AiTurnController {
     let response: AiDecisionResponse | null
     for (;;) {
       try {
-        response = await Promise.race([
-          this.options.api!.decide(request),
-          cancellation
-        ])
+        response = await Promise.race([this.options.api!.decide(request), cancellation])
         if (
           response &&
           this.current(identity) &&
@@ -533,12 +543,14 @@ export class AiTurnController {
           repairCount,
           phase: request.phase,
           instruction,
-          contextBytes: new TextEncoder().encode(JSON.stringify(request.messages)).length
+          contextBytes: new TextEncoder().encode(JSON.stringify(request.messages))
+            .length
         })
       }
     }
     if (!response || !this.current(identity)) return null
-    if (!('replace' in response.choice)) throw new Error('Mulligan requires choice.replace.')
+    if (!('replace' in response.choice))
+      throw new Error('Mulligan requires choice.replace.')
     const command = this.mulliganCommand(response.choice.replace, handRefs)
     if (
       !commands.some(
@@ -576,7 +588,8 @@ export class AiTurnController {
     }
     const commands = this.legalCommands()
     if (!commands.length) {
-      if (this.aiMustAct()) this.abandon(new Error('Active AI has no legal inputs.'), identity)
+      if (this.aiMustAct())
+        this.abandon(new Error('Active AI has no legal inputs.'), identity)
       return null
     }
     const cursor = session.getAiEventCursor()
@@ -596,9 +609,7 @@ export class AiTurnController {
         ? forcedLegalCommand(commands)
         : null
     let selected = forced ?? commands[0]!
-    let actionId = forced
-      ? 'a' + Math.max(0, commands.indexOf(forced))
-      : 'a0'
+    let actionId = forced ? 'a' + Math.max(0, commands.indexOf(forced)) : 'a0'
     let source: AiActionDecision['source'] = 'forced'
     let reason: string | undefined
     let expectedResult: string | undefined
@@ -630,7 +641,8 @@ export class AiTurnController {
             settings
           )
           if (!mulliganDecision) return null
-          if (this.options.recorder) this.options.recorder.decisionId = identity.requestId
+          if (this.options.recorder)
+            this.options.recorder.decisionId = identity.requestId
           return mulliganDecision
         }
         const actions = aiActions(session, commands)
@@ -766,8 +778,7 @@ export class AiTurnController {
                     }
                   }
                 } catch (error) {
-                  const reason =
-                    error instanceof Error ? error.message : String(error)
+                  const reason = error instanceof Error ? error.message : String(error)
                   throw new AiRequestError(reason, {
                     repairable: true,
                     failureKind: 'invalid-choice',
