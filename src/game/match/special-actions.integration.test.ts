@@ -34,8 +34,7 @@ describe('special action parity', () => {
     ).toBe(true)
     const nozdormu = scenario.match
       .getState()
-      .players.find((player) => player.participantId === participantId)!
-      .hand[0]!
+      .players.find((player) => player.participantId === participantId)!.hand[0]!
     const playResult = scenario.match.dispatch({
       type: 'play-card',
       participantId,

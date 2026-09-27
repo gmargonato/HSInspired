@@ -4,7 +4,10 @@ import {
   type MatchScenario
 } from '../testing/match-scenario-builder'
 import type { PlayerId } from '../match-types'
-import type { BattlecryRepetitionStartedEvent, OpeningMatchEvent } from '../opening-match-types'
+import type {
+  BattlecryRepetitionStartedEvent,
+  OpeningMatchEvent
+} from '../opening-match-types'
 
 const NIGHTBLADE = 'basic_nightblade'
 const YETI = 'basic_chillwind_yeti'
@@ -36,19 +39,17 @@ function boardOf(scenario: MatchScenario, participantId: PlayerId) {
     .players.find((entry) => entry.participantId === participantId)!.board
 }
 
-function prepareHand(
-  scenario: MatchScenario,
-  participantId: PlayerId,
-  cardId: string
-) {
+function prepareHand(scenario: MatchScenario, participantId: PlayerId, cardId: string) {
   expect(
-    scenario.match.dispatch({ type: 'dev-add-card', participantId, cardId })
-      .accepted
+    scenario.match.dispatch({ type: 'dev-add-card', participantId, cardId }).accepted
   ).toBe(true)
   expect(
-    scenario.match
-      .dispatch({ type: 'dev-set-mana', participantId, available: 10, maximum: 10 })
-      .accepted
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId,
+      available: 10,
+      maximum: 10
+    }).accepted
   ).toBe(true)
   return scenario.match
     .getState()
@@ -56,11 +57,7 @@ function prepareHand(
     .hand.find((entry) => entry.cardId === cardId)!
 }
 
-function playMinion(
-  scenario: MatchScenario,
-  participantId: PlayerId,
-  cardId: string
-) {
+function playMinion(scenario: MatchScenario, participantId: PlayerId, cardId: string) {
   const card = prepareHand(scenario, participantId, cardId)
   const result = scenario.match.dispatch({
     type: 'play-card',
@@ -102,9 +99,11 @@ describe('Battlecry repetition boundary events', () => {
   it('replays the announcement for every Battlecry repetition under Brann', () => {
     const { scenario, participantId } = setup()
     expect(
-      scenario.match
-        .dispatch({ type: 'dev-summon-minion', participantId, cardId: BRANN })
-        .accepted
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: BRANN
+      }).accepted
     ).toBe(true)
 
     const result = playMinion(scenario, participantId, NIGHTBLADE)

@@ -584,9 +584,7 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "Beast",
-    "tribes": [
-      "Elemental"
-    ],
+    "tribes": ["Elemental"],
     "cost": 7,
     "attack": 9,
     "health": 5,

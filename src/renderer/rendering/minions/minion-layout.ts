@@ -71,7 +71,7 @@ export const MINION_LAYOUT = {
     { width: 125, height: 167 },
     {
       anchor: CENTER,
-	  scale: 1.2,
+      scale: 1.2,
       note: 'Divine Shield cocoon surrounding the portrait.'
     }
   ),
@@ -164,8 +164,9 @@ export const MINION_LAYOUT = {
     { width: 125, height: 167 },
     {
       anchor: CENTER,
-	  scale: 1.2,
-	  note: 'Immune portrait overlay.' }
+      scale: 1.2,
+      note: 'Immune portrait overlay.'
+    }
   ),
   attackBadge: placement(
     { x: 35, y: 130 },

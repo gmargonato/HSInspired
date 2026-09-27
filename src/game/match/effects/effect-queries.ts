@@ -1,6 +1,10 @@
 import { cthunSnapshot } from '../cthun'
 import { HERO_CATALOG } from '../../content/heroes'
-import { cardHasTribe, type CardDefinition, type CardKeyword } from '../../content/cards'
+import {
+  cardHasTribe,
+  type CardDefinition,
+  type CardKeyword
+} from '../../content/cards'
 import type {
   OpeningMatchState,
   OpeningPlayerState,
@@ -332,21 +336,16 @@ export class EffectQueries {
           value.includes(definition.rarity)
       else if (key === 'expansionId') condition = definition?.expansionId === value
       else if (key === 'excludeInHand') {
-        const hand =
-          value === true
-            ? this.context.player(frame.controllerId).hand
-            : []
-        condition =
-          value !== true ||
-          !hand.some((card) => card.cardId === ref.cardId)
-      }
-      else if (key === 'sparePart')
+        const hand = value === true ? this.context.player(frame.controllerId).hand : []
+        condition = value !== true || !hand.some((card) => card.cardId === ref.cardId)
+      } else if (key === 'sparePart')
         condition =
           definition?.id.includes('spare') === value ||
           definition?.name.toLowerCase().includes('spare') === value
       else if (key === 'tribe') condition = cardHasTribe(definition, String(value))
       else if (key === 'type')
-        condition = definition?.type === value || cardHasTribe(definition, String(value))
+        condition =
+          definition?.type === value || cardHasTribe(definition, String(value))
       else if (key === 'stat') {
         const printedOnly = filter.printedOnly === true
         const actual =
@@ -461,10 +460,7 @@ export class EffectQueries {
     selector: Record<string, unknown>,
     frame: EffectFrame
   ): boolean {
-    if (
-      candidate.kind === 'minion' &&
-      this.context.currentMinion(candidate)?.dormant
-    )
+    if (candidate.kind === 'minion' && this.context.currentMinion(candidate)?.dormant)
       return false
     const controller = this.relativeController(selector.controller, frame)
     if (controller && candidate.participantId !== controller) return false
@@ -1068,8 +1064,10 @@ export class EffectQueries {
       }
       case 'player-deck-has-no-cost-cards': {
         const cost = Number(condition.cost ?? condition.value)
-        return Number.isFinite(cost) &&
+        return (
+          Number.isFinite(cost) &&
           player.deck.every((card) => cardDefinition(card.cardId)?.cost !== cost)
+        )
       }
       case 'player-deck-has-minion':
         return player.deck.some((card) => {
@@ -1091,11 +1089,15 @@ export class EffectQueries {
       case 'player-was-healed-this-turn':
         return (this.context.draft.history?.healingThisTurn ?? 0) > 0
       case 'opponent-has-more-minions':
-        return this.context.player(this.otherPlayer(player.participantId)).board.length >
+        return (
+          this.context.player(this.otherPlayer(player.participantId)).board.length >
           player.board.length
+        )
       case 'opponent-has-no-more-minions':
-        return this.context.player(this.otherPlayer(player.participantId)).board.length <=
+        return (
+          this.context.player(this.otherPlayer(player.participantId)).board.length <=
           player.board.length
+        )
       case 'repeat-ended-without-minion-death':
         return frame.storedValues.get('repeat.minions-died') === 0
       case 'player-has-weapon':

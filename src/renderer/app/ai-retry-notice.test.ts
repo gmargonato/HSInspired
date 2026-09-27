@@ -21,7 +21,11 @@ class Element {
   appendChild(child: Element): void {
     this.children.push(child)
   }
-  addEventListener(_event: string, callback: () => void, options?: { once?: boolean }): void {
+  addEventListener(
+    _event: string,
+    callback: () => void,
+    options?: { once?: boolean }
+  ): void {
     this.clickHandler = callback
     void options
   }
@@ -73,7 +77,9 @@ it('exits the match when the opponent-left overlay is clicked once', () => {
   dialogs.abandon('Your opponent left.', onContinue)
   const current = overlay as unknown as Element
   expect(
-    current.children[0]?.children.find((child) => child.textContent === 'Your opponent left.')
+    current.children[0]?.children.find(
+      (child) => child.textContent === 'Your opponent left.'
+    )
   ).toBeTruthy()
   current.click()
   current.click()

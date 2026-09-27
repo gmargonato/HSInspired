@@ -148,8 +148,7 @@ export function boardMinionRuntimeMarkers(
         ? minion.spellDamage !== 0
         : keywords.has('spell-damage')),
     lifesteal:
-      keywords.has('lifesteal') ||
-      hasJainaElementalLifesteal(minion.cardId, heroId),
+      keywords.has('lifesteal') || hasJainaElementalLifesteal(minion.cardId, heroId),
     elusive:
       (!minion.silenced || keywords.has('spell-immune')) &&
       (minion.spellImmune ?? keywords.has('spell-immune')),

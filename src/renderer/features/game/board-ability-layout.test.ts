@@ -61,7 +61,7 @@ describe('board ability badge layouts', () => {
       size: { width: 80, height: 53 }
     })
     expect(MINION_LAYOUT.taunt.scale).toBeUndefined()
-    expect(MINION_LAYOUT.divineShield.scale).toBeUndefined()
+    expect(MINION_LAYOUT.divineShield.scale).toEqual({ x: 1.2, y: 1.2 })
     expect(MINION_LAYOUT.trigger.scale).toEqual({ x: 0.75, y: 0.75 })
     expect(MINION_LAYOUT.inspire.scale).toEqual({ x: 0.75, y: 0.75 })
     expect(MINION_LAYOUT.lifesteal.scale).toEqual({ x: 0.75, y: 0.75 })
@@ -70,17 +70,19 @@ describe('board ability badge layouts', () => {
     expect(WEAPON_LAYOUT.deathrattle.scale).toBeUndefined()
   })
 
-  it('keeps the new minion visuals inside the canvas', () => {
+  it('keeps badges inside the canvas and shares the enlarged immunity cocoon', () => {
     for (const key of [
       'windfury',
       'spellDamage',
       'lifesteal',
       'aura',
-      'elusive',
-      'immune'
+      'elusive'
     ] as const) {
       expectInsideCanvas(MINION_LAYOUT[key], MINION_CANVAS)
     }
+    expect(MINION_LAYOUT.immune.position).toEqual(MINION_LAYOUT.divineShield.position)
+    expect(MINION_LAYOUT.immune.size).toEqual(MINION_LAYOUT.divineShield.size)
+    expect(MINION_LAYOUT.immune.scale).toEqual(MINION_LAYOUT.divineShield.scale)
   })
 
   it('spreads temporary weapon badges across a centered bottom row', () => {
@@ -96,7 +98,7 @@ describe('board ability badge layouts', () => {
   })
 
   it('places Aura at the top of the minion instead of in the bottom badge row', () => {
-    expect(MINION_LAYOUT.aura.position).toEqual({ x: 80, y: 35 })
+    expect(MINION_LAYOUT.aura.position).toEqual({ x: 80, y: 20 })
     expect(MINION_LAYOUT.aura).toMatchObject({
       size: { width: 38, height: 38 }
     })

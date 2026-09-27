@@ -4408,7 +4408,12 @@
     "health": 7,
     "rulesText": "Battlecry: The next spell you cast this turn costs Health instead of Mana.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"set-next-spell-costs-health"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [{ "action": "set-next-spell-costs-health" }]
+      }
+    ],
     "collectible": true
   },
   {

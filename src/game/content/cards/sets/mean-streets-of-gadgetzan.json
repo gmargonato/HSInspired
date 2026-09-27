@@ -2263,7 +2263,7 @@
     "health": 4,
     "rulesText": "All targets are chosen randomly.",
     "keywords": [],
-    "effects": [{"trigger":"aura","actions":[{"action":"randomize-targets"}]}],
+    "effects": [{ "trigger": "aura", "actions": [{ "action": "randomize-targets" }] }],
     "collectible": true
   },
   {

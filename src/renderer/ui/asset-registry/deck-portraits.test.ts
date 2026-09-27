@@ -13,7 +13,7 @@ describe('deck portrait asset keys', () => {
   })
 
   it('applies custom lower crops only to the requested heroes', () => {
-    expect(getDeckPortraitYOffset(asHeroId('rexxar'))).toBe(20)
+    expect(getDeckPortraitYOffset(asHeroId('rexxar'))).toBe(40)
     expect(getDeckPortraitYOffset(asHeroId('guldan'))).toBeUndefined()
   })
 })

@@ -411,9 +411,13 @@ export function formatCardRulesText(
 
 function raceLabel(card: CardDefinition): string | null {
   if (card.type === 'Minion') {
-    const tribes = [...new Set([...(card.tribes ?? []), card.subtype].filter(
-      (tribe): tribe is string => Boolean(tribe)
-    ))]
+    const tribes = [
+      ...new Set(
+        [...(card.tribes ?? []), card.subtype].filter((tribe): tribe is string =>
+          Boolean(tribe)
+        )
+      )
+    ]
     return tribes.length > 0 ? tribes.join(' / ') : null
   }
   if (card.type === 'Spell') return card.spellSchool ?? card.subtype

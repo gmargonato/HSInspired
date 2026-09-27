@@ -99,7 +99,9 @@
     "health": null,
     "rulesText": "Steal a minion from your opponent's deck and add it to your hand.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "steal-minion-from-deck" }] }],
+    "effects": [
+      { "trigger": "cast", "actions": [{ "action": "steal-minion-from-deck" }] }
+    ],
     "collectible": false,
     "deckLegal": false
   },
@@ -309,7 +311,9 @@
     "health": 3,
     "rulesText": "Deathrattle: Summon every minion killed by this weapon.",
     "keywords": [],
-    "effects": [{ "trigger": "deathrattle", "actions": [{ "action": "summon-weapon-kills" }] }],
+    "effects": [
+      { "trigger": "deathrattle", "actions": [{ "action": "summon-weapon-kills" }] }
+    ],
     "collectible": false,
     "deckLegal": false
   },
@@ -911,7 +915,19 @@
     "health": 3,
     "rulesText": "Battlecry: Gain stats equal to your weapon's.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"type":"minion","selection":"source"},"attack":{"reference":"source.weapon.attack"},"health":{"reference":"source.weapon.durability"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "type": "minion", "selection": "source" },
+            "attack": { "reference": "source.weapon.attack" },
+            "health": { "reference": "source.weapon.durability" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -927,7 +943,19 @@
     "health": 2,
     "rulesText": "Deathrattle: If it's your opponent's turn, summon an 8/8 Skeleton.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","condition":{"type":"player-turn","player":"opponent"},"actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_skeleton_8_8","count":1}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "condition": { "type": "player-turn", "player": "opponent" },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_skeleton_8_8",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -943,7 +971,22 @@
     "health": 1,
     "rulesText": "Deathrattle: Deal 2 damage to all enemy minions.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"damage","target":{"controller":"opponent","type":"minion","selection":"all"},"amount":2}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -975,7 +1018,29 @@
     "health": 2,
     "rulesText": "Battlecry: Summon a 5/5 Skeleton. Deathrattle: Summon one for your opponent.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_skeleton_5_5","count":1}]},{"trigger":"deathrattle","actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_skeleton_5_5","controller":"opponent","count":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_skeleton_5_5",
+            "count": 1
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_skeleton_5_5",
+            "controller": "opponent",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -991,7 +1056,12 @@
     "health": 4,
     "rulesText": "Battlecry: Summon two 1/1 Skeletons.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"summon","cardId":"classic_skeleton","count":2}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [{ "action": "summon", "cardId": "classic_skeleton", "count": 2 }]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1008,7 +1078,19 @@
     "health": 5,
     "rulesText": "Deathrattle: Add a random Dragon to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"add-to-hand","source":"random-card","count":1,"filter":{"type":"Minion","tribe":"Dragon"}}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "source": "random-card",
+            "count": 1,
+            "filter": { "type": "Minion", "tribe": "Dragon" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1024,7 +1106,22 @@
     "health": 4,
     "rulesText": "Battlecry: Give adjacent minions +2 Health.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"any","type":"minion","selection":"adjacent"},"health":2}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "adjacent"
+            },
+            "health": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1040,7 +1137,23 @@
     "health": 5,
     "rulesText": "At the end of your turn, give another random friendly minion +3 Attack.",
     "keywords": [],
-    "effects": [{"trigger":"end-of-turn","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"random","exclude":"source"},"attack":3}]}],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "exclude": "source"
+            },
+            "attack": 3
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1056,7 +1169,21 @@
     "health": 4,
     "rulesText": "Whenever this minion takes damage, gain +2 Attack.",
     "keywords": [],
-    "effects": [{"trigger":"on-damage","event":{"target":{"controller":"self","type":"minion","selection":"source"}},"actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":2}]}],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "target": { "controller": "self", "type": "minion", "selection": "source" }
+        },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1088,7 +1215,19 @@
     "health": 2,
     "rulesText": "Deathrattle: If it's your opponent's turn, summon a 2/2 Ghoul.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","condition":{"type":"player-turn","player":"opponent"},"actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_ghoul_2_2","count":1}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "condition": { "type": "player-turn", "player": "opponent" },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_ghoul_2_2",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1103,7 +1242,7 @@
     "attack": 1,
     "health": 1,
     "rulesText": "Taunt Divine Shield",
-    "keywords": ["divine-shield","taunt"],
+    "keywords": ["divine-shield", "taunt"],
     "effects": [],
     "collectible": true,
     "deckLegal": true
@@ -1121,7 +1260,19 @@
     "health": null,
     "rulesText": "Set a minion's Attack and Health to 3.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"modify","target":{"controller":"any","type":"minion","selection":"chosen"},"attack":{"operation":"set","value":3},"health":{"operation":"set","value":3}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "attack": { "operation": "set", "value": 3 },
+            "health": { "operation": "set", "value": 3 }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1138,7 +1289,28 @@
     "health": null,
     "rulesText": "Deal 1 damage to all minions. If any die, cast this again.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"all"},"amount":1}],"repeat":{"until":"repeat-ended-without-minion-death","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"all"},"amount":1}]}}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "all" },
+            "amount": 1
+          }
+        ],
+        "repeat": {
+          "until": "repeat-ended-without-minion-death",
+          "actions": [
+            {
+              "action": "damage",
+              "target": { "controller": "any", "type": "minion", "selection": "all" },
+              "amount": 1
+            }
+          ]
+        }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1154,7 +1326,64 @@
     "health": 3,
     "rulesText": "Choose a Deathrattle (Secretly) - Deal 3 damage to all minions; or Give them +2/+2.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","choice":{"options":[{"actions":[{"action":"grant-deathrattle","concealed":true,"target":{"controller":"self","type":"minion","selection":"source"},"actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"all"},"amount":3}]}]},{"actions":[{"action":"grant-deathrattle","concealed":true,"target":{"controller":"self","type":"minion","selection":"source"},"actions":[{"action":"modify","target":{"controller":"any","type":"minion","selection":"all"},"attack":2,"health":2}]}]}]}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "grant-deathrattle",
+                  "concealed": true,
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "actions": [
+                    {
+                      "action": "damage",
+                      "target": {
+                        "controller": "any",
+                        "type": "minion",
+                        "selection": "all"
+                      },
+                      "amount": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "grant-deathrattle",
+                  "concealed": true,
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "actions": [
+                    {
+                      "action": "modify",
+                      "target": {
+                        "controller": "any",
+                        "type": "minion",
+                        "selection": "all"
+                      },
+                      "attack": 2,
+                      "health": 2
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1171,7 +1400,32 @@
     "health": null,
     "rulesText": "Deal 2 damage to a minion. If it survives, give it Poisonous.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":2}],"then":{"condition":{"type":"target-survived"},"actions":[{"action":"grant-keyword","target":{"controller":"any","type":"minion","selection":"event-target"},"keyword":"poisonous"}]}}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": 2
+          }
+        ],
+        "then": {
+          "condition": { "type": "target-survived" },
+          "actions": [
+            {
+              "action": "grant-keyword",
+              "target": {
+                "controller": "any",
+                "type": "minion",
+                "selection": "event-target"
+              },
+              "keyword": "poisonous"
+            }
+          ]
+        }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1188,7 +1442,18 @@
     "health": null,
     "rulesText": "Summon two 1/2 Poisonous Spiders.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_poisonous_spider","count":2}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_poisonous_spider",
+            "count": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1204,7 +1469,41 @@
     "health": 2,
     "rulesText": "Choose One - Transform into a 1/2 with Poisonous; or a 1/5 with Taunt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","choice":{"options":[{"actions":[{"action":"transform","target":{"controller":"self","type":"minion","selection":"source"},"cardId":"knights_of_the_frozen_throne_druid_of_the_swarm_1_2_poisonous"}]},{"actions":[{"action":"transform","target":{"controller":"self","type":"minion","selection":"source"},"cardId":"knights_of_the_frozen_throne_druid_of_the_swarm_1_5_taunt"}]}]}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "transform",
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "cardId": "knights_of_the_frozen_throne_druid_of_the_swarm_1_2_poisonous"
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "transform",
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "cardId": "knights_of_the_frozen_throne_druid_of_the_swarm_1_5_taunt"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1220,7 +1519,22 @@
     "health": null,
     "rulesText": "Trigger a friendly minion's Deathrattle.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"trigger-deathrattle","target":{"controller":"self","type":"minion","selection":"chosen","filter":{"hasDeathrattle":true}}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "trigger-deathrattle",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": { "hasDeathrattle": true }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1237,7 +1551,28 @@
     "health": null,
     "rulesText": "Summon a 1/5 Scarab with Taunt. If your opponent has more minions, cast this again.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_scarab_beetle","count":1}],"repeat":{"until":"opponent-has-no-more-minions","actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_scarab_beetle","count":1}]}}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_scarab_beetle",
+            "count": 1
+          }
+        ],
+        "repeat": {
+          "until": "opponent-has-no-more-minions",
+          "actions": [
+            {
+              "action": "summon",
+              "cardId": "knights_of_the_frozen_throne_scarab_beetle",
+              "count": 1
+            }
+          ]
+        }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1254,7 +1589,18 @@
     "health": null,
     "rulesText": "Lifesteal Deal 3 damage to a minion.",
     "keywords": ["lifesteal"],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":3}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": 3
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1271,7 +1617,23 @@
     "health": null,
     "rulesText": "Give a minion +3/+3 and Freeze it.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"modify","target":{"controller":"any","type":"minion","selection":"chosen"},"attack":3,"health":3},{"action":"freeze","target":{"controller":"any","type":"minion","selection":"chosen"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "attack": 3,
+            "health": 3
+          },
+          {
+            "action": "freeze",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1288,7 +1650,21 @@
     "health": 2,
     "rulesText": "Battlecry: Freeze an enemy.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"freeze","target":{"controller":"opponent","type":"character","selection":"chosen"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1304,7 +1680,19 @@
     "health": 3,
     "rulesText": "Deathrattle: If it's your opponent's turn, gain 6 Armor.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","condition":{"type":"player-turn","player":"opponent"},"actions":[{"action":"gain-armor","target":{"controller":"self","type":"hero","selection":"hero"},"amount":6}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "condition": { "type": "player-turn", "player": "opponent" },
+        "actions": [
+          {
+            "action": "gain-armor",
+            "target": { "controller": "self", "type": "hero", "selection": "hero" },
+            "amount": 6
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1320,7 +1708,28 @@
     "health": 2,
     "rulesText": "Battlecry and Deathrattle: Deal 1 damage to all minions.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"all"},"amount":1}]},{"trigger":"deathrattle","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"all"},"amount":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "all" },
+            "amount": 1
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "all" },
+            "amount": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1336,7 +1745,14 @@
     "health": 5,
     "rulesText": "Deathrattle: Add two 1/1 Skeletons to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"add-to-hand","cardId":"classic_skeleton","count":2}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          { "action": "add-to-hand", "cardId": "classic_skeleton", "count": 2 }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1352,7 +1768,19 @@
     "health": 1,
     "rulesText": "Deathrattle: If it's your opponent's turn, summon a 2/2 Ghoul.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","condition":{"type":"player-turn","player":"opponent"},"actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_ghoul_2_2","count":1}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "condition": { "type": "player-turn", "player": "opponent" },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_ghoul_2_2",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1395,7 +1823,19 @@
     "health": 6,
     "rulesText": "Battlecry: Add a 'Mirror Image' spell to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"add-to-hand","player":"self","cardId":"basic_mirror_image","count":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "basic_mirror_image",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1411,7 +1851,19 @@
     "health": 4,
     "rulesText": "After a friendly minion loses Divine Shield, gain +1 Attack.",
     "keywords": [],
-    "effects": [{"trigger":"on-divine-shield-lost","event":{"type":"divine-shield-lost","controller":"self"},"actions":[{"action":"modify","target":{"controller":"self","type":"weapon","selection":"source"},"attack":1}]}],
+    "effects": [
+      {
+        "trigger": "on-divine-shield-lost",
+        "event": { "type": "divine-shield-lost", "controller": "self" },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "weapon", "selection": "source" },
+            "attack": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1427,7 +1879,22 @@
     "health": 6,
     "rulesText": "At the end of your turn, deal 1 damage to all enemy minions.",
     "keywords": [],
-    "effects": [{"trigger":"end-of-turn","actions":[{"action":"damage","target":{"controller":"opponent","type":"minion","selection":"all"},"amount":1}]}],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1444,7 +1911,27 @@
     "health": null,
     "rulesText": "Freeze a minion and deal 3 damage to adjacent ones.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"freeze","target":{"controller":"any","type":"minion","selection":"chosen"}},{"action":"damage","target":{"controller":"any","type":"minion","selection":"adjacent","adjacentTo":"event-target"},"amount":3}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "freeze",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" }
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "adjacent",
+              "adjacentTo": "event-target"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1460,7 +1947,20 @@
     "health": null,
     "rulesText": "Give your hero +3 Attack this turn. Gain 3 Armor.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"modify","target":{"controller":"self","type":"hero","selection":"hero"},"attack":3,"duration":"this-turn"},{"action":"gain-armor","player":"self","amount":3}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "hero", "selection": "hero" },
+            "attack": 3,
+            "duration": "this-turn"
+          },
+          { "action": "gain-armor", "player": "self", "amount": 3 }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1476,7 +1976,9 @@
     "health": 8,
     "rulesText": "Taunt Overload: (3)",
     "keywords": ["taunt"],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"overload","amount":3}]}],
+    "effects": [
+      { "trigger": "battlecry", "actions": [{ "action": "overload", "amount": 3 }] }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1492,10 +1994,25 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: After your opponent plays a minion, add two copies of it to your hand.",
-    "keywords": [
-      "secret"
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": { "type": "minion-played", "controller": "opponent" },
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "destination": "hand",
+            "count": 2
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"secret","event":{"type":"minion-played","controller":"opponent"},"actions":[{"action":"copy","target":{"controller":"opponent","type":"minion","selection":"event-target"},"destination":"hand","count":2}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -1511,7 +2028,24 @@
     "health": 2,
     "rulesText": "Your opponent's spells cost (1) more.",
     "keywords": [],
-    "effects": [{"trigger":"aura","actions":[{"action":"change-cost","target":{"controller":"opponent","type":"spell-card","selection":"all","zone":"hand"},"amount":1,"duration":"while-source-in-play"}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "opponent",
+              "type": "spell-card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "amount": 1,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1527,7 +2061,29 @@
     "health": null,
     "rulesText": "Deal 5 damage. Draw 5 cards. Gain 5 Armor. Summon a 5/5 Ghoul.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"character","selection":"chosen"},"amount":5},{"action":"draw","player":"self","count":5},{"action":"gain-armor","player":"self","amount":5},{"action":"summon","cardId":"knights_of_the_frozen_throne_ghoul","count":1}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 5
+          },
+          { "action": "draw", "player": "self", "count": 5 },
+          { "action": "gain-armor", "player": "self", "amount": 5 },
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_ghoul",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1544,7 +2100,25 @@
     "health": null,
     "rulesText": "Put one of each Secret from your deck into the battlefield.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"put-into-play","player":"self","source":{"controller":"self","type":"spell-card","selection":"all","zone":"deck","distinct":true,"filter":{"keyword":"secret"}}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": {
+              "controller": "self",
+              "type": "spell-card",
+              "selection": "all",
+              "zone": "deck",
+              "distinct": true,
+              "filter": { "keyword": "secret" }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1560,7 +2134,24 @@
     "health": 7,
     "rulesText": "Taunt Freeze any character damaged by this minion.",
     "keywords": ["taunt"],
-    "effects": [{"trigger":"on-damage","event":{"source":{"controller":"self","type":"minion","selection":"source"}},"actions":[{"action":"freeze","target":{"controller":"any","type":"character","selection":"event-target"}}]}],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "source": { "controller": "self", "type": "minion", "selection": "source" }
+        },
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1577,7 +2168,20 @@
     "health": null,
     "rulesText": "Draw 2 Murlocs from your deck.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"draw","player":"self","source":"deck","count":2,"filter":{"tribe":"Murloc"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "source": "deck",
+            "count": 2,
+            "filter": { "tribe": "Murloc" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1593,7 +2197,22 @@
     "health": 8,
     "rulesText": "Costs (1) less for each Mana Crystal you've Overloaded this game.",
     "keywords": [],
-    "effects": [{"trigger":"while-in-hand","actions":[{"action":"change-cost","target":{"type":"card","selection":"source"},"amount":{"operation":"subtract","reference":"mana-overloaded-this-game"},"minimum":0}]}],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": { "type": "card", "selection": "source" },
+            "amount": {
+              "operation": "subtract",
+              "reference": "mana-overloaded-this-game"
+            },
+            "minimum": 0
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1609,7 +2228,24 @@
     "health": null,
     "rulesText": "Shuffle a copy of your hand into your deck.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"copy","target":{"controller":"self","type":"card","selection":"all","zone":"hand"},"destination":"deck","count":1}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "destination": "deck",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1625,7 +2261,18 @@
     "health": 1,
     "rulesText": "Battlecry: Give a friendly minion +1 Attack.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"chosen"},"attack":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "attack": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1641,7 +2288,19 @@
     "health": 3,
     "rulesText": "Battlecry: Give a friendly minion Spell Damage +1.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"chosen"},"keyword":"spell-damage","amount":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "keyword": "spell-damage",
+            "amount": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1657,7 +2316,19 @@
     "health": 1,
     "rulesText": "Battlecry: Give a friendly minion +1/+1.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"chosen"},"attack":1,"health":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1695,7 +2366,20 @@
     "health": 4,
     "rulesText": "Whenever your weapon is destroyed, gain +1/+1.",
     "keywords": [],
-    "effects": [{"trigger":"on-death","event":{"type":"weapon-died","controller":"self"},"actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":1,"health":1}]}],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "event": { "type": "weapon-died", "controller": "self" },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1711,7 +2395,21 @@
     "health": 3,
     "rulesText": "Battlecry: Add a random Deathrattle minion that died this game to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"add-to-hand","player":"self","source":"friendly-minions-died-this-game","selection":"random","count":1,"filter":{"type":"Minion","hasDeathrattle":true}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "friendly-minions-died-this-game",
+            "selection": "random",
+            "count": 1,
+            "filter": { "type": "Minion", "hasDeathrattle": true }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1727,7 +2425,18 @@
     "health": 6,
     "rulesText": "Deathrattle: Deal 5 damage to your minions.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"damage","target":{"controller":"self","type":"minion","selection":"all"},"amount":5}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "self", "type": "minion", "selection": "all" },
+            "amount": 5
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1742,10 +2451,24 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When one of your minions is attacked, summon a 2/3 Poisonous Cobra.",
-    "keywords": [
-      "secret"
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": {
+          "type": "minion-attacked",
+          "controller": "opponent",
+          "target": { "controller": "self", "type": "minion", "selection": "all" }
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_venomous_cobra",
+            "count": 1
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"secret","event":{"type":"minion-attacked","controller":"opponent","target":{"controller":"self","type":"minion","selection":"all"}},"actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_venomous_cobra","count":1}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -1789,7 +2512,30 @@
     "health": 4,
     "rulesText": "After you play a Secret, put a random Hunter Secret into the battlefield.",
     "keywords": [],
-    "effects": [{"trigger":"on-secret-played","event":{"type":"secret-played","controller":"self","playedFromHand":true},"actions":[{"action":"add-to-hand","player":"self","source":"random-card","count":1,"filter":{"type":"Spell","cardClass":"Hunter","keyword":"secret"}},{"action":"put-into-play","player":"self","source":{"controller":"self","type":"added-card","selection":"all"}}]}],
+    "effects": [
+      {
+        "trigger": "on-secret-played",
+        "event": {
+          "type": "secret-played",
+          "controller": "self",
+          "playedFromHand": true
+        },
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "count": 1,
+            "filter": { "type": "Spell", "cardClass": "Hunter", "keyword": "secret" }
+          },
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": { "controller": "self", "type": "added-card", "selection": "all" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1806,7 +2552,18 @@
     "health": null,
     "rulesText": "Choose a friendly minion and give it to your opponent.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"take-control","controller":"opponent","target":{"controller":"self","type":"minion","selection":"chosen"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "take-control",
+            "controller": "opponent",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1823,7 +2580,24 @@
     "health": null,
     "rulesText": "Copy 3 cards in your opponent's deck and add them to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"copy","target":{"controller":"opponent","type":"card","selection":"random","zone":"deck","count":3},"destination":"hand"}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "opponent",
+              "type": "card",
+              "selection": "random",
+              "zone": "deck",
+              "count": 3
+            },
+            "destination": "hand"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1839,7 +2613,24 @@
     "health": 3,
     "rulesText": "At the end of your turn, give another random friendly minion +1/+1.",
     "keywords": [],
-    "effects": [{"trigger":"end-of-turn","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"random","exclude":"source"},"attack":1,"health":1}]}],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "exclude": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1854,9 +2645,7 @@
     "attack": 3,
     "health": 3,
     "rulesText": "Lifesteal",
-    "keywords": [
-      "lifesteal"
-    ],
+    "keywords": ["lifesteal"],
     "effects": [],
     "collectible": true,
     "deckLegal": true
@@ -1907,11 +2696,22 @@
     "attack": 4,
     "health": 8,
     "rulesText": "Taunt, Lifesteal Deathrattle: Destroy a random enemy minion.",
-    "keywords": [
-      "lifesteal",
-      "taunt"
+    "keywords": ["lifesteal", "taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            }
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"destroy","target":{"controller":"opponent","type":"minion","selection":"random"}}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -1927,7 +2727,23 @@
     "health": 6,
     "rulesText": "Battlecry: Shuffle a copy of your opponent's deck into your deck.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"copy","target":{"controller":"opponent","type":"card","selection":"all","zone":"deck"},"destination":"deck"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "opponent",
+              "type": "card",
+              "selection": "all",
+              "zone": "deck"
+            },
+            "destination": "deck"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1943,7 +2759,23 @@
     "health": 6,
     "rulesText": "Whenever this minion takes damage, discard a random card.",
     "keywords": [],
-    "effects": [{"trigger":"on-damage","event":{"target":{"controller":"self","type":"minion","selection":"source"}},"actions":[{"action":"discard","source":"hand","player":"self","count":1,"selection":"random"}]}],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "target": { "controller": "self", "type": "minion", "selection": "source" }
+        },
+        "actions": [
+          {
+            "action": "discard",
+            "source": "hand",
+            "player": "self",
+            "count": 1,
+            "selection": "random"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1959,9 +2791,7 @@
     "attack": 1,
     "health": 1,
     "rulesText": "Lifesteal",
-    "keywords": [
-      "lifesteal"
-    ],
+    "keywords": ["lifesteal"],
     "effects": [],
     "collectible": true,
     "deckLegal": true
@@ -1979,7 +2809,19 @@
     "health": null,
     "rulesText": "Give your weapon Lifesteal this turn.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"grant-keyword","target":{"controller":"self","type":"weapon","selection":"all"},"keyword":"lifesteal","duration":"this-turn"}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "weapon", "selection": "all" },
+            "keyword": "lifesteal",
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1995,7 +2837,22 @@
     "health": null,
     "rulesText": "Throw your weapon at a minion. It deals its damage, then returns to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":{"reference":"source.weapon.attack"}},{"action":"return-to-hand","target":{"controller":"self","type":"weapon","selection":"all"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": { "reference": "source.weapon.attack" }
+          },
+          {
+            "action": "return-to-hand",
+            "target": { "controller": "self", "type": "weapon", "selection": "all" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2012,7 +2869,28 @@
     "health": null,
     "rulesText": "Summon a 5/5 copy of a random minion in your deck.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"summon-copy","source":{"controller":"self","type":"card","selection":"random","zone":"deck","filter":{"cardType":"Minion"}},"count":1,"modifications":{"attack":{"operation":"set","value":5},"health":{"operation":"set","value":5}}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "source": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "deck",
+              "filter": { "cardType": "Minion" }
+            },
+            "count": 1,
+            "modifications": {
+              "attack": { "operation": "set", "value": 5 },
+              "health": { "operation": "set", "value": 5 }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2028,7 +2906,27 @@
     "health": 3,
     "rulesText": "Destroy any Frozen minion damaged by this.",
     "keywords": [],
-    "effects": [{"trigger":"on-damage","event":{"type":"damage-dealt","controller":"self","source":{"controller":"self","type":"hero","selection":"hero"},"filter":{"frozen":true}},"actions":[{"action":"destroy","target":{"controller":"any","type":"minion","selection":"event-target"}}]}],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "type": "damage-dealt",
+          "controller": "self",
+          "source": { "controller": "self", "type": "hero", "selection": "hero" },
+          "filter": { "frozen": true }
+        },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "event-target"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2044,7 +2942,23 @@
     "health": 3,
     "rulesText": "After you play a minion, deal 1 damage to it.",
     "keywords": [],
-    "effects": [{"trigger":"on-card-played","event":{"type":"minion-played","controller":"self"},"actions":[{"action":"damage","target":{"controller":"self","type":"minion","selection":"event-target"},"amount":1}]}],
+    "effects": [
+      {
+        "trigger": "on-card-played",
+        "event": { "type": "minion-played", "controller": "self" },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "event-target"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2082,7 +2996,26 @@
     "health": 6,
     "rulesText": "Your Deathrattle cards cost (2) less.",
     "keywords": [],
-    "effects": [{"trigger":"aura","actions":[{"action":"change-cost","target":{"controller":"self","type":"minion-card","selection":"all","zone":"hand","filter":{"hasDeathrattle":true}},"amount":-2,"minimum":0,"duration":"while-source-in-play"}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": { "hasDeathrattle": true }
+            },
+            "amount": -2,
+            "minimum": 0,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2099,7 +3032,28 @@
     "health": null,
     "rulesText": "Give a minion \"Deathrattle: Return this to life with 1 Health.\"",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"grant-deathrattle","target":{"controller":"any","type":"minion","selection":"chosen"},"actions":[{"action":"resurrect","target":{"controller":"self","type":"minion","selection":"source"},"health":1}]}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-deathrattle",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "actions": [
+              {
+                "action": "resurrect",
+                "target": {
+                  "controller": "self",
+                  "type": "minion",
+                  "selection": "source"
+                },
+                "health": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2116,7 +3070,26 @@
     "health": 9,
     "rulesText": "Whenever your hero is healed, deal that much damage to a random enemy minion.",
     "keywords": [],
-    "effects": [{"trigger":"on-heal","event":{"type":"health-restored","target":{"controller":"self","type":"hero","selection":"hero"}},"actions":[{"action":"damage","target":{"controller":"opponent","type":"minion","selection":"random"},"amount":{"reference":"event.amount"}}]}],
+    "effects": [
+      {
+        "trigger": "on-heal",
+        "event": {
+          "type": "health-restored",
+          "target": { "controller": "self", "type": "hero", "selection": "hero" }
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            },
+            "amount": { "reference": "event.amount" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2132,7 +3105,17 @@
     "health": 4,
     "rulesText": "Battlecry: If an enemy is Frozen, draw a card.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"player-has-minion","player":"opponent","filter":{"frozen":true}},"actions":[{"action":"draw","player":"self","count":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion",
+          "player": "opponent",
+          "filter": { "frozen": true }
+        },
+        "actions": [{ "action": "draw", "player": "self", "count": 1 }]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2148,7 +3131,28 @@
     "health": 3,
     "rulesText": "Battlecry: Give a friendly minion \"Deathrattle: Resummon this minion.\"",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"grant-deathrattle","target":{"controller":"self","type":"minion","selection":"chosen"},"actions":[{"action":"summon-copy","source":{"controller":"self","type":"minion","selection":"source"},"count":1}]}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-deathrattle",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "actions": [
+              {
+                "action": "summon-copy",
+                "source": {
+                  "controller": "self",
+                  "type": "minion",
+                  "selection": "source"
+                },
+                "count": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2164,7 +3168,20 @@
     "health": null,
     "rulesText": "Draw 2 weapons from your deck.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"draw","player":"self","source":"deck","count":2,"filter":{"type":"Weapon"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "source": "deck",
+            "count": 2,
+            "filter": { "type": "Weapon" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2215,7 +3232,23 @@
     "health": 6,
     "rulesText": "After this minion survives damage, summon a random Legendary minion.",
     "keywords": [],
-    "effects": [{"trigger":"on-damage","event":{"target":{"controller":"self","type":"minion","selection":"source"}},"condition":{"type":"target-survived"},"actions":[{"action":"summon-random","player":"self","count":1,"filter":{"type":"Minion","rarity":"Legendary"}}]}],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "target": { "controller": "self", "type": "minion", "selection": "source" }
+        },
+        "condition": { "type": "target-survived" },
+        "actions": [
+          {
+            "action": "summon-random",
+            "player": "self",
+            "count": 1,
+            "filter": { "type": "Minion", "rarity": "Legendary" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2231,7 +3264,19 @@
     "health": 3,
     "rulesText": "Battlecry: Remove the top card of your opponent's deck.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"discard","player":"opponent","source":"deck-top","count":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discard",
+            "player": "opponent",
+            "source": "deck-top",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2247,7 +3292,22 @@
     "health": 4,
     "rulesText": "After this minion survives damage, summon a 2/2 Ghoul.",
     "keywords": [],
-    "effects": [{"trigger":"on-damage","event":{"target":{"controller":"self","type":"minion","selection":"source"}},"condition":{"type":"target-survived"},"actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_ghoul_2_2","count":1}]}],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "target": { "controller": "self", "type": "minion", "selection": "source" }
+        },
+        "condition": { "type": "target-survived" },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_ghoul_2_2",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2263,7 +3323,21 @@
     "health": 2,
     "rulesText": "Battlecry: Discover a copy of a minion in your deck.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"discover","player":"self","count":3,"source":"deck","copy":true,"filter":{"cardType":"Minion"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "deck",
+            "copy": true,
+            "filter": { "cardType": "Minion" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2296,7 +3370,35 @@
     "health": 3,
     "rulesText": "Battlecry: Gain +1/+1 for each damaged minion.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":{"reference":"matching-entity-count","selector":{"controller":"any","type":"minion","selection":"all","filter":{"damaged":true}}},"health":{"reference":"matching-entity-count","selector":{"controller":"any","type":"minion","selection":"all","filter":{"damaged":true}}}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "any",
+                "type": "minion",
+                "selection": "all",
+                "filter": { "damaged": true }
+              }
+            },
+            "health": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "any",
+                "type": "minion",
+                "selection": "all",
+                "filter": { "damaged": true }
+              }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2311,10 +3413,19 @@
     "attack": 2,
     "health": 3,
     "rulesText": "Taunt Battlecry: Summon a Saronite Chain Gang.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "source": { "controller": "self", "type": "minion", "selection": "source" },
+            "count": 1
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"summon-copy","source":{"controller":"self","type":"minion","selection":"source"},"count":1}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -2330,7 +3441,19 @@
     "health": 4,
     "rulesText": "Battlecry: Give a friendly minion Immune this turn.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"chosen"},"keyword":"immune","duration":"this-turn"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "keyword": "immune",
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2346,7 +3469,21 @@
     "health": 1,
     "rulesText": "Whenever this minion attacks, deal 2 damage to the enemy hero.",
     "keywords": [],
-    "effects": [{"trigger":"on-attack","event":{"source":{"controller":"self","type":"minion","selection":"source"}},"actions":[{"action":"damage","target":{"controller":"opponent","type":"hero","selection":"hero"},"amount":2}]}],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "source": { "controller": "self", "type": "minion", "selection": "source" }
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "opponent", "type": "hero", "selection": "hero" },
+            "amount": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2363,7 +3500,25 @@
     "health": null,
     "rulesText": "Choose a friendly minion. Destroy it and a random enemy minion.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"destroy","target":{"controller":"self","type":"minion","selection":"chosen"}},{"action":"destroy","target":{"controller":"opponent","type":"minion","selection":"random"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" }
+          },
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2379,7 +3534,20 @@
     "health": 3,
     "rulesText": "Costs (0) if your hero was healed this turn.",
     "keywords": [],
-    "effects": [{"trigger":"while-in-hand","condition":{"type":"player-was-healed-this-turn"},"actions":[{"action":"change-cost","target":{"type":"card","selection":"source"},"amount":{"operation":"set","value":0},"minimum":0}]}],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "condition": { "type": "player-was-healed-this-turn" },
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": { "type": "card", "selection": "source" },
+            "amount": { "operation": "set", "value": 0 },
+            "minimum": 0
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2395,7 +3563,33 @@
     "health": 6,
     "rulesText": "Battlecry: Destroy all 1-Cost spells in both hands and decks.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"destroy","target":{"controller":"any","type":"spell-card","selection":"all","zone":"hand","filter":{"cost":1}}},{"action":"destroy","target":{"controller":"any","type":"spell-card","selection":"all","zone":"deck","filter":{"cost":1}}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "spell-card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": { "cost": 1 }
+            }
+          },
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "spell-card",
+              "selection": "all",
+              "zone": "deck",
+              "filter": { "cost": 1 }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2411,7 +3605,20 @@
     "health": 1,
     "rulesText": "Deathrattle: Add a random Deathrattle minion to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"add-to-hand","player":"self","source":"random-card","count":1,"filter":{"type":"Minion","hasDeathrattle":true}}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "count": 1,
+            "filter": { "type": "Minion", "hasDeathrattle": true }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2428,7 +3635,24 @@
     "health": 5,
     "rulesText": "Battlecry: Give a friendly minion +4/+4 and Taunt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"chosen"},"attack":4,"health":4},{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"chosen"},"keyword":"taunt"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "attack": 4,
+            "health": 4
+          },
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2444,7 +3668,24 @@
     "health": 5,
     "rulesText": "Spells cost (2) more.",
     "keywords": [],
-    "effects": [{"trigger":"aura","actions":[{"action":"change-cost","target":{"controller":"any","type":"spell-card","selection":"all","zone":"hand"},"amount":2,"duration":"while-source-in-play"}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "any",
+              "type": "spell-card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "amount": 2,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2460,7 +3701,20 @@
     "health": 2,
     "rulesText": "Battlecry: Draw a Divine Shield minion from your deck.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"draw","player":"self","source":"deck","count":1,"filter":{"type":"Minion","keyword":"divine-shield"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "source": "deck",
+            "count": 1,
+            "filter": { "type": "Minion", "keyword": "divine-shield" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2477,7 +3731,18 @@
     "health": null,
     "rulesText": "Lifesteal Deal 1 damage to all minions.",
     "keywords": ["lifesteal"],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"all"},"amount":1}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "all" },
+            "amount": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2493,7 +3758,24 @@
     "health": 3,
     "rulesText": "Battlecry: Give your Taunt minions +2/+2.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"all","filter":{"keyword":"taunt"}},"attack":2,"health":2}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": { "keyword": "taunt" }
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2508,10 +3790,20 @@
     "attack": 1,
     "health": 6,
     "rulesText": "Taunt After you summon a minion, gain +1 Health.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "event": { "type": "minion-summoned", "controller": "self" },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "health": 1
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"on-summon","event":{"type":"minion-summoned","controller":"self"},"actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"health":1}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -2527,7 +3819,19 @@
     "health": 3,
     "rulesText": "Combo: Give a friendly minion Poisonous.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"combo-active"},"actions":[{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"chosen"},"keyword":"poisonous"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": { "type": "combo-active" },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "keyword": "poisonous"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2543,7 +3847,25 @@
     "health": 3,
     "rulesText": "Battlecry: Give a random Lifesteal minion in your hand +2/+2.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"self","type":"minion-card","selection":"random","zone":"hand","filter":{"keyword":"lifesteal"}},"attack":2,"health":2}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "random",
+              "zone": "hand",
+              "filter": { "keyword": "lifesteal" }
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2580,7 +3902,27 @@
     "health": 4,
     "rulesText": "Deathrattle: Summon a minion from your deck with less Attack than this minion.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"put-into-play","source":{"controller":"self","type":"minion-card","selection":"random","zone":"deck","filter":{"stat":"attack","operator":"lt","value":{"reference":"source.attack"}}}}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "source": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "random",
+              "zone": "deck",
+              "filter": {
+                "stat": "attack",
+                "operator": "lt",
+                "value": { "reference": "source.attack" }
+              }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2595,10 +3937,7 @@
     "attack": 3,
     "health": 2,
     "rulesText": "Charge Lifesteal",
-    "keywords": [
-      "charge",
-      "lifesteal"
-    ],
+    "keywords": ["charge", "lifesteal"],
     "effects": [],
     "collectible": true,
     "deckLegal": true
@@ -2616,7 +3955,25 @@
     "health": null,
     "rulesText": "Copy the lowest Cost minion in your hand.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"copy","target":{"controller":"self","type":"minion-card","zone":"hand","selection":"all","count":1,"order":"lowest-cost"},"destination":"hand"}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "zone": "hand",
+              "selection": "all",
+              "count": 1,
+              "order": "lowest-cost"
+            },
+            "destination": "hand"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2632,7 +3989,20 @@
     "health": 7,
     "rulesText": "Deathrattle: Summon a random friendly Beast that died this game.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"resurrect","source":"friendly-minions-died-this-game","selection":"random","count":1,"filter":{"tribe":"Beast"}}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "resurrect",
+            "source": "friendly-minions-died-this-game",
+            "selection": "random",
+            "count": 1,
+            "filter": { "tribe": "Beast" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2648,7 +4018,20 @@
     "health": 7,
     "rulesText": "Deathrattle: Summon your Taunt minions that died this game.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"resurrect","source":"friendly-minions-died-this-game","selection":"all","count":7,"filter":{"keyword":"taunt"}}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "resurrect",
+            "source": "friendly-minions-died-this-game",
+            "selection": "all",
+            "count": 7,
+            "filter": { "keyword": "taunt" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2665,7 +4048,22 @@
     "health": null,
     "rulesText": "Deal 2 damage to a random enemy minion and Freeze it.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"opponent","type":"minion","selection":"random"},"amount":2}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2681,7 +4079,25 @@
     "health": null,
     "rulesText": "Gain 10 Armor. Reduce the Cost of minions in your opponent's hand by (2).",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"gain-armor","player":"self","amount":10},{"action":"change-cost","target":{"controller":"opponent","type":"minion-card","selection":"all","zone":"hand"},"amount":-2,"duration":"permanent"}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          { "action": "gain-armor", "player": "self", "amount": 10 },
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "opponent",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "amount": -2,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2698,7 +4114,18 @@
     "health": 8,
     "rulesText": "Battlecry: Summon two 0/1 Frozen Champions.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_frozen_champion","count":2}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_frozen_champion",
+            "count": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2713,10 +4140,19 @@
     "attack": 1,
     "health": 6,
     "rulesText": "Lifesteal Has +1 Attack for each card you've discarded this game.",
-    "keywords": [
-      "lifesteal"
+    "keywords": ["lifesteal"],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "type": "minion", "selection": "source" },
+            "attack": { "reference": "cards-discarded-this-game" }
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"aura","actions":[{"action":"modify","target":{"type":"minion","selection":"source"},"attack":{"reference":"cards-discarded-this-game"}}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -2733,7 +4169,32 @@
     "health": null,
     "rulesText": "Choose an enemy minion. At the start of your turn, gain control of it.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"schedule","trigger":"start-of-turn","target":{"controller":"opponent","type":"minion","selection":"chosen"},"actions":[{"action":"take-control","target":{"controller":"any","type":"minion","selection":"event-target"}}]}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "schedule",
+            "trigger": "start-of-turn",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "actions": [
+              {
+                "action": "take-control",
+                "target": {
+                  "controller": "any",
+                  "type": "minion",
+                  "selection": "event-target"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2749,7 +4210,19 @@
     "health": 2,
     "rulesText": "Battlecry: Your hero is Immune this turn.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"grant-keyword","target":{"controller":"self","type":"hero","selection":"hero"},"keyword":"immune","duration":"this-turn"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "hero", "selection": "hero" },
+            "keyword": "immune",
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2765,7 +4238,25 @@
     "health": 2,
     "rulesText": "Battlecry: If your deck has no 2-Cost cards, give all minions in your deck +1/+1.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"self","type":"minion-card","selection":"all","zone":"deck"},"attack":1,"health":1}],"condition":{"type":"player-deck-has-no-cost-cards","cost":2}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "deck"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ],
+        "condition": { "type": "player-deck-has-no-cost-cards", "cost": 2 }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2814,7 +4305,19 @@
     "health": 4,
     "rulesText": "Battlecry: If your deck has no 4-Cost cards, gain Lifesteal and Taunt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"grant-keywords","target":{"type":"minion","selection":"source"},"keywords":["taunt","lifesteal"]}],"condition":{"type":"player-deck-has-no-cost-cards","cost":4}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keywords",
+            "target": { "type": "minion", "selection": "source" },
+            "keywords": ["taunt", "lifesteal"]
+          }
+        ],
+        "condition": { "type": "player-deck-has-no-cost-cards", "cost": 4 }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2831,7 +4334,29 @@
     "health": 2,
     "rulesText": "Deathrattle: Add a random Lich King card to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"add-to-hand","player":"self","source":"random-card","pool":["knights_of_the_frozen_throne_death_coil","knights_of_the_frozen_throne_death_grip","knights_of_the_frozen_throne_obliterate","knights_of_the_frozen_throne_death_and_decay","knights_of_the_frozen_throne_anti_magic_shell","knights_of_the_frozen_throne_doom_pact","knights_of_the_frozen_throne_army_of_the_frozen_throne","knights_of_the_frozen_throne_frostmourne"],"count":1}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "pool": [
+              "knights_of_the_frozen_throne_death_coil",
+              "knights_of_the_frozen_throne_death_grip",
+              "knights_of_the_frozen_throne_obliterate",
+              "knights_of_the_frozen_throne_death_and_decay",
+              "knights_of_the_frozen_throne_anti_magic_shell",
+              "knights_of_the_frozen_throne_doom_pact",
+              "knights_of_the_frozen_throne_army_of_the_frozen_throne",
+              "knights_of_the_frozen_throne_frostmourne"
+            ],
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2847,7 +4372,22 @@
     "health": 4,
     "rulesText": "Battlecry: Freeze your other minions.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"freeze","target":{"controller":"self","type":"minion","selection":"all","exclude":"source"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2879,10 +4419,20 @@
     "attack": 1,
     "health": 7,
     "rulesText": "Divine Shield After a friendly minion loses Divine Shield, gain +2 Attack.",
-    "keywords": [
-      "divine-shield"
+    "keywords": ["divine-shield"],
+    "effects": [
+      {
+        "trigger": "on-divine-shield-lost",
+        "event": { "type": "divine-shield-lost", "controller": "self" },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": 2
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"on-divine-shield-lost","event":{"type":"divine-shield-lost","controller":"self"},"actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":2}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -2898,7 +4448,28 @@
     "health": 3,
     "rulesText": "Whenever one of your other minions dies, summon a 2/2 Ghoul.",
     "keywords": [],
-    "effects": [{"trigger":"on-death","event":{"type":"minion-died","controller":"self","target":{"controller":"self","type":"minion","selection":"event-target","exclude":"source"}},"actions":[{"action":"summon","cardId":"knights_of_the_frozen_throne_ghoul_2_2","count":1}]}],
+    "effects": [
+      {
+        "trigger": "on-death",
+        "event": {
+          "type": "minion-died",
+          "controller": "self",
+          "target": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "event-target",
+            "exclude": "source"
+          }
+        },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "knights_of_the_frozen_throne_ghoul_2_2",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2914,7 +4485,20 @@
     "health": 5,
     "rulesText": "Your end of turn effects trigger twice.",
     "keywords": [],
-    "effects": [{"trigger":"aura","actions":[{"action":"multiply-trigger","target":{"controller":"self","type":"minion","selection":"all"},"trigger":"end-of-turn","multiplier":2,"duration":"while-source-in-play"}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "multiply-trigger",
+            "target": { "controller": "self", "type": "minion", "selection": "all" },
+            "trigger": "end-of-turn",
+            "multiplier": 2,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2930,7 +4514,19 @@
     "health": 5,
     "rulesText": "Hero Powers are disabled.",
     "keywords": [],
-    "effects": [{"trigger":"aura","actions":[{"action":"modify-hero-power-uses","player":"each","heroPowerUsesPerTurn":0,"disabled":true}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "modify-hero-power-uses",
+            "player": "each",
+            "heroPowerUsesPerTurn": 0,
+            "disabled": true
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2946,7 +4542,23 @@
     "health": 1,
     "rulesText": "Battlecry: Destroy a friendly minion and gain +2/+2.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"destroy","target":{"controller":"self","type":"minion","selection":"chosen"}},{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":2,"health":2}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" }
+          },
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2962,7 +4574,19 @@
     "health": 1,
     "rulesText": "Battlecry: Gain +1/+1 for each minion that died this turn.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":{"reference":"minions-died-this-turn"},"health":{"reference":"minions-died-this-turn"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": { "reference": "minions-died-this-turn" },
+            "health": { "reference": "minions-died-this-turn" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2977,9 +4601,7 @@
     "attack": 4,
     "health": 4,
     "rulesText": "Lifesteal",
-    "keywords": [
-      "lifesteal"
-    ],
+    "keywords": ["lifesteal"],
     "effects": [],
     "collectible": true,
     "deckLegal": true
@@ -2996,7 +4618,19 @@
     "health": 5,
     "rulesText": "Combo: Deal 2 damage to a minion for each other card you've played this turn.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"combo-active"},"actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":{"reference":"cards-played-earlier-this-turn","multiplier":2}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": { "type": "combo-active" },
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": { "reference": "cards-played-earlier-this-turn", "multiplier": 2 }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3012,7 +4646,15 @@
     "health": 5,
     "rulesText": "Whenever you play a card, remove the top 3 cards of your deck.",
     "keywords": [],
-    "effects": [{"trigger":"on-card-played","event":{"type":"card-played","controller":"self"},"actions":[{"action":"discard","player":"self","source":"deck-top","count":3}]}],
+    "effects": [
+      {
+        "trigger": "on-card-played",
+        "event": { "type": "card-played", "controller": "self" },
+        "actions": [
+          { "action": "discard", "player": "self", "source": "deck-top", "count": 3 }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3028,7 +4670,64 @@
     "health": 3,
     "rulesText": "Battlecry: Gain Taunt if your deck has a Taunt minion. Repeat for Divine Shield, Lifesteal, Windfury.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"player-deck-has-minion","filter":{"type":"Minion","keyword":"taunt"}},"actions":[{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"source"},"keyword":"taunt"}]},{"trigger":"battlecry","condition":{"type":"player-deck-has-minion","filter":{"type":"Minion","keyword":"divine-shield"}},"actions":[{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"source"},"keyword":"divine-shield"}]},{"trigger":"battlecry","condition":{"type":"player-deck-has-minion","filter":{"type":"Minion","keyword":"lifesteal"}},"actions":[{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"source"},"keyword":"lifesteal"}]},{"trigger":"battlecry","condition":{"type":"player-deck-has-minion","filter":{"type":"Minion","keyword":"windfury"}},"actions":[{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"source"},"keyword":"windfury"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-deck-has-minion",
+          "filter": { "type": "Minion", "keyword": "taunt" }
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "keyword": "taunt"
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-deck-has-minion",
+          "filter": { "type": "Minion", "keyword": "divine-shield" }
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "keyword": "divine-shield"
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-deck-has-minion",
+          "filter": { "type": "Minion", "keyword": "lifesteal" }
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "keyword": "lifesteal"
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-deck-has-minion",
+          "filter": { "type": "Minion", "keyword": "windfury" }
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "keyword": "windfury"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3044,7 +4743,7 @@
     "health": 1,
     "spellDamage": 1,
     "rulesText": "Divine Shield Spell Damage +1",
-    "keywords": ["divine-shield","spell-damage"],
+    "keywords": ["divine-shield", "spell-damage"],
     "effects": [],
     "collectible": true,
     "deckLegal": true
@@ -3060,9 +4759,7 @@
     "attack": 1,
     "health": 2,
     "rulesText": "Poisonous",
-    "keywords": [
-      "poisonous"
-    ],
+    "keywords": ["poisonous"],
     "effects": [],
     "collectible": false,
     "deckLegal": false
@@ -3111,7 +4808,20 @@
     "health": 1,
     "rulesText": "",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"add-to-hand","player":"self","source":"random-card","count":1,"filter":{"type":"Minion","rarity":"Legendary"}}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "count": 1,
+            "filter": { "type": "Minion", "rarity": "Legendary" }
+          }
+        ]
+      }
+    ],
     "collectible": false,
     "deckLegal": false
   },
@@ -3158,9 +4868,7 @@
     "attack": 2,
     "health": 3,
     "rulesText": "Poisonous",
-    "keywords": [
-      "poisonous"
-    ],
+    "keywords": ["poisonous"],
     "effects": [],
     "collectible": false,
     "deckLegal": false
@@ -3176,9 +4884,7 @@
     "attack": 1,
     "health": 2,
     "rulesText": "Poisonous",
-    "keywords": [
-      "poisonous"
-    ],
+    "keywords": ["poisonous"],
     "effects": [],
     "collectible": false,
     "deckLegal": false
@@ -3194,9 +4900,7 @@
     "attack": 1,
     "health": 5,
     "rulesText": "Taunt",
-    "keywords": [
-      "taunt"
-    ],
+    "keywords": ["taunt"],
     "effects": [],
     "collectible": false,
     "deckLegal": false

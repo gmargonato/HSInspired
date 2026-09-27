@@ -64,7 +64,8 @@ export class PriestHealEffect extends Container {
       }
       const phase = (clock.elapsed / CONFIG.aura.period) * Math.PI * 2
       const rotation = (clock.elapsed / CONFIG.timing.cycle) * Math.PI * 2
-      const spotlightRotation = (clock.elapsed / CONFIG.timing.spotlightRotation) * Math.PI * 2
+      const spotlightRotation =
+        (clock.elapsed / CONFIG.timing.spotlightRotation) * Math.PI * 2
       const spotlightScale =
         (CONFIG.spotlight.diameter / CONFIG.sprite.size.width) *
         size *

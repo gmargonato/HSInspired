@@ -54,7 +54,11 @@ describe('premium generation through transforms', () => {
     expect(appearance.resolve({ instanceId: 'hand-premium', cardId: 'reno' })).toBe(
       true
     )
-    appearance.resolve({ instanceId: 'hand-normal', cardId: 'execute', ownerId: localId })
+    appearance.resolve({
+      instanceId: 'hand-normal',
+      cardId: 'execute',
+      ownerId: localId
+    })
     appearance.observe([
       effectEvent('transform-random', GOLDEN_MONKEY, {
         target: 'hand-premium',
@@ -245,9 +249,7 @@ describe('premium hero powers', () => {
       cardId: 'premium_justicar',
       ownerId: localId
     })
-    appearance.observe([
-      heroPowerReplaced(asCardId('premium_justicar'), 'justicar')
-    ])
+    appearance.observe([heroPowerReplaced(asCardId('premium_justicar'), 'justicar')])
     expect(appearance.heroPowerPremium(localId)).toBe(true)
 
     appearance.resolve({

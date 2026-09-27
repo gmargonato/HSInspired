@@ -161,11 +161,11 @@ export class DeckSelectionView extends Container {
     applyAnchoredPlacement(this.rankMedalSprite, DECK_SELECTION_LAYOUT.rankMedal)
     applyAnchoredPlacement(this.rankMedalNumber, DECK_SELECTION_LAYOUT.rankMedal)
     if (rank.tier === 'legend') {
-	  this.rankMedalSprite.y += LEGEND_MEDAL_Y_OFFSET
-	  this.rankMedalNumber.y += LEGEND_MEDAL_Y_OFFSET
-	} else {
-	  this.rankMedalSprite.y += 10
-	}
+      this.rankMedalSprite.y += LEGEND_MEDAL_Y_OFFSET
+      this.rankMedalNumber.y += LEGEND_MEDAL_Y_OFFSET
+    } else {
+      this.rankMedalSprite.y += 10
+    }
   }
 
   private refreshRankMedalNumber(rank: ConstructedRankSnapshot): void {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_CATALOG, asCardId } from '../../content/cards'
-import { zombeastId, zombeastPool, zombeastPoolCards } from '../../content/cards/zombeast'
+import {
+  zombeastId,
+  zombeastPool,
+  zombeastPoolCards
+} from '../../content/cards/zombeast'
 import {
   createOpeningMatchFromCheckpoint,
   type OpeningMatchInstance
@@ -657,13 +661,11 @@ describe('One Night in Karazhan, Whispers of the Old Gods, and Mean Streets effe
     expect(
       result.events.filter(
         (event) =>
-          event.type === 'trigger-activated' &&
-          event.trigger === 'while-in-deck'
+          event.type === 'trigger-activated' && event.trigger === 'while-in-deck'
       )
     ).toHaveLength(0)
     const patchesOnBoard = player(scenario, participantId).board.filter(
-      (minion) =>
-        minion.cardId === 'mean_streets_of_gadgetzan_patches_the_pirate'
+      (minion) => minion.cardId === 'mean_streets_of_gadgetzan_patches_the_pirate'
     )
     expect(patchesOnBoard).toHaveLength(1)
     expect(player(scenario, participantId).board).toHaveLength(2)

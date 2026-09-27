@@ -71,23 +71,22 @@ function playEliseAndCollectPack(scenario: Scenario, participantId: string) {
   play(scenario, participantId, ELISE_ID)
   const handAfter = player(scenario, participantId).hand
   const pack = handAfter.filter(
-    (card) =>
-      !handBefore.some(
-        (before) => before.instanceId === card.instanceId
-      )
+    (card) => !handBefore.some((before) => before.instanceId === card.instanceId)
   )
   return { pack, handBeforeCount: handBefore.length, handAfterCount: handAfter.length }
 }
 
-describe('Elise the Trailblazer Un\'Goro pack', () => {
-  it('adds exactly 5 distinct Un\'Goro cards with one guaranteed Legendary', () => {
+describe("Elise the Trailblazer Un'Goro pack", () => {
+  it("adds exactly 5 distinct Un'Goro cards with one guaranteed Legendary", () => {
     const scenario = ready({ seed: 7311 })
     const [own] = activePlayers(scenario)
     addCard(scenario, own, ELISE_ID)
     setMana(scenario, own)
 
-    const { pack, handBeforeCount, handAfterCount } =
-      playEliseAndCollectPack(scenario, own)
+    const { pack, handBeforeCount, handAfterCount } = playEliseAndCollectPack(
+      scenario,
+      own
+    )
 
     expect(handAfterCount).toBe(handBeforeCount + 5)
     expect(pack).toHaveLength(5)
@@ -105,9 +104,7 @@ describe('Elise the Trailblazer Un\'Goro pack', () => {
       (definition) => definition.rarity === 'Legendary'
     )
     expect(legendaries.length).toBeGreaterThanOrEqual(1)
-    const others = definitions.filter(
-      (definition) => definition !== legendaries[0]
-    )
+    const others = definitions.filter((definition) => definition !== legendaries[0])
     expect(others).toHaveLength(4)
     for (const definition of others)
       expect(['Rare', 'Epic', 'Legendary']).toContain(definition.rarity)

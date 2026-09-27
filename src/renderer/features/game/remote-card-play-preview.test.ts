@@ -37,7 +37,13 @@ describe('automatic spell preview', () => {
           done = true
         })
       for (let tick = 0; tick < 6; tick++) await Promise.resolve()
-      expect(create).toHaveBeenCalledWith(definition, undefined, side === 'remote')
+      expect(create).toHaveBeenCalledWith(
+        definition,
+        undefined,
+        side === 'remote',
+        false,
+        side
+      )
       const origin =
         side === 'local'
           ? MATCH_HISTORY_LAYOUT.remoteCardPlay.localOrigin

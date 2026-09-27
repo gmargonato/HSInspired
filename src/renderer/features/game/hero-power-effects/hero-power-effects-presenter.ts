@@ -63,10 +63,7 @@ const EFFECTS = new Map<string, EffectFactory>([
   [
     'warlock-life-tap',
     (assets, animations) =>
-      new WarlockLifeTapEffect(
-        { swirl: assets.heroPowerAura4 },
-        animations
-      )
+      new WarlockLifeTapEffect({ swirl: assets.heroPowerAura4 }, animations)
   ]
 ])
 

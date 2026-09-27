@@ -1,6 +1,10 @@
 import { CARD_CATALOG } from '../../../game/content/cards'
 import type { CardDefinition } from '../../../game/content/cards'
-import type { CardAction, CardEffectBlock, CardTrigger } from '../../../game/content/cards'
+import type {
+  CardAction,
+  CardEffectBlock,
+  CardTrigger
+} from '../../../game/content/cards'
 
 const GENERATED_PREVIEW_TRIGGERS: ReadonlySet<CardTrigger> = new Set([
   'deathrattle',
@@ -38,7 +42,9 @@ export function resolveGeneratedPreviewCardId(card: CardDefinition): string | nu
 }
 
 /** Resolved generated-card preview definition, or null when none applies. */
-export function resolveGeneratedPreviewCard(card: CardDefinition): CardDefinition | null {
+export function resolveGeneratedPreviewCard(
+  card: CardDefinition
+): CardDefinition | null {
   const id = resolveGeneratedPreviewCardId(card)
   return id ? CARD_CATALOG.require(id) : null
 }

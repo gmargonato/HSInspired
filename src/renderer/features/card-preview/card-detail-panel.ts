@@ -84,11 +84,18 @@ export function cardDetailRows(card: CardDefinition): readonly CardDetailRow[] {
     { label: 'Rarity', value: card.rarity }
   ]
 
-  const tribes = [...new Set([...(card.tribes ?? []), card.subtype].filter(
-    (tribe): tribe is string => Boolean(tribe)
-  ))]
+  const tribes = [
+    ...new Set(
+      [...(card.tribes ?? []), card.subtype].filter((tribe): tribe is string =>
+        Boolean(tribe)
+      )
+    )
+  ]
   if (tribes.length > 0)
-    rows.push({ label: tribes.length === 1 ? 'Tribe' : 'Tribes', value: tribes.join(', ') })
+    rows.push({
+      label: tribes.length === 1 ? 'Tribe' : 'Tribes',
+      value: tribes.join(', ')
+    })
   if (card.spellSchool) rows.push({ label: 'School', value: card.spellSchool })
   if ((card.type === 'Minion' || card.type === 'Weapon') && card.attack !== null) {
     rows.push({ label: 'Attack', value: String(card.attack) })

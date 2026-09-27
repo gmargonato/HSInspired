@@ -142,10 +142,7 @@ export class MatchPremiumAppearance {
           )
         }
       }
-      if (
-        event.type === 'hero-power-replaced' ||
-        event.type === 'hero-replaced'
-      ) {
+      if (event.type === 'hero-power-replaced' || event.type === 'hero-replaced') {
         // A hero card's battlecry (e.g. Lord Jaraxxus) also installs its power.
         const sourcePremium = event.sourceInstanceId
           ? this.instances.get(event.sourceInstanceId)?.premium === true

@@ -30,7 +30,11 @@ export type HeroPowerEffect =
       readonly amount: number
     }
   | { readonly kind: 'gain-armor'; readonly amount: number }
-  | { readonly kind: 'buff-friendly-beast'; readonly attack: number; readonly health: number }
+  | {
+      readonly kind: 'buff-friendly-beast'
+      readonly attack: number
+      readonly health: number
+    }
   | { readonly kind: 'build-a-beast' }
   | { readonly kind: 'copy-last-card-this-turn' }
   | {
@@ -376,7 +380,7 @@ const HERO_POWER_DATA = [
     'Priest',
     "Obelisk's Eye",
     2,
-    "Restore 3 Health. If you target a minion, also give it +3/+3.",
+    'Restore 3 Health. If you target a minion, also give it +3/+3.',
     'hero-power-obelisks-eye',
     'any-character',
     { kind: 'restore-and-buff-minion', amount: 3 }

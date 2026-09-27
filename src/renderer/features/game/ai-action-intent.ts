@@ -1,8 +1,5 @@
 import type { TurnMatchCommand } from '../../../game/match'
-import {
-  sameAiIntent,
-  type AiActionIntent
-} from '../../../shared/ipc/ai-deliberation'
+import { sameAiIntent, type AiActionIntent } from '../../../shared/ipc/ai-deliberation'
 
 /** Explicit references disambiguate hero targets; no command is reconstructed from model prose. */
 export function aiActionIntent(
@@ -73,10 +70,7 @@ export type AiCommitIntentValidation =
       readonly returned: AiActionIntent
     }
 
-function sameIntentExceptPosition(
-  a: AiActionIntent,
-  b: AiActionIntent
-): boolean {
+function sameIntentExceptPosition(a: AiActionIntent, b: AiActionIntent): boolean {
   return (
     a.type === b.type &&
     a.source === b.source &&
@@ -99,7 +93,8 @@ export function validateAiCommitIntent(
   returned: AiActionIntent,
   command: TurnMatchCommand,
   opponentId: string
-): AiCommitIntentValidation {  const expected = aiActionIntent(command, opponentId)
+): AiCommitIntentValidation {
+  const expected = aiActionIntent(command, opponentId)
   if (sameAiIntent(returned, expected)) {
     return { ok: true, intent: expected, normalized: false }
   }

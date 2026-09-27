@@ -120,9 +120,7 @@
     "cardClass": "Hunter",
     "type": "Minion",
     "subtype": "Beast",
-    "tribes": [
-      "Elemental"
-    ],
+    "tribes": ["Elemental"],
     "cost": 4,
     "attack": 4,
     "health": 4,

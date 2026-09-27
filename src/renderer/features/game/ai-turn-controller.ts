@@ -1028,7 +1028,10 @@ export class AiTurnController {
           actionId = action.id
           source = 'model'
           reason = response.reason
-          expectedResult = response.choice.expectedResult
+          expectedResult =
+            'expectedResult' in response.choice
+              ? response.choice.expectedResult
+              : undefined
           break
         }
       } catch (error) {

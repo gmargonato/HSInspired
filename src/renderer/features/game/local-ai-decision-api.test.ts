@@ -214,9 +214,10 @@ describe('hardware local AI', () => {
     const nonlethalCoin = nonlethalMinion
       .findPlayer(nonlethalBefore, nonlethalParticipantId)
       .hand.find((card) => card.cardId === 'basic_the_coin')
-    const nonlethalTarget = nonlethalMinion
-      .findPlayer(nonlethalBefore, nonlethalMinion.localParticipantId)
-      .board[0]
+    const nonlethalTarget = nonlethalMinion.findPlayer(
+      nonlethalBefore,
+      nonlethalMinion.localParticipantId
+    ).board[0]
     if (!nonlethalCoin || !nonlethalTarget)
       throw new Error('Expected The Coin and a durable enemy minion.')
     const nonlethalLine: TurnMatchCommand[] = [
@@ -253,8 +254,7 @@ describe('hardware local AI', () => {
     const priestCoin = priest
       .findPlayer(priestBefore, priestParticipantId)
       .hand.find((card) => card.cardId === 'basic_the_coin')
-    const priestTarget = priest
-      .findPlayer(priestBefore, priest.localParticipantId)
+    const priestTarget = priest.findPlayer(priestBefore, priest.localParticipantId)
       .board[0]
     if (!priestCoin || !priestTarget)
       throw new Error('Expected The Coin and an enemy target for Priest.')
@@ -478,8 +478,7 @@ describe('hardware local AI', () => {
           description: candidate.description,
           meanValue: candidate.meanValue,
           prior: candidate.prior,
-          continuationPreference:
-            candidate.scoreComponents.continuationPreference
+          continuationPreference: candidate.scoreComponents.continuationPreference
         }))
       )
     ).toBe(preferredAction.id)

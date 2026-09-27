@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { aiActionIntent, validateAiCommitIntent } from './ai-action-intent'
-import type { TurnMatchCommand } from '../../../game/match'
+import { asPlayerId, type TurnMatchCommand } from '../../../game/match'
 
 const opponentId = 'human-player'
 
 describe('validateAiCommitIntent', () => {
   const playAtZero: TurnMatchCommand = {
     type: 'play-card',
-    participantId: 'ai-player',
+    participantId: asPlayerId('ai-player'),
     cardInstanceId: 'ai-player:deck:18',
     position: 0
   }
@@ -36,7 +36,7 @@ describe('validateAiCommitIntent', () => {
   it('accepts extra targets on an untargeted hero power', () => {
     const heroPower: TurnMatchCommand = {
       type: 'use-hero-power',
-      participantId: 'ai-player'
+      participantId: asPlayerId('ai-player')
     }
     const resolved = aiActionIntent(heroPower, opponentId)
     expect(
@@ -54,11 +54,15 @@ describe('validateAiCommitIntent', () => {
   it('accepts extra and unsorted targets when type, source and option match', () => {
     const targeted: TurnMatchCommand = {
       type: 'play-card',
-      participantId: 'ai-player',
+      participantId: asPlayerId('ai-player'),
       cardInstanceId: 'ai-player:deck:28',
       position: 0,
       targets: [
-        { kind: 'minion', participantId: 'human-player', instanceId: 'human-player:deck:8' }
+        {
+          kind: 'minion',
+          participantId: asPlayerId('human-player'),
+          instanceId: 'human-player:deck:8'
+        }
       ]
     }
     const resolved = aiActionIntent(targeted, opponentId)
@@ -78,10 +82,10 @@ describe('validateAiCommitIntent', () => {
   it('rejects a play with the wrong source even when targets match', () => {
     const targeted: TurnMatchCommand = {
       type: 'play-card',
-      participantId: 'ai-player',
+      participantId: asPlayerId('ai-player'),
       cardInstanceId: 'ai-player:deck:28',
       position: 0,
-      targets: [{ kind: 'hero', participantId: 'human-player' }]
+      targets: [{ kind: 'hero', participantId: asPlayerId('human-player') }]
     }
     const resolved = aiActionIntent(targeted, opponentId)
     expect(
@@ -96,7 +100,7 @@ describe('validateAiCommitIntent', () => {
   it('rejects a target mismatch on an attack', () => {
     const attack: TurnMatchCommand = {
       type: 'attack-character',
-      participantId: 'ai-player',
+      participantId: asPlayerId('ai-player'),
       attacker: { kind: 'minion', instanceId: 'ai-player:deck:10' },
       defender: { kind: 'minion', instanceId: 'human-player:deck:8' }
     }
@@ -111,7 +115,15 @@ describe('validateAiCommitIntent', () => {
   })
 
   it.each([
-    ['extra replace ref', ['ai-player:deck:20', 'ai-player:deck:27', 'ai-player:deck:8', 'ai-player:deck:23']],
+    [
+      'extra replace ref',
+      [
+        'ai-player:deck:20',
+        'ai-player:deck:27',
+        'ai-player:deck:8',
+        'ai-player:deck:23'
+      ]
+    ],
     ['wrong order', ['ai-player:deck:27', 'ai-player:deck:20', 'ai-player:deck:8']],
     ['missing ref', ['ai-player:deck:20']]
   ])(
@@ -119,8 +131,12 @@ describe('validateAiCommitIntent', () => {
     (_label, targets) => {
       const mulligan: TurnMatchCommand = {
         type: 'confirm-mulligan',
-        participantId: 'ai-player',
-        replaceInstanceIds: ['ai-player:deck:20', 'ai-player:deck:27', 'ai-player:deck:8']
+        participantId: asPlayerId('ai-player'),
+        replaceInstanceIds: [
+          'ai-player:deck:20',
+          'ai-player:deck:27',
+          'ai-player:deck:8'
+        ]
       }
       const resolved = aiActionIntent(mulligan, opponentId)
       expect(
@@ -132,10 +148,10 @@ describe('validateAiCommitIntent', () => {
   it('rejects a missing target on a targeted play', () => {
     const targeted: TurnMatchCommand = {
       type: 'play-card',
-      participantId: 'ai-player',
+      participantId: asPlayerId('ai-player'),
       cardInstanceId: 'ai-player:deck:28',
       position: 0,
-      targets: [{ kind: 'hero', participantId: 'human-player' }]
+      targets: [{ kind: 'hero', participantId: asPlayerId('human-player') }]
     }
     const resolved = aiActionIntent(targeted, opponentId)
     expect(

@@ -113,7 +113,9 @@ describe('fair Expert AI checkpoints', () => {
     const hiddenPlayer = liveCheckpoint.state.players.find(
       (player) => player.participantId === fixture.aiParticipantId
     )!
-    expect(hiddenPlayer.hand.some((card) => card.cardId === 'basic_the_coin')).toBe(true)
+    expect(hiddenPlayer.hand.some((card) => card.cardId === 'basic_the_coin')).toBe(
+      true
+    )
 
     const firstWorld = createFairHypothesisCheckpoint(
       liveCheckpoint,

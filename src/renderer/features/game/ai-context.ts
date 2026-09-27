@@ -160,7 +160,7 @@ export function aiMulliganModelState(session: GameBoardSession): JsonObject {
       }))
     },
     opponent: { handSize: opponent.handSize }
-  })
+  }) as JsonObject
 }
 
 export function aiSystemContext(session: GameBoardSession): AiMessage {

@@ -1,3 +1,4 @@
+import { cardHasTribe } from '../content/cards/card-definition'
 import { describe, expect, it } from 'vitest'
 import { selectAiHeroPowerBonus } from './ai-bonuses'
 import { createMatchScenario } from './testing/match-scenario-builder'
@@ -498,7 +499,7 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     expect(
       deck
         .filter((entry) => !entry.startedInDeck)
-        .every((entry) => CARD_CATALOG.require(entry.cardId).subtype === 'Beast')
+        .every((entry) => cardHasTribe(CARD_CATALOG.require(entry.cardId), 'Beast'))
     ).toBe(true)
     expect(
       deck
@@ -610,9 +611,9 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     expect(
       deck.every((entry) => CARD_CATALOG.require(entry.cardId).subtype === 'Demon')
     ).toBe(true)
-    expect(
-      deck.every((entry) => CARD_CATALOG.require(entry.cardId).collectible)
-    ).toBe(true)
+    expect(deck.every((entry) => CARD_CATALOG.require(entry.cardId).collectible)).toBe(
+      true
+    )
     expect(
       deck.every((entry) => entry.scalingCounter === 'nether-portal-draw-buff')
     ).toBe(true)
@@ -636,7 +637,13 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     expect(second.handCard.health).toBe(second.definition.health + 2)
     expect(findPlayer().counters?.['nether-portal-draw-buff']).toBe(3)
 
-    accept(match.dispatch({ type: 'dev-add-card', participantId: activeId, cardId: 'journey_to_ungoro_nether_portal' }))
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: activeId,
+        cardId: 'journey_to_ungoro_nether_portal'
+      })
+    )
     accept(
       match.dispatch({
         type: 'dev-set-mana',
@@ -694,7 +701,11 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     const { match, activeId, card } = readyCard(cardId)
     for (const id of [targetCardId, targetCardId, 'basic_boulderfist_ogre'])
       accept(
-        match.dispatch({ type: 'dev-summon-minion', participantId: activeId, cardId: id })
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: activeId,
+          cardId: id
+        })
       )
     const board = () =>
       match.getState().players.find((p) => p.participantId === activeId)!.board
@@ -714,7 +725,9 @@ describe("Un'Goro and Frozen Throne rewards", () => {
       remaining: 1
     })
     expect(pending.queued ?? []).toHaveLength(0)
-    expect(result.events.filter((e) => e.type === 'card-choice-started')).toHaveLength(1)
+    expect(result.events.filter((e) => e.type === 'card-choice-started')).toHaveLength(
+      1
+    )
     const checkpoint = match.getCheckpoint()
     const choose = (choice: number) => {
       const branch = createOpeningMatchFromCheckpoint(checkpoint)
@@ -822,7 +835,9 @@ describe("Un'Goro and Frozen Throne rewards", () => {
       })
     )
     const choice = match.getState().pendingCardChoice!
-    expect(choice.resolution).toMatchObject({ targetInstanceIds: [before[1].instanceId] })
+    expect(choice.resolution).toMatchObject({
+      targetInstanceIds: [before[1].instanceId]
+    })
     accept(
       match.dispatch({
         type: 'choose-card-option',
@@ -964,8 +979,9 @@ describe("Un'Goro and Frozen Throne rewards", () => {
         ) as [OpeningPlayerState, OpeningPlayerState]
       }
     })
-    const attacker = branch.getState().players.find((p) => p.participantId === activeId)!
-      .board[0]
+    const attacker = branch
+      .getState()
+      .players.find((p) => p.participantId === activeId)!.board[0]
     const result = accept(
       branch.dispatch({
         type: 'attack-character',
@@ -1013,7 +1029,11 @@ describe("Un'Goro and Frozen Throne rewards", () => {
             {
               ...pending,
               sourceCardInstanceId: targets[1],
-              resolution: { type: 'adapt', targetInstanceIds: [targets[1]], remaining: 1 }
+              resolution: {
+                type: 'adapt',
+                targetInstanceIds: [targets[1]],
+                remaining: 1
+              }
             }
           ]
         }
@@ -1553,7 +1573,9 @@ describe('AI startup bonuses', () => {
         replaceInstanceIds: []
       })
     )
-    const before = match.getState().players.find((p) => p.participantId === OPPONENT_ID)!
+    const before = match
+      .getState()
+      .players.find((p) => p.participantId === OPPONENT_ID)!
 
     for (let turn = 0; turn < 6; turn++) {
       const activePlayerId = match.getState().activePlayerId!

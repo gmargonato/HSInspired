@@ -1438,9 +1438,7 @@ async function runBenchmark(options: BenchmarkOptions) {
     let capped = false
     let expertPlannedTurn: number | null = null
     const gameInvalidSelectionDiagnostics: InvalidSelectionDiagnostic[] = []
-    const recordInvalidSelection = (
-      diagnostic: InvalidSelectionDiagnostic
-    ): void => {
+    const recordInvalidSelection = (diagnostic: InvalidSelectionDiagnostic): void => {
       invalidSelectionDiagnostics.push(diagnostic)
       gameInvalidSelectionDiagnostics.push(diagnostic)
       process.stderr.write(
@@ -1518,11 +1516,34 @@ async function runBenchmark(options: BenchmarkOptions) {
           participantId: player.participantId,
           replaceInstanceIds: []
         }
-      if (!outcome.command) {
-        profileMetrics[profile].fallbacks++
-        if (outcome.timedOut) profileMetrics[profile].timeoutFallbacks++
-        else if (outcome.failed) profileMetrics[profile].failedFallbacks++
-        else {
+        if (!outcome.command) {
+          profileMetrics[profile].fallbacks++
+          if (outcome.timedOut) profileMetrics[profile].timeoutFallbacks++
+          else if (outcome.failed) profileMetrics[profile].failedFallbacks++
+          else {
+            profileMetrics[profile].invalidSelections++
+            recordInvalidSelection({
+              gameIndex,
+              seed,
+              profile,
+              phase: 'mulligan',
+              turnNumber: state.turnNumber,
+              revision: state.revision,
+              participantId: player.participantId,
+              source: 'no-command',
+              actionSource: outcome.actionSource ?? null,
+              fallbackKind: outcome.fallbackKind ?? 'invalid',
+              selectedActionId: outcome.selectedActionId ?? null,
+              selectedDescription: outcome.selectedDescription ?? null,
+              failureMessage: outcome.failureMessage ?? null,
+              attemptedCommand: null
+            })
+          }
+        }
+        let result = liveSession.match.dispatch(command)
+        if (!result.accepted) {
+          profileMetrics[profile].rejectedCommands++
+          profileMetrics[profile].fallbacks++
           profileMetrics[profile].invalidSelections++
           recordInvalidSelection({
             gameIndex,
@@ -1532,40 +1553,17 @@ async function runBenchmark(options: BenchmarkOptions) {
             turnNumber: state.turnNumber,
             revision: state.revision,
             participantId: player.participantId,
-            source: 'no-command',
+            source: 'rejected-command',
             actionSource: outcome.actionSource ?? null,
-            fallbackKind: outcome.fallbackKind ?? 'invalid',
+            fallbackKind: outcome.fallbackKind ?? null,
             selectedActionId: outcome.selectedActionId ?? null,
             selectedDescription: outcome.selectedDescription ?? null,
             failureMessage: outcome.failureMessage ?? null,
-            attemptedCommand: null
+            attemptedCommand: command,
+            rejectionCode: result.code,
+            rejectionMessage: result.message
           })
-        }
-      }
-      let result = liveSession.match.dispatch(command)
-      if (!result.accepted) {
-        profileMetrics[profile].rejectedCommands++
-        profileMetrics[profile].fallbacks++
-        profileMetrics[profile].invalidSelections++
-        recordInvalidSelection({
-          gameIndex,
-          seed,
-          profile,
-          phase: 'mulligan',
-          turnNumber: state.turnNumber,
-          revision: state.revision,
-          participantId: player.participantId,
-          source: 'rejected-command',
-          actionSource: outcome.actionSource ?? null,
-          fallbackKind: outcome.fallbackKind ?? null,
-          selectedActionId: outcome.selectedActionId ?? null,
-          selectedDescription: outcome.selectedDescription ?? null,
-          failureMessage: outcome.failureMessage ?? null,
-          attemptedCommand: command,
-          rejectionCode: result.code,
-          rejectionMessage: result.message
-        })
-        result = liveSession.match.dispatch({
+          result = liveSession.match.dispatch({
             type: 'confirm-mulligan',
             participantId: player.participantId,
             replaceInstanceIds: []

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  InformationSetMcts,
-  mctsRootRecommendationScore
-} from './information-set-mcts'
+import { InformationSetMcts, mctsRootRecommendationScore } from './information-set-mcts'
 
 describe('information-set Monte Carlo tree search', () => {
   it('expands alternatives and backs up root-perspective outcomes', () => {

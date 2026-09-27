@@ -1653,10 +1653,7 @@ export function createOpeningMatch(
           const drawn = drawCards(player, 1)
           const handCard = drawn.cards[0]
           if (handCard?.scalingCounter) {
-            counters = applyDrawScalingBuff(
-              handCard as unknown as DraftCard,
-              counters
-            )
+            counters = applyDrawScalingBuff(handCard as unknown as DraftCard, counters)
             drawnCard = { ...handCard }
           }
           nextPlayer = { ...drawn.player, counters }

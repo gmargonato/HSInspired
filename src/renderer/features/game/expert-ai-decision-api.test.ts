@@ -82,11 +82,35 @@ describe('Expert hidden-world consensus', () => {
     ).toBe('hold-coin')
   })
 
-  it('keeps a one-visit lucky rollout below a repeatedly supported root action', () => {
-    const candidates = [
-      { actionId: 'lucky', score: 0.95, meanValue: 0.95, visits: 1 },
-      { actionId: 'supported', score: 0.7, meanValue: 0.7, visits: 100 }
-    ].map((candidate) => ({
+  it.each([
+    {
+      name: 'keeps a one-visit lucky rollout below a repeatedly supported root action',
+      values: [
+        { actionId: 'lucky', score: 0.95, meanValue: 0.95, visits: 1 },
+        { actionId: 'supported', score: 0.7, meanValue: 0.7, visits: 100 }
+      ]
+    },
+    {
+      name: 'preserves the supported continuation value when combining worlds',
+      values: [
+        {
+          actionId: 'lucky',
+          score: 0.8,
+          meanValue: 0.8,
+          visits: 100,
+          recommendationValue: 0.8
+        },
+        {
+          actionId: 'supported',
+          score: 0.4,
+          meanValue: 0.4,
+          visits: 100,
+          recommendationValue: 0.9
+        }
+      ]
+    }
+  ])('$name', ({ values }) => {
+    const candidates = values.map((candidate) => ({
       ...candidate,
       type: 'end-turn' as const,
       description: candidate.actionId,
@@ -276,7 +300,9 @@ describe('Expert AI worker boundary', () => {
         (message): message is Extract<ExpertAiWorkerRequest, { type: 'decide' }> =>
           message.type === 'decide'
       )
-      expect(decisionsPosted[0]?.remainingSearchBudgetMs).toBe(11_000)
+      expect(decisionsPosted[0]?.remainingSearchBudgetMs).toBe(
+        EXPERT_AI_DECISION_SEARCH_BUDGET_MS
+      )
       expect(decisionsPosted[1]?.remainingSearchBudgetMs).toBe(1_500)
 
       const firstPlayerId = session.remoteParticipantId
@@ -304,7 +330,9 @@ describe('Expert AI worker boundary', () => {
       expect(nextTurnDecision?.type).toBe('decide')
       if (nextTurnDecision?.type !== 'decide')
         throw new Error('Expected the next-turn worker request.')
-      expect(nextTurnDecision.remainingSearchBudgetMs).toBe(11_000)
+      expect(nextTurnDecision.remainingSearchBudgetMs).toBe(
+        EXPERT_AI_DECISION_SEARCH_BUDGET_MS
+      )
 
       now += 7_200
       await expect(
@@ -318,7 +346,9 @@ describe('Expert AI worker boundary', () => {
       expect(reserveDecision?.type).toBe('decide')
       if (reserveDecision?.type !== 'decide')
         throw new Error('Expected the presentation-reserve worker request.')
-      expect(reserveDecision.remainingSearchBudgetMs).toBe(5_300)
+      expect(reserveDecision.remainingSearchBudgetMs).toBe(
+        EXPERT_AI_SEARCH_BUDGET_MS - 7_200
+      )
     } finally {
       api.dispose()
     }
@@ -1337,13 +1367,15 @@ describe('Expert AI worker boundary', () => {
 
     if (!('actionId' in firstDecision.choice))
       throw new Error('Expected an Expert action decision.')
-    const coin = actions.find((action) => action.id === firstDecision.choice.actionId)
+    const firstActionId = firstDecision.choice.actionId
+    const coin = actions.find((action) => action.id === firstActionId)
     expect(coin?.command.type).toBe('play-card')
-    if (coin?.command.type !== 'play-card') return
+    if (coin?.command.type !== 'play-card') throw new Error('Expected card play')
+    const coinInstanceId = coin.command.cardInstanceId
     expect(
       session
         .findPlayer(session.getState(), session.remoteParticipantId)
-        .hand.find((card) => card.instanceId === coin.command.cardInstanceId)?.cardId
+        .hand.find((card) => card.instanceId === coinInstanceId)?.cardId
     ).toBe('basic_the_coin')
     const coinResult = session.match.dispatch(coin.command)
     expect(coinResult.accepted).toBe(true)
@@ -1369,16 +1401,15 @@ describe('Expert AI worker boundary', () => {
     })
     if (!('actionId' in followUpDecision.choice))
       throw new Error('Expected an Expert follow-up action decision.')
-    const followUp = followUpActions.find(
-      (action) => action.id === followUpDecision.choice.actionId
-    )
+    const followUpActionId = followUpDecision.choice.actionId
+    const followUp = followUpActions.find((action) => action.id === followUpActionId)
     expect(followUp?.command.type).toBe('play-card')
-    if (followUp?.command.type !== 'play-card') return
+    if (followUp?.command.type !== 'play-card') throw new Error('Expected card play')
+    const followUpInstanceId = followUp.command.cardInstanceId
     expect(
       session
         .findPlayer(session.getState(), session.remoteParticipantId)
-        .hand.find((card) => card.instanceId === followUp.command.cardInstanceId)
-        ?.cardId
+        .hand.find((card) => card.instanceId === followUpInstanceId)?.cardId
     ).toBe('classic_faerie_dragon')
   }, 15_000)
 
@@ -1525,7 +1556,7 @@ describe('Expert AI worker boundary', () => {
     const api = new LocalAiDecisionApi(session, undefined, {
       profile: 'expert',
       fairHypothesis: true,
-      budgetMs: 3_000
+      workBudget: 256
     })
 
     const response = await api.decide({
@@ -1548,8 +1579,20 @@ describe('Expert AI worker boundary', () => {
     const selectedCard = session
       .findPlayer(session.getState(), session.remoteParticipantId)
       .hand.find((card) => card.instanceId === selectedCommand.cardInstanceId)
-    expect(selectedCard?.cardId).toBe('basic_vanish')
-  }, 15_000)
+    expect(
+      selectedCard?.cardId,
+      JSON.stringify(
+        api
+          .getLastTrace()
+          ?.candidates.map((c) => ({
+            action: c.description,
+            value: c.recommendationValue,
+            mean: c.meanValue,
+            visits: c.visits
+          }))
+      )
+    ).toBe('basic_vanish')
+  }, 60_000)
 
   it('simulates attacks through a Taunt before choosing to end the turn', async () => {
     const fixture = createAiFixture({

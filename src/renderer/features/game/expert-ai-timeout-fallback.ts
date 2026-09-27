@@ -528,7 +528,8 @@ export function selectExpertTimeoutFallbackAction(
     facingLethal,
     enemyHealth,
     coinPlayedThisTurn:
-      session.getState().history?.cardsPlayedThisTurn.includes('basic_the_coin') === true
+      session.getState().history?.cardsPlayedThisTurn.includes('basic_the_coin') ===
+      true
   }
   let best: LocalAction | undefined
   let bestScore = 0

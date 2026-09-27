@@ -134,7 +134,11 @@ export interface AiFixtureOptions {
   readonly opponentHeroPowerId?: string
   readonly aiHeroPowerUsesThisTurn?: number
   readonly opponentHeroPowerUsesThisTurn?: number
-  readonly aiCthun?: { readonly attack: number; readonly health: number; readonly taunt?: boolean }
+  readonly aiCthun?: {
+    readonly attack: number
+    readonly health: number
+    readonly taunt?: boolean
+  }
   readonly opponentCthun?: {
     readonly attack: number
     readonly health: number
@@ -175,14 +179,8 @@ function countCards(cards: readonly string[]): Readonly<Record<string, number>> 
   return counts
 }
 
-function fixtureDeck(
-  id: string,
-  heroId: string,
-  cards: readonly string[]
-): Deck {
-  const normalized = [
-    ...(cards.length > 0 ? cards : ['basic_acidic_swamp_ooze'])
-  ]
+function fixtureDeck(id: string, heroId: string, cards: readonly string[]): Deck {
+  const normalized = [...(cards.length > 0 ? cards : ['basic_acidic_swamp_ooze'])]
   while (normalized.length < 30) normalized.push('basic_acidic_swamp_ooze')
   if (normalized.length > 30) normalized.length = 30
   return {
@@ -209,9 +207,12 @@ function makeCard(
     ownerId: participantId,
     controllerId: participantId,
     creationOrdinal: ordinal,
-    baseCost: typeof input === 'string' ? definition.cost : input.baseCost ?? definition.cost,
+    baseCost:
+      typeof input === 'string' ? definition.cost : (input.baseCost ?? definition.cost),
     currentCost:
-      typeof input === 'string' ? definition.cost : input.currentCost ?? definition.cost,
+      typeof input === 'string'
+        ? definition.cost
+        : (input.currentCost ?? definition.cost),
     zone,
     revealed: zone === 'hand' || zone === 'revealed',
     startedInDeck: zone === 'deck',
@@ -262,17 +263,18 @@ function makeMinion(
     enchantments: input.enchantments ?? [],
     grantedTriggers: [],
     attachedEffects: [],
-    deathrattles: definition.effects.filter((effect) => effect.trigger === 'deathrattle'),
+    deathrattles: definition.effects.filter(
+      (effect) => effect.trigger === 'deathrattle'
+    ),
     silenced: false,
-    frozenUntilTurn:
-      input.frozenUntilTurn ?? (input.frozen ? turnNumber : null),
-    divineShield:
-      input.divineShield ?? definition.keywords.includes('divine-shield'),
-    divineShieldConsumed: input.divineShieldConsumed ?? false,
+    frozenUntilTurn: input.frozenUntilTurn ?? (input.frozen ? turnNumber : null),
+    divineShield: input.divineShield ?? definition.keywords.includes('divine-shield'),
+    divineShieldConsumed:
+      input.divineShieldConsumed ??
+      (input.divineShield === false && definition.keywords.includes('divine-shield')),
     stealth: input.stealth ?? definition.keywords.includes('stealth'),
     immune: input.immune ?? definition.keywords.includes('immune'),
-    spellImmune:
-      input.spellImmune ?? definition.keywords.includes('spell-immune'),
+    spellImmune: input.spellImmune ?? definition.keywords.includes('spell-immune'),
     attacksUsedThisTurn: input.attacksUsedThisTurn ?? 0,
     maxAttacksPerTurn,
     damageTaken: Math.max(0, maxHealth - health)
@@ -441,8 +443,12 @@ export function createAiFixture(options: AiFixtureOptions): AiFixture {
     graveyardInputs: readonly AiFixtureMinion[] | undefined,
     elementalPlayedLastTurn: boolean | undefined
   ): OpeningPlayerState => {
-    const hand = handIds.map((cardId) => makeCard(cardId, participantId, allocate(), 'hand'))
-    const deck = deckIds.map((cardId) => makeCard(cardId, participantId, allocate(), 'deck'))
+    const hand = handIds.map((cardId) =>
+      makeCard(cardId, participantId, allocate(), 'hand')
+    )
+    const deck = deckIds.map((cardId) =>
+      makeCard(cardId, participantId, allocate(), 'deck')
+    )
     const board = boardInputs.map((minion) =>
       makeMinion(minion, participantId, turnNumber, allocate())
     )
@@ -597,7 +603,8 @@ export function createAiFixture(options: AiFixtureOptions): AiFixture {
     ? {
         participantId: AI_ID,
         sourceCardInstanceId:
-          options.pendingDiscover?.sourceCardInstanceId ?? `${AI_ID}:fixture-discover-source`,
+          options.pendingDiscover?.sourceCardInstanceId ??
+          `${AI_ID}:fixture-discover-source`,
         candidates: discoverCandidates,
         ...(options.pendingDiscover?.sourceCardId
           ? { publicSourceCardId: asCardId(options.pendingDiscover.sourceCardId) }
@@ -621,9 +628,9 @@ export function createAiFixture(options: AiFixtureOptions): AiFixture {
         sourceCardInstanceId:
           options.pendingCardChoice.sourceCardInstanceId ??
           (options.pendingCardChoice.targetCardId
-            ? aiWithPending.board.find(
+            ? (aiWithPending.board.find(
                 (entry) => entry.cardId === options.pendingCardChoice!.targetCardId
-              )?.instanceId ?? `${AI_ID}:fixture-choice-source`
+              )?.instanceId ?? `${AI_ID}:fixture-choice-source`)
             : `${AI_ID}:fixture-choice-source`),
         sourceCardId: asCardId(options.pendingCardChoice.sourceCardId),
         options: pendingChoiceOptions ?? [],

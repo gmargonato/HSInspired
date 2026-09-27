@@ -5,63 +5,65 @@
 - If running tests, and any test fails because of the live-numbers are different from the test files, assume that the human made manual adjustments and those are the correct values he wants.
 
 ## Engineering preference
+
 When investigating or fixing technical problems:
-* Prefer clean, targeted, reliable fixes that address the actual problem.
-* Do not over-engineer solutions or introduce unnecessary complexity.
-* Do not turn a focused fix into a broad rewrite, refactor, redesign, migration, or cleanup unless that is specifically the goal or clearly necessary.
-* Preserve working behavior and existing architecture when possible.
-* Investigate and gather evidence before making speculative changes.
-* Favor the smallest complete solution, not a shortcut that only hides the symptom.
-* Separate necessary fixes from optional improvements.
-* Suggestions for broader improvements are welcome, but do not automatically implement them.
-* Optimize for reliability, clarity, maintainability, and low complexity.
+
+- Prefer clean, targeted, reliable fixes that address the actual problem.
+- Do not over-engineer solutions or introduce unnecessary complexity.
+- Do not turn a focused fix into a broad rewrite, refactor, redesign, migration, or cleanup unless that is specifically the goal or clearly necessary.
+- Preserve working behavior and existing architecture when possible.
+- Investigate and gather evidence before making speculative changes.
+- Favor the smallest complete solution, not a shortcut that only hides the symptom.
+- Separate necessary fixes from optional improvements.
+- Suggestions for broader improvements are welcome, but do not automatically implement them.
+- Optimize for reliability, clarity, maintainability, and low complexity.
 
 ## Windows Codex Sandbox ACL Failure
 
-  If `apply_patch` or normal `exec_command` fails before launching with:
-  
-  ```
-  helper_unknown_error: apply deny-read ACLs
-  windows sandbox failed: helper_unknown_error: apply deny-read ACLs
-  ```
+If `apply_patch` or normal `exec_command` fails before launching with:
 
-  inspect the Codex sandbox state before changing repository permissions or source files.
+```
+helper_unknown_error: apply deny-read ACLs
+windows sandbox failed: helper_unknown_error: apply deny-read ACLs
+```
 
-  Check:
+inspect the Codex sandbox state before changing repository permissions or source files.
 
-  C:\Users\gabri\.codex\.sandbox\setup_error.json
-  C:\Users\gabri\.codex\.sandbox\deny_read_acl_state.json
-  C:\Users\gabri\.codex\.sandbox\sandbox*.log
+Check:
 
-  The issue is confirmed when the log contains:
+C:\Users\gabri\.codex\.sandbox\setup_error.json
+C:\Users\gabri\.codex\.sandbox\deny_read_acl_state.json
+C:\Users\gabri\.codex\.sandbox\sandbox*.log
 
-  parse deny-read ACL state ...\deny_read_acl_state.json
-  expected value at line 1 column 1
+The issue is confirmed when the log contains:
 
-  and deny_read_acl_state.json contains NUL bytes instead of valid JSON. This is a corrupted Codex sandbox state file,
-  not necessarily a repository ACL problem.
+parse deny-read ACL state ...\deny_read_acl_state.json
+expected value at line 1 column 1
 
-  Preserve the corrupt file and move it out of the active path so Codex can regenerate it:
+and deny_read_acl_state.json contains NUL bytes instead of valid JSON. This is a corrupted Codex sandbox state file,
+not necessarily a repository ACL problem.
 
-  $statePath = 'C:\Users\gabri\.codex\.sandbox\deny_read_acl_state.json'
+Preserve the corrupt file and move it out of the active path so Codex can regenerate it:
+
+$statePath = 'C:\Users\gabri\.codex\.sandbox\deny_read_acl_state.json'
   $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 
-  if (Test-Path -LiteralPath $statePath) {
+if (Test-Path -LiteralPath $statePath) {
       Move-Item -LiteralPath $statePath `
-          -Destination ($statePath + '.corrupt-' + $stamp)
-  }
+-Destination ($statePath + '.corrupt-' + $stamp)
+}
 
-  This may require elevated permission because the file is outside the repository. Do not manually guess a replacement
-  schema; let Codex regenerate the state. Verify using normal, non-elevated commands:
+This may require elevated permission because the file is outside the repository. Do not manually guess a replacement
+schema; let Codex regenerate the state. Verify using normal, non-elevated commands:
 
-  ```
-  Get-Location
-  git status --short
-  ```
+```
+Get-Location
+git status --short
+```
 
-  Then confirm that deny_read_acl_state.json has been recreated as valid JSON. If the error persists, restart/recreate
-  the Codex sandbox and inspect the newest sandbox log. Do not modify .git ACLs unless separate evidence proves they are
-  the cause.
+Then confirm that deny_read_acl_state.json has been recreated as valid JSON. If the error persists, restart/recreate
+the Codex sandbox and inspect the newest sandbox log. Do not modify .git ACLs unless separate evidence proves they are
+the cause.
 
 # Commiting and Pushing to GitHub
 

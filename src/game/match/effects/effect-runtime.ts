@@ -877,12 +877,15 @@ export class EffectRuntime {
           data
         )
     if (history)
-      this.events.push({
-        ...history,
-        ...(action === 'summon' && frame.summonGroupId
-          ? { summonGroupId: frame.summonGroupId }
-          : {})
-      })
+      // Keep the recorder's event identity: aura checkpoints settle its outcomes.
+      this.events.push(
+        Object.assign(
+          history,
+          action === 'summon' && frame.summonGroupId
+            ? { summonGroupId: frame.summonGroupId }
+            : {}
+        )
+      )
     for (const revealed of cardReveal?.cards ?? []) {
       const fact = this.historyRecorder?.capture(
         this.draft as unknown as OpeningMatchState,
@@ -6289,7 +6292,7 @@ export class EffectRuntime {
           (card) =>
             card.type === 'Minion' &&
             cardHasTribe(card, subtype) &&
-            (action.includeUncollectible === true || card.collectible !== true)
+            (action.includeUncollectible === true || card.collectible === true)
         )
         if (pool.length === 0) return
         for (const participantId of this.targetPlayers(action, frame)) {
@@ -14454,7 +14457,7 @@ export function applyDrawScalingBuff(
   const previousDelta =
     existingIndex >= 0 ? (enchantments[existingIndex].attackDelta ?? 0) : 0
   const totalDelta = previousDelta + amount
-  const enchantment: RuntimeEnchantment = {
+  const enchantment: Mutable<RuntimeEnchantment> = {
     id: enchantmentId,
     sourceInstanceId: card.instanceId,
     sourceCardId: card.cardId,

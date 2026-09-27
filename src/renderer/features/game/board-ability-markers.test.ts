@@ -280,6 +280,7 @@ describe('board ability markers', () => {
 
   it('grants Frost Lich Jaina Elementals the Lifesteal badge', () => {
     const waterElemental = CARD_CATALOG.require('basic_water_elemental')
+    if (waterElemental.type !== 'Minion') throw new Error('Expected minion')
     const elementalMinion = {
       instanceId: 'water-elemental',
       cardId: waterElemental.id,
@@ -292,22 +293,18 @@ describe('board ability markers', () => {
     } as BoardMinion
 
     expect(
-      boardMinionAbilityMarkers(
-        elementalMinion,
-        waterElemental,
-        1,
-        'jaina-frost-lich'
-      ).lifesteal
+      boardMinionAbilityMarkers(elementalMinion, waterElemental, 1, 'jaina-frost-lich')
+        .lifesteal
     ).toBe(true)
     expect(
-      boardMinionAbilityMarkers(elementalMinion, waterElemental, 1, 'jaina')
-        .lifesteal
+      boardMinionAbilityMarkers(elementalMinion, waterElemental, 1, 'jaina').lifesteal
     ).toBe(false)
-    expect(boardMinionAbilityMarkers(elementalMinion, waterElemental, 1).lifesteal).toBe(
-      false
-    )
+    expect(
+      boardMinionAbilityMarkers(elementalMinion, waterElemental, 1).lifesteal
+    ).toBe(false)
 
     const noElemental = CARD_CATALOG.require('basic_goldshire_footman')
+    if (noElemental.type !== 'Minion') throw new Error('Expected minion')
     const footmanMinion = {
       instanceId: 'footman',
       cardId: noElemental.id,

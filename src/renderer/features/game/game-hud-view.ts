@@ -98,13 +98,10 @@ export class GameHudView {
     )
     this.endTurnHoverOutlineTarget.eventMode = 'none'
     this.endTurnHoverOutlineTarget.label = 'game.end-turn-hover-outline-target'
-    this.endTurnHoverOutline = new AnimatedOutline(
-      this.endTurnHoverOutlineTarget,
-      {
-        palette: 'white',
-        preset: 'button'
-      }
-    )
+    this.endTurnHoverOutline = new AnimatedOutline(this.endTurnHoverOutlineTarget, {
+      palette: 'white',
+      preset: 'button'
+    })
     this.endTurnHoverOutline.setEnabled(false)
     this.turnButtonLayer.addChild(this.endTurnHoverOutlineTarget)
 

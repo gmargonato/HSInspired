@@ -79,7 +79,11 @@
   },
   {
     "id": "journey_to_ungoro_jungle_giants",
-    "quest": { "goal": "summon-attack-5", "target": 5, "rewardCardId": "journey_to_ungoro_barnabus_the_stomper" },
+    "quest": {
+      "goal": "summon-attack-5",
+      "target": 5,
+      "rewardCardId": "journey_to_ungoro_barnabus_the_stomper"
+    },
     "name": "Jungle Giants",
     "rarity": "Legendary",
     "cardClass": "Druid",
@@ -131,7 +135,11 @@
   },
   {
     "id": "journey_to_ungoro_the_marsh_queen",
-    "quest": { "goal": "play-cost-1-minion", "target": 5, "rewardCardId": "journey_to_ungoro_queen_carnassa" },
+    "quest": {
+      "goal": "play-cost-1-minion",
+      "target": 5,
+      "rewardCardId": "journey_to_ungoro_queen_carnassa"
+    },
     "name": "The Marsh Queen",
     "rarity": "Legendary",
     "cardClass": "Hunter",
@@ -158,13 +166,29 @@
     "health": 8,
     "rulesText": "Rush. Battlecry: Shuffle 20 random Beasts into your deck.",
     "keywords": ["rush"],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "shuffle-random-minions", "player": "self", "tribe": "Beast", "count": 20 }] }],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "shuffle-random-minions",
+            "player": "self",
+            "tribe": "Beast",
+            "count": 20
+          }
+        ]
+      }
+    ],
     "collectible": false,
     "deckLegal": false
   },
   {
     "id": "journey_to_ungoro_open_the_waygate",
-    "quest": { "goal": "cast-generated-spell", "target": 5, "rewardCardId": "journey_to_ungoro_time_warp" },
+    "quest": {
+      "goal": "cast-generated-spell",
+      "target": 5,
+      "rewardCardId": "journey_to_ungoro_time_warp"
+    },
     "name": "Open the Waygate",
     "rarity": "Legendary",
     "cardClass": "Mage",
@@ -191,13 +215,22 @@
     "health": null,
     "rulesText": "Refill your deck.",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "refill-original-decks", "player": "self" }] }],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [{ "action": "refill-original-decks", "player": "self" }]
+      }
+    ],
     "collectible": false,
     "deckLegal": false
   },
   {
     "id": "journey_to_ungoro_the_last_kaleidosaur",
-    "quest": { "goal": "target-friendly-minion", "target": 5, "rewardCardId": "journey_to_ungoro_galvadon" },
+    "quest": {
+      "goal": "target-friendly-minion",
+      "target": 5,
+      "rewardCardId": "journey_to_ungoro_galvadon"
+    },
     "name": "The Last Kaleidosaur",
     "rarity": "Legendary",
     "cardClass": "Paladin",
@@ -224,13 +257,19 @@
     "health": 8,
     "rulesText": "Battlecry: Adapt 5 times.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "adapt", "count": 5 }] }],
+    "effects": [
+      { "trigger": "battlecry", "actions": [{ "action": "adapt", "count": 5 }] }
+    ],
     "collectible": false,
     "deckLegal": false
   },
   {
     "id": "journey_to_ungoro_awaken_the_makers",
-    "quest": { "goal": "summon-deathrattle", "target": 5, "rewardCardId": "journey_to_ungoro_amara_warden_of_hope" },
+    "quest": {
+      "goal": "summon-deathrattle",
+      "target": 5,
+      "rewardCardId": "journey_to_ungoro_amara_warden_of_hope"
+    },
     "name": "Awaken the Makers",
     "rarity": "Legendary",
     "cardClass": "Priest",
@@ -290,7 +329,11 @@
   },
   {
     "id": "journey_to_ungoro_the_caverns_below",
-    "quest": { "goal": "play-same-name", "target": 5, "rewardCardId": "journey_to_ungoro_crystal_core" },
+    "quest": {
+      "goal": "play-same-name",
+      "target": 5,
+      "rewardCardId": "journey_to_ungoro_crystal_core"
+    },
     "name": "The Caverns Below",
     "rarity": "Legendary",
     "cardClass": "Rogue",
@@ -373,7 +416,25 @@
     "health": 7,
     "rulesText": "Battlecry: If you played an Elemental last turn, cast an Elemental Invocation.",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "cast-random-spells", "count": 1, "onlyIfElementalLastTurn": true, "includeUncollectible": true, "pool": ["journey_to_ungoro_invocation_of_air", "journey_to_ungoro_invocation_of_earth", "journey_to_ungoro_invocation_of_fire", "journey_to_ungoro_invocation_of_water"] }] }],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "cast-random-spells",
+            "count": 1,
+            "onlyIfElementalLastTurn": true,
+            "includeUncollectible": true,
+            "pool": [
+              "journey_to_ungoro_invocation_of_air",
+              "journey_to_ungoro_invocation_of_earth",
+              "journey_to_ungoro_invocation_of_fire",
+              "journey_to_ungoro_invocation_of_water"
+            ]
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -431,7 +492,11 @@
   },
   {
     "id": "journey_to_ungoro_lakkari_sacrifice",
-    "quest": { "goal": "discard-card", "target": 6, "rewardCardId": "journey_to_ungoro_nether_portal" },
+    "quest": {
+      "goal": "discard-card",
+      "target": 6,
+      "rewardCardId": "journey_to_ungoro_nether_portal"
+    },
     "name": "Lakkari Sacrifice",
     "rarity": "Legendary",
     "cardClass": "Warlock",
@@ -497,7 +562,11 @@
   },
   {
     "id": "journey_to_ungoro_fire_plumes_heart",
-    "quest": { "goal": "play-taunt-minion", "target": 7, "rewardCardId": "journey_to_ungoro_sulfuras" },
+    "quest": {
+      "goal": "play-taunt-minion",
+      "target": 7,
+      "rewardCardId": "journey_to_ungoro_sulfuras"
+    },
     "name": "Fire Plume's Heart",
     "rarity": "Legendary",
     "cardClass": "Warrior",
@@ -524,7 +593,18 @@
     "health": 2,
     "rulesText": "Battlecry: Your Hero Power becomes 'DIE, INSECT!'",
     "keywords": [],
-    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "set-hero-power", "player": "self", "power": "ragnaros-die-insects" }] }],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "set-hero-power",
+            "player": "self",
+            "power": "ragnaros-die-insects"
+          }
+        ]
+      }
+    ],
     "collectible": false,
     "deckLegal": false
   },
@@ -827,7 +907,18 @@
     "health": null,
     "rulesText": "Poisonous",
     "keywords": [],
-    "effects": [{ "trigger": "cast", "actions": [{ "action": "grant-keyword", "target": { "controller": "any", "type": "minion", "selection": "chosen" }, "keyword": "poisonous" }] }],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "keyword": "poisonous"
+          }
+        ]
+      }
+    ],
     "collectible": false,
     "deckLegal": false
   },
@@ -1470,7 +1561,7 @@
     "health": 2,
     "rulesText": "Battlecry: Adapt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"adapt"}]}],
+    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "adapt" }] }],
     "collectible": true,
     "deckLegal": true
   },
@@ -1487,7 +1578,9 @@
     "health": 6,
     "rulesText": "Battlecry: Adapt, then Adapt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"adapt","count":2}]}],
+    "effects": [
+      { "trigger": "battlecry", "actions": [{ "action": "adapt", "count": 2 }] }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1503,7 +1596,19 @@
     "health": null,
     "rulesText": "Set a minion's stats to 7/14.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"modify","target":{"controller":"any","type":"minion","selection":"chosen"},"attack":{"operation":"set","value":7},"health":{"operation":"set","value":14}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "attack": { "operation": "set", "value": 7 },
+            "health": { "operation": "set", "value": 14 }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1519,7 +1624,18 @@
     "health": 2,
     "rulesText": "Battlecry: If you control at least 2 other minions, Adapt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"player-has-minion-count","player":"self","operator":"gte","value":3},"actions":[{"action":"adapt"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion-count",
+          "player": "self",
+          "operator": "gte",
+          "value": 3
+        },
+        "actions": [{ "action": "adapt" }]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1535,7 +1651,12 @@
     "health": 8,
     "rulesText": "Taunt Deathrattle: Summon three 1/1 Murlocs.",
     "keywords": ["taunt"],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"summon","cardId":"basic_murloc_scout","count":3}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [{ "action": "summon", "cardId": "basic_murloc_scout", "count": 3 }]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1551,7 +1672,31 @@
     "health": 2,
     "rulesText": "Battlecry: Discover and cast a Secret.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"discover","player":"self","count":3,"source":"random-card","filter":{"keyword":"secret"},"storeAs":"discoveredCard"},{"action":"put-into-play","source":{"controller":"self","type":"spell","selection":"stored","zone":"hand","reference":"discoveredCard"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": { "keyword": "secret" },
+            "storeAs": "discoveredCard"
+          },
+          {
+            "action": "put-into-play",
+            "source": {
+              "controller": "self",
+              "type": "spell",
+              "selection": "stored",
+              "zone": "hand",
+              "reference": "discoveredCard"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1566,10 +1711,25 @@
     "attack": 3,
     "health": 7,
     "rulesText": "Taunt Battlecry: Set all other minions' Attack and Health to 3.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "attack": { "operation": "set", "value": 3 },
+            "health": { "operation": "set", "value": 3 }
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"any","type":"minion","selection":"all","exclude":"source"},"attack":{"operation":"set","value":3},"health":{"operation":"set","value":3}}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -1586,7 +1746,23 @@
     "health": null,
     "rulesText": "Deal 2 damage. Add a 1/2 Elemental to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":2},{"action":"add-to-hand","cardId":"journey_to_ungoro_flame_elemental","count":1}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": 2
+          },
+          {
+            "action": "add-to-hand",
+            "cardId": "journey_to_ungoro_flame_elemental",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1618,7 +1794,20 @@
     "health": 3,
     "rulesText": "Battlecry: Draw a Secret.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"draw","player":"self","source":"deck","count":1,"filter":{"keyword":"secret"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "source": "deck",
+            "count": 1,
+            "filter": { "keyword": "secret" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1634,7 +1823,19 @@
     "health": 4,
     "rulesText": "Battlecry: If you played an Elemental last turn, add a 'Flame Geyser' to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"add-to-hand","player":"self","cardId":"journey_to_ungoro_flame_geyser"}],"condition":{"type":"player-played-elemental-last-turn"}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "journey_to_ungoro_flame_geyser"
+          }
+        ],
+        "condition": { "type": "player-played-elemental-last-turn" }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1650,7 +1851,22 @@
     "health": 3,
     "rulesText": "Battlecry: Choose a minion. Summon a 1/1 copy of it.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"summon-copy","target":{"controller":"any","type":"minion","selection":"chosen"},"count":1,"modifications":{"attack":{"operation":"set","value":1},"health":{"operation":"set","value":1}}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "count": 1,
+            "modifications": {
+              "attack": { "operation": "set", "value": 1 },
+              "health": { "operation": "set", "value": 1 }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1666,10 +1882,34 @@
     "attack": null,
     "health": null,
     "rulesText": "Secret: When your opponent casts a spell, add a copy to your hand that costs (0).",
-    "keywords": [
-      "secret"
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "event": { "type": "spell-cast", "controller": "opponent" },
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "opponent",
+              "type": "card",
+              "selection": "event-source"
+            },
+            "destination": "hand"
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "added-card",
+              "selection": "all"
+            },
+            "amount": { "operation": "set", "value": 0 },
+            "duration": "permanent"
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"secret","event":{"type":"spell-cast","controller":"opponent"},"actions":[{"action":"copy","target":{"controller":"opponent","type":"card","selection":"event-source"},"destination":"hand"},{"action":"change-cost","target":{"controller":"self","type":"added-card","selection":"all"},"amount":{"operation":"set","value":0},"duration":"permanent"}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -1686,7 +1926,20 @@
     "health": null,
     "rulesText": "Deal 15 damage randomly split among all minions. Overload: (1)",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"random"},"amount":1,"hits":15},{"action":"overload","amount":1}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "random" },
+            "amount": 1,
+            "hits": 15
+          },
+          { "action": "overload", "amount": 1 }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1702,7 +1955,18 @@
     "health": 2,
     "rulesText": "Deathrattle: Return this to your hand as a 6/6 that costs (4).",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"add-to-hand","player":"self","cardId":"journey_to_ungoro_pyros_6_6"}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "journey_to_ungoro_pyros_6_6"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1719,7 +1983,21 @@
     "health": null,
     "rulesText": "Discover a copy of a spell in your deck.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"discover","player":"self","count":3,"source":"deck","copy":true,"filter":{"cardType":"Spell"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "deck",
+            "copy": true,
+            "filter": { "cardType": "Spell" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1736,7 +2014,23 @@
     "health": null,
     "rulesText": "Restore #5 Health to a minion and your hero.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"restore","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":5},{"action":"restore","target":{"controller":"self","type":"hero","selection":"hero"},"amount":5}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": 5
+          },
+          {
+            "action": "restore",
+            "target": { "controller": "self", "type": "hero", "selection": "hero" },
+            "amount": 5
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1752,7 +2046,24 @@
     "health": 2,
     "rulesText": "Deathrattle: Copy a card from your opponent's deck and add it to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"copy","target":{"controller":"opponent","type":"card","selection":"random","zone":"deck"},"destination":"hand","count":1}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "opponent",
+              "type": "card",
+              "selection": "random",
+              "zone": "deck"
+            },
+            "destination": "hand",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1768,7 +2079,25 @@
     "health": 3,
     "rulesText": "Your spells cost (1) less (but not less than 1).",
     "keywords": [],
-    "effects": [{"trigger":"aura","actions":[{"action":"change-cost","target":{"controller":"self","type":"spell-card","selection":"all","zone":"hand"},"amount":-1,"minimum":1,"duration":"while-source-in-play"}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "spell-card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "amount": -1,
+            "minimum": 1,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1804,10 +2133,25 @@
     "attack": 2,
     "health": 5,
     "rulesText": "Taunt Deathrattle: Give a random friendly minion +1/+1.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "random",
+              "exclude": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"random","exclude":"source"},"attack":1,"health":1}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -1823,7 +2167,18 @@
     "health": 3,
     "rulesText": "Battlecry: Destroy a friendly minion to Adapt twice.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"destroy","target":{"controller":"self","type":"minion","selection":"chosen"}},{"action":"adapt","count":2}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" }
+          },
+          { "action": "adapt", "count": 2 }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1839,7 +2194,20 @@
     "health": 7,
     "rulesText": "Taunt Has +3 Attack during your opponent's turn.",
     "keywords": ["taunt"],
-    "effects": [{"trigger":"aura","condition":{"type":"player-turn","player":"opponent"},"actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":3,"duration":"while-source-in-play"}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": { "type": "player-turn", "player": "opponent" },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": 3,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1856,7 +2224,19 @@
     "health": null,
     "rulesText": "Add two Razorpetals to your hand that deal 2 damage.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"add-to-hand","player":"self","cardId":"journey_to_ungoro_razorpetal","count":2}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "journey_to_ungoro_razorpetal",
+            "count": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1872,7 +2252,19 @@
     "health": 2,
     "rulesText": "Battlecry: Add a Razorpetal to your hand that deals 2 damage.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"add-to-hand","player":"self","cardId":"journey_to_ungoro_razorpetal","count":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "journey_to_ungoro_razorpetal",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1889,7 +2281,23 @@
     "health": null,
     "rulesText": "Draw a card, then add a copy of it to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"draw","player":"self","count":1},{"action":"copy","target":{"controller":"self","type":"drawn-card","selection":"all"},"destination":"hand"}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          { "action": "draw", "player": "self", "count": 1 },
+          {
+            "action": "copy",
+            "target": {
+              "controller": "self",
+              "type": "drawn-card",
+              "selection": "all"
+            },
+            "destination": "hand"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1905,7 +2313,22 @@
     "health": 3,
     "rulesText": "Costs (1) less for each non-Rogue Class card added to your hand this game.",
     "keywords": [],
-    "effects": [{"trigger":"while-in-hand","actions":[{"action":"change-cost","target":{"type":"card","selection":"source"},"amount":{"operation":"subtract","reference":"off-class-cards-added-to-hand-this-game"},"minimum":0}]}],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": { "type": "card", "selection": "source" },
+            "amount": {
+              "operation": "subtract",
+              "reference": "off-class-cards-added-to-hand-this-game"
+            },
+            "minimum": 0
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1921,7 +2344,20 @@
     "health": 2,
     "rulesText": "Combo: Gain +1/+1 for each other card you've played this turn.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"combo-active"},"actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":{"reference":"cards-played-earlier-this-turn"},"health":{"reference":"cards-played-earlier-this-turn"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": { "type": "combo-active" },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": { "reference": "cards-played-earlier-this-turn" },
+            "health": { "reference": "cards-played-earlier-this-turn" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1937,7 +2373,18 @@
     "health": 4,
     "rulesText": "Combo: Destroy a minion.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"combo-active"},"actions":[{"action":"destroy","target":{"controller":"any","type":"minion","selection":"chosen"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": { "type": "combo-active" },
+        "actions": [
+          {
+            "action": "destroy",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -1979,7 +2426,19 @@
     "health": 6,
     "rulesText": "Battlecry: If you played an Elemental last turn, gain Taunt and Divine Shield.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"grant-keywords","target":{"type":"minion","selection":"source"},"keywords":["taunt","divine-shield"]}],"condition":{"type":"player-played-elemental-last-turn"}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keywords",
+            "target": { "type": "minion", "selection": "source" },
+            "keywords": ["taunt", "divine-shield"]
+          }
+        ],
+        "condition": { "type": "player-played-elemental-last-turn" }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2010,10 +2469,21 @@
     "attack": 1,
     "health": 5,
     "rulesText": "Taunt Battlecry: Discover a Taunt minion.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "filter": { "type": "Minion", "keyword": "taunt" },
+            "source": "random-card"
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"discover","player":"self","count":3,"filter":{"type":"Minion","keyword":"taunt"},"source":"random-card"}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -2029,7 +2499,24 @@
     "health": 3,
     "rulesText": "Battlecry: Give a friendly Murloc +1/+1.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"chosen","filter":{"tribe":"Murloc"}},"attack":1,"health":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": { "tribe": "Murloc" }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2045,7 +2532,17 @@
     "health": 3,
     "rulesText": "After this minion attacks a hero, Adapt.",
     "keywords": [],
-    "effects": [{"trigger":"on-attack","event":{"type":"attack-resolved","source":{"controller":"self","type":"minion","selection":"source"},"target":{"controller":"opponent","type":"hero","selection":"all"}},"actions":[{"action":"adapt"}]}],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "attack-resolved",
+          "source": { "controller": "self", "type": "minion", "selection": "source" },
+          "target": { "controller": "opponent", "type": "hero", "selection": "all" }
+        },
+        "actions": [{ "action": "adapt" }]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2061,7 +2558,14 @@
     "health": 1,
     "rulesText": "Deathrattle: Summon two 1/1 Raptors.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"summon","cardId":"journey_to_ungoro_raptor","count":2}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          { "action": "summon", "cardId": "journey_to_ungoro_raptor", "count": 2 }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2077,7 +2581,25 @@
     "health": 2,
     "rulesText": "Battlecry: Add a random minion with 5 or more Attack to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"add-to-hand","player":"self","source":"random-card","count":1,"filter":{"type":"Minion","stat":"attack","operator":"gte","value":5}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "count": 1,
+            "filter": {
+              "type": "Minion",
+              "stat": "attack",
+              "operator": "gte",
+              "value": 5
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2093,7 +2615,20 @@
     "health": 8,
     "rulesText": "After this minion attacks, Freeze it.",
     "keywords": [],
-    "effects": [{"trigger":"on-attack","event":{"source":{"controller":"self","type":"minion","selection":"source"}},"actions":[{"action":"freeze","target":{"controller":"self","type":"minion","selection":"source"}}]}],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "source": { "controller": "self", "type": "minion", "selection": "source" }
+        },
+        "actions": [
+          {
+            "action": "freeze",
+            "target": { "controller": "self", "type": "minion", "selection": "source" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2109,7 +2644,13 @@
     "health": 3,
     "rulesText": "Battlecry: If you played an Elemental last turn, Adapt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"adapt"}],"condition":{"type":"player-played-elemental-last-turn"}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [{ "action": "adapt" }],
+        "condition": { "type": "player-played-elemental-last-turn" }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2125,7 +2666,12 @@
     "health": 3,
     "rulesText": "Deathrattle: Summon a 5/5 Devilsaur.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"summon","cardId":"classic_devilsaur","count":1}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [{ "action": "summon", "cardId": "classic_devilsaur", "count": 1 }]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2141,7 +2687,22 @@
     "health": 4,
     "rulesText": "Battlecry: Deal 3 damage.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"damage","target":{"controller":"any","type":"character","selection":"chosen"},"amount":3}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2157,7 +2718,24 @@
     "health": 3,
     "rulesText": "Your minions cost (2) more.",
     "keywords": [],
-    "effects": [{"trigger":"aura","actions":[{"action":"change-cost","target":{"controller":"self","type":"minion-card","selection":"all","zone":"hand"},"amount":2,"duration":"while-source-in-play"}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "amount": 2,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2172,10 +2750,25 @@
     "attack": 5,
     "health": 3,
     "rulesText": "Taunt Deathrattle: Summon a minion from your hand with 5 or more Attack.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "random",
+              "zone": "hand",
+              "filter": { "stat": "attack", "operator": "gte", "value": 5 }
+            }
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"put-into-play","player":"self","source":{"controller":"self","type":"minion-card","selection":"random","zone":"hand","filter":{"stat":"attack","operator":"gte","value":5}}}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -2191,7 +2784,21 @@
     "health": 8,
     "rulesText": "Whenever this minion takes damage, deal 3 damage to your hero.",
     "keywords": [],
-    "effects": [{"trigger":"on-damage","event":{"target":{"controller":"self","type":"minion","selection":"source"}},"actions":[{"action":"damage","target":{"controller":"self","type":"hero","selection":"hero"},"amount":3}]}],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "event": {
+          "target": { "controller": "self", "type": "minion", "selection": "source" }
+        },
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "self", "type": "hero", "selection": "hero" },
+            "amount": 3
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2207,7 +2814,22 @@
     "health": 5,
     "rulesText": "Battlecry: Discover a spell and cast it with random targets.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"discover","player":"self","count":3,"source":"random-card","filter":{"cardType":"Spell"},"storeAs":"discoveredCard"},{"action":"cast-discovered-spell"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": { "cardType": "Spell" },
+            "storeAs": "discoveredCard"
+          },
+          { "action": "cast-discovered-spell" }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2223,7 +2845,22 @@
     "health": 4,
     "rulesText": "Battlecry: Adapt your Murlocs.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"adapt","target":{"controller":"self","type":"minion","selection":"all","filter":{"tribe":"Murloc"}}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "adapt",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": { "tribe": "Murloc" }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2240,7 +2877,19 @@
     "health": 7,
     "rulesText": "Charge Battlecry: Can't attack heroes this turn.",
     "keywords": ["charge"],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"source"},"keyword":"cannot-attack-heroes","duration":"this-turn"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "keyword": "cannot-attack-heroes",
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2256,7 +2905,7 @@
     "health": 5,
     "rulesText": "Battlecry: Adapt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"adapt"}]}],
+    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "adapt" }] }],
     "collectible": true,
     "deckLegal": true
   },
@@ -2272,7 +2921,41 @@
     "health": 3,
     "rulesText": "Choose One - Transform into a 5/3 with Stealth; or a 3/5 with Taunt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","choice":{"options":[{"actions":[{"action":"transform","target":{"controller":"self","type":"minion","selection":"source"},"cardId":"journey_to_ungoro_shellshifter_5_3_stealth"}]},{"actions":[{"action":"transform","target":{"controller":"self","type":"minion","selection":"source"},"cardId":"journey_to_ungoro_shellshifter_3_5_taunt"}]}]}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "actions": [
+                {
+                  "action": "transform",
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "cardId": "journey_to_ungoro_shellshifter_5_3_stealth"
+                }
+              ]
+            },
+            {
+              "actions": [
+                {
+                  "action": "transform",
+                  "target": {
+                    "controller": "self",
+                    "type": "minion",
+                    "selection": "source"
+                  },
+                  "cardId": "journey_to_ungoro_shellshifter_3_5_taunt"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2289,7 +2972,17 @@
     "health": null,
     "rulesText": "Adapt your minions.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"adapt","target":{"controller":"self","type":"minion","selection":"all"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "adapt",
+            "target": { "controller": "self", "type": "minion", "selection": "all" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2306,7 +2999,24 @@
     "health": null,
     "rulesText": "Give a friendly minion +1/+1, then gain Armor equal to its Attack.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"chosen"},"attack":1,"health":1},{"action":"gain-armor","target":{"controller":"self","type":"hero","selection":"hero"},"amount":{"reference":"event-target.attack"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "attack": 1,
+            "health": 1
+          },
+          {
+            "action": "gain-armor",
+            "target": { "controller": "self", "type": "hero", "selection": "hero" },
+            "amount": { "reference": "event-target.attack" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2322,7 +3032,22 @@
     "health": 1,
     "rulesText": "Battlecry: If you're holding a minion with 5 or more Attack, Adapt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"player-has-card-in-hand","player":"self","filter":{"type":"Minion","stat":"attack","operator":"gte","value":5}},"actions":[{"action":"adapt"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": {
+            "type": "Minion",
+            "stat": "attack",
+            "operator": "gte",
+            "value": 5
+          }
+        },
+        "actions": [{ "action": "adapt" }]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2360,7 +3085,19 @@
     "health": 4,
     "rulesText": "Battlecry: Draw a card. Change its Cost to (5).",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"draw","player":"self","count":1,"modifyDrawnCard":{"setCost":5}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "modifyDrawnCard": { "setCost": 5 }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2376,7 +3113,12 @@
     "health": 3,
     "rulesText": "At the end of your turn, summon a 1/1 Murloc.",
     "keywords": [],
-    "effects": [{"trigger":"end-of-turn","actions":[{"action":"summon","cardId":"basic_murloc_scout","count":1}]}],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [{ "action": "summon", "cardId": "basic_murloc_scout", "count": 1 }]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2392,7 +3134,25 @@
     "health": 1,
     "rulesText": "Battlecry: Reduce the Cost of Elementals in your hand by (1).",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"change-cost","target":{"controller":"self","type":"minion-card","selection":"all","zone":"hand","filter":{"tribe":"Elemental"}},"amount":-1,"duration":"permanent"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": { "tribe": "Elemental" }
+            },
+            "amount": -1,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2408,7 +3168,21 @@
     "health": 1,
     "rulesText": "Battlecry: Freeze an enemy.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"freeze","target":{"controller":"opponent","type":"character","selection":"chosen"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2424,7 +3198,19 @@
     "health": 4,
     "rulesText": "Battlecry: If you played an Elemental last turn, summon two 2/3 Elementals with Taunt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"player-played-elemental-last-turn"},"actions":[{"action":"summon","cardId":"journey_to_ungoro_stone_sentinel_elemental","count":2}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": { "type": "player-played-elemental-last-turn" },
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "journey_to_ungoro_stone_sentinel_elemental",
+            "count": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2440,7 +3226,22 @@
     "health": 3,
     "rulesText": "Battlecry: Trigger a friendly minion's Deathrattle.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"trigger-deathrattle","target":{"controller":"self","type":"minion","selection":"chosen","filter":{"hasDeathrattle":true}}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "trigger-deathrattle",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": { "hasDeathrattle": true }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2456,7 +3257,24 @@
     "health": 7,
     "rulesText": "Battlecry: If you control at least 2 other minions, gain Taunt.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"player-has-minion-count","player":"self","operator":"gte","value":3},"actions":[{"action":"grant-keyword","target":{"controller":"self","type":"minion","selection":"source"},"keyword":"taunt"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion-count",
+          "player": "self",
+          "operator": "gte",
+          "value": 3
+        },
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "keyword": "taunt"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2472,7 +3290,18 @@
     "health": 1,
     "rulesText": "Battlecry: Deal 1 damage to each hero.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"damage","target":{"controller":"any","type":"hero","selection":"all"},"amount":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "hero", "selection": "all" },
+            "amount": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2504,7 +3333,28 @@
     "health": 3,
     "rulesText": "Battlecry: Destroy a Pirate and gain +1/+1.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"destroy","target":{"controller":"any","type":"minion","selection":"chosen","filter":{"tribe":"Pirate"}}},{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":1,"health":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": { "tribe": "Pirate" }
+            }
+          },
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2519,7 +3369,7 @@
     "attack": 1,
     "health": 3,
     "rulesText": "Taunt Poisonous",
-    "keywords": ["poisonous","taunt"],
+    "keywords": ["poisonous", "taunt"],
     "effects": [],
     "collectible": true,
     "deckLegal": true
@@ -2536,7 +3386,18 @@
     "health": 2,
     "rulesText": "Battlecry: Add a 1/2 Elemental to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"add-to-hand","cardId":"journey_to_ungoro_flame_elemental","count":1}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "cardId": "journey_to_ungoro_flame_elemental",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2599,7 +3460,7 @@
     "attack": 2,
     "health": 2,
     "rulesText": "Stealth Poisonous",
-    "keywords": ["poisonous","stealth"],
+    "keywords": ["poisonous", "stealth"],
     "effects": [],
     "collectible": true,
     "deckLegal": true
@@ -2616,7 +3477,21 @@
     "health": 5,
     "rulesText": "Battlecry: If you played an Elemental last turn, Discover an Elemental.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"discover","player":"self","count":3,"source":"random-card","filter":{"type":"Minion","tribe":"Elemental"}}],"condition":{"type":"player-played-elemental-last-turn"}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": { "type": "Minion", "tribe": "Elemental" }
+          }
+        ],
+        "condition": { "type": "player-played-elemental-last-turn" }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2633,7 +3508,18 @@
     "health": null,
     "rulesText": "Lifesteal Deal 5 damage to a minion.",
     "keywords": ["lifesteal"],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":5}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": 5
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2649,7 +3535,22 @@
     "health": 1,
     "rulesText": "Deathrattle: Deal 3 damage to a random enemy minion.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"damage","target":{"controller":"opponent","type":"minion","selection":"random"},"amount":3}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "random"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2666,7 +3567,19 @@
     "health": null,
     "rulesText": "Give your weapon Poisonous.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"grant-keyword","target":{"controller":"self","type":"weapon","selection":"all"},"keyword":"poisonous","duration":"this-turn"}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "self", "type": "weapon", "selection": "all" },
+            "keyword": "poisonous",
+            "duration": "this-turn"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2711,7 +3624,29 @@
     "health": null,
     "rulesText": "Curse all minions. Destroy them at the start of your next turn.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"schedule","trigger":"start-of-turn","target":{"controller":"any","type":"minion","selection":"all"},"attachedToTarget":true,"actions":[{"action":"destroy","target":{"controller":"any","type":"minion","selection":"source"}}]}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "schedule",
+            "trigger": "start-of-turn",
+            "target": { "controller": "any", "type": "minion", "selection": "all" },
+            "attachedToTarget": true,
+            "actions": [
+              {
+                "action": "destroy",
+                "target": {
+                  "controller": "any",
+                  "type": "minion",
+                  "selection": "source"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2728,7 +3663,9 @@
     "health": null,
     "rulesText": "The next spell you cast this turn costs Health instead of Mana.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"set-next-spell-costs-health"}]}],
+    "effects": [
+      { "trigger": "cast", "actions": [{ "action": "set-next-spell-costs-health" }] }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2743,9 +3680,7 @@
     "attack": 3,
     "health": 8,
     "rulesText": "Taunt Battlecry: Discard your two lowest-Cost cards.",
-    "keywords": [
-      "taunt"
-    ],
+    "keywords": ["taunt"],
     "effects": [
       {
         "trigger": "battlecry",
@@ -2779,7 +3714,33 @@
     "health": null,
     "rulesText": "Deal 3 damage to a minion. Summon three 1/1 Pterrordaxes and Adapt them.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":3},{"action":"summon","cardId":"journey_to_ungoro_pterrordax","count":3,"storeAs":"pterrordaxes"},{"action":"adapt","target":{"controller":"self","type":"minion","selection":"stored","reference":"pterrordaxes"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": 3
+          },
+          {
+            "action": "summon",
+            "cardId": "journey_to_ungoro_pterrordax",
+            "count": 3,
+            "storeAs": "pterrordaxes"
+          },
+          {
+            "action": "adapt",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "stored",
+              "reference": "pterrordaxes"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2795,7 +3756,26 @@
     "health": 2,
     "rulesText": "Battlecry: Discover a spell. Deal damage to your hero equal to its Cost.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"discover","player":"self","count":3,"source":"random-card","filter":{"cardType":"Spell"},"storeAs":"discoveredCard"},{"action":"damage","target":{"type":"hero","selection":"hero","controller":"self"},"amount":{"reference":"discoveredCard.cost"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": { "cardType": "Spell" },
+            "storeAs": "discoveredCard"
+          },
+          {
+            "action": "damage",
+            "target": { "type": "hero", "selection": "hero", "controller": "self" },
+            "amount": { "reference": "discoveredCard.cost" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2811,7 +3791,32 @@
     "health": 2,
     "rulesText": "Whenever you discard this, give it +2/+2 and return it to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"on-discard","event":{"type":"card-discarded","target":{"selection":"source"}},"actions":[{"action":"return-to-hand","target":{"controller":"self","type":"card","selection":"event-target"}},{"action":"modify","target":{"controller":"self","type":"card","selection":"event-target"},"attack":2,"health":2}]}],
+    "effects": [
+      {
+        "trigger": "on-discard",
+        "event": { "type": "card-discarded", "target": { "selection": "source" } },
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "event-target"
+            }
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "event-target"
+            },
+            "attack": 2,
+            "health": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2827,7 +3832,20 @@
     "health": 11,
     "rulesText": "Taunt Has +4 Attack during your opponent's turn.",
     "keywords": ["taunt"],
-    "effects": [{"trigger":"aura","condition":{"type":"player-turn","player":"opponent"},"actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":4,"duration":"while-source-in-play"}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": { "type": "player-turn", "player": "opponent" },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": 4,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2843,7 +3861,23 @@
     "health": 6,
     "rulesText": "Battlecry: Destroy all cards in your deck that cost (3) or less.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"discard","target":{"controller":"self","type":"card","selection":"all","zone":"deck","filter":{"cost":{"operator":"lte","value":3}}}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discard",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "deck",
+              "filter": { "cost": { "operator": "lte", "value": 3 } }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2918,7 +3952,19 @@
     "health": 3,
     "rulesText": "Deathrattle: Add two 1/2 Flame Elementals to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"add-to-hand","player":"self","cardId":"journey_to_ungoro_flame_elemental","count":2}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "journey_to_ungoro_flame_elemental",
+            "count": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2934,7 +3980,20 @@
     "health": 2,
     "rulesText": "Battlecry: Add a random Mage spell to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"add-to-hand","player":"self","source":"random-card","count":1,"filter":{"cardClass":"Mage","cardType":"Spell"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "count": 1,
+            "filter": { "cardClass": "Mage", "cardType": "Spell" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2950,7 +4009,23 @@
     "health": 6,
     "rulesText": "Battlecry: If you played an Elemental last turn, deal 5 damage.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"damage","target":{"controller":"opponent","type":"character","selection":"random"},"amount":5}],"condition":{"type":"player-played-elemental-last-turn"}}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 5
+          }
+        ],
+        "condition": { "type": "player-played-elemental-last-turn" }
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2966,7 +4041,23 @@
     "health": 8,
     "rulesText": "Taunt Battlecry: Deal 2 damage to all other minions.",
     "keywords": ["taunt"],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"all","exclude":"source"},"amount":2}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -2981,7 +4072,7 @@
     "attack": 14,
     "health": 14,
     "rulesText": "Taunt Elusive",
-    "keywords": ["taunt","spell-immune"],
+    "keywords": ["taunt", "spell-immune"],
     "effects": [],
     "collectible": true,
     "deckLegal": true
@@ -2998,7 +4089,21 @@
     "health": null,
     "rulesText": "Discover a minion that costs (8) or more. Summon it.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"discover","player":"self","count":3,"source":"random-card","destination":"board","filter":{"type":"Minion","cost":{"operator":"gte","value":8}}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "destination": "board",
+            "filter": { "type": "Minion", "cost": { "operator": "gte", "value": 8 } }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3015,7 +4120,20 @@
     "health": null,
     "rulesText": "Discover a card from your opponent's class.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"discover","player":"self","count":3,"source":"random-card","filter":{"cardClass":"opponent"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": { "cardClass": "opponent" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3030,10 +4148,19 @@
     "attack": 8,
     "health": 8,
     "rulesText": "Taunt Battlecry: Gain +5 Health for each Elemental you played last turn.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "type": "minion", "selection": "source" },
+            "health": { "reference": "elementals-played-last-turn", "multiplier": 5 }
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"modify","target":{"type":"minion","selection":"source"},"health":{"reference":"elementals-played-last-turn","multiplier":5}}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -3049,7 +4176,28 @@
     "health": null,
     "rulesText": "Deal 3 damage to a minion and 1 damage to adjacent ones.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":3},{"action":"damage","target":{"controller":"any","type":"minion","selection":"adjacent","adjacentTo":"event-target"},"amount":1}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": 3
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "adjacent",
+              "adjacentTo": "event-target"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3065,7 +4213,20 @@
     "health": 2,
     "rulesText": "Battlecry: Add a random Beast to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"add-to-hand","player":"self","source":"random-card","count":1,"filter":{"tribe":"Beast"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "count": 1,
+            "filter": { "tribe": "Beast" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3081,7 +4242,20 @@
     "health": 4,
     "rulesText": "Battlecry: Draw two 1-Cost minions from your deck.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"draw","player":"self","source":"deck","count":2,"filter":{"type":"Minion","cost":1}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "source": "deck",
+            "count": 2,
+            "filter": { "type": "Minion", "cost": 1 }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3097,7 +4271,19 @@
     "health": 1,
     "rulesText": "Deathrattle: Shuffle a 4/5 Raptor into your deck.",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"shuffle-into-deck","player":"self","cardId":"journey_to_ungoro_raptor_4_5","count":1}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "self",
+            "cardId": "journey_to_ungoro_raptor_4_5",
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3113,7 +4299,22 @@
     "health": 2,
     "rulesText": "Battlecry: Adapt a friendly Beast.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"adapt","target":{"controller":"self","type":"minion","selection":"chosen","filter":{"tribe":"Beast"}}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "adapt",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen",
+              "filter": { "tribe": "Beast" }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3129,7 +4330,25 @@
     "health": null,
     "rulesText": "Each time you play a Beast this turn, add a random Beast to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"on-card-played","event":{"type":"card-played","controller":"self","filter":{"tribe":"Beast"}},"actions":[{"action":"add-to-hand","player":"self","source":"random-card","count":1,"filter":{"tribe":"Beast"}}]}],
+    "effects": [
+      {
+        "trigger": "on-card-played",
+        "event": {
+          "type": "card-played",
+          "controller": "self",
+          "filter": { "tribe": "Beast" }
+        },
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "count": 1,
+            "filter": { "tribe": "Beast" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3145,7 +4364,14 @@
     "health": null,
     "rulesText": "Replace your Hero Power with 'Give a Beast +3/+3.'",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"set-hero-power","player":"self","power":"hunter-dinomancy"}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          { "action": "set-hero-power", "player": "self", "power": "hunter-dinomancy" }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3214,7 +4440,12 @@
     "health": null,
     "rulesText": "Gain 5 Armor.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"gain-armor","player":"self","amount":5}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [{ "action": "gain-armor", "player": "self", "amount": 5 }]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3229,10 +4460,8 @@
     "attack": 6,
     "health": 6,
     "rulesText": "Taunt Battlecry: Adapt.",
-    "keywords": [
-      "taunt"
-    ],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"adapt"}]}],
+    "keywords": ["taunt"],
+    "effects": [{ "trigger": "battlecry", "actions": [{ "action": "adapt" }] }],
     "collectible": true,
     "deckLegal": true
   },
@@ -3247,10 +4476,20 @@
     "attack": 2,
     "health": 6,
     "rulesText": "Taunt. Battlecry: Summon three 1/1 Raptors for your opponent.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "journey_to_ungoro_raptor",
+            "controller": "opponent",
+            "count": 3
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"summon","cardId":"journey_to_ungoro_raptor","controller":"opponent","count":3}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -3267,7 +4506,23 @@
     "health": null,
     "rulesText": "Summon copies of your damaged minions.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"summon-copy","source":{"controller":"self","type":"minion","selection":"all","filter":{"damaged":true}},"count":7}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "source": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": { "damaged": true }
+            },
+            "count": 7
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3283,7 +4538,20 @@
     "health": 5,
     "rulesText": "Taunt Has +2 Attack during your opponent's turn.",
     "keywords": ["taunt"],
-    "effects": [{"trigger":"aura","condition":{"type":"player-turn","player":"opponent"},"actions":[{"action":"modify","target":{"controller":"self","type":"minion","selection":"source"},"attack":2,"duration":"while-source-in-play"}]}],
+    "effects": [
+      {
+        "trigger": "aura",
+        "condition": { "type": "player-turn", "player": "opponent" },
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "self", "type": "minion", "selection": "source" },
+            "attack": 2,
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3299,7 +4567,23 @@
     "health": 1,
     "rulesText": "Transforms into a new weapon when in hand that changes each turn.",
     "keywords": [],
-    "effects": [{"trigger":"while-in-hand","event":{"type":"turn-started","controller":"self"},"actions":[{"action":"transform-card-random","target":{"controller":"self","type":"weapon","zone":"hand","selection":"source"}}]}],
+    "effects": [
+      {
+        "trigger": "while-in-hand",
+        "event": { "type": "turn-started", "controller": "self" },
+        "actions": [
+          {
+            "action": "transform-card-random",
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "zone": "hand",
+              "selection": "source"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3348,7 +4632,26 @@
     "health": 2,
     "rulesText": "Battlecry: If you control another Murloc, Discover a Murloc.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","condition":{"type":"player-has-minion","player":"self","filter":{"tribe":"Murloc"},"exclude":"source"},"actions":[{"action":"discover","player":"self","count":3,"filter":{"tribe":"Murloc"},"source":"random-card"}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "condition": {
+          "type": "player-has-minion",
+          "player": "self",
+          "filter": { "tribe": "Murloc" },
+          "exclude": "source"
+        },
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "filter": { "tribe": "Murloc" },
+            "source": "random-card"
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3363,10 +4666,23 @@
     "attack": 2,
     "health": 4,
     "rulesText": "Taunt Battlecry: Restore #3 Health.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 3
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"restore","target":{"controller":"any","type":"character","selection":"chosen"},"amount":3}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -3383,7 +4699,32 @@
     "health": null,
     "rulesText": "Discover a spell. Reduce its Cost by (2).",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"discover","player":"self","count":3,"source":"random-card","filter":{"cardType":"Spell"},"storeAs":"discoveredCard"},{"action":"change-cost","target":{"type":"spell-card","selection":"stored","zone":"hand","reference":"discoveredCard"},"amount":-2,"minimum":0}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": { "cardType": "Spell" },
+            "storeAs": "discoveredCard"
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "spell-card",
+              "selection": "stored",
+              "zone": "hand",
+              "reference": "discoveredCard"
+            },
+            "amount": -2,
+            "minimum": 0
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3399,7 +4740,22 @@
     "health": 3,
     "rulesText": "Battlecry: Destroy your opponent's weapon and gain Armor equal to its Attack.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"destroy","target":{"controller":"opponent","type":"weapon","selection":"all"}},{"action":"gain-armor","target":{"controller":"self","type":"hero","selection":"hero"},"amount":{"reference":"destroyed-weapon.attack"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": { "controller": "opponent", "type": "weapon", "selection": "all" }
+          },
+          {
+            "action": "gain-armor",
+            "target": { "controller": "self", "type": "hero", "selection": "hero" },
+            "amount": { "reference": "destroyed-weapon.attack" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3416,7 +4772,18 @@
     "health": null,
     "rulesText": "Choose a friendly minion. Summon a copy of it.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"summon-copy","target":{"controller":"self","type":"minion","selection":"chosen"},"count":1}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" },
+            "count": 1
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3432,7 +4799,18 @@
     "health": 3,
     "rulesText": "After your hero attacks, summon two 1/1 Silver Hand Recruits.",
     "keywords": [],
-    "effects": [{"trigger":"on-attack","event":{"type":"attack-resolved","source":{"controller":"self","type":"hero","selection":"hero"}},"actions":[{"action":"summon","cardId":"basic_silver_hand_recruit","count":2}]}],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "event": {
+          "type": "attack-resolved",
+          "source": { "controller": "self", "type": "hero", "selection": "hero" }
+        },
+        "actions": [
+          { "action": "summon", "cardId": "basic_silver_hand_recruit", "count": 2 }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3448,7 +4826,31 @@
     "health": null,
     "rulesText": "Give a minion +2/+6 and Taunt. When it dies, summon a Stegodon.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"modify","target":{"controller":"any","type":"minion","selection":"chosen"},"attack":2,"health":6},{"action":"grant-keyword","target":{"controller":"any","type":"minion","selection":"chosen"},"keyword":"taunt"},{"action":"grant-deathrattle","target":{"controller":"any","type":"minion","selection":"chosen"},"actions":[{"action":"summon","cardId":"journey_to_ungoro_stegodon","count":1}]}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "attack": 2,
+            "health": 6
+          },
+          {
+            "action": "grant-keyword",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "keyword": "taunt"
+          },
+          {
+            "action": "grant-deathrattle",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "actions": [
+              { "action": "summon", "cardId": "journey_to_ungoro_stegodon", "count": 1 }
+            ]
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3491,7 +4893,28 @@
     "health": null,
     "rulesText": "Deal 15 damage to a minion and 4 damage to adjacent ones.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"damage","target":{"controller":"any","type":"minion","selection":"chosen"},"amount":15},{"action":"damage","target":{"controller":"any","type":"minion","selection":"adjacent","adjacentTo":"event-target"},"amount":4}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "amount": 15
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "adjacent",
+              "adjacentTo": "event-target"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3508,7 +4931,27 @@
     "health": null,
     "rulesText": "Give your minions \"Deathrattle: Return this to your hand.\"",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"grant-deathrattle","target":{"controller":"self","type":"minion","selection":"all"},"actions":[{"action":"return-to-hand","target":{"controller":"self","type":"minion","selection":"source"}}]}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-deathrattle",
+            "target": { "controller": "self", "type": "minion", "selection": "all" },
+            "actions": [
+              {
+                "action": "return-to-hand",
+                "target": {
+                  "controller": "self",
+                  "type": "minion",
+                  "selection": "source"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3523,10 +4966,20 @@
     "attack": 4,
     "health": 6,
     "rulesText": "Taunt Deathrattle: Shuffle an 8/12 Direhorn with Taunt into your deck.",
-    "keywords": [
-      "taunt"
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "player": "self",
+            "cardId": "journey_to_ungoro_direhorn",
+            "count": 1
+          }
+        ]
+      }
     ],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"shuffle-into-deck","player":"self","cardId":"journey_to_ungoro_direhorn","count":1}]}],
     "collectible": true,
     "deckLegal": true
   },
@@ -3542,7 +4995,14 @@
     "health": null,
     "rulesText": "Summon two 1/1 Silver Hand Recruits.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"summon","cardId":"basic_silver_hand_recruit","count":2}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          { "action": "summon", "cardId": "basic_silver_hand_recruit", "count": 2 }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3558,7 +5018,17 @@
     "health": null,
     "rulesText": "Adapt a friendly minion.",
     "keywords": [],
-    "effects": [{"trigger":"cast","actions":[{"action":"adapt","target":{"controller":"self","type":"minion","selection":"chosen"}}]}],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "adapt",
+            "target": { "controller": "self", "type": "minion", "selection": "chosen" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3574,7 +5044,22 @@
     "health": 3,
     "rulesText": "Battlecry: Adapt your Silver Hand Recruits.",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"adapt","target":{"controller":"self","type":"minion","selection":"all","filter":{"cardId":"basic_silver_hand_recruit"}}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "adapt",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "filter": { "cardId": "basic_silver_hand_recruit" }
+            }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3590,7 +5075,21 @@
     "health": 5,
     "rulesText": "Whenever you cast a spell, add a random Priest spell to your hand.",
     "keywords": [],
-    "effects": [{"trigger":"on-cast","event":{"type":"spell-cast","controller":"self"},"actions":[{"action":"add-to-hand","player":"self","source":"random-card","count":1,"filter":{"type":"Spell","cardClass":"Priest"}}]}],
+    "effects": [
+      {
+        "trigger": "on-cast",
+        "event": { "type": "spell-cast", "controller": "self" },
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "random-card",
+            "count": 1,
+            "filter": { "type": "Spell", "cardClass": "Priest" }
+          }
+        ]
+      }
+    ],
     "collectible": true,
     "deckLegal": true
   },
@@ -3653,9 +5152,7 @@
     "attack": 8,
     "health": 12,
     "rulesText": "Taunt",
-    "keywords": [
-      "taunt"
-    ],
+    "keywords": ["taunt"],
     "effects": [],
     "collectible": false,
     "deckLegal": false
@@ -3703,9 +5200,7 @@
     "attack": 5,
     "health": 3,
     "rulesText": "Stealth",
-    "keywords": [
-      "stealth"
-    ],
+    "keywords": ["stealth"],
     "effects": [],
     "collectible": false,
     "deckLegal": false
@@ -3721,9 +5216,7 @@
     "attack": 3,
     "health": 5,
     "rulesText": "Taunt",
-    "keywords": [
-      "taunt"
-    ],
+    "keywords": ["taunt"],
     "effects": [],
     "collectible": false,
     "deckLegal": false
@@ -3740,7 +5233,18 @@
     "health": 6,
     "rulesText": "Deathrattle: Return this to your hand as a 10/10 that costs (10).",
     "keywords": [],
-    "effects": [{"trigger":"deathrattle","actions":[{"action":"add-to-hand","player":"self","cardId":"journey_to_ungoro_pyros_10_10"}]}],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "journey_to_ungoro_pyros_10_10"
+          }
+        ]
+      }
+    ],
     "collectible": false,
     "deckLegal": false
   },
@@ -3756,7 +5260,24 @@
     "health": 10,
     "rulesText": "",
     "keywords": [],
-    "effects": [{"trigger":"battlecry","actions":[{"action":"discard","target":{"controller":"self","type":"card","zone":"hand","selection":"all","count":2,"order":"lowest-cost"}}]}],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discard",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "zone": "hand",
+              "selection": "all",
+              "count": 2,
+              "order": "lowest-cost"
+            }
+          }
+        ]
+      }
+    ],
     "collectible": false,
     "deckLegal": false
   },
@@ -3830,7 +5351,14 @@
     "effects": [
       {
         "trigger": "cast",
-        "actions": [{ "action": "discover", "player": "self", "count": 3, "source": "random-card" }]
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card"
+          }
+        ]
       }
     ],
     "collectible": false,

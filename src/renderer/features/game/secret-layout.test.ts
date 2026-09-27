@@ -16,18 +16,14 @@ function edge(
 }
 
 describe('Secret layout', () => {
-  it('mirrors the local marker rail above the remote hero portrait', () => {
-    const localTopGap =
-      SECRET_LAYOUT.badges.local.position.y -
-      edge(GAME_BOARD_LAYOUT.heroes.local, 'top')
-    const remoteTopGap =
-      edge(GAME_BOARD_LAYOUT.heroes.remote, 'top') -
-      SECRET_LAYOUT.badges.remote.position.y
-
-    expect(SECRET_LAYOUT.badges.remote.position.y).toBeLessThan(
-      edge(GAME_BOARD_LAYOUT.heroes.remote, 'top')
-    )
-    expect(Math.abs(localTopGap - remoteTopGap)).toBeLessThanOrEqual(0.5)
+  it('keeps both marker rails near the top inside their hero portraits', () => {
+    for (const side of ['local', 'remote'] as const) {
+      const hero = GAME_BOARD_LAYOUT.heroes[side]
+      const badge = SECRET_LAYOUT.badges[side]
+      expect(badge.position.x).toBe(hero.position.x)
+      expect(badge.position.y).toBeGreaterThan(edge(hero, 'top'))
+      expect(badge.position.y).toBeLessThan(hero.position.y)
+    }
   })
 
   it('centers the Belwe count over each Secret badge', () => {
@@ -39,10 +35,9 @@ describe('Secret layout', () => {
     })
   })
 
-  it('spaces the Quest cards around the full-size arrow and labels progress above it', () => {
+  it('spaces the Quest cards around the full-size arrow and centers progress on it', () => {
     const preview = SECRET_LAYOUT.questPreview
     const arrowHalfWidth = preview.arrow.size.width / 2
-    const arrowTop = preview.arrow.position.y - preview.arrow.size.height / 2
     expect(preview.arrow.position.x - arrowHalfWidth).toBeGreaterThan(
       preview.leftCard.x + CARD_CANVAS.width * preview.scale + 50
     )
@@ -50,9 +45,7 @@ describe('Secret layout', () => {
       preview.arrow.position.x + arrowHalfWidth + 50
     )
     expect(preview.progress.position.x).toBe(preview.arrow.position.x)
-    expect(preview.progress.position.y + preview.progress.size.height / 2).toBeLessThan(
-      arrowTop
-    )
+    expect(preview.progress.position.y).toBe(preview.arrow.position.y)
   })
 
   it('centers the cropped reveal banner and readable card on the game canvas', () => {

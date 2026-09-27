@@ -19,7 +19,7 @@ import { asPlayerId } from '../../game/match/match-types'
 const electron = vi.hoisted(() => ({ invoke: vi.fn(), expose: vi.fn() }))
 const modelSnapshot = vi.hoisted(() => ({ value: { mana: 7 } as JsonObject }))
 const legal = vi.hoisted(() => {
-  const defaultLegalCommands = () => [
+  const defaultLegalCommands = (): Record<string, unknown>[] => [
     { type: 'end-turn', participantId: 'ai' },
     { type: 'use-hero-power', participantId: 'ai' },
     {
@@ -47,7 +47,10 @@ vi.mock('../../game/match/ai', async (importOriginal) => {
 })
 vi.mock('../features/game/ai-context', () => ({
   aiSystemContext: () => ({ role: 'system', content: 'Choose a legal action.' }),
-  aiMulliganSystemContext: () => ({ role: 'system', content: 'Mulligan opening hand.' }),
+  aiMulliganSystemContext: () => ({
+    role: 'system',
+    content: 'Mulligan opening hand.'
+  }),
   aiMulliganModelState: () => ({
     phase: 'mulligan',
     self: { hand: [{ ref: 'c1' }, { ref: 'c2' }] }
@@ -225,7 +228,8 @@ function setup(
             finishReason: 'stop'
           })
         }
-        if (request.phase === 'action' && priorActionRequests.length === 0) return reject()
+        if (request.phase === 'action' && priorActionRequests.length === 0)
+          return reject()
         return aiIpcSuccess({
           ...request,
           reason: 'Choose.',
@@ -408,9 +412,7 @@ describe('preload to renderer recovery', () => {
   it('discards a fresh recovery response when its revision becomes stale', async () => {
     const test = setup('plan', (request, count) => {
       if (count === 4) test.state.revision++
-      return request.phase === 'plan'
-        ? planChoice()
-        : repairableIntentMismatch()
+      return request.phase === 'plan' ? planChoice() : repairableIntentMismatch()
     })
     try {
       expect(await test.controller.chooseTurnAction()).toBeNull()
@@ -567,7 +569,9 @@ describe('preload to renderer recovery', () => {
         expect(requests).toHaveLength(2)
         expect(onAbandoned).not.toHaveBeenCalled()
         expect(
-          logger.info.mock.calls.some(([kind]) => kind === '[Game AI] intent-normalized')
+          logger.info.mock.calls.some(
+            ([kind]) => kind === '[Game AI] intent-normalized'
+          )
         ).toBe(true)
         expect(
           logger.info.mock.calls.some(([kind]) => kind === '[Game AI] format-repair')
@@ -581,13 +585,16 @@ describe('preload to renderer recovery', () => {
     'repairs an ID/intent mismatch without dispatching it (correction=%s)',
     async (correct) => {
       let mismatchCount = 0
-      const { controller, requests, onAbandoned, logger } = setup('plan', (r, count) => {
-        if (r.phase === 'plan') return planChoice()
-        if (correct && count === 3) return commitChoice()
-        mismatchCount++
-        if (!correct && mismatchCount >= 6) return commitChoice()
-        return repairableIntentMismatch()
-      })
+      const { controller, requests, onAbandoned, logger } = setup(
+        'plan',
+        (r, count) => {
+          if (r.phase === 'plan') return planChoice()
+          if (correct && count === 3) return commitChoice()
+          mismatchCount++
+          if (!correct && mismatchCount >= 6) return commitChoice()
+          return repairableIntentMismatch()
+        }
+      )
       try {
         const decision = await controller.chooseTurnAction()
         expect(requests.length).toBeGreaterThanOrEqual(correct ? 3 : 5)
@@ -862,7 +869,8 @@ describe('preload to renderer recovery', () => {
       expect(decision?.source).toBe('random-timeout')
       expect(['a0', 'a1', 'a2']).toContain(decision?.actionId)
       expect(
-        legal.commands.find((_command, index) => decision?.actionId === 'a' + index)?.type
+        legal.commands.find((_command, index) => decision?.actionId === 'a' + index)
+          ?.type
       ).toBe(decision?.command.type)
       expect(requests).toHaveLength(1)
       expect(onAbandoned).not.toHaveBeenCalled()

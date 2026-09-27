@@ -585,7 +585,7 @@ describe('Phase 5/6 real-card integration', () => {
       temporary: 2
     })
 
-  const aura = createMatchScenario({
+    const aura = createMatchScenario({
       seed: 514,
       cardId: 'classic_sorcerers_apprentice'
     })

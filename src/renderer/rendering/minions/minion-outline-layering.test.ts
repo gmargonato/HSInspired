@@ -304,9 +304,7 @@ describe('MinionView outline layering', () => {
     expect(childIndex('minion.targeting-outline-proxy')).toBeLessThan(
       childIndex('minion.frame')
     )
-    expect(childIndex('minion.artwork')).toBeLessThan(
-      childIndex('minion.stealth')
-    )
+    expect(childIndex('minion.artwork')).toBeLessThan(childIndex('minion.stealth'))
     expect(childIndex('minion.stealth')).toBeLessThan(childIndex('minion.frame'))
     expect(childIndex('minion.frame-legendary')).toBeLessThan(
       childIndex('minion.frozen')

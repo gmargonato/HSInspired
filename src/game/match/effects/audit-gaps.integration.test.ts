@@ -141,8 +141,9 @@ describe('Catalog gap remediation', () => {
     )!
     endTurn(scenario, own)
     expect(
-      player(scenario, own).hand.find((candidate) => candidate.instanceId === zerus.instanceId)!
-        .cardId
+      player(scenario, own).hand.find(
+        (candidate) => candidate.instanceId === zerus.instanceId
+      )!.cardId
     ).toBe('whispers_of_the_old_gods_shifter_zerus')
     cycleTurn(scenario, enemy, own)
     const transformed = player(scenario, own).hand.find(
@@ -160,8 +161,7 @@ describe('Catalog gap remediation', () => {
     addCard(scenario, own, 'whispers_of_the_old_gods_nerubian_prophet')
     const prophet = () =>
       player(scenario, own).hand.find(
-        (candidate) =>
-          candidate.cardId === 'whispers_of_the_old_gods_nerubian_prophet'
+        (candidate) => candidate.cardId === 'whispers_of_the_old_gods_nerubian_prophet'
       )!
     expect(prophet().currentCost).toBe(6)
     cycleTurn(scenario, own, enemy)
@@ -226,8 +226,7 @@ describe('Catalog gap remediation', () => {
     })
     expect(player(scenario, enemy).board[0]!.health).toBe(2)
     const bomb = player(scenario, own).board.find(
-      (candidate) =>
-        candidate.cardId === 'mean_streets_of_gadgetzan_bomb_squad'
+      (candidate) => candidate.cardId === 'mean_streets_of_gadgetzan_bomb_squad'
     )!
     addCard(scenario, own, 'basic_fireball')
     play(scenario, own, 'basic_fireball', {
@@ -237,8 +236,7 @@ describe('Catalog gap remediation', () => {
     expect(player(scenario, own).hero.health).toBe(heroHealthBefore - 5)
     expect(
       player(scenario, own).board.some(
-        (candidate) =>
-          candidate.cardId === 'mean_streets_of_gadgetzan_bomb_squad'
+        (candidate) => candidate.cardId === 'mean_streets_of_gadgetzan_bomb_squad'
       )
     ).toBe(false)
   })
@@ -293,15 +291,12 @@ describe('Catalog gap remediation', () => {
       targets: [targetOf(own, chosen.instanceId)]
     })
     const board = player(scenario, own).board
-    expect(board.some((candidate) => candidate.cardId === 'basic_acidic_swamp_ooze')).toBe(
-      true
-    )
     expect(
-      board.some(
-        (candidate) =>
-          candidate.instanceId === chosen.instanceId
-      )
-    ).toBe(false)
+      board.some((candidate) => candidate.cardId === 'basic_acidic_swamp_ooze')
+    ).toBe(true)
+    expect(board.some((candidate) => candidate.instanceId === chosen.instanceId)).toBe(
+      false
+    )
     expect(
       player(scenario, own).deck.some(
         (candidate) => candidate.cardId === 'basic_chillwind_yeti'

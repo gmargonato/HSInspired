@@ -128,12 +128,7 @@ export function runSummonAction(
               frame,
               path,
               undefined,
-              context.summonPosition(
-                frame,
-                frame.controllerId,
-                placement,
-                summonIndex
-              ),
+              context.summonPosition(frame, frame.controllerId, placement, summonIndex),
               context.currentMinion(target) ?? undefined,
               action.modifications
             )
@@ -175,30 +170,31 @@ export function runSummonAction(
     }
     case 'summon-random': {
       const count = Math.max(0, context.queries.evaluate(action.count ?? 1, frame))
-      const pool = action.source === 'discarded-minions'
-        ? context
-            .sourceEntities(action, frame)
-            .flatMap((candidate) => candidate.cardId ? [candidate.cardId] : [])
-        : Array.isArray(action.pool)
-        ? action.pool.filter((entry): entry is string => typeof entry === 'string')
-        : CARD_CATALOG.all
-            .filter(
-              (card) =>
-                card.collectible &&
-                card.type === 'Minion' &&
-                context.queries.matchesFilter(
-                  {
-                    instanceId: `${frame.controllerId}:pool:${card.id}`,
-                    kind: 'card',
-                    participantId: frame.controllerId,
-                    zone: 'revealed',
-                    cardId: card.id
-                  },
-                  action.filter,
-                  frame
+      const pool =
+        action.source === 'discarded-minions'
+          ? context
+              .sourceEntities(action, frame)
+              .flatMap((candidate) => (candidate.cardId ? [candidate.cardId] : []))
+          : Array.isArray(action.pool)
+            ? action.pool.filter((entry): entry is string => typeof entry === 'string')
+            : CARD_CATALOG.all
+                .filter(
+                  (card) =>
+                    card.collectible &&
+                    card.type === 'Minion' &&
+                    context.queries.matchesFilter(
+                      {
+                        instanceId: `${frame.controllerId}:pool:${card.id}`,
+                        kind: 'card',
+                        participantId: frame.controllerId,
+                        zone: 'revealed',
+                        cardId: card.id
+                      },
+                      action.filter,
+                      frame
+                    )
                 )
-            )
-            .map((card) => card.id)
+                .map((card) => card.id)
       const placement =
         typeof action.placement === 'string'
           ? (action.placement as CardSummonPlacement)

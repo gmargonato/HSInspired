@@ -125,6 +125,31 @@ function attemptCard(
     case 'classic_the_black_knight':
       summon(opponentId, asCardId('basic_senjin_shieldmasta'))
       break
+    case 'knights_of_the_frozen_throne_play_dead':
+      summon(participantId, asCardId('naxxramas_haunted_creeper'))
+      break
+    case 'knights_of_the_frozen_throne_snowfury_giant': {
+      expect(
+        scenario.match.dispatch({
+          type: 'dev-add-card',
+          participantId,
+          cardId: 'classic_lightning_bolt'
+        }).accepted
+      ).toBe(true)
+      const bolt = scenario.match
+        .getState()
+        .players.find((player) => player.participantId === participantId)!
+        .hand.find((card) => card.cardId === 'classic_lightning_bolt')!
+      expect(
+        scenario.match.dispatch({
+          type: 'play-card',
+          participantId,
+          cardInstanceId: bolt.instanceId,
+          targets: [{ kind: 'hero', participantId: opponentId }]
+        }).accepted
+      ).toBe(true)
+      break
+    }
     case 'goblins_vs_gnomes_upgraded_repair_bot': {
       const mech = summon(participantId, asCardId('goblins_vs_gnomes_snowchugger'))
       damage(participantId, mech)

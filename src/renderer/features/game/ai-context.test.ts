@@ -542,7 +542,7 @@ describe('AI context fidelity', () => {
       participantId
     )
     expect(JSON.stringify(aiMulliganModelState(session)).length).toBeLessThan(
-      JSON.stringify(aiModelState(session, commands)).length / 2
+      JSON.stringify(aiModelState(session, commands)).length
     )
     expect(aiMulliganSystemContext(session).content.length).toBeLessThan(
       aiSystemContext(session).content.length

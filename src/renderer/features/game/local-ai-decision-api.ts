@@ -133,6 +133,8 @@ export interface LocalAiCandidateTrace {
   readonly visits?: number
   readonly meanValue?: number
   readonly prior?: number
+  /** Value of the best continuation sampled at least twice. */
+  readonly recommendationValue?: number
   readonly recommendationRiskAdjustment?: number
   readonly recommendationPreferenceAdjustment?: number
   /** Hard Expert penalty for a first-turn Coin followed by a non-exempt hero power. */
@@ -290,16 +292,14 @@ function sampledContinuation(
     | undefined
 ): readonly TurnMatchCommand[] | undefined {
   if (!lines) return undefined
-  // Prefer the longest line that recurred, instead of repeatedly choosing
-  // the already-selected first action.
+  // Prefer the strongest recurring continuation; length only breaks value ties.
   return [...lines.values()]
     .filter((line) => line.commands.length > 1 && line.visits >= 2)
     .sort(
       (left, right) =>
+        right.valueSum / right.visits - left.valueSum / left.visits ||
         right.commands.length - left.commands.length ||
         right.visits - left.visits ||
-        right.valueSum / Math.max(1, right.visits) -
-          left.valueSum / Math.max(1, left.visits) ||
         JSON.stringify(left.commands.map(canonicalCommandKey)).localeCompare(
           JSON.stringify(right.commands.map(canonicalCommandKey))
         )
@@ -1597,6 +1597,10 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             const result = fork.dispatch(command)
             mctsProfile.simulationDispatchMs += performance.now() - dispatchStarted
             if (!result.accepted) break
+            if (actorId === rootId && !rootTurnPassed) {
+              searchedTurnLine.push(command)
+              if (command.type === 'end-turn') rootTurnPassed = true
+            }
             if (actorId !== rootId) {
               mctsProfile.opponentActionsSimulated++
               if (command.type === 'play-card') mctsProfile.opponentCardPlaysSimulated++
@@ -1726,6 +1730,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const rootState = simulationSession.getState()
     const rootCandidateTacticalPenalties = new Map<string, number>()
     const rootCandidateContinuations = new Map<string, readonly TurnMatchCommand[]>()
+    const exposedContinuations = new Set<string>()
     for (const { stat, action } of visited) {
       let continuation = sampledContinuation(sampledTurnLines.get(stat.key)) ?? [
         action.command
@@ -1779,10 +1784,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         )[0]
         if (bestPayoff) continuation = bestPayoff.commands
         else if (sampledLines.some((line) => line.penalty > 0)) {
-          rootCandidateTacticalPenalties.set(
-            stat.key,
-            EXPERT_COIN_HERO_POWER_PENALTY
-          )
+          rootCandidateTacticalPenalties.set(stat.key, EXPERT_COIN_HERO_POWER_PENALTY)
           const badLine = [...sampledLines].sort(
             (left, right) =>
               right.valueSum / right.visits - left.valueSum / left.visits ||
@@ -1791,19 +1793,56 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           if (badLine) continuation = badLine.commands
         }
       }
+      // A favorable rollout can miss an obvious face lethal. Verify the public
+      // board at the end of the proposed turn before trusting that continuation.
+      if (continuation.at(-1)?.type === 'end-turn') {
+        const exposedToLethal = simulationSession.match.analyze((fork) => {
+          for (const command of continuation) {
+            if (!fork.dispatch(command).accepted) return false
+          }
+          if (fork.getState().phase === 'ended') return false
+          const observation = fork.getAiObservation?.(rootId, 'fair')
+          const self = observation?.players.find(
+            (player) => player.participantId === rootId
+          )
+          const enemy = observation?.players.find(
+            (player) => player.participantId !== rootId
+          )
+          return !!(
+            observation &&
+            self &&
+            enemy &&
+            record(self.hero).immune !== true &&
+            visibleHeroThreat(enemy, self, observation.turnNumber) >=
+              number(record(self.hero).health) + number(record(self.hero).armor)
+          )
+        })
+        if (exposedToLethal) exposedContinuations.add(stat.key)
+      }
       rootCandidateContinuations.set(stat.key, continuation)
+    }
+    // Score achievable continuations instead of averaging good setups with
+    // avoidable mistakes later in the same turn. Require repeated samples.
+    const supportedLineValue = (
+      key: string,
+      fallback: (typeof rootStats)[number]
+    ): number => {
+      // A predicted loss remains preferable to a confirmed terminal loss.
+      if (exposedContinuations.has(key)) return -MCTS_POSITION_VALUE_LIMIT
+      const lines = [...(sampledTurnLines.get(key)?.values() ?? [])].filter(
+        (line) => line.visits >= 2
+      )
+      return lines.length
+        ? Math.max(...lines.map((line) => line.valueSum / line.visits))
+        : mctsRootRecommendationScore(fallback)
     }
     const selected = [...visited].sort(
       (left, right) =>
-        mctsRootRecommendationScore(right.stat) +
-          Math.max(-8, Math.min(24, rootCandidatePriors.get(right.stat.key) ?? 0)) *
-            0.005 -
+        supportedLineValue(right.stat.key, right.stat) -
           (rootCandidatePreferenceAdjustments.get(right.stat.key) ?? 0) -
           (rootCandidateRiskAdjustments.get(right.stat.key) ?? 0) -
           (rootCandidateTacticalPenalties.get(right.stat.key) ?? 0) -
-          (mctsRootRecommendationScore(left.stat) +
-            Math.max(-8, Math.min(24, rootCandidatePriors.get(left.stat.key) ?? 0)) *
-              0.005 -
+          (supportedLineValue(left.stat.key, left.stat) -
             (rootCandidatePreferenceAdjustments.get(left.stat.key) ?? 0) -
             (rootCandidateRiskAdjustments.get(left.stat.key) ?? 0) -
             (rootCandidateTacticalPenalties.get(left.stat.key) ?? 0)) ||
@@ -1849,6 +1888,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         visits: stat.visits,
         meanValue: stat.meanValue,
         prior: rootCandidatePriors.get(stat.key),
+        recommendationValue: supportedLineValue(stat.key, stat),
         recommendationRiskAdjustment: rootCandidateRiskAdjustments.get(stat.key),
         recommendationPreferenceAdjustment: rootCandidatePreferenceAdjustments.get(
           stat.key
@@ -2282,6 +2322,21 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       if (!actor || !attacker || !opponent?.secrets?.some((secret) => !secret.revealed))
         return 0
 
+      // A lethal attack is not guaranteed through an unknown defensive Secret.
+      // Clear it first when public hand/mana facts provide that option.
+      if (
+        attacker.attack >= opponent.hero.health + opponent.hero.armor &&
+        actor.hand.some((card) => {
+          const definition = CARD_CATALOG.get(card.cardId)
+          return (
+            definition &&
+            number(card.currentCost, definition.cost) <= actor.mana.available &&
+            containsEffectAction(definition.effects, 'destroy-secrets')
+          )
+        })
+      )
+        return 0.65
+
       const readyAttackers = actor.board.filter((minion) => {
         const keywords = effectiveBoardMinionKeywords(minion, state.turnNumber)
         return (
@@ -2319,12 +2374,13 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       !opponent ||
       !card ||
       definition?.type !== 'Spell' ||
-      !command.targets?.some(
-        (target) =>
-          target.kind === 'hero' && target.participantId === opponent.participantId
-      ) ||
       !hasUnrevealedSecret ||
-      this.lethalBurstPrior(command, state, actorId) <= 0
+      (!containsEffectAction(definition.effects, 'destroy-secrets') &&
+        (!command.targets?.some(
+          (target) =>
+            target.kind === 'hero' && target.participantId === opponent.participantId
+        ) ||
+          this.lethalBurstPrior(command, state, actorId) <= 0))
     )
       return 0
 

@@ -75,10 +75,15 @@ describe('bounded AI deliberation contract', () => {
     })
   })
   it('constrains mulligan replace refs to visible hand IDs', () => {
-    expect(aiChoiceSchema({ phase: 'mulligan', actionIds: ['hand:c1', 'hand:c2'] })).toEqual({
+    expect(
+      aiChoiceSchema({ phase: 'mulligan', actionIds: ['hand:c1', 'hand:c2'] })
+    ).toEqual({
       type: 'object',
       properties: {
-        replace: { type: 'array', items: { type: 'string', enum: ['hand:c1', 'hand:c2'] } },
+        replace: {
+          type: 'array',
+          items: { type: 'string', enum: ['hand:c1', 'hand:c2'] }
+        },
         planUpdate: { type: 'null' }
       },
       required: ['replace', 'planUpdate'],

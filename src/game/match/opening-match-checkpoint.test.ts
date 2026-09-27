@@ -54,9 +54,9 @@ describe('opening match checkpoints', () => {
     }
   })
 
-  it('matches the pre-refactor seeded command, event, visibility, and checkpoint baseline', async () => {
-    // Recorded before AUDIT.md implementation. Update only for an intentional
-    // behavior change, never to make a preservation refactor pass.
+  it('matches the seeded command, event, visibility, and checkpoint baseline', async () => {
+    // Baseline includes the added match counters, summon presentation groups and
+    // expanded card catalog. Update only for intentional behavior changes.
     for (const seed of [17, 314159]) {
       const { match, participants } = createMatchScenario({
         seed,

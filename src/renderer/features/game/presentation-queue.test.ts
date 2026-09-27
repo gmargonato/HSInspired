@@ -4293,7 +4293,7 @@ describe('board lifecycle preservation', () => {
         health: 27
       })
       expect(captured.accepted).toBe(true)
-      const setStats = vi.spyOn(attacker, 'setStats')
+      const setStats = vi.spyOn(attacker, 'setHealthAndArmor')
       const timelines: gsap.core.Timeline[] = []
       const timeline = internal.animationScope.timeline.bind(internal.animationScope)
       vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
@@ -4358,7 +4358,7 @@ describe('board lifecycle preservation', () => {
       }
       expect(completed).toBe(true)
       await job
-      expect(setStats).toHaveBeenLastCalledWith(0, 27, 0, 30)
+      expect(setStats).toHaveBeenLastCalledWith(27, 0, 30)
       expect(attacker.parent).toBe(origin.parent)
       expect(attacker.parent!.getChildIndex(attacker)).toBe(origin.index)
       expect({ x: attacker.x, y: attacker.y, zIndex: attacker.zIndex }).toEqual({
