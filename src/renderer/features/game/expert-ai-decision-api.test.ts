@@ -1582,14 +1582,12 @@ describe('Expert AI worker boundary', () => {
     expect(
       selectedCard?.cardId,
       JSON.stringify(
-        api
-          .getLastTrace()
-          ?.candidates.map((c) => ({
-            action: c.description,
-            value: c.recommendationValue,
-            mean: c.meanValue,
-            visits: c.visits
-          }))
+        api.getLastTrace()?.candidates.map((c) => ({
+          action: c.description,
+          value: c.recommendationValue,
+          mean: c.meanValue,
+          visits: c.visits
+        }))
       )
     ).toBe('basic_vanish')
   }, 60_000)
