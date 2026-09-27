@@ -301,7 +301,7 @@ export const GAME_BOARD_LAYOUT = {
      * shares the local label's Y and starts just right of it.
      */
     crystals: {
-      firstCrystalCenter: { x: 1345, y: 1015 },
+      firstCrystalCenter: { x: 1345, y: 1012 },
       pendingRowOffsetY: 40,
       overloadCrystal: placement(
         { x: 0, y: 0 },
@@ -438,6 +438,11 @@ export const GAME_BOARD_LAYOUT = {
 
   /** Reusable three-card selection surface used by Tracking and future Discover cards. */
   cardSelection: {
+    prompt: placement(
+      { x: 960, y: 280 },
+      { width: 1200, height: 44 },
+      { anchor: CENTER, note: 'Instructions for staged card choices.' }
+    ),
     cards: {
       centerX: 960,
       baselineY: 720,

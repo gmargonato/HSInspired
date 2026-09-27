@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { selectAiHeroPowerBonus } from './ai-bonuses'
 import { createMatchScenario } from './testing/match-scenario-builder'
 import { createSeededRng } from './rng'
+import { boardMinionAbilityMarkers } from './rules/minion-abilities'
 import { CARD_CATALOG, asCardId, asHeroId } from '../content/cards'
 import { HERO_POWER_CATALOG } from '../content/hero-powers'
+import { zombeastId, zombeastPool } from '../content/cards/zombeast'
 import type { Deck } from '../decks'
 import type { OpeningPlayerState } from './opening-match-types'
 import { asPlayerId, type MatchSetup, type PlayerId } from './match-types'
@@ -716,7 +718,7 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     const checkpoint = match.getCheckpoint()
     const choose = (choice: number) => {
       const branch = createOpeningMatchFromCheckpoint(checkpoint)
-      accept(
+      const resolved = accept(
         branch.dispatch({
           type: 'choose-card-option',
           participantId: activeId,
@@ -724,6 +726,17 @@ describe("Un'Goro and Frozen Throne rewards", () => {
           choice
         })
       )
+      const history = resolved.events.find(
+        (event) => event.type === 'history-action-resolved'
+      ) as HistoryActionResolvedEvent
+      expect(history.source.id).toBe(card.instanceId)
+      expect(
+        history.outcomes
+          .filter((outcome) => outcome.kind === 'adapt')
+          .map((outcome) => outcome.target.cardId)
+      ).toEqual([
+        pending.options.find((option) => option.choice === choice)!.presentationCardId
+      ])
       expect(branch.getState().pendingCardChoice).toBeUndefined()
       return branch.getState().players.find((p) => p.participantId === activeId)!.board
     }
@@ -1151,7 +1164,8 @@ describe("Un'Goro and Frozen Throne rewards", () => {
         remaining: rounds - index
       })
       expect(choice.options).toHaveLength(3)
-      accept(
+      const selected = choice.options[0]!.presentationCardId
+      const resolved = accept(
         match.dispatch({
           type: 'choose-card-option',
           participantId: activeId,
@@ -1159,6 +1173,15 @@ describe("Un'Goro and Frozen Throne rewards", () => {
           choice: 0
         })
       )
+      const history = resolved.events.find(
+        (event) => event.type === 'history-action-resolved'
+      ) as HistoryActionResolvedEvent
+      expect(history.source.id).toBe(card.instanceId)
+      expect(
+        history.outcomes
+          .filter((outcome) => outcome.kind === 'adapt')
+          .map((outcome) => outcome.target.cardId)
+      ).toEqual([selected])
     }
     expect(match.getState().pendingCardChoice).toBeUndefined()
   })
@@ -1209,6 +1232,92 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     expect(
       match.getState().players.find((player) => player.participantId === opponentId)
         ?.board
+    ).toHaveLength(0)
+  })
+
+  it('applies selected Poison Spit to Ornery Direhorn and records the choice', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_ornery_direhorn')
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        position: 0
+      })
+    )
+    const checkpoint = match.getCheckpoint()
+    const pending = checkpoint.state.pendingCardChoice!
+    const adapted = createOpeningMatchFromCheckpoint({
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        pendingCardChoice: {
+          ...pending,
+          options: [
+            {
+              choice: 0,
+              label: 'Poison Spit',
+              presentationCardId: asCardId('journey_to_ungoro_poison_spit')
+            }
+          ]
+        }
+      }
+    })
+    const result = accept(
+      adapted.dispatch({
+        type: 'choose-card-option',
+        participantId: activeId,
+        sourceCardInstanceId: pending.sourceCardInstanceId,
+        choice: 0
+      })
+    )
+    const minion = result.state.players.find((p) => p.participantId === activeId)!
+      .board[0]!
+    expect(
+      boardMinionAbilityMarkers(
+        minion,
+        CARD_CATALOG.require(minion.cardId),
+        result.state.turnNumber
+      ).poisonous
+    ).toBe(true)
+    const history = result.events.find(
+      (event) => event.type === 'history-action-resolved'
+    ) as HistoryActionResolvedEvent
+    expect(history).toMatchObject({ append: true, source: { id: card.instanceId } })
+    expect(history.outcomes).toContainEqual(
+      expect.objectContaining({
+        kind: 'adapt',
+        target: expect.objectContaining({
+          cardId: 'journey_to_ungoro_poison_spit',
+          publicIdentity: true
+        })
+      })
+    )
+    const opponentId = result.state.players.find(
+      (p) => p.participantId !== activeId
+    )!.participantId
+    accept(
+      adapted.dispatch({
+        type: 'dev-summon-minion',
+        participantId: opponentId,
+        cardId: 'basic_boulderfist_ogre'
+      })
+    )
+    accept(adapted.dispatch({ type: 'end-turn', participantId: activeId }))
+    accept(adapted.dispatch({ type: 'end-turn', participantId: opponentId }))
+    const defender = adapted
+      .getState()
+      .players.find((p) => p.participantId === opponentId)!.board[0]!
+    accept(
+      adapted.dispatch({
+        type: 'attack-character',
+        participantId: activeId,
+        attacker: { kind: 'minion', instanceId: minion.instanceId },
+        defender: { kind: 'minion', instanceId: defender.instanceId }
+      })
+    )
+    expect(
+      adapted.getState().players.find((p) => p.participantId === opponentId)!.board
     ).toHaveLength(0)
   })
 
@@ -2280,7 +2389,7 @@ describe('Hero cards', () => {
     )
   })
 
-  it('Deathstalker Rexxar replaces the hero power with Build-A-Beast Discover', () => {
+  it('Deathstalker Rexxar crafts a Zombeast through two private choices', () => {
     const match = startMatch('rexxar')
     accept(
       match.dispatch({
@@ -2307,7 +2416,7 @@ describe('Hero cards', () => {
     )
     expect(heroPower).toMatchObject({
       displayName: 'Build-A-Beast',
-      rulesText: 'Discover a Beast',
+      rulesText: 'Craft a custom Zombeast.',
       cost: 2,
       targeting: 'none',
       presentationAssetKey: 'hero-power-build-a-beast'
@@ -2320,33 +2429,71 @@ describe('Hero cards', () => {
     })
 
     const result = usePower(match)
-    const pending = match.getState().pendingDiscover
+    const pending = match.getState().pendingCardChoice
     expect(result.events).toContainEqual(
-      expect.objectContaining({ type: 'discover-started', participantId: HUMAN_ID })
+      expect.objectContaining({ type: 'card-choice-started', participantId: HUMAN_ID })
     )
     expect(pending?.participantId).toBe(HUMAN_ID)
-    expect(pending?.candidates).toHaveLength(3)
-    expect(new Set(pending?.candidates.map((card) => card.cardId))).toHaveLength(3)
+    expect(pending?.options).toHaveLength(3)
     expect(
-      pending?.candidates.every((card) => {
-        const definition = CARD_CATALOG.require(card.cardId)
-        return definition.type === 'Minion' && definition.subtype === 'Beast'
-      })
+      new Set(pending?.options.map((option) => option.presentationCardId))
+    ).toHaveLength(3)
+    expect(
+      pending?.options.every(
+        (option) =>
+          zombeastPool(CARD_CATALOG.require(option.presentationCardId!)) === 'first'
+      )
     ).toBe(true)
-
-    const selected = pending!.candidates[0]!
+    expect(match.getPublicState!(OPPONENT_ID).pendingCardChoice).toBeUndefined()
+    const handSize = match.getState().players[0].hand.length
+    const mana = match.getState().players[0].mana.available
+    const selected = pending!.options[0]!
     accept(
       match.dispatch({
-        type: 'choose-discover-card',
+        type: 'choose-card-option',
         participantId: HUMAN_ID,
-        cardInstanceId: selected.instanceId
+        sourceCardInstanceId: pending!.sourceCardInstanceId,
+        choice: selected.choice
       })
     )
-    expect(match.getState().pendingDiscover).toBeUndefined()
+    expect(match.getState().players[0].hand).toHaveLength(handSize)
+    const second = match.getState().pendingCardChoice!
+    expect(second.resolution).toMatchObject({
+      type: 'build-a-beast',
+      stage: 'second',
+      firstBeast: selected.presentationCardId
+    })
+    expect(second.options).toHaveLength(3)
+    expect(
+      second.options.every(
+        (option) =>
+          zombeastPool(CARD_CATALOG.require(option.presentationCardId!)) === 'second'
+      )
+    ).toBe(true)
+    expect(match.dispatch({ type: 'end-turn', participantId: HUMAN_ID }).accepted).toBe(
+      false
+    )
+    const command = {
+      type: 'choose-card-option' as const,
+      participantId: HUMAN_ID,
+      sourceCardInstanceId: second.sourceCardInstanceId,
+      choice: second.options[0]!.choice
+    }
+    const restored = createOpeningMatchFromCheckpoint(
+      JSON.parse(JSON.stringify(match.getCheckpoint()))
+    )
+    expect(accept(restored.dispatch(command)).state).toEqual(
+      accept(match.dispatch(command)).state
+    )
+    expect(match.getState().pendingCardChoice).toBeUndefined()
+    expect(match.getState().players[0].mana.available).toBe(mana)
+    expect(match.getState().players[0].heroPower.available).toBe(false)
     expect(match.getState().players[0].hand).toContainEqual(
       expect.objectContaining({
-        instanceId: selected.instanceId,
-        cardId: selected.cardId
+        cardId: zombeastId(
+          selected.presentationCardId!,
+          second.options[0]!.presentationCardId!
+        )
       })
     )
   })

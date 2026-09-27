@@ -1024,7 +1024,8 @@ export function createOpeningMatch(
             result.state,
             command.sourceCardInstanceId,
             command.participantId,
-            result.events
+            result.events,
+            command.choice
           )
           return history ? [history] : []
         })(),

@@ -1,4 +1,5 @@
 import { summonPresentationBatch } from './summon-presentation'
+import { returnPresentationBatch } from './return-presentation'
 import { PresentationQueue } from './presentation-queue'
 import { randomSpellPresentationStates } from './random-spell-presentation'
 import type { RemoteCardPlayPreview } from './remote-card-play-preview'
@@ -48,6 +49,7 @@ import {
 import type { MinionPreviewPresentation } from './game-card-targeting-types'
 import type { CardSelectionOverlay } from './card-selection-overlay'
 import { CardDepartureAnimation } from './card-departure-animation'
+import { Burn } from '../../rendering/effects/burn'
 import { CARD_DEPARTURE_LAYOUT } from './card-departure-layout'
 import { HandCardPerspectivePool } from './hand-card-perspective-pool'
 import { CardView } from '../../rendering/cards/card-view'
@@ -106,6 +108,7 @@ describe('engine-driven minion card departures', () => {
       createSlot(card: OpeningCard): Promise<GameCardSlot>
       presentEffectResolved(event: OpeningMatchEvent): Promise<void>
       presentMinionCardMovement(movement: MinionCardMovement): Promise<void>
+      presentMinionReturnBatch(movements: readonly MinionCardMovement[]): Promise<void>
       reconcileEffectMovement(state: OpeningMatchState): Promise<void>
       presentDraw(participantId: PlayerId, card: OpeningCard): Promise<void>
       animateSlotToDeck(
@@ -250,6 +253,274 @@ describe('engine-driven minion card departures', () => {
     expect(source.destroyed).toBe(true)
     expect(internal.hand.entries).toHaveLength(0)
     expect(internal.summonLayer.children).toHaveLength(0)
+  })
+
+  it('waits for all assets, lifts both rows together, then returns or burns in event order', async () => {
+    const { internal, source, animations, finish, movement } = setup()
+    const second = Object.assign(new Container(), {
+      instanceId: 'second-return',
+      cardId: source.cardId,
+      ownerId: internal.session.remoteParticipantId
+    }) as unknown as MinionView
+    Object.assign(second, {
+      shadow: attachShadow(second, { x: -90, y: -120, width: 180, height: 240 })
+    })
+    second.addChild(new Sprite(Texture.WHITE))
+    internal.boardPositions.insert('remote', 0, second)
+    second.position.set(850, 400)
+    let resolveSlot!: (slot: GameCardSlot) => void
+    vi.mocked(internal.createSlot).mockImplementation(async (card) => {
+      if (card.instanceId === second.instanceId)
+        return new Promise((resolve) => {
+          resolveSlot = resolve
+        })
+      return departureSlot(card.instanceId)
+    })
+    const burn = vi
+      .spyOn(internal.cardDepartureAnimation, 'burnCard')
+      .mockResolvedValue()
+    const layout = vi.spyOn(internal.hand, 'applyLayout')
+    const job = internal.presentMinionReturnBatch([
+      movement('hand'),
+      {
+        ...movement('discarded'),
+        sourceInstanceId: second.instanceId!,
+        participantId: internal.session.remoteParticipantId,
+        cards: [{ ...movement('discarded').cards[0], instanceId: second.instanceId! }]
+      }
+    ])
+    for (let pass = 0; pass < 5; pass++) await Promise.resolve()
+    expect(animations).toHaveLength(0)
+    expect(source.destroyed).toBe(false)
+    expect(second.destroyed).toBe(false)
+    resolveSlot(departureSlot(second.instanceId!))
+    for (let pass = 0; pass < 5; pass++) await Promise.resolve()
+    expect(animations).toHaveLength(2)
+    expect(burn).not.toHaveBeenCalled()
+    for (const animation of [...animations]) animation.progress(1)
+    await Promise.resolve()
+    expect(source.destroyed).toBe(true)
+    expect(second.destroyed).toBe(true)
+    expect(burn).not.toHaveBeenCalled()
+    expect(layout).not.toHaveBeenCalled()
+    await finish(job)
+    expect(burn).toHaveBeenCalledOnce()
+    expect(burn.mock.calls[0][0].instanceId).toBe(second.instanceId)
+    expect(layout).toHaveBeenCalledOnce()
+    expect(internal.hand.entries.map((entry) => entry.card.instanceId)).toEqual([
+      source.instanceId
+    ])
+    expect(internal.activeDepartureSlots.size).toBe(0)
+  })
+
+  it('uses the burn path for a single full-hand return after materialization', async () => {
+    const { internal, finish, movement } = setup()
+    const burn = vi
+      .spyOn(internal.cardDepartureAnimation, 'burnCard')
+      .mockImplementation(async (slot) => {
+        expect(slot.alpha).toBe(1)
+        expect(
+          internal.summonLayer.getChildByLabel('game.departing-minion.departure-source')
+        ).toBeNull()
+      })
+    await finish(
+      internal.presentEffectResolved({
+        type: 'effect-resolved',
+        action: 'return-to-hand',
+        revision: 1,
+        sourceInstanceId: 'sap',
+        sourceCardId: null,
+        controllerId: internal.session.localParticipantId,
+        actionPath: 'cast.0',
+        cardMovement: movement('discarded')
+      })
+    )
+    expect(burn).toHaveBeenCalledOnce()
+    expect(internal.hand.entries).toHaveLength(0)
+  })
+
+  it.each(['local', 'remote'] as const)(
+    'reserves stable positions for multiple %s returns',
+    async (side) => {
+      const { internal, source, finish, movement } = setup()
+      const second = Object.assign(new Container(), {
+        instanceId: 'second-return',
+        cardId: source.cardId,
+        ownerId: source.ownerId
+      }) as unknown as MinionView
+      Object.assign(second, {
+        shadow: attachShadow(second, { x: -90, y: -120, width: 180, height: 240 })
+      })
+      second.addChild(new Sprite(Texture.WHITE))
+      internal.boardPositions.insert('local', 1, second)
+      const participantId =
+        side === 'local'
+          ? internal.session.localParticipantId
+          : internal.session.remoteParticipantId
+      const first = { ...movement('hand'), participantId }
+      const count = internal.remoteBackCount
+      const layout = vi.spyOn(internal.hand, 'applyLayout')
+      await finish(
+        internal.presentMinionReturnBatch([
+          first,
+          {
+            ...first,
+            sourceInstanceId: second.instanceId!,
+            cards: [{ ...first.cards[0], instanceId: second.instanceId! }]
+          }
+        ])
+      )
+      if (side === 'local') {
+        expect(layout).toHaveBeenCalledOnce()
+        expect(internal.hand.entries.map((entry) => entry.card.instanceId)).toEqual([
+          source.instanceId,
+          second.instanceId
+        ])
+      } else {
+        expect(internal.remoteBackCount).toBe(count + 2)
+        expect(internal.remoteBacks[count].x).not.toBe(
+          internal.remoteBacks[count + 1].x
+        )
+        expect(
+          internal.remoteBacks.slice(count).every((back) => back.alpha === 1)
+        ).toBe(true)
+        expect(layout).not.toHaveBeenCalled()
+      }
+      expect(internal.activeDepartureSlots.size).toBe(0)
+    }
+  )
+
+  it.each([false, true])(
+    'cleans the burn filter and shadow on completion or interruption (%s)',
+    async (interrupt) => {
+      const { value, internal, animations, finish } = setup()
+      vi.stubGlobal('document', {
+        createElement: () => ({
+          getContext: () => ({
+            createLinearGradient: () => ({ addColorStop: vi.fn() }),
+            fillRect: vi.fn()
+          })
+        })
+      })
+      const gradient = RenderTexture.create({ width: 256, height: 1 })
+      vi.spyOn(Texture, 'from').mockReturnValue(gradient)
+      const destroy = vi.spyOn(Burn.prototype, 'destroy')
+      const slot = departureSlot('burning')
+      const visual = slot.shadow.visual
+      internal.summonLayer.addChild(slot)
+      const job = internal.cardDepartureAnimation.burnCard(slot, Texture.WHITE)
+      expect(slot.card.filters).toHaveLength(1)
+      expect(slot.shadow.visual.visible).toBe(false)
+      expect(animations[0].duration()).toBe(CARD_DRAW_LAYOUT.localReveal.burnDuration)
+      if (interrupt) {
+        animations[0].progress(0.5)
+        value.dispose()
+        await job
+      } else {
+        await finish(job)
+        expect(slot.card.filters ?? []).toHaveLength(0)
+        expect(slot.shadow.visual).toBe(visual)
+      }
+      expect(destroy).toHaveBeenCalledOnce()
+    }
+  )
+
+  it('batches both owners and overflow, but stops at a different action or trigger', () => {
+    const { internal, movement } = setup()
+    const first: OpeningMatchEvent = {
+      type: 'effect-resolved',
+      action: 'return-to-hand',
+      revision: 1,
+      sourceInstanceId: 'vanish',
+      sourceCardId: null,
+      controllerId: internal.session.localParticipantId,
+      actionPath: 'cast.0',
+      cardMovement: movement('hand')
+    }
+    const second: OpeningMatchEvent = {
+      ...first,
+      cardMovement: {
+        ...movement('discarded'),
+        participantId: internal.session.remoteParticipantId
+      }
+    }
+    expect(returnPresentationBatch([first, second], 0)).toEqual([first, second])
+    for (const changed of [
+      { action: 'damage' },
+      { actionPath: 'cast.1' },
+      { revision: 2 },
+      { sourceInstanceId: 'another-cast' }
+    ]) {
+      expect(
+        returnPresentationBatch([first, { ...second, ...changed }, second], 0)
+      ).toEqual([first])
+    }
+  })
+
+  it('groups real Vanish events across history records and preserves partial hand overflow', () => {
+    const scenario = createMatchScenario({ cardId: 'basic_vanish' })
+    scenario.confirmBothMulligans()
+    const active = scenario.match.getState().activePlayerId!
+    const opponent = scenario.participants.find((id) => id !== active)!
+    const dispatch = (command: Parameters<typeof scenario.match.dispatch>[0]) => {
+      const result = scenario.match.dispatch(command)
+      expect(result.accepted).toBe(true)
+      return result
+    }
+    dispatch({
+      type: 'dev-set-mana',
+      participantId: active,
+      available: 10,
+      maximum: 10
+    })
+    dispatch({ type: 'dev-clear-zone', participantId: opponent, zone: 'hand' })
+    for (let index = 0; index < 9; index++)
+      dispatch({
+        type: 'dev-add-card',
+        participantId: opponent,
+        cardId: 'basic_acidic_swamp_ooze'
+      })
+    for (const participantId of scenario.participants)
+      for (let index = 0; index < 2; index++)
+        dispatch({
+          type: 'dev-summon-minion',
+          participantId,
+          cardId: 'basic_acidic_swamp_ooze'
+        })
+    const spell = scenario.match
+      .getState()
+      .players.find((player) => player.participantId === active)!
+      .hand.find((card) => card.cardId === 'basic_vanish')!
+    const result = dispatch({
+      type: 'play-card',
+      participantId: active,
+      cardInstanceId: spell.instanceId
+    })
+    if (!result.accepted) return
+    const start = result.events.findIndex(
+      (event) => event.type === 'effect-resolved' && event.action === 'return-to-hand'
+    )
+    const batch = returnPresentationBatch(result.events, start)
+    expect(batch).toHaveLength(4)
+    expect(
+      batch.filter((event) => event.cardMovement.destination === 'discarded')
+    ).toHaveLength(1)
+    expect(new Set(batch.map((event) => event.cardMovement.participantId)).size).toBe(2)
+    expect(result.state.players.every((player) => player.board.length === 0)).toBe(true)
+  })
+
+  it('releases every return slot when the scene is disposed during materialization', async () => {
+    const { value, internal, animations, movement } = setup()
+    const job = internal.presentMinionReturnBatch([movement('hand')])
+    for (let pass = 0; pass < 5; pass++) await Promise.resolve()
+    animations[0].progress(1)
+    await Promise.resolve()
+    const slots = [...internal.activeDepartureSlots]
+    expect(slots).toHaveLength(1)
+    value.dispose()
+    await job
+    expect(slots.every((slot) => slot.destroyed)).toBe(true)
+    expect(internal.activeDepartureSlots.size).toBe(0)
   })
 
   it.each([false, true])(
@@ -1359,6 +1630,58 @@ describe('Golden Monkey hand presentation', () => {
 })
 
 describe('remote card choices', () => {
+  it('shows both Build-a-Beast stages when the choice source is a hero power', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      cardSelectionOverlay: CardSelectionOverlay
+      createSlot(card: OpeningCard): Promise<GameCardSlot>
+      chooseVisibleCardOption(choice: number, animated?: boolean): void
+    }
+    const choose = vi
+      .spyOn(internal, 'chooseVisibleCardOption')
+      .mockImplementation(() => {})
+    const createSlot = vi
+      .spyOn(internal, 'createSlot')
+      .mockImplementation(async (card) => mulliganSlot(card.instanceId))
+    const overlay = internal.cardSelectionOverlay
+    for (const [stage, cardIds] of [
+      [
+        'first',
+        ['basic_timber_wolf', 'classic_dire_wolf_alpha', 'classic_scavenging_hyena']
+      ],
+      [
+        'second',
+        ['basic_stonetusk_boar', 'basic_river_crocolisk', 'basic_ironfur_grizzly']
+      ]
+    ] as const) {
+      await overlay.showChoices(
+        internal.session.localParticipantId,
+        `${internal.session.localParticipantId}:hero`,
+        asCardId('knights_of_the_frozen_throne_build_a_beast'),
+        cardIds.map((id, choice) => ({
+          choice,
+          label: id,
+          presentationCardId: asCardId(id)
+        })),
+        true,
+        `Choose the ${stage} Beast`
+      )
+      expect(overlay.visible).toBe(true)
+      const slots = createSlot.mock.results.slice(-3)
+      expect(slots).toHaveLength(3)
+      for (const result of slots) {
+        const slot = await result.value
+        expect(slot.alpha).toBe(1)
+        expect(slot.destroyed).toBe(false)
+      }
+      overlay.selectChoice(1)
+      expect(choose).toHaveBeenLastCalledWith(1, undefined)
+    }
+    expect(createSlot).toHaveBeenCalledTimes(6)
+    expect(choose).toHaveBeenCalledTimes(2)
+  })
+
   it('hides the board inspection toggle while the remote Discover is active', async () => {
     const value = board()
     const internal = value as unknown as {
@@ -4283,18 +4606,251 @@ describe('board lifecycle preservation', () => {
     move()
     expect(hand.hoveredSlot).toBeNull()
     internal.heroPowerTargeting = false
-    move()
+    hand.refreshHover()
     expect(hand.hoveredSlot).toBe(slot)
     expect(slot.zIndex).toBe(1000)
     move(1)
     expect(hand.hoveredSlot).toBe(slot)
-    expect(deferPreparation).toHaveBeenCalledTimes(2)
+    expect(deferPreparation).toHaveBeenCalledTimes(1)
+    hand.setReflowing(true)
+    hand.resetHover()
+    hand.refreshHover()
+    expect(hand.hoveredSlot).toBeNull()
+    hand.setReflowing(false)
+    hand.refreshHover()
+    expect(hand.hoveredSlot).toBe(slot)
     hand.layer.emit('pointerleave', {} as FederatedPointerEvent)
+    hand.setReflowing(true)
+    hand.setReflowing(false)
+    hand.refreshHover()
     expect(hand.hoveredSlot).toBeNull()
     value.dispose()
     expect(hand.layer.listenerCount('pointermove')).toBe(0)
     expect(hand.layer.listenerCount('globalpointermove')).toBe(0)
     expect(slot.destroyed).toBe(true)
+  })
+
+  it('refreshes the current pointer after a lock without hovering through an overlay', () => {
+    const value = board()
+    const internal = value as unknown as {
+      hand: GameHandView
+      heroPowerTargeting: boolean
+    }
+    const { hand } = internal
+    const slot = mulliganSlot('stationary')
+    const rest = layoutHand(1)[0]!
+    hand.layer.addChild(slot)
+    hand.append({
+      card: { instanceId: 'stationary', cardId: asCardId('classic_wisp') },
+      slot,
+      restTransform: rest,
+      displaced: false
+    })
+    hand.activate()
+    const overlay = new Container()
+    const hitTest = vi.fn<() => Container | null>(() => overlay)
+    const pointer = { global: hand.layer.toGlobal({ x: rest.x, y: 1060 }) }
+    const renderer = (hand as unknown as { renderer: { events: unknown } }).renderer
+    renderer.events = { pointer, rootBoundary: { hitTest } }
+    internal.heroPowerTargeting = true
+    hand.refreshHover()
+    internal.heroPowerTargeting = false
+    hand.refreshHover()
+    expect(hand.hoveredSlot).toBeNull()
+    hitTest.mockReturnValue(slot)
+    hand.refreshHover()
+    expect(hand.hoveredSlot).toBe(slot)
+    // Discard disables event delivery; use the renderer's latest position on unlock.
+    hand.layer.eventMode = 'none'
+    hand.resetHover()
+    hand.refreshHover()
+    pointer.global.set(50, 50)
+    hitTest.mockReturnValue(null)
+    hand.layer.eventMode = 'static'
+    hand.refreshHover()
+    expect(hand.hoveredSlot).toBeNull()
+    overlay.destroy()
+  })
+
+  it('restores stationary hover when a held card finishes returning', () => {
+    const value = board()
+    const { hand } = value as unknown as { hand: GameHandView }
+    const slot = mulliganSlot('returning')
+    const rest = layoutHand(1)[0]!
+    hand.layer.addChild(slot)
+    hand.append({
+      card: { instanceId: 'returning', cardId: asCardId('classic_wisp') },
+      slot,
+      restTransform: rest,
+      displaced: false
+    })
+    hand.activate()
+    const index = vi.spyOn(hand.drag, 'index', 'get').mockReturnValue(0)
+    hand.layer.emit('pointermove', {
+      getLocalPosition: () => ({ x: rest.x, y: rest.y - 40 })
+    } as unknown as FederatedPointerEvent)
+    hand.refreshHover()
+    expect(hand.hoveredSlot).toBeNull()
+    index.mockReturnValue(null)
+    hand.refreshHover()
+    expect(hand.hoveredSlot).toBe(slot)
+  })
+
+  it.each(['Minion', 'Spell', 'Weapon', 'Hero'] as const)(
+    'allows remaining-card hover during %s play and follow-up effects',
+    async (kind) => {
+      const value = board()
+      type Result = Extract<
+        ReturnType<GameBoardSession['dispatch']>,
+        { accepted: true }
+      >
+      const internal = value as unknown as {
+        session: GameBoardSession
+        hand: GameHandView
+        wait(duration: number): Promise<void>
+        presentAcceptedMinionPlay(entry: HandEntry, result: Result): Promise<void>
+        presentAcceptedWeaponPlay(entry: HandEntry, result: Result): Promise<void>
+        presentAcceptedHeroPlay(entry: HandEntry, result: Result): Promise<void>
+        presentAcceptedSpellPlay(
+          entry: HandEntry,
+          result: Result,
+          pose: unknown
+        ): Promise<void>
+        presentMinionPlayed(): Promise<void>
+        presentWeaponEquipped(): Promise<void>
+        presentResolutionEvents(): Promise<void>
+        cardPlayAnimation: { present(): Promise<void> }
+      }
+      const { hand } = internal
+      const entries = ['played', 'first', 'second'].map((id, index) => {
+        const slot = mulliganSlot(id)
+        const rest = layoutHand(3)[index]!
+        slot.position.set(rest.x, rest.y)
+        slot.scale.set(rest.scale)
+        hand.layer.addChild(slot)
+        const entry = {
+          card: { instanceId: id, cardId: asCardId('classic_wisp') },
+          slot,
+          restTransform: rest,
+          displaced: false
+        }
+        hand.append(entry)
+        return entry
+      })
+      hand.activate()
+      hand.setReflowing(true)
+      let finishAnimation!: () => void
+      const animation = new Promise<void>((resolve) => {
+        finishAnimation = resolve
+      })
+      let finishEffects!: () => void
+      const effects = new Promise<void>((resolve) => {
+        finishEffects = resolve
+      })
+      vi.spyOn(internal, 'wait').mockReturnValue(animation)
+      vi.spyOn(internal, 'presentMinionPlayed').mockReturnValue(animation)
+      vi.spyOn(internal, 'presentWeaponEquipped').mockReturnValue(animation)
+      vi.spyOn(internal.cardPlayAnimation, 'present').mockReturnValue(animation)
+      const resolution = vi
+        .spyOn(internal, 'presentResolutionEvents')
+        .mockReturnValue(effects)
+      const events = (
+        kind === 'Minion'
+          ? [{ type: 'minion-played' }]
+          : kind === 'Weapon'
+            ? [{ type: 'weapon-equipped' }]
+            : []
+      ) as OpeningMatchEvent[]
+      const result = {
+        accepted: true as const,
+        state: internal.session.getState(),
+        events
+      }
+      const play =
+        kind === 'Spell'
+          ? internal.presentAcceptedSpellPlay(entries[0], result, {})
+          : internal[`presentAccepted${kind}Play`](entries[0], result)
+      const move = (index: number) => {
+        const rest = hand.entries[index].restTransform!
+        hand.layer.emit('pointermove', {
+          getLocalPosition: () => ({ x: rest.x, y: rest.y - 40 })
+        } as unknown as FederatedPointerEvent)
+      }
+      expect(hand.isReflowing).toBe(false)
+      expect(hand.entries).not.toContain(entries[0])
+      move(0)
+      expect(hand.hoveredSlot).toBe(entries[1].slot)
+      move(1)
+      expect(hand.hoveredSlot).toBe(entries[2].slot)
+      expect(resolution).not.toHaveBeenCalled()
+      finishAnimation()
+      for (let pass = 0; pass < 12; pass++) await Promise.resolve()
+      expect(resolution).toHaveBeenCalledOnce()
+      move(0)
+      expect(hand.hoveredSlot).toBe(entries[1].slot)
+      finishEffects()
+      await play
+    }
+  )
+
+  it('keeps local hover available throughout an opponent discard', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      hand: GameHandView
+      remoteBacks: Sprite[]
+      remoteBackCount: number
+      animationScope: AnimationScope
+      presentHandDiscards(events: OpeningMatchEvent[]): Promise<void>
+    }
+    const { hand } = internal
+    const slot = mulliganSlot('survivor')
+    const rest = layoutHand(1)[0]!
+    hand.layer.addChild(slot)
+    hand.append({
+      card: { instanceId: 'survivor', cardId: asCardId('classic_wisp') },
+      slot,
+      restTransform: rest,
+      displaced: false
+    })
+    hand.activate()
+    internal.remoteBacks.push(new Sprite(Texture.WHITE))
+    internal.remoteBackCount = 1
+    const timelines: gsap.core.Timeline[] = []
+    const timeline = internal.animationScope.timeline.bind(internal.animationScope)
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const result = timeline(vars)
+      timelines.push(result)
+      return result
+    })
+    const play = internal.presentHandDiscards([
+      {
+        type: 'effect-resolved',
+        action: 'discard',
+        revision: 1,
+        sourceInstanceId: 'remote-source',
+        sourceCardId: asCardId('classic_soulfire'),
+        controllerId: internal.session.remoteParticipantId,
+        actionPath: 'play-card.discard',
+        data: {
+          fromZone: 'hand',
+          target: 'remote-card',
+          participantId: internal.session.remoteParticipantId
+        }
+      }
+    ])
+    expect(hand.layer.eventMode).toBe('static')
+    expect(hand.isReflowing).toBe(false)
+    hand.layer.emit('pointermove', {
+      getLocalPosition: () => ({ x: rest.x, y: rest.y - 40 })
+    } as unknown as FederatedPointerEvent)
+    expect(hand.hoveredSlot).toBe(slot)
+    // A lock acquired during this unrelated animation must also survive its completion.
+    hand.setReflowing(true)
+    for (const item of timelines) item.progress(1)
+    await play
+    expect(hand.isReflowing).toBe(true)
+    expect(hand.hoveredSlot).toBe(slot)
   })
 
   it.each(['draw', 'generated', 'discover'] as const)(

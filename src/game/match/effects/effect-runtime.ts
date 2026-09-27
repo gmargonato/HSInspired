@@ -1,3 +1,4 @@
+import { zombeastId, zombeastPoolCards } from '../../content/cards/zombeast'
 import {
   applyCthunToCard,
   cthunEnchantment,
@@ -6424,7 +6425,8 @@ export class EffectRuntime {
           frame.controllerId,
           targetInstanceIds,
           source.cardId,
-          picks
+          picks,
+          { instanceId: frame.source.instanceId, cardId: frame.source.cardId! }
         )
         if (this.draft.pendingCardChoice) {
           this.draft.pendingCardChoice.queued = [
@@ -12128,7 +12130,14 @@ export class EffectRuntime {
           'insufficient-mana',
           'Not enough mana to use the hero power.'
         )
-      if (power.effect.kind === 'choose-one' && options.choice === undefined) {
+      const combineChoices =
+        power.effect.kind === 'choose-one' &&
+        this.combinedChooseOneActive(options.participantId)
+      if (
+        power.effect.kind === 'choose-one' &&
+        options.choice === undefined &&
+        !combineChoices
+      ) {
         this.step('checkpoint.hero-power-choice', 'checkpoint')
         const sourceCardInstanceId = `${options.participantId}:hero-power-choice`
         const pendingChoice: PendingCardChoice = {
@@ -12139,12 +12148,12 @@ export class EffectRuntime {
             {
               choice: 0,
               label: `+${power.effect.attack} Attack this turn`,
-              presentationHeroPowerId: power.id
+              presentationCardId: power.effect.attackChoiceCardId
             },
             {
               choice: 1,
               label: `Gain ${power.effect.armor} Armor`,
-              presentationHeroPowerId: power.id
+              presentationCardId: power.effect.armorChoiceCardId
             }
           ],
           resolution: {
@@ -12342,7 +12351,7 @@ export class EffectRuntime {
           break
         }
         case 'choose-one':
-          if (options.choice === 0)
+          if (combineChoices || options.choice === 0)
             runHeroPowerAction(
               {
                 action: 'modify',
@@ -12352,7 +12361,7 @@ export class EffectRuntime {
               },
               'hero-power.choose-one.attack'
             )
-          else
+          if (combineChoices || options.choice === 1)
             runHeroPowerAction(
               {
                 action: 'gain-armor',
@@ -12477,18 +12486,30 @@ export class EffectRuntime {
             'hero-power.summon-golem'
           )
           break
-        case 'discover-beast':
-          runHeroPowerAction(
-            {
-              action: 'discover',
-              player: 'self',
-              count: 3,
-              source: 'random-card',
-              filter: { tribe: 'Beast' }
-            },
-            'hero-power.discover-beast'
-          )
+        case 'build-a-beast': {
+          const offers = this.shuffle([
+            ...zombeastPoolCards(CARD_CATALOG.all, 'first')
+          ]).slice(0, 3)
+          if (!offers.length || !zombeastPoolCards(CARD_CATALOG.all, 'second').length)
+            throw new ResolutionInputError(
+              'resolution-failed',
+              'No eligible Beasts are available.'
+            )
+          this.draft.pendingCardChoice = {
+            participantId: options.participantId,
+            sourceCardInstanceId: source.instanceId,
+            sourceCardId: asCardId(power.id),
+            prompt: 'Build-a-Beast: Choose the first Beast',
+            options: offers.map((card, choice) => ({
+              choice,
+              label: card.name,
+              presentationCardId: card.id
+            })),
+            resolution: { type: 'build-a-beast', stage: 'first' }
+          }
+          this.announcePendingCardChoice()
           break
+        }
         case 'discover-choose-one':
           runHeroPowerAction(
             {
@@ -13930,7 +13951,8 @@ export class EffectRuntime {
     participantId: PlayerId,
     targetInstanceIds: readonly string[],
     sourceCardId: CardId,
-    remaining: number
+    remaining: number,
+    historySource?: { readonly instanceId: string; readonly cardId: CardId }
   ): Omit<PendingCardChoice, 'queued'> {
     const names = [
       'crackling_shield',
@@ -13956,7 +13978,7 @@ export class EffectRuntime {
         label: definition.name,
         presentationCardId: definition.id
       })),
-      resolution: { type: 'adapt', targetInstanceIds, remaining }
+      resolution: { type: 'adapt', targetInstanceIds, remaining, historySource }
     }
   }
 
@@ -13978,7 +14000,8 @@ export class EffectRuntime {
       participantId: pending.participantId,
       sourceCardInstanceId: pending.sourceCardInstanceId,
       sourceCardId: pending.sourceCardId,
-      options: clonePlain(pending.options)
+      options: clonePlain(pending.options),
+      ...(pending.prompt ? { prompt: pending.prompt } : {})
     })
   }
 
@@ -14033,7 +14056,8 @@ export class EffectRuntime {
               pending.participantId,
               remainingTargets.map((target) => target.instanceId),
               pending.sourceCardId,
-              pending.resolution.remaining - 1
+              pending.resolution.remaining - 1,
+              pending.resolution.historySource
             )
           ) as NonNullable<DraftState['pendingCardChoice']>
           this.draft.pendingCardChoice = {
@@ -14041,6 +14065,72 @@ export class EffectRuntime {
             ...(pending.queued?.length ? { queued: pending.queued } : {})
           }
         } else this.advancePendingCardChoice(pending)
+        this.announcePendingCardChoice()
+        const nextState = this.commitResolution()
+        return {
+          accepted: true,
+          state: nextState,
+          events: clonePlain(this.events) as OpeningMatchEvent[],
+          trace: copyPlainArray(this.trace),
+          nextEntityOrdinal: this.nextEntityOrdinal,
+          triggerEvents: copyPlainArray(this.triggerEvents)
+        }
+      }
+      if (pending.resolution?.type === 'build-a-beast') {
+        const resolution = pending.resolution
+        const selected = pending.options.find(
+          (option) => option.choice === options.choice
+        )?.presentationCardId
+        if (!selected)
+          throw new ResolutionInputError(
+            'stale-target',
+            'The selected Beast is unavailable.'
+          )
+        if (resolution.stage === 'first') {
+          const offers = this.shuffle([
+            ...zombeastPoolCards(CARD_CATALOG.all, 'second')
+          ]).slice(0, 3)
+          this.draft.pendingCardChoice = {
+            ...pending,
+            prompt: `Build-a-Beast: Combine ${CARD_CATALOG.require(selected).name} with a second Beast`,
+            options: offers.map((card, choice) => ({
+              choice,
+              label: card.name,
+              presentationCardId: card.id
+            })),
+            resolution: { ...resolution, stage: 'second', firstBeast: selected }
+          }
+        } else {
+          if (!resolution.firstBeast)
+            throw new ResolutionInputError(
+              'stale-target',
+              'The first Beast is unavailable.'
+            )
+          const cardId = zombeastId(resolution.firstBeast, selected)
+          if (!CARD_CATALOG.get(cardId))
+            throw new ResolutionInputError(
+              'resolution-failed',
+              'The selected Beasts have no recipe.'
+            )
+          const source: EntityRef = {
+            instanceId: pending.sourceCardInstanceId,
+            kind: 'hero',
+            participantId: pending.participantId,
+            zone: 'hero',
+            cardId: pending.sourceCardId
+          }
+          this.advancePendingCardChoice(pending)
+          this.addCardToHand(
+            pending.participantId,
+            cardId,
+            {
+              ...this.frameFor(source, null, []),
+              isHeroPower: true
+            },
+            'pending-choice.build-a-beast'
+          )
+          this.processDeaths()
+        }
         this.announcePendingCardChoice()
         const nextState = this.commitResolution()
         return {

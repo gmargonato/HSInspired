@@ -31,9 +31,15 @@ export type HeroPowerEffect =
     }
   | { readonly kind: 'gain-armor'; readonly amount: number }
   | { readonly kind: 'buff-friendly-beast'; readonly attack: number; readonly health: number }
-  | { readonly kind: 'discover-beast' }
+  | { readonly kind: 'build-a-beast' }
   | { readonly kind: 'copy-last-card-this-turn' }
-  | { readonly kind: 'choose-one'; readonly attack: number; readonly armor: number }
+  | {
+      readonly kind: 'choose-one'
+      readonly attack: number
+      readonly armor: number
+      readonly attackChoiceCardId: CardId
+      readonly armorChoiceCardId: CardId
+    }
   | {
       readonly kind: 'damage-and-summon-on-kill'
       readonly amount: number
@@ -232,17 +238,23 @@ const HERO_POWER_DATA = [
     'Choose One - +3 Attack this turn; or Gain 3 Armor.',
     'hero-power-plague-lord',
     'none',
-    { kind: 'choose-one', attack: 3, armor: 3 }
+    {
+      kind: 'choose-one',
+      attack: 3,
+      armor: 3,
+      attackChoiceCardId: asCardId('knights_of_the_frozen_throne_spider_fangs'),
+      armorChoiceCardId: asCardId('knights_of_the_frozen_throne_scarab_shell')
+    }
   ],
   [
     'knights_of_the_frozen_throne_build_a_beast',
     'Hunter',
     'Build-A-Beast',
     2,
-    'Discover a Beast',
+    'Craft a custom Zombeast.',
     'hero-power-build-a-beast',
     'none',
-    { kind: 'discover-beast' }
+    { kind: 'build-a-beast' }
   ],
   [
     'knights_of_the_frozen_throne_bladestorm',

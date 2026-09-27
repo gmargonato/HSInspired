@@ -51,9 +51,11 @@ export class GameHandView {
   private localHoveredSlot: GameCardSlot | null = null
   private reflowing = false
   private handModeActive = false
+  private hoverPointer: HandPointer | null = null
+  private hoverRefreshPending = true
 
   constructor(
-    renderer: Renderer,
+    private readonly renderer: Renderer,
     private readonly animations: Pick<AnimationScope, 'kill' | 'to' | 'timeline'>,
     private readonly callbacks: HandCallbacks,
     private readonly transport: HandCardTransport,
@@ -75,8 +77,7 @@ export class GameHandView {
         syncMana: callbacks.syncMana,
         onReturned: callbacks.onReturned,
         clearHover: () => {
-          this.localHoveredSlot = null
-          this.drag.prepare(null)
+          this.resetHover()
         },
         beginReflow: () => {
           this.reflowing = true
@@ -134,10 +135,12 @@ export class GameHandView {
   }
   setReflowing(value: boolean): void {
     this.reflowing = value
+    this.hoverRefreshPending = true
   }
   resetHover(): void {
     this.localHoveredSlot = null
     this.drag.prepare(null)
+    this.hoverRefreshPending = true
   }
   hoverForBenchmark(slot: GameCardSlot): void {
     this.localHoveredSlot = slot
@@ -150,6 +153,7 @@ export class GameHandView {
   }
 
   clearHover(): void {
+    this.hoverRefreshPending = true
     if (this.localHoveredSlot === null) return
     this.localHoveredSlot = null
     this.drag.prepare(null)
@@ -182,24 +186,16 @@ export class GameHandView {
       }
     } as unknown as Rectangle
     this.layer.on('pointermove', (event: FederatedPointerEvent) => {
-      if (!this.handModeActive || this.reflowing || this.callbacks.isHoverBlocked())
-        return
       const local = event.getLocalPosition(this.layer)
-      if (this.drag.index !== null) return
+      this.hoverPointer = { x: local.x, y: local.y }
+      this.hoverRefreshPending = true
+      if (this.isHoverBlocked()) return
       this.drag.deferPreparation()
-      // Include arriving slots in the fan geometry, but only let cards that
-      // have reached the hand own hover. Missing edge transforms would make
-      // the hit resolver reject the entire fan during a draw.
-      const resolved = resolveHandHover(local, this.restTransforms, DEFAULT_HAND_LAYOUT)
-      const candidate =
-        resolved !== null ? (this.handEntries[resolved]?.slot ?? null) : null
-      const nearest =
-        candidate && isHandOwnedSlot(candidate, this.layer) ? candidate : null
-      if (nearest === this.localHoveredSlot) return
-      this.localHoveredSlot = nearest
-      this.applyHoverDelta()
+      this.resolveHover(local)
     })
     this.layer.on('pointerleave', () => {
+      this.hoverPointer = null
+      this.hoverRefreshPending = true
       if (!this.handModeActive || this.drag.index !== null) return
       this.localHoveredSlot = null
       this.applyHoverDelta()
@@ -215,6 +211,56 @@ export class GameHandView {
     )
   }
 
+  private isHoverBlocked(): boolean {
+    return (
+      !this.handModeActive ||
+      this.layer.eventMode === 'none' ||
+      this.reflowing ||
+      this.callbacks.isHoverBlocked() ||
+      this.drag.index !== null
+    )
+  }
+
+  /** Restore stationary-pointer inspection after targeting, reflow, or drag ends. */
+  refreshHover(): void {
+    if (this.isHoverBlocked()) {
+      this.hoverRefreshPending = true
+      return
+    }
+    if (!this.hoverRefreshPending) return
+    let pointer = this.hoverPointer
+    const events = this.renderer.events
+    if (events) {
+      const global = events.pointer.global
+      pointer = this.layer.toLocal(global)
+      // Re-test the actual input target: a modal can cover a stationary pointer.
+      let target: Container | null = events.rootBoundary.hitTest(global.x, global.y)
+      while (target && target !== this.layer) target = target.parent
+      if (!target) {
+        this.clearHover()
+        // Retry while an overlay covers the hand, but not outside the hand zone.
+        this.hoverRefreshPending =
+          this.layer.hitArea?.contains(pointer.x, pointer.y) === true
+        return
+      }
+    }
+    if (pointer) this.resolveHover(pointer)
+    else this.hoverRefreshPending = false
+  }
+
+  private resolveHover(pointer: HandPointer): void {
+    this.hoverRefreshPending = false
+    // Arriving cards contribute geometry, but only hand-owned cards can hover.
+    const resolved = resolveHandHover(pointer, this.restTransforms, DEFAULT_HAND_LAYOUT)
+    const candidate =
+      resolved !== null ? (this.handEntries[resolved]?.slot ?? null) : null
+    const nearest =
+      candidate && isHandOwnedSlot(candidate, this.layer) ? candidate : null
+    if (nearest === this.localHoveredSlot) return
+    this.localHoveredSlot = nearest
+    this.applyHoverDelta()
+  }
+
   async applyLayout(opts: {
     readonly positionDuration: number
     readonly scaleDuration: number
@@ -223,6 +269,7 @@ export class GameHandView {
   }): Promise<void> {
     const transforms = layoutHand(this.handEntries.length, DEFAULT_HAND_LAYOUT, null)
     this.cachedRestTransforms = transforms
+    this.hoverRefreshPending = true
     await Promise.all(
       this.handEntries.map((entry, index) => {
         const transform = transforms[index]

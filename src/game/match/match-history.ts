@@ -205,16 +205,38 @@ export function choiceHistoryEvent(
   after: OpeningMatchState,
   sourceId: string,
   participantId: PlayerId,
-  events: readonly OpeningMatchEvent[]
+  events: readonly OpeningMatchEvent[],
+  choice?: number
 ): HistoryActionResolvedEvent | null {
-  const outcomes = historyOutcomes(before, after, events)
+  const outcomes = [...historyOutcomes(before, after, events)]
+  const pending = before.pendingCardChoice
+  const adapt = pending?.resolution?.type === 'adapt' ? pending.resolution : undefined
+  const selected = adapt
+    ? pending?.options.find((option) => option.choice === choice)?.presentationCardId
+    : undefined
+  if (selected)
+    outcomes.push({
+      kind: 'adapt',
+      target: {
+        id: `adapt:${after.revision}:${sourceId}`,
+        participantId,
+        kind: 'card',
+        cardId: selected,
+        publicIdentity: true
+      }
+    })
   if (outcomes.length === 0) return null
   return {
     type: 'history-action-resolved',
     append: true,
     participantId,
     action: 'card',
-    source: historySnapshot(before, participantId, sourceId),
+    source: historySnapshot(
+      before,
+      participantId,
+      adapt?.historySource?.instanceId ?? sourceId,
+      adapt?.historySource?.cardId ?? null
+    ),
     outcomes
   }
 }

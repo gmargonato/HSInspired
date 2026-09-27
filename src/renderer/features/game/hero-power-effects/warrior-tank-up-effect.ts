@@ -1,6 +1,10 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
 import type { AnimationScope } from '../../../animation/animations'
-import { applyAnchoredPlacement, type LayoutPlacement } from '../../../rendering/layout'
+import {
+  applyAnchoredPlacement,
+  type LayoutPlacement,
+  type LayoutPoint
+} from '../../../rendering/layout'
 import { WARRIOR_TANK_UP as CONFIG } from './warrior-tank-up-layout'
 
 export interface WarriorTankUpTextures {
@@ -18,7 +22,6 @@ export class WarriorTankUpEffect extends Container {
   readonly released: Promise<void>
   readonly finished: Promise<void>
   private readonly animation: gsap.core.Timeline
-  private burstAnimation: gsap.core.Timeline | null = null
   private settle: () => void = () => undefined
   private settled = false
 
@@ -43,7 +46,6 @@ export class WarriorTankUpEffect extends Container {
     this.settle = () => {
       if (this.settled) return
       this.settled = true
-      if (this.burstAnimation) this.animations.cancel(this.burstAnimation)
       resolveRelease()
       this.removeFromParent()
       this.destroy({ children: true })
@@ -51,7 +53,7 @@ export class WarriorTankUpEffect extends Container {
     }
 
     // Glow elements first so the hammer renders above them; the radial burst
-    // is created at contact and intentionally sits on top of everything.
+    // becomes visible at contact and intentionally sits on top of everything.
     const shockwave = this.glow(
       textures.shockwave,
       CONFIG.shockwave.ring,
@@ -79,8 +81,7 @@ export class WarriorTankUpEffect extends Container {
     this.animation.to(
       hammer.position,
       {
-        x: CONFIG.contactOffset.x,
-        y: CONFIG.contactOffset.y,
+        ...this.hammerPivot(CONFIG.contactOffset, CONFIG.tilt.approachEnd),
         duration: CONFIG.timing.approach,
         ease: 'power2.in'
       },
@@ -99,7 +100,6 @@ export class WarriorTankUpEffect extends Container {
       () => {
         shockwave.visible = true
         flash.visible = true
-        this.emitBurst(textures.particle)
         onRelease()
         resolveRelease()
       },
@@ -166,13 +166,14 @@ export class WarriorTankUpEffect extends Container {
     this.animation.to(
       hammer.position,
       {
-        x: CONFIG.retreatOffset.x,
-        y: CONFIG.retreatOffset.y,
+        ...this.hammerPivot(CONFIG.retreatOffset, CONFIG.tilt.retreatEnd),
         duration: CONFIG.timing.retreat,
         ease: 'power1.out'
       },
       contactTime + CONFIG.timing.retreatDelay
     )
+    // Owning the burst on this timeline keeps cleanup after its full fade.
+    this.addBurst(textures.particle, contactTime)
     this.animation.to(
       hammer,
       {
@@ -198,9 +199,9 @@ export class WarriorTankUpEffect extends Container {
     this.settle()
   }
 
-  private emitBurst(particleTexture: Texture): void {
-    if (this.settled) return
-    this.burstAnimation = this.animations.timeline()
+  private addBurst(particleTexture: Texture, contactTime: number): void {
+    const particles: Sprite[] = []
+    const color = { tint: CONFIG.burst.startTint as string }
     for (let index = 0; index < CONFIG.burst.count; index++) {
       const alternatingJitter = index % 2 === 0 ? 1 : -1
       const angle =
@@ -211,23 +212,47 @@ export class WarriorTankUpEffect extends Container {
       const particle = new Sprite(particleTexture)
       particle.label = `game.warrior-tank-up-particle-${index}`
       particle.eventMode = 'none'
-      particle.tint = CONFIG.burst.tint
+      particle.tint = color.tint
       particle.blendMode = 'add'
       particle.alpha = CONFIG.burst.opacity
+      particle.visible = false
       applyAnchoredPlacement(particle, CONFIG.burst.particle)
       this.addChild(particle)
-      this.burstAnimation.to(
+      particles.push(particle)
+      this.animation.set(particle, { visible: true }, contactTime)
+      this.animation.to(
         particle,
         {
           x: directionX * CONFIG.burst.travelDistance,
           y: directionY * CONFIG.burst.travelDistance,
-          alpha: 0,
           duration: CONFIG.burst.duration,
           ease: 'power1.out'
         },
-        0
+        contactTime
+      )
+      this.animation.to(
+        particle,
+        {
+          alpha: 0,
+          duration: CONFIG.burst.duration - CONFIG.burst.brightHold,
+          ease: 'power1.in'
+        },
+        contactTime + CONFIG.burst.brightHold
       )
     }
+    // GSAP interpolates color strings channel by channel, not packed RGB integers.
+    this.animation.to(
+      color,
+      {
+        tint: CONFIG.burst.endTint,
+        duration: CONFIG.burst.coolingDuration,
+        ease: 'none',
+        onUpdate: () => {
+          for (const particle of particles) particle.tint = color.tint
+        }
+      },
+      contactTime
+    )
   }
 
   private hammer(texture: Texture): Sprite {
@@ -235,11 +260,23 @@ export class WarriorTankUpEffect extends Container {
     sprite.label = 'game.warrior-tank-up.hammer'
     sprite.eventMode = 'none'
     applyAnchoredPlacement(sprite, CONFIG.hammer)
-    sprite.position.set(CONFIG.startOffset.x, CONFIG.startOffset.y)
+    const start = this.hammerPivot(CONFIG.startOffset, CONFIG.tilt.approachStart)
+    sprite.position.set(start.x, start.y)
     sprite.rotation = CONFIG.tilt.approachStart
     sprite.alpha = 0
     this.addChild(sprite)
     return sprite
+  }
+
+  /** Position the bottom pivot so the rotated head lands at the authored offset. */
+  private hammerPivot(head: LayoutPoint, rotation: number): LayoutPoint {
+    const { anchor, size, scale } = CONFIG.hammer
+    const x = (CONFIG.headPoint.x - anchor.x) * size.width * (scale?.x ?? 1)
+    const y = (CONFIG.headPoint.y - anchor.y) * size.height * (scale?.y ?? 1)
+    return {
+      x: head.x - (x * Math.cos(rotation) - y * Math.sin(rotation)),
+      y: head.y - (x * Math.sin(rotation) + y * Math.cos(rotation))
+    }
   }
 
   /** Adds an additive, tinted glow sprite hidden until the impact fires it. */

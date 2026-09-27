@@ -70,17 +70,21 @@ export function resolveManaCrystalStates(
 /** Scale multiplier for the brief pop a crystal makes when it becomes full. */
 const MANA_TRAY_POP_SCALE = 1.5
 const MANA_TRAY_POP_DURATION = 0.5
+const MANA_TRAY_INSERT_DURATION = 0.4
 
 /**
  * The local player's mana crystal tray: one pooled `Sprite` per crystal slot
  * up to the ten-crystal maximum. `sync` is the single entry point — it
- * reconciles visibility, state textures, and the "refreshed" pop whenever a
- * crystal turns full.
+ * reconciles visibility and state textures, grows new crystals at the left,
+ * and preserves the "refreshed" pop for existing crystals that turn full.
  */
 export class ManaTray extends Actor {
   private readonly crystals: Sprite[]
   private readonly pendingCrystals: Sprite[]
   private previousStates: ManaCrystalState[] = []
+  private initialized = false
+  private growingCount = 0
+  private readonly insertion = { progress: 1 }
 
   constructor(
     private readonly availableTexture: Texture,
@@ -119,8 +123,31 @@ export class ManaTray extends Actor {
 
   /** Applies a full tray state; crystals beyond the returned states hide. */
   sync(states: readonly ManaCrystalState[], overloadNextTurn = 0): void {
+    const count = Math.min(MAX_MANA, states.length)
+    const previousCount = this.previousStates.length
+    const countChanged = count !== previousCount
+    const added = this.initialized ? Math.max(0, count - previousCount) : 0
+    if (countChanged) {
+      this.killTweensOf(this.insertion)
+      this.insertion.progress = 1
+      this.applyInsertion()
+      this.growingCount = 0
+    }
+    if (added > 0) {
+      // Reuse hidden sprites at the left; retain the visible row's identity.
+      const incoming = this.crystals.splice(previousCount, added)
+      this.crystals.unshift(...incoming)
+      this.growingCount = added
+      this.insertion.progress = 0
+      this.crystals.forEach((crystal, index) => {
+        crystal.label = `game.mana-crystal-${index}`
+        this.setChildIndex(crystal, index)
+      })
+    }
     this.crystals.forEach((crystal, index) => {
       const state = states[index]
+      const previousState =
+        index < added ? undefined : this.previousStates[index - added]
       if (!state) {
         this.killTweensOf(crystal.scale)
         crystal.visible = false
@@ -140,12 +167,23 @@ export class ManaTray extends Actor {
             : state.highlighted
               ? this.highlightedTexture
               : this.availableTexture
-      if (state.phase !== this.previousStates[index]?.phase) {
+      if (countChanged || !this.initialized) {
+        crystal.position.set(
+          this.layout.firstCrystalCenter.x + index * this.layout.gap,
+          this.layout.firstCrystalCenter.y
+        )
+      }
+      if (state.phase !== previousState?.phase) {
         this.killTweensOf(crystal.scale)
         crystal.anchor.set(placement.anchor.x, placement.anchor.y)
         crystal.scale.set(placement.scale?.x ?? 1, placement.scale?.y ?? 1)
       }
-      if (state.phase === 'full' && this.previousStates[index]?.phase !== 'full') {
+      if (
+        this.initialized &&
+        index >= this.growingCount &&
+        state.phase === 'full' &&
+        previousState?.phase !== 'full'
+      ) {
         this.popCrystal(crystal)
       }
     })
@@ -161,7 +199,42 @@ export class ManaTray extends Actor {
         this.layout.firstCrystalCenter.y + this.layout.pendingRowOffsetY
       )
     })
-    this.previousStates = [...states]
+    this.previousStates = states.slice(0, MAX_MANA)
+    this.initialized = true
+    if (this.growingCount > 0) this.applyInsertion()
+    if (added > 0) {
+      this.tweenTo(this.insertion, {
+        progress: 1,
+        duration: MANA_TRAY_INSERT_DURATION,
+        ease: 'power2.out',
+        onUpdate: () => this.applyInsertion(),
+        onComplete: () => {
+          this.growingCount = 0
+        }
+      })
+    }
+  }
+
+  /** One progress value keeps the new crystals' growth and the row's push in step. */
+  private applyInsertion(): void {
+    if (this.growingCount === 0) return
+    const progress = this.insertion.progress
+    this.crystals.slice(0, this.previousStates.length).forEach((crystal, index) => {
+      const growing = index < this.growingCount
+      crystal.x =
+        this.layout.firstCrystalCenter.x +
+        (index - (growing ? 0 : this.growingCount * (1 - progress))) * this.layout.gap
+      if (growing) {
+        const placement =
+          this.previousStates[index].phase === 'locked'
+            ? this.layout.overloadCrystal
+            : this.layout.crystal
+        crystal.scale.set(
+          (placement.scale?.x ?? 1) * progress,
+          (placement.scale?.y ?? 1) * progress
+        )
+      }
+    })
   }
 
   /** Quick scale pop so a freshly refreshed crystal reads as "new". */

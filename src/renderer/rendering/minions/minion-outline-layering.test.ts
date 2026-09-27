@@ -248,14 +248,19 @@ describe('MinionView outline layering', () => {
   })
 
   it('toggles all new ability sprites without rebuilding the minion', async () => {
-    const view = await MinionView.create(tauntMinion, textures, undefined)
+    const view = await MinionView.create(
+      { ...tauntMinion, poisonous: false },
+      textures,
+      undefined
+    )
     const sprites = [
       'windfury',
       'spell-damage',
       'lifesteal',
       'aura',
       'elusive',
-      'immune'
+      'immune',
+      'poisonous'
     ].map((name) => view.children.find((child) => child.label === 'minion.' + name)!)
     expect(sprites.every((sprite) => !sprite.visible)).toBe(true)
     view.setAbilityEffects({
@@ -264,7 +269,8 @@ describe('MinionView outline layering', () => {
       lifesteal: true,
       aura: true,
       elusive: true,
-      immune: true
+      immune: true,
+      poisonous: true
     })
     expect(sprites.every((sprite) => sprite.visible)).toBe(true)
     view.setAbilityEffects({
@@ -273,7 +279,8 @@ describe('MinionView outline layering', () => {
       lifesteal: false,
       aura: false,
       elusive: false,
-      immune: false
+      immune: false,
+      poisonous: false
     })
     expect(sprites.every((sprite) => !sprite.visible)).toBe(true)
     view.destroy({ children: true })

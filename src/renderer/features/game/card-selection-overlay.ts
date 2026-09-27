@@ -51,6 +51,16 @@ export class CardSelectionOverlay extends Container {
   private requestRevision = 0
   private readonly darkOverlay = new Graphics()
   private readonly cardsLayer = new Container()
+  private readonly prompt = new Text({
+    text: '',
+    style: {
+      fontFamily: 'Belwe',
+      fontSize: 30,
+      fill: 0xffffff,
+      align: 'center',
+      stroke: { color: 0x000000, width: 5 }
+    }
+  })
   private readonly toggleOutline: GhostAura
   private readonly toggle: Button
   private readonly toggleLabel: Text
@@ -80,6 +90,9 @@ export class CardSelectionOverlay extends Container {
     this.darkOverlay.eventMode = 'static'
     this.darkOverlay.on('pointertap', (event) => event.stopPropagation())
     this.addChild(this.darkOverlay)
+    this.prompt.label = 'game.card-selection.prompt'
+    applyAnchoredPlacement(this.prompt, GAME_BOARD_LAYOUT.cardSelection.prompt)
+    this.addChild(this.prompt)
     this.shadowLayer = new BoardShadowLayer(this, options.renderer)
     this.shadowLayer.label = 'game.card-selection.shadows'
     this.addChild(this.shadowLayer)
@@ -265,7 +278,8 @@ export class CardSelectionOverlay extends Container {
     sourceCardInstanceId: string,
     sourceCardId: OpeningCard['cardId'],
     options: readonly CardChoiceOption[],
-    dimBoard = true
+    dimBoard = true,
+    prompt = ''
   ): Promise<void> {
     if (
       options.length > 0 &&
@@ -294,7 +308,8 @@ export class CardSelectionOverlay extends Container {
       options,
       sourceCardInstanceId,
       this.options.animateChoice?.(sourceCardId) ?? false,
-      dimBoard
+      dimBoard,
+      prompt
     )
   }
 
@@ -303,10 +318,12 @@ export class CardSelectionOverlay extends Container {
     choiceOptions: readonly CardChoiceOption[] = [],
     sourceInstanceId?: string,
     animateSelection = false,
-    dimBoard = true
+    dimBoard = true,
+    prompt = ''
   ): Promise<void> {
     if (this.destroyed) return
     this.clear()
+    this.prompt.text = prompt
     this.animateSelection = animateSelection
     const revision = this.requestRevision
     choiceOptions.forEach((option, index) => {
@@ -455,6 +472,7 @@ export class CardSelectionOverlay extends Container {
 
   clear(): void {
     if (this.destroyed) return
+    this.prompt.text = ''
     this.requestRevision += 1
     this.animationScope.kill()
     this.animateSelection = false
@@ -571,6 +589,7 @@ export class CardSelectionOverlay extends Container {
 
   private syncView(): void {
     this.cardsLayer.visible = !this.boardVisible
+    this.prompt.visible = !this.boardVisible
     const dimmed = !this.boardVisible && this.dimming
     this.darkOverlay.alpha = dimmed && this.dimBoard ? 1 : 0
     this.darkOverlay.eventMode = dimmed ? 'static' : 'none'

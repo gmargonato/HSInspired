@@ -48,6 +48,35 @@ function played(cardId: string, participantId = remote): HistoryActionResolvedEv
 }
 
 describe('MatchHistoryModel', () => {
+  it('keeps every selected adaptation as an arrow target, including repeated picks', () => {
+    const model = new MatchHistoryModel(local)
+    const event = played('journey_to_ungoro_volcanosaur', local)
+    model.record(event)
+    for (let index = 0; index < 2; index += 1) {
+      model.record({
+        ...event,
+        append: true,
+        outcomes: [
+          {
+            kind: 'adapt',
+            target: {
+              id: `adapt:${index}`,
+              participantId: local,
+              kind: 'card',
+              cardId: asCardId('journey_to_ungoro_volcanic_might'),
+              publicIdentity: true
+            }
+          }
+        ]
+      })
+    }
+    expect(model.count).toBe(1)
+    const entry = model.all()[0]!
+    expect(
+      entry.kind === 'action' && entry.targets.map((target) => target.target.cardId)
+    ).toEqual(['journey_to_ungoro_volcanic_might', 'journey_to_ungoro_volcanic_might'])
+  })
+
   it('keeps repeated Joust pairs public, separate, and Local first', () => {
     const model = new MatchHistoryModel(local)
     const event = played('the_grand_tournament_gadgetzan_jouster')

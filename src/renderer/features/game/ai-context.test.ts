@@ -12,11 +12,48 @@ import { observedAiCorrections } from './ai-feedback'
 import { enumerateLegalCommands } from '../../../game/match/ai'
 import { GameBoardSession } from './game-board-session'
 import { createMatchScenario } from '../../../game/match/testing/match-scenario-builder'
-import { CARD_CATALOG } from '../../../game/content/cards'
+import { CARD_CATALOG, asCardId } from '../../../game/content/cards'
+import { createAiFixture } from '../../../game/match/testing/ai-scenario-builder'
 import { AiTurnController } from './ai-turn-controller'
 import { parseAiDecisionResponse, type AiDecisionApi } from '../../../shared/ipc/ai'
 
 describe('AI context fidelity', () => {
+  it('includes the first Beast and crafting stage in Build-a-Beast decisions', () => {
+    const fixture = createAiFixture({
+      seed: 806,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'jaina',
+      pendingCardChoice: {
+        sourceCardId: 'knights_of_the_frozen_throne_build_a_beast',
+        options: [
+          {
+            choice: 0,
+            label: 'Stonetusk Boar',
+            presentationCardId: 'basic_stonetusk_boar'
+          }
+        ],
+        resolution: {
+          type: 'build-a-beast',
+          stage: 'second',
+          firstBeast: asCardId('basic_timber_wolf')
+        }
+      }
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    expect(aiModelState(session, [])).toMatchObject({
+      pendingChoice: {
+        resolution: {
+          type: 'build-a-beast',
+          stage: 'second',
+          firstBeast: { name: 'Timber Wolf' }
+        }
+      }
+    })
+  })
   it('omits generated Kazakus recipe mappings while retaining choice rules', () => {
     const effects = CARD_CATALOG.require('mean_streets_of_gadgetzan_kazakus').effects
     const original = JSON.stringify(effects)

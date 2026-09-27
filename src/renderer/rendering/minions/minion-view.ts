@@ -153,6 +153,7 @@ export class MinionView extends Container {
   private readonly frozen: Sprite
   private readonly stealth: Sprite
   private readonly deathrattle: Sprite
+  private readonly poisonous: Sprite
   private readonly trigger: Sprite
   private readonly inspire: Sprite
   private readonly attackLabel: Text
@@ -335,13 +336,11 @@ export class MinionView extends Container {
     this.deathrattle.label = 'minion.deathrattle'
     this.addChild(this.deathrattle)
 
-    let poisonous: Sprite | undefined
-    if (model.poisonous) {
-      poisonous = new Sprite(textures.poisonous)
-      applyAnchoredPlacement(poisonous, MINION_LAYOUT.poisonous)
-      poisonous.label = 'minion.poisonous'
-      this.addChild(poisonous)
-    }
+    this.poisonous = new Sprite(textures.poisonous)
+    applyAnchoredPlacement(this.poisonous, MINION_LAYOUT.poisonous)
+    this.poisonous.label = 'minion.poisonous'
+    this.poisonous.visible = model.poisonous
+    this.addChild(this.poisonous)
 
     this.trigger = new Sprite(textures.trigger)
     applyAnchoredPlacement(this.trigger, MINION_LAYOUT.trigger)
@@ -414,7 +413,7 @@ export class MinionView extends Container {
       this.deathrattle,
       this.trigger,
       this.inspire,
-      poisonous,
+      this.poisonous,
       attack.badge,
       health.badge
     ]
@@ -568,9 +567,17 @@ export class MinionView extends Container {
   setAbilityEffects(
     markers: Pick<
       MinionViewModel,
-      'windfury' | 'spellDamage' | 'lifesteal' | 'aura' | 'elusive' | 'immune'
+      | 'windfury'
+      | 'spellDamage'
+      | 'lifesteal'
+      | 'aura'
+      | 'elusive'
+      | 'immune'
+      | 'poisonous'
     >
   ): void {
+    this.invalidateShadowVisibility(this.poisonous, markers.poisonous)
+    this.poisonous.visible = markers.poisonous
     this.windfury.visible = markers.windfury
     this.spellDamage.visible = markers.spellDamage
     this.lifesteal.visible = markers.lifesteal

@@ -66,6 +66,21 @@ Individual focused commands:
 
 ---
 
+## Build-a-Beast
+
+Deathstalker Rexxar's Hero Power crafts a Zombeast through two consecutive
+three-card choices. The pools use collectible Hunter and neutral Beasts costing
+at most 5 mana from the existing catalog: an effect-bearing first component and
+a keyword-only or vanilla second component. Authored balance values are preserved.
+The result combines both cards' base stats and abilities and uses the first
+Beast's artwork. Only the finished card enters the hand.
+
+Pool eligibility and composition live in `src/game/content/cards/zombeast.ts`.
+Ordered component IDs identify the recipe across checkpoints and AI workers.
+The catalog resolves these noncollectible recipes by ID but excludes them from
+its enumerable card pool, preventing unrelated random effects from generating
+Zombeasts. Combined stats are intrinsic and survive silence.
+
 ## Dynamic match decks
 
 Both match decks display one shared-texture `deck-sliced.png` sprite per remaining

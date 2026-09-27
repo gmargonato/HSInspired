@@ -12,6 +12,7 @@ import { WHISPERS_OF_THE_OLD_GODS_CARD_SOURCE } from './sets/whispers-of-the-old
 import { MEAN_STREETS_OF_GADGETZAN_CARD_SOURCE } from './sets/mean-streets-of-gadgetzan'
 import type { CardDefinition, CardId } from './card-definition'
 import { GENERATED_CARD_DEFINITIONS } from './generated-card-definitions'
+import { createZombeastDefinitions } from './zombeast'
 
 function referencedCardIds(value: unknown): readonly string[] {
   if (Array.isArray(value)) return value.flatMap(referencedCardIds)
@@ -38,6 +39,8 @@ function referencedCardIds(value: unknown): readonly string[] {
 
 export class CardCatalog {
   private readonly cardsById: ReadonlyMap<CardId, CardDefinition>
+  /** Recipe results resolve by ID, but never enter random or collection pools. */
+  private readonly zombeastsById: ReadonlyMap<CardId, CardDefinition>
 
   constructor(cards: readonly CardDefinition[]) {
     const cardsById = new Map<CardId, CardDefinition>()
@@ -57,6 +60,9 @@ export class CardCatalog {
       }
     }
     this.cardsById = cardsById
+    this.zombeastsById = new Map(
+      createZombeastDefinitions(cards).map((card) => [card.id, card])
+    )
   }
 
   get size(): number {
@@ -68,7 +74,7 @@ export class CardCatalog {
   }
 
   get(id: CardId | string): CardDefinition | undefined {
-    return this.cardsById.get(id as CardId)
+    return this.cardsById.get(id as CardId) ?? this.zombeastsById.get(id as CardId)
   }
 
   require(id: CardId | string): CardDefinition {

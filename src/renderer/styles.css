@@ -9,6 +9,14 @@ body {
 }
 
 @font-face {
+  font-family: 'Fraps';
+  src: url('../../assets/fonts/fraps.otf') format('opentype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
+@font-face {
   font-family: 'Belwe';
   src: url('../../assets/fonts/belwe_bold.ttf') format('truetype');
   font-style: normal;
@@ -143,12 +151,13 @@ body:has(.app-error-notice:not(.app-error-notice-abandon))::after {
   top: 10px;
   left: 10px;
   z-index: 999;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
+  background-image: linear-gradient(#ffff00, #ffff00);
+  background-size: 100% 34px;
+  background-position: left top 2px;
+  background-repeat: no-repeat;
+  color: #000;
   font:
-    14px/1.4 Consolas,
+    48px/1 'Fraps',
     monospace;
   pointer-events: none;
   user-select: none;

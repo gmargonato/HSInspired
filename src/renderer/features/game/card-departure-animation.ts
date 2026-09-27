@@ -8,6 +8,8 @@ import { CARD_PLAY_LAYOUT } from './card-play-layout'
 import { CARD_DEPARTURE_LAYOUT } from './card-departure-layout'
 import type { GameCardSlot } from './game-card-slot'
 import { completeTimeline } from './game-presentation-animation'
+import { Burn } from '../../rendering/effects/burn'
+import { CARD_DRAW_LAYOUT } from './card-draw-layout'
 
 /** Temporary board bodies are owned here; the caller owns the resulting card. */
 export class CardDepartureAnimation {
@@ -173,6 +175,36 @@ export class CardDepartureAnimation {
       this.bodies.delete(particles)
       if (!particles.destroyed) particles.destroy({ children: true })
       if (!aura.destroyed) aura.destroy()
+    }
+  }
+
+  async burnCard(slot: GameCardSlot, noise: Sprite['texture']): Promise<void> {
+    if (this.disposed || slot.destroyed) return
+    const burn = new Burn(noise)
+    const hiddenShadow = new Container()
+    hiddenShadow.visible = false
+    const previousVisual = slot.shadow.visual
+    slot.shadow.visual = hiddenShadow
+    slot.card.filters = [...(slot.card.filters ?? []), burn.filter]
+    const progress = { value: 0 }
+    try {
+      await completeTimeline(
+        this.animations.timeline().to(progress, {
+          value: 1,
+          duration: CARD_DRAW_LAYOUT.localReveal.burnDuration,
+          ease: 'none',
+          onUpdate: () => burn.setProgress(progress.value)
+        })
+      )
+      if (!slot.destroyed) slot.alpha = 0
+    } finally {
+      if (!slot.card.destroyed)
+        slot.card.filters = (slot.card.filters ?? []).filter(
+          (filter) => filter !== burn.filter
+        )
+      slot.shadow.visual = previousVisual
+      hiddenShadow.destroy()
+      burn.destroy()
     }
   }
 

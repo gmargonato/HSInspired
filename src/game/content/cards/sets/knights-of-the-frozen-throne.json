@@ -321,7 +321,7 @@
     "type": "Hero",
     "replacementHeroId": "malfurion-pestilent",
     "subtype": "General",
-    "cost": 7,
+    "cost": 8,
     "attack": null,
     "armor": 5,
     "rulesText": "Choose One - Summon 2 Poisonous Spiders; or 2 Scarabs with Taunt.",
@@ -329,14 +329,20 @@
     "effects": [
       {
         "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "replace-hero",
+            "heroId": "malfurion-pestilent"
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
         "choice": {
           "options": [
             {
+              "presentationCardId": "knights_of_the_frozen_throne_spider_plague",
               "actions": [
-                {
-                  "action": "replace-hero",
-                  "heroId": "malfurion-pestilent"
-                },
                 {
                   "action": "summon",
                   "cardId": "knights_of_the_frozen_throne_frost_widow",
@@ -345,11 +351,8 @@
               ]
             },
             {
+              "presentationCardId": "knights_of_the_frozen_throne_scarab_plague",
               "actions": [
-                {
-                  "action": "replace-hero",
-                  "heroId": "malfurion-pestilent"
-                },
                 {
                   "action": "summon",
                   "cardId": "knights_of_the_frozen_throne_scarab_beetle",
@@ -521,7 +524,7 @@
     "type": "Hero",
     "replacementHeroId": "rexxar-deathstalker",
     "subtype": "General",
-    "cost": 6,
+    "cost": 8,
     "attack": null,
     "armor": 5,
     "rulesText": "Battlecry: Deal 2 damage to all enemy minions.",
@@ -557,7 +560,7 @@
     "type": "Hero",
     "replacementHeroId": "jaina-frost-lich",
     "subtype": "General",
-    "cost": 9,
+    "cost": 8,
     "attack": null,
     "armor": 5,
     "rulesText": "Battlecry: Summon a 3/6 Water Elemental. Your Elementals have Lifesteal for the rest of the game.",
@@ -589,7 +592,7 @@
     "type": "Hero",
     "replacementHeroId": "uther-ebon-blade",
     "subtype": "General",
-    "cost": 9,
+    "cost": 8,
     "attack": null,
     "armor": 5,
     "rulesText": "Battlecry: Equip a 5/3 Lifesteal weapon.",
@@ -740,7 +743,7 @@
     "type": "Hero",
     "replacementHeroId": "valeera-hollow",
     "subtype": "General",
-    "cost": 9,
+    "cost": 8,
     "attack": null,
     "armor": 5,
     "rulesText": "Battlecry: Become immune until your next turn.",
@@ -819,7 +822,7 @@
     "type": "Hero",
     "replacementHeroId": "guldan-bloodreaver",
     "subtype": "General",
-    "cost": 10,
+    "cost": 8,
     "attack": null,
     "armor": 5,
     "rulesText": "Battlecry: Summon all friendly Demons that died this game.",

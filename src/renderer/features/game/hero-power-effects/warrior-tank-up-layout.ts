@@ -11,22 +11,24 @@ export const WARRIOR_TANK_UP = {
     { x: 0, y: 0 },
     { width: 300, height: 474 },
     {
-      anchor: { x: 0.47, y: 0.21 },
+      anchor: { x: 0.77, y: 0.96 },
       scale: 0.55,
-      note: 'Golden hammer; authored art is already tilted head-up-left. The anchor sits on the hammer head (~140,100 of the texture) so rotation pivots the handle around the planted head.'
+      note: 'Golden hammer; pivot at the bottom of the handle (~231,455 of the texture), letting the head swing counterclockwise on impact.'
     }
   ),
+  /** Normalized head contact point in the artwork, independent of the pivot. */
+  headPoint: { x: 0.47, y: 0.21 },
   /** Hammer head offsets relative to the hero-power card center. */
   startOffset: { x: 180, y: -25 } satisfies LayoutPoint,
   contactOffset: { x: 0, y: 0 } satisfies LayoutPoint,
   retreatOffset: { x: 225, y: -50 } satisfies LayoutPoint,
-  /** Radians; the head swings down on approach and back up on retreat. */
+  /** Radians; decreasing angles swing counterclockwise in screen coordinates. */
   tilt: {
-    approachStart: -0.12,
-    approachEnd: 0.1,
-    retreatEnd: -0.16
+    approachStart: 0.12,
+    approachEnd: -0.1,
+    retreatEnd: 0.16
   },
-  /** Shared warm-gold tint for every glow element (particles, ring, flash). */
+  /** Warm-gold shockwave tint. */
   tint: 0xffd75e,
   timing: {
     fadeIn: 0.06,
@@ -36,12 +38,15 @@ export const WARRIOR_TANK_UP = {
     retreat: 0.45
   },
   burst: {
-    count: 14,
-    angleJitter: 0.12,
+    count: 36,
+    angleJitter: 0.04,
     travelDistance: 170,
-    tint: 0xffd75e,
-    opacity: 0.95,
-    duration: 0.7,
+    startTint: '#ffffff',
+    endTint: '#ffe033',
+    coolingDuration: 0.4,
+    brightHold: 0.12,
+    opacity: 1,
+    duration: 0.9,
     particle: placement(
       { x: 0, y: 0 },
       { width: 256, height: 256 },
@@ -81,5 +86,5 @@ export const WARRIOR_TANK_UP = {
       { anchor: CENTER, note: 'playSpotlight-01 authored size; effect drives scale.' }
     )
   },
-  shake: { amplitude: 10, pulses: 3, duration: 0.18 }
+  shake: { amplitude: 18, pulses: 6, duration: 0.48 }
 } as const

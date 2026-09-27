@@ -52,6 +52,7 @@ import { dispatchDevMatchCommand } from './dev-match-command-dispatch'
 import { eventPresentationPolicy } from './event-presentation-policy'
 import { handDiscardBatch, isHandDiscard } from './hand-discard-presentation'
 import { summonPresentationBatch } from './summon-presentation'
+import { isMinionReturn, returnPresentationBatch } from './return-presentation'
 import { randomSpellPresentationStates } from './random-spell-presentation'
 import { selectRandomBoardTexture } from './board-selection'
 import { isLegalHeroPowerTarget } from './hero-power-targeting'
@@ -1034,10 +1035,11 @@ export class GameBoardView extends Actor {
       onChooseOption: (choice, animated) =>
         this.chooseVisibleCardOption(choice, animated),
       choiceAnimation: this.choicePlayAnimation,
+      // Hero-power choices have no playable source card to animate.
       animateChoice: (sourceCardId) =>
-        CARD_CATALOG.require(sourceCardId).effects.some((effect) =>
+        CARD_CATALOG.get(sourceCardId)?.effects.some((effect) =>
           Array.isArray(effect.choice?.options)
-        ),
+        ) ?? false,
       isInputBlocked: () => this.cardChoiceInputGate.blocked
     })
     this.cardPlay = new GameCardTargeting(
@@ -2032,7 +2034,9 @@ export class GameBoardView extends Actor {
           pending.participantId,
           pending.sourceCardInstanceId,
           pending.sourceCardId,
-          pending.options
+          pending.options,
+          true,
+          pending.prompt
         )
       } else {
         this.cardSelectionOverlay.clear()
@@ -3300,7 +3304,7 @@ export class GameBoardView extends Actor {
     return player
   }
 
-  private ensureRemoteBacks(count: number): void {
+  private ensureRemoteBacks(count: number, applyLayout = true): void {
     while (this.remoteBacks.length < count) {
       const back = new Sprite(this.options.gameAssets.cardBack)
       back.anchor.set(0.5, 1)
@@ -3315,7 +3319,7 @@ export class GameBoardView extends Actor {
       this.remoteBacks.push(back)
       this.remoteHandLayer.addChild(back)
     }
-    this.layoutRemoteHand()
+    if (applyLayout) this.layoutRemoteHand()
   }
 
   private layoutRemoteHand(): void {
@@ -3536,11 +3540,13 @@ export class GameBoardView extends Actor {
       )
       let goldenMonkeyHandReplacementPresented = false
       const presentedDiscards = new Set<OpeningMatchEvent>()
+      const presentedReturns = new Set<OpeningMatchEvent>()
       for (let index = 0; index < events.length; index += 1) {
         const event = events[index]!
         if (this.destroyed) return
         if (event === alreadyPresented) continue
         if (presentedDiscards.has(event)) continue
+        if (presentedReturns.has(event)) continue
         if (hasCombat && event.type === 'card-choice-started') {
           deferredChoices.push(event)
           continue
@@ -3568,6 +3574,10 @@ export class GameBoardView extends Actor {
           for (const record of summonBatch.bookkeeping) await this.presentEvent(record)
           await this.presentMinionSummonBatch(summonBatch.summons)
           index = summonBatch.end
+        } else if (isMinionReturn(event)) {
+          const batch = returnPresentationBatch(events, index)
+          batch.forEach((returned) => presentedReturns.add(returned))
+          await this.presentMinionReturnBatch(batch.map((entry) => entry.cardMovement))
         } else if (isHandDiscard(event)) {
           const batch = handDiscardBatch(events, index)
           batch.forEach((discard) => presentedDiscards.add(discard))
@@ -3728,7 +3738,9 @@ export class GameBoardView extends Actor {
             event.participantId,
             event.sourceCardInstanceId,
             event.sourceCardId,
-            event.options
+            event.options,
+            true,
+            event.prompt
           )
         }
         return
@@ -4054,6 +4066,10 @@ export class GameBoardView extends Actor {
       return
     }
     if (event.cardMovement) {
+      if (isMinionReturn(event)) {
+        await this.presentMinionReturnBatch([event.cardMovement])
+        return
+      }
       await this.presentMinionCardMovement(event.cardMovement)
       return
     }
@@ -4458,6 +4474,157 @@ export class GameBoardView extends Actor {
     }
   }
 
+  private async presentMinionReturnBatch(
+    movements: readonly MinionCardMovement[]
+  ): Promise<void> {
+    const prepared: {
+      movement: MinionCardMovement
+      source: MinionView
+      card: OpeningCard
+      slot: GameCardSlot
+    }[] = []
+    const adopted = new Set<GameCardSlot>()
+    const wasReflowing = this.hand.isReflowing
+    try {
+      // Resolve every asset before any board body is removed or starts lifting.
+      for (const movement of movements) {
+        const source = [...this.localMinionViews, ...this.remoteMinionViews].find(
+          (view) => view.instanceId === movement.sourceInstanceId && !view.destroyed
+        )
+        if (!source) continue
+        if (this.hoveredBoardCardView === source) this.hideBoardCardPreview(source)
+        if (this.selectedCombatView === source) this.deselectAttacker(false)
+        for (const card of movement.cards) {
+          const slot = await this.createSlot(card)
+          prepared.push({ movement, source, card, slot })
+          this.activeDepartureSlots.add(slot)
+          if (this.destroyed) return
+        }
+      }
+      // materialize captures each body's original position synchronously. Reflow
+      // only after every source has been released, so neighbours cannot drift.
+      const localBoardChanged = prepared.some(({ source }) =>
+        this.localMinionViews.includes(source)
+      )
+      const remoteBoardChanged = prepared.some(({ source }) =>
+        this.remoteMinionViews.includes(source)
+      )
+      let remaining = prepared.length
+      const materialized = await Promise.allSettled(
+        prepared.map(({ source, slot }) =>
+          this.cardDepartureAnimation.materialize(source, slot, () => {
+            this.removeMinionView(source)
+            if (--remaining === 0) {
+              if (localBoardChanged) this.applyLocalBoardLayout()
+              if (remoteBoardChanged) this.applyRemoteBoardLayout()
+            }
+          })
+        )
+      )
+      const failure = materialized.find((result) => result.status === 'rejected')
+      if (failure?.status === 'rejected') throw failure.reason
+      if (this.destroyed) return
+      const ready = prepared.filter((_, index) => {
+        const result = materialized[index]
+        return result.status === 'fulfilled' && result.value
+      })
+      const local = ready.filter(
+        ({ movement }) =>
+          movement.destination === 'hand' &&
+          movement.participantId === this.localParticipantId
+      )
+      const remote = ready.filter(
+        ({ movement }) =>
+          movement.destination === 'hand' &&
+          movement.participantId === this.remoteParticipantId
+      )
+      for (const { card, slot } of local) {
+        this.travelLayer.reparentChild(slot)
+        this.hand.append({
+          card: cloneCard(card),
+          slot,
+          restTransform: undefined,
+          displaced: false
+        })
+      }
+      const remoteStart = this.remoteBackCount
+      this.remoteBackCount += remote.length
+      if (remote.length) {
+        this.ensureRemoteBacks(this.remoteBackCount, false)
+        for (let index = 0; index < this.remoteBackCount; index++) {
+          const back = this.remoteBacks[index]
+          back.visible = true
+          const shadow = getShadowCaster(back)
+          if (shadow)
+            shadow.restingScale = this.remoteHandTransform(
+              index,
+              this.remoteBackCount
+            ).scale
+        }
+      }
+      for (let index = remoteStart; index < this.remoteBackCount; index++)
+        this.remoteBacks[index].alpha = 0
+      const jobs: Promise<void>[] = ready
+        .filter(({ movement }) => movement.destination === 'discarded')
+        .map(({ slot }) =>
+          this.cardDepartureAnimation.burnCard(slot, this.options.gameAssets.burnNoise)
+        )
+      if (local.length) {
+        this.hand.setReflowing(true)
+        this.hand.resetHover()
+        jobs.push(
+          (async () => {
+            await this.hand.applyLayout({
+              positionDuration: RESOLUTION_TIMING.generatedCard,
+              scaleDuration: RESOLUTION_TIMING.generatedCard
+            })
+            if (this.destroyed) return
+            for (const { slot } of local) {
+              if (slot.destroyed) continue
+              this.hand.layer.reparentChild(slot)
+              slot.suppressPlayableOutline(false)
+              this.hand.configureSlot(slot)
+              adopted.add(slot)
+            }
+          })()
+        )
+      }
+      if (remote.length) {
+        for (let index = 0; index < remoteStart; index++)
+          jobs.push(
+            this.animateBackToHand(
+              this.remoteBacks[index],
+              index,
+              this.remoteBackCount,
+              RESOLUTION_TIMING.generatedCard,
+              0
+            )
+          )
+        jobs.push(
+          ...remote.map(({ slot }, index) =>
+            this.presentReturnedRemoteCard(
+              slot,
+              remoteStart + index,
+              this.remoteBackCount
+            )
+          )
+        )
+      }
+      const results = await Promise.allSettled(jobs)
+      const destinationFailure = results.find((result) => result.status === 'rejected')
+      if (destinationFailure?.status === 'rejected') throw destinationFailure.reason
+    } finally {
+      this.hand.setReflowing(wasReflowing)
+      for (const { slot } of prepared) {
+        this.activeDepartureSlots.delete(slot)
+        if (adopted.has(slot)) continue
+        const index = this.hand.entries.findIndex((entry) => entry.slot === slot)
+        if (index >= 0) this.hand.removeAt(index)
+        if (!slot.destroyed) slot.destroy({ children: true })
+      }
+    }
+  }
+
   private async presentMinionCardMovement(movement: MinionCardMovement): Promise<void> {
     const source = [...this.localMinionViews, ...this.remoteMinionViews].find(
       (view) => view.instanceId === movement.sourceInstanceId && !view.destroyed
@@ -4558,7 +4725,11 @@ export class GameBoardView extends Actor {
     }
   }
 
-  private async presentReturnedRemoteCard(slot: GameCardSlot): Promise<void> {
+  private async presentReturnedRemoteCard(
+    slot: GameCardSlot,
+    reservedIndex?: number,
+    reservedCount?: number
+  ): Promise<void> {
     const scale = slot.scale.x
     await completeTimeline(
       this.timeline().to(slot.scale, {
@@ -4568,9 +4739,13 @@ export class GameBoardView extends Actor {
       })
     )
     if (this.destroyed || slot.destroyed) return
-    this.remoteBackCount += 1
-    this.ensureRemoteBacks(this.remoteBackCount)
-    const back = this.remoteBacks[this.remoteBackCount - 1]
+    if (reservedIndex === undefined) {
+      this.remoteBackCount += 1
+      this.ensureRemoteBacks(this.remoteBackCount)
+    }
+    const index = reservedIndex ?? this.remoteBackCount - 1
+    const count = reservedCount ?? this.remoteBackCount
+    const back = this.remoteBacks[index]
     slot.alpha = 0
     back.position.copyFrom(this.remoteHandLayer.toLocal(slot.toGlobal({ x: 0, y: 0 })))
     back.rotation = 0
@@ -4584,13 +4759,7 @@ export class GameBoardView extends Actor {
       })
     )
     if (this.destroyed || back.destroyed) return
-    await this.animateBackToHand(
-      back,
-      this.remoteBackCount - 1,
-      this.remoteBackCount,
-      RESOLUTION_TIMING.generatedCard,
-      0
-    )
+    await this.animateBackToHand(back, index, count, RESOLUTION_TIMING.generatedCard, 0)
   }
 
   private async reconcileRandomSpellState(state: OpeningMatchState): Promise<void> {
@@ -7298,6 +7467,22 @@ export class GameBoardView extends Actor {
     if (index >= 0) this.hand.removeAt(index)
   }
 
+  /** Remaining cards can be inspected while the accepted card owns its animation. */
+  private async reflowHandAfterPlay(): Promise<void> {
+    const duration = OPENING_TIMING.cardDeal
+    const layout = this.hand.applyLayout({
+      positionDuration: duration,
+      scaleDuration: duration,
+      preserveHover: true
+    })
+    this.hand.setReflowing(false)
+    // Keep effect sequencing independent of hover interrupting a card's tween.
+    await Promise.all([
+      layout,
+      this.hand.entries.length > 0 ? this.wait(duration) : Promise.resolve()
+    ])
+  }
+
   private async presentAcceptedWeaponPlay(
     entry: HandEntry,
     result: Extract<ReturnType<OpeningMatchInstance['dispatch']>, { accepted: true }>
@@ -7307,10 +7492,7 @@ export class GameBoardView extends Actor {
       this.removePresentedHandEntry(entry)
       entry.slot.disposePlayableOutline()
       entry.slot.removeFromParent()
-      const handReflow = this.hand.applyLayout({
-        positionDuration: OPENING_TIMING.cardDeal,
-        scaleDuration: OPENING_TIMING.cardDeal
-      })
+      const handReflow = this.reflowHandAfterPlay()
       const weaponEquipped = result.events.find(
         (event): event is Extract<OpeningMatchEvent, { type: 'weapon-equipped' }> =>
           event.type === 'weapon-equipped'
@@ -7342,10 +7524,7 @@ export class GameBoardView extends Actor {
       this.removePresentedHandEntry(entry)
       entry.slot.disposePlayableOutline()
       entry.slot.removeFromParent()
-      await this.hand.applyLayout({
-        positionDuration: OPENING_TIMING.cardDeal,
-        scaleDuration: OPENING_TIMING.cardDeal
-      })
+      await this.reflowHandAfterPlay()
       if (this.destroyed) return
       entry.slot.destroy({ children: true })
       await this.presentResolutionEvents(result.events)
@@ -7387,7 +7566,13 @@ export class GameBoardView extends Actor {
       entry.slot.disposePlayableOutline()
       entry.slot.removeFromParent()
       entry.slot.destroy({ children: true })
-      if (result.events.some(isHandDiscard)) {
+      if (
+        result.events.some(
+          (event) =>
+            isHandDiscard(event) &&
+            event.data?.participantId === this.localParticipantId
+        )
+      ) {
         // Discard effects need not wait for the cast's decorative particles.
         // Settle the remaining cards first so their discard origins are stable.
         await Promise.all([
@@ -7400,6 +7585,7 @@ export class GameBoardView extends Actor {
               scaleDuration: RESOLUTION_TIMING.discardHandSettle
             })
             if (this.destroyed) return
+            this.hand.setReflowing(false)
             this.syncSecrets(result.state)
             await this.presentResolutionEvents(result.events)
           })()
@@ -7410,10 +7596,7 @@ export class GameBoardView extends Actor {
         skipCastAnimation
           ? Promise.resolve()
           : this.cardPlayAnimation.present('Spell', pose),
-        this.hand.applyLayout({
-          positionDuration: OPENING_TIMING.cardDeal,
-          scaleDuration: OPENING_TIMING.cardDeal
-        })
+        this.reflowHandAfterPlay()
       ])
       if (this.destroyed) return
       this.syncSecrets(result.state)
@@ -7461,10 +7644,7 @@ export class GameBoardView extends Actor {
             false
           )
         : Promise.resolve()
-      const handReflow = this.hand.applyLayout({
-        positionDuration: OPENING_TIMING.cardDeal,
-        scaleDuration: OPENING_TIMING.cardDeal
-      })
+      const handReflow = this.reflowHandAfterPlay()
       const summon = minionPreview
         ? this.finalizeMinionTargetPreview(minionPreview, minionPlayed)
         : minionPlayed
@@ -7654,6 +7834,7 @@ export class GameBoardView extends Actor {
 
   /** Input pose, dependent presentation, and shadows belong to the same render. */
   updateFrame(deltaMS: number): void {
+    this.hand.refreshHover()
     this.hand.drag.update(deltaMS)
     this.hud.setEndTurnHoverSuppressed(this.hand.drag.index !== null)
     this.flushBoardPointerVisuals()
@@ -7810,9 +7991,14 @@ export class GameBoardView extends Actor {
     const seen = new Set<string>()
     const wasReflowing = this.hand.isReflowing
     const previousEventMode = this.hand.layer.eventMode
-    this.hand.setReflowing(true)
-    this.hand.layer.eventMode = 'none'
-    this.hand.resetHover()
+    const discardsLocalCards = discards.some(
+      (event) => event.data?.participantId === this.localParticipantId
+    )
+    if (discardsLocalCards) {
+      this.hand.setReflowing(true)
+      this.hand.layer.eventMode = 'none'
+      this.hand.resetHover()
+    }
     let localChanged = false
     let remoteChanged = false
     try {
@@ -7873,7 +8059,7 @@ export class GameBoardView extends Actor {
     } finally {
       for (const { body } of bodies)
         if (!body.destroyed) body.destroy({ children: true })
-      if (!this.destroyed) {
+      if (!this.destroyed && discardsLocalCards) {
         this.hand.setReflowing(wasReflowing)
         this.hand.layer.eventMode = previousEventMode
       }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_CATALOG, asCardId } from '../../content/cards'
+import { zombeastId, zombeastPool, zombeastPoolCards } from '../../content/cards/zombeast'
 import {
   createOpeningMatchFromCheckpoint,
   type OpeningMatchInstance
@@ -7,6 +8,196 @@ import {
 import { createMatchScenario } from '../testing/match-scenario-builder'
 
 type Scenario = ReturnType<typeof createMatchScenario>
+
+describe('Build-a-Beast', () => {
+  it('classifies existing Beasts and keeps recipes outside unrelated card pools', () => {
+    expect(
+      zombeastPool(CARD_CATALOG.require('goblins_vs_gnomes_king_of_beasts'))
+    ).toBeUndefined()
+    expect(
+      zombeastPool(CARD_CATALOG.require('classic_savannah_highmane'))
+    ).toBeUndefined()
+    expect(
+      zombeastPool(CARD_CATALOG.require('league_of_explorers_pit_snake'))
+    ).toBeUndefined()
+    expect(
+      zombeastPool(CARD_CATALOG.require('whispers_of_the_old_gods_silithid_swarmer'))
+    ).toBe('first')
+    const first = zombeastPoolCards(CARD_CATALOG.all, 'first')
+    const second = zombeastPoolCards(CARD_CATALOG.all, 'second')
+    expect(first.length).toBeGreaterThan(3)
+    expect(second.length).toBeGreaterThan(3)
+    for (const left of first)
+      for (const right of second) {
+        const beast = CARD_CATALOG.require(zombeastId(left.id, right.id))
+        expect(beast).toMatchObject({
+          name: 'Zombeast',
+          cardClass: 'Hunter',
+          cost: left.cost + right.cost,
+          attack: left.attack + right.attack,
+          health: left.health + right.health,
+          tribes: ['Undead', 'Beast'],
+          collectible: false,
+          deckLegal: false
+        })
+        expect(beast.cost).toBeLessThanOrEqual(10)
+      }
+    expect(CARD_CATALOG.all.some((card) => card.id.startsWith('zombeast:'))).toBe(false)
+  })
+
+  it('preserves base stats through silence, copying and bounce, but replaces them on transform', () => {
+    const scenario = ready({ seed: 801 })
+    const [own] = activePlayers(scenario)
+    const id = zombeastId('basic_timber_wolf', 'basic_ironfur_grizzly')
+    const definition = CARD_CATALOG.require(id)
+    const target = summon(scenario, own, id)
+    const other = summon(scenario, own, 'basic_river_crocolisk')
+    expect(
+      player(scenario, own).board.find((card) => card.instanceId === other.instanceId)
+        ?.attack
+    ).toBe(
+      (CARD_CATALOG.require('basic_river_crocolisk') as { attack: number }).attack + 1
+    )
+    const targets = [
+      { kind: 'minion', participantId: own, instanceId: target.instanceId }
+    ]
+    setMana(scenario, own)
+    addCard(scenario, own, 'classic_silence')
+    play(scenario, own, 'classic_silence', { targets })
+    expect(
+      player(scenario, own).board.find((card) => card.instanceId === target.instanceId)
+    ).toMatchObject({
+      silenced: true,
+      baseAttack: (definition as { attack: number }).attack,
+      baseHealth: (definition as { health: number }).health
+    })
+    expect(
+      player(scenario, own).board.find((card) => card.instanceId === other.instanceId)
+        ?.attack
+    ).toBe((CARD_CATALOG.require('basic_river_crocolisk') as { attack: number }).attack)
+    addCard(scenario, own, 'classic_youthful_brewmaster')
+    play(scenario, own, 'classic_youthful_brewmaster', { targets })
+    expect(player(scenario, own).hand.some((card) => card.cardId === id)).toBe(true)
+    setMana(scenario, own)
+    play(scenario, own, id)
+    const replayed = player(scenario, own).board.find((card) => card.cardId === id)!
+    expect(replayed.silenced).toBe(false)
+    const replayedTargets = [
+      { kind: 'minion', participantId: own, instanceId: replayed.instanceId }
+    ]
+    setMana(scenario, own)
+    addCard(scenario, own, 'classic_faceless_manipulator')
+    play(scenario, own, 'classic_faceless_manipulator', { targets: replayedTargets })
+    expect(
+      player(scenario, own).board.filter((card) => card.cardId === id)
+    ).toHaveLength(2)
+    addCard(scenario, own, 'basic_polymorph')
+    play(scenario, own, 'basic_polymorph', { targets: replayedTargets })
+    expect(
+      player(scenario, own).board.find(
+        (card) => card.instanceId === replayed.instanceId
+      )
+    ).toMatchObject({ baseAttack: 1, baseHealth: 1 })
+  })
+
+  it('uses combined Attack for Dispatch Kodo and applies Poisonous to its Battlecry', () => {
+    const scenario = ready({ seed: 802 })
+    const [own, enemy] = activePlayers(scenario)
+    const victim = summon(scenario, enemy, 'basic_boulderfist_ogre')
+    const id = zombeastId(
+      'mean_streets_of_gadgetzan_dispatch_kodo',
+      'classic_emperor_cobra'
+    )
+    setMana(scenario, own)
+    addCard(scenario, own, id)
+    play(scenario, own, id, {
+      targets: [{ kind: 'minion', participantId: enemy, instanceId: victim.instanceId }]
+    })
+    expect(player(scenario, enemy).board).toHaveLength(0)
+  })
+
+  it.each(['classic_emperor_cobra', 'knights_of_the_frozen_throne_bloodworm'])(
+    'applies %s keywords to Exploding Bloatbat deathrattle and resurrects the recipe',
+    (second) => {
+      const scenario = ready({ seed: 803 })
+      const [own, enemy] = activePlayers(scenario)
+      setHealth(scenario, own, 10)
+      summon(scenario, enemy, 'basic_boulderfist_ogre')
+      summon(scenario, enemy, 'basic_chillwind_yeti')
+      const id = zombeastId('knights_of_the_frozen_throne_exploding_bloatbat', second)
+      const target = summon(scenario, own, id)
+      setMana(scenario, own)
+      addCard(scenario, own, 'classic_naturalize')
+      play(scenario, own, 'classic_naturalize', {
+        targets: [{ kind: 'minion', participantId: own, instanceId: target.instanceId }]
+      })
+      if (second === 'classic_emperor_cobra')
+        expect(player(scenario, enemy).board).toHaveLength(0)
+      else expect(player(scenario, own).hero.health).toBe(14)
+      setMana(scenario, own)
+      addCard(scenario, own, 'whispers_of_the_old_gods_nzoth_the_corruptor')
+      play(scenario, own, 'whispers_of_the_old_gods_nzoth_the_corruptor')
+      expect(player(scenario, own).board.some((card) => card.cardId === id)).toBe(true)
+    }
+  )
+
+  it('shuffles the whole Weasel Zombeast into the opposing deck', () => {
+    const scenario = ready({ seed: 804 })
+    const [own, enemy] = activePlayers(scenario)
+    const id = zombeastId(
+      'mean_streets_of_gadgetzan_weasel_tunneler',
+      'basic_stonetusk_boar'
+    )
+    const target = summon(scenario, own, id)
+    setMana(scenario, own)
+    addCard(scenario, own, 'classic_naturalize')
+    play(scenario, own, 'classic_naturalize', {
+      targets: [{ kind: 'minion', participantId: own, instanceId: target.instanceId }]
+    })
+    expect(
+      [...player(scenario, enemy).deck, ...player(scenario, enemy).hand].some(
+        (card) => card.cardId === id
+      )
+    ).toBe(true)
+  })
+
+  it('restores the first stage deterministically and burns only the finished card with a full hand', () => {
+    const scenario = ready({ seed: 805, firstHeroId: 'rexxar', secondHeroId: 'rexxar' })
+    const [own] = activePlayers(scenario)
+    setMana(scenario, own)
+    addCard(scenario, own, 'knights_of_the_frozen_throne_deathstalker_rexxar')
+    play(scenario, own, 'knights_of_the_frozen_throne_deathstalker_rexxar')
+    while (player(scenario, own).hand.length < 10)
+      addCard(scenario, own, 'basic_chillwind_yeti')
+    setMana(scenario, own)
+    const powerCost = player(scenario, own).heroPower.cost
+    expect(
+      scenario.match.dispatch({ type: 'use-hero-power', participantId: own }).accepted
+    ).toBe(true)
+    const restored = createOpeningMatchFromCheckpoint(
+      JSON.parse(JSON.stringify(scenario.match.getCheckpoint()))
+    )
+    for (let stage = 0; stage < 2; stage++) {
+      const pending = scenario.match.getState().pendingCardChoice!
+      const command = {
+        type: 'choose-card-option' as const,
+        participantId: own,
+        sourceCardInstanceId: pending.sourceCardInstanceId,
+        choice: 0
+      }
+      const result = scenario.match.dispatch(command)
+      expect(result).toEqual(restored.dispatch(command))
+      expect(result.accepted).toBe(true)
+      if (result.accepted)
+        expect(
+          result.events.filter((event) => event.type === 'card-burned')
+        ).toHaveLength(stage)
+    }
+    expect(player(scenario, own).hand).toHaveLength(10)
+    expect(player(scenario, own).mana.available).toBe(10 - powerCost)
+    expect(scenario.match.getState().pendingCardChoice).toBeUndefined()
+  })
+})
 
 function player(scenario: Scenario, participantId: string) {
   return scenario.match

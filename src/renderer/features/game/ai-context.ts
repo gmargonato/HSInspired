@@ -611,7 +611,15 @@ export function aiModelState(
                   cost: choice.resolution.selectedCostOption?.cost,
                   firstIngredient: choice.resolution.selectedFirstIngredient
                 }
-              : choice.resolution?.type
+              : choice.resolution?.type === 'build-a-beast'
+                ? {
+                    type: choice.resolution.type,
+                    stage: choice.resolution.stage,
+                    firstBeast: choice.resolution.firstBeast
+                      ? cardFacts(choice.resolution.firstBeast)
+                      : undefined
+                  }
+                : choice.resolution?.type
         }
       : null,
     scheduledEffects: (state.scheduledEffects ?? []).filter(

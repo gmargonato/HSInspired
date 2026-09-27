@@ -621,14 +621,24 @@ export interface CardChoiceOption {
 }
 
 export interface PendingCardChoice {
+  readonly prompt?: string
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
   readonly sourceCardId: CardId
   readonly options: readonly CardChoiceOption[]
   readonly resolution?:
+    | {
+        readonly type: 'build-a-beast'
+        readonly stage: 'first' | 'second'
+        readonly firstBeast?: CardId
+      }
     | { readonly type: 'bonus-spell' }
     | {
         readonly type: 'adapt'
+        readonly historySource?: {
+          readonly instanceId: string
+          readonly cardId: CardId
+        }
         readonly targetInstanceIds: readonly string[]
         readonly remaining: number
       }
@@ -898,6 +908,7 @@ export interface DiscoverStartedEvent {
 }
 
 export interface CardChoiceStartedEvent {
+  readonly prompt?: string
   readonly type: 'card-choice-started'
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
@@ -1196,6 +1207,7 @@ export interface HistoryActionOutcome {
   readonly revealGroupId?: string
   readonly revealComparison?: boolean
   readonly kind:
+    | 'adapt'
     | 'reveal'
     | 'cast-spell'
     | 'damage'

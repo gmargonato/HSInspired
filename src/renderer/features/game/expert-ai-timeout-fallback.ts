@@ -435,7 +435,7 @@ function scoreHeroPower(
       return effect.armor * (context.facingLethal ? 2 : 0.5) + effect.attack * 0.5
     case 'draw-and-self-damage':
     case 'draw-with-set-cost':
-    case 'discover-beast':
+    case 'build-a-beast':
     case 'discover-choose-one':
     case 'discover-spell-discount':
     case 'copy-last-card-this-turn':

@@ -1,6 +1,7 @@
 import { Assets, Texture } from 'pixi.js'
 import { hasCardAssetDefinition, resolveCardAssetDefinition } from './card-assets'
 import { resolveGadgetzanArtworkId } from './gadgetzan-artwork-aliases'
+import { zombeastComponents } from '../../../game/content/cards/zombeast'
 
 const artworkUrls = import.meta.glob(
   '../../../../assets/images/card-artwork/*.{jpg,jpeg,png}',
@@ -16,7 +17,9 @@ function artworkGlobKey(fileName: string): string {
 }
 
 function artworkFileNames(cardId: string): readonly string[] {
-  const resolvedId = resolveGadgetzanArtworkId(cardId)
+  const resolvedId = resolveGadgetzanArtworkId(
+    zombeastComponents(cardId)?.[0] ?? cardId
+  )
   return [`${resolvedId}.jpg`, `${resolvedId}.jpeg`, `${resolvedId}.png`]
 }
 

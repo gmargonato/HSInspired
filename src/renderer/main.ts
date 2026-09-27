@@ -67,7 +67,7 @@ function subscribeToSceneMenu(
 function mountFpsCounter(app: Application, container: HTMLElement): () => void {
   const counter = document.createElement('div')
   counter.className = 'fps-counter'
-  counter.textContent = 'FPS: --'
+  counter.textContent = '--'
   container.appendChild(counter)
 
   let frames = 0
@@ -78,7 +78,7 @@ function mountFpsCounter(app: Application, container: HTMLElement): () => void {
     const elapsed = now - sampleStart
     if (elapsed < 500) return
 
-    counter.textContent = `FPS: ${Math.round((frames * 1000) / elapsed)}`
+    counter.textContent = String(Math.round((frames * 1000) / elapsed))
     frames = 0
     sampleStart = now
   }

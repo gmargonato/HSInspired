@@ -6231,13 +6231,70 @@ describe('hardware local AI artifact scenarios', () => {
     expect(aiWon(actual)).toBe(true)
   }, 60_000)
 
-  it('DEV-139: records the unsupported Build-a-Beast continuation', () => {
-    expect(CARD_CATALOG.all.some((card) => card.name === 'Zombeast')).toBe(false)
-  })
+  it('DEV-139: completes a Zombeast with Charge for lethal', async () => {
+    const actual = createSession({
+      seed: 0xde0139,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'jaina',
+      aiMana: 2,
+      aiMaximumMana: 2,
+      aiHeroPowerAvailable: false,
+      aiHand: [],
+      opponentHealth: 2,
+      pendingCardChoice: {
+        sourceCardId: 'knights_of_the_frozen_throne_build_a_beast',
+        options: [
+          'basic_stonetusk_boar',
+          'basic_river_crocolisk',
+          'basic_ironfur_grizzly'
+        ].map((id, choice) => ({
+          choice,
+          label: CARD_CATALOG.require(id).name,
+          presentationCardId: id
+        })),
+        resolution: {
+          type: 'build-a-beast',
+          stage: 'second',
+          firstBeast: asCardId('basic_timber_wolf')
+        }
+      }
+    })
+    await runAiTurn(actual)
+    expect(actual.getState().pendingCardChoice).toBeUndefined()
+    expect(aiWon(actual)).toBe(true)
+  }, 60_000)
 
-  it('DEV-140: records the unsupported Build-a-Beast first-stage continuation', () => {
-    expect(CARD_CATALOG.all.some((card) => card.name === 'Zombeast')).toBe(false)
-  })
+  it('DEV-140: resolves both stages of Build-a-Beast', async () => {
+    const actual = createSession({
+      seed: 0xde0140,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'jaina',
+      aiMana: 0,
+      aiMaximumMana: 2,
+      aiHeroPowerAvailable: false,
+      aiHand: [],
+      pendingCardChoice: {
+        sourceCardId: 'knights_of_the_frozen_throne_build_a_beast',
+        options: [
+          'basic_timber_wolf',
+          'classic_dire_wolf_alpha',
+          'classic_scavenging_hyena'
+        ].map((id, choice) => ({
+          choice,
+          label: CARD_CATALOG.require(id).name,
+          presentationCardId: id
+        })),
+        resolution: { type: 'build-a-beast', stage: 'first' }
+      }
+    })
+    await runAiTurn(actual)
+    expect(actual.getState().pendingCardChoice).toBeUndefined()
+    expect(
+      aiPlayer(actual).hand.some(
+        (card) => CARD_CATALOG.require(card.cardId).name === 'Zombeast'
+      )
+    ).toBe(true)
+  }, 60_000)
 
   it('DEV-141: probes the hidden spell secret with The Coin before Fireball', async () => {
     for (const secretId of ['classic_counterspell', 'classic_mirror_entity']) {
