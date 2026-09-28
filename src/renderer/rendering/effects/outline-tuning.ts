@@ -19,6 +19,7 @@ export type {
 } from '../../../shared/ipc/outline-tuning'
 
 const initialConfig = parseOutlineTuningConfig(rawConfig)
+export const SHATTER_CONFIG = { ...initialConfig.shatter }
 export const GHOST_AURA_CONFIG = { ...initialConfig.ghost }
 
 /** Current production tuning registry, initialized from the checked-in JSON config. */
@@ -38,7 +39,8 @@ export function getOutlineTuning(preset: OutlinePresetName): OutlineTuning {
 
 export function getOutlineTuningConfig(): OutlineTuningConfig {
   return parseOutlineTuningConfig({
-    version: 4,
+    version: 10,
+    shatter: SHATTER_CONFIG,
     aura: { presets: OUTLINE_TUNINGS, palettes: OUTLINE_PALETTES },
     ghost: GHOST_AURA_CONFIG
   })
@@ -46,6 +48,7 @@ export function getOutlineTuningConfig(): OutlineTuningConfig {
 
 export function updateOutlineTuningConfig(config: OutlineTuningConfig): void {
   const parsed = parseOutlineTuningConfig(config)
+  Object.assign(SHATTER_CONFIG, parsed.shatter)
   GHOST_AURA_CONFIG.tuning = parsed.ghost.tuning
   GHOST_AURA_CONFIG.palette = parsed.ghost.palette
   for (const preset of OUTLINE_PRESET_NAMES) {

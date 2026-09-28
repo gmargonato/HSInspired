@@ -22,6 +22,9 @@ import { CombatAttackWarp } from './combat-attack-warp'
 import type { BoardPositionController } from './board-position-controller'
 import { MATCH_SHADOW_CONFIG } from '../../rendering/shadows/match-shadow-config'
 
+import { SHATTER_CONFIG } from '../../rendering/effects/outline-tuning'
+import { createShatter } from '../../rendering/effects/shatter'
+
 export const COMBAT_ATTACKER_Z_INDEX = 100
 
 /** Intentional pacing for the warp return leg: 1 = base timing, 2 = half speed. */
@@ -96,6 +99,8 @@ export class GameCombatPresentation {
   >()
   private readonly activeWarps = new Map<MinionView, CombatAttackWarp>()
 
+  private readonly activeShatters = new Set<ReturnType<typeof createShatter>>()
+
   constructor(
     private readonly assets: GameAssets,
     private readonly animations: Pick<AnimationScope, 'timeline' | 'cancel'>,
@@ -127,6 +132,8 @@ export class GameCombatPresentation {
   }
 
   dispose(): void {
+    for (const shatter of this.activeShatters) shatter.dispose()
+    this.activeShatters.clear()
     this.indicatorLayer.onRender = null
     this.indicatorSources.clear()
     this.clearCombatPreview()
@@ -423,11 +430,16 @@ export class GameCombatPresentation {
       }
       const targetScale = view.scale.x * 0.72
       const timeline = this.animations.timeline()
-      timeline.to(view, {
-        alpha: 0,
-        duration: RESOLUTION_TIMING.deathCollapse,
-        ease: 'power2.in'
-      })
+      const completion = this.completeShatter(timeline, view, 0)
+      timeline.to(
+        view,
+        {
+          alpha: 0,
+          duration: RESOLUTION_TIMING.deathCollapse,
+          ease: 'power2.in'
+        },
+        0
+      )
       timeline.to(
         view.scale,
         {
@@ -438,7 +450,7 @@ export class GameCombatPresentation {
         },
         0
       )
-      animations.push(completeTimeline(timeline))
+      animations.push(completion)
     }
     await Promise.all(animations)
     for (const death of event.deaths) {
@@ -1023,6 +1035,7 @@ export class GameCombatPresentation {
         ease: 'sine.inOut'
       })
     const deathStart = BOARD_TIMING.minionDeathWiggle
+    const completion = this.completeShatter(timeline, view, deathStart)
     timeline
       .to(view, { alpha: 0, duration: deathDuration, ease: 'power2.in' }, deathStart)
       .to(
@@ -1036,7 +1049,48 @@ export class GameCombatPresentation {
         deathStart
       )
     timeline.eventCallback('onUpdate', () => this.updateCombatMarkerPositions())
-    return completeTimeline(timeline)
+    return completion
+  }
+
+  /** Snapshot after the wiggle, then keep resolution queued until all shards fade. */
+  private completeShatter(
+    timeline: gsap.core.Timeline,
+    view: MinionView | WeaponView,
+    start: number
+  ): Promise<void> {
+    const state = { progress: 0 }
+    const tuning = { ...SHATTER_CONFIG }
+    let effect: ReturnType<typeof createShatter> | undefined
+    // Insert before the collapse's first rendered frame; its hidden original
+    // retains the existing fade as a fallback if snapshot creation fails.
+    timeline.call(
+      () => {
+        if (view.destroyed) return
+        try {
+          effect = createShatter(this.context.renderer, view, tuning)
+          this.activeShatters.add(effect)
+        } catch (error) {
+          console.warn('[Shatter] snapshot failed; using death fade', error)
+        }
+      },
+      [],
+      start
+    )
+    timeline.to(
+      state,
+      {
+        progress: 1,
+        duration: tuning.duration,
+        ease: 'none',
+        onUpdate: () => effect?.setProgress(state.progress)
+      },
+      start
+    )
+    return completeTimeline(timeline).finally(() => {
+      if (!effect) return
+      this.activeShatters.delete(effect)
+      effect.dispose()
+    })
   }
 
   private attackerReturnPosition(

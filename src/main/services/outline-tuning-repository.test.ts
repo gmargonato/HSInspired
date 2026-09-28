@@ -24,7 +24,9 @@ describe('OutlineTuningRepository', () => {
     const draft = structuredClone(rawConfig)
     draft.aura.presets.board.glowIntensity = 0.35
     draft.aura.palettes.green.baseColor = 0x123456
-    draft.ghost.tuning.motionSpeed = 1.5
+    draft.ghost.tuning.particleWindStrength = 1.5
+    draft.shatter.duration = 2.4
+    draft.shatter.shardCount = 72
     const second = parseOutlineTuningConfig(draft)
 
     await Promise.all([repository.save(first), repository.save(second)])

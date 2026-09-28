@@ -7,6 +7,7 @@ import {
   OUTLINE_PALETTES,
   OUTLINE_TUNINGS,
   GHOST_AURA_CONFIG,
+  SHATTER_CONFIG,
   updateOutlineTuningConfig
 } from './outline-tuning'
 import { inverseAuraProjection } from './aura-projection'
@@ -17,13 +18,16 @@ describe('shader tuning registry', () => {
     const updated = structuredClone(rawConfig)
     updated.aura.presets.card.speed = 0.37
     updated.aura.palettes.blue.glowColor = 0x123456
-    updated.ghost.tuning.motionSpeed = 1.5
+    updated.ghost.tuning.particleWindStrength = 1.5
+    updated.shatter.duration = 2.4
+    updated.shatter.seed = 23
     updateOutlineTuningConfig(parseOutlineTuningConfig(updated))
     expect(getOutlineTuning('card').speed).toBe(0.37)
     expect(OUTLINE_TUNINGS.card.speed).toBe(0.37)
     expect(OUTLINE_PALETTES.blue.glowColor).toBe(0x123456)
-    expect(GHOST_AURA_CONFIG.tuning.motionSpeed).toBe(1.5)
+    expect(GHOST_AURA_CONFIG.tuning.particleWindStrength).toBe(1.5)
     expect(GHOST_AURA_CONFIG.palette).toEqual(initialConfig.ghost.palette)
+    expect(SHATTER_CONFIG).toEqual(updated.shatter)
     expect(getOutlineTuningConfig()).toEqual(updated)
   })
 })

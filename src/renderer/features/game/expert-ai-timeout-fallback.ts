@@ -135,6 +135,7 @@ function scoreDamageTarget(
 ): number {
   if (target.participantId === context.opponent.participantId) {
     if (target.kind === 'hero') {
+      if (context.opponent.hero.immune === true) return 0
       if (amount >= context.enemyHealth) return 100_000 + amount
       return amount * 1.5
     }
@@ -146,10 +147,38 @@ function scoreDamageTarget(
         context.observation.turnNumber
       )
       const shielded = keywords.includes('divine-shield')
-      if (!shielded && !keywords.includes('immune') && amount >= numeric(minion.health))
+      if (keywords.includes('immune')) return 0
+      if (!shielded && amount >= numeric(minion.health))
         return removalScore(minion, context)
       return shielded && amount > 0 ? 0.5 : amount * 0.35
     }
+  }
+  if (target.participantId === context.self.participantId) {
+    if (target.kind === 'hero')
+      return heroHealth(context.self) <= amount
+        ? -100_000 - amount
+        : -amount * (context.facingLethal ? 12 : 4)
+    if (target.kind !== 'minion' || typeof target.instanceId !== 'string') return 0
+    const minion = findMinion(context.self, target.instanceId)
+    if (!minion) return 0
+    const keywords = effectiveBoardMinionKeywords(
+      minion,
+      context.observation.turnNumber
+    )
+    if (keywords.includes('divine-shield') || keywords.includes('immune')) return -1
+    const definition = CARD_CATALOG.get(minion.cardId)
+    const killed = amount >= numeric(minion.health)
+    if (
+      definition?.effects.some((effect) =>
+        killed
+          ? effect.trigger === 'deathrattle' || effect.trigger === 'on-death'
+          : effect.trigger === 'on-damage'
+      )
+    )
+      return 0
+    return killed
+      ? -(5 + Math.max(0, numeric(minion.attack)) * 1.8 + numeric(minion.health) * 0.8)
+      : -(1.5 + amount * 1.2)
   }
   return 0
 }
@@ -365,10 +394,35 @@ function scoreHeroPower(
     case 'damage-character':
       return target ? scoreDamageTarget(effect.amount, target, context) : 0
     case 'damage-and-summon-on-kill':
-      return (
-        (target ? scoreDamageTarget(effect.amount, target, context) : 0) +
-        cardBodyScore(effect.cardId, 0, context.self.board.length)
-      )
+      if (!target) return 0
+      {
+        const targetMinion =
+          target.kind === 'minion' && typeof target.instanceId === 'string'
+            ? findMinion(
+                target.participantId === context.self.participantId
+                  ? context.self
+                  : context.opponent,
+                target.instanceId
+              )
+            : undefined
+        const targetKeywords = targetMinion
+          ? effectiveBoardMinionKeywords(targetMinion, context.observation.turnNumber)
+          : []
+        const targetDies =
+          targetMinion !== undefined &&
+          !targetKeywords.includes('divine-shield') &&
+          !targetKeywords.includes('immune') &&
+          effect.amount >= numeric(targetMinion.health)
+        const friendlyTargetDies =
+          targetDies && target.participantId === context.self.participantId
+        const boardCountAfterDamage =
+          context.self.board.length - (friendlyTargetDies ? 1 : 0)
+        const summonValue =
+          targetDies && boardCountAfterDamage < 7
+            ? cardBodyScore(effect.cardId, 0, boardCountAfterDamage)
+            : 0
+        return scoreDamageTarget(effect.amount, target, context) + summonValue
+      }
     case 'damage-all-minions': {
       const enemyValue = context.opponent.board.reduce((total, minion) => {
         const shielded = effectiveBoardMinionKeywords(
@@ -384,13 +438,16 @@ function scoreHeroPower(
       }, 0)
       const friendlyLoss = context.self.board.reduce(
         (total, minion) =>
-          total +
-          (!effectiveBoardMinionKeywords(
-            minion,
-            context.observation.turnNumber
-          ).includes('divine-shield') && effect.amount >= numeric(minion.health)
-            ? 5 + numeric(minion.attack) * 1.5
-            : 0),
+          total -
+          scoreDamageTarget(
+            effect.amount,
+            {
+              kind: 'minion',
+              participantId: context.self.participantId,
+              instanceId: minion.instanceId
+            },
+            context
+          ),
         0
       )
       return enemyValue - friendlyLoss

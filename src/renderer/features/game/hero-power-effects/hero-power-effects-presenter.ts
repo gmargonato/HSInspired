@@ -135,6 +135,12 @@ export class HeroPowerEffectsPresenter {
     await this.views.get(participantId)?.flipUp()
   }
 
+  async syncAvailability(participantId: PlayerId, available: boolean): Promise<void> {
+    const view = this.views.get(participantId)
+    if (!view || view.destroyed) return
+    await (available ? view.flipUp() : view.flipDown())
+  }
+
   use(event: Extract<OpeningMatchEvent, { type: 'hero-power-used' }>): Promise<void> {
     return this.play(event)
   }

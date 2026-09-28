@@ -53,30 +53,61 @@ export interface AuraPalette {
 }
 export type OutlineTuning = AuraTuning
 export type OutlinePalette = AuraPalette
+/** Numeric storage; the editor displays compass labels. Screen Y points down. */
+export const GHOST_WIND_DIRECTIONS = [
+  { value: 0, label: 'All directions', x: 0, y: 0 },
+  { value: 1, label: 'N', x: 0, y: -1 },
+  { value: 2, label: 'NE', x: Math.SQRT1_2, y: -Math.SQRT1_2 },
+  { value: 3, label: 'E', x: 1, y: 0 },
+  { value: 4, label: 'SE', x: Math.SQRT1_2, y: Math.SQRT1_2 },
+  { value: 5, label: 'S', x: 0, y: 1 },
+  { value: 6, label: 'SW', x: -Math.SQRT1_2, y: Math.SQRT1_2 },
+  { value: 7, label: 'W', x: -1, y: 0 },
+  { value: 8, label: 'NW', x: -Math.SQRT1_2, y: -Math.SQRT1_2 }
+] as const
 export interface GhostAuraTuning {
-  readonly ribbonWidth: number
-  readonly edgeSoftness: number
-  /** Color intensity without changing outline coverage; 1 is unchanged. */
-  readonly saturation: number
-  readonly rimWidth: number
-  readonly glowWidth: number
-  readonly glowStrength: number
-  readonly highlightStrength: number
-  readonly hotspotScale: number
-  readonly hotspotDensity: number
-  readonly edgeWobble: number
-  readonly motionSpeed: number
-  readonly innerEdgeWidth: number
-  readonly pulseRate: number
-  /** Organic thick/thin asymmetry along the contour, 0 (uniform) to 10. */
-  readonly contourVariation: number
+  readonly windDirection: number
+  readonly mistEnabled: boolean
+  readonly mistIntensity: number
+  readonly mistWidth: number
+  readonly mistSoftness: number
+  readonly mistTextureScale: number
+  readonly mistAnimationSpeed: number
+  readonly particlesEnabled: boolean
+  readonly particleIntensity: number
+  readonly particleWindStrength: number
+  readonly particleCount: number
+  /** Average screen-pixel diameter, with built-in +/-60% variation. */
+  readonly particleSize: number
+  readonly particleTravelDistance: number
 }
 export interface GhostAuraPalette {
-  readonly baseColor: number
-  readonly outerColor: number
-  readonly glowColor: number
-  readonly highlightColor: number
+  readonly mistPrimaryColor: number
+  readonly mistHighlightColor: number
+  readonly particleColor: number
 }
+export const GHOST_MIST_DEFAULTS = {
+  tuning: {
+    windDirection: 2,
+    mistEnabled: true,
+    mistIntensity: 0.8,
+    mistWidth: 15,
+    mistSoftness: 1.5,
+    mistTextureScale: 1.5,
+    mistAnimationSpeed: 1,
+    particlesEnabled: true,
+    particleIntensity: 0.8,
+    particleWindStrength: 2,
+    particleCount: 120,
+    particleSize: 15,
+    particleTravelDistance: 60
+  },
+  palette: {
+    mistPrimaryColor: 994493,
+    mistHighlightColor: 37375,
+    particleColor: 37375
+  }
+} as const
 export const AURA_CONTROLS = [
   {
     key: 'smoothOutline',
@@ -378,23 +409,40 @@ export const AURA_CONTROLS = [
   }
 ] as const
 export const GHOST_TUNING_RANGES = {
-  ribbonWidth: [0, 20],
-  edgeSoftness: [0, 10],
-  saturation: [0, 2],
-  rimWidth: [0, 15],
-  glowWidth: [0, 30],
-  glowStrength: [0, 4],
-  highlightStrength: [0, 5],
-  hotspotScale: [1, 120],
-  hotspotDensity: [0, 4],
-  edgeWobble: [0, 16],
-  motionSpeed: [0, 3],
-  innerEdgeWidth: [0, 8],
-  pulseRate: [0, 3],
-  contourVariation: [0, 10]
-} as const satisfies Record<keyof GhostAuraTuning, readonly [number, number]>
+  windDirection: [0, 8],
+  mistIntensity: [0, 12],
+  mistWidth: [4, 80],
+  mistSoftness: [0.2, 1.5],
+  mistTextureScale: [0.25, 8],
+  mistAnimationSpeed: [0, 3],
+  particleIntensity: [0, 12],
+  particleWindStrength: [0, 3],
+  particleCount: [0, 120],
+  particleSize: [1, 60],
+  particleTravelDistance: [1, 300]
+} as const satisfies Record<
+  Exclude<keyof GhostAuraTuning, 'mistEnabled' | 'particlesEnabled'>,
+  readonly [number, number]
+>
+export const SHATTER_DEFAULTS = {
+  shardCount: 40,
+  spread: 0.75,
+  spin: 180,
+  duration: 1.8,
+  seed: 1
+}
+export type ShatterTuning = typeof SHATTER_DEFAULTS
+export const SHATTER_TUNING_RANGES = {
+  shardCount: [8, 120],
+  spread: [0, 2],
+  spin: [0, 720],
+  duration: [0.3, 5],
+  seed: [1, 9999]
+} as const
+
 export interface OutlineTuningConfig {
-  readonly version: 4
+  readonly shatter: ShatterTuning
+  readonly version: 10
   readonly aura: {
     readonly presets: Readonly<Record<OutlinePresetName, AuraTuning>>
     readonly palettes: Readonly<Record<OutlinePaletteName, AuraPalette>>
@@ -438,8 +486,24 @@ function colors<T>(value: unknown, keys: readonly string[]): T {
   ) as T
 }
 export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
-  const config = record(value, ['version', 'aura', 'ghost'])
-  if (config.version !== 4) throw new Error('Invalid shader tuning version')
+  const version =
+    value && typeof value === 'object' && 'version' in value ? value.version : undefined
+  const config = record(
+    value,
+    version === 10
+      ? ['version', 'aura', 'ghost', 'shatter']
+      : ['version', 'aura', 'ghost']
+  )
+  if (
+    config.version !== 4 &&
+    config.version !== 5 &&
+    config.version !== 6 &&
+    config.version !== 7 &&
+    config.version !== 8 &&
+    config.version !== 9 &&
+    config.version !== 10
+  )
+    throw new Error('Invalid shader tuning version')
   const aura = record(config.aura, ['presets', 'palettes'])
   const presets = record(aura.presets, OUTLINE_PRESET_NAMES)
   const palettes = record(aura.palettes, OUTLINE_PALETTE_NAMES)
@@ -478,23 +542,98 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
       colors<AuraPalette>(palettes[name], colorKeys)
     ])
   ) as unknown as OutlineTuningConfig['aura']['palettes']
-  const ghost = record(config.ghost, ['tuning', 'palette'])
-  const ghostTuning = record(ghost.tuning, Object.keys(GHOST_TUNING_RANGES))
+  let ghost = record(config.version === 4 ? GHOST_MIST_DEFAULTS : config.ghost, [
+    'tuning',
+    'palette'
+  ])
+  if (config.version !== 4 && config.version !== 9 && config.version !== 10) {
+    const old = record(ghost.tuning, [
+      'windDirection',
+      'windStrength',
+      'particleCount',
+      'spotSize',
+      'textureScale',
+      'expansion',
+      'intensity',
+      'softness',
+      ...(config.version === 5 || config.version === 6
+        ? []
+        : ['particleTravelDistance'])
+    ])
+    const palette = colors<{ primaryColor: number; secondaryColor: number }>(
+      ghost.palette,
+      ['primaryColor', 'secondaryColor']
+    )
+    const degrees = config.version === 8 ? null : number(old.windDirection, 0, 360)
+    ghost = {
+      tuning: {
+        windDirection:
+          degrees === null
+            ? old.windDirection
+            : ((Math.round(degrees / 45) + 2) % 8) + 1,
+        mistEnabled: true,
+        particlesEnabled: true,
+        mistAnimationSpeed: 1,
+        mistIntensity: old.intensity,
+        particleIntensity: old.intensity,
+        mistWidth: old.expansion,
+        mistSoftness: old.softness,
+        mistTextureScale: old.textureScale,
+        particleWindStrength: old.windStrength,
+        particleCount: old.particleCount,
+        particleSize:
+          config.version === 5 ? number(old.spotSize, 0.25, 8) * 7.5 : old.spotSize,
+        particleTravelDistance:
+          config.version === 5 || config.version === 6 ? 60 : old.particleTravelDistance
+      },
+      palette: {
+        mistPrimaryColor: palette.primaryColor,
+        mistHighlightColor: palette.secondaryColor,
+        particleColor: palette.secondaryColor
+      }
+    }
+  }
+  const ghostTuning = record(ghost.tuning, [
+    ...Object.keys(GHOST_TUNING_RANGES),
+    'mistEnabled',
+    'particlesEnabled'
+  ])
+  for (const key of ['mistEnabled', 'particlesEnabled'])
+    if (typeof ghostTuning[key] !== 'boolean')
+      throw new Error('Invalid Ghost enabled toggle')
+  const shatter = record(
+    config.version === 10 ? config.shatter : SHATTER_DEFAULTS,
+    Object.keys(SHATTER_DEFAULTS)
+  )
   return {
-    version: 4,
+    version: 10,
+    shatter: Object.fromEntries(
+      Object.entries(SHATTER_TUNING_RANGES).map(([key, [min, max]]) => [
+        key,
+        number(shatter[key], min, max, key === 'shardCount' || key === 'seed')
+      ])
+    ) as ShatterTuning,
     aura: { presets: parsedPresets, palettes: parsedPalettes },
     ghost: {
-      tuning: Object.fromEntries(
-        Object.entries(GHOST_TUNING_RANGES).map(([key, range]) => [
-          key,
-          number(ghostTuning[key], range[0], range[1])
-        ])
-      ) as unknown as GhostAuraTuning,
+      tuning: {
+        ...Object.fromEntries(
+          Object.entries(GHOST_TUNING_RANGES).map(([key, range]) => [
+            key,
+            number(
+              ghostTuning[key],
+              range[0],
+              range[1],
+              key === 'particleCount' || key === 'windDirection'
+            )
+          ])
+        ),
+        mistEnabled: ghostTuning.mistEnabled,
+        particlesEnabled: ghostTuning.particlesEnabled
+      } as unknown as GhostAuraTuning,
       palette: colors<GhostAuraPalette>(ghost.palette, [
-        'baseColor',
-        'outerColor',
-        'glowColor',
-        'highlightColor'
+        'mistPrimaryColor',
+        'mistHighlightColor',
+        'particleColor'
       ])
     }
   }

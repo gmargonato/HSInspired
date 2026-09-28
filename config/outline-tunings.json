@@ -1,5 +1,12 @@
 {
-  "version": 4,
+  "version": 10,
+  "shatter": {
+    "shardCount": 8,
+    "spread": 0.07,
+    "spin": 10,
+    "duration": 0.5,
+    "seed": 3456
+  },
   "aura": {
     "presets": {
       "card": {
@@ -66,18 +73,18 @@
       },
       "board": {
         "smoothOutline": true,
-        "speed": 0.5,
+        "speed": 1,
         "shimmer": 0.5,
-        "wobble": 4,
-        "baseWidth": 60,
+        "wobble": 8,
+        "baseWidth": 96,
         "baseEdgeSoftness": 30,
         "baseOpacity": 1,
-        "coreWidth": 5,
-        "coreIntensity": 0.3,
-        "glowWidth": 100,
-        "glowSoftness": 0.7,
+        "coreWidth": 24,
+        "coreIntensity": 0.5,
+        "glowWidth": 168,
+        "glowSoftness": 0.53,
         "glowIntensity": 0.85,
-        "additive": 0.3,
+        "additive": 1,
         "hotCount": 8,
         "blobLength": 90,
         "blobThickness": 12,
@@ -137,7 +144,7 @@
       },
       "green": {
         "baseColor": 3997474,
-        "coreColor": 10354538,
+        "coreColor": 13434298,
         "glowColor": 2076690,
         "hotColor": 12386152,
         "blobCoreColor": 16515040
@@ -174,26 +181,24 @@
   },
   "ghost": {
     "tuning": {
-      "ribbonWidth": 5,
-      "edgeSoftness": 10,
-      "saturation": 0.75,
-      "rimWidth": 15,
-      "glowWidth": 0,
-      "glowStrength": 0,
-      "highlightStrength": 5,
-      "hotspotScale": 1,
-      "hotspotDensity": 4,
-      "edgeWobble": 16,
-      "motionSpeed": 2,
-      "innerEdgeWidth": 0,
-      "pulseRate": 0,
-      "contourVariation": 10
+      "windDirection": 3,
+      "mistIntensity": 1.77,
+      "mistWidth": 16,
+      "mistSoftness": 0.29,
+      "mistTextureScale": 4.21,
+      "mistAnimationSpeed": 1,
+      "particleIntensity": 0.48,
+      "particleWindStrength": 0.65,
+      "particleCount": 63,
+      "particleSize": 25.03,
+      "particleTravelDistance": 293,
+      "mistEnabled": true,
+      "particlesEnabled": true
     },
     "palette": {
-      "baseColor": 7389695,
-      "outerColor": 3102975,
-      "glowColor": 6712319,
-      "highlightColor": 13758719
+      "mistPrimaryColor": 6967533,
+      "mistHighlightColor": 37375,
+      "particleColor": 46079
     }
   }
 }

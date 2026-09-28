@@ -1,3 +1,4 @@
+import { WEAPON_CANVAS } from '../../../rendering/weapons/weapon-layout'
 import { CENTER, TOP_LEFT, placement } from '../../../rendering/layout'
 import { MINION_CANVAS } from '../../../rendering/minions/minion-layout'
 import { HERO_CANVAS } from '../../../rendering/heroes/hero-layout'
@@ -40,6 +41,11 @@ export const OUTLINE_LAB_LAYOUT = {
   ),
   status: { x: 62, y: 1048 },
   minion: placement({ x: 270, y: 620 }, MINION_CANVAS, { anchor: CENTER, scale: 1 }),
+  shatterWeapon: placement({ x: 580, y: 610 }, WEAPON_CANVAS, {
+    anchor: CENTER,
+    scale: 1
+  }),
+  shatterHero: placement({ x: 910, y: 610 }, HERO_CANVAS, { anchor: CENTER, scale: 1 }),
   hero: placement({ x: 580, y: 610 }, HERO_CANVAS, { anchor: CENTER, scale: 1 }),
   power: placement({ x: 910, y: 610 }, HERO_POWER_ICON_CANVAS, {
     anchor: CENTER,

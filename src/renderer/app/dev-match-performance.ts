@@ -11,7 +11,6 @@ import type { SceneManager } from '../scenes/scene-manager'
 import { GameScene } from '../scenes/game-scene'
 import { createTavernBrawlGameRoute } from '../features/tavern-brawl/tavern-brawl-model'
 import { GAME_HEIGHT, GAME_WIDTH } from './config'
-import { CachedOutlineFilter } from '../rendering/effects/cached-ghost-aura-filter'
 import { getPremiumMode, setPremiumMode } from '../rendering/premium-appearance'
 
 const BENCHMARK_SEED = 0x48535046
@@ -157,7 +156,6 @@ async function sampleFrames(
   let wasDragging = false
   const eventStarts = new WeakMap<Event, number>()
   const startedAt = performance.now()
-  CachedOutlineFilter.resetDiagnostics()
   const input = (event: PointerEvent): void => {
     const now = performance.now()
     eventStarts.set(event, now)
@@ -315,7 +313,6 @@ async function sampleFrames(
     draggedFrames,
     targetingFrames,
     dragStarts,
-    ghostOutlineCache: CachedOutlineFilter.getDiagnostics(),
     resources: { before: resourcesBefore, after: readResources?.() },
     failures,
     status: failures.length ? ('fail' as const) : ('pass' as const)

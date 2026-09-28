@@ -1,3 +1,5 @@
+import ghostSpotlightImage from '@assets/images/effects/spotlight-triangle.png'
+import ghostDissolveImage from '@assets/images/effects/noise-03.png'
 import { Texture, type AssetsManifest } from 'pixi.js'
 import burnNoiseImage from '@assets/images/effects/noise-01.jpg'
 import spellPlayAuraImage from '@assets/images/cards/play-aura-spell.png'
@@ -1111,6 +1113,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     historyArrowImage,
     91,
     92,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.ghost-spotlight',
+    ASSET_BUNDLE_IDS.game,
+    'ghostSpotlight',
+    ghostSpotlightImage,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.ghost-dissolve',
+    ASSET_BUNDLE_IDS.game,
+    'ghostDissolve',
+    ghostDissolveImage,
+    256,
+    256,
     'game-scene'
   ),
   asset(
@@ -2529,6 +2549,8 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   historyRemoteTrigger: Texture
   historyArrow: Texture
   burnNoise: Texture
+  ghostDissolve: Texture
+  ghostSpotlight: Texture
   historyBurnCard: Texture
   historyBurnThumb: Texture
   historySecretCard: Texture

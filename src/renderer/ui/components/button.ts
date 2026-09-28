@@ -1,4 +1,4 @@
-import { ColorMatrixFilter, Sprite, Texture } from 'pixi.js'
+import { ColorMatrixFilter, Container, Sprite, Texture } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
 import { Actor } from './actor'
 
@@ -21,6 +21,8 @@ export interface ButtonOptions {
 
 /** A single-texture button with scoped hover and pressed animations. */
 export class Button extends Actor {
+  /** Artwork and optional labels that share button animations. */
+  readonly content = new Container()
   readonly sprite: Sprite
   private readonly pressedScale: number
   private readonly pressFromLeft: boolean
@@ -62,7 +64,9 @@ export class Button extends Actor {
     this.sprite = new Sprite(texture)
     this.sprite.anchor.set(0.5)
     this.sprite.position.set(0, 0)
-    this.addChild(this.sprite)
+    this.content.label = 'button.content'
+    this.content.addChild(this.sprite)
+    this.addChild(this.content)
     this.setBrightness(this.idleBrightness)
 
     this.eventMode = 'static'
@@ -128,12 +132,12 @@ export class Button extends Actor {
     if (!enabled) {
       this.hovered = false
       this.pressed = false
-      this.killTweensOf(this.sprite.scale)
-      if (this.pressFromLeft) this.killTweensOf(this.sprite)
+      this.killTweensOf(this.content.scale)
+      if (this.pressFromLeft) this.killTweensOf(this.content)
       this.killTweensOf(this)
       this.killTweensOf(this.brightnessState)
-      this.sprite.scale.set(1)
-      if (this.pressFromLeft) this.sprite.x = 0
+      this.content.scale.set(1)
+      if (this.pressFromLeft) this.content.x = 0
       this.y = this.baseY
       this.setBrightness(this.idleBrightness)
     }
@@ -151,7 +155,7 @@ export class Button extends Actor {
     } finally {
       this.flippingTexture = false
       this.pendingTexture = null
-      this.sprite.scale.y = 1
+      this.content.scale.y = 1
       this.syncInteractionState()
     }
   }
@@ -163,17 +167,17 @@ export class Button extends Actor {
       const finish = (): void => {
         if (completed) return
         completed = true
-        this.sprite.scale.y = 1
+        this.content.scale.y = 1
         resolve()
       }
 
-      this.tweenTo(this.sprite.scale, {
+      this.tweenTo(this.content.scale, {
         y: 0,
         duration: halfDuration,
         ease: 'power2.in',
         onComplete: () => {
           this.sprite.texture = texture
-          this.tweenTo(this.sprite.scale, {
+          this.tweenTo(this.content.scale, {
             y: 1,
             duration: halfDuration,
             ease: 'power2.out',
@@ -192,7 +196,7 @@ export class Button extends Actor {
     const filtered = Math.abs(brightness - 1) > 1e-4
     if (filtered === this.filterAttached) return
     this.filterAttached = filtered
-    this.sprite.filters = filtered ? [this.myFilter] : null
+    this.content.filters = filtered ? [this.myFilter] : null
   }
 
   private tweenBrightness(to: number, duration: number): void {
@@ -226,17 +230,17 @@ export class Button extends Actor {
   private onPressStart = (event: FederatedPointerEvent): void => {
     if (!this.interactionEnabled || event.button !== 0) return
     this.pressed = true
-    this.killTweensOf(this.sprite.scale)
-    if (this.pressFromLeft) this.killTweensOf(this.sprite)
+    this.killTweensOf(this.content.scale)
+    if (this.pressFromLeft) this.killTweensOf(this.content)
     this.killTweensOf(this)
-    this.tweenTo(this.sprite.scale, {
+    this.tweenTo(this.content.scale, {
       x: this.pressedScale,
       y: this.pressedScale,
       duration: 0.08,
       ease: 'power2.out'
     })
     if (this.pressFromLeft) {
-      this.tweenTo(this.sprite, {
+      this.tweenTo(this.content, {
         x: (-this.sprite.texture.width * (1 - this.pressedScale)) / 2,
         duration: 0.08,
         ease: 'power2.out'
@@ -262,17 +266,17 @@ export class Button extends Actor {
   private endPress(): void {
     if (!this.interactionEnabled) return
     this.pressed = false
-    this.killTweensOf(this.sprite.scale)
-    if (this.pressFromLeft) this.killTweensOf(this.sprite)
+    this.killTweensOf(this.content.scale)
+    if (this.pressFromLeft) this.killTweensOf(this.content)
     this.killTweensOf(this)
-    this.tweenTo(this.sprite.scale, {
+    this.tweenTo(this.content.scale, {
       x: this.hovered ? this.hoverScale : 1,
       y: this.hovered ? this.hoverScale : 1,
       duration: 0.12,
       ease: 'power2.out'
     })
     if (this.pressFromLeft) {
-      this.tweenTo(this.sprite, {
+      this.tweenTo(this.content, {
         x: 0,
         duration: 0.12,
         ease: 'power2.out'
@@ -306,8 +310,8 @@ export class Button extends Actor {
 
   private tweenHoverScale(): void {
     if (this.hoverScale === 1) return
-    this.killTweensOf(this.sprite.scale)
-    this.tweenTo(this.sprite.scale, {
+    this.killTweensOf(this.content.scale)
+    this.tweenTo(this.content.scale, {
       x: this.hovered ? this.hoverScale : 1,
       y: this.hovered ? this.hoverScale : 1,
       duration: 0.15,

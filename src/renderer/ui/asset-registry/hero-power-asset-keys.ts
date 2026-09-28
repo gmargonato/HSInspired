@@ -5,6 +5,8 @@ export const HERO_POWER_ASSET_KEYS = [
   'hero-power-paladin',
   'hero-power-paladin-tidal-hand',
   'hero-power-priest',
+  'hero-power-mind-spike',
+  'hero-power-mind-shatter',
   'hero-power-rogue',
   'hero-power-shaman',
   'hero-power-warlock',

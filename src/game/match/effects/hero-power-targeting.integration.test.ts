@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { asCardId } from '../../content/cards'
+import { asCardId, CARD_CATALOG, cardHasTribe } from '../../content/cards'
 import { createMatchScenario } from '../testing/match-scenario-builder'
 
 function player(
@@ -151,5 +151,105 @@ describe('aura-modified hero powers', () => {
     ).toBe(true)
     expect(player(scenario, opponentId).board).toHaveLength(0)
     expect(player(scenario, opponentId).hero.health).toBe(30)
+  })
+
+  it('limits Dinomancy to friendly Beasts and rejects other friendly minions', () => {
+    const scenario = createMatchScenario({
+      seed: 1202,
+      firstHeroId: 'rexxar',
+      secondHeroId: 'jaina'
+    })
+    scenario.confirmBothMulligans()
+    const participantId = scenario.match.getState().activePlayerId!
+    const beast = CARD_CATALOG.all.find(
+      (card) => card.type === 'Minion' && cardHasTribe(card, 'Beast')
+    )!
+
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId,
+        available: 10,
+        maximum: 10
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-add-card',
+        participantId,
+        cardId: asCardId('journey_to_ungoro_dinomancy')
+      }).accepted
+    ).toBe(true)
+    const dinomancy = player(scenario, participantId).hand.find(
+      (card) => card.cardId === 'journey_to_ungoro_dinomancy'
+    )!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: dinomancy.instanceId
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: beast.id
+      }).accepted
+    ).toBe(true)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: 'basic_acidic_swamp_ooze'
+      }).accepted
+    ).toBe(true)
+
+    const ownBoard = player(scenario, participantId).board
+    const beastMinion = ownBoard.find((minion) => minion.cardId === beast.id)!
+    const nonBeastMinion = ownBoard.find(
+      (minion) => minion.cardId === 'basic_acidic_swamp_ooze'
+    )!
+    const legality = scenario.match.getLegality!(participantId)
+    expect(player(scenario, participantId).heroPower.targetType).toBe('friendly-beast')
+    expect(legality.legalHeroPowerTargets).toEqual([
+      {
+        kind: 'minion',
+        participantId,
+        instanceId: beastMinion.instanceId
+      }
+    ])
+
+    const manaBeforeUse = player(scenario, participantId).mana.available
+    expect(
+      scenario.match.dispatch({
+        type: 'use-hero-power',
+        participantId,
+        target: {
+          kind: 'minion',
+          participantId,
+          instanceId: nonBeastMinion.instanceId
+        }
+      })
+    ).toMatchObject({ accepted: false, code: 'invalid-target' })
+    expect(player(scenario, participantId).mana.available).toBe(manaBeforeUse)
+    expect(player(scenario, participantId).heroPower.available).toBe(true)
+
+    expect(
+      scenario.match.dispatch({
+        type: 'use-hero-power',
+        participantId,
+        target: {
+          kind: 'minion',
+          participantId,
+          instanceId: beastMinion.instanceId
+        }
+      }).accepted
+    ).toBe(true)
+    expect(
+      player(scenario, participantId).board.find(
+        (minion) => minion.instanceId === beastMinion.instanceId
+      )
+    ).toMatchObject({ attack: beastMinion.attack + 3, health: beastMinion.health + 3 })
   })
 })

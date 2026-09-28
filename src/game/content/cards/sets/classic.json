@@ -175,7 +175,7 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "Dragon",
-    "cost": 9,
+    "cost": 8,
     "attack": 8,
     "health": 8,
     "rulesText": "Battlecry: Set a hero's remaining Health to 15.",
@@ -7314,12 +7314,8 @@
           {
             "action": "set-hero-power",
             "player": "self",
-            "power": {
-              "damage": 2
-            },
-            "upgradedPower": {
-              "damage": 3
-            }
+            "power": "priest-mind-spike",
+            "upgradedPower": "priest-mind-shatter"
           }
         ]
       }
@@ -8378,7 +8374,7 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "Undead",
-    "cost": 6,
+    "cost": 5,
     "attack": 5,
     "health": 5,
     "rulesText": "Deathrattle: Take control of a random enemy minion.",

@@ -1,4 +1,8 @@
-import { zombeastId, zombeastPoolCards } from '../../content/cards/zombeast'
+import {
+  zombeastId,
+  zombeastPoolCards,
+  zombeastPoolOffers
+} from '../../content/cards/zombeast'
 import {
   applyCthunToCard,
   cthunEnchantment,
@@ -2168,6 +2172,21 @@ export class EffectRuntime {
   ): boolean {
     const eventSpec = block.event
     if (block.trigger === 'inspire' && event.controllerId !== source.participantId)
+      return false
+    // An unfiltered on-attack effect belongs to the character attacking. A
+    // weapon uses its controller's hero as the attacking character.
+    if (
+      event.type === 'character-attacked' &&
+      block.trigger === 'on-attack' &&
+      eventSpec === undefined &&
+      (!event.source ||
+        (entityKey(event.source) !== entityKey(source) &&
+          !(
+            source.kind === 'weapon' &&
+            event.source.kind === 'hero' &&
+            event.source.participantId === source.participantId
+          )))
+    )
       return false
     // Unbound on-attack listeners observe the attack-start fact only. Explicit
     // `attack-resolved` event bindings (for example Finja or The Boogeymonster)
@@ -8720,10 +8739,20 @@ export class EffectRuntime {
       case 'set-hero-power': {
         const playerIds = this.targetPlayers(action, frame)
         if (typeof action.power === 'string' && HERO_POWER_CATALOG.get(action.power)) {
-          const replacement = HERO_POWER_CATALOG.require(action.power)
+          const baseReplacement = HERO_POWER_CATALOG.require(action.power)
+          const upgradedReplacement =
+            typeof action.upgradedPower === 'string'
+              ? HERO_POWER_CATALOG.require(action.upgradedPower)
+              : undefined
           for (const participantId of playerIds) {
             const player = this.player(participantId)
             const previousHeroPowerId = player.heroPower.id
+            const replacement =
+              upgradedReplacement &&
+              (previousHeroPowerId === baseReplacement.id ||
+                previousHeroPowerId === upgradedReplacement.id)
+                ? upgradedReplacement
+                : baseReplacement
             player.heroPower = {
               ...player.heroPower,
               id: replacement.id,
@@ -9724,6 +9753,12 @@ export class EffectRuntime {
           )
         }
       }
+
+      for (const player of this.draft.players) {
+        player.heroPower.available =
+          (player.heroPower.usesThisTurn ?? 0) <
+          this.heroPowerUseLimit(player.participantId)
+      }
     } finally {
       this.deriving = false
       this.historyRecorder?.settle(this.draft as unknown as OpeningMatchState)
@@ -10294,16 +10329,20 @@ export class EffectRuntime {
     targeting: string
   ): readonly EntityRef[] {
     return this.allEntities().filter((target) => {
+      const isFriendlyMinion =
+        target.kind === 'minion' && target.participantId === participantId
       const matchesTargetType =
         targeting === 'any-character'
           ? target.kind === 'hero' || target.kind === 'minion'
           : targeting === 'minion'
             ? target.kind === 'minion'
-            : targeting === 'enemy-minion'
-              ? target.kind === 'minion' && target.participantId !== participantId
-              : targeting === 'friendly-minion'
-                ? target.kind === 'minion' && target.participantId === participantId
-                : false
+              : targeting === 'enemy-minion'
+                ? target.kind === 'minion' && target.participantId !== participantId
+                : targeting === 'friendly-minion'
+                  ? isFriendlyMinion
+                  : targeting === 'friendly-beast'
+                    ? isFriendlyMinion && cardHasTribe(this.entityCard(target), 'Beast')
+                    : false
       return (
         matchesTargetType &&
         this.liveCombatTarget(target) &&
@@ -12084,6 +12123,16 @@ export class EffectRuntime {
             'invalid-target',
             'The selected target is not a friendly minion.'
           )
+        if (
+          effectiveTargeting === 'friendly-beast' &&
+          (target.kind !== 'minion' ||
+            target.participantId !== options.participantId ||
+            !cardHasTribe(this.entityCard(target), 'Beast'))
+        )
+          throw new ResolutionInputError(
+            'invalid-target',
+            'The selected target is not a friendly Beast.'
+          )
         if (this.isEnemyStealthed(target, options.participantId))
           throw new ResolutionInputError(
             'invalid-target',
@@ -12490,10 +12539,13 @@ export class EffectRuntime {
           )
           break
         case 'build-a-beast': {
-          const offers = this.shuffle([
-            ...zombeastPoolCards(CARD_CATALOG.all, 'first')
-          ]).slice(0, 3)
-          if (!offers.length || !zombeastPoolCards(CARD_CATALOG.all, 'second').length)
+          const offers = zombeastPoolOffers(CARD_CATALOG.all, 'first', () =>
+            this.rng.next()
+          )
+          if (
+            !offers.length ||
+            !zombeastPoolCards(CARD_CATALOG.all, 'second').length
+          )
             throw new ResolutionInputError(
               'resolution-failed',
               'No eligible Beasts are available.'
@@ -12779,6 +12831,23 @@ export class EffectRuntime {
           )
           break
         }
+        case 'draw-cards':
+          runHeroPowerAction(
+            {
+              action: 'draw',
+              player: 'self',
+              count: effect.count,
+              ...(this.heroPowerDrawCost(options.participantId) !== null
+                ? {
+                    modifyDrawnCard: {
+                      setCost: this.heroPowerDrawCost(options.participantId)
+                    }
+                  }
+                : {})
+            },
+            'hero-power.draw'
+          )
+          break
       }
       this.processDeaths()
       this.emitSemantic({
@@ -14090,9 +14159,9 @@ export class EffectRuntime {
             'The selected Beast is unavailable.'
           )
         if (resolution.stage === 'first') {
-          const offers = this.shuffle([
-            ...zombeastPoolCards(CARD_CATALOG.all, 'second')
-          ]).slice(0, 3)
+          const offers = zombeastPoolOffers(CARD_CATALOG.all, 'second', () =>
+            this.rng.next()
+          )
           this.draft.pendingCardChoice = {
             ...pending,
             prompt: `Build-a-Beast: Combine ${CARD_CATALOG.require(selected).name} with a second Beast`,

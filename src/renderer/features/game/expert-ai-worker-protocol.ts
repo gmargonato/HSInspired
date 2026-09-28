@@ -7,7 +7,7 @@ import type { AiActionIntent } from '../../../shared/ipc/ai-deliberation'
 import type { OpeningMatchCheckpoint } from '../../../game/match/opening-match-types'
 import type { PlayerId } from '../../../game/match/match-types'
 
-export const EXPERT_AI_TURN_BUDGET_MS = 30_000
+export const EXPERT_AI_TURN_BUDGET_MS = 35_000
 export const EXPERT_AI_PRESENTATION_RESERVE_MS = 5_000
 export const EXPERT_AI_DISPATCH_RESERVE_MS = 500
 export const EXPERT_AI_REPLAN_RESERVE_MS = 1_500

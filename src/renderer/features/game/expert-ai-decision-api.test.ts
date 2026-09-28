@@ -208,9 +208,9 @@ describe('Expert AI worker boundary', () => {
 
       const message = posted.find((entry) => entry.type === 'decide')!
       if (message.type !== 'decide') throw new Error('Expected a decide request.')
-      expect(EXPERT_AI_TURN_BUDGET_MS).toBe(30_000)
-      expect(EXPERT_AI_SEARCH_BUDGET_MS).toBe(24_500)
-      expect(EXPERT_AI_DECISION_SEARCH_BUDGET_MS).toBe(23_000)
+      expect(EXPERT_AI_TURN_BUDGET_MS).toBe(35_000)
+      expect(EXPERT_AI_SEARCH_BUDGET_MS).toBe(29_500)
+      expect(EXPERT_AI_DECISION_SEARCH_BUDGET_MS).toBe(28_000)
       expect(expertAiBudgetForTurn(10_000)).toMatchObject({
         turnBudgetMs: 10_000,
         searchBudgetMs: 4_500,
@@ -218,7 +218,7 @@ describe('Expert AI worker boundary', () => {
         planSearchLimitMs: 2_000,
         replanSearchLimitMs: 1_000
       })
-      expect(message.remainingSearchBudgetMs).toBeLessThanOrEqual(23_000)
+      expect(message.remainingSearchBudgetMs).toBeLessThanOrEqual(28_000)
       const originalHidden = fixture.checkpoint.state.players.find(
         (player) => player.participantId === fixture.localParticipantId
       )!

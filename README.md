@@ -172,11 +172,11 @@ the live next-card sequence. Expert detects lethal from cumulative visible
 attacks and simulates bounded engine-legal opponent replies, including sampled
 card plays, public attacks, and hero powers. It runs in a dedicated worker and
 never sends game state to a provider. Its cumulative search budget is capped at
-24.5 seconds within the 30-second total-turn target, leaving 5 seconds for
+29.5 seconds within the 35-second total-turn target, leaving 5 seconds for
 presentation and 0.5 seconds for dispatch. The initial plan runs up to three
 world searches concurrently, each limited to 18 seconds. This targets at most
 about 20 seconds of visible waiting after presentation while preserving a
-1.5-second reserve for a later replan. These are configured targets, not
+1.5-second reserve for later replanning. These are configured targets, not
 measured runtime guarantees.
 API mode continues using remote deliberation.
 
@@ -678,12 +678,37 @@ The Card baseline combines V5 defaults with matching saved V4 settings: eight
 blobs, pale threshold 1, taper 0.6, bottom fade 1, and fade start 0.67. V4-only
 settings are not translated into the new blob controls.
 
-**Ghost Aura Shader** retains the previous effect and tuning only for the mulligan
+**Ghost Aura Shader** uses Ghost Mist v1 from ShaderTest for the mulligan
 announcement, confirm button, opponent-still-choosing banner and selection toggle.
+The imported baseline has wind NE / strength 2, 120 particles, average spot
+size 15 pixels, texture
+scale 1.5, expansion 15, intensity 0.8, softness 1.5, and colors #0f2cbd / #0091ff.
+Closing these visuals plays a 1.8-second white flash, patch dissolve and particle
+burst without delaying gameplay. Reopening restores idle; scene exit cancels it.
+Noise and spotlight textures are shared through the game bundle. Ghost particles
+use `spotlight-triangle.png`, with a random starting angle and a clockwise or
+counterclockwise half-turn selected per spawn.
+Average spot size sets the mean diameter in screen pixels, with built-in variation
+from 40% to 160%. Spots keep their size throughout life and fade through opacity.
+Wind direction selects All directions or N, NE, E, SE, S, SW, W, NW.
+All directions emits around the entire outline and drives particles outward; the
+mist keeps gentle motion without a directional offset. Wind strength affects only
+particles; mist animation speed independently controls its noise motion.
+Older saved angles are rounded to the nearest compass direction.
+Particle travel distance (default 60 screen pixels) limits displacement from spawn,
+with a smooth fade over the final 30%. Idle particles emit around the entire
+outline regardless of wind direction; wind controls their travel. Disappearance
+retains the full-surface burst, with the same travel-distance limit.
 
 Shader Lab has separate Aura/Ghost selection and scrollable controls. Aura exposes
 all V5 inputs, including fractional values, five colors and the smooth-outline
-toggle. Ghost has independent controls and colors. Save writes both sections to
-`config/outline-tunings.json` (version 4) through the existing development bridge.
+toggle. Ghost controls are grouped into Mist, Particles, and Shared. Each layer
+has its own enabled toggle, intensity and colors. Mist width no longer changes
+particle movement; particle motion uses a fixed baseline matching expansion 14.
+Mist animation speed defaults to 1x; 0 freezes noise motion without stopping the
+artwork dissolve. Direction and disappearance timing remain shared. Disabled mist
+still allows the artwork to dissolve; disabled particles do not stop the mist.
+White full-surface bursts retain their existing brightness multiplier and timing. Save writes both sections to
+`config/outline-tunings.json` (version 9) through the existing development bridge.
 The V5 distance padding covers the full slider range, and pixel controls keep the
 source's 1268-pixel reference width. F3 suppresses both effects.

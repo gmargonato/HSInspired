@@ -733,6 +733,36 @@ function randomSpellScenario(
 }
 
 describe('random spell presentation boundaries', () => {
+  it('replaces and upgrades the power when Yogg casts Shadowform repeatedly', () => {
+    const fixture = randomSpellScenario('classic_shadowform', 3)
+    const result = fixture.resolve()
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    const replacements = result.events.filter(
+      (event) => event.type === 'hero-power-replaced'
+    )
+    expect(replacements.map((event) => event.heroPowerId)).toEqual([
+      'priest-mind-spike',
+      'priest-mind-shatter',
+      'priest-mind-shatter'
+    ])
+    for (const event of replacements) {
+      expect(event).toMatchObject({
+        participantId: fixture.participantId,
+        sourceCardId: 'classic_shadowform'
+      })
+    }
+    expect(
+      result.state.players.find(
+        (player) => player.participantId === fixture.participantId
+      )!.heroPower
+    ).toMatchObject({
+      id: 'priest-mind-shatter',
+      cost: 2,
+      targetingGranted: 'any-character'
+    })
+  })
+
   it('also brackets Servant of Yogg-Saron’s single random spell', () => {
     const fixture = randomSpellScenario(
       'basic_hellfire',

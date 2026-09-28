@@ -1,3 +1,4 @@
+import { prewarmShatter } from '../rendering/effects/shatter'
 import type { AppLogger, DialogService } from '../app/services'
 import type { AppRoute, GameRoute, SceneRouter } from '../app/router'
 import type { DeckStore } from '../ui/deck-store'
@@ -41,7 +42,7 @@ import { ExpertAiDecisionApi } from '../features/game/expert-ai-decision-api'
 import { LocalAiDecisionApi } from '../features/game/local-ai-decision-api'
 
 /** Set true to restore the AI's randomized startup Hero Power bonus. */
-const AI_HERO_POWER_BONUS_ENABLED = false
+const AI_HERO_POWER_BONUS_ENABLED = true
 
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
@@ -188,6 +189,13 @@ export class GameScene extends Scene {
     } catch (error) {
       // Outlines still build lazily on first use.
       this.logger?.warn('[GameScene] minion outline prebuild failed', error)
+    }
+
+    try {
+      prewarmShatter(this.appInstance.renderer)
+    } catch (error) {
+      // Keep match loading resilient; the first death can still initialize Shatter.
+      this.logger?.warn('[GameScene] shatter warm-up failed', error)
     }
 
     this.view = new GameBoardView({

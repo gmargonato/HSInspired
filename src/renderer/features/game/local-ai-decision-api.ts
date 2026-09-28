@@ -42,6 +42,7 @@ import {
 import { aiActionIntent } from './ai-action-intent'
 import { aiActions } from './ai-context'
 import { EXPERT_AI_PLAN_SEARCH_LIMIT_MS } from './expert-ai-worker-protocol'
+import { unpaidFriendlyDamageHeroPowerPenalty } from './expert-ai-action-safety'
 import { LOCAL_AI_POLICY } from './local-ai-policy'
 import { GameBoardSession } from './game-board-session'
 
@@ -298,7 +299,7 @@ function sampledContinuation(
     .sort(
       (left, right) =>
         right.valueSum / right.visits - left.valueSum / left.visits ||
-        right.commands.length - left.commands.length ||
+        left.commands.length - right.commands.length ||
         right.visits - left.visits ||
         JSON.stringify(left.commands.map(canonicalCommandKey)).localeCompare(
           JSON.stringify(right.commands.map(canonicalCommandKey))
@@ -488,7 +489,10 @@ function deathrattleClearPrior(
 
 function damageHeroPowerAmount(player: TurnMatchState['players'][number]): number {
   const effect = HERO_POWER_CATALOG.get(player.heroPower.id)?.effect
-  return effect?.kind === 'damage-character' ? number(effect.amount) : 0
+  return effect?.kind === 'damage-character' ||
+    effect?.kind === 'damage-and-summon-on-kill'
+    ? number(effect.amount)
+    : 0
 }
 
 function deathrattleSetupPrior(
@@ -1491,6 +1495,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const rootCandidatePriors = new Map<string, number>()
     const rootCandidateRiskAdjustments = new Map<string, number>()
     const rootCandidatePreferenceAdjustments = new Map<string, number>()
+    const rootCandidateTacticalPenalties = new Map<string, number>()
     const rootKeyStarted = performance.now()
     const rootInformationKey = informationSetKey(simulationSession.getAiObservation())
     mctsProfile.informationKeyMs += performance.now() - rootKeyStarted
@@ -1582,6 +1587,13 @@ export class LocalAiDecisionApi implements AiDecisionApi {
                   candidate.key,
                   -this.continuationPreference(candidate.action) * 0.1
                 )
+                const unpaidDamagePenalty = unpaidFriendlyDamageHeroPowerPenalty(
+                  candidate.action,
+                  priorState,
+                  actorId
+                )
+                if (unpaidDamagePenalty > 0)
+                  rootCandidateTacticalPenalties.set(candidate.key, unpaidDamagePenalty)
               }
             mctsProfile.actionPriorMs += performance.now() - priorStarted
             mctsProfile.candidateCacheMisses++
@@ -1728,9 +1740,8 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           entry.action !== undefined
       )
     const rootState = simulationSession.getState()
-    const rootCandidateTacticalPenalties = new Map<string, number>()
     const rootCandidateContinuations = new Map<string, readonly TurnMatchCommand[]>()
-    const exposedContinuations = new Set<string>()
+    const exposedContinuations = new Map<string, number>()
     for (const { stat, action } of visited) {
       let continuation = sampledContinuation(sampledTurnLines.get(stat.key)) ?? [
         action.command
@@ -1779,46 +1790,56 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         const bestPayoff = [...payoffs].sort(
           (left, right) =>
             right.valueSum / right.visits - left.valueSum / left.visits ||
-            right.commands.length - left.commands.length ||
+            left.commands.length - right.commands.length ||
             right.visits - left.visits
         )[0]
         if (bestPayoff) continuation = bestPayoff.commands
         else if (sampledLines.some((line) => line.penalty > 0)) {
-          rootCandidateTacticalPenalties.set(stat.key, EXPERT_COIN_HERO_POWER_PENALTY)
+          rootCandidateTacticalPenalties.set(
+            stat.key,
+            (rootCandidateTacticalPenalties.get(stat.key) ?? 0) +
+              EXPERT_COIN_HERO_POWER_PENALTY
+          )
           const badLine = [...sampledLines].sort(
             (left, right) =>
               right.valueSum / right.visits - left.valueSum / left.visits ||
-              right.commands.length - left.commands.length
+              left.commands.length - right.commands.length
           )[0]
           if (badLine) continuation = badLine.commands
         }
       }
       // A favorable rollout can miss an obvious face lethal. Verify the public
-      // board at the end of the proposed turn before trusting that continuation.
-      if (continuation.at(-1)?.type === 'end-turn') {
-        const exposedToLethal = simulationSession.match.analyze((fork) => {
-          for (const command of continuation) {
-            if (!fork.dispatch(command).accepted) return false
+      // board after the proposed line and end-of-turn effects, even when the
+      // sampled line omits its explicit end-turn command.
+      const lethalMargin = simulationSession.match.analyze((fork) => {
+        let passedTurn = false
+        for (const command of continuation) {
+          if (!fork.dispatch(command).accepted) return 0
+          if (fork.getState().phase === 'ended') return 0
+          if (command.type === 'end-turn') {
+            passedTurn = true
+            break
           }
-          if (fork.getState().phase === 'ended') return false
-          const observation = fork.getAiObservation?.(rootId, 'fair')
-          const self = observation?.players.find(
-            (player) => player.participantId === rootId
-          )
-          const enemy = observation?.players.find(
-            (player) => player.participantId !== rootId
-          )
-          return !!(
-            observation &&
-            self &&
-            enemy &&
-            record(self.hero).immune !== true &&
-            visibleHeroThreat(enemy, self, observation.turnNumber) >=
-              number(record(self.hero).health) + number(record(self.hero).armor)
-          )
-        })
-        if (exposedToLethal) exposedContinuations.add(stat.key)
-      }
+        }
+        if (!passedTurn && fork.getState().phase !== 'ended')
+          fork.dispatch({ type: 'end-turn', participantId: rootId })
+        if (fork.getState().phase === 'ended') return 0
+        const observation = fork.getAiObservation?.(rootId, 'fair')
+        const self = observation?.players.find(
+          (player) => player.participantId === rootId
+        )
+        const enemy = observation?.players.find(
+          (player) => player.participantId !== rootId
+        )
+        if (!observation || !self || !enemy || record(self.hero).immune === true)
+          return 0
+        return (
+          visibleHeroThreat(enemy, self, observation.turnNumber) -
+          number(record(self.hero).health) -
+          number(record(self.hero).armor)
+        )
+      })
+      if (lethalMargin >= 0) exposedContinuations.set(stat.key, lethalMargin)
       rootCandidateContinuations.set(stat.key, continuation)
     }
     // Score achievable continuations instead of averaging good setups with
@@ -1828,7 +1849,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       fallback: (typeof rootStats)[number]
     ): number => {
       // A predicted loss remains preferable to a confirmed terminal loss.
-      if (exposedContinuations.has(key)) return -MCTS_POSITION_VALUE_LIMIT
+      const lethalMargin = exposedContinuations.get(key)
+      if (lethalMargin !== undefined)
+        return -MCTS_POSITION_VALUE_LIMIT - Math.min(0.45, (lethalMargin + 1) * 0.025)
       const lines = [...(sampledTurnLines.get(key)?.values() ?? [])].filter(
         (line) => line.visits >= 2
       )
@@ -2029,7 +2052,11 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         )
           ? -6
           : 0
-      const basePrior = 2.5 + replayPenalty + continuationPreference
+      const basePrior =
+        2.5 +
+        replayPenalty +
+        continuationPreference -
+        unpaidFriendlyDamageHeroPowerPenalty(command, state, actorId)
       const targetRef = command.target
       if (targetRef?.kind !== 'minion') return basePrior
       const targetPlayer = state.players.find(

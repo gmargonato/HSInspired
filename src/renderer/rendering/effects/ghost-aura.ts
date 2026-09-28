@@ -1,293 +1,249 @@
-import { Filter, Sprite, UniformGroup } from 'pixi.js'
-import type { Container } from 'pixi.js'
+import { Container, Sprite, type Texture } from 'pixi.js'
 import { Actor } from '../../ui/components/actor'
-import { CachedOutlineFilter } from './cached-ghost-aura-filter'
-import { sampleOutlineLoop } from './outline-animation-loop'
-import {
-  createGhostAuraGlProgram,
-  createGhostAuraGpuProgram
-} from './ghost-aura-shader'
 import { GHOST_AURA_CONFIG } from './outline-tuning'
+import { createGhostMistFilter, type GhostMistValues } from './ghost-mist-filter'
+import { createMistParticles } from './ghost-mist-particles'
 import type {
-  GhostAuraTuning as OutlineTuning,
-  GhostAuraPalette as OutlinePalette
+  GhostAuraTuning,
+  GhostAuraPalette
 } from '../../../shared/ipc/outline-tuning'
-type OutlinePaletteInput = OutlinePalette
+
 export interface GhostAuraOptions {
-  readonly palette?: OutlinePaletteInput
-  /** Set false to force the live distance search for a sprite silhouette. */
-  readonly cacheDistance?: boolean
-  /** Explicit offscreen resolution for one-time baking; live effects inherit DPI. */
-  readonly resolution?: number | 'inherit'
-  /** Offstage cache baking must remain active during the F3 comparison. */
-  readonly debugSuppressible?: boolean
+  readonly noise: Texture
+  readonly dissolve: Texture
+  readonly spotlight: Texture
+  /** Artwork silhouette; the filtered target may also contain a button label. */
+  readonly silhouette?: Sprite
 }
+export const GHOST_DISAPPEARANCE_SECONDS = 1.8
 
-type Rgb = readonly [number, number, number]
-
-function toRgb01(hex: number): [number, number, number] {
-  return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255]
-}
-
-function saturateRgb(rgb: Rgb, saturation: number): [number, number, number] {
-  if (saturation === 1) return [...rgb]
-  const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722
-  return rgb.map((channel) =>
-    Math.min(1, Math.max(0, luminance + (channel - luminance) * saturation))
-  ) as [number, number, number]
-}
-
-function resolvePalette(input: OutlinePaletteInput): OutlinePalette {
-  return input
-}
-
-function writeColor(
-  uniforms: UniformGroup,
-  name: 'uBaseColor' | 'uRimColor' | 'uGlowColor' | 'uHotColor',
-  rgb: Rgb
-): void {
-  const value = uniforms.uniforms[name] as unknown as number[]
-  value[0] = rgb[0]
-  value[1] = rgb[1]
-  value[2] = rgb[2]
-  value[3] = 1
-}
-
-function writeVector(
-  uniforms: UniformGroup,
-  name: 'uGeometry' | 'uDetail' | 'uMotion' | 'uOrganic',
-  values: readonly [number, number, number, number]
-): void {
-  const target = uniforms.uniforms[name] as unknown as number[]
-  target[0] = values[0]
-  target[1] = values[1]
-  target[2] = values[2]
-  target[3] = values[3]
-}
-
-function outlinePadding(tuning: OutlineTuning): number {
-  const widthReach =
-    (tuning.ribbonWidth + tuning.rimWidth + tuning.glowWidth) *
-    (1 + (tuning.contourVariation / 10) * 0.55)
-  return widthReach + tuning.edgeWobble * 1.5 + 4
-}
-
-/** Asset-agnostic animated ribbon applied to the alpha silhouette of a display object. */
+/** Owns the live mist, foreground particles and interruptible disappearance. */
 export class GhostAura extends Actor {
-  private static readonly debugInstances = new Set<GhostAura>()
-  private static debugSuppressed = false
-  private debugRenderable: boolean | null = null
-
-  /** Hide outline-only proxies while the developer filter bypass is active. */
+  private static readonly instances = new Set<GhostAura>()
+  private static suppressed = false
   static setDebugSuppressed(suppressed: boolean): void {
     if (!import.meta.env.DEV) return
-    this.debugSuppressed = suppressed
-    for (const outline of this.debugInstances) outline.syncDebugSuppression()
+    this.suppressed = suppressed
+    for (const effect of this.instances) effect.syncVisibility()
   }
 
-  private readonly target: Container
-  private readonly filter: Filter
-  private readonly uniforms: UniformGroup
-  private tuning: OutlineTuning
-  private paletteInput: OutlinePaletteInput = GHOST_AURA_CONFIG.palette
-  private readonly timeState = { value: 0 }
-  private timeTween?: gsap.core.Tween
+  private readonly values: GhostMistValues = {
+    ...GHOST_AURA_CONFIG.tuning,
+    ...GHOST_AURA_CONFIG.palette,
+    progress: 0
+  }
+  private readonly mist: ReturnType<typeof createGhostMistFilter>
+  private readonly particles: ReturnType<typeof createMistParticles>
+  private readonly clock = { time: 0 }
+  private lastTime = 0
   private enabled = true
+  private exit: {
+    parent: Container
+    index: number
+    layer: Container
+    x: number
+    y: number
+    scaleX: number
+    scaleY: number
+    skewX: number
+    skewY: number
+    rotation: number
+    alpha: number
+    eventMode: Container['eventMode']
+    interactiveChildren: Container['interactiveChildren']
+  } | null = null
+  private disappearing = false
+  private disappearance: gsap.core.Tween | null = null
+  private timeTween: gsap.core.Tween
 
-  constructor(target: Container, options: GhostAuraOptions = {}) {
+  constructor(
+    private readonly target: Container,
+    options: GhostAuraOptions
+  ) {
     super()
-    this.target = target
-    this.tuning = GHOST_AURA_CONFIG.tuning
-    const usesDistanceCache =
-      target instanceof Sprite && options.cacheDistance !== false
-
-    this.uniforms = new UniformGroup({
-      uBaseColor: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
-      uRimColor: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
-      uGlowColor: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
-      uHotColor: { value: [1, 1, 1, 1], type: 'vec4<f32>' },
-      uGeometry: {
-        value: [
-          this.tuning.ribbonWidth,
-          this.tuning.rimWidth,
-          this.tuning.glowWidth,
-          this.tuning.glowStrength
-        ],
-        type: 'vec4<f32>'
-      },
-      uDetail: {
-        value: [
-          this.tuning.highlightStrength,
-          this.tuning.hotspotScale,
-          this.tuning.hotspotDensity,
-          this.tuning.edgeWobble
-        ],
-        type: 'vec4<f32>'
-      },
-      uMotion: {
-        value: [
-          this.tuning.motionSpeed,
-          this.tuning.edgeSoftness,
-          this.tuning.innerEdgeWidth,
-          this.tuning.pulseRate
-        ],
-        type: 'vec4<f32>'
-      },
-      uOrganic: {
-        value: [this.tuning.contourVariation, 0, 0, 0],
-        type: 'vec4<f32>'
-      },
-      uTime: { value: 0, type: 'f32' },
-      uLoop: { value: [0, 0, 0, 0], type: 'vec4<f32>' }
-    })
-
-    const filterOptions = {
-      glProgram: createGhostAuraGlProgram(),
-      gpuProgram: createGhostAuraGpuProgram(),
-      resources: { outlineUniforms: this.uniforms },
-      padding: this.resolvePadding(options.resolution),
-      resolution: options.resolution ?? ('inherit' as const),
-      antialias: 'inherit' as const
-    }
-    // Sprite distances are reprojected through safe transforms; material noise
-    // and opacity remain live. Deforming meshes and composed containers retain
-    // the full distance search.
-    this.filter = usesDistanceCache
-      ? new CachedOutlineFilter(target, filterOptions, this.uniforms)
-      : new Filter(filterOptions)
-    this.label = 'ghost-aura'
-    target.filters = [...(target.filters ?? []), this.filter]
-
-    this.setPalette(options.palette ?? GHOST_AURA_CONFIG.palette)
-
-    this.timeTween = this.tweenTo(this.timeState, {
-      value: 1,
+    const silhouette = options.silhouette ?? (target instanceof Sprite ? target : null)
+    if (!silhouette) throw new Error('Ghost Mist requires a sprite silhouette')
+    this.label = 'ghost-mist.effect'
+    this.mist = createGhostMistFilter(options.noise, options.dissolve, this.values)
+    this.particles = createMistParticles(silhouette, this.values, options.spotlight)
+    this.particles.refresh()
+    target.filters = [...(target.filters ?? []), this.mist.filter]
+    this.timeTween = this.tweenTo(this.clock, {
+      time: 1,
       duration: 1,
-      ease: 'none',
       repeat: -1,
-      onUpdate: () => this.syncTime()
+      ease: 'none',
+      onUpdate: () => {
+        const time = this.timeTween.totalTime()
+        const delta = Math.max(0, time - this.lastTime)
+        this.lastTime = time
+        if (!this.syncVisibility()) return
+        this.mist.update(delta)
+        this.particles.refresh()
+        this.particles.update(time)
+      }
     })
-    if (import.meta.env.DEV && options.debugSuppressible !== false) {
-      GhostAura.debugInstances.add(this)
-      this.syncDebugSuppression()
-    }
+    GhostAura.instances.add(this)
+    this.syncVisibility()
   }
 
   setEnabled(enabled: boolean): void {
-    if (this.enabled === enabled) return
-    this.enabled = enabled
-    this.target.visible = enabled
-    if (enabled) this.timeTween?.resume()
-    else this.timeTween?.pause()
-    if (!enabled && this.filter instanceof CachedOutlineFilter) this.filter.resetCache()
+    if (this.destroyed) return
+    if (enabled) this.restore()
+    else {
+      this.cancelDisappearance()
+      this.enabled = false
+      this.target.visible = false
+      this.timeTween.pause()
+      this.syncVisibility()
+    }
   }
-
   isEnabled(): boolean {
     return this.enabled
   }
-
-  setPalette(input: OutlinePaletteInput): void {
-    this.paletteInput = input
-    const palette = resolvePalette(input)
-    const saturation = this.tuning.saturation
-    writeColor(
-      this.uniforms,
-      'uBaseColor',
-      saturateRgb(toRgb01(palette.baseColor), saturation)
-    )
-    writeColor(
-      this.uniforms,
-      'uRimColor',
-      saturateRgb(toRgb01(palette.outerColor), saturation)
-    )
-    writeColor(
-      this.uniforms,
-      'uGlowColor',
-      saturateRgb(toRgb01(palette.glowColor ?? palette.outerColor), saturation)
-    )
-    writeColor(
-      this.uniforms,
-      'uHotColor',
-      saturateRgb(toRgb01(palette.highlightColor), saturation)
-    )
-  }
-
   getPadding(): number {
-    return this.filter.padding
+    return this.mist.filter.padding
+  }
+  setTuning(tuning: GhostAuraTuning): void {
+    Object.assign(this.values, tuning)
+    this.mist.sync()
+    this.syncVisibility()
+  }
+  setPalette(palette: GhostAuraPalette): void {
+    Object.assign(this.values, palette)
+    this.mist.sync()
   }
 
-  /** Optional loop duration closes the noise path for seamless frame baking. */
-  setAnimationTime(time: number, loopDuration = 0): void {
-    this.timeTween?.pause()
-    this.uniforms.uniforms.uTime = time
-    this.uniforms.uniforms.uLoop = sampleOutlineLoop(
-      time,
-      loopDuration,
-      this.tuning.pulseRate
-    )
+  restore(): void {
+    if (this.destroyed) return
+    this.cancelDisappearance()
+    this.enabled = true
+    this.values.progress = 0
+    this.target.visible = true
+    this.mist.sync()
+    this.timeTween.resume()
+    this.syncVisibility()
   }
 
-  /** Applies an in-memory tuning draft without changing the registered preset. */
-  setTuning(tuning: OutlineTuning): void {
-    this.tuning = tuning
-    writeVector(this.uniforms, 'uGeometry', [
-      this.tuning.ribbonWidth,
-      this.tuning.rimWidth,
-      this.tuning.glowWidth,
-      this.tuning.glowStrength
-    ])
-    writeVector(this.uniforms, 'uDetail', [
-      this.tuning.highlightStrength,
-      this.tuning.hotspotScale,
-      this.tuning.hotspotDensity,
-      this.tuning.edgeWobble
-    ])
-    writeVector(this.uniforms, 'uMotion', [
-      this.tuning.motionSpeed,
-      this.tuning.edgeSoftness,
-      this.tuning.innerEdgeWidth,
-      this.tuning.pulseRate
-    ])
-    writeVector(this.uniforms, 'uOrganic', [this.tuning.contourVariation, 0, 0, 0])
-    this.setPalette(this.paletteInput)
-    this.filter.padding = this.resolvePadding(this.filter.resolution)
-  }
-
-  override dispose(): void {
-    if (import.meta.env.DEV) {
-      GhostAura.debugInstances.delete(this)
-      // Some callers reuse the silhouette sprite as a summon ghost.
-      if (this.debugRenderable !== null && !this.target.destroyed)
-        this.target.renderable = this.debugRenderable
-      this.debugRenderable = null
+  /** Move only the outgoing visual out of a closing overlay; never delay game logic. */
+  disappear(exitParent: Container | null = this.target.parent): void {
+    if (this.destroyed || this.disappearing || !this.enabled || !this.target.visible)
+      return
+    const parent = this.target.parent
+    if (!parent || !exitParent || exitParent.destroyed) {
+      this.setEnabled(false)
+      return
     }
+    const layer = new Container()
+    layer.label = 'ghost-mist.disappearance'
+    layer.eventMode = 'none'
+    layer.interactiveChildren = false
+    layer.zIndex = 20000
+    this.exit = {
+      parent,
+      index: parent.getChildIndex(this.target),
+      layer,
+      x: this.target.x,
+      y: this.target.y,
+      scaleX: this.target.scale.x,
+      scaleY: this.target.scale.y,
+      skewX: this.target.skew.x,
+      skewY: this.target.skew.y,
+      rotation: this.target.rotation,
+      alpha: this.target.alpha,
+      eventMode: this.target.eventMode,
+      interactiveChildren: this.target.interactiveChildren
+    }
+    const alpha = this.target.getGlobalAlpha()
+    const transform = this.target.getGlobalTransform()
+    exitParent.addChild(layer)
+    transform.prepend(layer.getGlobalTransform().invert())
+    layer.addChild(this.target)
+    this.target.setFromMatrix(transform)
+    this.target.position.x +=
+      this.target.pivot.x * transform.a + this.target.pivot.y * transform.c
+    this.target.position.y +=
+      this.target.pivot.x * transform.b + this.target.pivot.y * transform.d
+    this.target.alpha = alpha / (layer.getGlobalAlpha() || 1)
+    this.target.eventMode = 'none'
+    this.target.interactiveChildren = false
+    this.disappearing = true
+    this.values.progress = 0
+    this.syncVisibility()
+    this.disappearance = this.tweenTo(this.values, {
+      progress: 1,
+      duration: GHOST_DISAPPEARANCE_SECONDS,
+      ease: 'none',
+      onUpdate: () => this.mist.sync(),
+      onComplete: () => {
+        this.disappearance = null
+        this.returnToParent()
+        this.disappearing = false
+        this.enabled = false
+        this.target.visible = false
+        this.timeTween.pause()
+        this.syncVisibility()
+      }
+    })
+  }
+
+  private cancelDisappearance(): void {
+    this.disappearance?.kill()
+    this.disappearance = null
+    this.returnToParent()
+    this.disappearing = false
+  }
+  private returnToParent(): void {
+    const exit = this.exit
+    if (!exit) return
+    this.exit = null
+    this.particles.container.removeFromParent()
     if (!this.target.destroyed) {
+      if (!exit.parent.destroyed)
+        exit.parent.addChildAt(
+          this.target,
+          Math.min(exit.index, exit.parent.children.length)
+        )
+      else this.target.removeFromParent()
+      this.target.position.set(exit.x, exit.y)
+      this.target.scale.set(exit.scaleX, exit.scaleY)
+      this.target.skew.set(exit.skewX, exit.skewY)
+      this.target.rotation = exit.rotation
+      this.target.alpha = exit.alpha
+      this.target.eventMode = exit.eventMode
+      this.target.interactiveChildren = exit.interactiveChildren
+    }
+    exit.layer.destroy({ children: true })
+  }
+  private syncVisibility(): boolean {
+    const particles = this.particles.container
+    if (this.target.destroyed) {
+      particles.visible = false
+      return false
+    }
+    const parent = this.target.parent
+    if (parent && particles.parent !== parent) parent.addChild(particles)
+    let visible = this.enabled && !GhostAura.suppressed
+    for (let node: Container | null = this.target; node; node = node.parent)
+      visible &&= node.visible && node.renderable && node.alpha > 0
+    particles.visible = visible && this.values.particlesEnabled
+    particles.alpha = parent
+      ? this.target.getGlobalAlpha() / (parent.getGlobalAlpha() || 1)
+      : 0
+    particles.zIndex = this.target.zIndex
+    this.mist.filter.enabled = !GhostAura.suppressed
+    return visible
+  }
+  override dispose(): void {
+    if (this.destroyed) return
+    this.cancelDisappearance()
+    GhostAura.instances.delete(this)
+    if (!this.target.destroyed)
       this.target.filters = (this.target.filters ?? []).filter(
-        (filter) => filter !== this.filter
+        (filter) => filter !== this.mist.filter
       )
-    }
-    this.filter.destroy()
+    this.particles.destroy()
+    this.mist.destroy()
     super.dispose()
-  }
-
-  private syncTime(): void {
-    if (!this.timeTween) return
-    this.uniforms.uniforms.uTime = this.timeTween.totalTime()
-  }
-
-  private resolvePadding(resolution: number | 'inherit' | undefined): number {
-    return (
-      outlinePadding(this.tuning) / (typeof resolution === 'number' ? resolution : 1)
-    )
-  }
-
-  private syncDebugSuppression(): void {
-    if (GhostAura.debugSuppressed) {
-      this.debugRenderable ??= this.target.renderable
-      this.target.renderable = false
-    } else if (this.debugRenderable !== null) {
-      this.target.renderable = this.debugRenderable
-      this.debugRenderable = null
-    }
   }
 }

@@ -1,7 +1,9 @@
+import type { ShatterTuning } from '../../../rendering/effects/shatter'
 import type { Renderer } from 'pixi.js'
 import {
   AURA_CONTROLS,
   GHOST_TUNING_RANGES,
+  GHOST_WIND_DIRECTIONS,
   type AuraTuning,
   type AuraPalette,
   type GhostAuraTuning,
@@ -14,7 +16,8 @@ interface Control {
   key: string
   label: string
   section: string
-  type: 'range' | 'checkbox' | 'color'
+  type: 'range' | 'checkbox' | 'color' | 'select'
+  options?: readonly { readonly value: number; readonly label: string }[]
   min?: number
   max?: number
   step?: number
@@ -32,7 +35,7 @@ export class OutlineLabShaderControls {
       canvas: HTMLCanvasElement
       renderer: Renderer
       parent: HTMLElement
-      onShaderChange(ghost: boolean): void
+      onShaderChange(shader: 'aura' | 'ghost' | 'shatter'): void
     }
   ) {
     this.root.setAttribute('aria-label', 'Shader controls')
@@ -50,7 +53,8 @@ export class OutlineLabShaderControls {
     })
     for (const [value, label] of [
       ['aura', 'Aura Shader'],
-      ['ghost', 'Ghost Aura Shader']
+      ['ghost', 'Ghost Aura Shader'],
+      ['shatter', 'Shatter Shader']
     ]) {
       const option = document.createElement('option')
       option.value = value
@@ -60,7 +64,8 @@ export class OutlineLabShaderControls {
     this.shader.setAttribute('aria-label', 'Shader')
     this.shader.style.cssText =
       'width:100%;padding:10px;font:18px Arial;margin-bottom:12px'
-    this.shader.onchange = () => options.onShaderChange(this.shader.value === 'ghost')
+    this.shader.onchange = () =>
+      options.onShaderChange(this.shader.value as 'aura' | 'ghost' | 'shatter')
     this.root.append(this.shader, this.content)
     for (const event of ['pointerdown', 'wheel', 'keydown'])
       this.root.addEventListener(event, (event) => event.stopPropagation())
@@ -77,28 +82,155 @@ export class OutlineLabShaderControls {
   showGhost(
     tuning: GhostAuraTuning,
     palette: GhostAuraPalette,
-    onChange: Change
+    onChange: Change,
+    actions: { label: string; run(): void }[]
   ): void {
     this.shader.value = 'ghost'
-    const controls: Control[] = Object.entries(GHOST_TUNING_RANGES).map(
-      ([key, [min, max]]) => ({
+    const labels: Record<string, string> = {
+      windDirection: 'Direction',
+      mistIntensity: 'Intensity',
+      mistWidth: 'Width (px)',
+      mistSoftness: 'Softness',
+      mistTextureScale: 'Texture scale',
+      mistAnimationSpeed: 'Animation speed',
+      particleIntensity: 'Intensity',
+      particleWindStrength: 'Wind strength',
+      particleCount: 'Count',
+      particleSize: 'Average size (px)',
+      particleTravelDistance: 'Maximum travel distance (px)',
+      mistPrimaryColor: 'Primary color',
+      mistHighlightColor: 'Highlight color',
+      particleColor: 'Color'
+    }
+    const section = (key: string): string =>
+      key === 'windDirection' ? 'Shared' : key.startsWith('mist') ? 'Mist' : 'Particles'
+    const controls: Control[] = [
+      { key: 'mistEnabled', label: 'Enabled', section: 'Mist', type: 'checkbox' },
+      {
+        key: 'particlesEnabled',
+        label: 'Enabled',
+        section: 'Particles',
+        type: 'checkbox'
+      },
+      ...Object.entries(GHOST_TUNING_RANGES).map(([key, [min, max]]): Control => ({
         key,
-        label: this.label(key),
-        section: 'Ghost tuning',
-        type: 'range',
+        label: labels[key],
+        section: section(key),
+        type: key === 'windDirection' ? 'select' : 'range',
+        options: key === 'windDirection' ? GHOST_WIND_DIRECTIONS : undefined,
         min,
         max,
-        step: key === 'saturation' ? 0.05 : 1
-      })
-    )
-    for (const key of Object.keys(palette))
-      controls.push({
+        step: ['particleCount', 'particleTravelDistance', 'mistWidth'].includes(key)
+          ? 1
+          : 0.01
+      })),
+      ...Object.keys(palette).map((key): Control => ({
         key,
-        label: this.label(key),
-        section: 'Ghost colors',
+        label: labels[key],
+        section: section(key),
         type: 'color'
-      })
+      }))
+    ]
     this.render(controls, { ...tuning, ...palette }, onChange)
+    const buttons = document.createElement('div')
+    for (const action of actions) {
+      const button = document.createElement('button')
+      button.textContent = action.label
+      button.onclick = action.run
+      buttons.append(button)
+    }
+    const shared = Array.from(this.content.children).find(
+      (group) => group.querySelector('legend')?.textContent === 'Shared'
+    )
+    shared?.append(buttons)
+  }
+
+  showShatter(
+    tuning: ShatterTuning,
+    progress: number,
+    onChange: Change,
+    actions: { label: string; run(): void }[]
+  ): void {
+    this.shader.value = 'shatter'
+    this.render(
+      [
+        {
+          key: 'progress',
+          label: 'Progress',
+          section: 'Shatter',
+          type: 'range',
+          min: 0,
+          max: 1,
+          step: 0.001
+        },
+        {
+          key: 'shardCount',
+          label: 'Shard count',
+          section: 'Shatter',
+          type: 'range',
+          min: 8,
+          max: 120,
+          step: 1
+        },
+        {
+          key: 'spread',
+          label: 'Spread',
+          section: 'Shatter',
+          type: 'range',
+          min: 0,
+          max: 2,
+          step: 0.01
+        },
+        {
+          key: 'spin',
+          label: 'Spin (degrees)',
+          section: 'Shatter',
+          type: 'range',
+          min: 0,
+          max: 720,
+          step: 1
+        },
+        {
+          key: 'duration',
+          label: 'Duration (seconds)',
+          section: 'Shatter',
+          type: 'range',
+          min: 0.3,
+          max: 5,
+          step: 0.1
+        },
+        {
+          key: 'seed',
+          label: 'Seed',
+          section: 'Shatter',
+          type: 'range',
+          min: 1,
+          max: 9999,
+          step: 1
+        }
+      ],
+      { ...tuning, progress },
+      onChange
+    )
+    for (const action of actions) {
+      const button = document.createElement('button')
+      button.textContent = action.label
+      button.onclick = action.run
+      this.content.append(button)
+    }
+    const note = document.createElement('p')
+    note.textContent =
+      'Save applies these settings to matches and future sessions. Match minions shatter after their death wiggle; heroes are preview-only.'
+    this.content.append(note)
+  }
+
+  setShatterProgress(progress: number): void {
+    if (this.shader.value !== 'shatter') return
+    for (const input of this.content.querySelectorAll<HTMLInputElement>(
+      'input[aria-label^="Shatter: Progress"]'
+    )) {
+      input.value = String(Number(progress.toFixed(3)))
+    }
   }
 
   private render(
@@ -124,6 +256,21 @@ export class OutlineLabShaderControls {
         'display:grid;grid-template-columns:180px 1fr 78px;align-items:center;gap:10px;margin:9px 0'
       const caption = document.createElement('span')
       caption.textContent = spec.label
+      if (spec.type === 'select') {
+        const select = document.createElement('select')
+        select.setAttribute('aria-label', spec.section + ': ' + spec.label)
+        for (const option of spec.options ?? []) {
+          const element = document.createElement('option')
+          element.value = String(option.value)
+          element.textContent = option.label
+          select.append(element)
+        }
+        select.value = String(values[spec.key])
+        select.onchange = () => onChange(spec.key, Number(select.value), false)
+        row.append(caption, select)
+        group.append(row)
+        continue
+      }
       const input = document.createElement('input')
       input.setAttribute('aria-label', `${spec.section}: ${spec.label}`)
       const output = document.createElement('input')
@@ -182,9 +329,6 @@ export class OutlineLabShaderControls {
     }
   }
 
-  private label(key: string): string {
-    return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())
-  }
   setVisible(visible: boolean): void {
     this.root.hidden = !visible
   }

@@ -10,6 +10,8 @@ import paladinImage from '@assets/images/heroes/original-art-heropower/recruit.p
 import paladinTidalHandImage from '@assets/images/heroes/original-art-heropower/the_tidal_hand.png'
 import paladinUpgradedImage from '@assets/images/heroes/original-art-heropower/the-silver-hand.png'
 import priestImage from '@assets/images/heroes/original-art-heropower/lesser_heal.png'
+import mindSpikeImage from '@assets/images/heroes/original-art-heropower/mind-spike.png'
+import mindShatterImage from '@assets/images/heroes/original-art-heropower/mind-shatter.png'
 import priestUpgradedImage from '@assets/images/heroes/original-art-heropower/heall.png'
 import rogueImage from '@assets/images/heroes/original-art-heropower/dagger-mastery.png'
 import rogueUpgradedImage from '@assets/images/heroes/original-art-heropower/poisoned-daggers.png'
@@ -53,6 +55,8 @@ export const HERO_POWER_ASSET_SOURCES: Record<HeroPowerAssetKey, string> = {
   'hero-power-paladin': paladinImage,
   'hero-power-paladin-tidal-hand': paladinTidalHandImage,
   'hero-power-priest': priestImage,
+  'hero-power-mind-spike': mindSpikeImage,
+  'hero-power-mind-shatter': mindShatterImage,
   'hero-power-rogue': rogueImage,
   'hero-power-shaman': shamanImage,
   'hero-power-warlock': warlockImage,

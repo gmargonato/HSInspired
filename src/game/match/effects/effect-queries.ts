@@ -734,8 +734,12 @@ export class EffectQueries {
       case 'last-damage-amount':
         return frame.lastDamageAmount
       case 'destroyed-weapon.attack': {
+        const weaponControllerId =
+          frame.lastActionTarget?.kind === 'weapon'
+            ? frame.lastActionTarget.participantId
+            : frame.controllerId
         return (
-          this.context.destroyedWeaponSnapshots.get(frame.controllerId)?.attack ?? 0
+          this.context.destroyedWeaponSnapshots.get(weaponControllerId)?.attack ?? 0
         )
       }
       case 'destroyed-weapon.durability': {

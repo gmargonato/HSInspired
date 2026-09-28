@@ -22,6 +22,9 @@ export interface SelectedCardSlot {
 
 export interface CardSelectionOverlayOptions {
   readonly renderer: Renderer
+  readonly ghostNoise: Texture
+  readonly ghostDissolve: Texture
+  readonly ghostSpotlight: Texture
   readonly toggleTexture: Texture
   readonly cardBackTexture: Texture
   readonly createSlot: (
@@ -99,17 +102,9 @@ export class CardSelectionOverlay extends Container {
     this.cardsLayer.label = 'game.card-selection.cards'
     this.addChild(this.cardsLayer)
 
-    const toggleOutlineTarget = new Sprite(options.toggleTexture)
-    applyAnchoredPlacement(
-      toggleOutlineTarget,
-      GAME_BOARD_LAYOUT.cardSelection.toggleButton
-    )
-    toggleOutlineTarget.eventMode = 'none'
-    toggleOutlineTarget.label = 'game.card-selection.toggle-outline'
-    this.addChild(toggleOutlineTarget)
-    this.toggleOutline = new GhostAura(toggleOutlineTarget, {})
-
     this.toggle = new Button(options.toggleTexture, {
+      pressedScale: 1,
+      pressedBrightness: 1,
       highlightOnHover: false,
       hoverScale: 1.05,
       onClick: () => {
@@ -133,8 +128,14 @@ export class CardSelectionOverlay extends Container {
     })
     this.toggleLabel.anchor.set(0.5)
     this.toggleLabel.eventMode = 'none'
-    this.toggle.sprite.addChild(this.toggleLabel)
+    this.toggle.content.addChild(this.toggleLabel)
     this.addChild(this.toggle)
+    this.toggleOutline = new GhostAura(this.toggle, {
+      silhouette: this.toggle.sprite,
+      noise: options.ghostNoise,
+      dissolve: options.ghostDissolve,
+      spotlight: options.ghostSpotlight
+    })
     this.visible = false
   }
 
@@ -267,8 +268,6 @@ export class CardSelectionOverlay extends Container {
     this.choicesByInstanceId.clear()
     this.selected = null
     this.selecting = false
-    this.toggle.setEnabled(true)
-    this.setToggleVisible(true)
     this.visible = false
     return selected.view
   }
@@ -331,6 +330,8 @@ export class CardSelectionOverlay extends Container {
       if (card) this.choicesByInstanceId.set(card.instanceId, option)
     })
     this.visible = true
+    this.setToggleVisible(true)
+    this.toggle.setEnabled(true)
     this.boardVisible = false
     this.dimming = true
     this.dimBoard = dimBoard
@@ -398,6 +399,8 @@ export class CardSelectionOverlay extends Container {
     if (this.destroyed) return
     this.clear()
     this.visible = true
+    this.setToggleVisible(true)
+    this.toggle.setEnabled(true)
     this.boardVisible = false
     this.dimming = true
     this.selecting = false
@@ -472,6 +475,10 @@ export class CardSelectionOverlay extends Container {
 
   clear(): void {
     if (this.destroyed) return
+    if (this.visible && this.toggle.visible) {
+      this.toggle.setEnabled(false)
+      this.toggleOutline.disappear(this.parent)
+    }
     this.prompt.text = ''
     this.requestRevision += 1
     this.animationScope.kill()
@@ -490,9 +497,7 @@ export class CardSelectionOverlay extends Container {
     this.selected = null
     this.boardVisible = false
     this.dimming = true
-    this.syncView()
-    this.toggle.setEnabled(true)
-    this.setToggleVisible(true)
+    this.syncView(false)
     this.visible = false
   }
 
@@ -583,16 +588,15 @@ export class CardSelectionOverlay extends Container {
   }
 
   private setToggleVisible(visible: boolean): void {
-    this.toggle.visible = visible
     this.toggleOutline.setEnabled(visible)
   }
 
-  private syncView(): void {
+  private syncView(updateLabel = true): void {
     this.cardsLayer.visible = !this.boardVisible
     this.prompt.visible = !this.boardVisible
     const dimmed = !this.boardVisible && this.dimming
     this.darkOverlay.alpha = dimmed && this.dimBoard ? 1 : 0
     this.darkOverlay.eventMode = dimmed ? 'static' : 'none'
-    this.toggleLabel.text = this.boardVisible ? 'Show' : 'Hide'
+    if (updateLabel) this.toggleLabel.text = this.boardVisible ? 'Show' : 'Hide'
   }
 }

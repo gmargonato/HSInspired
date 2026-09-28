@@ -1,3 +1,4 @@
+import { ShatterLab } from './shatter-lab'
 import {
   Container,
   Graphics,
@@ -30,11 +31,12 @@ import {
 } from '../../../rendering/effects/outline-tuning'
 import { OutlineLabShaderControls } from './outline-lab-shader-controls'
 import { GhostAura } from '../../../rendering/effects/ghost-aura'
-import type {
-  GhostAuraTuning,
-  GhostAuraPalette
+import {
+  GHOST_MIST_DEFAULTS,
+  type GhostAuraTuning,
+  type GhostAuraPalette
 } from '../../../../shared/ipc/outline-tuning'
-type OutlinePresetName = AuraPresetName | 'ghost'
+type OutlinePresetName = AuraPresetName | 'ghost' | 'shatter'
 import { OutlineLabHand, clampHandCount } from './outline-lab-hand'
 import { OutlineLabBoard } from './outline-lab-board'
 import { OUTLINE_LAB_LAYOUT as LAYOUT } from './outline-lab-layout'
@@ -57,14 +59,16 @@ const PRESETS: readonly OutlinePresetName[] = [
   'bonus-card',
   'board',
   'button',
-  'ghost'
+  'ghost',
+  'shatter'
 ]
 const PRESET_LABELS: Record<OutlinePresetName, string> = {
   card: 'Card',
   'bonus-card': 'Bonus Card',
   board: 'Board',
   button: 'Button',
-  ghost: 'Ghost Aura Shader'
+  ghost: 'Ghost Aura Shader',
+  shatter: 'Shatter Shader'
 }
 const PALETTES: readonly OutlinePaletteName[] = [
   'green',
@@ -183,7 +187,8 @@ export class OutlineLab extends Container {
     'bonus-card': 'orange',
     board: 'green',
     button: 'blue',
-    ghost: 'purple'
+    ghost: 'purple',
+    shatter: 'purple'
   }
   private selectedPreset: OutlinePresetName = 'card'
   private shaderControls: OutlineLabShaderControls | null = null
@@ -193,6 +198,7 @@ export class OutlineLab extends Container {
   private saveInFlight = false
   private disposed = false
   private statusLabel!: Text
+  private shatter: ShatterLab | null = null
   private hand: OutlineLabHand | null = null
   private board: OutlineLabBoard | null = null
   private handCount = 5
@@ -234,7 +240,7 @@ export class OutlineLab extends Container {
     this.createPaletteControls()
     this.shaderControls = new OutlineLabShaderControls({
       ...this.options,
-      onShaderChange: (ghost) => this.selectPreset(ghost ? 'ghost' : 'card')
+      onShaderChange: (shader) => this.selectPreset(shader === 'aura' ? 'card' : shader)
     })
     await this.createPreviewGroups(gameAssets, deckAssets, selectionAssets)
     if (this.disposed) return
@@ -245,6 +251,7 @@ export class OutlineLab extends Container {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.shatter?.dispose()
     this.shaderControls?.dispose()
     for (const outline of this.ghostOutlines) outline.dispose()
     this.hand?.dispose()
@@ -267,6 +274,10 @@ export class OutlineLab extends Container {
 
   update(deltaMS: number): void {
     if (this.disposed || !this.controlsVisible) return
+    if (this.selectedPreset === 'shatter' && this.shatter) {
+      this.shatter.update(deltaMS)
+      this.shaderControls?.setShatterProgress(this.shatter.progress)
+    }
     this.hand?.update(deltaMS)
     this.board?.update(deltaMS)
   }
@@ -325,7 +336,7 @@ export class OutlineLab extends Container {
   private createPresetTabs(): void {
     const tabs = LAYOUT.tabs
     for (const [index, preset] of PRESETS.filter(
-      (preset) => preset !== 'ghost'
+      (preset) => preset !== 'ghost' && preset !== 'shatter'
     ).entries()) {
       const tab = this.createButton(
         tabs.x + index * (tabs.width + tabs.gap),
@@ -464,6 +475,7 @@ export class OutlineLab extends Container {
       'Play button'
     )
 
+    this.ghostAssets = gameAssets
     const ghostGroup = this.createPreviewGroup('ghost')
     this.addOutlinedTexture(
       ghostGroup,
@@ -479,6 +491,10 @@ export class OutlineLab extends Container {
       LAYOUT.confirmMulligan,
       'Confirm mulligan'
     )
+    const shatterGroup = this.createPreviewGroup('shatter')
+    this.shatter = new ShatterLab(this.options.renderer)
+    shatterGroup.addChild(this.shatter)
+    await this.shatter.mount(gameAssets, deckAssets, this.resolver)
     this.refreshPreviewAppearance('board')
   }
 
@@ -518,11 +534,13 @@ export class OutlineLab extends Container {
     group.addChild(target)
     this.registerOutline(target, preset)
 
-    const body = new Sprite(texture)
-    applyAnchoredPlacement(body, value)
-    body.eventMode = 'none'
-    body.label = `outline-lab.${preset}.${label}.body`
-    group.addChild(body)
+    if (preset !== 'ghost') {
+      const body = new Sprite(texture)
+      applyAnchoredPlacement(body, value)
+      body.eventMode = 'none'
+      body.label = `outline-lab.${preset}.${label}.body`
+      group.addChild(body)
+    }
     const caption = addLabel(
       group,
       label,
@@ -534,9 +552,16 @@ export class OutlineLab extends Container {
     caption.anchor.set(0.5, 0)
   }
 
+  private ghostAssets!: GameAssets
+
   private registerOutline(target: Container, preset: OutlinePresetName): void {
+    if (preset === 'shatter') return
     if (preset === 'ghost') {
-      const outline = new GhostAura(target)
+      const outline = new GhostAura(target, {
+        noise: this.ghostAssets.burnNoise,
+        dissolve: this.ghostAssets.ghostDissolve,
+        spotlight: this.ghostAssets.ghostSpotlight
+      })
       outline.setTuning(this.ghostTuning)
       outline.setPalette(this.ghostPalette)
       this.ghostOutlines.push(outline)
@@ -555,6 +580,8 @@ export class OutlineLab extends Container {
   private selectPreset(preset: OutlinePresetName): void {
     this.hand?.cancel()
     this.board?.clearHover()
+    this.shatter?.restore()
+    this.saveButton.root.visible = true
     this.selectedPreset = preset
     for (const [candidate, group] of this.previewGroups) {
       group.visible = candidate === preset
@@ -573,7 +600,7 @@ export class OutlineLab extends Container {
   }
 
   private selectPalette(palette: OutlinePaletteName): void {
-    if (this.selectedPreset === 'ghost') return
+    if (this.selectedPreset === 'ghost' || this.selectedPreset === 'shatter') return
     if (
       !OUTLINE_LAB_PALETTES[this.selectedPreset].some(
         (option) => option.palette === palette
@@ -603,6 +630,7 @@ export class OutlineLab extends Container {
         .stroke({ color: 0xffffff, width: 1, alpha: 0.7 })
     }
     for (const preset of PRESETS) {
+      if (preset === 'shatter') continue
       if (!OUTLINE_LAB_PALETTES[preset].some((option) => option.palette === palette))
         continue
       this.refreshPreviewAppearance(preset)
@@ -611,6 +639,37 @@ export class OutlineLab extends Container {
   }
 
   private refreshColorControls(): void {
+    if (this.selectedPreset === 'shatter') {
+      const preview = this.shatter
+      if (!preview) return
+      this.shaderControls?.showShatter(
+        preview.tuning,
+        preview.progress,
+        (key, value) => {
+          preview.set(key, value as number)
+          if (key !== 'progress') this.markDirty()
+        },
+        [
+          { label: 'Play shatter', run: () => preview.play() },
+          {
+            label: 'Restore assets',
+            run: () => {
+              preview.restore()
+              this.refreshColorControls()
+            }
+          },
+          {
+            label: 'Reset Shatter',
+            run: () => {
+              preview.reset()
+              this.markDirty()
+              this.refreshColorControls()
+            }
+          }
+        ]
+      )
+      return
+    }
     if (this.selectedPreset === 'ghost') {
       this.shaderControls?.showGhost(
         this.ghostTuning,
@@ -625,7 +684,35 @@ export class OutlineLab extends Container {
             this.ghostTuning = { ...this.ghostTuning, [key]: value } as GhostAuraTuning
           this.refreshPreviewAppearance('ghost')
           this.markDirty()
-        }
+        },
+        [
+          {
+            label: 'Play disappearance',
+            run: () => {
+              for (const effect of this.ghostOutlines) {
+                effect.restore()
+                effect.disappear()
+              }
+            }
+          },
+          {
+            label: 'Restore asset',
+            run: () => {
+              for (const effect of this.ghostOutlines) effect.restore()
+            }
+          },
+          {
+            label: 'Reset Ghost',
+            run: () => {
+              this.ghostTuning = { ...GHOST_MIST_DEFAULTS.tuning }
+              this.ghostPalette = { ...GHOST_MIST_DEFAULTS.palette }
+              for (const effect of this.ghostOutlines) effect.restore()
+              this.refreshPreviewAppearance('ghost')
+              this.refreshColorControls()
+              this.markDirty()
+            }
+          }
+        ]
       )
     } else {
       const preset = this.selectedPreset
@@ -657,6 +744,7 @@ export class OutlineLab extends Container {
   }
 
   private refreshPreviewAppearance(preset: OutlinePresetName): void {
+    if (preset === 'shatter') return
     if (preset === 'ghost') {
       for (const outline of this.ghostOutlines) {
         outline.setTuning(this.ghostTuning)
@@ -734,7 +822,8 @@ export class OutlineLab extends Container {
     for (const preset of PRESETS) {
       const tab = this.presetTabs.get(preset)
       if (!tab) continue
-      tab.root.visible = this.selectedPreset !== 'ghost'
+      tab.root.visible =
+        this.selectedPreset !== 'ghost' && this.selectedPreset !== 'shatter'
       tab.label.text = PRESET_LABELS[preset]
       this.drawButton(tab, preset === this.selectedPreset)
     }
@@ -742,10 +831,14 @@ export class OutlineLab extends Container {
 
   private refreshPaletteButtons(): void {
     const selected = this.selectedPalettes[this.selectedPreset]
-    const options = OUTLINE_LAB_PALETTES[this.selectedPreset]
+    const options =
+      this.selectedPreset === 'shatter' ? [] : OUTLINE_LAB_PALETTES[this.selectedPreset]
     for (const [palette, button] of this.paletteButtons) {
       const index = options.findIndex((option) => option.palette === palette)
-      button.root.visible = index >= 0 && this.selectedPreset !== 'ghost'
+      button.root.visible =
+        index >= 0 &&
+        this.selectedPreset !== 'ghost' &&
+        this.selectedPreset !== 'shatter'
       if (index < 0) continue
       button.root.x =
         LAYOUT.palettes.x + index * (LAYOUT.palettes.width + LAYOUT.palettes.gap)
@@ -777,7 +870,8 @@ export class OutlineLab extends Container {
 
     const savedRevision = this.revision
     const snapshot: OutlineTuningConfig = {
-      version: 4,
+      version: 10,
+      shatter: { ...(this.shatter?.tuning ?? this.initialConfig.shatter) },
       aura: {
         presets: cloneTunings(this.drafts),
         palettes: clonePalettes(this.paletteDrafts)

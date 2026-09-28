@@ -1017,6 +1017,9 @@ export class GameBoardView extends Actor {
     this.cardSelectionOverlay = new CardSelectionOverlay({
       renderer: options.renderer,
       toggleTexture: options.gameAssets.toggleViewButton,
+      ghostNoise: options.gameAssets.burnNoise,
+      ghostDissolve: options.gameAssets.ghostDissolve,
+      ghostSpotlight: options.gameAssets.ghostSpotlight,
       cardBackTexture: options.gameAssets.cardBack,
       createSlot: (card, sourceInstanceId) => this.createSlot(card, sourceInstanceId),
       createHeroPowerChoice: (heroPowerId, premium) => {
@@ -3590,6 +3593,14 @@ export class GameBoardView extends Actor {
       if (spellStates) this.randomSpellState = state
       await this.heroPowerEffects.finish()
       if (this.destroyed) return
+      await Promise.all(
+        state.players.map((player) =>
+          this.heroPowerEffects.syncAvailability(
+            player.participantId,
+            player.heroPower.available
+          )
+        )
+      )
       await this.reconcileWeaponViews(state)
       if (!requiresStateReconcile) return
       await this.reconcileEffectMovement(state)
@@ -3763,7 +3774,6 @@ export class GameBoardView extends Actor {
       case 'turn-started':
         this.syncTurnHud(this.match.getState())
         this.handleTurnStarted(event.participantId)
-        await this.heroPowerEffects.refresh(event.participantId)
         return
       case 'hero-power-used':
         this.syncTurnHud(this.match.getState())

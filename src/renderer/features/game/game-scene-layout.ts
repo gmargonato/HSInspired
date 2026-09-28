@@ -383,6 +383,7 @@ export const GAME_BOARD_LAYOUT = {
       centerX: 960,
       baselineY: 710,
       gap: 250,
+      threeCardGap: 350,
       scale: 0.35,
       anchor: BOTTOM_CENTER
     },
@@ -436,7 +437,7 @@ export const GAME_BOARD_LAYOUT = {
     }
   },
 
-  /** Reusable three-card selection surface used by Tracking and future Discover cards. */
+  /** Reusable three-card selection surface used by Tracking and Discover cards. */
   cardSelection: {
     prompt: placement(
       { x: 960, y: 280 },
@@ -446,7 +447,7 @@ export const GAME_BOARD_LAYOUT = {
     cards: {
       centerX: 960,
       baselineY: 720,
-      gap: 300,
+      gap: 400,
       scale: 0.42,
       anchor: BOTTOM_CENTER
     },
@@ -457,7 +458,7 @@ export const GAME_BOARD_LAYOUT = {
     remoteDiscover: {
       centerX: 960,
       baselineY: 360,
-      gap: 250,
+      gap: 300,
       scale: 0.35,
       anchor: BOTTOM_CENTER,
       /** Card-back elevation; the shadow offset scales with it (40 ≈ held-card lift). */

@@ -14,10 +14,15 @@ import {
   type PlayerId
 } from '../../../game/match'
 import { CARD_CATALOG } from '../../../game/content/cards'
-import { sameAiIntent, type AiActionIntent } from '../../../shared/ipc/ai-deliberation'
+import {
+  sameAiIntent,
+  type AiActionIntent,
+  type AiDecisionChoice
+} from '../../../shared/ipc/ai-deliberation'
 import type { GameBoardSession } from './game-board-session'
 import { aiActionIntent } from './ai-action-intent'
 import { aiActions } from './ai-context'
+import { unpaidFriendlyDamageHeroPowerPenalty } from './expert-ai-action-safety'
 import {
   EXPERT_AI_DEFAULT_BUDGET,
   EXPERT_AI_DISPATCH_RESERVE_MS,
@@ -413,6 +418,14 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       (action) => action.id === selectedActionId
     )
     if (!selectedAction) return null
+    if (
+      unpaidFriendlyDamageHeroPowerPenalty(
+        selectedAction.command,
+        state,
+        this.perspectiveParticipantId
+      ) > 0
+    )
+      return null
 
     const response: AiDecisionResponse = {
       ...cached.response,
@@ -456,6 +469,16 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         )
     )
     if (!selectedAction) return null
+    if (
+      unpaidFriendlyDamageHeroPowerPenalty(
+        selectedAction.command,
+        this.session.getState(),
+        this.perspectiveParticipantId
+      ) > 0
+    ) {
+      this.continuation = null
+      return null
+    }
 
     const remainingLine = continuation.actions.slice(
       continuation.nextIndex,
@@ -504,6 +527,114 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       this.perspectiveParticipantId
     )
     return aiActions(this.session, legal, this.perspectiveParticipantId)
+  }
+
+  private guardUnpaidDamageDecision(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    if (request.phase === 'mulligan') return response
+    const selectedId =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    if (!selectedId) return response
+
+    const legal = this.currentLegalActions().filter((action) =>
+      request.actionIds.includes(action.id)
+    )
+    const state = this.session.getState()
+    const selected = legal.find((action) => action.id === selectedId)
+    if (
+      !selected ||
+      unpaidFriendlyDamageHeroPowerPenalty(
+        selected.command,
+        state,
+        this.perspectiveParticipantId
+      ) === 0
+    )
+      return response
+
+    const consensus = Array.isArray(response.usage?.candidateConsensus)
+      ? response.usage.candidateConsensus
+      : []
+    const rankedIds = consensus
+      .map((candidate) => {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate))
+          return null
+        const entry = candidate as Record<string, unknown>
+        return typeof entry.candidateId === 'string' ? entry.candidateId : null
+      })
+      .filter((candidateId): candidateId is string => candidateId !== null)
+    const replacement =
+      rankedIds
+        .map((candidateId) => legal.find((action) => action.id === candidateId))
+        .find(
+          (action) =>
+            action !== undefined &&
+            unpaidFriendlyDamageHeroPowerPenalty(
+              action.command,
+              state,
+              this.perspectiveParticipantId
+            ) === 0
+        ) ??
+      legal.find((action) => action.command.type === 'end-turn') ??
+      legal.find(
+        (action) =>
+          unpaidFriendlyDamageHeroPowerPenalty(
+            action.command,
+            state,
+            this.perspectiveParticipantId
+          ) === 0
+      ) ??
+      legal[0]
+    if (!replacement) return response
+
+    const intent = aiActionIntent(replacement.command, this.opponentParticipantId())
+    let choice: AiDecisionChoice
+    if ('plan' in response.choice) {
+      const plan = response.choice.plan
+      choice = {
+        plan: {
+          ...plan,
+          objective: `Skip harmful ${selected.description}; use ${replacement.description}.`,
+          firstActionId: replacement.id,
+          candidates: plan.candidates.map((candidate, index) =>
+            index === plan.preferred
+              ? { ...candidate, sequence: [replacement.description] }
+              : candidate
+          )
+        }
+      }
+    } else if ('actionId' in response.choice) {
+      choice = {
+        actionId: replacement.id,
+        intent,
+        expectedResult: 'Avoid unpaid damage to a friendly character.',
+        planUpdate: null
+      }
+    } else return response
+
+    return {
+      ...response,
+      reason: `Tactical safety check skipped ${selected.description} and chose ${replacement.description}.`,
+      choice,
+      usage: {
+        ...response.usage,
+        tacticalOverride: true,
+        plannedActionIntents: [
+          {
+            type: intent.type,
+            source: intent.source,
+            targets: [...intent.targets],
+            position: intent.position,
+            option: intent.option
+          }
+        ]
+      }
+    }
   }
 
   private opponentParticipantId(): PlayerId {
@@ -637,9 +768,10 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     const pending = this.takePending(response.requestId)
     if (!pending) return
     if (response.type === 'decision') {
-      this.rememberPlanCommit(pending.request, response.response)
-      this.rememberContinuation(pending.request, response.response)
-      pending.resolve(response.response)
+      const guarded = this.guardUnpaidDamageDecision(pending.request, response.response)
+      this.rememberPlanCommit(pending.request, guarded)
+      this.rememberContinuation(pending.request, guarded)
+      pending.resolve(guarded)
     } else {
       const continuedAction = this.takeApplicableContinuation(pending.request)
       if (continuedAction) pending.resolve(continuedAction)

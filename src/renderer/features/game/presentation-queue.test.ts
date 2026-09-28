@@ -1,3 +1,8 @@
+import {
+  WeaponView,
+  type WeaponViewTextures
+} from '../../rendering/weapons/weapon-view'
+import * as ShatterEffect from '../../rendering/effects/shatter'
 import { summonPresentationBatch } from './summon-presentation'
 import { returnPresentationBatch } from './return-presentation'
 import { PresentationQueue } from './presentation-queue'
@@ -35,7 +40,11 @@ import type { GameCardSlot } from './game-card-slot'
 import { TargetGestureController } from './target-gesture'
 import { asCardId } from '../../../game/content/cards'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
-import { OPENING_TIMING, RESOLUTION_TIMING } from './game-presentation-timing'
+import {
+  BOARD_TIMING,
+  OPENING_TIMING,
+  RESOLUTION_TIMING
+} from './game-presentation-timing'
 import { DEFAULT_HAND_LAYOUT, layoutHand } from './hand-layout'
 import { attachShadow, getShadowCaster } from '../../rendering/shadows/shadow-caster'
 import { layoutBoardRow } from './board-layout'
@@ -66,6 +75,17 @@ import {
 import { CARD_DRAW_LAYOUT } from './card-draw-layout'
 import { CARD_REVEAL_LAYOUT } from './card-reveal-layout'
 import type { MinionCardMovement } from '../../../game/match'
+
+vi.mock('../../rendering/effects/ghost-mist-particles', () => ({
+  createMistParticles: () => ({
+    container: new Container(),
+    refresh: vi.fn(),
+    update: vi.fn(),
+    destroy() {
+      this.container.destroy({ children: true })
+    }
+  })
+}))
 
 describe('engine-driven minion card departures', () => {
   function departureSlot(instanceId: string): GameCardSlot {
@@ -1698,15 +1718,11 @@ describe('remote card choices', () => {
     )
 
     expect(overlay.getChildByLabel('game.card-selection.toggle')?.visible).toBe(false)
-    expect(overlay.getChildByLabel('game.card-selection.toggle-outline')?.visible).toBe(
-      false
-    )
+    expect(overlay.getChildByLabel('game.card-selection.toggle-outline')).toBeNull()
 
     overlay.clear()
-    expect(overlay.getChildByLabel('game.card-selection.toggle')?.visible).toBe(true)
-    expect(overlay.getChildByLabel('game.card-selection.toggle-outline')?.visible).toBe(
-      true
-    )
+    expect(overlay.visible).toBe(false)
+    expect(overlay.getChildByLabel('game.card-selection.toggle')?.visible).toBe(false)
   })
 
   it('shows remote Discover backs non-modally near the top edge without dimming', async () => {
@@ -3470,6 +3486,8 @@ describe('board lifecycle preservation', () => {
   })
 
   it('wiggles a dying minion after its lethal combat return', async () => {
+    const effect = { setProgress: vi.fn(), dispose: vi.fn() }
+    const shatter = vi.spyOn(ShatterEffect, 'createShatter').mockReturnValue(effect)
     const value = board()
     const internal = value as unknown as {
       session: GameBoardSession
@@ -3609,7 +3627,10 @@ describe('board lifecycle preservation', () => {
     ) as gsap.core.Tween[]
     const wiggles = deathTweens.filter((tween) => tween.vars.rotation !== undefined)
     const collapse = deathTweens.find((tween) => tween.vars.alpha === 0)!
-    deathTimeline.progress(0.2)
+    deathTimeline.time(BOARD_TIMING.minionDeathWiggle * 0.25)
+    expect(shatter).not.toHaveBeenCalled()
+    const shardTween = deathTweens.find((tween) => tween.vars.progress === 1)!
+    expect(shardTween.startTime()).toBeCloseTo(BOARD_TIMING.minionDeathWiggle)
     expect(wiggles).toHaveLength(4)
     expect(collapse.startTime()).toBeGreaterThan(
       wiggles.at(-1)!.startTime() + wiggles.at(-1)!.duration() - 0.001
@@ -3619,10 +3640,14 @@ describe('board lifecycle preservation', () => {
     expect(attacker.alpha).toBe(1)
     expect(Math.abs(attacker.rotation)).toBeGreaterThan(0.01)
     await finish(resolution)
+    expect(shatter).toHaveBeenCalled()
+    expect(effect.dispose).toHaveBeenCalled()
     expect(attacker.destroyed).toBe(true)
   })
 
   it('wiggles a minion before a regular death-batch collapse', async () => {
+    const effect = { setProgress: vi.fn(), dispose: vi.fn() }
+    const shatter = vi.spyOn(ShatterEffect, 'createShatter').mockReturnValue(effect)
     const value = board()
     const internal = value as unknown as {
       session: GameBoardSession
@@ -3694,11 +3719,18 @@ describe('board lifecycle preservation', () => {
     expect(collapse.startTime()).toBeGreaterThan(
       wiggles.at(-1)!.startTime() + wiggles.at(-1)!.duration() - 0.001
     )
-    deathTimeline.progress(0.2)
+    deathTimeline.time(BOARD_TIMING.minionDeathWiggle * 0.25)
+    expect(shatter).not.toHaveBeenCalled()
+    const shardTween = deathTweens.find((tween) => tween.vars.progress === 1)!
+    expect(shardTween.startTime()).toBeCloseTo(BOARD_TIMING.minionDeathWiggle)
     expect(Math.abs(view.rotation)).toBeGreaterThan(0.01)
     expect(view.alpha).toBe(1)
+    deathTimeline.time(BOARD_TIMING.minionDeathWiggle + 0.01)
+    expect(shatter).toHaveBeenCalledOnce()
+    expect(view.rotation).toBeCloseTo(0)
     deathTimeline.progress(1)
     await job
+    expect(effect.dispose).toHaveBeenCalledOnce()
     expect(view.destroyed).toBe(true)
   })
 
@@ -5108,9 +5140,9 @@ describe('board lifecycle preservation', () => {
     expect(slot.setSelected).toHaveBeenLastCalledWith(false)
     expect(slot.setPlayableOutlineEnabled).toHaveBeenLastCalledWith(true)
     confirmButton.emit('pointerdown', { button: 0 } as FederatedPointerEvent)
-    expect(gsap.getTweensOf(confirmButton.sprite.scale).length).toBeGreaterThan(0)
+    expect(gsap.getTweensOf(confirmButton.content.scale).length).toBeGreaterThan(0)
     value.dispose()
-    expect(gsap.getTweensOf(confirmButton.sprite.scale)).toHaveLength(0)
+    expect(gsap.getTweensOf(confirmButton.content.scale)).toHaveLength(0)
     expect(slot.destroyed).toBe(true)
     expect(slot.disposePlayableOutline).toHaveBeenCalledOnce()
   })
@@ -5169,7 +5201,11 @@ describe('board lifecycle preservation', () => {
       )
       const layout = GAME_BOARD_LAYOUT.mulligan.cards
       expect(slots.map((slot) => slot.x)).toEqual(
-        slots.map((_, index) => layout.centerX + (index - (count - 1) / 2) * layout.gap)
+        slots.map(
+          (_, index) =>
+            layout.centerX +
+            (index - (count - 1) / 2) * (count === 3 ? layout.threeCardGap : layout.gap)
+        )
       )
       for (const slot of slots) {
         expect(slot.parent).toBe(internal.mulligan.layer)
@@ -5779,3 +5815,142 @@ describe('grouped summon presentation', () => {
     expect(internal.boardPositions.views('local')).toEqual(views)
   })
 })
+
+it('shatters a broken weapon immediately and releases its snapshot', async () => {
+  const value = board()
+  const internal = value as unknown as {
+    session: GameBoardSession
+    combat: GameCombatPresentation
+    animationScope: AnimationScope
+  }
+  const context = (
+    internal.combat as unknown as {
+      context: ConstructorParameters<typeof GameCombatPresentation>[2]
+    }
+  ).context
+  const view = await WeaponView.create(
+    {
+      label: 'weapon.shatter-test',
+      attack: 3,
+      durability: 0,
+      printedDurability: 2,
+      deathrattle: false,
+      trigger: false,
+      lifesteal: false,
+      temporaryAbilityLabels: []
+    },
+    new Proxy({} as WeaponViewTextures, { get: () => Texture.WHITE }),
+    Texture.WHITE
+  )
+  view.instanceId = 'broken-weapon'
+  internal.combat.layer.addChild(view)
+  vi.spyOn(context, 'weaponView').mockReturnValue(view)
+  const remove = vi
+    .spyOn(context, 'removeWeapon')
+    .mockImplementation(() => view.destroy({ children: true }))
+  const effect = { setProgress: vi.fn(), dispose: vi.fn() }
+  const shatter = vi.spyOn(ShatterEffect, 'createShatter').mockReturnValue(effect)
+  const timeline = gsap.timeline({ paused: true })
+  vi.spyOn(internal.animationScope, 'timeline').mockReturnValue(timeline)
+  const job = internal.combat.presentDeathBatchStarted({
+    type: 'death-batch-started',
+    batchId: 'broken-weapon-batch',
+    deaths: [
+      {
+        kind: 'weapon',
+        instanceId: view.instanceId,
+        participantId: internal.session.localParticipantId,
+        cardId: asCardId('basic_fiery_war_axe'),
+        hasDeathrattle: false
+      }
+    ]
+  })
+  timeline.time(0.01)
+  expect(shatter).toHaveBeenCalledOnce()
+  expect(remove).not.toHaveBeenCalled()
+  timeline.progress(1)
+  await job
+  expect(effect.setProgress).toHaveBeenLastCalledWith(1)
+  expect(effect.dispose).toHaveBeenCalledOnce()
+  expect(remove).toHaveBeenCalledOnce()
+  timeline.kill()
+})
+
+it('builds moving shatter geometry and releases its snapshot on restore', () => {
+  vi.spyOn(DOMAdapter.get(), 'createCanvas').mockReturnValue({
+    getContext: () => null
+  } as unknown as HTMLCanvasElement)
+  const parent = new Container()
+  const target = new Sprite(Texture.WHITE)
+  target.anchor.set(0.5)
+  target.position.set(40, 70)
+  target.rotation = 0.3
+  target.scale.set(2, 3)
+  parent.addChild(target)
+  const texture = RenderTexture.create({ width: 10, height: 10 })
+  const renderer = { generateTexture: () => texture } as unknown as Parameters<
+    typeof ShatterEffect.createShatter
+  >[0]
+  const effect = ShatterEffect.createShatter(renderer, target)
+  const replacement = parent.children[1]
+  expect(target.visible).toBe(false)
+  expect(replacement.position.equals(target.position)).toBe(true)
+  expect(replacement.scale.equals(target.scale)).toBe(true)
+  expect(replacement.rotation).toBe(target.rotation)
+  const mesh = replacement.children[0] as import('pixi.js').Mesh
+  const initial = Array.from(mesh.geometry.getBuffer('aPosition').data)
+  effect.setProgress(0.5)
+  expect(Array.from(mesh.geometry.getBuffer('aPosition').data)).not.toEqual(initial)
+  effect.setProgress(1)
+  expect(mesh.visible).toBe(false)
+  effect.dispose()
+  effect.dispose()
+  expect(target.visible).toBe(true)
+  expect(parent.children).toEqual([target])
+  expect(texture.destroyed).toBe(true)
+  parent.destroy({ children: true })
+})
+
+it.each([false, true])(
+  'prewarms a visible shatter mesh offscreen and cleans up (render failure: %s)',
+  (fail) => {
+    vi.spyOn(DOMAdapter.get(), 'createCanvas').mockReturnValue({
+      getContext: () => null
+    } as unknown as HTMLCanvasElement)
+    const snapshot = RenderTexture.create({ width: 16, height: 16 })
+    let output: RenderTexture | undefined
+    let stage: Container | undefined
+    let mesh: import('pixi.js').Mesh | undefined
+    let program: import('pixi.js').GlProgram | undefined
+    let geometryDestroyed: ReturnType<typeof vi.spyOn> | undefined
+    const renderer = {
+      generateTexture: vi.fn(() => snapshot),
+      render: vi.fn((options: { container: Container; target: RenderTexture }) => {
+        output = options.target
+        stage = options.container
+        mesh = stage.children[1].children[0] as import('pixi.js').Mesh
+        program = mesh.shader!.glProgram
+        geometryDestroyed = vi.spyOn(mesh.geometry, 'destroy')
+        expect(mesh.visible).toBe(true)
+        expect(
+          mesh.shader!.resources.shatterUniforms.uniforms.uOpacity
+        ).toBeGreaterThan(0)
+        expect(output).toBeInstanceOf(RenderTexture)
+        if (fail) throw new Error('warmup render failure')
+      })
+    } as unknown as Parameters<typeof ShatterEffect.prewarmShatter>[0]
+    if (fail)
+      expect(() => ShatterEffect.prewarmShatter(renderer)).toThrow(
+        'warmup render failure'
+      )
+    else ShatterEffect.prewarmShatter(renderer)
+    expect(renderer.render).toHaveBeenCalledOnce()
+    expect(snapshot.destroyed).toBe(true)
+    expect(output?.destroyed).toBe(true)
+    expect(stage?.destroyed).toBe(true)
+    expect(mesh?.destroyed).toBe(true)
+    expect(geometryDestroyed).toHaveBeenCalledOnce()
+    expect(program?.vertex).toContain('aPosition')
+    expect(Texture.WHITE.destroyed).toBe(false)
+  }
+)

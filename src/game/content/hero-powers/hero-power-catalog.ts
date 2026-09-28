@@ -8,7 +8,12 @@ import {
 } from '../cards/card-definition'
 
 export type HeroPowerTargeting =
-  'none' | 'any-character' | 'minion' | 'enemy-minion' | 'friendly-minion'
+  | 'none'
+  | 'any-character'
+  | 'minion'
+  | 'enemy-minion'
+  | 'friendly-minion'
+  | 'friendly-beast'
 
 export type HeroPowerEffect =
   | {
@@ -29,6 +34,7 @@ export type HeroPowerEffect =
       readonly count: number
       readonly amount: number
     }
+  | { readonly kind: 'draw-cards'; readonly count: number }
   | { readonly kind: 'gain-armor'; readonly amount: number }
   | {
       readonly kind: 'buff-friendly-beast'
@@ -123,7 +129,7 @@ const HERO_POWER_DATA = [
     2,
     'Give a Beast +3/+3.',
     'hero-power-hunter',
-    'friendly-minion',
+    'friendly-beast',
     { kind: 'buff-friendly-beast', attack: 3, health: 3 }
   ],
   [
@@ -167,6 +173,26 @@ const HERO_POWER_DATA = [
     { kind: 'restore-character', amount: 2 }
   ],
   [
+    'priest-mind-spike',
+    'Priest',
+    'Mind Spike',
+    2,
+    'Deal 2 damage.',
+    'hero-power-mind-spike',
+    'any-character',
+    { kind: 'damage-character', amount: 2 }
+  ],
+  [
+    'priest-mind-shatter',
+    'Priest',
+    'Mind Shatter',
+    2,
+    'Deal 3 damage.',
+    'hero-power-mind-shatter',
+    'any-character',
+    { kind: 'damage-character', amount: 3 }
+  ],
+  [
     'rogue-dagger-mastery',
     'Rogue',
     'Dagger Mastery',
@@ -181,7 +207,7 @@ const HERO_POWER_DATA = [
     'Shaman',
     'Totemic Call',
     2,
-    'Summon a random Totem.',
+    'Summon a random basic Totem.',
     'hero-power-shaman',
     'none',
     {
@@ -521,10 +547,10 @@ const HERO_POWER_DATA = [
     'Warlock',
     'Soul Tap',
     2,
-    'Draw 2 cards and take 2 damage.',
+    'Draw a card.',
     'hero-power-warlock-upgraded',
     'none',
-    { kind: 'draw-and-self-damage', count: 2, amount: 2 }
+    { kind: 'draw-cards', count: 1 }
   ],
   [
     'warrior-tank-up',

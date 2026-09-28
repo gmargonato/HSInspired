@@ -3,7 +3,8 @@ import { CARD_CATALOG, asCardId } from '../../content/cards'
 import {
   zombeastId,
   zombeastPool,
-  zombeastPoolCards
+  zombeastPoolCards,
+  zombeastPoolOffers
 } from '../../content/cards/zombeast'
 import {
   createOpeningMatchFromCheckpoint,
@@ -14,6 +15,45 @@ import { createMatchScenario } from '../testing/match-scenario-builder'
 type Scenario = ReturnType<typeof createMatchScenario>
 
 describe('Build-a-Beast', () => {
+  it('offers Hunter and Neutral Beasts with equal class odds and without repeats', () => {
+    const firstPool = zombeastPoolCards(CARD_CATALOG.all, 'first')
+    const hunters = firstPool.filter((card) => card.cardClass === 'Hunter')
+    const neutrals = firstPool.filter((card) => card.cardClass === 'Neutral')
+    const randomValues = [0.1, 0, 0.9, 0, 0.1, 0]
+    let randomIndex = 0
+
+    const offers = zombeastPoolOffers(
+      [...hunters.slice(0, 2), neutrals[0]!],
+      'first',
+      () => randomValues[randomIndex++]!
+    )
+
+    expect(offers.map((card) => card.cardClass)).toEqual([
+      'Hunter',
+      'Neutral',
+      'Hunter'
+    ])
+    expect(new Set(offers.map((card) => card.id))).toHaveLength(3)
+  })
+
+  it('falls back to the other class after a class offer pool is exhausted', () => {
+    const secondPool = zombeastPoolCards(CARD_CATALOG.all, 'second')
+    const hunter = secondPool.find((card) => card.cardClass === 'Hunter')!
+    const neutrals = secondPool.filter((card) => card.cardClass === 'Neutral')
+    const offers = zombeastPoolOffers(
+      [hunter, ...neutrals.slice(0, 2)],
+      'second',
+      () => 0.1
+    )
+
+    expect(offers.map((card) => card.cardClass)).toEqual([
+      'Hunter',
+      'Neutral',
+      'Neutral'
+    ])
+    expect(new Set(offers.map((card) => card.id))).toHaveLength(3)
+  })
+
   it('classifies existing Beasts and keeps recipes outside unrelated card pools', () => {
     expect(
       zombeastPool(CARD_CATALOG.require('goblins_vs_gnomes_king_of_beasts'))

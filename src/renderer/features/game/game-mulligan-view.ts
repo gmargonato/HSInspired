@@ -31,11 +31,10 @@ export class GameMulliganView {
   private confirmationLocked = false
   private mulliganInputReady = false
   private confirmButton!: Button
-  private mulliganAnnouncementOutlineTarget: Sprite | null = null
+  private announcement: Sprite | null = null
   private mulliganAnnouncementOutline: GhostAura | null = null
   private confirmMulliganOutline: GhostAura | null = null
   private opponentStillChoosingOutline: GhostAura | null = null
-  private opponentStillChoosingOutlineTarget: Sprite | null = null
   private opponentStillChoosing: Sprite | null = null
 
   constructor(
@@ -55,17 +54,16 @@ export class GameMulliganView {
     this.syncMulliganSelectionVisuals()
     this.setInputEnabled(true)
     this.confirmButton.visible = true
-    this.confirmButton.setEnabled(true)
     this.confirmMulliganOutline?.setEnabled(true)
+    this.confirmButton.setEnabled(true)
   }
 
   beginConfirmation(slots: readonly GameCardSlot[]): readonly string[] | null {
     if (this.confirmationLocked) return null
     this.confirmationLocked = true
     this.setInputEnabled(false)
-    this.confirmButton.visible = false
     this.confirmButton.setEnabled(false)
-    this.confirmMulliganOutline?.setEnabled(false)
+    this.confirmMulliganOutline?.disappear(this.layer.parent)
     for (const slot of slots) {
       slot.setMulliganInteractionEnabled(false)
       slot.setPlayableOutlineEnabled(false)
@@ -83,9 +81,9 @@ export class GameMulliganView {
   }
 
   async hide(): Promise<void> {
+    this.disappearControls()
     await this.fadeTo(this.layer, 0, OPENING_TIMING.mulliganFade)
     this.layer.visible = false
-    this.confirmButton.visible = false
   }
 
   dispose(): void {
@@ -108,24 +106,18 @@ export class GameMulliganView {
     overlay.alpha = 0
     this.layer.addChild(overlay)
 
-    const announcementOutlineTarget = new Sprite(this.assets.mulliganAnnouncement)
-    applyAnchoredPlacement(
-      announcementOutlineTarget,
-      GAME_BOARD_LAYOUT.mulligan.announcement
-    )
-    announcementOutlineTarget.label = 'game.mulligan.announcement-outline'
-    announcementOutlineTarget.alpha = 0
-    announcementOutlineTarget.eventMode = 'none'
-    this.layer.addChild(announcementOutlineTarget)
-    this.mulliganAnnouncementOutlineTarget = announcementOutlineTarget
-    this.mulliganAnnouncementOutline = new GhostAura(announcementOutlineTarget, {})
-
     const announcement = new Sprite(this.assets.mulliganAnnouncement)
     applyAnchoredPlacement(announcement, GAME_BOARD_LAYOUT.mulligan.announcement)
     announcement.label = 'game.mulligan.announcement'
     announcement.alpha = 0
     announcement.eventMode = 'none'
     this.layer.addChild(announcement)
+    this.announcement = announcement
+    this.mulliganAnnouncementOutline = new GhostAura(announcement, {
+      noise: this.assets.burnNoise,
+      dissolve: this.assets.ghostDissolve,
+      spotlight: this.assets.ghostSpotlight
+    })
   }
 
   private createDarkOverlay(): Graphics {
@@ -137,46 +129,25 @@ export class GameMulliganView {
   }
 
   createControls(): void {
-    const confirmOutlineTarget = new Sprite(this.assets.confirmMulliganButton)
-    applyAnchoredPlacement(
-      confirmOutlineTarget,
-      GAME_BOARD_LAYOUT.mulligan.confirmButton
-    )
-    confirmOutlineTarget.eventMode = 'none'
-    confirmOutlineTarget.label = 'game.mulligan.confirm-outline'
-    this.layer.addChild(confirmOutlineTarget)
-    this.confirmMulliganOutline = new GhostAura(confirmOutlineTarget, {})
-    this.confirmMulliganOutline.setEnabled(false)
-
     this.confirmButton = new Button(this.assets.confirmMulliganButton, {
       pressedScale: 1,
       highlightOnHover: false,
       hoverScale: 1.05,
       onClick: () => void this.onConfirm()
     })
+    this.confirmButton.label = 'game.mulligan.confirm'
     applyPlacement(this.confirmButton, GAME_BOARD_LAYOUT.mulligan.confirmButton)
     this.confirmButton.setBaseY(GAME_BOARD_LAYOUT.mulligan.confirmButton.position.y)
     this.confirmButton.visible = false
     this.confirmButton.setEnabled(false)
     this.layer.addChild(this.confirmButton)
-
-    const opponentStillChoosingOutlineTarget = new Sprite(
-      this.assets.mulliganOpponentStillChoosing
-    )
-    applyAnchoredPlacement(
-      opponentStillChoosingOutlineTarget,
-      GAME_BOARD_LAYOUT.mulligan.opponentStillChoosing
-    )
-    opponentStillChoosingOutlineTarget.eventMode = 'none'
-    opponentStillChoosingOutlineTarget.label =
-      'game.mulligan.opponent-still-choosing-outline'
-    this.layer.addChild(opponentStillChoosingOutlineTarget)
-    this.opponentStillChoosingOutlineTarget = opponentStillChoosingOutlineTarget
-    this.opponentStillChoosingOutline = new GhostAura(
-      opponentStillChoosingOutlineTarget,
-      {}
-    )
-    this.opponentStillChoosingOutline.setEnabled(false)
+    this.confirmMulliganOutline = new GhostAura(this.confirmButton, {
+      silhouette: this.confirmButton.sprite,
+      noise: this.assets.burnNoise,
+      dissolve: this.assets.ghostDissolve,
+      spotlight: this.assets.ghostSpotlight
+    })
+    this.confirmMulliganOutline.setEnabled(false)
 
     this.opponentStillChoosing = new Sprite(this.assets.mulliganOpponentStillChoosing)
     applyAnchoredPlacement(
@@ -187,6 +158,12 @@ export class GameMulliganView {
     this.opponentStillChoosing.label = 'game.mulligan.opponent-still-choosing'
     this.opponentStillChoosing.visible = false
     this.layer.addChild(this.opponentStillChoosing)
+    this.opponentStillChoosingOutline = new GhostAura(this.opponentStillChoosing, {
+      noise: this.assets.burnNoise,
+      dissolve: this.assets.ghostDissolve,
+      spotlight: this.assets.ghostSpotlight
+    })
+    this.opponentStillChoosingOutline.setEnabled(false)
   }
 
   async createInitialCards(
@@ -237,15 +214,13 @@ export class GameMulliganView {
   }
 
   async present(): Promise<void> {
-    const announcement = this.layer.getChildByLabel('game.mulligan.announcement')
+    const announcement = this.announcement
     const overlay = this.layer.getChildByLabel('game.mulligan.dark-overlay')
-    const announcementOutlineTarget = this.mulliganAnnouncementOutlineTarget
-    if (!announcement || !overlay || !announcementOutlineTarget)
+    if (!announcement || !overlay)
       throw new Error('Mulligan presentation is unavailable.')
     this.mulliganAnnouncementOutline?.setEnabled(true)
     await Promise.all([
       this.fadeTo(overlay, 1, OPENING_TIMING.mulliganFade),
-      this.fadeTo(announcementOutlineTarget, 1, OPENING_TIMING.mulliganFade),
       this.fadeTo(announcement, 1, OPENING_TIMING.mulliganFade)
     ])
   }
@@ -285,9 +260,9 @@ export class GameMulliganView {
     staggerIndex = index
   ): Promise<void> {
     const midpoint = (count - 1) / 2
-    const x =
-      GAME_BOARD_LAYOUT.mulligan.cards.centerX +
-      (index - midpoint) * GAME_BOARD_LAYOUT.mulligan.cards.gap
+    const layout = GAME_BOARD_LAYOUT.mulligan.cards
+    const gap = count === 3 ? layout.threeCardGap : layout.gap
+    const x = layout.centerX + (index - midpoint) * gap
     if (this.transport.hasDrawOrigin(slot)) {
       slot.position.set(x, GAME_BOARD_LAYOUT.mulligan.cards.baselineY)
       slot.scale.set(GAME_BOARD_LAYOUT.mulligan.cards.scale)
@@ -337,9 +312,7 @@ export class GameMulliganView {
   }
 
   showConfirmed(waitingForOpponent: boolean): void {
-    const announcement = this.layer.getChildByLabel('game.mulligan.announcement')
-    if (announcement) announcement.visible = false
-    this.mulliganAnnouncementOutline?.setEnabled(false)
+    this.mulliganAnnouncementOutline?.disappear(this.layer.parent)
 
     if (!waitingForOpponent) return
     if (this.opponentStillChoosing) this.opponentStillChoosing.visible = true
@@ -347,34 +320,20 @@ export class GameMulliganView {
   }
 
   async dismiss(): Promise<void> {
-    const announcement = this.layer.getChildByLabel('game.mulligan.announcement')
     const overlay = this.layer.getChildByLabel('game.mulligan.dark-overlay')
-    const announcementOutlineTarget = this.mulliganAnnouncementOutlineTarget
-    if (!announcement || !overlay || !announcementOutlineTarget)
-      throw new Error('Mulligan presentation is unavailable.')
-    const fades = [
-      this.fadeTo(announcement, 0, OPENING_TIMING.mulliganFade),
-      this.fadeTo(announcementOutlineTarget, 0, OPENING_TIMING.mulliganFade),
-      this.fadeTo(overlay, 0, OPENING_TIMING.mulliganFade)
-    ]
-    if (this.opponentStillChoosing?.visible) {
-      fades.push(
-        this.fadeTo(this.opponentStillChoosing, 0, OPENING_TIMING.mulliganFade)
-      )
-    }
-    if (this.opponentStillChoosingOutlineTarget?.visible) {
-      fades.push(
-        this.fadeTo(
-          this.opponentStillChoosingOutlineTarget,
-          0,
-          OPENING_TIMING.mulliganFade
-        )
-      )
-    }
-    await Promise.all(fades)
-    this.mulliganAnnouncementOutline?.setEnabled(false)
-    this.opponentStillChoosingOutline?.setEnabled(false)
-    if (this.opponentStillChoosing) this.opponentStillChoosing.visible = false
+    if (!overlay) throw new Error('Mulligan presentation is unavailable.')
+    this.disappearControls()
+    await this.fadeTo(overlay, 0, OPENING_TIMING.mulliganFade)
+  }
+
+  private disappearControls(): void {
+    this.confirmButton?.setEnabled(false)
+    for (const effect of [
+      this.confirmMulliganOutline,
+      this.mulliganAnnouncementOutline,
+      this.opponentStillChoosingOutline
+    ])
+      effect?.disappear(this.layer.parent)
   }
 
   private fadeTo(

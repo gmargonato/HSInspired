@@ -50,11 +50,13 @@ function isPoisonEffect(effect: CardEffectBlock): boolean {
   )
 }
 
-/** The board Aura badge represents effects that can affect another minion. */
+/** The board Aura badge represents persistent effects that affect the board state. */
 function isBoardMinionAuraEffect(effect: CardEffectBlock): boolean {
   if (effect.trigger !== 'aura') return false
 
   return (effect.actions ?? []).some((action) => {
+    if (action.action === 'modify-hero-power-uses') return true
+
     const target = isCardEffectObject(action.target) ? action.target : undefined
     return target?.type === 'minion' && target.selection !== 'source'
   })

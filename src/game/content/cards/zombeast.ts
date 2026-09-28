@@ -49,6 +49,31 @@ export function zombeastPoolCards(
   )
 }
 
+/** Offers up to three unique Beasts, choosing Hunter or Neutral equally per slot. */
+export function zombeastPoolOffers(
+  cards: readonly CardDefinition[],
+  stage: 'first' | 'second',
+  random: () => number
+): readonly MinionCardDefinition[] {
+  const pool = zombeastPoolCards(cards, stage)
+  const hunter = pool.filter((card) => card.cardClass === 'Hunter')
+  const neutral = pool.filter((card) => card.cardClass === 'Neutral')
+  const offers: MinionCardDefinition[] = []
+
+  while (offers.length < 3 && (hunter.length > 0 || neutral.length > 0)) {
+    const preferred = random() < 0.5 ? hunter : neutral
+    const available =
+      preferred.length > 0 ? preferred : preferred === hunter ? neutral : hunter
+    const index = Math.min(
+      Math.floor(random() * available.length),
+      available.length - 1
+    )
+    offers.push(available.splice(index, 1)[0]!)
+  }
+
+  return offers
+}
+
 export function createZombeastDefinitions(
   cards: readonly CardDefinition[]
 ): readonly CardDefinition[] {

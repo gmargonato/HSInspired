@@ -70,7 +70,8 @@ for (const match of logs) {
       increment(responseFinishReasons, decision.finishReason || 'unknown')
       const isLocal =
         decision.finishReason === 'local-search' ||
-        decision.modelId === 'hardware-local-v1'
+        decision.modelId === 'hardware-local-v1' ||
+        decision.modelId === 'hardware-local-v2'
       if (isLocal) localResponses++
       else providerResponses++
       if (
