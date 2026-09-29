@@ -83,7 +83,52 @@ export const OUTLINE_LAB_LAYOUT = {
     { width: 235, height: 127 },
     { anchor: CENTER }
   ),
+  auraMinion: placement({ x: 600, y: 680 }, MINION_CANVAS, { anchor: CENTER }),
+  auraHero: placement({ x: 600, y: 680 }, HERO_CANVAS, { anchor: CENTER }),
+  auraPower: placement({ x: 600, y: 680 }, HERO_POWER_ICON_CANVAS, { anchor: CENTER }),
+  auraWeapon: placement({ x: 600, y: 680 }, WEAPON_CANVAS, { anchor: CENTER }),
+  auraDeck: placement(
+    { x: 600, y: 680 },
+    { width: 239, height: 107 },
+    { anchor: CENTER }
+  ),
+  auraPlay: placement(
+    { x: 600, y: 680 },
+    { width: 199, height: 199 },
+    { anchor: CENTER }
+  ),
   captionY: 840
+} as const
+
+/** Aura-only previews keep authored size; the scene artwork is cropped around them. */
+export const AURA_PREVIEW_LAYOUT = {
+  viewport: placement({ x: 42, y: 325 }, { width: 1116, height: 708 }),
+  center: { x: 600, y: 680 },
+  sourceCenters: {
+    card: { x: 960, y: 725 },
+    'bonus-card': { x: 960, y: 725 },
+    'deck-frame': { x: 496.5, y: 353.5 },
+    'play-button': { x: 1470, y: 930 },
+    'end-turn': { x: 1595, y: 495 },
+    'expansion-toggle': { x: 320, y: 1025 },
+    minion: { x: 960, y: 600 },
+    hero: { x: 985, y: 855 },
+    'hero-power': { x: 1160, y: 855 },
+    weapon: { x: 800, y: 855 },
+    secret: { x: 985, y: 737 },
+    quest: { x: 985, y: 737 }
+  },
+  endTurn: placement(
+    { x: 600, y: 680 },
+    { width: 157, height: 86 },
+    { anchor: CENTER }
+  ),
+  expansionToggle: placement(
+    { x: 600, y: 680 },
+    { width: 102, height: 77 },
+    { anchor: CENTER }
+  ),
+  badge: placement({ x: 600, y: 680 }, { width: 112, height: 112 }, { anchor: CENTER })
 } as const
 
 export function isInsideHandDropZone(pointer: {

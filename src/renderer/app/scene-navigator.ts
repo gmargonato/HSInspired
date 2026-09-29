@@ -84,7 +84,7 @@ function createFallbackGameRoute(
   }
 }
 
-type DevSceneId = 'card-inspector' | 'outline-lab' | 'hero-power-anim'
+type DevSceneId = 'card-inspector' | 'outline-lab' | 'hero-power-anim' | 'vfx-lab'
 type StandardSceneId = Exclude<SceneId, DevSceneId>
 type StandardSceneRequest = Exclude<SceneRequest, { readonly id: DevSceneId }>
 export type DevSceneRequest = Extract<SceneRequest, { readonly id: DevSceneId }>
@@ -136,7 +136,11 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
           deck,
           seed,
           decks,
-          import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined
+          import.meta.env.DEV ? import.meta.env.VITE_DEV_AI_DECK_ID : undefined,
+          undefined,
+          import.meta.env.DEV && 'params' in request
+            ? request.params?.curatedOpponentDeckId
+            : undefined
         ),
         dependencies.services.deckStore,
         dependencies.services.playerStatsStore,
@@ -220,7 +224,8 @@ export class SceneNavigator implements SceneRouter {
     if (
       request.id === 'card-inspector' ||
       request.id === 'outline-lab' ||
-      request.id === 'hero-power-anim'
+      request.id === 'hero-power-anim' ||
+      request.id === 'vfx-lab'
     ) {
       if (!this.createDevScene) {
         throw new Error('Development labs are available only in development builds.')
@@ -240,8 +245,18 @@ export class SceneNavigator implements SceneRouter {
       const gameParams = 'params' in request ? request.params : undefined
       const requestedDeckId = gameParams?.deckId
       const launchMode = gameParams?.launchMode
+      const curatedOpponentDeckId = import.meta.env.DEV
+        ? gameParams?.curatedOpponentDeckId
+        : undefined
+      const rememberedDeckId = curatedOpponentDeckId
+        ? (await this.services.preferences?.get())?.lastPlayedDeckId
+        : null
+      const rememberedDeck = decks.find((deck) => deck.id === rememberedDeckId)
       const targetDeckId =
         requestedDeckId ??
+        (rememberedDeck && countDeckCards(rememberedDeck) === MAX_DECK_CARDS
+          ? rememberedDeck.id
+          : undefined) ??
         decks.filter((deck) => countDeckCards(deck) === MAX_DECK_CARDS)[0]?.id
 
       if (!targetDeckId) {
@@ -268,7 +283,8 @@ export class SceneNavigator implements SceneRouter {
               ? { humanSeat: 'second' }
               : launchMode === 'skip-mulligan'
                 ? { skipMulligan: true }
-                : undefined
+                : undefined,
+          curatedOpponentDeckId
         )
       )
       return

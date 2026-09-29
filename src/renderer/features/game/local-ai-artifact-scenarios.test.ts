@@ -17,6 +17,287 @@ import type { AiDecisionRequest } from '../../../shared/ipc/ai'
 import { aiActions } from './ai-context'
 import { GameBoardSession } from './game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
+import {
+  searchTactics,
+  inspectTacticalLine
+} from '../../../game/match/ai/tactical-search'
+import { ExpertAiDecisionApi } from './expert-ai-decision-api'
+import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
+
+describe('Expert tactical priority regressions from September 29', () => {
+  const rogue = () =>
+    createSession({
+      seed: 290928,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'guldan',
+      aiMana: 10,
+      aiHealth: 10,
+      opponentHealth: 1,
+      aiWeapon: { cardId: 'basic_wicked_knife', durability: 1 },
+      aiHand: ['goblins_vs_gnomes_antique_healbot', 'naxxramas_sludge_belcher'],
+      opponentBoard: [{ cardId: 'classic_infernal' }]
+    })
+
+  it('takes the Rogue dagger win before starting a worker, even after the budget expires', async () => {
+    const session = rogue()
+    let now = 0
+    const api = new ExpertAiDecisionApi(
+      session,
+      () => {
+        throw new Error('A winning action needs no worker')
+      },
+      () => now
+    )
+    now = 100_000
+    try {
+      const choices = aiActions(session, legal(session))
+      const response = await api.decide(
+        request(
+          session,
+          'rogue-lethal',
+          choices.map((a) => a.id)
+        )
+      )
+      expect(response.usage?.decisionPriority).toBe('verified-win')
+      const selected = choices.find(
+        (a) => 'actionId' in response.choice && a.id === response.choice.actionId
+      )!
+      dispatch(session, selected.command)
+      expect(session.getState().winnerId).toBe(session.remoteParticipantId)
+    } finally {
+      api.dispose()
+    }
+  })
+
+  it('preserves terminal win classification and uses the same win in fallback', () => {
+    const session = rogue()
+    const selected = selectExpertTimeoutFallbackAction(session, legal(session))!
+    expect(
+      session.match.analyze((fork) =>
+        inspectTacticalLine(fork, session.remoteParticipantId, [selected.command])
+      ).outcome
+    ).toBe('win')
+    expect(
+      session.match.analyze((fork) =>
+        inspectTacticalLine(fork, session.remoteParticipantId, [
+          {
+            type: 'play-card',
+            participantId: session.remoteParticipantId,
+            cardInstanceId: 'missing'
+          }
+        ])
+      ).outcome
+    ).toBe('unknown')
+  })
+
+  it('finds a short winning sequence through shield, taunt and armor without mutating live state', () => {
+    const session = createSession({
+      seed: 290917,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'uther',
+      aiMana: 3,
+      aiHeroPowerCost: 1,
+      aiHand: ['basic_frostbolt'],
+      aiBoard: [{ cardId: 'basic_boulderfist_ogre', ready: true }],
+      opponentHealth: 4,
+      opponentArmor: 2,
+      opponentBoard: [{ cardId: 'mean_streets_of_gadgetzan_wickerflame_burnbristle' }]
+    })
+    const before = session.match.getCheckpoint()
+    const result = session.match.analyze((fork) =>
+      searchTactics(fork, session.remoteParticipantId)
+    )
+    expect(session.match.getCheckpoint()).toEqual(before)
+    expect(result.win?.proven).toBe(true)
+    result.win!.commands.forEach((command) => dispatch(session, command))
+    expect(session.getState().winnerId).toBe(session.remoteParticipantId)
+  })
+
+  it('does not certify sampled random damage or unknown secrets as guaranteed lethal', () => {
+    for (const options of [
+      {
+        aiHand: ['basic_arcane_missiles'],
+        opponentBoard: [{ cardId: 'basic_boulderfist_ogre' }]
+      },
+      {
+        aiHand: ['basic_fireball'],
+        opponentSecrets: [{ cardId: 'classic_ice_block', revealed: false }]
+      }
+    ]) {
+      const session = createSession({
+        seed: 29,
+        aiHeroId: 'jaina',
+        opponentHeroId: 'jaina',
+        aiMana: 4,
+        aiHeroPowerAvailable: false,
+        aiHeroPowerUsesThisTurn: 1,
+        opponentHealth: 1,
+        ...options
+      })
+      expect(
+        session.match.analyze((fork) =>
+          searchTactics(fork, session.remoteParticipantId)
+        ).win
+      ).toBeNull()
+    }
+  })
+
+  it('distinguishes loss, draw, ongoing and an exhausted analysis', () => {
+    const session = createSession({
+      seed: 29,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'guldan',
+      aiMana: 4,
+      aiHealth: 1,
+      opponentHealth: 30
+    })
+    const selfPing: TurnMatchCommand = {
+      type: 'use-hero-power',
+      participantId: session.remoteParticipantId,
+      target: { kind: 'hero', participantId: session.remoteParticipantId }
+    }
+    expect(
+      session.match.analyze((fork) =>
+        inspectTacticalLine(fork, session.remoteParticipantId, [selfPing])
+      ).outcome
+    ).toBe('loss')
+    expect(
+      session.match.analyze((fork) =>
+        inspectTacticalLine(fork, session.remoteParticipantId, [], () => true)
+      ).outcome
+    ).toBe('unknown')
+    const draw = createSession({
+      seed: 29,
+      aiHeroId: 'guldan',
+      opponentHeroId: 'jaina',
+      aiMana: 4,
+      aiHealth: 3,
+      opponentHealth: 3,
+      aiHand: ['basic_hellfire']
+    })
+    expect(
+      draw.match.analyze((fork) =>
+        inspectTacticalLine(fork, draw.remoteParticipantId, [
+          playCommand(draw, 'basic_hellfire')
+        ])
+      ).outcome
+    ).toBe('draw')
+  })
+
+  it('does not mistake a sampled Ragnaros kill for a proven terminal win', () => {
+    const session = createSession({
+      seed: 29,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'guldan',
+      opponentHealth: 1,
+      aiBoard: [{ cardId: 'classic_ragnaros_the_firelord' }],
+      opponentBoard: [{ cardId: 'basic_boulderfist_ogre' }]
+    })
+    expect(
+      session.match.analyze((fork) =>
+        inspectTacticalLine(fork, session.remoteParticipantId, [
+          { type: 'end-turn', participantId: session.remoteParticipantId }
+        ])
+      ).outcome
+    ).toBe('unknown')
+  })
+
+  it('does not certify outcomes from deck traps or triggered end-turn draws', () => {
+    for (const options of [
+      { opponentDeck: ['goblins_vs_gnomes_burrowing_mine'], opponentHealth: 5 },
+      { aiBoard: [{ cardId: 'classic_mana_tide_totem' }] }
+    ]) {
+      const session = createSession({
+        seed: 290932,
+        aiHeroId: 'thrall',
+        opponentHeroId: 'jaina',
+        ...options
+      })
+      expect(
+        session.match.analyze((fork) =>
+          inspectTacticalLine(fork, session.remoteParticipantId, [
+            { type: 'end-turn', participantId: session.remoteParticipantId }
+          ])
+        ).outcome
+      ).toBe('unknown')
+    }
+  })
+
+  it('finds public lethal by clearing Taunt first and distinguishes an exhausted reply search', () => {
+    const session = createSession({
+      seed: 290931,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'garrosh',
+      aiHealth: 3,
+      aiBoard: [{ cardId: 'basic_goldshire_footman', health: 1 }],
+      opponentBoard: [
+        { cardId: 'basic_boulderfist_ogre' },
+        { cardId: 'basic_chillwind_yeti' }
+      ]
+    })
+    const pass: TurnMatchCommand = {
+      type: 'end-turn',
+      participantId: session.remoteParticipantId
+    }
+    expect(
+      session.match.analyze((fork) =>
+        inspectTacticalLine(fork, session.remoteParticipantId, [pass])
+      ).reply
+    ).toBe('lethal')
+    expect(
+      session.match.analyze((fork) =>
+        inspectTacticalLine(fork, session.remoteParticipantId, [pass], () => false, 0)
+      ).reply
+    ).toBe('unknown')
+  })
+
+  it('plays Wyrm before Frostbolt and pings Wickerflame before killing it', async () => {
+    const session = createSession({
+      seed: 290917,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'uther',
+      aiMana: 4,
+      aiHeroPowerCost: 1,
+      aiHand: ['classic_mana_wyrm', 'basic_frostbolt'],
+      opponentHealth: 11,
+      aiBoard: [{ cardId: 'classic_azure_drake', ready: false }],
+      opponentBoard: [
+        { cardId: 'mean_streets_of_gadgetzan_wickerflame_burnbristle' },
+        { cardId: 'classic_aldor_peacekeeper' }
+      ]
+    })
+    await runAiTurn(session, 5)
+    expect(
+      opponent(session).board.some(
+        (m) => m.cardId === 'mean_streets_of_gadgetzan_wickerflame_burnbristle'
+      )
+    ).toBe(false)
+    expect(
+      aiPlayer(session).board.find((m) => m.cardId === 'classic_mana_wyrm')?.attack
+    ).toBe(2)
+  }, 30_000)
+
+  it.each([30, 6])(
+    'evaluates Thaurissan as a threat without letting removal override lethal at %i health',
+    async (health) => {
+      const session = createSession({
+        seed: 290930,
+        aiHeroId: 'jaina',
+        opponentHeroId: 'guldan',
+        aiMana: 4,
+        aiHand: ['basic_fireball'],
+        opponentHealth: health,
+        opponentHand: ['basic_boulderfist_ogre', 'basic_core_hound', 'basic_war_golem'],
+        opponentBoard: [{ cardId: 'blackrock_mountain_emperor_thaurissan' }]
+      })
+      await runAiTurn(session, 1)
+      if (health === 6)
+        expect(session.getState().winnerId).toBe(session.remoteParticipantId)
+      else expect(opponent(session).board).toHaveLength(0)
+    },
+    30_000
+  )
+})
 
 type ScenarioSession = GameBoardSession
 // Bound search work deterministically; wall-clock performance belongs in benchmarks.

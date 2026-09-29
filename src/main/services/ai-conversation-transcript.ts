@@ -190,7 +190,7 @@ export class AiConversationTranscript {
       case 'action-executed':
         return (
           heading +
-          `RESULT: ${d.accepted ? 'Accepted' : 'Rejected'}.\nSource: ${d.source === 'forced' ? 'Only legal input; no AI request needed' : d.source === 'safe-fallback' ? 'Deterministic End Turn safety fallback' : d.source === 'random-timeout' || d.source === 'random-fallback' ? 'Random fallback, not an AI decision' : 'AI decision'}.\n` +
+          `RESULT: ${d.accepted ? 'Accepted' : 'Rejected'}.\nSource: ${d.source === 'forced' ? 'Only legal input; no AI request needed' : d.source === 'safe-fallback' ? 'Deterministic local fallback' : d.source === 'random-timeout' || d.source === 'random-fallback' ? 'Random fallback, not an AI decision' : 'AI decision'}.\n` +
           this.readable(d.command) +
           '\n' +
           (d.accepted ? '' : `${d.message ?? d.reason ?? ''}\n`) +
@@ -245,7 +245,12 @@ export class AiConversationTranscript {
       case 'timeout-fallback':
         return (
           heading +
-          `TIMEOUT RANDOM FALLBACK\n${d.reason}\n${this.readable(d.command)}\nExecution is recorded separately.\n`
+          `TIMEOUT FALLBACK\n${d.reason}\n${this.readable(d.command)}\nExecution is recorded separately.\n`
+        )
+      case 'worker-fallback':
+        return (
+          heading +
+          `SEARCH WORKER FALLBACK\n${d.reason}\n${this.readable(d.command)}\nExecution is recorded separately.\n`
         )
       case 'manual-retry':
         return heading + `MANUAL RETRY\n${d.reason}\n`

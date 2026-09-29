@@ -165,7 +165,7 @@ export class HeroPowerView extends Actor {
     this.addChild(this.outlineTarget)
     this.playableOutline = new AnimatedOutline(this.outlineTarget, {
       palette: 'green',
-      preset: 'board'
+      preset: 'hero-power'
     })
     this.playableOutline.setEnabled(false)
 
@@ -188,7 +188,7 @@ export class HeroPowerView extends Actor {
     this.addChild(this.hoverOutlineTarget)
     this.hoverOutline = new AnimatedOutline(this.hoverOutlineTarget, {
       palette: 'white',
-      preset: 'board'
+      preset: 'hero-power'
     })
     this.hoverOutline.setEnabled(false)
 

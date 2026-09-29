@@ -455,7 +455,7 @@ export class MinionView extends Container {
     this.addChildAt(this.outlineProxy, this.getChildIndex(frame))
     this.attackOutline = new AnimatedOutline(this.outlineProxy, {
       palette: 'green',
-      preset: 'board',
+      preset: 'minion',
       sharedShapeKey: MINION_OUTLINE_SHAPE_KEY
     })
     this.attackOutline.setEnabled(false)
@@ -466,7 +466,7 @@ export class MinionView extends Container {
     this.addChildAt(this.targetingOutlineProxy, this.getChildIndex(frame))
     this.targetingOutline = new AnimatedOutline(this.targetingOutlineProxy, {
       palette: 'red',
-      preset: 'board',
+      preset: 'minion',
       sharedShapeKey: MINION_OUTLINE_SHAPE_KEY
     })
     this.targetingOutline.setEnabled(false)
@@ -475,7 +475,7 @@ export class MinionView extends Container {
     this.addChildAt(this.hoverOutlineProxy, this.getChildIndex(frame))
     this.hoverOutline = new AnimatedOutline(this.hoverOutlineProxy, {
       palette: 'white',
-      preset: 'board',
+      preset: 'minion',
       sharedShapeKey: MINION_OUTLINE_SHAPE_KEY
     })
     this.hoverOutline.setEnabled(false)

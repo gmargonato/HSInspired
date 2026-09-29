@@ -10,6 +10,10 @@ import {
   OPPONENT_GENERATOR_VERSION
 } from '../../../game/decks/opponent-generator'
 import {
+  CURATED_OPPONENT_DECKS,
+  CURATED_OPPONENT_CATALOG_VERSION
+} from '../../../game/decks/curated-opponent-decks'
+import {
   asPlayerId,
   createSeededRng,
   enumerateLegalCommands,
@@ -36,6 +40,7 @@ import {
   invalidatesExpertContinuation
 } from './expert-ai-decision-api'
 import { runExpertAiWorkerDecision } from './expert-ai.worker'
+import { evaluateExpertAiWorld } from './expert-ai-world-runner'
 import type {
   ExpertAiWorkerRequest,
   ExpertAiWorkerResponse
@@ -58,6 +63,9 @@ interface BenchmarkOptions {
   readonly games: number
   readonly seed: number
   readonly baseline: 'easy' | 'random'
+  readonly curated: boolean
+  readonly easyMirror: boolean
+  readonly curatedDeckIds: readonly string[]
   readonly maxActions: number
   readonly turnBudgetMs: number
   readonly workBudget?: number
@@ -132,7 +140,20 @@ interface MutableProfileMetrics {
 
 interface MatchResult {
   readonly seed: number
-  readonly expertPlayer: string
+  readonly expertPlayer: string | null
+  readonly candidateDeckId: string | null
+  readonly startingParticipantId: string
+  readonly winnerParticipantId: string | null
+  readonly decisionCoverage: readonly {
+    readonly participantId: string
+    readonly actionDecisions: number
+    readonly legalActionsOffered: number
+    readonly maximumLegalActionsOffered: number
+    readonly handCardIdsSeen: readonly string[]
+    readonly playableCardIdsOffered: readonly string[]
+    readonly playedCardIds: readonly string[]
+    readonly selectedCommandTypes: Readonly<Record<string, number>>
+  }[]
   readonly decks: readonly {
     readonly id: string
     readonly heroId: string
@@ -146,6 +167,28 @@ interface MatchResult {
   readonly turnNumber: number
   readonly invalidSelections: number
   readonly rejectedCommands: number
+}
+
+interface MutableDecisionCoverage {
+  actionDecisions: number
+  legalActionsOffered: number
+  maximumLegalActionsOffered: number
+  readonly handCardIdsSeen: Set<string>
+  readonly playableCardIdsOffered: Set<string>
+  readonly playedCardIds: string[]
+  readonly selectedCommandTypes: Record<string, number>
+}
+
+function createMutableDecisionCoverage(): MutableDecisionCoverage {
+  return {
+    actionDecisions: 0,
+    legalActionsOffered: 0,
+    maximumLegalActionsOffered: 0,
+    handCardIdsSeen: new Set(),
+    playableCardIdsOffered: new Set(),
+    playedCardIds: [],
+    selectedCommandTypes: {}
+  }
 }
 
 interface InvalidSelectionDiagnostic {
@@ -303,7 +346,10 @@ class InlineExpertWorker {
   private readonly activeApis = new Map<string, LocalAiDecisionApi[]>()
   private readonly traces: LocalAiDecisionTrace[] = []
 
-  constructor(private readonly clock: BenchmarkWorkerClock) {}
+  constructor(
+    private readonly clock: BenchmarkWorkerClock,
+    private readonly workBudget?: number
+  ) {}
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
     const listeners = this.listeners.get(type) ?? new Set()
@@ -327,7 +373,13 @@ class InlineExpertWorker {
     this.cancelled.delete(requestId)
     void runExpertAiWorkerDecision(message, {
       isCancelled: () => this.cancelled.has(requestId),
-      onApiCreated: (api) => apis.push(api),
+      evaluateWorld: (request, index, budgetMs, onProgress) =>
+        evaluateExpertAiWorld(request, index, budgetMs, {
+          isCancelled: () => this.cancelled.has(requestId),
+          onApiCreated: (api) => apis.push(api),
+          onProgress,
+          workBudget: this.workBudget
+        }),
       onWorldCompleted: (_response, trace) => {
         if (trace) this.traces.push(trace)
       }
@@ -396,14 +448,15 @@ class BenchmarkWorkerClock {
 function createExpertBenchmarkRuntime(
   session: GameBoardSession,
   perspectiveParticipantId: PlayerId,
-  turnBudgetMs: number
+  turnBudgetMs: number,
+  workBudget?: number
 ): ExpertBenchmarkRuntime {
   let worker: InlineExpertWorker | null = null
   const clock = new BenchmarkWorkerClock()
   const api = new ExpertAiDecisionApi(
     session,
     () => {
-      worker = new InlineExpertWorker(clock)
+      worker = new InlineExpertWorker(clock, workBudget)
       return worker as unknown as Worker
     },
     clock.now,
@@ -504,7 +557,9 @@ function sourceProvenance() {
     'src/renderer/features/game',
     'src/game/match',
     'src/game/content/cards',
-    'src/game/decks/opponent-generator.ts'
+    'src/game/decks/opponent-generator.ts',
+    'src/game/decks/curated-opponent-decks.ts',
+    'src/game/decks/curated-opponent-selection.ts'
   ]
   const files: string[] = []
   const visit = (absolutePath: string): void => {
@@ -1162,15 +1217,40 @@ function readOptions(): BenchmarkOptions {
           Number(process.env.LOCAL_AI_BENCHMARK_WORK_BUDGET),
           1_000_000
         )
+  const games = positiveInteger('LOCAL_AI_BENCHMARK_GAMES', 2, 100)
+  const curated = process.env.LOCAL_AI_BENCHMARK_CURATED === '1'
+  const easyMirror = process.env.LOCAL_AI_BENCHMARK_EASY_MIRROR === '1'
+  const curatedDeckIds = (
+    process.env.LOCAL_AI_BENCHMARK_DECK_IDS ?? ''
+  )
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+  const baseline = (() => {
+    const value = process.env.LOCAL_AI_BENCHMARK_BASELINE ?? 'easy'
+    if (value !== 'easy' && value !== 'random')
+      throw new Error('LOCAL_AI_BENCHMARK_BASELINE must be easy or random.')
+    if (curated && value !== 'easy')
+      throw new Error('Curated deck evaluation requires the Easy baseline.')
+    return value
+  })()
+  if (curated && !easyMirror && games !== 4)
+    throw new Error('Curated deck evaluation requires exactly four games per deck.')
+  if (easyMirror && (!curated || games !== 1))
+    throw new Error('Easy mirror checks require curated mode and exactly one game per deck.')
+  if (
+    curatedDeckIds.some(
+      (id) => !CURATED_OPPONENT_DECKS.some((candidate) => candidate.definition.id === id)
+    )
+  )
+    throw new Error('Curated deck evaluation received an unknown deck ID.')
   return {
-    games: positiveInteger('LOCAL_AI_BENCHMARK_GAMES', 2, 100),
+    games,
     seed,
-    baseline: (() => {
-      const baseline = process.env.LOCAL_AI_BENCHMARK_BASELINE ?? 'easy'
-      if (baseline !== 'easy' && baseline !== 'random')
-        throw new Error('LOCAL_AI_BENCHMARK_BASELINE must be easy or random.')
-      return baseline
-    })(),
+    baseline,
+    curated,
+    easyMirror,
+    curatedDeckIds,
     maxActions: positiveInteger('LOCAL_AI_BENCHMARK_MAX_ACTIONS', 300, 10_000),
     turnBudgetMs: positiveInteger(
       'LOCAL_AI_BENCHMARK_TURN_BUDGET_MS',
@@ -1382,37 +1462,101 @@ async function runBenchmark(options: BenchmarkOptions) {
   }
   const matches: MatchResult[] = []
   const invalidSelectionDiagnostics: InvalidSelectionDiagnostic[] = []
+  const curatedDecks = options.curated
+    ? CURATED_OPPONENT_DECKS.filter(
+        (candidate) =>
+          !options.curatedDeckIds.length ||
+          options.curatedDeckIds.includes(candidate.definition.id)
+      )
+    : []
+  if (options.curated && curatedDecks.length === 0)
+    throw new Error('Curated deck evaluation selected no catalog decks.')
+  const totalGames = options.curated
+    ? options.games * curatedDecks.length
+    : options.games
 
-  for (let gameIndex = 0; gameIndex < options.games; gameIndex++) {
-    const seed = uint32(options.seed + Math.floor(gameIndex / 2) * 0x9e3779b9)
-    const firstGenerated = generateConstructedOpponent(seed, {
-      archetypeId: 'beast-hunter'
-    })
-    const secondGenerated = generateConstructedOpponent(uint32(seed ^ 0xa511e9b3), {
-      archetypeId: 'recruit-paladin'
-    })
-    const firstDeck = { ...firstGenerated.deck, id: 'benchmark-first-' + seed }
-    const secondDeck = { ...secondGenerated.deck, id: 'benchmark-second-' + seed }
-    const expertPlayerId = gameIndex % 2 === 0 ? FIRST_ID : SECOND_ID
-    const profileByParticipant = new Map<string, LocalProfile>([
-      [FIRST_ID, expertPlayerId === FIRST_ID ? 'expert' : options.baseline],
-      [SECOND_ID, expertPlayerId === SECOND_ID ? 'expert' : options.baseline]
-    ])
-    // Keep the engine's AI-only hero-power bonus fixed to seat one so the mirrored
-    // profile assignment gives each profile the same benefit once per pair.
+  for (let gameIndex = 0; gameIndex < totalGames; gameIndex++) {
+    const candidateIndex = options.curated
+      ? Math.floor(gameIndex / options.games)
+      : -1
+    const candidateGameIndex = options.curated
+      ? gameIndex % options.games
+      : gameIndex
+    const curatedCandidate = options.curated
+      ? curatedDecks[candidateIndex]
+      : undefined
+    const seed = options.curated
+      ? uint32(
+          options.seed + (candidateGameIndex % 2) * 0x9e3779b9
+        )
+      : uint32(options.seed + Math.floor(gameIndex / 2) * 0x9e3779b9)
+    let firstDeck: ReturnType<typeof generateConstructedOpponent>['deck']
+    let secondDeck: ReturnType<typeof generateConstructedOpponent>['deck']
+    let firstArchetype: string
+    let secondArchetype: string
+    if (curatedCandidate) {
+      firstDeck = {
+        ...curatedCandidate.deck,
+        id: 'benchmark-local-' + curatedCandidate.definition.id
+      }
+      secondDeck = {
+        ...curatedCandidate.deck,
+        id: 'benchmark-remote-' + curatedCandidate.definition.id
+      }
+      firstArchetype = curatedCandidate.definition.id
+      secondArchetype = curatedCandidate.definition.id
+    } else {
+      const firstGenerated = generateConstructedOpponent(seed, {
+        archetypeId: 'beast-hunter'
+      })
+      const secondGenerated = generateConstructedOpponent(
+        uint32(seed ^ 0xa511e9b3),
+        { archetypeId: 'recruit-paladin' }
+      )
+      firstDeck = { ...firstGenerated.deck, id: 'benchmark-first-' + seed }
+      secondDeck = { ...secondGenerated.deck, id: 'benchmark-second-' + seed }
+      firstArchetype = firstGenerated.metadata.archetype
+      secondArchetype = secondGenerated.metadata.archetype
+    }
+    const expertPlayerId = options.easyMirror
+      ? null
+      : options.curated
+        ? FIRST_ID
+        : gameIndex % 2 === 0
+          ? FIRST_ID
+          : SECOND_ID
+    const profileByParticipant = options.curated
+      ? options.easyMirror
+        ? new Map<string, LocalProfile>([
+            [FIRST_ID, 'easy'],
+            [SECOND_ID, 'easy']
+          ])
+        : new Map<string, LocalProfile>([
+            [FIRST_ID, 'expert'],
+            [SECOND_ID, options.baseline]
+          ])
+      : new Map<string, LocalProfile>([
+          [FIRST_ID, expertPlayerId === FIRST_ID ? 'expert' : options.baseline],
+          [SECOND_ID, expertPlayerId === SECOND_ID ? 'expert' : options.baseline]
+        ])
+    const startingParticipantId =
+      options.curated && candidateGameIndex >= 2 ? SECOND_ID : FIRST_ID
+    // Curated runs disable this AI-only bonus; the generated mirror keeps it fixed
+    // to seat one so each profile receives the same benefit once per pair.
     const setup: MatchSetup = {
       seed,
-      startingParticipantId: FIRST_ID,
+      startingParticipantId,
+      ...(options.curated ? { aiHeroPowerBonusEnabled: false } : {}),
       participants: [
         {
           participantId: FIRST_ID,
-          controllerKind: 'ai',
+          controllerKind: options.curated ? 'human' : 'ai',
           heroId: firstDeck.heroId,
           deckId: firstDeck.id
         },
         {
           participantId: SECOND_ID,
-          controllerKind: 'human',
+          controllerKind: options.curated ? 'ai' : 'human',
           heroId: secondDeck.heroId,
           deckId: secondDeck.id
         }
@@ -1420,13 +1564,23 @@ async function runBenchmark(options: BenchmarkOptions) {
     }
     const liveSession = new GameBoardSession({
       setup,
-      decks: [firstDeck, secondDeck]
+      decks: [firstDeck, secondDeck],
+      ...(curatedCandidate ? { opponentStrategy: curatedCandidate.strategy } : {})
     })
-    const expertRuntime = createExpertBenchmarkRuntime(
-      liveSession,
-      expertPlayerId,
-      options.turnBudgetMs
-    )
+    const expertRuntime = expertPlayerId
+      ? createExpertBenchmarkRuntime(
+          liveSession,
+          expertPlayerId,
+          options.turnBudgetMs,
+          options.workBudget
+        )
+      : null
+    const decisionCoverageByParticipant = new Map<string, MutableDecisionCoverage>([
+      [FIRST_ID, createMutableDecisionCoverage()],
+      [SECOND_ID, createMutableDecisionCoverage()]
+    ])
+    const decisionClock = (profile: LocalProfile): number =>
+      profile === 'expert' ? expertRuntime!.now() : performance.now()
     const profileById = profileByParticipant as ReadonlyMap<string, LocalProfile>
     const currentTurnStart = new Map<string, number>()
     const currentTurnKey = new Map<string, string>()
@@ -1479,6 +1633,11 @@ async function runBenchmark(options: BenchmarkOptions) {
         if (!player)
           throw new Error('Benchmark match is stuck before mulligan completion.')
         const profile = profileByParticipant.get(player.participantId)!
+        const mulliganCoverage = decisionCoverageByParticipant.get(
+          player.participantId
+        )!
+        for (const card of player.hand)
+          mulliganCoverage.handCardIdsSeen.add(card.cardId)
         const started = performance.now()
         let outcome: DecisionOutcome
         const request: AiDecisionRequest = {
@@ -1499,7 +1658,7 @@ async function runBenchmark(options: BenchmarkOptions) {
             workBudget: options.workBudget,
             phase: 'mulligan',
             liveSession,
-            expertRuntime
+            expertRuntime: expertRuntime ?? undefined
           })
         } catch {
           outcome = {
@@ -1586,7 +1745,7 @@ async function runBenchmark(options: BenchmarkOptions) {
         currentTurnKey.set(participantId, turnKey)
         currentTurnStart.set(
           participantId,
-          profile === 'expert' ? expertRuntime.now() : performance.now()
+          decisionClock(profile)
         )
         currentTurnActions.set(participantId, 0)
         currentTurnWorkerMs.set(participantId, 0)
@@ -1597,9 +1756,28 @@ async function runBenchmark(options: BenchmarkOptions) {
         throw new Error(
           'No legal command for ' + participantId + ' on turn ' + state.turnNumber + '.'
         )
+      const currentPlayerState = state.players.find(
+        (player) => player.participantId === participantId
+      )!
+      const decisionCoverage = decisionCoverageByParticipant.get(participantId)!
+      for (const card of currentPlayerState.hand)
+        decisionCoverage.handCardIdsSeen.add(card.cardId)
+      decisionCoverage.actionDecisions++
       const actionIds = aiActions(liveSession, liveLegal, participantId).map(
         (action) => action.id
       )
+      decisionCoverage.legalActionsOffered += actionIds.length
+      decisionCoverage.maximumLegalActionsOffered = Math.max(
+        decisionCoverage.maximumLegalActionsOffered,
+        actionIds.length
+      )
+      for (const candidateCommand of liveLegal) {
+        if (candidateCommand.type !== 'play-card') continue
+        const card = currentPlayerState.hand.find(
+          (entry) => entry.instanceId === candidateCommand.cardInstanceId
+        )
+        if (card) decisionCoverage.playableCardIdsOffered.add(card.cardId)
+      }
       const request: AiDecisionRequest = {
         matchId: 'local-ai-benchmark-' + seed + '-' + gameIndex,
         requestId: 'benchmark-action-' + gameIndex + '-' + state.revision,
@@ -1609,8 +1787,7 @@ async function runBenchmark(options: BenchmarkOptions) {
         messages: [],
         actionIds
       }
-      const decisionStarted =
-        profile === 'expert' ? expertRuntime.now() : performance.now()
+      const decisionStarted = decisionClock(profile)
       let outcome: DecisionOutcome
       try {
         outcome = await decideProfile({
@@ -1620,7 +1797,7 @@ async function runBenchmark(options: BenchmarkOptions) {
           checkpoint: liveSession.match.getCheckpoint(),
           workBudget: options.workBudget,
           liveSession,
-          expertRuntime,
+          expertRuntime: expertRuntime ?? undefined,
           planBeforeAction:
             profile === 'expert' && expertPlannedTurn !== state.turnNumber,
           phase: 'action',
@@ -1635,9 +1812,7 @@ async function runBenchmark(options: BenchmarkOptions) {
           failed: true
         }
       }
-      const decisionElapsedMs =
-        (profile === 'expert' ? expertRuntime.now() : performance.now()) -
-        decisionStarted
+      const decisionElapsedMs = decisionClock(profile) - decisionStarted
       if (outcome.actionSource !== 'forced') {
         recordDecision(profileMetrics[profile], decisionElapsedMs, outcome)
         currentTurnWorkerMs.set(
@@ -1716,6 +1891,14 @@ async function runBenchmark(options: BenchmarkOptions) {
       }
       if (!result.accepted)
         throw new Error('Benchmark action fallback was rejected: ' + result.message)
+      decisionCoverage.selectedCommandTypes[command.type] =
+        (decisionCoverage.selectedCommandTypes[command.type] ?? 0) + 1
+      if (command.type === 'play-card') {
+        const card = currentPlayerState.hand.find(
+          (entry) => entry.instanceId === command.cardInstanceId
+        )
+        if (card) decisionCoverage.playedCardIds.push(card.cardId)
+      }
       recordActionSource(profileMetrics[profile], actionSource, fallbackKind)
       if (profile === 'expert' && invalidatesExpertContinuation(result.events))
         profileMetrics.expert.continuationInvalidations++
@@ -1740,45 +1923,69 @@ async function runBenchmark(options: BenchmarkOptions) {
         finishTurn(
           participantId,
           state.turnNumber,
-          (profile === 'expert' ? expertRuntime.now() : performance.now()) - turnStarted
+          decisionClock(profile) - turnStarted
         )
       } else if (result.state.phase === 'ended') {
         finishTurn(
           participantId,
           state.turnNumber,
-          (profile === 'expert' ? expertRuntime.now() : performance.now()) - turnStarted
+          decisionClock(profile) - turnStarted
         )
       }
     }
 
-    expertRuntime.api.dispose()
+    expertRuntime?.api.dispose()
 
     const finalState = liveSession.getState()
     const complete = finalState.phase === 'ended'
     if (!complete) {
       capped = true
-      for (const profile of ['expert', options.baseline] as const)
-        profileMetrics[profile].cappedGames++
+      if (options.easyMirror) profileMetrics.easy.cappedGames += 2
+      else
+        for (const profile of ['expert', options.baseline] as const)
+          profileMetrics[profile].cappedGames++
     }
     const winner = complete ? profileForWinner(finalState.winnerId, profileById) : null
-    if (winner) {
+    if (options.easyMirror) {
+      if (winner) {
+        profileMetrics.easy.wins++
+        profileMetrics.easy.losses++
+      } else if (complete) profileMetrics.easy.draws += 2
+    } else if (winner) {
       profileMetrics[winner].wins++
       profileMetrics[winner === 'expert' ? options.baseline : 'expert'].losses++
     } else if (complete) {
       profileMetrics[options.baseline].draws++
       profileMetrics.expert.draws++
     }
+    const decisionCoverage = [FIRST_ID, SECOND_ID].map((participantId) => {
+      const coverage = decisionCoverageByParticipant.get(participantId)!
+      return {
+        participantId,
+        actionDecisions: coverage.actionDecisions,
+        legalActionsOffered: coverage.legalActionsOffered,
+        maximumLegalActionsOffered: coverage.maximumLegalActionsOffered,
+        handCardIdsSeen: [...coverage.handCardIdsSeen].sort(),
+        playableCardIdsOffered: [...coverage.playableCardIdsOffered].sort(),
+        playedCardIds: [...coverage.playedCardIds],
+        selectedCommandTypes: { ...coverage.selectedCommandTypes }
+      }
+    })
     matches.push({
       seed,
       expertPlayer: expertPlayerId,
+      candidateDeckId: curatedCandidate?.definition.id ?? null,
+      startingParticipantId,
+      winnerParticipantId: finalState.winnerId ?? null,
+      decisionCoverage,
       decks: [
         {
           ...deckManifest(firstDeck),
-          archetype: firstGenerated.metadata.archetype
+          archetype: firstArchetype
         },
         {
           ...deckManifest(secondDeck),
-          archetype: secondGenerated.metadata.archetype
+          archetype: secondArchetype
         }
       ],
       status: capped ? 'capped' : winner ? 'completed' : 'draw',
@@ -1793,11 +2000,14 @@ async function runBenchmark(options: BenchmarkOptions) {
     process.stderr.write(
       'LOCAL_AI_BENCHMARK_GAME ' +
         JSON.stringify({
-          completed: gameIndex + 1,
-          total: options.games,
+        completed: gameIndex + 1,
+          total: totalGames,
           match: {
             seed,
+            candidateDeckId: curatedCandidate?.definition.id ?? null,
+            startingParticipantId,
             expertPlayer: matches[matches.length - 1]!.expertPlayer,
+            winnerParticipantId: matches[matches.length - 1]!.winnerParticipantId,
             status: matches[matches.length - 1]!.status,
             winner,
             actions,
@@ -1805,7 +2015,8 @@ async function runBenchmark(options: BenchmarkOptions) {
             invalidSelections: gameInvalidSelectionDiagnostics.length,
             rejectedCommands: gameInvalidSelectionDiagnostics.filter(
               (diagnostic) => diagnostic.source === 'rejected-command'
-            ).length
+            ).length,
+            decisionCoverage
           }
         }) +
         '\n'
@@ -1942,18 +2153,77 @@ async function runBenchmark(options: BenchmarkOptions) {
     }
   }
 
+  const deckScores = options.curated && !options.easyMirror
+    ? curatedDecks.map((candidate) => {
+        const candidateMatches = matches.filter(
+          (match) => match.candidateDeckId === candidate.definition.id
+        )
+        const count = (startingWithExpert: boolean) => {
+          const subset = candidateMatches.filter(
+            (match) =>
+              (match.startingParticipantId === FIRST_ID) === startingWithExpert
+          )
+          return {
+            games: subset.length,
+            wins: subset.filter((match) => match.winner === 'expert').length,
+            losses: subset.filter((match) => match.winner === 'easy').length,
+            draws: subset.filter((match) => match.status === 'draw').length,
+            capped: subset.filter((match) => match.status === 'capped').length
+          }
+        }
+        const wins = candidateMatches.filter(
+          (match) => match.winner === 'expert'
+        ).length
+        const losses = candidateMatches.filter(
+          (match) => match.winner === 'easy'
+        ).length
+        const draws = candidateMatches.filter(
+          (match) => match.status === 'draw'
+        ).length
+        const capped = candidateMatches.filter(
+          (match) => match.status === 'capped'
+        ).length
+        const scorePoints = wins + draws / 2
+        return {
+          deckId: candidate.definition.id,
+          deckName: candidate.definition.name,
+          classId: candidate.definition.classId,
+          source: candidate.definition.source.title,
+          games: candidateMatches.length,
+          wins,
+          losses,
+          draws,
+          capped,
+          scorePoints,
+          scoreOutOfFour:
+            candidateMatches.length === 4 && capped === 0
+              ? scorePoints
+              : null,
+          expertStartsFirst: count(true),
+          easyStartsFirst: count(false)
+        }
+      })
+    : []
+
   clearInterval(memorySampler)
   sampleMemory()
   const endingMemory = process.memoryUsage()
   return {
-    benchmark: 'local-ai-midrange-vs-baseline',
-    benchmarkVersion: 7,
-    generatorVersion: OPPONENT_GENERATOR_VERSION,
+    benchmark: options.easyMirror
+      ? 'local-ai-curated-easy-mirror-capability'
+      : options.curated
+        ? 'local-ai-curated-deck-mirror-screen'
+        : 'local-ai-midrange-vs-baseline',
+    benchmarkVersion: 8,
+    generatorVersion: options.curated ? null : OPPONENT_GENERATOR_VERSION,
+    catalogVersion: options.curated ? CURATED_OPPONENT_CATALOG_VERSION : null,
     configuration: options,
     source: provenance,
-    pairedWinRate: pairedWinRate(matches),
-    measurement:
-      'Headless domain simulation. Expert hidden-world searches run serially in Vitest, while their turn-time budget models concurrent workers using the slowest world duration. Includes actual benchmark wall time; excludes nested worker startup, Pixi rendering, and animations.',
+    pairedWinRate: options.curated ? null : pairedWinRate(matches),
+    deckScores,
+    measurement: options.easyMirror
+      ? 'Headless domain simulation with two Easy decision agents and curated AI hero-power bonuses disabled. Per-player action coverage records legal choices offered, distinct hand cards seen, playable cards offered, and cards played. Includes actual benchmark wall time; excludes Pixi rendering and animations.'
+      : 'Headless domain simulation. Expert hidden-world searches run serially in Vitest, while their turn-time budget models concurrent workers using the slowest world duration. Includes actual benchmark wall time; excludes nested worker startup, Pixi rendering, and animations.',
     runtime: {
       benchmarkWallTimeMs: Math.round(performance.now() - benchmarkStartedAt),
       nodeVersion: process.version,
@@ -1982,36 +2252,94 @@ async function runBenchmark(options: BenchmarkOptions) {
 }
 
 describe.skipIf(!ENABLED)('local AI matchup benchmark', () => {
-  it('compares seeded Midrange matches with a mirrored baseline assignment', async () => {
-    const options = readOptions()
-    const result = await runBenchmark(options)
-    const expert = result.profiles.expert
-    console.log(
-      'LOCAL_AI_BENCHMARK_SUMMARY ' +
-        JSON.stringify({
-          configuration: result.configuration,
-          pairedWinRate: result.pairedWinRate,
-          runtimeMs: result.runtime.benchmarkWallTimeMs,
-          expert: {
-            wins: expert.wins,
-            losses: expert.losses,
-            draws: expert.draws,
-            invalidSelections: expert.invalidSelections,
-            rejectedCommands: expert.rejectedCommands,
-            turnBudgetViolations: expert.turnBudgetViolations,
-            meanDecisionMs: expert.decisionLatency.meanMs,
-            meanFullTurnMs: expert.fullTurnLatency.meanMs
-          }
-        })
-    )
-    console.log('LOCAL_AI_BENCHMARK_JSON ' + JSON.stringify(result))
-    expect(result.matches).toHaveLength(options.games)
-    if (options.workBudget === undefined && options.maxActions >= 300) {
-      expect(result.matches.every((match) => match.status !== 'capped')).toBe(true)
-      expect(result.profiles.expert.invalidSelections).toBe(0)
-      expect(result.profiles.expert.rejectedCommands).toBe(0)
-      expect(result.profiles.expert.turnBudgetViolations).toBe(0)
-      expect(result.profiles.expert.actionSources.fallbackRate ?? 0).toBeLessThan(0.05)
-    }
-  }, 3_600_000)
+  it(
+    process.env.LOCAL_AI_BENCHMARK_EASY_MIRROR === '1'
+      ? 'checks curated deck capability with Easy mirror matches'
+      : 'compares seeded local Expert matches against the Easy remote baseline',
+    async () => {
+      const options = readOptions()
+      const result = await runBenchmark(options)
+      const expert = result.profiles.expert
+      console.log(
+        'LOCAL_AI_BENCHMARK_SUMMARY ' +
+          JSON.stringify({
+            configuration: result.configuration,
+            pairedWinRate: result.pairedWinRate,
+            runtimeMs: result.runtime.benchmarkWallTimeMs,
+            expert: {
+              wins: expert.wins,
+              losses: expert.losses,
+              draws: expert.draws,
+              invalidSelections: expert.invalidSelections,
+              rejectedCommands: expert.rejectedCommands,
+              turnBudgetViolations: expert.turnBudgetViolations,
+              meanDecisionMs: expert.decisionLatency.meanMs,
+              meanFullTurnMs: expert.fullTurnLatency.meanMs
+            }
+          })
+      )
+      if (options.curated && !options.easyMirror)
+        console.log('LOCAL_AI_CURATED_DECK_SCORES ' + JSON.stringify(result.deckScores))
+      if (options.easyMirror)
+        console.log(
+          'LOCAL_AI_EASY_MIRROR_RESULTS ' +
+            JSON.stringify({
+              runtimeMs: result.runtime.benchmarkWallTimeMs,
+              easy: {
+                decisions: result.profiles.matchup.decisions,
+                commands: result.profiles.matchup.commands,
+                invalidSelections: result.profiles.matchup.invalidSelections,
+                rejectedCommands: result.profiles.matchup.rejectedCommands
+              },
+              matches: result.matches
+            })
+        )
+      console.log('LOCAL_AI_BENCHMARK_JSON ' + JSON.stringify(result))
+      expect(result.matches).toHaveLength(
+        options.games *
+          (options.curated
+            ? options.easyMirror
+              ? options.curatedDeckIds.length || CURATED_OPPONENT_DECKS.length
+              : result.deckScores.length
+            : 1)
+      )
+      if (options.curated && !options.easyMirror) {
+        expect(result.deckScores).toHaveLength(
+          options.curatedDeckIds.length || CURATED_OPPONENT_DECKS.length
+        )
+        expect(
+          result.deckScores.every(
+            (deck) =>
+              deck.games === 4 &&
+              deck.expertStartsFirst.games === 2 &&
+              deck.easyStartsFirst.games === 2
+          )
+        ).toBe(true)
+      }
+      if (options.easyMirror) {
+        expect(result.matches.every((match) => match.status !== 'capped')).toBe(true)
+        expect(result.matches.every((match) => match.invalidSelections === 0)).toBe(true)
+        expect(result.matches.every((match) => match.rejectedCommands === 0)).toBe(true)
+        expect(
+          result.matches.every(
+            (match) =>
+              match.decisionCoverage.length === 2 &&
+              match.decisionCoverage.every(
+                (coverage) => coverage.actionDecisions > 0
+              )
+          )
+        ).toBe(true)
+      }
+      if (options.workBudget === undefined && options.maxActions >= 300) {
+        expect(result.matches.every((match) => match.status !== 'capped')).toBe(true)
+        expect(result.profiles.expert.invalidSelections).toBe(0)
+        expect(result.profiles.expert.rejectedCommands).toBe(0)
+        expect(result.profiles.expert.turnBudgetViolations).toBe(0)
+        expect(result.profiles.expert.actionSources.fallbackRate ?? 0).toBeLessThan(
+          0.05
+        )
+      }
+    },
+    process.env.LOCAL_AI_BENCHMARK_CURATED === '1' ? 12 * 3_600_000 : 3_600_000
+  )
 })

@@ -1,3 +1,7 @@
+import type { Texture } from 'pixi.js'
+import { GameLoadingView } from '../features/game/game-loading-view'
+import { OPENING_TIMING } from '../features/game/game-presentation-timing'
+import { selectRandomBoardTexture } from '../features/game/board-selection'
 import { prewarmShatter } from '../rendering/effects/shatter'
 import type { AppLogger, DialogService } from '../app/services'
 import type { AppRoute, GameRoute, SceneRouter } from '../app/router'
@@ -9,6 +13,9 @@ import { createMatchSeed } from '../features/deck-selection/deck-selection-model
 import { createRestartGameRoute } from '../features/game/game-route'
 import {
   ASSET_BUNDLE_IDS,
+  GAME_BOARD_BUNDLE_IDS,
+  type GameBoardAssets,
+  type GameLoadingAssets,
   type DeckPresentationAssets,
   type GameAssets
 } from '../ui/asset-registry'
@@ -37,7 +44,8 @@ import {
 } from '../features/game/ai-turn-controller'
 import { MatchRecorder, logObject } from '../features/game/match-recorder'
 import type { MatchLogsApi } from '../../shared/ipc/match-logs'
-import type { PreferencesApi, AiMode } from '../../shared/ipc/preferences'
+import type { PreferencesApi, Preferences } from '../../shared/ipc/preferences'
+import type { ExpertDeckStrategyBinding } from '../../game/decks/expert-deck-strategy'
 import { ExpertAiDecisionApi } from '../features/game/expert-ai-decision-api'
 import { LocalAiDecisionApi } from '../features/game/local-ai-decision-api'
 
@@ -50,6 +58,8 @@ export class GameScene extends Scene {
   private readonly route: GameRoute
   private readonly logger?: AppLogger
   private view: GameBoardView | null = null
+  private loadingView: GameLoadingView | null = null
+  private boardTexture?: Texture
   private expertAiApi: ExpertAiDecisionApi | null = null
   private recorder?: MatchRecorder
   private readonly rewardMatchId = crypto.randomUUID()
@@ -80,8 +90,20 @@ export class GameScene extends Scene {
   }
 
   async init(): Promise<void> {
+    const restoreCursor = this.sceneManager.cursor?.suppressVisibility()
     try {
+      await this.showLoadingScreen()
       await this.initMatch()
+      await this.reportLoading(1)
+      await new Promise<void>((resolve) => {
+        this.tweenTo(this.loadingView!, {
+          alpha: 0,
+          duration: OPENING_TIMING.loadingOverlayFade,
+          ease: 'sine.inOut',
+          onComplete: resolve,
+          onInterrupt: resolve
+        })
+      })
     } catch (error) {
       this.recorder?.record('events', 'error', {
         message: 'Match initialization failed.',
@@ -89,7 +111,34 @@ export class GameScene extends Scene {
       })
       this.recorder?.finish('interrupted')
       throw error
+    } finally {
+      this.loadingView?.destroy({ children: true })
+      this.loadingView = null
+      restoreCursor?.()
     }
+  }
+
+  private async showLoadingScreen(): Promise<void> {
+    const boardBundle = selectRandomBoardTexture(GAME_BOARD_BUNDLE_IDS)
+    // Settle both acquisitions before failure cleanup releases the scene's scope.
+    const results = await Promise.allSettled([
+      this.assetScope.acquire<GameBoardAssets>(boardBundle),
+      this.assetScope.acquire<GameLoadingAssets>(ASSET_BUNDLE_IDS.gameLoading)
+    ])
+    const [boardResult, loadingResult] = results
+    if (boardResult.status === 'rejected') throw boardResult.reason
+    if (loadingResult.status === 'rejected') throw loadingResult.reason
+    const board = boardResult.value
+    const loading = loadingResult.value
+    this.boardTexture = board.board
+    this.loadingView = new GameLoadingView(board.board, loading.overlay)
+    this.root.addChild(this.loadingView)
+    this.sceneManager.presentLoadingRoot?.(this.root)
+    await this.reportLoading(0.03)
+  }
+
+  private async reportLoading(progress: number): Promise<void> {
+    await this.loadingView?.report(progress)
   }
 
   private async initMatch(): Promise<void> {
@@ -117,7 +166,21 @@ export class GameScene extends Scene {
       decks.map((d) => `${d.id} — ${d.heroId}`)
     )
 
-    const aiMode = await this.readAiMode()
+    const aiPreferences = await this.readAiPreferences()
+    const aiMode = aiPreferences.aiMode
+    const strategyEnabled = aiPreferences.expertDeckStrategyEnabled !== false
+    const profileId = this.route.curatedOpponent?.expertStrategyProfileId
+    const aiParticipantId = this.route.setup.participants.find(
+      (participant) => participant.controllerKind === 'ai'
+    )?.participantId
+    const deckStrategy: ExpertDeckStrategyBinding | undefined =
+      aiMode === 'hardware-v2' &&
+      strategyEnabled &&
+      !this.route.mode &&
+      profileId &&
+      aiParticipantId
+        ? { participantId: aiParticipantId, profileId, version: 1 }
+        : undefined
     const matchRoute: GameRoute = {
       ...this.route,
       setup: {
@@ -129,11 +192,19 @@ export class GameScene extends Scene {
       this.matchLogs,
       logObject({
         mode: this.route.mode ?? 'standard',
-        ...(this.route.generatedOpponent
-          ? { generatedOpponent: this.route.generatedOpponent }
+        ...(this.route.curatedOpponent
+          ? { curatedOpponent: this.route.curatedOpponent }
           : {}),
         aiRuntimeSettings: { ...AI_CONVERSATION_LIMITS },
-        aiMode
+        aiMode,
+        expertDeckStrategy: {
+          enabled: strategyEnabled,
+          applied: Boolean(deckStrategy),
+          profileId: deckStrategy?.profileId ?? null,
+          version: deckStrategy?.version ?? null,
+          deckId: this.route.curatedOpponent?.deckId ?? null
+        },
+        aiHeroPowerBonusEnabled: matchRoute.setup.aiHeroPowerBonusEnabled
       }),
       this.reportLogError
     )
@@ -147,7 +218,8 @@ export class GameScene extends Scene {
     const aiSession = new GameBoardSession({
       setup: matchRoute.setup,
       decks,
-      opponentStrategy: this.route.generatedOpponent?.strategy,
+      opponentStrategy: this.route.curatedOpponent?.strategy,
+      opponentDeckStrategy: deckStrategy,
       recorder: this.recorder
     })
     let aiApi: AiDecisionApi | undefined
@@ -170,17 +242,22 @@ export class GameScene extends Scene {
         : {})
     })
 
+    await this.reportLoading(0.08)
     const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
     this.logger?.info('[GameScene] game assets acquired')
+    await this.reportLoading(0.2)
     const heroAssets = await this.assetScope.acquire<DeckPresentationAssets>(
       ASSET_BUNDLE_IDS.deckPresentation
     )
     this.logger?.info('[GameScene] hero assets acquired')
+    await this.reportLoading(0.26)
     await this.assetScope.acquire(ASSET_BUNDLE_IDS.cardRendering)
     this.logger?.info('[GameScene] card rendering bundle acquired')
+    await this.reportLoading(0.34)
 
     await this.waitForFonts()
     this.logger?.info('[GameScene] fonts ready')
+    await this.reportLoading(0.38)
 
     // Building the shared minion outline field is a GPU readback plus a large
     // CPU transform; pay it during load instead of on the first outline in play.
@@ -191,6 +268,7 @@ export class GameScene extends Scene {
       this.logger?.warn('[GameScene] minion outline prebuild failed', error)
     }
 
+    await this.reportLoading(0.43)
     try {
       prewarmShatter(this.appInstance.renderer)
     } catch (error) {
@@ -198,7 +276,10 @@ export class GameScene extends Scene {
       this.logger?.warn('[GameScene] shatter warm-up failed', error)
     }
 
+    await this.reportLoading(0.46)
     this.view = new GameBoardView({
+      boardTexture: this.boardTexture,
+      onLoadProgress: (progress) => this.reportLoading(0.46 + progress * 0.52),
       route: matchRoute,
       decks,
       gameAssets,
@@ -216,7 +297,7 @@ export class GameScene extends Scene {
     try {
       await this.view.mount()
       this.logger?.info('[GameScene] view mounted')
-      this.root.addChild(this.view)
+      this.root.addChildAt(this.view, 0)
       this.logger?.info('[GameScene] view added to root')
     } catch (error) {
       this.logger?.error('[GameScene] view mount failed', error)
@@ -226,16 +307,16 @@ export class GameScene extends Scene {
     }
   }
 
-  private async readAiMode(): Promise<AiMode> {
+  private async readAiPreferences(): Promise<Preferences> {
     const preferences =
       this.preferences ??
       (typeof window !== 'undefined' ? window.api?.preferences : undefined)
-    if (!preferences) return 'api'
+    if (!preferences) return { lastPlayedDeckId: null, aiMode: 'api' }
     try {
-      return (await preferences.get()).aiMode
+      return await preferences.get()
     } catch (error) {
       this.logger?.warn('[GameScene] AI mode preference unavailable; using API.', error)
-      return 'api'
+      return { lastPlayedDeckId: null, aiMode: 'api' }
     }
   }
 

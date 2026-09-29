@@ -22,9 +22,10 @@ function deck(id: string, heroId: string): Deck {
   }
 }
 
-function createStartedMatch() {
+function createStartedMatch(roll = 0.1) {
   const setup: MatchSetup = {
     seed: 1,
+    startingParticipantId: HUMAN_ID,
     participants: [
       {
         participantId: HUMAN_ID,
@@ -43,7 +44,7 @@ function createStartedMatch() {
   const match = createOpeningMatch(
     setup,
     [deck('human-deck', 'rexxar'), deck('opponent-deck', 'jaina')],
-    { next: () => 0.1, snapshot: () => 0, restore: () => undefined }
+    { next: () => roll, snapshot: () => 0, restore: () => undefined }
   )
   accept(
     match.dispatch({
@@ -63,6 +64,213 @@ function createStartedMatch() {
 }
 
 describe('dev deck commands', () => {
+  it('sets cost even when the remote player has a startup cost override', () => {
+    const match = createStartedMatch(0.7)
+    expect(match.getState().players[1].heroPowerCostOverride).toBe(1)
+    accept(
+      match.dispatch({
+        type: 'dev-set-hero-power',
+        participantId: OPPONENT_ID,
+        cost: 3
+      })
+    )
+    expect(match.getState().players[1].heroPower.cost).toBe(3)
+    accept(
+      match.dispatch({
+        type: 'dev-set-hero-power',
+        participantId: OPPONENT_ID,
+        available: true
+      })
+    )
+    expect(match.getState().players[1].heroPower.cost).toBe(3)
+  })
+
+  it('resets a used hero power for another paid use in the same turn', () => {
+    const match = createStartedMatch()
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: HUMAN_ID,
+        available: 10,
+        maximum: 10
+      })
+    )
+    accept(match.dispatch({ type: 'use-hero-power', participantId: HUMAN_ID }))
+    expect(match.getLegality!(HUMAN_ID).legalHeroPower).toBe(false)
+    const before = match.getState()
+    const reset = match.dispatch({
+      type: 'dev-set-hero-power',
+      participantId: HUMAN_ID,
+      available: true
+    })
+    accept(reset)
+    expect(reset.state.players[0].heroPower).toMatchObject({
+      available: true,
+      usesThisTurn: 0
+    })
+    expect(reset.state.players[0].mana).toEqual(before.players[0].mana)
+    expect(reset.state.players[1]).toEqual(before.players[1])
+    expect(match.getLegality!(HUMAN_ID).legalHeroPower).toBe(true)
+    accept(match.dispatch({ type: 'use-hero-power', participantId: HUMAN_ID }))
+    expect(match.getState().players[0].mana.available).toBe(6)
+  })
+
+  it.each([
+    [undefined, 1],
+    ['the_grand_tournament_garrison_commander', 2],
+    ['the_grand_tournament_coldarra_drake', 99]
+  ] as const)(
+    'consumes the current allowance with %s and survives recalculation',
+    (cardId, limit) => {
+      const match = createStartedMatch()
+      accept(
+        match.dispatch({
+          type: 'dev-set-mana',
+          participantId: HUMAN_ID,
+          available: 10,
+          maximum: 10
+        })
+      )
+      if (cardId)
+        accept(
+          match.dispatch({ type: 'dev-summon-minion', participantId: HUMAN_ID, cardId })
+        )
+      accept(
+        match.dispatch({
+          type: 'dev-set-hero-power',
+          participantId: HUMAN_ID,
+          available: false
+        })
+      )
+      expect(match.getState().players[0].heroPower).toMatchObject({
+        available: false,
+        usesThisTurn: limit
+      })
+      expect(match.getLegality!(HUMAN_ID).legalHeroPower).toBe(false)
+      accept(
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: HUMAN_ID,
+          cardId: 'basic_acidic_swamp_ooze'
+        })
+      )
+      expect(
+        match.dispatch({ type: 'use-hero-power', participantId: HUMAN_ID })
+      ).toMatchObject({ accepted: false, code: 'hero-power-unavailable' })
+      accept(
+        match.dispatch({
+          type: 'dev-set-hero-power',
+          participantId: HUMAN_ID,
+          available: true
+        })
+      )
+      expect(match.getLegality!(HUMAN_ID).legalHeroPower).toBe(true)
+    }
+  )
+
+  it('preserves normal restrictions and only resets the selected player', () => {
+    const match = createStartedMatch()
+    const local = match.getState().players[0]
+    accept(
+      match.dispatch({
+        type: 'dev-set-hero-power',
+        participantId: OPPONENT_ID,
+        available: false
+      })
+    )
+    expect(match.getState().players[0]).toEqual(local)
+    expect(match.getState().players[1].heroPower.available).toBe(false)
+    accept(
+      match.dispatch({
+        type: 'dev-set-hero-power',
+        participantId: OPPONENT_ID,
+        available: true
+      })
+    )
+    expect(match.getState().players[1].heroPower.available).toBe(true)
+    expect(match.getLegality!(OPPONENT_ID).legalHeroPower).toBe(false)
+    accept(
+      match.dispatch({
+        type: 'dev-set-hero-power',
+        participantId: HUMAN_ID,
+        available: true
+      })
+    )
+    expect(match.getLegality!(HUMAN_ID).legalHeroPower).toBe(false)
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: HUMAN_ID,
+        available: 10,
+        maximum: 10
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: OPPONENT_ID,
+        cardId: 'knights_of_the_frozen_throne_mindbreaker'
+      })
+    )
+    const reset = match.dispatch({
+      type: 'dev-set-hero-power',
+      participantId: HUMAN_ID,
+      available: true
+    })
+    accept(reset)
+    expect(reset.state.players[0].heroPower).toMatchObject({
+      available: false,
+      usesThisTurn: 0
+    })
+    expect(match.getLegality!(HUMAN_ID).legalHeroPower).toBe(false)
+  })
+
+  it('changes cost independently of usage and preserves discounted base cost on reset', () => {
+    const match = createStartedMatch()
+    accept(
+      match.dispatch({
+        type: 'dev-set-hero-power',
+        participantId: HUMAN_ID,
+        available: false
+      })
+    )
+    accept(
+      match.dispatch({ type: 'dev-set-hero-power', participantId: HUMAN_ID, cost: 0 })
+    )
+    expect(match.getState().players[0].heroPower).toMatchObject({
+      cost: 0,
+      baseCost: 0,
+      available: false,
+      usesThisTurn: 1
+    })
+    accept(
+      match.dispatch({ type: 'dev-set-hero-power', participantId: HUMAN_ID, cost: 2 })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: HUMAN_ID,
+        cardId: 'the_grand_tournament_maiden_of_the_lake'
+      })
+    )
+    const before = match.getState().players[0].heroPower
+    expect(before.cost).toBe(1)
+    accept(
+      match.dispatch({
+        type: 'dev-set-hero-power',
+        participantId: HUMAN_ID,
+        available: true
+      })
+    )
+    const after = match.getState().players[0].heroPower
+    expect(after.cost).toBe(before.cost)
+    expect(after.baseCost).toBe(before.baseCost)
+    accept(
+      match.dispatch({ type: 'dev-clear-zone', participantId: HUMAN_ID, zone: 'board' })
+    )
+    expect(match.getLegality!(HUMAN_ID).legalHeroPower).toBe(false)
+  })
+
   it('destroys only the selected player deck', () => {
     const match = createStartedMatch()
     const before = match.getState()

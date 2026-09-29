@@ -20,6 +20,29 @@ const environment = {
 
 for (let index = 2; index < process.argv.length; index++) {
   const name = process.argv[index]
+  if (name === '--curated') {
+    environment.LOCAL_AI_BENCHMARK_CURATED = '1'
+    continue
+  }
+  if (name === '--easy-mirror') {
+    environment.LOCAL_AI_BENCHMARK_EASY_MIRROR = '1'
+    continue
+  }
+  if (name === '--deck-id') {
+    const deckId = process.argv[index + 1]
+    if (!deckId || deckId.startsWith('--')) {
+      process.stderr.write(
+        'Usage: npm run benchmark:local-ai -- [--curated --games 4 | --curated --easy-mirror --games 1] [--deck-id ID] [--seed N] [--turn-budget-ms N]\n'
+      )
+      process.exit(2)
+    }
+    const existingDeckIds = environment.LOCAL_AI_BENCHMARK_DECK_IDS
+    environment.LOCAL_AI_BENCHMARK_DECK_IDS = existingDeckIds
+      ? existingDeckIds + ',' + deckId
+      : deckId
+    index++
+    continue
+  }
   if (name === '--trace-losses') {
     environment.LOCAL_AI_BENCHMARK_TRACE_LOSSES = '1'
     continue
@@ -28,7 +51,7 @@ for (let index = 2; index < process.argv.length; index++) {
   const value = process.argv[index + 1]
   if (!environmentName || value === undefined || value.startsWith('--')) {
     process.stderr.write(
-      'Usage: npm run benchmark:local-ai -- [--games N] [--seed N] [--baseline easy|random] [--max-actions N] [--turn-budget-ms N] [--work-budget N] [--trace-losses]\n'
+      'Usage: npm run benchmark:local-ai -- [--curated --games 4 [--deck-id ID] | --curated --easy-mirror --games 1 [--deck-id ID]] [--games N] [--seed N] [--baseline easy|random] [--max-actions N] [--turn-budget-ms N] [--work-budget N] [--trace-losses]\n'
     )
     process.exit(2)
   }

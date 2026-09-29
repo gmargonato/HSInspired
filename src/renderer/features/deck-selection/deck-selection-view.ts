@@ -236,7 +236,7 @@ export class DeckSelectionView extends Container {
 
     this.playOutline = new AnimatedOutline(this.playOutlineTarget, {
       palette: 'blue',
-      preset: 'button'
+      preset: 'play-button'
     })
     this.playOutline.setEnabled(false)
   }
@@ -284,7 +284,7 @@ export class DeckSelectionView extends Container {
 
       const outline = new AnimatedOutline(outlineTarget, {
         palette: 'blue',
-        preset: 'button'
+        preset: 'deck-frame'
       })
       outline.setEnabled(false)
       this.deckOutlines.push(outline)

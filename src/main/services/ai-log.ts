@@ -20,6 +20,7 @@ export class AiLog {
         'end-turn-review',
         'timeout-retry',
         'timeout-fallback',
+        'worker-fallback',
         'manual-retry',
         'turn-plan',
         'plan-challenge',

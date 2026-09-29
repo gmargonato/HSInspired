@@ -10,6 +10,7 @@ import {
   EXPERT_AI_PLAN_SEARCH_LIMIT_MS,
   EXPERT_AI_SEARCH_BUDGET_MS
 } from './expert-ai-worker-protocol'
+import { EXPERT_AI_POLICY_REVISION } from './expert-ai-worker-protocol'
 import {
   cancelExpertAiWorlds,
   evaluateExpertAiWorldInWorker
@@ -53,7 +54,9 @@ function aggregateResponse(
   results: readonly ExpertEvaluatedWorld[],
   actions: Map<string, LocalAction>,
   opponentPlayerId: string,
-  elapsedMs: number
+  elapsedMs: number,
+  failedWorlds: readonly string[] = [],
+  worldDetails: readonly { worldIndex: number; status: string }[] = []
 ): AiDecisionResponse {
   const first = results[0]?.response
   if (!first) throw new Error('Expert search did not complete a fair hypothesis.')
@@ -122,8 +125,45 @@ function aggregateResponse(
     durationMs: elapsedMs,
     finishReason: 'expert-sampled-search',
     usage: {
+      policyRevision: EXPERT_AI_POLICY_REVISION,
+      decisionPriority: candidate?.provenWin
+        ? 'verified-win'
+        : [...scores.values()].some((score) => score.publicLethal)
+          ? 'survival'
+          : 'strategy',
+      worldDetails: worldDetails.map((entry) => ({ ...entry })),
       mode: 'expert-sampled-search',
       worldsEvaluated: results.length,
+      ...(failedWorlds.length ? { failedWorlds: [...failedWorlds] } : {}),
+      searchDiagnostics: results.map((result, worldIndex) => ({
+        worldIndex: worldDetails[worldIndex]?.worldIndex ?? worldIndex,
+        status: worldDetails[worldIndex]?.status ?? 'completed',
+        tacticalNodes: result.trace?.tacticalNodes ?? 0,
+        tacticalExhausted: result.trace?.tacticalExhausted ?? false,
+        durationMs: result.trace?.durationMs ?? null,
+        iterations: result.trace?.sampleCount ?? null,
+        rootLegalActionCount: result.trace?.rootLegalActionCount ?? null,
+        deckStrategyCandidates: result.trace?.deckStrategy
+          ? result.trace.candidates.slice(0, 8).map((candidate) => ({
+              actionId: candidate.actionId,
+              visits: candidate.visits ?? 0,
+              meanAdjustment: candidate.meanDeckStrategyAdjustment ?? 0
+            }))
+          : [],
+        deckStrategy: result.trace?.deckStrategy
+          ? {
+              scope: 'root-position',
+              profileId: result.trace.deckStrategy.profileId,
+              version: result.trace.deckStrategy.version,
+              adjustment: result.trace.deckStrategy.adjustment,
+              safetyFactor: result.trace.deckStrategy.safetyFactor,
+              features: result.trace.deckStrategy.features.map((feature) => ({
+                id: feature.id,
+                contribution: feature.contribution
+              }))
+            }
+          : null
+      })),
       plannedActionIntents: plannedActionIntents.map((intent) => ({
         type: intent.type,
         source: intent.source,
@@ -157,8 +197,19 @@ export async function runExpertAiWorkerDecision(
     readonly evaluateWorld?: (
       request: ExpertWorldRequest,
       worldIndex: number,
-      budgetMs: number
+      budgetMs: number,
+      onProgress: (
+        response: AiDecisionResponse,
+        recommendationValue: number,
+        iterations: number
+      ) => void
     ) => Promise<ExpertAiWorldEvaluation | null>
+    readonly onProgress?: (
+      response: AiDecisionResponse,
+      recommendationValue: number,
+      worldIndex: number,
+      iterations: number
+    ) => void
     readonly onWorldCompleted?: (
       response: AiDecisionResponse,
       trace: ReturnType<LocalAiDecisionApi['getLastTrace']>
@@ -183,50 +234,133 @@ export async function runExpertAiWorkerDecision(
     request.request.phase === 'plan'
       ? (request.planSearchLimitMs ?? EXPERT_AI_PLAN_SEARCH_LIMIT_MS)
       : request.request.phase === 'action'
-        ? (request.replanSearchLimitMs ?? 1_500)
+        ? (request.replanSearchLimitMs ?? 4_000)
         : searchBudgetMs
   )
-  const runInlineWorld = (index: number) =>
+  const runInlineWorld = (
+    index: number,
+    onProgress: (
+      response: AiDecisionResponse,
+      recommendationValue: number,
+      iterations: number
+    ) => void
+  ) =>
     evaluateExpertAiWorld(request, index, worldBudgetMs, {
       isCancelled,
+      onProgress,
       ...(hooks.onApiCreated ? { onApiCreated: hooks.onApiCreated } : {})
     })
-  let worldResults: (ExpertAiWorldEvaluation | null)[]
+
+  const completedWorlds = new Map<number, ExpertAiWorldEvaluation>()
+  const worldFailures: string[] = []
+  const latestProgress = new Map<
+    number,
+    { response: AiDecisionResponse; recommendationValue: number; iterations: number }
+  >()
+  const publishBestProgress = () => {
+    const best = [...latestProgress.entries()].sort(
+      (left, right) =>
+        right[1].recommendationValue - left[1].recommendationValue ||
+        right[1].iterations - left[1].iterations ||
+        left[0] - right[0]
+    )[0]
+    if (best)
+      hooks.onProgress?.(
+        best[1].response,
+        best[1].recommendationValue,
+        best[0],
+        best[1].iterations
+      )
+  }
+  const recordProgress = (
+    worldIndex: number,
+    response: AiDecisionResponse,
+    recommendationValue: number,
+    iterations: number
+  ) => {
+    if (isCancelled() || !Number.isFinite(recommendationValue)) return
+    latestProgress.set(worldIndex, { response, recommendationValue, iterations })
+    publishBestProgress()
+  }
+  const chosenActionId = (response: AiDecisionResponse): string | null =>
+    'actionId' in response.choice
+      ? response.choice.actionId
+      : 'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : null
+  const completedRecommendation = (result: ExpertAiWorldEvaluation): number => {
+    const actionId = chosenActionId(result.evaluation.response)
+    const candidate = result.evaluation.trace?.candidates.find(
+      (entry) => entry.actionId === actionId
+    )
+    return (
+      candidate?.recommendationValue ?? candidate?.meanValue ?? candidate?.score ?? 0
+    )
+  }
+  const acceptWorld = (worldIndex: number, result: ExpertAiWorldEvaluation) => {
+    completedWorlds.set(worldIndex, result)
+    hooks.onWorldCompleted?.(result.evaluation.response, result.evaluation.trace)
+    recordProgress(
+      worldIndex,
+      result.evaluation.response,
+      completedRecommendation(result),
+      result.evaluation.trace?.sampleCount ?? 0
+    )
+  }
+
   if (hooks.evaluateWorld) {
-    const attempts = await Promise.all(
-      Array.from({ length: worldCount }, async (_, index) => {
+    await Promise.all(
+      Array.from({ length: worldCount }, async (_, worldIndex) => {
         if (isCancelled()) return { result: null } as const
         try {
-          return {
-            result: await hooks.evaluateWorld!(request, index, worldBudgetMs)
-          } as const
+          const result = await hooks.evaluateWorld!(
+            request,
+            worldIndex,
+            worldBudgetMs,
+            (response, recommendationValue, iterations) =>
+              recordProgress(worldIndex, response, recommendationValue, iterations)
+          )
+          if (result) acceptWorld(worldIndex, result)
+          else if (!isCancelled())
+            worldFailures.push(`world ${worldIndex + 1} returned no result`)
+          return { result } as const
         } catch (error) {
+          worldFailures.push(
+            `world ${worldIndex + 1}: ${error instanceof Error ? error.message : String(error)}`
+          )
           return { error } as const
         }
       })
     )
     if (isCancelled()) return null
-    worldResults = []
-    for (let index = 0; index < attempts.length; index++) {
-      const attempt = attempts[index]!
-      if ('error' in attempt || attempt.result === null)
-        worldResults.push(await runInlineWorld(index))
-      else worldResults.push(attempt.result)
-    }
   } else {
-    worldResults = []
     for (let index = 0; index < worldCount; index++) {
       if (isCancelled()) return null
-      worldResults.push(await runInlineWorld(index))
+      const result = await runInlineWorld(index, (response, value, iterations) =>
+        recordProgress(index, response, value, iterations)
+      )
+      if (result) acceptWorld(index, result)
+      else if (!isCancelled())
+        worldFailures.push(`world ${index + 1} returned no result`)
     }
   }
-  if (isCancelled() || worldResults.some((result) => result === null)) return null
-  const completedWorlds = worldResults as ExpertAiWorldEvaluation[]
-  const results = completedWorlds.map((result) => result.evaluation)
+  if (isCancelled()) return null
+  const orderedWorlds = [...completedWorlds.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, result]) => result)
+  if (!orderedWorlds.length)
+    throw new Error(
+      worldFailures.length
+        ? `Expert AI could not complete a fair hypothesis search: ${worldFailures.join('; ')}`
+        : 'Expert AI could not complete any fair hypothesis search.'
+    )
+  const results = orderedWorlds.map((result) => result.evaluation)
+  const actionWorld = orderedWorlds.find((result) => result.actions.length > 0)
+  if (!actionWorld)
+    throw new Error('Expert AI search did not retain its legal actions.')
   const actions = new Map<string, LocalAction>(
-    completedWorlds[0]!.actions.map((action) => [action.id, action])
+    actionWorld.actions.map((action) => [action.id, action])
   )
-  for (const result of results) hooks.onWorldCompleted?.(result.response, result.trace)
 
   const opponentPlayerId = request.checkpoint.setup.participants.find(
     (participant) => participant.participantId !== request.perspectivePlayerId
@@ -238,7 +372,14 @@ export async function runExpertAiWorkerDecision(
     results,
     actions,
     opponentPlayerId,
-    performance.now() - started
+    performance.now() - started,
+    worldFailures,
+    [...completedWorlds.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([worldIndex, result]) => ({
+        worldIndex,
+        status: result.status ?? 'completed'
+      }))
   )
 }
 
@@ -253,8 +394,17 @@ async function decide(
     const response = await runExpertAiWorkerDecision(request, {
       isCancelled: () => cancelled.has(requestId),
       onApiCreated: (api) => apis.push(api),
-      evaluateWorld: (worldRequest, worldIndex, budgetMs) =>
-        evaluateExpertAiWorldInWorker(worldRequest, worldIndex, budgetMs)
+      evaluateWorld: (worldRequest, worldIndex, budgetMs, onProgress) =>
+        evaluateExpertAiWorldInWorker(worldRequest, worldIndex, budgetMs, onProgress),
+      onProgress: (response, recommendationValue, worldIndex, iterations) =>
+        workerScope?.postMessage({
+          type: 'progress',
+          requestId,
+          response,
+          recommendationValue,
+          worldIndex,
+          iterations
+        })
     })
     if (!response || cancelled.has(requestId)) return
     workerScope?.postMessage({ type: 'decision', requestId, response })

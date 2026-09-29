@@ -1,6 +1,7 @@
 import { describeAiEvents } from '../../../game/match/ai/event-narrative'
 import type { Deck } from '../../../game/decks'
 import type { OpponentStrategyBrief } from '../../../game/decks/opponent-strategy'
+import type { ExpertDeckStrategyBinding } from '../../../game/decks/expert-deck-strategy'
 import type { JsonObject } from '../../../shared/ipc/ai'
 import {
   createTurnMatch,
@@ -21,6 +22,7 @@ export interface GameBoardSessionOptions {
   readonly setup: MatchSetup
   readonly decks: readonly Deck[]
   readonly opponentStrategy?: OpponentStrategyBrief
+  readonly opponentDeckStrategy?: ExpertDeckStrategyBinding
   /** Optional direct-load snapshot used by deterministic headless scenario tests. */
   readonly checkpoint?: OpeningMatchCheckpoint
 }
@@ -32,6 +34,7 @@ export interface GameBoardSessionOptions {
  */
 export class GameBoardSession {
   readonly opponentStrategy?: OpponentStrategyBrief
+  readonly opponentDeckStrategy?: ExpertDeckStrategyBinding
   readonly match: TurnMatchInstance
   readonly localParticipantId: PlayerId
   readonly remoteParticipantId: PlayerId
@@ -87,6 +90,7 @@ export class GameBoardSession {
 
   constructor(options: GameBoardSessionOptions) {
     this.opponentStrategy = options.opponentStrategy
+    this.opponentDeckStrategy = options.opponentDeckStrategy
     const match = createTurnMatch(
       options.setup,
       options.decks,

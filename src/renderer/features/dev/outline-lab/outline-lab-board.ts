@@ -1,4 +1,4 @@
-import { Container, Rectangle, Sprite, type Renderer } from 'pixi.js'
+import { Container, Rectangle, type Renderer } from 'pixi.js'
 import type {
   DeckPresentationAssets,
   GameAssets,
@@ -6,14 +6,14 @@ import type {
 } from '../../../ui/asset-registry'
 import { MinionView } from '../../../rendering/minions/minion-view'
 import { HeroView } from '../../../rendering/heroes/hero-view'
-import { HERO_LAYOUT } from '../../../rendering/heroes/hero-layout'
+import { WeaponView } from '../../../rendering/weapons/weapon-view'
 import {
-  AnimatedOutline,
   type OutlinePalette,
+  type OutlinePresetName,
   type OutlineTuning
 } from '../../../rendering/effects/animated-outline'
 import { BoardShadowLayer } from '../../../rendering/shadows/board-shadow-layer'
-import { applyPlacement, applyAnchoredPlacement } from '../../../rendering/layout'
+import { applyPlacement } from '../../../rendering/layout'
 import { HeroPowerView } from '../../game/hero-power-view'
 import { GAME_BOARD_LAYOUT } from '../../game/game-scene-layout'
 import { OUTLINE_LAB_LAYOUT as LAYOUT } from './outline-lab-layout'
@@ -24,8 +24,10 @@ export class OutlineLabBoard extends Container {
   private hero?: HeroView
   private power?: HeroPowerView
   private disposed = false
-  private heroHover?: AnimatedOutline
-  private readonly resetHover: (() => void)[] = []
+  private weapon?: WeaponView
+  private powerHost?: Container
+  private previewHover = false
+  private restorePower: (() => void) | undefined
 
   constructor(renderer: Renderer) {
     super()
@@ -96,11 +98,10 @@ export class OutlineLabBoard extends Container {
       return
     }
     this.minion = minion
-    applyPlacement(minion, LAYOUT.minion)
-    minion.shadow.restingScale = LAYOUT.minion.scale?.x ?? 1
+    applyPlacement(minion, LAYOUT.auraMinion)
+    minion.shadow.restingScale = LAYOUT.auraMinion.scale?.x ?? 1
     minion.setCanAttack(true)
     minion.setHoverable(true)
-    this.bindHover(minion, (enabled) => minion.setHoverAura(enabled))
     this.addChild(minion)
 
     this.hero = HeroView.create(
@@ -122,28 +123,14 @@ export class OutlineLabBoard extends Container {
         immune: assets.heroImmune
       }
     )
-    applyPlacement(this.hero, LAYOUT.hero)
+    applyPlacement(this.hero, LAYOUT.auraHero)
     this.hero.setHealthVisible(true)
     this.hero.setCanAttack(true)
     this.hero.eventMode = 'static'
-    const heroHoverTarget = new Sprite(heroes['hero-jaina'])
-    heroHoverTarget.label = 'outline-lab.board.hero-hover-outline'
-    heroHoverTarget.eventMode = 'none'
-    applyAnchoredPlacement(heroHoverTarget, HERO_LAYOUT.frame)
-    this.hero.addChildAt(
-      heroHoverTarget,
-      this.hero.getChildIndex(this.hero.getChildByLabel('hero.frame')!)
-    )
-    this.heroHover = new AnimatedOutline(heroHoverTarget, {
-      palette: 'white',
-      preset: 'board'
-    })
-    this.heroHover.setEnabled(false)
-    this.bindHover(this.hero, (enabled) => this.heroHover?.setEnabled(enabled))
     this.addChild(this.hero)
 
     const power = new HeroPowerView({
-      layout: { card: LAYOUT.power, ...GAME_BOARD_LAYOUT.heroPowers.manaOverlay },
+      layout: { card: LAYOUT.auraPower, ...GAME_BOARD_LAYOUT.heroPowers.manaOverlay },
       backTexture: assets.heroPowerBack,
       premiumBackTexture: assets.premiumHeroPowerBack,
       frontFrameTexture: assets.heroPowerFront,
@@ -158,10 +145,11 @@ export class OutlineLabBoard extends Container {
     // The match deliberately disables back-face clicks. This host allows repeated flips.
     power.eventMode = 'none'
     const flipHost = new Container()
+    this.powerHost = flipHost
     flipHost.label = 'outline-lab.board.hero-power-input'
     flipHost.hitArea = new Rectangle(
-      LAYOUT.power.position.x - 90,
-      LAYOUT.power.position.y - 90,
+      LAYOUT.auraPower.position.x - 90,
+      LAYOUT.auraPower.position.y - 90,
       180,
       180
     )
@@ -170,11 +158,13 @@ export class OutlineLabBoard extends Container {
     flipHost.addChild(power)
     let front = true
     let flipping = false
-    let hovered = false
-    this.bindHover(flipHost, (enabled) => {
-      hovered = enabled
-      power.setHoverAura(enabled && front && !flipping)
-    })
+    this.restorePower = () => {
+      if (front) return
+      front = true
+      void power.flipUp().finally(() => {
+        if (!this.disposed) power.setHoverAura(this.previewHover && front)
+      })
+    }
     flipHost.on('pointertap', (event) => {
       if (event.button !== 0 || flipping) return
       event.stopPropagation()
@@ -183,32 +173,86 @@ export class OutlineLabBoard extends Container {
       power.setHoverAura(false)
       void (front ? power.flipUp() : power.flipDown()).finally(() => {
         flipping = false
-        if (!this.disposed) power.setHoverAura(hovered && front)
+        if (!this.disposed) power.setHoverAura(this.previewHover && front)
       })
     })
     this.addChild(flipHost)
+    const [weaponArt, attack, durability] = await Promise.all([
+      resolver.loadArtwork('basic_fiery_war_axe'),
+      resolver.load('card.stat.weapon-attack'),
+      resolver.load('card.stat.weapon-durability')
+    ])
+    if (this.disposed) return
+    const weapon = await WeaponView.create(
+      {
+        label: 'outline-lab.weapon',
+        attack: 3,
+        durability: 2,
+        printedDurability: 2,
+        deathrattle: false,
+        trigger: false,
+        lifesteal: false,
+        temporaryAbilityLabels: []
+      },
+      {
+        frame: assets.weapon,
+        premiumFrame: assets.premiumWeapon,
+        trigger: assets.boardTrigger,
+        deathrattle: assets.boardDeathrattle,
+        lifesteal: assets.minionLifesteal,
+        attack,
+        durability
+      },
+      weaponArt
+    )
+    if (this.disposed) {
+      weapon.destroy({ children: true })
+      return
+    }
+    this.weapon = weapon
+    applyPlacement(weapon, LAYOUT.auraWeapon)
+    this.addChild(weapon)
+  }
+
+  selectElement(preset: OutlinePresetName): void {
+    this.clearHover()
+    if (this.minion) this.minion.visible = preset === 'minion'
+    if (this.hero) this.hero.visible = preset === 'hero'
+    if (this.powerHost) this.powerHost.visible = preset === 'hero-power'
+    if (this.weapon) this.weapon.visible = preset === 'weapon'
   }
 
   setAppearance(
+    preset: OutlinePresetName,
     palette: OutlinePalette,
     tuning: OutlineTuning,
-    hoverPalette: OutlinePalette
+    hoverPalette: OutlinePalette,
+    hover: boolean
   ): void {
-    this.minion?.setOutlineAppearance(palette, tuning, hoverPalette)
-    this.hero?.setOutlineAppearance(palette, tuning)
-    this.power?.setOutlineAppearance(palette, tuning, hoverPalette)
-    this.heroHover?.setPalette(hoverPalette)
-    this.heroHover?.setTuning(tuning)
+    if (preset === 'minion') {
+      this.minion?.setOutlineAppearance(palette, tuning, hoverPalette)
+      this.minion?.setCanAttack(!hover)
+      this.minion?.setHoverAura(hover)
+    } else if (preset === 'hero') {
+      this.hero?.setOutlineAppearance(palette, tuning)
+    } else if (preset === 'hero-power') {
+      this.previewHover = hover
+      this.power?.setOutlineAppearance(palette, tuning, hoverPalette)
+      this.power?.setEnabled(!hover)
+      if (this.power) this.power.eventMode = 'none'
+      this.power?.setHoverAura(hover)
+    } else if (preset === 'weapon') {
+      this.weapon?.setOutlineAppearance(hoverPalette, tuning)
+      this.weapon?.setHoverAura(true)
+    }
   }
 
   clearHover(): void {
-    for (const reset of this.resetHover) reset()
-  }
-
-  private bindHover(host: Container, setEnabled: (enabled: boolean) => void): void {
-    host.on('pointerover', () => setEnabled(true))
-    host.on('pointerout', () => setEnabled(false))
-    this.resetHover.push(() => setEnabled(false))
+    this.previewHover = false
+    if (!this.disposed) this.restorePower?.()
+    this.minion?.setHoverAura(false)
+    this.power?.setHoverAura(false)
+    this.weapon?.setHoverAura(false)
   }
 
   update(deltaMS: number): void {
@@ -217,9 +261,8 @@ export class OutlineLabBoard extends Container {
 
   dispose(): void {
     if (this.disposed) return
-    this.clearHover()
     this.disposed = true
-    this.heroHover?.dispose()
+    this.clearHover()
     this.power?.dispose()
     this.destroy({ children: true })
   }

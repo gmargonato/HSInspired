@@ -1,6 +1,6 @@
 import type { CardId } from '../../game/content/cards'
 import { countDeckCards, DeckRules, MAX_DECK_CARDS, type Deck } from '../../game/decks'
-import { generateConstructedOpponent } from '../../game/decks/opponent-generator'
+import { selectCuratedConstructedOpponent } from '../../game/decks/curated-opponent-selection'
 import {
   createHumanVsAiMatchSetup,
   type HumanVsAiMatchOptions,
@@ -39,13 +39,14 @@ export function createHumanVsAiGameRoute(
   }
 }
 
-/** Transient constructed decks share the same snapshot route as other generated modes. */
+/** Constructed matches snapshot the chosen saved or curated opponent deck. */
 export function createConstructedGameRoute(
   humanDeck: Deck,
   seed: number,
   savedDecks: readonly Deck[],
   preferredOpponentDeckId?: string,
-  options?: HumanVsAiMatchOptions
+  options?: HumanVsAiMatchOptions,
+  curatedOpponentDeckId?: string
 ): GameRoute {
   const rules = new DeckRules()
   if (
@@ -54,11 +55,13 @@ export function createConstructedGameRoute(
   ) {
     throw new Error('Select a valid 30-card constructed deck to start a game.')
   }
-  const preferred = preferredOpponentDeckId
-    ? savedDecks.find((deck) => deck.id === preferredOpponentDeckId)
-    : undefined
+  const preferred =
+    preferredOpponentDeckId && !curatedOpponentDeckId
+      ? savedDecks.find((deck) => deck.id === preferredOpponentDeckId)
+      : undefined
   if (
     preferredOpponentDeckId &&
+    !curatedOpponentDeckId &&
     (!preferred ||
       countDeckCards(preferred) !== MAX_DECK_CARDS ||
       rules.validate(preferred).length)
@@ -67,8 +70,11 @@ export function createConstructedGameRoute(
       `The requested AI deck ${preferredOpponentDeckId} is unavailable or invalid.`
     )
   }
-  const generated = preferred ? undefined : generateConstructedOpponent(seed)
-  const opponent = preferred ?? generated!.deck
+  const curated = preferred
+    ? undefined
+    : selectCuratedConstructedOpponent(seed, curatedOpponentDeckId)
+  const opponent = preferred ?? curated?.deck
+  if (!opponent) throw new Error('Unable to select a constructed opponent deck.')
   return {
     ...createHumanVsAiGameRoute(
       {
@@ -79,7 +85,7 @@ export function createConstructedGameRoute(
       options
     ),
     deckSnapshots: [structuredClone(humanDeck), structuredClone(opponent)],
-    ...(generated ? { generatedOpponent: generated.metadata } : {})
+    ...(curated ? { curatedOpponent: curated.metadata } : {})
   }
 }
 

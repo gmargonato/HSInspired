@@ -144,6 +144,7 @@ export class CursorManager {
   private pointerY: number | null = null
   private pointerInsideHost = false
   private mounted = false
+  private visibilitySuppressions = 0
   private targeting = false
   private targetingTargetPoint: CursorTargetPoint | null = null
   private targetingAngle = 0
@@ -222,6 +223,20 @@ export class CursorManager {
     window.addEventListener('blur', this.onWindowBlur)
     window.addEventListener('focus', this.onWindowFocus)
     document.addEventListener('visibilitychange', this.onVisibilityChange)
+  }
+
+  /** Keeps pointer tracking active while loading hides all cursor visuals. */
+  suppressVisibility(): () => void {
+    this.visibilitySuppressions++
+    this.hide()
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.visibilitySuppressions--
+      if (this.mounted && this.visibilitySuppressions === 0)
+        this.restoreAfterWindowReturn()
+    }
   }
 
   destroy(): void {
@@ -522,6 +537,7 @@ export class CursorManager {
 
   private syncTargetingVisibility(): void {
     const showArrowHead =
+      this.visibilitySuppressions === 0 &&
       this.overrideVariant === null &&
       this.targeting &&
       this.pointerInsideHost &&
@@ -532,6 +548,10 @@ export class CursorManager {
   }
 
   private show(): void {
+    if (this.visibilitySuppressions > 0) {
+      this.hide()
+      return
+    }
     if (this.targeting && this.overrideVariant === null) {
       this.element.style.visibility = 'hidden'
       this.syncTargetingVisibility()

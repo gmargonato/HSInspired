@@ -1,3 +1,11 @@
+import {
+  AURA_CATEGORIES,
+  AURA_ELEMENT_LABELS,
+  auraCategory,
+  type AuraCategory,
+  type AuraBackground
+} from './aura-lab-elements'
+import { OUTLINE_PRESET_NAMES } from '../../../../shared/ipc/outline-tuning'
 import { ShatterLab } from './shatter-lab'
 import {
   Container,
@@ -11,6 +19,9 @@ import {
 } from 'pixi.js'
 import {
   ASSET_BUNDLE_IDS,
+  GAME_BOARD_BUNDLE_IDS,
+  type CollectionAssets,
+  type GameBoardAssets,
   type DeckPresentationAssets,
   type DeckSelectionAssets,
   type GameAssets,
@@ -39,7 +50,7 @@ import {
 type OutlinePresetName = AuraPresetName | 'ghost' | 'shatter'
 import { OutlineLabHand, clampHandCount } from './outline-lab-hand'
 import { OutlineLabBoard } from './outline-lab-board'
-import { OUTLINE_LAB_LAYOUT as LAYOUT } from './outline-lab-layout'
+import { OUTLINE_LAB_LAYOUT as LAYOUT, AURA_PREVIEW_LAYOUT } from './outline-lab-layout'
 import { OUTLINE_LAB_PALETTES } from './outline-lab-palettes'
 import type { CursorManager } from '../../../ui/components/cursor'
 import {
@@ -55,21 +66,10 @@ const PREVIEW_PANEL = LAYOUT.preview
 const CONTROLS_PANEL = LAYOUT.controls
 
 const PRESETS: readonly OutlinePresetName[] = [
-  'card',
-  'bonus-card',
-  'board',
-  'button',
+  ...OUTLINE_PRESET_NAMES,
   'ghost',
   'shatter'
 ]
-const PRESET_LABELS: Record<OutlinePresetName, string> = {
-  card: 'Card',
-  'bonus-card': 'Bonus Card',
-  board: 'Board',
-  button: 'Button',
-  ghost: 'Ghost Aura Shader',
-  shatter: 'Shatter Shader'
-}
 const PALETTES: readonly OutlinePaletteName[] = [
   'green',
   'orange',
@@ -89,12 +89,9 @@ interface ButtonState {
 function cloneTunings(
   tunings: OutlineTuningConfig['aura']['presets']
 ): Record<AuraPresetName, OutlineTuning> {
-  return {
-    card: { ...tunings.card },
-    'bonus-card': { ...tunings['bonus-card'] },
-    board: { ...tunings.board },
-    button: { ...tunings.button }
-  }
+  return Object.fromEntries(
+    OUTLINE_PRESET_NAMES.map((name) => [name, { ...tunings[name] }])
+  ) as Record<AuraPresetName, OutlineTuning>
 }
 
 function clonePalettes(
@@ -179,17 +176,19 @@ export class OutlineLab extends Container {
   private readonly ghostOutlines: GhostAura[] = []
   private ghostTuning = { ...this.initialConfig.ghost.tuning }
   private ghostPalette = { ...this.initialConfig.ghost.palette }
-  private readonly presetTabs = new Map<OutlinePresetName, ButtonState>()
+  private readonly presetTabs = new Map<AuraCategory, ButtonState>()
   private readonly paletteButtons = new Map<OutlinePaletteName, ButtonState>()
   private readonly paletteSwatches = new Map<OutlinePaletteName, Graphics>()
-  private readonly selectedPalettes: Record<OutlinePresetName, OutlinePaletteName> = {
-    card: 'green',
-    'bonus-card': 'orange',
-    board: 'green',
-    button: 'blue',
-    ghost: 'purple',
-    shatter: 'purple'
-  }
+  private readonly selectedPalettes = Object.fromEntries(
+    PRESETS.map((name) => [
+      name,
+      name === 'shatter' ? 'purple' : OUTLINE_LAB_PALETTES[name][0].palette
+    ])
+  ) as Record<OutlinePresetName, OutlinePaletteName>
+  private readonly backgrounds = new Map<AuraPresetName, Sprite>()
+  private readonly backgroundChoices = new Map<AuraPresetName, AuraBackground>()
+  private readonly sceneTextures = new Map<AuraPresetName, Texture>()
+  private collectionAssets!: CollectionAssets
   private selectedPreset: OutlinePresetName = 'card'
   private shaderControls: OutlineLabShaderControls | null = null
   private saveButton!: ButtonState
@@ -219,12 +218,28 @@ export class OutlineLab extends Container {
         ASSET_BUNDLE_IDS.deckPresentation
       ),
       this.assetScope.acquire<DeckSelectionAssets>(ASSET_BUNDLE_IDS.deckSelection),
-      this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
+      this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game),
+      this.assetScope.acquire<CollectionAssets>(ASSET_BUNDLE_IDS.collection),
+      this.assetScope.acquire<GameBoardAssets>(GAME_BOARD_BUNDLE_IDS[0])
     ])
-    const [deckResult, selectionResult, gameResult] = results
+    const [deckResult, selectionResult, gameResult, collectionResult, boardResult] =
+      results
     if (deckResult.status === 'rejected') throw deckResult.reason
     if (selectionResult.status === 'rejected') throw selectionResult.reason
     if (gameResult.status === 'rejected') throw gameResult.reason
+    if (collectionResult.status === 'rejected') throw collectionResult.reason
+    if (boardResult.status === 'rejected') throw boardResult.reason
+    this.collectionAssets = collectionResult.value
+    for (const preset of OUTLINE_PRESET_NAMES) {
+      this.sceneTextures.set(
+        preset,
+        preset === 'expansion-toggle'
+          ? collectionResult.value.background
+          : preset === 'deck-frame' || preset === 'play-button'
+            ? selectionResult.value.panel
+            : boardResult.value.board
+      )
+    }
     const [deckAssets, selectionAssets, gameAssets] = [
       deckResult.value,
       selectionResult.value,
@@ -270,6 +285,7 @@ export class OutlineLab extends Container {
     if (visible) this.hand?.resume()
     else this.hand?.pause()
     if (!visible) this.board?.clearHover()
+    else this.refreshPreviewAppearance(this.selectedPreset)
   }
 
   update(deltaMS: number): void {
@@ -316,7 +332,7 @@ export class OutlineLab extends Container {
       save.y,
       save.width,
       save.height,
-      'Save',
+      'Save all changes',
       () => {
         void this.save()
       }
@@ -335,23 +351,23 @@ export class OutlineLab extends Container {
 
   private createPresetTabs(): void {
     const tabs = LAYOUT.tabs
-    for (const [index, preset] of PRESETS.filter(
-      (preset) => preset !== 'ghost' && preset !== 'shatter'
+    for (const [index, category] of (
+      Object.keys(AURA_CATEGORIES) as AuraCategory[]
     ).entries()) {
       const tab = this.createButton(
         tabs.x + index * (tabs.width + tabs.gap),
         tabs.y,
         tabs.width,
         tabs.height,
-        PRESET_LABELS[preset],
-        () => this.selectPreset(preset)
+        category,
+        () => this.selectPreset(AURA_CATEGORIES[category][0])
       )
-      this.presetTabs.set(preset, tab)
+      this.presetTabs.set(category, tab)
     }
   }
 
   private createPaletteControls(): void {
-    addLabel(this, 'Palette', 685, LAYOUT.panelTitleY, 16, 0x9db5d1)
+    addLabel(this, 'Shared palette', 630, LAYOUT.panelTitleY, 16, 0x9db5d1)
     const layout = LAYOUT.palettes
     for (const palette of PALETTES) {
       const button = this.createButton(
@@ -394,25 +410,19 @@ export class OutlineLab extends Container {
     await this.hand.setCount(this.handCount)
     if (this.disposed) return
 
-    const boardGroup = this.createPreviewGroup('board')
+    const boardGroup = this.createPreviewGroup('minion')
+    for (const preset of ['hero', 'hero-power', 'weapon'] as const)
+      this.createPreviewGroup(preset)
     this.board = new OutlineLabBoard(this.options.renderer)
     boardGroup.addChild(this.board)
     await this.board.mount(gameAssets, deckAssets, this.resolver)
     if (this.disposed) return
-    for (const [text, x] of [
-      ['Minion', LAYOUT.minion.position.x],
-      ['Jaina Proudmoore', LAYOUT.hero.position.x],
-      ['Hero power · click to flip', LAYOUT.power.position.x]
-    ] as const) {
-      addLabel(boardGroup, text, x, LAYOUT.captionY, 18, 0xd7e2ef).anchor.set(0.5, 0)
-    }
-
-    const buttonGroup = this.createPreviewGroup('button')
+    const buttonGroup = this.createPreviewGroup('deck-frame')
     const deck = new Container()
     deck.label = 'outline-lab.button.deck'
     deck.eventMode = 'none'
     deck.interactiveChildren = false
-    applyPlacement(deck, LAYOUT.deck)
+    applyPlacement(deck, LAYOUT.auraDeck)
 
     const portrait = new Sprite(deckAssets.jainaDeckPortrait)
     portrait.label = 'outline-lab.button.deck-portrait'
@@ -465,15 +475,33 @@ export class OutlineLab extends Container {
     outlineTarget.anchor.set(0.5)
     outlineTarget.eventMode = 'none'
     deck.addChildAt(outlineTarget, 0)
-    this.registerOutline(outlineTarget, 'button')
+    this.registerOutline(outlineTarget, 'deck-frame')
     buttonGroup.addChild(deck)
     this.addOutlinedTexture(
-      buttonGroup,
+      this.createPreviewGroup('play-button'),
       selectionAssets.playButton,
-      'button',
-      LAYOUT.play,
+      'play-button',
+      LAYOUT.auraPlay,
       'Play button'
     )
+
+    for (const [preset, texture, layout] of [
+      ['end-turn', gameAssets.endTurn, AURA_PREVIEW_LAYOUT.endTurn],
+      [
+        'expansion-toggle',
+        this.collectionAssets.expansionToggle,
+        AURA_PREVIEW_LAYOUT.expansionToggle
+      ],
+      ['secret', gameAssets.secret, AURA_PREVIEW_LAYOUT.badge],
+      ['quest', gameAssets.quest, AURA_PREVIEW_LAYOUT.badge]
+    ] as const)
+      this.addOutlinedTexture(
+        this.createPreviewGroup(preset),
+        texture,
+        preset,
+        layout,
+        AURA_ELEMENT_LABELS[preset]
+      )
 
     this.ghostAssets = gameAssets
     const ghostGroup = this.createPreviewGroup('ghost')
@@ -495,13 +523,21 @@ export class OutlineLab extends Container {
     this.shatter = new ShatterLab(this.options.renderer)
     shatterGroup.addChild(this.shatter)
     await this.shatter.mount(gameAssets, deckAssets, this.resolver)
-    this.refreshPreviewAppearance('board')
+    this.refreshPreviewAppearance('minion')
   }
 
   private createPreviewGroup(preset: OutlinePresetName): Container {
     const group = new Container()
     group.visible = false
     group.label = `outline-lab.preview.${preset}`
+    if (preset !== 'ghost' && preset !== 'shatter') {
+      const background = new Sprite(this.sceneTextures.get(preset))
+      background.label = 'outline-lab.background.' + preset
+      background.eventMode = 'none'
+      group.addChild(background)
+      this.backgrounds.set(preset, background)
+      this.refreshBackground(preset)
+    }
     this.previewGroups.set(preset, group)
     this.addChild(group)
     // Clip the bottom of the resting hand just as the match viewport does.
@@ -592,7 +628,18 @@ export class OutlineLab extends Container {
       this.hand.visible = isHand
       if (isHand) this.previewGroups.get(preset)?.addChild(this.hand)
     }
-    if (this.board) this.board.visible = preset === 'board'
+    if (this.board) {
+      const boardElement =
+        preset === 'minion' ||
+        preset === 'hero' ||
+        preset === 'hero-power' ||
+        preset === 'weapon'
+      this.board.visible = boardElement
+      if (boardElement) {
+        this.previewGroups.get(preset)?.addChild(this.board)
+        this.board.selectElement(preset)
+      }
+    }
     this.refreshPreviewAppearance(preset)
     this.refreshPresetTabs()
     this.refreshPaletteButtons()
@@ -728,8 +775,53 @@ export class OutlineLab extends Container {
             this.refreshPreviewAppearance(preset)
             this.markDirty()
           }
+        },
+        {
+          preset,
+          palette,
+          background: this.backgroundChoices.get(preset) ?? 'context',
+          onElement: (value) => this.selectPreset(value),
+          onState: (value) => this.selectPalette(value),
+          onBackground: (value) => {
+            this.backgroundChoices.set(preset, value)
+            this.refreshBackground(preset)
+          }
         }
       )
+    }
+  }
+
+  private refreshBackground(preset: AuraPresetName): void {
+    const background = this.backgrounds.get(preset)
+    if (!background) return
+    const choice = this.backgroundChoices.get(preset) ?? 'context'
+    const viewport = AURA_PREVIEW_LAYOUT.viewport
+    background.texture =
+      choice === 'context' ? this.sceneTextures.get(preset)! : Texture.WHITE
+    background.tint =
+      choice === 'light' ? 0xeeeeee : choice === 'dark' ? 0x17283d : 0xffffff
+    if (choice !== 'context') {
+      applyAnchoredPlacement(background, viewport)
+      background.width = viewport.size.width
+      background.height = viewport.size.height
+    } else {
+      const source = AURA_PREVIEW_LAYOUT.sourceCenters[preset]
+      const center = AURA_PREVIEW_LAYOUT.center
+      // Keep the selected scene point behind the element, clamping only at image edges.
+      const x = Math.min(
+        viewport.position.x,
+        Math.max(viewport.position.x + viewport.size.width - 1920, center.x - source.x)
+      )
+      const y = Math.min(
+        viewport.position.y,
+        Math.max(viewport.position.y + viewport.size.height - 1080, center.y - source.y)
+      )
+      applyAnchoredPlacement(
+        background,
+        placement({ x, y }, { width: 1920, height: 1080 })
+      )
+      background.width = 1920
+      background.height = 1080
     }
   }
 
@@ -737,7 +829,7 @@ export class OutlineLab extends Container {
     const preset = this.selectedPreset === 'bonus-card' ? 'bonus-card' : 'card'
     this.hand?.setAppearance(
       preset === 'bonus-card',
-      this.paletteDrafts[preset === 'bonus-card' ? 'orange' : 'green'],
+      this.paletteDrafts[this.selectedPalettes[preset]],
       this.drafts[preset],
       this.paletteDrafts.blue
     )
@@ -758,13 +850,14 @@ export class OutlineLab extends Container {
       outline.setPalette(palette)
       outline.setTuning(tuning)
     }
-    if (preset === 'board') {
-      // Selecting the white editor must not replace the ready outline: hover layers it on top.
-      const base =
-        this.selectedPalettes.board === 'red'
-          ? this.paletteDrafts.red
-          : this.paletteDrafts.green
-      this.board?.setAppearance(base, tuning, this.paletteDrafts.white)
+    if (preset === this.selectedPreset) {
+      this.board?.setAppearance(
+        preset,
+        palette,
+        tuning,
+        this.paletteDrafts.white,
+        this.selectedPalettes[preset] === 'white'
+      )
     }
     if (
       preset === this.selectedPreset &&
@@ -819,13 +912,11 @@ export class OutlineLab extends Container {
   }
 
   private refreshPresetTabs(): void {
-    for (const preset of PRESETS) {
-      const tab = this.presetTabs.get(preset)
-      if (!tab) continue
-      tab.root.visible =
-        this.selectedPreset !== 'ghost' && this.selectedPreset !== 'shatter'
-      tab.label.text = PRESET_LABELS[preset]
-      this.drawButton(tab, preset === this.selectedPreset)
+    const preset = this.selectedPreset
+    const aura = preset !== 'ghost' && preset !== 'shatter'
+    for (const [category, tab] of this.presetTabs) {
+      tab.root.visible = aura
+      this.drawButton(tab, aura && auraCategory(preset) === category)
     }
   }
 
@@ -870,7 +961,7 @@ export class OutlineLab extends Container {
 
     const savedRevision = this.revision
     const snapshot: OutlineTuningConfig = {
-      version: 10,
+      version: 11,
       shatter: { ...(this.shatter?.tuning ?? this.initialConfig.shatter) },
       aura: {
         presets: cloneTunings(this.drafts),

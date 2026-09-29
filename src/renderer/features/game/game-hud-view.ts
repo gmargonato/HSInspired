@@ -86,7 +86,7 @@ export class GameHudView {
     this.endTurnOutlineTarget.label = 'game.end-turn-exhausted-outline-target'
     this.endTurnOutline = new AnimatedOutline(this.endTurnOutlineTarget, {
       palette: 'green',
-      preset: 'button'
+      preset: 'end-turn'
     })
     this.endTurnOutline.setEnabled(false)
     this.turnButtonLayer.addChild(this.endTurnOutlineTarget)
@@ -100,7 +100,7 @@ export class GameHudView {
     this.endTurnHoverOutlineTarget.label = 'game.end-turn-hover-outline-target'
     this.endTurnHoverOutline = new AnimatedOutline(this.endTurnHoverOutlineTarget, {
       palette: 'white',
-      preset: 'button'
+      preset: 'end-turn'
     })
     this.endTurnHoverOutline.setEnabled(false)
     this.turnButtonLayer.addChild(this.endTurnHoverOutlineTarget)

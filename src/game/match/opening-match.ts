@@ -20,6 +20,7 @@ import {
   combatHistoryEvent
 } from './match-history'
 import { parseCommand } from './match-command-parser'
+import { heroPowerUseLimit } from './effects/hero-power-use-limit'
 import { CARD_CATALOG, asCardId } from '../content/cards'
 import { HERO_CATALOG } from '../content/heroes'
 import { HERO_POWER_CATALOG, BASIC_HERO_POWER_UPGRADES } from '../content/hero-powers'
@@ -1322,6 +1323,7 @@ export function createOpeningMatch(
       try {
         return operation({
           getState: () => instance.getState(),
+          getRandomState: () => rng.snapshot(),
           getAiObservation: (participantId, policy) =>
             instance.getAiObservation!(participantId, policy),
           dispatch: (command: unknown) => instance.dispatch(command),
@@ -1351,6 +1353,7 @@ export function createOpeningMatch(
         rng.restore(seed)
         return operation({
           getState: () => instance.getState(),
+          getRandomState: () => rng.snapshot(),
           getAiObservation: (participantId, policy) =>
             instance.getAiObservation!(participantId, policy),
           dispatch: (command: unknown) => instance.dispatch(command),
@@ -1571,16 +1574,32 @@ export function createOpeningMatch(
         if (state.phase !== 'turns')
           return reject(state, 'wrong-phase', 'Turns have not started yet.')
         const player = state.players[playerIndex]
-        const cost = command.cost === undefined ? player.heroPower.cost : command.cost
-        const available =
-          command.available === undefined
-            ? player.heroPower.available
-            : command.available
-        if (!Number.isInteger(cost) || cost < 0 || cost > MAX_MANA)
+        const cost = command.cost
+        if (
+          cost !== undefined &&
+          (!Number.isInteger(cost) || cost < 0 || cost > MAX_MANA)
+        )
           return reject(state, 'invalid-command', 'Invalid hero power cost.')
+        const limit = heroPowerUseLimit(state, command.participantId)
+        const availability =
+          command.available === undefined
+            ? {}
+            : {
+                usesThisTurn: command.available
+                  ? 0
+                  : Math.max(player.heroPower.usesThisTurn ?? 0, limit),
+                available: command.available && limit > 0
+              }
         const result = applyDevStateChange(state, playerIndex, {
           ...player,
-          heroPower: { ...player.heroPower, cost, baseCost: cost, available }
+          ...(cost !== undefined && player.heroPowerCostOverride !== undefined
+            ? { heroPowerCostOverride: cost }
+            : {}),
+          heroPower: {
+            ...player.heroPower,
+            ...(cost === undefined ? {} : { cost, baseCost: cost }),
+            ...availability
+          }
         })
         commitState(result.state)
         return result

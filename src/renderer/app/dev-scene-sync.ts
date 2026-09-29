@@ -26,7 +26,8 @@ function getDevSceneId(scene: unknown): DevSceneId {
   if (
     devSceneId === 'card-inspector' ||
     devSceneId === 'outline-lab' ||
-    devSceneId === 'hero-power-anim'
+    devSceneId === 'hero-power-anim' ||
+    devSceneId === 'vfx-lab'
   )
     return devSceneId
   if (scene instanceof MainMenuScene) return 'main-menu'

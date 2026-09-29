@@ -1,6 +1,7 @@
 import { Rectangle, Sprite, type Texture } from 'pixi.js'
 import { SETTINGS_LAYOUT } from '../features/settings/settings-layout'
 import { AiModeSelector } from '../features/settings/ai-mode-selector'
+import { ExpertDeckStrategyToggle } from '../features/settings/expert-deck-strategy-toggle'
 import { ResolutionSelector } from '../features/settings/resolution-selector'
 import { applyAnchoredPlacement, applyPlacement } from '../rendering/layout'
 import {
@@ -70,6 +71,7 @@ abstract class SettingsScene extends Scene {
 /** Settings overlay used throughout the non-match menu flow. */
 export class MenuSettingsScene extends SettingsScene {
   private aiModeSelector: AiModeSelector | null = null
+  private expertDeckStrategyToggle: ExpertDeckStrategyToggle | null = null
 
   async init(): Promise<void> {
     const assets = await this.assetScope.acquire<MenuSettingsAssets>(
@@ -77,6 +79,18 @@ export class MenuSettingsScene extends SettingsScene {
     )
     this.createBackground(assets.background, 'menu-settings-background')
     await this.waitForFonts()
+    const strategyToggle = new ExpertDeckStrategyToggle(
+      assets,
+      window.api.preferences,
+      console.error,
+      () => {
+        this.aiModeSelector?.closeOptions()
+        this.resolutionSelector?.closeOptions()
+      }
+    )
+    await strategyToggle.init()
+    this.expertDeckStrategyToggle = strategyToggle
+    this.root.addChild(strategyToggle)
     const aiModeSelector = new AiModeSelector(
       assets,
       window.api.preferences,
@@ -97,6 +111,8 @@ export class MenuSettingsScene extends SettingsScene {
     super.onExit()
     this.aiModeSelector?.dispose()
     this.aiModeSelector = null
+    this.expertDeckStrategyToggle?.dispose()
+    this.expertDeckStrategyToggle = null
   }
 }
 

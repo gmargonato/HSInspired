@@ -123,6 +123,8 @@ import {
   HeroPowerCardView
 } from '../../rendering/hero-powers/hero-power-presentation'
 import { WeaponView } from '../../rendering/weapons/weapon-view'
+import { prebuildWeaponOutlineShape } from '../../rendering/weapons/weapon-outline-shape'
+import { MatchArtworkWarmup, matchArtworkIds } from './match-artwork-warmup'
 import { AddCardPickerView } from './add-card-picker-view'
 import { CardSelectionOverlay } from './card-selection-overlay'
 import {
@@ -197,6 +199,8 @@ function isFrozen(
 }
 
 export interface GameBoardViewOptions {
+  readonly boardTexture?: Texture
+  readonly onLoadProgress?: (progress: number) => Promise<void>
   readonly route: GameRoute
   readonly decks: readonly Deck[]
   readonly gameAssets: GameAssets
@@ -305,6 +309,7 @@ export class GameBoardView extends Actor {
   }
   private readonly resolver = new CardAssetResolver()
   private readonly sceneAuraFields = new Map<Texture, AuraFieldLease>()
+  private artworkWarmup: MatchArtworkWarmup | null = null
   private readonly secretPreviewView: SecretPreviewView
   private readonly questPreviewView: QuestPreviewView
   private readonly hoverPreview: HoverPreviewController<MatchHoverTarget>
@@ -391,6 +396,7 @@ export class GameBoardView extends Actor {
   private readonly heroPowerLayer = new Container()
   private readonly heroLayer = new Container()
   private readonly openingLayer = new Container()
+  private readonly openingContent = new Container()
   private readonly travelLayer = new Container()
   /** Hosts discard flights above the hand, HUD, and summons. */
   private readonly discardFlightLayer = new Container()
@@ -1299,12 +1305,15 @@ export class GameBoardView extends Actor {
 
     const localPlayer = this.findPlayer(initialState, this.localParticipantId)
     const remotePlayer = this.findPlayer(initialState, this.remoteParticipantId)
+    await this.prebuildMatchAssets(initialState)
+    if (this.destroyed) return
     await this.createInitialLocalCards(localPlayer.hand.map(cloneCard))
     this.remoteBackCount = remotePlayer.hand.length
     this.ensureRemoteBacks(this.remoteBackCount)
 
     this.mulligan.createControls()
     if (initialState.phase === 'turns') await this.prepareStartedMatch()
+    await this.options.onLoadProgress?.(1)
   }
 
   async playOpeningReveal(): Promise<void> {
@@ -1314,6 +1323,16 @@ export class GameBoardView extends Actor {
       this.startInitialTurn()
       return
     }
+    // The loading overlay has fully faded before this sequence starts.
+    // Keep the dimmed board steady while the VS plate, names, and heroes appear.
+    const reveal = this.timeline()
+    reveal.to([this.openingContent, this.heroLayer], {
+      alpha: 1,
+      duration: OPENING_TIMING.versusReveal,
+      ease: 'sine.inOut'
+    })
+    await completeTimeline(reveal)
+    if (this.destroyed) return
     await this.wait(OPENING_TIMING.versusHold)
     await Promise.all([
       ...[...this.heroViews.entries()].map(([participantId, view]) =>
@@ -1499,17 +1518,18 @@ export class GameBoardView extends Actor {
 
   private createBoard(): void {
     const board = new Sprite(
-      selectRandomBoardTexture([
-        this.options.gameAssets.board1,
-        this.options.gameAssets.board2,
-        this.options.gameAssets.board3,
-        this.options.gameAssets.board4,
-        this.options.gameAssets.board5,
-        this.options.gameAssets.board6,
-        this.options.gameAssets.board7,
-        this.options.gameAssets.board8,
-        this.options.gameAssets.board9
-      ])
+      this.options.boardTexture ??
+        selectRandomBoardTexture([
+          this.options.gameAssets.board1,
+          this.options.gameAssets.board2,
+          this.options.gameAssets.board3,
+          this.options.gameAssets.board4,
+          this.options.gameAssets.board5,
+          this.options.gameAssets.board6,
+          this.options.gameAssets.board7,
+          this.options.gameAssets.board8,
+          this.options.gameAssets.board9
+        ])
     )
     applyAnchoredPlacement(board, GAME_BOARD_LAYOUT.board)
     board.eventMode = 'none'
@@ -3178,11 +3198,19 @@ export class GameBoardView extends Actor {
 
   private createOpeningLayer(state: OpeningMatchState): void {
     this.openingLayer.addChild(this.createDarkOverlay())
+    this.openingContent.label = 'game.versus-content'
+    this.openingContent.eventMode = 'none'
+    this.openingLayer.addChild(this.openingContent)
+    if (state.phase === 'mulligan') {
+      this.openingContent.alpha = 0
+      this.heroLayer.alpha = 0
+    }
 
     const versus = new Sprite(this.options.gameAssets.startOfGameVs)
+    versus.label = 'game.versus'
     applyAnchoredPlacement(versus, GAME_BOARD_LAYOUT.versus)
     versus.eventMode = 'none'
-    this.openingLayer.addChild(versus)
+    this.openingContent.addChild(versus)
     for (const player of state.players) {
       const hero = HERO_CATALOG.require(player.heroId)
       const intro =
@@ -3207,7 +3235,8 @@ export class GameBoardView extends Actor {
           GAME_BOARD_LAYOUT.heroes.introLabelOffset * (intro.scale?.y ?? 1)
       )
       label.eventMode = 'none'
-      this.openingLayer.addChild(label)
+      label.label = `game.versus-hero-${player.participantId}`
+      this.openingContent.addChild(label)
     }
   }
 
@@ -3226,12 +3255,58 @@ export class GameBoardView extends Actor {
     for (const { card, slot } of entries) {
       this.hand.append({ card, slot, restTransform: undefined, displaced: false })
     }
-    // Build each opening silhouette during mount, before the mulligan is shown.
-    // Keep a lease until disposal so hidden outlines can acquire the same field.
-    const textures = new Set(entries.map(({ slot }) => slot.playableOutlineTexture))
-    for (const texture of textures) {
-      this.prebuildAuraTexture(texture)
+  }
+
+  private async prebuildMatchAssets(state: OpeningMatchState): Promise<void> {
+    const started = performance.now()
+    // Configure every base frame before acquiring any field: resolver mipmap
+    // configuration can unload a source and invalidate an existing field.
+    const frames = await Promise.allSettled(
+      Object.values(CARD_PROFILES).map((profile) => this.resolver.load(profile.frame))
+    )
+    if (this.destroyed) return
+    const tasks: (() => void)[] = frames.map((result) => () => {
+      if (result.status === 'fulfilled') this.prebuildAuraTexture(result.value)
+      else this.logger.warn('[GameBoardView] card frame warmup failed', result.reason)
+    })
+    tasks.push(
+      () => this.secretZoneView.prebuildOutlines(this.options.renderer),
+      () => this.questZoneView.prebuildOutlines(this.options.renderer),
+      ...[this.options.gameAssets.weapon, this.options.gameAssets.premiumWeapon].map(
+        (texture) => () => prebuildWeaponOutlineShape(this.options.renderer, texture)
+      )
+    )
+    for (const [index, task] of tasks.entries()) {
+      if (this.destroyed) return
+      try {
+        task()
+      } catch (error) {
+        this.logger.warn('[GameBoardView] outline warmup failed', error)
+      }
+      if (this.options.onLoadProgress) {
+        await this.options.onLoadProgress((0.4 * (index + 1)) / tasks.length)
+      } else await new Promise<void>((resolve) => setTimeout(resolve, 0))
     }
+    if (this.destroyed) return
+    if (import.meta.env.DEV) {
+      this.logger.info('[GameBoardView] outline warmup', {
+        milliseconds: performance.now() - started
+      })
+    }
+    this.artworkWarmup = new MatchArtworkWarmup(
+      this.options.renderer,
+      this.resolver,
+      this.logger
+    )
+    await this.artworkWarmup.prepare(
+      matchArtworkIds(
+        this.options.decks,
+        state.players.map((player) => player.heroPower.id)
+      ),
+      this.options.onLoadProgress
+        ? (progress) => this.options.onLoadProgress!(0.4 + progress * 0.5)
+        : undefined
+    )
   }
 
   private prebuildAuraTexture(texture: Texture): void {
@@ -7861,6 +7936,7 @@ export class GameBoardView extends Actor {
   }
 
   override dispose(): void {
+    this.artworkWarmup?.dispose()
     this.heroPowerEffects.dispose()
     window.removeEventListener('resize', this.invalidateCanvasBounds)
     window.removeEventListener('scroll', this.invalidateCanvasBounds, true)

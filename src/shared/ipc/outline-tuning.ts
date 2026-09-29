@@ -2,7 +2,35 @@
 export const OUTLINE_TUNING_IPC_CHANNELS = {
   save: 'debug:outline-tuning:save'
 } as const
-export const OUTLINE_PRESET_NAMES = ['card', 'bonus-card', 'board', 'button'] as const
+export const OUTLINE_PRESET_NAMES = [
+  'card',
+  'bonus-card',
+  'deck-frame',
+  'play-button',
+  'end-turn',
+  'expansion-toggle',
+  'minion',
+  'hero',
+  'hero-power',
+  'weapon',
+  'secret',
+  'quest'
+] as const
+const LEGACY_PRESET_NAMES = ['card', 'bonus-card', 'board', 'button'] as const
+const AURA_LEGACY_PRESETS = {
+  card: 'card',
+  'bonus-card': 'bonus-card',
+  'deck-frame': 'button',
+  'play-button': 'button',
+  'end-turn': 'button',
+  'expansion-toggle': 'button',
+  minion: 'board',
+  hero: 'board',
+  'hero-power': 'board',
+  weapon: 'board',
+  secret: 'board',
+  quest: 'board'
+} as const
 export const OUTLINE_PALETTE_NAMES = [
   'blue',
   'green',
@@ -442,7 +470,7 @@ export const SHATTER_TUNING_RANGES = {
 
 export interface OutlineTuningConfig {
   readonly shatter: ShatterTuning
-  readonly version: 10
+  readonly version: 11
   readonly aura: {
     readonly presets: Readonly<Record<OutlinePresetName, AuraTuning>>
     readonly palettes: Readonly<Record<OutlinePaletteName, AuraPalette>>
@@ -490,7 +518,7 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     value && typeof value === 'object' && 'version' in value ? value.version : undefined
   const config = record(
     value,
-    version === 10
+    version === 10 || version === 11
       ? ['version', 'aura', 'ghost', 'shatter']
       : ['version', 'aura', 'ghost']
   )
@@ -501,17 +529,21 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     config.version !== 7 &&
     config.version !== 8 &&
     config.version !== 9 &&
-    config.version !== 10
+    config.version !== 10 &&
+    config.version !== 11
   )
     throw new Error('Invalid shader tuning version')
   const aura = record(config.aura, ['presets', 'palettes'])
-  const presets = record(aura.presets, OUTLINE_PRESET_NAMES)
+  const presets = record(
+    aura.presets,
+    config.version === 11 ? OUTLINE_PRESET_NAMES : LEGACY_PRESET_NAMES
+  )
   const palettes = record(aura.palettes, OUTLINE_PALETTE_NAMES)
   const controls = AURA_CONTROLS.filter((control) => control.type !== 'color')
   const parsedPresets = Object.fromEntries(
     OUTLINE_PRESET_NAMES.map((name) => {
       const preset = record(
-        presets[name],
+        presets[config.version === 11 ? name : AURA_LEGACY_PRESETS[name]],
         controls.map((control) => control.key)
       )
       return [
@@ -546,7 +578,12 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     'tuning',
     'palette'
   ])
-  if (config.version !== 4 && config.version !== 9 && config.version !== 10) {
+  if (
+    config.version !== 4 &&
+    config.version !== 9 &&
+    config.version !== 10 &&
+    config.version !== 11
+  ) {
     const old = record(ghost.tuning, [
       'windDirection',
       'windStrength',
@@ -602,11 +639,11 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     if (typeof ghostTuning[key] !== 'boolean')
       throw new Error('Invalid Ghost enabled toggle')
   const shatter = record(
-    config.version === 10 ? config.shatter : SHATTER_DEFAULTS,
+    config.version === 10 || config.version === 11 ? config.shatter : SHATTER_DEFAULTS,
     Object.keys(SHATTER_DEFAULTS)
   )
   return {
-    version: 10,
+    version: 11,
     shatter: Object.fromEntries(
       Object.entries(SHATTER_TUNING_RANGES).map(([key, [min, max]]) => [
         key,

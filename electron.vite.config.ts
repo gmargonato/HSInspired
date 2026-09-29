@@ -60,6 +60,11 @@ export default defineConfig(({ mode }) => ({
             ? 'src/renderer/app/renderer-production-placeholder.ts'
             : 'src/renderer/scenes/dev/hero-power-anim-scene.ts'
         ),
+        '@vfx-lab': resolve(
+          mode === 'production'
+            ? 'src/renderer/app/renderer-production-placeholder.ts'
+            : 'src/renderer/scenes/dev/vfx-lab-scene.ts'
+        ),
         '@dev-layout-inspector': resolve(
           mode === 'production'
             ? 'src/renderer/app/renderer-production-placeholder.ts'

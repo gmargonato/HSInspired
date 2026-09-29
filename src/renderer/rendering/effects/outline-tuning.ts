@@ -39,7 +39,7 @@ export function getOutlineTuning(preset: OutlinePresetName): OutlineTuning {
 
 export function getOutlineTuningConfig(): OutlineTuningConfig {
   return parseOutlineTuningConfig({
-    version: 10,
+    version: 11,
     shatter: SHATTER_CONFIG,
     aura: { presets: OUTLINE_TUNINGS, palettes: OUTLINE_PALETTES },
     ghost: GHOST_AURA_CONFIG

@@ -1,3 +1,4 @@
+import loadScreenOverlayImage from '@assets/images/ui/deck-selection/load-screen-overlay.png'
 import ghostSpotlightImage from '@assets/images/effects/spotlight-triangle.png'
 import ghostDissolveImage from '@assets/images/effects/noise-03.png'
 import { Texture, type AssetsManifest } from 'pixi.js'
@@ -96,6 +97,7 @@ import settingsBaseFrameLargeImage from '@assets/images/ui/settings/settings-bas
 import settingsConcedeImage from '@assets/images/ui/settings/settings-concede.png'
 import settingsRestartImage from '@assets/images/ui/settings/settings-restart.png'
 import settingsQuitImage from '@assets/images/ui/settings/settings-quit.png'
+import gameBoardBaseImage from '@assets/images/match/BOARD.png'
 import gameBoard1Image from '@assets/images/match/BOARD-1.png'
 import gameBoard2Image from '@assets/images/match/BOARD-2.png'
 import gameBoard3Image from '@assets/images/match/BOARD-3.png'
@@ -235,10 +237,10 @@ export { CardAssetResolver } from './card-asset-resolver'
 export * from './card-assets'
 export type { HeroPowerAssetKey } from './hero-power-assets'
 
-export { ASSET_BUNDLE_IDS } from './asset-bundle-ids'
+export { ASSET_BUNDLE_IDS, GAME_BOARD_BUNDLE_IDS } from './asset-bundle-ids'
 export { asset, type AssetDefinition } from './asset-definition'
 export type { StandaloneAssetSource, AtlasFrameAssetSource } from './asset-definition'
-import { ASSET_BUNDLE_IDS } from './asset-bundle-ids'
+import { ASSET_BUNDLE_IDS, GAME_BOARD_BUNDLE_IDS } from './asset-bundle-ids'
 import { asset, type AssetDefinition } from './asset-definition'
 
 const bespokeAssetDefinitions: readonly AssetDefinition[] = [
@@ -925,6 +927,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     294,
     97,
     'game-settings'
+  ),
+  asset(
+    'scene.game.board-base',
+    ASSET_BUNDLE_IDS.game,
+    'boardBase',
+    gameBoardBaseImage,
+    1920,
+    1080,
+    'game-scene'
   ),
   asset(
     'scene.game.board-1',
@@ -2369,6 +2380,36 @@ const cardDefinitions: readonly AssetDefinition[] = CARD_ASSET_DEFINITIONS.map(
 
 export const ASSET_DEFINITIONS: readonly AssetDefinition[] = [
   ...bespokeAssetDefinitions,
+  asset(
+    'scene.game-loading.overlay',
+    ASSET_BUNDLE_IDS.gameLoading,
+    'overlay',
+    loadScreenOverlayImage,
+    1920,
+    1080,
+    'game-loading'
+  ),
+  ...[
+    gameBoard1Image,
+    gameBoard2Image,
+    gameBoard3Image,
+    gameBoard4Image,
+    gameBoard5Image,
+    gameBoard6Image,
+    gameBoard7Image,
+    gameBoard8Image,
+    gameBoard9Image
+  ].map((source, index) =>
+    asset(
+      'scene.game-loading.board-' + (index + 1),
+      GAME_BOARD_BUNDLE_IDS[index]!,
+      'board',
+      source,
+      1920,
+      1080,
+      'game-loading'
+    )
+  ),
   ...cardDefinitions
 ]
 
@@ -2529,6 +2570,7 @@ export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
   heroPowerAura2: Texture
   heroPowerAura3: Texture
   heroPowerAura4: Texture
+  boardBase: Texture
   board1: Texture
   board2: Texture
   board3: Texture
@@ -2686,4 +2728,11 @@ export interface CardPreviewAssets {
   upgradeWindow: Texture
   upgradeButton: Texture
   disenchantButton: Texture
+}
+
+export interface GameLoadingAssets {
+  overlay: Texture
+}
+export interface GameBoardAssets {
+  board: Texture
 }

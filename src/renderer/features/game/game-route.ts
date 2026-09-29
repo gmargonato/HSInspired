@@ -1,6 +1,6 @@
 import type { MatchSetup } from '../../../game/match'
 import type { Deck } from '../../../game/decks'
-import type { GeneratedOpponentMetadata } from '../../../game/decks/opponent-generator'
+import type { CuratedOpponentMetadata } from '../../../game/decks/curated-opponent-selection'
 
 /** Minimal route contract consumed by the game feature itself. */
 export interface GameRoute {
@@ -8,7 +8,7 @@ export interface GameRoute {
   readonly setup: MatchSetup
   readonly mode?: 'tavern-brawl' | 'arena'
   readonly deckSnapshots?: readonly Deck[]
-  readonly generatedOpponent?: GeneratedOpponentMetadata
+  readonly curatedOpponent?: CuratedOpponentMetadata
 }
 
 /** Rebuilds the same matchup with a fresh deterministic match seed. */

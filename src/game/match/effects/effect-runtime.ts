@@ -27,6 +27,7 @@ import { runSummonAction, type SummonActionContext } from './summon-actions'
 import { runManaAction, type ManaActionContext } from './mana-actions'
 import { MAX_MANA, stringValue } from './effect-primitives'
 import { EffectQueries } from './effect-queries'
+import { heroPowerUseLimit } from './hero-power-use-limit'
 import {
   isRecord,
   integer,
@@ -9313,6 +9314,10 @@ export class EffectRuntime {
   private recomputeContinuousEffects(): void {
     if (this.deriving) return
     this.deriving = true
+    const previousMinionHealth = new Map<
+      string,
+      { health: number; maxHealth: number; minimumHealth: number }
+    >()
     try {
       for (const player of this.draft.players) {
         for (const card of [
@@ -9607,6 +9612,11 @@ export class EffectRuntime {
             (minimum, enchantment) => Math.max(minimum, enchantment.minimumHealth ?? 0),
             0
           )
+          previousMinionHealth.set(minion.instanceId, {
+            health: oldHealth,
+            maxHealth: oldMaximum,
+            minimumHealth
+          })
           minion.enchantments = storedEnchantments as DraftMinion['enchantments']
           minion.attack = Math.max(0, attack)
           minion.maxHealth = maximumHealth
@@ -9755,6 +9765,29 @@ export class EffectRuntime {
       }
 
       for (const player of this.draft.players) {
+        for (const minion of player.board) {
+          const previous = previousMinionHealth.get(minion.instanceId)
+          if (!previous) continue
+          // Removing and reapplying an aura is bookkeeping, not a new health buff.
+          // Apply only the net maximum-health change so derivation cannot heal
+          // damage or rescue a lethally damaged minion before the death checkpoint.
+          const minimumHealth = (minion.enchantments ?? []).reduce(
+            (minimum, enchantment) =>
+              enchantment.continuous
+                ? Math.max(minimum, enchantment.minimumHealth ?? 0)
+                : minimum,
+            previous.minimumHealth
+          )
+          minion.health = Math.max(
+            minimumHealth,
+            healthAfterMaximumChange(
+              previous.health,
+              previous.maxHealth,
+              minion.maxHealth
+            )
+          )
+          minion.damageTaken = Math.max(0, minion.maxHealth - minion.health)
+        }
         player.heroPower.available =
           (player.heroPower.usesThisTurn ?? 0) <
           this.heroPowerUseLimit(player.participantId)
@@ -11308,26 +11341,7 @@ export class EffectRuntime {
   }
 
   private heroPowerUseLimit(participantId: PlayerId): number {
-    let limit = 1
-    for (const boardPlayer of this.draft.players) {
-      for (const minion of boardPlayer.board) {
-        if (minion.silenced) continue
-        const definition = cardDefinition(minion.cardId)
-        for (const block of definition?.effects ?? []) {
-          if (block.trigger !== 'aura') continue
-          for (const action of block.actions ?? []) {
-            if (action.action !== 'modify-hero-power-uses') continue
-            if (action.disabled === true) return 0
-            if (
-              typeof action.heroPowerUsesPerTurn === 'number' &&
-              (action.player === 'each' || boardPlayer.participantId === participantId)
-            )
-              limit = Math.max(limit, Math.floor(action.heroPowerUsesPerTurn))
-          }
-        }
-      }
-    }
-    return limit
+    return heroPowerUseLimit(this.draft, participantId)
   }
 
   private heroPowerDamageBonus(participantId: PlayerId): number {

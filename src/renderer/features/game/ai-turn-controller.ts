@@ -1053,8 +1053,10 @@ export class AiTurnController {
         }
         if (
           error instanceof AiRequestError &&
-          error.details?.failureKind === 'timeout'
+          (error.details?.failureKind === 'timeout' ||
+            error.details?.failureKind === 'worker-failure')
         ) {
+          const expertFailureKind = error.details.failureKind
           const legal = this.legalCommands()
           if (!legal.length) return null
           if (settings?.modelId === 'hardware-local-v2') {
@@ -1068,7 +1070,10 @@ export class AiTurnController {
             selected = fallbackAction.command
             actionId = fallbackAction.id
             source = 'safe-fallback'
-            reason = `Hardware Expert reached its whole-turn search budget; used the deterministic fair-state fallback: ${fallbackAction.description}`
+            reason =
+              expertFailureKind === 'timeout'
+                ? `Hardware Expert reached its whole-turn search budget; used the deterministic fair-state fallback: ${fallbackAction.description}`
+                : `Hardware Expert's search worker failed; used the deterministic fair-state fallback: ${fallbackAction.description}`
           } else {
             const index = Math.floor(Math.random() * legal.length)
             selected = legal[index]!
@@ -1078,14 +1083,17 @@ export class AiTurnController {
           }
           this.turnPlan = undefined
           this.plannedTurn = undefined
-          this.log('timeout-fallback', {
-            ...identity,
-            actionId,
-            command: selected,
-            source,
-            reason,
-            diagnostics: error.details
-          })
+          this.log(
+            expertFailureKind === 'timeout' ? 'timeout-fallback' : 'worker-fallback',
+            {
+              ...identity,
+              actionId,
+              command: selected,
+              source,
+              reason,
+              diagnostics: error.details
+            }
+          )
         } else if (AiTurnController.isNonRetryableAbort(error)) {
           return null
         } else if (

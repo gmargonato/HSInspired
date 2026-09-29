@@ -5,6 +5,66 @@ import { effectiveBoardMinionKeywords } from '../../../game/match/rules/minion-a
 /** A soft value penalty in the normalized Expert position-score range. */
 export const EXPERT_UNPAID_FRIENDLY_DAMAGE_PENALTY = 0.35
 
+/** Soft advice; simulated payoffs may justify these setup actions. */
+export function unpaidActionPenalty(
+  command: TurnMatchCommand,
+  state: TurnMatchState,
+  actorId: string
+): number {
+  const player = state.players.find((entry) => entry.participantId === actorId)
+  if (!player) return 0
+  if (command.type === 'use-hero-power') {
+    const power = HERO_POWER_CATALOG.get(player.heroPower.id)
+    if (
+      power?.effect.kind === 'equip-weapon' &&
+      player.weapon &&
+      player.weapon.durability === player.weapon.maxDurability &&
+      player.weapon.cardId === power.effect.cardId
+    )
+      return 0.12
+    return unpaidFriendlyDamageHeroPowerPenalty(command, state, actorId)
+  }
+  if (command.type !== 'play-card') return 0
+  const card = player.hand.find((entry) => entry.instanceId === command.cardInstanceId)
+  const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
+  if (
+    definition?.type === 'Spell' &&
+    player.board.length < 7 &&
+    player.hand.some((entry) => {
+      const setup = CARD_CATALOG.get(entry.cardId)
+      return (
+        setup?.type === 'Minion' &&
+        setup.effects.some((effect) => effect.trigger === 'on-cast') &&
+        (entry.currentCost ?? setup.cost) + (card?.currentCost ?? definition.cost) <=
+          player.mana.available
+      )
+    })
+  )
+    return 0.08
+  if (
+    definition?.type !== 'Spell' ||
+    !definition.effects.length ||
+    !definition.effects.every(
+      (effect) =>
+        effect.trigger === 'cast' &&
+        effect.actions?.every((action) => action.action === 'damage')
+    )
+  )
+    return 0
+  if (!command.targets?.some((entry) => entry.participantId === actorId)) return 0
+  if (
+    state.players.some((entry) =>
+      entry.board.some((minion) =>
+        CARD_CATALOG.get(minion.cardId)?.effects.some((effect) =>
+          ['on-damage', 'on-death', 'deathrattle', 'on-cast'].includes(effect.trigger)
+        )
+      )
+    )
+  )
+    return 0
+  return EXPERT_UNPAID_FRIENDLY_DAMAGE_PENALTY
+}
+
 /**
  * Discourages direct hero-power damage to a friendly character when it has no
  * observable payoff. The engine still explores these actions, and damage or

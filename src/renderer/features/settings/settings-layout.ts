@@ -103,6 +103,26 @@ export const SETTINGS_LAYOUT = {
     { width: 200, height: 52 },
     { anchor: CENTER, note: 'Local text placement within an AI mode option.' }
   ),
+  expertDeckStrategyTitle: placement(
+    { x: 960, y: 695 },
+    { width: 420, height: 42 },
+    { anchor: CENTER, note: 'Heading for the Expert constructed deck strategy switch.' }
+  ),
+  expertDeckStrategyField: placement(
+    { x: 960, y: 750 },
+    { width: 344, height: 76 },
+    { anchor: CENTER, note: 'Clickable enabled/disabled strategy preference.' }
+  ),
+  expertDeckStrategyValue: placement(
+    { x: 918, y: 750 },
+    { width: 208, height: 42 },
+    { anchor: CENTER, note: 'Strategy switch value on the parchment field.' }
+  ),
+  expertDeckStrategyHint: placement(
+    { x: 960, y: 800 },
+    { width: 400, height: 22 },
+    { anchor: CENTER, note: 'Explains that the preference applies to future matches.' }
+  ),
   /** Match-only action frames and buttons, centered inside the game settings panel. */
   gameActions: {
     concedeFrame: placement(

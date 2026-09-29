@@ -8,6 +8,14 @@ export const SCENE_REQUEST_CHANNEL = 'debug:scene-request'
 
 export type DevMatchLaunchMode = 'first-player' | 'second-player' | 'skip-mulligan'
 
+/** Development menu choices for the current three-deck Expert pilot. */
+export const DEV_EXPERT_DRUID_DECKS = [
+  { id: 'druid-midrange-old-gods', label: 'Druid Mid A' },
+  { id: 'druid-cthun-midrange', label: "Druid C'Thun" },
+  { id: 'druid-jade-elemental', label: 'Jade Druid' }
+] as const
+export type DevExpertDruidDeckId = (typeof DEV_EXPERT_DRUID_DECKS)[number]['id']
+
 type DevMatchMenuCatalog = {
   readonly [Mode in DevMatchLaunchMode]: {
     readonly label: string
@@ -51,7 +59,14 @@ export interface SceneParamsById {
   'card-inspector': undefined
   'outline-lab': undefined
   'hero-power-anim': undefined
-  game: { deckId?: string; launchMode?: DevMatchLaunchMode } | undefined
+  'vfx-lab': undefined
+  game:
+    | {
+        deckId?: string
+        launchMode?: DevMatchLaunchMode
+        curatedOpponentDeckId?: DevExpertDruidDeckId
+      }
+    | undefined
 }
 
 export type SceneId = keyof SceneParamsById
@@ -101,6 +116,7 @@ export const SCENE_MENU_ENTRIES = {
   },
   'outline-lab': { label: 'Shader Lab', request: { id: 'outline-lab' } },
   'hero-power-anim': { label: 'Hero Power Anim', request: { id: 'hero-power-anim' } },
+  'vfx-lab': { label: 'VFX Lab', request: { id: 'vfx-lab' } },
   game: { label: 'Match', request: { id: 'game' } }
 } as const satisfies SceneMenuCatalog
 
@@ -117,7 +133,16 @@ export function isSceneRequest(value: unknown): value is SceneRequest {
 
   if (request.id === 'game' && request.params !== undefined) {
     if (typeof request.params !== 'object' || request.params === null) return false
-    const params = request.params as { deckId?: unknown; launchMode?: unknown }
+    const params = request.params as {
+      deckId?: unknown
+      launchMode?: unknown
+      curatedOpponentDeckId?: unknown
+    }
+    if (
+      params.curatedOpponentDeckId !== undefined &&
+      !DEV_EXPERT_DRUID_DECKS.some((deck) => deck.id === params.curatedOpponentDeckId)
+    )
+      return false
     if (
       params.deckId !== undefined &&
       (typeof params.deckId !== 'string' || params.deckId.length === 0)

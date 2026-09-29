@@ -4,6 +4,8 @@ import type {
   ExpertAiWorldWorkerResponse,
   ExpertWorldRequest
 } from './expert-ai-world-runner'
+import type { AiDecisionResponse } from '../../../shared/ipc/ai'
+import { partialExpertWorld } from './expert-ai-world-runner'
 
 const MAX_EXPERT_AI_WORLD_WORKERS = 3
 
@@ -13,13 +15,24 @@ interface WorldWorkerSlot {
 }
 
 interface PendingWorldTask {
+  progress?: {
+    response: AiDecisionResponse
+    recommendationValue: number
+    iterations: number
+  }
   readonly taskId: string
   readonly requestId: string
   readonly request: ExpertWorldRequest
   readonly worldIndex: number
   readonly budgetMs: number
+  readonly deadlineEpochMs: number
   readonly resolve: (result: ExpertAiWorldEvaluation | null) => void
   readonly reject: (error: Error) => void
+  readonly onProgress?: (
+    response: AiDecisionResponse,
+    recommendationValue: number,
+    iterations: number
+  ) => void
   settled: boolean
   slotIndex: number | null
   timer: ReturnType<typeof setTimeout> | null
@@ -39,7 +52,8 @@ export class ExpertAiWorldPool {
   evaluate(
     request: ExpertWorldRequest,
     worldIndex: number,
-    budgetMs: number
+    budgetMs: number,
+    onProgress?: PendingWorldTask['onProgress']
   ): Promise<ExpertAiWorldEvaluation | null> {
     const taskId = `${request.request.requestId}:${worldIndex}:${this.nextTaskOrdinal++}`
     return new Promise((resolve, reject) => {
@@ -49,8 +63,10 @@ export class ExpertAiWorldPool {
         request,
         worldIndex,
         budgetMs,
+        deadlineEpochMs: Date.now() + budgetMs,
         resolve,
         reject,
+        ...(onProgress ? { onProgress } : {}),
         settled: false,
         slotIndex: null,
         timer: null
@@ -98,6 +114,15 @@ export class ExpertAiWorldPool {
         if (candidate && !candidate.settled) task = candidate
       }
       if (!task) continue
+      const remainingMs = task.deadlineEpochMs - Date.now()
+      if (remainingMs <= 0) {
+        this.settleFailure(
+          task,
+          new Error('Expert AI world deadline expired in the queue.')
+        )
+        slotIndex--
+        continue
+      }
 
       let worker: Worker
       try {
@@ -114,10 +139,27 @@ export class ExpertAiWorldPool {
           slot.activeTaskId = null
           worker.terminate()
           slot.worker = null
-          this.settleFailure(task!, new Error('Expert AI world worker timed out.'))
+          if (task!.progress && !task!.settled) {
+            const progress = task!.progress
+            try {
+              const partial = partialExpertWorld(
+                task!.request,
+                task!.worldIndex,
+                progress.response,
+                progress.recommendationValue,
+                progress.iterations
+              )
+              task!.settled = true
+              task!.resolve(partial)
+              this.clearTask(task!)
+            } catch (error) {
+              this.settleFailure(task!, error)
+            }
+          } else
+            this.settleFailure(task!, new Error('Expert AI world worker timed out.'))
           this.dispatchQueuedTasks()
         },
-        Math.max(1_000, task.budgetMs + 750)
+        Math.max(1, remainingMs + 750)
       )
       try {
         const message: ExpertAiWorldWorkerRequest = {
@@ -125,7 +167,8 @@ export class ExpertAiWorldPool {
           taskId: task.taskId,
           request: task.request,
           worldIndex: task.worldIndex,
-          budgetMs: task.budgetMs
+          budgetMs: task.budgetMs,
+          deadlineEpochMs: task.deadlineEpochMs
         }
         worker.postMessage(message)
       } catch (error) {
@@ -149,6 +192,17 @@ export class ExpertAiWorldPool {
         const taskId = slot.activeTaskId
         if (!taskId) return
         const task = this.pending.get(taskId)
+        if (event.data.taskId !== taskId) return
+        if (event.data.type === 'progress') {
+          if (task && !task.settled) task.progress = event.data
+          if (task && !task.settled)
+            task.onProgress?.(
+              event.data.response,
+              event.data.recommendationValue,
+              event.data.iterations
+            )
+          return
+        }
         slot.activeTaskId = null
         if (task?.timer) clearTimeout(task.timer)
         if (task) task.timer = null
@@ -215,9 +269,10 @@ const worldPool = new ExpertAiWorldPool()
 export function evaluateExpertAiWorldInWorker(
   request: ExpertWorldRequest,
   worldIndex: number,
-  budgetMs: number
+  budgetMs: number,
+  onProgress?: PendingWorldTask['onProgress']
 ): Promise<ExpertAiWorldEvaluation | null> {
-  return worldPool.evaluate(request, worldIndex, budgetMs)
+  return worldPool.evaluate(request, worldIndex, budgetMs, onProgress)
 }
 
 export function cancelExpertAiWorlds(requestId: string): void {

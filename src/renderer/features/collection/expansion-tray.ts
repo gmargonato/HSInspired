@@ -109,7 +109,7 @@ export class ExpansionTray extends Actor {
 
     this.outline = new AnimatedOutline(outlineTarget, {
       palette: 'blue',
-      preset: 'button'
+      preset: 'expansion-toggle'
     })
     this.outline.setEnabled(false)
     this.addChild(this.outline)

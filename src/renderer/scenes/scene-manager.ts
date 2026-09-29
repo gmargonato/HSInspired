@@ -77,6 +77,11 @@ export class SceneManager {
     return this.stack[this.stack.length - 1] ?? null
   }
 
+  presentLoadingRoot(root: Container): void {
+    this.world.addChild(root)
+    this.fitToScreen()
+  }
+
   /** Design-canvas shake, independent of viewport fitting and the cursor. */
   setPresentationOffset(x: number, y: number): void {
     this.world.pivot.set(-x, -y)
@@ -391,6 +396,9 @@ export class SceneManager {
       await scene.load(this.app, this)
       loaded = true
 
+      // A loading presentation has already replaced black and revealed the board.
+      // Do not cover it with a second black fade when initialization completes.
+      if (scene.root.parent === this.world) overlay.alpha = 0
       this.world.addChild(scene.root)
       this.world.addChild(overlay)
       this.stack[this.stack.length - 1] = scene

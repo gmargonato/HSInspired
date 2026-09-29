@@ -141,6 +141,16 @@ export class MatchLogRepository {
       recordingIncomplete: false,
       participants: [],
       decisions: [],
+      ...(metadata.expertDeckStrategy
+        ? { expertDeckStrategy: metadata.expertDeckStrategy }
+        : {}),
+      ...(metadata.aiMode ? { aiMode: metadata.aiMode } : {}),
+      ...(typeof metadata.aiHeroPowerBonusEnabled === 'boolean'
+        ? { aiHeroPowerBonusEnabled: metadata.aiHeroPowerBonusEnabled }
+        : {}),
+      ...(metadata.curatedOpponent
+        ? { curatedOpponent: metadata.curatedOpponent }
+        : {}),
       ...(metadata.generatedOpponent
         ? { generatedOpponent: metadata.generatedOpponent }
         : {}),
@@ -150,6 +160,7 @@ export class MatchLogRepository {
         : {})
     }
     const generated = metadata.generatedOpponent as JsonObject | undefined
+    const curated = metadata.curatedOpponent as JsonObject | undefined
     const construction = Array.isArray(generated?.construction)
       ? generated.construction
       : []
@@ -160,9 +171,23 @@ export class MatchLogRepository {
         return `[${String(step.layer)}] ${String(step.selected)} — ${String(step.reason)} (candidates: ${String(step.candidates)}; deck: ${String(step.deckSize)}/30)\n`
       })
       .join('')
+    const source = curated?.source as JsonObject | undefined
+    const strategy = curated?.strategy as JsonObject | undefined
+    const curatedText = curated
+      ? `Curated opponent deck: ${String(curated.deckName)} (${String(curated.classId)})\n` +
+        `Catalog version: ${String(curated.catalogVersion)}\n` +
+        (typeof source?.title === 'string' ? `Source: ${source.title}\n` : '') +
+        (typeof source?.publishedAt === 'string'
+          ? `Published: ${source.publishedAt}\n`
+          : '') +
+        (typeof source?.url === 'string' ? `Source URL: ${source.url}\n` : '') +
+        (typeof strategy?.text === 'string' ? `Strategy: ${strategy.text}\n` : '') +
+        '\n'
+      : ''
     await writeFile(
       join(directory, 'match.txt'),
       'Match started.\n' +
+        curatedText +
         (constructionText
           ? '\nOpponent deck construction (generator rules and selections)\n' +
             constructionText +

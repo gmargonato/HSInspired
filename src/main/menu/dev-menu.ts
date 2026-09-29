@@ -370,7 +370,7 @@ function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
       {
         label: 'Set Rank',
         submenu: [
-          ...Array.from({ length: 25 }, (_, index) => 25 - index).map((rank) => ({
+          ...[25, 1].map((rank) => ({
             label: `Rank ${rank}`,
             click: () =>
               sendDevCommand(mainWindow, {

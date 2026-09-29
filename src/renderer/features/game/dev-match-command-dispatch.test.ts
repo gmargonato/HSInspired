@@ -4,6 +4,47 @@ import type { DevCommand } from '../../../shared/dev-menu'
 import { dispatchDevMatchCommand } from './dev-match-command-dispatch'
 
 describe('development match command dispatch', () => {
+  it.each(['local', 'remote'] as const)(
+    'maps standalone hero power controls for %s',
+    (target) => {
+      const calls: unknown[] = []
+      for (const fields of [
+        { action: 'reset' },
+        { action: 'consume' },
+        { cost: 3 }
+      ] as const) {
+        dispatchDevMatchCommand(
+          (command) => {
+            calls.push(command)
+            return {} as OpeningCommandResult
+          },
+          { type: 'game:set-hero-power', target, ...fields },
+          (selected) => asPlayerId(selected + '-player')
+        )
+      }
+      expect(calls).toEqual([
+        {
+          type: 'dev-set-hero-power',
+          participantId: asPlayerId(target + '-player'),
+          available: true,
+          cost: undefined
+        },
+        {
+          type: 'dev-set-hero-power',
+          participantId: asPlayerId(target + '-player'),
+          available: false,
+          cost: undefined
+        },
+        {
+          type: 'dev-set-hero-power',
+          participantId: asPlayerId(target + '-player'),
+          available: undefined,
+          cost: 3
+        }
+      ])
+    }
+  )
+
   it('maps each state-editing menu command through the canonical match boundary', () => {
     const commands: readonly DevCommand[] = [
       { type: 'game:draw', target: 'local' },

@@ -33,6 +33,10 @@ const createDevScene: DevSceneFactory | undefined = import.meta.env.DEV
           const { OutlineLabScene } = await import('@outline-lab')
           return new OutlineLabScene()
         }
+        case 'vfx-lab': {
+          const { VfxLabScene } = await import('@vfx-lab')
+          return new VfxLabScene()
+        }
       }
     }
   : undefined
@@ -242,6 +246,8 @@ async function bootstrap(): Promise<void> {
       import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'card-inspector'
     const directOutlineLabStart =
       import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'outline-lab'
+    const directVfxLabStart =
+      import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'vfx-lab'
     const directMatchPerformanceStart =
       import.meta.env.DEV &&
       import.meta.env.VITE_DEV_START_ROUTE === 'match-performance'
@@ -253,6 +259,9 @@ async function bootstrap(): Promise<void> {
     } else if (directOutlineLabStart) {
       const { OutlineLabScene } = await import('@outline-lab')
       await game.start(new OutlineLabScene())
+    } else if (directVfxLabStart) {
+      const { VfxLabScene } = await import('@vfx-lab')
+      await game.start(new VfxLabScene())
     } else {
       await game.start(navigator.createInitialScene())
       if (directGameStart) {

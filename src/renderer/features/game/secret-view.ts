@@ -1,4 +1,11 @@
-import { Container, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
+import {
+  Container,
+  Rectangle,
+  Sprite,
+  Text,
+  type Texture,
+  type Renderer
+} from 'pixi.js'
 import { CARD_CATALOG } from '../../../game/content/cards'
 import { AnimationScope } from '../../animation/animations'
 import { CardView } from '../../rendering/cards/card-view'
@@ -72,6 +79,10 @@ export class SecretZoneView extends Container {
     this.hoverOutlines.get(side)?.setEnabled(enabled)
   }
 
+  prebuildOutlines(renderer: Renderer): void {
+    for (const outline of this.hoverOutlines.values()) outline.prebuild(renderer)
+  }
+
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     this.animations.kill()
     for (const outline of this.hoverOutlines.values()) outline.dispose()
@@ -99,7 +110,7 @@ export class SecretZoneView extends Container {
     badge.addChildAt(hoverTarget, 0)
     const hoverOutline = new AnimatedOutline(hoverTarget, {
       palette: 'white',
-      preset: 'board'
+      preset: 'secret'
     })
     hoverOutline.setEnabled(false)
     this.hoverOutlines.set(side, hoverOutline)
@@ -190,7 +201,7 @@ export class QuestZoneView extends Container {
     badge.addChildAt(hoverTarget, 0)
     const hoverOutline = new AnimatedOutline(hoverTarget, {
       palette: 'white',
-      preset: 'board'
+      preset: 'quest'
     })
     hoverOutline.setEnabled(false)
     this.hoverOutlines.set(side, hoverOutline)
@@ -204,6 +215,10 @@ export class QuestZoneView extends Container {
     count.eventMode = 'none'
     badge.addChild(count)
     return badge
+  }
+
+  prebuildOutlines(renderer: Renderer): void {
+    for (const outline of this.hoverOutlines.values()) outline.prebuild(renderer)
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {

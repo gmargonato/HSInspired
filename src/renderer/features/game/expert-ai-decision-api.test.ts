@@ -29,6 +29,106 @@ import type {
 } from './expert-ai-worker-protocol'
 
 describe('Expert hidden-world consensus', () => {
+  it('keeps proven wins ahead of positional scores and preserves their sequence across worlds', () => {
+    const candidate = (actionId: string, score: number, provenWin = false) => ({
+      actionId,
+      type: 'attack-character',
+      description: actionId,
+      score,
+      recommendationValue: score,
+      provenWin,
+      accepted: true,
+      outcome: provenWin ? 'win' : 'ongoing',
+      recommendationTacticalPenalty: provenWin ? 100 : 0
+    })
+    const results = [
+      {
+        response: { choice: { actionId: 'win' } },
+        trace: {
+          chosenActionId: 'win',
+          chosenSequence: ['Win now'],
+          candidates: [candidate('win', -0.9, true), candidate('board', 0.99)]
+        }
+      },
+      {
+        response: { choice: { actionId: 'board' } },
+        trace: {
+          chosenActionId: 'board',
+          candidates: [candidate('win', -0.9), candidate('board', 0.99)]
+        }
+      }
+    ] as unknown as Parameters<typeof chooseExpertConsensus>[0]
+    const result = chooseExpertConsensus(results, ['win', 'board'])
+    expect(result.actionId).toBe('win')
+    expect(result.scores.get('win')?.trace?.sequence).toEqual(['Win now'])
+  })
+
+  it('ranks a demonstrated terminal loss below an ongoing position regardless of soft penalties', () => {
+    const results = [
+      {
+        response: { choice: { actionId: 'loss' } },
+        trace: {
+          candidates: [
+            { actionId: 'loss', accepted: true, outcome: 'loss', score: -1 },
+            { actionId: 'continue', accepted: true, outcome: 'ongoing', score: -5 }
+          ]
+        }
+      }
+    ] as unknown as Parameters<typeof chooseExpertConsensus>[0]
+    expect(chooseExpertConsensus(results, ['loss', 'continue']).actionId).toBe(
+      'continue'
+    )
+  })
+  it('prioritizes escaping a demonstrated public lethal over soft position scores', () => {
+    const results = [
+      {
+        response: { choice: { actionId: 'greed' } },
+        trace: {
+          candidates: [
+            {
+              actionId: 'greed',
+              accepted: true,
+              outcome: 'ongoing',
+              publicReply: 'lethal',
+              score: 1
+            },
+            {
+              actionId: 'defend',
+              accepted: true,
+              outcome: 'ongoing',
+              publicReply: 'clear',
+              score: -5
+            }
+          ]
+        }
+      }
+    ] as unknown as Parameters<typeof chooseExpertConsensus>[0]
+    expect(chooseExpertConsensus(results, ['greed', 'defend']).actionId).toBe('defend')
+  })
+
+  it('retains the safer continuation when another world finds a losing line with the same first action', () => {
+    const results = ['clear', 'lethal'].map((publicReply) => ({
+      response: { choice: { actionId: 'setup' } },
+      trace: {
+        chosenActionId: 'setup',
+        chosenSequence:
+          publicReply === 'clear' ? ['Setup', 'Defend'] : ['Setup', 'Pass'],
+        candidates: [
+          {
+            actionId: 'setup',
+            accepted: true,
+            outcome: 'ongoing',
+            publicReply,
+            score: 0
+          }
+        ]
+      }
+    })) as unknown as Parameters<typeof chooseExpertConsensus>[0]
+    const score = chooseExpertConsensus(results, ['setup']).scores.get('setup')
+    expect(score?.publicLethal).toBe(false)
+    expect(score?.trace?.sequence).toEqual(['Setup', 'Defend'])
+  })
+
   it('ranks an empty Coin into face hero power below ordinary legal moves', () => {
     const candidate = (
       actionId: string,
@@ -208,9 +308,9 @@ describe('Expert AI worker boundary', () => {
 
       const message = posted.find((entry) => entry.type === 'decide')!
       if (message.type !== 'decide') throw new Error('Expected a decide request.')
-      expect(EXPERT_AI_TURN_BUDGET_MS).toBe(35_000)
-      expect(EXPERT_AI_SEARCH_BUDGET_MS).toBe(29_500)
-      expect(EXPERT_AI_DECISION_SEARCH_BUDGET_MS).toBe(28_000)
+      expect(EXPERT_AI_TURN_BUDGET_MS).toBe(60_000)
+      expect(EXPERT_AI_SEARCH_BUDGET_MS).toBe(54_500)
+      expect(EXPERT_AI_DECISION_SEARCH_BUDGET_MS).toBe(46_500)
       expect(expertAiBudgetForTurn(10_000)).toMatchObject({
         turnBudgetMs: 10_000,
         searchBudgetMs: 4_500,
@@ -218,7 +318,7 @@ describe('Expert AI worker boundary', () => {
         planSearchLimitMs: 2_000,
         replanSearchLimitMs: 1_000
       })
-      expect(message.remainingSearchBudgetMs).toBeLessThanOrEqual(28_000)
+      expect(message.remainingSearchBudgetMs).toBeLessThanOrEqual(46_500)
       const originalHidden = fixture.checkpoint.state.players.find(
         (player) => player.participantId === fixture.localParticipantId
       )!
@@ -303,7 +403,7 @@ describe('Expert AI worker boundary', () => {
       expect(decisionsPosted[0]?.remainingSearchBudgetMs).toBe(
         EXPERT_AI_DECISION_SEARCH_BUDGET_MS
       )
-      expect(decisionsPosted[1]?.remainingSearchBudgetMs).toBe(1_500)
+      expect(decisionsPosted[1]?.remainingSearchBudgetMs).toBe(8_000)
 
       const firstPlayerId = session.remoteParticipantId
       const secondPlayerId = session
@@ -347,7 +447,10 @@ describe('Expert AI worker boundary', () => {
       if (reserveDecision?.type !== 'decide')
         throw new Error('Expected the presentation-reserve worker request.')
       expect(reserveDecision.remainingSearchBudgetMs).toBe(
-        EXPERT_AI_SEARCH_BUDGET_MS - 7_200
+        Math.min(
+          EXPERT_AI_DECISION_SEARCH_BUDGET_MS,
+          EXPERT_AI_SEARCH_BUDGET_MS - 7_200
+        )
       )
     } finally {
       api.dispose()

@@ -183,7 +183,7 @@ export class HeroView extends Container {
     this.addChildAt(this.outlineProxy, 0)
     this.attackOutline = new AnimatedOutline(this.outlineProxy, {
       palette: 'green',
-      preset: 'board'
+      preset: 'hero'
     })
     this.attackOutline.setEnabled(false)
 
@@ -195,7 +195,7 @@ export class HeroView extends Container {
     this.addChildAt(this.targetingOutlineProxy, 0)
     this.targetingOutline = new AnimatedOutline(this.targetingOutlineProxy, {
       palette: 'red',
-      preset: 'board'
+      preset: 'hero'
     })
     this.targetingOutline.setEnabled(false)
 

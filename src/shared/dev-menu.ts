@@ -41,6 +41,7 @@ export type DevSceneId =
   | 'card-inspector'
   | 'outline-lab'
   | 'hero-power-anim'
+  | 'vfx-lab'
   | 'game'
   | 'settings'
   | 'card-preview'
@@ -137,6 +138,7 @@ export function isDevSceneId(value: unknown): value is DevSceneId {
       'card-inspector',
       'outline-lab',
       'hero-power-anim',
+      'vfx-lab',
       'game',
       'settings',
       'card-preview',

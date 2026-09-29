@@ -6,6 +6,8 @@ import { effectiveBoardMinionKeywords } from '../../../game/match/rules/minion-a
 import { aiActions } from './ai-context'
 import type { GameBoardSession } from './game-board-session'
 import { expertCoinHeroPowerActionPenalty } from './expert-coin-hero-power-policy'
+import { immediateExpertWin } from './expert-tactics'
+import { canonicalCommandKey } from '../../../game/match/ai/legal-commands'
 
 type LocalAction = ReturnType<typeof aiActions>[number]
 type EffectRecord = Readonly<Record<string, unknown>>
@@ -18,6 +20,7 @@ interface FallbackContext {
   readonly facingLethal: boolean
   readonly enemyHealth: number
   readonly coinPlayedThisTurn: boolean
+  readonly legalActions: readonly LocalAction[]
 }
 
 function numeric(value: unknown, fallback = 0): number {
@@ -112,6 +115,137 @@ function cardActions(cardId: string): readonly EffectRecord[] {
   return result
 }
 
+function containsGlobalMinionDestroy(value: unknown, depth = 0): boolean {
+  if (depth >= 8) return false
+  if (Array.isArray(value))
+    return value.some((entry) => containsGlobalMinionDestroy(entry, depth + 1))
+  if (!value || typeof value !== 'object') return false
+  const entry = value as EffectRecord
+  const target = entry.target
+  if (
+    entry.action === 'destroy' &&
+    target &&
+    typeof target === 'object' &&
+    !Array.isArray(target) &&
+    (target as EffectRecord).controller === 'any' &&
+    (target as EffectRecord).type === 'minion' &&
+    (target as EffectRecord).selection === 'all'
+  )
+    return true
+  return Object.values(entry).some((child) =>
+    containsGlobalMinionDestroy(child, depth + 1)
+  )
+}
+
+function hasImminentBoardClear(minion: AiObservedPlayer['board'][number]): boolean {
+  if (minion.silenced === true) return false
+  const definition = CARD_CATALOG.get(minion.cardId)
+  if (
+    definition?.effects.some(
+      (effect) =>
+        effect.trigger === 'start-of-turn' &&
+        containsGlobalMinionDestroy(effect.actions)
+    )
+  )
+    return true
+  const minionRecord = minion as unknown as Record<string, unknown>
+  return ['attachedEffects', 'grantedTriggers'].some((key) => {
+    const effects = minionRecord[key]
+    return (
+      Array.isArray(effects) &&
+      effects.some((effect) => {
+        if (!effect || typeof effect !== 'object') return false
+        const record = effect as EffectRecord
+        return (
+          record.trigger === 'start-of-turn' &&
+          containsGlobalMinionDestroy(record.actions)
+        )
+      })
+    )
+  })
+}
+
+function attackPowerAvailableAfterHeroPower(context: FallbackContext): number {
+  if (
+    context.self.heroPower.available !== true ||
+    context.self.heroPower.cost > context.self.mana.available ||
+    (context.self.hero.attacksUsedThisTurn ?? 0) >=
+      (context.self.hero.maxAttacksPerTurn ?? 1) ||
+    (context.self.hero.frozenUntilTurn ?? -1) >= context.observation.turnNumber
+  )
+    return 0
+  const power = HERO_POWER_CATALOG.get(context.self.heroPower.id)
+  if (
+    !power ||
+    (power.effect.kind !== 'gain-attack-and-armor' &&
+      power.effect.kind !== 'choose-one')
+  )
+    return 0
+  return Math.max(0, numeric(power.effect.attack))
+}
+
+function imminentBoardClearTarget(
+  target: NonNullable<ReturnType<typeof findMinion>>,
+  context: FallbackContext
+): boolean {
+  return (
+    findMinion(context.opponent, target.instanceId) !== undefined &&
+    hasImminentBoardClear(target)
+  )
+}
+
+function damagePotentialAgainst(
+  target: NonNullable<ReturnType<typeof findMinion>>,
+  context: FallbackContext
+): number {
+  let damage = 0
+  let addedHeroAttack = 0
+  for (const action of context.legalActions) {
+    const command = action.command
+    if (command.type === 'attack-character') {
+      if (
+        command.defender.kind === 'minion' &&
+        command.defender.instanceId === target.instanceId
+      )
+        damage += attackerStats(
+          command,
+          context.self,
+          context.observation.turnNumber
+        ).attack
+      continue
+    }
+    if (command.type !== 'use-hero-power') continue
+    const effect = HERO_POWER_CATALOG.get(context.self.heroPower.id)?.effect
+    if (!effect) continue
+    if (
+      command.target?.participantId === context.opponent.participantId &&
+      command.target.kind === 'minion' &&
+      command.target.instanceId === target.instanceId &&
+      (effect.kind === 'damage-character' ||
+        effect.kind === 'damage-and-summon-on-kill' ||
+        effect.kind === 'lifesteal-damage')
+    )
+      damage += effect.amount
+    else if (effect.kind === 'damage-all-minions') damage += effect.amount
+    else if (effect.kind === 'gain-attack-and-armor' || effect.kind === 'choose-one')
+      addedHeroAttack = Math.max(addedHeroAttack, numeric(effect.attack))
+  }
+  return damage + addedHeroAttack
+}
+
+function imminentBoardClearProgressScore(
+  target: NonNullable<ReturnType<typeof findMinion>>,
+  amount: number,
+  context: FallbackContext
+): number {
+  if (
+    !imminentBoardClearTarget(target, context) ||
+    damagePotentialAgainst(target, context) < numeric(target.health)
+  )
+    return 0
+  return 60 + Math.max(0, amount) * 1.5
+}
+
 function removalScore(
   target: NonNullable<ReturnType<typeof findMinion>>,
   context: FallbackContext
@@ -148,8 +282,12 @@ function scoreDamageTarget(
       )
       const shielded = keywords.includes('divine-shield')
       if (keywords.includes('immune')) return 0
+      const boardClearScore = shielded
+        ? 0
+        : imminentBoardClearProgressScore(minion, amount, context)
       if (!shielded && amount >= numeric(minion.health))
-        return removalScore(minion, context)
+        return removalScore(minion, context) + boardClearScore
+      if (boardClearScore > 0) return boardClearScore
       return shielded && amount > 0 ? 0.5 : amount * 0.35
     }
   }
@@ -287,7 +425,17 @@ function scoreCardPlay(
         effectActionScore(action, command.targets ?? [], context)
       )
     )
-    return bodyScore + urgentBlock + effectScore
+    const clearTrigger = context.opponent.board.find(hasImminentBoardClear)
+    const canAttackImmediately = definition.keywords.some(
+      (keyword) => keyword === 'charge' || keyword === 'rush'
+    )
+    const boardClearPenalty =
+      clearTrigger &&
+      !canAttackImmediately &&
+      effectScore < removalScore(clearTrigger, context)
+        ? 16
+        : 0
+    return bodyScore + urgentBlock + effectScore - boardClearPenalty
   }
 
   if (definition.type === 'Spell') {
@@ -359,7 +507,24 @@ function scoreAttack(
     !targetKeywords.includes('immune') &&
     !shielded &&
     (poisonous || attacker.attack >= numeric(target.health))
-  if (!removesTarget) return shielded && attacker.attack > 0 ? 0.5 : 0
+  if (!removesTarget) {
+    if (shielded) return attacker.attack > 0 ? 0.5 : 0
+    const boardClearScore = imminentBoardClearProgressScore(
+      target,
+      attacker.attack,
+      context
+    )
+    if (boardClearScore <= 0) return 0
+    const attackerDies =
+      command.attacker.kind === 'minion' &&
+      !attacker.keywords.includes('divine-shield') &&
+      !attacker.keywords.includes('immune') &&
+      numeric(target.attack) >= attacker.health
+    const friendlyLoss = attackerDies
+      ? 3 + attacker.attack * 1.1 + attacker.health * 0.8
+      : 0
+    return Math.max(0, boardClearScore - friendlyLoss)
+  }
 
   const attackerDies =
     command.attacker.kind === 'minion' &&
@@ -367,14 +532,48 @@ function scoreAttack(
     !attacker.keywords.includes('immune') &&
     numeric(target.attack) >= attacker.health
   const friendlyLoss = attackerDies
-    ? 3 + attacker.attack * 1.1 + attacker.health * 0.8
+    ? 3 +
+      attacker.attack * 1.1 +
+      attacker.health * 0.8 +
+      (command.attacker.kind === 'minion' && attackPowerCanReplaceTrade(target, context)
+        ? 6
+        : 0)
     : 0
   return (
     6 +
     Math.max(0, numeric(target.attack)) * 1.6 +
     Math.min(12, Math.max(0, numeric(target.health))) * 0.35 -
     friendlyLoss +
+    imminentBoardClearProgressScore(target, attacker.attack, context) +
     (context.facingLethal ? Math.max(0, numeric(target.attack)) * 4 : 0)
+  )
+}
+
+function attackPowerCanReplaceTrade(
+  target: NonNullable<ReturnType<typeof findMinion>>,
+  context: FallbackContext
+): boolean {
+  if (
+    effectiveBoardMinionKeywords(target, context.observation.turnNumber).some(
+      (keyword) => keyword === 'divine-shield' || keyword === 'immune'
+    )
+  )
+    return false
+  const addedAttack = attackPowerAvailableAfterHeroPower(context)
+  const otherTaunt = context.opponent.board.some(
+    (minion) =>
+      minion.instanceId !== target.instanceId &&
+      effectiveBoardMinionKeywords(minion, context.observation.turnNumber).includes(
+        'taunt'
+      )
+  )
+  return (
+    !otherTaunt &&
+    addedAttack > 0 &&
+    numeric(context.self.hero.attack) +
+      numeric(context.self.weapon?.attack) +
+      addedAttack >=
+      numeric(target.health)
   )
 }
 
@@ -488,8 +687,22 @@ function scoreHeroPower(
       return weapon?.type === 'Weapon' ? weapon.attack * 2 + weapon.durability * 1.4 : 0
     }
     case 'gain-attack-and-armor':
-    case 'choose-one':
-      return effect.armor * (context.facingLethal ? 2 : 0.5) + effect.attack * 0.5
+    case 'choose-one': {
+      const followupClear = context.opponent.board.some(
+        (minion) =>
+          imminentBoardClearTarget(minion, context) &&
+          attackPowerAvailableAfterHeroPower(context) > 0 &&
+          numeric(context.self.hero.attack) +
+            numeric(context.self.weapon?.attack) +
+            Math.max(0, numeric(effect.attack)) >=
+            numeric(minion.health)
+      )
+      return (
+        effect.armor * (context.facingLethal ? 2 : 0.5) +
+        effect.attack * 0.5 +
+        (followupClear ? 65 : 0)
+      )
+    }
     case 'draw-and-self-damage':
     case 'draw-with-set-cost':
     case 'build-a-beast':
@@ -564,6 +777,15 @@ export function selectExpertTimeoutFallbackAction(
 ): LocalAction | undefined {
   const actions = aiActions(session, legalCommands)
   if (!actions.length) return undefined
+  const win = immediateExpertWin(
+    session.match.getCheckpoint(),
+    session.remoteParticipantId,
+    legalCommands
+  )
+  if (win)
+    return actions.find(
+      (action) => canonicalCommandKey(action.command) === canonicalCommandKey(win)
+    )
   const observation = session.getAiObservation()
   const self = observation.players.find((player) => player.role === 'self')
   const opponent = observation.players.find((player) => player.role === 'opponent')
@@ -584,6 +806,7 @@ export function selectExpertTimeoutFallbackAction(
     opponent,
     facingLethal,
     enemyHealth,
+    legalActions: actions,
     coinPlayedThisTurn:
       session.getState().history?.cardsPlayedThisTurn.includes('basic_the_coin') ===
       true

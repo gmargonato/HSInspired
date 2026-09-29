@@ -1,5 +1,10 @@
 import { CARD_CATALOG, HERO_POWER_CATALOG, cardHasTribe } from '../../../game/content'
 import {
+  searchTactics,
+  inspectTacticalLine,
+  type TacticalOutcome
+} from '../../../game/match/ai/tactical-search'
+import {
   enumerateLegalCommands,
   canonicalCommandKey,
   createSeededRng,
@@ -41,10 +46,21 @@ import {
 } from '../../../shared/ipc/ai-deliberation'
 import { aiActionIntent } from './ai-action-intent'
 import { aiActions } from './ai-context'
-import { EXPERT_AI_PLAN_SEARCH_LIMIT_MS } from './expert-ai-worker-protocol'
-import { unpaidFriendlyDamageHeroPowerPenalty } from './expert-ai-action-safety'
+import {
+  EXPERT_AI_PLAN_SEARCH_LIMIT_MS,
+  EXPERT_AI_POLICY_REVISION
+} from './expert-ai-worker-protocol'
+import {
+  unpaidFriendlyDamageHeroPowerPenalty,
+  unpaidActionPenalty
+} from './expert-ai-action-safety'
 import { LOCAL_AI_POLICY } from './local-ai-policy'
 import { GameBoardSession } from './game-board-session'
+import type { ExpertDeckStrategyBinding } from '../../../game/decks/expert-deck-strategy'
+import {
+  ExpertDeckEvaluator,
+  type ExpertDeckEvaluation
+} from './expert-deck-evaluation'
 
 const EASY_MODEL_ID = 'hardware-local-v1'
 const EXPERT_MODEL_ID = 'hardware-local-v2'
@@ -67,14 +83,24 @@ interface LocalAiSearchLimits {
 
 export interface LocalAiDecisionOptions {
   readonly profile?: LocalAiSearchProfile
+  readonly deckStrategy?: ExpertDeckStrategyBinding
   readonly budgetMs?: number
   /** Deterministic test/benchmark cap; production requests use the wall-clock budget. */
   readonly workBudget?: number
   readonly preferredContinuation?: AiActionIntent
   readonly expertPlanSearchLimitMs?: number
   readonly expertReplanSearchLimitMs?: number
+  readonly onSearchProgress?: (progress: LocalAiSearchProgress) => void
   /** True only when the session was built from a fair-hypothesis checkpoint. */
   readonly fairHypothesis?: boolean
+}
+
+export interface LocalAiSearchProgress {
+  readonly actionId: string
+  readonly command: TurnMatchCommand
+  readonly description: string
+  readonly recommendationValue: number
+  readonly iterations: number
 }
 
 const SEARCH_LIMITS: Readonly<Record<LocalAiSearchProfile, LocalAiSearchLimits>> = {
@@ -90,8 +116,8 @@ const SEARCH_LIMITS: Readonly<Record<LocalAiSearchProfile, LocalAiSearchLimits>>
     randomSampleSeeds: [0x1f123bb5, 0x8a5cd789, 0xc3ef14a1, 0x5eeded42]
   },
   expert: {
-    maxThinkMs: 26_000,
-    sequenceThinkMs: 26_000,
+    maxThinkMs: 54_500,
+    sequenceThinkMs: 54_500,
     rootSearchLimit: 64,
     sequenceBranchLimit: 12,
     sequenceMaxDepth: 10,
@@ -107,7 +133,7 @@ const SEARCH_LIMITS: Readonly<Record<LocalAiSearchProfile, LocalAiSearchLimits>>
 const EXPERT_REPLY_ACTION_LIMIT = 16
 const EXPERT_REPLY_NODE_LIMIT = 24
 const EXPERT_ROOT_COMMAND_PREFERENCE_SCALE = 0.5
-const EXPERT_REPLAN_SEARCH_LIMIT_MS = 1_500
+const EXPERT_REPLAN_SEARCH_LIMIT_MS = 4_000
 
 export interface LocalAiScoreComponents {
   readonly positionDelta: number
@@ -122,6 +148,9 @@ type LocalAction = ReturnType<typeof aiActions>[number]
 
 /** A compact, serializable explanation of one candidate considered by the CPU search. */
 export interface LocalAiCandidateTrace {
+  readonly outcome?: TacticalOutcome
+  readonly provenWin?: boolean
+  readonly publicReply?: 'lethal' | 'clear' | 'unknown'
   readonly actionId: string
   readonly type: TurnMatchCommand['type']
   readonly description: string
@@ -133,6 +162,8 @@ export interface LocalAiCandidateTrace {
   readonly sequenceIntents?: readonly AiActionIntent[]
   readonly visits?: number
   readonly meanValue?: number
+  /** Mean added position points across this root action's sampled leaves. */
+  readonly meanDeckStrategyAdjustment?: number
   readonly prior?: number
   /** Value of the best continuation sampled at least twice. */
   readonly recommendationValue?: number
@@ -144,6 +175,11 @@ export interface LocalAiCandidateTrace {
 
 /** Diagnostics for one local decision; kept small enough to persist with a match log. */
 export interface LocalAiDecisionTrace {
+  readonly tacticalNodes?: number
+  readonly tacticalExhausted?: boolean
+  readonly decisionPriority?: 'verified-win' | 'survival' | 'strategy'
+  /** Root position only; diagnostic contributions do not establish action causality. */
+  readonly deckStrategy?: ExpertDeckEvaluation
   readonly requestId: string
   readonly phase: 'plan' | 'action' | 'mulligan'
   readonly durationMs: number
@@ -769,6 +805,41 @@ function playerValue(player: AiObservedPlayer, turnNumber: number): number {
   )
 }
 
+/** Public recurring benefits omitted by the ordinary attack/health body score. */
+function expertEngineValue(player: AiObservedPlayer, turn: number): number {
+  return player.board.reduce((sum, minion) => {
+    const keywords = effectiveBoardMinionKeywords(minion, turn)
+    const healing = keywords.includes('lifesteal')
+      ? Math.min(
+          number(minion.attack),
+          Math.max(0, number(player.hero.maxHealth) - number(player.hero.health))
+        ) * LOCAL_AI_POLICY.weights.heroHealth
+      : 0
+    const recurring =
+      CARD_CATALOG.get(minion.cardId)
+        ?.effects.filter((effect) =>
+          ['start-of-turn', 'end-of-turn'].includes(effect.trigger)
+        )
+        .flatMap((effect) => effect.actions ?? [])
+        .reduce((value, action) => {
+          const entry = record(action)
+          if (
+            entry.action === 'change-cost' &&
+            number(entry.amount) < 0 &&
+            record(entry.target).zone === 'hand' &&
+            record(entry.target).controller === 'self'
+          )
+            return (
+              value +
+              Math.min(player.handSize, 10) * Math.min(2, -number(entry.amount)) * 2
+            )
+          if (entry.action === 'draw') return value + LOCAL_AI_POLICY.weights.handCard
+          return value
+        }, 0) ?? 0
+    return sum + healing + (minion.silenced ? 0 : recurring)
+  }, 0)
+}
+
 function stateScore(
   observation: AiObservation,
   selfId: string,
@@ -800,6 +871,10 @@ function stateScore(
     playerValue(self, observation.turnNumber) -
     playerValue(opponent, observation.turnNumber) +
     boardPresence +
+    (profile === 'expert'
+      ? expertEngineValue(self, observation.turnNumber) -
+        expertEngineValue(opponent, observation.turnNumber)
+      : 0) +
     pressure -
     danger
   )
@@ -1272,9 +1347,11 @@ export class LocalAiDecisionApi implements AiDecisionApi {
   private workUnits = 0
   private workBudgetHit = false
   private readonly preferredContinuation?: AiActionIntent
+  private readonly onSearchProgress?: (progress: LocalAiSearchProgress) => void
   private readonly fairHypothesis: boolean
   private readonly expertPlanSearchLimitMs: number
   private readonly expertReplanSearchLimitMs: number
+  private readonly deckEvaluator: ExpertDeckEvaluator | null
 
   constructor(
     private readonly session: GameBoardSession,
@@ -1282,6 +1359,11 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     options: LocalAiDecisionOptions = {}
   ) {
     this.profile = options.profile ?? 'easy'
+    this.deckEvaluator =
+      this.profile === 'expert' &&
+      options.deckStrategy?.participantId === session.remoteParticipantId
+        ? ExpertDeckEvaluator.create(options.deckStrategy)
+        : null
     this.limits = SEARCH_LIMITS[this.profile]
     this.budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY
     if (
@@ -1291,6 +1373,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       throw new RangeError('Local AI workBudget must be a positive safe integer.')
     this.workBudget = options.workBudget
     this.preferredContinuation = options.preferredContinuation
+    this.onSearchProgress = options.onSearchProgress
     this.fairHypothesis = options.fairHypothesis ?? false
     this.expertPlanSearchLimitMs =
       options.expertPlanSearchLimitMs ?? EXPERT_AI_PLAN_SEARCH_LIMIT_MS
@@ -1487,6 +1570,112 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           })
         })()
     mctsProfile.hypothesisSetupMs = performance.now() - hypothesisSetupStarted
+    const tacticalDeadline = Math.min(
+      started + (deadline - started) * 0.2,
+      performance.now() + 2_000
+    )
+    const tactical = simulationSession.match.analyze((fork) =>
+      searchTactics(fork, rootId, {
+        commands: actions.map((action) => action.command),
+        maxNodes:
+          this.workBudget === undefined ? 2_000 : Math.min(256, this.workBudget),
+        shouldStop: () =>
+          this.workBudget === undefined && performance.now() >= tacticalDeadline,
+        prior: (command, state) => this.commandPrior(command, state, rootId),
+        evaluate: (child) => {
+          const observation = child.getAiObservation?.(rootId, 'fair')
+          return observation
+            ? this.scoreObservation(observation, child.getState().winnerId)
+            : 0
+        }
+      })
+    )
+    if (tactical.win) {
+      const line = tactical.win
+      const action = actions.find(
+        (entry) =>
+          canonicalCommandKey(entry.command) === canonicalCommandKey(line.commands[0]!)
+      )!
+      const scoreComponents: LocalAiScoreComponents = {
+        positionDelta: 1,
+        commandPreference: 0,
+        continuationPreference: 0,
+        threatDefense: 0,
+        opponentBoardRemoval: 0,
+        friendlyBoardLoss: 0,
+        sequenceRefinement: 0
+      }
+      const sequenceLabels = line.commands.map((command) => JSON.stringify(command))
+      const best: ScoredAction = {
+        action,
+        score: 1,
+        reason: 'Verified winning sequence.',
+        simulation: { accepted: true, winnerId: rootId },
+        sequence: line.commands,
+        sequenceLabels,
+        scoreComponents
+      }
+      const trace: LocalAiDecisionTrace = {
+        requestId,
+        phase,
+        durationMs: performance.now() - started,
+        evaluatedActions: tactical.nodes,
+        refinedActions: 0,
+        continuations: 0,
+        timedOut: false,
+        baseScore: null,
+        visibleThreat: null,
+        chosenActionId: action.id,
+        chosenSequence: sequenceLabels,
+        decisionPriority: 'verified-win',
+        tacticalNodes: tactical.nodes,
+        candidates: [
+          {
+            actionId: action.id,
+            type: action.command.type,
+            description: best.reason,
+            score: 1,
+            recommendationValue: 1,
+            outcome: 'win',
+            provenWin: true,
+            scoreComponents,
+            accepted: true,
+            phase: 'ended',
+            winnerId: rootId,
+            sequenceIntents: line.commands.map((command) =>
+              aiActionIntent(command, this.session.localParticipantId)
+            )
+          }
+        ]
+      }
+      this.publishTrace(trace)
+      return { best, trace }
+    }
+    // Compare actual sequence outcomes, then guide initial rollouts through the best
+    // sequence for each root action. These are real samples, never invented visits.
+    const seedByRoot = new Map<string, (typeof tactical.lines)[number]>()
+    for (const line of tactical.lines) {
+      if (!line.proven || line.commands.length < 2) continue
+      const key = canonicalCommandKey(line.commands[0]!)
+      const previous = seedByRoot.get(key)
+      if (
+        !previous ||
+        line.value > previous.value ||
+        (line.value === previous.value &&
+          line.commands.length < previous.commands.length)
+      )
+        seedByRoot.set(key, line)
+    }
+    const seedLines = [...seedByRoot.values()]
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 24)
+    const searchDeadline =
+      this.workBudget === undefined
+        ? Math.max(
+            performance.now() + 1,
+            deadline - Math.min(1_500, (deadline - started) * 0.15)
+          )
+        : deadline
     const tree = new InformationSetMcts<TurnMatchCommand>()
     const rootChoices = new Map(
       actions.map((action) => [canonicalCommandKey(action.command), action])
@@ -1496,6 +1685,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const rootCandidateRiskAdjustments = new Map<string, number>()
     const rootCandidatePreferenceAdjustments = new Map<string, number>()
     const rootCandidateTacticalPenalties = new Map<string, number>()
+    const strategySamples = new Map<string, { total: number; samples: number }>()
     const rootKeyStarted = performance.now()
     const rootInformationKey = informationSetKey(simulationSession.getAiObservation())
     mctsProfile.informationKeyMs += performance.now() - rootKeyStarted
@@ -1517,7 +1707,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
 
     while (
       iterations < iterationLimit &&
-      performance.now() < deadline &&
+      (iterations === 0 || performance.now() < searchDeadline) &&
       this.tryUseWorkUnit()
     ) {
       if (iterations > 0 && iterations % 8 === 0) {
@@ -1529,6 +1719,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       }
 
       const iterationSeed = stableSeed(`${requestId}:${iterations}`)
+      const seedLine = seedLines[Math.floor(iterations / 2)]?.commands
       const selectedPath: MctsSelection<TurnMatchCommand>[] = []
       const searchedTurnLine: TurnMatchCommand[] = []
       let firstRootActionKey: string | null = null
@@ -1538,6 +1729,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       let rolloutDepth = 0
       let ownTurnEnds = 0
       let reward = 0
+      let deckStrategyAdjustment = 0
       const analysisStarted = performance.now()
       let callbackElapsedMs = 0
       simulationSession.match.analyzeWithSeed(iterationSeed, (fork) => {
@@ -1545,6 +1737,12 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         const rolloutRng = createSeededRng(iterationSeed ^ 0xa511e9b3)
         let expanded = false
         while (depth < pathLimit) {
+          if (
+            this.workBudget === undefined &&
+            performance.now() >= searchDeadline &&
+            depth > 0
+          )
+            break
           const state = fork.getState()
           if (state.phase === 'ended') {
             reward = this.terminalMctsValue(state.winnerId, rootId, depth)
@@ -1587,7 +1785,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
                   candidate.key,
                   -this.continuationPreference(candidate.action) * 0.1
                 )
-                const unpaidDamagePenalty = unpaidFriendlyDamageHeroPowerPenalty(
+                const unpaidDamagePenalty = unpaidActionPenalty(
                   candidate.action,
                   priorState,
                   actorId
@@ -1601,7 +1799,14 @@ export class LocalAiDecisionApi implements AiDecisionApi {
               candidateCache.set(nodeKey, candidates)
           } else mctsProfile.candidateCacheHits++
 
-          if (expanded) {
+          const seededCommand =
+            actorId === rootId && !rootTurnPassed ? seedLine?.[depth] : undefined
+          const seededCandidate = seededCommand
+            ? candidates.find(
+                (candidate) => candidate.key === canonicalCommandKey(seededCommand)
+              )
+            : undefined
+          if (expanded && !seededCandidate) {
             const rolloutStarted = performance.now()
             const command = this.rolloutCommand(candidates, rolloutRng)
             mctsProfile.rolloutSelectionMs += performance.now() - rolloutStarted
@@ -1638,7 +1843,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           const selectionStarted = performance.now()
           const selection = tree.select(
             nodeKey,
-            candidates,
+            seededCandidate ? [seededCandidate] : candidates,
             actorId === rootId,
             nodeKey === rootInformationKey ? this.limits.rootSearchLimit : 1
           )
@@ -1689,10 +1894,17 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           const leafObservationStarted = performance.now()
           const leafObservation = fork.getAiObservation?.(rootId, 'fair')
           mctsProfile.observationMs += performance.now() - leafObservationStarted
+          if (leafObservation && this.deckEvaluator)
+            deckStrategyAdjustment = this.deckEvaluator.evaluate(
+              leafObservation,
+              state.players.find((player) => player.participantId === rootId)?.deck ??
+                []
+            ).adjustment
           reward = leafObservation
             ? MCTS_POSITION_VALUE_LIMIT *
               Math.tanh(
-                this.scoreObservation(leafObservation, state.winnerId) /
+                (this.scoreObservation(leafObservation, state.winnerId) +
+                  deckStrategyAdjustment) /
                   MCTS_POSITION_VALUE_SCALE
               )
             : -MCTS_POSITION_VALUE_LIMIT
@@ -1707,6 +1919,15 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       )
 
       tree.backup(selectedPath, reward)
+      if (this.deckEvaluator && firstRootActionKey) {
+        const stats = strategySamples.get(firstRootActionKey) ?? {
+          total: 0,
+          samples: 0
+        }
+        stats.total += deckStrategyAdjustment
+        stats.samples++
+        strategySamples.set(firstRootActionKey, stats)
+      }
       if (firstRootActionKey && searchedTurnLine.length) {
         const lines = sampledTurnLines.get(firstRootActionKey) ?? new Map()
         for (let length = 1; length <= searchedTurnLine.length; length++) {
@@ -1728,6 +1949,41 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       totalTreeDepth += treeDepth
       totalRolloutDepth += rolloutDepth
       maximumRolloutDepth = Math.max(maximumRolloutDepth, rolloutDepth)
+      if (this.onSearchProgress && (iterations === 1 || iterations % 64 === 0)) {
+        const provisional = tree
+          .rootStats(rootInformationKey)
+          .map((stat) => {
+            const action = rootChoices.get(stat.key)
+            if (!action) return null
+            const recommendationValue =
+              mctsRootRecommendationScore(stat) -
+              (rootCandidatePreferenceAdjustments.get(stat.key) ?? 0) -
+              (rootCandidateRiskAdjustments.get(stat.key) ?? 0) -
+              (rootCandidateTacticalPenalties.get(stat.key) ?? 0)
+            return { stat, action, recommendationValue }
+          })
+          .filter((candidate) => candidate !== null)
+          .sort(
+            (left, right) =>
+              right.recommendationValue - left.recommendationValue ||
+              right.stat.visits - left.stat.visits ||
+              right.stat.meanValue - left.stat.meanValue ||
+              left.action.id.localeCompare(right.action.id)
+          )[0]
+        if (provisional) {
+          try {
+            this.onSearchProgress({
+              actionId: provisional.action.id,
+              command: provisional.action.command,
+              description: provisional.action.description,
+              recommendationValue: provisional.recommendationValue,
+              iterations
+            })
+          } catch {
+            // Progress reporting must not interrupt the actual search.
+          }
+        }
+      }
     }
 
     if (cancelled || this.cancelled.has(requestId)) return null
@@ -1741,7 +1997,16 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       )
     const rootState = simulationSession.getState()
     const rootCandidateContinuations = new Map<string, readonly TurnMatchCommand[]>()
-    const exposedContinuations = new Map<string, number>()
+    const continuationOutcomes = new Map<
+      string,
+      ReturnType<typeof inspectTacticalLine>
+    >()
+    const safetyCandidates = new Set(
+      [...visited]
+        .sort((a, b) => b.stat.meanValue - a.stat.meanValue)
+        .slice(0, 12)
+        .map(({ stat }) => stat.key)
+    )
     for (const { stat, action } of visited) {
       let continuation = sampledContinuation(sampledTurnLines.get(stat.key)) ?? [
         action.command
@@ -1808,38 +2073,19 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           if (badLine) continuation = badLine.commands
         }
       }
-      // A favorable rollout can miss an obvious face lethal. Verify the public
-      // board after the proposed line and end-of-turn effects, even when the
-      // sampled line omits its explicit end-turn command.
-      const lethalMargin = simulationSession.match.analyze((fork) => {
-        let passedTurn = false
-        for (const command of continuation) {
-          if (!fork.dispatch(command).accepted) return 0
-          if (fork.getState().phase === 'ended') return 0
-          if (command.type === 'end-turn') {
-            passedTurn = true
-            break
-          }
-        }
-        if (!passedTurn && fork.getState().phase !== 'ended')
-          fork.dispatch({ type: 'end-turn', participantId: rootId })
-        if (fork.getState().phase === 'ended') return 0
-        const observation = fork.getAiObservation?.(rootId, 'fair')
-        const self = observation?.players.find(
-          (player) => player.participantId === rootId
-        )
-        const enemy = observation?.players.find(
-          (player) => player.participantId !== rootId
-        )
-        if (!observation || !self || !enemy || record(self.hero).immune === true)
-          return 0
-        return (
-          visibleHeroThreat(enemy, self, observation.turnNumber) -
-          number(record(self.hero).health) -
-          number(record(self.hero).armor)
-        )
-      })
-      if (lethalMargin >= 0) exposedContinuations.set(stat.key, lethalMargin)
+      const inspection =
+        safetyCandidates.has(stat.key) && performance.now() < deadline
+          ? simulationSession.match.analyze((fork) =>
+              inspectTacticalLine(
+                fork,
+                rootId,
+                continuation,
+                () => this.workBudget === undefined && performance.now() >= deadline,
+                this.workBudget === undefined ? 96 : 12
+              )
+            )
+          : { outcome: 'unknown' as const, reply: 'unknown' as const }
+      continuationOutcomes.set(stat.key, inspection)
       rootCandidateContinuations.set(stat.key, continuation)
     }
     // Score achievable continuations instead of averaging good setups with
@@ -1848,10 +2094,11 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       key: string,
       fallback: (typeof rootStats)[number]
     ): number => {
-      // A predicted loss remains preferable to a confirmed terminal loss.
-      const lethalMargin = exposedContinuations.get(key)
-      if (lethalMargin !== undefined)
-        return -MCTS_POSITION_VALUE_LIMIT - Math.min(0.45, (lethalMargin + 1) * 0.025)
+      const inspection = continuationOutcomes.get(key)
+      if (inspection?.outcome === 'win') return 1
+      if (inspection?.outcome === 'loss') return -1
+      if (inspection?.outcome === 'draw') return 0
+      if (inspection?.reply === 'lethal') return -0.925
       const lines = [...(sampledTurnLines.get(key)?.values() ?? [])].filter(
         (line) => line.visits >= 2
       )
@@ -1861,6 +2108,12 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     }
     const selected = [...visited].sort(
       (left, right) =>
+        Number(continuationOutcomes.get(right.stat.key)?.outcome === 'win') -
+          Number(continuationOutcomes.get(left.stat.key)?.outcome === 'win') ||
+        Number(continuationOutcomes.get(left.stat.key)?.outcome === 'loss') -
+          Number(continuationOutcomes.get(right.stat.key)?.outcome === 'loss') ||
+        Number(continuationOutcomes.get(left.stat.key)?.reply === 'lethal') -
+          Number(continuationOutcomes.get(right.stat.key)?.reply === 'lethal') ||
         supportedLineValue(right.stat.key, right.stat) -
           (rootCandidatePreferenceAdjustments.get(right.stat.key) ?? 0) -
           (rootCandidateRiskAdjustments.get(right.stat.key) ?? 0) -
@@ -1908,8 +2161,18 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         accepted: true,
         phase: simulationSession.getState().phase,
         winnerId: null,
+        outcome: continuationOutcomes.get(stat.key)?.outcome,
+        provenWin: continuationOutcomes.get(stat.key)?.outcome === 'win',
+        publicReply: continuationOutcomes.get(stat.key)?.reply,
         visits: stat.visits,
         meanValue: stat.meanValue,
+        ...(this.deckEvaluator
+          ? {
+              meanDeckStrategyAdjustment:
+                (strategySamples.get(stat.key)?.total ?? 0) /
+                Math.max(1, strategySamples.get(stat.key)?.samples ?? 0)
+            }
+          : {}),
         prior: rootCandidatePriors.get(stat.key),
         recommendationValue: supportedLineValue(stat.key, stat),
         recommendationRiskAdjustment: rootCandidateRiskAdjustments.get(stat.key),
@@ -1954,7 +2217,24 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const trace: LocalAiDecisionTrace = {
       requestId,
       phase,
+      ...(this.deckEvaluator
+        ? {
+            deckStrategy: this.deckEvaluator.evaluate(
+              rootObservation,
+              rootState.players.find((player) => player.participantId === rootId)
+                ?.deck ?? []
+            )
+          }
+        : {}),
       durationMs,
+      tacticalNodes: tactical.nodes,
+      tacticalExhausted: tactical.exhausted,
+      decisionPriority:
+        continuationOutcomes.get(selected.stat.key)?.outcome === 'win'
+          ? 'verified-win'
+          : [...continuationOutcomes.values()].some((entry) => entry.reply === 'lethal')
+            ? 'survival'
+            : 'strategy',
       evaluatedActions: visited.length,
       refinedActions: visited.length,
       continuations: 0,
@@ -1987,7 +2267,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     state: TurnMatchState,
     actorId: string
   ): number {
-    const continuationPreference = this.continuationPreference(command) * 2
+    const continuationPreference =
+      this.continuationPreference(command) * 2 -
+      unpaidActionPenalty(command, state, actorId) * 20
     if (command.type === 'end-turn') return -2 + continuationPreference
     if (command.type === 'attack-character')
       return this.attackCommandPrior(command, state, actorId) + continuationPreference
@@ -3941,6 +4223,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         ? {
             usage: {
               mode: 'local-search',
+              ...(this.profile === 'expert'
+                ? { policyRevision: EXPERT_AI_POLICY_REVISION }
+                : {}),
               trace: traceAsJson(trace)
             }
           }

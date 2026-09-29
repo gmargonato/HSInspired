@@ -31,9 +31,27 @@ async function evaluate(
     const result = await evaluateExpertAiWorld(
       request.request,
       request.worldIndex,
-      request.budgetMs,
+      Math.max(
+        1,
+        Math.min(
+          request.budgetMs,
+          request.deadlineEpochMs === undefined
+            ? request.budgetMs
+            : request.deadlineEpochMs - Date.now() - 250
+        )
+      ),
       {
         isCancelled: () => cancelled.has(taskId),
+        onProgress: (response, recommendationValue, iterations) => {
+          if (!cancelled.has(taskId))
+            workerScope?.postMessage({
+              type: 'progress',
+              taskId,
+              response,
+              recommendationValue,
+              iterations
+            })
+        },
         onApiCreated: (api) =>
           activeSearches.set(taskId, {
             api,

@@ -1386,6 +1386,8 @@ export type OpeningCommandResult = OpeningAcceptedResult | OpeningRejectedResult
 
 export interface OpeningMatchAnalysis {
   getState(): OpeningMatchState
+  /** Opaque analysis-only marker; a changed value means a branch used randomness. */
+  getRandomState?(): unknown
   /** Returns the same fair, perspective-limited observation used by AI players. */
   getAiObservation?(participantId: PlayerId, policy: AiInformationPolicy): AiObservation
   dispatch(command: unknown): OpeningCommandResult

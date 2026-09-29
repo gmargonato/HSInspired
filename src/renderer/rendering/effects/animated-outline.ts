@@ -19,7 +19,7 @@ export type {
 export type OutlinePaletteInput = OutlinePaletteName | OutlinePalette
 export interface AnimatedOutlineOptions {
   readonly palette?: OutlinePaletteInput
-  readonly preset?: OutlinePresetName
+  readonly preset: OutlinePresetName
   /** Silhouette distance fields are always cached for Aura. */
   readonly cacheDistance?: boolean
   /** Original silhouette and its rectangle inside a padded perspective mesh. */
@@ -47,12 +47,12 @@ export class AnimatedOutline extends Actor {
   }
   constructor(
     private readonly target: Container,
-    options: AnimatedOutlineOptions = {}
+    options: AnimatedOutlineOptions
   ) {
     super()
     this.label = 'aura-shader'
     this.filter = new AuraFilter(target, options.silhouette, options.sharedShapeKey)
-    this.setTuning(getOutlineTuning(options.preset ?? 'button'))
+    this.setTuning(getOutlineTuning(options.preset))
     this.setPalette(options.palette ?? 'blue')
     target.filters = [...(target.filters ?? []), this.filter]
     this.timeTween = this.tweenTo(this.clock, {

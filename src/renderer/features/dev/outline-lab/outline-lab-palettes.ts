@@ -19,15 +19,28 @@ export const OUTLINE_LAB_PALETTES: Record<
     { palette: 'orange', label: 'Enhanced' },
     { palette: 'blue', label: 'Valid drop' }
   ],
-  board: [
+  minion: [
     { palette: 'green', label: 'Ready' },
     { palette: 'red', label: 'Targeting' },
     { palette: 'white', label: 'Hover' }
   ],
-  button: [
-    { palette: 'blue', label: 'Selection' },
-    { palette: 'green', label: 'End turn' },
+  hero: [
+    { palette: 'green', label: 'Ready' },
+    { palette: 'red', label: 'Targeting' }
+  ],
+  'hero-power': [
+    { palette: 'green', label: 'Available' },
     { palette: 'white', label: 'Hover' }
   ],
+  weapon: [{ palette: 'white', label: 'Hover' }],
+  secret: [{ palette: 'white', label: 'Hover' }],
+  quest: [{ palette: 'white', label: 'Hover' }],
+  'deck-frame': [{ palette: 'blue', label: 'Selection' }],
+  'play-button': [{ palette: 'blue', label: 'Available' }],
+  'end-turn': [
+    { palette: 'green', label: 'No actions left' },
+    { palette: 'white', label: 'Hover' }
+  ],
+  'expansion-toggle': [{ palette: 'blue', label: 'Selection' }],
   ghost: [{ palette: 'purple', label: 'Banner' }]
 }

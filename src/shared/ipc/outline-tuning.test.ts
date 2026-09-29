@@ -7,11 +7,22 @@ import {
   OUTLINE_PRESET_NAMES,
   parseOutlineTuningConfig
 } from './outline-tuning'
+function legacyAura() {
+  return {
+    presets: {
+      card: structuredClone(rawConfig.aura.presets.card),
+      'bonus-card': structuredClone(rawConfig.aura.presets['bonus-card']),
+      board: structuredClone(rawConfig.aura.presets.minion),
+      button: structuredClone(rawConfig.aura.presets['deck-frame'])
+    },
+    palettes: structuredClone(rawConfig.aura.palettes)
+  }
+}
 function legacyConfig(version: number) {
   const t = rawConfig.ghost.tuning,
     p = rawConfig.ghost.palette
   return {
-    aura: structuredClone(rawConfig.aura),
+    aura: legacyAura(),
     version,
     ghost: {
       tuning: {
@@ -44,13 +55,13 @@ describe('shader tuning IPC', () => {
   })
   it('migrates version 4 without changing Aura settings', () => {
     const legacy = {
-      aura: structuredClone(rawConfig.aura),
+      aura: legacyAura(),
       version: 4,
       ghost: { tuning: { ribbonWidth: 5 }, palette: { baseColor: 0 } }
     }
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(10)
-    expect(parsed.aura).toEqual(legacy.aura)
+    expect(parsed.version).toBe(11)
+    expect(parsed.aura).toEqual(rawConfig.aura)
     expect(parsed.ghost).toEqual(GHOST_MIST_DEFAULTS)
     expect(legacy.version).toBe(4)
   })
@@ -58,10 +69,10 @@ describe('shader tuning IPC', () => {
     const legacy = legacyConfig(5)
     legacy.ghost.tuning.spotSize = 1.09
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(10)
+    expect(parsed.version).toBe(11)
     expect(parsed.ghost.tuning.particleSize).toBeCloseTo(8.175)
     expect(legacy.ghost.tuning.spotSize).toBe(1.09)
-    expect(parsed.aura).toEqual(legacy.aura)
+    expect(parsed.aura).toEqual(rawConfig.aura)
     expect(parsed.ghost.palette).toEqual({
       mistPrimaryColor: legacy.ghost.palette.primaryColor,
       mistHighlightColor: legacy.ghost.palette.secondaryColor,
@@ -71,7 +82,7 @@ describe('shader tuning IPC', () => {
   it('adds travel distance to version 6 while preserving saved settings', () => {
     const legacy = legacyConfig(6)
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(10)
+    expect(parsed.version).toBe(11)
     expect(parsed.ghost.tuning).toMatchObject({
       particleTravelDistance: 60,
       windDirection: 2,
@@ -154,12 +165,12 @@ describe('shader tuning IPC', () => {
     expect(() => parseOutlineTuningConfig(config)).toThrow()
   })
   it('rejects incompatible shapes and versions', () => {
-    for (const version of [3, 11])
+    for (const version of [3, 12])
       expect(() => parseOutlineTuningConfig({ ...rawConfig, version })).toThrow()
     const missing = structuredClone(rawConfig) as unknown as {
       aura: { presets: Record<string, unknown> }
     }
-    delete missing.aura.presets.board
+    delete missing.aura.presets.minion
     expect(() => parseOutlineTuningConfig(missing)).toThrow()
     expect(() => parseOutlineTuningConfig({ ...rawConfig, ghost: undefined })).toThrow()
     expect(() => parseOutlineTuningConfig({ ...rawConfig, extra: true })).toThrow()
@@ -213,10 +224,10 @@ describe('shader tuning IPC', () => {
 })
 
 it('migrates version 9 with default shatter tuning and preserves other shaders', () => {
-  const legacy = { version: 9, aura: rawConfig.aura, ghost: rawConfig.ghost }
+  const legacy = { version: 9, aura: legacyAura(), ghost: rawConfig.ghost }
   const parsed = parseOutlineTuningConfig(legacy)
   expect(parsed.shatter).toEqual(SHATTER_DEFAULTS)
-  expect(parsed.aura).toEqual(legacy.aura)
+  expect(parsed.aura).toEqual(rawConfig.aura)
   expect(parsed.ghost).toEqual(legacy.ghost)
 })
 it.each([{ duration: 0 }, { shardCount: 10.5 }, { seed: Infinity }, { spread: 3 }])(
@@ -230,3 +241,41 @@ it.each([{ duration: 0 }, { shardCount: 10.5 }, { seed: Infinity }, { spread: 3 
     ).toThrow()
   }
 )
+
+it('migrates version 10 into independent element settings without changing other shaders', () => {
+  const legacy = { ...structuredClone(rawConfig), version: 10, aura: legacyAura() }
+  legacy.aura.presets.button.glowWidth = 77
+  legacy.aura.presets.board.glowWidth = 91
+  const before = structuredClone(legacy)
+  const migrated = parseOutlineTuningConfig(legacy)
+  for (const name of [
+    'deck-frame',
+    'play-button',
+    'end-turn',
+    'expansion-toggle'
+  ] as const)
+    expect(migrated.aura.presets[name]).toEqual(legacy.aura.presets.button)
+  for (const name of [
+    'minion',
+    'hero',
+    'hero-power',
+    'weapon',
+    'secret',
+    'quest'
+  ] as const)
+    expect(migrated.aura.presets[name]).toEqual(legacy.aura.presets.board)
+  expect(migrated.aura.presets.card).toEqual(legacy.aura.presets.card)
+  expect(migrated.aura.presets['bonus-card']).toEqual(legacy.aura.presets['bonus-card'])
+  expect(migrated.aura.palettes).toEqual(legacy.aura.palettes)
+  expect(migrated.ghost).toEqual(legacy.ghost)
+  expect(migrated.shatter).toEqual(legacy.shatter)
+  Object.assign(migrated.aura.presets['deck-frame'], { glowWidth: 123 })
+  Object.assign(migrated.aura.presets.minion, { glowWidth: 124 })
+  expect(migrated.aura.presets['play-button'].glowWidth).toBe(77)
+  expect(migrated.aura.presets['end-turn'].glowWidth).toBe(77)
+  expect(migrated.aura.presets.hero.glowWidth).toBe(91)
+  expect(legacy).toEqual(before)
+  expect(parseOutlineTuningConfig(JSON.parse(JSON.stringify(migrated)))).toEqual(
+    migrated
+  )
+})

@@ -1,3 +1,14 @@
+import {
+  AURA_CATEGORIES,
+  AURA_ELEMENT_LABELS,
+  auraCategory,
+  type AuraBackground
+} from './aura-lab-elements'
+import { OUTLINE_LAB_PALETTES } from './outline-lab-palettes'
+import type {
+  OutlinePresetName,
+  OutlinePaletteName
+} from '../../../rendering/effects/outline-tuning'
 import type { ShatterTuning } from '../../../rendering/effects/shatter'
 import type { Renderer } from 'pixi.js'
 import {
@@ -74,9 +85,76 @@ export class OutlineLabShaderControls {
     this.updatePosition()
   }
 
-  showAura(tuning: AuraTuning, palette: AuraPalette, onChange: Change): void {
+  showAura(
+    tuning: AuraTuning,
+    palette: AuraPalette,
+    onChange: Change,
+    preview: {
+      preset: OutlinePresetName
+      palette: OutlinePaletteName
+      background: AuraBackground
+      onElement(preset: OutlinePresetName): void
+      onState(palette: OutlinePaletteName): void
+      onBackground(background: AuraBackground): void
+    }
+  ): void {
     this.shader.value = 'aura'
     this.render(AURA_CONTROLS, { ...tuning, ...palette }, onChange)
+    const navigation = document.createElement('div')
+    const heading = document.createElement('h3')
+    heading.textContent = 'Editing: ' + AURA_ELEMENT_LABELS[preview.preset]
+    navigation.append(heading)
+    const select = (
+      label: string,
+      entries: readonly (readonly [string, string])[],
+      value: string,
+      change: (value: string) => void
+    ): void => {
+      const row = document.createElement('label')
+      row.style.cssText = 'display:block;margin:10px 0'
+      row.append(label + ' ')
+      const input = document.createElement('select')
+      input.style.cssText = 'padding:6px;max-width:100%;font:16px Arial'
+      input.setAttribute('aria-label', label)
+      for (const [key, title] of entries) input.add(new Option(title, key))
+      input.value = value
+      input.onchange = () => change(input.value)
+      row.append(input)
+      navigation.append(row)
+    }
+    select(
+      'Element',
+      AURA_CATEGORIES[auraCategory(preview.preset)].map(
+        (key) => [key, AURA_ELEMENT_LABELS[key]] as const
+      ),
+      preview.preset,
+      (value) => preview.onElement(value as OutlinePresetName)
+    )
+    select(
+      'Preview state',
+      OUTLINE_LAB_PALETTES[preview.preset].map(
+        (state) => [state.palette, state.label] as const
+      ),
+      preview.palette,
+      (value) => preview.onState(value as OutlinePaletteName)
+    )
+    select(
+      'Background',
+      [
+        ['context', 'Scene artwork'],
+        ['dark', 'Neutral dark'],
+        ['light', 'Neutral light']
+      ],
+      preview.background,
+      (value) => preview.onBackground(value as AuraBackground)
+    )
+    const note = document.createElement('p')
+    note.textContent =
+      'Tuning applies only to this element. Colors edit the shared ' +
+      preview.palette +
+      ' palette.'
+    navigation.append(note)
+    this.content.prepend(navigation)
   }
 
   showGhost(
