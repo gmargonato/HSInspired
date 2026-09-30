@@ -2,17 +2,16 @@
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
   "include": [
     "electron.vite.config.*",
-    "src/main/**/*",
-    "src/preload/**/*",
-    "src/game/**/*",
-    "src/shared/**/*"
+    "src/desktop/main/**/*",
+    "src/desktop/preload/**/*",
+    "src/game-rules/**/*",
+    "src/desktop/contracts/**/*"
   ],
   "compilerOptions": {
     "composite": true,
     "types": ["electron-vite/node"],
     "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["src/renderer/*"],
       "@assets/*": ["assets/*"]
     }
   }

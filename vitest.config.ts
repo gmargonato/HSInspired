@@ -7,7 +7,7 @@ export default defineConfig({
     alias: {
       '@assets': resolve('assets'),
       '@outline-directions': resolve(
-        'src/renderer/rendering/effects/outline-directions-dev.ts'
+        'src/dev-tools/outline-lab/outline-directions-dev.ts'
       )
     }
   }

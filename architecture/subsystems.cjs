@@ -12,15 +12,15 @@ module.exports = {
       responsibility:
         'Builds fair observations and legal turn policies for one remote strategy choice.',
       roots: [
-        'src/game/match/ai/',
-        'src/renderer/features/game/ai-',
-        'src/main/services/azure-openai-ai-service',
-        'src/main/services/ai-',
-        'src/shared/ipc/ai.ts'
+        'src/game-rules/match/ai/',
+        'src/scenes/match/ai/',
+        'src/desktop/main/services/azure-openai-ai-service',
+        'src/desktop/main/services/ai-',
+        'src/desktop/contracts/ipc/ai.ts'
       ],
       entryPoints: [
-        'src/renderer/features/game/ai-turn-controller.ts',
-        'src/game/match/ai/policy-planner.ts'
+        'src/scenes/match/ai/ai-turn-controller.ts',
+        'src/game-rules/match/ai/policy-planner.ts'
       ]
     },
     {
@@ -29,17 +29,14 @@ module.exports = {
       responsibility:
         'Turns player gestures into valid target, hero power, play, and combat actions.',
       roots: [
-        'src/renderer/features/game/target-gesture',
-        'src/renderer/features/game/hero-power-targeting',
-        'src/renderer/features/game/game-card-targeting',
-        'src/renderer/features/game/game-hand-drag',
-        'src/renderer/features/game/hand-play-gesture',
-        'src/renderer/features/game/hand-drag',
-        'src/renderer/features/game/attack-line'
+        'src/scenes/match/targeting/',
+        'src/scenes/match/hand/game-hand-drag',
+        'src/scenes/match/hand/hand-play-gesture',
+        'src/scenes/match/hand/hand-drag'
       ],
       entryPoints: [
-        'src/renderer/features/game/target-gesture.ts',
-        'src/renderer/features/game/hero-power-targeting.ts'
+        'src/scenes/match/targeting/target-gesture.ts',
+        'src/scenes/match/targeting/hero-power-targeting.ts'
       ]
     },
     {
@@ -47,10 +44,13 @@ module.exports = {
       name: 'Card effects & resolution',
       responsibility:
         'Executes card effects, triggers, queues, and reactive rule resolution.',
-      roots: ['src/game/match/effects/', 'src/game/content/cards/card-effects.ts'],
+      roots: [
+        'src/game-rules/match/effects/',
+        'src/game-rules/content/cards/card-effects.ts'
+      ],
       entryPoints: [
-        'src/game/match/effects/effect-runtime.ts',
-        'src/game/match/effects/resolution-queue.ts'
+        'src/game-rules/match/effects/effect-runtime.ts',
+        'src/game-rules/match/effects/resolution-queue.ts'
       ]
     },
     {
@@ -59,25 +59,28 @@ module.exports = {
       responsibility:
         'Owns deterministic match setup, turns, validation, state transitions, and rule invariants.',
       roots: [
-        'src/game/match/rules/',
-        'src/game/match/match',
-        'src/game/match/turn-match.ts',
-        'src/game/match/opening-match',
-        'src/game/match/match-setup.ts',
-        'src/game/match/contracts.ts',
-        'src/game/match/rng.ts'
+        'src/game-rules/match/rules/',
+        'src/game-rules/match/match',
+        'src/game-rules/match/turn-match.ts',
+        'src/game-rules/match/opening-match',
+        'src/game-rules/match/match-setup.ts',
+        'src/game-rules/match/contracts.ts',
+        'src/game-rules/match/rng.ts'
       ],
-      entryPoints: ['src/game/match/match.ts', 'src/game/match/turn-match.ts']
+      entryPoints: [
+        'src/game-rules/match/match.ts',
+        'src/game-rules/match/turn-match.ts'
+      ]
     },
     {
       id: 'card-content',
       name: 'Card content & catalog',
       responsibility:
         'Defines cards, heroes, expansions, capabilities, and immutable catalogs.',
-      roots: ['src/game/content/'],
+      roots: ['src/game-rules/content/'],
       entryPoints: [
-        'src/game/content/cards/index.ts',
-        'src/game/content/heroes/index.ts'
+        'src/game-rules/content/cards/index.ts',
+        'src/game-rules/content/heroes/index.ts'
       ]
     },
     {
@@ -85,10 +88,10 @@ module.exports = {
       name: 'Game board presentation',
       responsibility:
         'Presents match state, board interaction feedback, history, HUD, and match results.',
-      roots: ['src/renderer/features/game/'],
+      roots: ['src/scenes/match/'],
       entryPoints: [
-        'src/renderer/features/game/game-board-view.ts',
-        'src/renderer/features/game/game-board-session.ts'
+        'src/scenes/match/board/game-board-view.ts',
+        'src/scenes/match/game-board-session.ts'
       ]
     },
     {
@@ -97,16 +100,16 @@ module.exports = {
       responsibility:
         'Owns deck rules, collection browsing, deck creation, and deck selection.',
       roots: [
-        'src/game/decks/',
-        'src/renderer/features/collection/',
-        'src/renderer/features/deck-builder/',
-        'src/renderer/features/deck-selection/',
-        'src/renderer/ui/deck-store.ts',
-        'src/renderer/app/deck-store.ts'
+        'src/game-rules/decks/',
+        'src/scenes/collection/',
+        'src/scenes/deck-selection/',
+        'src/visual-components/controls/deck-entry-button.ts',
+        'src/application/contracts/deck-store.ts',
+        'src/application/deck-store.ts'
       ],
       entryPoints: [
-        'src/game/decks/deck-validation.ts',
-        'src/renderer/features/collection/collection-view.ts'
+        'src/game-rules/decks/deck-validation.ts',
+        'src/scenes/collection/collection-view.ts'
       ]
     },
     {
@@ -114,15 +117,8 @@ module.exports = {
       name: 'Arena & tavern modes',
       responsibility:
         'Implements arena runs and tavern-brawl presentation/model behaviour.',
-      roots: [
-        'src/game/arena/',
-        'src/renderer/features/arena/',
-        'src/renderer/features/tavern-brawl/'
-      ],
-      entryPoints: [
-        'src/game/arena/arena.ts',
-        'src/renderer/features/arena/arena-view.ts'
-      ]
+      roots: ['src/game-rules/arena/', 'src/scenes/arena/', 'src/scenes/tavern-brawl/'],
+      entryPoints: ['src/game-rules/arena/arena.ts', 'src/scenes/arena/arena-view.ts']
     },
     {
       id: 'navigation-scenes',
@@ -130,22 +126,60 @@ module.exports = {
       responsibility:
         'Composes routes, creates scenes, and owns full-screen lifecycle transitions.',
       roots: [
-        'src/renderer/app/router.ts',
-        'src/renderer/app/scene-navigator.ts',
-        'src/renderer/scenes/'
+        'src/application/navigation/router.ts',
+        'src/application/navigation/scene-navigator.ts',
+        'src/application/navigation/scene-manager.ts',
+        'src/application/navigation/',
+        'src/visual-components/lifecycle/scene.ts',
+        'src/application/contracts/scene-manager-port.ts',
+        'src/application/match-seed.ts'
       ],
       entryPoints: [
-        'src/renderer/app/scene-navigator.ts',
-        'src/renderer/scenes/scene-manager.ts'
+        'src/application/navigation/scene-navigator.ts',
+        'src/application/navigation/scene-manager.ts'
       ]
+    },
+    {
+      id: 'menu-presentation',
+      name: 'Menu screens & overlays',
+      responsibility: 'Owns main-menu and settings scene presentation.',
+      roots: ['src/scenes/main-menu/', 'src/scenes/settings/'],
+      entryPoints: [
+        'src/scenes/main-menu/main-menu-scene.ts',
+        'src/scenes/settings/settings-scenes.ts'
+      ]
+    },
+    {
+      id: 'development-tools',
+      name: 'Development tools',
+      responsibility:
+        'Owns standalone inspectors, labs, and guarded development runtime adapters.',
+      roots: ['src/dev-tools/'],
+      entryPoints: ['src/dev-tools/card-inspector/card-inspector-scene.ts']
+    },
+    {
+      id: 'application-services',
+      name: 'Application services',
+      responsibility:
+        'Composes renderer services and startup around injected persistence/navigation contracts.',
+      roots: [
+        'src/application/',
+        'src/application/main.ts',
+        'src/application/env.d.ts',
+        'src/application/contracts/'
+      ],
+      entryPoints: ['src/application/main.ts', 'src/application/services.ts']
     },
     {
       id: 'persistence-ipc',
       name: 'Persistence & IPC',
       responsibility:
         'Bridges renderer contracts to Electron main-process repositories and services.',
-      roots: ['src/main/services/', 'src/shared/ipc/', 'src/preload/'],
-      entryPoints: ['src/main/services/deck-ipc.ts', 'src/preload/index.ts']
+      roots: ['src/desktop/main/', 'src/desktop/contracts/', 'src/desktop/preload/'],
+      entryPoints: [
+        'src/desktop/main/services/deck-ipc.ts',
+        'src/desktop/preload/index.ts'
+      ]
     },
     {
       id: 'rendering-assets',
@@ -153,13 +187,18 @@ module.exports = {
       responsibility:
         'Provides reusable card/board rendering, layout, textures, asset scopes, and UI primitives.',
       roots: [
-        'src/renderer/rendering/',
-        'src/renderer/ui/asset-registry/',
-        'src/renderer/ui/components/'
+        'src/visual-components/cards/',
+        'src/visual-components/assets/',
+        'src/visual-components/controls/',
+        'src/visual-components/effects/',
+        'src/visual-components/layout/',
+        'src/visual-components/animation/',
+        'src/visual-components/lifecycle/',
+        'src/visual-components/transitions/'
       ],
       entryPoints: [
-        'src/renderer/rendering/cards/card-view.ts',
-        'src/renderer/ui/asset-registry/asset-scope.ts'
+        'src/visual-components/cards/card-view.ts',
+        'src/visual-components/assets/asset-scope.ts'
       ]
     }
   ],
@@ -196,13 +235,13 @@ module.exports = {
       id: 'route-to-scene',
       name: 'Route to scene',
       description:
-        'Typed navigation constructs a scene, which composes its feature root and requests domain/shared services.',
+        'Typed navigation constructs a scene, which composes local views/controllers and requests domain/shared services.',
       steps: [
         'App route',
         'Scene navigator',
         'Scene factory',
-        'Feature root',
-        'Rendering / UI',
+        'Scene-local views / controllers',
+        'Shared presentation',
         'Game / shared contracts'
       ]
     }

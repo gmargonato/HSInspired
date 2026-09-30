@@ -34,12 +34,18 @@ walk(rendererOutput)
 
 const devOnlyMarkers = [
   'CardInspectorScene',
+  'OutlineLabScene',
   'HeroPowerAnimScene',
   'VfxLabScene',
+  'LayoutInspector',
   'hero-power-anim.controls',
   'vfx-lab.controls',
-  'features/dev/card-inspector',
-  'features/dev/vfx-lab',
+  'dev-tools/card-inspector',
+  'dev-tools/outline-lab',
+  'dev-tools/hero-power-anim',
+  'dev-tools/vfx-lab',
+  'dev-tools/layout-inspector',
+  'dev-tools/runtime',
   'runMatchPerformanceBenchmark',
   'VITE_DEV_START_ROUTE'
 ]

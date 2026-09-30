@@ -1,27 +1,28 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
   "include": [
-    "src/renderer/env.d.ts",
-    "src/renderer/**/*",
-    "src/game/**/*",
-    "src/preload/index.d.ts",
-    "src/shared/**/*"
+    "src/application/env.d.ts",
+    "src/application/**/*",
+    "src/scenes/**/*",
+    "src/visual-components/**/*",
+    "src/dev-tools/**/*",
+    "src/game-rules/**/*",
+    "src/desktop/preload/index.d.ts",
+    "src/desktop/contracts/**/*"
   ],
   "compilerOptions": {
     "composite": true,
     "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["src/renderer/*"],
+      "@application/*": ["src/application/*"],
       "@assets/*": ["assets/*"],
-      "@dev-inspector": ["src/renderer/scenes/dev/card-inspector-scene.ts"],
-      "@outline-lab": ["src/renderer/scenes/dev/outline-lab-scene.ts"],
-      "@hero-power-anim": ["src/renderer/scenes/dev/hero-power-anim-scene.ts"],
-      "@vfx-lab": ["src/renderer/scenes/dev/vfx-lab-scene.ts"],
-      "@dev-match-performance": ["src/renderer/app/dev-match-performance.ts"],
-      "@dev-layout-inspector": ["src/renderer/features/dev/layout-inspector/index.ts"],
-      "@outline-directions": [
-        "src/renderer/rendering/effects/outline-directions-dev.ts"
-      ]
+      "@dev-inspector": ["src/dev-tools/card-inspector/card-inspector-scene.ts"],
+      "@outline-lab": ["src/dev-tools/outline-lab/outline-lab-scene.ts"],
+      "@hero-power-anim": ["src/dev-tools/hero-power-anim/hero-power-anim-scene.ts"],
+      "@vfx-lab": ["src/dev-tools/vfx-lab/vfx-lab-scene.ts"],
+      "@dev-match-performance": ["src/dev-tools/runtime/dev-match-performance.ts"],
+      "@dev-layout-inspector": ["src/dev-tools/layout-inspector/index.ts"],
+      "@outline-directions": ["src/dev-tools/outline-lab/outline-directions-dev.ts"]
     }
   }
 }

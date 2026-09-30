@@ -81,41 +81,40 @@ Every AI agent and developer working on this codebase must adhere strictly to th
 ## 1. Process & Dependency Boundaries
 
 ```text
-Electron main / preload adapters
-            -> shared contracts
-            -> game domain
-
-renderer app -> scenes -> features -> rendering / ui
-                         -> game / shared contracts
+Desktop main / preload -> desktop contracts -> game rules
+Application -> scene adapters -> scene-local views / controllers
+                              -> visual components / injected contracts
+                              -> game rules / desktop contracts
 ```
 
 ### Strict Ownership Rules
 
-- **`src/game` (Pure Domain)**: Contains game rules, card content catalogs, deck validation, and match engine. It must **NEVER** import Electron, PixiJS, DOM, Node.js (`fs`, `path`, etc.), or renderer code.
-- **`src/shared` (Cross-Process Contracts)**: Process-safe contracts (e.g. IPC schemas, route requests). Must **NEVER** import implementation code from `main`, `preload`, or `renderer`.
-- **`src/main` (Electron Main Process)**: App lifecycle, JSON deck filesystem repository, IPC handlers. Platform-neutral; must **NEVER** import renderer code.
-- **`src/preload` (Electron Preload Bridge)**: Exposes a narrow runtime-validated bridge (`window.electron`) to the renderer. Must **NEVER** import domain or renderer implementations.
-- **`src/renderer` (PixiJS Presentation Layer)**:
-  - `app/`: Composition root, router, services, and `SceneNavigator` scene factory.
-  - `scenes/`: Full-screen scene adapters and lifecycle orchestration (`Scene`, `SceneManager`). Scenes must **NEVER** import or construct concrete sibling scenes; navigation is requested via typed `AppRoute` through `SceneNavigator`.
-  - `features/`: Feature state, controllers, views, and local layout modules. Features must **NEVER** import scenes.
-  - `rendering/`: Low-level draw infrastructure and the feature-agnostic card engine (card rendering, layout engine, filters, shaders/effects). Must **NEVER** import feature state or app services.
-  - `ui/`: Base presentation primitives and asset loading, depended on by `rendering/` and below. Holds `Actor`/`AnimationScope` lifecycle bases, interactive controls (`Button`, `FlipCard`, `cursor`), and the semantic `asset-registry` (including shared `deck-frames.ts` asset-key maps). `ui/` must **NEVER** import feature state, scenes, or app services.
-  - `features/dev/` & `scenes/dev/`: Development-only tools (Card Inspector, Layout Inspector). Isolated behind conditional build aliases so they are stripped from production builds.
+- **`src/scenes`**: Each screen and its complete workflow. Keep adapters, views, controllers, layouts, and animations together while preserving their separate responsibilities. Collection owns `card-preview/` and `deck-builder/`, including the separately navigable New Deck screen. Scenes must never construct or import concrete sibling scene adapters; request typed routes through SceneNavigator. Separate workflows must not import each other's internal views/controllers.
+- **`src/scenes/match`**: Match orchestration and named board, hand, targeting, combat, AI, presentation, HUD, history, results, loading, and embedded-tool subfolders. The mulligan view lives directly beside match orchestration. Hero, minion, weapon, power, and board-shadow visuals live directly in `board/`. Inspectors may reuse them without moving them out of match.
+- **`src/visual-components`**: Reusable cards, controls, assets, layout, animations, effects, transitions, and lifecycle bases. Must never import scene implementations, application service implementations, or development tools. Injected interfaces from `application/contracts` are allowed. Scene and Actor bases live in `lifecycle`; AnimationScope lives in `animation`.
+- **`src/game-rules`**: Pure game content, deck validation, and deterministic match simulation. Must never import Electron, PixiJS, DOM, Node APIs, desktop contracts, or presentation/application code.
+- **`src/application`**: Startup and concrete renderer services. `navigation/` owns the router, SceneNavigator factory, SceneManager, and typed routes. `contracts/` owns injected service ports; `match-seed.ts` is the session seed helper. Views/controllers consume these contracts and route definitions rather than concrete application implementations.
+- **`src/dev-tools`**: Standalone inspectors, labs, and development runtime adapters. Preserve guarded entrypoint imports and production-substituted aliases. Embedded match commands/card-picker hooks retain their existing availability in `scenes/match/tools`.
+- **`src/desktop/main`**: Electron lifecycle, native menus, filesystem repositories, and platform services. Must never import presentation code or preload implementations.
+- **`src/desktop/preload`**: Narrow, runtime-validated bridge exposing desktop services to the game window. Must never import game-rules, main-process, or presentation implementations.
+- **`src/desktop/contracts`**: Process-safe message schemas and route requests used across the desktop bridge. Must never import process or presentation implementations.
 
-These boundaries are strictly enforced by `.dependency-cruiser.cjs` and checked via `npm run deps:check`.
+The current navigation guide is `src/README.md`; the complete follow-up inventory and validation tracker is `docs/source-layout.md`. `docs/renderer-reorganization.md` records the initial migration with final destinations. Retired `src/renderer`, `src/game`, `src/main`, `src/preload`, and `src/shared` roots must not be reintroduced. Stable public router/service exports remain facades, not migration shims.
+
+Boundaries are enforced by `.dependency-cruiser.cjs` and checked with `npm run deps:check`. Route IDs, exported classes, saved data, asset keys, and numeric tuning are independent of folder names.
 
 ---
 
 ## 2. Directory Structure & File Conventions
 
-- **Flattened Renderer**: All renderer code lives under `src/renderer/` (`app`, `scenes`, `features`, `rendering`, `ui`, `animation`). Never create a nested `src/renderer/src/`.
-- **File Naming**: All files and directories must use **`kebab-case.ts`** (e.g. `deck-repository.ts`, `scene-navigator.ts`, `main-menu-scene.ts`, `flip-card.ts`).
+- **Purpose-named source roots**: `scenes`, `visual-components`, `game-rules`, `application`, `dev-tools`, and `desktop`. Browser startup, HTML, stylesheet, and environment declarations live in `application`. Electron's compiled `out/main`, `out/preload`, and `out/renderer` paths remain stable.
+- **Shallow by default**: Use at most one organizational folder below a scene or subsystem owner (for example `scenes/match/board/*.ts` and `application/navigation/*.ts`). Keep single-file helpers beside their owner or in an existing related group. Do not create placeholder folders. Desktop process owners (`main`, `preload`, `contracts`), content catalog owners (`cards`, `heroes`, etc.) with their card-set data, and framework-managed `__snapshots__` retain their meaningful boundaries. Document any additional depth in `src/README.md` before introducing it.
+- **File Naming**: Use **kebab-case** for source files and directories (for example `deck-repository.ts` and `main-menu-scene.ts`).
 - **No Direct Mutation of Layout Values**: Do not modify pixel coordinates or scales during refactoring unless explicitly requested.
 
 ---
 
-## 3. Scene Layout Contract (`src/renderer/rendering/layout`)
+## 3. Scene Layout Contract (`src/visual-components/layout`)
 
 Scene geometry is self-describing so numbers are understandable without reading surrounding animation or input logic.
 
@@ -129,7 +128,7 @@ import {
   TOP_LEFT,
   placement,
   type LayoutPlacement
-} from '../../rendering/layout'
+} from '../../visual-components/layout'
 
 export const MY_FEATURE_LAYOUT = {
   name: 'Feature Name',
@@ -148,7 +147,7 @@ export const MY_FEATURE_LAYOUT = {
 ### Layout Placement Rules
 
 1. **Design Canvas**: Full scenes use the canonical **1920 x 1080** canvas at 1x scale (origin top-left). Complete cards use **620 x 900**.
-2. **Beside the Feature**: Each scene/feature keeps its geometry in a `*-layout.ts` module inside its feature folder (e.g. `src/renderer/features/game/game-scene-layout.ts`, `src/renderer/features/collection/collection-layout.ts`).
+2. **Beside Its Owner**: Each scene/component keeps its geometry in a `*-layout.ts` module beside its implementation (e.g. `src/scenes/match/game-scene-layout.ts`, `src/scenes/collection/collection-layout.ts`).
 3. **Application Helpers**: Apply placements with `applyAnchoredPlacement(sprite, value)` (sets position + anchor + scale) or `applyPlacement(container, value)`.
 4. **Fixed Placements vs. Parameterized Spreads**:
    - Use `placement()` for fixed elements (backgrounds, buttons, frames, portraits).
@@ -177,9 +176,9 @@ export const MY_FEATURE_LAYOUT = {
   - `ui/`: Subdivided into `common/`, `main-menu/`, `deck-selection/`, `deck-builder/`, `collection/`, `card-preview/`, `settings/`.
 - **Never delete existing asset files.**
 
-### Asset Registration (`src/renderer/ui/asset-registry`)
+### Asset Registration (`src/visual-components/assets`)
 
-- Bespoke assets are imported and typed in `src/renderer/ui/asset-registry/index.ts` with their semantic key, authored dimensions, bundle, and alias.
+- Bespoke assets are imported and typed in `src/visual-components/assets/index.ts` with their semantic key, authored dimensions, bundle, and alias.
 - Assets are grouped into lazy bundles (`main-menu`, `deck-selection`, `deck-presentation`, `game`, `collection`, `card-preview`, `menu-settings`, `game-settings`, `shared-ui`, `card-rendering`).
 - Components acquire textures through `this.assetScope.acquire(bundleId)` rather than loading files ad-hoc.
 
@@ -187,18 +186,18 @@ export const MY_FEATURE_LAYOUT = {
 
 ## 5. Domain Models (Game & Match)
 
-### Card Content (`src/game/content`)
+### Card Content (`src/game-rules/content`)
 
-- Cards are declared in `src/game/content/cards/sets/*.json` and validated by `validateCardSet` against the schema.
+- Cards are declared in `src/game-rules/content/cards/sets/*.json` and validated by `validateCardSet` against the schema.
 - `CardDefinition` is a discriminated union (`Minion`, `Spell`, `Weapon`, `Hero`) with branded IDs (`asCardId`, `asHeroId`, `asExpansionId`).
 - Catalogs (`CARD_CATALOG`, `HERO_CATALOG`, `HERO_POWER_CATALOG`, `EXPANSION_CATALOG`, `CLASS_CATALOG`) provide immutable, queryable indexes. Rules text is display-only markup and never parsed as code.
 
-### Deck Persistence & Rules (`src/game/decks` & `src/main/services/deck-repository.ts`)
+### Deck Persistence & Rules (`src/game-rules/decks` & `src/desktop/main/services/deck-repository.ts`)
 
 - Decks are version 2 JSON records with 30 cards, a designated `heroId`, max 2 copies of normal cards, and max 1 copy of legendaries.
 - The Electron main process owns JSON persistence, automatic v1 $\rightarrow$ v2 migration, and corruption recovery backups.
 
-### Match Engine (`src/game/match`)
+### Match Engine (`src/game-rules/match`)
 
 - Platform-neutral, deterministic match boundary driven by seeded RNG (`createSeededRng`).
 - Manages opening hand dealing (3 cards for player 1, 4 cards + Coin for player 2), mulligan card replacement, alternating turn loops, draw/fatigue/burn rules, and turn-by-turn mana crystal growth.

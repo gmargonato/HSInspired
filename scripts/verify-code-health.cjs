@@ -30,7 +30,7 @@ try {
     })
   )
   write(
-    'src/game/engine.ts',
+    'src/game-rules/engine.ts',
     `
 export interface Runner { run(value: number): number }
 export class Engine implements Runner {
@@ -47,60 +47,60 @@ export function make() { return new Engine() }
 `
   )
   write(
-    'src/game/index.ts',
+    'src/game-rules/index.ts',
     `export { Engine as PublicEngine } from './engine'; export type { Runner } from './engine'`
   )
   write(
-    'src/main/use.ts',
-    `import { PublicEngine } from '../game'; import type { Runner } from '../game'; export const engine = new PublicEngine(); export function use(): Runner { engine.run(1); return engine }`
+    'src/desktop/main/use.ts',
+    `import { PublicEngine } from '../../game-rules'; import type { Runner } from '../../game-rules'; export const engine = new PublicEngine(); export function use(): Runner { engine.run(1); return engine }`
   )
   write(
-    'src/game/engine.spec.ts',
+    'src/game-rules/engine.spec.ts',
     `import { Engine } from './engine'; const instance = new Engine(); instance.run(1)`
   )
   write(
-    'src/game/type-a.ts',
+    'src/game-rules/type-a.ts',
     `import type { B } from './type-b'; export interface A { b: B }`
   )
   write(
-    'src/game/type-b.ts',
+    'src/game-rules/type-b.ts',
     `import type { A } from './type-a'; export interface B { a: A }`
   )
   write(
-    'src/game/value-a.ts',
+    'src/game-rules/value-a.ts',
     `import { b } from './value-b'; export function a(): number { return b() }`
   )
   write(
-    'src/game/value-b.ts',
+    'src/game-rules/value-b.ts',
     `import { a } from './value-a'; export function b(): number { return a() }`
   )
   write(
-    'src/game/broken.ts',
+    'src/game-rules/broken.ts',
     `declare const mystery: any; mystery.notKnown(); const invalid: string = 4`
   )
   write(
-    'src/game/events.ts',
+    'src/game-rules/events.ts',
     `declare const events: { on(event: string, callback: () => void): void }; export function listen() { events.on('done', () => {}) }`
   )
-  write('src/game/bom.ts', '\uFEFFexport const bom = 1')
+  write('src/game-rules/bom.ts', '\uFEFFexport const bom = 1')
   write(
-    'src/main/lazy.ts',
-    `export const load = () => import('../game/engine'); declare const name: string; export const dynamic = () => import(name)`
+    'src/desktop/main/lazy.ts',
+    `export const load = () => import('../../game-rules/engine'); declare const name: string; export const dynamic = () => import(name)`
   )
   write(
     'node_modules/electron/index.d.ts',
     `export const ipcMain: { handle(channel: string, callback: () => number): void }; export const ipcRenderer: { invoke(channel: string): Promise<number> }`
   )
   write(
-    'src/main/ipc.ts',
+    'src/desktop/main/ipc.ts',
     `import { ipcMain, ipcRenderer } from 'electron'; const channel = 'match:save' as const; ipcMain.handle(channel, () => 1); ipcRenderer.invoke(channel)`
   )
   const registry = {
     subsystems: [
       {
         id: 'engine',
-        roots: ['src/game/'],
-        entryPoints: ['src/game/engine.ts', 'src/game/missing.ts']
+        roots: ['src/game-rules/'],
+        entryPoints: ['src/game-rules/engine.ts', 'src/game-rules/missing.ts']
       },
       { id: 'broad', roots: ['src/'], entryPoints: [] }
     ],
@@ -111,8 +111,8 @@ export function make() { return new Engine() }
     summary: {
       violations: [
         {
-          from: 'src/main/use.ts',
-          to: 'src/game/engine.ts',
+          from: 'src/desktop/main/use.ts',
+          to: 'src/game-rules/engine.ts',
           rule: { name: 'fixture-rule', severity: 'error' }
         }
       ]
@@ -126,7 +126,8 @@ export function make() { return new Engine() }
   )
   assert.ok(
     data.relationships.some(
-      (item) => item.kind === 'imports-dynamic' && item.to === 'src/game/engine.ts'
+      (item) =>
+        item.kind === 'imports-dynamic' && item.to === 'src/game-rules/engine.ts'
     )
   )
   assert.ok(
@@ -152,7 +153,7 @@ export function make() { return new Engine() }
     'Local initializer remains owned by method'
   )
   assert.ok(
-    edge('src/main/use.ts', engine.id, 'imports-symbol'),
+    edge('src/desktop/main/use.ts', engine.id, 'imports-symbol'),
     'Alias through barrel resolves original class'
   )
   assert.ok(
@@ -177,7 +178,7 @@ export function make() { return new Engine() }
     0,
     'Nested callbacks have their own complexity'
   )
-  assert.deepEqual(run.usage.testFiles, ['src/game/engine.spec.ts'])
+  assert.deepEqual(run.usage.testFiles, ['src/game-rules/engine.spec.ts'])
   assert.ok(run.usage.productionCallers.every((id) => !id.includes('.spec.ts')))
   assert.equal(
     data.cycles.filter((item) => item.kind === 'value-import-component').length,
@@ -221,7 +222,7 @@ export function make() { return new Engine() }
   const report = markdownReport(data)
   for (const finding of data.findings)
     assert.ok(report.includes(finding.id), 'Markdown retains every finding')
-  const html = atlasHtml(data, 'src/game')
+  const html = atlasHtml(data, 'src/game-rules')
   const script = html.match(/<script>([\s\S]*)<\/script>/)[1]
   new vm.Script(script)
   const malicious = {
@@ -275,7 +276,7 @@ export function make() { return new Engine() }
     data.relationships,
     'Relationships are deterministic'
   )
-  write('src/game/new-file.ts', 'export const changed = true')
+  write('src/game-rules/new-file.ts', 'export const changed = true')
   assert.notEqual(
     analyzeCodebase(temporaryRoot, cruise, registry, ['tsconfig.json']).snapshot
       .sourceHash,
@@ -301,7 +302,7 @@ export function make() { return new Engine() }
       encoding: 'utf8',
       env: { ...process.env, NODE_PATH: path.resolve(__dirname, '../node_modules') }
     })
-  const generated = command(['--focus', 'src/game/'])
+  const generated = command(['--focus', 'src/game-rules/'])
   assert.equal(generated.status, 0, generated.stderr)
   const generatedData = JSON.parse(
     fs.readFileSync(
@@ -320,7 +321,7 @@ export function make() { return new Engine() }
         'utf8'
       )
     ).focus.expression,
-    'src/game/'
+    'src/game-rules/'
   )
   assert.notEqual(command(['--focus', '[']).status, 0, 'Reject invalid focus regex')
   assert.notEqual(command(['--focus']).status, 0, 'Reject missing focus regex')

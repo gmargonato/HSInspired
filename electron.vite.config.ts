@@ -34,51 +34,61 @@ function liveConfigHmrGuard() {
 
 export default defineConfig(({ mode }) => ({
   main: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: { input: resolve('src/desktop/main/index.ts') }
+    }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: { input: resolve('src/desktop/preload/index.ts') }
+    }
   },
   renderer: {
+    root: resolve('src/application'),
+    build: {
+      rollupOptions: { input: resolve('src/application/index.html') }
+    },
     plugins: [cspPlugin(mode), liveConfigHmrGuard()],
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer'),
+        '@application': resolve('src/application'),
         '@assets': resolve('assets'),
         '@dev-inspector': resolve(
           mode === 'production'
-            ? 'src/renderer/app/renderer-production-placeholder.ts'
-            : 'src/renderer/scenes/dev/card-inspector-scene.ts'
+            ? 'src/application/renderer-production-placeholder.ts'
+            : 'src/dev-tools/card-inspector/card-inspector-scene.ts'
         ),
         '@outline-lab': resolve(
           mode === 'production'
-            ? 'src/renderer/app/renderer-production-placeholder.ts'
-            : 'src/renderer/scenes/dev/outline-lab-scene.ts'
+            ? 'src/application/renderer-production-placeholder.ts'
+            : 'src/dev-tools/outline-lab/outline-lab-scene.ts'
         ),
         '@hero-power-anim': resolve(
           mode === 'production'
-            ? 'src/renderer/app/renderer-production-placeholder.ts'
-            : 'src/renderer/scenes/dev/hero-power-anim-scene.ts'
+            ? 'src/application/renderer-production-placeholder.ts'
+            : 'src/dev-tools/hero-power-anim/hero-power-anim-scene.ts'
         ),
         '@vfx-lab': resolve(
           mode === 'production'
-            ? 'src/renderer/app/renderer-production-placeholder.ts'
-            : 'src/renderer/scenes/dev/vfx-lab-scene.ts'
+            ? 'src/application/renderer-production-placeholder.ts'
+            : 'src/dev-tools/vfx-lab/vfx-lab-scene.ts'
         ),
         '@dev-layout-inspector': resolve(
           mode === 'production'
-            ? 'src/renderer/app/renderer-production-placeholder.ts'
-            : 'src/renderer/features/dev/layout-inspector/index.ts'
+            ? 'src/application/renderer-production-placeholder.ts'
+            : 'src/dev-tools/layout-inspector/index.ts'
         ),
         '@dev-match-performance': resolve(
           mode === 'production'
-            ? 'src/renderer/app/renderer-production-placeholder.ts'
-            : 'src/renderer/app/dev-match-performance.ts'
+            ? 'src/application/renderer-production-placeholder.ts'
+            : 'src/dev-tools/runtime/dev-match-performance.ts'
         ),
         '@outline-directions': resolve(
           mode === 'production'
-            ? 'src/renderer/rendering/effects/outline-directions-placeholder.ts'
-            : 'src/renderer/rendering/effects/outline-directions-dev.ts'
+            ? 'src/visual-components/effects/outline-directions-placeholder.ts'
+            : 'src/dev-tools/outline-lab/outline-directions-dev.ts'
         )
       }
     },

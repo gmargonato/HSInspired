@@ -9,10 +9,10 @@ const { createServer } = require('vite')
   })
   try {
     const inventoryModule = await server.ssrLoadModule(
-      '/src/game/content/cards/capability-inventory.ts'
+      '/src/game-rules/content/cards/capability-inventory.ts'
     )
     const capabilityModule = await server.ssrLoadModule(
-      '/src/game/match/effects/capability.ts'
+      '/src/game-rules/match/effects/capability.ts'
     )
     inventoryModule.assertCapabilityOwnership()
     const ownershipKeys = new Set(

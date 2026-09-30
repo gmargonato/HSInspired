@@ -61,7 +61,7 @@ for (let index = 2; index < process.argv.length; index++) {
 
 const vitestEntry = path.resolve('node_modules/vitest/vitest.mjs')
 const benchmarkTest = path.resolve(
-  'src/renderer/features/game/local-ai-matchup-benchmark.test.ts'
+  'src/scenes/match/ai/local-ai-matchup-benchmark.test.ts'
 )
 const result = spawnSync(
   process.execPath,

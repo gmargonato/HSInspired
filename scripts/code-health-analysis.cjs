@@ -71,24 +71,26 @@ function analyzeCodebase(
     unresolved = []
   const programs = []
   const configurations = []
+  const isPresentation = (file) =>
+    /^src\/(?:application|scenes|visual-components|dev-tools)\//.test(file)
   const classify = (file) => {
     const matches = registry.subsystems.filter((subsystem) =>
       subsystem.roots.some((prefix) => file.startsWith(prefix))
     )
     return {
-      process: file.startsWith('src/renderer/')
+      process: isPresentation(file)
         ? 'renderer'
-        : file.startsWith('src/main/')
+        : file.startsWith('src/desktop/main/')
           ? 'main'
-          : file.startsWith('src/preload/')
+          : file.startsWith('src/desktop/preload/')
             ? 'preload'
             : 'neutral',
-      layer: file.startsWith('src/renderer/') ? file.split('/')[2] : file.split('/')[1],
+      layer: file.startsWith('src/desktop/') ? file.split('/')[2] : file.split('/')[1],
       subsystem: matches[0]?.id || 'unmapped',
       subsystemMatches: matches.map((item) => item.id),
       scope: testPath(file)
         ? 'test'
-        : /\/(?:dev|__fixtures__)\//.test(file) || /\/dev-/.test(file)
+        : /\/(?:dev-tools|__fixtures__)\//.test(file) || /\/dev-/.test(file)
           ? 'development'
           : file.endsWith('.d.ts')
             ? 'declaration'
@@ -167,7 +169,7 @@ function analyzeCodebase(
       return (
         file.startsWith('src/') &&
         !owned.has(file) &&
-        !(configName.includes('node') && file.startsWith('src/renderer/'))
+        !(configName.includes('node') && isPresentation(file))
       )
     })
     const nodeIds = new Map()

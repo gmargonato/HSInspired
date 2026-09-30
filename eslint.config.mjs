@@ -5,7 +5,14 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['node_modules/**', 'dist/**', 'out/**', 'artifacts/**', 'assets/**']
+    ignores: [
+      'node_modules/**',
+      'dist/**',
+      'out/**',
+      'artifacts/**',
+      'assets/**',
+      '.tmp/**'
+    ]
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
@@ -19,7 +26,12 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/renderer/**/*.ts'],
+    files: [
+      'src/application/**/*.ts',
+      'src/scenes/**/*.ts',
+      'src/visual-components/**/*.ts',
+      'src/dev-tools/**/*.ts'
+    ],
     languageOptions: {
       globals: globals.browser
     }

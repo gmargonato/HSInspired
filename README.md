@@ -54,3 +54,19 @@ Requires Node.js 20+ and npm.
 npm install
 npm run dev
 ```
+
+## Verify changes
+
+```bash
+npm run assets:check # Verify artwork resolution, aliases, and served images
+npm run verify      # Formatting, lint, assets, all tests, types, dependencies, build
+```
+
+Artwork verification uses the actual Vite asset pipeline and does not launch the
+game. The full verification command includes the production build smoke check.
+
+## Find the code
+
+Scenes live directly under `src/scenes`. See [the source guide](src/README.md)
+for visual components, game rules, application navigation, development tools,
+and desktop services.
