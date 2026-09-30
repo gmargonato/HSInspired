@@ -1,4 +1,4 @@
-import { Sprite, Texture } from 'pixi.js'
+import { Container, Sprite, Texture } from 'pixi.js'
 import { Actor } from '../lifecycle/actor'
 
 export interface FlipCardOptions {
@@ -7,6 +7,8 @@ export interface FlipCardOptions {
   onClick?: () => void | Promise<void>
   onError?: (error: unknown) => void
   oneShot?: boolean
+  /** Disable the card's own click action while allowing interactive children. */
+  interactive?: boolean
 }
 
 /**
@@ -19,10 +21,13 @@ export interface FlipCardOptions {
  * can never flip back again.
  */
 export class FlipCard extends Actor {
+  /** Front artwork and controls that rotate and hide together. */
+  readonly frontFace = new Container()
   readonly front: Sprite
   readonly back: Sprite
   private readonly durationMs: number
   private readonly oneShot: boolean
+  private readonly clickEnabled: boolean
   private flipped = false
   private flipping = false
   private flipPromise: Promise<void> | null = null
@@ -31,6 +36,7 @@ export class FlipCard extends Actor {
     super()
     this.durationMs = options.durationMs ?? 400
     this.oneShot = options.oneShot ?? false
+    this.clickEnabled = options.interactive ?? true
 
     this.front = new Sprite(texture)
     this.front.anchor.set(0.5)
@@ -42,11 +48,15 @@ export class FlipCard extends Actor {
     this.front.visible = !this.flipped
     this.back.visible = this.flipped
 
-    this.addChild(this.front)
+    this.frontFace.label = 'flip-card.front-face'
+    this.frontFace.eventMode = 'passive'
+    this.frontFace.visible = !this.flipped
+    this.frontFace.addChild(this.front)
+    this.addChild(this.frontFace)
     this.addChild(this.back)
 
-    this.eventMode = this.oneShot && this.flipped ? 'none' : 'static'
-    this.cursor = this.oneShot && this.flipped ? 'default' : 'pointer'
+    this.syncInteractionState()
+    if (!this.clickEnabled) return
     this.on('pointertap', () => {
       if (this.flipping) return
       if (this.oneShot && this.flipped) return
@@ -60,6 +70,12 @@ export class FlipCard extends Actor {
 
   get isFlipped(): boolean {
     return this.flipped
+  }
+
+  private syncInteractionState(): void {
+    const disabled = this.oneShot && this.flipped
+    this.eventMode = !this.clickEnabled ? 'passive' : disabled ? 'none' : 'static'
+    this.cursor = !this.clickEnabled || disabled ? 'default' : 'pointer'
   }
 
   /**
@@ -116,10 +132,10 @@ export class FlipCard extends Actor {
         ease: 'power2.in',
         onComplete: () => {
           this.front.visible = target === this.front
+          this.frontFace.visible = target === this.front
           this.back.visible = target === this.back
           this.flipped = target === this.back
-          this.eventMode = this.oneShot && this.flipped ? 'none' : 'static'
-          this.cursor = this.oneShot && this.flipped ? 'default' : 'pointer'
+          this.syncInteractionState()
           this.tweenTo(this.scale, {
             x: 1,
             duration: halfMs / 1000,

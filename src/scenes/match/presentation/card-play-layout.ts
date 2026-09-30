@@ -6,6 +6,7 @@ export const CARD_PLAY_LAYOUT = {
     snapDuration: 0.18,
     chargeDuration: 0.3,
     settleDuration: 0.38,
+    legendaryShake: { amplitude: 14, pulses: 4, duration: 0.24 },
     fallbackStartScaleMultiplier: 1.3,
     fallbackStartYOffset: -30,
     aura: {

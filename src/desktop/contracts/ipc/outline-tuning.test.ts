@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import rawConfig from '../../../../config/outline-tunings.json'
+import { GOD_RAYS_DEFAULTS } from './god-rays-tuning'
+import { GOD_RAYS_DUST_DEFAULTS } from './god-rays-dust-tuning'
 import {
   GHOST_MIST_DEFAULTS,
   SHATTER_DEFAULTS,
@@ -81,7 +83,7 @@ describe('shader tuning IPC', () => {
       ghost: { tuning: { ribbonWidth: 5 }, palette: { baseColor: 0 } }
     }
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(11)
+    expect(parsed.version).toBe(13)
     expect(parsed.aura).toEqual(expectedMigratedAura(legacy.aura))
     expect(parsed.ghost).toEqual(GHOST_MIST_DEFAULTS)
     expect(legacy.version).toBe(4)
@@ -90,7 +92,7 @@ describe('shader tuning IPC', () => {
     const legacy = legacyConfig(5)
     legacy.ghost.tuning.spotSize = 1.09
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(11)
+    expect(parsed.version).toBe(13)
     expect(parsed.ghost.tuning.particleSize).toBeCloseTo(8.175)
     expect(legacy.ghost.tuning.spotSize).toBe(1.09)
     expect(parsed.aura).toEqual(expectedMigratedAura(legacy.aura))
@@ -103,7 +105,7 @@ describe('shader tuning IPC', () => {
   it('adds travel distance to version 6 while preserving saved settings', () => {
     const legacy = legacyConfig(6)
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(11)
+    expect(parsed.version).toBe(13)
     expect(parsed.ghost.tuning).toMatchObject({
       particleTravelDistance: 60,
       windDirection: 2,
@@ -186,7 +188,7 @@ describe('shader tuning IPC', () => {
     expect(() => parseOutlineTuningConfig(config)).toThrow()
   })
   it('rejects incompatible shapes and versions', () => {
-    for (const version of [3, 12])
+    for (const version of [3, 14])
       expect(() => parseOutlineTuningConfig({ ...rawConfig, version })).toThrow()
     const missing = structuredClone(rawConfig) as unknown as {
       aura: { presets: Record<string, unknown> }
@@ -264,7 +266,12 @@ it.each([{ duration: 0 }, { shardCount: 10.5 }, { seed: Infinity }, { spread: 3 
 )
 
 it('migrates version 10 into independent element settings without changing other shaders', () => {
-  const legacy = { ...structuredClone(rawConfig), version: 10, aura: legacyAura() }
+  const legacy = {
+    version: 10,
+    aura: legacyAura(),
+    ghost: structuredClone(rawConfig.ghost),
+    shatter: structuredClone(rawConfig.shatter)
+  }
   legacy.aura.presets.button.glowWidth = 77
   legacy.aura.presets.board.glowWidth = 91
   const before = structuredClone(legacy)
@@ -299,4 +306,84 @@ it('migrates version 10 into independent element settings without changing other
   expect(parseOutlineTuningConfig(JSON.parse(JSON.stringify(migrated)))).toEqual(
     migrated
   )
+})
+
+it('adds god rays to version 11 without changing existing shader tuning', () => {
+  const {
+    godRays: _godRays,
+    godRaysDust: _dust,
+    ...previous
+  } = structuredClone(rawConfig)
+  const legacy = { ...previous, version: 11 }
+  const migrated = parseOutlineTuningConfig(legacy)
+  expect(migrated.version).toBe(13)
+  expect(migrated.godRays).toEqual(GOD_RAYS_DEFAULTS)
+  expect(migrated.aura).toEqual(legacy.aura)
+  expect(migrated.ghost).toEqual(legacy.ghost)
+  expect(migrated.shatter).toEqual(legacy.shatter)
+  expect(legacy).not.toHaveProperty('godRays')
+})
+
+it('round-trips fractional god rays values and copies its color channels', () => {
+  const config = structuredClone(rawConfig)
+  config.godRays.angle = -1.23
+  config.godRays.speed = 0
+  config.godRays.hdr = true
+  config.godRays.seed = 25.31
+  config.godRays.color = [0.123, 0.456, 0.789, 0.321]
+  const parsed = parseOutlineTuningConfig(config)
+  expect(parsed).toEqual(config)
+  expect(parsed.godRays.color).not.toBe(config.godRays.color)
+  expect(parseOutlineTuningConfig(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed)
+})
+
+it('adds dust to version 12 without changing saved ray or other shader values', () => {
+  const { godRaysDust: _dust, ...previous } = structuredClone(rawConfig)
+  const legacy = { ...previous, version: 12 }
+  legacy.godRays.angle = -1.21
+  const migrated = parseOutlineTuningConfig(legacy)
+  expect(migrated.godRaysDust).toEqual(GOD_RAYS_DUST_DEFAULTS)
+  expect(migrated.godRays).toEqual(legacy.godRays)
+  expect(migrated.aura).toEqual(legacy.aura)
+  expect(migrated.ghost).toEqual(legacy.ghost)
+  expect(migrated.shatter).toEqual(legacy.shatter)
+  expect(legacy).not.toHaveProperty('godRaysDust')
+})
+
+it.each([
+  { count: 1.5 },
+  { count: 501 },
+  { speed: NaN },
+  { decayChance: 1.1 },
+  { brightness: -1 },
+  { size: 0 },
+  { enabled: 1 },
+  { blendMode: 'multiply' },
+  { extra: true }
+])('rejects invalid dust settings: %j', (invalid) => {
+  expect(() =>
+    parseOutlineTuningConfig({
+      ...rawConfig,
+      godRaysDust: { ...rawConfig.godRaysDust, ...invalid }
+    })
+  ).toThrow()
+})
+
+it.each([
+  { angle: NaN },
+  { spread: -0.01 },
+  { speed: 21 },
+  { hdr: 1 },
+  { color: [1, 1, 1] },
+  { color: [1, 1, 1, 1.1] },
+  { color: [1, 1, 1, NaN] },
+  { seed: Infinity },
+  { extra: true }
+])('rejects malformed god rays settings: %j', (invalid) => {
+  expect(() =>
+    parseOutlineTuningConfig({
+      ...rawConfig,
+      godRays: { ...rawConfig.godRays, ...invalid }
+    })
+  ).toThrow()
 })

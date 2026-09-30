@@ -1,3 +1,14 @@
+import {
+  GOD_RAYS_DEFAULTS,
+  parseGodRaysTuning,
+  type GodRaysTuning
+} from './god-rays-tuning'
+import {
+  GOD_RAYS_DUST_DEFAULTS,
+  parseGodRaysDustTuning,
+  type GodRaysDustTuning
+} from './god-rays-dust-tuning'
+
 /** Shader Lab's process-safe tuning contract. V5 controls retain their source units. */
 export const OUTLINE_TUNING_IPC_CHANNELS = {
   save: 'debug:outline-tuning:save'
@@ -469,8 +480,10 @@ export const SHATTER_TUNING_RANGES = {
 } as const
 
 export interface OutlineTuningConfig {
+  readonly godRays: GodRaysTuning
+  readonly godRaysDust: GodRaysDustTuning
   readonly shatter: ShatterTuning
-  readonly version: 11
+  readonly version: 13
   readonly aura: {
     readonly presets: Readonly<Record<OutlinePresetName, AuraTuning>>
     readonly palettes: Readonly<Record<OutlinePaletteName, AuraPalette>>
@@ -518,9 +531,13 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     value && typeof value === 'object' && 'version' in value ? value.version : undefined
   const config = record(
     value,
-    version === 10 || version === 11
-      ? ['version', 'aura', 'ghost', 'shatter']
-      : ['version', 'aura', 'ghost']
+    version === 13
+      ? ['version', 'aura', 'ghost', 'shatter', 'godRays', 'godRaysDust']
+      : version === 12
+        ? ['version', 'aura', 'ghost', 'shatter', 'godRays']
+        : version === 10 || version === 11
+          ? ['version', 'aura', 'ghost', 'shatter']
+          : ['version', 'aura', 'ghost']
   )
   if (
     config.version !== 4 &&
@@ -530,20 +547,28 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     config.version !== 8 &&
     config.version !== 9 &&
     config.version !== 10 &&
-    config.version !== 11
+    config.version !== 11 &&
+    config.version !== 12 &&
+    config.version !== 13
   )
     throw new Error('Invalid shader tuning version')
   const aura = record(config.aura, ['presets', 'palettes'])
   const presets = record(
     aura.presets,
-    config.version === 11 ? OUTLINE_PRESET_NAMES : LEGACY_PRESET_NAMES
+    config.version === 11 || config.version === 12 || config.version === 13
+      ? OUTLINE_PRESET_NAMES
+      : LEGACY_PRESET_NAMES
   )
   const palettes = record(aura.palettes, OUTLINE_PALETTE_NAMES)
   const controls = AURA_CONTROLS.filter((control) => control.type !== 'color')
   const parsedPresets = Object.fromEntries(
     OUTLINE_PRESET_NAMES.map((name) => {
       const preset = record(
-        presets[config.version === 11 ? name : AURA_LEGACY_PRESETS[name]],
+        presets[
+          config.version === 11 || config.version === 12 || config.version === 13
+            ? name
+            : AURA_LEGACY_PRESETS[name]
+        ],
         controls.map((control) => control.key)
       )
       return [
@@ -582,7 +607,9 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     config.version !== 4 &&
     config.version !== 9 &&
     config.version !== 10 &&
-    config.version !== 11
+    config.version !== 11 &&
+    config.version !== 12 &&
+    config.version !== 13
   ) {
     const old = record(ghost.tuning, [
       'windDirection',
@@ -639,11 +666,24 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     if (typeof ghostTuning[key] !== 'boolean')
       throw new Error('Invalid Ghost enabled toggle')
   const shatter = record(
-    config.version === 10 || config.version === 11 ? config.shatter : SHATTER_DEFAULTS,
+    config.version === 10 ||
+      config.version === 11 ||
+      config.version === 12 ||
+      config.version === 13
+      ? config.shatter
+      : SHATTER_DEFAULTS,
     Object.keys(SHATTER_DEFAULTS)
   )
   return {
-    version: 11,
+    version: 13,
+    godRaysDust: parseGodRaysDustTuning(
+      config.version === 13 ? config.godRaysDust : GOD_RAYS_DUST_DEFAULTS
+    ),
+    godRays: parseGodRaysTuning(
+      config.version === 12 || config.version === 13
+        ? config.godRays
+        : GOD_RAYS_DEFAULTS
+    ),
     shatter: Object.fromEntries(
       Object.entries(SHATTER_TUNING_RANGES).map(([key, [min, max]]) => [
         key,

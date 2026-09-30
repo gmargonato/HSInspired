@@ -22,6 +22,15 @@ import {
 
 export const GAME_BOARD_LAYOUT = {
   name: 'Game board (opening sequence)',
+  openingBackdrop: {
+    area: placement(
+      { x: 0, y: 0 },
+      { width: 1920, height: 1080 },
+      { anchor: TOP_LEFT }
+    ),
+    color: 0x000000,
+    alpha: 0.8
+  },
   /** Each discarded card keeps its own x position and moves toward the board. */
   discard: { travelDistance: 120 },
 
@@ -149,7 +158,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote equipped weapon, screen-left of the remote hero frame. */
     remote: placement(
-      { x: 800, y: 200 },
+      { x: 800, y: 220 },
       { width: 240, height: 210 },
       {
         anchor: CENTER,

@@ -27,6 +27,11 @@ describe('OutlineTuningRepository', () => {
     draft.ghost.tuning.particleWindStrength = 1.5
     draft.shatter.duration = 2.4
     draft.shatter.shardCount = 72
+    draft.godRays.angle = -0.75
+    draft.godRaysDust.enabled = false
+    draft.godRaysDust.speed = 1.35
+    draft.godRaysDust.blendMode = 'add'
+    draft.godRays.color = [0.9, 0.7, 0.5, 0.6]
     const second = parseOutlineTuningConfig(draft)
 
     await Promise.all([repository.save(first), repository.save(second)])

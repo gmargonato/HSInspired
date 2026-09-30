@@ -37,6 +37,14 @@ export const MAIN_MENU_LAYOUT = {
         anchor: TOP_LEFT,
         note: 'Drawn at native 1920x1080, top-left anchored, filling the viewport.'
       }
+    ),
+    godRays: placement(
+      { x: 0, y: 0 },
+      { width: GAME_WIDTH, height: GAME_HEIGHT },
+      {
+        anchor: TOP_LEFT,
+        note: 'Screen-blended god rays above the menu artwork, hidden during transitions.'
+      }
     )
   },
   chest: {
@@ -102,7 +110,7 @@ export const MAIN_MENU_LAYOUT = {
 /** Durations for the chest opening and menu reveal choreography (seconds). */
 export const MAIN_MENU_TIMING = {
   lidOpen: 0.6,
-  menuReveal: 0.15
+  effectsFade: 0.4
 } as const
 
 /** Hinged-door physics constants consumed by updateHingedDoor. */

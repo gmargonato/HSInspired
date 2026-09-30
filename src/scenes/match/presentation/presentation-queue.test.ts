@@ -1,5 +1,7 @@
 import { WeaponView, type WeaponViewTextures } from '../board/weapon-view'
 import * as ShatterEffect from '../../../visual-components/effects/shatter'
+import * as ScreenShake from '../combat/screen-shake'
+import { CARD_PLAY_LAYOUT } from './card-play-layout'
 import { summonPresentationBatch } from './summon-presentation'
 import { returnPresentationBatch } from './return-presentation'
 import { PresentationQueue } from './presentation-queue'
@@ -55,7 +57,10 @@ import type { BoardPositionController } from '../board/board-position-controller
 import type { HandEntry } from '../hand/game-hand-entry'
 import type { PlayCardInput } from '../../../game-rules/match'
 import { MinionView, type MinionViewTextures } from '../board/minion-view'
-import type { MinionPreviewPresentation } from '../targeting/game-card-targeting-types'
+import type {
+  MinionPreviewPresentation,
+  PendingMinionTargetPreview
+} from '../targeting/game-card-targeting-types'
 import type { CardSelectionOverlay } from './card-selection-overlay'
 import { CardDepartureAnimation } from './card-departure-animation'
 import { Burn } from '../../../visual-components/effects/burn'
@@ -2669,6 +2674,152 @@ describe('random spell playback', () => {
       after,
       after
     ])
+  })
+})
+
+describe('Legendary minion entrance shake', () => {
+  it.each([
+    { remote: false, legendary: true, slot: true, preview: false, cancel: false },
+    { remote: true, legendary: true, slot: true, preview: false, cancel: false },
+    { remote: false, legendary: false, slot: true, preview: false, cancel: false },
+    { remote: false, legendary: true, slot: false, preview: false, cancel: false },
+    { remote: true, legendary: true, slot: false, preview: false, cancel: false },
+    { remote: false, legendary: true, slot: true, preview: true, cancel: false },
+    { remote: false, legendary: true, slot: true, preview: true, cancel: true },
+    {
+      remote: false,
+      legendary: true,
+      slot: true,
+      preview: false,
+      cancel: false,
+      summoned: true
+    }
+  ])('shakes only on eligible landings: %j', async (scenario) => {
+    const value = board()
+    value.position.set(17, 23)
+    const internal = value as unknown as {
+      session: GameBoardSession
+      animationScope: AnimationScope
+      resolver: { loadArtwork(): Promise<Texture> }
+      cardPlayAnimation: CardPlayAnimation
+      presentMinionPlayed(
+        event: OpeningMatchEvent,
+        slot?: GameCardSlot,
+        removedFromHand?: boolean,
+        retainForTargeting?: boolean,
+        preview?: PendingMinionTargetPreview
+      ): Promise<MinionPreviewPresentation | null>
+    }
+    vi.spyOn(internal.resolver, 'loadArtwork').mockResolvedValue(Texture.WHITE)
+    vi.spyOn(internal.cardPlayAnimation, 'createMinionAura').mockImplementation(
+      () => new Sprite(Texture.WHITE)
+    )
+    vi.spyOn(internal.cardPlayAnimation, 'detachMinionAura').mockImplementation(
+      () => {}
+    )
+    vi.spyOn(internal.cardPlayAnimation, 'alignMinionArtwork').mockReturnValue(false)
+    vi.spyOn(internal.cardPlayAnimation, 'emitMinionParticles').mockImplementation(
+      (timeline, _layer, _source, stage) => {
+        // Keep particles alive past landing to distinguish impact from completion.
+        if (stage === 'settle') timeline.to({}, { duration: 0.9 }, 0)
+        return new Container()
+      }
+    )
+    const timelines: gsap.core.Timeline[] = []
+    const makeTimeline = internal.animationScope.timeline.bind(internal.animationScope)
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const timeline = makeTimeline(vars)
+      timeline.pause()
+      timelines.push(timeline)
+      return timeline
+    })
+    const shake = vi.spyOn(ScreenShake, 'runScreenShake')
+    for (const player of internal.session.getState().players)
+      internal.session.dispatch({
+        type: 'confirm-mulligan',
+        participantId: player.participantId,
+        replaceInstanceIds: []
+      })
+    const result = internal.session.dispatch({
+      type: 'dev-summon-minion',
+      participantId: scenario.remote
+        ? internal.session.remoteParticipantId
+        : internal.session.localParticipantId,
+      cardId: asCardId(scenario.legendary ? 'classic_gruul' : 'basic_bloodfen_raptor')
+    })
+    if (!result.accepted) throw new Error(result.message)
+    const summoned = result.events.find(
+      (event) => event.type === 'dev-minion-summoned'
+    )!
+    const event = {
+      ...summoned,
+      type: scenario.summoned ? 'dev-minion-summoned' : 'minion-played'
+    } as OpeningMatchEvent
+    const slot = scenario.slot
+      ? Object.assign(mulliganSlot('legendary-entrance'), {
+          card: new Container(),
+          beginMinionPlayTransition: vi.fn()
+        })
+      : undefined
+    const preview = scenario.preview
+      ? ({
+          cancelled: false,
+          playEffects: new Set(),
+          activeTimelines: new Set()
+        } as unknown as PendingMinionTargetPreview)
+      : undefined
+    let done = false
+    const job = internal.presentMinionPlayed(
+      event,
+      slot,
+      false,
+      scenario.preview,
+      preview
+    )
+    void job.then(() => {
+      done = true
+    })
+    // Finish the charge, then stop immediately before the landing callback.
+    for (let pass = 0; pass < 30 && timelines.length < 2; pass++) {
+      if (scenario.slot) timelines[0]?.progress(1)
+      await Promise.resolve()
+      if (!scenario.slot && timelines.length) break
+    }
+    const landing = timelines[scenario.slot ? 1 : 0]
+    expect(landing).toBeDefined()
+    const landingTime = scenario.slot
+      ? CARD_PLAY_LAYOUT.minion.settleDuration
+      : landing.duration()
+    landing.time(landingTime - 0.001, false)
+    expect(shake).not.toHaveBeenCalled()
+    if (scenario.cancel && preview) preview.cancelled = true
+    landing.time(landingTime, false)
+    await Promise.resolve()
+    const eligible = scenario.legendary && !scenario.cancel && !scenario.summoned
+    expect(shake).toHaveBeenCalledTimes(eligible ? 1 : 0)
+    if (eligible) {
+      expect(shake).toHaveBeenCalledWith(
+        value,
+        internal.animationScope,
+        CARD_PLAY_LAYOUT.minion.legendaryShake
+      )
+      expect(done).toBe(false)
+      const shaking = timelines.at(-1)!
+      shaking.time(shaking.duration() / 8, false)
+      expect(value.x).not.toBe(17)
+      if (scenario.preview) {
+        preview!.cancelled = true
+        shaking.kill()
+      } else shaking.progress(1, false)
+    }
+    landing.progress(1, false)
+    await job
+    expect(value.position.x).toBe(17)
+    expect(value.position.y).toBe(23)
+    if (eligible && !scenario.preview) {
+      await internal.presentMinionPlayed(event)
+      expect(shake).toHaveBeenCalledTimes(1)
+    }
   })
 })
 

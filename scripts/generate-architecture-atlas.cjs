@@ -3,7 +3,7 @@ const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 const { analyzeCodebase } = require('./code-health-analysis.cjs')
 const { atlasHtml, markdownReport, boundaryHtml } = require('./code-health-report.cjs')
-const registry = require('../architecture/subsystems.cjs')
+const registry = require('./architecture-subsystems.cjs')
 
 const root = path.resolve(__dirname, '..')
 const output = path.join(root, 'artifacts', 'architecture')

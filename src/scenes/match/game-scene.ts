@@ -100,10 +100,11 @@ export class GameScene extends Scene {
       await this.initMatch()
       await this.reportLoading(1)
       await new Promise<void>((resolve) => {
-        this.tweenTo(this.loadingView!, {
-          alpha: 0,
-          duration: OPENING_TIMING.loadingOverlayFade,
-          ease: 'sine.inOut',
+        this.tweenTo(this.loadingView!.panel.scale, {
+          x: 0,
+          y: 0,
+          duration: OPENING_TIMING.loadingPanelShrink,
+          ease: 'power2.in',
           onComplete: resolve,
           onInterrupt: resolve
         })

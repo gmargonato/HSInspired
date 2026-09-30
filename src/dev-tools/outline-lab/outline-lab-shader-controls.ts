@@ -21,6 +21,16 @@ import {
   type GhostAuraPalette
 } from '../../desktop/contracts/ipc/outline-tuning'
 import { OUTLINE_LAB_LAYOUT as LAYOUT } from './outline-lab-layout'
+import {
+  GOD_RAYS_TUNING_RANGES,
+  type GodRaysTuning
+} from '../../desktop/contracts/ipc/god-rays-tuning'
+
+type LabShader = 'aura' | 'ghost' | 'shatter' | 'god-rays'
+import {
+  GOD_RAYS_DUST_RANGES,
+  type GodRaysDustTuning
+} from '../../desktop/contracts/ipc/god-rays-dust-tuning'
 
 type Change = (key: string, value: number | boolean, color: boolean) => void
 interface Control {
@@ -46,7 +56,7 @@ export class OutlineLabShaderControls {
       canvas: HTMLCanvasElement
       renderer: Renderer
       parent: HTMLElement
-      onShaderChange(shader: 'aura' | 'ghost' | 'shatter'): void
+      onShaderChange(shader: LabShader): void
     }
   ) {
     this.root.setAttribute('aria-label', 'Shader controls')
@@ -65,7 +75,8 @@ export class OutlineLabShaderControls {
     for (const [value, label] of [
       ['aura', 'Aura Shader'],
       ['ghost', 'Ghost Aura Shader'],
-      ['shatter', 'Shatter Shader']
+      ['shatter', 'Shatter Shader'],
+      ['god-rays', 'God Rays — Main Menu']
     ]) {
       const option = document.createElement('option')
       option.value = value
@@ -75,8 +86,7 @@ export class OutlineLabShaderControls {
     this.shader.setAttribute('aria-label', 'Shader')
     this.shader.style.cssText =
       'width:100%;padding:10px;font:18px Arial;margin-bottom:12px'
-    this.shader.onchange = () =>
-      options.onShaderChange(this.shader.value as 'aura' | 'ghost' | 'shatter')
+    this.shader.onchange = () => options.onShaderChange(this.shader.value as LabShader)
     this.root.append(this.shader, this.content)
     for (const event of ['pointerdown', 'wheel', 'keydown'])
       this.root.addEventListener(event, (event) => event.stopPropagation())
@@ -300,6 +310,138 @@ export class OutlineLabShaderControls {
     note.textContent =
       'Save applies these settings to matches and future sessions. Match minions shatter after their death wiggle; heroes are preview-only.'
     this.content.append(note)
+  }
+
+  showGodRays(
+    tuning: GodRaysTuning,
+    onChange: Change,
+    reset: () => void,
+    dust: GodRaysDustTuning,
+    onDustChange: Change,
+    resetDust: () => void
+  ): void {
+    this.shader.value = 'god-rays'
+    const labels: Record<keyof typeof GOD_RAYS_TUNING_RANGES, string> = {
+      angle: 'Angle (radians)',
+      position: 'Position',
+      spread: 'Spread',
+      cutoff: 'Cutoff',
+      falloff: 'Falloff',
+      edgeFade: 'Edge fade',
+      speed: 'Speed',
+      ray1Density: 'Ray 1 density',
+      ray2Density: 'Ray 2 density',
+      ray2Intensity: 'Ray 2 intensity',
+      seed: 'Seed'
+    }
+    const dustLabels: Record<keyof typeof GOD_RAYS_DUST_RANGES, string> = {
+      count: 'Particle count',
+      speed: 'Average fall speed (×)',
+      decayChance: 'Decay chance (%)',
+      size: 'Size multiplier',
+      brightness: 'Brightness'
+    }
+    this.render(
+      [
+        ...Object.entries(GOD_RAYS_TUNING_RANGES).map(([key, [min, max]]): Control => ({
+          key,
+          label: labels[key as keyof typeof labels],
+          section: 'God rays',
+          type: 'range',
+          min,
+          max,
+          step: [
+            'angle',
+            'position',
+            'spread',
+            'cutoff',
+            'falloff',
+            'edgeFade',
+            'ray2Intensity'
+          ].includes(key)
+            ? 0.001
+            : 0.01
+        })),
+        ...['red', 'green', 'blue', 'opacity'].map((key): Control => ({
+          key,
+          label: key[0].toUpperCase() + key.slice(1),
+          section: 'Color',
+          type: 'range',
+          min: 0,
+          max: 1,
+          step: 0.001
+        })),
+        {
+          key: 'hdr',
+          label: 'HDR (unclamped rays)',
+          section: 'God rays',
+          type: 'checkbox'
+        },
+        { key: 'dust.enabled', label: 'Enabled', section: 'Dust', type: 'checkbox' },
+        ...Object.entries(GOD_RAYS_DUST_RANGES).map(([key, [min, max]]): Control => ({
+          key: 'dust.' + key,
+          label: dustLabels[key as keyof typeof dustLabels],
+          section: 'Dust',
+          type: 'range',
+          min,
+          max: key === 'decayChance' ? 100 : max,
+          step: key === 'count' || key === 'decayChance' ? 1 : 0.01
+        })),
+        {
+          key: 'dust.blendMode',
+          label: 'Blend mode',
+          section: 'Dust',
+          type: 'select',
+          options: [
+            { value: 0, label: 'Screen' },
+            { value: 1, label: 'Additive' }
+          ]
+        }
+      ],
+      {
+        ...Object.fromEntries(
+          Object.keys(GOD_RAYS_TUNING_RANGES).map((key) => [
+            key,
+            tuning[key as keyof typeof GOD_RAYS_TUNING_RANGES]
+          ])
+        ),
+        red: tuning.color[0],
+        green: tuning.color[1],
+        blue: tuning.color[2],
+        opacity: tuning.color[3],
+        hdr: tuning.hdr,
+        ...Object.fromEntries(
+          Object.keys(GOD_RAYS_DUST_RANGES).map((key) => [
+            'dust.' + key,
+            dust[key as keyof typeof GOD_RAYS_DUST_RANGES]
+          ])
+        ),
+        'dust.enabled': dust.enabled,
+        'dust.decayChance': dust.decayChance * 100,
+        'dust.blendMode': dust.blendMode === 'add' ? 1 : 0
+      },
+      (key, value, color) =>
+        key.startsWith('dust.')
+          ? onDustChange(key.slice(5), value, color)
+          : onChange(key, value, color)
+    )
+    const button = document.createElement('button')
+    button.textContent = 'Reset God Rays'
+    button.onclick = reset
+    const dustButton = document.createElement('button')
+    dustButton.textContent = 'Reset Dust'
+    dustButton.onclick = resetDust
+    const dustNote = document.createElement('p')
+    dustNote.textContent =
+      'Larger particles drift slower. Decay is chosen at birth; changes affect newly spawned particles. Dust inherits the light color.'
+    const dustSection = Array.from(this.content.children).find(
+      (group) => group.querySelector('legend')?.textContent === 'Dust'
+    )
+    dustSection?.append(dustButton, dustNote)
+    const note = document.createElement('p')
+    note.textContent =
+      'Static main-menu artwork. Save all changes applies these values to the main menu and future sessions.'
+    this.content.prepend(note, button)
   }
 
   setShatterProgress(progress: number): void {

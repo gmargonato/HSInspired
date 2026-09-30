@@ -40,6 +40,15 @@ export const OUTLINE_LAB_LAYOUT = {
     { anchor: TOP_LEFT }
   ),
   status: { x: 62, y: 1048 },
+  godRaysPreview: placement(
+    { x: 42, y: 256 },
+    { width: 1920, height: 1080 },
+    {
+      anchor: TOP_LEFT,
+      scale: 1116 / 1920,
+      note: 'Fit the complete main menu into the preview without cropping.'
+    }
+  ),
   minion: placement({ x: 270, y: 620 }, MINION_CANVAS, { anchor: CENTER, scale: 1 }),
   shatterWeapon: placement({ x: 580, y: 610 }, WEAPON_CANVAS, {
     anchor: CENTER,

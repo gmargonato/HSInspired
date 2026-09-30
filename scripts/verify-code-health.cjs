@@ -289,7 +289,10 @@ export function make() { return new Engine() }
     'code-health-report.cjs'
   ])
     write(`scripts/${script}`, fs.readFileSync(path.join(__dirname, script), 'utf8'))
-  write('architecture/subsystems.cjs', `module.exports = ${JSON.stringify(registry)}`)
+  write(
+    'scripts/architecture-subsystems.cjs',
+    `module.exports = ${JSON.stringify(registry)}`
+  )
   write('tsconfig.node.json', '{"extends":"./tsconfig.json"}')
   write('tsconfig.web.json', '{"extends":"./tsconfig.json"}')
   write(

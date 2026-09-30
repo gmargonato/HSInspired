@@ -1,6 +1,6 @@
 /** Feature-local timings make the opening easy to tune without layout edits. */
 export const OPENING_TIMING = {
-  loadingOverlayFade: 0.65,
+  loadingPanelShrink: 0.2,
   versusReveal: 0.85,
   versusHold: 2,
   heroSettle: 0.6,

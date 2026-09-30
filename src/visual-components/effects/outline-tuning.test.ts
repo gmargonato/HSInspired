@@ -8,6 +8,8 @@ import {
   OUTLINE_TUNINGS,
   GHOST_AURA_CONFIG,
   SHATTER_CONFIG,
+  GOD_RAYS_CONFIG,
+  GOD_RAYS_DUST_CONFIG,
   updateOutlineTuningConfig
 } from './outline-tuning'
 import { inverseAuraProjection } from './aura-projection'
@@ -21,6 +23,11 @@ describe('shader tuning registry', () => {
     updated.ghost.tuning.particleWindStrength = 1.5
     updated.shatter.duration = 2.4
     updated.shatter.seed = 23
+    updated.godRays.speed = 2.75
+    updated.godRaysDust.count = 133
+    updated.godRaysDust.decayChance = 0.74
+    updated.godRaysDust.blendMode = 'add'
+    updated.godRays.color = [0.1, 0.2, 0.3, 0.4]
     updateOutlineTuningConfig(parseOutlineTuningConfig(updated))
     expect(getOutlineTuning('card').speed).toBe(0.37)
     expect(OUTLINE_TUNINGS.card.speed).toBe(0.37)
@@ -28,6 +35,9 @@ describe('shader tuning registry', () => {
     expect(GHOST_AURA_CONFIG.tuning.particleWindStrength).toBe(1.5)
     expect(GHOST_AURA_CONFIG.palette).toEqual(initialConfig.ghost.palette)
     expect(SHATTER_CONFIG).toEqual(updated.shatter)
+    expect(GOD_RAYS_CONFIG).toEqual(updated.godRays)
+    expect(GOD_RAYS_DUST_CONFIG).toEqual(updated.godRaysDust)
+    expect(GOD_RAYS_CONFIG.color).not.toBe(updated.godRays.color)
     expect(getOutlineTuningConfig()).toEqual(updated)
   })
 })

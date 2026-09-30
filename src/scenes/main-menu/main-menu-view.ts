@@ -12,8 +12,17 @@ import {
   updateHingedDoor,
   type HingeSide
 } from '../../visual-components/effects/hinged-door'
+import {
+  createGodRaysFilter,
+  type GodRaysEffect
+} from '../../visual-components/effects/god-rays-filter'
 import { MAIN_MENU_HINGE, MAIN_MENU_LAYOUT, MAIN_MENU_TIMING } from './main-menu-layout'
 import { applyAnchoredPlacement, applyPlacement } from '../../visual-components/layout'
+import {
+  GOD_RAYS_CONFIG,
+  GOD_RAYS_DUST_CONFIG
+} from '../../visual-components/effects/outline-tuning'
+import { GodRaysDust } from '../../visual-components/effects/god-rays-dust'
 
 const { chest, menuButtons } = MAIN_MENU_LAYOUT
 
@@ -44,6 +53,10 @@ export class MainMenuView extends Actor {
    */
   readonly transitionHost = new Container()
   private table!: Sprite
+  private godRaysOverlay!: Sprite
+  private godRays: GodRaysEffect | null = null
+  private godRaysDust: GodRaysDust | null = null
+  private readonly effectTargets: Container[] = []
   private boxLayer!: Container
   private menuGroup!: Container
   private chestBox!: Sprite
@@ -92,15 +105,16 @@ export class MainMenuView extends Actor {
    */
   prepareDestinationTransition(): Promise<void> {
     if (!this.destinationPreparation) {
+      const effectsFade = this.fadeEffects(0)
       const centerFlip = this.centerCard.flip()
       this.destinationPreparation = (async () => {
-        await centerFlip
+        await Promise.all([centerFlip, effectsFade])
+        if (this.destroyed) return
         await this.openChest()
 
         this.lidLeft.visible = false
         this.lidRight.visible = false
         this.centerCard.visible = false
-        for (const button of this.menuButtonActors) button.visible = false
       })()
     }
 
@@ -125,10 +139,10 @@ export class MainMenuView extends Actor {
     // a destination is selected, immediately before the chest opens.
     this.centerCard = new FlipCard(assets.centerPartMenu, assets.centerPart, {
       initialFace: this.entryMode === 'returning' ? 'back' : 'front',
-      oneShot: true
+      oneShot: true,
+      interactive: false
     })
     this.centerCard.label = 'main-menu.center-card'
-    this.centerCard.eventMode = 'none'
 
     // Keep the center part mounted to the right lid so it follows the lid's
     // free edge while the chest opens.
@@ -153,9 +167,8 @@ export class MainMenuView extends Actor {
     applyPlacement(this.buttonPlay, menuButtons.play)
     this.buttonPlay.setBaseY(menuButtons.play.position.y)
     this.buttonPlay.visible = true
-    this.buttonPlay.alpha = this.entryMode === 'returning' ? 0 : 1
     this.buttonPlay.setEnabled(this.entryMode !== 'returning')
-    this.menuGroup.addChild(this.buttonPlay)
+    this.centerCard.frontFace.addChild(this.buttonPlay)
 
     this.buttonCollection = new Button(assets.buttonCollection, {
       sinkPx: 6,
@@ -165,9 +178,8 @@ export class MainMenuView extends Actor {
     applyPlacement(this.buttonCollection, menuButtons.collection)
     this.buttonCollection.setBaseY(menuButtons.collection.position.y)
     this.buttonCollection.visible = true
-    this.buttonCollection.alpha = this.entryMode === 'returning' ? 0 : 1
     this.buttonCollection.setEnabled(this.entryMode !== 'returning')
-    this.menuGroup.addChild(this.buttonCollection)
+    this.centerCard.frontFace.addChild(this.buttonCollection)
 
     this.buttonArena = new Button(assets.buttonArena, {
       sinkPx: -1,
@@ -177,9 +189,8 @@ export class MainMenuView extends Actor {
     applyPlacement(this.buttonArena, menuButtons.arena)
     this.buttonArena.setBaseY(menuButtons.arena.position.y)
     this.buttonArena.visible = true
-    this.buttonArena.alpha = this.entryMode === 'returning' ? 0 : 1
     this.buttonArena.setEnabled(this.entryMode !== 'returning')
-    this.menuGroup.addChild(this.buttonArena)
+    this.centerCard.frontFace.addChild(this.buttonArena)
 
     this.buttonTavern = new Button(assets.buttonTavern, {
       sinkPx: -5,
@@ -189,9 +200,8 @@ export class MainMenuView extends Actor {
     applyPlacement(this.buttonTavern, menuButtons.tavern)
     this.buttonTavern.setBaseY(menuButtons.tavern.position.y)
     this.buttonTavern.visible = true
-    this.buttonTavern.alpha = this.entryMode === 'returning' ? 0 : 1
     this.buttonTavern.setEnabled(this.entryMode !== 'returning')
-    this.menuGroup.addChild(this.buttonTavern)
+    this.centerCard.frontFace.addChild(this.buttonTavern)
 
     this.menuButtonActors.push(
       this.buttonPlay,
@@ -199,6 +209,30 @@ export class MainMenuView extends Actor {
       this.buttonArena,
       this.buttonTavern
     )
+
+    this.godRaysOverlay = new Sprite(Texture.WHITE)
+    this.godRaysOverlay.label = 'main-menu.god-rays'
+    this.godRaysOverlay.eventMode = 'none'
+    applyAnchoredPlacement(this.godRaysOverlay, MAIN_MENU_LAYOUT.screen.godRays)
+    this.godRaysOverlay.width = MAIN_MENU_LAYOUT.screen.godRays.size.width
+    this.godRaysOverlay.height = MAIN_MENU_LAYOUT.screen.godRays.size.height
+    this.godRays = createGodRaysFilter(GOD_RAYS_CONFIG)
+    this.godRaysOverlay.filters = [this.godRays.filter]
+    this.godRaysOverlay.visible = this.entryMode !== 'returning'
+    this.godRaysOverlay.alpha = 0
+    this.addChild(this.godRaysOverlay)
+    this.godRaysDust = new GodRaysDust(
+      [assets.dustRound, assets.dustTriangle],
+      this.godRays,
+      GOD_RAYS_DUST_CONFIG
+    )
+    this.godRaysDust.label = 'main-menu.god-rays-dust'
+    applyPlacement(this.godRaysDust, MAIN_MENU_LAYOUT.screen.godRays)
+    this.godRaysDust.setActive(this.entryMode !== 'returning')
+    this.godRaysDust.alpha = 0
+    this.addChild(this.godRaysDust)
+    this.effectTargets.push(this.godRaysOverlay, this.godRaysDust)
+    if (this.entryMode !== 'returning') void this.fadeEffects(1)
   }
 
   async closeReturningChest(): Promise<void> {
@@ -220,28 +254,33 @@ export class MainMenuView extends Actor {
 
   private async finishReturnReveal(): Promise<void> {
     await this.centerCard.flipToFront()
-    this.centerCard.eventMode = 'none'
-    await this.fadeMenuButtonsIn()
+    await this.fadeEffects(1)
+    if (this.destroyed) return
     this.transitionOpened = false
     for (const button of this.menuButtonActors) button.setEnabled(true)
   }
 
-  private fadeMenuButtonsIn(): Promise<void> {
+  private fadeEffects(alpha: 0 | 1): Promise<void> {
+    if (this.destroyed) return Promise.resolve()
+    this.killTweensOf(this.effectTargets)
+    if (alpha === 1) {
+      this.godRaysOverlay.visible = true
+      this.godRaysDust?.setActive(true)
+    }
     return new Promise<void>((resolve) => {
-      const timeline = this.timeline({
-        onComplete: resolve,
-        onInterrupt: resolve
+      this.tweenTo(this.effectTargets, {
+        alpha,
+        duration: MAIN_MENU_TIMING.effectsFade,
+        ease: 'power2.inOut',
+        onInterrupt: resolve,
+        onComplete: () => {
+          if (alpha === 0 && !this.destroyed) {
+            this.godRaysOverlay.visible = false
+            this.godRaysDust?.setActive(false)
+          }
+          resolve()
+        }
       })
-
-      timeline.to(
-        this.menuButtonActors,
-        {
-          alpha: 1,
-          duration: MAIN_MENU_TIMING.menuReveal,
-          ease: 'power2.out'
-        },
-        0
-      )
     })
   }
 
@@ -316,11 +355,10 @@ export class MainMenuView extends Actor {
     if (this.transitionOpened) return
     this.transitionOpened = true
 
-    // Hide the menu buttons while the chest transitions.
+    // Keep the buttons on the rotating menu face, but prevent further clicks.
     for (const button of this.menuButtonActors) {
       this.killTweensOf(button)
       button.setEnabled(false)
-      this.tweenTo(button, { alpha: 0, duration: 0.15 })
     }
 
     // Start the chest choreography before navigation. SceneManager waits for
@@ -340,14 +378,13 @@ export class MainMenuView extends Actor {
         this.killTweensOf(button)
         button.visible = true
         button.setEnabled(true)
-        button.alpha = 1
         button.y = button.getBaseY()
       }
       this.centerCard.visible = true
-      this.centerCard.eventMode = 'none'
       this.lidLeft.visible = true
       this.lidRight.visible = true
       this.updateLidMeshes(0)
+      await this.fadeEffects(1)
     }
   }
 
@@ -414,5 +451,20 @@ export class MainMenuView extends Actor {
     this.centerPartMount.scale.set(widthScale, 1)
   }
 
-  update(_deltaMS: number): void {}
+  update(deltaMS: number): void {
+    if (this.godRaysOverlay?.visible) {
+      this.godRays?.update(deltaMS)
+      this.godRaysDust?.update(deltaMS)
+    }
+  }
+
+  override destroy(options?: Parameters<Actor['destroy']>[0]): void {
+    if (this.destroyed) return
+    if (this.godRaysOverlay) this.godRaysOverlay.filters = null
+    this.godRaysDust?.destroy({ children: true })
+    this.godRaysDust = null
+    this.godRays?.destroy()
+    this.godRays = null
+    super.destroy(options)
+  }
 }

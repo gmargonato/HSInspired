@@ -1338,7 +1338,7 @@ export class GameBoardView extends Actor {
       this.startInitialTurn()
       return
     }
-    // The loading overlay has fully faded before this sequence starts.
+    // The loading panel has fully shrunk before this sequence starts.
     // Keep the dimmed board steady while the VS plate, names, and heroes appear.
     const reveal = this.timeline()
     reveal.to([this.openingContent, this.heroLayer], {
@@ -3257,8 +3257,11 @@ export class GameBoardView extends Actor {
 
   private createDarkOverlay(): Graphics {
     const overlay = new Graphics()
-    overlay.rect(0, 0, 1920, 1080)
-    overlay.fill({ color: 0x000000, alpha: 0.8 })
+    const { area, color, alpha } = GAME_BOARD_LAYOUT.openingBackdrop
+    overlay.label = 'game.opening-backdrop'
+    applyPlacement(overlay, area)
+    overlay.rect(0, 0, area.size.width, area.size.height)
+    overlay.fill({ color, alpha })
     overlay.eventMode = 'none'
     return overlay
   }
@@ -6033,6 +6036,22 @@ export class GameBoardView extends Actor {
       return null
     }
 
+    const definition = CARD_CATALOG.require(event.minion.cardId)
+    const shakeOnLanding = (): Promise<void> => {
+      if (
+        event.type !== 'minion-played' ||
+        definition.type !== 'Minion' ||
+        definition.rarity !== 'Legendary' ||
+        targetPreview?.cancelled ||
+        this.destroyed
+      )
+        return Promise.resolve()
+      return runScreenShake(
+        this,
+        this.animationScope,
+        CARD_PLAY_LAYOUT.minion.legendaryShake
+      )
+    }
     const entranceSide = this.boardSide(event.participantId)
     const entranceOwner = event.minion.instanceId
     this.boardPositions.reserve(entranceSide, entranceOwner, event.position)
@@ -6073,6 +6092,7 @@ export class GameBoardView extends Actor {
             })
           )
           view.presentTauntPop()
+          await shakeOnLanding()
           return null
         }
         // Remote (AI) board: same fade but on the top row.
@@ -6099,6 +6119,7 @@ export class GameBoardView extends Actor {
           })
         )
         view.presentTauntPop()
+        await shakeOnLanding()
         return null
       }
 
@@ -6246,7 +6267,17 @@ export class GameBoardView extends Actor {
           'settle'
         )
         targetPreview?.playEffects.add(settleParticles)
+        let landingShake = Promise.resolve()
+        // Land with the minion, while the remaining settle particles continue.
+        impact.call(
+          () => {
+            landingShake = shakeOnLanding()
+          },
+          [],
+          summon.settleDuration
+        )
         await completeTimeline(impact)
+        await landingShake
         targetPreview?.activeTimelines.delete(impact)
         if (targetPreview?.cancelled || this.destroyed) return null
 

@@ -783,7 +783,7 @@ function snapshot(root, files, configNames, configurations) {
     'package.json',
     'package-lock.json',
     '.dependency-cruiser.cjs',
-    'architecture/subsystems.cjs',
+    'scripts/architecture-subsystems.cjs',
     ...configNames,
     'scripts/code-health-analysis.cjs',
     'scripts/code-health-report.cjs',

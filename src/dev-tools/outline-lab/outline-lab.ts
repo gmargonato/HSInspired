@@ -7,6 +7,15 @@ import {
 } from './aura-lab-elements'
 import { OUTLINE_PRESET_NAMES } from '../../desktop/contracts/ipc/outline-tuning'
 import { ShatterLab } from './shatter-lab'
+import { GodRaysLab } from './god-rays-lab'
+import {
+  GOD_RAYS_DUST_DEFAULTS,
+  type GodRaysDustTuning
+} from '../../desktop/contracts/ipc/god-rays-dust-tuning'
+import {
+  GOD_RAYS_DEFAULTS,
+  type GodRaysTuning
+} from '../../desktop/contracts/ipc/god-rays-tuning'
 import {
   Container,
   Graphics,
@@ -25,6 +34,7 @@ import {
   type DeckPresentationAssets,
   type DeckSelectionAssets,
   type GameAssets,
+  type MainMenuAssets,
   AssetScope,
   CardAssetResolver
 } from '../../visual-components/assets'
@@ -47,7 +57,10 @@ import {
   type GhostAuraTuning,
   type GhostAuraPalette
 } from '../../desktop/contracts/ipc/outline-tuning'
-type OutlinePresetName = AuraPresetName | 'ghost' | 'shatter'
+type OutlinePresetName = AuraPresetName | 'ghost' | 'shatter' | 'god-rays'
+function isAuraPreset(preset: OutlinePresetName): preset is AuraPresetName {
+  return preset !== 'ghost' && preset !== 'shatter' && preset !== 'god-rays'
+}
 import { OutlineLabHand, clampHandCount } from './outline-lab-hand'
 import { OutlineLabBoard } from './outline-lab-board'
 import { OUTLINE_LAB_LAYOUT as LAYOUT, AURA_PREVIEW_LAYOUT } from './outline-lab-layout'
@@ -68,7 +81,8 @@ const CONTROLS_PANEL = LAYOUT.controls
 const PRESETS: readonly OutlinePresetName[] = [
   ...OUTLINE_PRESET_NAMES,
   'ghost',
-  'shatter'
+  'shatter',
+  'god-rays'
 ]
 const PALETTES: readonly OutlinePaletteName[] = [
   'green',
@@ -176,13 +190,17 @@ export class OutlineLab extends Container {
   private readonly ghostOutlines: GhostAura[] = []
   private ghostTuning = { ...this.initialConfig.ghost.tuning }
   private ghostPalette = { ...this.initialConfig.ghost.palette }
+  private godRaysTuning: GodRaysTuning = structuredClone(this.initialConfig.godRays)
+  private godRaysDustTuning: GodRaysDustTuning = { ...this.initialConfig.godRaysDust }
   private readonly presetTabs = new Map<AuraCategory, ButtonState>()
   private readonly paletteButtons = new Map<OutlinePaletteName, ButtonState>()
   private readonly paletteSwatches = new Map<OutlinePaletteName, Graphics>()
   private readonly selectedPalettes = Object.fromEntries(
     PRESETS.map((name) => [
       name,
-      name === 'shatter' ? 'purple' : OUTLINE_LAB_PALETTES[name][0].palette
+      name === 'shatter' || name === 'god-rays'
+        ? 'purple'
+        : OUTLINE_LAB_PALETTES[name][0].palette
     ])
   ) as Record<OutlinePresetName, OutlinePaletteName>
   private readonly backgrounds = new Map<AuraPresetName, Sprite>()
@@ -198,6 +216,7 @@ export class OutlineLab extends Container {
   private disposed = false
   private statusLabel!: Text
   private shatter: ShatterLab | null = null
+  private godRays: GodRaysLab | null = null
   private hand: OutlineLabHand | null = null
   private board: OutlineLabBoard | null = null
   private handCount = 5
@@ -220,15 +239,23 @@ export class OutlineLab extends Container {
       this.assetScope.acquire<DeckSelectionAssets>(ASSET_BUNDLE_IDS.deckSelection),
       this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game),
       this.assetScope.acquire<CollectionAssets>(ASSET_BUNDLE_IDS.collection),
-      this.assetScope.acquire<GameBoardAssets>(GAME_BOARD_BUNDLE_IDS[0])
+      this.assetScope.acquire<GameBoardAssets>(GAME_BOARD_BUNDLE_IDS[0]),
+      this.assetScope.acquire<MainMenuAssets>(ASSET_BUNDLE_IDS.mainMenu)
     ])
-    const [deckResult, selectionResult, gameResult, collectionResult, boardResult] =
-      results
+    const [
+      deckResult,
+      selectionResult,
+      gameResult,
+      collectionResult,
+      boardResult,
+      menuResult
+    ] = results
     if (deckResult.status === 'rejected') throw deckResult.reason
     if (selectionResult.status === 'rejected') throw selectionResult.reason
     if (gameResult.status === 'rejected') throw gameResult.reason
     if (collectionResult.status === 'rejected') throw collectionResult.reason
     if (boardResult.status === 'rejected') throw boardResult.reason
+    if (menuResult.status === 'rejected') throw menuResult.reason
     this.collectionAssets = collectionResult.value
     for (const preset of OUTLINE_PRESET_NAMES) {
       this.sceneTextures.set(
@@ -259,6 +286,13 @@ export class OutlineLab extends Container {
     })
     await this.createPreviewGroups(gameAssets, deckAssets, selectionAssets)
     if (this.disposed) return
+    this.godRays = new GodRaysLab(
+      menuResult.value,
+      this.godRaysTuning,
+      this.godRaysDustTuning
+    )
+    applyPlacement(this.godRays, LAYOUT.godRaysPreview)
+    this.createPreviewGroup('god-rays').addChild(this.godRays)
     this.createHandControls()
     this.selectPreset('card')
   }
@@ -294,6 +328,7 @@ export class OutlineLab extends Container {
       this.shatter.update(deltaMS)
       this.shaderControls?.setShatterProgress(this.shatter.progress)
     }
+    if (this.selectedPreset === 'god-rays') this.godRays?.update(deltaMS)
     this.hand?.update(deltaMS)
     this.board?.update(deltaMS)
   }
@@ -530,7 +565,7 @@ export class OutlineLab extends Container {
     const group = new Container()
     group.visible = false
     group.label = `outline-lab.preview.${preset}`
-    if (preset !== 'ghost' && preset !== 'shatter') {
+    if (isAuraPreset(preset)) {
       const background = new Sprite(this.sceneTextures.get(preset))
       background.label = 'outline-lab.background.' + preset
       background.eventMode = 'none'
@@ -544,9 +579,9 @@ export class OutlineLab extends Container {
     const mask = new Graphics()
       .rect(
         PREVIEW_PANEL.x + 2,
-        PREVIEW_PANEL.y + 220,
+        PREVIEW_PANEL.y + (preset === 'god-rays' ? 64 : 220),
         PREVIEW_PANEL.width - 4,
-        PREVIEW_PANEL.height - 222
+        PREVIEW_PANEL.height - (preset === 'god-rays' ? 66 : 222)
       )
       .fill(0xffffff)
     mask.eventMode = 'none'
@@ -591,7 +626,7 @@ export class OutlineLab extends Container {
   private ghostAssets!: GameAssets
 
   private registerOutline(target: Container, preset: OutlinePresetName): void {
-    if (preset === 'shatter') return
+    if (preset === 'shatter' || preset === 'god-rays') return
     if (preset === 'ghost') {
       const outline = new GhostAura(target, {
         noise: this.ghostAssets.burnNoise,
@@ -647,7 +682,7 @@ export class OutlineLab extends Container {
   }
 
   private selectPalette(palette: OutlinePaletteName): void {
-    if (this.selectedPreset === 'ghost' || this.selectedPreset === 'shatter') return
+    if (!isAuraPreset(this.selectedPreset)) return
     if (
       !OUTLINE_LAB_PALETTES[this.selectedPreset].some(
         (option) => option.palette === palette
@@ -677,7 +712,7 @@ export class OutlineLab extends Container {
         .stroke({ color: 0xffffff, width: 1, alpha: 0.7 })
     }
     for (const preset of PRESETS) {
-      if (preset === 'shatter') continue
+      if (preset === 'shatter' || preset === 'god-rays') continue
       if (!OUTLINE_LAB_PALETTES[preset].some((option) => option.palette === palette))
         continue
       this.refreshPreviewAppearance(preset)
@@ -686,6 +721,55 @@ export class OutlineLab extends Container {
   }
 
   private refreshColorControls(): void {
+    if (this.selectedPreset === 'god-rays') {
+      this.shaderControls?.showGodRays(
+        this.godRaysTuning,
+        (key, value) => {
+          const channels = ['red', 'green', 'blue', 'opacity']
+          const channel = channels.indexOf(key)
+          if (channel >= 0) {
+            const color: [number, number, number, number] = [
+              ...this.godRaysTuning.color
+            ]
+            color[channel] = value as number
+            this.godRaysTuning = { ...this.godRaysTuning, color }
+          } else {
+            this.godRaysTuning = { ...this.godRaysTuning, [key]: value }
+          }
+          this.godRays?.setTuning(this.godRaysTuning)
+          this.markDirty()
+        },
+        () => {
+          this.godRaysTuning = structuredClone(GOD_RAYS_DEFAULTS)
+          this.godRays?.setTuning(this.godRaysTuning)
+          this.markDirty()
+          this.refreshColorControls()
+        },
+        this.godRaysDustTuning,
+        (key, value) => {
+          this.godRaysDustTuning = {
+            ...this.godRaysDustTuning,
+            [key]:
+              key === 'blendMode'
+                ? value === 1
+                  ? 'add'
+                  : 'screen'
+                : key === 'decayChance'
+                  ? Number(value) / 100
+                  : value
+          }
+          this.godRays?.setDustTuning(this.godRaysDustTuning)
+          this.markDirty()
+        },
+        () => {
+          this.godRaysDustTuning = { ...GOD_RAYS_DUST_DEFAULTS }
+          this.godRays?.setDustTuning(this.godRaysDustTuning)
+          this.markDirty()
+          this.refreshColorControls()
+        }
+      )
+      return
+    }
     if (this.selectedPreset === 'shatter') {
       const preview = this.shatter
       if (!preview) return
@@ -836,7 +920,7 @@ export class OutlineLab extends Container {
   }
 
   private refreshPreviewAppearance(preset: OutlinePresetName): void {
-    if (preset === 'shatter') return
+    if (preset === 'shatter' || preset === 'god-rays') return
     if (preset === 'ghost') {
       for (const outline of this.ghostOutlines) {
         outline.setTuning(this.ghostTuning)
@@ -913,7 +997,7 @@ export class OutlineLab extends Container {
 
   private refreshPresetTabs(): void {
     const preset = this.selectedPreset
-    const aura = preset !== 'ghost' && preset !== 'shatter'
+    const aura = isAuraPreset(preset)
     for (const [category, tab] of this.presetTabs) {
       tab.root.visible = aura
       this.drawButton(tab, aura && auraCategory(preset) === category)
@@ -923,7 +1007,9 @@ export class OutlineLab extends Container {
   private refreshPaletteButtons(): void {
     const selected = this.selectedPalettes[this.selectedPreset]
     const options =
-      this.selectedPreset === 'shatter' ? [] : OUTLINE_LAB_PALETTES[this.selectedPreset]
+      this.selectedPreset === 'shatter' || this.selectedPreset === 'god-rays'
+        ? []
+        : OUTLINE_LAB_PALETTES[this.selectedPreset]
     for (const [palette, button] of this.paletteButtons) {
       const index = options.findIndex((option) => option.palette === palette)
       button.root.visible =
@@ -961,7 +1047,9 @@ export class OutlineLab extends Container {
 
     const savedRevision = this.revision
     const snapshot: OutlineTuningConfig = {
-      version: 11,
+      version: 13,
+      godRaysDust: { ...this.godRaysDustTuning },
+      godRays: structuredClone(this.godRaysTuning),
       shatter: { ...(this.shatter?.tuning ?? this.initialConfig.shatter) },
       aura: {
         presets: cloneTunings(this.drafts),

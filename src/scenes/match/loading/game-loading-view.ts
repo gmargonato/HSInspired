@@ -8,6 +8,7 @@ import { GAME_LOADING_LAYOUT } from './game-loading-layout'
 
 /** Visible before the game view mounts; blocks input to the outgoing scene. */
 export class GameLoadingView extends Container {
+  readonly panel = new Container()
   private readonly fill = new Graphics()
   private progress = 0
 
@@ -20,12 +21,21 @@ export class GameLoadingView extends Container {
     const board = new Sprite(boardTexture)
     board.label = 'game.loading-board'
     applyAnchoredPlacement(board, GAME_BOARD_LAYOUT.board)
+    const backdrop = new Graphics()
+    const { area, color, alpha } = GAME_BOARD_LAYOUT.openingBackdrop
+    backdrop.label = 'game.loading-backdrop'
+    backdrop.eventMode = 'none'
+    applyPlacement(backdrop, area)
+    backdrop.rect(0, 0, area.size.width, area.size.height).fill({ color, alpha })
+    this.panel.label = 'game.loading-panel'
+    applyPlacement(this.panel, GAME_LOADING_LAYOUT.panel)
     const overlay = new Sprite(overlayTexture)
     overlay.label = 'game.loading-overlay'
     applyAnchoredPlacement(overlay, GAME_LOADING_LAYOUT.overlay)
     this.fill.label = 'game.loading-progress'
     applyPlacement(this.fill, GAME_LOADING_LAYOUT.progress)
-    this.addChild(board, overlay, this.fill)
+    this.panel.addChild(overlay, this.fill)
+    this.addChild(board, backdrop, this.panel)
   }
 
   /** Yield past a browser paint so completed work becomes visible before more work. */

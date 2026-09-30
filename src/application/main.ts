@@ -11,6 +11,7 @@ import { gsap } from '../visual-components/animation/animations'
 import { CursorManager } from '../visual-components/controls/cursor'
 import type { SceneRequest } from '../desktop/contracts/scene-navigation'
 import './styles.css'
+import { prepareMainMenuEffects } from './prepare-main-menu-effects'
 
 export { GAME_HEIGHT, GAME_WIDTH }
 
@@ -215,6 +216,7 @@ async function bootstrap(): Promise<void> {
 
   try {
     app.ticker.maxFPS = 60
+    await prepareMainMenuEffects(app.renderer)
     removeFpsCounter = mountFpsCounter(app, container)
     if (import.meta.env.DEV) {
       const { installDevFilterToggle } =

@@ -245,6 +245,24 @@ import { asset, type AssetDefinition } from './asset-definition'
 
 const bespokeAssetDefinitions: readonly AssetDefinition[] = [
   asset(
+    'scene.main-menu.dust-round',
+    ASSET_BUNDLE_IDS.mainMenu,
+    'dustRound',
+    playSpotlight1Image,
+    256,
+    256,
+    'main-menu'
+  ),
+  asset(
+    'scene.main-menu.dust-triangle',
+    ASSET_BUNDLE_IDS.mainMenu,
+    'dustTriangle',
+    ghostSpotlightImage,
+    256,
+    256,
+    'main-menu'
+  ),
+  asset(
     'scene.main-menu.table',
     ASSET_BUNDLE_IDS.mainMenu,
     'table',
@@ -2385,8 +2403,8 @@ export const ASSET_DEFINITIONS: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.gameLoading,
     'overlay',
     loadScreenOverlayImage,
-    1920,
-    1080,
+    855,
+    338,
     'game-loading'
   ),
   ...[
@@ -2448,11 +2466,16 @@ for (const bundle of manifestBundles) {
     // Pixi pools alpha-mask filters across scenes. Destroying a card-frame
     // TextureSource leaves those pooled filters with a dead WebGPU bind group,
     // so card rendering assets live until the renderer itself is destroyed.
-    persistent: bundle.name === ASSET_BUNDLE_IDS.cardRendering
+    // Main-menu artwork and dust are preloaded at startup and reused on return.
+    persistent:
+      bundle.name === ASSET_BUNDLE_IDS.cardRendering ||
+      bundle.name === ASSET_BUNDLE_IDS.mainMenu
   })
 }
 
 export interface MainMenuAssets {
+  dustRound: Texture
+  dustTriangle: Texture
   table: Texture
   box: Texture
   leftLid: Texture
