@@ -3,7 +3,7 @@ import { HERO_POWER_CATALOG } from '../../game-rules/content/hero-powers'
 import { Actor } from '../../visual-components/lifecycle/actor'
 import type {
   GameAssets,
-  DeckPresentationAssets,
+  HeroAssets,
   HeroPowerAssetKey
 } from '../../visual-components/assets'
 import { BoardShadowLayer } from '../../scenes/match/board/board-shadow-layer'
@@ -27,7 +27,7 @@ interface HeroPowerAnimOptions {
   renderer: Renderer
   parent: HTMLElement
   assets: GameAssets
-  heroes: DeckPresentationAssets
+  heroes: HeroAssets
 }
 
 /** One isolated playback at a time, sharing the match's effect implementation. */

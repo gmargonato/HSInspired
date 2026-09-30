@@ -1,6 +1,6 @@
 import type { Renderer } from 'pixi.js'
+import type { VfxTemplate } from '../../desktop/contracts/ipc/vfx-templates'
 import {
-  AOE_TARGET_PRESETS,
   AOE_ZONES,
   type VfxEffectId,
   type VfxLabSettingKey,
@@ -21,6 +21,11 @@ interface ControlSpec {
 
 interface ControlActions {
   select(effect: VfxEffectId): void
+  selectTemplate(id: string): void
+  createTemplate(): void
+  deleteTemplate(): void
+  renameTemplate(name: string): void
+  saveTemplates(): void
   change(key: VfxLabSettingKey, value: VfxLabSettingValue): void
   play(): void
   loop(enabled: boolean): void
@@ -127,6 +132,13 @@ export class VfxLabControls {
   private readonly host = element('section')
   private readonly shadow: ShadowRoot
   private readonly effectSelect = element('select')
+  private readonly templateList = element('div')
+  private readonly nameInput = element('input')
+  private readonly keyLabel = element('p')
+  private readonly createButton = element('button', 'Create copy')
+  private readonly deleteButton = element('button', 'Delete')
+  private readonly saveButton = element('button', 'Save effects')
+  private readonly saveStatus = element('p')
   private readonly parameterList = element('div')
   private readonly playButton = element('button', 'Play / Replay')
   private readonly loopInput = element('input')
@@ -138,6 +150,7 @@ export class VfxLabControls {
   private readonly outputs = new Map<VfxLabSettingKey, HTMLOutputElement>()
   private readonly resize = (): void => this.updatePosition()
   private currentEffect: VfxEffectId | null = null
+  private templateListKey = ''
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -177,6 +190,14 @@ export class VfxLabControls {
       '  margin:0 0 12px; padding:10px 12px 4px; }',
       'legend { color:#ddc490; padding:0 6px; }',
       '.scroll { overflow-y:auto; flex:1; min-height:0; padding-right:4px; }',
+      '.templates { max-height:150px; overflow-y:auto; display:flex; flex-direction:column;',
+      '  gap:4px; margin:0 0 10px; }',
+      '.templates button { text-align:left; padding:5px 8px; }',
+      '.templates button.selected { border-color:#e5be68; background:#504636; }',
+      '.template-actions { display:flex; gap:7px; margin:0 0 10px; }',
+      '.template-actions button { flex:1; padding:7px; }',
+      '.name-input { width:100%; padding:7px; margin-bottom:8px;',
+      '  background:#303945; border:1px solid #637082; border-radius:6px; }',
       '.toolbar { display:flex; gap:12px; align-items:center; margin:4px 0 8px; }',
       'button { background:#303945; border:1px solid #637082; border-radius:6px;',
       '  padding:10px 14px; cursor:pointer; }',
@@ -185,6 +206,7 @@ export class VfxLabControls {
       '.loop { display:flex; align-items:center; gap:7px; margin:0; cursor:pointer; }',
       '.loop input { accent-color:#e5be68; width:18px; height:18px; }',
       '.status { min-height:22px; color:#b7d99f; margin:5px 0 0; }',
+      '.save-status { min-height:18px; margin:2px 0 0; color:#e9d3a6; font-size:13px; }',
       '.note { font-size:13px; color:#b5b1aa; margin:4px 0 0; }'
     ].join('\n')
 
@@ -199,6 +221,21 @@ export class VfxLabControls {
     }
     this.effectSelect.onchange = () =>
       actions.select(this.effectSelect.value as VfxEffectId)
+    this.templateList.className = 'templates'
+    this.templateList.setAttribute('aria-label', 'Saved effects')
+    this.nameInput.className = 'name-input'
+    this.nameInput.setAttribute('aria-label', 'Effect name')
+    this.nameInput.maxLength = 80
+    this.nameInput.onchange = () => actions.renameTemplate(this.nameInput.value)
+    this.keyLabel.className = 'note'
+    this.createButton.type = 'button'
+    this.createButton.onclick = () => actions.createTemplate()
+    this.deleteButton.type = 'button'
+    this.deleteButton.onclick = () => actions.deleteTemplate()
+    this.saveButton.type = 'button'
+    this.saveButton.onclick = () => actions.saveTemplates()
+    this.saveStatus.className = 'save-status'
+    this.saveStatus.setAttribute('aria-live', 'polite')
     this.playButton.type = 'button'
     this.playButton.onclick = () => actions.play()
     this.loopInput.type = 'checkbox'
@@ -208,12 +245,17 @@ export class VfxLabControls {
 
     const panel = element('div')
     panel.className = 'panel'
-    const subtitle = element('p', 'Choose an effect, tune the shader, then play it.')
+    const subtitle = element('p', 'Select an effect, tune it, then save your changes.')
     subtitle.className = 'muted'
     const effectLabel = element('label')
     const effectTitle = element('span', 'Effect')
     effectTitle.className = 'field-label'
     effectLabel.append(effectTitle, this.effectSelect)
+    const templateLabel = element('div', 'Effects')
+    templateLabel.className = 'field-label'
+    const templateActions = element('div')
+    templateActions.className = 'template-actions'
+    templateActions.append(this.createButton, this.deleteButton)
 
     const toolbar = element('div')
     toolbar.className = 'toolbar'
@@ -222,10 +264,7 @@ export class VfxLabControls {
     loopLabel.append(this.loopInput, document.createTextNode('Loop'))
     toolbar.append(this.playButton, loopLabel)
 
-    const note = element(
-      'p',
-      'Reference presets restore their colors and intensity. Each effect keeps its own tuning while this lab is open.'
-    )
+    const note = element('p', 'Effects use stable keys for future card bindings.')
     note.className = 'note'
     const scroll = element('div')
     scroll.className = 'scroll'
@@ -234,9 +273,16 @@ export class VfxLabControls {
       element('h1', 'VFX Lab'),
       subtitle,
       effectLabel,
+      templateLabel,
+      this.templateList,
+      this.nameInput,
+      this.keyLabel,
+      templateActions,
       scroll,
       toolbar,
       this.status,
+      this.saveButton,
+      this.saveStatus,
       note
     )
     this.shadow.append(style, panel)
@@ -250,10 +296,48 @@ export class VfxLabControls {
     effect: VfxEffectId,
     settings: VfxLabSettings,
     playing: boolean,
-    looping: boolean
+    looping: boolean,
+    templates: readonly VfxTemplate[],
+    selectedId: string | null,
+    dirty: boolean,
+    saving: boolean,
+    saveMessage: string
   ): void {
     this.effectSelect.value = effect
+    const listKey =
+      JSON.stringify(
+        templates
+          .filter((item) => item.family === effect)
+          .map((item) => [item.id, item.name])
+      ) + selectedId
+    if (listKey !== this.templateListKey) {
+      this.templateListKey = listKey
+      this.templateList.replaceChildren()
+      for (const template of templates.filter((item) => item.family === effect)) {
+        const button = element('button', template.name)
+        button.type = 'button'
+        button.title = template.id
+        button.classList.toggle('selected', template.id === selectedId)
+        button.onclick = () => this.actions.selectTemplate(template.id)
+        this.templateList.append(button)
+      }
+      if (!this.templateList.childElementCount)
+        this.templateList.append(
+          element('p', 'No effects in this family. Create one to begin.')
+        )
+    }
+    const selected = templates.find((item) => item.id === selectedId)
+    if (this.shadow.activeElement !== this.nameInput)
+      this.nameInput.value = selected?.name ?? ''
+    this.keyLabel.textContent = selected ? `Effect key: ${selected.id}` : ''
+    this.createButton.textContent = selected ? 'Create copy' : 'Create effect'
+    this.nameInput.disabled = !selected
+    this.deleteButton.disabled = !selected
+    this.playButton.disabled = !selected
+    this.saveButton.disabled = !dirty || saving
+    this.saveStatus.textContent = saveMessage || (dirty ? 'Unsaved changes' : 'Saved')
     if (this.currentEffect !== effect) this.renderParameters(effect, settings)
+    this.parameterList.hidden = !selected
     for (const [key, input] of this.inputs) {
       if (input instanceof HTMLInputElement && input.type === 'checkbox') {
         input.checked = Boolean(settings[key])
@@ -266,12 +350,15 @@ export class VfxLabControls {
       if (output) output.value = this.formatValue(key, Number(value))
     }
     this.loopInput.checked = looping
-    const noTargets = effect === 'aoe' && !AOE_ZONES.some(({ key }) => settings[key])
-    this.status.textContent = noTargets
-      ? 'Select a target zone to preview'
-      : playing
-        ? 'Playing…'
-        : 'Ready to play'
+    const noTargets =
+      effect === 'aoe' && selected && !AOE_ZONES.some(({ key }) => settings[key])
+    this.status.textContent = !selected
+      ? 'Create an effect to preview'
+      : noTargets
+        ? 'Select a target zone to preview'
+        : playing
+          ? 'Playing…'
+          : 'Ready to play'
   }
 
   setVisible(visible: boolean): void {
@@ -293,18 +380,6 @@ export class VfxLabControls {
       this.addGroup(
         'Target zones',
         [
-          {
-            key: 'aoeTarget',
-            label: 'Target preset',
-            type: 'select',
-            options: [
-              ...Object.entries(AOE_TARGET_PRESETS).map(([value, preset]) => ({
-                value,
-                label: preset.label
-              })),
-              { value: 'custom', label: 'Custom zones' }
-            ]
-          },
           ...AOE_ZONES.map(({ key, label }) => ({
             key,
             label,

@@ -39,6 +39,25 @@ src/
 | The bridge exposed to the game window                     | `desktop/preload`                                            |
 | Message schemas shared by the desktop processes           | `desktop/contracts`                                          |
 
+## Startup
+
+Normal startup shows the HTML `app-start.png` splash while application-owned
+menu resources load and upload to the GPU. `application/prepare-menu-resources.ts`
+holds their asset scope and GPU residency for the renderer lifetime, including
+shared card frames but excluding individual card artwork and match-only bundles.
+Only selectable hero portraits belong to `deck-presentation`; transformation
+portraits load with `game` and are combined with the menu portraits for matches.
+The deck-frame, Play-button, and Collection expansion-toggle outline fields stay
+cached so silhouette generation happens during startup instead of on menu visits.
+Fonts, cached menu data, and texture loading overlap, with asset bundles decoded
+in pairs and GPU uploads processed sequentially. Decks, player statistics, and
+progression fill their renderer caches; preferences prime the main-process cache
+while later reads still see current values. Failed data preloads remain retryable
+by the menus instead of preventing the application from starting.
+Menu shader paths are warmed offscreen before the first menu frame; the splash
+then fades out over 1000 ms before input and queued navigation are enabled.
+Development direct-start routes keep their existing preparation path.
+
 ## Folder depth
 
 Use one organizational level below each scene or subsystem as the default:

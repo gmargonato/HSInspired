@@ -26,10 +26,7 @@ import {
   applyAnchoredPlacement
 } from '../../../visual-components/layout'
 import { Actor } from '../../../visual-components/lifecycle/actor'
-import type {
-  DeckPresentationAssets,
-  HeroPowerAssetKey
-} from '../../../visual-components/assets'
+import type { HeroAssets, HeroPowerAssetKey } from '../../../visual-components/assets'
 import { CardAssetResolver } from '../../../visual-components/assets/card-asset-resolver'
 import {
   MATCH_HISTORY_LAYOUT,
@@ -63,7 +60,7 @@ export interface MatchHistoryTextures {
   readonly heroAttack: Texture
   readonly heroHealth: Texture
   readonly heroArmor: Texture
-  readonly heroFrames: DeckPresentationAssets
+  readonly heroFrames: HeroAssets
   readonly heroPowers: Record<HeroPowerAssetKey, Texture>
   readonly heroPowerCardFrame: Texture
 }

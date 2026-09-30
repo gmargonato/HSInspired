@@ -20,7 +20,12 @@ function cspPlugin(mode: string) {
 
 const CARD_CLASS_CONFIG_PATH = resolve('config/card-class-colors.json')
 const OUTLINE_TUNING_CONFIG_PATH = resolve('config/outline-tunings.json')
-const LIVE_CONFIG_PATHS = new Set([CARD_CLASS_CONFIG_PATH, OUTLINE_TUNING_CONFIG_PATH])
+const VFX_TEMPLATES_CONFIG_PATH = resolve('config/vfx-templates.json')
+const LIVE_CONFIG_PATHS = new Set([
+  CARD_CLASS_CONFIG_PATH,
+  OUTLINE_TUNING_CONFIG_PATH,
+  VFX_TEMPLATES_CONFIG_PATH
+])
 
 function liveConfigHmrGuard() {
   return {

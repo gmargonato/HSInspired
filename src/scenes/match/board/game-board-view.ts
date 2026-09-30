@@ -72,7 +72,7 @@ import {
 } from '../../../visual-components/cards/card-layout'
 import { cardCostColor } from '../../../visual-components/cards/card-cost-presentation'
 import {
-  type DeckPresentationAssets,
+  type HeroAssets,
   type GameAssets,
   type HeroPowerAssetKey
 } from '../../../visual-components/assets'
@@ -219,7 +219,7 @@ export interface GameBoardViewOptions {
   readonly route: GameRoute
   readonly decks: readonly Deck[]
   readonly gameAssets: GameAssets
-  readonly heroAssets: DeckPresentationAssets
+  readonly heroAssets: HeroAssets
   readonly renderer: Renderer
   readonly cursor?: CursorManager | null
   readonly logger?: RendererLogger

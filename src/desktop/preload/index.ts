@@ -106,6 +106,11 @@ import {
   parseOutlineTuningConfig,
   type OutlineTuningConfig
 } from '../contracts/ipc/outline-tuning'
+import {
+  VFX_TEMPLATES_IPC_CHANNELS,
+  parseVfxTemplateLibrary,
+  type VfxTemplateLibrary
+} from '../contracts/ipc/vfx-templates'
 
 const api = {
   matchLogs: {
@@ -146,6 +151,14 @@ const api = {
             await ipcRenderer.invoke(
               OUTLINE_TUNING_IPC_CHANNELS.save,
               parseOutlineTuningConfig(config)
+            )
+          }
+        },
+        vfxTemplates: {
+          save: async (library: VfxTemplateLibrary): Promise<void> => {
+            await ipcRenderer.invoke(
+              VFX_TEMPLATES_IPC_CHANNELS.save,
+              parseVfxTemplateLibrary(library)
             )
           }
         }

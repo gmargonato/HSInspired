@@ -16,6 +16,7 @@ import type { ProgressionApi } from '../contracts/ipc/progression'
 import type { ArenaApi } from '../contracts/ipc/arena'
 import type { CardClassBuilderApi } from '../contracts/ipc/card-class-builder'
 import type { OutlineTuningApi } from '../contracts/ipc/outline-tuning'
+import type { VfxTemplatesApi } from '../contracts/ipc/vfx-templates'
 
 interface AppAPI {
   devMenu: {
@@ -28,6 +29,7 @@ interface AppAPI {
   matchLogs: MatchLogsApi
   cardClassBuilder?: CardClassBuilderApi
   outlineTuning?: OutlineTuningApi
+  vfxTemplates?: VfxTemplatesApi
   arena: ArenaApi
   onSceneRequest(listener: (request: SceneRequest) => void): () => void
   ai: AiDecisionBridge

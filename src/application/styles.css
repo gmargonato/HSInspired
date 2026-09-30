@@ -146,6 +146,15 @@ body:has(.app-error-notice:not(.app-error-notice-abandon))::after {
   display: block;
 }
 
+#startup-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #0a0f1e url('../../assets/images/ui/common/app-start.png') center /
+    contain no-repeat;
+  user-select: none;
+}
+
 .fps-counter {
   position: fixed;
   top: 10px;

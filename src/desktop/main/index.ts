@@ -27,6 +27,8 @@ import { OutlineTuningRepository } from './services/outline-tuning-repository'
 import { MatchLogRepository } from './services/match-log-repository'
 import { registerMatchLogIpc } from './services/match-log-ipc'
 import { registerOutlineTuningIpc } from './services/outline-tuning-ipc'
+import { VfxTemplateRepository } from './services/vfx-template-repository'
+import { registerVfxTemplateIpc } from './services/vfx-template-ipc'
 
 const WINDOW_WIDTH = 1920
 const WINDOW_HEIGHT = 1080
@@ -205,6 +207,9 @@ void app
       )
       registerOutlineTuningIpc(
         new OutlineTuningRepository(join(appPath, 'config', 'outline-tunings.json'))
+      )
+      registerVfxTemplateIpc(
+        new VfxTemplateRepository(join(appPath, 'config', 'vfx-templates.json'))
       )
     }
     registerAiIpc(aiService)

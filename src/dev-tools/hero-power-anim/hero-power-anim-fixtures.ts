@@ -2,7 +2,7 @@ import { Container, Sprite, type Texture } from 'pixi.js'
 import { CARD_CATALOG } from '../../game-rules/content/cards'
 import { HERO_CATALOG } from '../../game-rules/content/heroes'
 import type { HeroPowerDefinition } from '../../game-rules/content/hero-powers'
-import type { GameAssets, DeckPresentationAssets } from '../../visual-components/assets'
+import type { GameAssets, HeroAssets } from '../../visual-components/assets'
 import { HeroView } from '../../scenes/match/board/hero-view'
 import { MinionView } from '../../scenes/match/board/minion-view'
 import { applyPlacement, applyAnchoredPlacement } from '../../visual-components/layout'
@@ -25,7 +25,7 @@ export class HeroPowerAnimFixtures extends Container {
 
   constructor(
     private readonly assets: GameAssets,
-    private readonly heroes: DeckPresentationAssets
+    private readonly heroes: HeroAssets
   ) {
     super()
     this.label = 'hero-power-anim.fixtures'

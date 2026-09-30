@@ -26,7 +26,7 @@ export class HeroPowerAnimScene extends Scene {
       parent,
       renderer: this.appInstance.renderer,
       assets,
-      heroes
+      heroes: { ...heroes, ...assets }
     })
     this.root.addChild(this.preview)
     try {

@@ -1,4 +1,5 @@
 import loadScreenOverlayImage from '@assets/images/ui/deck-selection/load-screen-overlay.png'
+import appStartImage from '@assets/images/ui/common/app-start.png'
 import ghostSpotlightImage from '@assets/images/effects/spotlight-triangle.png'
 import ghostDissolveImage from '@assets/images/effects/noise-03.png'
 import { Texture, type AssetsManifest } from 'pixi.js'
@@ -227,7 +228,13 @@ import rogueNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-
 import shamanNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-shaman.png'
 import warlockNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-warlock.png'
 import warriorNewDeckFrameImage from '@assets/images/heroes/frames/new-deck-frame-warrior.png'
-import { HERO_ASSET_SOURCES, type HeroAssetKey } from './hero-assets'
+import {
+  HERO_ASSET_SOURCES,
+  DECK_HERO_ASSET_SOURCES,
+  type HeroAssetKey,
+  type DeckHeroAssetKey,
+  type MatchHeroAssetKey
+} from './hero-assets'
 import { HERO_POWER_ASSET_SOURCES, type HeroPowerAssetKey } from './hero-power-assets'
 import { CARD_ASSET_DEFINITIONS, type CardAssetDefinition } from './card-assets'
 import { registerAssetBundle } from './asset-scope'
@@ -2373,7 +2380,9 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
   ...Object.entries(HERO_ASSET_SOURCES).map(([key, source]) =>
     asset(
       `hero.${key}`,
-      ASSET_BUNDLE_IDS.deckPresentation,
+      Object.hasOwn(DECK_HERO_ASSET_SOURCES, key)
+        ? ASSET_BUNDLE_IDS.deckPresentation
+        : ASSET_BUNDLE_IDS.game,
       key,
       source,
       345,
@@ -2397,6 +2406,16 @@ const cardDefinitions: readonly AssetDefinition[] = CARD_ASSET_DEFINITIONS.map(
 )
 
 export const ASSET_DEFINITIONS: readonly AssetDefinition[] = [
+  // Displayed by the initial document's CSS, before the Pixi asset system starts.
+  asset(
+    'application.startup.splash',
+    ASSET_BUNDLE_IDS.appStartup,
+    'splash',
+    appStartImage,
+    1920,
+    1080,
+    'application'
+  ),
   ...bespokeAssetDefinitions,
   asset(
     'scene.game-loading.overlay',
@@ -2566,7 +2585,9 @@ export interface DeckSelectionAssets extends Record<
   playButton: Texture
 }
 
-export interface DeckPresentationAssets extends Record<HeroAssetKey, Texture> {
+export type HeroAssets = Record<HeroAssetKey, Texture>
+
+export interface DeckPresentationAssets extends Record<DeckHeroAssetKey, Texture> {
   deckButtonFrame: Texture
   anduinDeckPortrait: Texture
   garroshDeckPortrait: Texture
@@ -2588,7 +2609,10 @@ export interface DeckPresentationAssets extends Record<HeroAssetKey, Texture> {
   warriorNewDeckFrame: Texture
 }
 
-export interface GameAssets extends Record<HeroPowerAssetKey, Texture> {
+export interface GameAssets extends Record<
+  HeroPowerAssetKey | MatchHeroAssetKey,
+  Texture
+> {
   heroPowerAura1: Texture
   heroPowerAura2: Texture
   heroPowerAura3: Texture

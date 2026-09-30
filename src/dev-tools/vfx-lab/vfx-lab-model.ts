@@ -1,3 +1,6 @@
+import type { VfxAoeZone } from '../../desktop/contracts/ipc/vfx-templates'
+import type { VfxTemplate } from '../../desktop/contracts/ipc/vfx-templates'
+
 export type VfxEffectId = 'missile' | 'aoe'
 export type AoeShape = 'radial' | 'wide'
 
@@ -7,56 +10,8 @@ export const AOE_ZONES = [
   { key: 'enemyHero', label: 'Enemy hero' },
   { key: 'friendlyHero', label: 'Friendly hero' }
 ] as const
-export type AoeZoneId = (typeof AOE_ZONES)[number]['key']
+export type AoeZoneId = VfxAoeZone
 export type AoePreviewAreaId = AoeZoneId | 'bothBoards'
-
-/** Saturated orange body and yellow heat from the supplied explosion references. */
-export const AOE_REFERENCE_SETTINGS = {
-  flameColor: '#ff5900',
-  coreColor: '#ffe600',
-  intensity: 1.65,
-  noiseScale: 2.6,
-  flowSpeed: 0.85,
-  turbulence: 0.85,
-  durationMs: 1250,
-  aoeRadius: 0.98,
-  aoeEdgeSoftness: 0.1,
-  aoeShape: 'wide'
-} as const
-
-export const AOE_TARGET_PRESETS = {
-  flamestrike: {
-    label: 'Flamestrike — enemy board',
-    zones: ['enemyBoard'],
-    reference: true
-  },
-  doomsayer: {
-    label: 'Doomsayer — both boards',
-    zones: ['enemyBoard', 'friendlyBoard'],
-    reference: true
-  },
-  'baron-geddon': {
-    label: 'Baron Geddon — boards + heroes',
-    zones: ['enemyBoard', 'friendlyBoard', 'enemyHero', 'friendlyHero'],
-    reference: true
-  },
-  'enemy-board': { label: 'Enemy board only', zones: ['enemyBoard'] },
-  'friendly-board': { label: 'Friendly board only', zones: ['friendlyBoard'] },
-  'both-boards': { label: 'Both boards', zones: ['enemyBoard', 'friendlyBoard'] },
-  'enemy-side': { label: 'Enemy board + hero', zones: ['enemyBoard', 'enemyHero'] },
-  'friendly-side': {
-    label: 'Friendly board + hero',
-    zones: ['friendlyBoard', 'friendlyHero']
-  },
-  'all-zones': {
-    label: 'All zones',
-    zones: ['enemyBoard', 'friendlyBoard', 'enemyHero', 'friendlyHero']
-  }
-} as const satisfies Record<
-  string,
-  { label: string; zones: readonly AoeZoneId[]; reference?: boolean }
->
-export type AoeTargetPreset = keyof typeof AOE_TARGET_PRESETS | 'custom'
 
 export interface VfxLabSettings {
   flameColor: string
@@ -71,7 +26,6 @@ export interface VfxLabSettings {
   aoeRadius: number
   aoeEdgeSoftness: number
   aoeShape: AoeShape
-  aoeTarget: AoeTargetPreset
   enemyBoard: boolean
   friendlyBoard: boolean
   enemyHero: boolean
@@ -97,7 +51,6 @@ export const DEFAULT_VFX_LAB_SETTINGS: VfxLabSettings = {
   aoeRadius: 0.92,
   aoeEdgeSoftness: 0.055,
   aoeShape: 'wide',
-  aoeTarget: 'enemy-board',
   enemyBoard: true,
   friendlyBoard: false,
   enemyHero: false,
@@ -116,4 +69,71 @@ export function getAoePreviewAreas(
   if (settings.enemyHero) areas.push('enemyHero')
   if (settings.friendlyHero) areas.push('friendlyHero')
   return areas
+}
+
+export function settingsFromTemplate(
+  template: VfxTemplate,
+  showTargetGuides = false
+): VfxLabSettings {
+  const settings = {
+    ...DEFAULT_VFX_LAB_SETTINGS,
+    ...template.tuning,
+    showTargetGuides
+  }
+  if (template.family === 'aoe') {
+    for (const zone of AOE_ZONES) settings[zone.key] = template.zones.includes(zone.key)
+  }
+  return settings
+}
+
+export function templateFromSettings(
+  template: VfxTemplate,
+  settings: VfxLabSettings
+): VfxTemplate {
+  return createTemplateFromSettings(
+    template.id,
+    template.name,
+    template.family,
+    settings
+  )
+}
+
+export function createTemplateFromSettings(
+  id: string,
+  name: string,
+  family: VfxEffectId,
+  settings: VfxLabSettings
+): VfxTemplate {
+  const common = {
+    flameColor: settings.flameColor,
+    coreColor: settings.coreColor,
+    intensity: settings.intensity,
+    noiseScale: settings.noiseScale,
+    flowSpeed: settings.flowSpeed,
+    turbulence: settings.turbulence,
+    durationMs: settings.durationMs
+  }
+  if (family === 'missile')
+    return {
+      id,
+      name,
+      family,
+      tuning: {
+        ...common,
+        missileLength: settings.missileLength,
+        missileWidth: settings.missileWidth
+      }
+    }
+  return {
+    id,
+    name,
+    family,
+    zones: AOE_ZONES.filter(({ key }) => settings[key]).map(({ key }) => key),
+    tuning: {
+      ...common,
+      aoeRadius: settings.aoeRadius,
+      aoeEdgeSoftness: settings.aoeEdgeSoftness,
+      aoeShape: settings.aoeShape
+    }
+  }
 }

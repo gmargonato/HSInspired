@@ -1,5 +1,6 @@
 /** Lazy asset bundles loaded by scene/feature ownership. */
 export const ASSET_BUNDLE_IDS = {
+  appStartup: 'app-startup',
   mainMenu: 'main-menu',
   arena: 'arena',
   tavernBrawl: 'tavern-brawl',

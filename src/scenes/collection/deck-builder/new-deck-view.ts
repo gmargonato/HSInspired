@@ -10,6 +10,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../../../visual-components/layout'
 import type { RendererLogger } from '../../../application/contracts/logger'
 import { AnimationScope } from '../../../visual-components/animation/animations'
 import { AssetScope } from '../../../visual-components/assets/asset-scope'
+import { getDeckHeroTexture } from '../../../visual-components/assets/hero-assets'
 import type { DeckStore } from '../../../application/contracts/deck-store'
 import { NEW_DECK_FRAME_ASSET_KEYS } from '../../../visual-components/assets/deck-frames'
 import { NEW_DECK_LAYOUT } from './new-deck-layout'
@@ -222,7 +223,10 @@ export class NewDeckView extends Container {
     if (!hero) return
 
     this.selectedHero = hero
-    this.heroPortrait.texture = this.deckPresentationAssets[hero.presentationAssetKey]
+    this.heroPortrait.texture = getDeckHeroTexture(
+      this.deckPresentationAssets,
+      hero.presentationAssetKey
+    )
     this.heroPortrait.visible = true
     this.heroName.text = hero.displayName
     this.heroName.visible = true

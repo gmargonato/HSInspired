@@ -22,12 +22,7 @@
     "ray2Intensity": 0,
     "seed": 1,
     "hdr": false,
-    "color": [
-      1,
-      0.9,
-      0.65,
-      0.8
-    ]
+    "color": [1, 0.9, 0.65, 0.8]
   },
   "shatter": {
     "shardCount": 8,

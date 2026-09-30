@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "fire-missile",
+      "name": "Fire missile",
+      "family": "missile",
+      "tuning": {
+        "flameColor": "#ff4b08",
+        "coreColor": "#ffd13b",
+        "intensity": 1.7,
+        "noiseScale": 2.8,
+        "flowSpeed": 1.2,
+        "turbulence": 0.85,
+        "durationMs": 1800,
+        "missileLength": 550,
+        "missileWidth": 0.32
+      }
+    },
+    {
+      "id": "fire-blast-enemy-board",
+      "name": "Fire blast: enemy board",
+      "family": "aoe",
+      "zones": ["enemyBoard"],
+      "tuning": {
+        "flameColor": "#ff5900",
+        "coreColor": "#ffe600",
+        "intensity": 1.65,
+        "noiseScale": 2.6,
+        "flowSpeed": 0.85,
+        "turbulence": 0.85,
+        "durationMs": 1250,
+        "aoeRadius": 0.98,
+        "aoeEdgeSoftness": 0.1,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "fire-blast-both-boards",
+      "name": "Fire blast: both boards",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard"],
+      "tuning": {
+        "flameColor": "#ff5900",
+        "coreColor": "#ffe600",
+        "intensity": 1.65,
+        "noiseScale": 2.6,
+        "flowSpeed": 0.85,
+        "turbulence": 0.85,
+        "durationMs": 1250,
+        "aoeRadius": 0.98,
+        "aoeEdgeSoftness": 0.1,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "fire-blast-all-characters",
+      "name": "Fire blast: all characters",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
+      "tuning": {
+        "flameColor": "#ff5900",
+        "coreColor": "#ffe600",
+        "intensity": 1.65,
+        "noiseScale": 2.6,
+        "flowSpeed": 0.85,
+        "turbulence": 0.85,
+        "durationMs": 1250,
+        "aoeRadius": 0.98,
+        "aoeEdgeSoftness": 0.1,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "orange-explosion-enemy-board",
+      "name": "Orange explosion: enemy board",
+      "family": "aoe",
+      "zones": ["enemyBoard"],
+      "tuning": {
+        "flameColor": "#ff4b08",
+        "coreColor": "#ffd13b",
+        "intensity": 1.7,
+        "noiseScale": 2.8,
+        "flowSpeed": 1.2,
+        "turbulence": 0.85,
+        "durationMs": 1800,
+        "aoeRadius": 0.92,
+        "aoeEdgeSoftness": 0.055,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "orange-explosion-friendly-board",
+      "name": "Orange explosion: friendly board",
+      "family": "aoe",
+      "zones": ["friendlyBoard"],
+      "tuning": {
+        "flameColor": "#ff4b08",
+        "coreColor": "#ffd13b",
+        "intensity": 1.7,
+        "noiseScale": 2.8,
+        "flowSpeed": 1.2,
+        "turbulence": 0.85,
+        "durationMs": 1800,
+        "aoeRadius": 0.92,
+        "aoeEdgeSoftness": 0.055,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "orange-explosion-both-boards",
+      "name": "Orange explosion: both boards",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard"],
+      "tuning": {
+        "flameColor": "#ff4b08",
+        "coreColor": "#ffd13b",
+        "intensity": 1.7,
+        "noiseScale": 2.8,
+        "flowSpeed": 1.2,
+        "turbulence": 0.85,
+        "durationMs": 1800,
+        "aoeRadius": 0.92,
+        "aoeEdgeSoftness": 0.055,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "orange-explosion-enemy-side",
+      "name": "Orange explosion: enemy side",
+      "family": "aoe",
+      "zones": ["enemyBoard", "enemyHero"],
+      "tuning": {
+        "flameColor": "#ff4b08",
+        "coreColor": "#ffd13b",
+        "intensity": 1.7,
+        "noiseScale": 2.8,
+        "flowSpeed": 1.2,
+        "turbulence": 0.85,
+        "durationMs": 1800,
+        "aoeRadius": 0.92,
+        "aoeEdgeSoftness": 0.055,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "orange-explosion-friendly-side",
+      "name": "Orange explosion: friendly side",
+      "family": "aoe",
+      "zones": ["friendlyBoard", "friendlyHero"],
+      "tuning": {
+        "flameColor": "#ff4b08",
+        "coreColor": "#ffd13b",
+        "intensity": 1.7,
+        "noiseScale": 2.8,
+        "flowSpeed": 1.2,
+        "turbulence": 0.85,
+        "durationMs": 1800,
+        "aoeRadius": 0.92,
+        "aoeEdgeSoftness": 0.055,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "orange-explosion-all-characters",
+      "name": "Orange explosion: all characters",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
+      "tuning": {
+        "flameColor": "#ff4b08",
+        "coreColor": "#ffd13b",
+        "intensity": 1.7,
+        "noiseScale": 2.8,
+        "flowSpeed": 1.2,
+        "turbulence": 0.85,
+        "durationMs": 1800,
+        "aoeRadius": 0.92,
+        "aoeEdgeSoftness": 0.055,
+        "aoeShape": "wide"
+      }
+    }
+  ]
+}

@@ -251,9 +251,11 @@ export class GameScene extends Scene {
     const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
     this.logger?.info('[GameScene] game assets acquired')
     await this.reportLoading(0.2)
-    const heroAssets = await this.assetScope.acquire<DeckPresentationAssets>(
-      ASSET_BUNDLE_IDS.deckPresentation
-    )
+    const deckPresentationAssets =
+      await this.assetScope.acquire<DeckPresentationAssets>(
+        ASSET_BUNDLE_IDS.deckPresentation
+      )
+    const heroAssets = { ...deckPresentationAssets, ...gameAssets }
     this.logger?.info('[GameScene] hero assets acquired')
     await this.reportLoading(0.26)
     await this.assetScope.acquire(ASSET_BUNDLE_IDS.cardRendering)

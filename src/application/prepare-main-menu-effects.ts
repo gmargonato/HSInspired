@@ -20,31 +20,39 @@ export async function prepareMainMenuEffects(renderer: Renderer): Promise<void> 
     assets.dustRound.source.autoGarbageCollect = false
     assets.dustTriangle.source.autoGarbageCollect = false
     await renderer.prepare.upload(Object.values(assets))
-    const rays = createGodRaysFilter(GOD_RAYS_CONFIG)
-    const root = new Container()
-    const carrier = new Sprite(Texture.WHITE)
-    carrier.width = GAME_WIDTH
-    carrier.height = GAME_HEIGHT
-    carrier.filters = [rays.filter]
-    root.addChild(carrier)
-    const dust = new GodRaysDust([assets.dustRound, assets.dustTriangle], rays, {
-      ...GOD_RAYS_DUST_CONFIG,
-      enabled: true,
-      count: 2
-    })
-    root.addChild(dust)
-    const target = RenderTexture.create({ width: GAME_WIDTH, height: GAME_HEIGHT })
-    try {
-      // Offscreen rendering warms Pixi's cached GL programs without flashing onscreen.
-      renderer.render({ container: root, target, clear: true })
-    } finally {
-      carrier.filters = null
-      root.destroy({ children: true })
-      rays.destroy()
-      target.destroy(true)
-    }
+    warmMainMenuEffects(renderer, assets)
   } finally {
     // The persistent bundle stays cached after this startup ownership ends.
     await scope.releaseAll()
+  }
+}
+
+/** Compile effects using textures already acquired and uploaded by the caller. */
+export function warmMainMenuEffects(
+  renderer: Renderer,
+  assets: Pick<MainMenuAssets, 'dustRound' | 'dustTriangle'>
+): void {
+  const rays = createGodRaysFilter(GOD_RAYS_CONFIG)
+  const root = new Container()
+  const carrier = new Sprite(Texture.WHITE)
+  carrier.width = GAME_WIDTH
+  carrier.height = GAME_HEIGHT
+  carrier.filters = [rays.filter]
+  root.addChild(carrier)
+  const dust = new GodRaysDust([assets.dustRound, assets.dustTriangle], rays, {
+    ...GOD_RAYS_DUST_CONFIG,
+    enabled: true,
+    count: 2
+  })
+  root.addChild(dust)
+  const target = RenderTexture.create({ width: GAME_WIDTH, height: GAME_HEIGHT })
+  try {
+    // Offscreen rendering warms Pixi's cached GL programs without flashing onscreen.
+    renderer.render({ container: root, target, clear: true })
+  } finally {
+    carrier.filters = null
+    root.destroy({ children: true })
+    rays.destroy()
+    target.destroy(true)
   }
 }

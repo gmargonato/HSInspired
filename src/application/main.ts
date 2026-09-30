@@ -10,8 +10,10 @@ import { GAME_HEIGHT, GAME_WIDTH } from './config'
 import { gsap } from '../visual-components/animation/animations'
 import { CursorManager } from '../visual-components/controls/cursor'
 import type { SceneRequest } from '../desktop/contracts/scene-navigation'
-import './styles.css'
 import { prepareMainMenuEffects } from './prepare-main-menu-effects'
+import { MenuStartupResources } from './prepare-menu-resources'
+import { prepareMenuData } from './prepare-menu-data'
+import { StartupSplash } from './startup-splash'
 
 export { GAME_HEIGHT, GAME_WIDTH }
 
@@ -136,6 +138,7 @@ function installErrorLoopHalt(
 }
 
 async function bootstrap(): Promise<void> {
+  const startedAt = performance.now()
   const container = document.getElementById('game-container')
   if (!container) {
     throw new Error('Game container was not found')
@@ -146,6 +149,8 @@ async function bootstrap(): Promise<void> {
   // reload cannot leave the native OS cursor active while the game boots.
   const cursor = new CursorManager(container)
   cursor.mount()
+  const restoreCursor = cursor.suppressVisibility()
+  await startupSplash.ready()
 
   const app = new Application()
 
@@ -168,6 +173,8 @@ async function bootstrap(): Promise<void> {
   }
 
   container.appendChild(app.canvas)
+  const stageEventMode = app.stage.eventMode
+  app.stage.eventMode = 'none'
 
   const preventContextMenu = (event: MouseEvent): void => {
     event.preventDefault()
@@ -213,11 +220,35 @@ async function bootstrap(): Promise<void> {
   let unsubscribeDevCommandHandler = (): void => undefined
   let removeFpsCounter = (): void => undefined
   let removeDevFilterToggle = (): void => undefined
+  const menuResources = new MenuStartupResources()
+
+  const directInspectorStart =
+    import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'card-inspector'
+  const directOutlineLabStart =
+    import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'outline-lab'
+  const directVfxLabStart =
+    import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'vfx-lab'
+  const directMatchPerformanceStart =
+    import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'match-performance'
+  const directGameStart =
+    import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'game'
+  const directStart =
+    directInspectorStart ||
+    directOutlineLabStart ||
+    directVfxLabStart ||
+    directMatchPerformanceStart ||
+    directGameStart
 
   try {
     app.ticker.maxFPS = 60
-    await prepareMainMenuEffects(app.renderer)
-    removeFpsCounter = mountFpsCounter(app, container)
+    if (directStart) {
+      await prepareMainMenuEffects(app.renderer)
+    } else {
+      await Promise.all([
+        menuResources.prepare(app.renderer),
+        prepareMenuData(services)
+      ])
+    }
     if (import.meta.env.DEV) {
       const { installDevFilterToggle } =
         await import('../dev-tools/runtime/dev-filter-toggle')
@@ -248,17 +279,6 @@ async function bootstrap(): Promise<void> {
       )
     }
 
-    const directInspectorStart =
-      import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'card-inspector'
-    const directOutlineLabStart =
-      import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'outline-lab'
-    const directVfxLabStart =
-      import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'vfx-lab'
-    const directMatchPerformanceStart =
-      import.meta.env.DEV &&
-      import.meta.env.VITE_DEV_START_ROUTE === 'match-performance'
-    const directGameStart =
-      import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'game'
     if (directInspectorStart) {
       const { CardInspectorScene } = await import('@dev-inspector')
       await game.start(new CardInspectorScene())
@@ -277,6 +297,14 @@ async function bootstrap(): Promise<void> {
         })
       }
     }
+
+    await startupSplash.reveal(() => app.render())
+    app.stage.eventMode = stageEventMode
+    restoreCursor()
+    removeFpsCounter = mountFpsCounter(app, container)
+    services.logger.info('[Startup] ready', {
+      elapsedMS: Math.round(performance.now() - startedAt)
+    })
 
     if (directMatchPerformanceStart) {
       const { runMatchPerformanceBenchmark } = await import('@dev-match-performance')
@@ -336,6 +364,10 @@ async function bootstrap(): Promise<void> {
         unsubscribeFromSceneMenu()
         unsubscribeDevSceneSync()
         unsubscribeDevCommandHandler()
+        app.stop()
+        void menuResources.release().catch((error: unknown) => {
+          services.logger.warn('Failed to release startup resources.', error)
+        })
         app.canvas.removeEventListener('contextmenu', preventContextMenu)
         // The browser discards this document, its nodes, and listeners. Avoid
         // removing the custom cursor early while Vite performs a full reload.
@@ -343,6 +375,7 @@ async function bootstrap(): Promise<void> {
       { once: true }
     )
   } catch (error) {
+    app.stop()
     removeFpsCounter()
     removeDevFilterToggle()
     removeSettingsShortcut()
@@ -350,12 +383,18 @@ async function bootstrap(): Promise<void> {
     unsubscribeDevSceneSync()
     unsubscribeDevCommandHandler()
     cursor.destroy()
+    await menuResources.release().catch((releaseError: unknown) => {
+      services.logger.warn('Failed to release startup resources.', releaseError)
+    })
     throw error
   }
 }
 
+const startupSplash = new StartupSplash()
+
 void bootstrap().catch((error: unknown) => {
   console.error('Failed to start the game:', error)
+  startupSplash.dispose()
 
   const container = document.getElementById('game-container')
   if (container) {

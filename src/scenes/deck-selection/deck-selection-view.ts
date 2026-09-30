@@ -12,6 +12,7 @@ import { applyAnchoredPlacement, applyPlacement } from '../../visual-components/
 import { Button } from '../../visual-components/controls/button'
 import { DeckEntryButton } from '../../visual-components/controls/deck-entry-button'
 import { HERO_CATALOG } from '../../game-rules/content/heroes'
+import { getDeckHeroTexture } from '../../visual-components/assets/hero-assets'
 import type { Deck } from '../../game-rules/decks'
 import type { PreferencesApi } from '../../desktop/contracts/ipc/preferences'
 import type { DeckStore } from '../../application/contracts/deck-store'
@@ -312,7 +313,7 @@ export class DeckSelectionView extends Container {
     this.selectedDeckOutline?.setEnabled(false)
     this.selectedDeckOutline = outline
     this.selectedDeck = deck
-    this.heroPortrait.texture = assets[hero.presentationAssetKey]
+    this.heroPortrait.texture = getDeckHeroTexture(assets, hero.presentationAssetKey)
     this.heroPortrait.visible = true
     this.heroName.text = hero.displayName
     this.heroName.visible = true

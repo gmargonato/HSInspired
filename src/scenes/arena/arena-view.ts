@@ -27,6 +27,7 @@ import type { GameRoute } from '../../application/navigation/game-route'
 import { createMatchSeed } from '../../application/match-seed'
 import { CardView } from '../../visual-components/cards/card-view'
 import { CardAssetResolver } from '../../visual-components/assets/card-asset-resolver'
+import { getDeckHeroTexture } from '../../visual-components/assets/hero-assets'
 import {
   ARENA_KEY_ASSET_KEYS,
   type ArenaAssets,
@@ -367,7 +368,9 @@ export class ArenaView extends Actor {
       root.cursor = 'pointer'
       root.on('pointertap', () => void this.selectHero(hero, root))
 
-      const portrait = new Sprite(this.heroAssets[hero.presentationAssetKey])
+      const portrait = new Sprite(
+        getDeckHeroTexture(this.heroAssets, hero.presentationAssetKey)
+      )
       portrait.label = `arena.hero-portrait.${hero.id}`
       portrait.anchor.set(0.5)
       portrait.scale.set(ARENA_LAYOUT.heroChoices.scale)
@@ -725,7 +728,9 @@ export class ArenaView extends Actor {
     }
     if (!this.snapshot.heroId) return
     const hero = HERO_CATALOG.require(this.snapshot.heroId)
-    const portrait = new Sprite(this.heroAssets[hero.presentationAssetKey])
+    const portrait = new Sprite(
+      getDeckHeroTexture(this.heroAssets, hero.presentationAssetKey)
+    )
     portrait.label = 'arena.selected-hero'
     applyAnchoredPlacement(portrait, ARENA_LAYOUT.selectedHero)
     portrait.eventMode = 'none'

@@ -19,8 +19,9 @@ import thrallDeathseerFrameImage from '@assets/images/heroes/frames/shaman-thral
 import guldanBloodreaverFrameImage from '@assets/images/heroes/frames/warlock-guldan-bloodreaver-frame.png'
 import garroshScourgelordFrameImage from '@assets/images/heroes/frames/warrior-garrosh-scourgelord-frame.png'
 import type { HeroPresentationAssetKey } from '../../game-rules/content/heroes'
+import type { Texture } from 'pixi.js'
 
-export const HERO_ASSET_SOURCES: Record<HeroPresentationAssetKey, string> = {
+export const DECK_HERO_ASSET_SOURCES = {
   'hero-guldan': guldanFrameImage,
   'hero-rexxar': rexxarFrameImage,
   'hero-valeera': valeeraFrameImage,
@@ -29,7 +30,11 @@ export const HERO_ASSET_SOURCES: Record<HeroPresentationAssetKey, string> = {
   'hero-uther': utherFrameImage,
   'hero-anduin': anduinFrameImage,
   'hero-jaina': jainaFrameImage,
-  'hero-thrall': thrallFrameImage,
+  'hero-thrall': thrallFrameImage
+}
+
+/** These portraits are only used after a hero transforms during a match. */
+export const MATCH_HERO_ASSET_SOURCES = {
   'hero-jaraxxus': jaraxxusFrameImage,
   'hero-ragnaros': ragnarosFrameImage,
   'hero-malfurion-pestilent': malfurionPestilentFrameImage,
@@ -43,4 +48,22 @@ export const HERO_ASSET_SOURCES: Record<HeroPresentationAssetKey, string> = {
   'hero-garrosh-scourgelord': garroshScourgelordFrameImage
 }
 
+export const HERO_ASSET_SOURCES = {
+  ...DECK_HERO_ASSET_SOURCES,
+  ...MATCH_HERO_ASSET_SOURCES
+} satisfies Record<HeroPresentationAssetKey, string>
+
 export type HeroAssetKey = HeroPresentationAssetKey
+export type DeckHeroAssetKey = keyof typeof DECK_HERO_ASSET_SOURCES
+export type MatchHeroAssetKey = keyof typeof MATCH_HERO_ASSET_SOURCES
+
+/** Menu portraits only exist for selectable deck heroes. */
+export function getDeckHeroTexture(
+  assets: Record<DeckHeroAssetKey, Texture>,
+  key: HeroAssetKey
+): Texture {
+  if (!Object.hasOwn(DECK_HERO_ASSET_SOURCES, key)) {
+    throw new Error(`Hero portrait ${key} is only available during a match.`)
+  }
+  return assets[key as DeckHeroAssetKey]
+}

@@ -30,7 +30,7 @@ function artworkUrl(cardId: string): string | undefined {
 }
 
 /** Improves minification when the same authored texture is used by compact cards. */
-function configureCardTexture(texture: Texture): Texture {
+export function configureCardTexture(texture: Texture): Texture {
   const source = texture.source
   const mipLevelCount =
     Math.floor(Math.log2(Math.max(source.pixelWidth, source.pixelHeight))) + 1

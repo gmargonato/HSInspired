@@ -6,16 +6,20 @@ import {
   MISSILE_VFX_TIMING
 } from '../../visual-components/effects/missile-vfx-shader'
 import type { GameAssets } from '../../visual-components/assets'
+import {
+  getVfxTemplateLibrary,
+  updateVfxTemplateLibrary
+} from '../../visual-components/effects/vfx-templates'
+import type { VfxTemplate } from '../../desktop/contracts/ipc/vfx-templates'
 import { VfxLabControls } from './vfx-lab-controls'
 import {
   DEFAULT_VFX_LAB_SETTINGS,
   AOE_ZONES,
-  AOE_TARGET_PRESETS,
-  AOE_REFERENCE_SETTINGS,
   getAoePreviewAreas,
+  createTemplateFromSettings,
+  settingsFromTemplate,
+  templateFromSettings,
   type AoePreviewAreaId,
-  type AoeZoneId,
-  type AoeTargetPreset,
   type VfxEffectId,
   type VfxLabSettingKey,
   type VfxLabSettingValue,
@@ -100,13 +104,18 @@ export class VfxLab extends Container {
   private readonly missileTarget: Container
   private readonly areaGuide: Graphics
   private readonly controls: VfxLabControls
+  private templates: VfxTemplate[] = structuredClone([
+    ...getVfxTemplateLibrary().templates
+  ])
+  private selectedTemplateId: string | null =
+    this.templates.find((template) => template.family === 'missile')?.id ?? null
+  private revision = 0
+  private savedRevision = 0
+  private saving = false
+  private saveMessage = ''
   private readonly effectSettings: Record<VfxEffectId, VfxLabSettings> = {
     missile: { ...DEFAULT_VFX_LAB_SETTINGS },
-    aoe: {
-      ...DEFAULT_VFX_LAB_SETTINGS,
-      ...AOE_REFERENCE_SETTINGS,
-      aoeTarget: 'flamestrike'
-    }
+    aoe: { ...DEFAULT_VFX_LAB_SETTINGS }
   }
   private get settings(): VfxLabSettings {
     return this.effectSettings[this.selectedEffect]
@@ -115,6 +124,9 @@ export class VfxLab extends Container {
     this.effectSettings[this.selectedEffect] = settings
   }
   private selectedEffect: VfxEffectId = 'missile'
+  private get selectedTemplate(): VfxTemplate | undefined {
+    return this.templates.find((template) => template.id === this.selectedTemplateId)
+  }
   private elapsedMS = 0
   private clockSeconds = 0
   private loopDelayMS = -1
@@ -232,14 +244,20 @@ export class VfxLab extends Container {
       options.parent,
       {
         select: (effect) => this.selectEffect(effect),
+        selectTemplate: (id) => this.selectTemplate(id),
+        createTemplate: () => this.createTemplate(),
+        deleteTemplate: () => this.deleteTemplate(),
+        renameTemplate: (name) => this.renameTemplate(name),
+        saveTemplates: () => void this.saveTemplates(),
         change: (key, value) => this.changeSetting(key, value),
         play: () => this.play(),
         loop: (enabled) => this.setLooping(enabled)
       }
     )
+    this.loadSelectedTemplate()
     this.applySettings()
     this.setEffectVisibility()
-    this.controls.refresh(this.selectedEffect, this.settings, false, this.looping)
+    this.refreshControls()
     this.play()
   }
 
@@ -253,7 +271,7 @@ export class VfxLab extends Container {
         this.elapsedMS = this.settings.durationMs
         this.playing = false
         this.loopDelayMS = this.looping ? LAYOUT.loopPauseMS : -1
-        this.controls.refresh(this.selectedEffect, this.settings, false, this.looping)
+        this.refreshControls()
       }
     } else if (this.looping && this.loopDelayMS >= 0) {
       this.loopDelayMS -= delta
@@ -283,53 +301,182 @@ export class VfxLab extends Container {
   private selectEffect(effect: VfxEffectId): void {
     if (this.disposed || this.selectedEffect === effect) return
     this.selectedEffect = effect
+    this.selectedTemplateId =
+      this.templates.find((template) => template.family === effect)?.id ?? null
+    this.loadSelectedTemplate()
     this.applySettings()
     this.setEffectVisibility()
     this.play()
+    this.refreshControls()
   }
 
-  private changeSetting(key: VfxLabSettingKey, value: VfxLabSettingValue): void {
-    this.settings = { ...this.settings, [key]: value } as VfxLabSettings
-    if (key === 'aoeTarget' && value !== 'custom') {
-      const preset = AOE_TARGET_PRESETS[value as Exclude<AoeTargetPreset, 'custom'>]
-      if ('reference' in preset)
-        this.settings = { ...this.settings, ...AOE_REFERENCE_SETTINGS }
-      for (const { key: zone } of AOE_ZONES) {
-        this.settings[zone] = (preset.zones as readonly AoeZoneId[]).includes(zone)
-      }
-    } else if (AOE_ZONES.some(({ key: zone }) => zone === key)) {
-      this.settings.aoeTarget = 'custom'
+  private selectTemplate(id: string): void {
+    const template = this.templates.find((candidate) => candidate.id === id)
+    if (!template || template.family !== this.selectedEffect) return
+    this.selectedTemplateId = id
+    this.loadSelectedTemplate()
+    this.applySettings()
+    this.play()
+    this.refreshControls()
+  }
+
+  private loadSelectedTemplate(): void {
+    const template = this.selectedTemplate
+    if (template)
+      this.settings = settingsFromTemplate(template, this.settings.showTargetGuides)
+    else this.settings = { ...DEFAULT_VFX_LAB_SETTINGS }
+  }
+
+  private replaceSelectedTemplate(template: VfxTemplate): void {
+    const index = this.templates.findIndex((item) => item.id === template.id)
+    if (index >= 0) this.templates[index] = template
+  }
+
+  private uniqueId(base: string): string {
+    const slug =
+      base
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'effect'
+    let id = slug
+    let suffix = 2
+    while (this.templates.some((template) => template.id === id))
+      id = `${slug}-${suffix++}`
+    return id
+  }
+
+  private createTemplate(): void {
+    const selected = this.selectedTemplate
+    let template: VfxTemplate
+    if (selected) {
+      const name = `${selected.name} copy`
+      template = { ...structuredClone(selected), id: this.uniqueId(name), name }
+    } else {
+      const name =
+        this.selectedEffect === 'aoe' ? 'New AoE effect' : 'New missile effect'
+      const id = this.uniqueId(name)
+      template = createTemplateFromSettings(
+        id,
+        name,
+        this.selectedEffect,
+        DEFAULT_VFX_LAB_SETTINGS
+      )
     }
+    this.templates.push(template)
+    this.selectedTemplateId = template.id
+    this.loadSelectedTemplate()
+    this.markDirty()
+    this.applySettings()
+    this.play()
+    this.refreshControls()
+  }
+
+  private deleteTemplate(): void {
+    const selected = this.selectedTemplate
+    if (!selected || !window.confirm(`Delete effect "${selected.name}"?`)) return
+    this.templates = this.templates.filter((template) => template.id !== selected.id)
+    this.selectedTemplateId =
+      this.templates.find((template) => template.family === this.selectedEffect)?.id ??
+      null
+    this.loadSelectedTemplate()
+    this.markDirty()
     this.applySettings()
     this.setEffectVisibility()
-    if (!this.playing) this.play()
+    this.playing = false
+    this.play()
+    this.refreshControls()
+  }
+
+  private renameTemplate(name: string): void {
+    const selected = this.selectedTemplate
+    if (!selected) return
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === selected.name) {
+      this.refreshControls()
+      return
+    }
+    this.replaceSelectedTemplate({ ...selected, name: trimmed })
+    this.markDirty()
+    this.refreshControls()
+  }
+
+  private markDirty(): void {
+    this.revision++
+    this.saveMessage = ''
+  }
+
+  private refreshControls(): void {
     this.controls.refresh(
       this.selectedEffect,
       this.settings,
       this.playing,
-      this.looping
+      this.looping,
+      this.templates,
+      this.selectedTemplateId,
+      this.revision !== this.savedRevision,
+      this.saving,
+      this.saveMessage
     )
+  }
+
+  private async saveTemplates(): Promise<void> {
+    if (this.saving || this.revision === this.savedRevision) return
+    const save = window.api.vfxTemplates?.save
+    if (!save) {
+      this.saveMessage = 'Save unavailable: development VFX API is missing.'
+      this.refreshControls()
+      return
+    }
+    const revision = this.revision
+    const snapshot = { version: 1 as const, templates: structuredClone(this.templates) }
+    this.saving = true
+    this.saveMessage = 'Saving effects…'
+    this.refreshControls()
+    try {
+      await save(snapshot)
+      updateVfxTemplateLibrary(snapshot)
+      this.savedRevision = revision
+      this.saveMessage =
+        this.revision === revision
+          ? 'Effects saved.'
+          : 'Earlier edits saved; newer changes remain unsaved.'
+    } catch (error) {
+      console.error('[VfxLab] Failed to save effects.', error)
+      this.saveMessage = 'Save failed. Changes remain unsaved; retry Save.'
+    } finally {
+      this.saving = false
+      if (!this.disposed) this.refreshControls()
+    }
+  }
+
+  private changeSetting(key: VfxLabSettingKey, value: VfxLabSettingValue): void {
+    if (!this.selectedTemplate) return
+    this.settings = { ...this.settings, [key]: value } as VfxLabSettings
+    this.replaceSelectedTemplate(
+      templateFromSettings(this.selectedTemplate, this.settings)
+    )
+    if (key !== 'showTargetGuides') this.markDirty()
+    this.applySettings()
+    this.setEffectVisibility()
+    if (!this.playing) this.play()
+    this.refreshControls()
   }
 
   private setLooping(enabled: boolean): void {
     this.looping = enabled
     if (!enabled) this.loopDelayMS = -1
     else if (!this.playing) this.play()
-    this.controls.refresh(
-      this.selectedEffect,
-      this.settings,
-      this.playing,
-      this.looping
-    )
+    this.refreshControls()
   }
 
   private play(): void {
-    if (this.disposed) return
+    if (this.disposed || !this.selectedTemplate) return
     this.elapsedMS = 0
     this.loopDelayMS = -1
     this.playing = true
     this.setEffectVisibility()
-    this.controls.refresh(this.selectedEffect, this.settings, true, this.looping)
+    this.refreshControls()
   }
 
   private applySettings(): void {
@@ -384,17 +531,22 @@ export class VfxLab extends Container {
 
   private setEffectVisibility(): void {
     const missile = this.selectedEffect === 'missile'
-    this.missileGuide.visible = missile && this.settings.showTargetGuides
-    this.missileGroup.visible = missile
-    this.missileSource.visible = missile && this.settings.showTargetGuides
-    this.missileTarget.visible = missile && this.settings.showTargetGuides
-    this.aoeGroup.visible = !missile
-    this.areaGuide.visible = !missile && this.settings.showTargetGuides
+    this.missileGuide.visible =
+      missile && !!this.selectedTemplate && this.settings.showTargetGuides
+    this.missileGroup.visible = missile && !!this.selectedTemplate
+    this.missileSource.visible =
+      missile && !!this.selectedTemplate && this.settings.showTargetGuides
+    this.missileTarget.visible =
+      missile && !!this.selectedTemplate && this.settings.showTargetGuides
+    this.aoeGroup.visible = !missile && !!this.selectedTemplate
+    this.areaGuide.visible =
+      !missile && !!this.selectedTemplate && this.settings.showTargetGuides
   }
 
   private updateMissile(progress: number): void {
     const active = this.playing && this.selectedEffect === 'missile'
-    this.missileGroup.visible = this.selectedEffect === 'missile'
+    this.missileGroup.visible =
+      this.selectedEffect === 'missile' && !!this.selectedTemplate
     this.missileSprite.visible = active
     // Time is local to each cast, so replaying the reference is deterministic.
     this.missileShader.setFrame(this.elapsedMS / 1000, active ? progress : 1)
@@ -423,11 +575,13 @@ export class VfxLab extends Container {
 
   private updateAoe(progress: number): void {
     const active = this.playing && this.selectedEffect === 'aoe'
-    this.aoeGroup.visible = this.selectedEffect === 'aoe'
+    this.aoeGroup.visible = this.selectedEffect === 'aoe' && !!this.selectedTemplate
     this.aoeShader.setFrame(this.clockSeconds, active ? progress : 1)
     this.aoeImpactShader.setFrame(this.clockSeconds + 1.7, active ? progress : 1)
     this.areaGuide.visible =
-      this.selectedEffect === 'aoe' && this.settings.showTargetGuides
+      this.selectedEffect === 'aoe' &&
+      !!this.selectedTemplate &&
+      this.settings.showTargetGuides
     const areas = getAoePreviewAreas(this.settings)
     for (const zone of this.aoeZones) {
       zone.group.visible = areas.includes(zone.id)
