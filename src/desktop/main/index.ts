@@ -35,6 +35,19 @@ const WINDOW_HEIGHT = 1080
 // Hybrid-GPU laptops otherwise run Chromium's GPU process on the integrated
 // adapter. Must be set before the app is ready.
 app.commandLine.appendSwitch('force_high_performance_gpu')
+// Match presentation gates the next AI action. Keep Chromium scheduling its
+// renderer and timers when the game window loses focus or becomes occluded.
+for (const flag of [
+  'disable-background-timer-throttling',
+  'disable-backgrounding-occluded-windows',
+  'disable-renderer-backgrounding'
+])
+  app.commandLine.appendSwitch(flag)
+const disabledFeatures = app.commandLine.getSwitchValue('disable-features')
+app.commandLine.appendSwitch(
+  'disable-features',
+  [disabledFeatures, 'CalculateNativeWinOcclusion'].filter(Boolean).join(',')
+)
 // The runner owns this temporary directory. Select it before any repository,
 // Chromium session, or recovery routine can touch the ordinary player profile.
 const matchPerformanceRoot =
@@ -47,19 +60,6 @@ if (is.dev && process.env['VITE_DEV_START_ROUTE'] === 'match-performance') {
   }
   app.setPath('userData', join(matchPerformanceRoot, 'user-data'))
   app.setPath('sessionData', join(matchPerformanceRoot, 'session-data'))
-  // Keep foreground scheduling when automation covers the benchmark window.
-  // These switches never apply to an ordinary game launch.
-  for (const flag of [
-    'disable-background-timer-throttling',
-    'disable-backgrounding-occluded-windows',
-    'disable-renderer-backgrounding'
-  ])
-    app.commandLine.appendSwitch(flag)
-  const disabledFeatures = app.commandLine.getSwitchValue('disable-features')
-  app.commandLine.appendSwitch(
-    'disable-features',
-    [disabledFeatures, 'CalculateNativeWinOcclusion'].filter(Boolean).join(',')
-  )
 }
 /**
  * Keep the native menu bar visible for development and testing.

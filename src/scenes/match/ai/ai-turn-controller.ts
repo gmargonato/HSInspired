@@ -182,6 +182,14 @@ export class AiTurnController {
   recordTiming(decision: AiActionDecision, timing: JsonObject): void {
     this.log('decision-timing', { ...decision, ...timing })
   }
+  recordPresentation(decision: AiActionDecision, presentationMs: number): void {
+    this.log('presentation-complete', {
+      ...decision,
+      presentationMs,
+      focused: document.hasFocus(),
+      visibilityState: document.visibilityState
+    })
+  }
   hasLegalActions(): boolean {
     return !this.disposed && !this.abandoned && this.legalCommands().length > 0
   }

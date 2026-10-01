@@ -41,6 +41,7 @@ export const EVENT_PRESENTATION_POLICY: Readonly<
   'minion-combat-resolved': 'animation',
   'character-combat-resolved': 'animation',
   'effect-resolved': 'state-refresh',
+  'effect-vfx-started': 'animation',
   'match-ended': 'animation',
   'dev-card-added': 'animation',
   'dev-mana-set': 'state-refresh',

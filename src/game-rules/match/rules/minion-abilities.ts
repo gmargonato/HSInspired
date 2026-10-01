@@ -136,9 +136,7 @@ export function boardMinionRuntimeMarkers(
 
   return {
     taunt: keywords.has('taunt'),
-    divineShield:
-      minion.divineShield === true &&
-      (!minion.silenced || keywords.has('divine-shield')),
+    divineShield: minion.divineShield === true && keywords.has('divine-shield'),
     stealth: minion.stealth === true && (!minion.silenced || keywords.has('stealth')),
     windfury:
       (!minion.silenced || keywords.has('windfury') || keywords.has('mega-windfury')) &&

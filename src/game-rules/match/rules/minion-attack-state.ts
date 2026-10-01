@@ -4,7 +4,7 @@ import type { BoardMinion } from '../opening-match-types'
 /** Keywords currently affecting a board minion after runtime enchantments. */
 export function effectiveBoardMinionKeywords(
   minion: Pick<BoardMinion, 'keywords' | 'enchantments' | 'silenced'> &
-    Partial<Pick<BoardMinion, 'health' | 'maxHealth'>>,
+    Partial<Pick<BoardMinion, 'health' | 'maxHealth' | 'divineShieldConsumed'>>,
   currentTurn?: number
 ): readonly CardKeyword[] {
   const keywords = new Set<CardKeyword>(minion.silenced ? [] : (minion.keywords ?? []))
@@ -25,6 +25,9 @@ export function effectiveBoardMinionKeywords(
     for (const keyword of enchantment.keywords ?? []) keywords.add(keyword)
     for (const keyword of enchantment.removedKeywords ?? []) keywords.delete(keyword)
   }
+  // Printed and granted keywords remain stored after absorption. Every runtime
+  // consumer (including AI evaluation) must see that the shield was spent.
+  if (minion.divineShieldConsumed) keywords.delete('divine-shield')
   return [...keywords]
 }
 

@@ -69,6 +69,23 @@ export class GameScene extends Scene {
   private readonly rewardMatchId = crypto.randomUUID()
   private statisticsAttempted = false
   private opponentLeftShown = false
+  private readonly recordWindowFocus = (): void => this.recordWindowState('focus')
+  private readonly recordWindowBlur = (): void => this.recordWindowState('blur')
+  private readonly recordVisibilityChange = (): void =>
+    this.recordWindowState('visibilitychange')
+
+  private recordWindowState(event: string): void {
+    this.recorder?.record(
+      'decisions',
+      'window-state',
+      {
+        event,
+        focused: document.hasFocus(),
+        visibilityState: document.visibilityState
+      },
+      ''
+    )
+  }
 
   constructor(
     route: GameRoute,
@@ -98,7 +115,7 @@ export class GameScene extends Scene {
     try {
       await this.showLoadingScreen()
       await this.initMatch()
-      await this.reportLoading(1)
+      await this.reportLoading(1, 'Starting match')
       await new Promise<void>((resolve) => {
         this.tweenTo(this.loadingView!.panel.scale, {
           x: 0,
@@ -136,14 +153,14 @@ export class GameScene extends Scene {
     const board = boardResult.value
     const loading = loadingResult.value
     this.boardTexture = board.board
-    this.loadingView = new GameLoadingView(board.board, loading.overlay)
+    this.loadingView = new GameLoadingView(board.board, loading.overlay, loading.noise)
     this.root.addChild(this.loadingView)
     this.sceneManager.presentLoadingRoot?.(this.root)
-    await this.reportLoading(0.03)
+    await this.reportLoading(0.03, 'Setting up decks')
   }
 
-  private async reportLoading(progress: number): Promise<void> {
-    await this.loadingView?.report(progress)
+  private async reportLoading(progress: number, status?: string): Promise<void> {
+    await this.loadingView?.report(progress, status)
   }
 
   private async initMatch(): Promise<void> {
@@ -213,6 +230,10 @@ export class GameScene extends Scene {
       }),
       this.reportLogError
     )
+    window.addEventListener('focus', this.recordWindowFocus)
+    window.addEventListener('blur', this.recordWindowBlur)
+    document.addEventListener('visibilitychange', this.recordVisibilityChange)
+    this.recordWindowState('initial')
     const aiLogger = this.recorder.logger(
       this.logger ?? {
         info: () => undefined,
@@ -247,24 +268,24 @@ export class GameScene extends Scene {
         : {})
     })
 
-    await this.reportLoading(0.08)
+    await this.reportLoading(0.08, 'Loading game assets')
     const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
     this.logger?.info('[GameScene] game assets acquired')
-    await this.reportLoading(0.2)
+    await this.reportLoading(0.2, 'Loading hero assets')
     const deckPresentationAssets =
       await this.assetScope.acquire<DeckPresentationAssets>(
         ASSET_BUNDLE_IDS.deckPresentation
       )
     const heroAssets = { ...deckPresentationAssets, ...gameAssets }
     this.logger?.info('[GameScene] hero assets acquired')
-    await this.reportLoading(0.26)
+    await this.reportLoading(0.26, 'Loading card frames')
     await this.assetScope.acquire(ASSET_BUNDLE_IDS.cardRendering)
     this.logger?.info('[GameScene] card rendering bundle acquired')
-    await this.reportLoading(0.34)
+    await this.reportLoading(0.34, 'Loading fonts')
 
     await this.waitForFonts()
     this.logger?.info('[GameScene] fonts ready')
-    await this.reportLoading(0.38)
+    await this.reportLoading(0.38, 'Preparing outlines')
 
     // Building the shared minion outline field is a GPU readback plus a large
     // CPU transform; pay it during load instead of on the first outline in play.
@@ -275,7 +296,7 @@ export class GameScene extends Scene {
       this.logger?.warn('[GameScene] minion outline prebuild failed', error)
     }
 
-    await this.reportLoading(0.43)
+    await this.reportLoading(0.43, 'Loading shaders')
     try {
       prewarmShatter(this.appInstance.renderer)
     } catch (error) {
@@ -283,10 +304,14 @@ export class GameScene extends Scene {
       this.logger?.warn('[GameScene] shatter warm-up failed', error)
     }
 
-    await this.reportLoading(0.46)
+    await this.reportLoading(0.46, 'Building game board')
     this.view = new GameBoardView({
       boardTexture: this.boardTexture,
-      onLoadProgress: (progress) => this.reportLoading(0.46 + progress * 0.52),
+      onLoadProgress: (progress) =>
+        this.reportLoading(
+          0.46 + progress * 0.52,
+          progress >= 0.4 ? 'Preparing card artwork' : 'Preparing card visuals'
+        ),
       route: matchRoute,
       decks,
       gameAssets,
@@ -534,6 +559,9 @@ export class GameScene extends Scene {
   }
 
   protected onExit(): void {
+    window.removeEventListener('focus', this.recordWindowFocus)
+    window.removeEventListener('blur', this.recordWindowBlur)
+    document.removeEventListener('visibilitychange', this.recordVisibilityChange)
     this.recorder?.finish('abandoned')
     this.expertAiApi?.dispose()
     this.expertAiApi = null

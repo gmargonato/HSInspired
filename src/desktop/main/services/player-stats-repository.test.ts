@@ -6,6 +6,7 @@ import { asClassId, CARD_CATALOG } from '../../../game-rules/content/cards'
 import { premiumUpgradeCost } from '../../../game-rules/progression/arcane-dust'
 import { supportsPremiumFormat } from '../../../game-rules/progression/premium-support'
 import { createSeasonKey } from '../../../game-rules/ranking/constructed-ranking'
+import { seasonArenaWins } from '../../../game-rules/ranking/season-rewards'
 import * as atomicFile from './atomic-file'
 import type { DustRewardRequest } from '../../contracts/ipc/progression'
 import { PlayerStatsRepository } from './player-stats-repository'
@@ -130,7 +131,7 @@ describe('PlayerStatsRepository', () => {
     expect((await reloaded.getProgression()).dust).toBe(25)
     await reloaded.awardArena('new-run', 0, 1)
     const migrated = JSON.parse(await readFile(filePath, 'utf8'))
-    expect(migrated.version).toBe(5)
+    expect(migrated.version).toBe(6)
     expect(migrated.dustRewards).toEqual(saved.dustRewards)
   })
   it('starts every playable class at zero when no file exists', async () => {
@@ -200,7 +201,7 @@ describe('PlayerStatsRepository', () => {
       version: number
       tavernBrawlWins: number
     }
-    expect(persisted).toMatchObject({ version: 5, tavernBrawlWins: 1 })
+    expect(persisted).toMatchObject({ version: 6, tavernBrawlWins: 1 })
   })
 
   it('falls back to zero totals when saved data is malformed', async () => {
@@ -215,6 +216,27 @@ describe('PlayerStatsRepository', () => {
       name.startsWith('player-stats.json.corrupt-')
     )!
     expect(await readFile(join(directory, backup), 'utf8')).toBe('{not valid json')
+  })
+})
+
+describe('Season reward rank tiers', () => {
+  it('maps each numbered boundary and Legend to the agreed Arena tier', () => {
+    const seasonKey = createSeasonKey(new Date())
+    const expected = new Map([
+      [25, 0],
+      [21, 0],
+      [20, 3],
+      [16, 3],
+      [15, 6],
+      [11, 6],
+      [10, 9],
+      [6, 9],
+      [5, 11],
+      [1, 11]
+    ])
+    for (const [rank, wins] of expected)
+      expect(seasonArenaWins({ tier: 'rank', rank, seasonKey })).toBe(wins)
+    expect(seasonArenaWins({ tier: 'legend', legendRank: 999, seasonKey })).toBe(12)
   })
 })
 
@@ -529,7 +551,7 @@ describe('Constructed ladder', () => {
     expect(await reloaded.getProgression()).toEqual(saved.progression)
     await reloaded.recordConstructedResult({ matchId: 'm1', result: 'win' })
     const persisted = JSON.parse(await readFile(filePath, 'utf8'))
-    expect(persisted.version).toBe(5)
+    expect(persisted.version).toBe(6)
     expect(persisted.rank).toEqual({
       tier: 'rank',
       rank: 24,
@@ -557,19 +579,98 @@ describe('Constructed ladder', () => {
     })
   })
 
+  it('saves a previous-season reward and credits it exactly once across reloads', async () => {
+    const { repository, filePath } = await createRepository()
+    await repository.recordWin(asClassId('Mage'))
+    const saved = JSON.parse(await readFile(filePath, 'utf8'))
+    saved.version = 5
+    saved.rank = { tier: 'rank', rank: 5, seasonKey: '2000-01' }
+    delete saved.seasonRewards
+    await writeFile(filePath, JSON.stringify(saved))
+
+    const first = new PlayerStatsRepository(filePath)
+    expect((await first.get()).rank).toMatchObject({ tier: 'rank', rank: 25 })
+    const pending = await first.pendingSeasonReward()
+    expect(pending).toMatchObject({ previousRank: saved.rank, claimed: false })
+    expect(pending?.prizes).toHaveLength(4)
+    expect(await first.pendingSeasonReward()).toEqual(pending)
+    expect(await new PlayerStatsRepository(filePath).pendingSeasonReward()).toEqual(
+      pending
+    )
+
+    const claimed = await first.claimSeasonReward(pending!.id)
+    expect(claimed.claimed).toBe(true)
+    const balance = await first.getProgression()
+    expect(balance.dust + Object.keys(balance.premiumPurchases).length).toBeGreaterThan(
+      0
+    )
+    await new PlayerStatsRepository(filePath).claimSeasonReward(pending!.id)
+    expect(await first.getProgression()).toEqual(balance)
+    expect(await new PlayerStatsRepository(filePath).getProgression()).toEqual(balance)
+    await first.acknowledgeSeasonReward(pending!.id)
+    expect(await new PlayerStatsRepository(filePath).pendingSeasonReward()).toBeNull()
+    await expect(first.claimSeasonReward(pending!.id)).rejects.toThrow('unavailable')
+  })
+
+  it('allows repeated real developer resets after acknowledgment', async () => {
+    const { repository } = await createRepository()
+    for (let index = 0; index < 2; index += 1) {
+      await repository.setRank({
+        tier: 'legend',
+        legendRank: 2,
+        seasonKey: createSeasonKey(new Date())
+      })
+      const reward = await repository.devResetSeason()
+      expect(reward.previousRank).toMatchObject({ tier: 'legend', legendRank: 2 })
+      expect(reward.prizes).toHaveLength(5)
+      expect((await repository.get()).rank).toMatchObject({ tier: 'rank', rank: 25 })
+      await repository.claimSeasonReward(reward.id)
+      await repository.acknowledgeSeasonReward(reward.id)
+    }
+    expect(await repository.pendingSeasonReward()).toBeNull()
+  })
+
+  it('keeps season prizes pending when claim or acknowledgment cannot be saved', async () => {
+    const { repository, filePath } = await createRepository()
+    await repository.setRank({
+      tier: 'rank',
+      rank: 20,
+      seasonKey: createSeasonKey(new Date())
+    })
+    const reward = await repository.devResetSeason()
+    const write = vi
+      .spyOn(atomicFile, 'replaceFileAtomically')
+      .mockRejectedValueOnce(new Error('disk full'))
+    await expect(repository.claimSeasonReward(reward.id)).rejects.toThrow('disk full')
+    expect(await repository.getProgression()).toEqual({ dust: 0, premiumPurchases: {} })
+    expect((await repository.pendingSeasonReward())?.claimed).toBe(false)
+    await repository.claimSeasonReward(reward.id)
+    const credited = await repository.getProgression()
+    write.mockRejectedValueOnce(new Error('disk full'))
+    await expect(repository.acknowledgeSeasonReward(reward.id)).rejects.toThrow(
+      'disk full'
+    )
+    expect(
+      (await new PlayerStatsRepository(filePath).pendingSeasonReward())?.claimed
+    ).toBe(true)
+    await repository.acknowledgeSeasonReward(reward.id)
+    expect(await repository.getProgression()).toEqual(credited)
+  })
+
   it('overrides the rank outright in development and persists the override', async () => {
     const { repository, filePath } = await createRepository()
-    await repository.setRank({ tier: 'legend', legendRank: 2, seasonKey: '2026-09' })
+    const seasonKey = createSeasonKey(new Date())
+    await repository.setRank({ tier: 'legend', legendRank: 2, seasonKey })
     expect((await repository.get()).rank).toEqual({
       tier: 'legend',
       legendRank: 2,
-      seasonKey: '2026-09'
+      seasonKey
     })
     expect(await new PlayerStatsRepository(filePath).get().then((s) => s.rank)).toEqual(
-      { tier: 'legend', legendRank: 2, seasonKey: '2026-09' }
+      { tier: 'legend', legendRank: 2, seasonKey }
     )
-    expect(() =>
-      repository.setRank({ tier: 'rank', rank: 26, seasonKey: '2026-09' })
-    ).toThrow('Invalid constructed rank')
+    expect(() => repository.setRank({ tier: 'rank', rank: 26, seasonKey })).toThrow(
+      'Invalid constructed rank'
+    )
   })
 })

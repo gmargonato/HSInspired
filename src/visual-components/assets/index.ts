@@ -24,6 +24,8 @@ import buttonPlayImage from '@assets/images/ui/main-menu/menu-button-play.png'
 import buttonCollectionImage from '@assets/images/ui/main-menu/menu-button-collection.png'
 import buttonArenaImage from '@assets/images/ui/main-menu/menu-button-arena.png'
 import buttonTavernImage from '@assets/images/ui/main-menu/menu-button-tavern.png'
+import rankResetOverlayImage from '@assets/images/ui/main-menu/rank-reset-overlay.png'
+import collectRewardsRankButtonImage from '@assets/images/ui/main-menu/collect-rewards-rank-button.png'
 import arenaBackgroundImage from '@assets/images/ui/arena/arena-background.png'
 import arenaRewardBoxImage from '@assets/images/ui/arena/reward-box.png'
 import arenaConfirmRewardImage from '@assets/images/ui/arena/arena-confirm-reward.png'
@@ -360,6 +362,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'main-menu'
   ),
   asset(
+    'scene.main-menu.rank-reset-overlay',
+    ASSET_BUNDLE_IDS.mainMenu,
+    'rankResetOverlay',
+    rankResetOverlayImage,
+    1920,
+    1080,
+    'main-menu'
+  ),
+  asset(
+    'scene.main-menu.collect-rewards-rank-button',
+    ASSET_BUNDLE_IDS.mainMenu,
+    'collectRewardsRankButton',
+    collectRewardsRankButtonImage,
+    178,
+    97,
+    'main-menu'
+  ),
+  asset(
     'scene.tavern-brawl.background',
     ASSET_BUNDLE_IDS.tavernBrawl,
     'background',
@@ -393,6 +413,33 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     arenaConfirmRewardImage,
     235,
     127,
+    'arena'
+  ),
+  asset(
+    'scene.arena.ghost-spotlight',
+    ASSET_BUNDLE_IDS.arena,
+    'ghostSpotlight',
+    ghostSpotlightImage,
+    256,
+    256,
+    'arena'
+  ),
+  asset(
+    'scene.arena.ghost-dissolve',
+    ASSET_BUNDLE_IDS.arena,
+    'ghostDissolve',
+    ghostDissolveImage,
+    256,
+    256,
+    'arena'
+  ),
+  asset(
+    'scene.arena.burn-noise',
+    ASSET_BUNDLE_IDS.arena,
+    'burnNoise',
+    burnNoiseImage,
+    512,
+    512,
     'arena'
   ),
   asset(
@@ -2426,6 +2473,15 @@ export const ASSET_DEFINITIONS: readonly AssetDefinition[] = [
     338,
     'game-loading'
   ),
+  asset(
+    'scene.game-loading.noise',
+    ASSET_BUNDLE_IDS.gameLoading,
+    'noise',
+    ghostDissolveImage,
+    256,
+    256,
+    'game-loading'
+  ),
   ...[
     gameBoard1Image,
     gameBoard2Image,
@@ -2493,6 +2549,8 @@ for (const bundle of manifestBundles) {
 }
 
 export interface MainMenuAssets {
+  rankResetOverlay: Texture
+  collectRewardsRankButton: Texture
   dustRound: Texture
   dustTriangle: Texture
   table: Texture
@@ -2532,6 +2590,9 @@ export interface ArenaAssets extends Record<
   (typeof ARENA_KEY_ASSET_KEYS)[number],
   Texture
 > {
+  ghostSpotlight: Texture
+  ghostDissolve: Texture
+  burnNoise: Texture
   rewardBox: Texture
   confirmReward: Texture
   rewardDust: Texture
@@ -2779,6 +2840,7 @@ export interface CardPreviewAssets {
 
 export interface GameLoadingAssets {
   overlay: Texture
+  noise: Texture
 }
 export interface GameBoardAssets {
   board: Texture

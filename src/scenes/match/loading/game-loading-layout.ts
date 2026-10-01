@@ -14,7 +14,15 @@ export const GAME_LOADING_LAYOUT = {
   progress: placement(
     { x: -244, y: 3 },
     { width: 474, height: 46 },
-    { anchor: TOP_LEFT, note: 'Plain fill inside the loading overlay bar well.' }
+    { anchor: TOP_LEFT, note: 'Colored fill inside the loading overlay bar well.' }
   ),
-  progressColor: 0x36b6b0
+  status: placement(
+    { x: -7, y: 26 },
+    { width: 474, height: 46 },
+    { anchor: CENTER, note: 'Belwe status centered over the progress bar.' }
+  ),
+  progressStartColor: 0x4283fa,
+  progressEndColor: 0x8efcff,
+  noiseAlpha: 0.55,
+  noiseTileScale: 0.45
 } as const

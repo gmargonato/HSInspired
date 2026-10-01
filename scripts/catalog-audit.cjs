@@ -1,4 +1,22 @@
 const { createServer } = require('vite')
+const vfxLibrary = require('../config/vfx-templates.json')
+
+function auditVfxBindings(cards) {
+  const ids = new Set(vfxLibrary.templates.map((template) => template.id))
+  let count = 0
+  const visit = (value, cardId) => {
+    if (Array.isArray(value)) return value.forEach((item) => visit(item, cardId))
+    if (!value || typeof value !== 'object') return
+    for (const [key, nested] of Object.entries(value)) {
+      if (key === 'vfx') {
+        if (!ids.has(nested)) throw new Error(`Unknown VFX key ${nested} on ${cardId}`)
+        count += 1
+      } else visit(nested, cardId)
+    }
+  }
+  for (const card of cards) visit(card.effects, card.id)
+  return count
+}
 
 ;(async () => {
   const server = await createServer({
@@ -14,6 +32,10 @@ const { createServer } = require('vite')
     const capabilityModule = await server.ssrLoadModule(
       '/src/game-rules/match/effects/capability.ts'
     )
+    const cardModule = await server.ssrLoadModule(
+      '/src/game-rules/content/cards/card-catalog.ts'
+    )
+    const vfxBindingCount = auditVfxBindings(cardModule.CARD_CATALOG.all)
     inventoryModule.assertCapabilityOwnership()
     const ownershipKeys = new Set(
       inventoryModule.CAPABILITY_OWNERSHIP.map(
@@ -35,6 +57,7 @@ const { createServer } = require('vite')
       JSON.stringify(
         {
           ...inventoryModule.CAPABILITY_INVENTORY,
+          vfxBindingCount,
           runtimeCapabilityCount: capabilityModule.RUNTIME_CAPABILITY_REGISTRY.length
         },
         null,

@@ -2068,6 +2068,7 @@ describe('AI decision overlap', () => {
           order.push('record')
         }),
         recordTiming: vi.fn(),
+        recordPresentation: vi.fn(),
         isCurrent: vi.fn(() => {
           if (mode === 'stale' && state.revision === 1) {
             harness.turnLayer.visible = false
@@ -2162,6 +2163,7 @@ describe('AI decision overlap', () => {
       chooseTurnAction: vi.fn().mockResolvedValue(decision),
       recordExecution: vi.fn(),
       recordTiming: vi.fn(),
+      recordPresentation: vi.fn(),
       isCurrent: () => true,
       isAbandoned: false,
       hasLegalActions: () => false

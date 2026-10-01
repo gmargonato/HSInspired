@@ -11,6 +11,8 @@ export class AiLog {
       ![
         'request-started',
         'decision-timing',
+        'presentation-complete',
+        'window-state',
         'request-progress',
         'request-superseded',
         'response-received',
@@ -95,6 +97,9 @@ export class AiLog {
           'presentationOverlapMs',
           'visibleWaitMs',
           'presentationMs',
+          'focused',
+          'visibilityState',
+          'event',
           'freshContext',
           'currentDecision',
           'extraExchangesUsed',

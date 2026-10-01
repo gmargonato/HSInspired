@@ -275,6 +275,7 @@ const ACTION_FIELDS = new Set([
   'trigger',
   'unlimited',
   'upgradedPower',
+  'vfx',
   'winActions',
   'loseActions',
   'ingredientPool',
@@ -908,6 +909,13 @@ function actionsValue(value: unknown, path: string): void {
     }
     const actionName = actionRecord(record, actionPath)
     validateActionShape(actionName, record, actionPath)
+    if (record['vfx'] !== undefined) {
+      if (actionName !== 'damage' && actionName !== 'destroy')
+        fail(`${actionPath}.vfx`, 'is only supported by damage and destroy actions')
+      const vfx = stringValue(record['vfx'], `${actionPath}.vfx`)
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(vfx))
+        fail(`${actionPath}.vfx`, 'must be a lowercase kebab-case effect key')
+    }
     if (record['damageResolution'] !== undefined) {
       if (actionName !== 'damage') fail(actionPath, 'damageResolution requires damage')
       enumValue(

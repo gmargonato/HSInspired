@@ -270,6 +270,16 @@ export interface EffectDomainEvent {
   readonly correlation?: ResolutionCorrelation
 }
 
+/** One visual cue for an action execution, before its per-target outcomes. */
+export interface EffectVfxEvent {
+  readonly type: 'effect-vfx-started'
+  readonly vfxId: string
+  readonly sourceInstanceId: string
+  readonly controllerId: PlayerId
+  readonly actionPath: string
+  readonly targetInstanceId?: string
+}
+
 /**
  * One concrete trigger frame that passed its runtime checks and is about to
  * resolve.  This is deliberately emitted from the resolver's trigger frame,
@@ -1330,6 +1340,7 @@ export type OpeningMatchEvent =
   | DeathBatchCompletedEvent
   | MinionSummonedEvent
   | EffectDomainEvent
+  | EffectVfxEvent
 
 export interface OpeningAcceptedResult {
   readonly accepted: true

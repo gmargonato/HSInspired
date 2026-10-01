@@ -397,6 +397,12 @@ function buildOptionsMenu(mainWindow: BrowserWindow): MenuItem {
                 tier: 'legend' as const,
                 rank: 2
               })
+          },
+          { type: 'separator' },
+          {
+            label: 'Reset Season',
+            enabled: cachedCurrentSceneId === 'main-menu',
+            click: () => sendDevCommand(mainWindow, { type: 'ranking:reset-season' })
           }
         ]
       },

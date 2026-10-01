@@ -13,6 +13,8 @@ import { createManaHighlightFilter } from './highlight'
 import { PremiumArtworkBreath } from './premium-artwork-breath'
 import { AnimatedOutline, type OutlinePresetName } from './animated-outline'
 import { acquireAuraField, type AuraFieldLease } from './aura-field-cache'
+import { GhostAura } from './ghost-aura'
+import type { ArenaAssets } from '../assets'
 
 /** Retain the expensive silhouette field and compile its shader before navigation. */
 export function prepareMenuOutline(
@@ -83,6 +85,34 @@ export function prepareMenuEffects(renderer: Renderer): void {
     root.destroy({ children: true })
     // Keep the shared shader programs and asset textures alive in Pixi's caches.
     for (const filter of filters) filter.destroy()
+    target.destroy(true)
+  }
+}
+
+/** Compile the reward button's ghost filter and particles during menu startup. */
+export function prepareRewardGhostAura(
+  renderer: Renderer,
+  assets: Pick<
+    ArenaAssets,
+    'confirmReward' | 'burnNoise' | 'ghostDissolve' | 'ghostSpotlight'
+  >
+): void {
+  const root = new Container()
+  const button = new Sprite(assets.confirmReward)
+  button.position.set(32, 32)
+  root.addChild(button)
+  const aura = new GhostAura(button, {
+    silhouette: button,
+    noise: assets.burnNoise,
+    dissolve: assets.ghostDissolve,
+    spotlight: assets.ghostSpotlight
+  })
+  const target = RenderTexture.create({ width: 300, height: 190, resolution: 1 })
+  try {
+    renderer.render({ container: root, target, clear: true })
+  } finally {
+    aura.dispose()
+    root.destroy({ children: true })
     target.destroy(true)
   }
 }

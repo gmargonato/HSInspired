@@ -4,7 +4,8 @@ import { AssetScope } from '../visual-components/assets/asset-scope'
 import { configureCardTexture } from '../visual-components/assets/card-asset-resolver'
 import {
   prepareMenuEffects,
-  prepareMenuOutline
+  prepareMenuOutline,
+  prepareRewardGhostAura
 } from '../visual-components/effects/prepare-menu-effects'
 import type { AuraFieldLease } from '../visual-components/effects/aura-field-cache'
 import type { OutlinePresetName } from '../visual-components/effects/animated-outline'
@@ -73,6 +74,13 @@ export class MenuStartupResources {
           warmMainMenuEffects(renderer, {
             dustRound: assets.dustRound,
             dustTriangle: assets.dustTriangle
+          })
+        } else if (bundle === ASSET_BUNDLE_IDS.arena) {
+          prepareRewardGhostAura(renderer, {
+            confirmReward: assets.confirmReward,
+            burnNoise: assets.burnNoise,
+            ghostDissolve: assets.ghostDissolve,
+            ghostSpotlight: assets.ghostSpotlight
           })
         } else if (bundle === ASSET_BUNDLE_IDS.deckSelection) {
           this.prepareOutline(renderer, assets.playButton, 'play-button')

@@ -58,6 +58,7 @@ export type DevDeckTrackerSortMode = 'cost' | 'alphabetical' | 'draw-order'
 
 export type DevCommand =
   | { readonly type: 'progression:set-dust'; readonly amount: number | 'custom' }
+  | { readonly type: 'ranking:reset-season' }
   | {
       readonly type: 'ranking:set-rank'
       readonly tier: 'rank' | 'legend'
@@ -182,6 +183,7 @@ export function isDevCommand(value: unknown): value is DevCommand {
       rank <= (value.tier === 'rank' ? 25 : 999)
     )
   }
+  if (value.type === 'ranking:reset-season') return true
   if (value.type === 'cards:set-premium') return isPremiumMode(value.mode)
   if (value.type === 'arena:retire') return true
   if (value.type === 'arena:set-score')

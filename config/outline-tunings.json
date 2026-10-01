@@ -13,16 +13,21 @@
     "angle": 0.5,
     "position": 0.2,
     "spread": 1,
-    "cutoff": 0.03,
+    "cutoff": -0.203,
     "falloff": 1,
     "edgeFade": 0.96,
-    "speed": 5,
-    "ray1Density": 8,
-    "ray2Density": 30,
-    "ray2Intensity": 0,
+    "speed": 1.5,
+    "ray1Density": 9.08,
+    "ray2Density": 33,
+    "ray2Intensity": 0.123,
     "seed": 1,
     "hdr": false,
-    "color": [1, 0.9, 0.65, 0.8]
+    "color": [
+      1,
+      0.9,
+      0.65,
+      1
+    ]
   },
   "shatter": {
     "shardCount": 8,

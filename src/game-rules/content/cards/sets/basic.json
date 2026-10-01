@@ -1045,6 +1045,7 @@
         "actions": [
           {
             "action": "damage",
+            "vfx": "fire-missile",
             "target": {
               "controller": "any",
               "type": "character",
@@ -1074,6 +1075,7 @@
         "actions": [
           {
             "action": "damage",
+            "vfx": "fire-blast-enemy-board",
             "target": {
               "controller": "opponent",
               "type": "minion",

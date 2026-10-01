@@ -8,6 +8,7 @@ import {
 } from '../desktop/contracts/ipc/player-stats'
 import { createInitialRankState } from '../game-rules/ranking/constructed-ranking'
 import type { PlayerStatsStore } from './contracts/player-stats-store'
+import type { SeasonRewardReceipt } from '../desktop/contracts/ipc/player-stats'
 
 function getPlayerStatsApi(): PlayerStatsApi {
   if (typeof window === 'undefined' || !window.api?.playerStats) {
@@ -56,6 +57,35 @@ export class PersistentPlayerStatsStore implements PlayerStatsStore {
 
   getRank(): ConstructedRankSnapshot {
     return this.snapshot.rank
+  }
+
+  pendingSeasonReward(): Promise<SeasonRewardReceipt | null> {
+    return this.enqueue(async () => {
+      await this.load()
+      const api = this.apiProvider()
+      this.snapshot = await api.get()
+      return api.pendingSeasonReward()
+    })
+  }
+
+  claimSeasonReward(id: string): Promise<SeasonRewardReceipt> {
+    return this.enqueue(async () => this.apiProvider().claimSeasonReward(id))
+  }
+
+  acknowledgeSeasonReward(id: string): Promise<void> {
+    return this.enqueue(async () => this.apiProvider().acknowledgeSeasonReward(id))
+  }
+
+  devResetSeason(): Promise<SeasonRewardReceipt> {
+    return this.enqueue(async () => {
+      const api = this.apiProvider()
+      if (!api.devResetSeason)
+        throw new Error('Season resets are only available in development')
+      await this.load()
+      const reward = await api.devResetSeason()
+      this.snapshot = await api.get()
+      return reward
+    })
   }
 
   recordWin(classId: ClassId): Promise<number> {

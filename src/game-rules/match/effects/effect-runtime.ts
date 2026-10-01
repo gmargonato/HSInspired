@@ -931,6 +931,23 @@ export class EffectRuntime {
       })
   }
 
+  private emitVfx(
+    frame: EffectFrame,
+    action: Record<string, unknown>,
+    actionPath: string,
+    target?: EntityRef
+  ): void {
+    if (this.deriving || typeof action.vfx !== 'string') return
+    this.events.push({
+      type: 'effect-vfx-started',
+      vfxId: action.vfx,
+      sourceInstanceId: frame.source.instanceId,
+      controllerId: frame.controllerId,
+      actionPath,
+      ...(target ? { targetInstanceId: target.instanceId } : {})
+    })
+  }
+
   /** Records one concrete trigger frame before any of its consequences run. */
   private emitTriggerActivated(
     frame: EffectFrame,
@@ -1867,7 +1884,9 @@ export class EffectRuntime {
     if (this.activeFrame) this.activeFrame.lastEvent = queued
     if (
       this.pendingDamageConsequences &&
-      (queued.type === 'damage-dealt' || queued.type === 'hero-damaged')
+      (queued.type === 'damage-dealt' ||
+        queued.type === 'hero-damaged' ||
+        queued.type === 'divine-shield-lost')
     )
       this.pendingDamageConsequences.push({ event: queued, frame: this.activeFrame })
     else this.resolveEvent(queued)
@@ -3796,7 +3815,6 @@ export class EffectRuntime {
         minion.divineShield = false
         minion.divineShieldConsumed = true
       })
-      this.notifyDivineShieldLost(ref)
       this.emit(frame, 'damage', path, {
         target: ref.instanceId,
         amount: requested,
@@ -3804,6 +3822,7 @@ export class EffectRuntime {
         actualDamage: 0,
         shieldConsumed: true
       })
+      this.notifyDivineShieldLost(ref)
       return 0
     }
     let actualDamage = displayAmount
@@ -7140,6 +7159,8 @@ export class EffectRuntime {
         const randomTarget =
           isRecord(action.target) && action.target.selection === 'random'
         const targets = randomTarget ? [] : this.damageTargets(action, frame)
+        if (!randomTarget) this.emitVfx(frame, action, path, targets[0])
+        let randomVfxEmitted = false
         const randomSplitSpell =
           this.sourceIsSpell(frame) && randomTarget && action.amount === 1
         const hits = randomSplitSpell
@@ -7162,6 +7183,10 @@ export class EffectRuntime {
             const selectedTargets = randomTarget
               ? this.damageTargets(action, frame)
               : targets
+            if (randomTarget && !randomVfxEmitted) {
+              this.emitVfx(frame, action, path, selectedTargets[0])
+              randomVfxEmitted = true
+            }
             if (action.damageResolution === 'per-target') {
               for (const target of selectedTargets)
                 this.runDamageStep(
@@ -7201,8 +7226,10 @@ export class EffectRuntime {
         }
         return
       }
-      case 'destroy':
-        for (const target of this.actionTargets(action, frame)) {
+      case 'destroy': {
+        const targets = this.actionTargets(action, frame)
+        this.emitVfx(frame, action, path, targets[0])
+        for (const target of targets) {
           if (action.storeCardId === true && frame.source.kind === 'minion') {
             const victim = this.currentMinion(target)
             if (victim) {
@@ -7238,6 +7265,7 @@ export class EffectRuntime {
           frame.lastActionTarget = target
         }
         return
+      }
       case 'destroy-all-but-highest-attack':
         for (const player of this.draft.players) {
           const highest = Math.max(

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { CARD_CATALOG } from '../../content/cards'
 import { getMatchLegality, resolveAttack } from './effect-runtime'
 import type { BoardMinion } from '../opening-match-types'
-import { isBoardMinionSleeping } from '../rules/minion-attack-state'
+import {
+  effectiveBoardMinionKeywords,
+  isBoardMinionSleeping
+} from '../rules/minion-attack-state'
 import { enumerateLegalCommands } from '../ai/legal-commands'
 import { canBoardMinionAttack, canHeroAttack, getHeroAttack } from '../opening-match'
 import { createMatchScenario } from '../testing/match-scenario-builder'
@@ -56,6 +60,237 @@ function beginNextTurn(scenario: Scenario, participantId: string, opponentId: st
 }
 
 describe('combat keyword matrix', () => {
+  function shieldScenario(cardId: string) {
+    const scenario = createMatchScenario({ seed: 1002, cardId })
+    scenario.confirmBothMulligans()
+    const [own, enemy] = activePlayers(scenario)
+    scenario.match.dispatch({
+      type: 'dev-set-mana',
+      participantId: own,
+      available: 10,
+      maximum: 10
+    })
+    const play = (id: string, target?: BoardMinion, owner = own) => {
+      scenario.match.dispatch({ type: 'dev-add-card', participantId: own, cardId: id })
+      scenario.match.dispatch({
+        type: 'dev-set-mana',
+        participantId: own,
+        available: 10,
+        maximum: 10
+      })
+      const card = player(scenario, own).hand.find((entry) => entry.cardId === id)!
+      const result = scenario.match.dispatch({
+        type: 'play-card',
+        participantId: own,
+        cardInstanceId: card.instanceId,
+        ...(CARD_CATALOG.require(id).type === 'Minion'
+          ? { position: player(scenario, own).board.length }
+          : {}),
+        ...(target
+          ? {
+              targets: [
+                {
+                  kind: 'minion' as const,
+                  participantId: owner,
+                  instanceId: target.instanceId
+                }
+              ]
+            }
+          : {})
+      })
+      expect(result).toMatchObject({ accepted: true })
+      return result
+    }
+    return { scenario, own, enemy, play }
+  }
+
+  it('removes consumed shields from effective keywords and restores them only on a fresh grant', () => {
+    const { scenario, own, play } = shieldScenario('classic_cruel_taskmaster')
+    const squire = summon(scenario, own, 'classic_argent_squire')
+    play('classic_cruel_taskmaster', squire)
+    const current = () =>
+      player(scenario, own).board.find(
+        (entry) => entry.instanceId === squire.instanceId
+      )!
+    expect(current()).toMatchObject({
+      attack: 3,
+      health: 1,
+      divineShield: false,
+      divineShieldConsumed: true
+    })
+    expect(effectiveBoardMinionKeywords(current())).not.toContain('divine-shield')
+    play('classic_argent_protector', squire)
+    expect(current()).toMatchObject({ divineShield: true, divineShieldConsumed: false })
+    expect(effectiveBoardMinionKeywords(current())).toContain('divine-shield')
+    play('classic_cruel_taskmaster', squire)
+    expect(current()).toMatchObject({ attack: 5, health: 1, divineShield: false })
+  })
+
+  it('records shield absorption before the resulting Bolvar trigger', () => {
+    const { scenario, own, play } = shieldScenario('classic_cruel_taskmaster')
+    const bolvar = summon(
+      scenario,
+      own,
+      'knights_of_the_frozen_throne_bolvar_fireblood'
+    )
+    const squire = summon(scenario, own, 'classic_argent_squire')
+    const result = play('classic_cruel_taskmaster', squire)
+    const damage = result.events.findIndex(
+      (event) => event.type === 'effect-resolved' && event.data?.shieldConsumed === true
+    )
+    const trigger = result.events.findIndex(
+      (event) =>
+        event.type === 'trigger-activated' &&
+        event.source.instanceId === bolvar.instanceId
+    )
+    expect(damage).toBeGreaterThanOrEqual(0)
+    expect(trigger).toBeGreaterThan(damage)
+    expect(
+      player(scenario, own).board.find(
+        (entry) => entry.instanceId === bolvar.instanceId
+      )?.attack
+    ).toBe(bolvar.attack + 2)
+  })
+
+  it('removes all shields with Blood Knight, counts each once, and permits a new grant', () => {
+    const { scenario, own, enemy, play } = shieldScenario('classic_blood_knight')
+    const friendly = summon(scenario, own, 'classic_argent_squire')
+    summon(scenario, enemy, 'classic_argent_squire')
+    play('classic_blood_knight')
+    expect(
+      player(scenario, own).board.find(
+        (entry) => entry.cardId === 'classic_blood_knight'
+      )
+    ).toMatchObject({ attack: 9, health: 9 })
+    expect(player(scenario, own).board[0].divineShield).toBe(false)
+    expect(player(scenario, enemy).board[0].divineShield).toBe(false)
+    play('classic_argent_protector', friendly)
+    expect(player(scenario, own).board[0].divineShield).toBe(true)
+  })
+
+  it('finishes simultaneous area damage before reacting to shield loss', () => {
+    const { scenario, own, play } = shieldScenario('basic_whirlwind')
+    const bolvar = summon(
+      scenario,
+      own,
+      'knights_of_the_frozen_throne_bolvar_fireblood'
+    )
+    summon(scenario, own, 'classic_argent_squire')
+    summon(scenario, own, 'basic_chillwind_yeti')
+    const result = play('basic_whirlwind')
+    const damages = result.events.flatMap((event, index) =>
+      event.type === 'effect-resolved' && event.action === 'damage' ? [index] : []
+    )
+    const trigger = result.events.findIndex(
+      (event) =>
+        event.type === 'trigger-activated' &&
+        event.source.instanceId === bolvar.instanceId
+    )
+    expect(damages).toHaveLength(3)
+    expect(trigger).toBeGreaterThan(Math.max(...damages))
+    expect(player(scenario, own).board[0]).toMatchObject({
+      attack: bolvar.attack + 4,
+      health: bolvar.health,
+      divineShield: false
+    })
+    expect(player(scenario, own).board[2].health).toBe(4)
+  })
+
+  it('silences a shield, then allows a granted shield to absorb damage without damage triggers', () => {
+    const { scenario, own, play } = shieldScenario('classic_silence')
+    const squire = summon(scenario, own, 'classic_argent_squire')
+    const berserker = summon(scenario, own, 'classic_frothing_berserker')
+    play('classic_silence', squire)
+    expect(player(scenario, own).board[0]).toMatchObject({
+      silenced: true,
+      divineShield: false
+    })
+    play('classic_argent_protector', squire)
+    expect(player(scenario, own).board[0].divineShield).toBe(true)
+    play('classic_cruel_taskmaster', squire)
+    expect(player(scenario, own).board[0]).toMatchObject({
+      health: 1,
+      attack: 3,
+      divineShield: false
+    })
+    expect(player(scenario, own).board[1].attack).toBe(berserker.attack)
+  })
+
+  it('does not consume a shield when the incoming damage is zero', () => {
+    const { scenario, own, enemy } = shieldScenario('basic_fireball')
+    const attacker = summon(scenario, own, 'classic_alakir_the_windlord')
+    const defender = summon(scenario, enemy, 'classic_shieldbearer')
+    expect(
+      attack(
+        scenario,
+        own,
+        { kind: 'minion', instanceId: attacker.instanceId },
+        { kind: 'minion', instanceId: defender.instanceId }
+      ).accepted
+    ).toBe(true)
+    expect(player(scenario, own).board[0]).toMatchObject({
+      health: attacker.health,
+      divineShield: true
+    })
+  })
+
+  it.each([
+    'classic_emperor_cobra',
+    'basic_water_elemental',
+    'mean_streets_of_gadgetzan_wickerflame_burnbristle'
+  ])('shield absorption blocks damage consequences from %s', (cardId) => {
+    const { scenario, own, enemy } = shieldScenario('basic_fireball')
+    const attacker = summon(scenario, own, cardId)
+    const defender = summon(scenario, enemy, 'classic_argent_squire')
+    beginNextTurn(scenario, own, enemy)
+    scenario.match.dispatch({ type: 'dev-set-hero', participantId: own, health: 20 })
+    expect(
+      attack(
+        scenario,
+        own,
+        { kind: 'minion', instanceId: attacker.instanceId },
+        { kind: 'minion', instanceId: defender.instanceId }
+      ).accepted
+    ).toBe(true)
+    const survivor = player(scenario, enemy).board[0]
+    expect(survivor).toMatchObject({
+      instanceId: defender.instanceId,
+      health: 1,
+      divineShield: false
+    })
+    expect(survivor.frozenUntilTurn ?? null).toBeNull()
+    expect(player(scenario, own).hero.health).toBe(20)
+  })
+
+  it('immunity prevents damage without spending Divine Shield', () => {
+    const { scenario, own, play } = shieldScenario('classic_bestial_wrath')
+    const beast = summon(scenario, own, 'basic_bloodfen_raptor')
+    play('classic_argent_protector', beast)
+    play('classic_bestial_wrath', beast)
+    play('classic_cruel_taskmaster', beast)
+    expect(player(scenario, own).board[0]).toMatchObject({
+      health: beast.health,
+      divineShield: true,
+      immune: true
+    })
+  })
+
+  it.each(['basic_assassinate', 'basic_polymorph'])(
+    '%s bypasses Divine Shield',
+    (cardId) => {
+      const { scenario, enemy, play } = shieldScenario(cardId)
+      const squire = summon(scenario, enemy, 'classic_argent_squire')
+      play(cardId, squire, enemy)
+      if (cardId === 'basic_assassinate')
+        expect(player(scenario, enemy).board).toHaveLength(0)
+      else
+        expect(player(scenario, enemy).board[0]).toMatchObject({
+          cardId: 'basic_sheep',
+          divineShield: false
+        })
+    }
+  )
+
   it('summons a 1/1 Ooze from Bilefin Tidehunter and enforces its Taunt', () => {
     const scenario = createMatchScenario({
       seed: 1001,

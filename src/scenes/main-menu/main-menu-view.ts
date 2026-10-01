@@ -78,6 +78,7 @@ export class MainMenuView extends Actor {
   private readonly entryMode: MainMenuEntryMode
   private readonly logger: RendererLogger
   private readonly assetScope: AssetScope
+  private seasonRewardBlocked = false
 
   constructor(options: MainMenuViewOptions) {
     super()
@@ -95,6 +96,12 @@ export class MainMenuView extends Actor {
   /** True while a button-initiated destination transition is being prepared. */
   get isDestinationTransitionOpen(): boolean {
     return this.transitionOpened
+  }
+
+  setSeasonRewardBlocked(blocked: boolean): void {
+    this.seasonRewardBlocked = blocked
+    if (!this.transitionOpened)
+      for (const button of this.menuButtonActors) button.setEnabled(!blocked)
   }
 
   /**
@@ -257,7 +264,8 @@ export class MainMenuView extends Actor {
     await this.fadeEffects(1)
     if (this.destroyed) return
     this.transitionOpened = false
-    for (const button of this.menuButtonActors) button.setEnabled(true)
+    for (const button of this.menuButtonActors)
+      button.setEnabled(!this.seasonRewardBlocked)
   }
 
   private fadeEffects(alpha: 0 | 1): Promise<void> {
@@ -352,7 +360,7 @@ export class MainMenuView extends Actor {
     route: MainMenuRoute,
     destinationName: string
   ): Promise<void> {
-    if (this.transitionOpened) return
+    if (this.transitionOpened || this.seasonRewardBlocked) return
     this.transitionOpened = true
 
     // Keep the buttons on the rotating menu face, but prevent further clicks.

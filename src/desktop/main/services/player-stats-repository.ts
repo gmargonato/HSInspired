@@ -1,6 +1,6 @@
 import { replaceFileAtomically } from './atomic-file'
 import { SerialOperationQueue } from './serial-operation-queue'
-import { randomUUID } from 'node:crypto'
+import { randomInt, randomUUID } from 'node:crypto'
 import { readFile, rename } from 'node:fs/promises'
 import { CARD_CATALOG } from '../../../game-rules/content/cards'
 import {
@@ -12,6 +12,7 @@ import {
   parseArenaRewardReceipt,
   parseArenaRunId
 } from '../../contracts/ipc/arena-rewards'
+import { seasonArenaWins } from '../../../game-rules/ranking/season-rewards'
 import {
   premiumUpgradeCost,
   WIN_DUST_REWARD
@@ -32,10 +33,12 @@ import {
   parseConstructedRankSnapshot,
   parsePlayableClassId,
   parsePlayerStatsSnapshot,
+  parseSeasonRewardReceipt,
   type ClassWinTotals,
   type ConstructedRankSnapshot,
   type ConstructedRankResultRequest,
-  type PlayerStatsSnapshot
+  type PlayerStatsSnapshot,
+  type SeasonRewardReceipt
 } from '../../contracts/ipc/player-stats'
 import {
   applyConstructedResult,
@@ -45,7 +48,7 @@ import {
 } from '../../../game-rules/ranking/constructed-ranking'
 import type { ClassId, DeckClass } from '../../../game-rules/content/cards'
 
-const PLAYER_STATS_FILE_VERSION = 5
+const PLAYER_STATS_FILE_VERSION = 6
 
 interface PersistedPlayerStats {
   readonly version: typeof PLAYER_STATS_FILE_VERSION
@@ -56,6 +59,7 @@ interface PersistedPlayerStats {
   readonly arenaRewards: Readonly<Record<string, ArenaRewardReceipt>>
   readonly rank: ConstructedRankState
   readonly rankResults: Readonly<Record<string, ConstructedRankResultRequest['result']>>
+  readonly seasonRewards: readonly SeasonRewardReceipt[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -85,6 +89,7 @@ export class PlayerStatsRepository {
   private arenaRewards: Record<string, ArenaRewardReceipt> = {}
   private rankState: ConstructedRankState = createInitialRankState()
   private rankResults: Record<string, ConstructedRankResultRequest['result']> = {}
+  private seasonRewards: SeasonRewardReceipt[] = []
   private snapshot: PlayerStatsSnapshot = {
     winsByClass: createEmptyClassWinTotals(),
     tavernBrawlWins: 0,
@@ -210,6 +215,108 @@ export class PlayerStatsRepository {
     })
   }
 
+  async pendingSeasonReward(): Promise<SeasonRewardReceipt | null> {
+    return this.mutations.enqueue(async () => {
+      await this.ensureLoaded()
+      await this.refreshSeason()
+      return this.seasonRewards[0]
+        ? parseSeasonRewardReceipt(this.seasonRewards[0])
+        : null
+    })
+  }
+
+  claimSeasonReward(id: string): Promise<SeasonRewardReceipt> {
+    parseArenaRunId(id)
+    return this.mutations.enqueue(async () => {
+      await this.ensureLoaded()
+      const reward = this.seasonRewards[0]
+      if (!reward || reward.id !== id) throw new Error('Season reward is unavailable.')
+      if (reward.claimed) return parseSeasonRewardReceipt(reward)
+      const purchases = { ...this.progression.premiumPurchases }
+      let dust = this.progression.dust
+      for (const prize of reward.prizes) {
+        if (prize.kind === 'dust') dust += prize.amount
+        else purchases[prize.cardId] = prize.refundValue
+      }
+      const progression = { dust: parseDustAmount(dust), premiumPurchases: purchases }
+      const claimed = { ...reward, claimed: true }
+      const seasonRewards = [claimed, ...this.seasonRewards.slice(1)]
+      await this.persist(
+        this.snapshot,
+        progression,
+        this.dustRewards,
+        this.arenaRewards,
+        this.rankState,
+        this.rankResults,
+        seasonRewards
+      )
+      this.progression = progression
+      this.seasonRewards = seasonRewards
+      return parseSeasonRewardReceipt(claimed)
+    })
+  }
+
+  acknowledgeSeasonReward(id: string): Promise<void> {
+    parseArenaRunId(id)
+    return this.mutations.enqueue(async () => {
+      await this.ensureLoaded()
+      const reward = this.seasonRewards[0]
+      if (!reward || reward.id !== id || !reward.claimed)
+        throw new Error('Season reward has not been claimed.')
+      const remaining = this.seasonRewards.slice(1)
+      await this.persist(
+        this.snapshot,
+        this.progression,
+        this.dustRewards,
+        this.arenaRewards,
+        this.rankState,
+        this.rankResults,
+        remaining
+      )
+      this.seasonRewards = remaining
+    })
+  }
+
+  /** Development-only real reset; each invocation adds another reward. */
+  devResetSeason(): Promise<SeasonRewardReceipt> {
+    return this.mutations.enqueue(async () => {
+      await this.ensureLoaded()
+      await this.refreshSeason()
+      const reward = this.createSeasonReward(this.rankState)
+      const next = createInitialRankState()
+      const snapshot = { ...this.snapshot, rank: cloneRank(next) }
+      const rewards = [...this.seasonRewards, reward]
+      await this.persist(
+        snapshot,
+        this.progression,
+        this.dustRewards,
+        this.arenaRewards,
+        next,
+        this.rankResults,
+        rewards
+      )
+      this.rankState = next
+      this.snapshot = snapshot
+      this.seasonRewards = rewards
+      return parseSeasonRewardReceipt(reward)
+    })
+  }
+
+  private createSeasonReward(rank: ConstructedRankState): SeasonRewardReceipt {
+    const owned = { ...this.progression.premiumPurchases }
+    for (const reward of this.seasonRewards)
+      for (const prize of reward.prizes)
+        if (prize.kind === 'premium') owned[prize.cardId] = prize.refundValue
+    const id = randomUUID()
+    const { prizes } = createArenaRewards(
+      id,
+      seasonArenaWins(rank),
+      owned,
+      createSeededRng(randomInt(0, 0x100000000))
+    )
+    return { id, previousRank: cloneRank(rank), prizes, claimed: false }
+  }
+
   /**
    * Applies one constructed match result to the ladder. Results are
    * idempotent: replaying the same match id never changes the rank again.
@@ -323,16 +430,20 @@ export class PlayerStatsRepository {
   private async refreshSeason(): Promise<void> {
     const next = applySeasonReset(this.rankState)
     if (next === this.rankState) return
+    const reward = this.createSeasonReward(this.rankState)
+    const seasonRewards = [...this.seasonRewards, reward]
     await this.persist(
       this.snapshot,
       this.progression,
       this.dustRewards,
       this.arenaRewards,
       next,
-      this.rankResults
+      this.rankResults,
+      seasonRewards
     )
     this.rankState = next
     this.snapshot = { ...this.snapshot, rank: cloneRank(next) }
+    this.seasonRewards = seasonRewards
   }
 
   private async ensureLoaded(): Promise<void> {
@@ -370,12 +481,13 @@ export class PlayerStatsRepository {
           parsed.version !== 2 &&
           parsed.version !== 3 &&
           parsed.version !== 4 &&
+          parsed.version !== 5 &&
           parsed.version !== PLAYER_STATS_FILE_VERSION)
       ) {
         throw new Error('Unsupported player stats version')
       }
       const rank =
-        parsed.version === PLAYER_STATS_FILE_VERSION
+        parsed.version === 5 || parsed.version === PLAYER_STATS_FILE_VERSION
           ? parseConstructedRankSnapshot(parsed.rank)
           : createInitialRankState()
       this.snapshot = parsePlayerStatsSnapshot({
@@ -387,6 +499,7 @@ export class PlayerStatsRepository {
       if (
         parsed.version === 3 ||
         parsed.version === 4 ||
+        parsed.version === 5 ||
         parsed.version === PLAYER_STATS_FILE_VERSION
       ) {
         const progression = parseProgressionSnapshot(parsed.progression)
@@ -405,7 +518,11 @@ export class PlayerStatsRepository {
         this.progression = progression
         this.dustRewards = receipts
       }
-      if (parsed.version === 4 || parsed.version === PLAYER_STATS_FILE_VERSION) {
+      if (
+        parsed.version === 4 ||
+        parsed.version === 5 ||
+        parsed.version === PLAYER_STATS_FILE_VERSION
+      ) {
         if (!isRecord(parsed.arenaRewards)) throw new Error('Invalid Arena receipts.')
         const receipts: Record<string, ArenaRewardReceipt> = {}
         for (const [id, value] of Object.entries(parsed.arenaRewards)) {
@@ -415,7 +532,7 @@ export class PlayerStatsRepository {
         }
         this.arenaRewards = receipts
       }
-      if (parsed.version === PLAYER_STATS_FILE_VERSION) {
+      if (parsed.version === 5 || parsed.version === PLAYER_STATS_FILE_VERSION) {
         if (!isRecord(parsed.rankResults)) {
           throw new Error('Invalid constructed rank receipts')
         }
@@ -427,6 +544,11 @@ export class PlayerStatsRepository {
           rankReceipts[id] = parseConstructedMatchResult(result)
         }
         this.rankResults = rankReceipts
+      }
+      if (parsed.version === PLAYER_STATS_FILE_VERSION) {
+        if (!Array.isArray(parsed.seasonRewards))
+          throw new Error('Invalid season rewards.')
+        this.seasonRewards = parsed.seasonRewards.map(parseSeasonRewardReceipt)
       }
     } catch (error) {
       // Future-version saves must not be replaced by an older application.
@@ -447,6 +569,7 @@ export class PlayerStatsRepository {
       this.progression = { dust: 0, premiumPurchases: {} }
       this.dustRewards = {}
       this.arenaRewards = {}
+      this.seasonRewards = []
     }
     this.loaded = true
   }
@@ -462,7 +585,8 @@ export class PlayerStatsRepository {
     arenaRewards = this.arenaRewards,
     rank: ConstructedRankState = this.rankState,
     rankResults: Readonly<Record<string, ConstructedRankResultRequest['result']>> = this
-      .rankResults
+      .rankResults,
+    seasonRewards: readonly SeasonRewardReceipt[] = this.seasonRewards
   ): Promise<void> {
     const payload: PersistedPlayerStats = {
       version: PLAYER_STATS_FILE_VERSION,
@@ -472,7 +596,8 @@ export class PlayerStatsRepository {
       dustRewards,
       arenaRewards,
       rank,
-      rankResults
+      rankResults,
+      seasonRewards
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
     await replaceFileAtomically(

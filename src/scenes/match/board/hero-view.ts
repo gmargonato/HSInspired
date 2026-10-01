@@ -44,6 +44,7 @@ const HERO_REPLACEMENT_FLIP = {
 
 interface StatGroup {
   readonly group: Container
+  readonly badge: Sprite
   readonly value: Text
 }
 
@@ -72,7 +73,7 @@ function createStatGroup(
   valueLabel.position.set(0, 0)
   valueLabel.label = `${label}-value`
   group.addChild(valueLabel)
-  return { group, value: valueLabel }
+  return { group, badge, value: valueLabel }
 }
 
 function setEventModeNone(container: Container): void {
@@ -175,6 +176,37 @@ export class HeroView extends Container {
     this.armorGroup.visible = false
     this.addChild(this.armorGroup)
 
+    // Bake the physical portrait and badges once, then reuse the texture as the
+    // hero moves. The frame's alpha preserves its arched top and squared base.
+    const surfaces = [this.frame, attack.badge, health.badge, armor.badge]
+    this.shadow.silhouette = {
+      revision: 0,
+      create: () => {
+        const body = new Container()
+        body.label = 'hero.shadow-silhouette'
+        for (const source of surfaces) {
+          if (!source.visible || !source.parent?.visible) continue
+          const copy = new Sprite(source.texture)
+          copy.label = `${source.label}.shadow-surface`
+          if (source === this.frame) {
+            // The replacement animation briefly scales the live frame to zero.
+            // Keep its baked footprint at the authored portrait placement.
+            applyAnchoredPlacement(copy, HERO_LAYOUT.frame)
+          } else {
+            copy.anchor.copyFrom(source.anchor)
+            source.updateLocalTransform()
+            const transform = source.localTransform.clone()
+            source.parent.updateLocalTransform()
+            transform.prepend(source.parent.localTransform)
+            copy.setFromMatrix(transform)
+          }
+          copy.tint = 0x000000
+          body.addChild(copy)
+        }
+        return body
+      }
+    }
+
     // Use the hero-frame alpha as the outline silhouette. A generic oval makes
     // heroes read like minions, while this preserves the portrait's arched top
     // and squared base.
@@ -215,6 +247,7 @@ export class HeroView extends Container {
 
   setAttack(attack: number): void {
     this.attackLabel.text = String(attack)
+    if (this.attackGroup.visible !== attack > 0) this.shadow.silhouette!.revision++
     this.attackGroup.visible = attack > 0
   }
 
@@ -229,6 +262,8 @@ export class HeroView extends Container {
     this.healthLabel.text = String(health)
     this.setHealthColor(health)
     this.armorLabel.text = String(armor)
+    if (this.armorGroup.visible !== (this.healthVisible && armor > 0))
+      this.shadow.silhouette!.revision++
     this.armorGroup.visible = this.healthVisible && armor > 0
   }
 
@@ -237,6 +272,7 @@ export class HeroView extends Container {
     this.frame.texture = texture
     this.outlineProxy.texture = texture
     this.targetingOutlineProxy.texture = texture
+    this.shadow.silhouette!.revision++
   }
 
   /** Horizontally flips only the portrait frame, swapping identity edge-on. */
@@ -289,8 +325,11 @@ export class HeroView extends Container {
   /** Controls whether the health badge is shown independently of its value. */
   setHealthVisible(visible: boolean): void {
     this.healthVisible = visible
+    if (this.healthGroup.visible !== visible) this.shadow.silhouette!.revision++
     this.healthGroup.visible = visible
-    this.armorGroup.visible = visible && Number(this.armorLabel.text) > 0
+    const armorVisible = visible && Number(this.armorLabel.text) > 0
+    if (this.armorGroup.visible !== armorVisible) this.shadow.silhouette!.revision++
+    this.armorGroup.visible = armorVisible
   }
 
   private setHealthColor(health: number): void {

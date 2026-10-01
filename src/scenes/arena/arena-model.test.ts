@@ -14,8 +14,8 @@ import type {
   DeckPresentationAssets,
   SharedUIAssets
 } from '../../visual-components/assets'
-import { ArenaRewardsView } from './arena-rewards-view'
-import { arenaRewardPosition } from './arena-rewards-layout'
+import { ArenaRewardsView } from '../../visual-components/cards/reward-prizes-view'
+import { arenaRewardPosition } from '../../visual-components/cards/reward-prizes-layout'
 import { CardAssetResolver } from '../../visual-components/assets/card-asset-resolver'
 import { CardView } from '../../visual-components/cards/card-view'
 import type { ArenaAssets } from '../../visual-components/assets'
@@ -27,6 +27,20 @@ import {
   type ArenaRunSnapshot
 } from '../../game-rules'
 import { buildArenaDeckEntries, buildArenaManaCurve } from './arena-model'
+
+vi.mock('../../visual-components/effects/ghost-aura', () => ({
+  GHOST_DISAPPEARANCE_SECONDS: 1.8,
+  GhostAura: class {
+    constructor(private readonly target: Container) {}
+    setEnabled(enabled: boolean): void {
+      this.target.visible = enabled
+    }
+    disappear(): void {
+      this.target.visible = false
+    }
+    dispose(): void {}
+  }
+}))
 
 function run(cards: Readonly<Record<string, number>>): ArenaRunSnapshot {
   const timestamp = new Date(0).toISOString()
@@ -81,7 +95,10 @@ describe('Arena reward overlay', () => {
   const assets = {
     rewardBox: Texture.WHITE,
     rewardDust: Texture.WHITE,
-    confirmReward: Texture.WHITE
+    confirmReward: Texture.WHITE,
+    burnNoise: Texture.WHITE,
+    ghostDissolve: Texture.WHITE,
+    ghostSpotlight: Texture.WHITE
   } as ArenaAssets
   const views: ArenaRewardsView[] = []
   const event = {
@@ -128,21 +145,41 @@ describe('Arena reward overlay', () => {
     }
   })
 
-  it('reveals dust only once and allows Confirm with unopened boxes', async () => {
+  it('reveals dust only once and gates Confirm until every box is opened', async () => {
     const confirm = vi.fn().mockResolvedValue(undefined)
     const view = new ArenaRewardsView(receipt, assets, confirm, vi.fn())
     views.push(view)
     const box = view.getChildByLabel('arena.reward-box.0', true) as Sprite
+    const button = view.getChildByLabel('arena.reward-confirm')!
+    expect(button.visible).toBe(false)
+    button.emit('pointertap', event)
+    expect(confirm).not.toHaveBeenCalled()
     expect(box.anchor.x).toBe(0.5)
     box.emit('pointertap', event)
     box.emit('pointertap', event)
     expect(view.getChildrenByLabel('arena.reward-prize.0', true)).toHaveLength(1)
-    const unopened = new ArenaRewardsView(receipt, assets, confirm, vi.fn())
-    views.push(unopened)
-    unopened.getChildByLabel('arena.reward-confirm')!.emit('pointertap', event)
+    expect(button.visible).toBe(true)
+    button.emit('pointertap', event)
     await flush()
     expect(confirm).toHaveBeenCalledTimes(1)
-    expect(unopened.getChildByLabel('arena.reward-prize.0', true)).toBeNull()
+  })
+
+  it('waits for every reward in a multi-box receipt', () => {
+    const confirm = vi.fn().mockResolvedValue(undefined)
+    const view = new ArenaRewardsView(
+      { ...receipt, prizes: [{ kind: 'dust', amount: 15 }, { kind: 'dust', amount: 25 }] },
+      assets,
+      confirm,
+      vi.fn()
+    )
+    views.push(view)
+    const button = view.getChildByLabel('arena.reward-confirm')!
+    view.getChildByLabel('arena.reward-box.0', true)!.emit('pointertap', event)
+    expect(button.visible).toBe(false)
+    button.emit('pointertap', event)
+    expect(confirm).not.toHaveBeenCalled()
+    view.getChildByLabel('arena.reward-box.1', true)!.emit('pointertap', event)
+    expect(button.visible).toBe(true)
   })
 
   it('retains the overlay for acknowledgement retries', async () => {
@@ -154,6 +191,7 @@ describe('Arena reward overlay', () => {
     const view = new ArenaRewardsView(receipt, assets, confirm, onError)
     views.push(view)
     const button = view.getChildByLabel('arena.reward-confirm')!
+    view.getChildByLabel('arena.reward-box.0', true)!.emit('pointertap', event)
     button.emit('pointertap', event)
     await flush()
     expect(onError).toHaveBeenCalledOnce()

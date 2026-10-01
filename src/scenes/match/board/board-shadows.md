@@ -27,14 +27,16 @@ The registry contains physical roots only and releases them on destruction. The
 match samples only visible casters belonging to its gameplay root; it never scans
 their artwork children or measures live bounds each frame. Each shadow layer lazily
 bakes two shared primitive textures, with blur and transparent edge padding.
-Board minions instead supply an offstage physical silhouette: filled portrait,
-frame, Taunt, legendary decoration, Frozen ice, stat badges and solid ability
-markers. Magical overlays, numbers, sleeping Zs, glows and pulses are excluded.
-Each visible minion caches its own texture (256 pixels along the longest body
-dimension, plus blur padding). Bounds measurement and baking happen only on first
-use or a silhouette revision, such as toggling Taunt or changing premium frames.
+Heroes and board minions instead supply offstage physical silhouettes. Heroes
+include the portrait frame and visible stat badges; minions include the filled
+portrait, frame, Taunt, legendary decoration, Frozen ice, stat badges and solid
+ability markers. Magical overlays, numbers, sleeping Zs, glows and pulses are
+excluded.
+Each visible hero and minion caches its own texture (256 pixels along the longest
+body dimension, plus blur padding). Bounds measurement and baking happen only on
+first use or a silhouette revision, such as toggling Taunt or changing frames.
 Movement and stat-number changes reuse the texture. Replaced textures are destroyed;
-hidden/removed minions release their caches on the next shadow update.
+hidden/removed pieces release their caches on the next shadow update.
 Ordinary shadows use sprites; perspective cards use a small 10x10 mesh sharing
 the shared primitive textures. There are no live blur filters,
 continuous offscreen passes, or extra tickers. Scene update drives the layer, so

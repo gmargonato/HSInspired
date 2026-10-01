@@ -11,13 +11,19 @@ import {
   LEGEND_TOP_RANK,
   type ConstructedMatchResult
 } from '../../../game-rules/ranking/constructed-ranking'
+import type { ArenaReward } from '../../../game-rules/arena/arena-rewards'
+import { parseArenaRewardReceipt, parseArenaRunId } from './arena-rewards'
 
 export const PLAYER_STATS_IPC_CHANNELS = {
   get: 'player-stats:get',
   recordWin: 'player-stats:record-win',
   recordTavernBrawlWin: 'player-stats:record-tavern-brawl-win',
   recordConstructedResult: 'player-stats:record-constructed-result',
-  devSetRank: 'player-stats:dev-set-rank'
+  devSetRank: 'player-stats:dev-set-rank',
+  pendingSeasonReward: 'player-stats:pending-season-reward',
+  claimSeasonReward: 'player-stats:claim-season-reward',
+  acknowledgeSeasonReward: 'player-stats:acknowledge-season-reward',
+  devResetSeason: 'player-stats:dev-reset-season'
 } as const
 
 export type ClassWinTotals = Readonly<Record<DeckClass, number>>
@@ -38,6 +44,28 @@ export type ConstructedRankSnapshot =
       readonly seasonKey: string
     }
 
+export interface SeasonRewardReceipt {
+  readonly id: string
+  readonly previousRank: ConstructedRankSnapshot
+  readonly prizes: readonly ArenaReward[]
+  readonly claimed: boolean
+}
+
+export function parseSeasonRewardReceipt(value: unknown): SeasonRewardReceipt {
+  if (!value || typeof value !== 'object') throw new Error('Invalid season reward.')
+  const receipt = value as Record<string, unknown>
+  const id = parseArenaRunId(receipt.id)
+  const previousRank = parseConstructedRankSnapshot(receipt.previousRank)
+  if (typeof receipt.claimed !== 'boolean')
+    throw new Error('Invalid season reward claim.')
+  const { prizes } = parseArenaRewardReceipt({
+    runId: id,
+    wins: 0,
+    prizes: receipt.prizes
+  })
+  return { id, previousRank, prizes, claimed: receipt.claimed }
+}
+
 export interface ConstructedRankResultRequest {
   readonly matchId: string
   readonly result: ConstructedMatchResult
@@ -56,8 +84,12 @@ export interface PlayerStatsApi {
   recordConstructedResult(
     request: ConstructedRankResultRequest
   ): Promise<PlayerStatsSnapshot>
+  pendingSeasonReward(): Promise<SeasonRewardReceipt | null>
+  claimSeasonReward(id: string): Promise<SeasonRewardReceipt>
+  acknowledgeSeasonReward(id: string): Promise<void>
   /** Exposed only in development; the main process independently checks dev mode. */
   devSetRank?(rank: ConstructedRankSnapshot): Promise<PlayerStatsSnapshot>
+  devResetSeason?(): Promise<SeasonRewardReceipt>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

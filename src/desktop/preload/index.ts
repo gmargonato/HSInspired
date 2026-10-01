@@ -70,6 +70,7 @@ import {
   parseConstructedRankSnapshot,
   parsePlayableClassId,
   parsePlayerStatsSnapshot,
+  parseSeasonRewardReceipt,
   type ConstructedRankResultRequest,
   type ConstructedRankSnapshot,
   type PlayerStatsApi,
@@ -373,6 +374,29 @@ const api = {
           PLAYER_STATS_IPC_CHANNELS.recordConstructedResult,
           parseConstructedRankResultRequest(request)
         )
+      ),
+    pendingSeasonReward: async () => {
+      const reward = await ipcRenderer.invoke(
+        PLAYER_STATS_IPC_CHANNELS.pendingSeasonReward
+      )
+      return reward === null ? null : parseSeasonRewardReceipt(reward)
+    },
+    claimSeasonReward: async (id: string) =>
+      parseSeasonRewardReceipt(
+        await ipcRenderer.invoke(
+          PLAYER_STATS_IPC_CHANNELS.claimSeasonReward,
+          parseArenaRunId(id)
+        )
+      ),
+    acknowledgeSeasonReward: async (id: string) => {
+      await ipcRenderer.invoke(
+        PLAYER_STATS_IPC_CHANNELS.acknowledgeSeasonReward,
+        parseArenaRunId(id)
+      )
+    },
+    devResetSeason: async () =>
+      parseSeasonRewardReceipt(
+        await ipcRenderer.invoke(PLAYER_STATS_IPC_CHANNELS.devResetSeason)
       ),
     devSetRank: async (rank: ConstructedRankSnapshot): Promise<PlayerStatsSnapshot> =>
       parsePlayerStatsSnapshot(

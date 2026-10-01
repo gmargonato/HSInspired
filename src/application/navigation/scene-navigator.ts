@@ -95,7 +95,14 @@ export type DevSceneFactory = (request: DevSceneRequest) => Promise<Scene>
 
 const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
   'main-menu': (_request, dependencies) =>
-    new MainMenuScene(dependencies.router, 'closed', dependencies.services.logger),
+    new MainMenuScene(
+      dependencies.router,
+      'closed',
+      dependencies.services.logger,
+      dependencies.services.playerStatsStore,
+      dependencies.services.progressionStore,
+      dependencies.services.dialogs
+    ),
   'deck-selection': (_request, dependencies) =>
     new DeckSelectionScene(
       dependencies.services.deckStore,
@@ -317,6 +324,7 @@ export class SceneNavigator implements SceneRouter {
   /** Handles settings-only Escape presses without taking over contextual overlays. */
   requestSettingsToggle(): boolean {
     const current = this.sceneManager.current
+    if (current instanceof MainMenuScene && current.hasOpenSeasonReward) return false
     let operation: (() => Promise<unknown>) | null = null
 
     if (current instanceof MenuSettingsScene || current instanceof GameSettingsScene) {
@@ -457,7 +465,10 @@ export class SceneNavigator implements SceneRouter {
         return new MainMenuScene(
           this,
           route.entryMode ?? 'closed',
-          this.services.logger
+          this.services.logger,
+          this.services.playerStatsStore,
+          this.services.progressionStore,
+          this.services.dialogs
         )
       case 'deck-selection':
         return new DeckSelectionScene(

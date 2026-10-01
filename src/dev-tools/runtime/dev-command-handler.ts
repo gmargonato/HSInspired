@@ -8,6 +8,7 @@ import { CollectionScene } from '../../scenes/collection/collection-scene'
 import { GameScene } from '../../scenes/match/game-scene'
 import { ArenaScene } from '../../scenes/arena/arena-scene'
 import { DeckSelectionScene } from '../../scenes/deck-selection/deck-selection-scene'
+import { MainMenuScene } from '../../scenes/main-menu/main-menu-scene'
 import { createSeasonKey } from '../../game-rules/ranking/constructed-ranking'
 import type { ConstructedRankSnapshot } from '../../desktop/contracts/ipc/player-stats'
 import {
@@ -90,6 +91,20 @@ export function installDevCommandHandler(
         .catch((error) => {
           logger.error('[DevMenu] failed to set the constructed rank', error)
           reportError('Could not set the rank. Please try again.')
+        })
+        .finally(() => {
+          rankCommandPending = false
+        })
+      return
+    }
+    if (command.type === 'ranking:reset-season') {
+      if (rankCommandPending || !(sceneManager.current instanceof MainMenuScene)) return
+      rankCommandPending = true
+      void sceneManager.current
+        .devResetSeason()
+        .catch((error) => {
+          logger.error('[DevMenu] failed to reset the constructed season', error)
+          reportError('Could not reset the season. Please try again.')
         })
         .finally(() => {
           rankCommandPending = false

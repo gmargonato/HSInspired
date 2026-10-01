@@ -41,7 +41,7 @@ import { Button } from '../../visual-components/controls/button'
 import { applyAnchoredPlacement, applyPlacement } from '../../visual-components/layout'
 import { ARENA_LAYOUT } from './arena-layout'
 import { buildArenaDeckEntries, buildArenaManaCurve } from './arena-model'
-import { ArenaRewardsView } from './arena-rewards-view'
+import { ArenaRewardsView } from '../../visual-components/cards/reward-prizes-view'
 import {
   createCardAddFlightPath,
   resolveCardAddFlightPoint,
@@ -322,15 +322,19 @@ export class ArenaView extends Actor {
     }
     if (enable) this.setEnabled(true)
     if (snapshot.rewards) {
+      let acknowledged: ArenaRunSnapshot | null = null
       this.rewardView = new ArenaRewardsView(
         snapshot.rewards,
         this.assets,
         async () => {
           await this.callbacks.onRewardsSaved?.()
-          const next = await this.store.acknowledgeRewards(snapshot.runId)
-          if (!this.disposed) await this.render(next)
+          acknowledged = await this.store.acknowledgeRewards(snapshot.runId)
         },
-        (message, error) => this.callbacks.onError?.(message, error)
+        (message, error) => this.callbacks.onError?.(message, error),
+        'arena',
+        async () => {
+          if (!this.disposed && acknowledged) await this.render(acknowledged)
+        }
       )
       this.addChild(this.rewardView)
     }

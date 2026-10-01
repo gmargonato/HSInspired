@@ -933,6 +933,7 @@
         "actions": [
           {
             "action": "damage",
+            "vfx": "fire-blast-all-characters",
             "target": {
               "controller": "any",
               "type": "character",
@@ -2628,6 +2629,7 @@
         "actions": [
           {
             "action": "destroy",
+            "vfx": "fire-blast-both-boards",
             "target": {
               "controller": "any",
               "type": "minion",

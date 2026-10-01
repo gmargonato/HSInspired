@@ -25,6 +25,11 @@ describe('PersistentPlayerStatsStore', () => {
       rank: { tier: 'rank', rank: 25, seasonKey: '2026-09' }
     }
     const api: PlayerStatsApi = {
+      pendingSeasonReward: async () => null,
+      claimSeasonReward: async () => {
+        throw new Error('No season reward')
+      },
+      acknowledgeSeasonReward: async () => undefined,
       get: async () => {
         getCalls += 1
         return snapshot

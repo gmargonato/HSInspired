@@ -50,6 +50,8 @@ import type {
 import type { GameRoute } from '../../../application/navigation/game-route'
 import { dispatchDevMatchCommand } from '../tools/dev-match-command-dispatch'
 import { eventPresentationPolicy } from '../presentation/event-presentation-policy'
+import { MatchVfxPresenter } from '../presentation/match-vfx-presenter'
+import { getVfxTemplate } from '../../../visual-components/effects/vfx-templates'
 import { handDiscardBatch, isHandDiscard } from '../hand/hand-discard-presentation'
 import { summonPresentationBatch } from '../presentation/summon-presentation'
 import {
@@ -413,6 +415,11 @@ export class GameBoardView extends Actor {
   private readonly openingLayer = new Container()
   private readonly openingContent = new Container()
   private readonly travelLayer = new Container()
+  private readonly vfxPresenter: MatchVfxPresenter
+  private recentAoeVfxAction: {
+    readonly path: string
+    readonly sourceId: string
+  } | null = null
   /** Hosts discard flights above the hand, HUD, and summons. */
   private readonly discardFlightLayer = new Container()
   private readonly deckLayer = new Container()
@@ -728,6 +735,7 @@ export class GameBoardView extends Actor {
 
   constructor(private readonly options: GameBoardViewOptions) {
     super()
+    this.vfxPresenter = new MatchVfxPresenter(options.gameAssets, () => this.timeline())
     this.boardPositions = new BoardPositionController(
       { layer: this.localMinionLayer, config: this.localBoardRowConfig() },
       { layer: this.remoteMinionLayer, config: this.remoteBoardRowConfig() },
@@ -988,6 +996,7 @@ export class GameBoardView extends Actor {
     this.summonLayer.eventMode = 'none'
     this.summonLayer.sortableChildren = true
     this.gameplayLayer.addChild(this.summonLayer)
+    this.gameplayLayer.addChild(this.vfxPresenter.layer)
     const createCardPlayAnimation = (): CardPlayAnimation =>
       new CardPlayAnimation(
         options.gameAssets.spellPlayAura,
@@ -3194,6 +3203,10 @@ export class GameBoardView extends Actor {
           this.remoteBackCount = Math.max(0, this.remoteBackCount - 1)
           this.layoutRemoteHand()
         }
+        this.aiController.recordPresentation(
+          decision,
+          performance.now() - presentationStartedAt
+        )
         await this.wait(0.12)
         presentationMs = performance.now() - presentationStartedAt
       }
@@ -3946,6 +3959,9 @@ export class GameBoardView extends Actor {
       case 'effect-resolved':
         await this.presentEffectResolved(event)
         return
+      case 'effect-vfx-started':
+        await this.presentEffectVfx(event)
+        return
       case 'match-ended':
         this.syncTurnControls(this.match.getState())
         await this.presentMatchResult(event)
@@ -4256,11 +4272,15 @@ export class GameBoardView extends Actor {
       if (event.actionPath.startsWith('combat.')) {
         this.combat.beginLatestImpact()
       }
-      await this.wait(
-        event.actionPath.startsWith('combat.')
-          ? RESOLUTION_TIMING.combatImpactPause
-          : RESOLUTION_TIMING.outcomePause
-      )
+      const simultaneousAoe =
+        this.recentAoeVfxAction?.sourceId === event.sourceInstanceId &&
+        event.actionPath.startsWith(`${this.recentAoeVfxAction.path}.hit`)
+      if (!simultaneousAoe)
+        await this.wait(
+          event.actionPath.startsWith('combat.')
+            ? RESOLUTION_TIMING.combatImpactPause
+            : RESOLUTION_TIMING.outcomePause
+        )
       if (event.actionPath.startsWith('combat.')) {
         const returning = this.combat.returnLatestAttacker()
         if (returning) await returning
@@ -4321,6 +4341,39 @@ export class GameBoardView extends Actor {
       })
       await this.wait(RESOLUTION_TIMING.outcomePause)
     }
+  }
+
+  private async presentEffectVfx(
+    event: Extract<OpeningMatchEvent, { type: 'effect-vfx-started' }>
+  ): Promise<void> {
+    const template = getVfxTemplate(event.vfxId)
+    if (!template) {
+      this.logger.warn(`Unknown VFX effect: ${event.vfxId}`)
+      return
+    }
+    this.recentAoeVfxAction =
+      template.family === 'aoe'
+        ? { path: event.actionPath, sourceId: event.sourceInstanceId }
+        : null
+    const pointFor = (instanceId: string): { x: number; y: number } | undefined => {
+      const view = this.findEffectTargetView(instanceId)?.view
+      return view
+        ? this.vfxPresenter.layer.toLocal(view.getGlobalPosition())
+        : undefined
+    }
+    const casterHero = this.heroViews.get(event.controllerId)
+    const source =
+      pointFor(event.sourceInstanceId) ??
+      (casterHero
+        ? this.vfxPresenter.layer.toLocal(casterHero.getGlobalPosition())
+        : undefined)
+    const target = event.targetInstanceId ? pointFor(event.targetInstanceId) : undefined
+    await this.vfxPresenter.play(
+      template,
+      event.controllerId === this.localParticipantId,
+      source,
+      target
+    )
   }
 
   /** Adds only the hover grayscale filter, preserving result filters when present. */
@@ -7982,6 +8035,7 @@ export class GameBoardView extends Actor {
   }
 
   override dispose(): void {
+    this.vfxPresenter.dispose()
     this.artworkWarmup?.dispose()
     this.heroPowerEffects.dispose()
     window.removeEventListener('resize', this.invalidateCanvasBounds)
