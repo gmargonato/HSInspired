@@ -2,15 +2,19 @@ import type { ExpansionId } from '../../game-rules/content/cards'
 import type { CollectibleMode, ManaFilterValue } from './collection-filters'
 import type { CollectionClassFilter, CollectionQueryState } from './collection-query'
 
-/** Owns mutable collection query state independently of Pixi controls. */
-export class CollectionQueryController {
-  private state: CollectionQueryState = {
+export function defaultCollectionQuery(): CollectionQueryState {
+  return {
     classFilter: null,
     searchQuery: '',
     manaFilter: null,
     hiddenExpansionIds: [],
     collectibleMode: 'collectible'
   }
+}
+
+/** Owns mutable collection query state independently of Pixi controls. */
+export class CollectionQueryController {
+  private state: CollectionQueryState = defaultCollectionQuery()
 
   get classFilter(): CollectionClassFilter {
     return this.state.classFilter
@@ -63,5 +67,9 @@ export class CollectionQueryController {
 
   snapshot(): CollectionQueryState {
     return this.state
+  }
+
+  restore(state: CollectionQueryState): void {
+    this.state = { ...state, hiddenExpansionIds: [...state.hiddenExpansionIds] }
   }
 }

@@ -1221,7 +1221,7 @@
     "cost": 5,
     "attack": 5,
     "health": 6,
-    "rulesText": "Battlecry: If you're holding any non-Rogue class cards,  reduce their Cost by (2).",
+    "rulesText": "Battlecry: If you're holding any non-Rogue class cards, reduce their Cost by (2).",
     "keywords": [],
     "effects": [
       {
@@ -1235,7 +1235,8 @@
               "selection": "all",
               "zone": "hand",
               "filter": {
-                "cardClass": "not-self"
+                "cardClassIn": ["Rogue", "Neutral"],
+                "negate": true
               }
             },
             "amount": -2,
@@ -1553,7 +1554,7 @@
     "cost": 3,
     "attack": 1,
     "health": 1,
-    "rulesText": "Stealth At the end of your turn, summon a 1/1 Steward.",
+    "rulesText": "Stealth. At the end of your turn, summon a 1/1 Steward.",
     "keywords": ["stealth"],
     "effects": [
       {

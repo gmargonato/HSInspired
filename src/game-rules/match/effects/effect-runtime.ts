@@ -1,3 +1,4 @@
+import { effectiveHeroCombatKeywords } from '../rules/hero-combat-keywords'
 import {
   zombeastId,
   zombeastPoolCards,
@@ -1442,17 +1443,22 @@ export class EffectRuntime {
     const definition = cardDefinition(cardId)
     const player = this.player(participantId)
     const playerClass = HERO_CATALOG.get(player.heroId)?.classId
-    if (
-      !definition ||
-      definition.cardClass === 'Neutral' ||
-      definition.cardClass === playerClass
-    )
-      return
+    if (!definition || definition.cardClass === 'Neutral') return
     this.historyUpdate((history) => {
-      history.offClassCardsAddedToHandThisGameByPlayer = {
-        ...(history.offClassCardsAddedToHandThisGameByPlayer ?? {}),
-        [participantId]:
-          (history.offClassCardsAddedToHandThisGameByPlayer?.[participantId] ?? 0) + 1
+      if (definition.cardClass !== playerClass) {
+        history.offClassCardsAddedToHandThisGameByPlayer = {
+          ...(history.offClassCardsAddedToHandThisGameByPlayer ?? {}),
+          [participantId]:
+            (history.offClassCardsAddedToHandThisGameByPlayer?.[participantId] ?? 0) + 1
+        }
+      }
+      if (definition.cardClass !== 'Rogue') {
+        history.nonRogueClassCardsAddedToHandThisGameByPlayer = {
+          ...(history.nonRogueClassCardsAddedToHandThisGameByPlayer ?? {}),
+          [participantId]:
+            (history.nonRogueClassCardsAddedToHandThisGameByPlayer?.[participantId] ??
+              0) + 1
+        }
       }
     })
     this.recomputeContinuousEffects()
@@ -1892,7 +1898,7 @@ export class EffectRuntime {
     else this.resolveEvent(queued)
     if (
       queued.type === 'damage-dealt' &&
-      queued.source?.kind === 'minion' &&
+      (queued.source?.kind === 'minion' || queued.source?.kind === 'weapon') &&
       queued.target?.kind === 'minion' &&
       (queued.damage ?? 0) > 0 &&
       this.hasKeyword(queued.source, 'poisonous')
@@ -1915,6 +1921,7 @@ export class EffectRuntime {
       if (power?.effect.kind === 'summon-and-refresh-after-hero-attack') {
         player.heroPower.available = true
         player.heroPower.usesThisTurn = 0
+        delete player.heroPower.disabledThisTurn
       }
     }
     if (queued.type === 'spell-cast' && queued.controllerId) {
@@ -2090,6 +2097,14 @@ export class EffectRuntime {
       case 'play-battlecry-minion':
         progressDelta =
           playedMinion && minion!.effects.some((block) => block.trigger === 'battlecry')
+            ? 1
+            : 0
+        break
+      case 'play-battlecry-card':
+        progressDelta =
+          event.type === 'card-played' &&
+          event.kind === 'play' &&
+          definition?.effects.some((block) => block.trigger === 'battlecry')
             ? 1
             : 0
         break
@@ -2648,6 +2663,20 @@ export class EffectRuntime {
     },
     consumeSecrets: boolean
   ): void {
+    // Earlier end-turn effects can consume or transform another queued source.
+    // Its former card's trigger must not resurrect it or resolve as the new card.
+    if (
+      entry.block.trigger === 'end-of-turn' &&
+      entry.source.kind === 'minion' &&
+      !this.player(entry.source.participantId).board.some(
+        (minion) =>
+          minion.instanceId === entry.source.instanceId &&
+          minion.cardId === entry.source.cardId &&
+          minion.health > 0 &&
+          !minion.silenced
+      )
+    )
+      return
     const key = `${event.sequence}:${entry.order}:${entry.source.instanceId}:${entry.block.trigger}:${JSON.stringify(entry.block.event ?? null)}`
     if (this.firedTriggers.has(key)) return
     this.firedTriggers.add(key)
@@ -3461,7 +3490,12 @@ export class EffectRuntime {
     if (ref.kind === 'card') {
       const card = this.currentCard(ref)
       const definition = card?.cardId ? cardDefinition(card.cardId) : undefined
-      return card?.attack ?? (definition?.type === 'Minion' ? definition.attack : 0)
+      return (
+        card?.attack ??
+        (definition?.type === 'Minion' || definition?.type === 'Weapon'
+          ? definition.attack
+          : 0)
+      )
     }
     return 0
   }
@@ -3498,6 +3532,18 @@ export class EffectRuntime {
   }
 
   private readDurability(ref: EntityRef): number {
+    if (ref.kind === 'card') {
+      const card = this.currentCard(ref)
+      const definition = card ? cardDefinition(card.cardId) : undefined
+      if (definition?.type !== 'Weapon') return 0
+      return (
+        definition.durability +
+        (card?.enchantments ?? []).reduce(
+          (sum, enchantment) => sum + (enchantment.durabilityDelta ?? 0),
+          0
+        )
+      )
+    }
     if (ref.kind !== 'weapon') return 0
     const equipped = this.player(ref.participantId).weapon
     if (equipped?.instanceId === ref.instanceId) return equipped.durability
@@ -3562,7 +3608,10 @@ export class EffectRuntime {
       const weapon = this.player(ref.participantId).weapon
       return (
         weapon?.instanceId === ref.instanceId &&
-        (cardDefinition(weapon.cardId)?.keywords ?? []).includes(keyword)
+        effectiveBoardMinionKeywords(
+          { ...weapon, keywords: cardDefinition(weapon.cardId)?.keywords },
+          this.draft.turnNumber
+        ).includes(keyword)
       )
     }
     if (ref.kind === 'hero') {
@@ -4596,7 +4645,8 @@ export class EffectRuntime {
     frame: EffectFrame,
     path: string,
     preferredInstanceId?: string,
-    preferredCreationOrdinal?: number
+    preferredCreationOrdinal?: number,
+    sourceCard?: OpeningCard
   ): void {
     const definition = cardDefinition(cardId)
     if (!definition || definition.type !== 'Weapon') return
@@ -4620,8 +4670,13 @@ export class EffectRuntime {
       controllerId: participantId,
       creationOrdinal: preferredCreationOrdinal ?? this.nextEntityOrdinal++,
       playOrder: this.nextEntityOrdinal++,
-      enchantments: []
+      enchantments: copyPlainArray(
+        (sourceCard?.enchantments ?? []).filter(
+          (enchantment) => !enchantment.continuous
+        )
+      ) as Mutable<BoardWeapon>['enchantments']
     }
+    if (sourceCard) this.recomputeContinuousEffects()
     this.emitSemantic({
       type: 'weapon-equipped',
       source: frame.source,
@@ -8250,9 +8305,9 @@ export class EffectRuntime {
         )
         const duration = stringValue(action.duration) ?? 'permanent'
         for (const target of this.actionTargets(action, frame)) {
-          if (target.kind !== 'minion') continue
-          const minion = this.currentMinion(target)
-          if (!minion) continue
+          if (target.kind !== 'minion' && target.kind !== 'hero') continue
+          const minion = target.kind === 'minion' ? this.currentMinion(target) : null
+          if (target.kind === 'minion' && !minion) continue
           const enchantment: RuntimeEnchantment = {
             id: frame.continuous
               ? frame.source.instanceId +
@@ -8280,10 +8335,11 @@ export class EffectRuntime {
             ...(frame.continuous ? { continuous: true } : {})
           }
           this.addEnchantment(target, enchantment)
-          minion.triggerMultipliers = {
-            ...(minion.triggerMultipliers ?? {}),
-            [trigger]: multiplier
-          }
+          if (minion)
+            minion.triggerMultipliers = {
+              ...(minion.triggerMultipliers ?? {}),
+              [trigger]: multiplier
+            }
           this.emit(frame, name, path, {
             target: target.instanceId,
             trigger,
@@ -9450,30 +9506,12 @@ export class EffectRuntime {
         hero.keywords = [...heroKeywords]
         hero.immune = heroKeywords.has('immune')
         hero.spellImmune = heroKeywords.has('spell-immune')
-        const heroCombatKeywords = new Set(heroKeywords)
-        if (player.weapon) {
-          const weaponDefinition = cardDefinition(player.weapon.cardId)
-          if (weaponDefinition?.type === 'Weapon') {
-            for (const keyword of weaponDefinition.keywords)
-              heroCombatKeywords.add(keyword)
-          }
-          for (const enchantment of player.weapon.enchantments ?? []) {
-            if (
-              (enchantment.expiresOnTurn !== undefined &&
-                enchantment.expiresOnTurn < this.draft.turnNumber) ||
-              (enchantment.startsOnTurn !== undefined &&
-                enchantment.startsOnTurn > this.draft.turnNumber) ||
-              enchantment.continuous ||
-              (enchantment.duration === 'while-source-in-play' &&
-                !this.sourceIsInPlay(enchantment.sourceInstanceId))
-            )
-              continue
-            for (const keyword of enchantment.keywords ?? [])
-              heroCombatKeywords.add(keyword)
-            for (const keyword of enchantment.removedKeywords ?? [])
-              heroCombatKeywords.delete(keyword)
-          }
-        }
+        const heroCombatKeywords = effectiveHeroCombatKeywords(
+          heroKeywords,
+          player.weapon,
+          this.draft.turnNumber,
+          (id) => this.sourceIsInPlay(id)
+        )
         const keywordAttackLimit = attacksPerTurnForKeywords(heroCombatKeywords)
         const enchantmentAttackLimit = activeHeroEnchantments.reduce(
           (limit, enchantment) => Math.max(limit, enchantment.maxAttacksPerTurn ?? 0),
@@ -10965,7 +11003,7 @@ export class EffectRuntime {
           )
         : 1
     const heroRepetitions =
-      trigger === 'battlecry' && frame.source.kind === 'minion'
+      trigger === 'battlecry'
         ? this.heroTriggerMultiplier(frame.controllerId, trigger)
         : 1
     const repetitions = Math.max(minionRepetitions, heroRepetitions)
@@ -11047,6 +11085,7 @@ export class EffectRuntime {
       if (power?.effect.kind === 'damage-and-refresh-after-card') {
         player.heroPower.available = true
         player.heroPower.usesThisTurn = 0
+        delete player.heroPower.disabledThisTurn
       }
     }
     return event
@@ -11880,6 +11919,9 @@ export class EffectRuntime {
         actualDefender.kind === 'hero'
           ? this.player(actualDefender.participantId).hero.health <= 0
           : (this.currentMinion(actualDefender)?.health ?? 0) <= 0
+      // Completed-combat listeners observe deaths and their resulting board,
+      // rather than allowing a mortally wounded aura source to redirect hits.
+      this.processDeaths(true)
       this.emitSemantic({
         type: 'attack-resolved',
         source: attacker,
@@ -13182,6 +13224,7 @@ export class EffectRuntime {
     }
     player.overload = locked
     player.heroPower.usesThisTurn = 0
+    delete player.heroPower.disabledThisTurn
     player.heroPower.available = true
     player.hero.attacksUsedThisTurn = 0
     for (const minion of player.board) {
@@ -13577,7 +13620,8 @@ export class EffectRuntime {
         frame,
         'play-card.equip',
         card.instanceId,
-        card.creationOrdinal
+        card.creationOrdinal,
+        card
       )
       const weapon = player.weapon
       if (!weapon)

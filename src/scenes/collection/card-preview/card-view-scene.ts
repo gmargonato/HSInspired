@@ -13,6 +13,7 @@ export interface CardViewSceneOptions {
   readonly sourceBounds: CardPreviewSourceBounds
   readonly resolver?: CardAssetResolver
   readonly progression?: ProgressionStore
+  readonly onMessage?: (message: string) => void
 }
 
 /** Lifecycle adapter for the collection's enlarged card preview. */

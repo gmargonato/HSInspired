@@ -7,6 +7,7 @@ import { createOpeningMatch, type OpeningMatchInstance } from '../opening-match'
 export interface MatchScenarioBuilderOptions {
   readonly seed?: number
   readonly cardId?: string
+  readonly focalCardCopies?: number
   readonly firstHeroId?: string
   readonly secondHeroId?: string
   readonly firstController?: 'human' | 'ai'
@@ -22,9 +23,22 @@ export interface MatchScenario {
   confirmBothMulligans(): void
 }
 
-function createDeck(id: string, heroId: string, cardId: string): Deck {
+function createDeck(
+  id: string,
+  heroId: string,
+  cardId: string,
+  focalCardCopies: number
+): Deck {
   const definition = CARD_CATALOG.get(cardId)
   if (!definition) throw new Error(`Scenario card ${cardId} does not exist.`)
+  if (!Number.isInteger(focalCardCopies) || focalCardCopies < 1 || focalCardCopies > 30)
+    throw new Error('Scenario focal card copies must be between 1 and 30.')
+  const cardCounts: Record<string, number> = { [definition.id]: focalCardCopies }
+  const fillerCopies = 30 - focalCardCopies
+  if (fillerCopies > 0) {
+    cardCounts.basic_acidic_swamp_ooze =
+      (cardCounts.basic_acidic_swamp_ooze ?? 0) + fillerCopies
+  }
   return {
     id,
     name: id,
@@ -32,7 +46,7 @@ function createDeck(id: string, heroId: string, cardId: string): Deck {
     cards:
       definition.type === 'Spell' && definition.quest
         ? { [definition.id]: 1, basic_acidic_swamp_ooze: 29 }
-        : { [definition.id]: 30 },
+        : cardCounts,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z'
   }
@@ -48,6 +62,7 @@ export function createMatchScenario(
 ): MatchScenario {
   const seed = options.seed ?? 0x5eeded
   const cardId = options.cardId ?? 'basic_acidic_swamp_ooze'
+  const focalCardCopies = options.focalCardCopies ?? 30
   const firstHeroId = options.firstHeroId ?? 'jaina'
   const secondHeroId = options.secondHeroId ?? 'garrosh'
   const setup: MatchSetup = {
@@ -69,8 +84,8 @@ export function createMatchScenario(
     ]
   }
   const decks = [
-    createDeck('scenario-deck-one', firstHeroId, cardId),
-    createDeck('scenario-deck-two', secondHeroId, cardId)
+    createDeck('scenario-deck-one', firstHeroId, cardId, focalCardCopies),
+    createDeck('scenario-deck-two', secondHeroId, cardId, focalCardCopies)
   ] as const
   const rng = createSeededRng(seed)
   const match = createOpeningMatch(setup, decks, rng)

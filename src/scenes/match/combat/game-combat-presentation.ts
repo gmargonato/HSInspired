@@ -16,6 +16,7 @@ import { WeaponView } from '../board/weapon-view'
 import type { GameAssets } from '../../../visual-components/assets'
 import { DamageIndicatorView } from './damage-indicator-view'
 import { HealIndicatorView } from './heal-indicator-view'
+import { addCombatDamageGlow, playCombatImpact } from './combat-impact-effect'
 import {
   BOARD_TIMING,
   RESOLUTION_TIMING
@@ -270,6 +271,7 @@ export class GameCombatPresentation {
       lunge.eventCallback('onUpdate', followDeathMarkers)
       await completeTimeline(lunge)
       if (this.layer.destroyed) return
+      this.showCombatImpact(attacker, defender, attackerGlobal, defenderGlobal)
       this.context.onImpact()
     } catch (error) {
       this.activeCombatPresentations.delete(event.combatId)
@@ -581,6 +583,7 @@ export class GameCombatPresentation {
       await completeTimeline(lunge)
       if (this.layer.destroyed) return
 
+      this.showCombatImpact(attacker, defender, attackerGlobal, defenderGlobal)
       this.setCombatViewStats(attacker, event.attacker)
       this.setCombatViewStats(defender, event.defender)
       followDeathMarkers()
@@ -595,8 +598,8 @@ export class GameCombatPresentation {
       const defenderDamageTaken = event.defender.divineShieldConsumed
         ? 0
         : event.defender.attemptedDamage
-      this.showDamageIndicator(attacker, attackerDamageTaken)
-      this.showDamageIndicator(defender, defenderDamageTaken)
+      this.showDamageIndicator(attacker, attackerDamageTaken, true)
+      this.showDamageIndicator(defender, defenderDamageTaken, true)
 
       const settle = async (
         view: MinionView,
@@ -706,6 +709,7 @@ export class GameCombatPresentation {
       await completeTimeline(lunge)
       if (this.layer.destroyed) return
 
+      this.showCombatImpact(attacker, defender, attackerGlobal, defenderGlobal)
       this.setCombatViewStats(attacker, event.attacker)
       this.setCombatViewStats(defender, event.defender)
       followDeathMarkers()
@@ -716,8 +720,8 @@ export class GameCombatPresentation {
 
       const damageTaken = (combatant: CharacterCombatantResult): number =>
         combatant.divineShieldConsumed ? 0 : combatant.attemptedDamage
-      this.showDamageIndicator(attacker, damageTaken(event.attacker))
-      this.showDamageIndicator(defender, damageTaken(event.defender))
+      this.showDamageIndicator(attacker, damageTaken(event.attacker), true)
+      this.showDamageIndicator(defender, damageTaken(event.defender), true)
 
       const settle = async (
         view: CombatView,
@@ -835,10 +839,39 @@ export class GameCombatPresentation {
     if (view) this.showHealIndicator(view, amount)
   }
 
-  showDamageIndicator(view: CombatView, amount: number): DamageIndicatorView | null {
+  private showCombatImpact(
+    attacker: CombatView,
+    defender: CombatView,
+    attackerOrigin: { readonly x: number; readonly y: number },
+    defenderOrigin: { readonly x: number; readonly y: number }
+  ): void {
+    if (attacker.destroyed || defender.destroyed) return
+    const from = this.indicatorLayer.toLocal(attackerOrigin)
+    const to = this.indicatorLayer.toLocal(defenderOrigin)
+    const attackerContact = this.indicatorLayer.toLocal(attacker.getGlobalPosition())
+    const defenderContact = this.indicatorLayer.toLocal(defender.getGlobalPosition())
+    playCombatImpact(
+      this.indicatorLayer,
+      this.assets,
+      this.animations,
+      {
+        x: (attackerContact.x + defenderContact.x) / 2,
+        y: (attackerContact.y + defenderContact.y) / 2
+      },
+      { x: to.x - from.x, y: to.y - from.y }
+    )
+  }
+
+  showDamageIndicator(
+    view: CombatView,
+    amount: number,
+    combatImpact = this.activeCombatPresentations.size > 0
+  ): DamageIndicatorView | null {
     if (amount <= 0) return null
 
+    view.pulseHealth()
     const indicator = new DamageIndicatorView(this.assets.damageIndicator, amount)
+    if (combatImpact) addCombatDamageGlow(indicator, this.assets, this.animations)
     return this.showCharacterIndicator(indicator, view)
   }
 

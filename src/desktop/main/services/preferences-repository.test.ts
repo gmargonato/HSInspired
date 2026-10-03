@@ -79,6 +79,34 @@ describe('PreferencesRepository', () => {
     })
   })
 
+  it('ignores the retired deck strategy preference while preserving current settings', async () => {
+    const { repository, filePath } = await createRepository()
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 2,
+        lastPlayedDeckId: 'deck-123',
+        aiMode: 'hardware-v2',
+        expertDeckStrategyEnabled: false
+      }),
+      'utf8'
+    )
+
+    const preferences = await repository.get()
+    expect(preferences).toEqual({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'hardware-v2'
+    })
+    expect(parsePreferencesUpdateRequest({ expertDeckStrategyEnabled: false })).toEqual(
+      {}
+    )
+    await repository.set(preferences)
+    expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual({
+      version: 2,
+      ...preferences
+    })
+  })
+
   it('rejects invalid deck ids without modifying the saved file', async () => {
     const { repository, filePath } = await createRepository()
     await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'api' })

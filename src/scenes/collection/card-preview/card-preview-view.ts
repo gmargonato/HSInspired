@@ -47,6 +47,7 @@ export interface CardPreviewViewOptions {
   readonly assetScope: AssetScope
   readonly onClose: () => Promise<void> | void
   readonly progression?: ProgressionStore
+  readonly onMessage?: (message: string) => void
   readonly onPresentationOffset?: (x: number, y: number) => void
 }
 
@@ -87,6 +88,7 @@ export class CardPreviewView extends Actor {
   private changing = false
   private cancelAssembly: (() => void) | null = null
   private readonly progression?: ProgressionStore
+  private readonly onMessage?: (message: string) => void
   private upgradePanel?: PremiumUpgradePanel
   private assemblyEffects?: CardAssemblyEffects
   private readonly onPresentationOffset: (x: number, y: number) => void
@@ -99,6 +101,7 @@ export class CardPreviewView extends Actor {
     this.assetScope = options.assetScope
     this.onClose = options.onClose
     this.progression = options.progression
+    this.onMessage = options.onMessage
     this.onPresentationOffset = options.onPresentationOffset ?? (() => undefined)
   }
 
@@ -177,7 +180,8 @@ export class CardPreviewView extends Actor {
         this.card,
         assets,
         this.progression,
-        (action) => this.changePremium(action)
+        (action) => this.changePremium(action),
+        this.onMessage
       )
       this.upgradePanel.alpha = 0
       this.addChild(this.upgradePanel)

@@ -6,6 +6,7 @@ import { Texture, type AssetsManifest } from 'pixi.js'
 import burnNoiseImage from '@assets/images/effects/noise-01.jpg'
 import spellPlayAuraImage from '@assets/images/cards/play-aura-spell.png'
 import minionPlayAuraImage from '@assets/images/cards/play-aura-minion.png'
+import weaponPlayAuraImage from '@assets/images/cards/play-aura-weapon.png'
 import playSpotlight1Image from '@assets/images/effects/spotlight-01.png'
 import playSpotlight2Image from '@assets/images/effects/spotlight-02.png'
 import playSpotlight3Image from '@assets/images/effects/spotlight-03.png'
@@ -1568,6 +1569,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.weapon-play-aura',
+    ASSET_BUNDLE_IDS.game,
+    'weaponPlayAura',
+    weaponPlayAuraImage,
+    698,
+    927,
+    'game-scene'
+  ),
+  asset(
     'scene.game.spell-play-aura',
     ASSET_BUNDLE_IDS.game,
     'spellPlayAura',
@@ -2743,6 +2753,7 @@ export interface GameAssets extends Record<
   minionSummonRays: Texture
   spellPlayAura: Texture
   minionPlayAura: Texture
+  weaponPlayAura: Texture
   playSpotlight1: Texture
   playSpotlight2: Texture
   playSpotlight3: Texture

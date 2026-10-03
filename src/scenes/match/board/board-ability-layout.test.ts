@@ -73,7 +73,7 @@ describe('board ability badge layouts', () => {
   it('keeps badges inside the canvas and shares the enlarged immunity cocoon', () => {
     for (const key of [
       'windfury',
-      'spellDamage',
+      'statusCurtain',
       'lifesteal',
       'aura',
       'elusive'

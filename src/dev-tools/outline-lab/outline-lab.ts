@@ -1,3 +1,4 @@
+import { WINDFURY_DEFAULTS } from '../../desktop/contracts/ipc/windfury-tuning'
 import {
   AURA_CATEGORIES,
   AURA_ELEMENT_LABELS,
@@ -57,9 +58,14 @@ import {
   type GhostAuraTuning,
   type GhostAuraPalette
 } from '../../desktop/contracts/ipc/outline-tuning'
-type OutlinePresetName = AuraPresetName | 'ghost' | 'shatter' | 'god-rays'
+type OutlinePresetName = AuraPresetName | 'ghost' | 'shatter' | 'god-rays' | 'windfury'
 function isAuraPreset(preset: OutlinePresetName): preset is AuraPresetName {
-  return preset !== 'ghost' && preset !== 'shatter' && preset !== 'god-rays'
+  return (
+    preset !== 'ghost' &&
+    preset !== 'shatter' &&
+    preset !== 'god-rays' &&
+    preset !== 'windfury'
+  )
 }
 import { OutlineLabHand, clampHandCount } from './outline-lab-hand'
 import { OutlineLabBoard } from './outline-lab-board'
@@ -82,7 +88,8 @@ const PRESETS: readonly OutlinePresetName[] = [
   ...OUTLINE_PRESET_NAMES,
   'ghost',
   'shatter',
-  'god-rays'
+  'god-rays',
+  'windfury'
 ]
 const PALETTES: readonly OutlinePaletteName[] = [
   'green',
@@ -190,6 +197,7 @@ export class OutlineLab extends Container {
   private readonly ghostOutlines: GhostAura[] = []
   private ghostTuning = { ...this.initialConfig.ghost.tuning }
   private ghostPalette = { ...this.initialConfig.ghost.palette }
+  private windfuryTuning = { ...this.initialConfig.windfury }
   private godRaysTuning: GodRaysTuning = structuredClone(this.initialConfig.godRays)
   private godRaysDustTuning: GodRaysDustTuning = { ...this.initialConfig.godRaysDust }
   private readonly presetTabs = new Map<AuraCategory, ButtonState>()
@@ -198,7 +206,7 @@ export class OutlineLab extends Container {
   private readonly selectedPalettes = Object.fromEntries(
     PRESETS.map((name) => [
       name,
-      name === 'shatter' || name === 'god-rays'
+      name === 'shatter' || name === 'god-rays' || name === 'windfury'
         ? 'purple'
         : OUTLINE_LAB_PALETTES[name][0].palette
     ])
@@ -294,6 +302,7 @@ export class OutlineLab extends Container {
     applyPlacement(this.godRays, LAYOUT.godRaysPreview)
     this.createPreviewGroup('god-rays').addChild(this.godRays)
     this.createHandControls()
+    this.createPreviewGroup('windfury')
     this.selectPreset('card')
   }
 
@@ -626,7 +635,7 @@ export class OutlineLab extends Container {
   private ghostAssets!: GameAssets
 
   private registerOutline(target: Container, preset: OutlinePresetName): void {
-    if (preset === 'shatter' || preset === 'god-rays') return
+    if (preset === 'shatter' || preset === 'god-rays' || preset === 'windfury') return
     if (preset === 'ghost') {
       const outline = new GhostAura(target, {
         noise: this.ghostAssets.burnNoise,
@@ -651,6 +660,7 @@ export class OutlineLab extends Container {
   private selectPreset(preset: OutlinePresetName): void {
     this.hand?.cancel()
     this.board?.clearHover()
+    this.board?.setWindfuryPreview(false, this.windfuryTuning)
     this.shatter?.restore()
     this.saveButton.root.visible = true
     this.selectedPreset = preset
@@ -668,11 +678,14 @@ export class OutlineLab extends Container {
         preset === 'minion' ||
         preset === 'hero' ||
         preset === 'hero-power' ||
-        preset === 'weapon'
+        preset === 'weapon' ||
+        preset === 'windfury'
       this.board.visible = boardElement
       if (boardElement) {
         this.previewGroups.get(preset)?.addChild(this.board)
-        this.board.selectElement(preset)
+        if (preset === 'windfury')
+          this.board.setWindfuryPreview(true, this.windfuryTuning)
+        else this.board.selectElement(preset)
       }
     }
     this.refreshPreviewAppearance(preset)
@@ -712,7 +725,8 @@ export class OutlineLab extends Container {
         .stroke({ color: 0xffffff, width: 1, alpha: 0.7 })
     }
     for (const preset of PRESETS) {
-      if (preset === 'shatter' || preset === 'god-rays') continue
+      if (preset === 'shatter' || preset === 'god-rays' || preset === 'windfury')
+        continue
       if (!OUTLINE_LAB_PALETTES[preset].some((option) => option.palette === palette))
         continue
       this.refreshPreviewAppearance(preset)
@@ -721,6 +735,23 @@ export class OutlineLab extends Container {
   }
 
   private refreshColorControls(): void {
+    if (this.selectedPreset === 'windfury') {
+      this.shaderControls?.showWindfury(
+        this.windfuryTuning,
+        (key, value) => {
+          this.windfuryTuning = { ...this.windfuryTuning, [key]: value }
+          this.board?.setWindfuryPreview(true, this.windfuryTuning)
+          this.markDirty()
+        },
+        () => {
+          this.windfuryTuning = { ...WINDFURY_DEFAULTS }
+          this.board?.setWindfuryPreview(true, this.windfuryTuning)
+          this.markDirty()
+          this.refreshColorControls()
+        }
+      )
+      return
+    }
     if (this.selectedPreset === 'god-rays') {
       this.shaderControls?.showGodRays(
         this.godRaysTuning,
@@ -920,7 +951,7 @@ export class OutlineLab extends Container {
   }
 
   private refreshPreviewAppearance(preset: OutlinePresetName): void {
-    if (preset === 'shatter' || preset === 'god-rays') return
+    if (preset === 'shatter' || preset === 'god-rays' || preset === 'windfury') return
     if (preset === 'ghost') {
       for (const outline of this.ghostOutlines) {
         outline.setTuning(this.ghostTuning)
@@ -1007,7 +1038,9 @@ export class OutlineLab extends Container {
   private refreshPaletteButtons(): void {
     const selected = this.selectedPalettes[this.selectedPreset]
     const options =
-      this.selectedPreset === 'shatter' || this.selectedPreset === 'god-rays'
+      this.selectedPreset === 'shatter' ||
+      this.selectedPreset === 'god-rays' ||
+      this.selectedPreset === 'windfury'
         ? []
         : OUTLINE_LAB_PALETTES[this.selectedPreset]
     for (const [palette, button] of this.paletteButtons) {
@@ -1047,7 +1080,8 @@ export class OutlineLab extends Container {
 
     const savedRevision = this.revision
     const snapshot: OutlineTuningConfig = {
-      version: 13,
+      version: 14,
+      windfury: { ...this.windfuryTuning },
       godRaysDust: { ...this.godRaysDustTuning },
       godRays: structuredClone(this.godRaysTuning),
       shatter: { ...(this.shatter?.tuning ?? this.initialConfig.shatter) },

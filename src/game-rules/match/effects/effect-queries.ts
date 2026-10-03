@@ -729,6 +729,12 @@ export class EffectQueries {
             frame.controllerId
           ] ?? 0
         )
+      case 'non-rogue-class-cards-added-to-hand-this-game':
+        return (
+          this.context.draft.history?.nonRogueClassCardsAddedToHandThisGameByPlayer?.[
+            frame.controllerId
+          ] ?? 0
+        )
       case 'damage-dealt':
         return frame.damageDealt
       case 'last-damage-amount':
@@ -1054,6 +1060,15 @@ export class EffectQueries {
         )
       case 'player-has-minion':
         return matchingMinions(player, condition.filter).length > 0
+      case 'player-has-character':
+        return this.context
+          .allEntities()
+          .some(
+            (candidate) =>
+              candidate.participantId === player.participantId &&
+              this.matchesType(candidate, 'character') &&
+              this.matchesFilter(candidate, condition.filter, frame)
+          )
       case 'player-has-minion-count':
         return this.compare(
           matchingMinions(player, condition.filter).length,
@@ -1209,6 +1224,11 @@ export class EffectQueries {
           return this.context.player(target.participantId).hero.health > 0
         if (target.kind !== 'minion') return false
         return (this.context.currentMinion(target)?.health ?? 0) > 0
+      case 'source-survived':
+        return frame.source.kind === 'hero'
+          ? this.context.player(frame.source.participantId).hero.health > 0
+          : frame.source.kind === 'minion' &&
+              (this.context.currentMinion(frame.source)?.health ?? 0) > 0
       default:
         return false
     }

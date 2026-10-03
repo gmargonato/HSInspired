@@ -68,9 +68,6 @@ export const DECK_EDITOR_FRAME_TARGET_WIDTH = COLLECTION_LAYOUT.deckList.size.wi
 export const DECK_EDITOR_FRAME_CARD_LIST_GAP = 4
 export const DECK_EDITOR_ROW_REMOVE_DURATION = 0.22
 export const DECK_EDITOR_ROW_COLLAPSE_DURATION = 0.18
-export const DECK_EDITOR_FULL_WARNING_DURATION = 1800
-export const DECK_EDITOR_FULL_WARNING_FONT_SIZE = 64
-export const DECK_EDITOR_FULL_WARNING_STROKE_WIDTH = 6
 export const DECK_EDITOR_PREVIEW = {
   maxWidth: 190,
   maxHeight: 345,
@@ -79,7 +76,6 @@ export const DECK_EDITOR_PREVIEW = {
 } as const
 
 export const DECK_EDITOR_COUNT_FILL = 0xffffff
-export const DECK_EDITOR_ERROR_FILL = 0xff9a9a
 
 /** Collection-card-to-deck choreography, in seconds and design-canvas pixels. */
 export const CARD_ADD_CHOREOGRAPHY = {

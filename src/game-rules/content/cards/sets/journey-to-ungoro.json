@@ -92,7 +92,7 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Quest: Summon 5 minions with 5 or more Attack. Reward: Barnabus.",
+    "rulesText": "Quest: Summon 5 minions with an Attack of 5 or more. Reward: Barnabus.",
     "keywords": [],
     "effects": [],
     "collectible": true,
@@ -1019,9 +1019,9 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
-              "type": "minion",
-              "selection": "all"
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
             },
             "amount": 6
           }
@@ -1050,9 +1050,9 @@
           {
             "action": "restore",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "character",
-              "selection": "all"
+              "selection": "chosen"
             },
             "amount": 12
           }
@@ -1353,7 +1353,7 @@
   {
     "id": "journey_to_ungoro_corrupt_the_waters",
     "quest": {
-      "goal": "play-battlecry-minion",
+      "goal": "play-battlecry-card",
       "target": 6,
       "rewardCardId": "journey_to_ungoro_heart_of_virnaal"
     },
@@ -1649,7 +1649,7 @@
     "cost": 7,
     "attack": 5,
     "health": 8,
-    "rulesText": "Taunt Deathrattle: Summon three 1/1 Murlocs.",
+    "rulesText": "Taunt. Deathrattle: Summon three 1/1 Murlocs.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -1710,7 +1710,7 @@
     "cost": 6,
     "attack": 3,
     "health": 7,
-    "rulesText": "Taunt Battlecry: Set all other minions' Attack and Health to 3.",
+    "rulesText": "Taunt. Battlecry: Set all other minions' Attack and Health to 3.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -1752,7 +1752,11 @@
         "actions": [
           {
             "action": "damage",
-            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
             "amount": 2
           },
           {
@@ -2077,7 +2081,7 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Your spells cost (1) less (but not less than 1).",
+    "rulesText": "Your spells cost (1) less.",
     "keywords": [],
     "effects": [
       {
@@ -2092,7 +2096,6 @@
               "zone": "hand"
             },
             "amount": -1,
-            "minimum": 1,
             "duration": "while-source-in-play"
           }
         ]
@@ -2132,7 +2135,7 @@
     "cost": 3,
     "attack": 2,
     "health": 5,
-    "rulesText": "Taunt Deathrattle: Give a random friendly minion +1/+1.",
+    "rulesText": "Taunt. Deathrattle: Give a random friendly minion +1/+1.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -2192,7 +2195,7 @@
     "cost": 5,
     "attack": 1,
     "health": 7,
-    "rulesText": "Taunt Has +3 Attack during your opponent's turn.",
+    "rulesText": "Taunt. Has +3 Attack during your opponent's turn.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -2311,7 +2314,7 @@
     "cost": 4,
     "attack": 3,
     "health": 3,
-    "rulesText": "Costs (1) less for each non-Rogue Class card added to your hand this game.",
+    "rulesText": "Costs (1) less for each non-Rogue class card added to your hand this game.",
     "keywords": [],
     "effects": [
       {
@@ -2319,10 +2322,13 @@
         "actions": [
           {
             "action": "change-cost",
-            "target": { "type": "card", "selection": "source" },
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
             "amount": {
               "operation": "subtract",
-              "reference": "off-class-cards-added-to-hand-this-game"
+              "reference": "non-rogue-class-cards-added-to-hand-this-game"
             },
             "minimum": 0
           }
@@ -2468,7 +2474,7 @@
     "cost": 3,
     "attack": 1,
     "health": 5,
-    "rulesText": "Taunt Battlecry: Discover a Taunt minion.",
+    "rulesText": "Taunt. Battlecry: Discover a Taunt minion.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -2579,7 +2585,7 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry: Add a random minion with 5 or more Attack to your hand.",
+    "rulesText": "Battlecry: Add a random minion with an Attack of 5 or more to your hand.",
     "keywords": [],
     "effects": [
       {
@@ -2619,12 +2625,21 @@
       {
         "trigger": "on-attack",
         "event": {
-          "source": { "controller": "self", "type": "minion", "selection": "source" }
+          "source": {
+            "controller": "self",
+            "type": "minion",
+            "selection": "source"
+          },
+          "type": "attack-resolved"
         },
         "actions": [
           {
             "action": "freeze",
-            "target": { "controller": "self", "type": "minion", "selection": "source" }
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            }
           }
         ]
       }
@@ -2749,7 +2764,7 @@
     "cost": 7,
     "attack": 5,
     "health": 3,
-    "rulesText": "Taunt Deathrattle: Summon a minion from your hand with 5 or more Attack.",
+    "rulesText": "Taunt. Deathrattle: Summon a minion from your hand with an Attack of 5 or more.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -2875,7 +2890,7 @@
     "cost": 7,
     "attack": 7,
     "health": 7,
-    "rulesText": "Charge Battlecry: Can't attack heroes this turn.",
+    "rulesText": "Charge. Battlecry: Can't attack heroes this turn.",
     "keywords": ["charge"],
     "effects": [
       {
@@ -3368,7 +3383,7 @@
     "cost": 2,
     "attack": 1,
     "health": 3,
-    "rulesText": "Taunt Poisonous",
+    "rulesText": "Taunt. Poisonous.",
     "keywords": ["poisonous", "taunt"],
     "effects": [],
     "collectible": true,
@@ -3459,7 +3474,7 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Stealth Poisonous",
+    "rulesText": "Stealth. Poisonous.",
     "keywords": ["poisonous", "stealth"],
     "effects": [],
     "collectible": true,
@@ -3506,7 +3521,7 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Lifesteal Deal 5 damage to a minion.",
+    "rulesText": "Lifesteal. Deal 5 damage to a minion.",
     "keywords": ["lifesteal"],
     "effects": [
       {
@@ -3573,9 +3588,12 @@
         "actions": [
           {
             "action": "grant-keyword",
-            "target": { "controller": "self", "type": "weapon", "selection": "all" },
-            "keyword": "poisonous",
-            "duration": "this-turn"
+            "target": {
+              "controller": "self",
+              "type": "weapon",
+              "selection": "all"
+            },
+            "keyword": "poisonous"
           }
         ]
       }
@@ -3679,7 +3697,7 @@
     "cost": 4,
     "attack": 3,
     "health": 8,
-    "rulesText": "Taunt Battlecry: Discard your two lowest-Cost cards.",
+    "rulesText": "Taunt. Battlecry: Discard your two lowest-Cost cards.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -3830,7 +3848,7 @@
     "cost": 6,
     "attack": 1,
     "health": 11,
-    "rulesText": "Taunt Has +4 Attack during your opponent's turn.",
+    "rulesText": "Taunt. Has +4 Attack during your opponent's turn.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -4016,14 +4034,16 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
-              "selection": "random"
+              "selection": "chosen"
             },
             "amount": 5
           }
         ],
-        "condition": { "type": "player-played-elemental-last-turn" }
+        "condition": {
+          "type": "player-played-elemental-last-turn"
+        }
       }
     ],
     "collectible": true,
@@ -4039,7 +4059,7 @@
     "cost": 8,
     "attack": 4,
     "health": 8,
-    "rulesText": "Taunt Battlecry: Deal 2 damage to all other minions.",
+    "rulesText": "Taunt. Battlecry: Deal 2 damage to all other minions.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -4071,7 +4091,7 @@
     "cost": 10,
     "attack": 14,
     "health": 14,
-    "rulesText": "Taunt Elusive",
+    "rulesText": "Taunt. Elusive.",
     "keywords": ["taunt", "spell-immune"],
     "effects": [],
     "collectible": true,
@@ -4147,7 +4167,7 @@
     "cost": 8,
     "attack": 8,
     "health": 8,
-    "rulesText": "Taunt Battlecry: Gain +5 Health for each Elemental you played last turn.",
+    "rulesText": "Taunt. Battlecry: Gain +5 Health for each Elemental you played last turn.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -4459,7 +4479,7 @@
     "cost": 6,
     "attack": 6,
     "health": 6,
-    "rulesText": "Taunt Battlecry: Adapt.",
+    "rulesText": "Taunt. Battlecry: Adapt.",
     "keywords": ["taunt"],
     "effects": [{ "trigger": "battlecry", "actions": [{ "action": "adapt" }] }],
     "collectible": true,
@@ -4536,7 +4556,7 @@
     "cost": 3,
     "attack": 1,
     "health": 5,
-    "rulesText": "Taunt Has +2 Attack during your opponent's turn.",
+    "rulesText": "Taunt. Has +2 Attack during your opponent's turn.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -4665,7 +4685,7 @@
     "cost": 3,
     "attack": 2,
     "health": 4,
-    "rulesText": "Taunt Battlecry: Restore #3 Health.",
+    "rulesText": "Taunt. Battlecry: Restore #3 Health.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -4965,7 +4985,7 @@
     "cost": 5,
     "attack": 4,
     "health": 6,
-    "rulesText": "Taunt Deathrattle: Shuffle an 8/12 Direhorn with Taunt into your deck.",
+    "rulesText": "Taunt. Deathrattle: Shuffle an 8/12 Direhorn with Taunt into your deck.",
     "keywords": ["taunt"],
     "effects": [
       {

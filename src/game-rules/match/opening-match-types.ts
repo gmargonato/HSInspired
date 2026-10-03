@@ -189,6 +189,9 @@ export interface MatchHistory {
   readonly cardsDiscardedThisGameByPlayer?: Readonly<Record<string, number>>
   readonly overloadedManaThisGameByPlayer?: Readonly<Record<string, number>>
   readonly offClassCardsAddedToHandThisGameByPlayer?: Readonly<Record<string, number>>
+  readonly nonRogueClassCardsAddedToHandThisGameByPlayer?: Readonly<
+    Record<string, number>
+  >
   readonly beastsSummonedByPlayer: Readonly<Record<string, number>>
   readonly heroPowersUsedByPlayer: Readonly<Record<string, number>>
 }
@@ -467,6 +470,8 @@ export interface PlayerHeroPower {
   readonly available: boolean
   /** Activations made with the current power this turn; reset when an effect replaces it. */
   readonly usesThisTurn?: number
+  /** Developer availability override, cleared when this power refreshes. */
+  readonly disabledThisTurn?: boolean
   readonly baseCost?: number
   readonly targetType?: string
   readonly targetingGranted?: string | null

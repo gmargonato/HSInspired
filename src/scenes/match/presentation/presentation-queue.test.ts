@@ -717,6 +717,211 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('weapon play entrances', () => {
+  function weaponSlot(): GameCardSlot {
+    const slot = mulliganSlot('played-weapon')
+    const card = Object.assign(new Container(), {
+      plan: { width: 620, cardId: 'basic_fiery_war_axe' },
+      renderedHeight: 900
+    })
+    card.position.set(-310, -900)
+    const art = new Container()
+    art.label = 'basic_fiery_war_axe:card.artwork'
+    art.position.set(110, 100)
+    const image = new Sprite(Texture.WHITE)
+    image.scale.set(30)
+    art.addChild(image)
+    card.addChild(art)
+    slot.addChild(card)
+    return Object.assign(slot, {
+      card,
+      beginMinionPlayTransition: vi.fn()
+    }) as unknown as GameCardSlot
+  }
+
+  function pausedTimelines(actor: unknown): gsap.core.Timeline[] {
+    const scope = (actor as { animationScope: AnimationScope }).animationScope
+    const timelines: gsap.core.Timeline[] = []
+    const create = scope.timeline.bind(scope)
+    vi.spyOn(scope, 'timeline').mockImplementation((vars) => {
+      const timeline = create(vars).pause()
+      timelines.push(timeline)
+      return timeline
+    })
+    return timelines
+  }
+
+  function entrance() {
+    const value = board()
+    const internal = value as unknown as {
+      cardPlayAnimation: CardPlayAnimation
+      weaponLayer: Container
+    }
+    const play = internal.cardPlayAnimation
+    const slot = weaponSlot()
+    value.addChild(slot)
+    slot.position.set(1100, 700)
+    slot.scale.set(0.3)
+    const view = new Container() as WeaponView
+    view.position.set(800, 855)
+    const artwork = new Sprite(Texture.WHITE)
+    artwork.label = 'weapon.artwork-image'
+    artwork.anchor.set(0.5)
+    artwork.position.set(120, 88)
+    artwork.scale.set(13)
+    view.addChild(artwork)
+    view.pivot.set(120, 105)
+    const previous = new Container()
+    internal.weaponLayer.addChild(previous)
+    const equip = vi.fn(() => {
+      previous.destroy()
+      internal.weaponLayer.addChild(view)
+    })
+    const timelines = pausedTimelines(play)
+    return {
+      value,
+      play,
+      slot,
+      view,
+      previous,
+      equip,
+      timelines,
+      layer: internal.weaponLayer
+    }
+  }
+
+  it('keeps the old weapon through charging, aligns artwork at the swap, and settles once', async () => {
+    const { play, slot, view, previous, equip, timelines, layer } = entrance()
+    const job = play.presentWeaponEntrance(slot, view, layer, equip)
+    expect(previous.destroyed).toBe(false)
+    expect(equip).not.toHaveBeenCalled()
+    const aura = slot.getChildByLabel('game.weapon-play-aura') as Sprite
+    expect(aura).toBeDefined()
+    timelines[0].progress(1)
+    const cardArt = slot.card.getChildByLabel('basic_fiery_war_axe:card.artwork', true)!
+      .children[0] as Sprite
+    const center = cardArt.toGlobal({
+      x: cardArt.texture.width / 2,
+      y: cardArt.texture.height / 2
+    })
+    await Promise.resolve()
+    expect(equip).toHaveBeenCalledOnce()
+    expect(previous.destroyed).toBe(true)
+    expect(slot.alpha).toBe(0)
+    const boardCenter = view
+      .getChildByLabel('weapon.artwork-image')!
+      .toGlobal({ x: 0, y: 0 })
+    expect(boardCenter.x).toBeCloseTo(center.x)
+    expect(boardCenter.y).toBeCloseTo(center.y)
+    timelines[1].progress(1)
+    await job
+    expect(view.position).toMatchObject({ x: 800, y: 855 })
+    expect(view.scale).toMatchObject({ x: 1, y: 1 })
+    expect(slot.destroyed).toBe(true)
+    expect(aura.destroyed).toBe(true)
+    expect(play.children).toHaveLength(0)
+  })
+
+  it('equips a weapon whose card already belongs to the animation layer', async () => {
+    const { play, slot, view, equip, timelines, layer } = entrance()
+    // Both local hand removal and the opponent flight attach the slot first.
+    play.reparentChild(slot)
+    let completed = false
+    let failure: unknown
+    const job = play.presentWeaponEntrance(slot, view, layer, equip).then(
+      () => {
+        completed = true
+      },
+      (error: unknown) => {
+        failure = error
+      }
+    )
+    for (let pass = 0; pass < 10; pass++) {
+      for (const timeline of timelines) timeline.progress(1)
+      await Promise.resolve()
+    }
+    expect(failure).toBeUndefined()
+    expect(completed).toBe(true)
+    await job
+    expect(equip).toHaveBeenCalledOnce()
+    expect(view.parent).toBe(layer)
+    expect(view.position).toMatchObject({ x: 800, y: 855 })
+    expect(slot.destroyed).toBe(true)
+    expect(play.children).toHaveLength(0)
+  })
+
+  it.each(['charge', 'settle'] as const)(
+    'cleans up when disposed during %s',
+    async (stage) => {
+      const { play, slot, view, equip, timelines, layer } = entrance()
+      const job = play.presentWeaponEntrance(slot, view, layer, equip)
+      if (stage === 'settle') {
+        timelines[0].progress(1)
+        await Promise.resolve()
+      }
+      play.dispose()
+      await job
+      expect(slot.destroyed).toBe(true)
+      if (stage === 'charge') {
+        expect(equip).not.toHaveBeenCalled()
+        expect(view.destroyed).toBe(true)
+      } else {
+        expect(equip).toHaveBeenCalledOnce()
+        expect(view.parent).toBe(layer)
+      }
+    }
+  )
+
+  it('reveals an opponent weapon from one hidden hand card before equipping', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      remoteBackCount: number
+      remoteBacks: Sprite[]
+      ensureRemoteBacks(count: number): void
+      createSlot(card: OpeningCard): Promise<GameCardSlot>
+      presentRemoteWeaponPlayed(
+        event: OpeningMatchEvent,
+        card: OpeningCard
+      ): Promise<void>
+      presentWeaponEquipped(
+        event: OpeningMatchEvent,
+        adjustHand: boolean,
+        slot: GameCardSlot
+      ): Promise<void>
+    }
+    const slot = weaponSlot()
+    internal.remoteBackCount = 3
+    internal.ensureRemoteBacks(3)
+    const create = vi.spyOn(internal, 'createSlot').mockResolvedValue(slot)
+    const equip = vi.spyOn(internal, 'presentWeaponEquipped').mockResolvedValue()
+    const timelines = pausedTimelines(value)
+    const source = {
+      instanceId: slot.instanceId,
+      cardId: asCardId('basic_fiery_war_axe'),
+      ownerId: internal.session.remoteParticipantId
+    } as OpeningCard
+    const event = {
+      type: 'weapon-equipped',
+      participantId: internal.session.remoteParticipantId,
+      weapon: { instanceId: source.instanceId }
+    } as OpeningMatchEvent
+    const job = internal.presentRemoteWeaponPlayed(event, source)
+    await Promise.resolve()
+    expect(create).toHaveBeenCalledWith(source)
+    expect(internal.remoteBackCount).toBe(2)
+    expect(slot.card.visible).toBe(false)
+    expect(equip).not.toHaveBeenCalled()
+    timelines[0].progress(1)
+    await Promise.resolve()
+    timelines[1].progress(1)
+    await job
+    expect(equip).toHaveBeenCalledExactlyOnceWith(event, false, slot)
+    expect(internal.remoteBackCount).toBe(2)
+    expect(slot.destroyed).toBe(true)
+  })
+})
+
 describe('local draw profiles', () => {
   it('flies continuously from the deck to a face-up hand card without growing past hand size', () => {
     const start: DrawCorners = [
@@ -1879,6 +2084,7 @@ describe('character indicator tracking', () => {
     const minion = (id: string): MinionView =>
       Object.assign(new Container(), {
         instanceId: id,
+        pulseHealth: vi.fn(),
         setBaseScale: vi.fn(),
         isSelected: () => false
       }) as unknown as MinionView
@@ -4943,7 +5149,13 @@ describe('board lifecycle preservation', () => {
         kind === 'Minion'
           ? [{ type: 'minion-played' }]
           : kind === 'Weapon'
-            ? [{ type: 'weapon-equipped' }]
+            ? [
+                {
+                  type: 'weapon-equipped',
+                  participantId: internal.session.localParticipantId,
+                  weapon: { instanceId: entries[0].card.instanceId }
+                }
+              ]
             : []
       ) as OpeningMatchEvent[]
       const result = {
@@ -4971,6 +5183,14 @@ describe('board lifecycle preservation', () => {
       finishAnimation()
       for (let pass = 0; pass < 12; pass++) await Promise.resolve()
       expect(resolution).toHaveBeenCalledOnce()
+      if (kind === 'Weapon') {
+        expect(internal.presentWeaponEquipped).toHaveBeenCalledExactlyOnceWith(
+          events[0],
+          false,
+          entries[0].slot
+        )
+        expect(resolution).toHaveBeenCalledWith(events, events[0])
+      }
       move(0)
       expect(hand.hoveredSlot).toBe(entries[1].slot)
       finishEffects()

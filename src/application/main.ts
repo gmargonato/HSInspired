@@ -349,14 +349,12 @@ async function bootstrap(): Promise<void> {
       navigateSceneRequest(request)
     }
 
-    if (import.meta.env.DEV && import.meta.hot) {
-      import.meta.hot.on('vite:afterUpdate', () => cursor.mount())
-    }
-
     // The native Electron menu sends requests through preload. Keep all scene
     // construction in the renderer, where SceneManager and Pixi are available.
+    // Clean up only when the document actually leaves. A beforeunload event
+    // can be followed by cancelled navigation, leaving this game running.
     window.addEventListener(
-      'beforeunload',
+      'pagehide',
       () => {
         removeFpsCounter()
         removeDevFilterToggle()
@@ -370,7 +368,7 @@ async function bootstrap(): Promise<void> {
         })
         app.canvas.removeEventListener('contextmenu', preventContextMenu)
         // The browser discards this document, its nodes, and listeners. Avoid
-        // removing the custom cursor early while Vite performs a full reload.
+        // removing the custom cursor early during navigation.
       },
       { once: true }
     )

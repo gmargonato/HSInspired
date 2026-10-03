@@ -31,6 +31,7 @@ export interface CollectionPageViewOptions {
   readonly resolver?: CardAssetResolver
   readonly state: CollectionPageViewState
   readonly getCardBounds: (view: CardView) => CardPreviewRouteBounds
+  readonly canInteract: () => boolean
   readonly onCardTap?: (
     card: CardDefinition,
     source: { view: CardView; bounds: CardPreviewRouteBounds }
@@ -50,7 +51,7 @@ export class CollectionPageView extends Container {
   private readonly classLabel: Text
   private readonly pageLabel: Text
   private readonly emptyStateImage: Sprite
-  private pages: readonly CollectionPage[] = []
+  private currentPage: CollectionPage | null = null
   private renderSequence = 0
   private disposed = false
   private loading = false
@@ -112,10 +113,6 @@ export class CollectionPageView extends Container {
     return this.loading
   }
 
-  setPages(pages: readonly CollectionPage[]): void {
-    this.pages = pages
-  }
-
   setPremiumAppearancePaused(paused: boolean): void {
     this.premiumAppearancePaused = paused
     for (const child of this.cardLayerRoot.children[0]?.children ?? []) {
@@ -123,7 +120,11 @@ export class CollectionPageView extends Container {
     }
   }
 
-  async renderPage(page: CollectionPage, index: number): Promise<void> {
+  async renderPage(
+    page: CollectionPage,
+    index: number,
+    onCommit: () => void
+  ): Promise<boolean> {
     const sequence = ++this.renderSequence
     this.loading = true
     const nextCardLayer = new Container()
@@ -142,13 +143,13 @@ export class CollectionPageView extends Container {
         result.status === 'fulfilled' ? [result.value] : []
       )
       const failedResult = results.find((result) => result.status === 'rejected')
+      if (this.disposed || sequence !== this.renderSequence) {
+        this.destroyCardViews(views)
+        return false
+      }
       if (failedResult?.status === 'rejected') {
         this.destroyCardViews(views)
         throw failedResult.reason
-      }
-      if (this.disposed || sequence !== this.renderSequence) {
-        this.destroyCardViews(views)
-        return
       }
 
       for (const [cardIndex, view] of views.entries()) {
@@ -172,10 +173,15 @@ export class CollectionPageView extends Container {
       this.cardLayerRoot.addChild(nextCardLayer)
       previousCardLayer?.destroy({ children: true })
       this.pageIndex = index
+      this.currentPage = page
       this.classLabel.text = page.cardClass
       this.pageLabel.text = `Page ${page.pageNumber}`
+      this.emptyStateImage.visible = false
+      onCommit()
       this.updateCompletionState()
+      return true
     } finally {
+      if (!nextCardLayer.parent) nextCardLayer.destroy({ children: true })
       if (sequence === this.renderSequence) this.loading = false
     }
   }
@@ -183,6 +189,8 @@ export class CollectionPageView extends Container {
   renderEmpty(): void {
     this.renderSequence += 1
     this.loading = false
+    this.currentPage = null
+    this.pageIndex = 0
     const oldLayer = this.cardLayerRoot.removeChildren()
     for (const child of oldLayer) child.destroy({ children: true })
     this.classLabel.text = ''
@@ -190,12 +198,8 @@ export class CollectionPageView extends Container {
     this.emptyStateImage.visible = true
   }
 
-  showContent(): void {
-    this.emptyStateImage.visible = false
-  }
-
   updateCompletionState(): void {
-    const page = this.pages[this.pageIndex]
+    const page = this.currentPage
     const deck = this.options.state.getActiveDeck()
     const cardLayer = this.cardLayerRoot.children[0]
     if (!(cardLayer instanceof Container) || !page) return
@@ -260,7 +264,7 @@ export class CollectionPageView extends Container {
   ): void {
     if (
       event.button !== 0 ||
-      !this.options.state.getActiveDeck() ||
+      !this.options.canInteract() ||
       this.options.state.isEditorTransitioning()
     )
       return
@@ -275,6 +279,7 @@ export class CollectionPageView extends Container {
   ): void {
     if (
       event.button !== 2 ||
+      !this.options.canInteract() ||
       this.disposed ||
       !this.options.state.isNavigationReady() ||
       this.options.state.isEditorTransitioning() ||

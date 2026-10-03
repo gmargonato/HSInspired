@@ -1,4 +1,9 @@
 import {
+  WINDFURY_DEFAULTS,
+  parseWindfuryTuning,
+  type WindfuryTuning
+} from './windfury-tuning'
+import {
   GOD_RAYS_DEFAULTS,
   parseGodRaysTuning,
   type GodRaysTuning
@@ -483,7 +488,8 @@ export interface OutlineTuningConfig {
   readonly godRays: GodRaysTuning
   readonly godRaysDust: GodRaysDustTuning
   readonly shatter: ShatterTuning
-  readonly version: 13
+  readonly windfury: WindfuryTuning
+  readonly version: 14
   readonly aura: {
     readonly presets: Readonly<Record<OutlinePresetName, AuraTuning>>
     readonly palettes: Readonly<Record<OutlinePaletteName, AuraPalette>>
@@ -531,13 +537,15 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     value && typeof value === 'object' && 'version' in value ? value.version : undefined
   const config = record(
     value,
-    version === 13
-      ? ['version', 'aura', 'ghost', 'shatter', 'godRays', 'godRaysDust']
-      : version === 12
-        ? ['version', 'aura', 'ghost', 'shatter', 'godRays']
-        : version === 10 || version === 11
-          ? ['version', 'aura', 'ghost', 'shatter']
-          : ['version', 'aura', 'ghost']
+    version === 14
+      ? ['version', 'aura', 'ghost', 'shatter', 'godRays', 'godRaysDust', 'windfury']
+      : version === 13
+        ? ['version', 'aura', 'ghost', 'shatter', 'godRays', 'godRaysDust']
+        : version === 12
+          ? ['version', 'aura', 'ghost', 'shatter', 'godRays']
+          : version === 10 || version === 11
+            ? ['version', 'aura', 'ghost', 'shatter']
+            : ['version', 'aura', 'ghost']
   )
   if (
     config.version !== 4 &&
@@ -549,13 +557,17 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     config.version !== 10 &&
     config.version !== 11 &&
     config.version !== 12 &&
-    config.version !== 13
+    config.version !== 13 &&
+    config.version !== 14
   )
     throw new Error('Invalid shader tuning version')
   const aura = record(config.aura, ['presets', 'palettes'])
   const presets = record(
     aura.presets,
-    config.version === 11 || config.version === 12 || config.version === 13
+    config.version === 11 ||
+      config.version === 12 ||
+      config.version === 13 ||
+      config.version === 14
       ? OUTLINE_PRESET_NAMES
       : LEGACY_PRESET_NAMES
   )
@@ -565,7 +577,10 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     OUTLINE_PRESET_NAMES.map((name) => {
       const preset = record(
         presets[
-          config.version === 11 || config.version === 12 || config.version === 13
+          config.version === 11 ||
+          config.version === 12 ||
+          config.version === 13 ||
+          config.version === 14
             ? name
             : AURA_LEGACY_PRESETS[name]
         ],
@@ -609,7 +624,8 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     config.version !== 10 &&
     config.version !== 11 &&
     config.version !== 12 &&
-    config.version !== 13
+    config.version !== 13 &&
+    config.version !== 14
   ) {
     const old = record(ghost.tuning, [
       'windDirection',
@@ -669,18 +685,24 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     config.version === 10 ||
       config.version === 11 ||
       config.version === 12 ||
-      config.version === 13
+      config.version === 13 ||
+      config.version === 14
       ? config.shatter
       : SHATTER_DEFAULTS,
     Object.keys(SHATTER_DEFAULTS)
   )
   return {
-    version: 13,
+    version: 14,
+    windfury: parseWindfuryTuning(
+      config.version === 14 ? config.windfury : WINDFURY_DEFAULTS
+    ),
     godRaysDust: parseGodRaysDustTuning(
-      config.version === 13 ? config.godRaysDust : GOD_RAYS_DUST_DEFAULTS
+      config.version === 13 || config.version === 14
+        ? config.godRaysDust
+        : GOD_RAYS_DUST_DEFAULTS
     ),
     godRays: parseGodRaysTuning(
-      config.version === 12 || config.version === 13
+      config.version === 12 || config.version === 13 || config.version === 14
         ? config.godRays
         : GOD_RAYS_DEFAULTS
     ),

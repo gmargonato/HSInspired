@@ -1,15 +1,16 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { BrowserDialogService } from './services'
 
-// Minimal DOM double: exercise the real notice builder without launching Electron.
+// Exercise the real message builder without launching Electron.
 class Element {
   id = ''
-  type = ''
-  disabled = false
-  style = {}
+  className = ''
+  style: Record<string, string> = {}
   children: Element[] = []
+  attributes: Record<string, string> = {}
+  parent: Element | null = null
   private text = ''
-  private clickHandler?: () => void
+  constructor(readonly tag: string) {}
   get textContent(): string {
     return this.text
   }
@@ -17,72 +18,103 @@ class Element {
     this.text = value
     this.children = []
   }
-  setAttribute(): void {}
+  setAttribute(name: string, value: string): void {
+    this.attributes[name] = value
+  }
   appendChild(child: Element): void {
+    child.parent = this
     this.children.push(child)
   }
-  addEventListener(
-    _event: string,
-    callback: () => void,
-    options?: { once?: boolean }
-  ): void {
-    this.clickHandler = callback
-    void options
-  }
-  remove = vi.fn()
-  click(): void {
-    if (!this.disabled) this.clickHandler?.()
+  remove(): void {
+    if (this.parent)
+      this.parent.children = this.parent.children.filter((child) => child !== this)
+    this.parent = null
   }
 }
-afterEach(() => vi.unstubAllGlobals())
-it('offers a single-use Retry AI action and replaces old controls on a new notice', () => {
-  let notice: Element | null = null
+let body: Element
+beforeEach(() => {
+  vi.useFakeTimers()
+  body = new Element('body')
   vi.stubGlobal('document', {
-    getElementById: () => notice,
-    createElement: () => new Element(),
-    body: {
-      appendChild: (element: Element) => {
-        notice = element
-      }
-    }
+    getElementById: (id: string) =>
+      body.children.find((element) => element.id === id) ?? null,
+    createElement: (tag: string) => new Element(tag),
+    body
   })
-  const dialogs = new BrowserDialogService()
-  const retry = vi.fn()
-  dialogs.error('AI paused', retry)
-  const current = notice as unknown as Element
-  const button = current.children.find((child) => child.textContent === 'Retry AI')!
-  button.click()
-  button.click()
-  expect(retry).toHaveBeenCalledOnce()
-  expect(current.remove).toHaveBeenCalledOnce()
-  dialogs.error('Other error')
-  expect(current.children.map((child) => child.textContent)).toEqual([
-    'Other error',
-    'Dismiss'
-  ])
 })
-it('exits the match when the opponent-left overlay is clicked once', () => {
-  let overlay: Element | null = null
-  vi.stubGlobal('document', {
-    getElementById: () => null,
-    createElement: () => new Element(),
-    body: {
-      appendChild: (element: Element) => {
-        overlay = element
-      }
-    }
-  })
+afterEach(() => {
+  vi.clearAllTimers()
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
+
+it('shows only the artwork and message and removes them after exactly three seconds', () => {
+  new BrowserDialogService().error('A deck cannot contain more than 30 cards.')
+  const notice = body.children[0]
+  expect(notice.style.backgroundImage).toContain('generic-dialog.png')
+  expect(notice.attributes.role).toBe('status')
+  expect(notice.children.map((child) => child.tag)).toEqual(['div'])
+  expect(notice.children[0].textContent).toBe(
+    'A deck cannot contain more than 30 cards.'
+  )
+  vi.advanceTimersByTime(2999)
+  expect(body.children).toEqual([notice])
+  vi.advanceTimersByTime(1)
+  expect(body.children).toEqual([])
+})
+
+it('replaces a message and restarts the timer without stacking notices', () => {
   const dialogs = new BrowserDialogService()
-  const onContinue = vi.fn()
-  dialogs.abandon('Your opponent left.', onContinue)
-  const current = overlay as unknown as Element
-  expect(
-    current.children[0]?.children.find(
-      (child) => child.textContent === 'Your opponent left.'
-    )
-  ).toBeTruthy()
-  current.click()
-  current.click()
-  expect(onContinue).toHaveBeenCalledOnce()
-  expect(current.remove).toHaveBeenCalledOnce()
+  dialogs.error('First')
+  vi.advanceTimersByTime(2000)
+  dialogs.error('Second')
+  expect(body.children).toHaveLength(1)
+  expect(body.children[0].children.map((child) => child.textContent)).toEqual([
+    'Second'
+  ])
+  vi.advanceTimersByTime(1000)
+  expect(body.children).toHaveLength(1)
+  vi.advanceTimersByTime(2000)
+  expect(body.children).toHaveLength(0)
+  dialogs.error('Third')
+  expect(body.children).toHaveLength(1)
+})
+
+it('repeated identical messages also restart the timer', () => {
+  const dialogs = new BrowserDialogService()
+  dialogs.error('Only two copies allowed.')
+  vi.advanceTimersByTime(2500)
+  dialogs.error('Only two copies allowed.')
+  vi.advanceTimersByTime(2999)
+  expect(body.children).toHaveLength(1)
+  vi.advanceTimersByTime(1)
+  expect(body.children).toHaveLength(0)
+})
+
+it('continues an abandoned match once after three seconds without a click', () => {
+  const dialogs = new BrowserDialogService()
+  const continueMatch = vi.fn()
+  dialogs.abandon('Your opponent left.', continueMatch)
+  expect(body.children).toHaveLength(1)
+  expect(body.children[0].children[0].textContent).toBe('Your opponent left.')
+  vi.advanceTimersByTime(2999)
+  expect(continueMatch).not.toHaveBeenCalled()
+  vi.advanceTimersByTime(1)
+  expect(body.children).toHaveLength(0)
+  expect(continueMatch).toHaveBeenCalledOnce()
+  vi.advanceTimersByTime(3000)
+  expect(continueMatch).toHaveBeenCalledOnce()
+})
+
+it('does not strand match recovery when another message replaces the notice', () => {
+  const dialogs = new BrowserDialogService()
+  const continueMatch = vi.fn()
+  dialogs.abandon('Your opponent left.', continueMatch)
+  vi.advanceTimersByTime(1000)
+  dialogs.error('Another message')
+  vi.advanceTimersByTime(2000)
+  expect(continueMatch).toHaveBeenCalledOnce()
+  expect(body.children[0].children[0].textContent).toBe('Another message')
+  vi.advanceTimersByTime(1000)
+  expect(body.children).toHaveLength(0)
 })

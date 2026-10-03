@@ -2958,7 +2958,8 @@
           "type": "player-has-minion-count",
           "player": "self",
           "filter": {
-            "cardId": "whispers_of_the_old_gods_blood_of_the_ancient_one"
+            "cardId": "whispers_of_the_old_gods_blood_of_the_ancient_one",
+            "mortallyWounded": false
           },
           "operator": "gte",
           "value": 2
@@ -2979,9 +2980,11 @@
               "type": "minion",
               "selection": "all",
               "filter": {
-                "cardId": "whispers_of_the_old_gods_blood_of_the_ancient_one"
+                "cardId": "whispers_of_the_old_gods_blood_of_the_ancient_one",
+                "mortallyWounded": false
               },
-              "exclude": "source"
+              "exclude": "source",
+              "count": 1
             }
           }
         ]
@@ -3080,7 +3083,7 @@
     "cost": 5,
     "attack": 3,
     "health": 4,
-    "rulesText": "Taunt Divine Shield",
+    "rulesText": "Taunt. Divine Shield.",
     "keywords": ["divine-shield", "taunt"],
     "effects": [],
     "collectible": true
@@ -3104,8 +3107,8 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
-              "type": "minion",
+              "controller": "any",
+              "type": "character",
               "selection": "chosen"
             },
             "amount": 1
@@ -3252,11 +3255,11 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": "Battlecry: Spend all your Mana. Gain +1/+1 for each mana spent.",
+    "rulesText": "Battlecry: Spend all your Mana. Gain +1/+1 for each Mana spent.",
     "keywords": [],
     "effects": [
       {
-        "trigger": "cast",
+        "trigger": "battlecry",
         "actions": [
           {
             "action": "spend-all-mana",
@@ -3329,7 +3332,7 @@
       {
         "trigger": "on-cast",
         "event": {
-          "type": "spell-cast",
+          "type": "spell-resolved",
           "controller": "self"
         },
         "actions": [
@@ -3386,7 +3389,7 @@
     "cost": 2,
     "attack": 1,
     "health": 4,
-    "rulesText": "Taunt Battlecry: Give your C'Thun Taunt (wherever it is).",
+    "rulesText": "Taunt. Battlecry: Give your C'Thun Taunt (wherever it is).",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -3701,7 +3704,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "minion",
               "selection": "chosen"
             },
@@ -3822,12 +3825,12 @@
           {
             "action": "destroy",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "minion",
-              "selection": "chosen"
-            },
-            "filter": {
-              "frozen": true
+              "selection": "chosen",
+              "filter": {
+                "frozen": true
+              }
             }
           }
         ]
@@ -4053,8 +4056,7 @@
               "filter": {
                 "tribe": "Dragon"
               }
-            },
-            "count": 1
+            }
           }
         ]
       }
@@ -4316,7 +4318,7 @@
     "cost": 4,
     "attack": 2,
     "health": 3,
-    "rulesText": "Taunt Deathrattle: Summon a 2/2 Slime.",
+    "rulesText": "Taunt. Deathrattle: Summon a 2/2 Slime.",
     "keywords": ["taunt"],
     "effects": [
       {

@@ -55,6 +55,15 @@ npm install
 npm run dev
 ```
 
+Development sessions keep running while source files are edited: automatic hot
+updates, reloads, and renderer file watching are disabled. Stop the development
+command and run `npm run dev` again to apply changes, including desktop code.
+The FPS counter and controls remain active during edits.
+
+This preserves already-loaded code, rather than taking a snapshot of the entire
+project. Assets, developer tools, or AI workers first loaded later can still read
+changed files. Existing live tuning controls continue to work.
+
 ## Verify changes
 
 ```bash
@@ -64,6 +73,33 @@ npm run verify      # Formatting, lint, assets, all tests, types, dependencies, 
 
 Artwork verification uses the actual Vite asset pipeline and does not launch the
 game. The full verification command includes the production build smoke check.
+
+## Card behavior campaigns
+
+The headless card campaign runner inventories authored, static generated, and
+dynamic Zombeast entries. It records replayable setup, commands, state snapshots,
+event traces, assertions, and progress under `Artifacts/card-testing/`.
+
+```bash
+npm run cards:test -- preflight
+npm run cards:test -- start [campaign-id]
+npm run cards:test -- status <campaign-id>
+npm run cards:test -- pause <campaign-id>
+npm run cards:test -- resume <campaign-id>
+npm run cards:test -- replay <campaign-id> <scenario-id>
+npm run cards:test -- report <campaign-id>
+```
+
+Campaigns freeze source and catalog fingerprints. Start a linked campaign with
+`--parent <campaign-id>` after changing inputs. The baseline checks command
+acceptance, match invariants, and seeded replay. The interaction phase revisits
+every entry with mixed boards, weapons, companion actions, post-card hero power
+and hero attack attempts, and both turn boundaries. It resolves pending choices
+with the first legal option and records effect-trace paths and bystander changes.
+Trace evidence does not establish semantic correctness. The completed card audit
+and its actionable findings are consolidated in `Artifacts/card-testing/REPORT.md`;
+temporary campaign outputs were removed. Progress is indexed in
+`Artifacts/CARD_TESTING_PROGRESS.md`.
 
 ## Find the code
 

@@ -389,14 +389,24 @@
       {
         "trigger": "secret",
         "event": {
-          "type": "hero-attacked",
+          "type": "attack-resolved",
           "target": {
             "type": "hero",
             "controller": "self",
             "selection": "event-target"
           }
         },
-        "actions": [{ "action": "summon", "cardId": "the_grand_tournament_bear" }]
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "the_grand_tournament_bear"
+          }
+        ],
+        "condition": {
+          "type": "player-health-gt",
+          "player": "self",
+          "value": 0
+        }
       }
     ]
   },
@@ -772,7 +782,7 @@
         "actions": [
           {
             "action": "modify-hero-power-uses",
-            "heroPowerUsesPerTurn": 99
+            "unlimited": true
           }
         ]
       }
@@ -852,8 +862,11 @@
             "winActions": [
               {
                 "action": "modify",
-                "target": { "type": "weapon", "selection": "source" },
-                "health": 1
+                "target": {
+                  "type": "weapon",
+                  "selection": "source"
+                },
+                "durability": 1
               }
             ]
           }
@@ -2273,12 +2286,20 @@
     "effects": [
       {
         "trigger": "battlecry",
-        "condition": { "type": "player-has-minion", "filter": { "keyword": "taunt" } },
+        "condition": {
+          "type": "player-has-minion",
+          "filter": {
+            "keyword": "taunt"
+          }
+        },
         "actions": [
           {
             "action": "modify",
-            "target": { "type": "weapon", "selection": "source" },
-            "health": 1
+            "target": {
+              "type": "weapon",
+              "selection": "source"
+            },
+            "durability": 1
           }
         ]
       }
@@ -2682,7 +2703,7 @@
     "cost": 3,
     "attack": 2,
     "health": 1,
-    "rulesText": "Charge. Divine Shield",
+    "rulesText": "Charge. Divine Shield.",
     "keywords": ["charge", "divine-shield"],
     "effects": []
   },
@@ -2710,7 +2731,7 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Stealth. Divine Shield",
+    "rulesText": "Stealth. Divine Shield.",
     "keywords": ["divine-shield", "stealth"],
     "effects": []
   },
@@ -2745,7 +2766,7 @@
     "cost": 3,
     "attack": 4,
     "health": 3,
-    "rulesText": "Battlecry:. Silence a Demon.",
+    "rulesText": "Battlecry: Silence a Demon.",
     "keywords": [],
     "effects": [
       {
@@ -2968,7 +2989,10 @@
               "controller": "self",
               "selection": "all"
             },
-            "amount": -1
+            "amount": {
+              "operation": "set",
+              "value": 1
+            }
           }
         ]
       }
@@ -3009,7 +3033,7 @@
     "cost": 4,
     "attack": 2,
     "health": 6,
-    "rulesText": "Spell Damage +1",
+    "rulesText": "Spell Damage +1.",
     "keywords": ["spell-damage"],
     "effects": []
   },
@@ -3484,7 +3508,7 @@
     "cost": 7,
     "attack": 4,
     "health": 6,
-    "rulesText": "Charrrrrge Costs (1) less for each friendly Pirate.",
+    "rulesText": "Charrrrrge. Costs (1) less for each friendly Pirate.",
     "keywords": ["charge"],
     "effects": [
       {

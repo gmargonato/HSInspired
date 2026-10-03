@@ -8,6 +8,7 @@ import {
   OUTLINE_TUNINGS,
   GHOST_AURA_CONFIG,
   SHATTER_CONFIG,
+  WINDFURY_CONFIG,
   GOD_RAYS_CONFIG,
   GOD_RAYS_DUST_CONFIG,
   updateOutlineTuningConfig
@@ -16,6 +17,15 @@ import { inverseAuraProjection } from './aura-projection'
 const initialConfig = parseOutlineTuningConfig(rawConfig)
 describe('shader tuning registry', () => {
   afterEach(() => updateOutlineTuningConfig(initialConfig))
+  it('saves Windfury tuning for new production effects', () => {
+    const updated = {
+      ...initialConfig,
+      windfury: { ...initialConfig.windfury, speed: 1.8, thickness: 2 }
+    }
+    updateOutlineTuningConfig(updated)
+    expect(WINDFURY_CONFIG).toEqual(updated.windfury)
+    expect(getOutlineTuningConfig()).toEqual(updated)
+  })
   it('updates Aura and Ghost registries without crossing configurations', () => {
     const updated = structuredClone(rawConfig)
     updated.aura.presets.card.speed = 0.37
@@ -38,7 +48,7 @@ describe('shader tuning registry', () => {
     expect(GOD_RAYS_CONFIG).toEqual(updated.godRays)
     expect(GOD_RAYS_DUST_CONFIG).toEqual(updated.godRaysDust)
     expect(GOD_RAYS_CONFIG.color).not.toBe(updated.godRays.color)
-    expect(getOutlineTuningConfig()).toEqual(updated)
+    expect(getOutlineTuningConfig()).toEqual(parseOutlineTuningConfig(updated))
   })
 })
 describe('Aura perspective projection', () => {

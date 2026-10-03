@@ -12,6 +12,7 @@ import {
   CARD_CATALOG,
   CARD_CLASSES,
   type CardDefinition,
+  type DeckClass,
   type ExpansionId
 } from '../../game-rules/content/cards'
 import { EXPANSION_CATALOG } from '../../game-rules/content/expansions'
@@ -45,14 +46,28 @@ import {
   PAGE_TOP,
   getExpansionFilterButtonPlacement
 } from './collection-layout'
-import { buildCollectionPages, type CollectionPage } from './collection-pages'
+import {
+  buildCollectionPages,
+  capturePageAnchor,
+  resolvePageAnchor,
+  type CollectionPageAnchor,
+  type CollectionPage
+} from './collection-pages'
 import {
   formatManaFilterLabel,
   MANA_FILTER_VALUES,
+  type CollectibleMode,
   type ManaFilterValue
 } from './collection-filters'
-import { queryCollectionCards, type CollectionClassFilter } from './collection-query'
-import { CollectionQueryController } from './collection-query-controller'
+import {
+  queryCollectionCards,
+  type CollectionClassFilter,
+  type CollectionQueryState
+} from './collection-query'
+import {
+  CollectionQueryController,
+  defaultCollectionQuery
+} from './collection-query-controller'
 import { CollectionPageView } from './collection-page-view'
 import { CollectionSearchInput } from './search-input'
 import { ExpansionTray } from './expansion-tray'
@@ -75,6 +90,7 @@ export interface CollectionViewCallbacks {
     sourceBounds: CardPreviewRouteBounds
   ) => void | Promise<void>
   readonly onRevealComplete?: () => void
+  readonly onCollectibleModeChanged?: (mode: CollectibleMode) => void
   readonly onError?: (message: string, error?: unknown) => void
   readonly onWarning?: (message: string, error?: unknown) => void
 }
@@ -82,6 +98,11 @@ export interface CollectionViewCallbacks {
 export interface CollectionCardAddSource {
   readonly view: CardView
   readonly bounds: CardPreviewRouteBounds
+}
+
+export interface CollectionBrowsingState {
+  readonly query: CollectionQueryState
+  readonly anchor: CollectionPageAnchor | null
 }
 
 export interface CollectionViewOptions {
@@ -107,6 +128,9 @@ interface ClassFilterControl {
  */
 export class CollectionView extends Actor {
   private readonly collectionQuery = new CollectionQueryController()
+  private committedQuery = this.collectionQuery.snapshot()
+  private deckClass: DeckClass | null = null
+  private committedDeckClass: DeckClass | null = null
   private pages: readonly CollectionPage[] = []
   private readonly cardResolver = new CardAssetResolver()
 
@@ -120,6 +144,7 @@ export class CollectionView extends Actor {
   private readonly manaFilterControls: Container[] = []
   private readonly manaFilterCrystals: Sprite[] = []
   private readonly manaFilterLabels: Text[] = []
+  private hoveredMana: ManaFilterValue | null = null
   private readonly classFilterControls: ClassFilterControl[] = []
   private searchInput: CollectionSearchInput | null = null
   private searchClearButton!: Sprite
@@ -131,6 +156,7 @@ export class CollectionView extends Actor {
   private hoveredPageZone: CursorContextVariant | null = null
   private pageHoverSequence = 0
   private disposed = false
+  private paused = false
 
   constructor(private readonly options: CollectionViewOptions) {
     super()
@@ -138,6 +164,7 @@ export class CollectionView extends Actor {
       assets: options.assets,
       resolver: this.cardResolver,
       state: options.state,
+      canInteract: () => this.canInteract() && !this.pageLoading,
       getCardBounds: (view) => this.getCardBounds(view),
       onCardTap: (card, source) => options.callbacks?.onCardTap?.(card, source),
       onCardPreview: (card, bounds) => options.callbacks?.onCardPreview?.(card, bounds)
@@ -194,11 +221,12 @@ export class CollectionView extends Actor {
     if (this.pages.length === 0) {
       throw new Error('Collection has no cards to display')
     }
-    this.pageView.setPages(this.pages)
 
     this.setNavigationEnabled(false)
     this.createCollectionFilters()
     this.createExpansionFilter()
+    this.syncFilterControls()
+    this.updateCollectionFilterModes()
   }
 
   /**
@@ -232,16 +260,14 @@ export class CollectionView extends Actor {
     return this.collectionQuery.classFilter
   }
 
-  get collectibleMode(): string {
+  get collectibleMode(): CollectibleMode {
     return this.collectionQuery.collectibleMode
   }
 
-  async setCollectibleMode(
-    mode: import('./collection-filters').CollectibleMode
-  ): Promise<void> {
+  async setCollectibleMode(mode: CollectibleMode): Promise<void> {
     if (this.collectionQuery.collectibleMode === mode) return
     this.collectionQuery.setCollectibleMode(mode)
-    await this.applyCollectionFilters()
+    await this.applyCollectionFilters(true)
   }
 
   /** Re-applies deck copy-limit dimming to the current page. */
@@ -255,29 +281,48 @@ export class CollectionView extends Actor {
 
     this.collectionQuery.setClassFilter(classFilter)
     this.updateClassFilterAppearance()
+    // Clearing a class broadens the results without leaving the current cards.
+    await this.applyCollectionFilters(classFilter === null)
+  }
+
+  async setDeckClass(deckClass: DeckClass | null): Promise<void> {
+    this.deckClass = deckClass
+    this.collectionQuery.restore(defaultCollectionQuery())
+    this.syncFilterControls()
     await this.applyCollectionFilters()
+  }
+
+  captureBrowsingState(): CollectionBrowsingState {
+    return {
+      query: this.committedQuery,
+      anchor: capturePageAnchor(this.pages[this.pageIndex])
+    }
+  }
+
+  async restoreBrowsingState(state: CollectionBrowsingState): Promise<void> {
+    this.deckClass = null
+    this.collectionQuery.restore(state.query)
+    this.syncFilterControls()
+    const pages = this.buildFilteredPages()
+    await this.renderPages(pages, resolvePageAnchor(pages, state.anchor))
   }
 
   /** Re-evaluates controls after the deck editor changes open/closed state. */
   refreshFilterInteractionState(): void {
     this.updateCollectionFilterModes()
+    this.updatePageZoneModes()
   }
 
   onPause(): void {
+    this.paused = true
     this.pageView.setPremiumAppearancePaused(true)
-    this.setSearchInputVisible(false)
-    for (const control of this.manaFilterControls) {
-      control.eventMode = 'none'
-    }
-    for (const { control } of this.classFilterControls) {
-      control.eventMode = 'none'
-    }
-    this.expansionTray?.setEnabled(false)
+    this.refreshFilterInteractionState()
   }
 
   onResume(): void {
+    this.paused = false
     this.pageView.setPremiumAppearancePaused(false)
-    this.updateCollectionFilterModes()
+    this.refreshFilterInteractionState()
   }
 
   onExit(): void {
@@ -333,10 +378,12 @@ export class CollectionView extends Actor {
 
   private createCollectionFilters(): void {
     const collectionFilterLayer = new Container()
+    collectionFilterLayer.label = 'collection.filters'
     this.pageView.addChild(collectionFilterLayer)
 
     for (const [index, value] of MANA_FILTER_VALUES.entries()) {
       const control = new Container()
+      control.label = `collection.mana-${value}`
       control.position.set(
         COLLECTION_LAYOUT.collectionFilters.mana.firstCrystalCenter.x +
           index * COLLECTION_LAYOUT.collectionFilters.mana.gap,
@@ -351,13 +398,16 @@ export class CollectionView extends Actor {
       })
 
       const crystal = new Sprite(this.options.assets.manaCrystal)
+      crystal.label = `collection.mana-${value}.crystal`
       applyAnchoredPlacement(crystal, COLLECTION_LAYOUT.collectionFilters.mana.crystal)
       crystal.eventMode = 'none'
       control.addChild(crystal)
       control.on('pointerover', () => {
-        crystal.filters = [this.getManaFilterHighlightFilter()]
+        this.hoveredMana = value
+        this.updateManaFilterAppearance()
       })
       control.on('pointerout', () => {
+        if (this.hoveredMana === value) this.hoveredMana = null
         this.updateManaFilterAppearance()
       })
 
@@ -372,6 +422,7 @@ export class CollectionView extends Actor {
         }
       })
       label.anchor.set(0.5)
+      label.label = `collection.mana-${value}.label`
       label.position.set(
         COLLECTION_LAYOUT.collectionFilters.mana.labelOffset.x,
         COLLECTION_LAYOUT.collectionFilters.mana.labelOffset.y
@@ -386,6 +437,7 @@ export class CollectionView extends Actor {
     }
 
     this.searchClearButton = new Sprite(this.options.assets.searchClear)
+    this.searchClearButton.label = 'collection.search-clear'
     this.searchClearButton.anchor.set(0.5)
     this.searchClearButton.position.set(
       COLLECTION_LAYOUT.collectionFilters.searchClear.position.x,
@@ -534,6 +586,7 @@ export class CollectionView extends Actor {
   }
 
   private readonly handleSearchInput = (value: string): void => {
+    if (!this.canInteract()) return
     this.collectionQuery.setSearchQuery(value)
     this.updateSearchClearVisibility()
     void this.applyCollectionFilters().catch((error: unknown) => {
@@ -542,7 +595,7 @@ export class CollectionView extends Actor {
   }
 
   private clearSearch(): void {
-    if (!this.searchInput) return
+    if (!this.searchInput || !this.canInteract()) return
 
     this.searchInput.setValue('')
     this.collectionQuery.setSearchQuery('')
@@ -562,47 +615,34 @@ export class CollectionView extends Actor {
   }
 
   private handleExpansionFilterTap(expansionId: ExpansionId): void {
-    if (
-      !this.options.state.isNavigationReady() ||
-      !this.navigationEnabled ||
-      this.options.state.isNewDeckOpen()
-    ) {
-      return
-    }
+    if (!this.canInteract()) return
 
     this.collectionQuery.toggleExpansionVisibility(expansionId)
     this.expansionTray?.syncHiddenExpansions()
-    void this.applyCollectionFilters().catch((error: unknown) => {
+    void this.applyCollectionFilters(true).catch((error: unknown) => {
       this.options.callbacks?.onError?.('Failed to filter the collection.', error)
     })
   }
 
   private handleManaFilterTap(value: ManaFilterValue): void {
-    if (
-      !this.options.state.isNavigationReady() ||
-      !this.navigationEnabled ||
-      this.options.state.isNewDeckOpen()
-    ) {
-      return
-    }
+    if (!this.canInteract()) return
 
     this.collectionQuery.toggleManaFilter(value)
     this.updateManaFilterAppearance()
-    void this.applyCollectionFilters().catch((error: unknown) => {
+    void this.applyCollectionFilters(true).catch((error: unknown) => {
       this.options.callbacks?.onError?.('Failed to filter the collection.', error)
     })
   }
 
-  private handleClassFilterTap(cardClass: Exclude<CollectionClassFilter, null>): void {
+  private handleClassFilterTap(cardClass: CollectionClassFilter): void {
+    if (!this.canInteract()) return
     if (
-      !this.options.state.isNavigationReady() ||
-      !this.navigationEnabled ||
-      this.options.state.isNewDeckOpen() ||
-      this.options.state.getActiveDeck() !== null
-    ) {
+      this.deckClass &&
+      cardClass &&
+      cardClass !== this.deckClass &&
+      cardClass !== 'Neutral'
+    )
       return
-    }
-
     const nextFilter = this.collectionQuery.classFilter === cardClass ? null : cardClass
     void this.applyClassFilter(nextFilter).catch((error: unknown) => {
       this.options.callbacks?.onError?.('Failed to filter the collection.', error)
@@ -610,12 +650,10 @@ export class CollectionView extends Actor {
   }
 
   private updateClassFilterAppearance(): void {
-    const isDeckEditing = this.options.state.getActiveDeck() !== null
-    const selectedClass = this.collectionQuery.classFilter
     const visibleControls =
-      isDeckEditing && selectedClass !== null
+      this.deckClass !== null
         ? this.classFilterControls.filter(
-            ({ cardClass }) => cardClass === selectedClass || cardClass === 'Neutral'
+            ({ cardClass }) => cardClass === this.deckClass || cardClass === 'Neutral'
           )
         : this.classFilterControls
     const { width } = COLLECTION_LAYOUT.classFilters.first.size
@@ -638,14 +676,7 @@ export class CollectionView extends Actor {
     const { background, cardClass, control, label } = classControl
     const { width, height } = COLLECTION_LAYOUT.classFilters.first.size
     const isSelected = this.collectionQuery.classFilter === cardClass
-    const isLocked = this.options.state.getActiveDeck() !== null
-    const isInteractive =
-      this.navigationEnabled &&
-      this.options.state.isNavigationReady() &&
-      !this.options.state.isNewDeckOpen() &&
-      !this.options.state.isEditorTransitioning() &&
-      !this.options.state.isEditorClosing() &&
-      !isLocked
+    const isInteractive = this.canInteract()
 
     background.clear()
     background.roundRect(0, 0, width, height, 6)
@@ -675,7 +706,10 @@ export class CollectionView extends Actor {
       if (!crystal || !label) continue
 
       crystal.alpha = 1
-      crystal.filters = isActive ? [this.getManaFilterHighlightFilter()] : null
+      crystal.filters =
+        isActive || (this.hoveredMana === value && this.canInteract())
+          ? [this.getManaFilterHighlightFilter()]
+          : null
       label.alpha = 1
       control.cursor = 'pointer'
     }
@@ -689,40 +723,77 @@ export class CollectionView extends Actor {
     return this.manaFilterHighlightFilter
   }
 
-  private async applyCollectionFilters(): Promise<void> {
+  private async applyCollectionFilters(preservePosition = false): Promise<void> {
     const pages = this.buildFilteredPages()
-
-    this.pages = pages
-    this.pageView.setPages(pages)
-    this.pageIndex = 0
-    if (pages.length === 0) {
-      this.renderEmptyCollectionState()
-      return
-    }
-
-    this.pageView.showContent()
-    await this.renderPage(0)
+    const anchor = preservePosition
+      ? capturePageAnchor(this.pages[this.pageIndex])
+      : null
+    await this.renderPages(pages, resolvePageAnchor(pages, anchor))
   }
 
-  private renderEmptyCollectionState(): void {
-    this.pageView.renderEmpty()
-    this.updatePageZoneModes()
+  private syncFilterControls(): void {
+    this.searchInput?.setValue(this.collectionQuery.searchQuery)
+    this.updateSearchClearVisibility()
+    this.updateManaFilterAppearance()
+    this.updateClassFilterAppearance()
+    this.expansionTray?.syncHiddenExpansions()
   }
 
   private buildFilteredPages(): readonly CollectionPage[] {
     const filteredCards = queryCollectionCards(
       CARD_CATALOG.all,
-      this.collectionQuery.snapshot()
+      this.collectionQuery.snapshot(),
+      this.deckClass
     )
     return buildCollectionPages(filteredCards)
   }
 
   async renderPage(index: number): Promise<void> {
-    const page = this.pages[index]
-    if (!page) throw new Error('Collection page does not exist: ' + index)
-    await this.pageView.renderPage(page, index)
-    this.pageIndex = index
-    if (!this.disposed) this.updatePageZoneModes()
+    await this.renderPages(this.pages, index)
+  }
+
+  private async renderPages(
+    pages: readonly CollectionPage[],
+    index: number
+  ): Promise<void> {
+    if (this.disposed) return
+    const sequence = ++this.renderSequence
+    const query = this.collectionQuery.snapshot()
+    const deckClass = this.deckClass
+    this.pageLoading = true
+    this.updatePageZoneModes()
+    const commit = (): void => {
+      this.pages = pages
+      this.pageIndex = index
+      this.committedQuery = query
+      this.committedDeckClass = deckClass
+      this.syncFilterControls()
+      this.options.callbacks?.onCollectibleModeChanged?.(query.collectibleMode)
+    }
+    try {
+      if (pages.length === 0) {
+        this.pageView.renderEmpty()
+        commit()
+      } else {
+        const page = pages[index]
+        if (!page) throw new Error('Collection page does not exist: ' + index)
+        await this.pageView.renderPage(page, index, commit)
+      }
+    } catch (error) {
+      if (this.disposed || sequence !== this.renderSequence) return
+      this.collectionQuery.restore(this.committedQuery)
+      this.deckClass = this.committedDeckClass
+      this.syncFilterControls()
+      this.options.callbacks?.onCollectibleModeChanged?.(
+        this.committedQuery.collectibleMode
+      )
+      throw error
+    } finally {
+      if (!this.disposed && sequence === this.renderSequence) {
+        this.pageLoading = false
+        this.updatePageZoneModes()
+      }
+    }
   }
 
   private updateCollectionCardCompletionState(): void {
@@ -750,6 +821,7 @@ export class CollectionView extends Actor {
     onClick: () => void
   ): Container {
     const zone = new Container()
+    zone.label = `collection.${cursorVariant}`
     zone.position.set(x, PAGE_TOP)
     zone.hitArea = new Rectangle(0, 0, width, PAGE_HEIGHT)
     zone.eventMode = 'none'
@@ -779,21 +851,28 @@ export class CollectionView extends Actor {
     return zone
   }
 
-  private updateCollectionFilterModes(): void {
-    const filtersEnabled =
+  private canInteract(): boolean {
+    return (
+      !this.disposed &&
+      !this.paused &&
       this.navigationEnabled &&
       this.options.state.isNavigationReady() &&
       !this.options.state.isNewDeckOpen() &&
       !this.options.state.isEditorTransitioning() &&
       !this.options.state.isEditorClosing()
+    )
+  }
+
+  private updateCollectionFilterModes(): void {
+    const filtersEnabled = this.canInteract()
 
     for (const control of this.manaFilterControls) {
       control.eventMode = filtersEnabled ? 'static' : 'none'
     }
-    const classFiltersEnabled =
-      filtersEnabled && this.options.state.getActiveDeck() === null
+    if (!filtersEnabled) this.hoveredMana = null
+    this.updateManaFilterAppearance()
     for (const { control } of this.classFilterControls) {
-      control.eventMode = classFiltersEnabled ? 'static' : 'none'
+      control.eventMode = filtersEnabled ? 'static' : 'none'
     }
     this.updateClassFilterAppearance()
     if (this.searchClearButton) {
@@ -804,8 +883,8 @@ export class CollectionView extends Actor {
   }
 
   private updatePageZoneModes(): void {
-    const creationOpen = this.options.state.isNewDeckOpen()
-    const navigationEnabled = this.navigationEnabled && !creationOpen
+    // Keep hover tracking alive while loading; changePage guards repeat clicks.
+    const navigationEnabled = this.canInteract()
 
     const previousPageEnabled = navigationEnabled && this.pageIndex > 0
     const nextPageEnabled = navigationEnabled && this.pageIndex < this.pages.length - 1
@@ -825,7 +904,7 @@ export class CollectionView extends Actor {
   }
 
   private changePage(delta: number): void {
-    if (this.pageLoading || !this.options.state.isNavigationReady()) return
+    if (this.pageLoading || !this.canInteract()) return
 
     const nextIndex = this.pageIndex + delta
     if (nextIndex < 0 || nextIndex >= this.pages.length) return

@@ -1,4 +1,8 @@
 import {
+  WINDFURY_RANGES,
+  type WindfuryTuning
+} from '../../desktop/contracts/ipc/windfury-tuning'
+import {
   AURA_CATEGORIES,
   AURA_ELEMENT_LABELS,
   auraCategory,
@@ -26,7 +30,7 @@ import {
   type GodRaysTuning
 } from '../../desktop/contracts/ipc/god-rays-tuning'
 
-type LabShader = 'aura' | 'ghost' | 'shatter' | 'god-rays'
+type LabShader = 'aura' | 'ghost' | 'shatter' | 'god-rays' | 'windfury'
 import {
   GOD_RAYS_DUST_RANGES,
   type GodRaysDustTuning
@@ -76,6 +80,7 @@ export class OutlineLabShaderControls {
       ['aura', 'Aura Shader'],
       ['ghost', 'Ghost Aura Shader'],
       ['shatter', 'Shatter Shader'],
+      ['windfury', 'Windfury'],
       ['god-rays', 'God Rays — Main Menu']
     ]) {
       const option = document.createElement('option')
@@ -231,6 +236,42 @@ export class OutlineLabShaderControls {
       (group) => group.querySelector('legend')?.textContent === 'Shared'
     )
     shared?.append(buttons)
+  }
+
+  showWindfury(tuning: WindfuryTuning, onChange: Change, reset: () => void): void {
+    this.shader.value = 'windfury'
+    const labels: Record<keyof WindfuryTuning, string> = {
+      speed: 'Speed (0 pauses)',
+      thickness: 'Ribbon thickness',
+      ribbons: 'Ribbon count',
+      trailLength: 'Trail length (half-turns)',
+      width: 'Orbit width',
+      orbitDepth: 'Orbit depth',
+      spacing: 'Ribbon spacing',
+      opacity: 'Opacity',
+      softness: 'Edge softness',
+      color: 'Wind color'
+    }
+    this.render(
+      [
+        ...Object.entries(WINDFURY_RANGES).map(([key, [min, max]]): Control => ({
+          key,
+          label: labels[key as keyof WindfuryTuning],
+          section: 'Windfury',
+          type: 'range',
+          min,
+          max,
+          step: key === 'ribbons' ? 1 : 0.01
+        })),
+        { key: 'color', label: labels.color, section: 'Windfury', type: 'color' }
+      ],
+      { ...tuning },
+      onChange
+    )
+    const button = document.createElement('button')
+    button.textContent = 'Reset Windfury'
+    button.onclick = reset
+    this.content.append(button)
   }
 
   showShatter(

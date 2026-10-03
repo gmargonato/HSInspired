@@ -9,7 +9,7 @@
     "cost": 5,
     "attack": 4,
     "health": 4,
-    "rulesText": "Taunt. Deathrattle: deal 2 damage to all characters",
+    "rulesText": "Taunt. Deathrattle: Deal 2 damage to all characters.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -38,7 +38,7 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "Battlecry: Give a minion 2 Attack this turn.",
+    "rulesText": "Battlecry: Give a minion +2 Attack this turn.",
     "keywords": [],
     "effects": [
       {
@@ -99,7 +99,7 @@
     "cost": 8,
     "attack": 3,
     "health": 5,
-    "rulesText": "Windfury, Charge, Divine Shield, Taunt.",
+    "rulesText": "Windfury. Charge. Divine Shield. Taunt.",
     "keywords": ["windfury", "charge", "divine-shield", "taunt"],
     "effects": []
   },
@@ -113,7 +113,7 @@
     "cost": 3,
     "attack": 0,
     "health": 3,
-    "rulesText": "At the start of your turn swap this minion with a random one in your hand",
+    "rulesText": "At the start of your turn, swap this minion with a random one in your hand.",
     "keywords": [],
     "effects": [
       {
@@ -146,7 +146,7 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Change an enemy minion's attack to 1.",
+    "rulesText": "Battlecry: Change an enemy minion's Attack to 1.",
     "keywords": [],
     "effects": [
       {
@@ -208,7 +208,7 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Enrage: 3 attack",
+    "rulesText": "Enrage: +3 Attack.",
     "keywords": [],
     "effects": [
       {
@@ -571,10 +571,6 @@
         "trigger": "battlecry",
         "actions": [
           {
-            "action": "replace-hero",
-            "heroId": "jaraxxus"
-          },
-          {
             "action": "equip",
             "cardId": "classic_battle_axe"
           }
@@ -648,7 +644,7 @@
     "cost": 6,
     "attack": 4,
     "health": 2,
-    "rulesText": "Charge, Divine Shield",
+    "rulesText": "Charge. Divine Shield.",
     "keywords": ["charge", "divine-shield"],
     "effects": []
   },
@@ -811,7 +807,7 @@
     "cost": 5,
     "attack": 4,
     "health": 4,
-    "rulesText": "Spell Damage 1. Battlecry: Draw a card.",
+    "rulesText": "Spell Damage +1. Battlecry: Draw a card.",
     "keywords": ["spell-damage"],
     "effects": [
       {
@@ -1084,7 +1080,7 @@
           {
             "action": "modify",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "minion",
               "selection": "chosen",
               "filter": {
@@ -1097,7 +1093,7 @@
           {
             "action": "grant-keyword",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "minion",
               "selection": "chosen",
               "filter": {
@@ -1568,7 +1564,7 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy all minions except one. (chosen randomly)",
+    "rulesText": "Destroy all minions except one (chosen randomly).",
     "keywords": [],
     "effects": [
       {
@@ -1615,7 +1611,7 @@
     "cost": 6,
     "attack": 4,
     "health": 5,
-    "rulesText": "Battlecry: Take control of an enemy minion that has 2 or less Attack.",
+    "rulesText": "Battlecry: Take control of an enemy minion with an Attack of 2 or less.",
     "keywords": [],
     "effects": [
       {
@@ -2010,7 +2006,7 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When your opponent casts a spell, Counter it.",
+    "rulesText": "Secret: When your opponent casts a spell, counter it.",
     "keywords": ["secret"],
     "effects": [
       {
@@ -2412,7 +2408,7 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to a minion. If it's a friendly Demon give it +2/+2 instead.",
+    "rulesText": "Deal 2 damage to a minion. If it's a friendly Demon, give it +2/+2 instead.",
     "keywords": [],
     "effects": [
       {
@@ -2535,7 +2531,7 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Draw cards until you have as many in hand as your opponent.",
+    "rulesText": "Draw cards until you have as many cards in hand as your opponent.",
     "keywords": [],
     "effects": [
       {
@@ -2593,7 +2589,7 @@
     "cost": 5,
     "attack": 2,
     "health": 8,
-    "rulesText": "Windfury, Overload: (2)",
+    "rulesText": "Windfury. Overload: (2)",
     "keywords": ["windfury"],
     "effects": [
       {
@@ -2876,7 +2872,7 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry: Restore 3 Health",
+    "rulesText": "Battlecry: Restore 3 Health.",
     "keywords": [],
     "effects": [
       {
@@ -2944,7 +2940,7 @@
     "cost": 1,
     "attack": 0,
     "health": 4,
-    "rulesText": "At the end of your turn, give a random minion 1/ 1.",
+    "rulesText": "At the end of your turn, give a random minion +1/+1.",
     "keywords": [],
     "effects": [
       {
@@ -2953,7 +2949,7 @@
           {
             "action": "modify",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "minion",
               "selection": "random"
             },
@@ -3567,10 +3563,10 @@
             "target": {
               "controller": "opponent",
               "type": "minion",
-              "selection": "random"
+              "selection": "random",
+              "count": 2
             },
-            "amount": 2,
-            "hits": 2
+            "amount": 2
           },
           {
             "action": "overload",
@@ -3883,7 +3879,7 @@
     "cost": 5,
     "attack": 5,
     "health": 4,
-    "rulesText": "Battlecry: Destroy your opponent weapon and draw cards equal to its durability",
+    "rulesText": "Battlecry: Destroy your opponent's weapon and draw cards equal to its Durability.",
     "keywords": [],
     "effects": [
       {
@@ -3918,7 +3914,7 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Deathrattle: Summon a 2/1 Damaged Golem",
+    "rulesText": "Deathrattle: Summon a 2/1 Damaged Golem.",
     "keywords": [],
     "effects": [
       {
@@ -4007,7 +4003,7 @@
     "cost": 6,
     "attack": 4,
     "health": 4,
-    "rulesText": "At the end of your turn, Summon a 2/2 Gnoll with Taunt",
+    "rulesText": "At the end of your turn, summon a 2/2 Gnoll with Taunt.",
     "keywords": [],
     "effects": [
       {
@@ -4100,7 +4096,7 @@
     "cost": 5,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to all enemies. Restore 2 health to all friendly characters.",
+    "rulesText": "Deal 2 damage to all enemies. Restore 2 Health to all friendly characters.",
     "keywords": [],
     "effects": [
       {
@@ -4154,7 +4150,7 @@
             "action": "damage",
             "target": {
               "controller": "any",
-              "type": "minion",
+              "type": "character",
               "selection": "chosen"
             },
             "amount": {
@@ -4479,7 +4475,7 @@
     "cost": 3,
     "attack": 4,
     "health": 7,
-    "rulesText": "Battlecry:Deal 4 damage to HIMSELF.",
+    "rulesText": "Battlecry: Deal 4 damage to itself.",
     "keywords": [],
     "effects": [
       {
@@ -4507,7 +4503,7 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Change a minions Attack to be equal to its Health.",
+    "rulesText": "Change a minion's Attack to equal its Health.",
     "keywords": [],
     "effects": [
       {
@@ -4589,7 +4585,7 @@
     "cost": 2,
     "attack": 2,
     "health": 1,
-    "rulesText": "Battlecry:Silence a minion.",
+    "rulesText": "Battlecry: Silence a minion.",
     "keywords": [],
     "effects": [
       {
@@ -4617,7 +4613,7 @@
     "cost": 3,
     "attack": 2,
     "health": 2,
-    "rulesText": "Battlecry:Deal 1 damage.",
+    "rulesText": "Battlecry: Deal 1 damage.",
     "keywords": [],
     "effects": [
       {
@@ -4811,7 +4807,7 @@
     "cost": 3,
     "attack": 5,
     "health": 5,
-    "rulesText": "Battlecry: Give your opponent 2 Bananas",
+    "rulesText": "Battlecry: Give your opponent 2 Bananas.",
     "keywords": [],
     "effects": [
       {
@@ -4848,15 +4844,19 @@
             "target": {
               "controller": "self",
               "type": "card",
-              "selection": "next",
+              "selection": "all",
               "zone": "hand",
               "filter": {
-                "cardType": "Secret"
+                "keyword": "secret"
               }
             },
-            "amount": -999,
+            "amount": {
+              "operation": "set",
+              "value": 0
+            },
             "minimum": 0,
-            "duration": "this-turn"
+            "duration": "this-turn",
+            "deferUntil": "next-matching-card-played"
           }
         ]
       }
@@ -5045,7 +5045,7 @@
     "cost": 3,
     "attack": 2,
     "health": 4,
-    "rulesText": "Other friendly minions have 1 Attack.",
+    "rulesText": "Other friendly minions have +1 Attack.",
     "keywords": [],
     "effects": [
       {
@@ -5075,7 +5075,7 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "Deathrattle:Deal 2 damage to the enemy hero.",
+    "rulesText": "Deathrattle: Deal 2 damage to the enemy hero.",
     "keywords": [],
     "effects": [
       {
@@ -5318,7 +5318,7 @@
     "cost": 2,
     "attack": 2,
     "health": 1,
-    "rulesText": "Deathrattle:Draw a card.",
+    "rulesText": "Deathrattle: Draw a card.",
     "keywords": [],
     "effects": [
       {
@@ -5348,12 +5348,17 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
             "heroId": "jaraxxus"
-          },
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "actions": [
           {
             "action": "equip",
             "cardId": "classic_blood_fury"
@@ -5422,7 +5427,7 @@
     "cost": 2,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry:Deal 3 damage randomly split between all other characters.",
+    "rulesText": "Battlecry: Deal 3 damage randomly split between all other characters.",
     "keywords": [],
     "effects": [
       {
@@ -5726,7 +5731,7 @@
     "cost": 2,
     "attack": 1,
     "health": 3,
-    "rulesText": "At the end of your turn,give another random friendly minion +1 Attack.",
+    "rulesText": "At the end of your turn, give another random friendly minion +1 Attack.",
     "keywords": [],
     "effects": [
       {
@@ -5809,7 +5814,7 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Battlecry:If your opponent has 4 or more minions, take control of one of at random.",
+    "rulesText": "Battlecry: If your opponent has 4 or more minions, take control of one at random.",
     "keywords": [],
     "effects": [
       {
@@ -5922,7 +5927,7 @@
     "cost": 20,
     "attack": 8,
     "health": 8,
-    "rulesText": "Costs (1) less for each damage your hero has taken.",
+    "rulesText": "Costs (1) less for each point of damage your hero has taken.",
     "keywords": [],
     "effects": [
       {
@@ -5982,7 +5987,7 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 4 damage.If your hero has 12 or less Health, deal 6 damage instead.",
+    "rulesText": "Deal 4 damage. If your hero has 12 Health or less, deal 6 damage instead.",
     "keywords": [],
     "effects": [
       {
@@ -6109,7 +6114,7 @@
           {
             "action": "modify",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "minion",
               "selection": "all",
               "filter": {
@@ -6566,7 +6571,7 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Choose one - Give your minions +1/+1; or Summon a 3/2 Panther.",
+    "rulesText": "Choose One - Give your minions +1/+1; or Summon a 3/2 Panther.",
     "keywords": [],
     "effects": [
       {
@@ -6819,7 +6824,7 @@
     "cost": 3,
     "attack": 3,
     "health": 3,
-    "rulesText": "Enrage: Windfury and +1 Attack",
+    "rulesText": "Enrage: Windfury and +1 Attack.",
     "keywords": [],
     "effects": [
       {
@@ -7222,7 +7227,7 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Gain control of an enemy minion with 3 or less Attack until end of turn.",
+    "rulesText": "Gain control of an enemy minion with an Attack of 3 or less until the end of the turn.",
     "keywords": [],
     "effects": [
       {
@@ -7307,7 +7312,7 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Your Hero Power becomes 'Deal 2 damage'. If already in Shadowform: 3 damage.",
+    "rulesText": "Your Hero Power becomes 'Deal 2 damage.' If you're already in Shadowform, it deals 3 damage instead.",
     "keywords": [],
     "effects": [
       {
@@ -7568,7 +7573,7 @@
     "cost": 5,
     "attack": 4,
     "health": 4,
-    "rulesText": "Battlecry:Summon a 2/2 Squire.",
+    "rulesText": "Battlecry: Summon a 2/2 Squire.",
     "keywords": [],
     "effects": [
       {
@@ -7621,7 +7626,7 @@
     "cost": 6,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a minion.Restore 3 Health to your hero.",
+    "rulesText": "Destroy a minion. Restore 3 Health to your hero.",
     "keywords": [],
     "effects": [
       {
@@ -7673,7 +7678,7 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 2 damage to a minion.If it survives, draw a card.",
+    "rulesText": "Deal 2 damage to a minion. If it survives, draw a card.",
     "keywords": [],
     "effects": [
       {
@@ -7937,7 +7942,7 @@
     "cost": 4,
     "attack": 4,
     "health": 3,
-    "rulesText": "Battlecry:Silence a minion.",
+    "rulesText": "Battlecry: Silence a minion.",
     "keywords": [],
     "effects": [
       {
@@ -7981,7 +7986,7 @@
     "cost": 5,
     "attack": 4,
     "health": 6,
-    "rulesText": "Enrage: Your weapon has +2 attack.",
+    "rulesText": "Enrage: Your weapon has +2 Attack.",
     "keywords": [],
     "effects": [
       {
@@ -8069,7 +8074,7 @@
     "cost": 5,
     "attack": 3,
     "health": 5,
-    "rulesText": "Battlecry:Destroy a random enemy minion with 2 or less Attack.",
+    "rulesText": "Battlecry: Destroy a random enemy minion with an Attack of 2 or less.",
     "keywords": [],
     "effects": [
       {
@@ -8295,7 +8300,7 @@
     "cost": 2,
     "attack": 2,
     "health": 3,
-    "rulesText": "Battlecry:Give adjacent minions Taunt.",
+    "rulesText": "Battlecry: Give adjacent minions Taunt.",
     "keywords": [],
     "effects": [
       {
@@ -8324,7 +8329,7 @@
     "cost": 6,
     "attack": 4,
     "health": 5,
-    "rulesText": "Taunt. Divine Shield",
+    "rulesText": "Taunt. Divine Shield.",
     "keywords": ["taunt", "divine-shield"],
     "effects": []
   },
@@ -8407,7 +8412,7 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Taunt.Enrage:+ 3 Attack",
+    "rulesText": "Taunt. Enrage: +3 Attack.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -8469,7 +8474,7 @@
     "cost": 6,
     "attack": 9,
     "health": 7,
-    "rulesText": "Deathrattle:Summon a 3/3 Pip Quickwit for your opponent.",
+    "rulesText": "Deathrattle: Summon a 3/3 Pip Quickwit for your opponent.",
     "keywords": [],
     "effects": [
       {
@@ -9262,7 +9267,7 @@
     "cost": 1,
     "attack": 2,
     "health": 1,
-    "rulesText": "At the end of your turn, give another random friendly minion +1 health.",
+    "rulesText": "At the end of your turn, give another random friendly minion +1 Health.",
     "keywords": [],
     "effects": [
       {

@@ -39,6 +39,44 @@ export const CARD_PLAY_LAYOUT = {
       tint: 0xc4f4ff
     }
   },
+  weapon: {
+    cardScale: 0.27,
+    chargedCardScale: 0.36,
+    snapDuration: 0.18,
+    chargeDuration: 0.3,
+    settleDuration: 0.38,
+    fallbackStartScaleMultiplier: 1.3,
+    fallbackStartYOffset: -30,
+    aura: {
+      widthMultiplier: 698 / 620,
+      heightMultiplier: 927 / 905,
+      initialAlpha: 0.08,
+      peakAlpha: 1,
+      fadeDuration: 0.32
+    },
+    chargeParticles: {
+      count: 36,
+      stagger: 0.15,
+      duration: 0.3,
+      sizeMin: 3,
+      sizeMax: 8,
+      riseMin: 25,
+      riseMax: 65,
+      drift: 16,
+      tint: 0x8eeaff
+    },
+    settleParticles: {
+      count: 56,
+      stagger: 0.32,
+      duration: 0.48,
+      sizeMin: 4,
+      sizeMax: 12,
+      riseMin: 35,
+      riseMax: 95,
+      drift: 22,
+      tint: 0xc4f4ff
+    }
+  },
   spell: {
     aura: {
       widthMultiplier: 1.12,

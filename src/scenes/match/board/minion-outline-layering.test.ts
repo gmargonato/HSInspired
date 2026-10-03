@@ -1,4 +1,11 @@
-import { Sprite, Text, Texture } from 'pixi.js'
+import { prewarmMinionStatus } from '../loading/minion-status-warmup'
+import { MinionStatusCurtainEffect } from './minion-status-curtain-effect'
+import type { GameAssets } from '../../../visual-components/assets'
+import { prewarmWindfury } from '../loading/windfury-warmup'
+import { WINDFURY_DEFAULTS } from '../../../desktop/contracts/ipc/windfury-tuning'
+import type { Container, Renderer, RenderTexture } from 'pixi.js'
+import { AnimationScope } from '../../../visual-components/animation/animations'
+import { Graphics, Sprite, Text, Texture } from 'pixi.js'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../../visual-components/effects/animated-outline', () => ({
@@ -33,8 +40,8 @@ import {
 } from '../../../visual-components/cards/premium-appearance'
 
 const textures: MinionViewTextures = {
-  windfury: Texture.EMPTY,
-  spellDamage: Texture.EMPTY,
+  curtainSpark: Texture.EMPTY,
+  curtainMote: Texture.EMPTY,
   lifesteal: Texture.EMPTY,
   aura: Texture.EMPTY,
   elusive: Texture.EMPTY,
@@ -263,8 +270,8 @@ describe('MinionView outline layering', () => {
       undefined
     )
     const sprites = [
-      'windfury',
-      'spell-damage',
+      'windfury.front',
+      'windfury.rear',
       'lifesteal',
       'aura',
       'elusive',
@@ -421,4 +428,214 @@ describe('MinionView outline layering', () => {
 
     view.destroy({ children: true })
   })
+})
+
+describe('Windfury wind lifecycle', () => {
+  it('wraps the minion below badges, survives exhaustion, and releases its loop', async () => {
+    const animate = vi.spyOn(AnimationScope.prototype, 'to')
+    const view = await MinionView.create(
+      { ...tauntMinion, windfury: true, frozen: true, divineShield: true },
+      textures,
+      undefined
+    )
+    try {
+      const rear = view.getChildByLabel('minion.windfury.rear')!
+      const front = view.getChildByLabel('minion.windfury.front')!
+      const index = (label: string) => view.getChildIndex(view.getChildByLabel(label)!)
+      expect(index('minion.windfury.rear')).toBeLessThan(index('minion.artwork'))
+      expect(index('minion.windfury.front')).toBeGreaterThan(
+        index('minion.divine-shield')
+      )
+      expect(index('minion.windfury.front')).toBeLessThan(index('minion.deathrattle'))
+      expect(view.getChildByLabel('minion.windfury')).toBeNull()
+      const loopIndex = animate.mock.calls.findIndex(
+        ([target]) => 'phase' in (target as object)
+      )
+      expect(loopIndex).toBeGreaterThanOrEqual(0)
+      const loop = animate.mock.results[loopIndex].value
+      loop.progress(0.35)
+      const phase = loop.progress()
+      view.setWindfuryTuning({ ...WINDFURY_DEFAULTS, speed: 0, thickness: 2 })
+      expect(loop.timeScale()).toBe(0)
+      expect(loop.progress()).toBe(phase)
+      view.setWindfuryTuning({ ...WINDFURY_DEFAULTS, speed: 2 })
+      expect(loop.timeScale()).toBe(2)
+      expect(loop.progress()).toBe(phase)
+      view.setAbilityEffects({ ...tauntMinion, windfury: true })
+      expect(loop.progress()).toBe(phase)
+      view.setCanAttack(false)
+      expect(rear.visible && front.visible).toBe(true)
+      view.setAbilityEffects({ ...tauntMinion, windfury: false })
+      expect(rear.visible || front.visible).toBe(false)
+      expect(loop.parent).toBeNull()
+      view.setAbilityEffects({ ...tauntMinion, windfury: true })
+      expect(front.visible).toBe(true)
+      view.destroy({ children: true })
+      expect(rear.destroyed && front.destroyed).toBe(true)
+    } finally {
+      if (!view.destroyed) view.destroy({ children: true })
+      animate.mockRestore()
+    }
+  })
+})
+
+describe('Windfury scene warm-up', () => {
+  it.each([false, true])(
+    'renders both portrait sizes offscreen and cleans up (failure: %s)',
+    (fail) => {
+      let root: Container | undefined
+      let layers: Container[] = []
+      let target: RenderTexture | undefined
+      const render = vi.fn(
+        (options: { container: Container; target: RenderTexture }) => {
+          root = options.container
+          target = options.target
+          layers = [...root.children]
+          expect(layers).toHaveLength(4)
+          expect(layers.every((layer) => layer.visible)).toBe(true)
+          if (fail) throw new Error('GPU unavailable')
+        }
+      )
+      const renderer = { render } as unknown as Renderer
+      if (fail) expect(() => prewarmWindfury(renderer)).toThrow('GPU unavailable')
+      else prewarmWindfury(renderer)
+      expect(render).toHaveBeenCalledOnce()
+      expect(root?.destroyed).toBe(true)
+      expect(target?.destroyed).toBe(true)
+      expect(layers.every((layer) => layer.destroyed)).toBe(true)
+    }
+  )
+})
+
+describe('minion status curtains', () => {
+  it('reuses warmed mask geometry and hides inactive masks', () => {
+    const first = new MinionStatusCurtainEffect(Texture.WHITE, Texture.WHITE)
+    const second = new MinionStatusCurtainEffect(Texture.WHITE, Texture.WHITE)
+    try {
+      const mask = (effect: MinionStatusCurtainEffect) =>
+        effect.layer.getChildByLabel('minion.status-curtains.mask') as Graphics
+      const context = mask(first).context
+      expect(mask(second).context).toBe(context)
+      expect(first.layer.visible).toBe(false)
+      first.setState({ spellDamage: true, buffed: false, debuffed: false })
+      expect(first.layer.visible).toBe(true)
+      first.setState({ spellDamage: false, buffed: false, debuffed: false })
+      expect(first.layer.visible).toBe(false)
+      first.destroy()
+      expect(context.destroyed).toBe(false)
+      second.setState({ spellDamage: false, buffed: true, debuffed: false })
+      expect(second.layer.visible).toBe(true)
+    } finally {
+      first.destroy()
+      second.destroy()
+    }
+  })
+
+  it('moves blue and orange upward and red downward without reallocating sprites', () => {
+    const animate = vi.spyOn(AnimationScope.prototype, 'to')
+    const effect = new MinionStatusCurtainEffect(Texture.WHITE, Texture.WHITE)
+    try {
+      effect.setState({ spellDamage: true, buffed: true, debuffed: true })
+      const particles = ['spellDamage', 'buffed', 'debuffed'].map((kind) =>
+        effect.layer.getChildByLabel(`minion.curtain.${kind}.0`, true)!
+      )
+      const loops = animate.mock.results.map((result) => result.value)
+      for (const loop of loops) loop.progress(0.25)
+      const before = particles.map((p) => p.y)
+      for (const loop of loops) loop.progress(0.5)
+      expect(particles[0].y).toBeLessThan(before[0])
+      expect(particles[1].y).toBeLessThan(before[1])
+      expect(particles[2].y).toBeGreaterThan(before[2])
+      effect.setState({ spellDamage: true, buffed: true, debuffed: true })
+      expect(animate).toHaveBeenCalledTimes(3)
+      effect.destroy()
+      for (const loop of loops) expect(loop.parent).toBeNull()
+    } finally {
+      effect.destroy()
+      animate.mockRestore()
+    }
+  })
+  it('overlays independent conditions, ignores damage, preserves loops, and cleans up', async () => {
+    const animate = vi.spyOn(AnimationScope.prototype, 'to')
+    const view = await MinionView.create(
+      {
+        ...tauntMinion,
+        attack: 3,
+        health: 4,
+        maxHealth: 4,
+        baseAttack: 3,
+        baseHealth: 4
+      },
+      textures,
+      undefined
+    )
+    try {
+      const band = (name: string) =>
+        view.getChildByLabel('minion.curtain.' + name, true)!
+      const index = (label: string) => view.getChildIndex(view.getChildByLabel(label)!)
+      expect(index('minion.status-curtains')).toBeGreaterThan(
+        index('minion.frame-legendary')
+      )
+      expect(index('minion.status-curtains')).toBeLessThan(index('minion.frozen'))
+      expect(view.getChildByLabel('minion.spell-damage')).toBeNull()
+      view.setHealth(1)
+      expect(band('debuffed').visible).toBe(false)
+      view.setStats(5, 1, 2)
+      view.setAbilityEffects({ ...tauntMinion, spellDamage: true })
+      expect(band('spellDamage').visible).toBe(true)
+      expect(band('buffed').visible).toBe(false)
+      expect(band('debuffed').visible).toBe(false)
+      const count = animate.mock.calls.length
+      view.setStats(5, 1, 2)
+      view.setAbilityEffects({ ...tauntMinion, spellDamage: true })
+      expect(animate.mock.calls).toHaveLength(count)
+      view.setBaseStats(3, 4)
+      view.setAbilityEffects(tauntMinion)
+      expect(['spellDamage', 'buffed', 'debuffed'].every((k) => !band(k).visible)).toBe(
+        true
+      )
+      view.setPendingDestruction(true)
+      expect(band('debuffed').visible).toBe(true)
+      view.setPendingDestruction(false)
+      expect(band('debuffed').visible).toBe(false)
+      const curtain = view.getChildByLabel('minion.status-curtains')!
+      view.destroy({ children: true })
+      expect(curtain.destroyed).toBe(true)
+      for (const result of animate.mock.results) expect(result.value.parent).toBeNull()
+    } finally {
+      if (!view.destroyed) view.destroy({ children: true })
+      animate.mockRestore()
+    }
+  })
+
+  it.each([false, true])(
+    'warms both textures and mask, then cleans up (failure: %s)',
+    (fail) => {
+      let root: Container | undefined
+      let target: RenderTexture | undefined
+      const assets = {
+        playSpotlight1: Texture.WHITE,
+        playSpotlight4: Texture.WHITE
+      } as GameAssets
+      const renderer = {
+        render(options: { container: Container; target: RenderTexture }) {
+          root = options.container
+          target = options.target
+          for (const kind of ['spellDamage', 'buffed', 'debuffed']) {
+            const layer = root.getChildByLabel('minion.curtain.' + kind, true)!
+            expect(layer.visible).toBe(true)
+            expect(layer.children).toHaveLength(18)
+            expect(layer.children.some((p) => p.alpha > 0)).toBe(true)
+          }
+          if (fail) throw new Error('GPU unavailable')
+        }
+      } as unknown as Renderer
+      if (fail)
+        expect(() => prewarmMinionStatus(renderer, assets)).toThrow('GPU unavailable')
+      else prewarmMinionStatus(renderer, assets)
+      expect(root?.destroyed).toBe(true)
+      expect(target?.destroyed).toBe(true)
+      expect(Texture.WHITE.destroyed).toBe(false)
+    }
+  )
 })

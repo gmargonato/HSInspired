@@ -1587,7 +1587,13 @@ export function createOpeningMatch(
             : {
                 usesThisTurn: command.available
                   ? 0
-                  : Math.max(player.heroPower.usesThisTurn ?? 0, limit),
+                  : Math.max(
+                      player.heroPower.usesThisTurn ?? 0,
+                      Number.isFinite(limit) ? limit : 0
+                    ),
+                ...(!Number.isFinite(limit) || player.heroPower.disabledThisTurn
+                  ? { disabledThisTurn: !command.available }
+                  : {}),
                 available: command.available && limit > 0
               }
         const result = applyDevStateChange(state, playerIndex, {

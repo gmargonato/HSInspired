@@ -23,6 +23,7 @@ import {
 } from '../../../visual-components/layout'
 
 export interface NewDeckViewCallbacks {
+  onError?: (message: string, error: unknown) => void
   onClassSelected?: (hero: HeroDefinition) => void | Promise<void>
   onCancelled?: () => void | Promise<void>
   onDeckCreated?: (deck: Deck, hero: HeroDefinition) => void | Promise<void>
@@ -255,6 +256,7 @@ export class NewDeckView extends Container {
       deck = await this.deckStore.createDeck({ heroId: hero.id })
     } catch (error) {
       this.logger.error(`Failed to create ${hero.displayName} deck.`, error)
+      this.callbacks.onError?.('Could not create the deck. Please try again.', error)
       this.actionInProgress = false
       if (this.selectionOpen) {
         this.setClassButtonsEnabled(true)

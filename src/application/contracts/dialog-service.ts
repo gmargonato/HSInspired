@@ -1,5 +1,6 @@
 export interface DialogService {
   confirm(message: string): boolean
-  error(message: string, retry?: () => void): void
+  /** Shows a non-blocking message for three seconds, with no buttons. */
+  error(message: string): void
   abandon(message: string, onContinue: () => void): void
 }

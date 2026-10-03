@@ -7,6 +7,9 @@ import { CARD_PLAY_LAYOUT } from './card-play-layout'
 import { completeTimeline } from './game-presentation-animation'
 import { MINION_LAYOUT } from '../board/minion-layout'
 import type { MinionView } from '../board/minion-view'
+import type { WeaponView } from '../board/weapon-view'
+import { WEAPON_LAYOUT } from '../board/weapon-layout'
+import type { GameCardSlot } from '../hand/game-card-slot'
 
 interface RisingParticleProfile {
   readonly count: number
@@ -34,7 +37,8 @@ export class CardPlayAnimation extends Actor {
   constructor(
     private readonly spellAura: Texture,
     private readonly spotlights: readonly Texture[],
-    private readonly minionAura: Texture
+    private readonly minionAura: Texture,
+    private readonly weaponAura: Texture
   ) {
     super()
     this.label = 'game.card-play-effects'
@@ -57,6 +61,121 @@ export class CardPlayAnimation extends Actor {
       width: Math.hypot(right.x - left.x, right.y - left.y),
       height: Math.hypot(bottom.x - left.x, bottom.y - left.y),
       rotation: Math.atan2(right.y - left.y, right.x - left.x)
+    }
+  }
+
+  /** Charge the hand card, then exchange it for its equipped board body. */
+  async presentWeaponEntrance(
+    slot: GameCardSlot,
+    view: WeaponView,
+    destinationLayer: Container,
+    equip: () => void
+  ): Promise<void> {
+    const profile = CARD_PLAY_LAYOUT.weapon
+    const resting = { x: view.x, y: view.y, scaleX: view.scale.x, scaleY: view.scale.y }
+    const center = this.toLocal(destinationLayer.toGlobal(resting))
+    // Hand removal and remote flight may already have transferred ownership.
+    // Pixi's reparentChild cannot append a child to its current parent.
+    if (slot.parent !== this) this.reparentChild(slot)
+    slot.beginMinionPlayTransition()
+    slot.eventMode = 'none'
+    const aura = this.createWeaponAura(slot.card, slot)
+    const charge = this.timeline()
+    charge.to(
+      slot,
+      {
+        x: center.x,
+        y: center.y + (slot.card.renderedHeight * profile.cardScale) / 2,
+        rotation: 0,
+        duration: profile.snapDuration,
+        ease: 'power2.out'
+      },
+      0
+    )
+    charge.to(
+      slot.scale,
+      {
+        x: profile.cardScale,
+        y: profile.cardScale,
+        duration: profile.snapDuration,
+        ease: 'power2.out'
+      },
+      0
+    )
+    charge.to(
+      slot.scale,
+      {
+        x: profile.chargedCardScale,
+        y: profile.chargedCardScale,
+        duration: profile.chargeDuration,
+        ease: 'sine.inOut'
+      },
+      profile.snapDuration
+    )
+    charge.to(
+      aura,
+      {
+        alpha: profile.aura.peakAlpha,
+        duration: profile.snapDuration + profile.chargeDuration,
+        ease: 'power2.in'
+      },
+      0
+    )
+    const chargeParticles = this.emitWeaponParticles(charge, this, slot.card, 'charge')
+    let settleParticles: Container | undefined
+    let settle: gsap.core.Timeline | undefined
+    let equipped = false
+    try {
+      await completeTimeline(charge)
+      if (this.destroyed || slot.destroyed || view.destroyed) return
+      this.detachMinionAura(aura, this)
+      equip()
+      equipped = true
+      view.alpha = 1
+      view.position.set(resting.x, resting.y + profile.fallbackStartYOffset)
+      view.scale.set(
+        resting.scaleX * profile.fallbackStartScaleMultiplier,
+        resting.scaleY * profile.fallbackStartScaleMultiplier
+      )
+      this.alignWeaponArtwork(slot.card, view, destinationLayer)
+      slot.alpha = 0
+      settle = this.timeline()
+      settle.to(
+        aura,
+        { alpha: 0, duration: profile.aura.fadeDuration, ease: 'power2.out' },
+        0
+      )
+      settle.to(
+        view,
+        {
+          x: resting.x,
+          y: resting.y,
+          duration: profile.settleDuration,
+          ease: 'power2.in'
+        },
+        0
+      )
+      settle.to(
+        view.scale,
+        {
+          x: resting.scaleX,
+          y: resting.scaleY,
+          duration: profile.settleDuration,
+          ease: 'power2.in'
+        },
+        0
+      )
+      settleParticles = this.emitWeaponParticles(settle, this, view, 'settle')
+      await completeTimeline(settle)
+    } finally {
+      charge.kill()
+      settle?.kill()
+      if (!aura.destroyed) aura.destroy()
+      if (!chargeParticles.destroyed) chargeParticles.destroy({ children: true })
+      if (settleParticles && !settleParticles.destroyed)
+        settleParticles.destroy({ children: true })
+      if (!slot.destroyed) slot.destroy({ children: true })
+      if (!equipped && !view.destroyed) view.destroy({ children: true })
     }
   }
 
@@ -97,9 +216,21 @@ export class CardPlayAnimation extends Actor {
   }
 
   createMinionAura(card: CardView, parent: Container): Sprite {
-    const profile = CARD_PLAY_LAYOUT.minion.aura
-    const aura = new Sprite(this.minionAura)
-    aura.label = 'game.minion-play-aura'
+    return this.createCardAura(card, parent, 'minion')
+  }
+
+  createWeaponAura(card: CardView, parent: Container): Sprite {
+    return this.createCardAura(card, parent, 'weapon')
+  }
+
+  private createCardAura(
+    card: CardView,
+    parent: Container,
+    kind: 'minion' | 'weapon'
+  ): Sprite {
+    const profile = CARD_PLAY_LAYOUT[kind].aura
+    const aura = new Sprite(kind === 'minion' ? this.minionAura : this.weaponAura)
+    aura.label = `game.${kind}-play-aura`
     aura.eventMode = 'none'
     aura.anchor.set(0.5)
     aura.position.set(card.x + card.plan.width / 2, card.y + card.renderedHeight / 2)
@@ -133,10 +264,24 @@ export class CardPlayAnimation extends Actor {
     layer: Container,
     presentation: Container = view
   ): boolean {
+    return this.alignBoardArtwork(card, view, layer, presentation, 'minion')
+  }
+
+  alignWeaponArtwork(card: CardView, view: WeaponView, layer: Container): boolean {
+    return this.alignBoardArtwork(card, view, layer, view, 'weapon')
+  }
+
+  private alignBoardArtwork(
+    card: CardView,
+    view: MinionView | WeaponView,
+    layer: Container,
+    presentation: Container,
+    kind: 'minion' | 'weapon'
+  ): boolean {
     const cardArt = card
       .getChildByLabel(`${card.plan.cardId}:card.artwork`, true)
       ?.children.find((child): child is Sprite => child instanceof Sprite)
-    const boardArt = view.getChildByLabel('minion.artwork-image', true)
+    const boardArt = view.getChildByLabel(`${kind}.artwork-image`, true)
     if (cardArt && boardArt instanceof Sprite) {
       const center = { x: cardArt.texture.width / 2, y: cardArt.texture.height / 2 }
       const source = layer.toLocal(cardArt.toGlobal(center))
@@ -177,18 +322,37 @@ export class CardPlayAnimation extends Actor {
     source: CardView | MinionView,
     stage: 'charge' | 'settle'
   ): Container {
+    return this.emitPlayParticles(timeline, layer, source, stage, 'minion')
+  }
+
+  emitWeaponParticles(
+    timeline: gsap.core.Timeline,
+    layer: Container,
+    source: CardView | WeaponView,
+    stage: 'charge' | 'settle'
+  ): Container {
+    return this.emitPlayParticles(timeline, layer, source, stage, 'weapon')
+  }
+
+  private emitPlayParticles(
+    timeline: gsap.core.Timeline,
+    layer: Container,
+    source: CardView | MinionView | WeaponView,
+    stage: 'charge' | 'settle',
+    kind: 'minion' | 'weapon'
+  ): Container {
     const profile: RisingParticleProfile =
       stage === 'charge'
-        ? CARD_PLAY_LAYOUT.minion.chargeParticles
-        : CARD_PLAY_LAYOUT.minion.settleParticles
+        ? CARD_PLAY_LAYOUT[kind].chargeParticles
+        : CARD_PLAY_LAYOUT[kind].settleParticles
     const particles = new Container()
-    particles.label = `game.minion-play-${stage}-particles`
+    particles.label = `game.${kind}-play-${stage}-particles`
     particles.eventMode = 'none'
     particles.zIndex = 5
     layer.addChild(particles)
     for (let index = 0; index < profile.count; index++) {
       const particle = new Sprite(this.spotlights[index % this.spotlights.length])
-      particle.label = `game.minion-play-${stage}-particle-${index}`
+      particle.label = `game.${kind}-play-${stage}-particle-${index}`
       particle.anchor.set(0.5)
       particle.width = particle.height =
         profile.sizeMin + Math.random() * (profile.sizeMax - profile.sizeMin)
@@ -211,7 +375,7 @@ export class CardPlayAnimation extends Actor {
               y: card.renderedHeight * (0.5 + Math.sin(angle) * 0.48)
             }
           } else {
-            const frame = MINION_LAYOUT.frame
+            const frame = kind === 'minion' ? MINION_LAYOUT.frame : WEAPON_LAYOUT.frame
             point = {
               x: frame.position.x + (Math.cos(angle) * frame.size.width) / 2,
               y: frame.position.y + (Math.sin(angle) * frame.size.height) / 2

@@ -1201,6 +1201,7 @@ export function validateCardRecord(
           'restore-health',
           'add-other-class-card',
           'play-battlecry-minion',
+          'play-battlecry-card',
           'draw-card',
           'hero-attack'
         ] as const,

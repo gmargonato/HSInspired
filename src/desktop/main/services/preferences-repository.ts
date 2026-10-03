@@ -3,7 +3,6 @@ import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
   parseAiMode,
-  parseExpertDeckStrategyEnabled,
   parseLastPlayedDeckId,
   type AiMode,
   type Preferences
@@ -15,7 +14,6 @@ interface PersistedPreferences {
   readonly version: typeof PREFERENCES_FILE_VERSION
   readonly lastPlayedDeckId: string | null
   readonly aiMode: AiMode
-  readonly expertDeckStrategyEnabled?: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -29,10 +27,7 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 function clonePreferences(preferences: Preferences): Preferences {
   return {
     lastPlayedDeckId: preferences.lastPlayedDeckId,
-    aiMode: preferences.aiMode,
-    ...(preferences.expertDeckStrategyEnabled === undefined
-      ? {}
-      : { expertDeckStrategyEnabled: preferences.expertDeckStrategyEnabled })
+    aiMode: preferences.aiMode
   }
 }
 
@@ -55,8 +50,6 @@ export class PreferencesRepository {
   async set(preferences: Preferences): Promise<void> {
     parseLastPlayedDeckId(preferences.lastPlayedDeckId)
     parseAiMode(preferences.aiMode)
-    if (preferences.expertDeckStrategyEnabled !== undefined)
-      parseExpertDeckStrategyEnabled(preferences.expertDeckStrategyEnabled)
     await this.ensureLoaded()
     await this.persist(preferences)
     this.preferences = clonePreferences(preferences)
@@ -99,14 +92,7 @@ export class PreferencesRepository {
                   parsed.aiMode === 'hardware-v2' ||
                   parsed.aiMode === 'api'
                 ? parsed.aiMode
-                : 'api',
-          ...(parsed.expertDeckStrategyEnabled === undefined
-            ? {}
-            : {
-                expertDeckStrategyEnabled: parseExpertDeckStrategyEnabled(
-                  parsed.expertDeckStrategyEnabled
-                )
-              })
+                : 'api'
         }
       } catch {
         console.warn('Saved preferences were invalid; using safe defaults.')
@@ -121,10 +107,7 @@ export class PreferencesRepository {
     const payload: PersistedPreferences = {
       version: PREFERENCES_FILE_VERSION,
       lastPlayedDeckId: preferences.lastPlayedDeckId,
-      aiMode: preferences.aiMode,
-      ...(preferences.expertDeckStrategyEnabled === undefined
-        ? {}
-        : { expertDeckStrategyEnabled: preferences.expertDeckStrategyEnabled })
+      aiMode: preferences.aiMode
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
     const write = this.writeQueue

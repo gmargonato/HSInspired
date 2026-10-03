@@ -120,22 +120,17 @@ export const MINION_LAYOUT = {
     }
   ),
   windfury: placement(
-    { x: 80, y: 160 },
-    { width: 51, height: 48 },
+    { x: 80, y: 90 },
+    { width: 150, height: 161 },
     {
       anchor: CENTER,
-      scale: 0.75,
-      note: 'Bottom-center Windfury and Mega Windfury badge, sharing the Trigger position.'
+      note: 'Wind ribbons wrapping around the portrait and Taunt ring.'
     }
   ),
-  spellDamage: placement(
-    { x: 80, y: 160 },
-    { width: 43, height: 45 },
-    {
-      anchor: CENTER,
-      scale: 0.75,
-      note: 'Bottom-center Spell Damage badge, sharing the Trigger position.'
-    }
+  statusCurtain: placement(
+    { x: 80, y: 90 },
+    { width: 127, height: 169 },
+    { anchor: CENTER, note: 'Soft particle curtain across the portrait and frame.' }
   ),
   lifesteal: placement(
     { x: 80, y: 160 },

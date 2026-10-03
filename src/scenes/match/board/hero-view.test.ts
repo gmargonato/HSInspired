@@ -102,3 +102,49 @@ describe('hero identity presentation', () => {
     view.destroy({ children: true })
   })
 })
+
+describe('hero Windfury wind', () => {
+  it('fits the hero frame and remains visible through freeze and exhaustion', () => {
+    const view = HeroView.create(
+      {
+        label: 'hero',
+        attack: 2,
+        health: 30,
+        maxHealth: 30,
+        armor: 0,
+        frozen: true,
+        immune: true,
+        windfury: true
+      },
+      {
+        frame: Texture.EMPTY,
+        attack: Texture.EMPTY,
+        health: Texture.EMPTY,
+        armor: Texture.EMPTY,
+        frozen: Texture.EMPTY,
+        immune: Texture.EMPTY
+      }
+    )
+    const rear = view.getChildByLabel('hero.windfury.rear')!
+    const front = view.getChildByLabel('hero.windfury.front')!
+    try {
+      const index = (label: string) => view.getChildIndex(view.getChildByLabel(label)!)
+      expect(index('hero.windfury.rear')).toBeLessThan(index('hero.frame'))
+      expect(index('hero.windfury.front')).toBeGreaterThan(index('hero.immune'))
+      expect(index('hero.windfury.front')).toBeLessThan(index('hero.stat-attack'))
+      view.setCanAttack(false)
+      view.setFrozen(true)
+      view.setBaseScale(0.5)
+      expect(front.visible && rear.visible).toBe(true)
+      expect(front.parent).toBe(view)
+      expect(rear.parent).toBe(view)
+      view.setWindfury(false)
+      expect(front.visible || rear.visible).toBe(false)
+      view.setWindfury(true)
+      expect(front.visible && rear.visible).toBe(true)
+    } finally {
+      view.destroy({ children: true })
+    }
+    expect(front.destroyed && rear.destroyed).toBe(true)
+  })
+})

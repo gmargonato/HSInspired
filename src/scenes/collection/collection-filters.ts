@@ -123,7 +123,7 @@ function parseCollectionQuery(query: string): ParsedCollectionQuery {
       continue
     }
 
-    const numericValue = parseNumericFilterValue(normalizedValue)
+    const numericValue = parseNumericFilterValue(rawValue)
     if (numericValue === null) {
       hasInvalidConstraint = true
       continue

@@ -92,6 +92,11 @@ export const OUTLINE_LAB_LAYOUT = {
     { width: 235, height: 127 },
     { anchor: CENTER }
   ),
+  windfuryMinion: placement({ x: 400, y: 660 }, MINION_CANVAS, {
+    anchor: CENTER,
+    scale: 1.5
+  }),
+  windfuryHero: placement({ x: 810, y: 650 }, HERO_CANVAS, { anchor: CENTER }),
   auraMinion: placement({ x: 600, y: 680 }, MINION_CANVAS, { anchor: CENTER }),
   auraHero: placement({ x: 600, y: 680 }, HERO_CANVAS, { anchor: CENTER }),
   auraPower: placement({ x: 600, y: 680 }, HERO_POWER_ICON_CANVAS, { anchor: CENTER }),

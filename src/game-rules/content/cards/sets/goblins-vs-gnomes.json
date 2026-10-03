@@ -495,7 +495,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "minion",
               "selection": "chosen"
             },
@@ -1510,7 +1510,7 @@
     "cost": 4,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a random enemy minion. Combo: And your opponent's weapon.",
+    "rulesText": "Destroy a random enemy minion. Combo: Destroy your opponent's weapon.",
     "keywords": [],
     "effects": [
       {
@@ -1985,10 +1985,12 @@
             "action": "damage",
             "target": {
               "controller": "any",
-              "type": "minion",
+              "type": "character",
               "selection": "chosen"
             },
-            "amount": { "random": [2, 3, 4] }
+            "amount": {
+              "random": [2, 3, 4]
+            }
           }
         ],
         "then": {
@@ -1996,7 +1998,9 @@
             {
               "action": "summon",
               "cardId": "classic_imp",
-              "count": { "reference": "last-damage-amount" }
+              "count": {
+                "reference": "last-damage-amount"
+              }
             }
           ]
         }
@@ -3949,7 +3953,7 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Casts When drawn. You take 10 damage.",
+    "rulesText": "Casts when drawn. You take 10 damage.",
     "keywords": [],
     "effects": [
       {

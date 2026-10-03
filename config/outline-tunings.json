@@ -1,5 +1,17 @@
 {
-  "version": 13,
+  "version": 14,
+  "windfury": {
+    "speed": 1,
+    "thickness": 1,
+    "ribbons": 3,
+    "trailLength": 1,
+    "width": 1,
+    "orbitDepth": 0.15,
+    "spacing": 0.22,
+    "opacity": 1,
+    "softness": 1,
+    "color": 15333375
+  },
   "godRaysDust": {
     "enabled": true,
     "count": 20,

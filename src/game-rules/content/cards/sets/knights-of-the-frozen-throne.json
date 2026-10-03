@@ -332,7 +332,7 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
@@ -535,12 +535,17 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
             "heroId": "rexxar-deathstalker"
-          },
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "actions": [
           {
             "action": "damage",
             "target": {
@@ -571,12 +576,17 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
             "heroId": "jaina-frost-lich"
-          },
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "actions": [
           {
             "action": "summon",
             "cardId": "basic_water_elemental",
@@ -603,12 +613,17 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
             "heroId": "uther-ebon-blade"
-          },
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "actions": [
           {
             "action": "equip",
             "cardId": "knights_of_the_frozen_throne_grave_vengeance"
@@ -714,12 +729,17 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
             "heroId": "anduin-shadowreaper"
-          },
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "actions": [
           {
             "action": "destroy",
             "target": {
@@ -750,16 +770,21 @@
     "cost": 8,
     "attack": null,
     "armor": 5,
-    "rulesText": "Battlecry: Become immune until your next turn.",
+    "rulesText": "Battlecry: Become Immune until your next turn.",
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
             "heroId": "valeera-hollow"
-          },
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "actions": [
           {
             "action": "grant-keyword",
             "target": {
@@ -791,12 +816,17 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
             "heroId": "thrall-deathseer"
-          },
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "actions": [
           {
             "action": "transform-random",
             "target": {
@@ -833,12 +863,17 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
             "heroId": "guldan-bloodreaver"
-          },
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "actions": [
           {
             "action": "resurrect",
             "player": "self",
@@ -886,12 +921,17 @@
     "keywords": [],
     "effects": [
       {
-        "trigger": "battlecry",
+        "trigger": "on-play",
         "actions": [
           {
             "action": "replace-hero",
             "heroId": "garrosh-scourgelord"
-          },
+          }
+        ]
+      },
+      {
+        "trigger": "battlecry",
+        "actions": [
           {
             "action": "equip",
             "cardId": "knights_of_the_frozen_throne_shadowmourne"
@@ -1241,7 +1281,7 @@
     "cost": 1,
     "attack": 1,
     "health": 1,
-    "rulesText": "Taunt Divine Shield",
+    "rulesText": "Taunt. Divine Shield.",
     "keywords": ["divine-shield", "taunt"],
     "effects": [],
     "collectible": true,
@@ -1324,7 +1364,7 @@
     "cost": 5,
     "attack": 5,
     "health": 3,
-    "rulesText": "Choose a Deathrattle (Secretly) - Deal 3 damage to all minions; or Give them +2/+2.",
+    "rulesText": "Choose a Deathrattle (secretly) - Deal 3 damage to all minions; or Give them +2/+2.",
     "keywords": [],
     "effects": [
       {
@@ -1587,7 +1627,7 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Lifesteal Deal 3 damage to a minion.",
+    "rulesText": "Lifesteal. Deal 3 damage to a minion.",
     "keywords": ["lifesteal"],
     "effects": [
       {
@@ -1974,7 +2014,7 @@
     "cost": 3,
     "attack": 2,
     "health": 8,
-    "rulesText": "Taunt Overload: (3)",
+    "rulesText": "Taunt. Overload: (3)",
     "keywords": ["taunt"],
     "effects": [
       { "trigger": "battlecry", "actions": [{ "action": "overload", "amount": 3 }] }
@@ -2132,7 +2172,7 @@
     "cost": 5,
     "attack": 2,
     "health": 7,
-    "rulesText": "Taunt Freeze any character damaged by this minion.",
+    "rulesText": "Taunt. Freeze any character damaged by this minion.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -2402,10 +2442,13 @@
           {
             "action": "add-to-hand",
             "player": "self",
-            "source": "friendly-minions-died-this-game",
+            "source": "minions-died-this-game",
             "selection": "random",
             "count": 1,
-            "filter": { "type": "Minion", "hasDeathrattle": true }
+            "filter": {
+              "type": "Minion",
+              "hasDeathrattle": true
+            }
           }
         ]
       }
@@ -2695,7 +2738,7 @@
     "cost": 9,
     "attack": 4,
     "health": 8,
-    "rulesText": "Taunt, Lifesteal Deathrattle: Destroy a random enemy minion.",
+    "rulesText": "Taunt. Lifesteal. Deathrattle: Destroy a random enemy minion.",
     "keywords": ["lifesteal", "taunt"],
     "effects": [
       {
@@ -3004,10 +3047,12 @@
             "action": "change-cost",
             "target": {
               "controller": "self",
-              "type": "minion-card",
+              "type": "card",
               "selection": "all",
               "zone": "hand",
-              "filter": { "hasDeathrattle": true }
+              "filter": {
+                "hasDeathrattle": true
+              }
             },
             "amount": -2,
             "minimum": 0,
@@ -3109,11 +3154,19 @@
       {
         "trigger": "battlecry",
         "condition": {
-          "type": "player-has-minion",
+          "type": "player-has-character",
           "player": "opponent",
-          "filter": { "frozen": true }
+          "filter": {
+            "frozen": true
+          }
         },
-        "actions": [{ "action": "draw", "player": "self", "count": 1 }]
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
       }
     ],
     "collectible": true,
@@ -3412,7 +3465,7 @@
     "cost": 4,
     "attack": 2,
     "health": 3,
-    "rulesText": "Taunt Battlecry: Summon a Saronite Chain Gang.",
+    "rulesText": "Taunt. Battlecry: Summon a Saronite Chain Gang.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -3729,7 +3782,7 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Lifesteal Deal 1 damage to all minions.",
+    "rulesText": "Lifesteal. Deal 1 damage to all minions.",
     "keywords": ["lifesteal"],
     "effects": [
       {
@@ -3789,7 +3842,7 @@
     "cost": 3,
     "attack": 1,
     "health": 6,
-    "rulesText": "Taunt After you summon a minion, gain +1 Health.",
+    "rulesText": "Taunt. After you summon a minion, gain +1 Health.",
     "keywords": ["taunt"],
     "effects": [
       {
@@ -3936,7 +3989,7 @@
     "cost": 4,
     "attack": 3,
     "health": 2,
-    "rulesText": "Charge Lifesteal",
+    "rulesText": "Charge. Lifesteal.",
     "keywords": ["charge", "lifesteal"],
     "effects": [],
     "collectible": true,
@@ -4139,7 +4192,7 @@
     "cost": 5,
     "attack": 1,
     "health": 6,
-    "rulesText": "Lifesteal Has +1 Attack for each card you've discarded this game.",
+    "rulesText": "Lifesteal. Has +1 Attack for each card you've discarded this game.",
     "keywords": ["lifesteal"],
     "effects": [
       {
@@ -4402,7 +4455,7 @@
     "attack": 4,
     "health": 4,
     "spellDamage": 1,
-    "rulesText": "Spell Damage +2",
+    "rulesText": "Spell Damage +2.",
     "keywords": ["spell-damage"],
     "effects": [],
     "collectible": true,
@@ -4418,7 +4471,7 @@
     "cost": 5,
     "attack": 1,
     "health": 7,
-    "rulesText": "Divine Shield After a friendly minion loses Divine Shield, gain +2 Attack.",
+    "rulesText": "Divine Shield. After a friendly minion loses Divine Shield, gain +2 Attack.",
     "keywords": ["divine-shield"],
     "effects": [
       {
@@ -4742,7 +4795,7 @@
     "attack": 1,
     "health": 1,
     "spellDamage": 1,
-    "rulesText": "Divine Shield Spell Damage +1",
+    "rulesText": "Divine Shield. Spell Damage +1.",
     "keywords": ["divine-shield", "spell-damage"],
     "effects": [],
     "collectible": true,

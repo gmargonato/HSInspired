@@ -94,7 +94,7 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
@@ -108,7 +108,13 @@
             "operator": "eq",
             "value": 0
           },
-          "actions": [{ "action": "draw", "player": "self", "count": 1 }]
+          "actions": [
+            {
+              "action": "draw",
+              "player": "self",
+              "count": 1
+            }
+          ]
         }
       }
     ]
@@ -409,13 +415,16 @@
           {
             "action": "damage",
             "target": {
-              "controller": "opponent",
+              "controller": "any",
               "type": "character",
               "selection": "chosen"
             },
             "amount": 2
           },
-          { "action": "unlock-overload", "player": "self" }
+          {
+            "action": "unlock-overload",
+            "player": "self"
+          }
         ]
       }
     ]
@@ -509,7 +518,7 @@
     "type": "Spell",
     "subtype": "General",
     "cost": 2,
-    "rulesText": "Deal 1 damage to all minions. If you have 12 or less Health, deal 3 damage instead.",
+    "rulesText": "Deal 1 damage to all minions. If you have 12 Health or less, deal 3 damage instead.",
     "keywords": [],
     "effects": [
       {
@@ -781,7 +790,7 @@
     "cost": 6,
     "attack": 6,
     "health": 6,
-    "rulesText": "Battlecry: If your opponent has 15 or less Health, gain +3/+3.",
+    "rulesText": "Battlecry: If your opponent has 15 Health or less, gain +3/+3.",
     "keywords": [],
     "effects": [
       {

@@ -1,3 +1,4 @@
+import type { WindfuryTuning } from '../../desktop/contracts/ipc/windfury-tuning'
 import { Container, Rectangle, type Renderer } from 'pixi.js'
 import type {
   DeckPresentationAssets,
@@ -78,8 +79,8 @@ export class OutlineLabBoard extends Container {
         divineShield: assets.minionDivineShield,
         frozen: assets.minionFrozen,
         stealth: assets.minionStealth,
-        windfury: assets.minionWindfury,
-        spellDamage: assets.minionSpellDamage,
+        curtainSpark: assets.playSpotlight4,
+        curtainMote: assets.playSpotlight1,
         lifesteal: assets.minionLifesteal,
         aura: assets.minionAura,
         elusive: assets.minionElusive,
@@ -212,6 +213,27 @@ export class OutlineLabBoard extends Container {
     this.weapon = weapon
     applyPlacement(weapon, LAYOUT.auraWeapon)
     this.addChild(weapon)
+  }
+
+  setWindfuryPreview(enabled: boolean, tuning: WindfuryTuning): void {
+    this.minion?.setWindfuryTuning(tuning)
+    this.hero?.setWindfuryTuning(tuning)
+    this.minion?.setWindfury(enabled)
+    this.hero?.setWindfury(enabled)
+    this.minion?.setCanAttack(!enabled)
+    this.hero?.setCanAttack(!enabled)
+    if (this.minion)
+      applyPlacement(this.minion, enabled ? LAYOUT.windfuryMinion : LAYOUT.auraMinion)
+    if (this.hero)
+      applyPlacement(this.hero, enabled ? LAYOUT.windfuryHero : LAYOUT.auraHero)
+    if (this.minion) this.minion.shadow.restingScale = this.minion.scale.x
+    if (this.hero) this.hero.shadow.restingScale = this.hero.scale.x
+    if (enabled) {
+      if (this.minion) this.minion.visible = true
+      if (this.hero) this.hero.visible = true
+      if (this.powerHost) this.powerHost.visible = false
+      if (this.weapon) this.weapon.visible = false
+    }
   }
 
   selectElement(preset: OutlinePresetName): void {

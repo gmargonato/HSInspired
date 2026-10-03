@@ -247,9 +247,9 @@ exports[`opening match checkpoints > matches the seeded command, event, visibili
     "checkpoints": "1542d8226ef7a4ec667678d061e285f1e402955cc7cc91bdb749bce282be028e",
     "commands": "27b804fe2b22d674637c2dbd70f541ddf2c71dbbe634aea3e12427dc0af3cbf7",
     "legality": "61135493b6bd1c50604562cbef0efa97adca8095e747ee7dc5c8f7786a6f0a4f",
-    "publicEvents": "dbcbcc68568ab623fae78db6ac7fd288b7bf53c9b7c9e30336a9518b97757851",
+    "publicEvents": "625d0c0b25f0a274ac39ef5792c64034861f7fae2b5d4e92079e97df8f945770",
     "publicState": "3f4049e5d65194a73583e008cc6eea66ade00aeb418b013f89797e8d524067d4",
-    "results": "55e7c5c156aa65f16028c500ab20f9e0595fdd74984318b1dbd0c23fd77ed111",
+    "results": "cb4149b158feec35587c55435c95091f1ad0d3c059cc54527c7b1d93131d82b2",
     "trace": "b7ba7cd87df2139919b98c0a5aaa635d1bd7e52fca9afc4e8c5e1feb2e846fb9",
   },
 }
@@ -502,9 +502,9 @@ exports[`opening match checkpoints > matches the seeded command, event, visibili
     "checkpoints": "e05997724b3c654082b79334c65cd7dc497cfde33fbb05f7926df03c64952aa0",
     "commands": "1df3500ff667fe5e400400a3846fef06b20472bb50e02d546cdda1d90574a273",
     "legality": "1c72db1e9f70d9744a25e76c03596655c5cdea213c4fb80a5c3d42b1db454d91",
-    "publicEvents": "089d5bdad913070e27e43a866c4695909b8e0d3ec34e2c1f30fa0a6529c68526",
+    "publicEvents": "d40dda60c2daeb3176090b99965f959836a6f2fd00c8f011621f2888db67ca3f",
     "publicState": "c0b0d97c0f3623b39f473bf5683d5a11f2558a880203054e653785fa94173360",
-    "results": "5e7750bf2731faf02c4db31e46fda95ef703e83f637088a1a9ef88282c092dd2",
+    "results": "0b13c8caa455d87d7184f5a8cdd42bc72fa7249e4e5cc753619e00af7652b8bd",
     "trace": "5ab8377d67f7b6790dd00676e57479e2fc4209b4970e09a8cd651f4da43277c3",
   },
 }

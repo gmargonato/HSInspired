@@ -25,6 +25,7 @@
     "analyze:ai-corpus": "node scripts/analyze-ai-corpus.cjs",
     "test:local-ai": "vitest run --run src/game-rules/match/ai/fair-hypothesis-checkpoint.test.ts src/scenes/match/ai/expert-ai-decision-api.test.ts src/scenes/match/ai/local-ai-artifact-scenarios.test.ts src/scenes/match/ai/local-ai-scenarios.test.ts src/scenes/match/ai/local-ai-decision-api.test.ts src/scenes/match/ai/local-ai-turn-planning.test.ts src/scenes/match/ai/ai-forced-command.test.ts",
     "benchmark:local-ai": "node scripts/run-local-ai-benchmark.cjs",
+    "cards:test": "node scripts/card-testing.cjs",
     "catalog:audit": "node scripts/catalog-audit.cjs",
     "assets:check": "node scripts/check-card-artwork.cjs",
     "verify": "npm run format:check && npm run lint && npm run assets:check && npm run test && npm run typecheck && npm run deps:check && npm run build:smoke",

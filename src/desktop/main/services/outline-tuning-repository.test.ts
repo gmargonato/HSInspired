@@ -32,7 +32,10 @@ describe('OutlineTuningRepository', () => {
     draft.godRaysDust.speed = 1.35
     draft.godRaysDust.blendMode = 'add'
     draft.godRays.color = [0.9, 0.7, 0.5, 0.6]
-    const second = parseOutlineTuningConfig(draft)
+    const second = {
+      ...parseOutlineTuningConfig(draft),
+      windfury: { ...first.windfury, speed: 1.7, thickness: 2.2 }
+    }
 
     await Promise.all([repository.save(first), repository.save(second)])
 

@@ -18,13 +18,13 @@ export class PremiumUpgradePanel extends Container {
   private readonly balanceText: Text
   private readonly unsubscribe: () => void
   private pending = false
-  private errorMessage = ''
 
   constructor(
     private readonly card: CardDefinition,
     assets: CardPreviewAssets,
     private readonly store: ProgressionStore,
-    private readonly onChange?: (action: 'upgrade' | 'refund') => Promise<void>
+    private readonly onChange?: (action: 'upgrade' | 'refund') => Promise<void>,
+    private readonly onMessage?: (message: string) => void
   ) {
     super()
     this.label = 'card-preview.upgrade-panel'
@@ -89,8 +89,7 @@ export class PremiumUpgradePanel extends Container {
     this.costText.text = price === null ? '—' : `-${price}`
     this.refundText.text =
       paid !== undefined ? `+${paid}` : price === null ? '—' : `+${price}`
-    this.balanceText.text = this.errorMessage || String(dust)
-    this.balanceText.style.fontSize = this.errorMessage ? 18 : 28
+    this.balanceText.text = String(dust)
     this.setEnabled(
       this.upgradeButton,
       eligible && paid === undefined && dust >= price! && !this.pending
@@ -100,20 +99,39 @@ export class PremiumUpgradePanel extends Container {
 
   private setEnabled(button: Sprite, enabled: boolean): void {
     button.tint = enabled ? 0xffffff : 0x666666
-    button.eventMode = enabled ? 'static' : 'none'
+    // Unavailable actions explain their restriction when clicked.
+    button.eventMode = this.pending ? 'none' : 'static'
     button.cursor = enabled ? 'pointer' : 'default'
   }
 
   private async change(action: 'upgrade' | 'refund'): Promise<void> {
     if (this.pending) return
+    const { dust, premiumPurchases } = this.store.getSnapshot()
+    const price = premiumUpgradeCost(this.card)
+    const paid = premiumPurchases[this.card.id]
+    const reason =
+      action === 'refund'
+        ? paid === undefined
+          ? 'This card has no premium upgrade to refund.'
+          : null
+        : price === null
+          ? 'This card cannot be upgraded.'
+          : paid !== undefined
+            ? 'This card is already upgraded.'
+            : dust < price
+              ? `You need ${price} Arcane Dust to upgrade this card.`
+              : null
+    if (reason) {
+      this.onMessage?.(reason)
+      return
+    }
     this.pending = true
-    this.errorMessage = ''
     this.refresh()
     try {
       if (this.onChange) await this.onChange(action)
       else await this.store[action](this.card.id)
     } catch (error) {
-      this.errorMessage = 'Could not save. Try again.'
+      this.onMessage?.('Could not save the premium card change. Please try again.')
       console.error('Could not save the premium card change.', error)
     } finally {
       this.pending = false

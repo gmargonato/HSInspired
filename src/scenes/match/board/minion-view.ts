@@ -1,3 +1,6 @@
+import { MinionStatusCurtainEffect } from './minion-status-curtain-effect'
+import { createHealthPulse } from './health-pulse'
+import type { WindfuryTuning } from '../../../desktop/contracts/ipc/windfury-tuning'
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import {
   applyAnchoredPlacement,
@@ -10,6 +13,7 @@ import {
 } from '../../../visual-components/effects/animated-outline'
 import { MINION_CANVAS, MINION_HIT_AREA, MINION_LAYOUT } from './minion-layout'
 import { attachShadow } from '../../../visual-components/effects/shadow-caster'
+import { WindfuryEffect } from './windfury-effect'
 import { SleepingZs } from './sleeping-zs'
 import { AnimationScope } from '../../../visual-components/animation/animations'
 import { killDisplayTweens } from '../../../visual-components/animation/kill-display-tweens'
@@ -47,6 +51,7 @@ export interface MinionViewModel {
   readonly trigger: boolean
   readonly inspire: boolean
   readonly windfury: boolean
+  readonly pendingDestruction?: boolean
   readonly spellDamage: boolean
   readonly lifesteal: boolean
   readonly elusive: boolean
@@ -54,8 +59,8 @@ export interface MinionViewModel {
 }
 
 export interface MinionViewTextures {
-  readonly windfury: Texture
-  readonly spellDamage: Texture
+  readonly curtainSpark: Texture
+  readonly curtainMote: Texture
   readonly lifesteal: Texture
   readonly aura: Texture
   readonly elusive: Texture
@@ -150,8 +155,10 @@ export class MinionView extends Container {
   private readonly battlecryBanner: Sprite
   private readonly enrage: Sprite
   private readonly divineShield: Sprite
-  private readonly windfury: Sprite
-  private readonly spellDamage: Sprite
+  private readonly windfury: WindfuryEffect
+  private readonly statusCurtains: MinionStatusCurtainEffect
+  private spellDamageEnabled = false
+  private pendingDestruction = false
   private readonly lifesteal: Sprite
   private readonly aura: Sprite
   private readonly elusive: Sprite
@@ -164,6 +171,7 @@ export class MinionView extends Container {
   private readonly inspire: Sprite
   private readonly attackLabel: Text
   private readonly healthLabel: Text
+  readonly pulseHealth: () => void
   private readonly artworkImage: Sprite
   private readonly artworkPlaceholder: Graphics
   private readonly outlineProxy: Graphics
@@ -207,6 +215,10 @@ export class MinionView extends Container {
     this.maxHealth = model.maxHealth
     this.eventMode = 'none'
     this.pivot.set(MINION_CANVAS.width / 2, MINION_CANVAS.height / 2)
+
+    this.windfury = new WindfuryEffect(MINION_LAYOUT.windfury, 'minion.windfury')
+    this.windfury.setEnabled(model.windfury)
+    this.addChild(this.windfury.rear)
 
     const artworkLayer = new Container()
     applyPlacement(artworkLayer, MINION_LAYOUT.artwork)
@@ -300,6 +312,15 @@ export class MinionView extends Container {
     this.legendaryFrame.label = 'minion.frame-legendary'
     this.addChild(this.legendaryFrame)
 
+    this.statusCurtains = new MinionStatusCurtainEffect(
+      textures.curtainSpark,
+      textures.curtainMote
+    )
+    this.spellDamageEnabled = model.spellDamage
+    this.pendingDestruction = model.pendingDestruction ?? false
+    this.addChild(this.statusCurtains.layer)
+    this.updateStatusCurtains()
+
     this.frozen = new Sprite(textures.frozen)
     applyAnchoredPlacement(this.frozen, MINION_LAYOUT.frozen)
     this.frozen.visible = model.frozen
@@ -331,6 +352,7 @@ export class MinionView extends Container {
     this.divineShield.visible = model.divineShield
     this.divineShield.label = 'minion.divine-shield'
     this.addChild(this.divineShield)
+    this.addChild(this.windfury.front)
 
     // Pixi renders later children on top: add the large Deathrattle badge first.
     // Keep both ability sprites mounted even when hidden so runtime-granted
@@ -360,18 +382,6 @@ export class MinionView extends Container {
     this.inspire.label = 'minion.inspire'
     this.addChild(this.inspire)
 
-    this.windfury = new Sprite(textures.windfury)
-    applyAnchoredPlacement(this.windfury, MINION_LAYOUT.windfury)
-    this.windfury.visible = model.windfury
-    this.windfury.label = 'minion.windfury'
-    this.addChild(this.windfury)
-
-    this.spellDamage = new Sprite(textures.spellDamage)
-    applyAnchoredPlacement(this.spellDamage, MINION_LAYOUT.spellDamage)
-    this.spellDamage.visible = model.spellDamage
-    this.spellDamage.label = 'minion.spell-damage'
-    this.addChild(this.spellDamage)
-
     this.lifesteal = new Sprite(textures.lifesteal)
     applyAnchoredPlacement(this.lifesteal, MINION_LAYOUT.lifesteal)
     this.lifesteal.visible = model.lifesteal
@@ -396,6 +406,7 @@ export class MinionView extends Container {
       MINION_LAYOUT.statValueOffsets.health
     )
     this.healthLabel = health.value
+    this.pulseHealth = createHealthPulse(health.group, this.animationScope)
     this.addChild(health.group)
 
     // Keep Aura as the final persistent marker layer so it remains above every
@@ -584,12 +595,26 @@ export class MinionView extends Container {
   ): void {
     this.invalidateShadowVisibility(this.poisonous, markers.poisonous)
     this.poisonous.visible = markers.poisonous
-    this.windfury.visible = markers.windfury
-    this.spellDamage.visible = markers.spellDamage
+    this.windfury.setEnabled(markers.windfury)
+    this.spellDamageEnabled = markers.spellDamage
+    this.updateStatusCurtains()
     this.lifesteal.visible = markers.lifesteal
     this.aura.visible = markers.aura
     this.elusive.visible = markers.elusive
     this.immune.visible = markers.immune
+  }
+
+  setPendingDestruction(enabled: boolean): void {
+    this.pendingDestruction = enabled
+    this.updateStatusCurtains()
+  }
+
+  private updateStatusCurtains(): void {
+    this.statusCurtains.setState({
+      spellDamage: this.spellDamageEnabled,
+      buffed: false,
+      debuffed: this.pendingDestruction
+    })
   }
 
   setTaunt(visible: boolean): void {
@@ -641,6 +666,14 @@ export class MinionView extends Container {
 
   setDivineShield(visible: boolean): void {
     this.divineShield.visible = visible
+  }
+
+  setWindfury(enabled: boolean): void {
+    this.windfury.setEnabled(enabled)
+  }
+
+  setWindfuryTuning(tuning: WindfuryTuning): void {
+    this.windfury.setTuning(tuning)
   }
 
   setFrozen(visible: boolean): void {
@@ -929,6 +962,8 @@ export class MinionView extends Container {
     killDisplayTweens(this)
     this.unsubscribePremium()
     this.artworkBreath.destroy()
+    this.windfury.destroy()
+    this.statusCurtains.destroy()
     // Release any pending banner waiter so presentation sequences cannot stall.
     this.settleBattlecryBanner?.()
     this.animationScope.kill()

@@ -539,10 +539,10 @@
             "target": {
               "controller": "opponent",
               "type": "minion",
-              "selection": "random"
+              "selection": "random",
+              "count": 2
             },
-            "amount": 2,
-            "hits": 2
+            "amount": 2
           }
         ]
       }
@@ -684,7 +684,7 @@
     "cost": 2,
     "attack": 2,
     "health": 2,
-    "rulesText": "Whenever you play a Beast, the Beast gains +1/+1",
+    "rulesText": "Whenever you play a Beast, the Beast gains +1/+1.",
     "keywords": [],
     "effects": [
       {
@@ -749,7 +749,7 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Double a minion's health.",
+    "rulesText": "Double a minion's Health.",
     "keywords": [],
     "effects": [
       {
@@ -1155,7 +1155,7 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Deal 1 Damage to an enemy character and Freeze it.",
+    "rulesText": "Deal 1 damage to an enemy character and Freeze it.",
     "keywords": [],
     "effects": [
       {
@@ -1336,7 +1336,7 @@
           {
             "action": "modify",
             "target": {
-              "controller": "self",
+              "controller": "any",
               "type": "minion",
               "selection": "all",
               "filter": {
@@ -1912,7 +1912,7 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Give a minion Taunt and +2/+2. (+2 Attack/ +2 Health)",
+    "rulesText": "Give a minion Taunt and +2/+2. (+2 Attack/+2 Health)",
     "keywords": [],
     "effects": [
       {
@@ -2323,7 +2323,7 @@
     "cost": 4,
     "attack": 4,
     "health": 4,
-    "rulesText": "Spell Damage 1",
+    "rulesText": "Spell Damage +1.",
     "keywords": ["spell-damage"],
     "effects": []
   },
@@ -2581,7 +2581,7 @@
     "cost": 3,
     "attack": null,
     "health": null,
-    "rulesText": "Give your characters 2 Attack this turn.",
+    "rulesText": "Give your characters +2 Attack this turn.",
     "keywords": [],
     "effects": [
       {
@@ -2702,7 +2702,7 @@
     "cost": 2,
     "attack": null,
     "health": null,
-    "rulesText": "Destroy a minion with 3 or less Attack.",
+    "rulesText": "Destroy a minion with an Attack of 3 or less.",
     "keywords": [],
     "effects": [
       {
@@ -2735,7 +2735,7 @@
     "cost": 3,
     "attack": 3,
     "health": 2,
-    "rulesText": "Battlecry: Give a friendly minion +1/1.",
+    "rulesText": "Battlecry: Give a friendly minion +1/+1.",
     "keywords": [],
     "effects": [
       {
@@ -3021,7 +3021,7 @@
     "cost": 7,
     "attack": 6,
     "health": 6,
-    "rulesText": "Your other minions have +1/1.",
+    "rulesText": "Your other minions have +1/+1.",
     "keywords": [],
     "effects": [
       {
@@ -3128,7 +3128,7 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Give 1 mana.",
+    "rulesText": "Gain 1 Mana Crystal this turn only.",
     "keywords": [],
     "effects": [
       {
@@ -3187,7 +3187,7 @@
     "cost": 0,
     "attack": null,
     "health": null,
-    "rulesText": "Give your Totems 2 Health.",
+    "rulesText": "Give your Totems +2 Health.",
     "keywords": [],
     "effects": [
       {
@@ -3365,7 +3365,7 @@
     "cost": 3,
     "attack": 2,
     "health": 3,
-    "rulesText": "Whenever you summon a minion with 3 or less Attack, give it Charge.",
+    "rulesText": "Whenever you summon a minion with an Attack of 3 or less, give it Charge.",
     "keywords": [],
     "effects": [
       {
@@ -3485,6 +3485,21 @@
     "effects": [
       {
         "trigger": "cast",
+        "condition": {
+          "type": "player-maximum-mana-gte",
+          "player": "self",
+          "value": 10
+        },
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      },
+      {
+        "trigger": "cast",
         "actions": [
           {
             "action": "gain-mana",
@@ -3492,21 +3507,7 @@
             "amount": 1,
             "crystal": "empty"
           }
-        ],
-        "then": {
-          "condition": {
-            "type": "player-maximum-mana-gte",
-            "player": "self",
-            "value": 10
-          },
-          "actions": [
-            {
-              "action": "draw",
-              "player": "self",
-              "count": 1
-            }
-          ]
-        }
+        ]
       }
     ]
   },
@@ -3593,7 +3594,7 @@
     "cost": 1,
     "attack": 0,
     "health": 2,
-    "rulesText": "Spell damage 1",
+    "rulesText": "Spell Damage +1.",
     "keywords": ["spell-damage"],
     "effects": []
   }

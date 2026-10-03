@@ -328,7 +328,7 @@
     "cost": 1,
     "attack": null,
     "health": null,
-    "rulesText": "Secret: When your opponent has at least 3 minions and plays another, destroy it.",
+    "rulesText": "Secret: When your opponent has at least 3 minions and plays another minion, destroy it.",
     "keywords": ["secret"],
     "effects": [
       {
@@ -1202,11 +1202,8 @@
             "action": "multiply-trigger",
             "target": {
               "controller": "self",
-              "type": "minion",
-              "selection": "all",
-              "filter": {
-                "hasBattlecry": true
-              }
+              "type": "hero",
+              "selection": "all"
             },
             "trigger": "battlecry",
             "multiplier": 2
@@ -1382,7 +1379,7 @@
     "cost": 4,
     "attack": 7,
     "health": 7,
-    "rulesText": "Can't attack unless it's the only minion in the battlefield.",
+    "rulesText": "Can't attack unless it's the only minion on the battlefield.",
     "keywords": [],
     "effects": [
       {
@@ -1553,7 +1550,7 @@
     "cost": 4,
     "attack": 6,
     "health": 6,
-    "rulesText": "Taunt Battlecry: Replace your hand and deck with Legendary minions.",
+    "rulesText": "Taunt. Battlecry: Replace your hand and deck with Legendary minions.",
     "keywords": ["taunt"],
     "effects": [
       {

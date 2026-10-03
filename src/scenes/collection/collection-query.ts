@@ -1,6 +1,7 @@
 import type {
   CardClass,
   CardDefinition,
+  DeckClass,
   ExpansionId
 } from '../../game-rules/content/cards'
 import {
@@ -23,15 +24,9 @@ export type CollectionClassFilter = CardClass | null
 /** Applies collection-owned query state before the scene builds display pages. */
 export function queryCollectionCards(
   cards: readonly CardDefinition[],
-  state: CollectionQueryState
+  state: CollectionQueryState,
+  deckClass: DeckClass | null = null
 ): readonly CardDefinition[] {
-  const allowedClasses: readonly string[] | undefined =
-    state.classFilter === 'Neutral'
-      ? ['Neutral']
-      : state.classFilter
-        ? [state.classFilter, 'Neutral']
-        : undefined
-
   const filtered = filterCollectionCards(cards, {
     query: state.searchQuery,
     manaCost: state.manaFilter,
@@ -39,7 +34,11 @@ export function queryCollectionCards(
     collectibleMode: state.collectibleMode
   })
 
-  return allowedClasses
-    ? filtered.filter((card) => allowedClasses.includes(card.cardClass))
-    : filtered
+  return filtered.filter(
+    (card) =>
+      (state.classFilter === null || card.cardClass === state.classFilter) &&
+      (deckClass === null ||
+        card.cardClass === deckClass ||
+        card.cardClass === 'Neutral')
+  )
 }

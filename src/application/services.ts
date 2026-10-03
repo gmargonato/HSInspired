@@ -21,73 +21,34 @@ export class BrowserDialogService implements DialogService {
     return typeof window.confirm === 'function' ? window.confirm(message) : true
   }
 
-  error(message: string, retry?: () => void): void {
+  private noticeTimer: ReturnType<typeof setTimeout> | null = null
+
+  /** One non-blocking message; newer messages replace it and restart its lifetime. */
+  error(message: string): void {
+    if (this.noticeTimer !== null) clearTimeout(this.noticeTimer)
     const existing = document.getElementById('app-error-notice')
     const notice = existing ?? document.createElement('div')
     notice.id = 'app-error-notice'
-    notice.setAttribute('role', 'alert')
+    notice.setAttribute('role', 'status')
+    notice.setAttribute('aria-live', 'polite')
     notice.className = 'app-error-notice'
     notice.style.backgroundImage = `url("${resolveAssetDefinition('ui.generic-dialog').source.src}")`
     notice.textContent = ''
     const text = document.createElement('div')
     text.className = 'app-error-notice-message'
     text.textContent = message
-    text.tabIndex = 0
     notice.appendChild(text)
-
-    if (retry) {
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.textContent = 'Retry AI'
-      button.className = 'app-error-notice-button app-error-notice-retry'
-      button.addEventListener(
-        'click',
-        () => {
-          button.disabled = true
-          notice.remove()
-          retry()
-        },
-        { once: true }
-      )
-      notice.appendChild(button)
-    }
-    {
-      const dismiss = document.createElement('button')
-      dismiss.type = 'button'
-      dismiss.textContent = 'Dismiss'
-      dismiss.className = 'app-error-notice-button app-error-notice-dismiss'
-      dismiss.addEventListener('click', () => notice.remove())
-      notice.appendChild(dismiss)
-      if (!existing) document.body.appendChild(notice)
-    }
+    if (!existing) document.body.appendChild(notice)
+    this.noticeTimer = setTimeout(() => {
+      notice.remove()
+      this.noticeTimer = null
+    }, 3000)
   }
 
   abandon(message: string, onContinue: () => void): void {
-    document.getElementById('app-abandon-overlay')?.remove()
-    const overlay = document.createElement('div')
-    overlay.id = 'app-abandon-overlay'
-    overlay.className = 'app-abandon-overlay'
-    overlay.setAttribute('role', 'alertdialog')
-    overlay.setAttribute('aria-modal', 'true')
-
-    const notice = document.createElement('div')
-    notice.className = 'app-error-notice app-error-notice-abandon'
-    notice.style.backgroundImage = `url("${resolveAssetDefinition('ui.generic-dialog').source.src}")`
-    const text = document.createElement('div')
-    text.className = 'app-error-notice-message'
-    text.textContent = message
-    notice.appendChild(text)
-    overlay.appendChild(notice)
-
-    let continued = false
-    const finish = (): void => {
-      if (continued) return
-      continued = true
-      overlay.remove()
-      onContinue()
-    }
-    overlay.addEventListener('click', finish, { once: true })
-    document.body.appendChild(overlay)
+    this.error(message)
+    // Match recovery must still finish if another message replaces this one.
+    setTimeout(onContinue, 3000)
   }
 }
 

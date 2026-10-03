@@ -19,6 +19,7 @@ export type {
 } from '../../desktop/contracts/ipc/outline-tuning'
 
 const initialConfig = parseOutlineTuningConfig(rawConfig)
+export const WINDFURY_CONFIG = { ...initialConfig.windfury }
 export const SHATTER_CONFIG = { ...initialConfig.shatter }
 export const GOD_RAYS_CONFIG = { ...initialConfig.godRays }
 export const GOD_RAYS_DUST_CONFIG = { ...initialConfig.godRaysDust }
@@ -41,7 +42,8 @@ export function getOutlineTuning(preset: OutlinePresetName): OutlineTuning {
 
 export function getOutlineTuningConfig(): OutlineTuningConfig {
   return parseOutlineTuningConfig({
-    version: 13,
+    version: 14,
+    windfury: WINDFURY_CONFIG,
     godRaysDust: GOD_RAYS_DUST_CONFIG,
     godRays: GOD_RAYS_CONFIG,
     shatter: SHATTER_CONFIG,
@@ -52,6 +54,7 @@ export function getOutlineTuningConfig(): OutlineTuningConfig {
 
 export function updateOutlineTuningConfig(config: OutlineTuningConfig): void {
   const parsed = parseOutlineTuningConfig(config)
+  Object.assign(WINDFURY_CONFIG, parsed.windfury)
   Object.assign(SHATTER_CONFIG, parsed.shatter)
   Object.assign(GOD_RAYS_CONFIG, parsed.godRays)
   Object.assign(GOD_RAYS_DUST_CONFIG, parsed.godRaysDust)

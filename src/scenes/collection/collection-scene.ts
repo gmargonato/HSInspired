@@ -11,7 +11,11 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../../application/config'
 import { NewDeckView } from './deck-builder/new-deck-view'
 import type { DeckStore } from '../../application/contracts/deck-store'
 import { DeleteDeckView } from './delete-deck-view'
-import { CollectionView, type CollectionCardAddSource } from './collection-view'
+import {
+  CollectionView,
+  type CollectionCardAddSource,
+  type CollectionBrowsingState
+} from './collection-view'
 import {
   DeckPanelView,
   type DeckPanelAssets,
@@ -27,7 +31,6 @@ import type {
   SceneRouter
 } from '../../application/navigation/router'
 import type { CollectibleMode } from './collection-filters'
-import type { CollectionClassFilter } from './collection-query'
 import { setCollectionPreviewCached } from './collection-preview-cache'
 
 /** Full-viewport collection scene presented through the main menu transition. */
@@ -38,7 +41,8 @@ export class CollectionScene extends Scene {
   private newDeckScene!: NewDeckView
   private deleteDeckView!: DeleteDeckView
   private collectionBackButton!: Button
-  private previousCollectionClassFilter: CollectionClassFilter = null
+  private previousBrowsingState: CollectionBrowsingState | null = null
+  private enteringDeck = false
   private collectionPreviewBlurFilter: BlurFilter | null = null
   private navigationReady = false
   private savingDeckName = false
@@ -98,6 +102,7 @@ export class CollectionScene extends Scene {
         onCardPreview: (card, sourceBounds) =>
           this.handleCollectionCardPreview(card, sourceBounds),
         onRevealComplete: () => this.handleRevealComplete(),
+        onCollectibleModeChanged: (mode) => this.notifyCollectibleMode(mode),
         onError: (message, error) => this.reportError(message, error),
         onWarning: (message, error) => this.reportWarning(message, error)
       }
@@ -138,7 +143,8 @@ export class CollectionScene extends Scene {
         onClassSelected: (hero) =>
           this.handleNewDeckHeroSelected(hero.classId as DeckClass),
         onCancelled: () => this.handleNewDeckCreationCancelled(),
-        onDeckCreated: (deck) => this.handleNewDeckCreated(deck)
+        onDeckCreated: (deck) => this.handleNewDeckCreated(deck),
+        onError: (message, error) => this.reportError(message, error)
       },
       this.logger
     )
@@ -196,7 +202,7 @@ export class CollectionScene extends Scene {
 
     try {
       await this.collectionView.setCollectibleMode(mode)
-      this.notifyCollectibleMode(mode)
+      this.notifyCollectibleMode(this.collectionView.collectibleMode)
     } catch (error) {
       this.reportError(
         `Failed to filter the collection for collectible mode ${mode}.`,
@@ -233,6 +239,7 @@ export class CollectionScene extends Scene {
       onNewDeck: () => void this.beginNewDeckCreation(),
       onDeleteDeck: (deckId) => void this.deleteDeck(deckId),
       onEditorDone: () => this.saveDeckNameAndExitEditor(),
+      onMessage: (message) => this.dialogs.error(message),
       onError: (message, error) => this.reportError(message, error),
       onWarning: (message, error) => this.reportWarning(message, error)
     }
@@ -305,6 +312,7 @@ export class CollectionScene extends Scene {
       !this.navigationReady ||
       this.disposed ||
       this.deckPanel.getActiveDeckId() !== null ||
+      this.enteringDeck ||
       this.deckPanel.isTransitioning
     ) {
       return
@@ -317,23 +325,32 @@ export class CollectionScene extends Scene {
       y: DECK_EDITOR_LAYOUT.header.position.y
     }
 
+    this.previousBrowsingState ??= this.collectionView.captureBrowsingState()
+    this.enteringDeck = true
+    this.setNavigationEnabled(false)
     this.setDeckInteractionEnabled(false)
 
     try {
-      await this.collectionView.applyClassFilter(this.deckPanel.getDeckClass(deck))
+      await this.collectionView.setDeckClass(this.deckPanel.getDeckClass(deck))
+      if (this.disposed) return
+      await this.deckPanel.enterEditor(deck, origin)
+      if (this.disposed) return
+      this.collectionView.refreshCompletionState()
     } catch (error) {
-      this.reportError(`Failed to filter the collection for ${deck.name}.`, error)
-      if (!this.disposed) this.setDeckInteractionEnabled(true)
-      return
+      this.reportError(`Failed to open ${deck.name}.`, error)
+      if (!this.disposed) {
+        if (this.deckPanel.getActiveDeckId()) await this.deckPanel.exitEditor()
+        await this.restoreBrowsingState().catch((restoreError: unknown) =>
+          this.reportError('Failed to restore collection browsing.', restoreError)
+        )
+      }
+    } finally {
+      this.enteringDeck = false
+      if (!this.disposed) {
+        this.setNavigationEnabled(true)
+        this.setDeckInteractionEnabled(true)
+      }
     }
-    if (this.disposed) return
-
-    await this.deckPanel.enterEditor(deck, origin)
-    if (this.disposed) return
-
-    this.collectionView.refreshFilterInteractionState()
-    this.collectionView.refreshCompletionState()
-    this.setDeckInteractionEnabled(true)
   }
 
   private async exitDeckEditor(): Promise<void> {
@@ -348,13 +365,13 @@ export class CollectionScene extends Scene {
     this.setNavigationEnabled(false)
     this.setDeckInteractionEnabled(false)
 
-    await this.deckPanel.exitEditor()
-    if (this.disposed) return
-
-    this.deckPanel.renderDeckList()
-
     try {
-      await this.collectionView.applyClassFilter(null)
+      await this.restoreBrowsingState()
+      if (this.disposed) return
+      await this.deckPanel.exitEditor()
+      if (this.disposed) return
+      this.deckPanel.renderDeckList()
+      this.collectionView.refreshCompletionState()
     } catch (error) {
       this.reportError('Failed to restore the full collection.', error)
     } finally {
@@ -363,6 +380,12 @@ export class CollectionScene extends Scene {
         this.setDeckInteractionEnabled(true)
       }
     }
+  }
+
+  private async restoreBrowsingState(): Promise<void> {
+    if (this.disposed || !this.previousBrowsingState) return
+    await this.collectionView.restoreBrowsingState(this.previousBrowsingState)
+    this.previousBrowsingState = null
   }
 
   private async saveDeckNameAndExitEditor(): Promise<void> {
@@ -405,13 +428,14 @@ export class CollectionScene extends Scene {
     card: CardDefinition,
     source: CollectionCardAddSource
   ): void {
-    if (this.deckPanel.getActiveDeckId() === null || this.deckPanel.isTransitioning) {
+    if (this.deckPanel.isTransitioning) return
+    if (this.deckPanel.getActiveDeckId() === null) {
+      this.dialogs.error('Use right-click to preview a card')
       return
     }
 
     void this.deckPanel.enqueueCardAddition(card, source).catch((error: unknown) => {
       this.reportError(`Failed to add ${card.name} to the deck.`, error)
-      this.deckPanel.flashCount()
     })
   }
 
@@ -433,14 +457,16 @@ export class CollectionScene extends Scene {
       return
     }
 
-    this.previousCollectionClassFilter = this.collectionView.classFilter
+    this.previousBrowsingState = this.collectionView.captureBrowsingState()
     this.setNavigationEnabled(false)
     this.setDeckInteractionEnabled(false)
     try {
       await this.newDeckScene.open()
     } catch (error) {
       this.reportError('Failed to open the new deck selector.', error)
-      this.previousCollectionClassFilter = null
+      await this.restoreBrowsingState().catch((restoreError: unknown) =>
+        this.reportError('Failed to restore collection browsing.', restoreError)
+      )
       if (!this.disposed) {
         this.setNavigationEnabled(true)
         this.setDeckInteractionEnabled(true)
@@ -450,21 +476,18 @@ export class CollectionScene extends Scene {
 
   private async handleNewDeckHeroSelected(heroClass: DeckClass): Promise<void> {
     try {
-      await this.collectionView.applyClassFilter(heroClass)
+      await this.collectionView.setDeckClass(heroClass)
     } catch (error) {
       this.reportError(`Failed to filter the collection for ${heroClass}.`, error)
     }
   }
 
   private async handleNewDeckCreationCancelled(): Promise<void> {
-    const previousFilter = this.previousCollectionClassFilter
-
     try {
-      await this.collectionView.applyClassFilter(previousFilter)
+      await this.restoreBrowsingState()
     } catch (error) {
       this.reportError('Failed to restore the collection after cancelling.', error)
     } finally {
-      this.previousCollectionClassFilter = null
       if (!this.disposed) {
         this.setNavigationEnabled(true)
         this.setDeckInteractionEnabled(true)
@@ -473,7 +496,6 @@ export class CollectionScene extends Scene {
   }
 
   private async handleNewDeckCreated(deck: Deck): Promise<void> {
-    this.previousCollectionClassFilter = null
     if (this.disposed) return
 
     this.setNavigationEnabled(true)
@@ -552,7 +574,9 @@ export class CollectionScene extends Scene {
         strength: COLLECTION_PREVIEW_BLUR_STRENGTH,
         quality: 2,
         resolution: 'inherit',
-        antialias: 'inherit'
+        antialias: 'inherit',
+        // The cached scene can be larger than the window's pixel viewport.
+        clipToViewport: false
       })
       this.collectionPreviewBlurFilter = filter
       this.root.filters = [...(this.root.filters ?? []), filter]

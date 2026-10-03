@@ -14,6 +14,11 @@ export const HERO_LAYOUT = {
       note: 'Existing hero portrait frame.'
     }
   ),
+  windfury: placement(
+    { x: HERO_CANVAS.width / 2, y: HERO_CANVAS.height / 2 },
+    { width: HERO_CANVAS.width * 1.08, height: HERO_CANVAS.height },
+    { anchor: CENTER, note: 'Wind ribbons fitted to the hero portrait frame.' }
+  ),
   frozen: placement(
     { x: HERO_CANVAS.width / 2, y: HERO_CANVAS.height / 2 },
     { width: HERO_CANVAS.width, height: HERO_CANVAS.height },

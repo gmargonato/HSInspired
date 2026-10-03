@@ -1,3 +1,6 @@
+import { prewarmMinionStatus } from './loading/minion-status-warmup'
+import { prewarmWindfury } from './loading/windfury-warmup'
+import { prewarmCardPlay } from './loading/card-play-warmup'
 import type { Texture } from 'pixi.js'
 import { GameLoadingView } from './loading/game-loading-view'
 import { OPENING_TIMING } from './presentation/game-presentation-timing'
@@ -190,17 +193,12 @@ export class GameScene extends Scene {
 
     const aiPreferences = await this.readAiPreferences()
     const aiMode = aiPreferences.aiMode
-    const strategyEnabled = aiPreferences.expertDeckStrategyEnabled !== false
     const profileId = this.route.curatedOpponent?.expertStrategyProfileId
     const aiParticipantId = this.route.setup.participants.find(
       (participant) => participant.controllerKind === 'ai'
     )?.participantId
     const deckStrategy: ExpertDeckStrategyBinding | undefined =
-      aiMode === 'hardware-v2' &&
-      strategyEnabled &&
-      !this.route.mode &&
-      profileId &&
-      aiParticipantId
+      aiMode === 'hardware-v2' && !this.route.mode && profileId && aiParticipantId
         ? { participantId: aiParticipantId, profileId, version: 1 }
         : undefined
     const matchRoute: GameRoute = {
@@ -220,7 +218,7 @@ export class GameScene extends Scene {
         aiRuntimeSettings: { ...AI_CONVERSATION_LIMITS },
         aiMode,
         expertDeckStrategy: {
-          enabled: strategyEnabled,
+          enabled: true,
           applied: Boolean(deckStrategy),
           profileId: deckStrategy?.profileId ?? null,
           version: deckStrategy?.version ?? null,
@@ -302,6 +300,24 @@ export class GameScene extends Scene {
     } catch (error) {
       // Keep match loading resilient; the first death can still initialize Shatter.
       this.logger?.warn('[GameScene] shatter warm-up failed', error)
+    }
+
+    try {
+      prewarmWindfury(this.appInstance.renderer)
+    } catch (error) {
+      this.logger?.warn('[GameScene] Windfury warm-up failed', error)
+    }
+
+    try {
+      prewarmCardPlay(this.appInstance.renderer, gameAssets)
+    } catch (error) {
+      this.logger?.warn('[GameScene] card play warm-up failed', error)
+    }
+
+    try {
+      prewarmMinionStatus(this.appInstance.renderer, gameAssets)
+    } catch (error) {
+      this.logger?.warn('[GameScene] minion status warm-up failed', error)
     }
 
     await this.reportLoading(0.46, 'Building game board')
@@ -390,7 +406,7 @@ export class GameScene extends Scene {
     if (this.opponentLeftShown) return
     this.opponentLeftShown = true
     this.dialogs?.abandon('Your opponent left.', () => {
-      void this.router?.navigate(this.createExitRoute())
+      if (this.isLoaded) void this.router?.navigate(this.createExitRoute())
     })
   }
 

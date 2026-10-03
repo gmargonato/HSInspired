@@ -136,6 +136,7 @@ export interface SpellCardDefinition extends CardMetadata {
       | 'restore-health'
       | 'add-other-class-card'
       | 'play-battlecry-minion'
+      | 'play-battlecry-card'
       | 'draw-card'
       | 'hero-attack'
     readonly target: number

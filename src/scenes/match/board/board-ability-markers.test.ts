@@ -1,3 +1,12 @@
+import {
+  effectiveHeroCombatKeywords,
+  heroHasWindfury
+} from '../../../game-rules/match/rules/hero-combat-keywords'
+import type {
+  OpeningMatchState,
+  OpeningPlayerState,
+  BoardWeapon
+} from '../../../game-rules/match/opening-match-types'
 import { describe, expect, it } from 'vitest'
 import { markHearthstoneKeywords } from '../../../visual-components/cards/card-text-markup'
 import { CARD_CATALOG, type CardTrigger } from '../../../game-rules/content/cards'
@@ -471,4 +480,95 @@ it('uses modern bold keywords across matching card descriptions', () => {
       '<keyword>' + keyword + '</keyword>'
     )
   }
+})
+
+describe('hero Windfury presentation', () => {
+  const doomhammer: BoardWeapon = {
+    instanceId: 'weapon',
+    cardId: CARD_CATALOG.require('classic_doomhammer').id,
+    attack: 2,
+    durability: 8,
+    maxDurability: 8
+  }
+  const ordinary: BoardWeapon = {
+    ...doomhammer,
+    cardId: CARD_CATALOG.require('basic_fiery_war_axe').id
+  }
+  const enchantment: RuntimeEnchantment = {
+    id: 'wind',
+    sourceInstanceId: 'source',
+    sourceCardId: null,
+    keywords: ['windfury'],
+    startsOnTurn: 2,
+    expiresOnTurn: 3
+  }
+  it('follows equipped keywords and independent hero grants, not attack counts', () => {
+    const owner = {
+      participantId: 'local',
+      hero: { keywords: [], maxAttacksPerTurn: 99, frozenUntilTurn: 5 },
+      weapon: doomhammer,
+      board: [],
+      secrets: []
+    } as unknown as OpeningPlayerState
+    const state = {
+      turnNumber: 2,
+      players: [owner],
+      activePlayerId: 'remote'
+    } as unknown as OpeningMatchState
+    expect(heroHasWindfury(state, owner)).toBe(true)
+    expect(heroHasWindfury(state, { ...owner, weapon: ordinary })).toBe(false)
+    expect(heroHasWindfury(state, { ...owner, weapon: null })).toBe(false)
+    for (const keyword of ['windfury', 'mega-windfury'] as const) {
+      expect(
+        heroHasWindfury(state, {
+          ...owner,
+          weapon: null,
+          hero: { ...owner.hero, keywords: [keyword] }
+        })
+      ).toBe(true)
+    }
+  })
+  it('honors weapon keyword removal, expiry, delayed starts, and source lifetime', () => {
+    const hasWind = (weapon: BoardWeapon, turn: number, source = true) =>
+      effectiveHeroCombatKeywords([], weapon, turn, () => source).has('windfury')
+    const granted = { ...ordinary, enchantments: [enchantment] }
+    expect(hasWind(granted, 1)).toBe(false)
+    expect(hasWind(granted, 2)).toBe(true)
+    expect(hasWind(granted, 3)).toBe(true)
+    expect(hasWind(granted, 4)).toBe(false)
+    expect(
+      hasWind(
+        {
+          ...doomhammer,
+          enchantments: [
+            { ...enchantment, keywords: [], removedKeywords: ['windfury'] }
+          ]
+        },
+        2
+      )
+    ).toBe(false)
+    expect(
+      hasWind(
+        {
+          ...ordinary,
+          enchantments: [{ ...enchantment, duration: 'while-source-in-play' }]
+        },
+        2,
+        false
+      )
+    ).toBe(false)
+    expect(
+      hasWind(
+        {
+          ...ordinary,
+          enchantments: [{ ...enchantment, duration: 'while-source-in-play' }]
+        },
+        2,
+        true
+      )
+    ).toBe(true)
+    expect(
+      hasWind({ ...ordinary, enchantments: [{ ...enchantment, continuous: true }] }, 2)
+    ).toBe(false)
+  })
 })

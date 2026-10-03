@@ -1,3 +1,4 @@
+import { WINDFURY_DEFAULTS } from './windfury-tuning'
 import { describe, expect, it } from 'vitest'
 import rawConfig from '../../../../config/outline-tunings.json'
 import { GOD_RAYS_DEFAULTS } from './god-rays-tuning'
@@ -69,7 +70,7 @@ function legacyConfig(version: number) {
 describe('shader tuning IPC', () => {
   it('clones both shaders without sharing mutable nested values', () => {
     const parsed = parseOutlineTuningConfig(rawConfig)
-    expect(parsed).toEqual(rawConfig)
+    expect(parsed).toEqual({ ...rawConfig, version: 14, windfury: WINDFURY_DEFAULTS })
     expect(Object.keys(parsed.aura.presets)).toEqual([...OUTLINE_PRESET_NAMES])
     expect(Object.keys(parsed.aura.palettes)).toEqual([...OUTLINE_PALETTE_NAMES])
     expect(parsed.aura.presets.card).not.toBe(rawConfig.aura.presets.card)
@@ -83,7 +84,7 @@ describe('shader tuning IPC', () => {
       ghost: { tuning: { ribbonWidth: 5 }, palette: { baseColor: 0 } }
     }
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(13)
+    expect(parsed.version).toBe(14)
     expect(parsed.aura).toEqual(expectedMigratedAura(legacy.aura))
     expect(parsed.ghost).toEqual(GHOST_MIST_DEFAULTS)
     expect(legacy.version).toBe(4)
@@ -92,7 +93,7 @@ describe('shader tuning IPC', () => {
     const legacy = legacyConfig(5)
     legacy.ghost.tuning.spotSize = 1.09
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(13)
+    expect(parsed.version).toBe(14)
     expect(parsed.ghost.tuning.particleSize).toBeCloseTo(8.175)
     expect(legacy.ghost.tuning.spotSize).toBe(1.09)
     expect(parsed.aura).toEqual(expectedMigratedAura(legacy.aura))
@@ -105,7 +106,7 @@ describe('shader tuning IPC', () => {
   it('adds travel distance to version 6 while preserving saved settings', () => {
     const legacy = legacyConfig(6)
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(13)
+    expect(parsed.version).toBe(14)
     expect(parsed.ghost.tuning).toMatchObject({
       particleTravelDistance: 60,
       windDirection: 2,
@@ -180,7 +181,11 @@ describe('shader tuning IPC', () => {
     config.ghost.tuning.mistIntensity = 0.3
     config.ghost.tuning.particleIntensity = 2
     config.ghost.palette.particleColor = 0xff0000
-    expect(parseOutlineTuningConfig(config)).toEqual(config)
+    expect(parseOutlineTuningConfig(config)).toEqual({
+      ...config,
+      version: 14,
+      windfury: WINDFURY_DEFAULTS
+    })
   })
   it('rejects fractional particle counts', () => {
     const config = structuredClone(rawConfig)
@@ -316,7 +321,7 @@ it('adds god rays to version 11 without changing existing shader tuning', () => 
   } = structuredClone(rawConfig)
   const legacy = { ...previous, version: 11 }
   const migrated = parseOutlineTuningConfig(legacy)
-  expect(migrated.version).toBe(13)
+  expect(migrated.version).toBe(14)
   expect(migrated.godRays).toEqual(GOD_RAYS_DEFAULTS)
   expect(migrated.aura).toEqual(legacy.aura)
   expect(migrated.ghost).toEqual(legacy.ghost)
@@ -332,7 +337,7 @@ it('round-trips fractional god rays values and copies its color channels', () =>
   config.godRays.seed = 25.31
   config.godRays.color = [0.123, 0.456, 0.789, 0.321]
   const parsed = parseOutlineTuningConfig(config)
-  expect(parsed).toEqual(config)
+  expect(parsed).toEqual({ ...config, version: 14, windfury: WINDFURY_DEFAULTS })
   expect(parsed.godRays.color).not.toBe(config.godRays.color)
   expect(parseOutlineTuningConfig(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed)
 })
@@ -384,6 +389,42 @@ it.each([
     parseOutlineTuningConfig({
       ...rawConfig,
       godRays: { ...rawConfig.godRays, ...invalid }
+    })
+  ).toThrow()
+})
+
+it('migrates Windfury defaults and round-trips saved adjustments without changing other effects', () => {
+  const initial = parseOutlineTuningConfig(rawConfig)
+  expect(initial.windfury).toEqual(WINDFURY_DEFAULTS)
+  const changed = {
+    ...initial,
+    windfury: {
+      ...initial.windfury,
+      speed: 0,
+      thickness: 2.5,
+      ribbons: 5,
+      color: 0xabcdef
+    }
+  }
+  const saved = parseOutlineTuningConfig(JSON.parse(JSON.stringify(changed)))
+  expect(saved).toEqual(changed)
+  expect(saved.aura).toEqual(initial.aura)
+  expect(initial.windfury).toEqual(WINDFURY_DEFAULTS)
+})
+
+it.each([
+  { speed: -1 },
+  { thickness: NaN },
+  { ribbons: 1.5 },
+  { color: 0x1000000 },
+  { speed: '2' },
+  { unknown: 1 }
+])('rejects invalid Windfury tuning %j', (invalid) => {
+  const config = parseOutlineTuningConfig(rawConfig)
+  expect(() =>
+    parseOutlineTuningConfig({
+      ...config,
+      windfury: { ...config.windfury, ...invalid }
     })
   ).toThrow()
 })

@@ -37,12 +37,8 @@ import {
   DECK_EDITOR_COPIES_WIDTH,
   DECK_EDITOR_COST_WIDTH,
   DECK_EDITOR_COUNT_FILL,
-  DECK_EDITOR_ERROR_FILL,
   DECK_EDITOR_FRAME_CARD_LIST_GAP,
   DECK_EDITOR_FRAME_TARGET_WIDTH,
-  DECK_EDITOR_FULL_WARNING_DURATION,
-  DECK_EDITOR_FULL_WARNING_FONT_SIZE,
-  DECK_EDITOR_FULL_WARNING_STROKE_WIDTH,
   DECK_EDITOR_LAYOUT,
   DECK_EDITOR_PREVIEW,
   DECK_EDITOR_ROW_COLLAPSE_DURATION,
@@ -62,7 +58,6 @@ import {
   type Deck,
   type DeckMutationFailure
 } from '../../game-rules/decks'
-import { GAME_HEIGHT, GAME_WIDTH } from '../../visual-components/layout'
 import type { CollectionCardAddSource } from './collection-view'
 import {
   createCardAddFlightPath,
@@ -81,6 +76,7 @@ export interface DeckPanelViewCallbacks {
   readonly onDeleteDeck?: (deckId: string) => void
   readonly onEditorDone?: () => void | Promise<void>
   readonly onError?: (message: string, error?: unknown) => void
+  readonly onMessage?: (message: string) => void
   readonly onWarning?: (message: string, error?: unknown) => void
 }
 
@@ -145,7 +141,6 @@ export class DeckPanelView extends Actor {
   private deckEditorCardViewport!: Container
   private deckEditorFrame!: Container
   private deckEditorCount!: Text
-  private deckFullWarning!: Text
   private deckEditorDoneButton!: Button
   private deckEditorCardContent!: Container
   private deckScrollOffset = 0
@@ -162,8 +157,6 @@ export class DeckPanelView extends Actor {
   private deckEditorTransitionTimeline: gsap.core.Timeline | null = null
   private deckEditorTransitionResolve: (() => void) | null = null
   private deckEditorRenderSequence = 0
-  private deckEditorCountFeedbackTimer: ReturnType<typeof setTimeout> | null = null
-  private deckFullWarningTimer: ReturnType<typeof setTimeout> | null = null
   private deckEditorCardMutationInProgress = false
   private deckEditorCardPreview: CardView | null = null
   private deckEditorCardPreviewRequest = 0
@@ -189,6 +182,7 @@ export class DeckPanelView extends Actor {
       createDeckButton: (deck, onClick) => this.createDeckButton(deck, onClick)
     })
     this.deckNameInput = new DeckNameInput({
+      onMessage: (message) => options.callbacks?.onMessage?.(message),
       canvas: options.canvas,
       renderer: options.renderer,
       parent: options.inputParent,
@@ -248,11 +242,6 @@ export class DeckPanelView extends Actor {
 
   get isAddingCard(): boolean {
     return this.processingCardAddQueue
-  }
-
-  /** Briefly flashes the deck-editor count in error color. */
-  flashCount(): void {
-    this.flashDeckEditorCount()
   }
 
   getDeckClass(deck: Deck): DeckClass | null {
@@ -393,8 +382,6 @@ export class DeckPanelView extends Actor {
 
   updateEditor(deck: Deck): void {
     this.renderDeckEditorFrame(deck)
-    this.clearDeckFullWarning()
-    this.clearDeckEditorCountFeedback()
     this.deckEditorCount.text = `${countDeckCards(deck)} / ${MAX_DECK_CARDS} Cards`
     this.renderDeckCardRows(deck)
   }
@@ -755,13 +742,7 @@ export class DeckPanelView extends Actor {
   }
 
   private reportCardAddFailure(result: DeckMutationFailure): void {
-    if (result.code === 'deck-full') {
-      this.options.callbacks?.onWarning?.(result.message)
-      this.showDeckFullWarning(result.message)
-    } else if (result.code !== 'copy-limit') {
-      this.options.callbacks?.onError?.(result.message)
-    }
-    this.flashDeckEditorCount()
+    this.options.callbacks?.onMessage?.(result.message)
   }
 
   async removeCard(cardId: string, row?: Container): Promise<void> {
@@ -813,7 +794,6 @@ export class DeckPanelView extends Actor {
         this.options.callbacks?.onError?.(result.message)
         const updatedDeck = this.deckStore.getDeck(deckId)
         if (updatedDeck) this.updateEditor(updatedDeck)
-        this.flashDeckEditorCount()
         return
       }
 
@@ -827,7 +807,6 @@ export class DeckPanelView extends Actor {
       if (!this.disposed && this.activeDeckId === deckId) {
         const updatedDeck = this.deckStore.getDeck(deckId)
         if (updatedDeck) this.updateEditor(updatedDeck)
-        this.flashDeckEditorCount()
       }
     } finally {
       this.deckEditorCardMutationInProgress = false
@@ -858,8 +837,6 @@ export class DeckPanelView extends Actor {
     this.deckEditorTransitioning = false
     this.deckEditorClosing = false
     this.deckEditorCardMutationInProgress = false
-    this.clearDeckEditorCountFeedback()
-    this.clearDeckFullWarning()
     this.deckNameInput.dispose()
     this.setInteractionEnabled(false)
   }
@@ -897,28 +874,6 @@ export class DeckPanelView extends Actor {
       DECK_EDITOR_LAYOUT.count.position.y
     )
     this.deckEditorLayer.addChild(this.deckEditorCount)
-
-    this.deckFullWarning = new Text({
-      text: '',
-      style: {
-        fontFamily: 'Belwe',
-        fontSize: DECK_EDITOR_FULL_WARNING_FONT_SIZE,
-        fill: 0xffffff,
-        stroke: {
-          color: 0x000000,
-          width: DECK_EDITOR_FULL_WARNING_STROKE_WIDTH
-        },
-        align: 'center',
-        wordWrap: true,
-        wordWrapWidth: GAME_WIDTH - 160,
-        lineHeight: DECK_EDITOR_FULL_WARNING_FONT_SIZE * 1.1
-      }
-    })
-    this.deckFullWarning.anchor.set(0.5)
-    this.deckFullWarning.position.set(GAME_WIDTH / 2, GAME_HEIGHT / 2)
-    this.deckFullWarning.eventMode = 'none'
-    this.deckFullWarning.visible = false
-    this.deckFullWarning.alpha = 0
 
     const deckEditorCardMask = new Graphics()
       .rect(
@@ -959,7 +914,6 @@ export class DeckPanelView extends Actor {
     this.deckEditorLayer.visible = false
     this.deckEditorLayer.alpha = 0
     this.addChild(this.deckEditorLayer)
-    this.addChild(this.deckFullWarning)
   }
 
   private createDeckButton(
@@ -1553,75 +1507,5 @@ export class DeckPanelView extends Actor {
 
     this.killTweensOf(preview)
     preview.destroy({ children: true })
-  }
-
-  private flashDeckEditorCount(): void {
-    if (!this.deckEditorCount) return
-
-    if (this.deckEditorCountFeedbackTimer !== null) {
-      clearTimeout(this.deckEditorCountFeedbackTimer)
-    }
-    this.deckEditorCount.style.fill = DECK_EDITOR_ERROR_FILL
-    this.deckEditorCountFeedbackTimer = setTimeout(() => {
-      this.deckEditorCountFeedbackTimer = null
-      if (!this.disposed && this.deckEditorCount) {
-        this.deckEditorCount.style.fill = DECK_EDITOR_COUNT_FILL
-      }
-    }, 650)
-  }
-
-  private clearDeckEditorCountFeedback(): void {
-    if (this.deckEditorCountFeedbackTimer !== null) {
-      clearTimeout(this.deckEditorCountFeedbackTimer)
-      this.deckEditorCountFeedbackTimer = null
-    }
-    if (this.deckEditorCount) {
-      this.deckEditorCount.style.fill = DECK_EDITOR_COUNT_FILL
-    }
-  }
-
-  private showDeckFullWarning(message: string): void {
-    if (!this.deckFullWarning) return
-
-    this.clearDeckFullWarning()
-    this.deckFullWarning.text = message
-    this.deckFullWarning.visible = true
-    this.tweenTo(this.deckFullWarning, {
-      alpha: 1,
-      duration: 0.12,
-      ease: 'power2.out'
-    })
-    this.deckFullWarningTimer = setTimeout(() => {
-      this.deckFullWarningTimer = null
-      if (this.disposed || !this.deckFullWarning) return
-
-      this.tweenTo(this.deckFullWarning, {
-        alpha: 0,
-        duration: 0.25,
-        ease: 'power2.in',
-        onComplete: () => {
-          if (!this.disposed && this.deckFullWarning) {
-            this.deckFullWarning.visible = false
-          }
-        },
-        onInterrupt: () => {
-          if (!this.disposed && this.deckFullWarning) {
-            this.deckFullWarning.visible = false
-          }
-        }
-      })
-    }, DECK_EDITOR_FULL_WARNING_DURATION)
-  }
-
-  private clearDeckFullWarning(): void {
-    if (this.deckFullWarningTimer !== null) {
-      clearTimeout(this.deckFullWarningTimer)
-      this.deckFullWarningTimer = null
-    }
-    if (!this.deckFullWarning) return
-
-    this.killTweensOf(this.deckFullWarning)
-    this.deckFullWarning.alpha = 0
-    this.deckFullWarning.visible = false
   }
 }

@@ -1,3 +1,4 @@
+import type { WindfuryTuning } from '../../../desktop/contracts/ipc/windfury-tuning'
 import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import {
   applyAnchoredPlacement,
@@ -9,6 +10,8 @@ import {
   type OutlineTuning
 } from '../../../visual-components/effects/animated-outline'
 import { AnimationScope } from '../../../visual-components/animation/animations'
+import { WindfuryEffect } from './windfury-effect'
+import { createHealthPulse } from './health-pulse'
 import { HERO_CANVAS, HERO_LAYOUT } from './hero-layout'
 import { attachShadow } from '../../../visual-components/effects/shadow-caster'
 
@@ -20,6 +23,7 @@ export interface HeroViewModel {
   readonly armor: number
   readonly frozen: boolean
   readonly immune: boolean
+  readonly windfury?: boolean
 }
 
 export interface HeroViewTextures {
@@ -91,6 +95,7 @@ export class HeroView extends Container {
     { x: 0, y: 0, ...HERO_CANVAS },
     { restingHeight: 0 }
   )
+  private readonly windfury: WindfuryEffect
   private readonly frame: Sprite
   private readonly frozen: Sprite
   private readonly immune: Sprite
@@ -100,6 +105,7 @@ export class HeroView extends Container {
   private readonly attackLabel: Text
   private readonly healthGroup: Container
   private readonly healthLabel: Text
+  readonly pulseHealth: () => void
   private readonly armorGroup: Container
   private readonly armorLabel: Text
   private readonly outlineProxy: Sprite
@@ -124,6 +130,10 @@ export class HeroView extends Container {
     this.eventMode = 'none'
     this.pivot.set(HERO_CANVAS.width / 2, HERO_CANVAS.height / 2)
 
+    this.windfury = new WindfuryEffect(HERO_LAYOUT.windfury, 'hero.windfury')
+    this.windfury.setEnabled(model.windfury ?? false)
+    this.addChild(this.windfury.rear)
+
     this.frame = new Sprite(textures.frame)
     applyAnchoredPlacement(this.frame, HERO_LAYOUT.frame)
     this.frame.label = 'hero.frame'
@@ -140,6 +150,7 @@ export class HeroView extends Container {
     this.setImmune(model.immune)
     this.immune.label = 'hero.immune'
     this.addChild(this.immune)
+    this.addChild(this.windfury.front)
 
     const attack = createStatGroup(
       'hero.stat-attack',
@@ -160,6 +171,7 @@ export class HeroView extends Container {
     )
     this.healthGroup = health.group
     this.healthLabel = health.value
+    this.pulseHealth = createHealthPulse(health.group, this.animationScope)
     this.healthGroup.visible = false
     this.addChild(this.healthGroup)
     this.setHealthColor(model.health)
@@ -307,6 +319,14 @@ export class HeroView extends Container {
     })
   }
 
+  setWindfury(enabled: boolean): void {
+    this.windfury.setEnabled(enabled)
+  }
+
+  setWindfuryTuning(tuning: WindfuryTuning): void {
+    this.windfury.setTuning(tuning)
+  }
+
   setFrozen(visible: boolean): void {
     this.frozen.visible = visible
   }
@@ -409,6 +429,7 @@ export class HeroView extends Container {
     this.attackOutline.dispose()
     this.targetingOutline.dispose()
     this.animationScope.kill()
+    this.windfury.destroy()
     super.destroy(options)
   }
 }

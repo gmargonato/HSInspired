@@ -126,7 +126,11 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       dependencies.services.progressionStore
     ),
   'new-deck': (_request, dependencies) =>
-    new NewDeckScene(dependencies.services.deckStore, dependencies.services.logger),
+    new NewDeckScene(
+      dependencies.services.deckStore,
+      dependencies.services.logger,
+      dependencies.services.dialogs
+    ),
   'tavern-brawl': (_request, dependencies) =>
     new TavernBrawlScene(
       dependencies.services.playerStatsStore,
@@ -159,7 +163,7 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
         dependencies.router,
         dependencies.services.ai,
         dependencies.services.matchLogs,
-        (message, retry) => dependencies.services.dialogs.error(message, retry),
+        (message) => dependencies.services.dialogs.error(message),
         dependencies.services.progressionStore,
         dependencies.services.dialogs,
         dependencies.services.preferences
@@ -181,7 +185,7 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       dependencies.router,
       dependencies.services.ai,
       dependencies.services.matchLogs,
-      (message, retry) => dependencies.services.dialogs.error(message, retry),
+      (message) => dependencies.services.dialogs.error(message),
       dependencies.services.progressionStore,
       dependencies.services.dialogs,
       dependencies.services.preferences
@@ -493,7 +497,11 @@ export class SceneNavigator implements SceneRouter {
           this.services.progressionStore
         )
       case 'new-deck':
-        return new NewDeckScene(this.services.deckStore, this.services.logger)
+        return new NewDeckScene(
+          this.services.deckStore,
+          this.services.logger,
+          this.services.dialogs
+        )
       case 'tavern-brawl':
         return new TavernBrawlScene(
           this.services.playerStatsStore,
@@ -510,7 +518,7 @@ export class SceneNavigator implements SceneRouter {
           this,
           this.services.ai,
           this.services.matchLogs,
-          (message, retry) => this.services.dialogs.error(message, retry),
+          (message) => this.services.dialogs.error(message),
           this.services.progressionStore,
           this.services.dialogs,
           this.services.preferences
@@ -520,7 +528,8 @@ export class SceneNavigator implements SceneRouter {
           card: CARD_CATALOG.require(route.cardId),
           sourceBounds: route.sourceBounds,
           resolver: this.cardResolver,
-          progression: this.services.progressionStore
+          progression: this.services.progressionStore,
+          onMessage: (message) => this.services.dialogs.error(message)
         })
     }
 

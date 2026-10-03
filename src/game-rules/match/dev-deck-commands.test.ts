@@ -118,7 +118,7 @@ describe('dev deck commands', () => {
   it.each([
     [undefined, 1],
     ['the_grand_tournament_garrison_commander', 2],
-    ['the_grand_tournament_coldarra_drake', 99]
+    ['the_grand_tournament_coldarra_drake', 0]
   ] as const)(
     'consumes the current allowance with %s and survives recalculation',
     (cardId, limit) => {

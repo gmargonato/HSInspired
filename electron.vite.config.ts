@@ -18,25 +18,6 @@ function cspPlugin(mode: string) {
   }
 }
 
-const CARD_CLASS_CONFIG_PATH = resolve('config/card-class-colors.json')
-const OUTLINE_TUNING_CONFIG_PATH = resolve('config/outline-tunings.json')
-const VFX_TEMPLATES_CONFIG_PATH = resolve('config/vfx-templates.json')
-const LIVE_CONFIG_PATHS = new Set([
-  CARD_CLASS_CONFIG_PATH,
-  OUTLINE_TUNING_CONFIG_PATH,
-  VFX_TEMPLATES_CONFIG_PATH
-])
-
-function liveConfigHmrGuard() {
-  return {
-    name: 'live-config-hmr-guard',
-    handleHotUpdate(context: { readonly file: string }) {
-      if (LIVE_CONFIG_PATHS.has(resolve(context.file))) return []
-      return undefined
-    }
-  }
-}
-
 export default defineConfig(({ mode }) => ({
   main: {
     plugins: [externalizeDepsPlugin()],
@@ -55,7 +36,7 @@ export default defineConfig(({ mode }) => ({
     build: {
       rollupOptions: { input: resolve('src/application/index.html') }
     },
-    plugins: [cspPlugin(mode), liveConfigHmrGuard()],
+    plugins: [cspPlugin(mode)],
     resolve: {
       alias: {
         '@application': resolve('src/application'),
@@ -98,6 +79,11 @@ export default defineConfig(({ mode }) => ({
       }
     },
     server: {
+      // Keep the current game session running while source files are edited.
+      // Restart npm run dev to apply changes; do not invalidate cached modules
+      // or restart the server when its configuration changes during a match.
+      hmr: false,
+      watch: null,
       port: 8081,
       strictPort: true
     }
