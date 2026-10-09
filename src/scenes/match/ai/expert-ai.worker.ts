@@ -143,6 +143,15 @@ function aggregateResponse(
         durationMs: result.trace?.durationMs ?? null,
         iterations: result.trace?.sampleCount ?? null,
         rootLegalActionCount: result.trace?.rootLegalActionCount ?? null,
+        boundaryEvaluations: result.trace?.boundaryEvaluations ?? 0,
+        actionOutcomes: (result.trace?.candidates ?? [])
+          .filter((candidate) => candidate.actionOutcomeReason)
+          .slice(0, 8)
+          .map((candidate) => ({
+            actionId: candidate.actionId,
+            reason: candidate.actionOutcomeReason ?? null,
+            penalty: candidate.recommendationTacticalPenalty ?? 0
+          })),
         deckStrategyCandidates: result.trace?.deckStrategy
           ? result.trace.candidates.slice(0, 8).map((candidate) => ({
               actionId: candidate.actionId,

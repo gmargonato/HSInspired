@@ -1,6 +1,10 @@
 import { CARD_CATALOG, HERO_POWER_CATALOG } from '../../../game-rules/content'
 import type { TurnMatchCommand, TurnMatchState } from '../../../game-rules/match'
-import { effectiveBoardMinionKeywords } from '../../../game-rules/match/rules/minion-attack-state'
+import {
+  effectiveBoardMinionKeywords,
+  hasBoardMinionEntryExhaustion,
+  boardMinionAttacksUsed
+} from '../../../game-rules/match/rules/minion-attack-state'
 
 /** A soft value penalty in the normalized Expert position-score range. */
 export const EXPERT_UNPAID_FRIENDLY_DAMAGE_PENALTY = 0.35
@@ -28,13 +32,45 @@ export function unpaidActionPenalty(
   const card = player.hand.find((entry) => entry.instanceId === command.cardInstanceId)
   const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
   if (
+    definition?.effects.some((effect) =>
+      effect.actions?.some(
+        (action) =>
+          action.action === 'modify' &&
+          action.duration === 'this-turn' &&
+          typeof action.attack === 'number' &&
+          action.attack > 0
+      )
+    )
+  ) {
+    const canAttack = (minion: (typeof player.board)[number]) => {
+      const keywords = effectiveBoardMinionKeywords(minion, state.turnNumber)
+      return (
+        !minion.dormant &&
+        (!hasBoardMinionEntryExhaustion(minion, state.turnNumber) ||
+          keywords.includes('charge') ||
+          keywords.includes('rush')) &&
+        (minion.frozenUntilTurn ?? -1) < state.turnNumber &&
+        boardMinionAttacksUsed(minion, state.turnNumber) <
+          (minion.maxAttacksPerTurn ?? 1)
+      )
+    }
+    const target = player.board.find((m) =>
+      command.targets?.some((t) => t.kind === 'minion' && t.instanceId === m.instanceId)
+    )
+    if (target && !canAttack(target) && player.board.some(canAttack)) return 0.08
+  }
+  if (
     definition?.type === 'Spell' &&
     player.board.length < 7 &&
     player.hand.some((entry) => {
       const setup = CARD_CATALOG.get(entry.cardId)
       return (
         setup?.type === 'Minion' &&
-        setup.effects.some((effect) => effect.trigger === 'on-cast') &&
+        (setup.effects.some((effect) => effect.trigger === 'on-cast') ||
+          (setup.keywords.includes('spell-damage') &&
+            definition.effects.some((effect) =>
+              effect.actions?.some((action) => action.action === 'damage')
+            ))) &&
         (entry.currentCost ?? setup.cost) + (card?.currentCost ?? definition.cost) <=
           player.mana.available
       )

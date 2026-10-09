@@ -22,8 +22,7 @@ import {
   type AiPlanNote
 } from '../../../desktop/contracts/ipc/ai-deliberation'
 import { aiActionIntent, validateAiCommitIntent } from './ai-action-intent'
-import { CARD_CATALOG } from '../../../game-rules/content/cards'
-import { HERO_POWER_CATALOG } from '../../../game-rules/content/hero-powers'
+import { createExpertActionInspector } from './expert-action-outcome'
 import { forcedLegalCommand } from './ai-forced-command'
 import { answerAiChecks, aiDecisionFacts } from './ai-fact-checks'
 import { observedAiCorrections } from './ai-feedback'
@@ -48,12 +47,6 @@ import {
 } from './ai-context'
 import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
 
-function effectTargetController(value: unknown): unknown {
-  if (typeof value !== 'object' || value === null || Array.isArray(value))
-    return undefined
-  return (value as { readonly controller?: unknown }).controller
-}
-
 // Byte limits bound payload size; they are not model token-window guarantees.
 export const AI_CONVERSATION_LIMITS = {
   maxExchanges: 16,
@@ -63,7 +56,7 @@ const AI_SILENT_RETRY_DELAY_MS = 1000
 const AI_MAX_FAILURES_PER_REVISION = 3
 const AI_OPPONENT_RESTORE_GUARD = 'opponent-restore'
 const AI_OPPONENT_RESTORE_MESSAGE =
-  'The selected action restores health on the opposing side, which is never correct. Choose an action that helps your own side, or End Turn.'
+  'The selected action has no observed payoff or only heals the opposing side. Choose a beneficial action, or End Turn.'
 
 export interface AiActionDecision extends AiDecisionIdentity {
   readonly actionId: string
@@ -213,57 +206,22 @@ export class AiTurnController {
       this.options.session.getState().revision === identity.expectedRevision
     )
   }
-  /**
-   * Beneficial (restore) effects pointed at the opposing side are always mistakes —
-   * the model may select a legal-but-wrong target while narrating "heal my hero".
-   */
+  /** Judge the resolved effect: converted healing and useful triggers remain legal. */
   private commitsRestoreOntoOpponent(command: TurnMatchCommand): boolean {
-    try {
-      const session = this.options.session
-      const opponentId = session.localParticipantId
-      const targets =
-        command.type === 'use-hero-power'
-          ? command.target
-            ? [command.target]
-            : []
-          : command.type === 'play-card'
-            ? (command.targets ?? [])
-            : []
-      if (!targets.some((target) => target.participantId === opponentId)) return false
-      if (command.type === 'use-hero-power') {
-        const self = session
-          .getAiObservation()
-          .players.find((player) => player.role === 'self')
-        return self
-          ? HERO_POWER_CATALOG.require(self.heroPower.id).effect.kind ===
-              'restore-character'
-          : false
-      }
-      if (command.type === 'play-card') {
-        const self = session
-          .getAiObservation()
-          .players.find((player) => player.role === 'self')
-        const card = self?.hand.find(
-          (entry) => entry.instanceId === command.cardInstanceId
-        )
-        const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
-        return (
-          definition?.effects.some(
-            (effect) =>
-              ['cast', 'battlecry'].includes(effect.trigger) &&
-              (effect.actions ?? []).some(
-                (action) =>
-                  action.action === 'restore' &&
-                  effectTargetController(action.target) !== 'self'
-              )
-          ) ?? false
-        )
-      }
+    const session = this.options.session
+    const targets =
+      command.type === 'use-hero-power'
+        ? [command.target]
+        : command.type === 'play-card'
+          ? (command.targets ?? [])
+          : []
+    if (!targets.some((target) => target?.participantId === session.localParticipantId))
       return false
-    } catch {
-      // Observation gaps must never block a legal commit.
-      return false
-    }
+    const outcome = createExpertActionInspector(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId
+    )(command)
+    return outcome.reason === 'opponent-heal' || outcome.reason === 'no-payoff'
   }
   private aiMustAct(state = this.options.session.getState()): boolean {
     return (

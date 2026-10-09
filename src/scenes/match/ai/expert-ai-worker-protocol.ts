@@ -8,7 +8,7 @@ import type { OpeningMatchCheckpoint } from '../../../game-rules/match/opening-m
 import type { PlayerId } from '../../../game-rules/match/match-types'
 import type { ExpertDeckStrategyBinding } from '../../../game-rules/decks/expert-deck-strategy'
 
-export const EXPERT_AI_POLICY_REVISION = 'expert-tactics-1'
+export const EXPERT_AI_POLICY_REVISION = 'expert-tactics-5'
 export const EXPERT_AI_TURN_BUDGET_MS = 60_000
 export const EXPERT_AI_PRESENTATION_RESERVE_MS = 5_000
 export const EXPERT_AI_DISPATCH_RESERVE_MS = 500

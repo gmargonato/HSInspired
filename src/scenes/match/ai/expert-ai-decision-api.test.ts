@@ -32,6 +32,95 @@ import type {
 } from './expert-ai-worker-protocol'
 
 describe('Expert hidden-world consensus', () => {
+  it('replans a cached zero-value heal and records the rejection', async () => {
+    const fixture = createAiFixture({
+      seed: 100506,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'garrosh',
+      aiMana: 6,
+      aiHand: ['basic_chillwind_yeti']
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actions = () =>
+      aiActions(
+        session,
+        enumerateLegalCommands(
+          {
+            getState: session.match.getState,
+            getPlayInput: session.match.getPlayInput!,
+            getLegality: session.match.getLegality!
+          },
+          session.remoteParticipantId
+        )
+      )
+    const play = actions().find((a) => a.command.type === 'play-card')!
+    const heal = actions().find(
+      (a) =>
+        a.command.type === 'use-hero-power' &&
+        a.command.target?.kind === 'hero' &&
+        a.command.target.participantId === session.remoteParticipantId
+    )!
+    let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+    let calls = 0
+    const worker = {
+      addEventListener(type: string, listener: unknown) {
+        if (type === 'message') receive = listener as typeof receive
+      },
+      postMessage(message: ExpertAiWorkerRequest) {
+        if (message.type !== 'decide') return
+        const selected =
+          calls++ === 0 ? play : actions().find((a) => a.command.type === 'end-turn')!
+        const response: AiDecisionResponse = {
+          matchId: message.request.matchId,
+          requestId: message.request.requestId,
+          expectedRevision: message.request.expectedRevision,
+          modelId: 'hardware-local-v2',
+          reason: 'Fixture line.',
+          durationMs: 0,
+          finishReason: 'fixture',
+          choice: {
+            actionId: selected.id,
+            intent: aiActionIntent(selected.command, session.localParticipantId),
+            expectedResult: 'Fixture.',
+            planUpdate: null
+          },
+          usage: {
+            plannedActionIntents: [play, heal].map((a) =>
+              aiActionIntent(a.command, session.localParticipantId)
+            )
+          } as unknown as JsonObject
+        }
+        receive?.({
+          data: { type: 'decision', requestId: message.request.requestId, response }
+        } as MessageEvent<ExpertAiWorkerResponse>)
+      },
+      terminate() {}
+    } as unknown as Worker
+    const api = new ExpertAiDecisionApi(session, () => worker)
+    const request = (id: string): AiDecisionRequest => ({
+      matchId: 'october',
+      requestId: id,
+      phase: 'action',
+      expectedRevision: session.getState().revision,
+      allowInspection: false,
+      messages: [],
+      actionIds: actions().map((a) => a.id)
+    })
+    try {
+      await api.decide(request('first'))
+      expect(session.match.dispatch(play.command).accepted).toBe(true)
+      const response = await api.decide(request('second'))
+      expect(calls).toBe(2)
+      expect(response.usage?.continuationRejection).toBe('no-payoff')
+      expect(response.finishReason).not.toBe('expert-continuation')
+    } finally {
+      api.dispose()
+    }
+  })
   it('keeps proven wins ahead of positional scores and preserves their sequence across worlds', () => {
     const candidate = (actionId: string, score: number, provenWin = false) => ({
       actionId,

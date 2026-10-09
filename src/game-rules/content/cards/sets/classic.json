@@ -5341,7 +5341,7 @@
     "type": "Hero",
     "replacementHeroId": "jaraxxus",
     "subtype": "Demon",
-    "cost": 9,
+    "cost": 8,
     "attack": null,
     "armor": 5,
     "rulesText": "Battlecry: Equip a 3/8 Blood Fury.",

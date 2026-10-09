@@ -17,12 +17,113 @@ import type { AiDecisionRequest } from '../../../desktop/contracts/ipc/ai'
 import { aiActions } from './ai-context'
 import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
+import { expertDrawPreference } from './expert-draw-preference'
 import {
   searchTactics,
   inspectTacticalLine
 } from '../../../game-rules/match/ai/tactical-search'
 import { ExpertAiDecisionApi } from './expert-ai-decision-api'
 import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
+import {
+  createExpertActionInspector,
+  expertContinuationPenalty,
+  evaluateExpertBoundary
+} from './expert-action-outcome'
+
+describe('Expert early draw preference', () => {
+  const base: AiFixtureOptions = {
+    seed: 61015,
+    aiHeroId: 'guldan',
+    opponentHeroId: 'uther',
+    aiMana: 8,
+    aiHealth: 22,
+    aiHand: ['basic_chillwind_yeti'],
+    aiDeck: ['classic_fen_creeper', 'basic_chillwind_yeti', 'basic_boulderfist_ogre']
+  }
+  function preference(options: Partial<AiFixtureOptions> = {}) {
+    const session = createSession({ ...base, ...options })
+    const before = session.match.getCheckpoint()
+    const command = legal(session).find((c) => c.type === 'use-hero-power')!
+    const value = session.match.analyze((fork) =>
+      expertDrawPreference(fork, session.remoteParticipantId, command)
+    )
+    expect(session.match.getCheckpoint()).toEqual(before)
+    return value
+  }
+
+  it('values remaining options without reading the drawn card identity', () => {
+    expect(preference()).toBeGreaterThan(0)
+    expect(preference({ aiMana: 4 })).toBeLessThan(preference())
+    expect(preference({ aiDeck: ['classic_wisp'] })).toBe(preference())
+  })
+
+  it('does not promote burns, fatigue, unsafe self-damage or exhausted mana', () => {
+    expect(preference({ aiHand: Array(10).fill('basic_chillwind_yeti') })).toBe(0)
+    expect(preference({ aiDeck: [] })).toBe(0)
+    expect(preference({ aiHealth: 11 })).toBe(0)
+    expect(
+      preference({
+        aiHealth: 16,
+        opponentBoard: [{ cardId: 'basic_boulderfist_ogre', attack: 14 }]
+      })
+    ).toBe(0)
+    expect(preference({ aiMana: 2 })).toBe(0)
+  })
+
+  it('leaves affordable hero-power discounts and Inspire setup to the search', () => {
+    expect(preference({ aiHand: ['the_grand_tournament_maiden_of_the_lake'] })).toBe(0)
+    expect(preference({ aiHand: ['the_grand_tournament_tournament_medic'] })).toBe(0)
+    expect(
+      preference({ aiMana: 3, aiHand: ['the_grand_tournament_maiden_of_the_lake'] })
+    ).toBeGreaterThan(0)
+  })
+
+  it('recognizes a successful conditional draw but not failed Mortal Coil damage', () => {
+    for (const health of [1, 2]) {
+      const session = createSession({
+        ...base,
+        aiHand: ['basic_mortal_coil'],
+        opponentBoard: [{ cardId: 'basic_chillwind_yeti', health }]
+      })
+      const command = legal(session).find((c) => c.type === 'play-card')!
+      const value = session.match.analyze((fork) =>
+        expertDrawPreference(fork, session.remoteParticipantId, command)
+      )
+      expect(value > 0).toBe(health === 1)
+    }
+  })
+
+  it('explores and chooses Life Tap before committing mana to a minion', async () => {
+    const session = createSession(base)
+    const actions = await runAiTurn(session, 1)
+    expect(actions[0]?.type).toBe('use-hero-power')
+  }, 30_000)
+
+  it('does not reward a multi-draw that also causes fatigue', () => {
+    const session = createSession({
+      ...base,
+      aiHeroId: 'jaina',
+      aiHand: ['basic_arcane_intellect'],
+      aiDeck: ['classic_wisp']
+    })
+    const command = legal(session).find((c) => c.type === 'play-card')!
+    expect(
+      session.match.analyze((fork) =>
+        expertDrawPreference(fork, session.remoteParticipantId, command)
+      )
+    ).toBe(0)
+  })
+
+  it('takes guaranteed lethal before a safe draw', async () => {
+    const session = createSession({
+      ...base,
+      opponentHealth: 4,
+      aiBoard: [{ cardId: 'basic_chillwind_yeti', ready: true }]
+    })
+    await runAiTurn(session, 1)
+    expect(session.getState().winnerId).toBe(session.remoteParticipantId)
+  }, 30_000)
+})
 
 describe('Expert tactical priority regressions from September 29', () => {
   const rogue = () =>
@@ -300,6 +401,533 @@ describe('Expert tactical priority regressions from September 29', () => {
 })
 
 type ScenarioSession = GameBoardSession
+describe('Expert October match regressions', () => {
+  it('removes the visible battlecry engine before an ordinary body', async () => {
+    const session = createSession({
+      seed: 100527,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'garrosh',
+      aiMana: 0,
+      aiBoard: [{ cardId: 'classic_baine_bloodhoof', ready: true }],
+      opponentHand: [
+        'basic_chillwind_yeti',
+        'basic_chillwind_yeti',
+        'basic_chillwind_yeti'
+      ],
+      opponentBoard: [
+        { cardId: 'league_of_explorers_brann_bronzebeard', health: 3 },
+        { cardId: 'goblins_vs_gnomes_antique_healbot' }
+      ]
+    })
+    await runAiTurn(session)
+    expect(
+      opponent(session).board.some(
+        (m) => m.cardId === 'league_of_explorers_brann_bronzebeard'
+      )
+    ).toBe(false)
+  }, 30_000)
+
+  it('retains a free spell when it can activate an affordable Combo', () => {
+    const session = createSession({
+      seed: 100528,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'garrosh',
+      aiMana: 3,
+      aiHand: ['classic_circle_of_healing', 'classic_si_7_agent']
+    })
+    const outcome = createExpertActionInspector(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId
+    )(playCommand(session, 'classic_circle_of_healing'))
+    expect(outcome.penalty).toBe(0)
+  })
+  it('detects zero-value healing and damage without mutating the live match', () => {
+    const session = createSession({
+      seed: 100535,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'garrosh',
+      aiMana: 10,
+      aiHand: ['classic_shield_slam', 'whispers_of_the_old_gods_forbidden_healing'],
+      aiBoard: [{ cardId: 'basic_chillwind_yeti' }]
+    })
+    const checkpoint = session.match.getCheckpoint()
+    const inspect = createExpertActionInspector(checkpoint, session.remoteParticipantId)
+    const slam = playCommand(
+      session,
+      'classic_shield_slam',
+      (t) => t.participantId === session.remoteParticipantId
+    )
+    expect(inspect(slam).reason).toBe('no-payoff')
+    const heal = legal(session).find(
+      (c) =>
+        c.type === 'use-hero-power' &&
+        c.target?.kind === 'hero' &&
+        c.target.participantId === session.remoteParticipantId
+    )!
+    expect(inspect(heal).reason).toBe('no-payoff')
+    expect(session.match.getCheckpoint()).toEqual(checkpoint)
+    expect(
+      selectExpertTimeoutFallbackAction(session, legal(session))?.command.type
+    ).not.toBe('use-hero-power')
+  })
+
+  it('allows healing converted to damage and healing that triggers a draw', () => {
+    for (const cardId of ['classic_auchenai_soulpriest', 'basic_northshire_cleric']) {
+      const session = createSession({
+        seed: 100536,
+        aiHeroId: 'anduin',
+        opponentHeroId: 'garrosh',
+        aiMana: 2,
+        aiBoard: [{ cardId }],
+        opponentBoard: [{ cardId: 'basic_chillwind_yeti', health: 2, maxHealth: 5 }],
+        aiDeck: ['basic_chillwind_yeti']
+      })
+      const command = legal(session).find(
+        (c) =>
+          c.type === 'use-hero-power' &&
+          c.target?.kind === 'minion' &&
+          c.target.participantId === session.localParticipantId
+      )!
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty,
+        cardId
+      ).toBe(0)
+    }
+  })
+
+  it('distinguishes empty sacrifices from a real Voidcaller payoff', () => {
+    for (const payoff of [false, true]) {
+      const session = createSession({
+        seed: 100237,
+        aiHeroId: 'guldan',
+        opponentHeroId: 'jaina',
+        aiMana: 4,
+        aiHand: ['classic_shadowflame', ...(payoff ? ['classic_doomguard'] : [])],
+        aiBoard: [{ cardId: 'naxxramas_voidcaller' }]
+      })
+      const outcome = createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(playCommand(session, 'classic_shadowflame'))
+      expect(outcome.reason).toBe(payoff ? undefined : 'unpaid-sacrifice')
+    }
+  })
+
+  it('resolves a pending clear including deathrattles', () => {
+    const session = createSession({
+      seed: 100238,
+      aiHeroId: 'guldan',
+      opponentHeroId: 'jaina',
+      aiMana: 4,
+      aiBoard: [{ cardId: 'naxxramas_nerubian_egg' }],
+      opponentBoard: [{ cardId: 'classic_doomsayer' }]
+    })
+    const before = session.match.getCheckpoint()
+    const surviving = session.match.analyze((fork) =>
+      evaluateExpertBoundary(fork, (child) =>
+        child
+          .getState()
+          .players.find((p) => p.participantId === session.remoteParticipantId)!
+          .board.map((m) => m.cardId)
+      )
+    )
+    expect(surviving).toContain('naxxramas_nerubian')
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it('uses spell damage before casting Frostbolt', async () => {
+    const session = createSession({
+      seed: 100110,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'garrosh',
+      aiMana: 4,
+      aiHeroPowerAvailable: false,
+      aiHand: ['classic_bloodmage_thalnos', 'basic_frostbolt'],
+      opponentBoard: [{ cardId: 'basic_senjin_shieldmasta', health: 4 }]
+    })
+    const actions = await runAiTurn(session)
+    expect(opponent(session).board).toHaveLength(0)
+    expect(actions[0]).toMatchObject({
+      type: 'play-card',
+      cardInstanceId: expect.any(String)
+    })
+    expect(
+      aiPlayer(session).board.some((m) => m.cardId === 'classic_bloodmage_thalnos')
+    ).toBe(true)
+  }, 30_000)
+
+  it('uses the temporary attack buff on a ready minion', async () => {
+    const session = createSession({
+      seed: 100118,
+      aiHeroId: 'uther',
+      opponentHeroId: 'garrosh',
+      aiMana: 1,
+      aiHand: ['classic_abusive_sergeant'],
+      aiBoard: [
+        { cardId: 'classic_aldor_peacekeeper', ready: false },
+        { cardId: 'basic_silver_hand_recruit', ready: true }
+      ],
+      opponentBoard: [{ cardId: 'basic_senjin_shieldmasta', health: 3 }]
+    })
+    await runAiTurn(session)
+    expect(opponent(session).board).toHaveLength(0)
+    expect(
+      aiPlayer(session).board.find((m) => m.cardId === 'classic_aldor_peacekeeper')
+        ?.attack
+    ).toBe(3)
+  }, 30_000)
+
+  it('develops Shredder instead of dagger and pass with four mana', async () => {
+    const session = createSession({
+      seed: 100208,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'thrall',
+      aiMana: 4,
+      aiHand: ['goblins_vs_gnomes_piloted_shredder']
+    })
+    await runAiTurn(session)
+    expect(
+      aiPlayer(session).board.some(
+        (m) => m.cardId === 'goblins_vs_gnomes_piloted_shredder'
+      )
+    ).toBe(true)
+  }, 30_000)
+  it('removes Doomsayer instead of the expendable Ooze', async () => {
+    const session = createSession({
+      seed: 100112,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'guldan',
+      aiMana: 6,
+      aiHand: ['basic_shadow_word_pain'],
+      aiBoard: [{ cardId: 'whispers_of_the_old_gods_cthuns_chosen', ready: true }],
+      opponentBoard: [
+        { cardId: 'classic_doomsayer' },
+        { cardId: 'basic_acidic_swamp_ooze' }
+      ]
+    })
+    await runAiTurn(session)
+    expect(opponent(session).board.some((m) => m.cardId === 'classic_doomsayer')).toBe(
+      false
+    )
+    expect(aiPlayer(session).board.length).toBeGreaterThan(0)
+  }, 30_000)
+
+  it('holds development before an unavoidable Doomsayer clear', async () => {
+    const session = createSession({
+      seed: 100208,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'uther',
+      aiMana: 4,
+      aiHand: ['league_of_explorers_huge_toad', 'league_of_explorers_huge_toad'],
+      aiBoard: [{ cardId: 'whispers_of_the_old_gods_carrion_grub', ready: true }],
+      opponentBoard: [{ cardId: 'classic_doomsayer' }]
+    })
+    await runAiTurn(session)
+    expect(
+      aiPlayer(session).hand.filter((c) => c.cardId === 'league_of_explorers_huge_toad')
+    ).toHaveLength(2)
+  }, 30_000)
+
+  it('distinguishes wasted development from useful clear-boundary payoffs', () => {
+    for (const [cardId, aiHealth, opponentHealth, penalized] of [
+      ['league_of_explorers_huge_toad', 30, 30, true],
+      ['league_of_explorers_huge_toad', 30, 1, false],
+      ['classic_loot_hoarder', 30, 30, false],
+      ['naxxramas_haunted_creeper', 30, 30, false],
+      ['goblins_vs_gnomes_antique_healbot', 10, 30, false],
+      ['basic_stonetusk_boar', 30, 30, false]
+    ] as const) {
+      const session = createSession({
+        seed: 100208,
+        aiHeroId: 'rexxar',
+        opponentHeroId: 'uther',
+        aiMana: 5,
+        aiHealth,
+        opponentHealth,
+        aiHand: [cardId],
+        opponentBoard: [{ cardId: 'classic_doomsayer' }]
+      })
+      const outcome = createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(playCommand(session, cardId))
+      expect(outcome.penalty >= 0.25, cardId).toBe(penalized)
+    }
+  })
+
+  it('prefers a useful temporary buff before attacking, without delaying lethal or impossible setup', () => {
+    for (const [aiMana, opponentHealth, fullBoard, penalized] of [
+      [1, 30, false, true],
+      [0, 30, false, false],
+      [1, 1, false, false],
+      [1, 30, true, false]
+    ] as const) {
+      const session = createSession({
+        seed: 100118,
+        aiHeroId: 'uther',
+        opponentHeroId: 'garrosh',
+        aiMana,
+        opponentHealth,
+        aiHand: ['classic_abusive_sergeant'],
+        aiBoard: Array.from({ length: fullBoard ? 7 : 1 }, () => ({
+          cardId: 'basic_silver_hand_recruit',
+          ready: true
+        }))
+      })
+      const attack = attackCommand(
+        session,
+        aiPlayer(session).board[0].instanceId,
+        'hero'
+      )
+      const outcome = createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(attack)
+      expect(outcome.reason === 'attack-before-buff').toBe(penalized)
+    }
+  })
+
+  it('allows a battlecry buff that prepares an answer to Doomsayer', () => {
+    const session = createSession({
+      seed: 100208,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'uther',
+      aiMana: 4,
+      aiHand: ['basic_houndmaster'],
+      aiBoard: [{ cardId: 'whispers_of_the_old_gods_carrion_grub', ready: true }],
+      opponentBoard: [{ cardId: 'classic_doomsayer', health: 4 }]
+    })
+    const play = playCommand(
+      session,
+      'basic_houndmaster',
+      (t) => t.kind === 'minion' && t.participantId === session.remoteParticipantId
+    )
+    const inspect = createExpertActionInspector(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId
+    )
+    expect(inspect(play).penalty).toBe(0)
+    const attackerId = aiPlayer(session).board[0].instanceId
+    dispatch(session, play)
+    dispatch(
+      session,
+      attackCommand(session, attackerId, opponent(session).board[0].instanceId)
+    )
+    expect(opponent(session).board).toHaveLength(0)
+  })
+
+  it('does not delay an already sufficient trade just to add temporary attack', () => {
+    const session = createSession({
+      seed: 100118,
+      aiHeroId: 'uther',
+      opponentHeroId: 'garrosh',
+      aiMana: 1,
+      aiHand: ['classic_abusive_sergeant'],
+      aiBoard: [{ cardId: 'basic_chillwind_yeti', ready: true }],
+      opponentBoard: [{ cardId: 'basic_silver_hand_recruit' }]
+    })
+    const outcome = createExpertActionInspector(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId
+    )(
+      attackCommand(
+        session,
+        aiPlayer(session).board[0].instanceId,
+        opponent(session).board[0].instanceId
+      )
+    )
+    expect(outcome.penalty).toBe(0)
+  })
+
+  it('rejects Houndmaster setup on an exhausted attacker and reviews it inside a plan', () => {
+    const session = createSession({
+      seed: 1006,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'uther',
+      aiMana: 4,
+      aiHand: ['basic_houndmaster'],
+      aiBoard: [{ cardId: 'whispers_of_the_old_gods_carrion_grub', ready: true }],
+      opponentBoard: [{ cardId: 'classic_doomsayer' }]
+    })
+    const attack = attackCommand(session, aiPlayer(session).board[0].instanceId, 'hero')
+    const play = playCommand(
+      session,
+      'basic_houndmaster',
+      (t) => t.kind === 'minion' && t.participantId === session.remoteParticipantId
+    )
+    const before = session.match.getCheckpoint()
+    expect(
+      session.match.analyze((fork) =>
+        expertContinuationPenalty(fork, session.remoteParticipantId, [attack, play])
+      )
+    ).toBeGreaterThanOrEqual(0.25)
+    expect(session.match.getCheckpoint()).toEqual(before)
+    dispatch(session, attack)
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(play).reason
+    ).toBe('imminent-clear')
+  })
+
+  it('distinguishes wasted clear damage from combined attacks, spells, and useful triggers', () => {
+    for (const [extraAttacker, spell, trigger, taunt, expected] of [
+      [false, false, false, false, true],
+      [true, false, false, false, false],
+      [false, true, false, false, false],
+      [false, false, true, false, false],
+      [false, false, false, true, false]
+    ] as const) {
+      const session = createSession({
+        seed: 1006,
+        aiHeroId: 'jaina',
+        opponentHeroId: 'uther',
+        aiMana: spell ? 4 : 0,
+        aiHand: spell ? ['basic_fireball'] : [],
+        aiDeck: ['basic_chillwind_yeti', 'basic_chillwind_yeti'],
+        aiBoard: [
+          {
+            cardId: trigger
+              ? 'classic_acolyte_of_pain'
+              : 'whispers_of_the_old_gods_carrion_grub',
+            ready: true
+          },
+          ...(extraAttacker ? [{ cardId: 'basic_boulderfist_ogre', ready: true }] : [])
+        ],
+        opponentBoard: [
+          { cardId: 'classic_doomsayer', attack: trigger ? 1 : 0 },
+          ...(taunt ? [{ cardId: 'basic_senjin_shieldmasta' }] : [])
+        ]
+      })
+      const target = opponent(session).board[taunt ? 1 : 0]
+      const attack = attackCommand(
+        session,
+        aiPlayer(session).board[0].instanceId,
+        target.instanceId
+      )
+      const outcome = createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(attack)
+      expect(
+        outcome.reason === 'wasted-before-clear',
+        JSON.stringify({ extraAttacker, spell, trigger, taunt })
+      ).toBe(expected)
+    }
+  })
+
+  it('does not pass up a free attack before a forced clear', () => {
+    const session = createSession({
+      seed: 1006,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'uther',
+      aiMana: 0,
+      aiHand: [],
+      aiBoard: [{ cardId: 'whispers_of_the_old_gods_carrion_grub', ready: true }],
+      opponentBoard: [{ cardId: 'classic_doomsayer' }]
+    })
+    const end = legal(session).find((c) => c.type === 'end-turn')!
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(end).reason
+    ).toBe('wasted-before-clear')
+    dispatch(
+      session,
+      attackCommand(session, aiPlayer(session).board[0].instanceId, 'hero')
+    )
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(end).penalty
+    ).toBe(0)
+  })
+
+  it('preserves Poisonous, Windfury, and shield-breaking answers to a clear', () => {
+    for (const kind of ['poisonous', 'windfury', 'shield'] as const) {
+      const session = createSession({
+        seed: 1006,
+        aiHeroId: 'rexxar',
+        opponentHeroId: 'uther',
+        aiMana: 0,
+        aiHand: [],
+        aiBoard: [
+          {
+            cardId: 'whispers_of_the_old_gods_carrion_grub',
+            ready: true,
+            attack: kind === 'windfury' ? 4 : 2,
+            keywords:
+              kind === 'poisonous'
+                ? ['poisonous']
+                : kind === 'windfury'
+                  ? ['windfury']
+                  : []
+          },
+          ...(kind === 'shield'
+            ? [{ cardId: 'basic_boulderfist_ogre', attack: 7, ready: true }]
+            : [])
+        ],
+        opponentBoard: [
+          { cardId: 'classic_doomsayer', divineShield: kind === 'shield' }
+        ]
+      })
+      const attack = attackCommand(
+        session,
+        aiPlayer(session).board[0].instanceId,
+        opponent(session).board[0].instanceId
+      )
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(attack).penalty,
+        kind
+      ).toBe(0)
+    }
+  })
+
+  it('keeps Shadowflame rather than sacrificing an empty Voidcaller', async () => {
+    const session = createSession({
+      seed: 100219,
+      aiHeroId: 'guldan',
+      opponentHeroId: 'jaina',
+      aiMana: 4,
+      aiHeroPowerAvailable: false,
+      aiHand: ['classic_shadowflame'],
+      aiBoard: [{ cardId: 'naxxramas_voidcaller' }]
+    })
+    await runAiTurn(session)
+    expect(
+      aiPlayer(session).board.some((m) => m.cardId === 'naxxramas_voidcaller')
+    ).toBe(true)
+    expect(aiPlayer(session).hand.some((c) => c.cardId === 'classic_shadowflame')).toBe(
+      true
+    )
+  }, 30_000)
+
+  it('preserves zero-mana Forbidden spells with no payoff', async () => {
+    for (const [aiHeroId, cardId] of [
+      ['uther', 'whispers_of_the_old_gods_forbidden_healing'],
+      ['anduin', 'whispers_of_the_old_gods_forbidden_shaping']
+    ]) {
+      const session = createSession({
+        seed: 100106,
+        aiHeroId,
+        opponentHeroId: 'garrosh',
+        aiMana: 0,
+        aiHand: [cardId]
+      })
+      await runAiTurn(session)
+      expect(aiPlayer(session).hand.some((c) => c.cardId === cardId)).toBe(true)
+    }
+  }, 30_000)
+})
 // Bound search work deterministically; wall-clock performance belongs in benchmarks.
 const ARTIFACT_MCTS_WORK_BUDGET = 256
 
@@ -1567,81 +2195,110 @@ describe('hardware local AI artifact scenarios', () => {
     expect(CARD_CATALOG.get('journey_to_ungoro_earthen_scales')?.cost).toBe(2)
   })
 
-  it('DEV-028: combines Lifesteal with Divine Shield in the recovery trade', async () => {
-    const options: AiFixtureOptions = {
-      seed: 0xde0028,
-      aiHeroId: 'uther',
-      opponentHeroId: 'garrosh',
-      aiHealth: 1,
-      aiMana: 4,
-      aiMaximumMana: 4,
-      aiHand: ['basic_blessing_of_kings'],
-      aiBoard: [
-        {
-          cardId: 'mean_streets_of_gadgetzan_wickerflame_burnbristle',
-          attack: 2,
-          health: 2,
-          ready: true
-        }
-      ],
-      opponentBoard: [
-        {
-          cardId: 'basic_boulderfist_ogre',
-          attack: 6,
-          health: 6,
-          maxHealth: 7,
-          ready: true
-        }
-      ]
-    }
-    const reference = createSession(options)
-    dispatch(
-      reference,
-      playCommand(
+  it.each([false, true])(
+    'DEV-028: recovers with Lifesteal and Divine Shield (enemy Taunt: %s)',
+    async (enemyTaunt) => {
+      const options: AiFixtureOptions = {
+        seed: 0xde0028,
+        aiHeroId: 'uther',
+        opponentHeroId: 'garrosh',
+        aiHealth: 1,
+        aiMana: 4,
+        aiMaximumMana: 4,
+        aiHand: ['basic_blessing_of_kings'],
+        aiBoard: [
+          {
+            cardId: 'mean_streets_of_gadgetzan_wickerflame_burnbristle',
+            attack: 2,
+            health: 2,
+            ready: true
+          }
+        ],
+        opponentBoard: [
+          {
+            cardId: 'basic_boulderfist_ogre',
+            attack: 6,
+            health: 6,
+            maxHealth: 7,
+            keywords: enemyTaunt ? ['taunt'] : [],
+            ready: true
+          }
+        ]
+      }
+      const reference = createSession(options)
+      dispatch(
         reference,
-        'basic_blessing_of_kings',
-        friendlyMinionTarget(
+        playCommand(
           reference,
-          'mean_streets_of_gadgetzan_wickerflame_burnbristle'
+          'basic_blessing_of_kings',
+          friendlyMinionTarget(
+            reference,
+            'mean_streets_of_gadgetzan_wickerflame_burnbristle'
+          )
         )
       )
-    )
-    const wickerflame = minion(
-      reference,
-      reference.remoteParticipantId,
-      'mean_streets_of_gadgetzan_wickerflame_burnbristle'
-    )
-    const ogre = minion(
-      reference,
-      reference.localParticipantId,
-      'basic_boulderfist_ogre'
-    )
-    dispatch(
-      reference,
-      attackCommand(reference, wickerflame.instanceId, ogre.instanceId)
-    )
-    expect(opponent(reference).board).toHaveLength(0)
-    const referenceWickerflame = minion(
-      reference,
-      reference.remoteParticipantId,
-      'mean_streets_of_gadgetzan_wickerflame_burnbristle'
-    )
-    expect(referenceWickerflame.health).toBe(6)
-    expect(referenceWickerflame.divineShield).toBe(false)
-    expect(aiPlayer(reference).hero.health).toBeGreaterThanOrEqual(7)
+      const wickerflame = minion(
+        reference,
+        reference.remoteParticipantId,
+        'mean_streets_of_gadgetzan_wickerflame_burnbristle'
+      )
+      const ogre = minion(
+        reference,
+        reference.localParticipantId,
+        'basic_boulderfist_ogre'
+      )
+      dispatch(
+        reference,
+        attackCommand(reference, wickerflame.instanceId, ogre.instanceId)
+      )
+      expect(opponent(reference).board).toHaveLength(0)
+      const referenceWickerflame = minion(
+        reference,
+        reference.remoteParticipantId,
+        'mean_streets_of_gadgetzan_wickerflame_burnbristle'
+      )
+      expect(referenceWickerflame.health).toBe(6)
+      expect(referenceWickerflame.divineShield).toBe(false)
+      expect(aiPlayer(reference).hero.health).toBeGreaterThanOrEqual(7)
 
-    const actual = createSession(options)
-    await runAiTurn(actual)
-    expect(opponent(actual).board).toHaveLength(0)
-    const actualWickerflame = minion(
-      actual,
-      actual.remoteParticipantId,
-      'mean_streets_of_gadgetzan_wickerflame_burnbristle'
-    )
-    expect(actualWickerflame.health).toBeGreaterThan(0)
-    expect(actualWickerflame.divineShield).toBe(false)
-    expect(aiPlayer(actual).hero.health).toBeGreaterThanOrEqual(7)
-  }, 60_000)
+      const actual = createSession(options)
+      await runAiTurn(actual)
+      expect(actual.getState().activePlayerId).toBe(actual.localParticipantId)
+      const actualWickerflame = minion(
+        actual,
+        actual.remoteParticipantId,
+        'mean_streets_of_gadgetzan_wickerflame_burnbristle'
+      )
+      expect(actualWickerflame.attack).toBe(6)
+      expect(actualWickerflame.health).toBe(6)
+      expect(aiPlayer(actual).hero.health).toBeGreaterThanOrEqual(7)
+      if (enemyTaunt || opponent(actual).board.length === 0) {
+        expect(opponent(actual).board).toHaveLength(0)
+        expect(actualWickerflame.divineShield).toBe(false)
+      } else {
+        // Face is also a safe recovery: Taunt + Divine Shield protects the hero.
+        // Ogre attacking loses to the shield and heals us again; passing preserves
+        // our shield. Do not require an immediate trade in this sparse position.
+        expect(opponent(actual).board).toHaveLength(1)
+        expect(opponent(actual).hero.health).toBe(24)
+        expect(actualWickerflame.divineShield).toBe(true)
+      }
+      expect(
+        everyOpponentReply(actual, (state) => {
+          const self = state.players.find(
+            (p) => p.participantId === actual.remoteParticipantId
+          )!
+          const survivor = self.board.find(
+            (m) => m.instanceId === actualWickerflame.instanceId
+          )
+          return (
+            state.phase !== 'ended' && self.hero.health >= 7 && survivor?.health === 6
+          )
+        })
+      ).toBe(true)
+    },
+    60_000
+  )
 
   it('DEV-029: removes Doomsayer without sacrificing the developed board', async () => {
     const options: AiFixtureOptions = {
@@ -4070,10 +4727,30 @@ describe('hardware local AI artifact scenarios', () => {
     expect(aiWon(actual)).toBe(true)
   }, 60_000)
 
-  it('DEV-079: records the live minimum spell cost that conflicts with the snapshot', () => {
-    const radiant = CARD_CATALOG.get('journey_to_ungoro_radiant_elemental')
-    expect(radiant?.rulesText).toContain('but not less than 1')
-    expect(JSON.stringify(radiant?.effects)).toContain('"minimum":1')
+  it('DEV-079: Radiant Elemental reduces spells to zero without negative costs', () => {
+    const session = createSession({
+      seed: 0xde0079,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'garrosh',
+      aiMana: 4,
+      aiHand: [
+        'journey_to_ungoro_radiant_elemental',
+        'journey_to_ungoro_radiant_elemental',
+        'basic_holy_smite',
+        'basic_shadow_word_pain'
+      ]
+    })
+    dispatch(session, playCommand(session, 'journey_to_ungoro_radiant_elemental'))
+    const cost = (cardId: string) =>
+      aiPlayer(session).hand.find((card) => card.cardId === cardId)?.currentCost
+    expect(cost('basic_holy_smite')).toBe(0)
+    expect(cost('basic_shadow_word_pain')).toBe(1)
+    dispatch(session, playCommand(session, 'journey_to_ungoro_radiant_elemental'))
+    expect(cost('basic_holy_smite')).toBe(0)
+    expect(cost('basic_shadow_word_pain')).toBe(0)
+    expect(aiPlayer(session).mana.available).toBe(0)
+    dispatch(session, playCommand(session, 'basic_holy_smite', heroTarget(session)))
+    expect(aiPlayer(session).mana.available).toBe(0)
   })
 
   it('DEV-080: unlocks current mana before Lava Burst', async () => {

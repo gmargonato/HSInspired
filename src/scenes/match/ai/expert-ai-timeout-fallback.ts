@@ -7,6 +7,8 @@ import { aiActions } from './ai-context'
 import type { GameBoardSession } from '../game-board-session'
 import { expertCoinHeroPowerActionPenalty } from './expert-coin-hero-power-policy'
 import { immediateExpertWin } from './expert-tactics'
+import { createExpertActionInspector } from './expert-action-outcome'
+import { unpaidActionPenalty } from './expert-ai-action-safety'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
 
 type LocalAction = ReturnType<typeof aiActions>[number]
@@ -813,8 +815,21 @@ export function selectExpertTimeoutFallbackAction(
   }
   let best: LocalAction | undefined
   let bestScore = 0
+  const inspect = createExpertActionInspector(
+    session.match.getCheckpoint(),
+    session.remoteParticipantId
+  )
   for (const action of actions) {
-    const score = scoreAction(action, context)
+    const outcome = inspect(action.command)
+    const score =
+      scoreAction(action, context) -
+      outcome.penalty * 1_000 -
+      unpaidActionPenalty(
+        action.command,
+        session.getState(),
+        session.remoteParticipantId
+      ) *
+        100
     if (score > bestScore) {
       best = action
       bestScore = score

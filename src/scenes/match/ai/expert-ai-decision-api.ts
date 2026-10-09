@@ -27,7 +27,11 @@ import { tacticalStateKey } from '../../../game-rules/match/ai/tactical-search'
 import { immediateExpertWin } from './expert-tactics'
 import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
 import { EXPERT_AI_POLICY_REVISION } from './expert-ai-worker-protocol'
-import { unpaidFriendlyDamageHeroPowerPenalty } from './expert-ai-action-safety'
+import {
+  unpaidFriendlyDamageHeroPowerPenalty,
+  unpaidActionPenalty
+} from './expert-ai-action-safety'
+import { createExpertActionInspector } from './expert-action-outcome'
 import {
   EXPERT_AI_DEFAULT_BUDGET,
   EXPERT_AI_DISPATCH_RESERVE_MS,
@@ -198,6 +202,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   private continuation: ExpertContinuation | null = null
   private planCommit: ExpertPlanCommit | null = null
   private winCheck: { revision: number; commandKey: string | null } | null = null
+  private continuationRejection: string | undefined
   private readonly unsubscribe: () => void
   private readonly perspectiveParticipantId: PlayerId
 
@@ -443,6 +448,19 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       (action) => action.id === selectedActionId
     )
     if (!selectedAction) return null
+    const actionOutcome =
+      cached.response.usage?.decisionPriority === 'verified-win'
+        ? { penalty: 0 }
+        : createExpertActionInspector(
+            this.session.match.getCheckpoint(),
+            this.perspectiveParticipantId
+          )(selectedAction.command)
+    if (actionOutcome.penalty >= 0.25) {
+      this.continuationRejection = actionOutcome.reason
+      this.continuation = null
+      this.planCommit = null
+      return null
+    }
     if (
       cached.response.usage?.decisionPriority !== 'verified-win' &&
       unpaidFriendlyDamageHeroPowerPenalty(
@@ -497,6 +515,17 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         )
     )
     if (!selectedAction) return null
+    const continuationOutcome = !continuation.provenWin
+      ? createExpertActionInspector(
+          this.session.match.getCheckpoint(),
+          this.perspectiveParticipantId
+        )(selectedAction.command)
+      : { penalty: 0 }
+    if (continuationOutcome.penalty >= 0.25) {
+      this.continuationRejection = continuationOutcome.reason
+      this.continuation = null
+      return null
+    }
     // End-turn gets a fresh review rather than bypassing search through the cache.
     if (
       selectedAction.command.type === 'end-turn' &&
@@ -508,12 +537,13 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       return null
     if (
       !continuation.provenWin &&
-      unpaidFriendlyDamageHeroPowerPenalty(
+      unpaidActionPenalty(
         selectedAction.command,
         this.session.getState(),
         this.perspectiveParticipantId
       ) > 0
     ) {
+      this.continuationRejection = 'action-setup-or-target'
       this.continuation = null
       return null
     }
@@ -587,15 +617,18 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     )
     const state = this.session.getState()
     const selected = legal.find((action) => action.id === selectedId)
-    if (
-      !selected ||
+    const inspect = createExpertActionInspector(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId
+    )
+    const unsafe = (action: (typeof legal)[number]) =>
       unpaidFriendlyDamageHeroPowerPenalty(
-        selected.command,
+        action.command,
         state,
         this.perspectiveParticipantId
-      ) === 0
-    )
-      return response
+      ) > 0 ||
+      ['no-payoff', 'opponent-heal'].includes(inspect(action.command).reason ?? '')
+    if (!selected || !unsafe(selected)) return response
 
     const consensus = Array.isArray(response.usage?.candidateConsensus)
       ? response.usage.candidateConsensus
@@ -611,24 +644,9 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     const replacement =
       rankedIds
         .map((candidateId) => legal.find((action) => action.id === candidateId))
-        .find(
-          (action) =>
-            action !== undefined &&
-            unpaidFriendlyDamageHeroPowerPenalty(
-              action.command,
-              state,
-              this.perspectiveParticipantId
-            ) === 0
-        ) ??
+        .find((action) => action !== undefined && !unsafe(action)) ??
       legal.find((action) => action.command.type === 'end-turn') ??
-      legal.find(
-        (action) =>
-          unpaidFriendlyDamageHeroPowerPenalty(
-            action.command,
-            state,
-            this.perspectiveParticipantId
-          ) === 0
-      ) ??
+      legal.find((action) => !unsafe(action)) ??
       legal[0]
     if (!replacement) return response
 
@@ -664,6 +682,8 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       usage: {
         ...(response.usage ?? {}),
         tacticalOverride: true,
+        actionOutcomeReason:
+          inspect(selected.command).reason ?? 'unpaid-friendly-damage',
         plannedActionIntents: [
           {
             type: intent.type,
@@ -805,6 +825,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     )
       this.continuation = null
     if (this.activeTurn === state.turnNumber) return
+    this.continuationRejection = undefined
     this.activeTurn = state.turnNumber
     this.turnStartedAt = this.now()
     this.searchUsedMs = 0
@@ -959,8 +980,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     this.rememberContinuation(pending.request, guarded)
     pending.resolve({
       ...guarded,
-      usage: { ...guarded.usage, policyRevision: EXPERT_AI_POLICY_REVISION }
+      usage: {
+        ...guarded.usage,
+        policyRevision: EXPERT_AI_POLICY_REVISION,
+        ...(this.continuationRejection
+          ? { continuationRejection: this.continuationRejection }
+          : {})
+      }
     })
+    this.continuationRejection = undefined
   }
 
   private verifiedWinResponse(request: AiDecisionRequest): AiDecisionResponse | null {
