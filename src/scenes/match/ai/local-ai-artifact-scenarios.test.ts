@@ -8135,7 +8135,7 @@ describe('hardware local AI artifact scenarios', () => {
     expect(actual.getState().phase).not.toBe('mulligan')
   }, 60_000)
 
-  it('DEV-176: reaches the CThun threshold before the seven-mana payoff', async () => {
+  it('DEV-176: uses the already-qualified CThun seven-mana payoff', async () => {
     const actual = createSession({
       seed: 0xde0176,
       aiHeroId: 'malfurion',
@@ -8150,8 +8150,22 @@ describe('hardware local AI artifact scenarios', () => {
       ],
       aiCthun: { attack: 8, health: 8 }
     })
+    const cthun = CARD_CATALOG.require('whispers_of_the_old_gods_cthun')
+    const payoff = CARD_CATALOG.require('whispers_of_the_old_gods_twin_emperor_veklor')
+    const threshold = payoff.effects
+      .map((effect) =>
+        'condition' in effect && effect.condition?.type === 'cthun-attack-at-least'
+          ? effect.condition.value
+          : undefined
+      )
+      .find((value): value is number => typeof value === 'number')
+    if (cthun.type !== 'Minion' || threshold === undefined)
+      throw new Error('Expected the catalog CThun conditional payoff')
+    // This fixture starts at bonus eight, already above the total-attack threshold.
+    const totalAttack = () => cthun.attack + (aiPlayer(actual).cthun?.attack ?? 0)
+    expect(totalAttack()).toBeGreaterThanOrEqual(threshold)
     await runAiTurn(actual)
-    expect(aiPlayer(actual).cthun?.attack).toBeGreaterThanOrEqual(10)
+    expect(totalAttack()).toBeGreaterThanOrEqual(threshold)
     expect(
       aiPlayer(actual).hand.some(
         (card) => card.cardId === 'whispers_of_the_old_gods_twin_emperor_veklor'

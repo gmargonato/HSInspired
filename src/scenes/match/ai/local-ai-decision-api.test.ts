@@ -687,3 +687,104 @@ describe('hardware local AI', () => {
     }
   }, 120_000)
 })
+
+// Deterministic scorer regressions: exercise existing private seams without
+// exporting implementation helpers or coupling correctness to search timing.
+describe('CThun ritual-total scoring', () => {
+  function scorer(bonus: number | undefined, dead = false, heldPayoff = true) {
+    const fixture = createAiFixture({
+      seed: 61003,
+      aiHeroId: 'malfurion',
+      opponentHeroId: 'garrosh',
+      aiMana: 10,
+      aiHand: [
+        'whispers_of_the_old_gods_beckoner_of_evil',
+        heldPayoff
+          ? 'whispers_of_the_old_gods_twin_emperor_veklor'
+          : 'basic_chillwind_yeti'
+      ],
+      aiDeck: [],
+      opponentDeck: []
+    })
+    const checkpoint = {
+      ...fixture.checkpoint,
+      state: {
+        ...fixture.checkpoint.state,
+        players: fixture.checkpoint.state.players.map((player) =>
+          player.participantId === fixture.aiParticipantId
+            ? {
+                ...player,
+                cthun:
+                  bonus === undefined
+                    ? undefined
+                    : { attack: bonus, health: bonus, taunt: false },
+                cthunDied: dead
+              }
+            : player
+        ) as unknown as typeof fixture.checkpoint.state.players
+      }
+    }
+    const session = new GameBoardSession({ ...fixture, checkpoint })
+    const api = new LocalAiDecisionApi(session, undefined, { profile: 'expert' })
+    const seam = api as unknown as {
+      commandPrior(
+        command: TurnMatchCommand,
+        state: ReturnType<GameBoardSession['getState']>,
+        actorId: string
+      ): number
+      scoreObservation(
+        observation: ReturnType<GameBoardSession['getAiObservation']>,
+        winnerId: undefined
+      ): number
+    }
+    const state = session.getState()
+    const beckoner = state.players
+      .find((player) => player.participantId === session.remoteParticipantId)!
+      .hand.find((card) => card.cardId === 'whispers_of_the_old_gods_beckoner_of_evil')!
+    const command = legal(session).find(
+      (entry) =>
+        entry.type === 'play-card' && entry.cardInstanceId === beckoner.instanceId
+    )!
+    expect(command).toBeDefined()
+    return {
+      prior: seam.commandPrior(command, state, session.remoteParticipantId),
+      score: seam.scoreObservation(session.getAiObservation(), undefined)
+    }
+  }
+
+  for (const dead of [false, true]) {
+    it(`values first buffs from absent/zero progression (dead=${dead})`, () => {
+      for (const bonus of [undefined, 0]) {
+        expect(
+          scorer(bonus, dead).prior - scorer(bonus, dead, false).prior
+        ).toBeCloseTo(1.6, 10)
+      }
+    })
+
+    it(`crosses total attack eight to ten with bonus two to four (dead=${dead})`, () => {
+      expect(scorer(2, dead).prior - scorer(2, dead, false).prior).toBe(16)
+      expect(scorer(4, dead).score - scorer(2, dead).score).toBeCloseTo(
+        21.6 + (dead ? 0 : 10),
+        10
+      )
+    })
+
+    it(`preserves bonus-only body value without a held payoff (dead=${dead})`, () => {
+      expect(scorer(4, dead, false).score - scorer(0, dead, false).score).toBeCloseTo(
+        dead ? 0 : 20,
+        10
+      )
+      expect(scorer(undefined, dead, false).score).toBe(scorer(0, dead, false).score)
+    })
+
+    it(`does not repeat the payoff windfall above the threshold (dead=${dead})`, () => {
+      for (const bonus of [4, 8]) {
+        expect(scorer(bonus, dead).prior).toBe(scorer(bonus, dead, false).prior)
+      }
+      expect(scorer(8, dead).score - scorer(4, dead).score).toBeCloseTo(
+        dead ? 0 : 20,
+        10
+      )
+    })
+  }
+})
