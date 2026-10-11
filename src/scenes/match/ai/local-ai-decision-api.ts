@@ -59,6 +59,7 @@ import {
   unpaidActionPenalty
 } from './expert-ai-action-safety'
 import { LOCAL_AI_POLICY } from './local-ai-policy'
+import { CTHUN_ID } from '../../../game-rules/match/cthun'
 import { expertDrawPreference } from './expert-draw-preference'
 import {
   inspectExpertAction,
@@ -607,6 +608,12 @@ function cthunBuffAmount(effects: unknown): number {
   )
 }
 
+/** Thresholds compare total ritual attack; linear body value remains bonus-only. */
+function cthunThresholdAttack(attackBonus: number): number {
+  const definition = CARD_CATALOG.get(CTHUN_ID)
+  return (definition?.type === 'Minion' ? definition.attack : 0) + attackBonus
+}
+
 function cthunPayoffValue(
   hand: readonly { readonly cardId: string }[],
   attack: number
@@ -634,8 +641,8 @@ function cthunBuffPrior(
   player: TurnMatchState['players'][number]
 ): number {
   const attackBuff = cthunBuffAmount(effects)
-  const attack = number(player.cthun?.attack)
-  if (!attackBuff || !attack || player.cthunDied) return 0
+  const attack = cthunThresholdAttack(number(player.cthun?.attack))
+  if (!attackBuff) return 0
   const before = cthunPayoffValue(player.hand, attack)
   const after = cthunPayoffValue(player.hand, attack + attackBuff)
   return Math.min(16, Math.max(0, after - before))
@@ -792,12 +799,13 @@ function playerValue(player: AiObservedPlayer, turnNumber: number): number {
   const effects = record(player.effects)
   const cthun = record(effects.cthun)
   const cthunAttack = number(cthun.attack)
-  const cthunProgress =
+  const cthunBodyProgress =
     effects.cthunDied === true || !cthunAttack
       ? 0
-      : cthunAttack * 3 +
-        number(cthun.health) * 2 +
-        cthunPayoffValue(player.hand, cthunAttack)
+      : cthunAttack * 3 + number(cthun.health) * 2
+  // A held conditional payoff still uses ritual totals after C'Thun has died.
+  const cthunProgress =
+    cthunBodyProgress + cthunPayoffValue(player.hand, cthunThresholdAttack(cthunAttack))
   const overloadLocked = number(record(player.mana).overloadLocked)
   const handOverflow = Math.max(0, player.handSize - 8)
   return (
