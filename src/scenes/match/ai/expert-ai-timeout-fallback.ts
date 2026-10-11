@@ -2,6 +2,7 @@ import { CARD_CATALOG } from '../../../game-rules/content/cards'
 import { HERO_POWER_CATALOG } from '../../../game-rules/content/hero-powers'
 import type { AiObservation, AiObservedPlayer } from '../../../game-rules/match/ai'
 import type { TurnMatchCommand } from '../../../game-rules/match'
+import type { PlayCardInput } from '../../../game-rules/match/opening-match-types'
 import { effectiveBoardMinionKeywords } from '../../../game-rules/match/rules/minion-attack-state'
 import { aiActions } from './ai-context'
 import type { GameBoardSession } from '../game-board-session'
@@ -60,23 +61,10 @@ function cardBodyScore(cardId: string, cost: number, boardCount: number): number
   const definition = CARD_CATALOG.get(cardId)
   if (!definition) return 0
   if (definition.type === 'Minion') {
-    const keywordScore = definition.keywords.reduce((total, keyword) => {
-      switch (keyword) {
-        case 'taunt':
-          return total + 3.5
-        case 'charge':
-        case 'rush':
-          return total + 2.5
-        case 'divine-shield':
-        case 'poisonous':
-          return total + 2
-        case 'lifesteal':
-        case 'windfury':
-          return total + 1.5
-        default:
-          return total
-      }
-    }, 0)
+    const keywordScore = definition.keywords.reduce(
+      (total, keyword) => total + knownKeywordScore(keyword),
+      0
+    )
     const boardSpace = Math.max(-2, 3 - boardCount) * 0.75
     return (
       definition.attack * 2.2 +
@@ -92,29 +80,215 @@ function cardBodyScore(cardId: string, cost: number, boardCount: number): number
   return 0
 }
 
-function actionRecords(value: unknown, output: EffectRecord[], depth = 0): void {
-  if (depth >= 8) return
-  if (Array.isArray(value)) {
-    for (const entry of value) actionRecords(entry, output, depth + 1)
-    return
-  }
-  if (!value || typeof value !== 'object') return
-  const entry = value as EffectRecord
-  if (typeof entry.action === 'string') output.push(entry)
-  for (const [key, child] of Object.entries(entry)) {
-    if (key !== 'action') actionRecords(child, output, depth + 1)
-  }
+function effectRecord(value: unknown): EffectRecord | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as EffectRecord)
+    : undefined
 }
 
-function cardActions(cardId: string): readonly EffectRecord[] {
+/** Only immediate instruction lists are traversed. Installed payloads are opaque. */
+function immediateActions(value: unknown, output: EffectRecord[]): boolean {
+  if (!Array.isArray(value)) return true
+  for (const valueAction of value) {
+    const action = effectRecord(valueAction)
+    if (!action || typeof action.action !== 'string') continue
+    if (action.action === 'damage-group') {
+      // This is an immediate simultaneous group, unlike granted/scheduled actions.
+      for (const child of Array.isArray(action.actions) ? action.actions : []) {
+        const damage = effectRecord(child)
+        if (damage?.action === 'damage') output.push(damage)
+      }
+    } else {
+      output.push(action)
+      if (action.action === 'discover') return false
+      if (
+        ![
+          'damage',
+          'destroy',
+          'transform',
+          'silence',
+          'return-to-hand',
+          'freeze',
+          'restore',
+          'draw',
+          'gain-armor',
+          'summon',
+          'modify',
+          'grant-keyword',
+          'grant-keywords',
+          'grant-deathrattle',
+          'grant-trigger',
+          'schedule'
+        ].includes(action.action)
+      )
+        return false
+    }
+  }
+  return true
+}
+
+export function immediateExpertTimeoutActions(
+  cardId: string,
+  command: Extract<TurnMatchCommand, { type: 'play-card' }>,
+  input: PlayCardInput | undefined
+): readonly EffectRecord[] {
   const definition = CARD_CATALOG.get(cardId)
   if (!definition) return []
   const result: EffectRecord[] = []
-  for (const effect of definition.effects) {
-    if (effect.trigger === 'cast' || effect.trigger === 'battlecry')
-      actionRecords(effect.actions, result)
-  }
+  let uninterrupted = true
+  definition.effects.forEach((effect, effectIndex) => {
+    if (!uninterrupted || (effect.trigger !== 'cast' && effect.trigger !== 'battlecry'))
+      return
+    if (
+      effect.condition &&
+      !input?.battlecryConditions?.some(
+        (fact) => fact.effectIndex === effectIndex && fact.status === 'met'
+      )
+    )
+      return
+    if (effect.choice) {
+      const options = effectRecord(effect.choice)?.options
+      if (
+        !Array.isArray(options) ||
+        command.choice === undefined ||
+        !input?.legalChoices.includes(command.choice)
+      )
+        return
+      const selected = command.choice === -1 ? options : [options[command.choice]]
+      for (const option of selected) {
+        if (!uninterrupted) break
+        uninterrupted = immediateActions(effectRecord(option)?.actions, result)
+      }
+    } else uninterrupted = immediateActions(effect.actions, result)
+    const then = effectRecord(effect.then)
+    // A condition after earlier actions is not certified by pre-play readiness.
+    if (uninterrupted && then && !then.condition)
+      uninterrupted = immediateActions(then.actions, result)
+  })
   return result
+}
+
+type EffectTarget = {
+  readonly kind: string
+  readonly participantId?: unknown
+  readonly instanceId?: unknown
+}
+
+function effectTargets(
+  action: EffectRecord,
+  command: Extract<TurnMatchCommand, { type: 'play-card' }>,
+  input: PlayCardInput | undefined,
+  context: FallbackContext
+): readonly EffectTarget[] {
+  const selector = effectRecord(action.target)
+  if (!selector) {
+    if (action.target !== undefined) return []
+    if (action.player === 'self')
+      return [{ kind: 'hero', participantId: context.self.participantId }]
+    if (action.player === 'opponent')
+      return [{ kind: 'hero', participantId: context.opponent.participantId }]
+    if (action.player === 'each')
+      return [context.self, context.opponent].map((p) => ({
+        kind: 'hero',
+        participantId: p.participantId
+      }))
+    return []
+  }
+  if (selector.selection === 'chosen') {
+    // Multiple chosen targets require the runtime's action cursor and filters.
+    // Do not assign one target to an unrelated effect or duplicate that engine.
+    if (input?.targetSelectionRandomized || command.targets?.length !== 1) return []
+    const target = command.targets[0]!
+    const valid = input?.targetSelectors.some((candidate, index) => {
+      const fields = Object.entries(candidate).filter(([key]) => !key.startsWith('__'))
+      return (
+        fields.length === Object.keys(selector).length &&
+        fields.every(
+          ([key, value]) => JSON.stringify(value) === JSON.stringify(selector[key])
+        ) &&
+        input.legalTargetOptions[index]?.some(
+          (option) =>
+            option.kind === target.kind &&
+            option.participantId === target.participantId &&
+            (option.kind !== 'minion' ||
+              (target.kind === 'minion' && option.instanceId === target.instanceId))
+        )
+      )
+    })
+    return valid ? [target] : []
+  }
+  if (
+    selector.selection !== 'all' ||
+    Object.keys(selector).some(
+      (key) => !['controller', 'type', 'selection'].includes(key)
+    )
+  )
+    return []
+  const players =
+    selector.controller === 'self'
+      ? [context.self]
+      : selector.controller === 'opponent'
+        ? [context.opponent]
+        : selector.controller === 'any'
+          ? [context.self, context.opponent]
+          : []
+  return players.flatMap((player) => [
+    ...(['minion', 'character'].includes(String(selector.type))
+      ? player.board.map((minion) => ({
+          kind: 'minion',
+          participantId: player.participantId,
+          instanceId: minion.instanceId
+        }))
+      : []),
+    ...(['hero', 'character'].includes(String(selector.type))
+      ? [{ kind: 'hero', participantId: player.participantId }]
+      : [])
+  ])
+}
+
+/** Keep the existing positive maximum, but never erase known simultaneous harm. */
+function signedMaximum(values: readonly number[]): number {
+  return (
+    Math.max(0, ...values) +
+    values.reduce((harm, value) => harm + Math.min(0, value), 0)
+  )
+}
+
+function statDelta(value: unknown, current: number): number {
+  if (typeof value === 'number' && Number.isFinite(value))
+    return Math.max(0, current + value) - current
+  const operation = effectRecord(value)
+  if (
+    !operation ||
+    Object.keys(operation).some((key) => key !== 'operation' && key !== 'value') ||
+    typeof operation.value !== 'number' ||
+    !Number.isFinite(operation.value)
+  )
+    return 0
+  if (operation.operation === 'set') return Math.max(0, operation.value) - current
+  if (operation.operation === 'multiply')
+    return Math.max(0, current * operation.value) - current
+  if (operation.operation === 'subtract')
+    return Math.max(0, current - operation.value) - current
+  return 0
+}
+
+function knownKeywordScore(keyword: string): number {
+  switch (keyword) {
+    case 'taunt':
+      return 3.5
+    case 'charge':
+    case 'rush':
+      return 2.5
+    case 'divine-shield':
+    case 'poisonous':
+      return 2
+    case 'lifesteal':
+    case 'windfury':
+      return 1.5
+    default:
+      return 0
+  }
 }
 
 function containsGlobalMinionDestroy(value: unknown, depth = 0): boolean {
@@ -336,10 +510,59 @@ function effectActionScore(
   if (typeof name !== 'string') return 0
   const amount = numeric(action.amount ?? action.damage ?? action.health)
 
+  if (name === 'modify' || name === 'grant-keyword' || name === 'grant-keywords') {
+    return signedMaximum(
+      targets.map((target) => {
+        const player =
+          target.participantId === context.self.participantId
+            ? context.self
+            : target.participantId === context.opponent.participantId
+              ? context.opponent
+              : undefined
+        if (
+          !player ||
+          target.kind !== 'minion' ||
+          typeof target.instanceId !== 'string'
+        )
+          return 0
+        const minion = findMinion(player, target.instanceId)
+        if (!minion) return 0
+        const sign = player === context.self ? 1 : -1
+        if (name === 'modify')
+          return (
+            sign *
+            (statDelta(action.attack, numeric(minion.attack)) * 2.2 +
+              statDelta(action.health, numeric(minion.maxHealth)) * 1.7)
+          )
+        const existing = effectiveBoardMinionKeywords(
+          minion,
+          context.observation.turnNumber
+        )
+        const keywords =
+          name === 'grant-keyword'
+            ? [action.keyword]
+            : Array.isArray(action.keywords)
+              ? action.keywords
+              : []
+        return (
+          sign *
+          [...new Set(keywords)].reduce<number>(
+            (sum, keyword) =>
+              sum +
+              (typeof keyword === 'string' &&
+              !existing.includes(keyword as (typeof existing)[number])
+                ? knownKeywordScore(keyword)
+                : 0),
+            0
+          )
+        )
+      })
+    )
+  }
+
   if (name === 'damage')
-    return targets.reduce(
-      (best, target) => Math.max(best, scoreDamageTarget(amount, target, context)),
-      0
+    return signedMaximum(
+      targets.map((target) => scoreDamageTarget(amount, target, context))
     )
 
   if (
@@ -348,14 +571,26 @@ function effectActionScore(
     name === 'silence' ||
     name === 'return-to-hand'
   ) {
-    return targets.reduce((best, target) => {
-      if (target.participantId !== context.opponent.participantId) return best
-      const minion =
-        target.kind === 'minion' && typeof target.instanceId === 'string'
-          ? findMinion(context.opponent, target.instanceId)
-          : undefined
-      return minion ? Math.max(best, removalScore(minion, context)) : best
-    }, 0)
+    return signedMaximum(
+      targets.map((target) => {
+        const player =
+          target.participantId === context.opponent.participantId
+            ? context.opponent
+            : target.participantId === context.self.participantId
+              ? context.self
+              : undefined
+        const minion =
+          player && target.kind === 'minion' && typeof target.instanceId === 'string'
+            ? findMinion(player, target.instanceId)
+            : undefined
+        if (!minion) return 0
+        if (player === context.opponent) return removalScore(minion, context)
+        // A self-silence or transformation can remove a drawback; unknown is neutral.
+        return name === 'destroy' || name === 'return-to-hand'
+          ? -removalScore(minion, context)
+          : 0
+      })
+    )
   }
 
   if (name === 'freeze') {
@@ -396,12 +631,57 @@ function effectActionScore(
     }, 0)
   }
 
-  if (name === 'draw' || name === 'discover')
-    return context.self.handSize < 9 && context.self.deckSize > 0 ? 2.5 : 0
+  if (name === 'draw' || name === 'discover') {
+    const players =
+      action.player === 'opponent'
+        ? [context.opponent]
+        : action.player === 'each'
+          ? [context.self, context.opponent]
+          : action.player === undefined || action.player === 'self'
+            ? [context.self]
+            : []
+    return signedMaximum(
+      players.map((player) =>
+        player.handSize < 9 && player.deckSize > 0
+          ? player === context.self
+            ? 2.5
+            : -2.5
+          : 0
+      )
+    )
+  }
   if (name === 'gain-armor')
-    return Math.max(0, amount) * (context.facingLethal ? 2 : 0.5)
-  if (name === 'summon' && typeof action.cardId === 'string')
-    return cardBodyScore(action.cardId, 0, context.self.board.length)
+    return signedMaximum(
+      targets.map((target) =>
+        target.kind !== 'hero'
+          ? 0
+          : target.participantId === context.self.participantId
+            ? Math.max(0, amount) * (context.facingLethal ? 2 : 0.5)
+            : target.participantId === context.opponent.participantId
+              ? -Math.max(0, amount) * 0.5
+              : 0
+      )
+    )
+  if (name === 'summon' && typeof action.cardId === 'string') {
+    // Mirrors immediate literal summons: controller, not nested payload ownership.
+    const player =
+      action.controller === 'opponent'
+        ? context.opponent
+        : action.controller === undefined || action.controller === 'self'
+          ? context.self
+          : undefined
+    const count = action.count === undefined ? 1 : action.count
+    if (!player || typeof count !== 'number' || !Number.isFinite(count)) return 0
+    const accepted = Math.min(
+      Math.max(0, Math.ceil(count)),
+      Math.max(0, 7 - player.board.length)
+    )
+    return (
+      (player === context.self ? 1 : -1) *
+      accepted *
+      cardBodyScore(action.cardId, 0, player.board.length)
+    )
+  }
   return 0
 }
 
@@ -416,17 +696,29 @@ function scoreCardPlay(
   const definition = CARD_CATALOG.get(card.cardId)
   if (!definition) return 0
   const cost = card.currentCost ?? card.baseCost ?? definition.cost
+  const input =
+    context.session.match.getPlayInput?.(
+      command.participantId,
+      command.cardInstanceId,
+      command.choice
+    ) ?? undefined
+  const effects = immediateExpertTimeoutActions(card.cardId, command, input)
+  const immediateEffectScore = () =>
+    signedMaximum(
+      effects.map((action) =>
+        effectActionScore(
+          action,
+          effectTargets(action, command, input, context),
+          context
+        )
+      )
+    )
 
   if (definition.type === 'Minion') {
     const bodyScore = cardBodyScore(card.cardId, cost, context.self.board.length)
     const taunt = definition.keywords.includes('taunt')
     const urgentBlock = taunt && context.facingLethal ? 1_000 : 0
-    const effectScore = Math.max(
-      0,
-      ...cardActions(card.cardId).map((action) =>
-        effectActionScore(action, command.targets ?? [], context)
-      )
-    )
+    const effectScore = immediateEffectScore()
     const clearTrigger = context.opponent.board.find(hasImminentBoardClear)
     const canAttackImmediately = definition.keywords.some(
       (keyword) => keyword === 'charge' || keyword === 'rush'
@@ -441,12 +733,7 @@ function scoreCardPlay(
   }
 
   if (definition.type === 'Spell') {
-    return Math.max(
-      0,
-      ...cardActions(card.cardId).map((action) =>
-        effectActionScore(action, command.targets ?? [], context)
-      )
-    )
+    return immediateEffectScore()
   }
 
   if (definition.type === 'Weapon') {
