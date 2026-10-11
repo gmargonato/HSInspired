@@ -1,9 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CARD_CATALOG } from '../../../game-rules/content/cards'
+import {
+  findExpertTimeoutCombatRescue,
+  EXPERT_TIMEOUT_COMBAT_RESCUE_MAX_DISPATCHES
+} from './expert-timeout-combat-rescue'
 import type { PlayCardInput } from '../../../game-rules/match/opening-match-types'
 import { createAiFixture } from '../../../game-rules/match/testing/ai-scenario-builder'
-import { enumerateLegalCommands } from '../../../game-rules/match'
+import {
+  enumerateLegalCommands,
+  type TurnMatchCommand
+} from '../../../game-rules/match'
 import { GameBoardSession } from '../game-board-session'
+import { ExpertAiDecisionApi } from './expert-ai-decision-api'
+import { AiTurnController } from './ai-turn-controller'
+import { EXPERT_AI_DEFAULT_BUDGET } from './expert-ai-worker-protocol'
 import {
   selectExpertTimeoutFallbackAction,
   immediateExpertTimeoutActions
@@ -667,5 +677,386 @@ describe('Fallback signed and fair public effects', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('Expert timeout plain-combat rescue', () => {
+  const fixture = {
+    seed: 20801,
+    aiHeroId: 'jaina',
+    opponentHeroId: 'garrosh',
+    aiHealth: 3,
+    opponentHealth: 30,
+    aiMana: 0,
+    aiMaximumMana: 4,
+    aiHand: [],
+    aiBoard: [
+      { cardId: 'basic_bloodfen_raptor', ready: true },
+      { cardId: 'basic_bloodfen_raptor', ready: true }
+    ],
+    opponentBoard: [{ cardId: 'basic_senjin_shieldmasta' }],
+    aiDeck: ['basic_acidic_swamp_ooze', 'basic_acidic_swamp_ooze'],
+    opponentDeck: ['basic_acidic_swamp_ooze', 'basic_acidic_swamp_ooze'],
+    turnNumber: 8
+  }
+  const inspect = (session: GameBoardSession) =>
+    findExpertTimeoutCombatRescue(
+      session.match.getCheckpoint(),
+      session.getAiObservation(),
+      legalCommands(session)
+    )
+  const select = (session: GameBoardSession) =>
+    selectExpertTimeoutFallbackAction(session, legalCommands(session))!.command
+
+  it('rescues a lethal pass with both accepted Raptor trades, without live mutation', () => {
+    const session = createSession(fixture)
+    const checkpoint = session.match.getCheckpoint()
+    expect(
+      session
+        .getAiObservation()
+        .players.find((player) => player.role === 'self')!
+        .board.map((minion) => [minion.attack, minion.health])
+    ).toEqual([
+      [3, 2],
+      [3, 2]
+    ])
+    expect(
+      session
+        .getAiObservation()
+        .players.find((player) => player.role === 'opponent')!
+        .board.map((minion) => [minion.attack, minion.health])
+    ).toEqual([[3, 5]])
+    const proof = inspect(session)
+    expect(proof.status).toBe('rescued')
+    expect(proof.simulations).toBe(5)
+    expect(session.match.getCheckpoint()).toEqual(checkpoint)
+    for (let index = 0; index < 2; index++) {
+      const command = select(session)
+      expect(command).toMatchObject({
+        type: 'attack-character',
+        attacker: { kind: 'minion' },
+        defender: { kind: 'minion' }
+      })
+      expect(session.match.dispatch(command).accepted).toBe(true)
+    }
+    expect(
+      session.getState().players.every((player) => player.board.length === 0)
+    ).toBe(true)
+    expect(select(session).type).toBe('end-turn')
+    expect(session.match.dispatch(select(session)).accepted).toBe(true)
+    expect(session.getState().phase).toBe('turns')
+    expect(
+      session
+        .getState()
+        .players.find((p) => p.participantId === session.remoteParticipantId)!.hero
+        .health
+    ).toBe(3)
+  })
+
+  it.each([
+    ['classic_lord_of_the_arena', 6, 3],
+    ['classic_fen_creeper', 3, 3],
+    ['basic_ironfur_grizzly', 3, 2]
+  ] as const)(
+    'generalizes the two-hit rescue to %s without card-specific scoring',
+    (cardId, aiHealth, attack) => {
+      const session = createSession({
+        ...fixture,
+        aiHealth,
+        aiBoard: fixture.aiBoard.map((minion) => ({ ...minion, attack })),
+        opponentBoard: [{ cardId }]
+      })
+      for (let index = 0; index < 2; index++) {
+        const command = select(session)
+        expect(command).toMatchObject({
+          type: 'attack-character',
+          defender: { kind: 'minion' }
+        })
+        expect(session.match.dispatch(command).accepted).toBe(true)
+      }
+      expect(
+        session
+          .getState()
+          .players.find(
+            (player) => player.participantId === session.localParticipantId
+          )!.board
+      ).toHaveLength(0)
+    }
+  )
+
+  it('keeps a safe-health pass instead of retuning every losing trade', () => {
+    const session = createSession({ ...fixture, aiHealth: 4 })
+    expect(inspect(session).status).toBe('not-found')
+    expect(select(session).type).toBe('end-turn')
+  })
+
+  it('does not start an insufficient two-hit line', () => {
+    const session = createSession({
+      ...fixture,
+      opponentBoard: [{ cardId: 'basic_senjin_shieldmasta', health: 7, maxHealth: 7 }]
+    })
+    expect(inspect(session)).toMatchObject({ status: 'not-found', simulations: 6 })
+    expect(select(session).type).toBe('end-turn')
+  })
+
+  it.each([
+    ['exhausted', { ready: false }],
+    ['frozen', { ready: true, frozen: true }]
+  ] as const)(
+    'requires both legal attacks when one Raptor is %s',
+    (_name, readiness) => {
+      const session = createSession({
+        ...fixture,
+        aiBoard: [
+          fixture.aiBoard[0]!,
+          { cardId: 'basic_bloodfen_raptor', ...readiness }
+        ]
+      })
+      expect(inspect(session).status).toBe('not-found')
+      expect(select(session).type).toBe('end-turn')
+    }
+  )
+
+  it('does not claim two ordinary hits remove Divine Shield plus five health', () => {
+    const session = createSession({
+      ...fixture,
+      opponentBoard: [
+        {
+          cardId: 'basic_senjin_shieldmasta',
+          keywords: ['taunt', 'divine-shield'],
+          divineShield: true
+        }
+      ]
+    })
+    expect(inspect(session).status).toBe('not-found')
+    // The existing scorer can still choose a positive shield pop; rescue does not override it.
+    expect(select(session).type).toBe('attack-character')
+  })
+
+  it('does not invent a threat from an opponent frozen through its next turn', () => {
+    const session = createSession({
+      ...fixture,
+      opponentBoard: [{ cardId: 'basic_senjin_shieldmasta', frozenUntilTurn: 9 }]
+    })
+    expect(inspect(session).status).toBe('not-found')
+    expect(select(session).type).toBe('end-turn')
+  })
+
+  it('does not invent a face attack through a friendly Taunt', () => {
+    const session = createSession({
+      ...fixture,
+      aiBoard: fixture.aiBoard.map((minion) => ({
+        ...minion,
+        keywords: ['taunt'] as const
+      }))
+    })
+    expect(inspect(session).status).toBe('not-found')
+    expect(select(session).type).toBe('end-turn')
+  })
+
+  it('preserves useful Fireball removal rather than sacrificing both friendly minions', () => {
+    const session = createSession({ ...fixture, aiMana: 4, aiHand: ['basic_fireball'] })
+    const command = select(session)
+    expect(command).toMatchObject({ type: 'play-card', targets: [{ kind: 'minion' }] })
+    expect(session.match.dispatch(command).accepted).toBe(true)
+    expect(
+      session
+        .getState()
+        .players.find((p) => p.participantId === session.remoteParticipantId)!.board
+    ).toHaveLength(2)
+    expect(
+      session
+        .getState()
+        .players.find((p) => p.participantId === session.localParticipantId)!.board
+    ).toHaveLength(0)
+  })
+
+  it('preserves a verified own immediate win before defensive rescue', () => {
+    const session = createSession({
+      ...fixture,
+      aiMana: 4,
+      aiHand: ['basic_fireball'],
+      opponentHealth: 6
+    })
+    const command = select(session)
+    expect(command).toMatchObject({
+      type: 'play-card',
+      targets: [{ kind: 'hero', participantId: session.localParticipantId }]
+    })
+    expect(session.match.dispatch(command).accepted).toBe(true)
+    expect(session.getState().winnerId).toBe(session.remoteParticipantId)
+  })
+
+  it.each([
+    [
+      'multiple public attackers',
+      { opponentBoard: [...fixture.opponentBoard, { cardId: 'basic_bloodfen_raptor' }] }
+    ],
+    [
+      'Windfury',
+      {
+        opponentBoard: [
+          { cardId: 'basic_senjin_shieldmasta', keywords: ['taunt', 'windfury'] }
+        ]
+      }
+    ],
+    ['opposing hero attack', { opponentAttack: 1 }],
+    ['weapon', { opponentWeapon: { cardId: 'basic_fiery_war_axe' } }],
+    [
+      'hidden Secret',
+      { opponentHeroId: 'jaina', opponentSecrets: [{ cardId: 'classic_ice_barrier' }] }
+    ],
+    [
+      'boundary trigger',
+      { aiBoard: [...fixture.aiBoard, { cardId: 'basic_healing_totem' }] }
+    ],
+    [
+      'Deathrattle',
+      { aiBoard: [...fixture.aiBoard, { cardId: 'classic_leper_gnome' }] }
+    ]
+  ] satisfies readonly [string, Partial<Parameters<typeof createAiFixture>[0]>][])(
+    'returns unknown for unsupported %s',
+    (_name, changes) => {
+      const session = createSession({ ...fixture, ...changes })
+      expect(inspect(session)).toEqual({ status: 'unknown', simulations: 0 })
+    }
+  )
+
+  it('does not use hidden opponent identities or either deck order to choose a rescue', () => {
+    const first = createSession({
+      ...fixture,
+      opponentHand: ['basic_execute'],
+      aiDeck: ['basic_fireball', 'basic_acidic_swamp_ooze']
+    })
+    const second = createSession({
+      ...fixture,
+      opponentHand: ['basic_arcanite_reaper'],
+      opponentDeck: ['basic_execute', 'basic_arcanite_reaper'],
+      aiDeck: ['basic_acidic_swamp_ooze', 'basic_fireball']
+    })
+    expect(inspect(first)).toEqual(inspect(second))
+    expect(select(first)).toEqual(select(second))
+  })
+
+  it('returns unknown exactly at its deterministic work cap without dispatching live', () => {
+    const session = createSession({
+      ...fixture,
+      aiBoard: Array.from({ length: 7 }, () => ({
+        cardId: 'basic_bloodfen_raptor',
+        ready: true
+      })),
+      opponentBoard: [
+        { cardId: 'basic_senjin_shieldmasta', health: 100, maxHealth: 100 }
+      ]
+    })
+    const before = session.match.getCheckpoint()
+    const expected = {
+      status: 'unknown',
+      simulations: EXPERT_TIMEOUT_COMBAT_RESCUE_MAX_DISPATCHES
+    }
+    expect(inspect(session)).toEqual(expected)
+    expect(inspect(session)).toEqual(expected)
+    expect(select(session).type).toBe('end-turn')
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it('recomputes and completes both trades through the actual zero-allowance controller', async () => {
+    const session = createSession(fixture)
+    const before = session.match.getCheckpoint()
+    const workerFactory = vi.fn(() => {
+      throw new Error('No worker should start after exhaustion')
+    })
+    const api = new ExpertAiDecisionApi(
+      session,
+      workerFactory,
+      () => performance.now(),
+      session.remoteParticipantId,
+      1,
+      { ...EXPERT_AI_DEFAULT_BUDGET, searchBudgetMs: 0 }
+    )
+    const controller = new AiTurnController({
+      session,
+      api,
+      online: () => true,
+      logger: { info() {}, warn() {}, error() {} }
+    })
+    const commands: TurnMatchCommand[] = []
+    try {
+      for (const type of ['attack-character', 'attack-character', 'end-turn']) {
+        const decision = await controller.chooseTurnAction()
+        expect(decision).not.toBeNull()
+        expect(controller.isCurrent(decision!)).toBe(true)
+        expect(decision!.command.type).toBe(type)
+        expect(legalCommands(session)).toContainEqual(decision!.command)
+        if (commands.length === 0) expect(decision!.source).toBe('safe-fallback')
+        const result = session.match.dispatch(decision!.command)
+        expect(result.accepted).toBe(true)
+        commands.push(decision!.command)
+        controller.recordExecution(decision!, result)
+      }
+      expect(session.getState().phase).toBe('turns')
+      expect(session.getState().activePlayerId).toBe(session.localParticipantId)
+      expect(
+        session.getState().players.every((player) => player.board.length === 0)
+      ).toBe(true)
+      const replay = new GameBoardSession({
+        setup: before.setup,
+        decks: before.decks,
+        checkpoint: before
+      })
+      for (const command of commands)
+        expect(replay.match.dispatch(command).accepted).toBe(true)
+      expect(replay.match.getCheckpoint()).toEqual(session.match.getCheckpoint())
+    } finally {
+      controller.dispose()
+      api.dispose()
+    }
+    expect(workerFactory).not.toHaveBeenCalled()
+  })
+
+  it('holds no-payoff Holy Light while keeping the useful recruit selected', () => {
+    const session = createSession({
+      ...fixture,
+      aiHeroId: 'uther',
+      aiHealth: 30,
+      aiMana: 2,
+      aiMaximumMana: 2,
+      aiHand: ['basic_holy_light'],
+      aiBoard: [],
+      opponentBoard: []
+    })
+    const command = select(session)
+    expect(command.type).toBe('use-hero-power')
+    expect(session.match.dispatch(command).accepted).toBe(true)
+    expect(
+      session
+        .getState()
+        .players.find((p) => p.participantId === session.remoteParticipantId)!
+        .hand.map((card) => card.cardId)
+    ).toEqual(['basic_holy_light'])
+  })
+
+  it('does not treat an opponent fatigue death after passing as a combat threat', () => {
+    const session = createSession({
+      ...fixture,
+      opponentDeck: [],
+      opponentHealth: 1,
+      opponentFatigueDamage: 1
+    })
+    expect(inspect(session)).toMatchObject({ status: 'unknown', simulations: 1 })
+  })
+
+  it('rejects oversized supplied attack candidates rather than truncating', () => {
+    const session = createSession(fixture)
+    const attack = legalCommands(session).find(
+      (command) => command.type === 'attack-character'
+    )!
+    expect(
+      findExpertTimeoutCombatRescue(
+        session.match.getCheckpoint(),
+        session.getAiObservation(),
+        Array.from({ length: 9 }, () => attack)
+      )
+    ).toEqual({ status: 'unknown', simulations: 0 })
   })
 })
