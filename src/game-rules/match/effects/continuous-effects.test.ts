@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { CARD_CATALOG, type CardDefinition } from '../../content/cards'
 import { createMatchScenario } from '../testing/match-scenario-builder'
 import { getDerivedState } from './effect-runtime'
 import type { OpeningMatchState } from '../opening-match-types'
@@ -21,6 +22,117 @@ function healthAuraScenario(aura: string, target: string, seed = 1201) {
 }
 
 describe('continuous effect derivation', () => {
+  describe.each(['minion', 'hero'] as const)('%s multiplier publication', (kind) => {
+    it.each([
+      ['permanent', false, 6, false],
+      ['this-turn', false, 6, false],
+      ['next-turn', false, 3, false],
+      ['while-damaged', false, 3, false],
+      ['while-damaged', true, 6, false],
+      ['while-damaged', true, 6, true],
+      ['while-source-in-play', false, 6, false],
+      ['while-source-equipped', false, 3, false]
+    ] as const)(
+      'combines a permanent factor with a %s aura (wounded=%s, factor=%i, health aura=%s)',
+      (duration, wounded, expected, healthAura) => {
+        const { scenario, opponentId } = healthAuraScenario(
+          'classic_prophet_velen',
+          'basic_chillwind_yeti'
+        )
+        const original = scenario.match.getState()
+        const definition = CARD_CATALOG.require('classic_prophet_velen')
+        const selector: Readonly<Record<string, string>> =
+          kind === 'hero'
+            ? { controller: 'self', type: 'hero', selection: 'all' }
+            : { type: 'minion', selection: 'source' }
+        const variant: CardDefinition = {
+          ...definition,
+          effects: [
+            {
+              trigger: 'aura',
+              actions: [
+                {
+                  action: 'modify',
+                  target: selector,
+                  duration,
+                  spellDamageMultiplier: 2,
+                  healingMultiplier: 2,
+                  heroPowerMultiplier: 2
+                },
+                ...(healthAura
+                  ? [{ action: 'modify' as const, target: selector, health: 1 }]
+                  : [])
+              ]
+            }
+          ]
+        }
+        const stored = {
+          id: 'stored-multiplier',
+          sourceInstanceId: `${opponentId}:hero`,
+          sourceCardId: null,
+          duration: 'permanent',
+          spellDamageMultiplier: 3,
+          healingMultiplier: 3,
+          heroPowerMultiplier: 3
+        }
+        const state: OpeningMatchState = {
+          ...original,
+          players: original.players.map((p) =>
+            p.participantId !== opponentId
+              ? p
+              : {
+                  ...p,
+                  hero:
+                    kind === 'hero'
+                      ? {
+                          ...p.hero,
+                          maxHealth: p.hero.maxHealth + Number(healthAura),
+                          health:
+                            p.hero.maxHealth + Number(healthAura) - Number(wounded),
+                          enchantments: [stored]
+                        }
+                      : p.hero,
+                  board: p.board.map((minion) =>
+                    kind === 'minion' && minion.cardId === definition.id
+                      ? {
+                          ...minion,
+                          maxHealth: minion.maxHealth + Number(healthAura),
+                          health:
+                            minion.maxHealth + Number(healthAura) - Number(wounded),
+                          enchantments: [stored]
+                        }
+                      : minion
+                  )
+                }
+          ) as unknown as OpeningMatchState['players']
+        }
+        // Only this generic target/duration matrix alters the catalog lookup.
+        // Integration cases use Velen's real, unmodified definition.
+        const lookup = CARD_CATALOG.get.bind(CARD_CATALOG)
+        const spy = vi
+          .spyOn(CARD_CATALOG, 'get')
+          .mockImplementation((id) => (id === definition.id ? variant : lookup(id)))
+        try {
+          const derived = getDerivedState(state)
+          const p = derived.players.find((entry) => entry.participantId === opponentId)!
+          const target =
+            kind === 'hero'
+              ? p.hero
+              : p.board.find((minion) => minion.cardId === definition.id)!
+          expect(target).toMatchObject({
+            spellDamageMultiplier: expected,
+            healingMultiplier: expected,
+            heroPowerMultiplier: expected
+          })
+          expect(getDerivedState(derived)).toEqual(derived)
+          expect(scenario.match.getState()).toEqual(original)
+        } finally {
+          spy.mockRestore()
+        }
+      }
+    )
+  })
+
   it.each([
     ['classic_murloc_warleader', 'basic_murloc_raider', 1201],
     ['classic_murloc_warleader', 'basic_murloc_raider', 1202],

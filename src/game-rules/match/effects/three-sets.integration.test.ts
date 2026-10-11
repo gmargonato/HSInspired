@@ -11,6 +11,8 @@ import {
   type OpeningMatchInstance
 } from '../opening-match'
 import { createMatchScenario } from '../testing/match-scenario-builder'
+import { spellDamageMultiplier, spellDamageRulesText } from '../spell-damage'
+import { getDerivedState } from './effect-runtime'
 
 type Scenario = ReturnType<typeof createMatchScenario>
 
@@ -2308,5 +2310,298 @@ describe('spell Lifesteal damage resolution', () => {
       targets: [{ kind: 'hero', participantId: enemy }]
     })
     expect(player(scenario, own).hero.health).toBe(20)
+  })
+})
+
+describe('Prophet Velen continuous multipliers', () => {
+  const velen = 'classic_prophet_velen'
+  const smite = 'basic_holy_smite'
+  const drain = 'knights_of_the_frozen_throne_drain_soul'
+
+  function cast(
+    scenario: Scenario,
+    participantId: string,
+    cardId: string,
+    extra: Record<string, unknown> = {}
+  ) {
+    setMana(scenario, participantId)
+    addCard(scenario, participantId, cardId)
+    return play(scenario, participantId, cardId, extra)
+  }
+
+  function playVelens(scenario: Scenario, participantId: string, count: number) {
+    for (let index = 0; index < count; index += 1) cast(scenario, participantId, velen)
+    return player(scenario, participantId).board.filter((m) => m.cardId === velen)
+  }
+
+  function outcomes(result: ReturnType<typeof play>, action: string) {
+    return result.events.filter(
+      (event): event is Extract<typeof event, { type: 'effect-resolved' }> =>
+        event.type === 'effect-resolved' && event.action === action
+    )
+  }
+
+  it.each([
+    [0, 0, 2],
+    [1, 0, 4],
+    [2, 0, 8],
+    [1, 1, 6],
+    [2, 1, 12]
+  ])(
+    'scales Holy Smite with %i Velens and %i Spell Damage to %i, including text and replay',
+    (count, bonus, expected) => {
+      const scenario = ready({ seed: 2201 })
+      const [own, enemy] = activePlayers(scenario)
+      playVelens(scenario, own, count)
+      if (bonus) summon(scenario, own, 'basic_kobold_geomancer')
+      // An opposing source must never contribute to the caster's multiplier.
+      summon(scenario, enemy, velen)
+      const snapshot = scenario.match.getState()
+      const derived = getDerivedState(snapshot)
+      expect(getDerivedState(derived)).toEqual(derived)
+      expect(scenario.match.getState()).toEqual(snapshot)
+      expect(spellDamageMultiplier(player(scenario, own))).toBe(2 ** count)
+      expect(
+        spellDamageRulesText(CARD_CATALOG.require(smite), player(scenario, own))
+      ).toBe(expected === 2 ? 'Deal 2 damage.' : `Deal *${expected}* damage.`)
+      for (const source of player(scenario, own).board.filter(
+        (m) => m.cardId === velen
+      ))
+        expect(source).toMatchObject({
+          spellDamageMultiplier: 2,
+          healingMultiplier: 2,
+          heroPowerMultiplier: 2
+        })
+      setMana(scenario, own)
+      addCard(scenario, own, smite)
+      const restored = createOpeningMatchFromCheckpoint(
+        JSON.parse(JSON.stringify(scenario.match.getCheckpoint()))
+      )
+      const command = {
+        type: 'play-card' as const,
+        participantId: own,
+        cardInstanceId: player(scenario, own).hand.find(
+          (card) => card.cardId === smite
+        )!.instanceId,
+        targets: [{ kind: 'hero' as const, participantId: enemy }]
+      }
+      const result = scenario.match.dispatch(command)
+      expect(result.accepted).toBe(true)
+      expect(restored.dispatch(command)).toEqual(result)
+      expect(restored.getCheckpoint()).toEqual(scenario.match.getCheckpoint())
+      expect(player(scenario, enemy).hero.health).toBe(30 - expected)
+    }
+  )
+
+  it.each([
+    'classic_silence',
+    'basic_polymorph',
+    'classic_youthful_brewmaster',
+    'classic_naturalize'
+  ])('removes each stacked contribution through %s', (removal) => {
+    const scenario = ready({ seed: 2202 })
+    const [own, enemy] = activePlayers(scenario)
+    const sources = playVelens(scenario, own, 2)
+    for (const [index, source] of sources.entries()) {
+      cast(scenario, own, removal, {
+        targets: [{ kind: 'minion', participantId: own, instanceId: source.instanceId }]
+      })
+      expect(spellDamageMultiplier(player(scenario, own))).toBe(index === 0 ? 2 : 1)
+      const before = player(scenario, enemy).hero.health
+      cast(scenario, own, smite, { targets: [{ kind: 'hero', participantId: enemy }] })
+      expect(before - player(scenario, enemy).hero.health).toBe(index === 0 ? 4 : 2)
+      const state = scenario.match.getState()
+      expect(getDerivedState(state)).toEqual(state)
+    }
+    if (removal === 'classic_youthful_brewmaster') {
+      setMana(scenario, own)
+      play(scenario, own, velen)
+      expect(spellDamageMultiplier(player(scenario, own))).toBe(2)
+    }
+  })
+
+  it('moves the aura to the new controller after Mind Control', () => {
+    const scenario = ready({ seed: 2203 })
+    const [own, enemy] = activePlayers(scenario)
+    const [source] = playVelens(scenario, own, 1)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: own }).accepted
+    ).toBe(true)
+    cast(scenario, enemy, 'basic_mind_control', {
+      targets: [{ kind: 'minion', participantId: own, instanceId: source!.instanceId }]
+    })
+    expect(spellDamageMultiplier(player(scenario, own))).toBe(1)
+    expect(spellDamageMultiplier(player(scenario, enemy))).toBe(2)
+    const before = player(scenario, own).hero.health
+    cast(scenario, enemy, smite, { targets: [{ kind: 'hero', participantId: own }] })
+    expect(player(scenario, own).hero.health).toBe(before - 4)
+  })
+
+  it.each([1, 2])(
+    'scales spell healing with %i Velens, but not minion Battlecries',
+    (count) => {
+      const scenario = ready({ seed: 2204 })
+      const [own] = activePlayers(scenario)
+      playVelens(scenario, own, count)
+      summon(scenario, own, 'basic_kobold_geomancer')
+      setHealth(scenario, own, 1)
+      cast(scenario, own, 'basic_holy_light', {
+        targets: [{ kind: 'hero', participantId: own }]
+      })
+      expect(player(scenario, own).hero.health).toBe(1 + 6 * 2 ** count)
+      cast(scenario, own, 'basic_voodoo_doctor', {
+        targets: [{ kind: 'hero', participantId: own }]
+      })
+      expect(player(scenario, own).hero.health).toBe(3 + 6 * 2 ** count)
+      setHealth(scenario, own, 29)
+      const result = cast(scenario, own, 'basic_holy_light', {
+        targets: [{ kind: 'hero', participantId: own }]
+      })
+      expect(player(scenario, own).hero.health).toBe(30)
+      expect(outcomes(result, 'restore')[0]?.data).toMatchObject({
+        amount: 1,
+        displayAmount: 6 * 2 ** count
+      })
+    }
+  )
+
+  it.each([
+    ['jaina', 1, 2],
+    ['jaina', 2, 4],
+    ['anduin', 1, 4],
+    ['anduin', 2, 8]
+  ] as const)(
+    'scales %s Hero Power with %i Velens to %i',
+    (heroId, count, expected) => {
+      const scenario = ready({ seed: 2205, firstHeroId: heroId, secondHeroId: heroId })
+      const [own, enemy] = activePlayers(scenario)
+      playVelens(scenario, own, count)
+      summon(scenario, own, 'basic_kobold_geomancer')
+      setHealth(scenario, own, 10)
+      setMana(scenario, own)
+      const result = scenario.match.dispatch({
+        type: 'use-hero-power',
+        participantId: own,
+        target: { kind: 'hero', participantId: heroId === 'anduin' ? own : enemy }
+      })
+      expect(result.accepted).toBe(true)
+      expect(player(scenario, heroId === 'anduin' ? own : enemy).hero.health).toBe(
+        heroId === 'anduin' ? 10 + expected : 30 - expected
+      )
+    }
+  )
+
+  it.each([
+    [1, 0, 6, 12],
+    [2, 0, 12, 48],
+    [1, 1, 8, 16]
+  ])(
+    'applies %i Velen and %i Spell Damage to Drain Soul as %i damage / %i healing',
+    (count, bonus, damage, healing) => {
+      const scenario = ready({ seed: 2206 })
+      const [own, enemy] = activePlayers(scenario)
+      playVelens(scenario, own, count)
+      if (bonus) summon(scenario, own, 'basic_kobold_geomancer')
+      const target = summon(scenario, enemy, 'classic_deathwing')
+      setHealth(scenario, own, 1)
+      const result = cast(scenario, own, drain, {
+        targets: [
+          { kind: 'minion', participantId: enemy, instanceId: target.instanceId }
+        ]
+      })
+      expect(outcomes(result, 'damage')[0]?.data?.actualDamage).toBe(damage)
+      expect(outcomes(result, 'restore')).toHaveLength(1)
+      expect(outcomes(result, 'restore')[0]?.data).toMatchObject({
+        amount: Math.min(29, healing),
+        displayAmount: healing
+      })
+      expect(player(scenario, own).hero.health).toBe(Math.min(30, 1 + healing))
+    }
+  )
+
+  it.each([
+    ['classic_wisp', 1, 2],
+    ['classic_argent_squire', 0, 0],
+    ['basic_boulderfist_ogre', 6, 12]
+  ] as const)(
+    'uses applied damage for Velen + Drain Soul against %s',
+    (cardId, damage, healing) => {
+      const scenario = ready({ seed: 2207 })
+      const [own, enemy] = activePlayers(scenario)
+      playVelens(scenario, own, 1)
+      const target = summon(scenario, enemy, cardId)
+      setHealth(scenario, own, 10)
+      const result = cast(scenario, own, drain, {
+        targets: [
+          { kind: 'minion', participantId: enemy, instanceId: target.instanceId }
+        ]
+      })
+      expect(outcomes(result, 'damage')[0]?.data?.actualDamage).toBe(damage)
+      expect(outcomes(result, 'restore')).toHaveLength(damage > 0 ? 1 : 0)
+      expect(player(scenario, own).hero.health).toBe(10 + healing)
+    }
+  )
+
+  it.each([
+    'classic_auchenai_soulpriest',
+    'whispers_of_the_old_gods_embrace_the_shadow'
+  ])('converts Velen-boosted Drain Soul healing once through %s', (replacement) => {
+    const scenario = ready({ seed: 2208 })
+    const [own, enemy] = activePlayers(scenario)
+    playVelens(scenario, own, 1)
+    if (replacement === 'classic_auchenai_soulpriest')
+      summon(scenario, own, replacement)
+    else cast(scenario, own, replacement)
+    const target = summon(scenario, enemy, 'basic_boulderfist_ogre')
+    setHealth(scenario, own, 20)
+    const result = cast(scenario, own, drain, {
+      targets: [{ kind: 'minion', participantId: enemy, instanceId: target.instanceId }]
+    })
+    expect(outcomes(result, 'damage').map((event) => event.data?.actualDamage)).toEqual(
+      [6, 12]
+    )
+    expect(outcomes(result, 'restore')).toHaveLength(1)
+    expect(outcomes(result, 'restore')[0]?.data).toMatchObject({
+      displayAmount: 12,
+      replaced: true
+    })
+    expect(player(scenario, own).hero.health).toBe(8)
+  })
+
+  it('keeps Velen active for Spirit Lash healing before its death checkpoint', () => {
+    const scenario = ready({ seed: 2209 })
+    const [own, enemy] = activePlayers(scenario)
+    const [source] = playVelens(scenario, own, 1)
+    // Set the intended one-health source without an unrelated damage setup sequence.
+    const checkpoint = scenario.match.getCheckpoint()
+    const originalSource = source!
+    const state = checkpoint.state
+    const players = state.players.map((p) =>
+      p.participantId !== own
+        ? p
+        : {
+            ...p,
+            board: [{ ...originalSource, health: 1, damageTaken: 6 }]
+          }
+    ) as unknown as typeof state.players
+    const fixture = {
+      ...scenario,
+      match: createOpeningMatchFromCheckpoint({
+        ...checkpoint,
+        state: { ...state, players }
+      })
+    }
+    summon(fixture, enemy, 'basic_boulderfist_ogre')
+    setHealth(fixture, own, 10)
+    const result = cast(fixture, own, 'knights_of_the_frozen_throne_spirit_lash')
+    expect(outcomes(result, 'damage').map((event) => event.data?.actualDamage)).toEqual(
+      [1, 2]
+    )
+    expect(
+      outcomes(result, 'restore').map((event) => event.data?.displayAmount)
+    ).toEqual([2, 4])
+    expect(player(fixture, own).hero.health).toBe(16)
+    expect(player(fixture, own).board).toHaveLength(0)
+    expect(spellDamageMultiplier(player(fixture, own))).toBe(1)
   })
 })
