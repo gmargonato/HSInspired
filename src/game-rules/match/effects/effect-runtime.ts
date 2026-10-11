@@ -3489,7 +3489,9 @@ export class EffectRuntime {
     if (ref.kind === 'hero') return this.player(ref.participantId).hero.attack
     if (ref.kind === 'card') {
       const card = this.currentCard(ref)
-      const definition = card?.cardId ? cardDefinition(card.cardId) : undefined
+      // Catalog and event references may have no live zone instance.
+      const cardId = card?.cardId ?? ref.cardId
+      const definition = cardId ? cardDefinition(cardId) : undefined
       return (
         card?.attack ??
         (definition?.type === 'Minion' || definition?.type === 'Weapon'
@@ -3525,7 +3527,9 @@ export class EffectRuntime {
     if (ref.kind === 'hero') return this.player(ref.participantId).hero.maxHealth
     if (ref.kind === 'card') {
       const card = this.currentCard(ref)
-      const definition = card?.cardId ? cardDefinition(card.cardId) : undefined
+      // Catalog and event references may have no live zone instance.
+      const cardId = card?.cardId ?? ref.cardId
+      const definition = cardId ? cardDefinition(cardId) : undefined
       return card?.health ?? (definition?.type === 'Minion' ? definition.health : 0)
     }
     return 0

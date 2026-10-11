@@ -1919,3 +1919,176 @@ describe('effect-runtime query language', () => {
     }
   })
 })
+
+describe('catalog-reference stat queries', () => {
+  function fixture() {
+    const scenario = createMatchScenario()
+    scenario.confirmBothMulligans()
+    const state = scenario.match.getState()
+    const queries = new EffectRuntime(state, scenario.rng).queries
+    const ref = (cardId?: string) =>
+      entityRef('card', state.activePlayerId!, 'catalog-candidate', 'revealed', cardId)
+    const frame = queries.frameFor(ref('basic_chillwind_yeti'), null, [])
+    return { scenario, state, queries, ref, frame }
+  }
+
+  it.each([
+    ['basic_chillwind_yeti', 4, 5, 4],
+    ['classic_stranglethorn_tiger', 5, 5, 5],
+    ['basic_arcanite_reaper', 5, 0, 5],
+    ['basic_fireball', 0, 0, 4],
+    ['missing-card-definition', 0, 0, undefined],
+    [undefined, 0, 0, undefined]
+  ] as const)(
+    'reads catalog attack, health and cost for %s without a live instance',
+    (cardId, attack, health, cost) => {
+      const { queries, ref, frame } = fixture()
+      const candidate = ref(cardId)
+      for (const [stat, value] of [
+        ['attack', attack],
+        ['health', health]
+      ] as const) {
+        expect(queries.matchesFilter(candidate, { stat, value }, frame)).toBe(true)
+        expect(
+          queries.matchesFilter(candidate, { stat, value: value + 1 }, frame)
+        ).toBe(false)
+      }
+      if (cost !== undefined)
+        expect(queries.matchesFilter(candidate, { cost }, frame)).toBe(true)
+      expect(
+        queries.matchesFilter(
+          candidate,
+          { type: 'Minion', stat: 'attack', operator: 'gte', value: 5 },
+          frame
+        )
+      ).toBe(cardId === 'classic_stranglethorn_tiger')
+    }
+  )
+
+  it('keeps strict, inclusive and printed-stat boundaries for catalog candidates', () => {
+    const { queries, ref, frame } = fixture()
+    for (const printedOnly of [false, true]) {
+      for (const stat of ['attack', 'health']) {
+        const candidate = ref('classic_stranglethorn_tiger')
+        for (const [operator, value, expected] of [
+          ['lt', 5, false],
+          ['lte', 5, true],
+          ['eq', 5, true],
+          ['gte', 5, true],
+          ['gt', 5, false],
+          ['gt', 4, true],
+          ['lt', 6, true]
+        ] as const)
+          expect(
+            queries.matchesFilter(
+              candidate,
+              { stat, operator, value, printedOnly },
+              frame
+            )
+          ).toBe(expected)
+      }
+    }
+  })
+
+  it.each(
+    (['hand', 'deck', 'revealed'] as const).flatMap((zone) =>
+      [0, 8].map((attack) => ({ zone, attack }))
+    )
+  )(
+    'preserves live $zone attack $attack and health overrides separately from printed stats',
+    ({ zone, attack }) => {
+      const { scenario, state } = fixture()
+      const owner = state.players.find((p) => p.participantId === state.activePlayerId)!
+      const original = owner.hand[0]!
+      const card = {
+        ...original,
+        cardId: asCardId('basic_chillwind_yeti'),
+        zone,
+        attack,
+        health: 9,
+        currentCost: 1,
+        baseCost: 4,
+        costAdjustments: [
+          { id: 'fixture-cost', sourceInstanceId: original.instanceId, amount: -3 }
+        ]
+      }
+      const players = state.players.map((p) =>
+        p.participantId === owner.participantId
+          ? {
+              ...p,
+              hand: zone === 'hand' ? [card] : [],
+              deck: zone === 'deck' ? [card] : [],
+              revealedCards: zone === 'revealed' ? [card] : []
+            }
+          : p
+      )
+      const queries = new EffectRuntime(
+        { ...state, players: [players[0]!, players[1]!] },
+        scenario.rng
+      ).queries
+      const candidate = entityRef(
+        'card',
+        owner.participantId,
+        card.instanceId,
+        zone,
+        card.cardId
+      )
+      const frame = queries.frameFor(candidate, null, [])
+      expect(
+        queries.matchesFilter(candidate, { stat: 'attack', value: attack }, frame)
+      ).toBe(true)
+      expect(
+        queries.matchesFilter(candidate, { stat: 'health', value: 9 }, frame)
+      ).toBe(true)
+      expect(
+        queries.matchesFilter(
+          candidate,
+          { stat: 'attack', value: 4, printedOnly: true },
+          frame
+        )
+      ).toBe(true)
+      expect(
+        queries.matchesFilter(
+          candidate,
+          { stat: 'health', value: 5, printedOnly: true },
+          frame
+        )
+      ).toBe(true)
+      expect(
+        queries.matchesFilter(
+          candidate,
+          { stat: 'attack', operator: 'gte', value: 5 },
+          frame
+        )
+      ).toBe(attack >= 5)
+      expect(queries.matchesFilter(candidate, { cost: 1 }, frame)).toBe(true)
+    }
+  )
+
+  it('uses the current card definition before a stale reference card ID', () => {
+    const { scenario, state } = fixture()
+    const owner = state.players.find((p) => p.participantId === state.activePlayerId)!
+    const card = { ...owner.hand[0]!, cardId: asCardId('basic_chillwind_yeti') }
+    const players = state.players.map((p) =>
+      p.participantId === owner.participantId ? { ...p, hand: [card] } : p
+    )
+    const queries = new EffectRuntime(
+      { ...state, players: [players[0]!, players[1]!] },
+      scenario.rng
+    ).queries
+    const candidate = entityRef(
+      'card',
+      owner.participantId,
+      card.instanceId,
+      'hand',
+      'basic_boulderfist_ogre'
+    )
+    const frame = queries.frameFor(candidate, null, [])
+    expect(queries.matchesFilter(candidate, { stat: 'attack', value: 4 }, frame)).toBe(
+      true
+    )
+    expect(queries.matchesFilter(candidate, { stat: 'health', value: 5 }, frame)).toBe(
+      true
+    )
+  })
+})
