@@ -11,7 +11,7 @@ import { DeckRules, isCollectibleDeckCard } from './deck-rules'
 import type { OpponentStrategyBrief } from './opponent-strategy'
 import type { ExpertDeckStrategyProfileId } from './expert-deck-strategy'
 
-export const CURATED_OPPONENT_CATALOG_VERSION = 1
+export const CURATED_OPPONENT_CATALOG_VERSION = 2
 
 const HISTORICAL_EXPANSIONS: ReadonlySet<string> = new Set([
   'basic',
@@ -45,7 +45,7 @@ export interface CuratedOpponentDeckDefinition {
   readonly plan: string
   /** Local Expert evaluation pilot; omitted decks keep general evaluation. */
   readonly expertStrategyProfileId?: ExpertDeckStrategyProfileId
-  /** Exact card names and counts from the linked source list. */
+  /** Approved local adaptation: exact card names and counts for this catalog. */
   readonly cardList: Readonly<Record<string, number>>
 }
 
@@ -67,242 +67,238 @@ const source = (
 })
 
 /**
- * Fixed, source-linked historical lists for constructed AI opponents.
- * The entries intentionally retain printed list names and counts; local card
- * stats/effects are resolved from the game's catalog without changing lists.
+ * Approved, source-inspired local adaptations for constructed AI opponents.
+ * These are not verbatim historical lists. Local card stats/effects resolve from
+ * the game's catalog. See README.md for the approval fingerprint and slot mapping.
+ * Replacement lists deliberately use general Expert evaluation: no old pilot
+ * profile is inherited solely because a new list replaces its catalog slot.
  */
 export const CURATED_OPPONENT_DECK_DEFINITIONS: readonly CuratedOpponentDeckDefinition[] =
   [
     {
-      id: 'druid-midrange-old-gods',
-      expertStrategyProfileId: 'ramp-midrange',
-      name: 'Druid Mid A',
+      id: 'druid-aggro-token',
+      name: 'Token Druid',
       classId: 'Druid',
       source: source(
-        'Winsteak to Legend Midrange Druid',
-        'https://www.hearthpwn.com/decks/559973-winsteak-to-legend-midrange-druid'
+        'slizzle466’s Aggro-Token Druid',
+        'https://www.vicioussyndicate.com/slizzle466s-aggro-token-druid/'
       ),
-      plan: 'Ramp into durable minions, contest the board, and use flexible threats to turn a stable board into pressure.',
+      plan: 'Flood resilient small bodies, rebuild with Living Mana, then convert the board into lethal with permanent buffs and Savage Roar.',
+      cardList: {
+        Innervate: 2,
+        'Bloodsail Corsair': 2,
+        'Enchanted Raven': 2,
+        'Fire Fly': 2,
+        'Living Roots': 2,
+        'Mark of the Lotus': 2,
+        'Patches the Pirate': 1,
+        'Druid of the Swarm': 2,
+        'Haunted Creeper': 2,
+        "Mark of Y'Shaarj": 2,
+        'Power of the Wild': 2,
+        'Crypt Lord': 2,
+        'Savage Roar': 2,
+        Jeeves: 2,
+        'Soul of the Forest': 1,
+        'Living Mana': 2
+      }
+    },
+    {
+      id: 'druid-force-roar-combo',
+      name: 'Combo Druid',
+      classId: 'Druid',
+      source: source(
+        'LowkoTV: Combo Druid deck demonstration and description',
+        'https://www.youtube.com/watch?v=1QijTGWjlZ8',
+        '2016-01-21'
+      ),
+      plan: 'Use ramp and durable midgame bodies to pressure and survive, then finish with the deterministic Force of Nature plus Savage Roar hand burst.',
       cardList: {
         Innervate: 2,
         'Living Roots': 2,
-        'Raven Idol': 2,
         'Darnassus Aspirant': 1,
         'Wild Growth': 2,
         Wrath: 2,
-        Mulch: 1,
-        Swipe: 2,
-        'Fandral Staghelm': 1,
-        'Mire Keeper': 2,
-        Nourish: 1,
-        'Dark Arakkoa': 2,
-        'Druid of the Claw': 2,
-        'Ancient of War': 2,
-        Cenarius: 1,
-        'Azure Drake': 2,
-        'Harrison Jones': 1,
-        'Sylvanas Windrunner': 1,
-        'Ragnaros the Firelord': 1
-      }
-    },
-    {
-      id: 'druid-cthun-midrange',
-      expertStrategyProfileId: 'cthun-midrange',
-      name: "Druid C'Thun",
-      classId: 'Druid',
-      source: source(
-        "GameKing's C'Thun Druid - EU Spring Prelims",
-        'https://www.hearthstonetopdecks.com/decks/gamekings-cthun-druid-hearthstone-eu-spring-prelims-2016/',
-        '2016-05-15'
-      ),
-      plan: 'Develop C’Thun followers on curve, trade for board control, and preserve the large C’Thun payoff for a swing turn.',
-      cardList: {
-        Innervate: 2,
-        'Wild Growth': 2,
-        Wrath: 2,
-        Swipe: 2,
-        'Klaxxi Amber-Weaver': 2,
-        Nourish: 1,
-        'Dark Arakkoa': 2,
-        'Druid of the Claw': 2,
-        'Ancient of War': 2,
-        'Beckoner of Evil': 2,
-        "Disciple of C'Thun": 2,
-        'Twilight Elder': 2,
-        "C'Thun's Chosen": 2,
-        'Azure Drake': 1,
-        'Sylvanas Windrunner': 1,
-        "Twin Emperor Vek'lor": 1,
-        "C'Thun": 1,
-        'Ragnaros the Firelord': 1
-      }
-    },
-    {
-      id: 'druid-jade-elemental',
-      expertStrategyProfileId: 'jade-midrange',
-      name: 'Jade Druid',
-      classId: 'Druid',
-      source: source(
-        "Tars' Jade Elemental Druid - July 2017",
-        'https://www.hearthstonetopdecks.com/decks/tars-jade-elemental-druid-july-2017-season-40/',
-        '2017-07'
-      ),
-      plan: 'Build repeatable Jade value while developing Elementals; make efficient trades until the growing board can end the game.',
-      cardList: {
-        Innervate: 2,
-        'Jade Idol': 2,
-        'Mark of the Lotus': 2,
-        'Power of the Wild': 2,
-        'Tortollan Forager': 2,
-        'Jade Blossom': 2,
+        'Big Game Hunter': 1,
         'Savage Roar': 2,
-        'Jade Spirit': 2,
-        'Living Mana': 2,
-        'Aya Blackpaw': 1,
-        'Bloodsail Corsair': 2,
-        'Fire Fly': 2,
-        'Patches the Pirate': 1,
         'Tar Creeper': 2,
-        'Servant of Kalimos': 2,
-        Blazecaller: 2
-      }
-    },
-    {
-      id: 'hunter-frozen-throne-midrange',
-      name: 'Hunter KFT',
-      classId: 'Hunter',
-      source: source(
-        'Midrange Hunter for Frozen Throne',
-        'https://www.hearthpwn.com/decks/902104-midrange-hunter-for-frozen-throne',
-        '2017-08-13'
-      ),
-      plan: 'Curve Beast minions into Houndmaster and Highmane; trade efficiently while the opponent can challenge the board, then pressure face.',
-      cardList: {
-        Alleycat: 2,
-        'Fiery Bat': 2,
-        'Jeweled Macaw': 2,
-        'Crackling Razormaw': 2,
-        'Kindly Grandmother': 2,
-        'Scavenging Hyena': 2,
-        'Animal Companion': 2,
-        Bearshark: 2,
-        'Eaglehorn Bow': 1,
-        'Kill Command': 2,
-        'Stitched Tracker': 1,
-        'Unleash the Hounds': 1,
-        'Exploding Bloatbat': 1,
-        Houndmaster: 2,
-        'Tundra Rhino': 1,
-        'Deathstalker Rexxar': 1,
-        'Savannah Highmane': 2,
-        Bloodworm: 1,
-        'Nesting Roc': 1
-      }
-    },
-    {
-      id: 'hunter-probably-midrange',
-      name: 'Hunter BM',
-      classId: 'Hunter',
-      source: source(
-        "Pajan's Probably Midrange Hunter",
-        'https://www.hearthstonetopdecks.com/decks/probably-midrange/',
-        '2017-08-07'
-      ),
-      plan: 'Develop Beasts on curve and use their synergies to win board trades; retain enough pressure to switch to face damage when ahead.',
-      cardList: {
-        Alleycat: 2,
-        'Crackling Razormaw': 2,
-        'Kindly Grandmother': 2,
-        'Scavenging Hyena': 2,
-        'Toxic Arrow': 2,
-        'Animal Companion': 2,
-        Bearshark: 2,
-        'Kill Command': 2,
-        'Rat Pack': 2,
-        'Stitched Tracker': 1,
-        'Unleash the Hounds': 1,
-        Houndmaster: 2,
-        'Corpse Widow': 2,
-        'Savannah Highmane': 2,
-        'Fire Fly': 2,
-        'Dire Wolf Alpha': 2
-      }
-    },
-    {
-      id: 'hunter-old-gods-midrange',
-      name: 'Hunter Old',
-      classId: 'Hunter',
-      source: source(
-        'New School Midrange Hunter by 3nnui',
-        'https://www.hearthpwn.com/forums/hearthstone-general/general-discussion/138781-headed-for-legend-s26-may-2016',
-        '2016-04-28'
-      ),
-      plan: 'Use early Beasts and weapons to secure board control, then curve into sticky midgame threats and finishers.',
-      cardList: {
-        Dreadscale: 1,
-        'Princess Huhuran': 1,
-        'Sylvanas Windrunner': 1,
-        'Infested Wolf': 2,
-        'Savannah Highmane': 2,
-        'Carrion Grub': 2,
-        'Fiery Bat': 2,
-        'Huge Toad': 2,
-        "King's Elekk": 2,
-        'Loot Hoarder': 2,
-        Houndmaster: 2,
-        'Call of the Wild': 2,
-        'Unleash the Hounds': 1,
-        'Animal Companion': 2,
-        'Bear Trap': 1,
-        'Quick Shot': 2,
-        "Hunter's Mark": 1,
-        'Kill Command': 2
-      }
-    },
-    {
-      id: 'mage-mech-midrange',
-      name: 'Mage Mech',
-      classId: 'Mage',
-      source: source(
-        'Mech Mage Deck List',
-        'https://www.hearthstonetopdecks.com/decks/mech-mage-deck-list/',
-        '2015-08'
-      ),
-      plan: 'Use Mech synergy to establish a board early, spend mana efficiently, and preserve burn for board control or lethal pressure.',
-      cardList: {
-        'Mana Wyrm': 2,
-        Frostbolt: 2,
-        Snowchugger: 2,
-        'Unstable Portal': 2,
-        Fireball: 2,
-        'Goblin Blastmage': 2,
-        'Archmage Antonidas': 1,
-        'Clockwork Gnome': 2,
-        Cogmaster: 2,
-        'Annoy-o-Tron': 2,
-        'Spider Tank': 2,
-        'Tinkertown Technician': 2,
-        Mechwarper: 2,
+        'Keeper of the Grove': 2,
         'Piloted Shredder': 2,
-        'Fel Reaver': 2,
+        Swipe: 2,
+        'Azure Drake': 1,
+        'Druid of the Claw': 2,
+        Loatheb: 1,
+        'Emperor Thaurissan': 1,
+        'Force of Nature': 2,
+        'Ancient of Lore': 2,
         'Dr. Boom': 1
       }
     },
     {
-      id: 'mage-pavel-tempo',
-      name: 'Mage Tempo',
+      id: 'druid-dedicated-jade',
+      name: 'Jade Druid',
+      classId: 'Druid',
+      source: source(
+        'Poach’s Jade Druid',
+        'https://www.vicioussyndicate.com/poachs-jade-druid/'
+      ),
+      plan: 'Ramp and draw into repeated, progressively larger Jade boards; defend with Plague/taunts and armor, with Idol recycling as an optional endurance route.',
+      cardList: {
+        Innervate: 2,
+        'Jade Idol': 2,
+        'Earthen Scales': 1,
+        'Wild Growth': 2,
+        Wrath: 2,
+        'Brann Bronzebeard': 1,
+        'Feral Rage': 1,
+        'Jade Blossom': 2,
+        Mulch: 1,
+        'Fandral Staghelm': 1,
+        'Jade Spirit': 2,
+        Swipe: 2,
+        'Azure Drake': 1,
+        Nourish: 2,
+        'Aya Blackpaw': 1,
+        'Jade Behemoth': 2,
+        'Spreading Plague': 2,
+        'Malfurion the Pestilent': 1,
+        'Ultimate Infestation': 2
+      }
+    },
+    {
+      id: 'hunter-face-burn',
+      name: 'Face Hunter',
+      classId: 'Hunter',
+      source: source(
+        'Foxta: S15 Face Hunter to everybody get legend',
+        'https://www.hearthpwn.com/decks/267204-s15-face-hunter-to-everybody-get-legend-w-guide',
+        '2015-06-27'
+      ),
+      plan: 'Commit cheap attackers and Charge damage to a fast life-total clock, then close with weapons, burn and Steady Shot rather than a six-to-eight-mana board plan.',
+      cardList: {
+        'Abusive Sergeant': 2,
+        'Fiery Bat': 2,
+        'Leper Gnome': 2,
+        Tracking: 1,
+        'Explosive Trap': 2,
+        Glaivezooka: 1,
+        'Ironbeak Owl': 1,
+        'Knife Juggler': 2,
+        'Mad Scientist': 2,
+        'Quick Shot': 2,
+        'Unleash the Hounds': 2,
+        'Animal Companion': 2,
+        'Arcane Golem': 2,
+        'Eaglehorn Bow': 2,
+        'Kill Command': 2,
+        Wolfrider: 2,
+        'Leeroy Jenkins': 1
+      }
+    },
+    {
+      id: 'hunter-egg-deathrattle',
+      name: 'Egg Hunter',
+      classId: 'Hunter',
+      source: source(
+        'Control’s Deathrattle Hunter',
+        'https://www.vicioussyndicate.com/controls-deathrattle-hunter/'
+      ),
+      plan: 'Turn inert Eggs and sticky deathrattles into immediate board/value swings with cheap activators, then use Widow-discounted Highmanes and optional Rexxar resources.',
+      cardList: {
+        'Play Dead': 2,
+        Tracking: 1,
+        'Feign Death': 2,
+        Glaivezooka: 2,
+        'Kindly Grandmother': 2,
+        'Loot Hoarder': 2,
+        'Nerubian Egg': 2,
+        'Terrorscale Stalker': 2,
+        'Devilsaur Egg': 2,
+        'Kill Command': 2,
+        'Stitched Tracker': 2,
+        Houndmaster: 2,
+        'Corpse Widow': 2,
+        'Princess Huhuran': 1,
+        'Sylvanas Windrunner': 1,
+        'Savannah Highmane': 2,
+        'Deathstalker Rexxar': 1
+      }
+    },
+    {
+      id: 'hunter-secret-tempo',
+      name: 'Secret Hunter',
+      classId: 'Hunter',
+      source: source(
+        "Thijs' Midrange Secret Hunter, BlizzCon 2016 Group Stage",
+        'https://www.hearthpwn.com/decks/654731-thijs-midrange-secret-hunter-blizzcon-2016-group',
+        '2016-10-20'
+      ),
+      plan: 'Develop Secretkeeper and Huntress/Scientist-supported secrets, tax opposing turns and extend Eaglehorn Bow, then win through protected Highmanes and Call of the Wild.',
+      cardList: {
+        Secretkeeper: 2,
+        Tracking: 1,
+        'Cat Trick': 2,
+        'Freezing Trap': 2,
+        'Kindly Grandmother': 2,
+        'Mad Scientist': 2,
+        'Quick Shot': 2,
+        'Snake Trap': 1,
+        Snipe: 2,
+        'Animal Companion': 2,
+        'Cloaked Huntress': 2,
+        'Eaglehorn Bow': 2,
+        'Kill Command': 2,
+        'Avian Watcher': 2,
+        'Savannah Highmane': 2,
+        'Call of the Wild': 2
+      }
+    },
+    {
+      id: 'mage-mech-tempo',
+      name: 'Mech Mage',
       classId: 'Mage',
       source: source(
-        "Pavel's Tempo Mage - BlizzCon 2016",
-        'https://www.hearthpwn.com/decks/654832-pavels-tempo-mage-blizzcon-2016-group-stage',
-        '2016'
+        'Mech Mage Deck List, Evident',
+        'https://www.hearthstonetopdecks.com/decks/mech-mage-deck-list/',
+        '2015-08-23'
       ),
-      plan: 'Develop cheap spell-synergy minions before chaining efficient spells; trade when it protects the engine and turn spare damage toward face.',
+      plan: 'Accelerate Mechs with Mechwarper, protect a snowballing board, and convert Mech-conditioned battlecries and burn into pressure.',
+      cardList: {
+        'Clockwork Gnome': 2,
+        Cogmaster: 2,
+        'Mana Wyrm': 2,
+        'Annoy-o-Tron': 2,
+        Frostbolt: 2,
+        Mechwarper: 2,
+        Snowchugger: 2,
+        'Unstable Portal': 1,
+        'Arcane Intellect': 1,
+        'Spider Tank': 2,
+        'Tinkertown Technician': 2,
+        Fireball: 2,
+        'Goblin Blastmage': 2,
+        'Piloted Shredder': 2,
+        'Clockwork Knight': 2,
+        'Archmage Antonidas': 1,
+        'Dr. Boom': 1
+      }
+    },
+    {
+      id: 'mage-flamewaker-tempo',
+      name: 'Flamewaker Mage',
+      classId: 'Mage',
+      source: source(
+        'Pavel’s Tempo Mage, BlizzCon 2016 Group Stage',
+        'https://www.hearthpwn.com/decks/654832-pavels-tempo-mage-blizzcon-2016-group-stage',
+        '2016-10-20'
+      ),
+      plan: 'Play spell-synergy minions before cheap spells, turn damage spells into board advantage and reach, and refill with Intellect/Drake.',
       cardList: {
         'Arcane Blast': 2,
         'Arcane Missiles': 2,
         'Babbling Book': 2,
         'Mana Wyrm': 2,
+        'Bloodmage Thalnos': 1,
         'Cult Sorcerer': 2,
         Frostbolt: 2,
         "Sorcerer's Apprentice": 2,
@@ -310,616 +306,599 @@ export const CURATED_OPPONENT_DECK_DEFINITIONS: readonly CuratedOpponentDeckDefi
         Flamewaker: 2,
         Fireball: 2,
         'Water Elemental': 1,
+        'Azure Drake': 2,
         'Faceless Summoner': 2,
         'Firelands Portal': 2,
         Flamestrike: 1,
-        'Bloodmage Thalnos': 1,
-        'Azure Drake': 2,
         'Ragnaros the Firelord': 1
       }
     },
     {
-      id: 'mage-frost-lich-midrange',
-      name: 'Mage Jaina',
+      id: 'mage-jaina-elemental-control',
+      name: 'Jaina Control',
       classId: 'Mage',
       source: source(
-        "Disguised Toast's Frost Lich Jaina Midrange Mage",
-        'https://www.hearthpwn.com/decks/894517-disguisedtoasts-frost-lich-jaina-midrange-mage',
-        '2017-08-11'
+        'MasterScary / GratedWasabi Elemental Mage Theorycraft discussion',
+        'https://www.hearthpwn.com/forums/class-discussion/mage/199550-elemental-mage-theorycraft'
       ),
-      plan: 'Develop Elementals and protect the board with secrets and removal; use the late-game hero card only after stabilizing.',
+      plan: 'Survive and contest the board with removal and defensive Elementals, then turn Elemental damage and Water Elemental production into a sustained healing/value endgame.',
       cardList: {
-        'Babbling Book': 2,
-        'Mana Wyrm': 2,
+        'Fire Fly': 2,
         Arcanologist: 2,
         Frostbolt: 2,
-        "Medivh's Valet": 2,
-        'Primordial Glyph': 2,
-        Pyros: 1,
+        'Primordial Glyph': 1,
         'Arcane Intellect': 2,
-        Counterspell: 1,
         'Ice Block': 2,
-        'Volcanic Potion': 1,
-        Fireball: 2,
+        'Tar Creeper': 2,
+        'Volcanic Potion': 2,
+        Polymorph: 2,
         'Water Elemental': 2,
+        'Servant of Kalimos': 2,
+        Blazecaller: 2,
+        Blizzard: 1,
+        Meteor: 1,
+        'Baron Geddon': 1,
         'Firelands Portal': 2,
         'Frost Lich Jaina': 1,
-        'Tar Creeper': 2,
-        'Servant of Kalimos': 2
+        'Ragnaros the Firelord': 1
       }
     },
     {
-      id: 'paladin-secret-midrange',
-      name: 'Pally Secret',
+      id: 'paladin-secret-challenger',
+      name: 'Secret Paladin',
       classId: 'Paladin',
       source: source(
-        'TGT Top 10 Legend Mysterious Challenger Midrange',
-        'https://www.hearthpwn.com/decks/314544-tgt-top-10-legend-mysterious-challlenger-midrange',
-        '2015-08-27'
+        'Chai’s Secret Paladin',
+        'https://www.vicioussyndicate.com/chais-secret-paladin-3/'
       ),
-      plan: 'Establish the early board with efficient minions and Muster, then turn a strong curve into a secret-powered midgame push.',
+      plan: 'Curve out resilient bodies, recruit a layered Secret board with Challenger, and close behind attack-order disruption.',
       cardList: {
-        Avenge: 1,
+        Avenge: 2,
         'Competitive Spirit': 1,
-        'Noble Sacrifice': 1,
+        'Noble Sacrifice': 2,
         Redemption: 1,
-        Repentance: 1,
-        Equality: 1,
-        'Shielded Minibot': 2,
-        'Aldor Peacekeeper': 1,
-        Coghammer: 1,
-        Consecration: 2,
-        'Muster for Battle': 2,
-        'Blessing of Kings': 1,
-        'Murloc Knight': 1,
-        'Truesilver Champion': 1,
-        'Mysterious Challenger': 2,
-        'Tirion Fordring': 1,
+        'Righteous Protector': 2,
+        Secretkeeper: 2,
+        Hydrologist: 2,
         'Knife Juggler': 2,
-        'Argent Horserider': 1,
-        'Ironbeak Owl': 1,
+        'Shielded Minibot': 2,
+        'Divine Favor': 1,
+        'Muster for Battle': 2,
+        'Rallying Blade': 2,
+        'Blessing of Kings': 1,
         'Piloted Shredder': 2,
+        'Truesilver Champion': 1,
         Loatheb: 1,
-        'Sludge Belcher': 2,
-        'Dr. Boom': 1
+        'Mysterious Challenger': 2,
+        'Sunkeeper Tarim': 1,
+        'Tirion Fordring': 1
       }
     },
     {
-      id: 'paladin-old-gods-midrange',
-      name: 'Pally WOG',
+      id: 'paladin-anyfin-control',
+      name: 'Anyfin Paladin',
       classId: 'Paladin',
       source: source(
-        "WoG Seraph's Midrange Paladin",
-        'https://www.hearthpwn.com/decks/556979-wog-seraphs-midrange-paladin',
-        '2016-05'
+        'Poach / Tempo Storm Wild Control Anyfin Paladin',
+        'https://www.hearthpwn.com/decks/748069-wild-control-anyfin-paladin'
       ),
-      plan: 'Mix early board development and efficient weapons with durable midgame minions; trade for tempo before using N’Zoth value to finish.',
+      plan: 'Use clears, healing and taunts to reach repeated Anyfin charge turns after the dedicated Murlocs have died.',
       cardList: {
         'Forbidden Healing': 1,
-        'Selfless Hero': 2,
-        'Aldor Peacekeeper': 2,
-        Consecration: 2,
-        'Divine Favor': 1,
-        'Keeper of Uldaman': 1,
-        'Rallying Blade': 1,
-        'Truesilver Champion': 2,
-        'Tirion Fordring': 1,
-        'Abusive Sergeant': 2,
-        'Argent Squire': 2,
-        'Flame Juggler': 2,
-        'Acolyte of Pain': 1,
-        'Harvest Golem': 2,
-        "C'Thun's Chosen": 2,
-        'Defender of Argus': 1,
-        'Corrupted Healbot': 2,
-        'Cairne Bloodhoof': 1,
-        'Sylvanas Windrunner': 1,
-        "N'Zoth, the Corruptor": 1
-      }
-    },
-    {
-      id: 'paladin-ungoro-murloc-midrange',
-      name: 'Pally Murloc',
-      classId: 'Paladin',
-      source: source(
-        "Machamp's Un'Goro Midrange Murloc Paladin",
-        'https://www.hearthpwn.com/decks/834961-ungoro-midrange-paladin-murloc-deck-list-guide-may',
-        '2017-05-15'
-      ),
-      plan: 'Build a Murloc board with efficient trades, then use the midgame buffs and taunts to convert board control into pressure.',
-      cardList: {
-        'Vilefin Inquisitor': 2,
+        'Bluegill Warrior': 2,
+        Doomsayer: 2,
         Equality: 2,
-        Hydrologist: 2,
+        'Wild Pyromancer': 2,
+        'Acolyte of Pain': 2,
         'Aldor Peacekeeper': 2,
+        'Murloc Warleader': 2,
         Consecration: 2,
-        'Ivory Knight': 1,
+        'Old Murk-Eye': 1,
         'Truesilver Champion': 2,
-        'Spikeridged Steed': 2,
-        'Sunkeeper Tarim': 1,
+        'Finja, the Flying Star': 1,
+        'Sludge Belcher': 2,
+        'Solemn Vigil': 2,
+        'Lay on Hands': 1,
         'Ragnaros, Lightlord': 1,
         'Tirion Fordring': 1,
-        'Golakka Crawler': 1,
+        'Anyfin Can Happen': 2
+      }
+    },
+    {
+      id: 'paladin-murloc-swarm',
+      name: 'Murloc Paladin',
+      classId: 'Paladin',
+      source: source(
+        'GetMeowth’s Murloc Paladin',
+        'https://www.vicioussyndicate.com/getmeowths-murloc-paladin/'
+      ),
+      plan: 'Deploy dense cheap Murlocs, amplify them with tribe-wide buffs and Adapt, and race with charge damage and Divine Favor refill.',
+      cardList: {
+        'Grimscale Chum': 2,
+        'Murloc Tidecaller': 2,
+        'Righteous Protector': 2,
+        'Vilefin Inquisitor': 2,
+        'Bluegill Warrior': 2,
+        Hydrologist: 2,
         'Rockpool Hunter': 2,
+        'Coldlight Seer': 2,
+        'Divine Favor': 2,
         'Murloc Warleader': 2,
-        'Stonehill Defender': 2,
+        'Rallying Blade': 2,
+        'Blessing of Kings': 2,
         'Gentle Megasaur': 2,
-        'Stampeding Kodo': 1,
-        'The Curator': 1,
-        'Primordial Drake': 1
-      }
-    },
-    {
-      id: 'priest-nzoth-deathrattle-midrange',
-      name: "Priest N'Zoth",
-      classId: 'Priest',
-      source: source(
-        "N'Zoth Deathrattle Priest",
-        'https://www.hearthstonetopdecks.com/decks/nzoth-deathrattle-priest-2/',
-        '2016-05-02'
-      ),
-      plan: 'Use healing and efficient removal to preserve a minion board, trade into threats, and rebuild with the late-game Deathrattle payoff.',
-      cardList: {
-        'Circle of Healing': 2,
-        'Northshire Cleric': 2,
-        'Power Word: Shield': 2,
-        'Museum Curator': 2,
-        'Shadow Word: Death': 2,
-        'Holy Nova': 2,
-        'Auchenai Soulpriest': 2,
-        'Shifting Shade': 2,
-        'Darkshire Alchemist': 2,
-        'Huge Toad': 2,
-        'Acolyte of Pain': 2,
-        'Refreshment Vendor': 2,
-        'Sen’jin Shieldmasta': 2,
-        'The Black Knight': 1,
-        'Cairne Bloodhoof': 1,
-        'Sylvanas Windrunner': 1,
-        "N'Zoth, the Corruptor": 1
-      }
-    },
-    {
-      id: 'priest-silent-midrange',
-      name: 'Silent Priest',
-      classId: 'Priest',
-      source: source(
-        'Silent Priest',
-        'https://www.hearthstonetopdecks.com/decks/silent-priest/',
-        '2017-01-08'
-      ),
-      plan: 'Make dormant high-stat minions active with silence effects, then use Priest buffs and removal to keep the board in play.',
-      cardList: {
-        Silence: 2,
-        'Power Word: Shield': 2,
-        Purify: 2,
-        'Shadow Word: Death': 2,
-        'Shadow Word: Pain': 2,
-        'Kabal Talonpriest': 2,
-        'Priest of the Feast': 2,
-        'Excavated Evil': 2,
-        'Kabal Songstealer': 2,
-        'Acidic Swamp Ooze': 2,
-        'Ancient Watcher': 2,
-        'Acolyte of Pain': 2,
-        'Fel Orc Soulfiend': 1,
-        'Eerie Statue': 2,
-        'Elise Starseeker': 1,
-        'Sylvanas Windrunner': 1,
-        'Ragnaros the Firelord': 1
-      }
-    },
-    {
-      id: 'priest-cthun-midrange',
-      name: "Priest C'Thun",
-      classId: 'Priest',
-      source: source(
-        "SuperJJ's DreamHack C'Thun Priest",
-        'https://www.hearthpwn.com/decks/574438-superjjs-dreamhack-cthun-priest',
-        '2016'
-      ),
-      plan: 'Trade with resilient C’Thun followers and removal, stabilize with healing, then use the late-game C’Thun package to close.',
-      cardList: {
-        'Circle of Healing': 2,
-        'Forbidden Shaping': 2,
-        'Northshire Cleric': 2,
-        'Power Word: Shield': 2,
-        'Shadow Word: Death': 2,
-        'Shadow Word: Pain': 2,
-        'Auchenai Soulpriest': 2,
-        'Excavated Evil': 1,
-        'Twilight Darkmender': 2,
-        'Cabal Shadow Priest': 1,
-        'Beckoner of Evil': 2,
-        'Wild Pyromancer': 2,
-        "Disciple of C'Thun": 2,
-        "C'Thun's Chosen": 2,
-        'Elise Starseeker': 1,
-        'Sylvanas Windrunner': 1,
-        "Twin Emperor Vek'lor": 1,
-        "C'Thun": 1
-      }
-    },
-    {
-      id: 'rogue-tgt-midrange',
-      name: 'Rogue TGT',
-      classId: 'Rogue',
-      source: source(
-        '[TGT] Midrange Rogue Guide',
-        'https://www.hearthpwn.com/decks/346915-tgt-midrange-rogue-guide',
-        '2015-10-13'
-      ),
-      plan: 'Use cheap removal and Combo enablers to gain tempo, then hold board control with minions and finish with weapon or spell pressure.',
-      cardList: {
-        Backstab: 2,
-        'Deadly Poison': 2,
-        'Blade Flurry': 1,
-        Eviscerate: 2,
-        'Fan of Knives': 2,
-        Sap: 2,
-        'Undercity Valiant': 2,
-        'SI:7 Agent': 2,
-        "Assassin's Blade": 1,
-        "Tinker's Sharpsword Oil": 1,
-        Sprint: 1,
-        'Ironbeak Owl': 1,
-        Saboteur: 1,
-        'Defender of Argus': 1,
-        'Piloted Shredder': 2,
-        'Antique Healbot': 1,
-        'Azure Drake': 1,
+        'Old Murk-Eye': 1,
+        'Finja, the Flying Star': 1,
         Loatheb: 1,
-        'Sludge Belcher': 2,
-        'Piloted Sky Golem': 1,
-        'Dr. Boom': 1
+        'Sunkeeper Tarim': 1
       }
     },
     {
-      id: 'rogue-midrange-2016',
-      name: 'Rogue Mid',
-      classId: 'Rogue',
+      id: 'priest-reno-raza',
+      name: 'Reno Raza',
+      classId: 'Priest',
       source: source(
-        'Midrange Rogue 70% Winrate',
-        'https://www.hearthpwn.com/decks/431155-midrange-rogue-70-winrate',
-        '2016-02-16'
+        'Capilano’s Reno Priest',
+        'https://www.vicioussyndicate.com/capilanos-reno-priest/'
       ),
-      plan: 'Trade with efficient Combo minions and removal, then use sticky threats and reach to shift from board control to aggression.',
+      plan: 'Survive with singleton answers and Reno, assemble Raza plus Anduin, then turn cheap cards into repeated damage Hero Powers and a Spawn burst finish.',
       cardList: {
-        Backstab: 2,
-        'Deadly Poison': 2,
-        Eviscerate: 2,
-        'Fan of Knives': 1,
-        'SI:7 Agent': 2,
-        'Unearthed Raptor': 2,
-        'Dark Iron Skulker': 2,
-        Sprint: 1,
-        'Haunted Creeper': 2,
-        'Knife Juggler': 2,
-        'Ironbeak Owl': 1,
-        'Big Game Hunter': 1,
-        'Defender of Argus': 2,
-        'Piloted Shredder': 2,
-        'Antique Healbot': 1,
-        Loatheb: 1,
-        'Sludge Belcher': 2,
-        'Dr. Boom': 1,
-        'Ragnaros the Firelord': 1
-      }
-    },
-    {
-      id: 'rogue-nzoth-deathrattle-midrange',
-      name: "N'Zoth Rogue",
-      classId: 'Rogue',
-      source: source(
-        "N'Zoth Rogue Wild",
-        'https://www.hearthpwn.com/decks/556794-nzoth-rogue-wild',
-        '2016'
-      ),
-      plan: 'Protect Deathrattle minions through efficient trades and removal, then rebuild the board with the final value swing.',
-      cardList: {
-        Backstab: 2,
-        Swashburglar: 1,
-        Eviscerate: 2,
-        'Fan of Knives': 2,
-        Sap: 2,
-        'Undercity Huckster': 2,
-        'Shadow Strike': 1,
-        'SI:7 Agent': 2,
-        'Unearthed Raptor': 2,
+        'Circle of Healing': 1,
+        Silence: 1,
+        'Binding Heal': 1,
+        'Flash Heal': 1,
+        'Holy Smite': 1,
+        'Northshire Cleric': 1,
+        'Potion of Madness': 1,
+        'Power Word: Shield': 1,
         'Bloodmage Thalnos': 1,
+        Doomsayer: 1,
         'Loot Hoarder': 1,
-        'Piloted Shredder': 2,
-        'Antique Healbot': 1,
+        'Mind Blast': 1,
+        'Novice Engineer': 1,
+        'Radiant Elemental': 1,
+        'Shadow Visions': 1,
+        'Shadow Word: Pain': 1,
+        'Wild Pyromancer': 1,
+        'Acolyte of Pain': 1,
+        'Shadow Word: Death': 1,
+        'Auchenai Soulpriest': 1,
+        'Spirit Lash': 1,
+        Kazakus: 1,
+        'Spawn of Shadows': 1,
         'Azure Drake': 1,
-        Barnes: 1,
-        'Sludge Belcher': 2,
-        'Cairne Bloodhoof': 1,
-        'Sylvanas Windrunner': 1,
-        'Dr. Boom': 1,
-        "Sneed's Old Shredder": 1,
-        "N'Zoth, the Corruptor": 1
+        'Raza the Chained': 1,
+        'Dragonfire Potion': 1,
+        'Emperor Thaurissan': 1,
+        Lightbomb: 1,
+        'Reno Jackson': 1,
+        'Shadowreaper Anduin': 1
       }
     },
     {
-      id: 'shaman-midrange-2016',
-      name: 'Shaman Mid',
+      id: 'priest-deathlord-inner-fire',
+      name: 'Inner Fire',
+      classId: 'Priest',
+      source: source(
+        'AZSwim’s Inner-Fire Priest',
+        'https://www.vicioussyndicate.com/azswims-inner-fire-priest/'
+      ),
+      plan: 'Build a high-health board, heal and protect it, then turn a surviving body into a lethal-sized attacker with health doubling and Inner Fire.',
+      cardList: {
+        'Circle of Healing': 2,
+        Silence: 1,
+        'Binding Heal': 1,
+        'Inner Fire': 2,
+        'Northshire Cleric': 2,
+        'Potion of Madness': 1,
+        'Power Word: Shield': 2,
+        'Divine Spirit': 2,
+        'Radiant Elemental': 2,
+        'Shadow Visions': 2,
+        'Shadow Word: Pain': 1,
+        'Acolyte of Pain': 1,
+        Deathlord: 2,
+        'Injured Blademaster': 2,
+        'Kabal Talonpriest': 2,
+        "Velen's Chosen": 2,
+        'Faceless Shambler': 2,
+        'Lyra the Sunshard': 1
+      }
+    },
+    {
+      id: 'priest-dragon-tempo',
+      name: 'Dragon Priest',
+      classId: 'Priest',
+      source: source(
+        'Capilano’s Dragon Priest',
+        'https://www.vicioussyndicate.com/capilanos-dragon-priest/'
+      ),
+      plan: 'Hold a Dragon to unlock efficient bodies and Battlecries, win trades with health buffs, and replenish threats while keeping board initiative.',
+      cardList: {
+        'Northshire Cleric': 2,
+        'Power Word: Shield': 2,
+        'Twilight Whelp': 2,
+        'Netherspite Historian': 2,
+        'Shadow Word: Pain': 2,
+        'Wyrmrest Agent': 2,
+        'Blackwing Technician': 2,
+        'Brann Bronzebeard': 1,
+        'Kabal Talonpriest': 2,
+        'Shadow Word: Death': 2,
+        'Twilight Guardian': 2,
+        'Azure Drake': 2,
+        'Blackwing Corruptor': 2,
+        'Drakonid Operative': 2,
+        'Dragonfire Potion': 2,
+        Ysera: 1
+      }
+    },
+    {
+      id: 'rogue-oil-burst',
+      name: 'Oil Rogue',
+      classId: 'Rogue',
+      source: source(
+        'Kolento Oil Rogue archive',
+        'https://www.hearthpwn.com/decks/262889-oil-rogue'
+      ),
+      plan: 'Cycle spells while controlling the board, then turn a buffed dagger into attack damage plus a face-capable Blade Flurry burst.',
+      cardList: {
+        Backstab: 2,
+        Preparation: 2,
+        'Deadly Poison': 2,
+        'Southsea Deckhand': 1,
+        'Blade Flurry': 2,
+        'Bloodmage Thalnos': 1,
+        Eviscerate: 2,
+        Sap: 2,
+        'Earthen Ring Farseer': 1,
+        'Edwin VanCleef': 1,
+        'Fan of Knives': 2,
+        'SI:7 Agent': 2,
+        "Tinker's Sharpsword Oil": 2,
+        'Violet Teacher': 2,
+        'Antique Healbot': 1,
+        'Azure Drake': 2,
+        Loatheb: 1,
+        Sprint: 2
+      }
+    },
+    {
+      id: 'rogue-keleseth-pirates',
+      name: 'Keleseth Rogue',
+      classId: 'Rogue',
+      source: source(
+        'Hazer’s Keleseth Tempo Rogue',
+        'https://www.vicioussyndicate.com/hazers-keleseth-tempo-rogue/'
+      ),
+      plan: 'Apply early pirate pressure, amplify future draws with Keleseth, then use removal Battlecries and attack buffs to convert initiative into lethal.',
+      cardList: {
+        Backstab: 2,
+        Shadowstep: 2,
+        'Cold Blood': 2,
+        'Fire Fly': 2,
+        'Patches the Pirate': 1,
+        'Southsea Deckhand': 2,
+        Swashburglar: 2,
+        'Prince Keleseth': 1,
+        'Edwin VanCleef': 1,
+        'SI:7 Agent': 2,
+        'Shaku, the Collector': 1,
+        'Southsea Captain': 2,
+        'Leeroy Jenkins': 1,
+        'Piloted Shredder': 2,
+        'Azure Drake': 1,
+        'Dark Iron Skulker': 1,
+        'Vilespine Slayer': 2,
+        'Cairne Bloodhoof': 1,
+        Bonemare: 2
+      }
+    },
+    {
+      id: 'rogue-jade-deathrattle',
+      name: 'Jade Rogue',
+      classId: 'Rogue',
+      source: source(
+        'Poach’s Raptor Jade Rogue',
+        'https://www.vicioussyndicate.com/poachs-raptor-jade-rogue/'
+      ),
+      plan: 'Trade sticky Egg and Jade boards, copy useful Deathrattles and Battlecries, and exhaust removal with increasingly large Jade bodies.',
+      cardList: {
+        Backstab: 2,
+        'Acherus Veteran': 2,
+        'Cold Blood': 2,
+        'Mistress of Mixtures': 1,
+        Eviscerate: 1,
+        'Jade Shuriken': 2,
+        'Jade Swarmer': 2,
+        'Mimic Pod': 2,
+        'Nerubian Egg': 2,
+        'Brann Bronzebeard': 1,
+        'Unearthed Raptor': 2,
+        'Defender of Argus': 2,
+        'Jade Spirit': 2,
+        'Dark Iron Skulker': 1,
+        'Sludge Belcher': 2,
+        'Vilespine Slayer': 2,
+        'Aya Blackpaw': 1,
+        'Valeera the Hollow': 1
+      }
+    },
+    {
+      id: 'shaman-nzoth-control',
+      name: "N'Zoth Shaman",
       classId: 'Shaman',
       source: source(
-        "Vlps' Top 10 Legend Midrange Shaman",
-        'https://www.hearthstonetopdecks.com/decks/vlps-top-10-legend-midrange-shaman-june-2016-season-27/',
-        '2016-06'
+        "Poach's Control Shaman",
+        'https://www.vicioussyndicate.com/poachs-control-shaman/'
       ),
-      plan: 'Build Totems and efficient minions on curve, use overload removal to keep the board, and turn a developed board into burst.',
+      plan: "Spend early turns clearing and healing, land layered deathrattle taunts and removal threats, then rebuild a compact six-card deathrattle pool with N'Zoth. White Eyes adds later 10/10 taunts.",
       cardList: {
-        'Tunnel Trogg': 2,
-        'Flametongue Totem': 2,
-        'Rockbiter Weapon': 2,
-        'Totem Golem': 2,
-        'Tuskarr Totemic': 2,
-        'Feral Spirit': 2,
+        'Ancestral Knowledge': 1,
+        'Bloodmage Thalnos': 1,
+        Devolve: 2,
+        Doomsayer: 2,
+        'Maelstrom Portal': 2,
+        'Far Sight': 1,
+        'Healing Wave': 2,
         Hex: 2,
         'Lightning Storm': 2,
         'Mana Tide Totem': 1,
-        'Flamewreathed Faceless': 2,
-        'Thunder Bluff Valiant': 2,
-        'Fire Elemental': 2,
-        'Thing from Below': 2,
-        "Al'Akir the Windlord": 1,
-        'Argent Squire': 2,
-        'Azure Drake': 2
+        'Tidal Surge': 2,
+        'Jinyu Waterspeaker': 2,
+        'Hallazeal the Ascended': 1,
+        'Harrison Jones': 1,
+        'Sludge Belcher': 2,
+        'Sylvanas Windrunner': 1,
+        Volcano: 2,
+        'White Eyes': 1,
+        'Cairne Bloodhoof': 1,
+        "N'Zoth, the Corruptor": 1
       }
     },
     {
-      id: 'shaman-karazhan-midrange',
+      id: 'shaman-totem-overload',
       name: 'Totem Shaman',
       classId: 'Shaman',
       source: source(
-        'Legend Guide Midrange Karazhan Shaman',
-        'https://www.hearthpwn.com/decks/608948-legend-guide-midrange-karazhan-shaman',
-        '2016-08-14'
+        'TjornHS: Midrange Karazhan Shaman',
+        'https://www.hearthpwn.com/decks/608948-legend-guide-midrange-karazhan-shaman'
       ),
-      plan: 'Use low-cost Totems and overload tools to seize the board, then preserve tempo with midgame minions and direct damage.',
+      plan: 'Claim board with Trogg, Totem Golem and Tuskarr; convert Totem summons to cheap Thing from Below and Valiant pressure. Spell-power weapons and Doomhammer/Rockbiter close games.',
       cardList: {
+        'Rockbiter Weapon': 2,
         'Spirit Claws': 2,
         'Tunnel Trogg': 2,
+        'Bloodmage Thalnos': 1,
         'Flametongue Totem': 2,
         'Maelstrom Portal': 2,
-        'Rockbiter Weapon': 2,
         'Totem Golem': 2,
-        'Tuskarr Totemic': 2,
         'Feral Spirit': 2,
         Hex: 2,
         'Lightning Storm': 1,
+        'Tuskarr Totemic': 2,
         'Flamewreathed Faceless': 2,
+        'Azure Drake': 2,
         Doomhammer: 1,
         'Thunder Bluff Valiant': 1,
         'Fire Elemental': 2,
-        'Thing from Below': 2,
-        'Bloodmage Thalnos': 1,
-        'Azure Drake': 2
+        'Thing from Below': 2
       }
     },
     {
-      id: 'shaman-elemental-midrange',
+      id: 'shaman-elemental-battlecry',
       name: 'Elemental Shm',
       classId: 'Shaman',
       source: source(
-        'Temp Elemento - Elemental Shaman',
-        'https://www.hearthstonetopdecks.com/decks/the-best-elemental-shaman/',
-        '2017-04-05'
+        "Furo: Ryan's Kalimos Elemental Shaman deck tech",
+        'https://www.youtube.com/watch?v=dSCfQDqG3lY'
       ),
-      plan: 'Chain Elementals across consecutive turns for discounts and value while making trades that protect the next Elemental payoff.',
+      plan: 'Maintain an Elemental played each turn, discount the next wave with Harbinger, then use Sentinel taunt boards and targeted Phoenix/Fire Elemental/Blazecaller damage to seize initiative.',
       cardList: {
         'Air Elemental': 2,
         'Earth Shock': 1,
+        'Fire Fly': 2,
         Devolve: 2,
         'Fire Plume Harbinger': 2,
         'Maelstrom Portal': 2,
         Hex: 2,
         'Hot Spring Guardian': 2,
-        'Stone Sentinel': 2,
-        'Fire Elemental': 2,
-        'Fire Fly': 2,
-        'Volatile Elemental': 1,
         'Igneous Elemental': 2,
-        'Thunder Lizard': 2,
+        'Tar Creeper': 2,
         'Fire Plume Phoenix': 2,
-        'Tol’vir Stoneshaper': 2,
-        'Servant of Kalimos': 2
+        'Servant of Kalimos': 2,
+        'Stone Sentinel': 2,
+        Blazecaller: 2,
+        'Fire Elemental': 2,
+        "Al'Akir the Windlord": 1
       }
     },
     {
-      id: 'warlock-midrange-demonlock-season-15',
-      name: 'Warlock S15',
+      id: 'warlock-sticky-zoo-selected',
+      name: 'Sticky Zoo',
       classId: 'Warlock',
       source: source(
-        '[Season 15] Midrange Demonlock',
-        'https://www.hearthpwn.com/decks/256245-season-15-midrange-demonlock',
-        '2015-06-01'
+        'Bunnyhoppor’s EU Winter Prelims 2016 Aggro Zoo',
+        'https://www.hearthstonetopdecks.com/decks/bunnyhoppors-eu-winter-prelims-2016-aggro-zoo/',
+        '2016-02-15'
       ),
-      plan: 'Control early exchanges with cheap removal and Demons, then use Voidcaller tempo and sturdy midgame minions to keep initiative.',
+      plan: 'Establish a wide, sticky early board, turn small bodies into favorable trades and immediate burst, and finish with Doomguard, Soulfire or a discounted Sea Giant.',
+      cardList: {
+        Soulfire: 2,
+        'Abusive Sergeant': 2,
+        'Flame Imp': 2,
+        'Possessed Villager': 2,
+        'Power Overwhelming': 2,
+        Voidwalker: 2,
+        'Dire Wolf Alpha': 2,
+        'Haunted Creeper': 2,
+        'Knife Juggler': 2,
+        'Darkshire Councilman': 2,
+        'Imp Gang Boss': 2,
+        'Defender of Argus': 2,
+        'Imp-losion': 2,
+        Doomguard: 2,
+        Loatheb: 1,
+        'Sea Giant': 1
+      }
+    },
+    {
+      id: 'warlock-giant-handlock-selected',
+      name: 'Giant Handlock',
+      classId: 'Warlock',
+      source: source(
+        'Handlock high budget against aggro meta (Lifecoach’s)',
+        'https://www.hearthpwn.com/decks/274879-handlock-high-budget-against-aggro-meta-lifecoachs',
+        '2015-07-22'
+      ),
+      plan: 'Use Life Tap and sturdy defensive bodies to create large Drakes and discounted Giants, then convert those bodies into taunts or one-turn Shadowflame swings. Jaraxxus is the optional late resource conversion.',
       cardList: {
         'Mortal Coil': 2,
-        'Power Overwhelming': 2,
-        Darkbomb: 1,
-        Demonwrath: 1,
-        Hellfire: 1,
-        'Imp Gang Boss': 2,
-        'Imp-losion': 1,
-        Shadowflame: 1,
-        Voidcaller: 2,
-        'Bane of Doom': 1,
-        Doomguard: 1,
-        'Mal’Ganis': 1,
-        'Abusive Sergeant': 1,
-        'Bloodmage Thalnos': 1,
-        'Nerubian Egg': 2,
-        'Ironbeak Owl': 1,
-        'Big Game Hunter': 1,
-        'Defender of Argus': 1,
-        'Piloted Shredder': 1,
-        'Antique Healbot': 2,
-        'Emperor Thaurissan': 1,
-        Loatheb: 1,
-        'Sylvanas Windrunner': 1,
-        'Dr. Boom': 1
-      }
-    },
-    {
-      id: 'warlock-imp-boss-midrange-demonlock',
-      name: 'Warlock Imp',
-      classId: 'Warlock',
-      source: source(
-        '[Myth] Imp Boss Midrange Demonlock',
-        'https://www.hearthpwn.com/decks/226703-myth-imp-boss-midrange-demonlock',
-        '2015-04-10'
-      ),
-      plan: 'Trade for the early board with Demons, use Voidcaller to accelerate a threat, and protect the lead with taunts and removal.',
-      cardList: {
-        'Mortal Coil': 1,
+        'Ancient Watcher': 2,
         Darkbomb: 2,
-        Hellfire: 1,
-        'Imp Gang Boss': 2,
-        'Void Terror': 1,
-        Shadowflame: 1,
-        'Siphon Soul': 1,
-        Voidcaller: 2,
-        Doomguard: 1,
-        'Lord Jaraxxus': 1,
-        'Mal’Ganis': 1,
-        'Zombie Chow': 2,
+        'Ironbeak Owl': 2,
         'Sunfury Protector': 2,
-        'Ironbeak Owl': 1,
         'Big Game Hunter': 1,
+        'Earthen Ring Farseer': 1,
+        'Defender of Argus': 2,
+        Hellfire: 2,
+        Shadowflame: 2,
         'Twilight Drake': 2,
         'Antique Healbot': 2,
         'Sludge Belcher': 2,
-        'Sylvanas Windrunner': 1,
-        'Dr. Boom': 1,
+        'Siphon Soul': 1,
+        'Lord Jaraxxus': 1,
+        'Mountain Giant': 2,
         'Molten Giant': 2
       }
     },
     {
-      id: 'warlock-cthun-midrange',
-      name: "C'Thun Lock",
+      id: 'warlock-reno-demon-control-selected',
+      name: 'Reno Demons',
       classId: 'Warlock',
       source: source(
-        'New Archetype Midrange Warlock',
-        'https://www.hearthpwn.com/decks/556017-new-archetype-midrange-warlock-with-guide',
-        '2016-05-24'
+        'GetMeowth’s Renolock',
+        'https://www.vicioussyndicate.com/getmeowths-renolock/',
+        '2017-09-10'
       ),
-      plan: 'Develop C’Thun followers and healing minions on curve, trade to maintain the board, and use the late-game payoff to close.',
+      plan: "Answer early boards with varied removal, taunts and healing, then turn independently playable Demons into pressure and one bounded Gul'dan rebuild. Reno offers an immediate life reset; Kazakus supplies flexible removal or resources.",
       cardList: {
-        'Possessed Villager': 2,
-        'Dark Peddler': 2,
-        Hellfire: 2,
-        'Siphon Soul': 2,
-        'Usher of Souls': 2,
-        'Dread Infernal': 2,
-        'Beckoner of Evil': 2,
-        'Jeweled Scarab': 2,
+        'Mistress of Mixtures': 1,
+        'Mortal Coil': 1,
+        'Acidic Swamp Ooze': 1,
+        Darkbomb: 1,
+        Defile: 1,
+        Doomsayer: 1,
+        'Drain Soul': 1,
         'Sunfury Protector': 1,
-        'Brann Bronzebeard': 1,
-        "Disciple of C'Thun": 2,
-        'Earthen Ring Farseer': 2,
-        'Twilight Elder': 2,
-        "C'Thun's Chosen": 2,
-        'Refreshment Vendor': 2,
-        "Twin Emperor Vek'lor": 1,
-        "C'Thun": 1
+        Demonwrath: 1,
+        'Earthen Ring Farseer': 1,
+        'Shadow Bolt': 1,
+        'Tar Creeper': 1,
+        Hellfire: 1,
+        Kazakus: 1,
+        'Refreshment Vendor': 1,
+        Shadowflame: 1,
+        Spellbreaker: 1,
+        Voidcaller: 1,
+        'Antique Healbot': 1,
+        'Despicable Dreadlord': 1,
+        Doomguard: 1,
+        Loatheb: 1,
+        'Sludge Belcher': 1,
+        'Dread Infernal': 1,
+        'Reno Jackson': 1,
+        'Siphon Soul': 1,
+        'Abyssal Enforcer': 1,
+        "Bloodreaver Gul'dan": 1,
+        'Twisting Nether': 1,
+        "Mal'Ganis": 1
       }
     },
     {
-      id: 'warrior-midrange-varian',
-      name: 'Warrior Varian',
+      id: 'warrior-justicar-control',
+      name: 'Armor Control',
       classId: 'Warrior',
       source: source(
-        'Top 100 Legend Midrange Varian Warrior',
-        'https://www.hearthpwn.com/decks/476637-top-100-legend-midrange-varian-warrior',
-        '2016-04-18'
+        'Fibonacci December 2015 Control Warrior in player interview archive',
+        'https://www.hearthpwn.com/news/1169-kindred-keywords-voting-player-spotlight-fibonacci'
       ),
-      plan: 'Use weapons and damaged-minion synergies to control early trades, then curve into sticky midrange threats and late pressure.',
+      plan: 'Trade weapons and efficient removal for opposing threats, build Armor to power Shield Slam, and establish sustainable Tank Up defense. Grommash/Ragnaros provide a concrete finish after stabilization.',
       cardList: {
         Execute: 2,
-        Slam: 2,
-        Armorsmith: 2,
-        Bash: 1,
-        'Cruel Taskmaster': 2,
+        'Shield Slam': 2,
         'Fiery War Axe': 2,
-        'Fierce Monkey': 2,
-        'Frothing Berserker': 2,
+        Revenge: 1,
+        Slam: 2,
+        'Acolyte of Pain': 2,
+        Bash: 2,
+        'Ravaging Ghoul': 2,
+        'Shield Block': 2,
         "Death's Bite": 2,
-        Brawl: 1,
-        'Grommash Hellscream': 1,
-        'Varian Wrynn': 1,
-        'Big Game Hunter': 1,
-        'Piloted Shredder': 2,
+        Brawl: 2,
         'Harrison Jones': 1,
         'Sludge Belcher': 2,
-        'Cairne Bloodhoof': 1,
         'Sylvanas Windrunner': 1,
-        'Dr. Boom': 1,
-        'Ragnaros the Firelord': 1
-      }
-    },
-    {
-      id: 'warrior-tempo-midrange-2016',
-      name: 'Tempo Warrior',
-      classId: 'Warrior',
-      source: source(
-        'Tempo Midrange Warrior Rank 3 Legend',
-        'https://www.hearthpwn.com/decks/521851-tempo-midrange-warrior-rank-3-legend-multiple-top',
-        '2016-04-30'
-      ),
-      plan: 'Manage damaged minions and weapons to win board trades, then turn a tempo lead into deliberate face pressure.',
-      cardList: {
-        'Blood To Ichor': 2,
-        Execute: 2,
-        Slam: 2,
-        Whirlwind: 2,
-        Armorsmith: 2,
-        'Battle Rage': 2,
-        'Fiery War Axe': 2,
-        'Fierce Monkey': 2,
-        'Frothing Berserker': 2,
-        'Ravaging Ghoul': 2,
-        'Arathi Weaponsmith': 1,
-        'Bloodhoof Brave': 2,
-        Malkorok: 1,
+        'Justicar Trueheart': 1,
+        Shieldmaiden: 2,
         'Grommash Hellscream': 1,
-        'Varian Wrynn': 1,
-        'Acolyte of Pain': 2,
-        'Cairne Bloodhoof': 1,
         'Ragnaros the Firelord': 1
       }
     },
     {
-      id: 'warrior-dragon-midrange-2016',
-      name: 'Dragon Warr',
+      id: 'warrior-pirate-weapons',
+      name: 'Pirate Warrior',
       classId: 'Warrior',
       source: source(
-        '[S27 Legend] Dragon Warrior',
-        'https://www.hearthpwn.com/decks/568392-s27-legend-dragon-warrior',
-        '2016-06-09'
+        "DannyDonuts' Pirate Warrior",
+        'https://www.vicioussyndicate.com/dannydonuts-pirate-warrior/'
       ),
-      plan: 'Curve Dragons and weapon-backed minions into board control, then apply pressure once the opponent is forced to trade.',
+      plan: 'Create an immediate Pirate/Cannon board, use efficient weapons to protect it, then finish with upgraded weapon damage and Charge. This is the fastest Warrior clock.',
+      cardList: {
+        "N'Zoth's First Mate": 2,
+        'Patches the Pirate': 1,
+        'Small-Time Buccaneer': 2,
+        'Southsea Deckhand': 2,
+        'Upgrade!': 2,
+        'Bloodsail Raider': 2,
+        'Fiery War Axe': 2,
+        'Heroic Strike': 2,
+        "Ship's Cannon": 2,
+        'Bloodsail Cultist': 2,
+        'Frothing Berserker': 2,
+        'Southsea Captain': 2,
+        "Death's Bite": 2,
+        'Dread Corsair': 2,
+        "Kor'kron Elite": 2,
+        'Leeroy Jenkins': 1
+      }
+    },
+    {
+      id: 'warrior-dragon-tempo',
+      name: 'Dragon Warrior',
+      classId: 'Warrior',
+      source: source(
+        'Toymachine: S 27 Dragon Warrior',
+        'https://www.hearthpwn.com/decks/568392-s27-legend-dragon-warrior'
+      ),
+      plan: 'Use held-Dragon Battlecries to take efficient early trades, retain substantial midgame bodies, and close via Charge, Corruptor damage and conditional Crushers.',
       cardList: {
         'Blood To Ichor': 2,
         Execute: 2,
-        Slam: 2,
+        'Sir Finley Mrrgglton': 1,
         "Alexstrasza's Champion": 2,
+        'Faerie Dragon': 2,
         'Fiery War Axe': 2,
+        Slam: 2,
+        'Blackwing Technician': 2,
         'Frothing Berserker': 1,
         'Ravaging Ghoul': 2,
-        'Kor’kron Elite': 2,
-        'Grommash Hellscream': 1,
-        'Sir Finley Mrrgglton': 1,
-        'Faerie Dragon': 2,
-        'Blackwing Technician': 2,
+        "Kor'kron Elite": 2,
         'Twilight Guardian': 2,
         'Azure Drake': 2,
         'Blackwing Corruptor': 2,
         'Drakonid Crusher': 2,
+        'Grommash Hellscream': 1,
         'Ragnaros the Firelord': 1
       }
     }
@@ -988,10 +967,10 @@ function buildDeck(definition: CuratedOpponentDeckDefinition): CuratedOpponentDe
     definition,
     deck,
     strategy: {
-      strategy: 'midrange',
+      strategy: 'constructed',
       theme: definition.id,
       text:
-        `Original deck: ${definition.source.title}. ${definition.plan} ` +
+        `Historical inspiration: ${definition.source.title}. ${definition.plan} ` +
         'Adapt to the visible board, hand, and opponent threats; this deck plan is a prior, not a rule.'
     }
   }

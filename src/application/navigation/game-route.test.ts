@@ -7,6 +7,65 @@ import { asHeroId } from '../../game-rules/content/cards'
 import { createRestartGameRoute, type GameRoute } from './game-route'
 import { describe, expect, it, vi } from 'vitest'
 import type { Deck } from '../../game-rules/decks'
+import { CURATED_OPPONENT_DECKS } from '../../game-rules/decks/curated-opponent-decks'
+import { createConstructedGameRoute } from './router'
+import { DEV_EXPERT_DRUID_DECKS } from '../../desktop/contracts/scene-navigation'
+
+describe('replacement curated roster routing', () => {
+  const humanDeck: Deck = {
+    ...CURATED_OPPONENT_DECKS[0].deck,
+    id: 'saved-human-deck'
+  }
+
+  it('launches each Druid menu choice with the matching replacement deck', () => {
+    for (const { id, label } of DEV_EXPERT_DRUID_DECKS) {
+      const route = createConstructedGameRoute(
+        humanDeck,
+        42,
+        [humanDeck],
+        undefined,
+        undefined,
+        id
+      )
+      const expected = CURATED_OPPONENT_DECKS.find(
+        ({ definition }) => definition.id === id
+      )!
+      expect(route.curatedOpponent).toMatchObject({
+        catalogVersion: 2,
+        deckId: id,
+        deckName: label,
+        classId: 'Druid'
+      })
+      expect(route.curatedOpponent?.expertStrategyProfileId).toBeUndefined()
+      expect(route.deckSnapshots).toEqual([humanDeck, expected.deck])
+      expect(route.deckSnapshots?.[1]).not.toBe(expected.deck)
+      expect(createRestartGameRoute(route, 43)).toMatchObject({
+        curatedOpponent: route.curatedOpponent,
+        deckSnapshots: route.deckSnapshots,
+        setup: { seed: 43 }
+      })
+    }
+  })
+
+  it('keeps an explicitly selected saved opponent instead of replacing it', () => {
+    const savedOpponent: Deck = {
+      ...CURATED_OPPONENT_DECKS[3].deck,
+      id: 'saved-opponent',
+      name: 'My custom deck'
+    }
+    const savedBefore = structuredClone(savedOpponent)
+    const route = createConstructedGameRoute(
+      humanDeck,
+      42,
+      [humanDeck, savedOpponent],
+      savedOpponent.id
+    )
+    expect(route.curatedOpponent).toBeUndefined()
+    expect(route.deckSnapshots).toEqual([humanDeck, savedBefore])
+    expect(route.deckSnapshots?.[1]).not.toBe(savedOpponent)
+    expect(savedOpponent).toEqual(savedBefore)
+  })
+})
 
 describe('createRestartGameRoute', () => {
   it('preserves the matchup while replacing the match seed', () => {

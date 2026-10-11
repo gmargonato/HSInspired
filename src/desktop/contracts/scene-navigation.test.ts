@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEV_EXPERT_DRUID_DECKS,
   DEV_MATCH_MENU_ENTRIES,
   isSceneRequest,
   SCENE_MENU_ENTRIES
@@ -49,5 +50,27 @@ describe('scene navigation contract', () => {
     expect(isSceneRequest({ id: 'game', params: { launchMode: 'invalid' } })).toBe(
       false
     )
+  })
+
+  it('routes the current Druid menu to the replacement roster only', () => {
+    expect(DEV_EXPERT_DRUID_DECKS).toEqual([
+      { id: 'druid-aggro-token', label: 'Token Druid' },
+      { id: 'druid-force-roar-combo', label: 'Combo Druid' },
+      { id: 'druid-dedicated-jade', label: 'Jade Druid' }
+    ])
+    for (const { id } of DEV_EXPERT_DRUID_DECKS)
+      expect(
+        isSceneRequest({ id: 'game', params: { curatedOpponentDeckId: id } })
+      ).toBe(true)
+    for (const id of [
+      'druid-midrange-old-gods',
+      'druid-cthun-midrange',
+      'druid-jade-elemental',
+      'priest-reno-raza',
+      'unknown'
+    ])
+      expect(
+        isSceneRequest({ id: 'game', params: { curatedOpponentDeckId: id } })
+      ).toBe(false)
   })
 })
