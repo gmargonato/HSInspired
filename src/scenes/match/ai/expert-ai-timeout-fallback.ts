@@ -8,6 +8,7 @@ import { aiActions } from './ai-context'
 import type { GameBoardSession } from '../game-board-session'
 import { expertCoinHeroPowerActionPenalty } from './expert-coin-hero-power-policy'
 import { immediateExpertWin } from './expert-tactics'
+import { findExpertTimeoutCombatRescue } from './expert-timeout-combat-rescue'
 import { createExpertActionInspector } from './expert-action-outcome'
 import { unpaidActionPenalty } from './expert-ai-action-safety'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
@@ -1057,8 +1058,8 @@ function scoreAction(action: LocalAction, context: FallbackContext): number {
 /**
  * Small deterministic timeout policy. It reads only the AI's fair observation
  * and the current authoritative legal-action list; it does not branch the live
- * match or infer concealed cards. End Turn remains the fallback when no
- * positive-value action is apparent.
+ * match or infer concealed cards. Before passing, a bounded plain-combat rescue
+ * may verify a complete two-trade answer to one public lethal attacker.
  */
 export function selectExpertTimeoutFallbackAction(
   session: GameBoardSession,
@@ -1122,7 +1123,21 @@ export function selectExpertTimeoutFallbackAction(
       bestScore = score
     }
   }
-  return (
-    best ?? actions.find((action) => action.command.type === 'end-turn') ?? actions[0]
-  )
+  if (best) return best
+  const pass = actions.find((action) => action.command.type === 'end-turn')
+  if (pass) {
+    const rescue = findExpertTimeoutCombatRescue(
+      session.match.getCheckpoint(),
+      observation,
+      legalCommands
+    ).command
+    if (rescue)
+      return (
+        actions.find(
+          (action) =>
+            canonicalCommandKey(action.command) === canonicalCommandKey(rescue)
+        ) ?? pass
+      )
+  }
+  return pass ?? actions[0]
 }
