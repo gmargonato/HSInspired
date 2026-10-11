@@ -3277,6 +3277,36 @@ export class EffectRuntime {
     minion.damageTaken = 0
   }
 
+  private publishContinuousMultipliers(
+    target: DraftMinion | Mutable<PlayerHeroState>,
+    enchantment: RuntimeEnchantment
+  ): void {
+    if (
+      !enchantment.continuous ||
+      (enchantment.startsOnTurn !== undefined &&
+        this.draft.turnNumber < enchantment.startsOnTurn) ||
+      (enchantment.expiresOnTurn !== undefined &&
+        this.draft.turnNumber > enchantment.expiresOnTurn) ||
+      (enchantment.duration === 'while-damaged' && target.health >= target.maxHealth) ||
+      (enchantment.duration === 'while-source-in-play' &&
+        !this.sourceIsInPlay(enchantment.sourceInstanceId)) ||
+      (enchantment.duration === 'while-source-equipped' &&
+        !this.sourceIsEquipped(enchantment.sourceInstanceId))
+    )
+      return
+
+    // Derivation resets these fields from stored modifiers before replaying auras.
+    // Publish each new aura factor once so effect resolution and previews see it.
+    for (const field of [
+      'spellDamageMultiplier',
+      'healingMultiplier',
+      'heroPowerMultiplier'
+    ] as const) {
+      const multiplier = enchantment[field]
+      if (multiplier !== undefined) target[field] = (target[field] ?? 1) * multiplier
+    }
+  }
+
   private modifyEntity(
     ref: EntityRef,
     action: Record<string, unknown>,
@@ -9865,6 +9895,11 @@ export class EffectRuntime {
             )
           )
           minion.damageTaken = Math.max(0, minion.maxHealth - minion.health)
+        }
+        // Evaluate duration conditions only after aura health bookkeeping settles.
+        for (const target of [player.hero, ...player.board]) {
+          for (const enchantment of target.enchantments ?? [])
+            this.publishContinuousMultipliers(target, enchantment)
         }
         player.heroPower.available =
           (player.heroPower.usesThisTurn ?? 0) <
