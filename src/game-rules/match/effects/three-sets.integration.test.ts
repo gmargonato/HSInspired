@@ -1919,3 +1919,394 @@ describe('Cthun resurrection', () => {
     ])
   })
 })
+
+describe('spell Lifesteal damage resolution', () => {
+  const lash = 'knights_of_the_frozen_throne_spirit_lash'
+  const drain = 'knights_of_the_frozen_throne_drain_soul'
+  const tidal = 'journey_to_ungoro_tidal_surge'
+
+  function damageEvents(result: ReturnType<typeof play>, cardId: string) {
+    return result.events.filter(
+      (event): event is Extract<typeof event, { type: 'effect-resolved' }> =>
+        event.type === 'effect-resolved' &&
+        event.action === 'damage' &&
+        event.sourceCardId === cardId
+    )
+  }
+
+  function restoreEvents(result: ReturnType<typeof play>, cardId: string) {
+    return result.events.filter(
+      (event): event is Extract<typeof event, { type: 'effect-resolved' }> =>
+        event.type === 'effect-resolved' &&
+        event.action === 'restore' &&
+        event.sourceCardId === cardId
+    )
+  }
+
+  it.each([
+    [lash, 1],
+    [drain, 3],
+    [tidal, 5]
+  ] as const)(
+    'heals the caster for %s damage and replays identically',
+    (id, amount) => {
+      const scenario = ready({ seed: 2101 })
+      const [own, enemy] = activePlayers(scenario)
+      const target = summon(scenario, enemy, 'basic_boulderfist_ogre')
+      setHealth(scenario, own, 10)
+      setHealth(scenario, enemy, 12)
+      setMana(scenario, own)
+      addCard(scenario, own, id)
+      const restored = createOpeningMatchFromCheckpoint(
+        JSON.parse(JSON.stringify(scenario.match.getCheckpoint()))
+      )
+      const command = {
+        type: 'play-card' as const,
+        participantId: own,
+        cardInstanceId: player(scenario, own).hand.find((card) => card.cardId === id)!
+          .instanceId,
+        ...(id === lash
+          ? {}
+          : {
+              targets: [
+                {
+                  kind: 'minion' as const,
+                  participantId: enemy,
+                  instanceId: target.instanceId
+                }
+              ]
+            })
+      }
+      const result = scenario.match.dispatch(command)
+      expect(result.accepted).toBe(true)
+      expect(restored.dispatch(command)).toEqual(result)
+      expect(restored.getCheckpoint()).toEqual(scenario.match.getCheckpoint())
+      expect(player(scenario, own).hero.health).toBe(10 + amount)
+      expect(player(scenario, enemy).hero.health).toBe(12)
+      expect(player(scenario, enemy).board[0]?.health).toBe(target.health - amount)
+    }
+  )
+
+  it.each([10, 29, 30])(
+    'sums friendly and enemy damage and caps healing from %i health',
+    (health) => {
+      const scenario = ready({ seed: 2102 })
+      const [own, enemy] = activePlayers(scenario)
+      summon(scenario, own, 'classic_wisp')
+      summon(scenario, own, 'basic_chillwind_yeti')
+      summon(scenario, enemy, 'basic_boulderfist_ogre')
+      setHealth(scenario, own, health)
+      setMana(scenario, own)
+      addCard(scenario, own, lash)
+
+      const result = play(scenario, own, lash)
+
+      expect(player(scenario, own).hero.health).toBe(Math.min(30, health + 3))
+      expect(
+        damageEvents(result, lash).map((event) => event.data?.actualDamage)
+      ).toEqual([1, 1, 1])
+      expect(
+        restoreEvents(result, lash).reduce(
+          (sum, event) => sum + Number(event.data?.amount),
+          0
+        )
+      ).toBe(Math.min(30 - health, 3))
+      const lastDamage = result.events.findLastIndex(
+        (event) =>
+          event.type === 'effect-resolved' &&
+          event.action === 'damage' &&
+          event.sourceCardId === lash
+      )
+      const firstRestore = result.events.findIndex(
+        (event) =>
+          event.type === 'effect-resolved' &&
+          event.action === 'restore' &&
+          event.sourceCardId === lash
+      )
+      expect(firstRestore).toBeGreaterThan(lastDamage)
+    }
+  )
+
+  it('counts applied damage after Spell Damage and overkill caps, including a dying spellpower source', () => {
+    const scenario = ready({ seed: 2103 })
+    const [own, enemy] = activePlayers(scenario)
+    summon(scenario, own, 'classic_bloodmage_thalnos')
+    summon(scenario, enemy, 'classic_wisp')
+    summon(scenario, enemy, 'basic_boulderfist_ogre')
+    setHealth(scenario, own, 10)
+    setMana(scenario, own)
+    addCard(scenario, own, lash)
+    const deckBefore = player(scenario, own).deck.length
+
+    const result = play(scenario, own, lash)
+
+    expect(damageEvents(result, lash).map((event) => event.data?.actualDamage)).toEqual(
+      [1, 1, 2]
+    )
+    expect(player(scenario, own).hero.health).toBe(14)
+    expect(player(scenario, own).board).toHaveLength(0)
+    expect(player(scenario, own).deck).toHaveLength(deckBefore - 1)
+  })
+
+  it('excludes Divine Shield, immunity and zero applied damage from healing', () => {
+    const scenario = ready({ seed: 2104 })
+    const [own, enemy] = activePlayers(scenario)
+    const immune = summon(scenario, enemy, 'basic_chillwind_yeti')
+    summon(scenario, enemy, 'classic_argent_squire')
+    summon(scenario, own, 'classic_wisp')
+    setHealth(scenario, own, 10)
+    setMana(scenario, own)
+    addCard(scenario, own, 'classic_commanding_shout')
+    play(scenario, own, 'classic_commanding_shout')
+    addCard(scenario, own, lash)
+    const checkpoint = scenario.match.getCheckpoint!()
+    const state = checkpoint.state
+    const players = state.players.map((candidate) => ({
+      ...candidate,
+      board: candidate.board.map((minion) =>
+        minion.instanceId === immune.instanceId
+          ? {
+              ...minion,
+              immune: true,
+              keywords: [...(minion.keywords ?? []), 'immune' as const]
+            }
+          : minion
+      )
+    })) as unknown as typeof state.players
+    const match = createOpeningMatchFromCheckpoint({
+      ...checkpoint,
+      state: { ...state, players }
+    })
+    const fixture = { ...scenario, match }
+
+    const result = play(fixture, own, lash)
+
+    expect(player(fixture, own).hero.health).toBe(10)
+    expect(damageEvents(result, lash).map((event) => event.data?.actualDamage)).toEqual(
+      [0, 0, 0]
+    )
+    expect(restoreEvents(result, lash)).toHaveLength(0)
+    expect(
+      player(fixture, enemy).board.find(
+        (minion) => minion.cardId === 'classic_argent_squire'
+      )?.divineShield
+    ).toBe(false)
+  })
+
+  it('does not heal with no targets or grant Lifesteal to ordinary spells', () => {
+    const scenario = ready({ seed: 2105 })
+    const [own, enemy] = activePlayers(scenario)
+    setHealth(scenario, own, 10)
+    setMana(scenario, own)
+    addCard(scenario, own, lash)
+    expect(restoreEvents(play(scenario, own, lash), lash)).toHaveLength(0)
+    const target = summon(scenario, enemy, 'basic_boulderfist_ogre')
+    addCard(scenario, own, 'basic_holy_smite')
+    play(scenario, own, 'basic_holy_smite', {
+      targets: [{ kind: 'minion', participantId: enemy, instanceId: target.instanceId }]
+    })
+    expect(player(scenario, own).hero.health).toBe(10)
+  })
+
+  it('does not damage or heal from a dormant minion', () => {
+    const scenario = ready({ seed: 2111 })
+    const [own, enemy] = activePlayers(scenario)
+    const sherazin = summon(scenario, enemy, 'journey_to_ungoro_sherazin_corpse_flower')
+    setMana(scenario, own)
+    addCard(scenario, own, drain)
+    play(scenario, own, drain, {
+      targets: [
+        { kind: 'minion', participantId: enemy, instanceId: sherazin.instanceId }
+      ]
+    })
+    expect(player(scenario, enemy).board[0]?.dormant).toBe(true)
+    setHealth(scenario, own, 10)
+    addCard(scenario, own, lash)
+
+    const result = play(scenario, own, lash)
+
+    expect(player(scenario, own).hero.health).toBe(10)
+    expect(player(scenario, enemy).board[0]?.dormant).toBe(true)
+    expect(damageEvents(result, lash)).toHaveLength(0)
+    expect(restoreEvents(result, lash)).toHaveLength(0)
+  })
+
+  it('heals the current caster after copying an opposing Lifesteal spell', () => {
+    const scenario = ready({ seed: 2106 })
+    const [own, enemy] = activePlayers(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId: enemy,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    addCard(scenario, enemy, drain)
+    setHealth(scenario, own, 10)
+    setHealth(scenario, enemy, 12)
+    setMana(scenario, own)
+    addCard(scenario, own, 'basic_mind_vision')
+    play(scenario, own, 'basic_mind_vision')
+    const target = summon(scenario, enemy, 'basic_boulderfist_ogre')
+
+    play(scenario, own, drain, {
+      targets: [{ kind: 'minion', participantId: enemy, instanceId: target.instanceId }]
+    })
+
+    expect(player(scenario, own).hero.health).toBe(13)
+    expect(player(scenario, enemy).hero.health).toBe(12)
+  })
+
+  it('resolves damage and heal listeners once before the deathrattle checkpoint', () => {
+    const scenario = ready({ seed: 2107 })
+    const [own, enemy] = activePlayers(scenario)
+    const abomination = summon(scenario, enemy, 'classic_abomination')
+    setMana(scenario, own)
+    addCard(scenario, own, drain)
+    play(scenario, own, drain, {
+      targets: [
+        { kind: 'minion', participantId: enemy, instanceId: abomination.instanceId }
+      ]
+    })
+    const lightwarden = summon(scenario, own, 'classic_lightwarden')
+    summon(scenario, own, 'classic_acolyte_of_pain')
+    setHealth(scenario, own, 1)
+    addCard(scenario, own, lash)
+    const deckBefore = player(scenario, own).deck.length
+
+    const result = play(scenario, own, lash)
+
+    expect(player(scenario, own).hero.health).toBe(2)
+    expect(player(scenario, own).deck).toHaveLength(deckBefore - 2)
+    const healBuffs = result.events.filter(
+      (event) =>
+        event.type === 'effect-resolved' &&
+        event.action === 'modify' &&
+        event.sourceInstanceId === lightwarden.instanceId
+    )
+    expect(healBuffs).toHaveLength(3)
+    const lastRestore = result.events.findLastIndex(
+      (event) =>
+        event.type === 'effect-resolved' &&
+        event.action === 'restore' &&
+        event.sourceCardId === lash
+    )
+    const firstDeathDamage = result.events.findIndex(
+      (event) =>
+        event.type === 'effect-resolved' &&
+        event.action === 'damage' &&
+        event.sourceCardId === 'classic_abomination'
+    )
+    expect(firstDeathDamage).toBeGreaterThan(lastRestore)
+  })
+
+  it.each([
+    'classic_auchenai_soulpriest',
+    'whispers_of_the_old_gods_embrace_the_shadow'
+  ])(
+    'converts Spell Damage-boosted Lifesteal exactly once through %s',
+    (replacement) => {
+      const scenario = ready({ seed: 2108 })
+      const [own, enemy] = activePlayers(scenario)
+      summon(scenario, own, 'basic_kobold_geomancer')
+      if (replacement === 'classic_auchenai_soulpriest')
+        summon(scenario, own, replacement)
+      else {
+        setMana(scenario, own)
+        addCard(scenario, own, replacement)
+        play(scenario, own, replacement)
+      }
+      const target = summon(scenario, enemy, 'basic_boulderfist_ogre')
+      setHealth(scenario, own, 20)
+      setMana(scenario, own)
+      addCard(scenario, own, drain)
+
+      const result = play(scenario, own, drain, {
+        targets: [
+          { kind: 'minion', participantId: enemy, instanceId: target.instanceId }
+        ]
+      })
+
+      expect(player(scenario, own).hero.health).toBe(16)
+      expect(
+        damageEvents(result, drain).map((event) => event.data?.actualDamage)
+      ).toEqual([4, 4])
+      expect(restoreEvents(result, drain)).toHaveLength(1)
+      expect(restoreEvents(result, drain)[0]?.data?.replaced).toBe(true)
+    }
+  )
+
+  it.each([false, true])(
+    'preserves spell healing multipliers with replacement=%s without rescaling damage',
+    (replace) => {
+      const scenario = ready({ seed: 2109 })
+      const [own, enemy] = activePlayers(scenario)
+
+      if (replace) summon(scenario, own, 'classic_auchenai_soulpriest')
+      const target = summon(scenario, enemy, 'basic_boulderfist_ogre')
+      setHealth(scenario, own, replace ? 20 : 10)
+      setMana(scenario, own)
+      addCard(scenario, own, drain)
+
+      // Use stored runtime modifiers to isolate Lifesteal from card-specific auras.
+      const checkpoint = scenario.match.getCheckpoint!()
+      const state = checkpoint.state
+      const players = state.players.map((candidate) =>
+        candidate.participantId !== own
+          ? candidate
+          : {
+              ...candidate,
+              hero: {
+                ...candidate.hero,
+                enchantments: [
+                  ...(candidate.hero.enchantments ?? []),
+                  {
+                    id: 'lifesteal-multiplier-fixture',
+                    sourceInstanceId: `${own}:hero`,
+                    sourceCardId: null,
+                    duration: 'permanent',
+                    spellDamageMultiplier: 2,
+                    healingMultiplier: 2
+                  }
+                ]
+              }
+            }
+      ) as unknown as typeof state.players
+      const match = createOpeningMatchFromCheckpoint({
+        ...checkpoint,
+        state: { ...state, players }
+      })
+      const fixture = { ...scenario, match }
+      const result = play(fixture, own, drain, {
+        targets: [
+          { kind: 'minion', participantId: enemy, instanceId: target.instanceId }
+        ]
+      })
+
+      expect(player(fixture, own).hero.health).toBe(replace ? 8 : 22)
+      expect(restoreEvents(result, drain)).toHaveLength(1)
+      expect(restoreEvents(result, drain)[0]?.data?.displayAmount).toBe(12)
+    }
+  )
+
+  it('preserves weapon Lifesteal through the hero attack source', () => {
+    const scenario = ready({ seed: 2110, firstHeroId: 'uther', secondHeroId: 'uther' })
+    const [own] = activePlayers(scenario)
+    setHealth(scenario, own, 20)
+    setMana(scenario, own)
+    addCard(scenario, own, 'knights_of_the_frozen_throne_uther_of_the_ebon_blade')
+    play(scenario, own, 'knights_of_the_frozen_throne_uther_of_the_ebon_blade')
+
+    expect(
+      attack(scenario.match, own, { kind: 'hero' }, { kind: 'hero' }).accepted
+    ).toBe(true)
+    expect(player(scenario, own).hero.health).toBe(25)
+    const [, enemy] = activePlayers(scenario)
+    setHealth(scenario, own, 20)
+    addCard(scenario, own, 'basic_holy_smite')
+    play(scenario, own, 'basic_holy_smite', {
+      targets: [{ kind: 'hero', participantId: enemy }]
+    })
+    expect(player(scenario, own).hero.health).toBe(20)
+  })
+})

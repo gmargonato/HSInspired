@@ -4015,7 +4015,8 @@ export class EffectRuntime {
       !frame.skipLifesteal &&
       (frame.source.kind === 'minion' ||
         frame.source.kind === 'hero' ||
-        frame.source.kind === 'weapon') &&
+        frame.source.kind === 'weapon' ||
+        (frame.source.kind === 'card' && this.sourceIsSpell(frame))) &&
       this.hasKeyword(frame.source, 'lifesteal')
     ) {
       const lifestealFrame = {
@@ -4034,6 +4035,8 @@ export class EffectRuntime {
           lifestealFrame,
           `${path}.lifesteal`,
           {
+            // This amount already includes the originating damage's spell scaling.
+            skipReplacementSpellScaling: true,
             forceHealthReplacement: this.hasHealthReplacement(
               frame.controllerId,
               frame,
@@ -4088,7 +4091,10 @@ export class EffectRuntime {
     amount: number,
     frame: EffectFrame,
     path: string,
-    options: { readonly forceHealthReplacement?: boolean } = {}
+    options: {
+      readonly forceHealthReplacement?: boolean
+      readonly skipReplacementSpellScaling?: boolean
+    } = {}
   ): number {
     const target =
       ref.kind === 'hero'
@@ -4112,7 +4118,9 @@ export class EffectRuntime {
       displayAmount > 0
     ) {
       const replacementFrame = cloneFrame(frame, `${path}.replace-event`)
-      this.applyDamage(ref, displayAmount, replacementFrame, `${path}.replacement`)
+      this.applyDamage(ref, displayAmount, replacementFrame, `${path}.replacement`, {
+        skipSpellScaling: options.skipReplacementSpellScaling
+      })
       this.emit(frame, 'restore', path, {
         target: ref.instanceId,
         amount: displayAmount,

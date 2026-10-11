@@ -8,11 +8,11 @@ export const SCENE_REQUEST_CHANNEL = 'debug:scene-request'
 
 export type DevMatchLaunchMode = 'first-player' | 'second-player' | 'skip-mulligan'
 
-/** Development menu choices for the current three-deck Expert pilot. */
+/** Development menu choices for the three current curated Druid opponents. */
 export const DEV_EXPERT_DRUID_DECKS = [
-  { id: 'druid-midrange-old-gods', label: 'Druid Mid A' },
-  { id: 'druid-cthun-midrange', label: "Druid C'Thun" },
-  { id: 'druid-jade-elemental', label: 'Jade Druid' }
+  { id: 'druid-aggro-token', label: 'Token Druid' },
+  { id: 'druid-force-roar-combo', label: 'Combo Druid' },
+  { id: 'druid-dedicated-jade', label: 'Jade Druid' }
 ] as const
 export type DevExpertDruidDeckId = (typeof DEV_EXPERT_DRUID_DECKS)[number]['id']
 
