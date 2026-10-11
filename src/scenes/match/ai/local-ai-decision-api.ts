@@ -61,6 +61,7 @@ import {
 import { LOCAL_AI_POLICY } from './local-ai-policy'
 import { CTHUN_ID } from '../../../game-rules/match/cthun'
 import { expertDrawPreference } from './expert-draw-preference'
+import { createExpertAttackOrderInspector } from './expert-action-ordering'
 import {
   inspectExpertAction,
   expertContinuationPenalty,
@@ -190,6 +191,13 @@ export interface LocalAiCandidateTrace {
 export interface LocalAiDecisionTrace {
   readonly boundaryEvaluations?: number
   readonly tacticalNodes?: number
+  readonly orderingReview?: {
+    readonly dispatches: number
+    readonly comparisons: number
+    readonly cacheHits: number
+    readonly abstentions: number
+    readonly durationMs: number
+  }
   readonly tacticalExhausted?: boolean
   readonly decisionPriority?: 'verified-win' | 'survival' | 'strategy'
   /** Root position only; diagnostic contributions do not establish action causality. */
@@ -1666,6 +1674,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         chosenSequence: sequenceLabels,
         decisionPriority: 'verified-win',
         tacticalNodes: tactical.nodes,
+        tacticalExhausted: tactical.exhausted,
         candidates: [
           {
             actionId: action.id,
@@ -1748,13 +1757,21 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const rootCandidatePreferenceAdjustments = new Map<string, number>()
     const rootCandidateTacticalPenalties = new Map<string, number>()
     let boundaryEvaluations = 0
+    const inspectOrder = createExpertAttackOrderInspector(
+      simulationSession.match.getCheckpoint(),
+      rootId,
+      () => this.workBudget === undefined && performance.now() >= searchDeadline
+    )
     const rootActionOutcomes = simulationSession.match.analyze((fork) => {
       const outcomes = new Map<string, ExpertActionOutcome>()
       for (const action of actions) {
         if (this.workBudget === undefined && performance.now() >= searchDeadline) break
+        const outcome = inspectExpertAction(fork, rootId, action.command)
         outcomes.set(
           canonicalCommandKey(action.command),
-          inspectExpertAction(fork, rootId, action.command)
+          outcome.penalty < 0.25 && inspectOrder(action.command)
+            ? { penalty: 0.25, reason: 'attack-before-setup' }
+            : outcome
         )
       }
       return outcomes
@@ -2096,6 +2113,17 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       string,
       ReturnType<typeof inspectTacticalLine>
     >()
+    // A terminal root dispatch remains certain even when the later shortlist
+    // inspection runs out of time. Otherwise a lightly sampled immediate loss
+    // can outrank alternatives whose next-turn public threats were inspected.
+    const rootTerminalOutcomes = new Map(
+      tactical.lines
+        .filter(
+          (line) =>
+            line.proven && line.commands.length === 1 && line.outcome !== 'ongoing'
+        )
+        .map((line) => [canonicalCommandKey(line.commands[0]!), line.outcome])
+    )
     const safetyCandidates = new Set(
       [...visited]
         .sort((a, b) => b.stat.meanValue - a.stat.meanValue)
@@ -2214,8 +2242,10 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           reviewedLineValues.set(stat.key, mctsRootRecommendationScore(stat))
         }
       }
-      const inspection =
-        safetyCandidates.has(stat.key) && performance.now() < deadline
+      const immediateOutcome = rootTerminalOutcomes.get(stat.key)
+      const inspection = immediateOutcome
+        ? { outcome: immediateOutcome, reply: 'unknown' as const }
+        : safetyCandidates.has(stat.key) && performance.now() < deadline
           ? simulationSession.match.analyze((fork) =>
               inspectTacticalLine(
                 fork,
@@ -2360,6 +2390,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     }
     const trace: LocalAiDecisionTrace = {
       boundaryEvaluations,
+      orderingReview: { ...inspectOrder.stats },
       requestId,
       phase,
       ...(this.deckEvaluator

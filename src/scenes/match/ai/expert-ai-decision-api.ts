@@ -11,7 +11,8 @@ import {
   enumerateLegalCommands,
   type OpeningMatchCheckpoint,
   type OpeningMatchEvent,
-  type PlayerId
+  type PlayerId,
+  type TurnMatchCommand
 } from '../../../game-rules/match'
 import { CARD_CATALOG } from '../../../game-rules/content/cards'
 import {
@@ -23,15 +24,23 @@ import type { GameBoardSession } from '../game-board-session'
 import { aiActionIntent } from './ai-action-intent'
 import { aiActions } from './ai-context'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
-import { tacticalStateKey } from '../../../game-rules/match/ai/tactical-search'
+import {
+  tacticalStateKey,
+  type TacticalOutcome
+} from '../../../game-rules/match/ai/tactical-search'
 import { immediateExpertWin } from './expert-tactics'
+import { createExpertAttackOrderInspector } from './expert-action-ordering'
 import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
 import { EXPERT_AI_POLICY_REVISION } from './expert-ai-worker-protocol'
 import {
   unpaidFriendlyDamageHeroPowerPenalty,
   unpaidActionPenalty
 } from './expert-ai-action-safety'
-import { createExpertActionInspector } from './expert-action-outcome'
+import {
+  createExpertActionInspector,
+  createExpertTerminalInspector,
+  EXPERT_TERMINAL_SAFETY_MAX_MS
+} from './expert-action-outcome'
 import {
   EXPERT_AI_DEFAULT_BUDGET,
   EXPERT_AI_DISPATCH_RESERVE_MS,
@@ -202,6 +211,10 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   private continuation: ExpertContinuation | null = null
   private planCommit: ExpertPlanCommit | null = null
   private winCheck: { revision: number; commandKey: string | null } | null = null
+  private terminalCheck: {
+    revision: number
+    outcomes: Map<string, TacticalOutcome>
+  } | null = null
   private continuationRejection: string | undefined
   private readonly unsubscribe: () => void
   private readonly perspectiveParticipantId: PlayerId
@@ -424,6 +437,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   }
 
   private takePlanCommit(request: AiDecisionRequest): AiDecisionResponse | null {
+    const started = this.now()
     const cached = this.planCommit
     this.planCommit = null
     if (!cached || request.phase !== 'action') return null
@@ -444,10 +458,20 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
 
     const selectedActionId = cached.response.choice.plan.firstActionId
     if (!request.actionIds.includes(selectedActionId)) return null
-    const selectedAction = this.currentLegalActions().find(
-      (action) => action.id === selectedActionId
+    const legal = this.currentLegalActions().filter((action) =>
+      request.actionIds.includes(action.id)
     )
+    const selectedAction = legal.find((action) => action.id === selectedActionId)
     if (!selectedAction) return null
+    if (this.avoidableTerminalLoss(selectedAction, legal)) return null
+    if (
+      this.invalidatesAttackOrder(
+        request,
+        selectedAction.command,
+        cached.response.usage?.decisionPriority === 'verified-win'
+      )
+    )
+      return null
     const actionOutcome =
       cached.response.usage?.decisionPriority === 'verified-win'
         ? { penalty: 0 }
@@ -482,7 +506,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         expectedResult: cached.response.reason,
         planUpdate: null
       },
-      durationMs: 0,
+      durationMs: Math.max(0, this.now() - started),
       finishReason: 'expert-plan-commit-cache'
     }
     this.rememberContinuation(request, response)
@@ -493,6 +517,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     request: AiDecisionRequest,
     fallback = true
   ): AiDecisionResponse | null {
+    const started = this.now()
     const win = this.verifiedWinResponse(request)
     if (win) return win
     const continuation = this.continuation
@@ -506,7 +531,10 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
 
     const plannedIntent = continuation.actions[continuation.nextIndex]
     if (!plannedIntent) return null
-    const selectedAction = this.currentLegalActions().find(
+    const legal = this.currentLegalActions().filter((action) =>
+      request.actionIds.includes(action.id)
+    )
+    const selectedAction = legal.find(
       (action) =>
         request.actionIds.includes(action.id) &&
         sameAiIntent(
@@ -515,6 +543,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         )
     )
     if (!selectedAction) return null
+    if (this.avoidableTerminalLoss(selectedAction, legal)) return null
+    if (
+      this.invalidatesAttackOrder(
+        request,
+        selectedAction.command,
+        continuation.provenWin
+      )
+    )
+      return null
     const continuationOutcome = !continuation.provenWin
       ? createExpertActionInspector(
           this.session.match.getCheckpoint(),
@@ -567,7 +604,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
           'Continue the previously searched line while its next step remains legal.',
         planUpdate: null
       },
-      durationMs: 0,
+      durationMs: Math.max(0, this.now() - started),
       finishReason: fallback ? 'expert-continuation-fallback' : 'expert-continuation',
       usage: {
         policyRevision: EXPERT_AI_POLICY_REVISION,
@@ -603,7 +640,11 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     request: AiDecisionRequest,
     response: AiDecisionResponse
   ): AiDecisionResponse {
-    if (request.phase === 'mulligan') return response
+    if (
+      request.phase === 'mulligan' ||
+      this.session.getState().revision !== request.expectedRevision
+    )
+      return response
     const selectedId =
       'plan' in response.choice
         ? response.choice.plan.firstActionId
@@ -617,6 +658,9 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     )
     const state = this.session.getState()
     const selected = legal.find((action) => action.id === selectedId)
+    if (!selected) return response
+    const terminal = this.createTerminalInspector()
+    const terminalLoss = terminal(selected.command) === 'loss'
     const inspect = createExpertActionInspector(
       this.session.match.getCheckpoint(),
       this.perspectiveParticipantId
@@ -628,7 +672,11 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         this.perspectiveParticipantId
       ) > 0 ||
       ['no-payoff', 'opponent-heal'].includes(inspect(action.command).reason ?? '')
-    if (!selected || !unsafe(selected)) return response
+    if (
+      !terminalLoss &&
+      (response.usage?.decisionPriority === 'verified-win' || !unsafe(selected))
+    )
+      return response
 
     const consensus = Array.isArray(response.usage?.candidateConsensus)
       ? response.usage.candidateConsensus
@@ -641,13 +689,19 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         return typeof entry.candidateId === 'string' ? entry.candidateId : null
       })
       .filter((candidateId): candidateId is string => candidateId !== null)
-    const replacement =
-      rankedIds
-        .map((candidateId) => legal.find((action) => action.id === candidateId))
-        .find((action) => action !== undefined && !unsafe(action)) ??
-      legal.find((action) => action.command.type === 'end-turn') ??
-      legal.find((action) => !unsafe(action)) ??
-      legal[0]
+    const replacement = [
+      ...rankedIds.map((candidateId) =>
+        legal.find((action) => action.id === candidateId)
+      ),
+      legal.find((action) => action.command.type === 'end-turn'),
+      ...legal
+    ].find(
+      (action) =>
+        action !== undefined &&
+        action.id !== selected.id &&
+        terminal(action.command) !== 'loss' &&
+        (terminalLoss || action.command.type === 'end-turn' || !unsafe(action))
+    )
     if (!replacement) return response
 
     const intent = aiActionIntent(replacement.command, this.opponentParticipantId())
@@ -670,7 +724,9 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       choice = {
         actionId: replacement.id,
         intent,
-        expectedResult: 'Avoid unpaid damage to a friendly character.',
+        expectedResult: terminalLoss
+          ? 'Avoid a certain immediate terminal loss.'
+          : 'Avoid unpaid damage to a friendly character.',
         planUpdate: null
       }
     } else return response
@@ -681,9 +737,13 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       choice,
       usage: {
         ...(response.usage ?? {}),
+        // An override invalidates the worker's claimed winning line.
+        decisionPriority: 'tactical-safety',
         tacticalOverride: true,
-        actionOutcomeReason:
-          inspect(selected.command).reason ?? 'unpaid-friendly-damage',
+        terminalSafety: { ...terminal.stats },
+        actionOutcomeReason: terminalLoss
+          ? 'immediate-terminal-loss'
+          : (inspect(selected.command).reason ?? 'unpaid-friendly-damage'),
         plannedActionIntents: [
           {
             type: intent.type,
@@ -695,6 +755,88 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         ]
       }
     }
+  }
+
+  private invalidatesAttackOrder(
+    request: AiDecisionRequest,
+    command: TurnMatchCommand,
+    provenWin = false
+  ): boolean {
+    if (provenWin || command.type !== 'attack-character') return false
+    const started = this.now()
+    const deadline = started + this.remainingBudget(request)
+    const changed = createExpertAttackOrderInspector(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      () => this.now() >= deadline
+    )(command)
+    this.searchUsedMs += Math.max(0, this.now() - started)
+    if (changed) {
+      this.continuationRejection = 'attack-before-setup'
+      this.continuation = null
+      this.planCommit = null
+    }
+    return changed
+  }
+
+  private createTerminalInspector() {
+    const started = this.now()
+    const checkpoint = this.session.match.getCheckpoint()
+    if (this.terminalCheck?.revision !== checkpoint.state.revision)
+      this.terminalCheck = {
+        revision: checkpoint.state.revision,
+        outcomes: new Map()
+      }
+    // A new selection gets its own cap, so earlier replacement probes cannot
+    // exhaust verification of a newly selected action at the same revision.
+    const inspect = createExpertTerminalInspector(
+      checkpoint,
+      this.perspectiveParticipantId,
+      undefined,
+      this.terminalCheck.outcomes,
+      () =>
+        this.now() - started >= EXPERT_TERMINAL_SAFETY_MAX_MS ||
+        this.searchUsedMs >= this.budget.searchBudgetMs ||
+        this.now() - this.turnStartedAt >=
+          this.budget.turnBudgetMs -
+            EXPERT_AI_PRESENTATION_RESERVE_MS -
+            EXPERT_AI_DISPATCH_RESERVE_MS
+    )
+    this.searchUsedMs += Math.max(0, this.now() - started)
+    return Object.assign(
+      (command: Parameters<typeof inspect>[0]) => {
+        const probeStarted = this.now()
+        const outcome = inspect(command)
+        this.searchUsedMs += Math.max(0, this.now() - probeStarted)
+        return outcome
+      },
+      { stats: inspect.stats }
+    )
+  }
+
+  private avoidableTerminalLoss(
+    selected: ReturnType<ExpertAiDecisionApi['currentLegalActions']>[number],
+    legal: ReturnType<ExpertAiDecisionApi['currentLegalActions']>
+  ): boolean {
+    const inspect = this.createTerminalInspector()
+    if (inspect(selected.command) !== 'loss') return false
+    const alternatives = [
+      legal.find((action) => action.command.type === 'end-turn'),
+      ...legal
+    ]
+    if (
+      !alternatives.some(
+        (action) =>
+          action !== undefined &&
+          action.id !== selected.id &&
+          inspect(action.command) !== 'loss'
+      )
+    )
+      return false
+    this.continuationRejection = 'immediate-terminal-loss'
+    this.continuation = null
+    this.planCommit = null
+    return true
   }
 
   private opponentParticipantId(): PlayerId {
@@ -973,13 +1115,12 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   ): void {
     const guarded =
       this.verifiedWinResponse(pending.request) ??
-      (response.usage?.decisionPriority === 'verified-win'
-        ? response
-        : this.guardUnpaidDamageDecision(pending.request, response))
+      this.guardUnpaidDamageDecision(pending.request, response)
     this.rememberPlanCommit(pending.request, guarded)
     this.rememberContinuation(pending.request, guarded)
     pending.resolve({
       ...guarded,
+      durationMs: Math.max(guarded.durationMs, this.now() - pending.startedAt),
       usage: {
         ...guarded.usage,
         policyRevision: EXPERT_AI_POLICY_REVISION,

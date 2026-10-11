@@ -9,7 +9,11 @@ import type { GameBoardSession } from '../game-board-session'
 import { expertCoinHeroPowerActionPenalty } from './expert-coin-hero-power-policy'
 import { immediateExpertWin } from './expert-tactics'
 import { findExpertTimeoutCombatRescue } from './expert-timeout-combat-rescue'
-import { createExpertActionInspector } from './expert-action-outcome'
+import {
+  createExpertActionInspector,
+  createExpertTerminalInspector,
+  EXPERT_TERMINAL_SAFETY_MAX_MS
+} from './expert-action-outcome'
 import { unpaidActionPenalty } from './expert-ai-action-safety'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
 
@@ -1076,11 +1080,33 @@ export function selectExpertTimeoutFallbackAction(
     return actions.find(
       (action) => canonicalCommandKey(action.command) === canonicalCommandKey(win)
     )
+  const scores = new Map<LocalAction, number>()
+  const guardTerminalLoss = (selected: LocalAction): LocalAction => {
+    const started = performance.now()
+    const terminal = createExpertTerminalInspector(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId,
+      undefined,
+      undefined,
+      () => performance.now() - started >= EXPERT_TERMINAL_SAFETY_MAX_MS
+    )
+    if (terminal(selected.command) !== 'loss') return selected
+    const ranked = [...actions].sort(
+      (left, right) => (scores.get(right) ?? 0) - (scores.get(left) ?? 0)
+    )
+    return (
+      ranked.find(
+        (action) => action !== selected && terminal(action.command) !== 'loss'
+      ) ?? selected
+    )
+  }
   const observation = session.getAiObservation()
   const self = observation.players.find((player) => player.role === 'self')
   const opponent = observation.players.find((player) => player.role === 'opponent')
   if (!self || !opponent)
-    return actions.find((action) => action.command.type === 'end-turn') ?? actions[0]
+    return guardTerminalLoss(
+      actions.find((action) => action.command.type === 'end-turn') ?? actions[0]!
+    )
 
   const ownTaunt = self.board.some((minion) =>
     effectiveBoardMinionKeywords(minion, observation.turnNumber).includes('taunt')
@@ -1118,12 +1144,13 @@ export function selectExpertTimeoutFallbackAction(
         session.remoteParticipantId
       ) *
         100
+    scores.set(action, score)
     if (score > bestScore) {
       best = action
       bestScore = score
     }
   }
-  if (best) return best
+  if (best) return guardTerminalLoss(best)
   const pass = actions.find((action) => action.command.type === 'end-turn')
   if (pass) {
     const rescue = findExpertTimeoutCombatRescue(
@@ -1132,12 +1159,12 @@ export function selectExpertTimeoutFallbackAction(
       legalCommands
     ).command
     if (rescue)
-      return (
+      return guardTerminalLoss(
         actions.find(
           (action) =>
             canonicalCommandKey(action.command) === canonicalCommandKey(rescue)
         ) ?? pass
       )
   }
-  return pass ?? actions[0]
+  return guardTerminalLoss(pass ?? actions[0]!)
 }

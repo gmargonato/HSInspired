@@ -14,6 +14,103 @@ import {
 } from '../../../game-rules/match'
 import { effectiveBoardMinionKeywords } from '../../../game-rules/match/rules/minion-attack-state'
 import { unpaidActionPenalty } from './expert-ai-action-safety'
+import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
+import {
+  revealsTacticalInformation,
+  terminalOutcome,
+  type TacticalOutcome
+} from '../../../game-rules/match/ai/tactical-search'
+
+export const EXPERT_TERMINAL_SAFETY_MAX_DISPATCHES = 32
+export const EXPERT_TERMINAL_SAFETY_MAX_MS = 25
+
+export interface ExpertTerminalInspector {
+  (command: TurnMatchCommand): TacticalOutcome
+  readonly stats: {
+    probes: number
+    cacheHits: number
+    workAbstentions: number
+    timeAbstentions: number
+  }
+}
+
+/** One command only: never turn a predicted opponent reply into a certain loss. */
+export function inspectExpertTerminalAction(
+  root: OpeningMatchAnalysis,
+  actorId: PlayerId,
+  command: TurnMatchCommand
+): TacticalOutcome {
+  return root.analyze((fork) => {
+    const state = fork.getState()
+    if (
+      !fork.getAiObservation ||
+      !fork.getRandomState ||
+      state.phase !== 'turns' ||
+      state.players.some(
+        (player) =>
+          player.participantId !== actorId &&
+          player.secrets?.some((secret) => !secret.revealed)
+      )
+    )
+      return 'unknown'
+    const rng = JSON.stringify(fork.getRandomState())
+    const result = fork.dispatch(command)
+    if (
+      !result.accepted ||
+      rng !== JSON.stringify(fork.getRandomState()) ||
+      revealsTacticalInformation(result.events)
+    )
+      return 'unknown'
+    return terminalOutcome(result.state, actorId)
+  })
+}
+
+/**
+ * Selected-first callers share one fair fork and at most 32 one-command probes.
+ * The cap bounds dispatches, not wall time; unknown (including exhaustion) is
+ * never a safety proof. Repeated cache checks at the same revision are free.
+ */
+export function createExpertTerminalInspector(
+  checkpoint: OpeningMatchCheckpoint,
+  actorId: PlayerId,
+  maxDispatches = EXPERT_TERMINAL_SAFETY_MAX_DISPATCHES,
+  outcomes = new Map<string, TacticalOutcome>(),
+  shouldStop: () => boolean = () => false
+): ExpertTerminalInspector {
+  let match: ReturnType<typeof createOpeningMatchFromCheckpoint> | undefined
+  let dispatched = 0
+  let first = true
+  const stats = { probes: 0, cacheHits: 0, workAbstentions: 0, timeAbstentions: 0 }
+  const inspect = (command: TurnMatchCommand): TacticalOutcome => {
+    const selected = first
+    first = false
+    const key = canonicalCommandKey(command)
+    const cached = outcomes.get(key)
+    if (cached !== undefined) {
+      stats.cacheHits++
+      return cached
+    }
+    if (dispatched >= maxDispatches) {
+      stats.workAbstentions++
+      return 'unknown'
+    }
+    if (!selected && shouldStop()) {
+      stats.timeAbstentions++
+      return 'unknown'
+    }
+    match ??= createOpeningMatchFromCheckpoint(
+      createFairHypothesisCheckpoint(checkpoint, actorId, 0x71ac71c)
+    )
+    dispatched++
+    stats.probes++
+    const outcome = match.analyze((fork) =>
+      inspectExpertTerminalAction(fork, actorId, command)
+    )
+    outcomes.set(key, outcome)
+    return outcome
+  }
+  return Object.assign(inspect, { stats })
+}
 
 export interface ExpertActionOutcome {
   readonly penalty: number
@@ -23,6 +120,7 @@ export interface ExpertActionOutcome {
     | 'opponent-heal'
     | 'imminent-clear'
     | 'attack-before-buff'
+    | 'attack-before-setup'
     | 'wasted-before-clear'
 }
 

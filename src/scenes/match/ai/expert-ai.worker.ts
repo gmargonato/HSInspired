@@ -144,6 +144,9 @@ function aggregateResponse(
         iterations: result.trace?.sampleCount ?? null,
         rootLegalActionCount: result.trace?.rootLegalActionCount ?? null,
         boundaryEvaluations: result.trace?.boundaryEvaluations ?? 0,
+        orderingReview: result.trace?.orderingReview
+          ? { ...result.trace.orderingReview }
+          : null,
         actionOutcomes: (result.trace?.candidates ?? [])
           .filter((candidate) => candidate.actionOutcomeReason)
           .slice(0, 8)

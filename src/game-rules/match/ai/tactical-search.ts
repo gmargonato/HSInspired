@@ -5,6 +5,10 @@ import type {
   OpeningMatchState
 } from '../opening-match-types'
 import type { TurnMatchCommand } from '../turn-match'
+import {
+  boardMinionAttacksUsed,
+  effectiveBoardMinionKeywords
+} from '../rules/minion-attack-state'
 import { canonicalCommandKey, enumerateLegalCommands } from './legal-commands'
 
 export type TacticalOutcome = 'win' | 'loss' | 'draw' | 'ongoing' | 'unknown'
@@ -76,6 +80,12 @@ export interface TacticalSearchResult {
   readonly complete: boolean
 }
 
+function isFaceAttackLine(line: TacticalLine): boolean {
+  return line.commands.every(
+    (command) => command.type === 'attack-character' && command.defender.kind === 'hero'
+  )
+}
+
 function tacticalPositionValue(state: OpeningMatchState, playerId: PlayerId): number {
   return state.players.reduce((total, player) => {
     const sign = player.participantId === playerId ? 1 : -1
@@ -94,6 +104,53 @@ function tacticalPositionValue(state: OpeningMatchState, playerId: PlayerId): nu
           ))
     )
   }, 0)
+}
+
+/**
+ * A completion hint, never a lethal proof. Check ready damage before a useful
+ * setup can be pruned in favor of developing another body's position score.
+ * Legality supplies readiness, Taunt, Rush and attack-target restrictions.
+ */
+function faceAttackPressure(root: OpeningMatchAnalysis, playerId: PlayerId): number {
+  const state = root.getState()
+  const self = state.players.find((player) => player.participantId === playerId)!
+  const enemy = state.players.find((player) => player.participantId !== playerId)!
+  const targets = root.getLegality(playerId).legalAttackTargets
+  let damage = 0
+  for (const [id, defenders] of Object.entries(targets)) {
+    if (!defenders.some((defender) => defender.kind === 'hero')) continue
+    if (id === `${playerId}:hero`) {
+      const hero = self.hero
+      const keywords = hero.keywords ?? []
+      const limit =
+        hero.maxAttacksPerTurn ??
+        (keywords.includes('mega-windfury') ? 4 : keywords.includes('windfury') ? 2 : 1)
+      const used =
+        hero.attacksUsedThisTurn ??
+        (hero.lastAttackedOnTurn === state.turnNumber ? 1 : 0)
+      const remaining = Math.max(0, limit - used)
+      damage += Math.max(0, hero.attack) * remaining
+      damage +=
+        Math.max(0, self.weapon?.attack ?? 0) *
+        Math.min(remaining, self.weapon?.durability ?? 0)
+    } else {
+      const minion = self.board.find((entry) => entry.instanceId === id)
+      if (!minion) continue
+      const keywords = effectiveBoardMinionKeywords(minion, state.turnNumber)
+      const limit =
+        minion.maxAttacksPerTurn ??
+        (keywords.includes('mega-windfury') ? 4 : keywords.includes('windfury') ? 2 : 1)
+      damage +=
+        Math.max(0, minion.attack) *
+        Math.max(
+          0,
+          limit +
+            (minion.extraAttacksThisTurn ?? 0) -
+            boardMinionAttacksUsed(minion, state.turnNumber)
+        )
+    }
+  }
+  return damage - enemy.hero.health - enemy.hero.armor
 }
 
 /** No platform clock: the caller owns elapsed time, cancellation and work limits. */
@@ -121,12 +178,87 @@ export function searchTactics(
   const lines: TacticalLine[] = []
   const seen = new Set<string>()
   const stop = () => nodes >= maxNodes || options.shouldStop?.() === true
+  // Complete a promising ready-damage line without waiting for every breadth
+  // layer. This is one deterministic attack order, not another search budget.
+  // Failed probes are discarded; only an engine-proven win escapes this fork.
+  const finishFaceAttacks = (
+    root: OpeningMatchAnalysis,
+    parent: TacticalLine
+  ): TacticalLine | null =>
+    root.analyze((fork) => {
+      const commands = [...parent.commands]
+      while (commands.length < maxDepth) {
+        if (stop()) {
+          exhausted = true
+          complete = false
+          return null
+        }
+        const before = fork.getState()
+        if (
+          before.players.some(
+            (player) =>
+              player.participantId !== playerId &&
+              player.secrets?.some((secret) => !secret.revealed)
+          )
+        )
+          return null
+        const attacks = enumerateLegalCommands(fork, playerId).filter(
+          (command) =>
+            command.type === 'attack-character' && command.defender.kind === 'hero'
+        )
+        const command = attacks.find(
+          (attack) =>
+            commands.length > 0 ||
+            !options.commands ||
+            options.commands.some(
+              (allowed) => canonicalCommandKey(allowed) === canonicalCommandKey(attack)
+            )
+        )
+        if (!command) return null
+        if (stop()) {
+          exhausted = true
+          complete = false
+          return null
+        }
+        const rng = JSON.stringify(fork.getRandomState?.())
+        nodes++
+        const result = fork.dispatch(command)
+        if (
+          !result.accepted ||
+          !fork.getAiObservation ||
+          !fork.getRandomState ||
+          rng !== JSON.stringify(fork.getRandomState()) ||
+          revealsTacticalInformation(result.events)
+        )
+          return null
+        commands.push(command)
+        const outcome = terminalOutcome(result.state, playerId)
+        if (outcome === 'win')
+          return {
+            commands,
+            outcome,
+            proven: true,
+            value:
+              options.evaluate?.(fork) ?? tacticalPositionValue(result.state, playerId)
+          }
+        if (
+          outcome !== 'ongoing' ||
+          result.state.activePlayerId !== playerId ||
+          result.state.pendingDiscover ||
+          result.state.pendingCardChoice ||
+          result.state.pendingResolution
+        )
+          return null
+      }
+      return null
+    })
   let frontier: TacticalLine[] = [
     { commands: [], outcome: 'ongoing', proven: true, value: 0 }
   ]
 
   for (let depth = 0; depth < maxDepth && frontier.length && !win; depth++) {
     const next: TacticalLine[] = []
+    let completion: TacticalLine | null = null
     for (const parent of frontier) {
       if (stop()) {
         exhausted = true
@@ -215,6 +347,16 @@ export function searchTactics(
               if (!seen.has(key)) {
                 seen.add(key)
                 next.push(line)
+                // The one-action guard and final depth have no next frontier.
+                if (!completion && depth + 1 < maxDepth) {
+                  const hint = faceAttackPressure(child, playerId)
+                  if (hint >= 0) {
+                    const finished = finishFaceAttacks(child, line)
+                    // Keep the proof, but let the current breadth layer find a
+                    // shorter direct win before accepting this longer line.
+                    if (finished) completion = finished
+                  }
+                }
               }
             }
             return line
@@ -224,6 +366,47 @@ export function searchTactics(
         }
       })
       if (win) break
+    }
+    if (
+      !win &&
+      completion &&
+      depth === 0 &&
+      maxDepth > 1 &&
+      !isFaceAttackLine(completion)
+    ) {
+      if (stop()) {
+        exhausted = true
+        complete = false
+      } else {
+        const state = root.getState()
+        const allowsFaceAttack =
+          !options.commands ||
+          options.commands.some(
+            (command) =>
+              command.type === 'attack-character' && command.defender.kind === 'hero'
+          )
+        if (
+          allowsFaceAttack &&
+          state.phase === 'turns' &&
+          state.activePlayerId === playerId &&
+          !state.pendingDiscover &&
+          !state.pendingCardChoice &&
+          !state.pendingResolution &&
+          faceAttackPressure(root, playerId) >= 0
+        ) {
+          // Preserve the ordinary direct-win scan first. Before adopting a
+          // setup-prefixed proof, see whether existing attacks already win.
+          // Failure or exhaustion keeps the prior proof; all work is shared.
+          const attackOnly = finishFaceAttacks(root, frontier[0]!)
+          if (attackOnly) completion = attackOnly
+        }
+      }
+    }
+    // A deadline may leave the layer incomplete; an already engine-proven
+    // completion remains usable, without claiming it is the shortest win.
+    if (!win && completion) {
+      win = completion
+      lines.push(completion)
     }
     next.sort(
       (left, right) =>
