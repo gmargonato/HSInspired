@@ -29,6 +29,7 @@ import {
   type TacticalOutcome
 } from '../../../game-rules/match/ai/tactical-search'
 import { immediateExpertWin } from './expert-tactics'
+import { createExpertExpiringAttackInspector } from './expert-expiring-hero-attack'
 import { createExpertAttackOrderInspector } from './expert-action-ordering'
 import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
 import { EXPERT_AI_POLICY_REVISION } from './expert-ai-worker-protocol'
@@ -509,8 +510,9 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       durationMs: Math.max(0, this.now() - started),
       finishReason: 'expert-plan-commit-cache'
     }
-    this.rememberContinuation(request, response)
-    return response
+    const guarded = this.guardExpiringAttackPass(request, response)
+    this.rememberContinuation(request, guarded)
+    return guarded
   }
 
   private takeApplicableContinuation(
@@ -619,8 +621,9 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         }))
       }
     }
-    this.rememberContinuation(request, response)
-    return response
+    const guarded = this.guardExpiringAttackPass(request, response)
+    this.rememberContinuation(request, guarded)
+    return guarded
   }
 
   private currentLegalActions() {
@@ -837,6 +840,161 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     this.continuation = null
     this.planCommit = null
     return true
+  }
+
+  private guardExpiringAttackPass(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    const knownPassOutcome =
+      this.terminalCheck?.revision === request.expectedRevision
+        ? this.terminalCheck.outcomes.get(
+            canonicalCommandKey({
+              type: 'end-turn',
+              participantId: this.perspectiveParticipantId
+            })
+          )
+        : undefined
+    if (
+      request.phase === 'mulligan' ||
+      knownPassOutcome === 'win' ||
+      knownPassOutcome === 'draw' ||
+      response.usage?.decisionPriority === 'verified-win' ||
+      this.session.getState().revision !== request.expectedRevision
+    )
+      return response
+    const started = this.now()
+    if (!Number.isFinite(started)) return response
+    let reviewStats:
+      ReturnType<typeof createExpertExpiringAttackInspector>['stats'] | undefined
+    let transition:
+      | {
+          reason: string
+          fromActionId: string
+          toActionId: string
+          fromCommandKey: string
+          toCommandKey: string
+        }
+      | undefined
+    const review = (): AiDecisionResponse => {
+      const remaining = this.remainingBudget(request)
+      if (!Number.isFinite(remaining) || remaining <= 0) return response
+      const selectedId =
+        'plan' in response.choice
+          ? response.choice.plan.firstActionId
+          : 'actionId' in response.choice
+            ? response.choice.actionId
+            : null
+      const legal = this.currentLegalActions().filter((action) =>
+        request.actionIds.includes(action.id)
+      )
+      const selected = legal.find((action) => action.id === selectedId)
+      if (selected?.command.type !== 'end-turn') return response
+      const deadline = started + remaining
+      const inspect = createExpertExpiringAttackInspector(
+        this.session.match.getCheckpoint(),
+        this.perspectiveParticipantId,
+        () => this.now() >= deadline,
+        this.now
+      )
+      reviewStats = inspect.stats
+      const consensus = Array.isArray(response.usage?.candidateConsensus)
+        ? response.usage.candidateConsensus
+        : []
+      const rankedIds = consensus.flatMap((candidate) =>
+        candidate &&
+        typeof candidate === 'object' &&
+        !Array.isArray(candidate) &&
+        typeof candidate.candidateId === 'string'
+          ? [candidate.candidateId]
+          : []
+      )
+      const replacement = [
+        ...rankedIds.map((id) => legal.find((action) => action.id === id)),
+        ...legal
+      ].find((action) => action !== undefined && inspect(action.command))
+      if (!replacement) return response
+      const intent = aiActionIntent(replacement.command, this.opponentParticipantId())
+      const priorSafety = response.usage?.decisionPriority === 'tactical-safety'
+      const preference = `Use otherwise expiring hero damage: ${replacement.description}.`
+      const reason = priorSafety ? `${response.reason} ${preference}` : preference
+      transition = {
+        reason: 'unused-expiring-hero-attack',
+        fromActionId: selected.id,
+        toActionId: replacement.id,
+        fromCommandKey: canonicalCommandKey(selected.command),
+        toCommandKey: canonicalCommandKey(replacement.command)
+      }
+      let choice: AiDecisionChoice
+      if ('plan' in response.choice) {
+        const plan = response.choice.plan
+        choice = {
+          plan: {
+            ...plan,
+            objective: reason,
+            firstActionId: replacement.id,
+            candidates: plan.candidates.map((candidate, index) =>
+              index === plan.preferred
+                ? { ...candidate, sequence: [replacement.description] }
+                : candidate
+            )
+          }
+        }
+      } else if ('actionId' in response.choice) {
+        choice = {
+          actionId: replacement.id,
+          intent,
+          expectedResult: reason,
+          planUpdate: null
+        }
+      } else return response
+      this.continuation = null
+      this.planCommit = null
+      return {
+        ...response,
+        reason,
+        choice,
+        usage: {
+          ...response.usage,
+          decisionPriority: priorSafety ? 'tactical-safety' : 'tactical-preference',
+          tacticalOverride: true,
+          actionOutcomeReason: priorSafety
+            ? (response.usage!.actionOutcomeReason ?? 'unused-expiring-hero-attack')
+            : 'unused-expiring-hero-attack',
+          plannedActionIntents: [
+            {
+              type: intent.type,
+              source: intent.source,
+              targets: [...intent.targets],
+              position: intent.position,
+              option: intent.option
+            }
+          ]
+        }
+      }
+    }
+    let result: AiDecisionResponse
+    let elapsed = 0
+    try {
+      result = review()
+    } finally {
+      const measured = this.now() - started
+      if (Number.isFinite(measured) && measured >= 0) {
+        elapsed = measured
+        this.searchUsedMs += elapsed
+      }
+    }
+    if (elapsed === 0 && !reviewStats) return result
+    return {
+      ...result,
+      durationMs: result.durationMs + elapsed,
+      usage: reviewStats
+        ? {
+            ...result.usage,
+            expiringAttackReview: { ...reviewStats, ...transition, durationMs: elapsed }
+          }
+        : result.usage
+    }
   }
 
   private opponentParticipantId(): PlayerId {
@@ -1113,9 +1271,10 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     pending: PendingDecision,
     response: AiDecisionResponse
   ): void {
-    const guarded =
+    const safe =
       this.verifiedWinResponse(pending.request) ??
       this.guardUnpaidDamageDecision(pending.request, response)
+    const guarded = this.guardExpiringAttackPass(pending.request, safe)
     this.rememberPlanCommit(pending.request, guarded)
     this.rememberContinuation(pending.request, guarded)
     pending.resolve({
