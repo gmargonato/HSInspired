@@ -30,6 +30,12 @@ export interface CardTextStyle {
 
 /** Retained for the renderer's optional curved-text support. */
 export interface CardTextCurve {
+  /** Optional normalized horizontal controls for a 2D, arc-length-spaced path. */
+  readonly control1X?: number
+  readonly control2X?: number
+  readonly pathRotationDegrees?: number
+  /** How closely letters rotate with the curve tangent (1 = fully aligned). */
+  readonly rotationScale?: number
   readonly startY: number
   readonly control1Y: number
   readonly control2Y: number
@@ -93,9 +99,10 @@ export interface CardTextNode {
 
 export interface CardArtworkNode {
   readonly kind: 'artwork'
+  readonly shape?: 'ellipse' | 'arch'
   readonly id: string
   readonly position: CardPoint
-  /** Native-size square artwork bounds in card coordinates. */
+  /** Artwork cover-fit and clipping bounds in card coordinates. */
   readonly bounds: CardBounds
   readonly zIndex: number
   readonly visible?: boolean

@@ -14,7 +14,7 @@ import { CardAssetResolver } from '../assets/card-asset-resolver'
 import { setPremiumMode } from './premium-appearance'
 import { describe, expect, it } from 'vitest'
 import { cardCostColor } from './card-cost-presentation'
-import { buildCardRenderTree } from './card-layout'
+import { buildCardRenderTree } from './card-render-builder'
 import { supportsPremiumFormat } from '../../game-rules/progression/premium-support'
 
 describe('card cost presentation', () => {
@@ -124,7 +124,7 @@ describe('runtime card stat presentation', () => {
       kind: 'image',
       assetKey: 'card.frame.legendary.spell',
       transform: {
-        position: { x: 370, y: -35 },
+        position: { x: 370, y: 10 },
         anchor: { x: 0.5, y: 0 }
       }
     })
@@ -170,7 +170,7 @@ describe('runtime card stat presentation', () => {
 
     expect(frame(standard)).toMatchObject({
       kind: 'image',
-      assetKey: 'card.frame.hero'
+      assetKey: 'card.frame.hero.warlock'
     })
     expect(frame(premium)).toMatchObject({
       kind: 'image',

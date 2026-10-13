@@ -73,7 +73,18 @@ export class CardInspectorControls extends Container {
     this.refresh()
   }
 
+  private readonly cardPicker = document.createElement('select')
+
   refresh(): void {
+    this.cardPicker.replaceChildren(
+      ...this.model.availableCards.map((card) => {
+        const option = document.createElement('option')
+        option.value = card.id
+        option.textContent = card.name + ' (' + card.rarity + ')'
+        option.selected = card.id === this.model.selectedCard?.id
+        return option
+      })
+    )
     const singleMask = !this.model.hasSecondaryMask
     this.rootElement.classList.toggle('is-single-mask', singleMask)
     for (const [classId, button] of this.classButtons) {
@@ -95,10 +106,9 @@ export class CardInspectorControls extends Container {
     this.status.hidden = !hasMask
     this.columns.hidden = !hasMask
     this.previewNotice.hidden = hasMask
-    this.previewNotice.textContent =
-      this.model.selectedTemplate === 'hero'
-        ? 'Hero cards use dedicated standard and premium frames and have no editable class mask.'
-        : 'Weapon cards have no editable class mask. Switch between Standard and Premium to preview both frames.'
+    this.previewNotice.textContent = this.model.selectedPremium
+      ? 'Neutral premium cards keep their uncolored frame.'
+      : 'Standard cards use baked-in class colors. Select Premium to edit its class mask.'
     for (const [channel, panel] of this.channelPanels) {
       panel.hidden = singleMask && channel === 'secondary'
       this.blendSelects.get(channel)!.value = this.model.getLayer(channel).blendMode
@@ -171,7 +181,12 @@ export class CardInspectorControls extends Container {
       premiumPicker.appendChild(button)
     }
 
-    toolbar.append(classPicker, templatePicker, premiumPicker)
+    this.cardPicker.setAttribute('aria-label', 'Preview card')
+    this.cardPicker.addEventListener('change', () => {
+      this.model.selectedCardId = this.cardPicker.value
+      this.options.onSelectionChanged()
+    })
+    toolbar.append(classPicker, templatePicker, premiumPicker, this.cardPicker)
     this.rootElement.appendChild(toolbar)
 
     this.columns.append(

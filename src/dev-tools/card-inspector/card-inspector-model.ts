@@ -117,8 +117,9 @@ function replaceClassLayer(
 }
 
 export class CardInspectorModel {
-  readonly classes = CARD_CLASS_BUILDER_CLASSES
-  selectedClass: ClassFrameClassId = CARD_CLASS_BUILDER_CLASSES[0]
+  readonly classes = [...CARD_CLASS_BUILDER_CLASSES, 'Neutral'] as const
+  selectedClass: ClassFrameClassId | 'Neutral' = CARD_CLASS_BUILDER_CLASSES[0]
+  selectedCardId: string | undefined
   private template: CardLabTemplate = 'minion'
   private premium = false
 
@@ -149,22 +150,30 @@ export class CardInspectorModel {
   }
 
   get hasSecondaryMask(): boolean {
-    return !this.premium && this.template === 'minion'
+    return false
   }
 
   get maskTemplate(): ClassFrameTemplate | undefined {
-    return this.template === 'minion' || this.template === 'spell'
-      ? this.template
-      : undefined
+    return this.premium && this.selectedClass !== 'Neutral' ? this.template : undefined
   }
 
-  hasCardForClass(classId: ClassFrameClassId): boolean {
+  hasCardForClass(classId: ClassFrameClassId | 'Neutral'): boolean {
     return CARD_CATALOG.all.some(
       (card) => card.cardClass === classId && card.type.toLowerCase() === this.template
     )
   }
 
+  get availableCards(): readonly CardDefinition[] {
+    return CARD_CATALOG.all.filter(
+      (card) =>
+        card.cardClass === this.selectedClass &&
+        card.type.toLowerCase() === this.template
+    )
+  }
+
   get selectedCard(): CardDefinition | undefined {
+    const selected = this.availableCards.find((card) => card.id === this.selectedCardId)
+    if (selected) return selected
     return CARD_CATALOG.all.find(
       (card) =>
         card.cardClass === this.selectedClass &&
@@ -173,7 +182,9 @@ export class CardInspectorModel {
   }
 
   getLayer(channel: ClassFrameMaskChannel): CardClassColorLayer {
-    return this.config.classes[this.selectedClass][channel]
+    return this.config.classes[
+      this.selectedClass === 'Neutral' ? 'Druid' : this.selectedClass
+    ][channel]
   }
 
   getNumeric(channel: ClassFrameMaskChannel, key: NumericControlKey): number {
@@ -200,7 +211,7 @@ export class CardInspectorModel {
   }
 
   setBlendMode(channel: ClassFrameMaskChannel, blendMode: ClassFrameBlendMode): void {
-    if (!this.maskTemplate) return
+    if (!this.maskTemplate || this.selectedClass === 'Neutral') return
     const config = this.config
     updateClassFrameConfig(
       replaceClassLayer(config, this.selectedClass, channel, {
@@ -223,7 +234,7 @@ export class CardInspectorModel {
     value: number
   ): void {
     const template = this.maskTemplate
-    if (!template) return
+    if (!template || this.selectedClass === 'Neutral') return
     const normalized = this.normalize(key, value)
     const config = this.config
     if (key === 'offsetX' || key === 'offsetY') {

@@ -114,11 +114,15 @@ function layerAppearance(
     blendMode: layer.blendMode,
     premiumOffsets: {
       minion: config.offsets.premium.minion.primary,
-      spell: config.offsets.premium.spell.primary
+      spell: config.offsets.premium.spell.primary,
+      weapon: config.offsets.premium.weapon.primary,
+      hero: config.offsets.premium.hero.primary
     },
     offsets: {
       minion: config.offsets.minion[channel],
-      spell: config.offsets.spell.primary
+      spell: config.offsets.spell.primary,
+      weapon: { x: 0, y: 0 },
+      hero: { x: 0, y: 0 }
     }
   }
 }

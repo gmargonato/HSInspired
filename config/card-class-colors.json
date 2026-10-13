@@ -5,9 +5,9 @@
       "primary": {
         "hue": 24.1,
         "saturation": 1,
-        "lightness": 0.237,
-        "opacity": 0.726,
-        "blendMode": "soft-light"
+        "lightness": 0.19,
+        "opacity": 1,
+        "blendMode": "multiply"
       },
       "secondary": {
         "hue": 40.8,
@@ -21,8 +21,8 @@
       "primary": {
         "hue": 125.3,
         "saturation": 1,
-        "lightness": 0.327,
-        "opacity": 0.614,
+        "lightness": 0.23,
+        "opacity": 1,
         "blendMode": "multiply"
       },
       "secondary": {
@@ -37,9 +37,9 @@
       "primary": {
         "hue": 214.8,
         "saturation": 1,
-        "lightness": 0.483,
-        "opacity": 0.579,
-        "blendMode": "color"
+        "lightness": 0.72,
+        "opacity": 1,
+        "blendMode": "multiply"
       },
       "secondary": {
         "hue": 40,
@@ -53,9 +53,9 @@
       "primary": {
         "hue": 36.7,
         "saturation": 0.638,
-        "lightness": 0.626,
-        "opacity": 0.991,
-        "blendMode": "overlay"
+        "lightness": 0.47,
+        "opacity": 1,
+        "blendMode": "multiply"
       },
       "secondary": {
         "hue": 53.4,
@@ -71,7 +71,7 @@
         "saturation": 1,
         "lightness": 0.711,
         "opacity": 0.295,
-        "blendMode": "add"
+        "blendMode": "multiply"
       },
       "secondary": {
         "hue": 45,
@@ -101,7 +101,7 @@
       "primary": {
         "hue": 227.5,
         "saturation": 1,
-        "lightness": 0.623,
+        "lightness": 0.51,
         "opacity": 1,
         "blendMode": "multiply"
       },
@@ -117,9 +117,9 @@
       "primary": {
         "hue": 258,
         "saturation": 0.421,
-        "lightness": 0.415,
+        "lightness": 0.38,
         "opacity": 1,
-        "blendMode": "overlay"
+        "blendMode": "multiply"
       },
       "secondary": {
         "hue": 39.7,
@@ -134,8 +134,8 @@
         "hue": 0,
         "saturation": 1,
         "lightness": 0.275,
-        "opacity": 0.767,
-        "blendMode": "overlay"
+        "opacity": 1,
+        "blendMode": "multiply"
       },
       "secondary": {
         "hue": 43.9,
@@ -173,6 +173,18 @@
       "spell": {
         "primary": {
           "x": -2,
+          "y": 0
+        }
+      },
+      "weapon": {
+        "primary": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "hero": {
+        "primary": {
+          "x": 0,
           "y": 0
         }
       }

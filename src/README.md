@@ -39,6 +39,23 @@ src/
 | The bridge exposed to the game window                     | `desktop/preload`                                            |
 | Message schemas shared by the desktop processes           | `desktop/contracts`                                          |
 
+## Card appearance tuning
+
+`visual-components/cards/card-layout.ts` owns positions, sizes, typography, curves,
+and layer order. `CARD_PROFILES` groups the settings by minion, spell, weapon, and
+hero; differing finishes have adjacent `standard` and `premium` entries.
+
+Coordinates use the 620 x 900 card canvas. Positive Y moves down. Name and rarity
+children are relative to their assembly's `position`: move that position to move
+the whole assembly, or change a child's placement to move only that element.
+For example, `CARD_PROFILES.minion.rarity.premium.gem` adjusts the golden minion
+gem, and `slot` adjusts its surround. Premium hero slots are built into the frame.
+
+The asset registry owns authored image dimensions. Display-size adjustments stay
+in the layout. `card-render-builder.ts` selects assets and constructs the semantic
+render tree; it contains no visual calibration values. Restart the development
+session to apply source changes.
+
 ## Startup
 
 Normal startup shows the HTML `app-start.png` splash while application-owned

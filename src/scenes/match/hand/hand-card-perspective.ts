@@ -1,3 +1,4 @@
+import { cardFrameTransform } from '../../../visual-components/cards/card-layout'
 import { Container, PerspectiveMesh, Rectangle, Sprite, type Renderer } from 'pixi.js'
 import type { CardView } from '../../../visual-components/cards/card-view'
 import { MAX_TILT_X_DEG, MAX_TILT_Y_DEG } from './drag-rotator'
@@ -167,9 +168,12 @@ export class HandCardPerspective {
     if (options.outlineTexture) {
       const maskContainer = new Container()
       const maskSprite = new Sprite(options.outlineTexture)
-      maskSprite.position.set(-frame.x, -frame.y)
-      maskSprite.width = cardView.plan.width
-      maskSprite.height = cardView.renderedHeight
+      const frameTransform = cardFrameTransform(cardView.plan.template)
+      maskSprite.position.set(
+        frameTransform.position.x - frame.x,
+        frameTransform.position.y - frame.y
+      )
+      maskSprite.scale.set(frameTransform.scale.x, frameTransform.scale.y)
       maskSprite.eventMode = 'none'
       maskContainer.addChild(maskSprite)
       try {
@@ -205,11 +209,12 @@ export class HandCardPerspective {
         preset: options.outlinePreset ?? 'card',
         silhouette: {
           texture: options.outlineTexture,
+          // Map the aura onto the same transformed frame as the mask above.
           bounds: new Rectangle(
-            -frame.x,
-            -frame.y,
-            cardView.plan.width,
-            cardView.renderedHeight
+            frameTransform.position.x - frame.x,
+            frameTransform.position.y - frame.y,
+            options.outlineTexture.width * frameTransform.scale.x,
+            options.outlineTexture.height * frameTransform.scale.y
           )
         }
       })
@@ -343,9 +348,12 @@ export class HandCardPerspective {
     }
     if (this.resourcesDirty && this.outlineMaskTexture && this.outlineTexture) {
       const mask = new Sprite(this.outlineTexture)
-      mask.position.set(-this.shadowFrame.x, -this.shadowFrame.y)
-      mask.width = this.cardView.plan.width
-      mask.height = this.cardView.renderedHeight
+      const frameTransform = cardFrameTransform(this.cardView.plan.template)
+      mask.position.set(
+        frameTransform.position.x - this.shadowFrame.x,
+        frameTransform.position.y - this.shadowFrame.y
+      )
+      mask.scale.set(frameTransform.scale.x, frameTransform.scale.y)
       const container = new Container()
       container.addChild(mask)
       try {

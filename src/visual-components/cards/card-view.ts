@@ -14,17 +14,14 @@ import 'pixi.js/advanced-blend-modes'
 import type { CardDefinition } from '../../game-rules/content/cards'
 import { supportsPremiumFormat } from '../../game-rules/progression/premium-support'
 import { CardAssetResolver } from '../assets/card-asset-resolver'
+import { CARD_NAME_FIT, CARD_RULES_COMPACT_SPACING } from './card-layout'
 import {
-  CARD_NAME_FIT,
-  CARD_RULES_COMPACT_SPACING,
   formatCardRulesText,
   buildCardLayout,
-  type CardBounds,
   type CardLayout,
-  type CardRenderNode,
-  type CardRenderOptions,
-  type CardTextLayer
-} from './card-layout'
+  type CardRenderOptions
+} from './card-render-builder'
+import type { CardBounds, CardRenderNode, CardTextLayer } from './card-render-tree'
 import { resolveCardTitleFit } from './card-title-fit'
 import {
   classFrameAppearanceFor,
@@ -153,36 +150,97 @@ function cubicBezierDerivative(
   )
 }
 
-function createCurvedText(layer: CardTextLayer): Container {
+function createCurvedText(layer: CardTextLayer, boxWidth: number): Container {
   const textLayer = new Container()
   const curve = layer.curve
   if (!curve) return textLayer
 
+  const measurement = new Text({ text: layer.text, style: layer.style })
+  if (layer.fit === 'width') fitTitleToWidth(measurement, boxWidth)
+  const glyphScale = measurement.scale.x
+  const style = { ...layer.style, fontSize: measurement.style.fontSize }
+  measurement.style.stroke = { color: 0x000000, width: 0 }
   const characters = Array.from(layer.text)
-  const measurementStyle = { ...layer.style, stroke: undefined }
-  const glyphs = characters.map(
-    (character) =>
-      new Text({
-        text: character,
-        style: layer.style,
-        anchor: { x: 0.5, y: 0.5 }
-      })
-  )
-  const glyphWidths = characters.map((character) => {
-    if (character === ' ') return layer.style.fontSize * 0.28
-    return new Text({
-      text: character,
-      style: measurementStyle,
-      anchor: { x: 0.5, y: 0.5 }
-    }).width
-  })
-  const totalWidth = glyphWidths.reduce((width, glyphWidth) => width + glyphWidth, 0)
-  let cursor = -totalWidth / 2
+  // Prefix measurements retain the font's spacing and kerning between letters.
+  const advances = [0]
+  for (let index = 1; index <= characters.length; index++) {
+    measurement.text = characters.slice(0, index).join('')
+    advances.push(measurement.width)
+  }
+  const totalWidth = advances[advances.length - 1]
+  const curveWidth = Math.max(1, boxWidth - CARD_NAME_FIT.horizontalPadding * 2)
+  measurement.destroy()
 
-  for (const [index, glyph] of glyphs.entries()) {
-    const glyphWidth = glyphWidths[index]
-    const glyphCenter = cursor + glyphWidth / 2
-    const t = totalWidth === 0 ? 0.5 : (glyphCenter + totalWidth / 2) / totalWidth
+  // A ribbon's curl needs horizontal as well as vertical Bézier controls.
+  // Sample its length so letter advances follow the path rather than its X axis.
+  const path =
+    curve.control1X === undefined
+      ? null
+      : Array.from({ length: 257 }, (_, i) => {
+          const t = i / 256
+          return {
+            t,
+            x: cubicBezier(
+              -curveWidth / 2,
+              (curve.control1X! - 0.5) * curveWidth,
+              ((curve.control2X ?? 2 / 3) - 0.5) * curveWidth,
+              curveWidth / 2,
+              t
+            ),
+            y: cubicBezier(
+              curve.startY,
+              curve.control1Y,
+              curve.control2Y,
+              curve.endY,
+              t
+            ),
+            distance: 0
+          }
+        })
+  if (path) {
+    for (let i = 1; i < path.length; i++) {
+      path[i].distance =
+        path[i - 1].distance +
+        Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y)
+    }
+  }
+  const pathLength = path?.[path.length - 1].distance ?? curveWidth
+  const pointAtDistance = (distance: number) => {
+    const next = path!.findIndex((point) => point.distance >= distance)
+    const index = Math.max(1, next < 0 ? path!.length - 1 : next)
+    const a = path![index - 1],
+      b = path![index]
+    const fraction = (distance - a.distance) / Math.max(0.0001, b.distance - a.distance)
+    return {
+      x: a.x + (b.x - a.x) * fraction,
+      y: a.y + (b.y - a.y) * fraction,
+      angle: Math.atan2(b.y - a.y, b.x - a.x)
+    }
+  }
+  const pathCenterX = path ? pointAtDistance(pathLength / 2).x : 0
+
+  for (const [index, character] of characters.entries()) {
+    if (character === ' ') continue
+    const glyph = new Text({
+      text: character,
+      style,
+      anchor: { x: 0.5, y: 0.5 }
+    })
+    glyph.scale.set(glyphScale)
+    const glyphCenter = (advances[index] + advances[index + 1] - totalWidth) / 2
+    if (path) {
+      const point = pointAtDistance(pathLength / 2 + glyphCenter)
+      const angle = ((curve.pathRotationDegrees ?? 0) * Math.PI) / 180
+      const x = point.x - pathCenterX
+      glyph.position.set(
+        x * Math.cos(angle) - point.y * Math.sin(angle),
+        x * Math.sin(angle) + point.y * Math.cos(angle)
+      )
+      glyph.rotation = (point.angle + angle) * (curve.rotationScale ?? 1)
+      textLayer.addChild(glyph)
+      continue
+    }
+    const t = Math.max(0, Math.min(1, 0.5 + glyphCenter / curveWidth))
     const y = cubicBezier(curve.startY, curve.control1Y, curve.control2Y, curve.endY, t)
     const slope = cubicBezierDerivative(
       curve.startY,
@@ -191,11 +249,9 @@ function createCurvedText(layer: CardTextLayer): Container {
       curve.endY,
       t
     )
-
     glyph.position.set(glyphCenter, y)
-    glyph.rotation = Math.atan2(slope, totalWidth)
+    glyph.rotation = Math.atan2(slope, curveWidth) * (curve.rotationScale ?? 1)
     textLayer.addChild(glyph)
-    cursor += glyphWidth
   }
 
   textLayer.position.set(layer.position.x, layer.position.y)
@@ -363,7 +419,7 @@ export class CardView extends Container {
     resolver: CardAssetResolver,
     options: CardViewOptions = {}
   ): Promise<CardView> {
-    // Start with both standard class-mask sprites mounted so switching is synchronous.
+    // Mount premium-only layers hidden in the standard tree so switching is synchronous.
     const view = new CardView(buildCardLayout(card, { ...options, premium: false }))
     const supportsPremium = supportsPremiumFormat(card.type)
     try {
@@ -378,10 +434,7 @@ export class CardView extends Container {
       }
       if (supportsPremium) await view.preparePremiumAppearance(card, resolver, options)
       if (options.snapshot) view.applySnapshot(card, options.snapshot)
-      if (
-        shouldRenderClassFrameColors(options.classFrameColors) &&
-        (card.type === 'Minion' || card.type === 'Spell')
-      ) {
+      if (shouldRenderClassFrameColors(options.classFrameColors)) {
         view.setClassFrameAppearance(card.cardClass)
         view.unsubscribeClassFrameConfig = subscribeToClassFrameConfig(() => {
           view.setClassFrameAppearance(card.cardClass)
@@ -526,7 +579,6 @@ export class CardView extends Container {
   setClassFrameAppearance(classId: string): void {
     const appearance = classFrameAppearanceFor(classId)
     if (!appearance || !this.hasLayer('card.class-frame-mask-1')) return
-    if (this.plan.template !== 'minion' && this.plan.template !== 'spell') return
 
     this.applyClassFrameLayer(
       'card.class-frame-mask-1',
@@ -692,7 +744,7 @@ export class CardView extends Container {
   private applyClassFrameLayer(
     path: string,
     appearance: ClassFrameLayerAppearance,
-    template: 'minion' | 'spell'
+    template: CardLayout['template']
   ): void {
     this.setLayerAppearance(path, {
       alpha: appearance.alpha,
@@ -713,27 +765,30 @@ export class CardView extends Container {
   ): Promise<void> {
     const standard = this.plan
     const premium = buildCardLayout(card, { ...options, premium: true })
-    const standardImages = standard.tree.root.children.filter(
-      (node) => node.kind === 'image'
-    )
-    const premiumImages = premium.tree.root.children.filter(
-      (node) => node.kind === 'image'
-    )
+    const collectImages = (
+      node: CardRenderNode,
+      path = ''
+    ): Array<Extract<CardRenderNode, { kind: 'image' }> & { path: string }> => {
+      const current = path ? path + '.' + node.id : node.id
+      if (node.kind === 'group')
+        return node.children.flatMap((child) => collectImages(child, current))
+      return node.kind === 'image' ? [{ ...node, path: current }] : []
+    }
+    const standardImages = collectImages(standard.tree.root)
+    const premiumImages = collectImages(premium.tree.root)
     const changedIds = new Set(
       standardImages
         .filter((node) => {
-          const alternate = premiumImages.find((candidate) => candidate.id === node.id)
-          return (
-            !alternate ||
-            alternate.assetKey !== node.assetKey ||
-            alternate.alphaMask?.assetKey !== node.alphaMask?.assetKey
+          const alternate = premiumImages.find(
+            (candidate) => candidate.path === node.path
           )
+          return !alternate || JSON.stringify(alternate) !== JSON.stringify(node)
         })
-        .map((node) => node.id)
+        .map((node) => node.path)
     )
     const keys = new Set(
       [...standardImages, ...premiumImages]
-        .filter((node) => changedIds.has(node.id))
+        .filter((node) => changedIds.has(node.path))
         .flatMap((node) => [
           node.assetKey,
           ...(node.alphaMask ? [node.alphaMask.assetKey] : [])
@@ -752,10 +807,10 @@ export class CardView extends Container {
       this.activePlan = enabled ? premium : standard
       const images = enabled ? premiumImages : standardImages
       for (const id of changedIds) {
-        const path = `card.${id}`
+        const path = id
         const entry = this.treeObjects.get(path)
         if (!entry || !(entry.object instanceof Sprite)) continue
-        const node = images.find((candidate) => candidate.id === id)
+        const node = images.find((candidate) => candidate.path === id)
         if (!node) {
           entry.object.visible = false
           continue
@@ -1049,12 +1104,34 @@ export class CardView extends Container {
       const artworkLayer = new Container()
       artworkLayer.position.set(node.position.x, node.position.y)
       const mask = new Graphics()
-      drawShape(mask, node.bounds, 0xffffff)
+      const { x, y, width, height } = node.bounds
+      if (node.shape === 'ellipse') {
+        mask
+          .ellipse(x + width / 2, y + height / 2, width / 2, height / 2)
+          .fill(0xffffff)
+      } else if (node.shape === 'arch') {
+        mask
+          .moveTo(x + width / 2, y)
+          .quadraticCurveTo(x + width, y + height / 5, x + width, y + height / 2)
+          .lineTo(x + width, y + height)
+          .lineTo(x, y + height)
+          .lineTo(x, y + height / 2)
+          .quadraticCurveTo(x, y + height / 5, x + width / 2, y)
+          .fill(0xffffff)
+      } else drawShape(mask, node.bounds, 0xffffff)
 
       if (artwork) {
         const image = new Sprite(artwork)
         image.anchor.set(0)
-        image.position.set(node.bounds.x, node.bounds.y)
+        const artworkScale = Math.max(
+          node.bounds.width / artwork.width,
+          node.bounds.height / artwork.height
+        )
+        image.scale.set(artworkScale)
+        image.position.set(
+          node.bounds.x + (node.bounds.width - image.width) / 2,
+          node.bounds.y + (node.bounds.height - image.height) / 2
+        )
         artworkLayer.addChild(image)
       } else {
         const placeholder = new Graphics()
@@ -1110,7 +1187,7 @@ export class CardView extends Container {
 
     const layer = cardTextLayer(node)
     const text = node.curve
-      ? createCurvedText(layer)
+      ? createCurvedText(layer, node.box.width)
       : new Text({ text: layer.text, style: layer.style, anchor: layer.anchor })
     if (layer.fit === 'width' && !node.curve && text instanceof Text) {
       fitTitleToWidth(text, node.box.width)

@@ -13,7 +13,9 @@ describe('card class builder IPC', () => {
     expect(parsed.offsets.spell).toEqual(offsets.spell)
     expect(parsed.offsets.premium).toEqual({
       minion: { primary: { x: 0, y: 0 } },
-      spell: { primary: { x: 0, y: 0 } }
+      spell: { primary: { x: 0, y: 0 } },
+      weapon: { primary: { x: 0, y: 0 } },
+      hero: { primary: { x: 0, y: 0 } }
     })
   })
 

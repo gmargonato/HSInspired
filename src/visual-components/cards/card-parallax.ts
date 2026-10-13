@@ -33,7 +33,8 @@ export const CARD_PARALLAX_LAYERS: readonly ParallaxLayerDefinition[] = [
   { path: 'card.name-banner', depth: 16 },
   { path: 'card.name', depth: 16 },
   { path: 'card.legendary-frame', depth: 12 },
-  { path: 'card.rarity', depth: 10 },
+  // Rarity surrounds sit on the frame; the premium hero surround is baked in.
+  { path: 'card.rarity', depth: 0 },
   { path: 'card.stats.mana', depth: 30 },
   { path: 'card.stats.mana.label', depth: 8 },
   { path: 'card.stats.attack', depth: 30 },

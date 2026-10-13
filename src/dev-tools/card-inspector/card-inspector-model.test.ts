@@ -1,234 +1,147 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { buildCardRenderTree } from '../../visual-components/cards/card-render-builder'
+import { afterEach, describe, expect, it } from 'vitest'
 import { CARD_CATALOG } from '../../game-rules/content/cards'
-import { CARD_CLASS_BLEND_MODES } from '../../desktop/contracts/ipc/card-class-builder'
-import { buildCardRenderTree } from '../../visual-components/cards/card-layout'
 import {
-  classFrameAppearanceFor,
+  CARD_BODY_BOUNDS,
+  cardFrameTransform
+} from '../../visual-components/cards/card-layout'
+import {
   getClassFrameConfig,
-  subscribeToClassFrameConfig,
   updateClassFrameConfig
 } from '../../visual-components/cards/class-frame-colors'
-import { CardInspectorModel, NUMERIC_CONTROL_SPECS } from './card-inspector-model'
-import { CardView } from '../../visual-components/cards/card-view'
-import { Container } from 'pixi.js'
+import { CardInspectorModel } from './card-inspector-model'
 
-describe('CardInspectorModel', () => {
-  let initialConfig = structuredClone(getClassFrameConfig())
+const original = structuredClone(getClassFrameConfig())
+afterEach(() => updateClassFrameConfig(original))
 
-  beforeEach(() => {
-    initialConfig = structuredClone(getClassFrameConfig())
-  })
-
-  afterEach(() => {
-    updateClassFrameConfig(initialConfig)
-  })
-
-  it('exposes only the approved production controls and blend modes', () => {
-    expect(NUMERIC_CONTROL_SPECS.map((spec) => spec.key)).toEqual([
-      'hue',
-      'saturation',
-      'lightness',
-      'opacity',
-      'offsetX',
-      'offsetY'
-    ])
-    expect(CARD_CLASS_BLEND_MODES).toEqual([
-      'normal',
-      'add',
-      'multiply',
-      'screen',
-      'color',
-      'overlay',
-      'soft-light'
-    ])
-  })
-
-  it('uses whole displayed units without rewriting saved values on selection', () => {
+describe('Card Lab migrated frames', () => {
+  it('keeps standard and Neutral previews read-only while all premium class templates can be tuned', () => {
     const model = new CardInspectorModel()
-    const before = structuredClone(model.config)
-    model.selectedPremium = true
-    model.selectedTemplate = 'spell'
-    expect(model.config).toEqual(before)
-    for (const spec of NUMERIC_CONTROL_SPECS) {
-      expect(spec.step * spec.displayScale).toBe(1)
+    for (const template of ['minion', 'spell', 'weapon', 'hero'] as const) {
+      model.selectedTemplate = template
+      model.selectedPremium = false
+      const before = structuredClone(model.config)
+      model.setNumeric('primary', 'offsetX', 30)
+      model.setBlendMode('primary', 'add')
+      expect(model.maskTemplate).toBeUndefined()
+      expect(model.config).toEqual(before)
+      model.selectedPremium = true
+      expect(model.maskTemplate).toBe(template)
+      model.setNumeric('primary', 'offsetX', 30)
+      expect(model.getNumeric('primary', 'offsetX')).toBe(30)
+      expect(model.hasSecondaryMask).toBe(false)
     }
-    model.setNumeric('primary', 'saturation', 0.726)
-    model.setNumeric('primary', 'offsetX', -12.7)
-    expect(model.getNumeric('primary', 'saturation')).toBe(0.73)
-    expect(model.getNumeric('primary', 'offsetX')).toBe(-13)
+    model.selectedClass = 'Neutral'
+    const before = structuredClone(model.config)
+    model.setNumeric('primary', 'hue', 40)
+    expect(model.maskTemplate).toBeUndefined()
+    expect(model.config).toEqual(before)
   })
 
-  it('previews available weapon and hero cards without editing class masks', () => {
+  it('keeps premium offsets independent by template and preserves colors during selection', () => {
     const model = new CardInspectorModel()
     const before = structuredClone(model.config)
     model.selectedPremium = true
-    model.selectedTemplate = 'weapon'
-    expect(model.selectedCard?.type).toBe('Weapon')
-    expect(model.hasCardForClass(model.selectedClass)).toBe(true)
-    expect(model.maskTemplate).toBeUndefined()
-    expect(model.selectedPremium).toBe(true)
-    model.setNumeric('primary', 'offsetX', 50)
-    model.setBlendMode('primary', 'add')
-    model.selectedTemplate = 'hero'
-    expect(model.selectedCard?.type).toBe('Hero')
-    expect(model.selectedPremium).toBe(true)
-    expect(model.maskTemplate).toBeUndefined()
-    expect(model.config).toEqual(before)
-    model.selectedTemplate = 'minion'
-    expect(model.selectedPremium).toBe(true)
-  })
-
-  it('keeps variant offsets independent, sharing colors and offsets across classes', () => {
-    const model = new CardInspectorModel()
-    model.setNumeric('primary', 'offsetX', 12)
-    model.selectedPremium = true
-    expect(model.hasSecondaryMask).toBe(false)
-    expect(model.hasSecondaryMask).toBe(false)
-    model.setNumeric('primary', 'offsetX', 30)
-    model.setNumeric('primary', 'offsetY', 0)
-    model.setNumeric('primary', 'offsetX', 32)
-    model.setNumeric('primary', 'offsetY', -5)
-    model.setNumeric('primary', 'hue', 123)
-    model.selectedPremium = false
-    expect(model.getNumeric('primary', 'offsetX')).toBe(12)
-    expect(model.getNumeric('primary', 'hue')).toBe(123)
-    expect(model.hasSecondaryMask).toBe(true)
-    model.selectedPremium = true
-    model.selectedClass = 'Mage'
-    expect(model.getNumeric('primary', 'offsetX')).toBe(32)
-    expect(model.getNumeric('primary', 'offsetY')).toBe(-5)
     model.selectedTemplate = 'spell'
-    model.setNumeric('primary', 'offsetX', -18)
+    expect(model.config).toEqual(before)
+    model.setNumeric('primary', 'offsetX', -12.7)
+    expect(model.getNumeric('primary', 'offsetX')).toBe(-13)
     model.selectedTemplate = 'minion'
-    expect(model.getNumeric('primary', 'offsetX')).toBe(32)
+    expect(model.getNumeric('primary', 'offsetX')).toBe(
+      before.offsets.premium.minion.primary.x
+    )
     model.setNumeric('primary', 'offsetX', 300)
     expect(model.getNumeric('primary', 'offsetX')).toBe(200)
-    expect(classFrameAppearanceFor('Mage')?.primary.premiumOffsets.spell.x).toBe(-18)
   })
 
-  it('applies live premium offsets relative to the mask base and restores standard offsets', () => {
+  it('can select specific cards and includes Neutral previews', () => {
     const model = new CardInspectorModel()
-    model.setNumeric('primary', 'offsetX', 12)
-    model.setNumeric('primary', 'offsetY', -4)
-    model.selectedPremium = true
-    model.setNumeric('primary', 'offsetX', 30)
-    model.setNumeric('primary', 'offsetY', -8)
-    const mask = new Container()
-    const path = 'card.class-frame-mask-1'
-    const view = Object.assign(Object.create(CardView.prototype), {
-      activePlan: { template: 'minion' },
-      premium: true,
-      layerObjects: new Map([[path, [mask]]]),
-      treeObjects: new Map([[path, { object: mask }]]),
-      basePositions: new Map([[path, { x: 185, y: 871 }]]),
-      semanticOffsets: new Map(),
-      updateCacheTexture: vi.fn()
-    }) as CardView
-    try {
-      view.setClassFrameAppearance(model.selectedClass)
-      expect([mask.x, mask.y]).toEqual([215, 863])
-      model.setNumeric('primary', 'offsetX', 35)
-      model.setNumeric('primary', 'offsetY', -10)
-      view.setClassFrameAppearance(model.selectedClass)
-      expect([mask.x, mask.y]).toEqual([220, 861])
-      Object.assign(view, { premium: false })
-      view.setClassFrameAppearance(model.selectedClass)
-      expect([mask.x, mask.y]).toEqual([197, 867])
-    } finally {
-      mask.destroy()
-    }
+    model.selectedClass = 'Neutral'
+    const card = model.availableCards.at(-1)!
+    model.selectedCardId = card.id
+    expect(model.selectedCard).toBe(card)
+    model.selectedTemplate = 'hero'
+    expect(model.selectedCard?.type).toBe('Hero')
   })
 
-  it('edits the live production configuration', () => {
-    const listener = vi.fn()
-    const unsubscribe = subscribeToClassFrameConfig(listener)
-    const model = new CardInspectorModel()
-    model.selectedClass = 'Druid'
-    model.setNumeric('primary', 'hue', 212.5)
-    model.setNumeric('secondary', 'opacity', 0.42)
-    model.setBlendMode('secondary', 'screen')
-
-    expect(getClassFrameConfig().classes.Druid.primary.hue).toBe(213)
-    expect(getClassFrameConfig().classes.Druid.secondary).toMatchObject({
-      opacity: 0.42,
-      blendMode: 'screen'
-    })
-    expect(listener).toHaveBeenCalledTimes(3)
-    unsubscribe()
-  })
-
-  it('shares offsets across classes while keeping minion and spell offsets separate', () => {
-    const model = new CardInspectorModel()
-    model.selectedClass = 'Druid'
-    model.setNumeric('primary', 'offsetX', 14.5)
-    model.setNumeric('secondary', 'offsetY', -8)
-    model.selectedClass = 'Mage'
-
-    expect(model.getNumeric('primary', 'offsetX')).toBe(15)
-    expect(model.getNumeric('secondary', 'offsetY')).toBe(-8)
-
-    model.selectedTemplate = 'spell'
-    expect(model.getNumeric('primary', 'offsetX')).toBe(
-      initialConfig.offsets.spell.primary.x
-    )
-    model.setNumeric('primary', 'offsetX', -21)
-    model.selectedTemplate = 'minion'
-    expect(model.getNumeric('primary', 'offsetX')).toBe(15)
-  })
-
-  it('forces spells to primary-only state and render trees', () => {
-    const minion = CARD_CATALOG.all.find(
-      (card) => card.cardClass === 'Druid' && card.type === 'Minion'
-    )!
-    const spell = CARD_CATALOG.all.find(
-      (card) => card.cardClass === 'Druid' && card.type === 'Spell'
-    )!
-    const maskIds = (card: typeof minion) =>
-      buildCardRenderTree(card)
-        .root.children.filter((node) => node.id.startsWith('class-frame-mask-'))
-        .map((node) => node.id)
-
-    expect(maskIds(minion)).toEqual(['class-frame-mask-1', 'class-frame-mask-2'])
-    expect(maskIds(spell)).toEqual(['class-frame-mask-1'])
-
-    const model = new CardInspectorModel()
-    model.selectedTemplate = 'spell'
-    expect(model.hasSecondaryMask).toBe(false)
-  })
-
-  it('aligns the full premium minion mask with the source frame bottom', () => {
-    const card = CARD_CATALOG.all.find(
-      (card) => card.type === 'Minion' && card.cardClass === 'Warlock'
-    )!
-    const mask = buildCardRenderTree(card, { premium: true }).root.children.find(
-      (node) => node.id === 'class-frame-mask-1'
-    )!
-    expect(mask.kind).toBe('image')
-    if (mask.kind !== 'image') throw new Error('Expected an image mask')
-    const scaleY = mask.transform.scale!.y
-    expect(mask.transform.position.x).toBe((620 - 250) / 2)
-    expect(scaleY).toBeCloseTo(900 / 913)
-    expect(mask.transform.position.y + 383 * scaleY).toBeCloseTo(900)
-    expect(mask.transform.position.y).toBeCloseTo(530 * scaleY)
-  })
-
-  it('uses the authored secondary appearance', () => {
-    for (const classId of new CardInspectorModel().classes) {
-      const entry = initialConfig.classes[classId].secondary
-      expect(classFrameAppearanceFor(classId)?.secondary).toMatchObject({
-        blendMode: entry.blendMode,
-        alpha: entry.opacity
+  it('selects baked-in class frames and mounts hidden premium masks for every type', () => {
+    for (const type of ['Minion', 'Spell', 'Weapon', 'Hero'] as const) {
+      const card = CARD_CATALOG.all.find(
+        (card) => card.type === type && card.cardClass !== 'Neutral'
+      )!
+      const standard = buildCardRenderTree(card).root.children
+      const premium = buildCardRenderTree(card, { premium: true }).root.children
+      expect(standard.find((node) => node.id === 'frame')).toMatchObject({
+        assetKey: `card.frame.${type.toLowerCase()}.${card.cardClass.toLowerCase()}`
       })
+      expect(standard.find((node) => node.id === 'class-frame-mask-1')).toMatchObject({
+        visible: false
+      })
+      expect(premium.find((node) => node.id === 'class-frame-mask-1')).toMatchObject({
+        visible: true
+      })
+      expect(standard.some((node) => node.id === 'mana-shadow')).toBe(false)
+      expect(standard.some((node) => node.id === 'class-frame-mask-2')).toBe(false)
     }
   })
 
-  it('edits masks independently and clamps values', () => {
-    const model = new CardInspectorModel()
-    model.setNumeric('primary', 'opacity', 1)
-    model.setNumeric('secondary', 'opacity', 0.38)
-    model.setNumeric('primary', 'opacity', 2)
-    expect(model.getNumeric('primary', 'opacity')).toBe(1)
-    model.setNumeric('primary', 'opacity', 1)
-    expect(model.getNumeric('secondary', 'opacity')).toBe(0.38)
+  it('omits gem surrounds for gemless cards and uses the built-in premium hero surround', () => {
+    const free = CARD_CATALOG.all.find((card) => card.rarity === 'Free')!
+    expect(
+      buildCardRenderTree(free).root.children.some((node) => node.id === 'rarity')
+    ).toBe(false)
+    const hero = CARD_CATALOG.all.find(
+      (card) => card.type === 'Hero' && card.rarity === 'Legendary'
+    )!
+    const rarity = buildCardRenderTree(hero, { premium: true }).root.children.find(
+      (node) => node.id === 'rarity'
+    )!
+    if (rarity.kind !== 'group') throw new Error('Expected rarity group')
+    expect(rarity.children.find((node) => node.id === 'frame')).toMatchObject({
+      visible: false
+    })
+    expect(rarity.children.find((node) => node.id === 'gem')).toMatchObject({
+      assetKey: 'card.rarity.legendary'
+    })
+  })
+})
+
+describe('shared card body alignment', () => {
+  it('aligns authored body edges while allowing portrait arches to protrude', () => {
+    const authored = {
+      minion: [65, 981],
+      spell: [2, 927],
+      weapon: [39, 957],
+      hero: [66, 985]
+    } as const
+    for (const template of ['minion', 'spell', 'weapon', 'hero'] as const) {
+      const frame = cardFrameTransform(template)
+      const [top, bottom] = authored[template]
+      expect(frame.position.y + top * frame.scale.y).toBeCloseTo(CARD_BODY_BOUNDS.y)
+      expect(frame.position.y + bottom * frame.scale.y).toBeCloseTo(
+        CARD_BODY_BOUNDS.y + CARD_BODY_BOUNDS.height
+      )
+    }
+  })
+
+  it('keeps each type’s title baseline across finishes and shares the rules baseline', () => {
+    const rulesYs = new Set<number>()
+    for (const type of ['Minion', 'Spell', 'Weapon', 'Hero'] as const) {
+      const titleYs = new Set<number>()
+      const card = CARD_CATALOG.all.find(
+        (card) => card.type === type && card.rulesText
+      )!
+      for (const premium of [false, true]) {
+        const nodes = buildCardRenderTree(card, { premium }).root.children
+        const title = nodes.find((node) => node.id === 'name')!
+        const rules = nodes.find((node) => node.id === 'rules')!
+        if (title.kind !== 'text' || rules.kind !== 'text')
+          throw new Error('Expected text')
+        titleYs.add(title.box.y)
+        rulesYs.add(rules.box.y)
+      }
+      expect(titleYs.size).toBe(1)
+    }
+    expect(rulesYs.size).toBe(1)
   })
 })

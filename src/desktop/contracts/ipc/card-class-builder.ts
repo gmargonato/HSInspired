@@ -27,7 +27,7 @@ export const CARD_CLASS_BLEND_MODES = [
 export type CardClassBuilderClass = (typeof CARD_CLASS_BUILDER_CLASSES)[number]
 export type CardClassBlendMode = (typeof CARD_CLASS_BLEND_MODES)[number]
 export type CardClassMaskChannel = 'primary' | 'secondary'
-export type CardClassTemplate = 'minion' | 'spell'
+export type CardClassTemplate = 'minion' | 'spell' | 'weapon' | 'hero'
 
 export interface CardClassColorLayer {
   readonly hue: number
@@ -169,7 +169,13 @@ export function parseCardClassBuilderConfig(value: unknown): CardClassBuilderCon
     'premium' in value.offsets
       ? value.offsets.premium
       : { minion: { primary: { x: 0, y: 0 } }, spell: { primary: { x: 0, y: 0 } } }
-  if (!isRecord(premium) || !hasExactKeys(premium, ['minion', 'spell'])) {
+  if (
+    !isRecord(premium) ||
+    !(
+      hasExactKeys(premium, ['minion', 'spell']) ||
+      hasExactKeys(premium, ['minion', 'spell', 'weapon', 'hero'])
+    )
+  ) {
     throw new Error('Invalid premium card class offsets')
   }
   const parsePremiumTemplate = (
@@ -192,7 +198,9 @@ export function parseCardClassBuilderConfig(value: unknown): CardClassBuilderCon
       spell: { primary: parseOffset(spell.primary) },
       premium: {
         minion: parsePremiumTemplate(premium.minion),
-        spell: parsePremiumTemplate(premium.spell)
+        spell: parsePremiumTemplate(premium.spell),
+        weapon: parsePremiumTemplate(premium.weapon ?? { primary: { x: 0, y: 0 } }),
+        hero: parsePremiumTemplate(premium.hero ?? { primary: { x: 0, y: 0 } })
       }
     }
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_CATALOG, asCardId } from '../../../game-rules/content/cards'
 import type { BoardMinion } from '../../../game-rules/match'
-import { buildCardRenderTree } from '../../../visual-components/cards/card-layout'
+import { buildCardRenderTree } from '../../../visual-components/cards/card-render-builder'
 import { MINION_STAT_COLORS } from './minion-stat-presentation'
 import {
   boardWeaponCardPreviewModel,

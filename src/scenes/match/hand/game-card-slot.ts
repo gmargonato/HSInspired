@@ -1,3 +1,4 @@
+import { cardFrameTransform } from '../../../visual-components/cards/card-layout'
 import { Container, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
 import { CardView } from '../../../visual-components/cards/card-view'
 import {
@@ -79,9 +80,12 @@ export class GameCardSlot extends Actor {
     card.position.set(slotLayout.cardOffset.x, slotLayout.cardOffset.y)
 
     this.outlineTarget = new Sprite(outlineTexture)
-    this.outlineTarget.width = card.plan.width
-    this.outlineTarget.height = card.renderedHeight
-    this.outlineTarget.position.set(slotLayout.cardOffset.x, slotLayout.cardOffset.y)
+    const frameTransform = cardFrameTransform(card.plan.template)
+    this.outlineTarget.scale.set(frameTransform.scale.x, frameTransform.scale.y)
+    this.outlineTarget.position.set(
+      slotLayout.cardOffset.x + frameTransform.position.x,
+      slotLayout.cardOffset.y + frameTransform.position.y
+    )
     this.outlineTarget.zIndex = -1
     this.outlineTarget.eventMode = 'none'
     this.outlineTarget.label = `${card.label}.playable-outline-target`
@@ -278,8 +282,12 @@ export class GameCardSlot extends Actor {
   private replacePlayableOutline(outlineTexture: Texture): void {
     this.playableOutlineTexture = outlineTexture
     this.outlineTarget.texture = outlineTexture
-    this.outlineTarget.width = this.activeCard.plan.width
-    this.outlineTarget.height = this.activeCard.renderedHeight
+    const frameTransform = cardFrameTransform(this.activeCard.plan.template)
+    this.outlineTarget.scale.set(frameTransform.scale.x, frameTransform.scale.y)
+    this.outlineTarget.position.set(
+      this.activeCard.x + frameTransform.position.x,
+      this.activeCard.y + frameTransform.position.y
+    )
 
     if (this.playableOutlineDisposed) return
 
