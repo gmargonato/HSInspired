@@ -1,5 +1,20 @@
+export interface RandomTargetSelection {
+  readonly targets: readonly {
+    readonly instanceId: string
+    readonly kind: string
+    readonly participantId: string
+    readonly zone: string
+  }[]
+  readonly sourceInstanceId: string
+  readonly sourceCardId: string | null
+  readonly actionPath: string
+  readonly selector: Readonly<Record<string, unknown>>
+}
+
 export interface DeterministicRng {
   next(): number
+  /** Optional exact-analysis boundary for a uniform finite target selection. */
+  nextTargetIndex?(selection: RandomTargetSelection): number
   /** Transaction hooks are mandatory so every command can roll back randomness. */
   snapshot(): unknown
   restore(snapshot: unknown): void

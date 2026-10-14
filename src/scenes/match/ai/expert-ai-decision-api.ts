@@ -14,6 +14,7 @@ import {
   type PlayerId,
   type TurnMatchCommand
 } from '../../../game-rules/match'
+import { createSeededRng } from '../../../game-rules/match/rng'
 import { CARD_CATALOG } from '../../../game-rules/content/cards'
 import {
   sameAiIntent,
@@ -30,7 +31,19 @@ import {
 } from '../../../game-rules/match/ai/tactical-search'
 import { immediateExpertWin } from './expert-tactics'
 import { createExpertExpiringAttackInspector } from './expert-expiring-hero-attack'
-import { createExpertAttackOrderInspector } from './expert-action-ordering'
+import {
+  createExpertAttackOrderInspector,
+  EXPERT_ORDERING_MAX_DISPATCHES
+} from './expert-action-ordering'
+import { reviewCommittedActionOrder } from './expert-committed-order'
+import { reviewCompletedAttackOrder } from './expert-completed-attack-order'
+import {
+  EXPERT_CHANCE_ORDER_MAX_MS,
+  hasChanceWeaponSetup,
+  reviewChanceAttackOrder,
+  publicOrderStateKey,
+  type SingletonOrderTransition
+} from './expert-chance-order'
 import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
 import { EXPERT_AI_POLICY_REVISION } from './expert-ai-worker-protocol'
 import {
@@ -69,6 +82,7 @@ interface PendingDecision {
   readonly resolve: (response: AiDecisionResponse) => void
   readonly reject: (error: unknown) => void
   readonly timer: ReturnType<typeof setTimeout>
+  readonly reconsideringContinuation?: boolean
   bestProgress?: {
     readonly response: AiDecisionResponse
     readonly recommendationValue: number
@@ -77,12 +91,24 @@ interface PendingDecision {
   }
 }
 
+interface CertifiedSingletonContinuation {
+  readonly matchId: string
+  readonly turn: number
+  readonly transition: SingletonOrderTransition
+  readonly actions: readonly AiActionIntent[]
+  readonly beforeRng: string
+  readonly afterRng: string
+}
+
 interface ExpertContinuation {
+  readonly singleton?: CertifiedSingletonContinuation
   readonly provenWin?: boolean
   readonly expectedPublicState?: string
   readonly turn: number
   readonly expectedRevision: number
   readonly nextIndex: number
+  readonly reconsiderAtIndex?: number
+  readonly reconsidering?: boolean
   readonly actions: readonly AiActionIntent[]
 }
 
@@ -210,6 +236,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   private turnStartedAt = 0
   private searchUsedMs = 0
   private continuation: ExpertContinuation | null = null
+  private singletonOrder: CertifiedSingletonContinuation | null = null
   private planCommit: ExpertPlanCommit | null = null
   private winCheck: { revision: number; commandKey: string | null } | null = null
   private terminalCheck: {
@@ -217,6 +244,8 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     outcomes: Map<string, TacticalOutcome>
   } | null = null
   private continuationRejection: string | undefined
+  private chanceOrderReview:
+    ReturnType<typeof reviewChanceAttackOrder>['stats'] | undefined
   private readonly unsubscribe: () => void
   private readonly perspectiveParticipantId: PlayerId
 
@@ -254,9 +283,13 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   }
 
   async decide(request: AiDecisionRequest): Promise<AiDecisionResponse> {
+    this.chanceOrderReview = undefined
     if (this.disposed) throw new Error('Expert AI worker has been disposed.')
     const win = this.verifiedWinResponse(request)
-    if (win) return win
+    if (win) {
+      this.singletonOrder = null
+      return win
+    }
     if (request.phase === 'plan') this.planCommit = null
     else if (request.phase === 'action') {
       const cachedPlanAction = this.takePlanCommit(request)
@@ -264,6 +297,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       const plannedContinuation = this.takeApplicableContinuation(request, false)
       if (plannedContinuation) return plannedContinuation
     }
+    this.singletonOrder = null
     const startedAt = this.now()
     let remainingBudgetMs = this.remainingBudget(request)
     if (remainingBudgetMs <= 100) {
@@ -284,7 +318,21 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       this.perspectiveParticipantId,
       seed
     )
-    const worker = this.getWorker()
+    let worker: Worker
+    try {
+      worker = this.getWorker()
+    } catch (error) {
+      if (this.continuation?.reconsidering) {
+        this.searchUsedMs += Math.max(0, this.now() - startedAt)
+        const retained = this.takeApplicableContinuation(request)
+        if (retained)
+          return {
+            ...retained,
+            durationMs: Math.max(retained.durationMs, this.now() - startedAt)
+          }
+      }
+      throw error
+    }
     remainingBudgetMs = this.remainingBudget(request)
     if (remainingBudgetMs <= 100) {
       const continuedAction = this.takeApplicableContinuation(request)
@@ -294,7 +342,10 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         budgetMs: this.budget.turnBudgetMs
       })
     }
-    const preferredContinuation = this.preferredContinuation(request)
+    const reconsideringContinuation = this.continuation?.reconsidering === true
+    const preferredContinuation = reconsideringContinuation
+      ? undefined
+      : this.preferredContinuation(request)
     const message: ExpertAiWorkerRequest = {
       type: 'decide',
       request,
@@ -353,7 +404,8 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         startedAt,
         resolve,
         reject,
-        timer
+        timer,
+        ...(reconsideringContinuation ? { reconsideringContinuation: true } : {})
       })
       try {
         worker.postMessage(message)
@@ -368,6 +420,8 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   }
 
   async cancel(identity: AiDecisionIdentity): Promise<void> {
+    this.singletonOrder = null
+    if (this.continuation?.singleton) this.continuation = null
     const pending = this.pending.get(identity.requestId)
     if (pending) {
       this.takePending(identity.requestId)?.reject(new Error('AI request cancelled.'))
@@ -378,6 +432,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.singletonOrder = null
     for (const requestId of [...this.pending.keys()])
       this.takePending(requestId)?.reject(
         new Error('Expert AI worker has been disposed.')
@@ -435,6 +490,16 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       return undefined
     }
     return continuation.actions[continuation.nextIndex]
+  }
+
+  private continuationNeedsReconsideration(): boolean {
+    const continuation = this.continuation
+    return (
+      continuation !== null &&
+      !continuation.provenWin &&
+      continuation.reconsiderAtIndex !== undefined &&
+      continuation.nextIndex >= continuation.reconsiderAtIndex
+    )
   }
 
   private takePlanCommit(request: AiDecisionRequest): AiDecisionResponse | null {
@@ -508,9 +573,16 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         planUpdate: null
       },
       durationMs: Math.max(0, this.now() - started),
-      finishReason: 'expert-plan-commit-cache'
+      finishReason: 'expert-plan-commit-cache',
+      usage: {
+        ...cached.response.usage,
+        ...(this.chanceOrderReview ? { chanceOrderReview: this.chanceOrderReview } : {})
+      }
     }
-    const guarded = this.guardExpiringAttackPass(request, response)
+    const guarded = this.guardExpiringAttackPass(
+      request,
+      this.guardCommittedOrder(request, response)
+    )
     this.rememberContinuation(request, guarded)
     return guarded
   }
@@ -587,6 +659,21 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       return null
     }
 
+    // Keep the searched line available to all existing timeout/failure paths.
+    // Only spend a normal, fully reserved replan window on the disputed suffix.
+    if (
+      !fallback &&
+      this.continuationNeedsReconsideration() &&
+      this.remainingBudget(request) > this.budget.replanSearchLimitMs
+    ) {
+      this.continuation = {
+        ...continuation,
+        reconsiderAtIndex: undefined,
+        reconsidering: true
+      }
+      return null
+    }
+
     const remainingLine = continuation.actions.slice(
       continuation.nextIndex,
       continuation.nextIndex + 6
@@ -612,16 +699,34 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         policyRevision: EXPERT_AI_POLICY_REVISION,
         ...(continuation.provenWin ? { decisionPriority: 'verified-win' } : {}),
         mode: fallback ? 'expert-continuation-fallback' : 'expert-continuation',
+        ...(this.chanceOrderReview
+          ? { chanceOrderReview: this.chanceOrderReview }
+          : {}),
         plannedActionIntents: remainingLine.map((intent) => ({
           type: intent.type,
           source: intent.source,
           targets: [...intent.targets],
           position: intent.position,
           option: intent.option
-        }))
+        })),
+        ...(continuation.reconsiderAtIndex !== undefined &&
+        continuation.reconsiderAtIndex > continuation.nextIndex
+          ? {
+              continuationReconsideration: {
+                prefixLength: continuation.reconsiderAtIndex - continuation.nextIndex,
+                actions: remainingLine.map((intent) => ({
+                  ...intent,
+                  targets: [...intent.targets]
+                }))
+              }
+            }
+          : {})
       }
     }
-    const guarded = this.guardExpiringAttackPass(request, response)
+    const guarded = this.guardExpiringAttackPass(
+      request,
+      this.guardCommittedOrder(request, response)
+    )
     this.rememberContinuation(request, guarded)
     return guarded
   }
@@ -768,11 +873,55 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     if (provenWin || command.type !== 'attack-character') return false
     const started = this.now()
     const deadline = started + this.remainingBudget(request)
-    const changed = createExpertAttackOrderInspector(
+    const deterministicOrder = createExpertAttackOrderInspector(
       this.session.match.getCheckpoint(),
       this.perspectiveParticipantId,
       () => this.now() >= deadline
-    )(command)
+    )
+    let changed = deterministicOrder(command)
+    // A conditional benefit may reopen search, but never commits the held card.
+    // Keep this out of worker scoring and reserve enough budget to start a replan.
+    if (
+      !changed &&
+      command.attacker.kind === 'hero' &&
+      command.defender.kind === 'hero' &&
+      deadline - this.now() > 100
+    ) {
+      const self = this.session
+        .getState()
+        .players.find((p) => p.participantId === this.perspectiveParticipantId)
+      const setupIds = new Set(
+        self?.hand
+          .filter((c) => hasChanceWeaponSetup(c.cardId))
+          .map((c) => c.instanceId)
+      )
+      if (setupIds.size) {
+        const stopAt = Math.min(deadline - 100, started + EXPERT_CHANCE_ORDER_MAX_MS)
+        for (const setup of this.currentLegalActions()
+          .filter(
+            (a) =>
+              request.actionIds.includes(a.id) &&
+              a.command.type === 'play-card' &&
+              setupIds.has(a.command.cardInstanceId)
+          )
+          .slice(0, 1)) {
+          if (this.now() >= stopAt) break
+          const review = reviewChanceAttackOrder(
+            this.session.match.getCheckpoint(),
+            this.perspectiveParticipantId,
+            [command, setup.command],
+            () => this.now() >= stopAt,
+            this.now,
+            EXPERT_ORDERING_MAX_DISPATCHES - deterministicOrder.stats.dispatches
+          )
+          this.chanceOrderReview = review.stats
+          if (review.improves && deadline - this.now() > 100) {
+            changed = true
+            break
+          }
+        }
+      }
+    }
     this.searchUsedMs += Math.max(0, this.now() - started)
     if (changed) {
       this.continuationRejection = 'attack-before-setup'
@@ -840,6 +989,427 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     this.continuation = null
     this.planCommit = null
     return true
+  }
+
+  private guardCommittedOrder(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    response = this.guardSingletonAttackOrder(request, response)
+    if (response.usage?.actionOutcomeReason === 'committed-singleton-attack-order')
+      return response
+    response = this.guardCompletedAttackOrder(request, response)
+    if (response.usage?.actionOutcomeReason === 'committed-expiring-minion-attack')
+      return response
+    if (
+      request.phase === 'mulligan' ||
+      response.usage?.decisionPriority === 'verified-win' ||
+      this.session.getState().revision !== request.expectedRevision
+    )
+      return response
+    const intents = response.usage?.plannedActionIntents
+    if (
+      !Array.isArray(intents) ||
+      intents.length < 2 ||
+      intents.length > 6 ||
+      !intents.every(isAiActionIntent) ||
+      !(
+        (['use-hero-power', 'play-card'].includes(intents[0]!.type) &&
+          intents[1]!.type === 'attack-character') ||
+        (intents[0]!.type === 'attack-character' && intents[1]!.type === 'play-card')
+      )
+    )
+      return response
+    const selectedId =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    const legal = this.currentLegalActions().filter((action) =>
+      request.actionIds.includes(action.id)
+    )
+    const selected = legal.find((action) => action.id === selectedId)
+    const opponentId = this.opponentParticipantId()
+    if (
+      !selected ||
+      !sameAiIntent(intents[0]!, aiActionIntent(selected.command, opponentId))
+    )
+      return response
+    const next = legal.find((action) =>
+      sameAiIntent(intents[1]!, aiActionIntent(action.command, opponentId))
+    )
+    if (!next) return response
+    const started = this.now()
+    const remaining = this.remainingBudget(request)
+    if (!Number.isFinite(remaining) || remaining <= 0) return response
+    const review = reviewCommittedActionOrder(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      selected.command,
+      next.command,
+      () => this.now() >= started + remaining,
+      this.now
+    )
+    const elapsed = Math.max(0, this.now() - started)
+    this.searchUsedMs += elapsed
+    if (!review.improves)
+      return {
+        ...response,
+        durationMs: response.durationMs + elapsed,
+        usage: { ...response.usage, committedOrderReview: review.stats }
+      }
+    const reason =
+      review.reason === 'committed-weapon-refresh-order'
+        ? 'Use the committed attack before refreshing the weapon, preserving a charge.'
+        : 'Use the committed setup before attacking for more damage with the same resources.'
+    const plan = 'plan' in response.choice ? response.choice.plan : null
+    const choice: AiDecisionChoice = plan
+      ? {
+          plan: {
+            ...plan,
+            objective: reason,
+            firstActionId: next.id,
+            candidates: plan.candidates.map((candidate, index) =>
+              index === plan.preferred
+                ? {
+                    ...candidate,
+                    sequence: [
+                      next.description,
+                      selected.description,
+                      ...candidate.sequence.slice(2)
+                    ]
+                  }
+                : candidate
+            )
+          }
+        }
+      : {
+          actionId: next.id,
+          intent: intents[1]!,
+          expectedResult: reason,
+          planUpdate: null
+        }
+    return {
+      ...response,
+      choice,
+      reason,
+      durationMs: response.durationMs + elapsed,
+      usage: {
+        ...response.usage,
+        decisionPriority:
+          response.usage?.decisionPriority === 'tactical-safety'
+            ? 'tactical-safety'
+            : 'tactical-preference',
+        tacticalOverride: true,
+        actionOutcomeReason: review.reason,
+        plannedActionIntents: [intents[1]!, intents[0]!, ...intents.slice(2)].map(
+          (intent) => ({
+            type: intent.type,
+            source: intent.source,
+            targets: [...intent.targets],
+            position: intent.position,
+            option: intent.option
+          })
+        ),
+        committedOrderReview: {
+          ...review.stats,
+          fromActionId: selected.id,
+          toActionId: next.id
+        }
+      }
+    }
+  }
+
+  private guardSingletonAttackOrder(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    const started = this.now()
+    const reviewed = this.reviewSingletonAttackOrder(request, response)
+    if (reviewed === response) return response
+    const elapsed = Math.max(0, this.now() - started)
+    this.searchUsedMs += elapsed
+    return { ...reviewed, durationMs: response.durationMs + elapsed }
+  }
+
+  private reviewSingletonAttackOrder(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    const intents = response.usage?.plannedActionIntents
+    if (
+      request.phase === 'mulligan' ||
+      response.usage?.decisionPriority === 'verified-win' ||
+      this.session.getState().revision !== request.expectedRevision ||
+      !Array.isArray(intents) ||
+      intents.length < 2 ||
+      intents.length > 4 ||
+      !intents.every(isAiActionIntent)
+    )
+      return response
+    const setupIndex = intents[1]?.type === 'use-hero-power' ? 2 : 1
+    if (
+      intents[0]?.type !== 'attack-character' ||
+      intents[setupIndex]?.type !== 'play-card' ||
+      intents.length > setupIndex + 2
+    )
+      return response
+    const legal = this.currentLegalActions().filter((a) =>
+      request.actionIds.includes(a.id)
+    )
+    const opponent = this.opponentParticipantId()
+    const prefix = intents
+      .slice(0, setupIndex + 1)
+      .map((intent) =>
+        legal.find((a) => sameAiIntent(intent, aiActionIntent(a.command, opponent)))
+      )
+    const selectedId =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    const first = prefix[0]?.command,
+      setup = prefix.at(-1)?.command
+    if (
+      prefix.some((a) => !a) ||
+      prefix[0]!.id !== selectedId ||
+      first?.type !== 'attack-character' ||
+      first.attacker.kind !== 'minion' ||
+      first.defender.kind !== 'hero' ||
+      setup?.type !== 'play-card'
+    )
+      return response
+    const card = this.session
+      .getState()
+      .players.find((p) => p.participantId === this.perspectiveParticipantId)
+      ?.hand.find((c) => c.instanceId === setup.cardInstanceId)
+    if (!card || !hasChanceWeaponSetup(card.cardId)) return response
+    // The weapon may not exist yet. Resolve this exact explicit intent now, but
+    // require engine legality at its actual step in both complete proof lines.
+    const hero: TurnMatchCommand = {
+      type: 'attack-character',
+      participantId: this.perspectiveParticipantId,
+      attacker: { kind: 'hero' },
+      defender: { kind: 'hero' }
+    }
+    const suffix = intents.slice(setupIndex + 1)
+    if (suffix.some((intent) => !sameAiIntent(intent, aiActionIntent(hero, opponent))))
+      return response
+    const started = this.now(),
+      remaining = this.remainingBudget(request)
+    if (!Number.isFinite(remaining) || remaining <= 0) return response
+    const checkpoint = this.session.match.getCheckpoint()
+    const review = reviewChanceAttackOrder(
+      checkpoint,
+      this.perspectiveParticipantId,
+      prefix.map((a) => a!.command),
+      () => this.now() >= started + remaining,
+      this.now,
+      8,
+      suffix.map(() => hero)
+    )
+    const elapsed = Math.max(0, this.now() - started)
+    if (!review.improves || !review.transition)
+      return {
+        ...response,
+        durationMs: response.durationMs + elapsed,
+        usage: { ...response.usage, singletonOrderReview: review.stats }
+      }
+    const sequence = [...intents.slice(1, setupIndex + 1), intents[0]!, ...suffix].map(
+      (intent) => ({ ...intent, targets: [...intent.targets] })
+    )
+    const rng = createSeededRng()
+    try {
+      rng.restore(checkpoint.rngState)
+    } catch {
+      return {
+        ...response,
+        usage: { ...response.usage, singletonOrderReview: review.stats }
+      }
+    }
+    rng.next()
+    this.singletonOrder = {
+      matchId: request.matchId,
+      turn: checkpoint.state.turnNumber,
+      transition: review.transition,
+      actions: sequence.slice(setupIndex - 1),
+      beforeRng: JSON.stringify(checkpoint.rngState),
+      afterRng: JSON.stringify(rng.snapshot())
+    }
+    const next = prefix[1]!,
+      plan = 'plan' in response.choice ? response.choice.plan : null
+    const reason =
+      'Use the committed setup before attacking; its sole outcome preserves the full line and deals more damage.'
+    return {
+      ...response,
+      reason,
+      durationMs: response.durationMs + elapsed,
+      choice: plan
+        ? {
+            plan: {
+              ...plan,
+              objective: reason,
+              firstActionId: next.id,
+              candidates: plan.candidates.map((candidate, index) =>
+                index === plan.preferred
+                  ? {
+                      ...candidate,
+                      sequence: [
+                        ...prefix.slice(1).map((a) => a!.description),
+                        prefix[0]!.description,
+                        ...candidate.sequence.slice(setupIndex + 1)
+                      ]
+                    }
+                  : candidate
+              )
+            }
+          }
+        : {
+            actionId: next.id,
+            intent: sequence[0]!,
+            expectedResult: reason,
+            planUpdate: null
+          },
+      usage: {
+        ...response.usage,
+        decisionPriority:
+          response.usage?.decisionPriority === 'tactical-safety'
+            ? 'tactical-safety'
+            : 'tactical-preference',
+        tacticalOverride: true,
+        actionOutcomeReason: 'committed-singleton-attack-order',
+        plannedActionIntents: sequence,
+        singletonOrderReview: {
+          ...review.stats,
+          fromActionId: selectedId,
+          toActionId: next.id
+        }
+      }
+    }
+  }
+
+  private guardCompletedAttackOrder(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    const intents = response.usage?.plannedActionIntents
+    if (
+      request.phase === 'mulligan' ||
+      response.usage?.decisionPriority === 'verified-win' ||
+      this.session.getState().revision !== request.expectedRevision ||
+      !Array.isArray(intents) ||
+      intents.length < 3 ||
+      intents.length > 5 ||
+      !intents.every(isAiActionIntent) ||
+      intents[0]!.type !== 'attack-character' ||
+      intents.at(-1)!.type !== 'end-turn' ||
+      !intents.slice(1, -1).every((intent) => intent.type === 'play-card')
+    )
+      return response
+    const legal = this.currentLegalActions().filter((action) =>
+      request.actionIds.includes(action.id)
+    )
+    const opponentId = this.opponentParticipantId()
+    const actions = intents
+      .slice(0, -1)
+      .map((intent) =>
+        legal.find((action) =>
+          sameAiIntent(intent, aiActionIntent(action.command, opponentId))
+        )
+      )
+    const selectedId =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    if (actions.some((action) => !action) || actions[0]!.id !== selectedId)
+      return response
+    const started = this.now(),
+      remaining = this.remainingBudget(request)
+    if (!Number.isFinite(remaining) || remaining <= 0) return response
+    const review = reviewCompletedAttackOrder(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      actions.map((action) => action!.command),
+      () => this.now() >= started + remaining,
+      this.now
+    )
+    const elapsed = Math.max(0, this.now() - started)
+    this.searchUsedMs += elapsed
+    const commands = review.commands
+    if (!commands)
+      return {
+        ...response,
+        durationMs: response.durationMs + elapsed,
+        usage: { ...response.usage, completedOrderReview: review.stats }
+      }
+    const next = legal.find(
+      (action) =>
+        canonicalCommandKey(action.command) === canonicalCommandKey(commands[0]!)
+    )!
+    const sequence = commands.map((command) => aiActionIntent(command, opponentId))
+    sequence.push(intents.at(-1)!)
+    const reason =
+      'Keep the committed card plays before spending the weapon, recovering an otherwise unavailable attack.'
+    const plan = 'plan' in response.choice ? response.choice.plan : null
+    return {
+      ...response,
+      reason,
+      durationMs: response.durationMs + elapsed,
+      choice: plan
+        ? {
+            plan: {
+              ...plan,
+              objective: reason,
+              firstActionId: next.id,
+              candidates: plan.candidates.map((candidate, index) =>
+                index === plan.preferred
+                  ? {
+                      ...candidate,
+                      sequence: [
+                        ...commands.map(
+                          (command) =>
+                            legal.find(
+                              (action) =>
+                                canonicalCommandKey(action.command) ===
+                                canonicalCommandKey(command)
+                            )?.description ?? canonicalCommandKey(command)
+                        ),
+                        'End turn.'
+                      ]
+                    }
+                  : candidate
+              )
+            }
+          }
+        : {
+            actionId: next.id,
+            intent: sequence[0]!,
+            expectedResult: reason,
+            planUpdate: null
+          },
+      usage: {
+        ...response.usage,
+        decisionPriority:
+          response.usage?.decisionPriority === 'tactical-safety'
+            ? 'tactical-safety'
+            : 'tactical-preference',
+        tacticalOverride: true,
+        actionOutcomeReason: 'committed-expiring-minion-attack',
+        plannedActionIntents: sequence.map((intent) => ({
+          ...intent,
+          targets: [...intent.targets]
+        })),
+        completedOrderReview: {
+          ...review.stats,
+          fromActionId: selectedId,
+          toActionId: next.id
+        }
+      }
+    }
   }
 
   private guardExpiringAttackPass(
@@ -1045,6 +1615,21 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     request: AiDecisionRequest,
     response: AiDecisionResponse
   ): void {
+    const started =
+      this.singletonOrder || response.usage?.continuationReconsideration
+        ? this.now()
+        : undefined
+    try {
+      this.storeContinuation(request, response)
+    } finally {
+      if (started !== undefined) this.searchUsedMs += Math.max(0, this.now() - started)
+    }
+  }
+
+  private storeContinuation(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): void {
     this.continuation = null
     if (request.phase !== 'plan' && request.phase !== 'action') return
     const state = this.session.getState()
@@ -1082,15 +1667,78 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     )
     if (!sameAiIntent(rawIntents[0]!, selectedIntent)) return
 
+    const certificate = this.singletonOrder
+    const singleton =
+      certificate &&
+      certificate.matchId === request.matchId &&
+      certificate.turn === state.turnNumber &&
+      certificate.transition.revision === request.expectedRevision &&
+      certificate.transition.commandKey ===
+        canonicalCommandKey(selectedAction.command) &&
+      certificate.actions.length === rawIntents.length &&
+      certificate.actions.every((intent, index) =>
+        sameAiIntent(intent, rawIntents[index]!)
+      ) &&
+      certificate.transition.beforePublicState ===
+        publicOrderStateKey(
+          this.session.match.getCheckpoint(),
+          this.perspectiveParticipantId
+        ) &&
+      certificate.beforeRng ===
+        JSON.stringify(this.session.match.getCheckpoint().rngState)
+        ? certificate
+        : undefined
+    if (certificate && state.revision >= certificate.transition.revision && !singleton)
+      this.singletonOrder = null
+    const rawReconsideration = response.usage?.continuationReconsideration
+    const reconsideration =
+      rawReconsideration &&
+      typeof rawReconsideration === 'object' &&
+      !Array.isArray(rawReconsideration)
+        ? (rawReconsideration as Record<string, unknown>)
+        : undefined
+    const prefixLength = reconsideration?.prefixLength
+    const reconsiderAtIndex =
+      !singleton &&
+      response.usage?.decisionPriority !== 'verified-win' &&
+      typeof prefixLength === 'number' &&
+      Number.isSafeInteger(prefixLength) &&
+      prefixLength > 0 &&
+      prefixLength < rawIntents.length &&
+      rawIntents
+        .slice(0, prefixLength)
+        .every((intent) => intent.type === 'attack-character') &&
+      Array.isArray(reconsideration?.actions) &&
+      reconsideration.actions.length === rawIntents.length &&
+      reconsideration.actions.every(
+        (intent, index) =>
+          isAiActionIntent(intent) && sameAiIntent(intent, rawIntents[index]!)
+      )
+        ? prefixLength
+        : undefined
     this.continuation = {
+      ...(singleton ? { singleton } : {}),
       provenWin: response.usage?.decisionPriority === 'verified-win',
       turn: state.turnNumber,
       expectedRevision: request.expectedRevision,
       nextIndex: request.phase === 'plan' ? 0 : 1,
+      ...(reconsiderAtIndex !== undefined ? { reconsiderAtIndex } : {}),
       actions: rawIntents,
       expectedPublicState: this.session.match.analyze((fork) => {
         const randomState = fork.getRandomState?.()
         const result = fork.dispatch(selectedAction.command)
+        if (singleton)
+          return result.accepted &&
+            result.state.revision === singleton.transition.revision + 1 &&
+            JSON.stringify(result.events) ===
+              JSON.stringify(singleton.transition.events) &&
+            publicOrderStateKey(
+              this.session.match.getCheckpoint(),
+              this.perspectiveParticipantId
+            ) === singleton.transition.afterPublicState &&
+            JSON.stringify(fork.getRandomState?.()) === singleton.afterRng
+            ? tacticalStateKey(fork, this.perspectiveParticipantId)
+            : undefined
         return result.accepted &&
           !invalidatesExpertContinuation(result.events) &&
           JSON.stringify(randomState) === JSON.stringify(fork.getRandomState?.())
@@ -1098,10 +1746,28 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
           : undefined
       })
     }
-    if (this.continuation.expectedPublicState === undefined) this.continuation = null
+    if (this.continuation.expectedPublicState === undefined) {
+      this.continuation = null
+      if (singleton) this.singletonOrder = null
+    }
   }
 
   private observeTurn(
+    state: ReturnType<GameBoardSession['getState']>,
+    events: readonly OpeningMatchEvent[] = []
+  ): void {
+    const started =
+      this.singletonOrder && state.turnNumber === this.activeTurn
+        ? this.now()
+        : undefined
+    try {
+      this.updateObservedTurn(state, events)
+    } finally {
+      if (started !== undefined) this.searchUsedMs += Math.max(0, this.now() - started)
+    }
+  }
+
+  private updateObservedTurn(
     state: ReturnType<GameBoardSession['getState']>,
     events: readonly OpeningMatchEvent[] = []
   ): void {
@@ -1110,12 +1776,41 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       state.activePlayerId !== this.perspectiveParticipantId
     ) {
       this.activeTurn = null
+      this.singletonOrder = null
       this.continuation = null
       this.planCommit = null
       return
     }
+    const certificate = this.singletonOrder
+    const singleton = this.continuation?.singleton
+    const certifiedTransition =
+      singleton !== undefined &&
+      certificate === singleton &&
+      state.revision === singleton.transition.revision + 1 &&
+      JSON.stringify(events) === JSON.stringify(singleton.transition.events) &&
+      publicOrderStateKey(
+        this.session.match.getCheckpoint(),
+        this.perspectiveParticipantId
+      ) === singleton.transition.afterPublicState &&
+      JSON.stringify(this.session.match.getCheckpoint().rngState) === singleton.afterRng
+    if (certificate && state.revision > certificate.transition.revision)
+      this.singletonOrder = null
     if (
-      invalidatesExpertContinuation(events) ||
+      certificate &&
+      state.revision === certificate.transition.revision &&
+      (publicOrderStateKey(
+        this.session.match.getCheckpoint(),
+        this.perspectiveParticipantId
+      ) !== certificate.transition.beforePublicState ||
+        JSON.stringify(this.session.match.getCheckpoint().rngState) !==
+          certificate.beforeRng)
+    )
+      this.singletonOrder = null
+    if (
+      (singleton !== undefined &&
+        state.revision > singleton.transition.revision &&
+        !certifiedTransition) ||
+      (invalidatesExpertContinuation(events) && !certifiedTransition) ||
       (this.continuation?.expectedPublicState !== undefined &&
         state.revision > this.continuation.expectedRevision &&
         this.continuation.expectedPublicState !==
@@ -1124,9 +1819,12 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
           ))
     )
       this.continuation = null
+    else if (certifiedTransition && this.continuation)
+      this.continuation = { ...this.continuation, singleton: undefined }
     if (this.activeTurn === state.turnNumber) return
     this.continuationRejection = undefined
     this.activeTurn = state.turnNumber
+    this.singletonOrder = null
     this.turnStartedAt = this.now()
     this.searchUsedMs = 0
     this.continuation = null
@@ -1163,6 +1861,13 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     if (response.type === 'decision') {
       this.resolveDecision(pending, response.response)
     } else {
+      const retained = pending.reconsideringContinuation
+        ? this.takeApplicableContinuation(pending.request)
+        : null
+      if (retained) {
+        pending.resolve(retained)
+        return
+      }
       const bestProgress = this.bestProgressResponse(pending, 'worker-failure')
       if (bestProgress) {
         this.resolveDecision(pending, bestProgress)
@@ -1192,6 +1897,13 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     for (const requestId of [...this.pending.keys()]) {
       const pending = this.takePending(requestId)
       if (!pending) continue
+      const retained = pending.reconsideringContinuation
+        ? this.takeApplicableContinuation(pending.request)
+        : null
+      if (retained) {
+        pending.resolve(retained)
+        continue
+      }
       const bestProgress = this.bestProgressResponse(pending, 'worker-failure')
       if (bestProgress) {
         this.resolveDecision(pending, bestProgress)
@@ -1274,7 +1986,10 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     const safe =
       this.verifiedWinResponse(pending.request) ??
       this.guardUnpaidDamageDecision(pending.request, response)
-    const guarded = this.guardExpiringAttackPass(pending.request, safe)
+    const guarded = this.guardExpiringAttackPass(
+      pending.request,
+      this.guardCommittedOrder(pending.request, safe)
+    )
     this.rememberPlanCommit(pending.request, guarded)
     this.rememberContinuation(pending.request, guarded)
     pending.resolve({
@@ -1283,6 +1998,9 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       usage: {
         ...guarded.usage,
         policyRevision: EXPERT_AI_POLICY_REVISION,
+        ...(this.chanceOrderReview
+          ? { chanceOrderReview: this.chanceOrderReview }
+          : {}),
         ...(this.continuationRejection
           ? { continuationRejection: this.continuationRejection }
           : {})

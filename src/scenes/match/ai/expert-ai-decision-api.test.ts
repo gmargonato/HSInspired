@@ -221,6 +221,445 @@ describe('Expert hidden-world consensus', () => {
     expect(score?.trace?.sequence).toEqual(['Setup', 'Defend'])
   })
 
+  describe('root-supported continuation boundaries', () => {
+    const intent = (source: string, position: number | null = null) => ({
+      type: source === 'attacker' ? 'attack-character' : 'play-card',
+      source,
+      targets: source === 'attacker' ? ['opponent:hero'] : [],
+      position,
+      option: null
+    })
+    const world = (
+      chosen: string,
+      line: ReturnType<typeof intent>[],
+      extra: Record<string, unknown> = {}
+    ) => ({
+      response: { choice: { actionId: chosen } },
+      trace: {
+        chosenActionId: chosen,
+        chosenSequence: line.map((entry) => entry.source),
+        candidates: [
+          {
+            actionId: 'root',
+            description: 'Root',
+            accepted: true,
+            outcome: 'ongoing',
+            publicReply: 'unknown',
+            score: 0.7,
+            visits: 20,
+            meanValue: 0.7,
+            recommendationValue: 0.7,
+            sequenceIntents: line,
+            ...extra
+          },
+          { actionId: 'other', accepted: true, outcome: 'ongoing', score: 0 }
+        ]
+      }
+    })
+    const choose = (results: ReturnType<typeof world>[]) =>
+      chooseExpertConsensus(
+        results as unknown as Parameters<typeof chooseExpertConsensus>[0],
+        ['root', 'other']
+      )
+
+    it('replans an orphaned dissenting-world tail without changing root scores or votes', () => {
+      const attack = intent('attacker')
+      const results = [
+        world('root', [attack, intent('develop', 0)]),
+        world('root', [attack, intent('develop', 1)]),
+        world('other', [attack, intent('bounce')])
+      ]
+      const original = structuredClone(results)
+      const result = choose(results)
+      expect(result.actionId).toBe('root')
+      expect(result.scores.get('root')?.votes).toBe(2)
+      expect(result.scores.get('root')?.samples).toBe(3)
+      expect(result.scores.get('root')?.score).toBeCloseTo(2.1)
+      expect(result.scores.get('root')?.trace?.sequenceIntents).toEqual([
+        attack,
+        intent('bounce')
+      ])
+      expect(result.scores.get('root')?.trace?.reconsiderAfterPrefix).toBe(1)
+      expect(results).toEqual(original)
+    })
+
+    it('retains the entire line when any recommending world supports it exactly', () => {
+      const line = [intent('attacker'), intent('develop', 0)]
+      const result = choose([
+        world('root', line),
+        world('root', [intent('attacker'), intent('develop', 1)]),
+        world('other', line)
+      ])
+      expect(result.scores.get('root')?.trace?.sequenceIntents).toEqual(line)
+    })
+
+    it('keeps existing single-world and singly endorsed continuations', () => {
+      const line = [intent('attacker'), intent('bounce')]
+      for (const results of [
+        [world('root', line)],
+        [
+          world('root', [intent('attacker'), intent('develop')]),
+          world('other', line),
+          world('other', line)
+        ]
+      ])
+        expect(choose(results).scores.get('root')?.trace?.sequenceIntents).toEqual(line)
+    })
+
+    it('retains an exact longer common prefix but does not merge different positions', () => {
+      const prefix = [
+        intent('attacker'),
+        { ...intent('attacker'), source: 'second-attacker' }
+      ]
+      const result = choose([
+        world('root', [...prefix, intent('develop', 0)]),
+        world('root', [...prefix, intent('develop', 1)]),
+        world('other', [...prefix, intent('bounce')])
+      ])
+      expect(result.scores.get('root')?.trace?.sequenceIntents).toEqual([
+        ...prefix,
+        intent('bounce')
+      ])
+      expect(result.scores.get('root')?.trace?.reconsiderAfterPrefix).toBe(2)
+    })
+
+    it.each(['play-card', 'use-hero-power'])(
+      'does not reconsider a shared %s setup, alone or after an attack',
+      (type) => {
+        const setup = { ...intent('setup'), type }
+        for (const prefix of [[setup], [intent('attacker'), setup]]) {
+          const line = [...prefix, intent('payoff')]
+          const result = choose([
+            world('root', [...prefix, intent('alternative', 0)]),
+            world('root', [...prefix, intent('alternative', 1)]),
+            world('other', line)
+          ])
+          expect(result.scores.get('root')?.trace?.sequenceIntents).toEqual(line)
+          expect(
+            result.scores.get('root')?.trace?.reconsiderAfterPrefix
+          ).toBeUndefined()
+          expect(result.scores.get('root')?.votes).toBe(2)
+        }
+      }
+    )
+
+    it('preserves stronger verified-win and public-defense continuations', () => {
+      const winning = [intent('attacker'), intent('win')]
+      const win = choose([
+        world('root', [intent('attacker'), intent('develop')]),
+        world('root', [intent('attacker'), intent('other-development')]),
+        world('other', winning, { provenWin: true, outcome: 'win' })
+      ])
+      expect(win.scores.get('root')?.trace?.sequenceIntents).toEqual(winning)
+      const defense = [intent('attacker'), intent('defend')]
+      const safe = choose([
+        world('root', [intent('attacker'), intent('greed')], { publicReply: 'lethal' }),
+        world('root', [intent('attacker'), intent('greed')], { publicReply: 'lethal' }),
+        world('other', defense, { publicReply: 'clear' })
+      ])
+      expect(safe.scores.get('root')?.trace?.sequenceIntents).toEqual(defense)
+    })
+
+    it('retains a complete clear-defense line while requesting a budgeted reconsideration', () => {
+      const line = [intent('attacker'), intent('defend')]
+      const result = choose([
+        world('root', [intent('attacker'), intent('develop')]),
+        world('root', [intent('attacker'), intent('other-development')]),
+        world('other', line, { publicReply: 'clear' })
+      ])
+      expect(result.scores.get('root')?.trace?.sequenceIntents).toEqual(line)
+      expect(result.scores.get('root')?.trace?.publicReply).toBe('clear')
+      expect(result.scores.get('root')?.trace?.reconsiderAfterPrefix).toBe(1)
+    })
+
+    it('does not count rejected candidates as continuation endorsements', () => {
+      const line = [intent('attacker'), intent('bounce')]
+      const result = choose([
+        world('root', [intent('attacker'), intent('develop')]),
+        world('root', [intent('attacker'), intent('develop')], { accepted: false }),
+        world('other', line)
+      ])
+      expect(result.scores.get('root')?.trace?.sequenceIntents).toEqual(line)
+    })
+  })
+
+  it.each([
+    'normal',
+    'action-entry',
+    'wall-exhausted',
+    'search-exhausted',
+    'exact-reserve',
+    'throw',
+    'failure',
+    'failure-progress',
+    'timeout',
+    'mismatched-line',
+    'card-setup-prefix',
+    'power-setup-prefix',
+    'construction-failure'
+  ])(
+    'keeps a bound continuation backup during consensus reconsideration: %s',
+    async (mode) => {
+      const fixture = createAiFixture({
+        seed: 813,
+        aiHeroId: 'valeera',
+        opponentHeroId: 'garrosh',
+        turnNumber: 5,
+        aiMana: mode === 'power-setup-prefix' ? 4 : 3,
+        aiMaximumMana: mode === 'power-setup-prefix' ? 4 : 3,
+        aiHeroPowerCost: 2,
+        aiHand: [
+          'basic_sap',
+          'classic_earthen_ring_farseer',
+          ...(mode === 'card-setup-prefix' ? ['classic_preparation'] : [])
+        ],
+        aiBoard: [{ cardId: 'classic_bloodmage_thalnos', ready: true }],
+        opponentBoard: [{ cardId: 'classic_acolyte_of_pain', ready: true }],
+        aiDeck: ['basic_chillwind_yeti'],
+        opponentDeck: ['basic_chillwind_yeti']
+      })
+      const session = new GameBoardSession({
+        setup: fixture.setup,
+        decks: fixture.decks,
+        checkpoint: fixture.checkpoint
+      })
+      const actions = () =>
+        aiActions(
+          session,
+          enumerateLegalCommands(
+            {
+              getState: session.match.getState,
+              getPlayInput: session.match.getPlayInput!,
+              getLegality: session.match.getLegality!
+            },
+            session.remoteParticipantId
+          )
+        )
+      const attack = actions().find((a) => {
+        if (mode === 'power-setup-prefix') return a.command.type === 'use-hero-power'
+        if (mode === 'card-setup-prefix') {
+          const preparation = session
+            .getState()
+            .players.find((p) => p.participantId === session.remoteParticipantId)!
+            .hand.find((card) => card.cardId === 'classic_preparation')!
+          return (
+            a.command.type === 'play-card' &&
+            a.command.cardInstanceId === preparation.instanceId
+          )
+        }
+        return (
+          a.command.type === 'attack-character' && a.command.defender.kind === 'hero'
+        )
+      })!
+      const hand = session
+        .getState()
+        .players.find((p) => p.participantId === session.remoteParticipantId)!.hand
+      const sapId = hand.find((c) => c.cardId === 'basic_sap')!.instanceId
+      const farseerId = hand.find(
+        (c) => c.cardId === 'classic_earthen_ring_farseer'
+      )!.instanceId
+      const sap = actions().find(
+        (a) => a.command.type === 'play-card' && a.command.cardInstanceId === sapId
+      )!
+      const line = [attack, sap].map((a) =>
+        aiActionIntent(a.command, session.localParticipantId)
+      )
+      const annotationLine = structuredClone(line)
+      if (mode === 'mismatched-line')
+        annotationLine[1] = { ...annotationLine[1]!, source: farseerId }
+      let now = 0
+      let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+      let workerError: ((event: ErrorEvent) => void) | undefined
+      let factoryCalls = 0
+      const posted: Extract<ExpertAiWorkerRequest, { type: 'decide' }>[] = []
+      const worker = {
+        addEventListener(type: string, listener: unknown) {
+          if (type === 'message') receive = listener as typeof receive
+          if (type === 'error') workerError = listener as typeof workerError
+        },
+        postMessage(message: ExpertAiWorkerRequest) {
+          if (message.type !== 'decide') return
+          posted.push(message)
+          const first = posted.length === 1
+          const selected = first
+            ? attack
+            : actions().find(
+                (a) =>
+                  a.command.type === 'play-card' &&
+                  a.command.cardInstanceId === farseerId &&
+                  a.command.targets?.some(
+                    (t) =>
+                      t.kind === 'hero' &&
+                      t.participantId === session.remoteParticipantId
+                  )
+              )!
+          const selectedIntent = aiActionIntent(
+            selected.command,
+            session.localParticipantId
+          )
+          const response: AiDecisionResponse = {
+            matchId: message.request.matchId,
+            requestId: message.request.requestId,
+            expectedRevision: message.request.expectedRevision,
+            modelId: 'hardware-local-v2',
+            reason: 'Bounded continuation fixture.',
+            durationMs: 0,
+            finishReason: 'fixture',
+            choice:
+              message.request.phase === 'plan'
+                ? {
+                    plan: {
+                      firstActionId: selected.id,
+                      objective: 'Fixture',
+                      winCheck: 'None',
+                      lossRisk: 'Fixture',
+                      candidates: [
+                        {
+                          sequence: ['Attack', 'Sap'],
+                          budget: 'Fixture',
+                          endPosition: 'Fixture',
+                          opponentReply: 'Fixture'
+                        }
+                      ],
+                      preferred: 0,
+                      checks: []
+                    }
+                  }
+                : {
+                    actionId: selected.id,
+                    intent: selectedIntent,
+                    expectedResult: 'Fixture',
+                    planUpdate: null
+                  },
+            usage: (first
+              ? {
+                  plannedActionIntents: line,
+                  continuationReconsideration: {
+                    prefixLength: 1,
+                    actions: annotationLine
+                  }
+                }
+              : { plannedActionIntents: [selectedIntent] }) as unknown as JsonObject
+          }
+          if (!first) {
+            expect(message.preferredContinuation).toBeUndefined()
+            if (mode === 'throw') throw new Error('Fixture worker failure')
+            if (mode === 'timeout') return
+            if (mode === 'failure-progress')
+              receive?.({
+                data: {
+                  type: 'progress',
+                  requestId: message.request.requestId,
+                  response,
+                  recommendationValue: 0.9,
+                  worldIndex: 0,
+                  iterations: 1
+                }
+              } as MessageEvent<ExpertAiWorkerResponse>)
+            if (mode === 'failure' || mode === 'failure-progress') {
+              receive?.({
+                data: {
+                  type: 'failure',
+                  requestId: message.request.requestId,
+                  error: 'Fixture worker failure'
+                }
+              } as MessageEvent<ExpertAiWorkerResponse>)
+              return
+            }
+          }
+          receive?.({
+            data: { type: 'decision', requestId: message.request.requestId, response }
+          } as MessageEvent<ExpertAiWorkerResponse>)
+        },
+        terminate() {}
+      } as unknown as Worker
+      if (mode === 'timeout') vi.useFakeTimers()
+      const api = new ExpertAiDecisionApi(
+        session,
+        () => {
+          factoryCalls++
+          if (mode === 'construction-failure' && factoryCalls > 1) {
+            now += 7
+            throw new Error('Fixture replacement worker construction failure')
+          }
+          return worker
+        },
+        () => now
+      )
+      const request = (
+        id: string,
+        phase: 'plan' | 'action' = 'action'
+      ): AiDecisionRequest => ({
+        matchId: 'consensus-boundary',
+        requestId: id,
+        phase,
+        expectedRevision: session.getState().revision,
+        allowInspection: false,
+        messages: [],
+        actionIds: actions().map((a) => a.id)
+      })
+      try {
+        const before = session.match.getCheckpoint()
+        await api.decide(request('first', mode === 'action-entry' ? 'action' : 'plan'))
+        if (mode !== 'action-entry') {
+          const commit = await api.decide(request('commit'))
+          expect('actionId' in commit.choice && commit.choice.actionId).toBe(attack.id)
+        }
+        expect(session.match.getCheckpoint()).toEqual(before)
+        expect(posted).toHaveLength(1)
+        expect(session.dispatch(attack.command).accepted).toBe(true)
+        if (mode === 'construction-failure')
+          workerError?.({
+            currentTarget: worker,
+            message: 'Worker crashed between actions'
+          } as unknown as ErrorEvent)
+        if (mode === 'wall-exhausted') now = 60_000
+        if (mode === 'exact-reserve') now = EXPERT_AI_SEARCH_BUDGET_MS - 4_000
+        if (mode === 'search-exhausted')
+          (api as unknown as { searchUsedMs: number }).searchUsedMs =
+            EXPERT_AI_SEARCH_BUDGET_MS
+        const pending = api.decide(request('second'))
+        if (mode === 'timeout') {
+          now = 60_000
+          await vi.advanceTimersByTimeAsync(60_000)
+        }
+        const response = await pending
+        const selected = actions().find(
+          (a) => 'actionId' in response.choice && a.id === response.choice.actionId
+        )!
+        const fresh = mode === 'normal' || mode === 'action-entry'
+        expect(
+          selected.command.type === 'play-card' && selected.command.cardInstanceId
+        ).toBe(fresh ? farseerId : sapId)
+        expect(posted).toHaveLength(
+          [
+            'wall-exhausted',
+            'search-exhausted',
+            'exact-reserve',
+            'mismatched-line',
+            'card-setup-prefix',
+            'power-setup-prefix',
+            'construction-failure'
+          ].includes(mode)
+            ? 1
+            : 2
+        )
+        expect(response.usage?.continuationReconsideration).toBeUndefined()
+        if (mode === 'construction-failure') {
+          expect(factoryCalls).toBe(2)
+          expect(
+            (api as unknown as { searchUsedMs: number }).searchUsedMs
+          ).toBeGreaterThanOrEqual(7)
+          expect(response.durationMs).toBeGreaterThanOrEqual(7)
+        }
+        expect(session.dispatch(selected.command).accepted).toBe(true)
+      } finally {
+        api.dispose()
+        if (mode === 'timeout') vi.useRealTimers()
+      }
+    }
+  )
+
   it('ranks an empty Coin into face hero power below ordinary legal moves', () => {
     const candidate = (
       actionId: string,
@@ -2214,3 +2653,642 @@ describe('Expert AI worker boundary', () => {
     api.dispose()
   })
 })
+
+it.each([
+  ['action', 'refresh'],
+  ['plan', 'refresh'],
+  ['action', 'buff'],
+  ['plan', 'buff']
+] as const)(
+  'repairs a committed %s/%s pair and retains it after search exhaustion',
+  async (phase, kind) => {
+    const fixture = createAiFixture({
+      seed: 613,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'garrosh',
+      aiMana: 2,
+      aiHand: kind === 'buff' ? ['basic_deadly_poison'] : [],
+      aiWeapon: { cardId: 'basic_wicked_knife', durability: kind === 'buff' ? 2 : 1 },
+      opponentHealth: 12,
+      opponentArmor: 9,
+      opponentBoard: [{ cardId: 'whispers_of_the_old_gods_ravaging_ghoul', health: 3 }]
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actions = () =>
+      aiActions(
+        session,
+        enumerateLegalCommands(
+          {
+            getState: session.match.getState,
+            getPlayInput: session.match.getPlayInput!,
+            getLegality: session.match.getLegality!
+          },
+          session.remoteParticipantId
+        )
+      )
+    const setup = actions().find(
+      (action) =>
+        action.command.type === (kind === 'buff' ? 'play-card' : 'use-hero-power')
+    )!
+    const attack = actions().find(
+      (action) =>
+        action.command.type === 'attack-character' &&
+        action.command.defender.kind === (kind === 'buff' ? 'hero' : 'minion')
+    )!
+    const first = kind === 'buff' ? attack : setup
+    const second = kind === 'buff' ? setup : attack
+    let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+    let calls = 0
+    let original: AiDecisionResponse | undefined
+    const worker = {
+      addEventListener(type: string, listener: unknown) {
+        if (type === 'message') receive = listener as typeof receive
+      },
+      postMessage(message: ExpertAiWorkerRequest) {
+        if (message.type !== 'decide') return
+        calls++
+        original = {
+          ...message.request,
+          modelId: 'hardware-local-v2',
+          reason: 'Recorded pair.',
+          durationMs: 0,
+          finishReason: 'fixture',
+          choice:
+            phase === 'plan'
+              ? {
+                  plan: {
+                    objective: 'Recorded pair.',
+                    winCheck: 'No proven win.',
+                    lossRisk: 'Test.',
+                    candidates: [
+                      {
+                        sequence: [first.description, second.description],
+                        budget: 'Two mana.',
+                        endPosition: 'Weapon retained.',
+                        opponentReply: 'Unknown.'
+                      }
+                    ],
+                    preferred: 0,
+                    firstActionId: first.id,
+                    checks: []
+                  }
+                }
+              : {
+                  actionId: first.id,
+                  intent: aiActionIntent(first.command, session.localParticipantId),
+                  expectedResult: 'Test.',
+                  planUpdate: null
+                },
+          usage: {
+            plannedActionIntents: [first, second].map((action) =>
+              aiActionIntent(action.command, session.localParticipantId)
+            )
+          } as unknown as JsonObject
+        }
+        receive?.({
+          data: {
+            type: 'decision',
+            requestId: message.request.requestId,
+            response: original
+          }
+        } as MessageEvent<ExpertAiWorkerResponse>)
+      },
+      terminate() {}
+    } as unknown as Worker
+    const api = new ExpertAiDecisionApi(
+      session,
+      () => worker,
+      () => 0
+    )
+    const request = (
+      requestId: string,
+      requestPhase: 'action' | 'plan' = 'action'
+    ): AiDecisionRequest => ({
+      matchId: 'refresh-order',
+      requestId,
+      phase: requestPhase,
+      expectedRevision: session.getState().revision,
+      allowInspection: false,
+      messages: [],
+      actionIds: actions().map((action) => action.id)
+    })
+    try {
+      let response = await api.decide(request('first', phase))
+      expect(response.usage?.actionOutcomeReason).toBe(
+        kind === 'buff'
+          ? 'committed-attack-setup-order'
+          : 'committed-weapon-refresh-order'
+      )
+      expect(
+        'plan' in original!.choice
+          ? original!.choice.plan.firstActionId
+          : 'actionId' in original!.choice
+            ? original!.choice.actionId
+            : null
+      ).toBe(first.id)
+      ;(api as unknown as { searchUsedMs: number }).searchUsedMs =
+        EXPERT_AI_SEARCH_BUDGET_MS
+      if (phase === 'plan') response = await api.decide(request('cached'))
+      expect(response.choice).toMatchObject({ actionId: second.id })
+      expect(session.dispatch(second.command).accepted).toBe(true)
+      response = await api.decide(request('continue'))
+      const next = actions().find(
+        (action) =>
+          'actionId' in response.choice && action.id === response.choice.actionId
+      )!
+      expect(next.command).toEqual(first.command)
+      expect(session.dispatch(next.command).accepted).toBe(true)
+      expect(
+        session
+          .getState()
+          .players.find(
+            (player) => player.participantId === session.remoteParticipantId
+          )!.weapon!.durability
+      ).toBe(kind === 'buff' ? 1 : 2)
+      if (kind === 'buff')
+        expect(
+          session
+            .getState()
+            .players.find(
+              (player) => player.participantId === session.localParticipantId
+            )!.hero.armor
+        ).toBe(6)
+      expect(calls).toBe(1)
+    } finally {
+      api.dispose()
+    }
+  }
+)
+
+it.each(['action', 'plan'] as const)(
+  'recovers a committed minion attack through %s and an exhausted cache',
+  async (phase) => {
+    const f = createAiFixture({
+      seed: 613,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'garrosh',
+      aiMana: 1,
+      aiHand: ['classic_southsea_deckhand'],
+      aiWeapon: { cardId: 'basic_wicked_knife', durability: 1 },
+      opponentHealth: 12,
+      opponentArmor: 9
+    })
+    const session = new GameBoardSession({
+      setup: f.setup,
+      decks: f.decks,
+      checkpoint: f.checkpoint
+    })
+    const actions = () =>
+      aiActions(
+        session,
+        enumerateLegalCommands(
+          {
+            getState: session.match.getState,
+            getPlayInput: session.match.getPlayInput!,
+            getLegality: session.match.getLegality!
+          },
+          session.remoteParticipantId
+        )
+      )
+    const attack = actions().find(
+      (a) =>
+        a.command.type === 'attack-character' &&
+        a.command.attacker.kind === 'hero' &&
+        a.command.defender.kind === 'hero'
+    )!
+    const play = actions().find((a) => a.command.type === 'play-card')!
+    const end = actions().find((a) => a.command.type === 'end-turn')!
+    let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+    let calls = 0
+    let original: AiDecisionResponse | undefined
+    const worker = {
+      addEventListener(type: string, listener: unknown) {
+        if (type === 'message') receive = listener as typeof receive
+      },
+      postMessage(message: ExpertAiWorkerRequest) {
+        if (message.type !== 'decide') return
+        calls++
+        original = {
+          ...message.request,
+          modelId: 'hardware-local-v2',
+          reason: 'Full selected line.',
+          durationMs: 0,
+          finishReason: 'fixture',
+          choice:
+            phase === 'plan'
+              ? {
+                  plan: {
+                    objective: 'Test',
+                    winCheck: 'No win',
+                    lossRisk: 'Test',
+                    candidates: [
+                      {
+                        sequence: [
+                          attack.description,
+                          play.description,
+                          end.description
+                        ],
+                        budget: 'One mana',
+                        endPosition: 'Test',
+                        opponentReply: 'Unknown'
+                      }
+                    ],
+                    preferred: 0,
+                    firstActionId: attack.id,
+                    checks: []
+                  }
+                }
+              : {
+                  actionId: attack.id,
+                  intent: aiActionIntent(attack.command, session.localParticipantId),
+                  expectedResult: 'Test',
+                  planUpdate: null
+                },
+          usage: {
+            plannedActionIntents: [attack, play, end].map((a) =>
+              aiActionIntent(a.command, session.localParticipantId)
+            )
+          } as unknown as JsonObject
+        }
+        receive?.({
+          data: {
+            type: 'decision',
+            requestId: message.request.requestId,
+            response: original
+          }
+        } as MessageEvent<ExpertAiWorkerResponse>)
+      },
+      terminate() {}
+    } as unknown as Worker
+    const api = new ExpertAiDecisionApi(
+      session,
+      () => worker,
+      () => 0
+    )
+    const request = (
+      requestId: string,
+      requestPhase: 'action' | 'plan' = 'action'
+    ): AiDecisionRequest => ({
+      matchId: 'complete-order',
+      requestId,
+      phase: requestPhase,
+      expectedRevision: session.getState().revision,
+      allowInspection: false,
+      messages: [],
+      actionIds: actions().map((a) => a.id)
+    })
+    try {
+      let response = await api.decide(request('first', phase))
+      expect(response.usage?.actionOutcomeReason).toBe(
+        'committed-expiring-minion-attack'
+      )
+      expect(
+        'plan' in original!.choice
+          ? original!.choice.plan.firstActionId
+          : 'actionId' in original!.choice
+            ? original!.choice.actionId
+            : null
+      ).toBe(attack.id)
+      ;(api as unknown as { searchUsedMs: number }).searchUsedMs =
+        EXPERT_AI_SEARCH_BUDGET_MS
+      if (phase === 'plan') response = await api.decide(request('cached'))
+      expect(response.choice).toMatchObject({ actionId: play.id })
+      expect(session.dispatch(play.command).accepted).toBe(true)
+      for (const kind of ['minion', 'hero']) {
+        response = await api.decide(request('continue-' + kind))
+        const chosen = actions().find(
+          (a) => 'actionId' in response.choice && a.id === response.choice.actionId
+        )!
+        expect(chosen.command).toMatchObject({
+          type: 'attack-character',
+          attacker: { kind },
+          defender: { kind: 'hero' }
+        })
+        expect(session.dispatch(chosen.command).accepted).toBe(true)
+      }
+      expect(
+        session
+          .getState()
+          .players.find((p) => p.participantId === session.localParticipantId)!.hero
+          .armor
+      ).toBe(6)
+      expect(calls).toBe(1)
+    } finally {
+      api.dispose()
+    }
+  }
+)
+
+it.each([
+  'replan-hold',
+  'replan-attack',
+  'fresh',
+  'exhausted',
+  'restricted',
+  'verified'
+] as const)('keeps the all-outcome cache gate conditional: %s', async (mode) => {
+  const fixture = createAiFixture({
+    seed: 613,
+    aiHeroId: 'valeera',
+    opponentHeroId: 'garrosh',
+    aiMana: 1,
+    aiHeroPowerAvailable: false,
+    aiHand: ['classic_preparation', 'goblins_vs_gnomes_tinkers_sharpsword_oil'],
+    aiBoard: [{ cardId: 'classic_violet_teacher' }, { cardId: 'basic_chillwind_yeti' }],
+    aiWeapon: { cardId: 'basic_wicked_knife', durability: 2 },
+    opponentHealth: 12,
+    opponentArmor: 12
+  })
+  const session = new GameBoardSession({
+    setup: fixture.setup,
+    decks: fixture.decks,
+    checkpoint: fixture.checkpoint
+  })
+  const own = session
+    .getState()
+    .players.find((p) => p.participantId === session.remoteParticipantId)!
+  expect(
+    session.dispatch({
+      type: 'play-card',
+      participantId: session.remoteParticipantId,
+      cardInstanceId: own.hand.find((c) => c.cardId === 'classic_preparation')!
+        .instanceId
+    }).accepted
+  ).toBe(true)
+  const actions = aiActions(
+    session,
+    enumerateLegalCommands(
+      {
+        getState: session.match.getState,
+        getPlayInput: session.match.getPlayInput!,
+        getLegality: session.match.getLegality!
+      },
+      session.remoteParticipantId
+    )
+  )
+  const attack = actions.find(
+    (a) =>
+      a.command.type === 'attack-character' &&
+      a.command.attacker.kind === 'hero' &&
+      a.command.defender.kind === 'hero'
+  )!
+  const pass = actions.find((a) => a.command.type === 'end-turn')!
+  const oil = actions.find((a) => a.command.type === 'play-card')!
+  let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined,
+    calls = 0
+  const worker = {
+    addEventListener(type: string, listener: unknown) {
+      if (type === 'message') receive = listener as typeof receive
+    },
+    removeEventListener() {},
+    terminate() {},
+    postMessage(message: ExpertAiWorkerRequest) {
+      if (message.type !== 'decide') return
+      calls++
+      const selected = mode === 'replan-attack' ? attack : pass
+      const response: AiDecisionResponse = {
+        ...message.request,
+        modelId: 'hardware-local-v2',
+        reason: 'Independent worker strategy',
+        durationMs: 1,
+        finishReason: 'fixture-search',
+        choice: {
+          actionId: selected.id,
+          intent: aiActionIntent(selected.command, session.localParticipantId),
+          expectedResult: 'Worker choice',
+          planUpdate: null
+        },
+        usage: {
+          plannedActionIntents: [
+            aiActionIntent(selected.command, session.localParticipantId)
+          ]
+        } as unknown as JsonObject
+      }
+      receive?.({
+        data: { type: 'decision', requestId: message.request.requestId, response }
+      } as MessageEvent<ExpertAiWorkerResponse>)
+    }
+  } as unknown as Worker
+  const api = new ExpertAiDecisionApi(
+    session,
+    () => worker,
+    () => 0
+  )
+  const request: AiDecisionRequest = {
+    matchId: 'chance-gate',
+    requestId: 'chance-gate:54',
+    phase: 'action',
+    expectedRevision: session.getState().revision,
+    allowInspection: false,
+    messages: [],
+    actionIds: actions
+      .filter((a) => mode !== 'restricted' || a.id !== oil.id)
+      .map((a) => a.id)
+  }
+  const internal = api as unknown as { continuation: unknown; searchUsedMs: number }
+  if (mode !== 'fresh')
+    internal.continuation = {
+      turn: session.getState().turnNumber,
+      expectedRevision: session.getState().revision - 1,
+      nextIndex: 1,
+      provenWin: mode === 'verified',
+      actions: [
+        aiActionIntent(attack.command, session.localParticipantId),
+        aiActionIntent(attack.command, session.localParticipantId)
+      ]
+    }
+  if (mode === 'exhausted') internal.searchUsedMs = EXPERT_AI_SEARCH_BUDGET_MS
+  const before = session.match.getCheckpoint()
+  try {
+    const response = await api.decide(request)
+    const replanned = mode === 'replan-hold' || mode === 'replan-attack'
+    expect(calls).toBe(replanned || mode === 'fresh' ? 1 : 0)
+    expect(response.choice).toMatchObject({
+      actionId: mode === 'replan-hold' || mode === 'fresh' ? pass.id : attack.id
+    })
+    if (replanned) {
+      expect(response.usage?.continuationRejection).toBe('attack-before-setup')
+      expect(response.usage?.chanceOrderReview).toMatchObject({
+        outcomes: 4,
+        targets: 4,
+        dispatches: 13,
+        abstained: false
+      })
+    }
+    expect(session.match.getCheckpoint()).toEqual(before)
+  } finally {
+    api.dispose()
+  }
+})
+
+it.each(['action', 'plan'] as const)(
+  'executes a proved singleton setup continuation after budget exhaustion from %s',
+  async (phase) => {
+    const fixture = createAiFixture({
+      seed: 613,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'garrosh',
+      aiMana: 6,
+      aiHand: ['basic_the_coin', 'goblins_vs_gnomes_tinkers_sharpsword_oil'],
+      aiBoard: [{ cardId: 'classic_si_7_agent', ready: true, health: 1 }],
+      opponentHealth: 12,
+      opponentArmor: 5
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actor = session.remoteParticipantId,
+      opponent = session.localParticipantId
+    const own = session.getState().players.find((p) => p.participantId === actor)!
+    expect(
+      session.dispatch({
+        type: 'play-card',
+        participantId: actor,
+        cardInstanceId: own.hand.find((c) => c.cardId === 'basic_the_coin')!.instanceId
+      }).accepted
+    ).toBe(true)
+    const actions = () =>
+      aiActions(
+        session,
+        enumerateLegalCommands(
+          {
+            getState: session.match.getState,
+            getPlayInput: session.match.getPlayInput!,
+            getLegality: session.match.getLegality!
+          },
+          actor
+        )
+      )
+    const first = actions().find(
+      (a) =>
+        a.command.type === 'attack-character' &&
+        a.command.attacker.kind === 'minion' &&
+        a.command.defender.kind === 'hero'
+    )!
+    const power = actions().find((a) => a.command.type === 'use-hero-power')!
+    const oil = actions().find((a) => a.command.type === 'play-card')!
+    const hero = {
+      type: 'attack-character' as const,
+      participantId: actor,
+      attacker: { kind: 'hero' as const },
+      defender: { kind: 'hero' as const }
+    }
+    const intents = [first.command, power.command, oil.command, hero].map((c) =>
+      aiActionIntent(c, opponent)
+    )
+    let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined,
+      calls = 0
+    const worker = {
+      addEventListener(type: string, listener: unknown) {
+        if (type === 'message') receive = listener as typeof receive
+      },
+      removeEventListener() {},
+      terminate() {},
+      postMessage(message: ExpertAiWorkerRequest) {
+        if (message.type !== 'decide') return
+        calls++
+        const response: AiDecisionResponse = {
+          ...message.request,
+          modelId: 'hardware-local-v2',
+          reason: 'Committed complete sequence',
+          finishReason: 'fixture-search',
+          durationMs: 1,
+          choice:
+            phase === 'plan'
+              ? {
+                  plan: {
+                    firstActionId: first.id,
+                    objective: 'Committed sequence',
+                    winCheck: 'none',
+                    lossRisk: 'test',
+                    candidates: [
+                      {
+                        sequence: ['attack', 'power', 'setup', 'hero'],
+                        budget: 'test',
+                        endPosition: 'test',
+                        opponentReply: 'test'
+                      }
+                    ],
+                    preferred: 0,
+                    checks: []
+                  }
+                }
+              : {
+                  actionId: first.id,
+                  intent: intents[0]!,
+                  expectedResult: 'Test',
+                  planUpdate: null
+                },
+          usage: { plannedActionIntents: intents } as unknown as JsonObject
+        }
+        receive?.({
+          data: { type: 'decision', requestId: message.request.requestId, response }
+        } as MessageEvent<ExpertAiWorkerResponse>)
+      }
+    } as unknown as Worker
+    const api = new ExpertAiDecisionApi(
+      session,
+      () => worker,
+      () => 0
+    )
+    const internal = api as unknown as { searchUsedMs: number; singletonOrder: unknown }
+    const request = (
+      id: string,
+      requestPhase: 'action' | 'plan' = 'action'
+    ): AiDecisionRequest => ({
+      matchId: 'singleton',
+      requestId: 'singleton:' + id,
+      phase: requestPhase,
+      expectedRevision: session.getState().revision,
+      allowInspection: false,
+      actionIds: actions().map((a) => a.id),
+      messages: []
+    })
+    const before = session.match.getCheckpoint()
+    try {
+      let response = await api.decide(request('initial', phase))
+      expect(response.usage?.singletonOrderReview).toMatchObject({
+        dispatches: 8,
+        targets: 1,
+        outcomes: 1
+      })
+      expect(session.match.getCheckpoint()).toEqual(before)
+      internal.searchUsedMs = EXPERT_AI_SEARCH_BUDGET_MS
+      if (phase === 'plan') response = await api.decide(request('cached'))
+      expect(response.choice).toMatchObject({ actionId: power.id })
+      expect(session.dispatch(power.command).accepted).toBe(true)
+      for (const expected of ['play-card', 'minion', 'hero']) {
+        response = await api.decide(request(expected))
+        const selected = actions().find(
+          (a) => 'actionId' in response.choice && a.id === response.choice.actionId
+        )!
+        expect(
+          selected.command.type === 'attack-character'
+            ? selected.command.attacker.kind
+            : selected.command.type
+        ).toBe(expected)
+        if (expected === 'play-card') {
+          const certificate = internal.singletonOrder
+          session.match.analyze((fork) => fork.dispatch(selected.command))
+          session.match.analyze((fork) => fork.dispatch(selected.command))
+          expect(internal.singletonOrder).toBe(certificate)
+        }
+        expect(session.dispatch(selected.command).accepted).toBe(true)
+        expect(internal.singletonOrder).toBeNull()
+      }
+      expect(
+        session.getState().players.find((p) => p.participantId === opponent)!.hero
+          .health
+      ).toBe(7)
+      expect(calls).toBe(1)
+    } finally {
+      api.dispose()
+    }
+  }
+)

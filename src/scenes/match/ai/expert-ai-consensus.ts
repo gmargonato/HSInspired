@@ -1,5 +1,8 @@
 import type { AiDecisionResponse } from '../../../desktop/contracts/ipc/ai'
-import type { AiDecisionChoice } from '../../../desktop/contracts/ipc/ai-deliberation'
+import {
+  sameAiIntent,
+  type AiDecisionChoice
+} from '../../../desktop/contracts/ipc/ai-deliberation'
 import type {
   LocalAiCandidateTrace,
   LocalAiDecisionTrace
@@ -8,6 +11,7 @@ import { mctsRootRecommendationScore } from '../../../game-rules/match/ai/inform
 
 export interface ExpertCandidateTrace extends LocalAiCandidateTrace {
   readonly sequence?: readonly string[]
+  readonly reconsiderAfterPrefix?: number
 }
 
 export interface ExpertCandidateScore {
@@ -94,6 +98,57 @@ export function rankExpertCandidateWorlds(
       }
       score.votes++
       scores.set(chosenId, score)
+    }
+  }
+
+  for (const [chosenId, score] of scores) {
+    const representative = score.trace
+    const line = representative?.sequenceIntents
+    if (!representative || safetyRank(representative) !== 1 || !line || line.length < 2)
+      continue
+    const endorsingCandidates = results.flatMap((result) => {
+      if (actionId(result.response.choice) !== chosenId) return []
+      const candidate = result.trace?.candidates.find(
+        (entry) => entry.accepted && entry.actionId === chosenId
+      )
+      return candidate &&
+        safetyRank(candidate) === 1 &&
+        candidate.sequenceIntents?.length
+        ? [candidate]
+        : []
+    })
+    const endorsingLines = endorsingCandidates.map(
+      (candidate) => candidate.sequenceIntents!
+    )
+    if (
+      endorsingLines.length < 2 ||
+      endorsingLines.some(
+        (endorsed) =>
+          endorsed.length >= line.length &&
+          line.every((intent, index) => sameAiIntent(intent, endorsed[index]!))
+      )
+    )
+      continue
+
+    // Two worlds can select a root while the last equally safe, dissenting
+    // world supplies an unrelated follow-up. Request reconsideration after
+    // their shared exact prefix, retaining the old line as a timeout backup.
+    // Root scores, supported continuations and stronger safety proofs stay intact.
+    const prefixLength = line.findIndex((intent, index) =>
+      endorsingLines.some(
+        (endorsed) => !endorsed[index] || !sameAiIntent(intent, endorsed[index]!)
+      )
+    )
+    // A played card or hero power may already have paid for the selected
+    // payoff. Preserve those setup commitments even when worlds disagree.
+    if (
+      prefixLength < 1 ||
+      line.slice(0, prefixLength).some((intent) => intent.type !== 'attack-character')
+    )
+      continue
+    score.trace = {
+      ...representative,
+      reconsiderAfterPrefix: prefixLength
     }
   }
   return scores

@@ -62,6 +62,7 @@ import { LOCAL_AI_POLICY } from './local-ai-policy'
 import { CTHUN_ID } from '../../../game-rules/match/cthun'
 import { expertDrawPreference } from './expert-draw-preference'
 import { createExpertAttackOrderInspector } from './expert-action-ordering'
+import { identicalSupportedContinuation } from './expert-completed-attack-order'
 import {
   inspectExpertAction,
   expertContinuationPenalty,
@@ -2220,17 +2221,27 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         let best: { value: number; commands: readonly TurnMatchCommand[] } | undefined
         for (const line of candidates) {
           if (this.workBudget === undefined && performance.now() >= deadline) break
+          const opening = line.commands[0]
+          const supported =
+            rootSelf?.weapon?.durability === 1 &&
+            opening?.type === 'attack-character' &&
+            opening.attacker.kind === 'hero'
+              ? identicalSupportedContinuation(line, [
+                  ...(sampledTurnLines.get(stat.key)?.values() ?? [])
+                ])
+              : line
           const penalty = simulationSession.match.analyze((fork) =>
             expertContinuationPenalty(
               fork,
               rootId,
-              line.commands,
+              supported.commands,
               () => this.workBudget === undefined && performance.now() >= deadline
             )
           )
           if (penalty > 0) continue
           const value = line.valueSum / line.visits
-          if (!best || value > best.value) best = { value, commands: line.commands }
+          if (!best || value > best.value)
+            best = { value, commands: supported.commands }
         }
         if (best) {
           continuation = best.commands
