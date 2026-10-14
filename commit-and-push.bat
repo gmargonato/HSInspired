@@ -94,21 +94,26 @@ echo Creating commit: %COMMIT_MESSAGE%
 git commit -m "%COMMIT_MESSAGE%"
 if errorlevel 1 goto :error_commit
 
+:push
 echo.
 echo Pushing to origin/main...
 git push origin main
 if errorlevel 1 goto :error_push
 
 set "COMMIT_HASH="
-for /f "delims=" %%H in ('git rev-parse --short HEAD 2^>nul') do set "COMMIT_HASH=%%H"
+for /f "delims=" %%H in ('git rev-parse HEAD 2^>nul') do set "COMMIT_HASH=%%H"
+if not defined COMMIT_HASH goto :error_verify_push
+set "REMOTE_HASH="
+for /f "tokens=1" %%H in ('git ls-remote origin refs/heads/main 2^>nul') do set "REMOTE_HASH=%%H"
+if not "%REMOTE_HASH%"=="%COMMIT_HASH%" goto :error_verify_push
 echo.
-echo Completed successfully: %COMMIT_HASH%
+echo Completed successfully. GitHub has your saved version: %COMMIT_HASH%
 goto :finish
 
 :nothing_to_commit
 echo.
-echo No changes to commit. Nothing was pushed.
-goto :finish
+echo No new file changes to save. Checking and uploading previously saved work...
+goto :push
 
 :error_directory
 echo ERROR: Could not open the repository directory.
@@ -187,6 +192,13 @@ goto :finish
 
 :error_push
 echo ERROR: Push failed. The local commit remains intact; no pull or reset was performed.
+echo        Run this script again to retry uploading the saved work.
+set "EXIT_CODE=1"
+goto :finish
+
+:error_verify_push
+echo ERROR: Could not confirm that GitHub has your saved version.
+echo        Your local work remains intact. Check the connection and run this script again.
 set "EXIT_CODE=1"
 goto :finish
 

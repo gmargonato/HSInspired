@@ -153,6 +153,19 @@ export class MatchPremiumAppearance {
             : false
         this.heroPowers.set(event.participantId, sourcePremium || identityPremium)
       }
+      if (event.type === 'hero-power-minion-summoned') {
+        const { minion, participantId } = event
+        if (!this.instances.has(minion.instanceId)) {
+          this.instances.set(minion.instanceId, {
+            cardId: minion.cardId,
+            ownerId: participantId,
+            premium:
+              this.heroPowerPremium(participantId) ||
+              this.identityPremium(minion.cardId, participantId)
+          })
+        }
+        continue
+      }
       if (event.type !== 'effect-resolved') continue
       const data = event.data
       if (!data) continue
