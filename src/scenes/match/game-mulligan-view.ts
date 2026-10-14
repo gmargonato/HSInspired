@@ -170,13 +170,24 @@ export class GameMulliganView {
     cards: readonly OpeningCard[],
     createSlot: (card: OpeningCard) => Promise<GameCardSlot>
   ): Promise<readonly { card: OpeningCard; slot: GameCardSlot }[]> {
-    const entries = await Promise.all(
+    const results = await Promise.allSettled(
       cards.map(async (card) => {
         const slot = await createSlot(card)
-        this.registerSlot(slot)
         return { card, slot }
       })
     )
+    const failure = results.find((result) => result.status === 'rejected')
+    if (failure?.status === 'rejected' || this.layer.destroyed) {
+      for (const result of results) {
+        if (result.status === 'fulfilled') result.value.slot.destroy({ children: true })
+      }
+      if (failure?.status === 'rejected') throw failure.reason
+      return []
+    }
+    const entries = results.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : []
+    )
+    for (const { slot } of entries) this.registerSlot(slot)
     // Artwork may finish out of order; the opening spread follows hand order.
     this.initialSlots.push(...entries.map((entry) => entry.slot))
     return entries

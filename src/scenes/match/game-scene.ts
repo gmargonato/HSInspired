@@ -1,6 +1,10 @@
 import { prewarmMinionStatus } from './loading/minion-status-warmup'
 import { prewarmWindfury } from './loading/windfury-warmup'
 import { prewarmCardPlay } from './loading/card-play-warmup'
+import {
+  MatchVisualResources,
+  matchVisualTextures
+} from './loading/match-visual-resources'
 import type { Texture } from 'pixi.js'
 import { GameLoadingView } from './loading/game-loading-view'
 import { OPENING_TIMING } from './presentation/game-presentation-timing'
@@ -62,6 +66,7 @@ const AI_HERO_POWER_BONUS_ENABLED = true
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
   private readonly deckStore: DeckStore
+  private readonly visualResources = new MatchVisualResources()
   private readonly route: GameRoute
   private readonly logger?: AppLogger
   private view: GameBoardView | null = null
@@ -111,6 +116,8 @@ export class GameScene extends Scene {
     this.route = route
     this.deckStore = deckStore
     this.logger = logger
+    // Root destruction also runs on initialization failure, before asset release.
+    this.root.once('destroyed', () => this.visualResources.dispose())
   }
 
   async init(): Promise<void> {
@@ -277,8 +284,19 @@ export class GameScene extends Scene {
     const heroAssets = { ...deckPresentationAssets, ...gameAssets }
     this.logger?.info('[GameScene] hero assets acquired')
     await this.reportLoading(0.26, 'Loading card frames')
-    await this.assetScope.acquire(ASSET_BUNDLE_IDS.cardRendering)
+    const cardAssets = await this.assetScope.acquire<Record<string, Texture>>(
+      ASSET_BUNDLE_IDS.cardRendering
+    )
     this.logger?.info('[GameScene] card rendering bundle acquired')
+    await this.reportLoading(0.3, 'Preparing match textures')
+    await this.visualResources.prepare(
+      this.appInstance.renderer,
+      Object.values(cardAssets),
+      matchVisualTextures(heroAssets, this.boardTexture!),
+      (progress) =>
+        this.reportLoading(0.3 + progress * 0.04, 'Preparing match textures')
+    )
+    this.logger?.info('[GameScene] match textures uploaded')
     await this.reportLoading(0.34, 'Loading fonts')
 
     await this.waitForFonts()

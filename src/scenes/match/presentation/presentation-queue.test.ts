@@ -657,6 +657,11 @@ describe('engine-driven minion card departures', () => {
 function mulliganSlot(instanceId: string): GameCardSlot {
   const slot = new Container()
   return Object.assign(slot, {
+    card: {
+      createAppearanceSnapshot: vi.fn(() =>
+        RenderTexture.create({ width: 620, height: 900 })
+      )
+    },
     shadow: attachShadow(
       slot,
       { x: 0, y: 0, width: 620, height: 900 },
@@ -5555,6 +5560,13 @@ describe('board lifecycle preservation', () => {
         await Promise.resolve()
       }
       await creating
+      for (const slot of slots) {
+        expect(slot.card.createAppearanceSnapshot).toHaveBeenCalledOnce()
+        expect(
+          vi.mocked(slot.card.createAppearanceSnapshot).mock.results[0]!.value.destroyed
+        ).toBe(true)
+        expect(slot.alpha).toBe(0)
+      }
       expect(internal.hand.entries.map((entry) => entry.slot)).toEqual(slots)
       expect(internal.mulligan.initialCardCount).toBe(count)
       vi.spyOn(internal, 'prepareSlotAtDeck').mockImplementation(() => undefined)
@@ -5588,6 +5600,57 @@ describe('board lifecycle preservation', () => {
       deck.destroy()
     }
   )
+
+  it('settles failed opening-card loads before releasing late successful slots', async () => {
+    const value = board()
+    const internal = value as unknown as { mulligan: GameMulliganView }
+    const late = mulliganSlot('late-opening')
+    let release!: (slot: GameCardSlot) => void
+    const cards = ['failed-opening', 'late-opening'].map((instanceId) => ({
+      instanceId,
+      cardId: asCardId('classic_wisp')
+    }))
+    let settled = false
+    const job = internal.mulligan
+      .createInitialCards(cards, (card) =>
+        card.instanceId === 'failed-opening'
+          ? Promise.reject(new Error('opening artwork unavailable'))
+          : new Promise((resolve) => {
+              release = resolve
+            })
+      )
+      .finally(() => {
+        settled = true
+      })
+    const rejected = expect(job).rejects.toThrow('opening artwork unavailable')
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    expect(late.parent).toBeNull()
+    release(late)
+    await rejected
+    expect(late.destroyed).toBe(true)
+    expect(internal.mulligan.initialCardCount).toBe(0)
+  })
+
+  it('discards late opening cards when their mulligan layer is already destroyed', async () => {
+    const value = board()
+    const internal = value as unknown as { mulligan: GameMulliganView }
+    const late = mulliganSlot('late-opening')
+    let release!: (slot: GameCardSlot) => void
+    const job = internal.mulligan.createInitialCards(
+      [{ instanceId: late.instanceId, cardId: asCardId('classic_wisp') }],
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        })
+    )
+    internal.mulligan.layer.destroy({ children: true })
+    release(late)
+    await expect(job).resolves.toEqual([])
+    expect(late.destroyed).toBe(true)
+    expect(internal.mulligan.initialCardCount).toBe(0)
+  })
 
   it('keeps mulligan animations in the board scope and ignores a departed card after disposal', async () => {
     const value = board()

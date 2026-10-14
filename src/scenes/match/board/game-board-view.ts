@@ -140,6 +140,10 @@ import { HERO_POWER_CARD_CANVAS, HeroPowerCardView } from './hero-power-presenta
 import { WeaponView } from './weapon-view'
 import { prebuildWeaponOutlineShape } from './weapon-outline-shape'
 import { MatchArtworkWarmup, matchArtworkIds } from '../loading/match-artwork-warmup'
+import {
+  prewarmCardRenderPaths,
+  prewarmOpeningCard
+} from '../loading/card-render-warmup'
 import { AddCardPickerView } from '../tools/add-card-picker-view'
 import { CardSelectionOverlay } from '../presentation/card-selection-overlay'
 import {
@@ -3309,7 +3313,12 @@ export class GameBoardView extends Actor {
       this.createSlot(card)
     )
     for (const { card, slot } of entries) {
+      if (this.destroyed) return
       this.hand.append({ card, slot, restTransform: undefined, displaced: false })
+      prewarmOpeningCard(this.options.renderer, slot.card)
+      await this.options.onLoadProgress?.(
+        0.9 + (0.08 * this.hand.entries.length) / entries.length
+      )
     }
   }
 
@@ -3349,6 +3358,15 @@ export class GameBoardView extends Actor {
         milliseconds: performance.now() - started
       })
     }
+    await prewarmCardRenderPaths(
+      this.options.renderer,
+      this.resolver,
+      () => this.destroyed,
+      this.options.onLoadProgress
+        ? (progress) => this.options.onLoadProgress!(0.4 + progress * 0.1)
+        : undefined
+    )
+    if (this.destroyed) return
     this.artworkWarmup = new MatchArtworkWarmup(
       this.options.renderer,
       this.resolver,
@@ -3360,7 +3378,7 @@ export class GameBoardView extends Actor {
         state.players.map((player) => player.heroPower.id)
       ),
       this.options.onLoadProgress
-        ? (progress) => this.options.onLoadProgress!(0.4 + progress * 0.5)
+        ? (progress) => this.options.onLoadProgress!(0.5 + progress * 0.4)
         : undefined
     )
   }

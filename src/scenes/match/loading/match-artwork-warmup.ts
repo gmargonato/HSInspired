@@ -1,7 +1,10 @@
 import { RenderTexture, Sprite, type Renderer, type TextureSource } from 'pixi.js'
 import { CARD_CATALOG } from '../../../game-rules/content/cards'
 import { HERO_CATALOG } from '../../../game-rules/content/heroes'
-import { HERO_POWER_CATALOG } from '../../../game-rules/content/hero-powers'
+import {
+  BASIC_HERO_POWER_UPGRADES,
+  HERO_POWER_CATALOG
+} from '../../../game-rules/content/hero-powers'
 import type { Deck } from '../../../game-rules/decks'
 import { CardAssetResolver } from '../../../visual-components/assets/card-asset-resolver'
 import type { RendererLogger } from '../../../application/contracts/logger'
@@ -18,6 +21,7 @@ export function matchArtworkIds(
   ids.add('basic_the_coin')
   const limit = ids.size + MAX_REFERENCED_ARTWORK
   const powers = new Set<string>()
+  let upgradeBasicPowers = false
   const add = (id: string): void => {
     if (ids.size < limit && CARD_CATALOG.get(id)) ids.add(id)
   }
@@ -25,12 +29,34 @@ export function matchArtworkIds(
     if (powers.has(id)) return
     powers.add(id)
     visit(HERO_POWER_CATALOG.get(id)?.effect)
+    const upgraded = BASIC_HERO_POWER_UPGRADES[id]
+    if (upgradeBasicPowers && upgraded) visitPower(upgraded)
   }
   const visit = (value: unknown, depth = 0): void => {
     if (!value || typeof value !== 'object' || depth > 16) return
     if (Array.isArray(value)) {
       for (const entry of value) visit(entry, depth + 1)
       return
+    }
+    const record = value as Record<string, unknown>
+    if (record.action === 'set-hero-power') {
+      if (record.power === 'upgrade-basic') {
+        upgradeBasicPowers = true
+        for (const id of powers) {
+          const upgraded = BASIC_HERO_POWER_UPGRADES[id]
+          if (upgraded) visitPower(upgraded)
+        }
+      } else if (record.power === 'summon-murloc') {
+        visitPower('paladin-the-tidal-hand')
+      } else if (
+        typeof record.power === 'string' &&
+        HERO_POWER_CATALOG.get(record.power)
+      ) {
+        visitPower(record.power)
+      }
+      if (typeof record.upgradedPower === 'string') visitPower(record.upgradedPower)
+      // Copying an opponent uses an already visited power. Random/discover
+      // replacements remain lazy rather than expanding catalog-wide pools.
     }
     for (const [key, entry] of Object.entries(value)) {
       if (key === 'excludeCardId') continue
@@ -40,6 +66,8 @@ export function matchArtworkIds(
         for (const id of entry) if (typeof id === 'string') add(id)
       } else if (key === 'heroPowerId' && typeof entry === 'string') {
         visitPower(entry)
+      } else if (key === 'transformOverrides' && entry && typeof entry === 'object') {
+        for (const id of Object.values(entry)) if (typeof id === 'string') add(id)
       }
       visit(entry, depth + 1)
     }
