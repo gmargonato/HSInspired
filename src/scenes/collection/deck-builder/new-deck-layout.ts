@@ -21,11 +21,30 @@ export const NEW_DECK_LAYOUT = {
     slideDuration: 0.5
   },
 
-  /** Class hero grid (3 columns). Buttons are centered in their cells. */
+  /** Slot centers and spacing are independent of portrait and label dimensions. */
   classGrid: {
-    frameStart: { x: 360, y: 190 } satisfies LayoutPoint,
-    frameGap: { x: 25, y: -20 } satisfies LayoutPoint
+    columns: 3,
+    firstCenter: { x: 530, y: 322 } satisfies LayoutPoint,
+    step: { x: 230, y: 250 } satisfies LayoutPoint,
+    hitArea: { x: -115, y: -130, width: 220, height: 255 }
   },
+  classPortrait: placement(
+    { x: -1, y: -2.8 },
+    { width: 205.2, height: 237.6 },
+    {
+      anchor: CENTER,
+      note: 'Fit each hero frame proportionally inside these slot bounds.'
+    }
+  ),
+  classLabel: placement(
+    { x: -10, y: 84 },
+    { width: 198, height: 57 },
+    {
+      anchor: CENTER,
+      scale: 0.92,
+      note: 'Class icon and name layered over the portrait near its base.'
+    }
+  ),
 
   /** Selected hero portrait */
   heroPortrait: placement(

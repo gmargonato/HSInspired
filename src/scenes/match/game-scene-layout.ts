@@ -268,7 +268,7 @@ export const GAME_BOARD_LAYOUT = {
       {
         anchor: CENTER,
         scale: 1,
-        note: 'Existing local HeroView promoted in front of the result artwork.'
+        note: 'Independent local hero portrait in front of the result artwork.'
       }
     ),
     continuePrompt: placement(
@@ -330,9 +330,19 @@ export const GAME_BOARD_LAYOUT = {
         {
           anchor: CENTER,
           scale: 1,
-          note: 'Native available/highlighted size; spent artwork is 44 x 45 at the same scale.'
+          note: 'Native available size; spent artwork is 44 x 45 at the same scale.'
         }
-      )
+      ),
+      glow: placement(
+        { x: 3, y: -4 },
+        { width: 96, height: 96 },
+        {
+          anchor: CENTER,
+          scale: 0.65,
+          note: 'Glow aligned to the visible crystal body, excluding its baked-in shadow.'
+        }
+      ),
+      glowFade: { inDuration: 0.15, outDuration: 0.2 }
     }
   },
 

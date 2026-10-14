@@ -29,10 +29,7 @@ import {
   getDeckSelectionPageForDeck
 } from './deck-selection-model'
 import { DECK_SELECTION_LAYOUT } from './deck-selection-layout'
-import {
-  getRankMedalTexture,
-  LEGEND_MEDAL_Y_OFFSET
-} from '../../visual-components/assets/rank-medals'
+import { getRankMedalTexture } from '../../visual-components/assets/rank-medals'
 import type { ConstructedRankSnapshot } from '../../desktop/contracts/ipc/player-stats'
 
 export interface DeckSelectionViewCallbacks {
@@ -132,15 +129,9 @@ export class DeckSelectionView extends Container {
 
     this.rankMedalNumber = new Text({
       text: '',
-      style: {
-        fontFamily: 'Belwe',
-        fontSize: 60,
-        fill: 0xf7e08c,
-        stroke: { color: 0x000000, width: 5 },
-        align: 'center'
-      }
+      style: DECK_SELECTION_LAYOUT.rankNumberStyle
     })
-    applyAnchoredPlacement(this.rankMedalNumber, DECK_SELECTION_LAYOUT.rankMedal)
+    applyAnchoredPlacement(this.rankMedalNumber, DECK_SELECTION_LAYOUT.rankNumber)
     this.rankMedalNumber.eventMode = 'none'
     this.rankMedalNumber.label = 'deck-selection.rank-medal-number'
     this.rankMedalNumber.visible = false
@@ -160,22 +151,21 @@ export class DeckSelectionView extends Container {
 
   private applyRankMedal(rank: ConstructedRankSnapshot): void {
     applyAnchoredPlacement(this.rankMedalSprite, DECK_SELECTION_LAYOUT.rankMedal)
-    applyAnchoredPlacement(this.rankMedalNumber, DECK_SELECTION_LAYOUT.rankMedal)
-    if (rank.tier === 'legend') {
-      this.rankMedalSprite.y += LEGEND_MEDAL_Y_OFFSET
-      this.rankMedalNumber.y += LEGEND_MEDAL_Y_OFFSET
-    } else {
-      this.rankMedalSprite.y += 10
-    }
+    applyAnchoredPlacement(
+      this.rankMedalNumber,
+      rank.tier === 'legend'
+        ? DECK_SELECTION_LAYOUT.legendNumber
+        : DECK_SELECTION_LAYOUT.rankNumber
+    )
   }
 
   private refreshRankMedalNumber(rank: ConstructedRankSnapshot): void {
-    if (rank.tier !== 'legend') {
-      this.rankMedalNumber.visible = false
-      this.rankMedalNumber.text = ''
-      return
+    this.rankMedalNumber.style = {
+      ...DECK_SELECTION_LAYOUT.rankNumberStyle,
+      ...(rank.tier === 'legend' ? DECK_SELECTION_LAYOUT.legendNumberStyle : {})
     }
-    this.rankMedalNumber.text = formatLegendRank(rank.legendRank)
+    this.rankMedalNumber.text =
+      rank.tier === 'legend' ? formatLegendRank(rank.legendRank) : String(rank.rank)
     this.rankMedalNumber.visible = true
   }
 

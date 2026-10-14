@@ -15,7 +15,7 @@ import type { DeckStore } from '../../../application/contracts/deck-store'
 import { NEW_DECK_FRAME_ASSET_KEYS } from '../../../visual-components/assets/deck-frames'
 import { NEW_DECK_LAYOUT } from './new-deck-layout'
 import { HERO_CATALOG, type HeroDefinition } from '../../../game-rules/content/heroes'
-import { PLAYABLE_CLASSES, type DeckClass } from '../../../game-rules/content/cards'
+import { PLAYABLE_CLASSES } from '../../../game-rules/content/cards'
 import type { Deck } from '../../../game-rules/decks'
 import {
   applyAnchoredPlacement,
@@ -134,21 +134,47 @@ export class NewDeckView extends Container {
     this.selectionContent.addChild(this.heroName)
 
     for (const [index, heroClass] of PLAYABLE_CLASSES.entries()) {
-      const texture = this.deckPresentationAssets[NEW_DECK_FRAME_ASSET_KEYS[heroClass]]
-      const button = new Button(texture, {
+      const hero = HERO_CATALOG.getPrimaryForClass(heroClass)
+      if (!hero) continue
+      const portraitTexture = getDeckHeroTexture(
+        this.deckPresentationAssets,
+        hero.presentationAssetKey
+      )
+      const button = new Button(portraitTexture, {
         highlightOnHover: false,
         pressedBrightness: 1,
-        onClick: () => this.selectClass(heroClass)
+        onClick: () => this.selectHero(hero)
       })
-      const column = index % 3
-      const row = Math.floor(index / 3)
+      button.label = `new-deck.class.${heroClass}`
+      button.sprite.label = `new-deck.portrait.${heroClass}`
+      button.sprite.eventMode = 'none'
+      applyAnchoredPlacement(button.sprite, NEW_DECK_LAYOUT.classPortrait)
+      const portraitSize = NEW_DECK_LAYOUT.classPortrait.size
+      button.sprite.scale.set(
+        Math.min(
+          portraitSize.width / portraitTexture.width,
+          portraitSize.height / portraitTexture.height
+        )
+      )
+      const label = new Sprite(
+        this.deckPresentationAssets[NEW_DECK_FRAME_ASSET_KEYS[heroClass]]
+      )
+      label.label = `new-deck.class-label.${heroClass}`
+      label.eventMode = 'none'
+      applyAnchoredPlacement(label, NEW_DECK_LAYOUT.classLabel)
+      button.content.addChild(label)
+      const grid = NEW_DECK_LAYOUT.classGrid
+      const column = index % grid.columns
+      const row = Math.floor(index / grid.columns)
       button.position.set(
-        NEW_DECK_LAYOUT.classGrid.frameStart.x +
-          texture.width / 2 +
-          column * (texture.width + NEW_DECK_LAYOUT.classGrid.frameGap.x),
-        NEW_DECK_LAYOUT.classGrid.frameStart.y +
-          texture.height / 2 +
-          row * (texture.height + NEW_DECK_LAYOUT.classGrid.frameGap.y)
+        grid.firstCenter.x + column * grid.step.x,
+        grid.firstCenter.y + row * grid.step.y
+      )
+      button.hitArea = new Rectangle(
+        grid.hitArea.x,
+        grid.hitArea.y,
+        grid.hitArea.width,
+        grid.hitArea.height
       )
       button.setBaseY(button.position.y)
       button.setEnabled(false)
@@ -217,11 +243,8 @@ export class NewDeckView extends Container {
     await this.callbacks.onCancelled?.()
   }
 
-  private selectClass(heroClass: DeckClass): void {
+  private selectHero(hero: HeroDefinition): void {
     if (!this.selectionOpen || this.actionInProgress) return
-
-    const hero = HERO_CATALOG.getPrimaryForClass(heroClass)
-    if (!hero) return
 
     this.selectedHero = hero
     this.heroPortrait.texture = getDeckHeroTexture(

@@ -6,6 +6,7 @@ import {
   type Renderer
 } from 'pixi.js'
 import type { GameAssets } from '../../../visual-components/assets'
+import { CARD_PLAY_AURA_TINT } from '../presentation/card-play-layout'
 
 /** Upload play textures and exercise their sprite/mesh paths before the match. */
 export function prewarmCardPlay(renderer: Renderer, assets: GameAssets): void {
@@ -14,9 +15,15 @@ export function prewarmCardPlay(renderer: Renderer, assets: GameAssets): void {
   let target: RenderTexture | undefined
   try {
     target = RenderTexture.create({ width: 32, height: 32, resolution: 1 })
-    const sprites = {
+    const auras = {
       minion: assets.minionPlayAura,
+      legendaryMinion: assets.legendaryMinionPlayAura,
       weapon: assets.weaponPlayAura,
+      hero: assets.heroPlayAura,
+      heroSpell: assets.heroSpellPlay,
+      burst: assets.cardPlayBurst
+    }
+    const particles = {
       particle1: assets.playSpotlight1,
       particle2: assets.playSpotlight2,
       particle3: assets.playSpotlight3,
@@ -26,33 +33,42 @@ export function prewarmCardPlay(renderer: Renderer, assets: GameAssets): void {
       particle7: assets.playSpotlight7,
       particle8: assets.playSpotlight8
     }
-    for (const [name, texture] of Object.entries(sprites)) {
+    for (const [name, texture] of Object.entries({ ...auras, ...particles })) {
       const sprite = new Sprite(texture)
       sprite.label = `game.card-play-warmup.${name}`
       sprite.width = 24
       sprite.height = 24
       sprite.alpha = 0.5
       sprite.blendMode = 'add'
+      sprite.tint = CARD_PLAY_AURA_TINT
       root.addChild(sprite)
     }
-    // Spells use a perspective mesh rather than the minion/weapon sprite path.
-    const spell = new PerspectiveMesh({
-      texture: assets.spellPlayAura,
-      verticesX: 10,
-      verticesY: 10,
-      x0: 2,
-      y0: 0,
-      x1: 22,
-      y1: 0,
-      x2: 24,
-      y2: 24,
-      x3: 0,
-      y3: 24
-    })
-    spell.label = 'game.card-play-warmup.spell'
-    spell.alpha = 0.5
-    spell.blendMode = 'add'
-    root.addChild(spell)
+    // Spell and hero casts also exercise the perspective mesh path.
+    for (const [name, texture] of Object.entries({
+      spell: assets.spellPlayAura,
+      legendarySpell: assets.legendarySpellPlayAura,
+      hero: assets.heroPlayAura,
+      burst: assets.cardPlayBurst
+    })) {
+      const cast = new PerspectiveMesh({
+        texture,
+        verticesX: 10,
+        verticesY: 10,
+        x0: 2,
+        y0: 0,
+        x1: 22,
+        y1: 0,
+        x2: 24,
+        y2: 24,
+        x3: 0,
+        y3: 24
+      })
+      cast.label = `game.card-play-warmup.${name}`
+      cast.alpha = 0.5
+      cast.blendMode = 'add'
+      cast.tint = CARD_PLAY_AURA_TINT
+      root.addChild(cast)
+    }
     renderer.render({ container: root, target, clear: true })
   } finally {
     // The game asset scope owns the source textures; release only our samples.

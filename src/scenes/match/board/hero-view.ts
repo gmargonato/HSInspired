@@ -12,7 +12,7 @@ import {
 import { AnimationScope } from '../../../visual-components/animation/animations'
 import { WindfuryEffect } from './windfury-effect'
 import { createHealthPulse } from './health-pulse'
-import { HERO_CANVAS, HERO_LAYOUT } from './hero-layout'
+import { HERO_CANVAS, HERO_LAYOUT, HERO_SPELL_PLAY } from './hero-layout'
 import { attachShadow } from '../../../visual-components/effects/shadow-caster'
 
 export interface HeroViewModel {
@@ -255,6 +255,70 @@ export class HeroView extends Container {
 
   static create(model: HeroViewModel, textures: HeroViewTextures): HeroView {
     return new HeroView(model, textures)
+  }
+
+  /** Decorative cast feedback; it never delays spell resolution. */
+  playSpellPulse(texture: Texture): void {
+    if (this.destroyed) return
+    const pulse = new Sprite(texture)
+    pulse.label = 'hero.spell-play'
+    pulse.eventMode = 'none'
+    pulse.blendMode = 'add'
+    pulse.alpha = 0
+    applyAnchoredPlacement(pulse, HERO_SPELL_PLAY.placement)
+    const fullScale = pulse.scale.clone()
+    pulse.scale.set(
+      fullScale.x * HERO_SPELL_PLAY.initialScale,
+      fullScale.y * HERO_SPELL_PLAY.initialScale
+    )
+    this.addChildAt(pulse, this.getChildIndex(this.attackGroup))
+    const cleanup = (): void => {
+      pulse.destroy()
+    }
+    this.animationScope
+      .timeline({ onComplete: cleanup, onInterrupt: cleanup })
+      .to(pulse, {
+        alpha: HERO_SPELL_PLAY.peakAlpha,
+        duration: HERO_SPELL_PLAY.brightenDuration,
+        ease: 'power2.out'
+      })
+      .to(pulse, {
+        alpha: 0,
+        delay: HERO_SPELL_PLAY.holdDuration,
+        duration: HERO_SPELL_PLAY.fadeDuration,
+        ease: 'power2.out'
+      })
+      .to(
+        pulse.scale,
+        {
+          x: fullScale.x,
+          y: fullScale.y,
+          duration: HERO_SPELL_PLAY.expandDuration,
+          ease: 'power2.out'
+        },
+        0
+      )
+  }
+
+  pauseAnimations(): void {
+    this.animationScope.pause()
+  }
+
+  resumeAnimations(): void {
+    this.animationScope.resume()
+  }
+
+  /** Independent current portrait/frame, without combat UI. */
+  createPortrait(): Container {
+    const portrait = new Container()
+    portrait.label = 'hero.portrait-copy'
+    portrait.pivot.set(HERO_CANVAS.width / 2, HERO_CANVAS.height / 2)
+    portrait.eventMode = 'none'
+    const frame = new Sprite(this.frame.texture)
+    frame.label = 'hero.portrait-copy.frame'
+    applyAnchoredPlacement(frame, HERO_LAYOUT.frame)
+    portrait.addChild(frame)
+    return portrait
   }
 
   setAttack(attack: number): void {

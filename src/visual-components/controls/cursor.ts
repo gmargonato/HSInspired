@@ -1,6 +1,7 @@
 import defaultCursorImage from '@assets/images/cursor/cursor-base.png'
 import grabCursorImage from '@assets/images/cursor/cursor-grab.png'
 import observerCursorImage from '@assets/images/cursor/cursor-observer.png'
+import observerClickedCursorImage from '@assets/images/cursor/cursor-observer-clicked.png'
 import collectionNewPageImage from '@assets/images/cursor/cursor-pass-page.png'
 import arrowHeadImage from '@assets/images/match/arrow-head.png'
 import arrowCircleImage from '@assets/images/match/arrow-circle.png'
@@ -36,6 +37,7 @@ const TARGET_CIRCLE_SIZE = 112
 const TARGET_CIRCLE_OFFSET_Y = -10
 interface CursorAsset {
   image: string
+  pressedImage?: string
   width: number
   height: number
   hotspotX: number
@@ -74,6 +76,7 @@ const CURSOR_ASSETS: Record<CursorVariant, CursorAsset> = {
   },
   observer: {
     image: observerCursorImage,
+    pressedImage: observerClickedCursorImage,
     width: CURSOR_BASE_SIZE,
     height: CURSOR_BASE_SIZE,
     hotspotX: CURSOR_BASE_SIZE / 2,
@@ -264,7 +267,7 @@ export class CursorManager {
     this.targeting = false
     this.targetingTargetPoint = null
     this.setVariant(resolveCursorVariant(this.contextVariant, this.overrideVariant))
-    this.applyCursorTransform()
+    this.applyCursorAppearance()
     this.mounted = false
   }
 
@@ -378,7 +381,7 @@ export class CursorManager {
 
     this.pointerInsideHost = true
     this.leftButtonDown = true
-    this.applyCursorTransform(true)
+    this.applyCursorAppearance(true)
     this.setPointerPosition(event.clientX, event.clientY)
     this.show()
   }
@@ -436,7 +439,7 @@ export class CursorManager {
     if (!this.leftButtonDown) return
 
     this.leftButtonDown = false
-    this.applyCursorTransform(true)
+    this.applyCursorAppearance(true)
   }
 
   private isInsideHost(event: Event): boolean {
@@ -456,14 +459,15 @@ export class CursorManager {
   }
 
   private applyVariant(): void {
-    const asset = CURSOR_ASSETS[this.variant]
-    this.element.src = asset.image
     this.element.style.transformOrigin =
       this.variant === 'default' ? '50% 100%' : '50% 50%'
-    this.applyCursorTransform()
+    this.applyCursorAppearance()
   }
 
-  private applyCursorTransform(animate = false): void {
+  private applyCursorAppearance(animate = false): void {
+    const asset = CURSOR_ASSETS[this.variant]
+    const image = this.leftButtonDown ? (asset.pressedImage ?? asset.image) : asset.image
+    if (this.element.getAttribute('src') !== image) this.element.src = image
     const isDefault = this.variant === 'default'
     // Animate presses only; variant changes must immediately discard the old transform.
     this.element.style.transition =

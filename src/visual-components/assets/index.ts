@@ -4,9 +4,14 @@ import ghostSpotlightImage from '@assets/images/effects/spotlight-triangle.png'
 import ghostDissolveImage from '@assets/images/effects/noise-03.png'
 import { Texture, type AssetsManifest } from 'pixi.js'
 import burnNoiseImage from '@assets/images/effects/noise-01.jpg'
-import spellPlayAuraImage from '@assets/images/cards/play-aura-spell.png'
-import minionPlayAuraImage from '@assets/images/cards/play-aura-minion.png'
-import weaponPlayAuraImage from '@assets/images/cards/play-aura-weapon.png'
+import spellPlayAuraImage from '@assets/images/effects/aura-spell.png'
+import minionPlayAuraImage from '@assets/images/effects/aura-minion.png'
+import weaponPlayAuraImage from '@assets/images/effects/aura-weapon.png'
+import heroPlayAuraImage from '@assets/images/effects/aura-hero.png'
+import legendaryMinionPlayAuraImage from '@assets/images/effects/aura-minion-legendary.png'
+import legendarySpellPlayAuraImage from '@assets/images/effects/aura-spell-legendary.png'
+import cardPlayBurstImage from '@assets/images/effects/card-play.png'
+import heroSpellPlayImage from '@assets/images/effects/hero-spell-play-01.png'
 import playSpotlight1Image from '@assets/images/effects/spotlight-01.png'
 import playSpotlight2Image from '@assets/images/effects/spotlight-02.png'
 import playSpotlight3Image from '@assets/images/effects/spotlight-03.png'
@@ -79,7 +84,7 @@ import rankMedal22Image from '@assets/images/ui/deck-selection/ranks/22.png'
 import rankMedal23Image from '@assets/images/ui/deck-selection/ranks/23.png'
 import rankMedal24Image from '@assets/images/ui/deck-selection/ranks/24.png'
 import rankMedal25Image from '@assets/images/ui/deck-selection/ranks/25.png'
-import rankLegendImage from '@assets/images/ui/deck-selection/ranks/LEGEND.png'
+import rankLegendImage from '@assets/images/ui/deck-selection/ranks/legend-medal.png'
 import collectionBackgroundImage from '@assets/images/ui/collection/collection-background.png'
 import collectionCoverImage from '@assets/images/ui/collection/collection-cover.png'
 import collectionCoverLockImage from '@assets/images/ui/collection/collection-cover-lock.png'
@@ -140,7 +145,8 @@ import historyLocalAttackImage from '@assets/images/match/history-local-attack.p
 import historyLocalTriggerImage from '@assets/images/match/history-local-trigger.png'
 import historyRemoteAttackImage from '@assets/images/match/history-remote-attack.png'
 import historyRemoteTriggerImage from '@assets/images/match/history-remote-trigger.png'
-import historyArrowImage from '@assets/images/match/history-arrow.png'
+import historyArrowLocalImage from '@assets/images/match/history-arrow-local.png'
+import historyArrowRemoteImage from '@assets/images/match/history-arrow-remote.png'
 import historyBurnCardImage from '@assets/images/match/burn.png'
 import historyBurnThumbImage from '@assets/images/match/history-burn-thumb.png'
 import historyFatigueCardImage from '@assets/images/match/history-fatigue-card.png'
@@ -149,12 +155,13 @@ import manaCrystalImage from '@assets/images/cards/MANA.png'
 import manaOverloadImage from '@assets/images/match/mana-overload.png'
 import manaAvailableImage from '@assets/images/match/mana-available.png'
 import manaSpentImage from '@assets/images/match/mana-spent.png'
-import manaHighlightedImage from '@assets/images/match/mana-highlighted.png'
+import manaGlowImage from '@assets/images/effects/mana-glow.png'
 import historySecretCardImage from '@assets/images/match/history-secret-card.png'
 import historySecretThumbImage from '@assets/images/match/history-secret-thumb.png'
 import summonTotemImage from '@assets/images/match/summon-totem.png'
 import tankUpHammerImage from '@assets/images/match/tank-up.png'
 import effectCircle1Image from '@assets/images/effects/circle-01.png'
+import effectSwirl2Image from '@assets/images/effects/swirl-02.png'
 import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
 import premiumHeroPowerBackImage from '@assets/images/heroes/hero-power/premium-hero-power-back.png'
 import heroPowerFrontImage from '@assets/images/heroes/hero-power/hero-power-front.png'
@@ -208,6 +215,8 @@ import arrowBodyImage from '@assets/images/match/arrow-body.png'
 import arrowHeadImage from '@assets/images/match/arrow-head.png'
 import arrowCircleImage from '@assets/images/match/arrow-circle.png'
 import winScreenImage from '@assets/images/match/win-screen.png'
+import destroyedLocalImage from '@assets/images/match/destroyed-local.png'
+import destroyedRemoteImage from '@assets/images/match/destroyed-remote.png'
 import arcaneDustImage from '@assets/images/ui/common/arcane-dust.png'
 import upgradeWindowImage from '@assets/images/ui/collection/upgrade-window-base.png'
 import upgradeButtonImage from '@assets/images/ui/collection/upgrade-button.png'
@@ -691,8 +700,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal1',
     rankMedal1Image,
-    124,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -700,8 +709,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal2',
     rankMedal2Image,
-    122,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -709,8 +718,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal3',
     rankMedal3Image,
-    123,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -718,8 +727,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal4',
     rankMedal4Image,
-    123,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -727,8 +736,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal5',
     rankMedal5Image,
-    123,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -736,8 +745,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal6',
     rankMedal6Image,
-    123,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -745,8 +754,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal7',
     rankMedal7Image,
-    124,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -754,8 +763,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal8',
     rankMedal8Image,
-    124,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -763,8 +772,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal9',
     rankMedal9Image,
-    122,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -772,8 +781,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal10',
     rankMedal10Image,
-    124,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -781,8 +790,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal11',
     rankMedal11Image,
-    122,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -790,8 +799,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal12',
     rankMedal12Image,
-    122,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -799,8 +808,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal13',
     rankMedal13Image,
-    123,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -808,8 +817,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal14',
     rankMedal14Image,
-    123,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -817,8 +826,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal15',
     rankMedal15Image,
-    123,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -826,8 +835,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal16',
     rankMedal16Image,
-    123,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -835,8 +844,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal17',
     rankMedal17Image,
-    124,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -844,8 +853,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal18',
     rankMedal18Image,
-    123,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -853,8 +862,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal19',
     rankMedal19Image,
-    122,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -862,8 +871,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal20',
     rankMedal20Image,
-    122,
-    159,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -871,8 +880,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal21',
     rankMedal21Image,
-    124,
-    159,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -880,8 +889,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal22',
     rankMedal22Image,
-    124,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -889,8 +898,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal23',
     rankMedal23Image,
-    124,
-    160,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -898,8 +907,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal24',
     rankMedal24Image,
-    123,
-    161,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -907,8 +916,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankMedal25',
     rankMedal25Image,
-    123,
-    159,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -916,8 +925,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckSelection,
     'rankLegend',
     rankLegendImage,
-    117,
-    135,
+    512,
+    512,
     'deck-selection'
   ),
   asset(
@@ -1191,12 +1200,21 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
-    'scene.game.history-arrow',
+    'scene.game.history-arrow-local',
     ASSET_BUNDLE_IDS.game,
-    'historyArrow',
-    historyArrowImage,
-    91,
-    92,
+    'historyArrowLocal',
+    historyArrowLocalImage,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.history-arrow-remote',
+    ASSET_BUNDLE_IDS.game,
+    'historyArrowRemote',
+    historyArrowRemoteImage,
+    256,
+    256,
     'game-scene'
   ),
   asset(
@@ -1564,8 +1582,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'minionPlayAura',
     minionPlayAuraImage,
-    698,
-    927,
+    512,
+    512,
     'game-scene'
   ),
   asset(
@@ -1573,8 +1591,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'weaponPlayAura',
     weaponPlayAuraImage,
-    698,
-    927,
+    512,
+    512,
     'game-scene'
   ),
   asset(
@@ -1582,8 +1600,53 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'spellPlayAura',
     spellPlayAuraImage,
-    720,
-    1000,
+    512,
+    512,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.hero-play-aura',
+    ASSET_BUNDLE_IDS.game,
+    'heroPlayAura',
+    heroPlayAuraImage,
+    512,
+    512,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.legendary-minion-play-aura',
+    ASSET_BUNDLE_IDS.game,
+    'legendaryMinionPlayAura',
+    legendaryMinionPlayAuraImage,
+    512,
+    512,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.legendary-spell-play-aura',
+    ASSET_BUNDLE_IDS.game,
+    'legendarySpellPlayAura',
+    legendarySpellPlayAuraImage,
+    512,
+    512,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.hero-spell-play',
+    ASSET_BUNDLE_IDS.game,
+    'heroSpellPlay',
+    heroSpellPlayImage,
+    512,
+    512,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.card-play-burst',
+    ASSET_BUNDLE_IDS.game,
+    'cardPlayBurst',
+    cardPlayBurstImage,
+    256,
+    256,
     'game-scene'
   ),
   asset(
@@ -1767,12 +1830,12 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
-    'scene.game.mana-highlighted',
+    'scene.game.mana-glow',
     ASSET_BUNDLE_IDS.game,
-    'manaHighlighted',
-    manaHighlightedImage,
-    45,
-    47,
+    'manaGlow',
+    manaGlowImage,
+    96,
+    96,
     'game-scene'
   ),
   asset(
@@ -1964,6 +2027,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     256,
     'game-scene'
   ),
+  asset(
+    'scene.game.effect-swirl-2',
+    ASSET_BUNDLE_IDS.game,
+    'effectSwirl2',
+    effectSwirl2Image,
+    256,
+    256,
+    'game-scene'
+  ),
   ...Object.entries(HERO_POWER_ASSET_SOURCES).map(([key, source]) =>
     asset(
       `scene.game.hero-power.${key}`,
@@ -2009,6 +2081,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     arcaneDustImage,
     180,
     243,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.destroyed-local',
+    ASSET_BUNDLE_IDS.game,
+    'destroyedLocal',
+    destroyedLocalImage,
+    718,
+    438,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.destroyed-remote',
+    ASSET_BUNDLE_IDS.game,
+    'destroyedRemote',
+    destroyedRemoteImage,
+    718,
+    379,
     'game-scene'
   ),
   asset(
@@ -2331,8 +2421,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckPresentation,
     'druidNewDeckFrame',
     druidNewDeckFrameImage,
-    246,
-    266,
+    197,
+    57,
     'deck-presentation'
   ),
   asset(
@@ -2340,8 +2430,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckPresentation,
     'hunterNewDeckFrame',
     hunterNewDeckFrameImage,
-    246,
-    266,
+    197,
+    57,
     'deck-presentation'
   ),
   asset(
@@ -2349,8 +2439,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckPresentation,
     'mageNewDeckFrame',
     mageNewDeckFrameImage,
-    246,
-    266,
+    198,
+    57,
     'deck-presentation'
   ),
   asset(
@@ -2358,8 +2448,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckPresentation,
     'paladinNewDeckFrame',
     paladinNewDeckFrameImage,
-    246,
-    266,
+    198,
+    57,
     'deck-presentation'
   ),
   asset(
@@ -2367,8 +2457,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckPresentation,
     'priestNewDeckFrame',
     priestNewDeckFrameImage,
-    246,
-    266,
+    196,
+    57,
     'deck-presentation'
   ),
   asset(
@@ -2376,8 +2466,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckPresentation,
     'rogueNewDeckFrame',
     rogueNewDeckFrameImage,
-    246,
-    266,
+    198,
+    57,
     'deck-presentation'
   ),
   asset(
@@ -2385,8 +2475,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckPresentation,
     'shamanNewDeckFrame',
     shamanNewDeckFrameImage,
-    246,
-    266,
+    197,
+    57,
     'deck-presentation'
   ),
   asset(
@@ -2394,8 +2484,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckPresentation,
     'warlockNewDeckFrame',
     warlockNewDeckFrameImage,
-    246,
-    266,
+    196,
+    57,
     'deck-presentation'
   ),
   asset(
@@ -2403,8 +2493,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.deckPresentation,
     'warriorNewDeckFrame',
     warriorNewDeckFrameImage,
-    246,
-    266,
+    198,
+    57,
     'deck-presentation'
   ),
   asset(
@@ -2685,9 +2775,11 @@ export interface GameAssets extends Record<
   Texture
 > {
   heroPowerAura1: Texture
+  heroSpellPlay: Texture
   heroPowerAura2: Texture
   heroPowerAura3: Texture
   heroPowerAura4: Texture
+  effectSwirl2: Texture
   boardBase: Texture
   board1: Texture
   board2: Texture
@@ -2707,7 +2799,8 @@ export interface GameAssets extends Record<
   historyLocalTrigger: Texture
   historyRemoteAttack: Texture
   historyRemoteTrigger: Texture
-  historyArrow: Texture
+  historyArrowLocal: Texture
+  historyArrowRemote: Texture
   burnNoise: Texture
   ghostDissolve: Texture
   ghostSpotlight: Texture
@@ -2754,6 +2847,10 @@ export interface GameAssets extends Record<
   spellPlayAura: Texture
   minionPlayAura: Texture
   weaponPlayAura: Texture
+  heroPlayAura: Texture
+  legendaryMinionPlayAura: Texture
+  legendarySpellPlayAura: Texture
+  cardPlayBurst: Texture
   playSpotlight1: Texture
   playSpotlight2: Texture
   playSpotlight3: Texture
@@ -2768,7 +2865,7 @@ export interface GameAssets extends Record<
   fatigueDeck: Texture
   manaAvailable: Texture
   manaSpent: Texture
-  manaHighlighted: Texture
+  manaGlow: Texture
   manaOverload: Texture
   endTurn: Texture
   toggleViewButton: Texture
@@ -2795,6 +2892,8 @@ export interface GameAssets extends Record<
   arrowHead: Texture
   arrowCircle: Texture
   winScreen: Texture
+  destroyedLocal: Texture
+  destroyedRemote: Texture
   arcaneDust: Texture
   defeatScreen: Texture
 }

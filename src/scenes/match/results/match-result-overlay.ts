@@ -117,11 +117,10 @@ export class MatchResultOverlay extends Container {
       result === 'win' ? this.options.winScreen : this.options.defeatScreen
     this.continuePrompt.text =
       result === 'draw' ? 'Draw — Click to continue' : 'Click to continue'
-    hero.removeFromParent()
-    applyPlacement(hero, GAME_BOARD_LAYOUT.matchResult.localHero)
-    hero.label = 'game.match-result.hero'
-    hero.eventMode = 'none'
-    this.heroLayer.addChild(hero)
+    const portrait = hero.createPortrait()
+    applyPlacement(portrait, GAME_BOARD_LAYOUT.matchResult.localHero)
+    portrait.label = 'game.match-result.hero'
+    this.heroLayer.addChild(portrait)
     this.visible = true
   }
 

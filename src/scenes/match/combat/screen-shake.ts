@@ -15,28 +15,48 @@ const SHAKE_DIRECTIONS = [
 export async function runScreenShake(
   target: Container,
   animations: Pick<AnimationScope, 'timeline'>,
-  profile: Pick<CombatImpactProfile, 'amplitude' | 'pulses' | 'duration'>
+  profile: Pick<CombatImpactProfile, 'amplitude' | 'pulses' | 'duration'> & {
+    readonly damped?: boolean
+  }
 ): Promise<void> {
   const baseX = target.x
   const baseY = target.y
   const stepDuration = profile.duration / (profile.pulses * 2)
   const timeline = animations.timeline()
 
-  for (let index = 0; index < profile.pulses; index += 1) {
-    const direction = SHAKE_DIRECTIONS[index % SHAKE_DIRECTIONS.length]
-    timeline.to(target, {
-      x: baseX + direction.x * profile.amplitude,
-      y: baseY + direction.y * profile.amplitude,
-      duration: stepDuration,
-      ease: 'power1.out'
+  if (profile.damped) {
+    const motion = { progress: 0 }
+    timeline.to(motion, {
+      progress: 1,
+      duration: profile.duration,
+      ease: 'none',
+      onUpdate: () => {
+        if (target.destroyed) return
+        // Continuous oscillation with zero displacement and velocity at rest.
+        const amplitude = profile.amplitude * (1 - motion.progress) ** 2
+        const phase = motion.progress * profile.pulses * Math.PI * 2
+        target.position.set(
+          baseX + Math.sin(phase) * amplitude,
+          baseY + Math.sin(phase * 0.73) * amplitude * 0.55
+        )
+      }
     })
-    timeline.to(target, {
-      x: baseX,
-      y: baseY,
-      duration: stepDuration,
-      ease: 'power1.in'
-    })
-  }
+  } else
+    for (let index = 0; index < profile.pulses; index += 1) {
+      const direction = SHAKE_DIRECTIONS[index % SHAKE_DIRECTIONS.length]
+      timeline.to(target, {
+        x: baseX + direction.x * profile.amplitude,
+        y: baseY + direction.y * profile.amplitude,
+        duration: stepDuration,
+        ease: 'power1.out'
+      })
+      timeline.to(target, {
+        x: baseX,
+        y: baseY,
+        duration: stepDuration,
+        ease: 'power1.in'
+      })
+    }
 
   try {
     await completeTimeline(timeline)

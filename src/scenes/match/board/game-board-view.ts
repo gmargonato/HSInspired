@@ -154,6 +154,7 @@ import {
 import { AttackLine } from '../targeting/attack-line'
 import { getCombatImpactProfile } from '../combat/combat-impact'
 import { runScreenShake } from '../combat/screen-shake'
+import { HeroDestruction } from '../results/hero-destruction'
 import { hasAvailableTurnAction } from '../targeting/turn-action-availability'
 import { GAME_BOARD_LAYOUT } from '../game-scene-layout'
 import { MINION_CANVAS } from './minion-layout'
@@ -403,6 +404,7 @@ export class GameBoardView extends Actor {
   private resolutionPresentationDepth = 0
   private readonly resolutionIdleWaiters: Array<() => void> = []
   private matchResultShown = false
+  private readonly heroDestruction = new HeroDestruction()
   private opponentLeftShown = false
   private readonly premiumAppearance = new MatchPremiumAppearance(
     () => this.localParticipantId,
@@ -898,7 +900,8 @@ export class GameBoardView extends Actor {
         this.premiumAppearance.sideFor(
           card,
           side === 'local' ? this.localParticipantId : this.remoteParticipantId
-        )
+        ),
+      (card, timeline) => this.cardPlayAnimation.createPreviewAura(card, timeline)
     )
     this.remoteTargetPreview = new RemoteTargetPreview(
       options.gameAssets.arrowBody,
@@ -1005,7 +1008,14 @@ export class GameBoardView extends Actor {
     this.gameplayLayer.addChild(this.vfxPresenter.layer)
     const createCardPlayAnimation = (): CardPlayAnimation =>
       new CardPlayAnimation(
-        options.gameAssets.spellPlayAura,
+        {
+          spell: options.gameAssets.spellPlayAura,
+          legendarySpell: options.gameAssets.legendarySpellPlayAura,
+          minion: options.gameAssets.minionPlayAura,
+          legendaryMinion: options.gameAssets.legendaryMinionPlayAura,
+          weapon: options.gameAssets.weaponPlayAura,
+          hero: options.gameAssets.heroPlayAura
+        },
         [
           options.gameAssets.playSpotlight1,
           options.gameAssets.playSpotlight2,
@@ -1016,8 +1026,7 @@ export class GameBoardView extends Actor {
           options.gameAssets.playSpotlight7,
           options.gameAssets.playSpotlight8
         ],
-        options.gameAssets.minionPlayAura,
-        options.gameAssets.weaponPlayAura
+        options.gameAssets.cardPlayBurst
       )
     this.cardPlayAnimation = createCardPlayAnimation()
     this.choicePlayAnimation = createCardPlayAnimation()
@@ -1270,7 +1279,8 @@ export class GameBoardView extends Actor {
         localTrigger: this.options.gameAssets.historyLocalTrigger,
         remoteAttack: this.options.gameAssets.historyRemoteAttack,
         remoteTrigger: this.options.gameAssets.historyRemoteTrigger,
-        arrow: this.options.gameAssets.historyArrow,
+        localArrow: this.options.gameAssets.historyArrowLocal,
+        remoteArrow: this.options.gameAssets.historyArrowRemote,
         burnCard: this.options.gameAssets.historyBurnCard,
         burnThumb: this.options.gameAssets.historyBurnThumb,
         damageIndicator: this.options.gameAssets.damageIndicator,
@@ -2274,21 +2284,7 @@ export class GameBoardView extends Actor {
   private showMatchResult(winnerId: PlayerId | null): void {
     if (this.matchResultShown) return
     this.matchResultShown = true
-    this.cardSelectionOverlay.clear()
-    this.turnInProgress = true
-    this.hand.drag.end()
-    this.cancelHeroPowerTargeting()
-    this.cardPlay.cancelCardTargeting()
-    this.deselectAttacker()
-    clearMatchResultCombatViews([
-      ...this.heroViews.values(),
-      ...this.localMinionViews,
-      ...this.remoteMinionViews
-    ])
-    this.mulligan.setInputEnabled(false)
-    this.mulligan.disableConfirmation()
-    this.hand.layer.eventMode = 'none'
-    this.setHeroHealthVisible(false)
+    this.freezeMatchResultInput()
 
     const blur = new BlurFilter({
       strength: GAME_BOARD_LAYOUT.matchResult.blurStrength,
@@ -2319,15 +2315,49 @@ export class GameBoardView extends Actor {
     this.matchResultOverlay.show(result, localHero)
   }
 
+  private freezeMatchResultInput(): void {
+    this.matchBackdropLayer.eventMode = 'none'
+    this.cardSelectionOverlay.clear()
+    this.turnInProgress = true
+    this.hand.drag.end()
+    this.cancelHeroPowerTargeting()
+    this.cardPlay.cancelCardTargeting()
+    this.deselectAttacker()
+    clearMatchResultCombatViews([
+      ...this.heroViews.values(),
+      ...this.localMinionViews,
+      ...this.remoteMinionViews
+    ])
+    this.mulligan.setInputEnabled(false)
+    this.mulligan.disableConfirmation()
+    this.hand.layer.eventMode = 'none'
+    this.setHeroHealthVisible(false)
+  }
+
   private async presentMatchResult(event: MatchEndedEvent): Promise<void> {
     if (this.matchResultShown) return
     this.matchResultPending ??= Promise.resolve()
-      .then(() => this.saveMatchReward(event))
+      .then(async () => {
+        if (this.destroyed) return
+        this.freezeMatchResultInput()
+        const heroes = [...this.heroViews.entries()]
+          .filter(([id]) => event.winnerId === null || id === event.loserId)
+          .map(([id, view]) => ({ view, local: id === this.localParticipantId }))
+        await Promise.all([
+          this.saveMatchReward(event),
+          this.heroDestruction.play(
+            this.options.renderer,
+            this.matchBackdropLayer,
+            heroes,
+            this.options.gameAssets
+          )
+        ])
+      })
       .catch((error) => {
         this.logger.warn('Failed to handle match completion.', error)
       })
     await this.matchResultPending
-    this.showMatchResult(event.winnerId)
+    if (!this.destroyed) this.showMatchResult(event.winnerId)
   }
 
   private async saveMatchReward(event: MatchEndedEvent): Promise<void> {
@@ -3171,7 +3201,18 @@ export class GameBoardView extends Actor {
             ? this.remoteCardPlayPreview
                 .present(
                   CARD_CATALOG.require(remotePlayedCard.cardId),
-                  remotePlayedCard
+                  remotePlayedCard,
+                  {
+                    side: 'remote',
+                    concealSecret: true,
+                    onStart: () => {
+                      if (cardDefinition(remotePlayedCard).type === 'Spell') {
+                        this.heroViews.get(this.remoteParticipantId)?.playSpellPulse(
+                          this.options.gameAssets.heroSpellPlay
+                        )
+                      }
+                    }
+                  }
                 )
                 .catch((error: unknown) =>
                   this.logger.warn('[Game AI] remote card preview failed', error)
@@ -6382,6 +6423,12 @@ export class GameBoardView extends Actor {
         },
         0
       )
+      const burst = this.cardPlayAnimation.createCardBurst(
+        summonSlot.card,
+        summonSlot,
+        charge
+      )
+      targetPreview?.playEffects.add(burst)
       const chargeParticles = this.cardPlayAnimation.emitMinionParticles(
         charge,
         this.summonLayer,
@@ -6528,9 +6575,11 @@ export class GameBoardView extends Actor {
         impact?.kill()
         if (impact) targetPreview?.activeTimelines.delete(impact)
         targetPreview?.playEffects.delete(aura)
+        targetPreview?.playEffects.delete(burst)
         targetPreview?.playEffects.delete(chargeParticles)
         if (settleParticles) targetPreview?.playEffects.delete(settleParticles)
         if (!aura.destroyed) aura.destroy()
+        if (!burst.destroyed) burst.destroy()
         if (!chargeParticles.destroyed) chargeParticles.destroy({ children: true })
         if (settleParticles && !settleParticles.destroyed)
           settleParticles.destroy({ children: true })
@@ -7869,10 +7918,11 @@ export class GameBoardView extends Actor {
     try {
       this.removePresentedHandEntry(entry)
       entry.slot.disposePlayableOutline()
-      entry.slot.removeFromParent()
-      await this.reflowHandAfterPlay()
+      await Promise.all([
+        this.cardPlayAnimation.presentChoice(entry.slot.card, entry.slot, 'Hero'),
+        this.reflowHandAfterPlay()
+      ])
       if (this.destroyed) return
-      entry.slot.destroy({ children: true })
       await this.presentResolutionEvents(result.events)
     } finally {
       if (!this.destroyed) {
@@ -7907,6 +7957,9 @@ export class GameBoardView extends Actor {
     skipCastAnimation = false
   ): Promise<void> {
     if (this.destroyed) return
+    this.heroViews.get(this.localParticipantId)?.playSpellPulse(
+      this.options.gameAssets.heroSpellPlay
+    )
     try {
       this.removePresentedHandEntry(entry)
       entry.slot.disposePlayableOutline()
@@ -8157,6 +8210,7 @@ export class GameBoardView extends Actor {
 
   override pauseAnimations(): void {
     super.pauseAnimations()
+    for (const hero of this.heroViews.values()) hero.pauseAnimations()
     this.cardPlayAnimation.pauseAnimations()
     this.choicePlayAnimation.pauseAnimations()
     this.cardSelectionOverlay.pauseAnimations()
@@ -8190,6 +8244,7 @@ export class GameBoardView extends Actor {
 
   override resumeAnimations(): void {
     super.resumeAnimations()
+    for (const hero of this.heroViews.values()) hero.resumeAnimations()
     this.cardPlayAnimation.resumeAnimations()
     this.choicePlayAnimation.resumeAnimations()
     this.cardSelectionOverlay.resumeAnimations()
@@ -8198,6 +8253,7 @@ export class GameBoardView extends Actor {
   }
 
   override dispose(): void {
+    this.heroDestruction.dispose()
     this.vfxPresenter.dispose()
     this.artworkWarmup?.dispose()
     this.heroPowerEffects.dispose()

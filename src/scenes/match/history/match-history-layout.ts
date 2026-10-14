@@ -34,8 +34,12 @@ export const MATCH_HISTORY_LAYOUT = {
     historyCard: { scale: CARD_CANVAS.height / 392 },
     arrow: placement(
       { x: 722, y: 540 },
-      { width: 91, height: 92 },
-      { anchor: CENTER, scale: 0.7 }
+      { width: 256, height: 256 },
+      {
+        anchor: CENTER,
+        scale: 0.75,
+        note: 'Padded local/remote arrow; scale matches the previous visible width.'
+      }
     )
   },
   remoteCardPlay: {

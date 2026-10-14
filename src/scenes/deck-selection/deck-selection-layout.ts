@@ -65,19 +65,38 @@ export const DECK_SELECTION_LAYOUT = {
     }
   ),
 
-  /**
-   * Constructed rank medal seated in the hexagonal socket at the panel's top
-   * right. Medals render at authored size (1x); the numbered medals are
-   * slightly larger than the 116x130 socket on purpose.
-   */
+  /** High-resolution medal fitted to the existing hexagonal socket. */
   rankMedal: placement(
     { x: 1475, y: 216 },
-    { width: 123, height: 159 },
+    { width: 512, height: 512 },
     {
       anchor: CENTER,
-      note: 'Legend medal (117x135) shares this center; nudge via LEGEND_MEDAL_Y_OFFSET.'
+      scale: 0.28,
+      note: 'Transparent square canvas; the visible hexagon is approximately 123 by 140 pixels.'
     }
   ),
+  rankNumber: placement(
+    { x: 1475, y: 258 },
+    { width: 0, height: 0 },
+    { anchor: CENTER, note: 'Live rank number over the lower medal, without a banner.' }
+  ),
+  legendNumber: placement(
+    { x: 1475, y: 216 },
+    { width: 0, height: 0 },
+    { anchor: CENTER, note: 'Legend placement remains centered in the medal.' }
+  ),
+  rankNumberStyle: {
+    fontFamily: 'Belwe',
+    fontSize: 42,
+    fill: 0xffffff,
+    stroke: { color: 0x000000, width: 4 },
+    align: 'center' as const
+  },
+  legendNumberStyle: {
+    fontSize: 60,
+    fill: 0xf7e08c,
+    stroke: { color: 0x000000, width: 5 }
+  },
 
   /** Current page label in the bottom-center footer recess. */
   pageLabel: placement(

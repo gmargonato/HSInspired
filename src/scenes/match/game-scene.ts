@@ -1,6 +1,7 @@
 import { prewarmMinionStatus } from './loading/minion-status-warmup'
 import { prewarmWindfury } from './loading/windfury-warmup'
 import { prewarmCardPlay } from './loading/card-play-warmup'
+import { prewarmMatchResult } from './loading/match-result-warmup'
 import {
   MatchVisualResources,
   matchVisualTextures
@@ -336,6 +337,12 @@ export class GameScene extends Scene {
       prewarmMinionStatus(this.appInstance.renderer, gameAssets)
     } catch (error) {
       this.logger?.warn('[GameScene] minion status warm-up failed', error)
+    }
+
+    try {
+      prewarmMatchResult(this.appInstance.renderer, gameAssets)
+    } catch (error) {
+      this.logger?.warn('[GameScene] match result warm-up failed', error)
     }
 
     await this.reportLoading(0.46, 'Building game board')

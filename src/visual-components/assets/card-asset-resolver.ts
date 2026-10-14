@@ -4,7 +4,7 @@ import { resolveGadgetzanArtworkId } from './gadgetzan-artwork-aliases'
 import { zombeastComponents } from '../../game-rules/content/cards/zombeast'
 
 const artworkUrls = import.meta.glob(
-  '../../../assets/images/card-artwork/*.{jpg,jpeg,png}',
+  '../../../assets/images/card-artwork/*.png',
   {
     eager: true,
     import: 'default',
@@ -16,17 +16,11 @@ function artworkGlobKey(fileName: string): string {
   return `../../../assets/images/card-artwork/${fileName}`
 }
 
-function artworkFileNames(cardId: string): readonly string[] {
+function artworkUrl(cardId: string): string | undefined {
   const resolvedId = resolveGadgetzanArtworkId(
     zombeastComponents(cardId)?.[0] ?? cardId
   )
-  return [`${resolvedId}.jpg`, `${resolvedId}.jpeg`, `${resolvedId}.png`]
-}
-
-function artworkUrl(cardId: string): string | undefined {
-  return artworkFileNames(cardId)
-    .map((fileName) => artworkUrls[artworkGlobKey(fileName)])
-    .find((url): url is string => url !== undefined)
+  return artworkUrls[artworkGlobKey(`${resolvedId}.png`)]
 }
 
 /** Improves minification when the same authored texture is used by compact cards. */

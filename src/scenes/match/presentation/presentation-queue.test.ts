@@ -2927,6 +2927,9 @@ describe('Legendary minion entrance shake', () => {
     vi.spyOn(internal.cardPlayAnimation, 'createMinionAura').mockImplementation(
       () => new Sprite(Texture.WHITE)
     )
+    vi.spyOn(internal.cardPlayAnimation, 'createCardBurst').mockImplementation(
+      () => new Sprite(Texture.WHITE)
+    )
     vi.spyOn(internal.cardPlayAnimation, 'detachMinionAura').mockImplementation(
       () => {}
     )
@@ -3046,6 +3049,7 @@ describe('board lifecycle preservation', () => {
       resolver: { loadArtwork(): Promise<Texture> }
       cardPlayAnimation: {
         createMinionAura(): Container
+        createCardBurst(): Sprite
         detachMinionAura(): void
         emitMinionParticles(): Container
         alignMinionArtwork(): void
@@ -3063,6 +3067,9 @@ describe('board lifecycle preservation', () => {
     vi.spyOn(internal.resolver, 'loadArtwork').mockResolvedValue(Texture.WHITE)
     vi.spyOn(internal.cardPlayAnimation, 'createMinionAura').mockImplementation(
       () => new Container()
+    )
+    vi.spyOn(internal.cardPlayAnimation, 'createCardBurst').mockImplementation(
+      () => new Sprite(Texture.WHITE)
     )
     vi.spyOn(internal.cardPlayAnimation, 'detachMinionAura').mockImplementation(
       () => undefined
@@ -5115,7 +5122,10 @@ describe('board lifecycle preservation', () => {
         presentMinionPlayed(): Promise<void>
         presentWeaponEquipped(): Promise<void>
         presentResolutionEvents(): Promise<void>
-        cardPlayAnimation: { present(): Promise<void> }
+        cardPlayAnimation: {
+          present(): Promise<void>
+          presentChoice(): Promise<void>
+        }
       }
       const { hand } = internal
       const entries = ['played', 'first', 'second'].map((id, index) => {
@@ -5147,6 +5157,7 @@ describe('board lifecycle preservation', () => {
       vi.spyOn(internal, 'presentMinionPlayed').mockReturnValue(animation)
       vi.spyOn(internal, 'presentWeaponEquipped').mockReturnValue(animation)
       vi.spyOn(internal.cardPlayAnimation, 'present').mockReturnValue(animation)
+      vi.spyOn(internal.cardPlayAnimation, 'presentChoice').mockReturnValue(animation)
       const resolution = vi
         .spyOn(internal, 'presentResolutionEvents')
         .mockReturnValue(effects)

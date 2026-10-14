@@ -1,7 +1,8 @@
-import { Sprite, Texture } from 'pixi.js'
+import { Container, Sprite, Texture } from 'pixi.js'
 import { MAX_MANA, type PlayerMana } from '../../../game-rules/match'
 import {
   applyAnchoredPlacement,
+  applyPlacement,
   type LayoutPlacement,
   type LayoutPoint
 } from '../../../visual-components/layout'
@@ -19,6 +20,8 @@ export interface ManaTrayLayout {
   readonly gap: number
   /** Native crystal size with a uniform scale, local to each crystal. */
   readonly crystal: LayoutPlacement
+  readonly glow: LayoutPlacement
+  readonly glowFade: { readonly inDuration: number; readonly outDuration: number }
   readonly overloadCrystal: LayoutPlacement
   readonly pendingRowOffsetY: number
 }
@@ -73,14 +76,15 @@ const MANA_TRAY_POP_DURATION = 0.5
 const MANA_TRAY_INSERT_DURATION = 0.4
 
 /**
- * The local player's mana crystal tray: one pooled `Sprite` per crystal slot
+ * The local player's mana crystal tray: one pooled container per crystal slot
  * up to the ten-crystal maximum. `sync` is the single entry point — it
  * reconciles visibility and state textures, grows new crystals at the left,
  * and preserves the "refreshed" pop for existing crystals that turn full.
  */
 export class ManaTray extends Actor {
-  private readonly crystals: Sprite[]
+  private readonly crystals: Container[]
   private readonly pendingCrystals: Sprite[]
+  private readonly highlightedGlows = new Set<Sprite>()
   private previousStates: ManaCrystalState[] = []
   private initialized = false
   private growingCount = 0
@@ -89,7 +93,7 @@ export class ManaTray extends Actor {
   constructor(
     private readonly availableTexture: Texture,
     private readonly spentTexture: Texture,
-    private readonly highlightedTexture: Texture,
+    glowTexture: Texture,
     private readonly overloadTexture: Texture,
     private readonly layout: ManaTrayLayout
   ) {
@@ -97,8 +101,8 @@ export class ManaTray extends Actor {
     this.label = 'game.mana-tray'
     this.eventMode = 'none'
     this.crystals = Array.from({ length: MAX_MANA }, (_, index) => {
-      const crystal = new Sprite(availableTexture)
-      applyAnchoredPlacement(crystal, layout.crystal)
+      const crystal = new Container()
+      applyPlacement(crystal, layout.crystal)
       crystal.position.set(
         layout.firstCrystalCenter.x + index * layout.gap,
         layout.firstCrystalCenter.y
@@ -107,6 +111,18 @@ export class ManaTray extends Actor {
       crystal.alpha = 0
       crystal.eventMode = 'none'
       crystal.label = `game.mana-crystal-${index}`
+      const image = new Sprite(availableTexture)
+      image.anchor.set(layout.crystal.anchor.x, layout.crystal.anchor.y)
+      image.eventMode = 'none'
+      image.label = 'game.mana-crystal-image'
+      const glow = new Sprite(glowTexture)
+      applyAnchoredPlacement(glow, layout.glow)
+      glow.blendMode = 'screen'
+      glow.alpha = 0
+      glow.visible = false
+      glow.eventMode = 'none'
+      glow.label = 'game.mana-glow'
+      crystal.addChild(image, glow)
       this.addChild(crystal)
       return crystal
     })
@@ -134,7 +150,7 @@ export class ManaTray extends Actor {
       this.growingCount = 0
     }
     if (added > 0) {
-      // Reuse hidden sprites at the left; retain the visible row's identity.
+      // Reuse hidden slots at the left; retain the visible row's identity.
       const incoming = this.crystals.splice(previousCount, added)
       this.crystals.unshift(...incoming)
       this.growingCount = added
@@ -146,9 +162,14 @@ export class ManaTray extends Actor {
     }
     this.crystals.forEach((crystal, index) => {
       const state = states[index]
+      const glow = crystal.getChildByLabel('game.mana-glow') as Sprite
       const previousState =
         index < added ? undefined : this.previousStates[index - added]
       if (!state) {
+        this.killTweensOf(glow)
+        this.highlightedGlows.delete(glow)
+        glow.alpha = 0
+        glow.visible = false
         this.killTweensOf(crystal.scale)
         crystal.visible = false
         crystal.tint = 0xffffff
@@ -157,16 +178,16 @@ export class ManaTray extends Actor {
       crystal.visible = true
       crystal.alpha = 1
       crystal.tint = 0xffffff
+      this.setGlowHighlight(glow, state.phase === 'full' && state.highlighted)
       const placement =
         state.phase === 'locked' ? this.layout.overloadCrystal : this.layout.crystal
-      crystal.texture =
+      const image = crystal.getChildByLabel('game.mana-crystal-image') as Sprite
+      image.texture =
         state.phase === 'locked'
           ? this.overloadTexture
           : state.phase === 'consumed'
             ? this.spentTexture
-            : state.highlighted
-              ? this.highlightedTexture
-              : this.availableTexture
+            : this.availableTexture
       if (countChanged || !this.initialized) {
         crystal.position.set(
           this.layout.firstCrystalCenter.x + index * this.layout.gap,
@@ -175,7 +196,7 @@ export class ManaTray extends Actor {
       }
       if (state.phase !== previousState?.phase) {
         this.killTweensOf(crystal.scale)
-        crystal.anchor.set(placement.anchor.x, placement.anchor.y)
+        image.anchor.set(placement.anchor.x, placement.anchor.y)
         crystal.scale.set(placement.scale?.x ?? 1, placement.scale?.y ?? 1)
       }
       if (
@@ -215,6 +236,25 @@ export class ManaTray extends Actor {
     }
   }
 
+  /** Repeated syncs keep their fade; changed highlights continue from current opacity. */
+  private setGlowHighlight(glow: Sprite, highlighted: boolean): void {
+    if (this.highlightedGlows.has(glow) === highlighted) return
+    if (highlighted) this.highlightedGlows.add(glow)
+    else this.highlightedGlows.delete(glow)
+    this.killTweensOf(glow)
+    glow.visible = true
+    this.tweenTo(glow, {
+      alpha: highlighted ? 1 : 0,
+      duration: highlighted
+        ? this.layout.glowFade.inDuration
+        : this.layout.glowFade.outDuration,
+      ease: 'sine.inOut',
+      onComplete: () => {
+        if (!highlighted) glow.visible = false
+      }
+    })
+  }
+
   /** One progress value keeps the new crystals' growth and the row's push in step. */
   private applyInsertion(): void {
     if (this.growingCount === 0) return
@@ -238,7 +278,7 @@ export class ManaTray extends Actor {
   }
 
   /** Quick scale pop so a freshly refreshed crystal reads as "new". */
-  private popCrystal(crystal: Sprite): void {
+  private popCrystal(crystal: Container): void {
     const base = this.layout.crystal.scale?.x ?? 1
     this.killTweensOf(crystal.scale)
     this.tweenFromTo(

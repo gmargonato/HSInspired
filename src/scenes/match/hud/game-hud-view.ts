@@ -75,7 +75,7 @@ export class GameHudView {
       | 'endTurn'
       | 'manaAvailable'
       | 'manaSpent'
-      | 'manaHighlighted'
+      | 'manaGlow'
       | 'manaOverload'
       | 'deckInfo'
     >,
@@ -144,7 +144,7 @@ export class GameHudView {
     this.manaLocalTray = new ManaTray(
       assets.manaAvailable,
       assets.manaSpent,
-      assets.manaHighlighted,
+      assets.manaGlow,
       assets.manaOverload,
       GAME_BOARD_LAYOUT.mana.crystals
     )

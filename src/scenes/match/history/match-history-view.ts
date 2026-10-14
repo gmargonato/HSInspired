@@ -46,7 +46,8 @@ export interface MatchHistoryTextures {
   readonly localTrigger: Texture
   readonly remoteAttack: Texture
   readonly remoteTrigger: Texture
-  readonly arrow: Texture
+  readonly localArrow: Texture
+  readonly remoteArrow: Texture
   readonly burnCard: Texture
   readonly burnThumb: Texture
   readonly damageIndicator: Texture
@@ -415,7 +416,11 @@ export class MatchHistoryView extends Actor {
     }
     if (!this.current(entry.id, sequence)) return
     if (targets.length === 0) return
-    const arrow = new Sprite(this.textures.arrow)
+    const arrow = new Sprite(
+      entry.participantId === this.localParticipantId
+        ? this.textures.localArrow
+        : this.textures.remoteArrow
+    )
     arrow.label = 'game.history.arrow'
     applyAnchoredPlacement(arrow, MATCH_HISTORY_LAYOUT.preview.arrow)
     this.preview.addChild(arrow)

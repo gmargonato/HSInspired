@@ -131,7 +131,8 @@ void main() {
 export function createShatter(
   renderer: Renderer,
   target: Container,
-  tuning: ShatterTuning = { ...SHATTER_CONFIG }
+  tuning: ShatterTuning = { ...SHATTER_CONFIG },
+  motion: { travelDistance?: number; fadeStart?: number } = {}
 ) {
   const parent = target.parent
   if (!parent) throw new Error('Shatter requires an attached view')
@@ -198,7 +199,8 @@ export function createShatter(
   }
   function applyProgress(progress: number) {
     const travel = progress * (2 - progress)
-    const fade = Math.max(0, Math.min(1, (progress - 0.55) / 0.45))
+    const fadeStart = motion.fadeStart ?? 0.55
+    const fade = Math.max(0, Math.min(1, (progress - fadeStart) / (1 - fadeStart)))
     shader.resources.shatterUniforms.uniforms.uOpacity =
       1 - fade * fade * (3 - 2 * fade)
     mesh.visible = progress < 1
@@ -208,7 +210,10 @@ export function createShatter(
       const angle = ((piece.rotation * tuning.spin * Math.PI) / 180) * progress
       const cos = Math.cos(angle)
       const sin = Math.sin(angle)
-      const distance = tuning.spread * Math.max(width, height) * piece.travel * travel
+      const distance =
+        (motion.travelDistance ?? tuning.spread * Math.max(width, height)) *
+        piece.travel *
+        travel
       const x = piece.cx - width / 2 + piece.direction[0] * distance
       const y = piece.cy - height / 2 + piece.direction[1] * distance
       for (const point of piece.polygon) {

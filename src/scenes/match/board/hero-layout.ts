@@ -3,6 +3,25 @@ import { CENTER, placement } from '../../../visual-components/layout'
 /** Local design space for one board hero portrait. */
 export const HERO_CANVAS = { width: 345, height: 433 } as const
 
+/** The bright portrait silhouette occupies about 210 x 235 in the 512px image. */
+export const HERO_SPELL_PLAY = {
+  placement: placement(
+    { x: HERO_CANVAS.width / 2, y: HERO_CANVAS.height / 2 + 14 * (433 / 235) },
+    { width: 512, height: 512 },
+    {
+      anchor: CENTER,
+      scale: { x: 345 / 210, y: 433 / 235 },
+      note: 'Spell pulse fitted to the portrait silhouette, including surrounding rays.'
+    }
+  ),
+  peakAlpha: 0.6,
+  brightenDuration: 0.15,
+  holdDuration: 0.25,
+  fadeDuration: 0.65,
+  initialScale: 0.6,
+  expandDuration: 0.15
+} as const
+
 /** Fixed geometry for the feature-agnostic hero render stack. */
 export const HERO_LAYOUT = {
   name: 'Board hero',

@@ -74,6 +74,15 @@ npm run verify      # Formatting, lint, assets, all tests, types, dependencies, 
 Artwork verification uses the actual Vite asset pipeline and does not launch the
 game. The full verification command includes the production build smoke check.
 
+Card artwork uses original extracted illustrations, exported as opaque RGB PNGs
+into `assets/images/card-artwork` under the existing game card IDs. Importing
+discards the source alpha masks while preserving dimensions and every RGB pixel;
+the extracted originals stay untouched.
+`scripts/card-artwork-sources.json` records the Hearthstone IDs, extracted source
+paths, and source/runtime image hashes. To reimport from `assets/original`, run
+`npm run assets:import`; replaced files are preserved in ignored
+`.tmp/card-artwork-backups` folders. Darkspear Hunter shares Houndmaster's artwork.
+
 ## Card behavior campaigns
 
 The headless card campaign runner inventories authored, static generated, and

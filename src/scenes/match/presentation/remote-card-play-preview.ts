@@ -52,7 +52,11 @@ export class RemoteCardPlayPreview extends Actor {
     private readonly premiumSideFor: (
       card: { instanceId: string; ownerId?: string },
       side: 'local' | 'remote'
-    ) => 'local' | 'remote' = (_card, side) => side
+    ) => 'local' | 'remote' = (_card, side) => side,
+    private readonly createPlayAura?: (
+      card: CardView,
+      timeline: gsap.core.Timeline
+    ) => Sprite
   ) {
     super()
     this.label = 'game.remote-card-play-preview'
@@ -62,7 +66,11 @@ export class RemoteCardPlayPreview extends Actor {
   async present(
     definition: CardDefinition,
     snapshot?: OpeningCard,
-    options: { readonly side: 'local' | 'remote'; readonly concealSecret: boolean } = {
+    options: {
+      readonly side: 'local' | 'remote'
+      readonly concealSecret: boolean
+      readonly onStart?: () => void
+    } = {
       side: 'remote',
       concealSecret: true
     }
@@ -119,7 +127,7 @@ export class RemoteCardPlayPreview extends Actor {
     card.position.set(originPosition.x, originPosition.y)
     card.scale.set(origin.scale!.x, origin.scale!.y)
     this.addChild(card)
-
+    options.onStart?.()
     const timeline = this.timeline()
       .to(card, {
         x: destinationPosition.x,
@@ -143,6 +151,16 @@ export class RemoteCardPlayPreview extends Actor {
         duration: MATCH_HISTORY_LAYOUT.remoteCardPlay.fadeDuration,
         ease: 'power1.in'
       })
+
+    const aura =
+      card instanceof CardView ? this.createPlayAura?.(card, timeline) : undefined
+    if (aura) {
+      timeline.to(
+        aura,
+        { alpha: 1, duration: MATCH_HISTORY_LAYOUT.remoteCardPlay.holdDuration },
+        MATCH_HISTORY_LAYOUT.remoteCardPlay.travelDuration
+      )
+    }
 
     await Promise.race([
       cancelled,
