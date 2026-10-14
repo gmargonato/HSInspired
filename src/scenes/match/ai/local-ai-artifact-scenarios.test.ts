@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { asCardId, CARD_CATALOG } from '../../../game-rules/content/cards'
-import { enumerateLegalCommands } from '../../../game-rules/match/ai'
+import {
+  canonicalCommandKey,
+  enumerateLegalCommands
+} from '../../../game-rules/match/ai'
 import type {
   CardPlayTargetRef,
   OpeningMatchAnalysis,
@@ -18,6 +21,8 @@ import { aiActions } from './ai-context'
 import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
 import { expertDrawPreference } from './expert-draw-preference'
+import { wastesImmediateTemporaryMana } from './expert-temporary-mana'
+import { unpaidActionPenalty } from './expert-ai-action-safety'
 import {
   searchTactics,
   inspectTacticalLine
@@ -115,6 +120,187 @@ describe('Expert early draw preference', () => {
   })
 
   it('takes guaranteed lethal before a safe draw', async () => {
+    const session = createSession({
+      ...base,
+      opponentHealth: 4,
+      aiBoard: [{ cardId: 'basic_chillwind_yeti', ready: true }]
+    })
+    await runAiTurn(session, 1)
+    expect(session.getState().winnerId).toBe(session.remoteParticipantId)
+  }, 30_000)
+})
+
+describe('Expert cheap generation information preference', () => {
+  const book = 'one_night_in_karazhan_babbling_book'
+  const portal = 'goblins_vs_gnomes_unstable_portal'
+  const base: AiFixtureOptions = {
+    seed: 101406,
+    aiHeroId: 'jaina',
+    opponentHeroId: 'guldan',
+    aiMana: 3,
+    aiHand: [book],
+    aiDeck: []
+  }
+
+  function inspect(options: Partial<AiFixtureOptions> = {}, cardId = book) {
+    const session = createSession({ ...base, ...options })
+    const before = session.match.getCheckpoint()
+    const card = aiPlayer(session).hand.find((entry) => entry.cardId === cardId)!
+    const command =
+      legal(session).find(
+        (entry) =>
+          entry.type === 'play-card' && entry.cardInstanceId === card.instanceId
+      ) ??
+      ({
+        type: 'play-card',
+        participantId: session.remoteParticipantId,
+        cardInstanceId: card.instanceId,
+        position: 0
+      } satisfies TurnMatchCommand)
+    const preference = session.match.analyze((fork) =>
+      expertDrawPreference(fork, session.remoteParticipantId, command)
+    )
+    const result = session.match.analyze((fork) => fork.dispatch(command))
+    expect(session.match.getCheckpoint()).toEqual(before)
+    return { preference, result }
+  }
+
+  it('values Book information with an empty deck, equally across generated spell identities', () => {
+    const generated = new Set<string>()
+    for (let seed = 1; seed <= 12; seed++) {
+      const { preference, result } = inspect({ seed })
+      expect(preference).toBe(0.02)
+      const event = result.events.find((entry) => entry.type === 'card-generated')
+      expect(event).toBeDefined()
+      if (event?.type === 'card-generated') generated.add(event.card.cardId)
+    }
+    expect(generated.size).toBeGreaterThan(1)
+    expect(inspect({ aiMana: 2 }).preference).toBe(0.01)
+    expect(inspect({ aiMana: 1 }).preference).toBe(0)
+  })
+
+  it('recognizes authored cheap random additions beyond Book without rewarding fixed or stolen cards', () => {
+    for (const cardId of [portal, 'one_night_in_karazhan_swashburglar']) {
+      expect(
+        inspect({ aiMana: 4, aiHand: [cardId] }, cardId).preference
+      ).toBeGreaterThan(0)
+    }
+    for (const cardId of ['journey_to_ungoro_flame_geyser', 'basic_mind_vision']) {
+      const { preference, result } = inspect(
+        { aiHand: [cardId], opponentHand: ['basic_chillwind_yeti'] },
+        cardId
+      )
+      expect(result.accepted).toBe(true)
+      expect(result.events.some((event) => event.type === 'card-generated')).toBe(true)
+      expect(preference).toBe(0)
+    }
+  })
+
+  it('does not extend the preference to expensive generation, summons, discover or delayed triggers', () => {
+    for (const cardId of [
+      'whispers_of_the_old_gods_cabalists_tome',
+      'one_night_in_karazhan_firelands_portal',
+      'journey_to_ungoro_primordial_glyph',
+      'goblins_vs_gnomes_clockwork_gnome'
+    ]) {
+      expect(inspect({ aiMana: 10, aiHand: [cardId] }, cardId).preference).toBe(0)
+    }
+  })
+
+  it('requires a successful own generation event and does not reward returned known cards', () => {
+    const technician = 'goblins_vs_gnomes_tinkertown_technician'
+    for (const mech of [false, true]) {
+      const { preference, result } = inspect(
+        {
+          aiHand: [{ cardId: technician, baseCost: 2, currentCost: 2 }],
+          aiBoard: mech ? [{ cardId: 'goblins_vs_gnomes_clockwork_gnome' }] : []
+        },
+        technician
+      )
+      expect(result.accepted).toBe(true)
+      expect(result.events.some((event) => event.type === 'card-generated')).toBe(mech)
+      expect(preference > 0).toBe(mech)
+    }
+    expect(
+      inspect(
+        { aiHand: ['classic_shadowstep'], aiBoard: [{ cardId: book }] },
+        'classic_shadowstep'
+      ).preference
+    ).toBe(0)
+  })
+
+  it('does not reward generation accompanied by draw fatigue', () => {
+    const { preference, result } = inspect(
+      { aiHand: [portal], aiBoard: [{ cardId: 'classic_gadgetzan_auctioneer' }] },
+      portal
+    )
+    expect(result.accepted).toBe(true)
+    expect(result.events.some((event) => event.type === 'card-generated')).toBe(true)
+    expect(
+      result.state.players.find(
+        (player) => player.participantId === result.state.activePlayerId
+      )!.fatigueDamage
+    ).toBeGreaterThan(0)
+    expect(preference).toBe(0)
+  })
+
+  it('leaves full hand, last board slot, rejected plays and burns unpromoted', () => {
+    const fullHand = [book, ...Array(9).fill('basic_chillwind_yeti')]
+    expect(inspect({ aiHand: fullHand }).preference).toBe(0)
+    for (const count of [6, 7]) {
+      const { preference, result } = inspect({
+        aiBoard: Array.from({ length: count }, () => ({ cardId: 'classic_wisp' }))
+      })
+      expect(preference).toBe(0)
+      expect(result.accepted).toBe(count === 6)
+    }
+    const burned = inspect({
+      aiHand: fullHand,
+      aiBoard: [{ cardId: 'league_of_explorers_brann_bronzebeard' }]
+    })
+    expect(burned.result.events.some((event) => event.type === 'card-burned')).toBe(
+      true
+    )
+    expect(burned.preference).toBe(0)
+  })
+
+  it('does not bias against an affordable full-mana known play', () => {
+    const aiHand = [book, 'basic_boulderfist_ogre']
+    expect(inspect({ aiMana: 6, aiHand }).preference).toBe(0)
+    expect(inspect({ aiMana: 7, aiHand }).preference).toBeGreaterThan(0)
+    expect(inspect({ aiHand: [book, 'basic_arcane_intellect'] }).preference).toBe(0.02)
+  })
+
+  it('preserves affordable spell discount and trigger setup before generation', () => {
+    for (const [generator, setup, aiMana] of [
+      [book, 'classic_sorcerers_apprentice', 3],
+      [book, 'league_of_explorers_brann_bronzebeard', 4],
+      [portal, 'classic_sorcerers_apprentice', 3],
+      [portal, 'classic_mana_wyrm', 3],
+      [portal, 'blackrock_mountain_flamewaker', 5]
+    ] as const) {
+      expect(
+        inspect({ aiMana, aiHand: [generator, setup] }, generator).preference
+      ).toBe(0)
+    }
+    expect(
+      inspect({ aiHand: [book, 'blackrock_mountain_flamewaker'] }).preference
+    ).toBe(0.02)
+  })
+
+  it('leaves secret interactions and terminal generation to tactical evaluation', () => {
+    expect(
+      inspect({ opponentSecrets: [{ cardId: 'classic_mirror_entity' }] }).preference
+    ).toBe(0)
+    const terminal = inspect({
+      opponentHealth: 1,
+      aiBoard: [{ cardId: 'classic_knife_juggler' }]
+    })
+    expect(terminal.result.state.phase).toBe('ended')
+    expect(terminal.preference).toBe(0)
+  })
+
+  it('takes a guaranteed win before revealing a generated card', async () => {
     const session = createSession({
       ...base,
       opponentHealth: 4,
@@ -398,6 +584,369 @@ describe('Expert tactical priority regressions from September 29', () => {
     },
     30_000
   )
+})
+
+describe('Expert meaningful friendly-target payoffs', () => {
+  it.each([
+    ['classic_battle_rage', 27, 0],
+    ['classic_battle_rage', 22, 0.25],
+    ['classic_mortal_strike', 12, 0],
+    ['classic_mortal_strike', 22, 0.25],
+    ['blackrock_mountain_revenge', 12, 0]
+  ] as const)(
+    'retains a full healing target when %s needs %i hero health',
+    (payoff, health, penalty) => {
+      const session = createSession({
+        seed: 101424,
+        aiHeroId: 'guldan',
+        opponentHeroId: 'jaina',
+        aiMana: 7,
+        aiHealth: health,
+        aiHand: ['classic_earthen_ring_farseer', payoff],
+        aiBoard: [{ cardId: 'goblins_vs_gnomes_antique_healbot' }],
+        aiDeck: ['basic_chillwind_yeti']
+      })
+      const full = aiPlayer(session).board[0]!
+      const command = playCommand(
+        session,
+        'classic_earthen_ring_farseer',
+        (target) => target.kind === 'minion' && target.instanceId === full.instanceId
+      )
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty
+      ).toBe(penalty)
+    }
+  )
+
+  it.each(['classic_battle_rage', 'classic_mortal_strike'])(
+    'abstains from hard heal-target advice with mixed destinations and held %s',
+    (payoff) => {
+      const session = createSession({
+        seed: 101425,
+        aiHeroId: 'guldan',
+        opponentHeroId: 'jaina',
+        aiMana: 7,
+        aiHealth: payoff === 'classic_battle_rage' ? 30 : 12,
+        aiHand: ['classic_earthen_ring_farseer', payoff],
+        aiBoard: [
+          { cardId: 'goblins_vs_gnomes_antique_healbot' },
+          { cardId: 'classic_mountain_giant', health: 5, maxHealth: 8 }
+        ],
+        aiDeck: ['basic_chillwind_yeti']
+      })
+      const full = aiPlayer(session).board[0]!
+      const command = playCommand(
+        session,
+        'classic_earthen_ring_farseer',
+        (target) => target.kind === 'minion' && target.instanceId === full.instanceId
+      )
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty
+      ).toBe(0)
+    }
+  )
+
+  it.each([
+    ['classic_battle_rage', 30, 0],
+    ['classic_battle_rage', 22, 0.35],
+    ['classic_mortal_strike', 13, 0],
+    ['classic_mortal_strike', 22, 0.35]
+  ] as const)(
+    'preserves actual own-health setup for %s from %i health',
+    (payoff, health, penalty) => {
+      const session = createSession({
+        seed: 101423,
+        aiHeroId: 'malfurion',
+        opponentHeroId: 'rexxar',
+        aiMana: 8,
+        aiHealth: health,
+        aiHand: ['classic_keeper_of_the_grove', payoff],
+        aiDeck: ['basic_chillwind_yeti']
+      })
+      const command = playCommand(
+        session,
+        'classic_keeper_of_the_grove',
+        (target) =>
+          target.kind === 'hero' &&
+          target.participantId === session.remoteParticipantId,
+        0
+      )
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty
+      ).toBe(penalty)
+    }
+  )
+
+  it('prefers effective same-card healing with a passive opposing secret', () => {
+    const session = createSession({
+      seed: 101421,
+      aiHeroId: 'guldan',
+      opponentHeroId: 'jaina',
+      aiMana: 3,
+      aiHand: ['classic_earthen_ring_farseer'],
+      aiBoard: [
+        { cardId: 'goblins_vs_gnomes_antique_healbot' },
+        { cardId: 'classic_mountain_giant', health: 5, maxHealth: 8 }
+      ],
+      opponentSecrets: [{ cardId: 'classic_ice_block', revealed: false }]
+    })
+    const full = aiPlayer(session).board[0]!
+    const wounded = aiPlayer(session).board[1]!
+    const checkpoint = session.match.getCheckpoint()
+    const inspect = createExpertActionInspector(checkpoint, session.remoteParticipantId)
+    const fullTarget = playCommand(
+      session,
+      'classic_earthen_ring_farseer',
+      (target) => target.kind === 'minion' && target.instanceId === full.instanceId
+    )
+    const woundedTarget = playCommand(
+      session,
+      'classic_earthen_ring_farseer',
+      (target) => target.kind === 'minion' && target.instanceId === wounded.instanceId
+    )
+    expect(inspect(fullTarget).preferredAlternativeKey).toBe(
+      canonicalCommandKey(woundedTarget)
+    )
+    expect(
+      inspect(
+        playCommand(
+          session,
+          'classic_earthen_ring_farseer',
+          (target) => target.kind === 'minion' && target.instanceId === full.instanceId
+        )
+      ).reason
+    ).toBe('wasted-healing-target')
+    expect(
+      inspect(
+        playCommand(
+          session,
+          'classic_earthen_ring_farseer',
+          (target) =>
+            target.kind === 'minion' && target.instanceId === wounded.instanceId
+        )
+      ).penalty
+    ).toBe(0)
+    expect(session.match.getCheckpoint()).toEqual(checkpoint)
+  })
+
+  it.each(['classic_auchenai_soulpriest', 'basic_northshire_cleric'])(
+    'leaves healing conversion and information from %s to search',
+    (engine) => {
+      const session = createSession({
+        seed: 101422,
+        aiHeroId: 'anduin',
+        opponentHeroId: 'jaina',
+        aiMana: 3,
+        aiHand: ['classic_earthen_ring_farseer'],
+        aiBoard: [
+          { cardId: engine },
+          { cardId: 'classic_mountain_giant', health: 5, maxHealth: 8 }
+        ],
+        aiDeck: ['basic_chillwind_yeti']
+      })
+      const full = aiPlayer(session).board[0]!
+      const command = playCommand(
+        session,
+        'classic_earthen_ring_farseer',
+        (target) => target.kind === 'minion' && target.instanceId === full.instanceId
+      )
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty
+      ).toBe(0)
+    }
+  )
+
+  it('penalizes a damaging battlecry on its own hero while retaining the enemy target and silence', () => {
+    const session = createSession({
+      seed: 101414,
+      aiHeroId: 'malfurion',
+      opponentHeroId: 'rexxar',
+      aiMana: 7,
+      aiHealth: 22,
+      aiArmor: 2,
+      aiHand: ['classic_keeper_of_the_grove'],
+      aiBoard: [{ cardId: 'classic_ancient_watcher' }],
+      opponentBoard: [
+        { cardId: 'whispers_of_the_old_gods_princess_huhuran', health: 1 }
+      ]
+    })
+    const before = session.match.getCheckpoint()
+    const inspect = createExpertActionInspector(before, session.remoteParticipantId)
+    const selfDamage = playCommand(
+      session,
+      'classic_keeper_of_the_grove',
+      (target) =>
+        target.kind === 'hero' && target.participantId === session.remoteParticipantId,
+      0
+    )
+    expect(inspect(selfDamage).reason).toBe('unpaid-friendly-damage')
+    expect(
+      inspect(
+        playCommand(
+          session,
+          'classic_keeper_of_the_grove',
+          (target) =>
+            target.participantId === session.localParticipantId &&
+            target.kind === 'minion',
+          0
+        )
+      ).penalty
+    ).toBe(0)
+    expect(
+      inspect(
+        playCommand(
+          session,
+          'classic_keeper_of_the_grove',
+          (target) =>
+            target.participantId === session.remoteParticipantId &&
+            target.kind === 'minion',
+          1
+        )
+      ).penalty
+    ).toBe(0)
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it('preserves chosen self damage that changes a held card cost', () => {
+    const session = createSession({
+      seed: 101415,
+      aiHeroId: 'malfurion',
+      opponentHeroId: 'rexxar',
+      aiMana: 7,
+      aiHealth: 22,
+      aiHand: ['classic_keeper_of_the_grove', 'classic_molten_giant']
+    })
+    const command = playCommand(
+      session,
+      'classic_keeper_of_the_grove',
+      (target) =>
+        target.kind === 'hero' && target.participantId === session.remoteParticipantId,
+      0
+    )
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(command).penalty
+    ).toBe(0)
+  })
+
+  it.each(['absent', 'body', 'threshold'] as const)(
+    'counts only reachable ritual payoffs: %s',
+    (payoff) => {
+      const session = createSession({
+        seed: 101418,
+        aiHeroId: 'jaina',
+        opponentHeroId: 'guldan',
+        aiMana: 1,
+        aiMaximumMana: 9,
+        aiHealth: 7,
+        opponentHealth: 2,
+        aiHeroPowerAvailable: false,
+        aiHand: [
+          'the_grand_tournament_arcane_blast',
+          payoff === 'threshold'
+            ? 'whispers_of_the_old_gods_twin_emperor_veklor'
+            : 'goblins_vs_gnomes_echo_of_medivh'
+        ],
+        aiDeck: [
+          payoff === 'body' ? 'whispers_of_the_old_gods_cthun' : 'basic_fireball'
+        ],
+        aiCthun: { attack: 1, health: 1 },
+        aiBoard: [
+          { cardId: 'classic_sorcerers_apprentice' },
+          { cardId: 'whispers_of_the_old_gods_cult_sorcerer' },
+          { cardId: 'one_night_in_karazhan_babbling_book' }
+        ]
+      })
+      const book = aiPlayer(session).board.find(
+        (minion) => minion.cardId === 'one_night_in_karazhan_babbling_book'
+      )!
+      const command = playCommand(
+        session,
+        'the_grand_tournament_arcane_blast',
+        (target) => target.kind === 'minion' && target.instanceId === book.instanceId
+      )
+      const checkpoint = session.match.getCheckpoint()
+      const outcome = createExpertActionInspector(
+        checkpoint,
+        session.remoteParticipantId
+      )(command)
+      expect(outcome.reason).toBe(payoff === 'absent' ? 'unpaid-sacrifice' : undefined)
+      expect(
+        unpaidActionPenalty(command, session.getState(), session.remoteParticipantId)
+      ).toBe(payoff === 'absent' ? 0.35 : 0)
+      expect(session.match.getCheckpoint()).toEqual(checkpoint)
+    }
+  )
+
+  it.each([
+    ['classic_moonfire', 'classic_grommash_hellscream'],
+    ['classic_moonfire', 'classic_acolyte_of_pain'],
+    ['the_grand_tournament_arcane_blast', 'naxxramas_nerubian_egg']
+  ])('preserves %s into a real %s payoff', (spell, minion) => {
+    const session = createSession({
+      seed: 101419,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'guldan',
+      aiMana: 4,
+      aiHand: [spell],
+      aiBoard: [{ cardId: minion }],
+      aiDeck: ['basic_chillwind_yeti']
+    })
+    const command = playCommand(
+      session,
+      spell,
+      (target) =>
+        target.kind === 'minion' && target.participantId === session.remoteParticipantId
+    )
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(command).penalty
+    ).toBe(0)
+    expect(
+      unpaidActionPenalty(command, session.getState(), session.remoteParticipantId)
+    ).toBe(0)
+  })
+
+  it('preserves a damage cast that enables a held affordable combo', () => {
+    const session = createSession({
+      seed: 101420,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'guldan',
+      aiMana: 4,
+      aiHand: ['the_grand_tournament_arcane_blast', 'classic_si_7_agent'],
+      aiBoard: [{ cardId: 'one_night_in_karazhan_babbling_book' }]
+    })
+    const command = playCommand(
+      session,
+      'the_grand_tournament_arcane_blast',
+      (target) => target.participantId === session.remoteParticipantId
+    )
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(command).penalty
+    ).toBe(0)
+    expect(
+      unpaidActionPenalty(command, session.getState(), session.remoteParticipantId)
+    ).toBe(0)
+  })
 })
 
 type ScenarioSession = GameBoardSession
@@ -8761,4 +9310,210 @@ describe('hardware local AI artifact scenarios', () => {
       }
     }
   }, 60_000)
+})
+
+// These checks deliberately perform no rollout or opponent search.
+describe('Expert immediate unspendable temporary mana', () => {
+  const hand = [
+    'classic_ancient_of_lore',
+    'basic_wild_growth',
+    'basic_savage_roar',
+    'basic_the_coin',
+    'classic_wrath'
+  ]
+  const base: AiFixtureOptions = {
+    seed: 101404,
+    aiHeroId: 'malfurion',
+    opponentHeroId: 'rexxar',
+    turnNumber: 4,
+    aiMana: 0,
+    aiMaximumMana: 2,
+    aiHeroPowerId: 'druid-dire-shapeshift',
+    aiHeroPowerCost: 2,
+    aiHeroPowerAvailable: false,
+    aiHeroPowerUsesThisTurn: 1,
+    aiAttack: 2,
+    aiArmor: 4,
+    aiHand: hand,
+    aiDeck: ['blackrock_mountain_emperor_thaurissan', 'basic_swipe'],
+    aiBoard: [{ cardId: 'the_grand_tournament_sapling', ready: true }],
+    opponentBoard: [{ cardId: 'one_night_in_karazhan_big_bad_wolf' }]
+  }
+  function review(options: Partial<AiFixtureOptions> = {}, stop = false) {
+    const session = createSession({ ...base, ...options })
+    const command = legal(session).find(
+      (entry) => cardIdForCommand(session, entry) === 'basic_the_coin'
+    )!
+    expect(command).toBeDefined()
+    const before = session.match.getCheckpoint()
+    const result = session.match.analyze((fork) =>
+      wastesImmediateTemporaryMana(
+        fork,
+        session.remoteParticipantId,
+        command,
+        () => stop
+      )
+    )
+    expect(session.match.getCheckpoint()).toEqual(before)
+    return result
+  }
+
+  it('recognizes the post-power Druid T4 resource waste while retaining all free attacks', () => {
+    expect(review()).toBe(true)
+    const session = createSession({
+      ...base,
+      aiMana: 1,
+      aiAttack: 0,
+      aiHeroPowerAvailable: true,
+      aiHeroPowerUsesThisTurn: 0
+    })
+    dispatch(session, {
+      type: 'use-hero-power',
+      participantId: session.remoteParticipantId
+    })
+    expect(aiPlayer(session).mana.available).toBe(0)
+    const command = legal(session).find(
+      (entry) => cardIdForCommand(session, entry) === 'basic_the_coin'
+    )!
+    const before = session.match.getCheckpoint()
+    expect(
+      session.match.analyze((fork) =>
+        wastesImmediateTemporaryMana(fork, session.remoteParticipantId, command)
+      )
+    ).toBe(true)
+    expect(session.match.getCheckpoint()).toEqual(before)
+    expect(
+      legal(session).filter((entry) => entry.type === 'attack-character')
+    ).toHaveLength(4)
+  })
+
+  it.each([
+    { aiHand: [...hand, 'basic_elven_archer'] },
+    { aiHand: [...hand, 'classic_wisp'] },
+    { aiHand: [...hand, 'classic_preparation'] },
+    { aiMana: 1, aiHeroPowerAvailable: true, aiHeroPowerUsesThisTurn: 0 },
+    { aiHand: ['basic_the_coin', ...Array(9).fill('basic_boulderfist_ogre')] },
+    { aiBoard: [{ cardId: 'classic_loot_hoarder', ready: true }] },
+    { opponentBoard: [{ cardId: 'classic_loot_hoarder' }] },
+    { aiBoard: [{ cardId: 'classic_cult_master', ready: true }] },
+    { aiBoard: [{ cardId: 'classic_gadgetzan_auctioneer' }] },
+    { opponentBoard: [{ cardId: 'mean_streets_of_gadgetzan_burgly_bully' }] },
+    { aiWeapon: { cardId: 'classic_sword_of_justice' } },
+    { opponentSecrets: [{ cardId: 'classic_explosive_trap', revealed: false }] },
+    { aiQuest: { cardId: 'journey_to_ungoro_untapped_potential', progress: 0 } },
+    { aiHand: [...hand, 'classic_molten_giant'] },
+    { aiHand: [...hand, 'classic_sea_giant'] },
+    { aiHand: [...hand, 'classic_edwin_vancleef'] },
+    { aiHand: [...hand, 'one_night_in_karazhan_arcane_giant'] },
+    { aiDeck: ['one_night_in_karazhan_arcane_giant'] },
+    { aiHeroPowerId: 'knights_of_the_frozen_throne_deaths_shadow' },
+    { aiHeroPowerId: 'saviors_of_uldum_anraphets_core' },
+    {
+      aiHand: [
+        ...hand,
+        {
+          cardId: 'basic_boulderfist_ogre',
+          costAdjustments: [
+            {
+              id: 'conditional',
+              sourceInstanceId: 'setup',
+              amount: -1,
+              duration: 'permanent'
+            }
+          ]
+        }
+      ]
+    }
+  ] satisfies Partial<AiFixtureOptions>[])(
+    'leaves resource, information and deferred payoff cases to search: %j',
+    (options) => {
+      expect(review(options)).toBe(false)
+    }
+  )
+
+  it('does not mistake a cheap body blocked by board space for permanently unusable mana', () => {
+    expect(
+      review({
+        aiHand: [...hand, 'basic_elven_archer'],
+        aiBoard: Array.from({ length: 7 }, () => ({
+          cardId: 'classic_wisp',
+          ready: true
+        }))
+      })
+    ).toBe(false)
+  })
+
+  it('recognizes another authored temporary-mana spell and excludes permanent ramp', () => {
+    for (const [cardId, mana, expected] of [
+      ['basic_innervate', 0, true],
+      ['basic_wild_growth', 2, false]
+    ] as const) {
+      const session = createSession({
+        ...base,
+        aiMana: mana,
+        aiHand: [cardId, 'basic_boulderfist_ogre']
+      })
+      const command = legal(session).find(
+        (entry) => cardIdForCommand(session, entry) === cardId
+      )!
+      expect(command).toBeDefined()
+      expect(
+        session.match.analyze((fork) =>
+          wastesImmediateTemporaryMana(fork, session.remoteParticipantId, command)
+        )
+      ).toBe(expected)
+    }
+  })
+
+  it('preserves known generated deck history payoffs without inspecting concealed generated identities', () => {
+    for (const [cardId, visibility, expected] of [
+      ['one_night_in_karazhan_arcane_giant', 'known', false],
+      ['one_night_in_karazhan_arcane_giant', 'started', false],
+      ['one_night_in_karazhan_arcane_giant', 'unknown', true],
+      ['basic_boulderfist_ogre', 'unknown', true]
+    ] as const) {
+      const fixture = createAiFixture({ ...base, aiDeck: ['basic_chillwind_yeti'] })
+      const definition = CARD_CATALOG.require(asCardId(cardId))
+      const checkpoint = {
+        ...fixture.checkpoint,
+        state: {
+          ...fixture.checkpoint.state,
+          players: fixture.checkpoint.state.players.map((player) =>
+            player.participantId !== fixture.aiParticipantId
+              ? player
+              : {
+                  ...player,
+                  deck: player.deck.map((card) => ({
+                    ...card,
+                    cardId: definition.id,
+                    baseCost: definition.cost,
+                    currentCost: definition.cost,
+                    startedInDeck: visibility === 'started',
+                    knownTo: visibility === 'known' ? [fixture.aiParticipantId] : []
+                  }))
+                }
+          ) as unknown as typeof fixture.checkpoint.state.players
+        }
+      }
+      const session = new GameBoardSession({
+        setup: checkpoint.setup,
+        decks: checkpoint.decks,
+        checkpoint
+      })
+      const command = legal(session).find(
+        (entry) => cardIdForCommand(session, entry) === 'basic_the_coin'
+      )!
+      expect(
+        session.match.analyze((fork) =>
+          wastesImmediateTemporaryMana(fork, session.remoteParticipantId, command)
+        )
+      ).toBe(expected)
+    }
+  })
+
+  it('abstains before any dispatch when canceled and never reads concealed opponent hand identity', () => {
+    expect(review({}, true)).toBe(false)
+    expect(review({ opponentHand: ['classic_wisp'] })).toBe(true)
+    expect(review({ opponentHand: ['one_night_in_karazhan_arcane_giant'] })).toBe(true)
+  })
 })
