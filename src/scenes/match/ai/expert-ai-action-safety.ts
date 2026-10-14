@@ -1,5 +1,6 @@
 import { CARD_CATALOG, HERO_POWER_CATALOG } from '../../../game-rules/content'
 import type { TurnMatchCommand, TurnMatchState } from '../../../game-rules/match'
+import { CTHUN_ID } from '../../../game-rules/match/cthun'
 import {
   effectiveBoardMinionKeywords,
   hasBoardMinionEntryExhaustion,
@@ -8,6 +9,33 @@ import {
 
 /** A soft value penalty in the normalized Expert position-score range. */
 export const EXPERT_UNPAID_FRIENDLY_DAMAGE_PENALTY = 0.35
+
+const cthunThresholdCards = new Map<string, boolean>()
+
+/** Ritual counters alone are not a payoff; use known cards, never hidden deck order. */
+export function hasKnownCthunPayoff(
+  cards: readonly { readonly cardId: string }[],
+  includeThresholds = true
+): boolean {
+  const hasThreshold = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(hasThreshold)
+    if (!value || typeof value !== 'object') return false
+    const entry = value as Record<string, unknown>
+    return (
+      entry.type === 'cthun-attack-at-least' || Object.values(entry).some(hasThreshold)
+    )
+  }
+  return cards.some(({ cardId }) => {
+    if (cardId === CTHUN_ID) return true
+    if (!includeThresholds) return false
+    let threshold = cthunThresholdCards.get(cardId)
+    if (threshold === undefined) {
+      threshold = hasThreshold(CARD_CATALOG.get(cardId)?.effects)
+      cthunThresholdCards.set(cardId, threshold)
+    }
+    return threshold
+  })
+}
 
 /** Soft advice; simulated payoffs may justify these setup actions. */
 export function unpaidActionPenalty(
@@ -88,12 +116,58 @@ export function unpaidActionPenalty(
   )
     return 0
   if (!command.targets?.some((entry) => entry.participantId === actorId)) return 0
+  const manaAfterCast = player.mana.available - (card?.currentCost ?? definition.cost)
+  if (
+    player.hand.length >= 10 ||
+    player.hand.some((entry) => {
+      if (entry.instanceId === command.cardInstanceId) return false
+      const payoff = CARD_CATALOG.get(entry.cardId)
+      return (
+        JSON.stringify(payoff?.effects)?.includes('friendly-spells-cast-this-game') ||
+        ((entry.currentCost ?? payoff?.cost ?? Infinity) <= manaAfterCast &&
+          payoff?.effects.some((effect) =>
+            JSON.stringify(effect.condition)?.includes('"combo"')
+          ))
+      )
+    })
+  )
+    return 0
+  const cthunPayoff = hasKnownCthunPayoff([
+    ...player.hand,
+    ...player.board,
+    ...player.deck.filter(
+      (entry) => entry.startedInDeck || entry.knownTo?.some((id) => id === actorId)
+    )
+  ])
   if (
     state.players.some((entry) =>
-      entry.board.some((minion) =>
-        CARD_CATALOG.get(minion.cardId)?.effects.some((effect) =>
-          ['on-damage', 'on-death', 'deathrattle', 'on-cast'].includes(effect.trigger)
-        )
+      entry.board.some(
+        (minion) =>
+          !minion.silenced &&
+          !minion.dormant &&
+          (minion.grantedTriggers?.length ||
+            minion.attachedEffects?.length ||
+            minion.deathrattles?.length ||
+            CARD_CATALOG.get(minion.cardId)?.effects.some(
+              (effect) =>
+                (['on-damage', 'on-death', 'deathrattle', 'on-cast'].includes(
+                  effect.trigger
+                ) ||
+                  (effect.trigger === 'aura' &&
+                    effect.condition?.type === 'source-damaged' &&
+                    command.targets?.some(
+                      (target) =>
+                        target.kind === 'minion' &&
+                        target.instanceId === minion.instanceId
+                    ))) &&
+                // An unrelated ritual cannot justify losing a friendly character.
+                !(
+                  entry.participantId === actorId &&
+                  !cthunPayoff &&
+                  effect.actions?.length &&
+                  effect.actions.every((action) => action.action === 'buff-cthun')
+                )
+            ))
       )
     )
   )

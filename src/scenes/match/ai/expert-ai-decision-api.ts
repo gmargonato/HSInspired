@@ -30,6 +30,7 @@ import {
   type TacticalOutcome
 } from '../../../game-rules/match/ai/tactical-search'
 import { immediateExpertWin } from './expert-tactics'
+import { findExpertVisibleDefense } from './expert-visible-survival'
 import { createExpertExpiringAttackInspector } from './expert-expiring-hero-attack'
 import {
   createExpertAttackOrderInspector,
@@ -773,13 +774,19 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       this.session.match.getCheckpoint(),
       this.perspectiveParticipantId
     )
+    const selectedOutcome = inspect(selected.command)
     const unsafe = (action: (typeof legal)[number]) =>
       unpaidFriendlyDamageHeroPowerPenalty(
         action.command,
         state,
         this.perspectiveParticipantId
       ) > 0 ||
-      ['no-payoff', 'opponent-heal'].includes(inspect(action.command).reason ?? '')
+      [
+        'no-payoff',
+        'opponent-heal',
+        'unpaid-friendly-damage',
+        'wasted-healing-target'
+      ].includes(inspect(action.command).reason ?? '')
     if (
       !terminalLoss &&
       (response.usage?.decisionPriority === 'verified-win' || !unsafe(selected))
@@ -797,16 +804,51 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         return typeof entry.candidateId === 'string' ? entry.candidateId : null
       })
       .filter((candidateId): candidateId is string => candidateId !== null)
-    const replacement = [
-      ...rankedIds.map((candidateId) =>
-        legal.find((action) => action.id === candidateId)
-      ),
-      legal.find((action) => action.command.type === 'end-turn'),
-      ...legal
-    ].find(
+    const ranked = rankedIds
+      .map((candidateId) => legal.find((action) => action.id === candidateId))
+      .filter((action): action is (typeof legal)[number] => action !== undefined)
+    const sameEffect = (action: (typeof legal)[number]) =>
+      selected.command.type === 'play-card' &&
+      action.command.type === 'play-card' &&
+      selected.command.cardInstanceId === action.command.cardInstanceId &&
+      selected.command.choice === action.command.choice
+    const samePlay = (action: (typeof legal)[number]) =>
+      sameEffect(action) &&
+      selected.command.type === 'play-card' &&
+      action.command.type === 'play-card' &&
+      selected.command.position === action.command.position
+    const healingAlternative =
+      selectedOutcome.reason === 'wasted-healing-target'
+        ? legal.find(
+            (action) =>
+              canonicalCommandKey(action.command) ===
+              selectedOutcome.preferredAlternativeKey
+          )
+        : undefined
+    // A local healing comparison authorizes only the alternative it checked.
+    if (selectedOutcome.reason === 'wasted-healing-target' && !healingAlternative)
+      return response
+    const alternatives = healingAlternative
+      ? [healingAlternative]
+      : [
+          // Repair a target before discarding a useful minion or the whole selected play.
+          ...[...ranked, ...legal].filter(samePlay),
+          ...ranked,
+          legal.find((action) => action.command.type === 'end-turn'),
+          ...legal
+        ]
+    const replacement = alternatives.find(
       (action) =>
         action !== undefined &&
         action.id !== selected.id &&
+        !(
+          selectedOutcome.reason === 'unpaid-friendly-damage' &&
+          sameEffect(action) &&
+          action.command.type === 'play-card' &&
+          action.command.targets?.some(
+            (target) => target.participantId === this.perspectiveParticipantId
+          )
+        ) &&
         terminal(action.command) !== 'loss' &&
         (terminalLoss || action.command.type === 'end-turn' || !unsafe(action))
     )
@@ -1416,6 +1458,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     request: AiDecisionRequest,
     response: AiDecisionResponse
   ): AiDecisionResponse {
+    response = this.guardVisibleLethalLine(request, response)
     const knownPassOutcome =
       this.terminalCheck?.revision === request.expectedRevision
         ? this.terminalCheck.outcomes.get(
@@ -1564,6 +1607,118 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
             expiringAttackReview: { ...reviewStats, ...transition, durationMs: elapsed }
           }
         : result.usage
+    }
+  }
+
+  private guardVisibleLethalLine(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    if (
+      request.phase === 'mulligan' ||
+      response.usage?.decisionPriority === 'verified-win' ||
+      this.session.getState().revision !== request.expectedRevision
+    )
+      return response
+    const selectedId =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    const legal = this.currentLegalActions().filter((action) =>
+      request.actionIds.includes(action.id)
+    )
+    const selected = legal.find((action) => action.id === selectedId)
+    if (!selected) return response
+    const rawIntents = response.usage?.plannedActionIntents
+    const selectedIntent = aiActionIntent(
+      selected.command,
+      this.opponentParticipantId()
+    )
+    const selectedIntents =
+      Array.isArray(rawIntents) &&
+      rawIntents.length > 0 &&
+      rawIntents.length <= 6 &&
+      rawIntents.every(isAiActionIntent) &&
+      sameAiIntent(rawIntents[0]!, selectedIntent)
+        ? rawIntents
+        : [selectedIntent]
+    const started = this.now()
+    const remaining = this.remainingBudget(request)
+    if (!Number.isFinite(started) || !Number.isFinite(remaining) || remaining <= 0)
+      return response
+    const review = findExpertVisibleDefense(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      legal.map((action) => action.command),
+      selectedIntents,
+      () => this.now() >= started + remaining,
+      this.now
+    )
+    const elapsed = Math.max(0, this.now() - started)
+    this.searchUsedMs += elapsed
+    if (!review.stats.supported) return response
+    const line = review.defense
+    const first = line?.commands[0]
+    const replacement = first
+      ? legal.find(
+          (action) => canonicalCommandKey(action.command) === canonicalCommandKey(first)
+        )
+      : undefined
+    if (!line || !replacement)
+      return {
+        ...response,
+        durationMs: response.durationMs + elapsed,
+        usage: { ...response.usage, visibleSurvivalReview: review.stats }
+      }
+    const intents = line.commands.map((command) =>
+      aiActionIntent(command, this.opponentParticipantId())
+    )
+    const reason =
+      line.outcome === 'win'
+        ? 'Use the verified winning line instead of passing.'
+        : 'Avoid the visible attack and hero-power lethal with the checked defensive line.'
+    const plan = 'plan' in response.choice ? response.choice.plan : null
+    this.continuation = null
+    this.planCommit = null
+    return {
+      ...response,
+      reason,
+      durationMs: response.durationMs + elapsed,
+      choice: plan
+        ? {
+            plan: {
+              ...plan,
+              objective: reason,
+              firstActionId: replacement.id,
+              candidates: plan.candidates.map((candidate, index) =>
+                index === plan.preferred
+                  ? {
+                      ...candidate,
+                      sequence: line.commands.map((command) => JSON.stringify(command))
+                    }
+                  : candidate
+              )
+            }
+          }
+        : {
+            actionId: replacement.id,
+            intent: intents[0]!,
+            expectedResult: reason,
+            planUpdate: null
+          },
+      usage: {
+        ...response.usage,
+        decisionPriority: line.outcome === 'win' ? 'verified-win' : 'tactical-safety',
+        tacticalOverride: true,
+        actionOutcomeReason: 'avoidable-visible-lethal',
+        plannedActionIntents: intents.map((intent) => ({
+          ...intent,
+          targets: [...intent.targets]
+        })),
+        visibleSurvivalReview: review.stats
+      }
     }
   }
 

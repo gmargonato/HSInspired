@@ -3,10 +3,17 @@ import { asCardId } from '../../../game-rules/content/cards'
 import { enumerateLegalCommands } from '../../../game-rules/match/ai'
 import type { TurnMatchCommand } from '../../../game-rules/match'
 import { createMatchScenario } from '../../../game-rules/match/testing/match-scenario-builder'
+import {
+  createAiFixture,
+  type AiFixtureOptions
+} from '../../../game-rules/match/testing/ai-scenario-builder'
+import type { TacticalLine } from '../../../game-rules/match/ai/tactical-search'
 import type { AiDecisionRequest } from '../../../desktop/contracts/ipc/ai'
 import { aiActions } from './ai-context'
 import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
+import { expertResourceSetupPreference } from './expert-resource-preference'
+import { expertSingletonCleanupSeeds } from './expert-cleanup-seeds'
 
 function dispatch(session: GameBoardSession, command: TurnMatchCommand): void {
   const result = session.match.dispatch(command)
@@ -460,4 +467,342 @@ describe('hardware local AI complete-turn planning', () => {
       }
     })
   }
+})
+
+describe('Expert bounded resource setup preferences', () => {
+  const apprentice = 'classic_sorcerers_apprentice'
+  const upgrade = 'classic_upgrade'
+  const raider = 'classic_bloodsail_raider'
+  const base: AiFixtureOptions = {
+    seed: 1022,
+    aiHeroId: 'jaina',
+    opponentHeroId: 'guldan',
+    aiMana: 3,
+    aiHand: [apprentice, 'basic_frostbolt']
+  }
+  function inspect(options: Partial<AiFixtureOptions> = {}, cardId = apprentice) {
+    const session = new GameBoardSession(createAiFixture({ ...base, ...options }))
+    const player = session.findPlayer(session.getState(), session.remoteParticipantId)
+    const card = player.hand.find((entry) => entry.cardId === cardId)!
+    const command =
+      legal(session).find(
+        (entry) =>
+          entry.type === 'play-card' && entry.cardInstanceId === card.instanceId
+      ) ??
+      ({
+        type: 'play-card',
+        participantId: session.remoteParticipantId,
+        cardInstanceId: card.instanceId,
+        position: 0
+      } satisfies TurnMatchCommand)
+    const before = session.match.getCheckpoint()
+    const preference = session.match.analyze((root) =>
+      expertResourceSetupPreference(root, session.remoteParticipantId, command)
+    )
+    expect(session.match.getCheckpoint()).toEqual(before)
+    return { session, command, preference }
+  }
+
+  it('recognizes a discount that makes the setup and spell executable', () => {
+    const { session, command, preference } = inspect()
+    expect(preference).toBeGreaterThan(0)
+    dispatch(session, command)
+    const spell = legal(session).find((entry) => entry.type === 'play-card')!
+    dispatch(session, spell)
+    expect(
+      session.findPlayer(session.getState(), session.remoteParticipantId).mana.available
+    ).toBe(0)
+  })
+
+  it('recognizes the one-attack weapon upgrade before a scaling battlecry', () => {
+    const { session, command, preference } = inspect(
+      {
+        aiHeroId: 'garrosh',
+        aiHand: [upgrade, raider],
+        aiWeapon: { cardId: 'basic_heavy_axe' }
+      },
+      upgrade
+    )
+    expect(preference).toBeGreaterThan(0)
+    dispatch(session, command)
+    dispatch(
+      session,
+      legal(session).find((entry) => entry.type === 'play-card')!
+    )
+    const player = session.findPlayer(session.getState(), session.remoteParticipantId)
+    expect(player.board.find((minion) => minion.cardId === raider)?.attack).toBe(4)
+  })
+
+  const negatives: readonly [string, Partial<AiFixtureOptions>][] = [
+    ['no affordable payoff', { aiMana: 2 }],
+    ['no spell payoff', { aiHand: [apprentice, 'classic_wisp'] }],
+    ['already free spell', { aiHand: [apprentice, 'basic_the_coin'] }],
+    ['full board', { aiBoard: Array(7).fill({ cardId: 'classic_wisp' }) }],
+    ['unknown secret', { opponentSecrets: [{ cardId: 'classic_snipe' }] }],
+    ['random summon trigger', { aiBoard: [{ cardId: 'classic_knife_juggler' }] }]
+  ]
+  for (const [name, options] of negatives)
+    it(`does not prefer setup with ${name}`, () => {
+      expect(inspect(options).preference).toBe(0)
+    })
+
+  it('abstains without RNG observation or when the shared deadline expires', () => {
+    const { session, command } = inspect()
+    session.match.analyze((root) => {
+      expect(
+        expertResourceSetupPreference(
+          { ...root, getRandomState: undefined },
+          session.remoteParticipantId,
+          command
+        )
+      ).toBe(0)
+      expect(
+        expertResourceSetupPreference(
+          root,
+          session.remoteParticipantId,
+          command,
+          () => true
+        )
+      ).toBe(0)
+    })
+  })
+
+  const drake = 'classic_twilight_drake'
+  const hunter = 'classic_big_game_hunter'
+  const handSetup: Partial<AiFixtureOptions> = {
+    aiHeroId: 'guldan',
+    aiMana: 8,
+    aiHeroPowerAvailable: false,
+    aiHeroPowerUsesThisTurn: 1,
+    aiHand: [drake, hunter, 'basic_hellfire', 'classic_siphon_soul'],
+    aiDeck: ['classic_wisp']
+  }
+
+  it('prefers a hand-count health battlecry before an affordable second minion', () => {
+    const { session, command, preference } = inspect(handSetup, drake)
+    expect(preference).toBeGreaterThan(0)
+    dispatch(session, command)
+    const hunterId = session
+      .findPlayer(session.getState(), session.remoteParticipantId)
+      .hand.find((card) => card.cardId === hunter)!.instanceId
+    dispatch(
+      session,
+      legal(session).find(
+        (entry) => entry.type === 'play-card' && entry.cardInstanceId === hunterId
+      )!
+    )
+    expect(
+      session
+        .findPlayer(session.getState(), session.remoteParticipantId)
+        .board.find((minion) => minion.cardId === drake)?.health
+    ).toBe(4)
+  })
+
+  it('leaves affordable draw hero powers first, using current cost and used legality', () => {
+    const { session, command } = inspect(handSetup, drake)
+    const actor = session.remoteParticipantId
+    const preference = () =>
+      session.match.analyze((root) =>
+        expertResourceSetupPreference(root, actor, command)
+      )
+    for (const cost of [0, 2, 7]) {
+      dispatch(session, {
+        type: 'dev-set-hero-power',
+        participantId: actor,
+        cost,
+        available: true
+      })
+      expect(session.findPlayer(session.getState(), actor).heroPower.cost).toBe(cost)
+      expect(preference() > 0).toBe(cost === 7)
+    }
+    dispatch(session, {
+      type: 'dev-set-hero-power',
+      participantId: actor,
+      cost: 0,
+      available: false
+    })
+    expect(preference()).toBeGreaterThan(0)
+  })
+
+  const handGrowthCards = [
+    'basic_novice_engineer',
+    'basic_arcane_intellect',
+    'one_night_in_karazhan_babbling_book',
+    'journey_to_ungoro_fire_fly',
+    'basic_mind_vision',
+    'classic_thoughtsteal',
+    'goblins_vs_gnomes_echo_of_medivh'
+  ]
+  for (const cardId of handGrowthCards)
+    it(`leaves affordable hand growth first for ${cardId}`, () => {
+      expect(
+        inspect(
+          {
+            ...handSetup,
+            aiHand: [drake, hunter, cardId],
+            aiBoard: [{ cardId: 'classic_wisp' }],
+            opponentHand: ['classic_wisp'],
+            opponentDeck: ['classic_wisp', 'classic_wisp']
+          },
+          drake
+        ).preference
+      ).toBe(0)
+    })
+
+  const handNegatives: readonly [string, Partial<AiFixtureOptions>][] = [
+    ['no second minion', { aiHand: [drake, 'basic_hellfire'] }],
+    ['insufficient pair mana', { aiMana: 6 }],
+    ['only one board slot', { aiBoard: Array(6).fill({ cardId: 'classic_wisp' }) }],
+    ['full board', { aiBoard: Array(7).fill({ cardId: 'classic_wisp' }) }],
+    ['deterministic trigger', { aiBoard: [{ cardId: 'classic_questing_adventurer' }] }],
+    ['random trigger', { aiBoard: [{ cardId: 'classic_knife_juggler' }] }],
+    ['body-changing second minion', { aiHand: [drake, 'classic_ironbeak_owl'] }],
+    ['secret uncertainty', { opponentSecrets: [{ cardId: 'classic_snipe' }] }]
+  ]
+  for (const [name, options] of handNegatives)
+    it(`abstains from hand-size setup with ${name}`, () => {
+      expect(inspect({ ...handSetup, ...options }, drake).preference).toBe(0)
+    })
+
+  it('does not trade cheaper hand-dependent costs for the hand-count buff', () => {
+    expect(
+      inspect(
+        {
+          ...handSetup,
+          aiMana: 9,
+          aiHand: [
+            drake,
+            'classic_mountain_giant',
+            ...Array(7).fill('basic_boulderfist_ogre')
+          ]
+        },
+        drake
+      ).preference
+    ).toBe(0)
+  })
+})
+
+describe('Expert singleton cleanup rollout seeds', () => {
+  const apprentice = 'classic_sorcerers_apprentice'
+  const cleanup = 'goblins_vs_gnomes_flamecannon'
+  function fixture(options: Partial<AiFixtureOptions> = {}, first = apprentice) {
+    const session = new GameBoardSession(
+      createAiFixture({
+        seed: 1023,
+        aiHeroId: 'jaina',
+        opponentHeroId: 'guldan',
+        aiMana: 8,
+        aiHand: [first, cleanup],
+        opponentBoard: [{ cardId: 'league_of_explorers_brann_bronzebeard' }],
+        ...options
+      })
+    )
+    const actor = session.remoteParticipantId
+    const player = session.findPlayer(session.getState(), actor)
+    const firstId = player.hand.find((card) => card.cardId === first)!.instanceId
+    const lastId = player.hand.find((card) => card.cardId === cleanup)!.instanceId
+    const line: TacticalLine = {
+      commands: [
+        legal(session).find(
+          (command) =>
+            command.type === 'play-card' && command.cardInstanceId === firstId
+        )!,
+        { type: 'play-card', participantId: actor, cardInstanceId: lastId }
+      ],
+      outcome: 'ongoing',
+      proven: false,
+      value: 10
+    }
+    return { session, actor, line }
+  }
+  function selected(options: Partial<AiFixtureOptions> = {}, first = apprentice) {
+    const { session, actor, line } = fixture(options, first)
+    const before = session.match.getCheckpoint()
+    const seeds = session.match.analyze((root) =>
+      expertSingletonCleanupSeeds(root, actor, [line])
+    )
+    expect(session.match.getCheckpoint()).toEqual(before)
+    expect(seeds.every((seed) => seed.proven === false)).toBe(true)
+    return seeds
+  }
+
+  it('seeds a real singleton cleanup without changing its unproven status', () => {
+    expect(selected()).toHaveLength(1)
+  })
+
+  const negatives: readonly [string, Partial<AiFixtureOptions>][] = [
+    [
+      'two eligible enemies',
+      { opponentBoard: [{ cardId: 'classic_wisp' }, { cardId: 'classic_wisp' }] }
+    ],
+    ['a surviving enemy', { opponentBoard: [{ cardId: 'basic_boulderfist_ogre' }] }],
+    ['an unknown secret', { opponentSecrets: [{ cardId: 'classic_counterspell' }] }],
+    ['another cast trigger', { aiBoard: [{ cardId: 'classic_mana_wyrm' }] }],
+    [
+      'a deathrattle',
+      {
+        opponentBoard: [{ cardId: 'classic_loot_hoarder' }],
+        opponentDeck: ['classic_wisp']
+      }
+    ]
+  ]
+  for (const [name, options] of negatives)
+    it(`does not seed cleanup with ${name}`, () => {
+      expect(selected(options)).toHaveLength(0)
+    })
+
+  it('stops at random or information-revealing prefixes', () => {
+    expect(selected({}, 'goblins_vs_gnomes_unstable_portal')).toHaveLength(0)
+    expect(
+      selected({ aiDeck: ['classic_wisp', 'classic_wisp'] }, 'basic_arcane_intellect')
+    ).toHaveLength(0)
+  })
+
+  it('keeps one best seed per root and observes the shared deadline', () => {
+    const { session, actor, line } = fixture()
+    session.match.analyze((root) => {
+      const seeds = expertSingletonCleanupSeeds(root, actor, [
+        line,
+        { ...line, value: 9 }
+      ])
+      expect(seeds).toEqual([line])
+      expect(expertSingletonCleanupSeeds(root, actor, [line], () => true)).toHaveLength(
+        0
+      )
+      expect(
+        expertSingletonCleanupSeeds(root, actor, [{ ...line, proven: true }])
+      ).toHaveLength(0)
+      expect(
+        expertSingletonCleanupSeeds({ ...root, getRandomState: undefined }, actor, [
+          line
+        ])
+      ).toHaveLength(0)
+    })
+  })
+
+  it('reviews at most eight candidate lines', () => {
+    const { session, actor, line } = fixture()
+    const invalidLine: TacticalLine = {
+      ...line,
+      commands: [
+        { type: 'play-card', participantId: actor, cardInstanceId: 'missing-prefix' },
+        line.commands[1]!
+      ]
+    }
+    let reviewed = 0
+    session.match.analyze((root) =>
+      expertSingletonCleanupSeeds(
+        {
+          ...root,
+          analyze: (operation) => {
+            reviewed++
+            return root.analyze(operation)
+          }
+        },
+        actor,
+        Array(20).fill(invalidLine)
+      )
+    )
+    expect(reviewed).toBe(8)
+  })
 })

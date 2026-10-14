@@ -12,8 +12,224 @@ import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
 import { aiActions } from './ai-context'
 import recorded from './expert-tactical-recorded-states.json'
+import {
+  findExpertVisibleDefense,
+  EXPERT_VISIBLE_SURVIVAL_MAX_DISPATCHES
+} from './expert-visible-survival'
 
 type Match = Parameters<typeof enumerateLegalCommands>[0]
+
+describe('Bounded public lethal defense', () => {
+  function scenario(options: Partial<Parameters<typeof createAiFixture>[0]> = {}) {
+    const fixture = createAiFixture({
+      seed: 99,
+      aiHeroId: 'malfurion',
+      opponentHeroId: 'rexxar',
+      turnNumber: 16,
+      aiMana: 6,
+      aiMaximumMana: 8,
+      aiHealth: 7,
+      aiArmor: 2,
+      aiHeroPowerUsesThisTurn: 1,
+      aiHeroPowerId: 'druid-dire-shapeshift',
+      aiHand: ['basic_swipe', 'basic_wild_growth'],
+      aiBoard: [{ cardId: 'classic_keeper_of_the_grove', ready: true }],
+      opponentBoard: [
+        { cardId: 'naxxramas_spectral_spider' },
+        { cardId: 'whispers_of_the_old_gods_princess_huhuran', health: 1 },
+        { cardId: 'basic_huffer', health: 2 },
+        { cardId: 'classic_leokk' },
+        { cardId: 'basic_misha' }
+      ],
+      aiDeck: ['basic_wild_growth'],
+      opponentDeck: ['basic_tracking'],
+      ...options
+    })
+    return new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+  }
+
+  function review(session: GameBoardSession, stop = () => false) {
+    return findExpertVisibleDefense(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId,
+      enumerateLegalCommands(session.match as Match, session.remoteParticipantId),
+      undefined,
+      stop,
+      () => 0
+    )
+  }
+
+  it('finds a deterministic spell-plus-trade defense without changing the live match', () => {
+    const session = scenario(),
+      before = session.match.getCheckpoint()
+    const result = review(session)
+    expect(session.match.getCheckpoint()).toEqual(before)
+    expect(result.stats.selectedReply).toBe('lethal')
+    expect(result.stats.dispatches).toBeLessThanOrEqual(
+      EXPERT_VISIBLE_SURVIVAL_MAX_DISPATCHES
+    )
+    expect(result.defense?.commands).toHaveLength(2)
+    for (const command of result.defense!.commands)
+      expect(session.dispatch(command).accepted).toBe(true)
+    const self = session
+      .getState()
+      .players.find((p) => p.participantId === session.remoteParticipantId)!
+    const enemy = session
+      .getState()
+      .players.find((p) => p.participantId === session.localParticipantId)!
+    expect(self.hero.health + self.hero.armor).toBe(9)
+    expect(enemy.board.map((m) => [m.cardId, m.attack, m.health])).toEqual([
+      ['classic_leokk', 2, 3]
+    ])
+  })
+
+  it('keeps a safe pass and refuses an exhausted check', () => {
+    const safe = review(scenario({ opponentBoard: [] }))
+    expect(safe.defense).toBeUndefined()
+    expect(safe.stats.selectedReply).toBe('clear')
+    const stopped = review(scenario(), () => true)
+    expect(stopped.defense).toBeUndefined()
+    expect(stopped.stats.exhausted).toBe(true)
+    expect(stopped.stats.dispatches).toBe(0)
+  })
+
+  it.each(['classic_alexstrasza', 'one_night_in_karazhan_cat_trick'])(
+    'never certifies concealed-condition Chillmaw defense from hidden %s',
+    (hidden) => {
+      const result = review(
+        scenario({
+          aiHealth: 6,
+          aiArmor: 0,
+          aiMana: 2,
+          aiHand: ['basic_goldshire_footman', 'basic_goldshire_footman'],
+          aiBoard: [],
+          opponentBoard: [
+            { cardId: 'the_grand_tournament_chillmaw', health: 1 },
+            { cardId: 'basic_boulderfist_ogre' }
+          ],
+          opponentHand: [hidden],
+          opponentDeck: [],
+          opponentMaximumMana: 0
+        })
+      )
+      expect(result.defense).toBeUndefined()
+      expect(result.stats.supported).toBe(false)
+      expect(result.stats.dispatches).toBe(0)
+    }
+  )
+
+  it('does not turn a sampled random removal into a certified defense', () => {
+    const result = review(
+      scenario({
+        aiHeroId: 'jaina',
+        aiHeroPowerId: 'mage-fireblast',
+        aiHealth: 2,
+        aiArmor: 0,
+        aiMana: 2,
+        aiHand: ['goblins_vs_gnomes_flamecannon'],
+        aiBoard: [],
+        opponentBoard: [{ cardId: 'basic_bloodfen_raptor' }]
+      })
+    )
+    expect(result.defense).toBeUndefined()
+    expect(result.stats.selectedReply).toBe('lethal')
+  })
+
+  it('does not inspect an unknown generated card in its own deck', () => {
+    const session = scenario({
+      aiHealth: 6,
+      aiArmor: 0,
+      aiMana: 1,
+      aiHand: ['basic_goldshire_footman'],
+      aiBoard: [],
+      opponentBoard: [{ cardId: 'basic_boulderfist_ogre' }],
+      opponentHeroId: 'garrosh',
+      opponentDeck: [],
+      opponentMaximumMana: 0
+    })
+    const actor = session.remoteParticipantId
+    const before = session.match.getCheckpoint()
+    const variants = [
+      'classic_wisp',
+      'mean_streets_of_gadgetzan_patches_the_pirate',
+      'the_grand_tournament_ambush'
+    ].map((cardId) => ({
+      ...before,
+      state: {
+        ...before.state,
+        players: before.state.players.map((player) =>
+          player.participantId !== actor
+            ? player
+            : {
+                ...player,
+                deck: player.deck.map((card) => ({
+                  ...card,
+                  cardId: cardId as typeof card.cardId,
+                  startedInDeck: false,
+                  knownTo: []
+                }))
+              }
+        ) as unknown as typeof before.state.players
+      }
+    }))
+    expect(createFairHypothesisCheckpoint(variants[0]!, actor, 19)).toEqual(
+      createFairHypothesisCheckpoint(variants[1]!, actor, 19)
+    )
+    const commands = enumerateLegalCommands(session.match as Match, actor)
+    const results = variants.map((checkpoint) =>
+      findExpertVisibleDefense(
+        checkpoint,
+        actor,
+        commands,
+        undefined,
+        () => false,
+        () => 0
+      )
+    )
+    for (const result of results.slice(1)) expect(result).toEqual(results[0])
+    expect(results[0]!.defense?.commands).toHaveLength(1)
+  })
+
+  it('abstains when a known future draw can trigger an effect', () => {
+    const session = scenario()
+    const actor = session.remoteParticipantId
+    const checkpoint = session.match.getCheckpoint()
+    const knownDraw = {
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        players: checkpoint.state.players.map((player) =>
+          player.participantId !== actor
+            ? player
+            : {
+                ...player,
+                deck: player.deck.map((card) => ({
+                  ...card,
+                  cardId: 'the_grand_tournament_ambush' as typeof card.cardId,
+                  startedInDeck: false,
+                  knownTo: [actor]
+                }))
+              }
+        ) as unknown as typeof checkpoint.state.players
+      }
+    }
+    const result = findExpertVisibleDefense(
+      knownDraw,
+      actor,
+      enumerateLegalCommands(session.match as Match, actor),
+      undefined,
+      () => false,
+      () => 0
+    )
+    expect(result.stats.supported).toBe(false)
+    expect(result.stats.dispatches).toBe(0)
+    expect(result.defense).toBeUndefined()
+  })
+})
 
 function recordedSession(seed = 0x71ac71c) {
   const checkpoint = createFairHypothesisCheckpoint(

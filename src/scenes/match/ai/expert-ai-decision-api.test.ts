@@ -3292,3 +3292,443 @@ it.each(['action', 'plan'] as const)(
     }
   }
 )
+
+describe('Expert fresh friendly-target repair', () => {
+  function harness(options: Parameters<typeof createAiFixture>[0]) {
+    const fixture = createAiFixture(options)
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actions = aiActions(
+      session,
+      enumerateLegalCommands(
+        {
+          getState: session.match.getState,
+          getPlayInput: session.match.getPlayInput!,
+          getLegality: session.match.getLegality!
+        },
+        session.remoteParticipantId
+      )
+    )
+    type Action = (typeof actions)[number]
+    const target = (side: 'self' | 'enemy', kind: 'hero' | 'minion', position = 0) => {
+      const participantId =
+        side === 'self' ? session.remoteParticipantId : session.localParticipantId
+      const action = actions.find(
+        ({ command }) =>
+          command.type === 'play-card' &&
+          (command.position ?? 0) === position &&
+          (command.choice ?? 0) === 0 &&
+          command.targets?.some(
+            (entry) => entry.participantId === participantId && entry.kind === kind
+          )
+      )
+      expect(action).toBeDefined()
+      return action!
+    }
+    const request: AiDecisionRequest = {
+      matchId: 'friendly-target-repair',
+      requestId: 'fresh-target',
+      phase: 'action',
+      expectedRevision: session.getState().revision,
+      actionIds: actions.map((action) => action.id),
+      allowInspection: false,
+      messages: []
+    }
+    const responseFor = (
+      selected: Action,
+      ranked: Action[] = []
+    ): AiDecisionResponse => ({
+      matchId: request.matchId,
+      requestId: request.requestId,
+      expectedRevision: request.expectedRevision,
+      modelId: 'hardware-local-v2',
+      reason: 'Fresh fixture choice',
+      durationMs: 0,
+      finishReason: 'fixture-search',
+      choice: {
+        actionId: selected.id,
+        intent: aiActionIntent(selected.command, session.localParticipantId),
+        expectedResult: 'Fixture',
+        planUpdate: null
+      },
+      usage: {
+        candidateConsensus: ranked.map((action) => ({ candidateId: action.id }))
+      }
+    })
+    let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+    let workerResponse: AiDecisionResponse | undefined
+    const postMessage = vi.fn((message: ExpertAiWorkerRequest) => {
+      if (message.type !== 'decide') return
+      expect(workerResponse).toBeDefined()
+      receive?.({
+        data: {
+          type: 'decision',
+          requestId: message.request.requestId,
+          response: {
+            ...workerResponse!,
+            matchId: message.request.matchId,
+            requestId: message.request.requestId,
+            expectedRevision: message.request.expectedRevision
+          }
+        }
+      } as MessageEvent<ExpertAiWorkerResponse>)
+    })
+    const worker = {
+      addEventListener(type: string, listener: unknown) {
+        if (type === 'message') receive = listener as typeof receive
+      },
+      removeEventListener() {},
+      terminate() {},
+      postMessage
+    } as unknown as Worker
+    const api = new ExpertAiDecisionApi(
+      session,
+      () => worker,
+      () => 0
+    )
+    const internal = api as unknown as {
+      guardUnpaidDamageDecision(
+        request: AiDecisionRequest,
+        response: AiDecisionResponse
+      ): AiDecisionResponse
+    }
+    return {
+      api,
+      session,
+      actions,
+      request,
+      target,
+      responseFor,
+      postMessage,
+      guard: internal.guardUnpaidDamageDecision.bind(api),
+      setWorkerResponse(response: AiDecisionResponse) {
+        workerResponse = response
+      }
+    }
+  }
+
+  const keeperOptions = {
+    seed: 101426,
+    aiHeroId: 'malfurion',
+    opponentHeroId: 'jaina',
+    aiMana: 8,
+    aiHealth: 22,
+    aiHand: ['classic_keeper_of_the_grove'],
+    aiBoard: [{ cardId: 'classic_wisp' }],
+    opponentBoard: [{ cardId: 'basic_chillwind_yeti' }]
+  }
+  const healerOptions = {
+    ...keeperOptions,
+    aiHeroId: 'guldan',
+    aiHand: ['classic_earthen_ring_farseer'],
+    opponentBoard: [{ cardId: 'basic_chillwind_yeti', health: 2, maxHealth: 5 }]
+  }
+
+  it('does not repair hero damage into friendly sacrifice at another board position', () => {
+    const h = harness(keeperOptions)
+    const selected = h.target('self', 'hero')
+    const sacrifice = h.target('self', 'minion', 1)
+    const pass = h.actions.find((action) => action.command.type === 'end-turn')!
+    const before = h.session.match.getCheckpoint()
+    try {
+      const result = h.guard(
+        { ...h.request, actionIds: [selected.id, sacrifice.id, pass.id] },
+        h.responseFor(selected, [sacrifice])
+      )
+      expect(result.choice).toMatchObject({ actionId: pass.id })
+      expect(h.session.match.getCheckpoint()).toEqual(before)
+    } finally {
+      h.api.dispose()
+    }
+  })
+
+  it.each(['action', 'plan'] as const)(
+    'repairs fresh Keeper own-hero damage without choosing a higher-ranked own Wisp (%s)',
+    (phase) => {
+      const h = harness(keeperOptions)
+      const before = h.session.match.getCheckpoint()
+      const enemy = h.target('enemy', 'minion')
+      const selected = h.target('self', 'hero')
+      const original = h.responseFor(selected, [h.target('self', 'minion'), enemy])
+      const response: AiDecisionResponse =
+        phase === 'action'
+          ? original
+          : {
+              ...original,
+              choice: {
+                plan: {
+                  firstActionId: selected.id,
+                  objective: 'Fixture',
+                  winCheck: 'none',
+                  lossRisk: 'test',
+                  candidates: [
+                    {
+                      sequence: ['Keeper'],
+                      budget: 'test',
+                      endPosition: 'test',
+                      opponentReply: 'test'
+                    }
+                  ],
+                  preferred: 0,
+                  checks: []
+                }
+              }
+            }
+      try {
+        const result = h.guard({ ...h.request, phase }, response)
+        expect(result.choice).toMatchObject(
+          phase === 'plan'
+            ? { plan: { firstActionId: enemy.id } }
+            : { actionId: enemy.id }
+        )
+        expect(result.usage?.actionOutcomeReason).toBe('unpaid-friendly-damage')
+        expect(result.usage?.tacticalOverride).toBe(true)
+        expect(h.session.match.getCheckpoint()).toEqual(before)
+      } finally {
+        h.api.dispose()
+      }
+    }
+  )
+
+  it.each([false, true])(
+    'uses only the vetted friendly healing target despite a higher-ranked wounded enemy (restricted: %s)',
+    (restricted) => {
+      const h = harness(healerOptions)
+      const before = h.session.match.getCheckpoint()
+      const hero = h.target('self', 'hero')
+      const response = h.responseFor(h.target('self', 'minion'), [
+        h.target('enemy', 'minion'),
+        hero
+      ])
+      try {
+        const result = h.guard(
+          {
+            ...h.request,
+            actionIds: h.request.actionIds.filter((id) => !restricted || id !== hero.id)
+          },
+          response
+        )
+        if (restricted) expect(result).toBe(response)
+        else {
+          expect(result.choice).toMatchObject({ actionId: hero.id })
+          expect(result.usage?.actionOutcomeReason).toBe('wasted-healing-target')
+        }
+        expect(h.session.match.getCheckpoint()).toEqual(before)
+      } finally {
+        h.api.dispose()
+      }
+    }
+  )
+
+  it('repairs the fresh Farseer choice returned by a worker through decide', async () => {
+    const h = harness(healerOptions)
+    const before = h.session.match.getCheckpoint()
+    h.setWorkerResponse(
+      h.responseFor(h.target('self', 'minion'), [h.target('enemy', 'minion')])
+    )
+    try {
+      const response = await h.api.decide(h.request)
+      expect(response.choice).toMatchObject({ actionId: h.target('self', 'hero').id })
+      expect(response.usage?.tacticalOverride).toBe(true)
+      expect(response.usage?.actionOutcomeReason).toBe('wasted-healing-target')
+      expect(
+        h.postMessage.mock.calls.filter(([message]) => message.type === 'decide')
+      ).toHaveLength(1)
+      expect(h.session.match.getCheckpoint()).toEqual(before)
+    } finally {
+      h.api.dispose()
+    }
+  })
+
+  it.each([
+    ['classic_battle_rage', 'damage', 30],
+    ['classic_mortal_strike', 'damage', 13],
+    ['classic_battle_rage', 'heal', 27],
+    ['classic_mortal_strike', 'heal', 12]
+  ] as const)('preserves held %s %s setup at %i health', (payoff, effect, health) => {
+    const options = effect === 'damage' ? keeperOptions : healerOptions
+    const h = harness({
+      ...options,
+      aiHealth: health,
+      aiHand: [...options.aiHand, payoff]
+    })
+    const before = h.session.match.getCheckpoint()
+    const response = h.responseFor(
+      h.target('self', effect === 'damage' ? 'hero' : 'minion')
+    )
+    try {
+      expect(h.guard(h.request, response)).toBe(response)
+      expect(h.session.match.getCheckpoint()).toEqual(before)
+    } finally {
+      h.api.dispose()
+    }
+  })
+})
+
+describe('Visible defense controller integration', () => {
+  it.each(['action', 'plan'] as const)(
+    'replaces an irreversible losing %s line and executes its checked defensive suffix',
+    async (phase) => {
+      const fixture = createAiFixture({
+        seed: 99,
+        aiHeroId: 'malfurion',
+        opponentHeroId: 'rexxar',
+        turnNumber: 16,
+        aiMana: 6,
+        aiMaximumMana: 8,
+        aiHealth: 7,
+        aiArmor: 2,
+        aiHeroPowerUsesThisTurn: 1,
+        aiHeroPowerId: 'druid-dire-shapeshift',
+        aiHand: ['basic_swipe', 'basic_wild_growth'],
+        aiBoard: [{ cardId: 'classic_keeper_of_the_grove', ready: true }],
+        opponentBoard: [
+          { cardId: 'naxxramas_spectral_spider' },
+          { cardId: 'whispers_of_the_old_gods_princess_huhuran', health: 1 },
+          { cardId: 'basic_huffer', health: 2 },
+          { cardId: 'classic_leokk' },
+          { cardId: 'basic_misha' }
+        ],
+        aiDeck: ['basic_wild_growth'],
+        opponentDeck: ['basic_tracking']
+      })
+      const session = new GameBoardSession({
+        setup: fixture.setup,
+        decks: fixture.decks,
+        checkpoint: fixture.checkpoint
+      })
+      const actor = session.remoteParticipantId
+      const opponent = session.localParticipantId
+      const actions = () =>
+        aiActions(
+          session,
+          enumerateLegalCommands(
+            {
+              getState: session.match.getState,
+              getPlayInput: session.match.getPlayInput!,
+              getLegality: session.match.getLegality!
+            },
+            actor
+          ),
+          actor
+        )
+      const misha = session
+        .getState()
+        .players.find((player) => player.participantId === opponent)!
+        .board.find((minion) => minion.cardId === 'basic_misha')!
+      const bad = actions().find(
+        (action) =>
+          action.command.type === 'attack-character' &&
+          action.command.attacker.kind === 'minion' &&
+          action.command.defender.kind === 'minion' &&
+          action.command.defender.instanceId === misha.instanceId
+      )!
+      const pass = actions().find((action) => action.command.type === 'end-turn')!
+      const badIntents = [bad, pass].map((action) =>
+        aiActionIntent(action.command, opponent)
+      )
+      let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+      let searches = 0
+      const worker = {
+        addEventListener(type: string, listener: unknown) {
+          if (type === 'message') receive = listener as typeof receive
+        },
+        postMessage(message: ExpertAiWorkerRequest) {
+          if (message.type !== 'decide') return
+          searches++
+          const response: AiDecisionResponse = {
+            ...message.request,
+            modelId: 'hardware-local-v2',
+            reason: 'Losing selected trade fixture.',
+            durationMs: 0,
+            finishReason: 'fixture-search',
+            choice:
+              message.request.phase === 'plan'
+                ? {
+                    plan: {
+                      firstActionId: bad.id,
+                      objective: 'Trade then pass',
+                      winCheck: 'none',
+                      lossRisk: 'fixture',
+                      candidates: [
+                        {
+                          sequence: ['trade', 'pass'],
+                          budget: 'fixture',
+                          endPosition: 'fixture',
+                          opponentReply: 'fixture'
+                        }
+                      ],
+                      preferred: 0,
+                      checks: []
+                    }
+                  }
+                : {
+                    actionId: bad.id,
+                    intent: badIntents[0]!,
+                    expectedResult: 'Fixture.',
+                    planUpdate: null
+                  },
+            usage: { plannedActionIntents: badIntents } as unknown as JsonObject
+          }
+          receive?.({
+            data: { type: 'decision', requestId: message.request.requestId, response }
+          } as MessageEvent<ExpertAiWorkerResponse>)
+        },
+        terminate() {}
+      } as unknown as Worker
+      const api = new ExpertAiDecisionApi(
+        session,
+        () => worker,
+        () => 0
+      )
+      const request = (
+        requestPhase: 'action' | 'plan',
+        id = 'defense-0'
+      ): AiDecisionRequest => ({
+        matchId: 'visible-defense',
+        requestId: id,
+        phase: requestPhase,
+        expectedRevision: session.getState().revision,
+        allowInspection: false,
+        messages: [],
+        actionIds: actions().map((action) => action.id)
+      })
+      try {
+        const before = session.match.getCheckpoint()
+        let response = await api.decide(request(phase))
+        expect(response.usage?.actionOutcomeReason).toBe('avoidable-visible-lethal')
+        expect(response.usage?.plannedActionIntents).toHaveLength(2)
+        expect(session.match.getCheckpoint()).toEqual(before)
+        if (phase === 'plan') response = await api.decide(request('action'))
+        const first = actions().find(
+          (action) =>
+            'actionId' in response.choice && action.id === response.choice.actionId
+        )!
+        expect(first.command).toMatchObject({
+          type: 'play-card',
+          targets: [{ instanceId: misha.instanceId }]
+        })
+        expect(session.dispatch(first.command).accepted).toBe(true)
+        response = await api.decide(request('action', 'defense-1'))
+        const second = actions().find(
+          (action) =>
+            'actionId' in response.choice && action.id === response.choice.actionId
+        )!
+        expect(second.command.type).toBe('attack-character')
+        expect(session.dispatch(second.command).accepted).toBe(true)
+        expect(searches).toBe(1)
+        expect(
+          session
+            .getState()
+            .players.find((player) => player.participantId === opponent)!
+            .board.map((minion) => [minion.cardId, minion.attack, minion.health])
+        ).toEqual([['classic_leokk', 2, 3]])
+      } finally {
+        api.dispose()
+      }
+    }
+  )
+})

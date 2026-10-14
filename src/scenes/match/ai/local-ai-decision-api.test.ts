@@ -691,7 +691,12 @@ describe('hardware local AI', () => {
 // Deterministic scorer regressions: exercise existing private seams without
 // exporting implementation helpers or coupling correctness to search timing.
 describe('CThun ritual-total scoring', () => {
-  function scorer(bonus: number | undefined, dead = false, heldPayoff = true) {
+  function scorer(
+    bonus: number | undefined,
+    dead = false,
+    heldPayoff = true,
+    bodyInDeck = true
+  ) {
     const fixture = createAiFixture({
       seed: 61003,
       aiHeroId: 'malfurion',
@@ -703,7 +708,9 @@ describe('CThun ritual-total scoring', () => {
           ? 'whispers_of_the_old_gods_twin_emperor_veklor'
           : 'basic_chillwind_yeti'
       ],
-      aiDeck: [],
+      // Linear body progress needs an actual known future body. The original
+      // fixture had no C'Thun anywhere and rewarded unusable ritual counters.
+      aiDeck: [bodyInDeck ? 'whispers_of_the_old_gods_cthun' : 'basic_chillwind_yeti'],
       opponentDeck: []
     })
     const checkpoint = {
@@ -751,6 +758,15 @@ describe('CThun ritual-total scoring', () => {
       score: seam.scoreObservation(session.getAiObservation(), undefined)
     }
   }
+
+  it('does not value ritual body progress without a known CThun body', () => {
+    expect(scorer(4, false, false, false).score).toBe(
+      scorer(0, false, false, false).score
+    )
+    expect(scorer(4, false, true, false).score).toBeGreaterThan(
+      scorer(0, false, true, false).score
+    )
+  })
 
   for (const dead of [false, true]) {
     it(`values first buffs from absent/zero progression (dead=${dead})`, () => {

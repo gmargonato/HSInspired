@@ -13,7 +13,8 @@ import {
   type TurnMatchCommand
 } from '../../../game-rules/match'
 import { effectiveBoardMinionKeywords } from '../../../game-rules/match/rules/minion-attack-state'
-import { unpaidActionPenalty } from './expert-ai-action-safety'
+import { hasKnownCthunPayoff, unpaidActionPenalty } from './expert-ai-action-safety'
+import { wastesImmediateTemporaryMana } from './expert-temporary-mana'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
 import {
   revealsTacticalInformation,
@@ -114,9 +115,13 @@ export function createExpertTerminalInspector(
 
 export interface ExpertActionOutcome {
   readonly penalty: number
+  /** A witnessed same-play replacement, never an arbitrary unpenalized sibling. */
+  readonly preferredAlternativeKey?: string
   readonly reason?:
     | 'no-payoff'
     | 'unpaid-sacrifice'
+    | 'unpaid-friendly-damage'
+    | 'wasted-healing-target'
     | 'opponent-heal'
     | 'imminent-clear'
     | 'attack-before-buff'
@@ -339,7 +344,8 @@ function attackBeforeBuffPenalty(
 function position(
   player: AiObservedPlayer,
   spentCard?: string,
-  lostMinions: readonly string[] = []
+  lostMinions: readonly string[] = [],
+  ignoreUnusableRitual = false
 ): string {
   return JSON.stringify({
     hero: player.hero,
@@ -350,7 +356,9 @@ function position(
     fatigueDamage: player.fatigueDamage,
     quest: player.quest,
     secrets: player.secrets,
-    effects: player.effects,
+    effects: ignoreUnusableRitual
+      ? { ...player.effects, cthun: undefined }
+      : player.effects,
     maximumMana: player.mana.maximum,
     heroPower: {
       ...player.heroPower,
@@ -374,6 +382,262 @@ function hasDeferredCastPayoff(player: AiObservedPlayer): boolean {
   })
 }
 
+/** Recognize authored health-dependent setup, without forecasting the follow-up. */
+function enablesHeldDamagePayoff(
+  before: AiObservedPlayer,
+  after: AiObservedPlayer
+): boolean {
+  const inspect = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(inspect)
+    if (!value || typeof value !== 'object') return false
+    const entry = value as Record<string, unknown>
+    if (
+      entry.type === 'player-health-lte' &&
+      entry.player === 'self' &&
+      typeof entry.value === 'number' &&
+      before.hero.health > entry.value &&
+      after.hero.health <= entry.value
+    )
+      return true
+    if (entry.reference === 'matching-entity-count') {
+      const selector = entry.selector as Record<string, unknown> | undefined
+      const filter = selector?.filter as Record<string, unknown> | undefined
+      if (
+        (selector?.controller === 'self' || selector?.controller === 'any') &&
+        (selector.type === 'character' ||
+          selector.type === 'hero' ||
+          selector.type === 'minion') &&
+        filter?.damaged === true
+      ) {
+        const count = (player: AiObservedPlayer) =>
+          (selector.type !== 'minion' && player.hero.health < player.hero.maxHealth
+            ? 1
+            : 0) +
+          (selector.type !== 'hero'
+            ? player.board.filter((minion) => minion.health < minion.maxHealth).length
+            : 0)
+        if (count(after) > count(before)) return true
+      }
+    }
+    return Object.values(entry).some(inspect)
+  }
+  return after.hand.some((card) => inspect(CARD_CATALOG.get(card.cardId)?.effects))
+}
+
+/** A chosen self-hero target must pay for its damage beyond ordinary development. */
+function unpaidTargetedHeroDamage(
+  root: OpeningMatchAnalysis,
+  actorId: PlayerId,
+  command: Extract<TurnMatchCommand, { type: 'play-card' }>
+): ExpertActionOutcome {
+  if (
+    !command.targets?.some(
+      (target) => target.kind === 'hero' && target.participantId === actorId
+    )
+  )
+    return { penalty: 0 }
+  return root.analyze((fork) => {
+    const before = fork.getAiObservation?.(actorId, 'fair')
+    const self = before?.players.find((player) => player.participantId === actorId)
+    if (!self) return { penalty: 0 }
+    const rng = JSON.stringify(fork.getRandomState?.())
+    const result = fork.dispatch(command)
+    if (
+      !result.accepted ||
+      result.state.phase === 'ended' ||
+      result.state.pendingDiscover ||
+      result.state.pendingCardChoice ||
+      rng !== JSON.stringify(fork.getRandomState?.()) ||
+      revealsTacticalInformation(result.events)
+    )
+      return { penalty: 0 }
+    const after = fork.getAiObservation?.(actorId, 'fair')
+    const next = after?.players.find((player) => player.participantId === actorId)
+    if (
+      !after ||
+      !next ||
+      self.hero.health + self.hero.armor <= next.hero.health + next.hero.armor ||
+      hasDeferredCastPayoff(next) ||
+      enablesHeldDamagePayoff(self, next) ||
+      self.handSize >= 10
+    )
+      return { penalty: 0 }
+    const otherwiseUnchanged = before!.players.every((player) => {
+      const changed = after.players.find(
+        (entry) => entry.participantId === player.participantId
+      )!
+      if (player.participantId !== actorId)
+        return position(player) === position(changed)
+      return (
+        position(player, command.cardInstanceId) ===
+        position(
+          {
+            ...changed,
+            hero: {
+              ...changed.hero,
+              health: player.hero.health,
+              armor: player.hero.armor,
+              damageTaken: player.hero.damageTaken
+            }
+          },
+          command.cardInstanceId,
+          // Only the played body is ordinary development. Additional summons,
+          // healing, draw, cost changes and damage-trigger effects remain payoffs.
+          [command.cardInstanceId]
+        )
+      )
+    })
+    return otherwiseUnchanged
+      ? { penalty: 0.35, reason: 'unpaid-friendly-damage' }
+      : { penalty: 0 }
+  })
+}
+
+/** A soft same-card target comparison; triggers and healing conversion stay visible. */
+function wastedHealingTarget(
+  root: OpeningMatchAnalysis,
+  actorId: PlayerId,
+  command: Extract<TurnMatchCommand, { type: 'play-card' }>
+): ExpertActionOutcome {
+  const self = root
+    .getState()
+    .players.find((player) => player.participantId === actorId)
+  const card = self?.hand.find((entry) => entry.instanceId === command.cardInstanceId)
+  const definition = card && CARD_CATALOG.get(card.cardId)
+  const target = command.targets?.[0]
+  if (
+    !self ||
+    !target ||
+    command.targets?.length !== 1 ||
+    target.participantId !== actorId ||
+    !definition?.effects.length ||
+    !definition.effects.every(
+      (effect) =>
+        (effect.trigger === 'cast' || effect.trigger === 'battlecry') &&
+        effect.actions?.length &&
+        effect.actions.every((action) => action.action === 'restore')
+    )
+  )
+    return { penalty: 0 }
+  const selectedTarget =
+    target.kind === 'hero'
+      ? self.hero
+      : target.kind === 'minion'
+        ? self.board.find((minion) => minion.instanceId === target.instanceId)
+        : undefined
+  if (!selectedTarget || selectedTarget.health < selectedTarget.maxHealth)
+    return { penalty: 0 }
+  if (
+    self.hero.health >= self.hero.maxHealth &&
+    !self.board.some((minion) => minion.health < minion.maxHealth)
+  )
+    return { penalty: 0 }
+  // Healing replacements are a separate tactical use, never a wasted heal.
+  if (
+    self.board.some(
+      (minion) =>
+        !minion.silenced &&
+        !minion.dormant &&
+        CARD_CATALOG.get(minion.cardId)?.effects.some((effect) =>
+          effect.actions?.some(
+            (action) =>
+              action.action === 'replace-event' && action.event === 'health-restored'
+          )
+        )
+    )
+  )
+    return { penalty: 0 }
+  const simulate = (action: TurnMatchCommand) =>
+    root.analyze((fork) => {
+      const rng = JSON.stringify(fork.getRandomState?.())
+      const result = fork.dispatch(action)
+      if (
+        !result.accepted ||
+        result.state.phase !== 'turns' ||
+        result.state.pendingDiscover ||
+        result.state.pendingCardChoice ||
+        revealsTacticalInformation(result.events) ||
+        rng !== JSON.stringify(fork.getRandomState?.())
+      )
+        return undefined
+      return fork.getAiObservation?.(actorId, 'fair')
+    })
+  const selected = simulate(command)
+  if (!selected) return { penalty: 0 }
+  const selectedSelf = selected.players.find(
+    (player) => player.participantId === actorId
+  )!
+  let preferredAlternativeKey: string | undefined
+  for (const alternate of enumerateLegalCommands(root, actorId)) {
+    if (
+      alternate.type !== 'play-card' ||
+      alternate.cardInstanceId !== command.cardInstanceId ||
+      alternate.choice !== command.choice ||
+      alternate.position !== command.position ||
+      alternate.targets?.length !== 1 ||
+      alternate.targets[0]?.participantId !== actorId ||
+      canonicalCommandKey(alternate) === canonicalCommandKey(command)
+    )
+      continue
+    const alternateTarget = alternate.targets[0]!
+    const wounded =
+      alternateTarget.kind === 'hero'
+        ? self.hero
+        : alternateTarget.kind === 'minion'
+          ? self.board.find(
+              (minion) => minion.instanceId === alternateTarget.instanceId
+            )
+          : undefined
+    if (!wounded || wounded.health >= wounded.maxHealth) continue
+    const improved = simulate(alternate)
+    if (!improved) return { penalty: 0 }
+    const improvedSelf = improved.players.find(
+      (player) => player.participantId === actorId
+    )!
+    // The controller may choose any same-play target. If one healing destination
+    // removes a held damaged-count/health-threshold payoff, leave target choice
+    // to search rather than certifying another destination as a hard repair.
+    if (enablesHeldDamagePayoff(improvedSelf, selectedSelf)) return { penalty: 0 }
+    let healing = 0
+    const equivalent = selected.players.every((before) => {
+      const after = improved.players.find(
+        (player) => player.participantId === before.participantId
+      )!
+      if (before.participantId !== actorId) return position(before) === position(after)
+      if (
+        JSON.stringify(before.mana) !== JSON.stringify(after.mana) ||
+        after.hero.health < before.hero.health ||
+        before.board.length !== after.board.length
+      )
+        return false
+      healing += after.hero.health - before.hero.health
+      const board = after.board.map((minion) => {
+        const old = before.board.find((entry) => entry.instanceId === minion.instanceId)
+        if (!old || minion.health < old.health) return minion
+        healing += minion.health - old.health
+        return { ...minion, health: old.health, damageTaken: old.damageTaken }
+      })
+      return (
+        position(before) ===
+        position({
+          ...after,
+          board,
+          hero: {
+            ...after.hero,
+            health: before.hero.health,
+            damageTaken: before.hero.damageTaken
+          }
+        })
+      )
+    })
+    if (equivalent && healing > 0)
+      preferredAlternativeKey ??= canonicalCommandKey(alternate)
+  }
+  return preferredAlternativeKey
+    ? { penalty: 0.25, reason: 'wasted-healing-target', preferredAlternativeKey }
+    : { penalty: 0 }
+}
+
 /** One reversible simulation on an already fair search fork, never a live dispatch. */
 export function inspectExpertAction(
   root: OpeningMatchAnalysis,
@@ -389,6 +653,12 @@ export function inspectExpertAction(
   if (command.type !== 'play-card' && command.type !== 'use-hero-power')
     return { penalty: 0 }
   if (command.type === 'play-card') {
+    if (wastesImmediateTemporaryMana(root, actorId, command))
+      return { penalty: 0.35, reason: 'no-payoff' }
+    const damage = unpaidTargetedHeroDamage(root, actorId, command)
+    if (damage.penalty > 0) return damage
+    const healing = wastedHealingTarget(root, actorId, command)
+    if (healing.penalty > 0) return healing
     const state = root.getState()
     const card = state.players
       .find((p) => p.participantId === actorId)
@@ -404,6 +674,22 @@ export function inspectExpertAction(
     const before = fork.getAiObservation?.(actorId, 'fair')
     const self = before?.players.find((p) => p.participantId === actorId)
     if (!self) return { penalty: 0 }
+    const ritualPayoff = hasKnownCthunPayoff([
+      ...self.hand,
+      ...self.board,
+      ...before!.selfOriginalDeck.cards
+    ])
+    const payoffPosition = (
+      player: AiObservedPlayer,
+      spentCard?: string,
+      lostMinions: readonly string[] = []
+    ) =>
+      position(
+        player,
+        spentCard,
+        lostMinions,
+        player.participantId === actorId && !ritualPayoff
+      )
     const spentCard = command.type === 'play-card' ? command.cardInstanceId : undefined
     const card = self.hand.find((c) => c.instanceId === spentCard)
     const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
@@ -550,7 +836,7 @@ export function inspectExpertAction(
         (e) =>
           e.type === 'character-healed' && e.participantId !== actorId && e.amount > 0
       ) &&
-      position(self, spentCard) === position(nextSelf, spentCard)
+      payoffPosition(self, spentCard) === payoffPosition(nextSelf, spentCard)
     )
       return { penalty: 0.25, reason: 'opponent-heal' }
     const enemyUnchanged = before!.players
@@ -560,14 +846,14 @@ export function inspectExpertAction(
         return position(p) === position(next)
       })
     if (!enemyUnchanged) return { penalty: 0 }
-    if (position(self, spentCard) === position(nextSelf, spentCard))
+    if (payoffPosition(self, spentCard) === payoffPosition(nextSelf, spentCard))
       return { penalty: 0.35, reason: 'no-payoff' }
     const lost = self.board
       .filter((m) => !nextSelf.board.some((n) => n.instanceId === m.instanceId))
       .map((m) => m.instanceId)
     if (
       lost.length &&
-      position(self, spentCard, lost) === position(nextSelf, spentCard)
+      payoffPosition(self, spentCard, lost) === payoffPosition(nextSelf, spentCard)
     ) {
       // Deaths can advance resurrection plans; retain a soft penalty rather
       // than removing the action from the legal search space.

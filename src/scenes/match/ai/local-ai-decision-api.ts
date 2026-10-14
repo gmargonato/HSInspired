@@ -55,12 +55,15 @@ import {
   EXPERT_AI_POLICY_REVISION
 } from './expert-ai-worker-protocol'
 import {
+  hasKnownCthunPayoff,
   unpaidFriendlyDamageHeroPowerPenalty,
   unpaidActionPenalty
 } from './expert-ai-action-safety'
 import { LOCAL_AI_POLICY } from './local-ai-policy'
 import { CTHUN_ID } from '../../../game-rules/match/cthun'
 import { expertDrawPreference } from './expert-draw-preference'
+import { expertResourceSetupPreference } from './expert-resource-preference'
+import { expertSingletonCleanupSeeds } from './expert-cleanup-seeds'
 import { createExpertAttackOrderInspector } from './expert-action-ordering'
 import { identicalSupportedContinuation } from './expert-completed-attack-order'
 import {
@@ -749,7 +752,11 @@ function heroPowerBlocksDiscountedChargeReplay(
   })
 }
 
-function playerValue(player: AiObservedPlayer, turnNumber: number): number {
+function playerValue(
+  player: AiObservedPlayer,
+  turnNumber: number,
+  knownOriginalDeck: AiObservation['selfOriginalDeck']['cards']
+): number {
   const hero = record(player.hero)
   const armor = number(hero.armor)
   const health = number(hero.health)
@@ -808,8 +815,12 @@ function playerValue(player: AiObservedPlayer, turnNumber: number): number {
   const effects = record(player.effects)
   const cthun = record(effects.cthun)
   const cthunAttack = number(cthun.attack)
+  const cthunBodyAvailable =
+    !cthunAttack ||
+    player.role !== 'self' ||
+    hasKnownCthunPayoff([...player.hand, ...player.board, ...knownOriginalDeck], false)
   const cthunBodyProgress =
-    effects.cthunDied === true || !cthunAttack
+    effects.cthunDied === true || !cthunAttack || !cthunBodyAvailable
       ? 0
       : cthunAttack * 3 + number(cthun.health) * 2
   // A held conditional payoff still uses ritual totals after C'Thun has died.
@@ -914,8 +925,8 @@ function stateScore(
         LOCAL_AI_POLICY.weights.expertBoardPresence
       : 0
   return (
-    playerValue(self, observation.turnNumber) -
-    playerValue(opponent, observation.turnNumber) +
+    playerValue(self, observation.turnNumber, observation.selfOriginalDeck.cards) -
+    playerValue(opponent, observation.turnNumber, observation.selfOriginalDeck.cards) +
     boardPresence +
     (profile === 'expert'
       ? expertEngineValue(self, observation.turnNumber) -
@@ -1698,13 +1709,19 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       this.publishTrace(trace)
       return { best, trace }
     }
-    const drawPreferences = simulationSession.match.analyze((fork) => {
+    const rootSequencePreferences = simulationSession.match.analyze((fork) => {
       const preferences = new Map<string, number>()
       for (const action of actions) {
         if (performance.now() >= deadline) break
         preferences.set(
           canonicalCommandKey(action.command),
-          expertDrawPreference(fork, rootId, action.command)
+          expertDrawPreference(fork, rootId, action.command) +
+            expertResourceSetupPreference(
+              fork,
+              rootId,
+              action.command,
+              () => this.workBudget === undefined && performance.now() >= deadline
+            )
         )
       }
       return preferences
@@ -1727,20 +1744,33 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const tacticalSeedLines = [...seedByRoot.values()]
       .sort((a, b) => b.value - a.value)
       .slice(0, 24)
-    // Sample safe draw-first alternatives even when the tactical plan omits drawing.
-    // Stop seeding at the draw so subsequent choices use the revealed information.
-    const drawSeedLines = actions
+    // Sample useful information and resource setups omitted by the tactical line.
+    // Seed only the setup; subsequent choices use its actual resolved state.
+    const informationAndSetupSeeds = actions
       .filter(
-        (action) => (drawPreferences.get(canonicalCommandKey(action.command)) ?? 0) > 0
+        (action) =>
+          (rootSequencePreferences.get(canonicalCommandKey(action.command)) ?? 0) > 0
       )
       .sort(
         (a, b) =>
-          drawPreferences.get(canonicalCommandKey(b.command))! -
-          drawPreferences.get(canonicalCommandKey(a.command))!
+          rootSequencePreferences.get(canonicalCommandKey(b.command))! -
+          rootSequencePreferences.get(canonicalCommandKey(a.command))!
       )
       .slice(0, 8)
       .map((action) => ({ commands: [action.command] }))
-    const seedLines = [...drawSeedLines, ...tacticalSeedLines]
+    const cleanupSeedLines = simulationSession.match.analyze((fork) =>
+      expertSingletonCleanupSeeds(
+        fork,
+        rootId,
+        tactical.lines,
+        () => this.workBudget === undefined && performance.now() >= deadline
+      )
+    )
+    const seedLines = [
+      ...informationAndSetupSeeds,
+      ...cleanupSeedLines,
+      ...tacticalSeedLines
+    ]
     const searchDeadline =
       this.workBudget === undefined
         ? Math.max(
@@ -1867,7 +1897,8 @@ export class LocalAiDecisionApi implements AiDecisionApi {
               prior:
                 this.commandPrior(command, priorState, actorId) +
                 (nodeKey === rootInformationKey
-                  ? (drawPreferences.get(canonicalCommandKey(command)) ?? 0) * 50
+                  ? (rootSequencePreferences.get(canonicalCommandKey(command)) ?? 0) *
+                    50
                   : 0)
             }))
             if (nodeKey === rootInformationKey)
@@ -1880,7 +1911,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
                 rootCandidatePreferenceAdjustments.set(
                   candidate.key,
                   -this.continuationPreference(candidate.action) * 0.1 -
-                    (drawPreferences.get(candidate.key) ?? 0)
+                    (rootSequencePreferences.get(candidate.key) ?? 0)
                 )
                 const unpaidDamagePenalty =
                   (rootActionOutcomes.get(candidate.key)?.penalty ?? 0) +
