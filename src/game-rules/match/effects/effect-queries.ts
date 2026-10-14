@@ -558,7 +558,11 @@ export class EffectQueries {
   }
 
   /** Resolves a selector in stable zone/board order before count or random choice. */
-  select(selectorValue: unknown, frame: EffectFrame): readonly EntityRef[] {
+  select(
+    selectorValue: unknown,
+    frame: EffectFrame,
+    actionPath?: string
+  ): readonly EntityRef[] {
     this.context.step(`${frame.actionPath}:select`)
     if (typeof selectorValue === 'string') {
       if (selectorValue === 'source') return [frame.source]
@@ -651,7 +655,15 @@ export class EffectQueries {
       const pool = [...candidates]
       const amount = count ?? 1
       for (let index = 0; index < amount && pool.length > 0; index += 1) {
-        const selectedIndex = Math.floor(this.context.rng.next() * pool.length)
+        const selectedIndex = this.context.rng.nextTargetIndex
+          ? this.context.rng.nextTargetIndex({
+              targets: pool,
+              sourceInstanceId: frame.source.instanceId,
+              sourceCardId: frame.sourceCardId,
+              actionPath: actionPath ?? frame.actionPath,
+              selector
+            })
+          : Math.floor(this.context.rng.next() * pool.length)
         chosen.push(...pool.splice(selectedIndex, 1))
       }
       candidates = chosen

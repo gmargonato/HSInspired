@@ -183,6 +183,19 @@ function aggregateResponse(
         position: intent.position,
         option: intent.option
       })),
+      ...(candidate?.reconsiderAfterPrefix !== undefined &&
+      candidate.reconsiderAfterPrefix > 0 &&
+      candidate.reconsiderAfterPrefix < plannedActionIntents.length
+        ? {
+            continuationReconsideration: {
+              prefixLength: candidate.reconsiderAfterPrefix,
+              actions: plannedActionIntents.map((intent) => ({
+                ...intent,
+                targets: [...intent.targets]
+              }))
+            }
+          }
+        : {}),
       candidateConsensus: [...scores.entries()]
         .sort(
           (left, right) =>

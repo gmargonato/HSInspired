@@ -1400,9 +1400,11 @@ export class EffectRuntime {
 
   private actionTargets(
     action: Record<string, unknown>,
-    frame: EffectFrame
+    frame: EffectFrame,
+    actionPath?: string
   ): readonly EntityRef[] {
-    if (action.target !== undefined) return this.queries.select(action.target, frame)
+    if (action.target !== undefined)
+      return this.queries.select(action.target, frame, actionPath)
     if (action.player !== undefined) {
       return this.targetPlayers(action, frame).map((participantId) => ({
         instanceId: `${participantId}:hero`,
@@ -8265,7 +8267,7 @@ export class EffectRuntime {
         return
       }
       case 'modify':
-        for (const target of this.actionTargets(action, frame)) {
+        for (const target of this.actionTargets(action, frame, path)) {
           this.queries.withTarget(frame, target, () =>
             this.modifyEntity(target, action, frame, path)
           )
