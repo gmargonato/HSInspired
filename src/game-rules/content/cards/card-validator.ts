@@ -1134,6 +1134,10 @@ export function validateCardRecord(
   const subtype = optionalString(raw.subtype, `${indexOrPath}.subtype`)
   const tribes = optionalStringArray(raw.tribes, `${indexOrPath}.tribes`)
   const spellSchool = optionalString(raw.spellSchool, `${indexOrPath}.spellSchool`)
+  if (type !== 'Spell' && spellSchool !== null)
+    return fail(`${indexOrPath}.spellSchool`, 'is only valid for spells')
+  if (type !== 'Minion' && (subtype !== null || (tribes?.length ?? 0) > 0))
+    return fail(`${indexOrPath}.subtype`, 'tribes are only valid for minions')
   const collectible = booleanValue(
     raw.collectible,
     `${indexOrPath}.collectible`,

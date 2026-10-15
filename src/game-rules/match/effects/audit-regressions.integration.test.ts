@@ -1389,3 +1389,35 @@ describe('safe card audit batch', () => {
     expect(f.player(f.foe).board[0]).toMatchObject({ health: 1, divineShield: false })
   })
 })
+
+describe('Hero Jaraxxus tribe regression', () => {
+  it('leaves Jaraxxus in hand when Voidcaller dies without a Demon minion', () => {
+    const scenario = createMatchScenario({ seed: 71, cardId: 'basic_sacrificial_pact' })
+    scenario.confirmBothMulligans()
+    const [participantId] = activePlayers(scenario)
+    setMana(scenario, participantId)
+    for (const command of [
+      { type: 'dev-add-card' as const, cardId: 'classic_lord_jaraxxus' },
+      { type: 'dev-summon-minion' as const, cardId: 'naxxramas_voidcaller' }
+    ])
+      expect(scenario.match.dispatch({ participantId, ...command }).accepted).toBe(true)
+    const before = player(scenario, participantId)
+    const jaraxxus = before.hand.find(
+      (card) => card.cardId === 'classic_lord_jaraxxus'
+    )!
+    const spell = before.hand.find((card) => card.cardId === 'basic_sacrificial_pact')!
+    const target = before.board.find((card) => card.cardId === 'naxxramas_voidcaller')!
+    expect(
+      scenario.match.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: spell.instanceId,
+        targets: [{ kind: 'minion', participantId, instanceId: target.instanceId }]
+      }).accepted
+    ).toBe(true)
+    const after = player(scenario, participantId)
+    expect(after.hand).toContainEqual(jaraxxus)
+    expect(after.board).toHaveLength(0)
+    expect(after.heroId).toBe(before.heroId)
+  })
+})

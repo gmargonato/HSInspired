@@ -5114,7 +5114,8 @@ export class EffectRuntime {
 
   private sourceEntities(
     action: Record<string, unknown>,
-    frame: EffectFrame
+    frame: EffectFrame,
+    eligible?: (candidate: EntityRef) => boolean
   ): EntityRef[] {
     if (action.source === undefined) return []
     if (
@@ -5124,7 +5125,7 @@ export class EffectRuntime {
         action.source === 'hand' ||
         action.source === 'deck-top')
     )
-      return [frame.source]
+      return eligible?.(frame.source) !== false ? [frame.source] : []
     // A `selection: 'source'` effect anchored to a zone must never resolve to
     // the whole zone. When the effect source is not itself a card in that
     // zone (for example a board minion re-firing a deck trigger), resolve the
@@ -5178,8 +5179,10 @@ export class EffectRuntime {
           zone: 'revealed' as const,
           cardId: cardId as CardId
         }))
-        .filter((candidate) =>
-          this.queries.matchesFilter(candidate, action.filter, frame)
+        .filter(
+          (candidate) =>
+            eligible?.(candidate) !== false &&
+            this.queries.matchesFilter(candidate, action.filter, frame)
         )
       const count =
         action.count === undefined
@@ -5194,15 +5197,22 @@ export class EffectRuntime {
       return selected
     }
     let source =
-      sourceSelector?.selection === 'random' && action.count !== undefined
+      sourceSelector?.selection === 'random' &&
+      (action.count !== undefined || eligible !== undefined)
         ? this.queries.selectorCandidates(
-            { ...sourceSelector, selection: 'all', count: undefined },
+            {
+              ...sourceSelector,
+              selection: 'all',
+              count: action.count === undefined ? sourceSelector.count : undefined
+            },
             frame
           )
         : this.cardRefsFromSource(action.source, frame)
     const filter = action.filter
-    source = source.filter((candidate) =>
-      this.queries.matchesFilter(candidate, filter, frame)
+    source = source.filter(
+      (candidate) =>
+        eligible?.(candidate) !== false &&
+        this.queries.matchesFilter(candidate, filter, frame)
     )
     if (action.source === 'deck-top') {
       const count =
@@ -5237,12 +5247,17 @@ export class EffectRuntime {
   private sourceEntitiesForParticipant(
     action: Record<string, unknown>,
     frame: EffectFrame,
-    participantId: PlayerId
+    participantId: PlayerId,
+    eligible?: (candidate: EntityRef) => boolean
   ): EntityRef[] {
-    return this.sourceEntities(action, {
-      ...frame,
-      controllerId: participantId
-    })
+    return this.sourceEntities(
+      action,
+      {
+        ...frame,
+        controllerId: participantId
+      },
+      eligible
+    )
   }
 
   private shuffle<T>(items: readonly T[]): T[] {
@@ -8525,11 +8540,27 @@ export class EffectRuntime {
           const sources = this.sourceEntitiesForParticipant(
             action,
             frame,
-            participantId
+            participantId,
+            (candidate) => {
+              const card = candidate.cardId
+                ? cardDefinition(candidate.cardId)
+                : undefined
+              return (
+                card?.type === 'Minion' ||
+                (card?.type === 'Spell' && card.keywords.includes('secret'))
+              )
+            }
           )
           for (const source of sources) {
             const definition = source.cardId ? cardDefinition(source.cardId) : undefined
-            if (!definition) continue
+            if (
+              !definition ||
+              (definition.type !== 'Minion' &&
+                !(
+                  definition.type === 'Spell' && definition.keywords.includes('secret')
+                ))
+            )
+              continue
             const targetPlayer = this.player(participantId)
             if (
               definition.type === 'Minion' &&

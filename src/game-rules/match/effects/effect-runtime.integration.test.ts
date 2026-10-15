@@ -7067,3 +7067,113 @@ describe('current-stat swaps', () => {
     expect(s.stats()).toBeUndefined()
   })
 })
+
+describe('put-into-play supported card types', () => {
+  it.each(
+    (['hand', 'deck'] as const).flatMap((zone) =>
+      (['all', 'random', 'random-top', 'random-bottom'] as const)
+        .filter((selection) => zone === 'deck' || !selection.startsWith('random-'))
+        .flatMap((selection) =>
+          [true, false].map((supported) => ({ zone, selection, supported }))
+        )
+    )
+  )(
+    'preserves unsupported cards ($zone, $selection, supported=$supported)',
+    ({ zone, selection, supported }) => {
+      const id = 'put_into_play_types_fixture' as CardId
+      const catalog = CARD_CATALOG as unknown as {
+        cardsById: Map<CardId, CardDefinition>
+      }
+      catalog.cardsById.set(id, {
+        ...CARD_CATALOG.require('basic_fireball'),
+        id,
+        cost: 0,
+        effects: [
+          {
+            trigger: 'cast',
+            actions: [
+              {
+                action: 'put-into-play',
+                ...(selection.startsWith('random-')
+                  ? {
+                      source: {
+                        type: 'card',
+                        controller: 'self',
+                        zone,
+                        selection: 'random',
+                        position: selection === 'random-top' ? 'top' : 'bottom',
+                        count: 4
+                      }
+                    }
+                  : { source: zone, selection })
+              }
+            ]
+          }
+        ]
+      } as CardDefinition)
+      try {
+        const scenario = createMatchScenario({ cardId: 'classic_wisp', seed: 71 })
+        scenario.confirmBothMulligans()
+        const initial = scenario.match.getState()
+        const participantId = initial.activePlayerId!
+        const owner = initial.players.find((p) => p.participantId === participantId)!
+        const cardIds = [
+          'classic_lord_jaraxxus',
+          'basic_fireball',
+          'basic_fiery_war_axe',
+          ...(supported ? ['basic_bloodfen_raptor', 'classic_counterspell'] : [])
+        ]
+        const cards = cardIds.map((cardId, index) => ({
+          ...owner.hand[0]!,
+          instanceId: `put-types:${index}`,
+          zone,
+          creationOrdinal: 1000 + index,
+          cardId: cardId as CardId,
+          currentCost: 0
+        }))
+        const source = {
+          ...owner.hand[0]!,
+          instanceId: 'put-types:source',
+          creationOrdinal: 1005,
+          cardId: id,
+          currentCost: 0
+        }
+        const state: OpeningMatchState = {
+          ...initial,
+          nextEntityOrdinal: 1006,
+          players: initial.players.map((p) =>
+            p.participantId !== participantId
+              ? p
+              : {
+                  ...p,
+                  hand: zone === 'hand' ? [source, ...cards] : [source],
+                  deck: zone === 'deck' ? cards : []
+                }
+          ) as unknown as OpeningMatchState['players']
+        }
+        const result = resolveCardPlay({
+          state,
+          participantId,
+          cardInstanceId: source.instanceId
+        })
+        expect(result.accepted, JSON.stringify(result)).toBe(true)
+        const after = result.state.players.find(
+          (p) => p.participantId === participantId
+        )!
+        expect(after[zone].slice(0, 3).map((card) => card.cardId)).toEqual(
+          cardIds.slice(0, 3)
+        )
+        const moved = [...after.board, ...(after.secrets ?? [])].map(
+          (card) => card.cardId
+        )
+        expect(moved).toHaveLength(supported ? (selection === 'all' ? 2 : 1) : 0)
+        for (const cardId of moved) expect(cardIds.slice(3)).toContain(cardId)
+        expect(after[zone]).toHaveLength(cardIds.length - moved.length)
+        expect(after.heroId).toBe(owner.heroId)
+        expect(after.weapon).toBe(owner.weapon)
+      } finally {
+        catalog.cardsById.delete(id)
+      }
+    }
+  )
+})
