@@ -71,7 +71,8 @@ function generatedMinion(
   id: string,
   name: string,
   attack: number,
-  health: number
+  health: number,
+  subtype: string | null = null
 ): CardDefinition {
   return {
     id: asCardId(id),
@@ -80,7 +81,7 @@ function generatedMinion(
     name,
     rarity: 'Summon',
     cardClass: GENERATED_CLASS,
-    subtype: null,
+    subtype,
     spellSchool: null,
     cost: 0,
     rulesText: '',
@@ -99,9 +100,10 @@ function generatedMinionWithKeywords(
   name: string,
   attack: number,
   health: number,
-  keywords: readonly CardKeyword[]
+  keywords: readonly CardKeyword[],
+  subtype: string | null = null
 ): CardDefinition {
-  return { ...generatedMinion(id, name, attack, health), keywords }
+  return { ...generatedMinion(id, name, attack, health, subtype), keywords }
 }
 
 function generatedTriggeredSpell(
@@ -133,25 +135,41 @@ const GENERATED_CARD_RECORDS: readonly CardDefinition[] = [
       }
     ]
   ),
-  generatedMinionWithKeywords('the_grand_tournament_bear', 'Bear', 3, 3, ['taunt']),
-  generatedMinionWithKeywords('the_grand_tournament_boar', 'Boar', 4, 2, ['charge']),
+  generatedMinionWithKeywords(
+    'the_grand_tournament_bear',
+    'Bear',
+    3,
+    3,
+    ['taunt'],
+    'Beast'
+  ),
+  generatedMinionWithKeywords(
+    'the_grand_tournament_boar',
+    'Boar',
+    4,
+    2,
+    ['charge'],
+    'Beast'
+  ),
   generatedMinionWithKeywords(
     'the_grand_tournament_saber_charge_form',
     'Druid of the Saber',
     2,
     1,
-    ['charge']
+    ['charge'],
+    'Beast'
   ),
   generatedMinionWithKeywords(
     'the_grand_tournament_saber_stealth_form',
     'Druid of the Saber',
     3,
     2,
-    ['stealth']
+    ['stealth'],
+    'Beast'
   ),
   generatedMinion('the_grand_tournament_nerubian', 'Nerubian', 4, 4),
   generatedMinion('the_grand_tournament_sapling', 'Sapling', 1, 1),
-  generatedMinion('the_grand_tournament_war_kodo', 'War Kodo', 3, 5),
+  generatedMinion('the_grand_tournament_war_kodo', 'War Kodo', 3, 5, 'Beast'),
   generatedWeapon('the_grand_tournament_poisoned_dagger', 'Poisoned Dagger', 2, 2),
   generatedSpell(
     'goblins_vs_gnomes_spare_part_armor_plating',
