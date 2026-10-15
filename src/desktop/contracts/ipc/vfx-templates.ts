@@ -49,6 +49,10 @@ export type VfxTemplate =
       readonly family: 'aoe'
       readonly zones: readonly VfxAoeZone[]
       readonly tuning: VfxCommonTuning & {
+        readonly redColor?: string
+        readonly sootColor?: string
+        /** Optional visual impact cue, independent of the residual tail. */
+        readonly impactMs?: number
         readonly aoeRadius: number
         readonly aoeEdgeSoftness: number
         readonly aoeShape: 'radial' | 'wide'
@@ -106,7 +110,7 @@ function headSize(value: unknown, label: string): number {
   return size
 }
 
-function tuning(value: unknown): VfxCommonTuning {
+function tuning(value: unknown, maxDuration = 2200): VfxCommonTuning {
   const source = record(value, 'tuning')
   return {
     flameColor: color(source.flameColor, 'flameColor'),
@@ -125,7 +129,8 @@ function tuning(value: unknown): VfxCommonTuning {
     ),
     durationMs: numberInRange(
       source.durationMs,
-      ...commonRanges.durationMs,
+      commonRanges.durationMs[0],
+      maxDuration,
       'durationMs'
     )
   }
@@ -144,7 +149,7 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
     ids.add(item.id)
     if (typeof item.name !== 'string' || !item.name.trim() || item.name.length > 80)
       throw new Error(`Invalid VFX template name: ${item.id}`)
-    const common = tuning(item.tuning)
+    const common = tuning(item.tuning, item.family === 'aoe' ? 5000 : 2200)
     const values = record(item.tuning, 'tuning')
     if (item.family === 'missile')
       return {
@@ -207,6 +212,22 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
         zones: [...item.zones] as VfxAoeZone[],
         tuning: {
           ...common,
+          ...(values.sootColor !== undefined
+            ? { sootColor: color(values.sootColor, 'sootColor') }
+            : {}),
+          ...(values.impactMs !== undefined
+            ? {
+                impactMs: numberInRange(
+                  values.impactMs,
+                  0,
+                  common.durationMs,
+                  'impactMs'
+                )
+              }
+            : {}),
+          ...(values.redColor !== undefined
+            ? { redColor: color(values.redColor, 'redColor') }
+            : {}),
           aoeRadius: numberInRange(values.aoeRadius, 0.35, 1.15, 'aoeRadius'),
           aoeEdgeSoftness: numberInRange(
             values.aoeEdgeSoftness,
