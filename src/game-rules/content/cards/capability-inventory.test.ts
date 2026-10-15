@@ -175,3 +175,54 @@ describe('validated mana action types', () => {
     expect(() => validateAction(action)).toThrow(diagnostic)
   })
 })
+
+describe('card classification metadata', () => {
+  it.each([
+    ['classic_demolisher', 'Mech'],
+    ['classic_harvest_golem', 'Mech'],
+    ['goblins_vs_gnomes_mekgineer_thermaplugg', 'Mech'],
+    ['the_grand_tournament_bear', 'Beast'],
+    ['the_grand_tournament_boar', 'Beast'],
+    ['the_grand_tournament_war_kodo', 'Beast'],
+    ['the_grand_tournament_saber_charge_form', 'Beast'],
+    ['the_grand_tournament_saber_stealth_form', 'Beast'],
+    ['journey_to_ungoro_shellshifter_5_3_stealth', 'Beast'],
+    ['journey_to_ungoro_shellshifter_3_5_taunt', 'Beast']
+  ])('retains the verified tribe for %s', (id, tribe) => {
+    expect(CARD_CATALOG.require(id)).toMatchObject({ type: 'Minion', subtype: tribe })
+  })
+
+  it('keeps Hero Jaraxxus out of Demon classification', () => {
+    const card = CARD_CATALOG.require('classic_lord_jaraxxus')
+    expect(card.type).toBe('Hero')
+    expect(card.subtype).toBeNull()
+    expect(card.tribes ?? []).toEqual([])
+  })
+
+  it('restricts school metadata to spells and tribe metadata to minions', () => {
+    const minion = CARD_CATALOG.require('basic_bloodfen_raptor')
+    const spell = CARD_CATALOG.require('basic_fireball')
+    for (const card of CARD_CATALOG.all) {
+      if (card.type !== 'Spell') expect(card.spellSchool, card.id).toBeNull()
+      if (card.type !== 'Minion') {
+        expect(card.subtype, card.id).toBeNull()
+        expect(card.tribes ?? [], card.id).toEqual([])
+      }
+    }
+    expect(() =>
+      validateCardRecord({ ...minion, spellSchool: 'Fire' }, 'basic')
+    ).toThrow('only valid for spells')
+    expect(() => validateCardRecord({ ...spell, subtype: 'Demon' }, 'basic')).toThrow(
+      'only valid for minions'
+    )
+    expect(() => validateCardRecord({ ...spell, tribes: ['Demon'] }, 'basic')).toThrow(
+      'only valid for minions'
+    )
+    expect(() =>
+      validateCardRecord({ ...spell, subtype: 'General', tribes: [] }, 'basic')
+    ).not.toThrow()
+    expect(() =>
+      validateCardRecord({ ...spell, spellSchool: null }, 'basic')
+    ).not.toThrow()
+  })
+})
