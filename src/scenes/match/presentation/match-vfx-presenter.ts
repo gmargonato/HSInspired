@@ -1,6 +1,7 @@
-import { Container, Sprite, Texture, type PointData } from 'pixi.js'
+import { Container, Sprite, Texture, type PointData, type Renderer } from 'pixi.js'
 import type { GameAssets } from '../../../visual-components/assets'
 import { AoeVfxShader } from '../../../visual-components/effects/aoe-vfx-shader'
+import { AoeMotes, AoeMoteTexture } from '../../../visual-components/effects/aoe-motes'
 import {
   MissileVfxShader,
   MISSILE_VFX_TIMING
@@ -66,11 +67,17 @@ interface ActiveEffect {
 export class MatchVfxPresenter {
   readonly layer = new Container()
   private readonly active = new Set<ActiveEffect>()
+  private readonly aoeMoteTexture?: AoeMoteTexture
 
   constructor(
-    private readonly assets: Pick<GameAssets, 'burnNoise' | 'playSpotlight1'>,
-    private readonly timeline: () => gsap.core.Timeline
+    private readonly assets: Pick<GameAssets, 'burnNoise' | 'playSpotlight1'> &
+      Partial<Pick<GameAssets, 'ghostSpotlight'>>,
+    private readonly timeline: () => gsap.core.Timeline,
+    renderer?: Renderer
   ) {
+    // Missile-only/headless consumers need no DOM texture; the game supplies both.
+    if (assets.ghostSpotlight && typeof document !== 'undefined')
+      this.aoeMoteTexture = new AoeMoteTexture(assets.ghostSpotlight, renderer)
     this.layer.label = 'game.vfx'
     this.layer.eventMode = 'none'
     this.layer.interactiveChildren = false
@@ -90,7 +97,13 @@ export class MatchVfxPresenter {
         : this.makeAoe(template, controllerIsLocal)
     if (!visual) return Promise.resolve()
     const seconds = template.tuning.durationMs / 1000
-    const impact = template.family === 'missile' ? MISSILE_VFX_TIMING.arrival : 0.28
+    const impactSeconds =
+      template.family === 'missile'
+        ? seconds * MISSILE_VFX_TIMING.arrival
+        : Math.min(
+            seconds,
+            (template.tuning.impactMs ?? template.tuning.durationMs * 0.28) / 1000
+          )
     const clock = { progress: 0 }
     const timeline = this.timeline()
     return new Promise((resolve) => {
@@ -120,7 +133,7 @@ export class MatchVfxPresenter {
         ease: 'none',
         onUpdate: () => visual.update(clock.progress, seconds)
       })
-      timeline.call(resolveImpact, undefined, seconds * impact)
+      timeline.call(resolveImpact, undefined, impactSeconds)
     })
   }
 
@@ -129,6 +142,7 @@ export class MatchVfxPresenter {
       effect.timeline.kill()
       effect.finish()
     }
+    this.aoeMoteTexture?.destroy()
   }
 
   private makeMissile(
@@ -220,11 +234,15 @@ export class MatchVfxPresenter {
   ): { update(progress: number, seconds: number): void; dispose(): void } | null {
     const areas = matchVfxAreas(template.zones, controllerIsLocal)
     if (!areas.length) return null
+    if (!this.aoeMoteTexture)
+      throw new Error('AOE VFX requires the ghostSpotlight asset')
     const group = new Container()
     group.label = `game.vfx.${template.id}`
     const boardShader = new AoeVfxShader(this.assets.burnNoise)
     const heroShader = new AoeVfxShader(this.assets.burnNoise)
-    for (const shader of [boardShader, heroShader]) shader.setPalette(template.tuning)
+    const friendlyHeroShader = new AoeVfxShader(this.assets.burnNoise, 1)
+    for (const shader of [boardShader, heroShader, friendlyHeroShader])
+      shader.setPalette(template.tuning)
     const tuning = {
       intensity: template.tuning.intensity,
       noiseScale: template.tuning.noiseScale,
@@ -236,7 +254,7 @@ export class MatchVfxPresenter {
     }
     boardShader.setTuning(tuning)
     heroShader.setTuning({ ...tuning, shape: 'radial', impact: true })
-    const tint = Number.parseInt(template.tuning.flameColor.slice(1), 16)
+    friendlyHeroShader.setTuning({ ...tuning, shape: 'radial', impact: true })
     const views = areas.map((id) => {
       const placement = MATCH_VFX_LAYOUT.areas[id]
       const area = new Container()
@@ -247,41 +265,53 @@ export class MatchVfxPresenter {
       sprite.anchor.set(0.5)
       sprite.width = placement.size.width
       sprite.height = placement.size.height
-      sprite.filters = [id.endsWith('Hero') ? heroShader.filter : boardShader.filter]
+      sprite.filters = [
+        id === (controllerIsLocal ? 'localHero' : 'remoteHero')
+          ? friendlyHeroShader.filter
+          : id.endsWith('Hero')
+            ? heroShader.filter
+            : boardShader.filter
+      ]
       area.addChild(sprite)
-      const sparks = particles(area, this.assets.playSpotlight1, area.label, 16)
-      for (const spark of sparks) spark.tint = tint
+      const friendly = id.startsWith(controllerIsLocal ? 'local' : 'remote')
+      const seed =
+        id === 'bothBoards'
+          ? 2
+          : id.endsWith('Hero')
+            ? friendly
+              ? 4
+              : 3
+            : friendly
+              ? 1
+              : 0
+      const motes = new AoeMotes(
+        this.aoeMoteTexture!.texture,
+        placement.size,
+        area.label,
+        seed
+      )
+      motes.setPalette(template.tuning)
+      area.addChild(motes.container)
       group.addChild(area)
-      return { sprite, sparks, size: placement.size }
+      return { sprite, motes }
     })
     this.layer.addChild(group)
     return {
       update(progress, seconds) {
         boardShader.setFrame(progress * seconds, progress)
         heroShader.setFrame(progress * seconds + 1.7, progress)
-        for (const { sparks, size } of views) {
-          for (const [index, spark] of sparks.entries()) {
-            const angle = (index / sparks.length) * Math.PI * 2
-            const variation = 0.52 + ((index * 37) % 39) / 100
-            const reach =
-              variation * smoothstep(0.02, 0.65, progress) * template.tuning.aoeRadius
-            spark.position.set(
-              Math.cos(angle) * size.width * 0.44 * reach,
-              Math.sin(angle) * size.height * 0.44 * reach
-            )
-            spark.alpha =
-              Math.sin(progress * Math.PI) * (1 - smoothstep(0.6, 1, progress)) * 0.65
-            const particleSize = 3 + ((index * 11) % 7) * (1 - progress * 0.38)
-            spark.width = particleSize
-            spark.height = particleSize
-            spark.rotation = angle + progress * seconds
-          }
-        }
+        friendlyHeroShader.setFrame(progress * seconds + 1.7, progress)
+        for (const { motes } of views)
+          motes.update(progress, template.tuning.aoeRadius, template.tuning.intensity)
       },
       dispose() {
-        for (const { sprite } of views) sprite.filters = null
+        for (const { sprite, motes } of views) {
+          sprite.filters = null
+          motes.destroy()
+        }
         boardShader.dispose()
         heroShader.dispose()
+        friendlyHeroShader.dispose()
         group.removeFromParent()
         group.destroy({ children: true })
       }

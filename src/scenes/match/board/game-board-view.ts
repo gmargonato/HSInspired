@@ -752,7 +752,11 @@ export class GameBoardView extends Actor {
 
   constructor(private readonly options: GameBoardViewOptions) {
     super()
-    this.vfxPresenter = new MatchVfxPresenter(options.gameAssets, () => this.timeline())
+    this.vfxPresenter = new MatchVfxPresenter(
+      options.gameAssets,
+      () => this.timeline(),
+      options.renderer
+    )
     this.boardPositions = new BoardPositionController(
       { layer: this.localMinionLayer, config: this.localBoardRowConfig() },
       { layer: this.remoteMinionLayer, config: this.remoteBoardRowConfig() },
