@@ -32,6 +32,9 @@ export interface VfxLabSettings {
   headGrowthMs: number
   missileLength: number
   missileWidth: number
+  aoeRedColorAuthored?: boolean
+  aoeSootColorAuthored?: boolean
+  aoeImpactMs?: number
   aoeRadius: number
   aoeEdgeSoftness: number
   aoeShape: AoeShape
@@ -106,6 +109,10 @@ export function settingsFromTemplate(
     settings.sootColor = template.tuning.sootColor ?? DEFAULT_VFX_LAB_SETTINGS.sootColor
   }
   if (template.family === 'aoe') {
+    settings.aoeImpactMs = template.tuning.impactMs
+    settings.edgeColor = template.tuning.redColor ?? template.tuning.flameColor
+    settings.aoeRedColorAuthored = template.tuning.redColor !== undefined
+    settings.aoeSootColorAuthored = template.tuning.sootColor !== undefined
     for (const zone of AOE_ZONES) settings[zone.key] = template.zones.includes(zone.key)
   }
   return settings
@@ -165,6 +172,16 @@ export function createTemplateFromSettings(
     zones: AOE_ZONES.filter(({ key }) => settings[key]).map(({ key }) => key),
     tuning: {
       ...common,
+      ...(settings.aoeSootColorAuthored ||
+      settings.sootColor !== DEFAULT_VFX_LAB_SETTINGS.sootColor
+        ? { sootColor: settings.sootColor }
+        : {}),
+      ...(settings.aoeImpactMs !== undefined
+        ? { impactMs: Math.min(settings.aoeImpactMs, settings.durationMs) }
+        : {}),
+      ...(settings.aoeRedColorAuthored || settings.edgeColor !== settings.flameColor
+        ? { redColor: settings.edgeColor }
+        : {}),
       aoeRadius: settings.aoeRadius,
       aoeEdgeSoftness: settings.aoeEdgeSoftness,
       aoeShape: settings.aoeShape

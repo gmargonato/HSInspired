@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Text, Texture, type Renderer } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../../visual-components/layout'
 import { AoeVfxShader } from '../../visual-components/effects/aoe-vfx-shader'
+import { AoeMotes, AoeMoteTexture } from '../../visual-components/effects/aoe-motes'
 import {
   MissileVfxShader,
   MISSILE_VFX_TIMING
@@ -88,6 +89,8 @@ export class VfxLab extends Container {
   private readonly missileShader: MissileVfxShader
   private readonly aoeShader: AoeVfxShader
   private readonly aoeImpactShader: AoeVfxShader
+  private readonly aoeFriendlyImpactShader: AoeVfxShader
+  private readonly aoeMoteTexture: AoeMoteTexture
   private readonly missileGroup = new Container()
   private readonly aoeGroup = new Container()
   private readonly missileSprite: Sprite
@@ -95,7 +98,7 @@ export class VfxLab extends Container {
     id: AoePreviewAreaId
     group: Container
     sprite: Sprite
-    particles: Sprite[]
+    motes: AoeMotes
   }[] = []
   private readonly missileParticles: Sprite[]
   private readonly missileGuide = new Graphics()
@@ -198,6 +201,11 @@ export class VfxLab extends Container {
 
     this.aoeShader = new AoeVfxShader(options.assets.burnNoise)
     this.aoeImpactShader = new AoeVfxShader(options.assets.burnNoise)
+    this.aoeFriendlyImpactShader = new AoeVfxShader(options.assets.burnNoise, 1)
+    this.aoeMoteTexture = new AoeMoteTexture(
+      options.assets.ghostSpotlight,
+      options.renderer
+    )
     this.aoeGroup.label = 'vfx-lab.aoe.effect'
     for (const id of Object.keys(LAYOUT.aoe.blasts) as AoePreviewAreaId[]) {
       const zone = LAYOUT.aoe.blasts[id]
@@ -210,17 +218,29 @@ export class VfxLab extends Container {
       sprite.height = zone.size.height
       sprite.label = group.label + '.shader'
       sprite.filters = [
-        id.endsWith('Hero') ? this.aoeImpactShader.filter : this.aoeShader.filter
+        id === 'friendlyHero'
+          ? this.aoeFriendlyImpactShader.filter
+          : id.endsWith('Hero')
+            ? this.aoeImpactShader.filter
+            : this.aoeShader.filter
       ]
       group.addChild(sprite)
-      const particles = makeParticles(
-        group,
-        options.assets.playSpotlight1,
+      const seed = {
+        enemyBoard: 0,
+        friendlyBoard: 1,
+        bothBoards: 2,
+        enemyHero: 3,
+        friendlyHero: 4
+      }[id]
+      const motes = new AoeMotes(
+        this.aoeMoteTexture.texture,
+        zone.size,
         group.label,
-        16
+        seed
       )
+      group.addChild(motes.container)
       this.aoeGroup.addChild(group)
-      this.aoeZones.push({ id, group, sprite, particles })
+      this.aoeZones.push({ id, group, sprite, motes })
     }
     for (const { key: id, label } of AOE_ZONES) {
       const zone = LAYOUT.aoe.zones[id]
@@ -292,10 +312,15 @@ export class VfxLab extends Container {
     this.disposed = true
     this.controls.dispose()
     this.missileSprite.filters = null
-    for (const zone of this.aoeZones) zone.sprite.filters = null
+    for (const zone of this.aoeZones) {
+      zone.sprite.filters = null
+      zone.motes.destroy()
+    }
+    this.aoeMoteTexture.destroy()
     this.missileShader.dispose()
     this.aoeShader.dispose()
     this.aoeImpactShader.dispose()
+    this.aoeFriendlyImpactShader.dispose()
   }
 
   private selectEffect(effect: VfxEffectId): void {
@@ -505,8 +530,21 @@ export class VfxLab extends Container {
       headGrowthMs: this.settings.headGrowthMs,
       durationMs: this.settings.durationMs
     })
-    this.aoeShader.setPalette(palette)
-    this.aoeImpactShader.setPalette(palette)
+    this.aoeShader.setPalette({
+      ...palette,
+      sootColor: this.settings.sootColor,
+      redColor: this.settings.edgeColor
+    })
+    this.aoeImpactShader.setPalette({
+      ...palette,
+      sootColor: this.settings.sootColor,
+      redColor: this.settings.edgeColor
+    })
+    this.aoeFriendlyImpactShader.setPalette({
+      ...palette,
+      sootColor: this.settings.sootColor,
+      redColor: this.settings.edgeColor
+    })
     const aoeTuning = {
       intensity: this.settings.intensity,
       noiseScale: this.settings.noiseScale,
@@ -518,6 +556,11 @@ export class VfxLab extends Container {
     }
     this.aoeShader.setTuning(aoeTuning)
     this.aoeImpactShader.setTuning({ ...aoeTuning, shape: 'radial', impact: true })
+    this.aoeFriendlyImpactShader.setTuning({
+      ...aoeTuning,
+      shape: 'radial',
+      impact: true
+    })
     const source = LAYOUT.missile.source.position
     const target = LAYOUT.missile.target.position
     const margin = Math.max(
@@ -538,11 +581,12 @@ export class VfxLab extends Container {
       { x: source.x - left, y: source.y - top },
       { x: target.x - left, y: target.y - top }
     )
-    for (const particle of [
-      ...this.missileParticles,
-      ...this.aoeZones.flatMap((zone) => zone.particles)
-    ])
+    for (const particle of this.missileParticles)
       particle.tint = colorValue(this.settings.flameColor)
+    for (const zone of this.aoeZones)
+      zone.motes.setPalette(
+        this.selectedTemplate?.family === 'aoe' ? this.selectedTemplate.tuning : palette
+      )
     this.drawAoeGuide()
   }
 
@@ -593,8 +637,11 @@ export class VfxLab extends Container {
   private updateAoe(progress: number): void {
     const active = this.playing && this.selectedEffect === 'aoe'
     this.aoeGroup.visible = this.selectedEffect === 'aoe' && !!this.selectedTemplate
-    this.aoeShader.setFrame(this.clockSeconds, active ? progress : 1)
-    this.aoeImpactShader.setFrame(this.clockSeconds + 1.7, active ? progress : 1)
+    // Match combat's cast-local clock so idle time cannot change hero replay.
+    const effectSeconds = (progress * this.settings.durationMs) / 1000
+    this.aoeShader.setFrame(effectSeconds, active ? progress : 1)
+    this.aoeImpactShader.setFrame(effectSeconds + 1.7, active ? progress : 1)
+    this.aoeFriendlyImpactShader.setFrame(effectSeconds + 1.7, active ? progress : 1)
     this.areaGuide.visible =
       this.selectedEffect === 'aoe' &&
       !!this.selectedTemplate &&
@@ -603,28 +650,11 @@ export class VfxLab extends Container {
     for (const zone of this.aoeZones) {
       zone.group.visible = areas.includes(zone.id)
       zone.sprite.visible = active
-      const size = LAYOUT.aoe.blasts[zone.id].size
-      for (let index = 0; index < zone.particles.length; index++) {
-        const particle = zone.particles[index]!
-        if (!active) {
-          particle.alpha = 0
-          continue
-        }
-        const angle = (index / zone.particles.length) * Math.PI * 2
-        const variation = 0.52 + ((index * 37) % 39) / 100
-        const reach =
-          variation * smoothstep(0.02, 0.65, progress) * this.settings.aoeRadius
-        particle.position.set(
-          Math.cos(angle) * size.width * 0.44 * reach,
-          Math.sin(angle) * size.height * 0.44 * reach
-        )
-        particle.alpha =
-          Math.sin(progress * Math.PI) * (1 - smoothstep(0.6, 1, progress)) * 0.65
-        const particleSize = 3 + ((index * 11) % 7) * (1 - progress * 0.38)
-        particle.width = particleSize
-        particle.height = particleSize
-        particle.rotation = angle + this.clockSeconds
-      }
+      zone.motes.update(
+        active ? progress : 1,
+        this.settings.aoeRadius,
+        this.settings.intensity
+      )
     }
   }
 

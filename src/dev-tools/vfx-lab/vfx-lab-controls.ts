@@ -129,6 +129,8 @@ const EFFECT_CONTROLS: Record<VfxEffectId, readonly ControlSpec[]> = {
     { key: 'showTargetGuides', label: 'Show hero endpoints', type: 'checkbox' }
   ],
   aoe: [
+    { key: 'edgeColor', label: 'Red / cool flame color', type: 'color' },
+    { key: 'sootColor', label: 'Ash / soot color', type: 'color' },
     {
       key: 'aoeRadius',
       label: 'Blast radius',
@@ -420,7 +422,13 @@ export class VfxLabControls {
         settings
       )
     }
-    this.addGroup('Flame color and intensity', COMMON_CONTROLS, settings)
+    this.addGroup(
+      'Flame color and intensity',
+      COMMON_CONTROLS.map((spec) =>
+        effect === 'aoe' && spec.key === 'durationMs' ? { ...spec, max: 5000 } : spec
+      ),
+      settings
+    )
     this.addGroup(
       effect === 'missile' ? 'Missile shape' : 'Area shape',
       EFFECT_CONTROLS[effect],
