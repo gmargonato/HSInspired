@@ -21,6 +21,15 @@ export interface VfxLabSettings {
   flowSpeed: number
   turbulence: number
   durationMs: number
+  headSurfaceColor: string
+  edgeColor: string
+  foldColor: string
+  glowColor: string
+  sootColor: string
+  missileGlow: number
+  headStartSize: number
+  headEndSize: number
+  headGrowthMs: number
   missileLength: number
   missileWidth: number
   aoeRadius: number
@@ -46,6 +55,15 @@ export const DEFAULT_VFX_LAB_SETTINGS: VfxLabSettings = {
   flowSpeed: 1.2,
   turbulence: 0.85,
   durationMs: 1800,
+  headSurfaceColor: '#d90c00',
+  edgeColor: '#ff6500',
+  foldColor: '#d84a08',
+  glowColor: '#ffb02e',
+  sootColor: '#1f130b',
+  missileGlow: 0.8,
+  headStartSize: 28,
+  headEndSize: 116,
+  headGrowthMs: 350,
   missileLength: VFX_DEFAULT_MISSILE_LENGTH,
   missileWidth: 0.32,
   aoeRadius: 0.92,
@@ -79,6 +97,13 @@ export function settingsFromTemplate(
     ...DEFAULT_VFX_LAB_SETTINGS,
     ...template.tuning,
     showTargetGuides
+  }
+  if (template.family === 'missile') {
+    settings.edgeColor = template.tuning.edgeColor ?? template.tuning.flameColor
+    settings.headSurfaceColor = template.tuning.headSurfaceColor ?? settings.edgeColor
+    settings.foldColor = template.tuning.foldColor ?? settings.edgeColor
+    settings.glowColor = template.tuning.glowColor ?? template.tuning.flameColor
+    settings.sootColor = template.tuning.sootColor ?? DEFAULT_VFX_LAB_SETTINGS.sootColor
   }
   if (template.family === 'aoe') {
     for (const zone of AOE_ZONES) settings[zone.key] = template.zones.includes(zone.key)
@@ -120,6 +145,15 @@ export function createTemplateFromSettings(
       family,
       tuning: {
         ...common,
+        headSurfaceColor: settings.headSurfaceColor,
+        edgeColor: settings.edgeColor,
+        foldColor: settings.foldColor,
+        glowColor: settings.glowColor,
+        sootColor: settings.sootColor,
+        missileGlow: settings.missileGlow,
+        headStartSize: settings.headStartSize,
+        headEndSize: settings.headEndSize,
+        headGrowthMs: settings.headGrowthMs,
         missileLength: settings.missileLength,
         missileWidth: settings.missileWidth
       }

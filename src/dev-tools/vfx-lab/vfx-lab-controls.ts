@@ -80,6 +80,36 @@ const COMMON_CONTROLS: readonly ControlSpec[] = [
 
 const EFFECT_CONTROLS: Record<VfxEffectId, readonly ControlSpec[]> = {
   missile: [
+    { key: 'headSurfaceColor', label: 'Head surface color', type: 'color' },
+    { key: 'edgeColor', label: 'Outer flame color', type: 'color' },
+    { key: 'foldColor', label: 'Fold color', type: 'color' },
+    { key: 'glowColor', label: 'Glow color', type: 'color' },
+    { key: 'sootColor', label: 'Soot color', type: 'color' },
+    { key: 'missileGlow', label: 'Glow', type: 'range', min: 0, max: 2, step: 0.05 },
+    {
+      key: 'headStartSize',
+      label: 'Head start diameter',
+      type: 'range',
+      min: 8,
+      max: 240,
+      step: 1
+    },
+    {
+      key: 'headEndSize',
+      label: 'Head final diameter',
+      type: 'range',
+      min: 16,
+      max: 400,
+      step: 1
+    },
+    {
+      key: 'headGrowthMs',
+      label: 'Head growth time',
+      type: 'range',
+      min: 0,
+      max: 600,
+      step: 10
+    },
     {
       key: 'missileLength',
       label: 'Wake length',
@@ -458,8 +488,9 @@ export class VfxLabControls {
   }
 
   private formatValue(key: VfxLabSettingKey, value: number): string {
-    if (key === 'durationMs') return Math.round(value) + ' ms'
-    if (key === 'missileLength') return Math.round(value) + ' px'
+    if (key === 'durationMs' || key === 'headGrowthMs') return Math.round(value) + ' ms'
+    if (key === 'missileLength' || key === 'headStartSize' || key === 'headEndSize')
+      return Math.round(value) + ' px'
     return value.toFixed(2)
   }
 

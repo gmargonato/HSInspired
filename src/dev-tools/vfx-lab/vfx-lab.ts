@@ -484,14 +484,26 @@ export class VfxLab extends Container {
       flameColor: this.settings.flameColor,
       coreColor: this.settings.coreColor
     }
-    this.missileShader.setPalette(palette)
+    this.missileShader.setPalette({
+      ...palette,
+      headSurfaceColor: this.settings.headSurfaceColor,
+      edgeColor: this.settings.edgeColor,
+      foldColor: this.settings.foldColor,
+      glowColor: this.settings.glowColor,
+      sootColor: this.settings.sootColor
+    })
     this.missileShader.setTuning({
       intensity: this.settings.intensity,
       noiseScale: this.settings.noiseScale,
       flowSpeed: this.settings.flowSpeed,
       turbulence: this.settings.turbulence,
       width: this.settings.missileWidth,
-      trailLength: this.settings.missileLength
+      trailLength: this.settings.missileLength,
+      glow: this.settings.missileGlow,
+      headStartSize: this.settings.headStartSize,
+      headEndSize: this.settings.headEndSize,
+      headGrowthMs: this.settings.headGrowthMs,
+      durationMs: this.settings.durationMs
     })
     this.aoeShader.setPalette(palette)
     this.aoeImpactShader.setPalette(palette)
@@ -508,7 +520,12 @@ export class VfxLab extends Container {
     this.aoeImpactShader.setTuning({ ...aoeTuning, shape: 'radial', impact: true })
     const source = LAYOUT.missile.source.position
     const target = LAYOUT.missile.target.position
-    const margin = LAYOUT.missile.margin
+    const margin = Math.max(
+      LAYOUT.missile.margin,
+      Math.max(this.settings.headStartSize ?? 28, this.settings.headEndSize ?? 116) *
+        0.8 +
+        24
+    )
     const left = Math.min(source.x, target.x) - margin
     const top = Math.min(source.y, target.y) - margin
     const width = Math.abs(target.x - source.x) + margin * 2

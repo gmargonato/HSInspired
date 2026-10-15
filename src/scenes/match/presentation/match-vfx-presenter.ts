@@ -138,7 +138,15 @@ export class MatchVfxPresenter {
   ): { update(progress: number, seconds: number): void; dispose(): void } {
     const group = new Container()
     group.label = `game.vfx.${template.id}`
-    const margin = MATCH_VFX_LAYOUT.missileMargin
+    const margin = Math.max(
+      MATCH_VFX_LAYOUT.missileMargin,
+      Math.max(
+        template.tuning.headStartSize ?? 28,
+        template.tuning.headEndSize ?? 116
+      ) *
+        0.8 +
+        24
+    )
     const left = Math.min(source.x, target.x) - margin
     const top = Math.min(source.y, target.y) - margin
     const width = Math.abs(target.x - source.x) + margin * 2
@@ -152,7 +160,12 @@ export class MatchVfxPresenter {
       flowSpeed: template.tuning.flowSpeed,
       turbulence: template.tuning.turbulence,
       width: template.tuning.missileWidth,
-      trailLength: template.tuning.missileLength
+      trailLength: template.tuning.missileLength,
+      glow: template.tuning.missileGlow,
+      headStartSize: template.tuning.headStartSize,
+      headEndSize: template.tuning.headEndSize,
+      headGrowthMs: template.tuning.headGrowthMs,
+      durationMs: template.tuning.durationMs
     })
     shader.setGeometry(
       { width, height },

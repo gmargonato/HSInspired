@@ -33,7 +33,8 @@
     "dist": "electron-vite build && electron-builder",
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:mac": "electron-vite build && electron-builder --mac",
-    "dist:linux": "electron-vite build && electron-builder --linux"
+    "dist:linux": "electron-vite build && electron-builder --linux",
+    "test:missile-vfx": "node scripts/check-missile-vfx.cjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",

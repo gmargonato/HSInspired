@@ -27,6 +27,18 @@ export type VfxTemplate =
       readonly name: string
       readonly family: 'missile'
       readonly tuning: VfxCommonTuning & {
+        /** Optional for compatibility with existing saved templates. */
+        readonly headSurfaceColor?: string
+        readonly edgeColor?: string
+        readonly foldColor?: string
+        readonly glowColor?: string
+        readonly sootColor?: string
+        readonly missileGlow?: number
+        /** Fireball head diameters, in design pixels. */
+        readonly headStartSize?: number
+        readonly headEndSize?: number
+        /** Milliseconds to reach the final head diameter; zero grows immediately. */
+        readonly headGrowthMs?: number
         readonly missileLength: number
         readonly missileWidth: number
       }
@@ -88,6 +100,12 @@ function color(value: unknown, label: string): string {
   return value
 }
 
+function headSize(value: unknown, label: string): number {
+  const size = numberInRange(value, 0, 1000, label)
+  if (size === 0) throw new Error(`${label} must be greater than zero`)
+  return size
+}
+
 function tuning(value: unknown): VfxCommonTuning {
   const source = record(value, 'tuning')
   return {
@@ -135,6 +153,40 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
         family: 'missile',
         tuning: {
           ...common,
+          ...(values.headSurfaceColor !== undefined
+            ? { headSurfaceColor: color(values.headSurfaceColor, 'headSurfaceColor') }
+            : {}),
+          ...(values.edgeColor !== undefined
+            ? { edgeColor: color(values.edgeColor, 'edgeColor') }
+            : {}),
+          ...(values.foldColor !== undefined
+            ? { foldColor: color(values.foldColor, 'foldColor') }
+            : {}),
+          ...(values.glowColor !== undefined
+            ? { glowColor: color(values.glowColor, 'glowColor') }
+            : {}),
+          ...(values.sootColor !== undefined
+            ? { sootColor: color(values.sootColor, 'sootColor') }
+            : {}),
+          ...(values.missileGlow !== undefined
+            ? { missileGlow: numberInRange(values.missileGlow, 0, 2, 'missileGlow') }
+            : {}),
+          ...(values.headStartSize !== undefined
+            ? { headStartSize: headSize(values.headStartSize, 'headStartSize') }
+            : {}),
+          ...(values.headEndSize !== undefined
+            ? { headEndSize: headSize(values.headEndSize, 'headEndSize') }
+            : {}),
+          ...(values.headGrowthMs !== undefined
+            ? {
+                headGrowthMs: numberInRange(
+                  values.headGrowthMs,
+                  0,
+                  5000,
+                  'headGrowthMs'
+                )
+              }
+            : {}),
           missileLength: numberInRange(values.missileLength, 150, 750, 'missileLength'),
           missileWidth: numberInRange(values.missileWidth, 0.12, 0.48, 'missileWidth')
         }
