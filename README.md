@@ -46,6 +46,16 @@ The game features animated card auras, premium card appearances, board shadows,
 ghostly mist and particles, card and Secret reveals, combat, and selected
 hero-power animations. In development, press **F3** to toggle GPU effects.
 
+Damage and character-destruction shaders are opt-in: set an action's `vfx` key in
+its card JSON. Hero powers declare the key beside their effect in
+`src/game-rules/content/hero-powers/hero-power-catalog.ts`; card-authored power
+overrides and generated Kazakus ingredients carry their own explicit keys.
+An omitted key produces no shader. `config/vfx-templates.json` owns the reusable
+fire missile and fire AoE tuning, including explicit friendly/enemy coverage.
+Repeated hits play individual missiles; simultaneous hits share an impact boundary.
+Power missiles start at the power center, minion effects at the visible source,
+and spells or missing sources at the controller's hero.
+
 ## Run locally
 
 Requires Node.js 20+ and npm.

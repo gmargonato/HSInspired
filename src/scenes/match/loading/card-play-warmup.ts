@@ -43,6 +43,20 @@ export function prewarmCardPlay(renderer: Renderer, assets: GameAssets): void {
       sprite.tint = CARD_PLAY_AURA_TINT
       root.addChild(sprite)
     }
+    // Landing dust uses untinted, normal-blended sprites rather than additive glows.
+    for (const [index, texture] of [
+      assets.landingDust1,
+      assets.landingDust2,
+      assets.landingDust3,
+      assets.landingDust4
+    ].entries()) {
+      const sprite = new Sprite(texture)
+      sprite.label = `game.card-play-warmup.dust-${index}`
+      sprite.width = sprite.height = 24
+      sprite.alpha = 0.5
+      sprite.blendMode = 'normal'
+      root.addChild(sprite)
+    }
     // Spell and hero casts also exercise the perspective mesh path.
     for (const [name, texture] of Object.entries({
       spell: assets.spellPlayAura,

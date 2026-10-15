@@ -253,3 +253,201 @@ describe('aura-modified hero powers', () => {
     ).toMatchObject({ attack: beastMinion.attack + 3, health: beastMinion.health + 3 })
   })
 })
+
+describe('explicit hero power VFX', () => {
+  it.each(['jaina', 'rexxar', 'guldan'])(
+    '%s uses only its authored visual for either participant',
+    (heroId) => {
+      const s = createMatchScenario({ firstHeroId: heroId, secondHeroId: heroId })
+      s.confirmBothMulligans()
+      for (let turn = 0; turn < 2; turn++) {
+        const id = s.match.getState().activePlayerId!
+        const enemy = s.participants.find((other) => other !== id)!
+        s.match.dispatch({
+          type: 'dev-set-mana',
+          participantId: id,
+          available: 10,
+          maximum: 10
+        })
+        const result = s.match.dispatch({
+          type: 'use-hero-power',
+          participantId: id,
+          ...(heroId === 'jaina'
+            ? { target: { kind: 'hero' as const, participantId: enemy } }
+            : {})
+        })
+        expect(result.accepted).toBe(true)
+        if (!result.accepted) throw new Error(result.message)
+        const cues = result.events.filter((e) => e.type === 'effect-vfx-started')
+        if (heroId === 'guldan') expect(cues).toHaveLength(0)
+        else {
+          expect(cues).toHaveLength(1)
+          expect(cues[0]).toMatchObject({
+            origin: 'hero-power',
+            controllerId: id,
+            vfxId: 'fire-missile',
+            targetInstanceIds: [enemy + ':hero']
+          })
+          const outcome = result.events.find((e) => e.type === 'character-damaged')
+          expect(outcome).toBeDefined()
+          expect(result.events.indexOf(cues[0])).toBeLessThan(
+            result.events.indexOf(outcome!)
+          )
+        }
+        s.match.dispatch({ type: 'end-turn', participantId: id })
+      }
+    }
+  )
+})
+
+describe('Charged Hammer replacement', () => {
+  it.each(['thrall', 'jaina'])(
+    'replaces %s power with a refreshed, targeted Lightning Jolt',
+    (heroId) => {
+      const s = createMatchScenario({
+        cardId: 'the_grand_tournament_charged_hammer',
+        firstHeroId: heroId,
+        secondHeroId: heroId
+      })
+      s.confirmBothMulligans()
+      const own = s.match.getState().activePlayerId!
+      const enemy = s.participants.find((id) => id !== own)!
+      const mana = () =>
+        s.match.dispatch({
+          type: 'dev-set-mana',
+          participantId: own,
+          available: 10,
+          maximum: 10
+        })
+      const equip = () => {
+        mana()
+        const result = s.match.dispatch({
+          type: 'play-card',
+          participantId: own,
+          cardInstanceId: player(s, own).hand.find(
+            (c) => c.cardId === 'the_grand_tournament_charged_hammer'
+          )!.instanceId
+        })
+        expect(result.accepted).toBe(true)
+        return result
+      }
+      mana()
+      expect(
+        s.match.dispatch({
+          type: 'use-hero-power',
+          participantId: own,
+          ...(heroId === 'jaina'
+            ? { target: { kind: 'hero' as const, participantId: enemy } }
+            : {})
+        }).accepted
+      ).toBe(true)
+      equip()
+      expect(player(s, own).heroPower.available).toBe(false)
+      const replacement = equip() // Replacing the equipped weapon triggers its Deathrattle.
+      expect(replacement.events).toContainEqual(
+        expect.objectContaining({
+          type: 'hero-power-replaced',
+          heroPowerId: 'shaman-lightning-jolt'
+        })
+      )
+      expect(player(s, own).heroPower).toMatchObject({
+        id: 'shaman-lightning-jolt',
+        cost: 2,
+        baseCost: 2,
+        targetType: 'any-character',
+        available: true,
+        usesThisTurn: 0
+      })
+      expect(player(s, own).heroPower.effectOverride).toBeUndefined()
+      expect(
+        s.match.dispatch({ type: 'use-hero-power', participantId: own }).accepted
+      ).toBe(false)
+      const before = player(s, enemy).hero.health
+      const manaBefore = player(s, own).mana.available
+      const result = s.match.dispatch({
+        type: 'use-hero-power',
+        participantId: own,
+        target: { kind: 'hero', participantId: enemy }
+      })
+      expect(result.accepted).toBe(true)
+      expect(player(s, enemy).hero.health).toBe(before - 2)
+      expect(player(s, own).mana.available).toBe(manaBefore - 2)
+      expect(
+        result.events.filter((e) => e.type === 'effect-vfx-started')
+      ).toMatchObject([
+        {
+          vfxId: 'fire-missile',
+          origin: 'hero-power',
+          controllerId: own,
+          targetInstanceIds: [enemy + ':hero']
+        }
+      ])
+      expect(
+        s.match.dispatch({
+          type: 'use-hero-power',
+          participantId: own,
+          target: { kind: 'hero', participantId: enemy }
+        }).accepted
+      ).toBe(false)
+      equip()
+      expect(player(s, own).heroPower).toMatchObject({
+        id: 'shaman-lightning-jolt',
+        available: true,
+        usesThisTurn: 0
+      })
+      const ownHealth = player(s, own).hero.health
+      expect(
+        s.match.dispatch({
+          type: 'use-hero-power',
+          participantId: own,
+          target: { kind: 'hero', participantId: own }
+        }).accepted
+      ).toBe(true)
+      expect(player(s, own).hero.health).toBe(ownHealth - 2)
+    }
+  )
+})
+
+it('retains a triggered missile impact when a hero power kills a deathrattle minion', () => {
+  const s = createMatchScenario({ firstHeroId: 'jaina', secondHeroId: 'jaina' })
+  s.confirmBothMulligans()
+  const own = s.match.getState().activePlayerId!
+  const enemy = s.participants.find((id) => id !== own)!
+  s.match.dispatch({
+    type: 'dev-set-mana',
+    participantId: own,
+    available: 10,
+    maximum: 10
+  })
+  s.match.dispatch({
+    type: 'dev-summon-minion',
+    participantId: enemy,
+    cardId: 'classic_leper_gnome'
+  })
+  const minion = player(s, enemy).board[0]
+  const result = s.match.dispatch({
+    type: 'use-hero-power',
+    participantId: own,
+    target: { kind: 'minion', participantId: enemy, instanceId: minion.instanceId }
+  })
+  expect(result.accepted).toBe(true)
+  if (!result.accepted) throw new Error(result.message)
+  const cue = result.events.find(
+    (e) => e.type === 'effect-vfx-started' && e.sourceInstanceId === minion.instanceId
+  )
+  expect(cue).toBeDefined()
+  if (cue?.type !== 'effect-vfx-started') throw new Error('Missing deathrattle missile')
+  const outcome = result.events.find(
+    (e) => e.type === 'effect-resolved' && e.vfxGroupId === cue.vfxGroupId
+  )
+  expect(outcome).toMatchObject({ action: 'damage', data: { target: own + ':hero' } })
+  expect(result.events.indexOf(outcome!)).toBeGreaterThan(result.events.indexOf(cue))
+  const direct = result.events.find(
+    (e) => e.type === 'effect-resolved' && e.actionPath.startsWith('hero-power.damage.')
+  )
+  expect(direct).toBeDefined()
+  expect(result.events.indexOf(direct!)).toBeLessThan(result.events.indexOf(cue))
+  expect(result.events.find((e) => e.type === 'character-damaged')).toMatchObject({
+    vfxGroupId: direct?.type === 'effect-resolved' ? direct.vfxGroupId : undefined
+  })
+})

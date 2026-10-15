@@ -256,6 +256,8 @@ export interface CardReveal {
 }
 
 export interface EffectDomainEvent {
+  /** Explicit visual wave owning this outcome. */
+  readonly vfxGroupId?: string
   /** Presentation-only identity of one summon-producing action execution. */
   readonly summonGroupId?: string
   readonly type: 'effect-resolved'
@@ -281,6 +283,15 @@ export interface EffectVfxEvent {
   readonly controllerId: PlayerId
   readonly actionPath: string
   readonly targetInstanceId?: string
+  readonly targetInstanceIds?: readonly string[]
+  readonly origin?: 'source' | 'hero-power'
+  readonly vfxGroupId?: string
+  readonly correlation?: ResolutionCorrelation
+  /** Complete set of visuals for a mixed simultaneous damage group. */
+  readonly visuals?: readonly {
+    readonly vfxId: string
+    readonly targetInstanceIds: readonly string[]
+  }[]
 }
 
 /**
@@ -333,6 +344,8 @@ export interface MinionSummonedEvent {
   /** Presentation-only identity of one summon-producing action execution. */
   readonly summonGroupId?: string
   readonly type: 'minion-summoned'
+  /** Original card zone for an existing card moved into play. */
+  readonly sourceZone?: RuntimeZone
   readonly participantId: PlayerId
   readonly minion: BoardMinion
   readonly position: number
@@ -475,7 +488,10 @@ export interface PlayerHeroPower {
   readonly baseCost?: number
   readonly targetType?: string
   readonly targetingGranted?: string | null
-  readonly effectOverride?: Readonly<{ readonly damage?: number }>
+  readonly effectOverride?: Readonly<{
+    readonly damage?: number
+    readonly vfx?: string
+  }>
   readonly enchantments?: readonly RuntimeEnchantment[]
 }
 
@@ -974,6 +990,8 @@ export interface HeroPowerReplacedEvent {
 }
 
 export interface CharacterDamagedEvent {
+  /** Direct effect outcome already presents this damage at the visual impact. */
+  readonly vfxGroupId?: string
   readonly type: 'character-damaged'
   readonly source: 'hero-power' | 'fatigue'
   readonly participantId: PlayerId

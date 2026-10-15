@@ -5,15 +5,21 @@ import { MINION_LAYOUT } from './minion-layout'
 
 export const MINION_CURTAIN_TUNING = {
   count: 18,
-  duration: 3,
-  minSize: 6,
-  maxSize: 14,
-  opacity: 0.7,
+  duration: 4,
+  minSize: 24,
+  maxSize: 42,
+  opacity: 1,
   drift: 2,
   spellDamage: 0x48aaff,
   buffed: 0xffb638,
   debuffed: 0xff3636
 } as const
+
+// Stable visual variation without consuming the match RNG.
+function variation(index: number): number {
+  const value = Math.sin(index * 127.1) * 43758.5453
+  return value - Math.floor(value)
+}
 
 export interface MinionCurtainState {
   readonly spellDamage: boolean
@@ -68,7 +74,7 @@ export class MinionStatusCurtainEffect {
         sprite.anchor.set(0.5)
         sprite.tint = MINION_CURTAIN_TUNING[kind]
         sprite.blendMode = 'add'
-        const fraction = ((i * 7) % 17) / 17
+        const fraction = variation(i + 1)
         sprite.width = sprite.height =
           MINION_CURTAIN_TUNING.minSize +
           fraction * (MINION_CURTAIN_TUNING.maxSize - MINION_CURTAIN_TUNING.minSize)
@@ -97,36 +103,37 @@ export class MinionStatusCurtainEffect {
       band.animations.kill()
       if (!band.layer.visible) continue
       const bandIndex = this.bands.indexOf(band)
-      const draw = (): void => {
+      const draw = (elapsed: number): void => {
         const { width, height } = MINION_LAYOUT.statusCurtain.size
         for (let i = 0; i < band.particles.length; i++) {
           const sprite = band.particles[i]
-          const phase = (band.clock.phase + i / band.particles.length) % 1
-          const lane = ((i * 0.61803398875 + bandIndex * 0.23) % 1) * 2 - 1
+          const speed = 0.75 + variation(i + 31 + bandIndex) * 0.5
+          const phase = (elapsed * speed + variation(i * (bandIndex + 1))) % 1
+          const side = i % 2 === 0 ? -1 : 1
           const y = (phase - 0.5) * height
+          // Follow the oval sides, keeping the portrait center clear.
+          const edgeX =
+            (width / 2) * Math.sqrt(Math.max(0, 1 - (y / (height / 2)) ** 2))
+          const lane = 0.68 + variation(i + 17 + bandIndex) * 0.18
           sprite.position.set(
-            lane * width * 0.43 +
+            side * edgeX * lane +
               Math.sin(phase * Math.PI * 2 + i) * MINION_CURTAIN_TUNING.drift,
             band.kind === 'debuffed' ? y : -y
           )
-          const edge = Math.max(
-            0,
-            1 - (sprite.x / (width / 2)) ** 2 - (sprite.y / (height / 2)) ** 2
-          )
           sprite.alpha =
             MINION_CURTAIN_TUNING.opacity *
-            Math.sin(phase * Math.PI) *
-            Math.min(1, edge * 5)
+            Math.min(1, phase / 0.15, (1 - phase) / 0.15)
         }
       }
       band.clock.phase = 0
-      draw()
-      band.animations.to(band.clock, {
+      draw(0)
+      const loop = band.animations.to(band.clock, {
         phase: 1,
         duration: MINION_CURTAIN_TUNING.duration,
         repeat: -1,
         ease: 'none',
-        onUpdate: draw
+        // Total time keeps individual speeds continuous across clock repeats.
+        onUpdate: () => draw(loop.totalTime() / MINION_CURTAIN_TUNING.duration)
       })
     }
   }

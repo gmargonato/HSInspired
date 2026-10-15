@@ -98,7 +98,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           }
         ],
         "then": {
@@ -177,7 +178,8 @@
               "selection": "random"
             },
             "amount": 1,
-            "hits": 2
+            "hits": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -204,7 +206,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 4
+            "amount": 4,
+            "vfx": "fire-missile"
           }
         ]
       },
@@ -392,7 +395,8 @@
               "selection": "all",
               "filter": { "damaged": false }
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-blast-enemy-board"
           }
         ]
       }
@@ -419,7 +423,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           },
           {
             "action": "unlock-overload",
@@ -477,7 +482,8 @@
               "selection": "all",
               "filter": { "tribe": "Demon", "negate": true }
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -539,7 +545,8 @@
               },
               "thenValue": 3,
               "elseValue": 1
-            }
+            },
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -565,7 +572,8 @@
           {
             "action": "damage",
             "target": { "controller": "opponent", "type": "hero", "selection": "all" },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -716,7 +724,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -864,7 +873,8 @@
               "type": "minion",
               "selection": "chosen",
               "filter": { "rarity": "Legendary" }
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }

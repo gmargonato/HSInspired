@@ -59,6 +59,7 @@ export class DeckSelectionView extends Container {
   private navigationStarted = false
   private currentPageIndex = 0
   private rankMedalSprite!: Sprite
+  private rankBannerSprite!: Sprite
   private rankMedalNumber!: Text
   private rankMedalAssets: DeckSelectionAssets | null = null
 
@@ -127,6 +128,12 @@ export class DeckSelectionView extends Container {
     this.rankMedalSprite.label = 'deck-selection.rank-medal'
     this.addChild(this.rankMedalSprite)
 
+    this.rankBannerSprite = new Sprite(assets.rankBanner)
+    applyAnchoredPlacement(this.rankBannerSprite, DECK_SELECTION_LAYOUT.rankBanner)
+    this.rankBannerSprite.eventMode = 'none'
+    this.rankBannerSprite.label = 'deck-selection.rank-banner'
+    this.addChild(this.rankBannerSprite)
+
     this.rankMedalNumber = new Text({
       text: '',
       style: DECK_SELECTION_LAYOUT.rankNumberStyle
@@ -150,6 +157,7 @@ export class DeckSelectionView extends Container {
   }
 
   private applyRankMedal(rank: ConstructedRankSnapshot): void {
+    this.rankBannerSprite.visible = rank.tier !== 'legend'
     applyAnchoredPlacement(this.rankMedalSprite, DECK_SELECTION_LAYOUT.rankMedal)
     applyAnchoredPlacement(
       this.rankMedalNumber,

@@ -2,6 +2,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HoverPreviewController } from './hover-preview-controller'
 
 describe('HoverPreviewController', () => {
+  it('rejects entry and delayed activation while a gesture owns input', () => {
+    let enabled = false
+    const activate = vi.fn()
+    const leave = vi.fn()
+    const controller = new HoverPreviewController({
+      delayMs: 600,
+      isEnabled: () => enabled,
+      key: (target: string) => target,
+      onEnter: vi.fn(),
+      onActivate: activate,
+      onLeave: leave
+    })
+    controller.enter('minion')
+    expect(controller.currentKey()).toBeNull()
+    enabled = true
+    controller.enter('minion')
+    enabled = false
+    vi.advanceTimersByTime(600)
+    expect(activate).not.toHaveBeenCalled()
+    expect(leave).toHaveBeenCalledWith('minion')
+    enabled = true
+    controller.enter('weapon')
+    vi.advanceTimersByTime(600)
+    expect(activate).toHaveBeenCalledWith('weapon')
+    controller.dispose()
+  })
   beforeEach(() => {
     vi.useFakeTimers()
   })

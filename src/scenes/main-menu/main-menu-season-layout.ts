@@ -8,21 +8,21 @@ export const MAIN_MENU_SEASON_LAYOUT = {
     { anchor: TOP_LEFT }
   ),
   medal: placement(
-    { x: 960, y: 455 },
-    { width: 123, height: 159 },
+    { x: 960, y: 435 },
+    { width: 512, height: 512 },
     {
       anchor: CENTER,
-      scale: 2.3,
-      note: 'Previous-season medal in the black hexagonal socket.'
+      scale: 0.66,
+      note: '512px canvas; visible medal fitted to the approximately 285 by 325 socket.'
     }
   ),
   legendMedal: placement(
     { x: 957, y: 435 },
-    { width: 117, height: 135 },
+    { width: 512, height: 512 },
     {
       anchor: CENTER,
-      scale: 2.45,
-      note: 'Legend gem in the black hexagonal socket.'
+      scale: 0.66,
+      note: '512px canvas; Legend gem fitted to the black hexagonal socket.'
     }
   ),
   legendRankNumber: placement(

@@ -183,7 +183,8 @@
               "type": "character",
               "selection": "random"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -246,7 +247,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           },
           {
             "action": "shuffle-into-deck",
@@ -349,7 +351,8 @@
               "controller": "opponent",
               "type": "minion",
               "selection": "event-target"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -503,7 +506,8 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-blast-both-boards"
           },
           {
             "action": "shuffle-into-deck",
@@ -654,7 +658,8 @@
               "type": "character",
               "selection": "random"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -983,7 +988,8 @@
               "type": "character",
               "selection": "random"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -1452,7 +1458,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 6
+            "amount": 6,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -1770,7 +1777,8 @@
               "selection": "random"
             },
             "amount": 1,
-            "hits": 10
+            "hits": 10,
+            "vfx": "fire-missile"
           }
         ]
       }

@@ -163,7 +163,7 @@ export class CardPlayAnimation extends Actor {
       settle = this.timeline()
       settle.to(
         aura,
-        { alpha: 0, duration: profile.aura.fadeDuration, ease: 'power2.out' },
+        { alpha: 0, duration: profile.aura.fadeDuration, ease: 'power2.in' },
         0
       )
       settle.to(

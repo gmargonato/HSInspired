@@ -327,7 +327,8 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -695,7 +696,8 @@
                 "negate": true
               }
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -765,7 +767,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -937,7 +940,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 4
+            "amount": 4,
+            "vfx": "fire-missile"
           },
           {
             "action": "summon-jade-golem",
@@ -1084,7 +1088,8 @@
               "controller": "any",
               "type": "minion",
               "selection": "chosen"
-            }
+            },
+            "vfx": "fire-missile"
           },
           {
             "action": "destroy-mana-crystal",
@@ -1151,7 +1156,8 @@
               "type": "character",
               "selection": "all"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-blast-all-characters"
           }
         ]
       }
@@ -1181,7 +1187,8 @@
               "selection": "all",
               "exclude": "source"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-blast-all-characters"
           }
         ]
       }
@@ -1213,7 +1220,8 @@
                 "damaged": true
               }
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -2180,7 +2188,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -2244,7 +2253,8 @@
               "type": "character",
               "selection": "hero"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -2543,7 +2553,8 @@
               "type": "character",
               "selection": "random"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           },
           {
             "action": "damage",
@@ -2552,7 +2563,8 @@
               "type": "character",
               "selection": "random"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           },
           {
             "action": "damage",
@@ -2561,7 +2573,8 @@
               "type": "character",
               "selection": "random"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -2746,7 +2759,8 @@
             },
             "amount": {
               "reference": "source.attack"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -3116,7 +3130,8 @@
             },
             "amount": {
               "reference": "source.attack"
-            }
+            },
+            "vfx": "fire-blast-enemy-board"
           }
         ]
       }
@@ -3842,7 +3857,8 @@
             },
             "amount": {
               "reference": "source.attack"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -4307,7 +4323,8 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-missile"
           }
         ]
       },

@@ -102,7 +102,7 @@ export const MINION_LAYOUT = {
     }
   ),
   deathrattle: placement(
-    { x: 75, y: 160 },
+    { x: 80, y: 160 },
     { width: 80, height: 53 },
     {
       anchor: CENTER,
@@ -130,7 +130,10 @@ export const MINION_LAYOUT = {
   statusCurtain: placement(
     { x: 80, y: 90 },
     { width: 127, height: 169 },
-    { anchor: CENTER, note: 'Soft particle curtain across the portrait and frame.' }
+    {
+      anchor: CENTER,
+      note: 'Sparkle streams following the left and right portrait edges.'
+    }
   ),
   lifesteal: placement(
     { x: 80, y: 160 },

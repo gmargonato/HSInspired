@@ -1,14 +1,71 @@
-import { Container, Sprite } from 'pixi.js'
+import { Container, Sprite, type Texture } from 'pixi.js'
 import type { AnimationScope } from '../../../visual-components/animation/animations'
 import type { GameAssets } from '../../../visual-components/assets'
 import {
   applyAnchoredPlacement,
   type LayoutPoint
 } from '../../../visual-components/layout'
-import { COMBAT_IMPACT_LAYOUT as LAYOUT } from './combat-impact-layout'
+import {
+  COMBAT_IMPACT_LAYOUT as LAYOUT,
+  COMBAT_DAMAGE_REVEAL_DELAY
+} from './combat-impact-layout'
 import type { DamageIndicatorView } from './damage-indicator-view'
 
 type ImpactAnimations = Pick<AnimationScope, 'timeline' | 'cancel'>
+
+let previousFlashRotation: number | undefined
+
+/** Shared by playback and loading so every flipbook frame is warmed. */
+export function combatHitSparkFrames(assets: GameAssets): readonly Texture[] {
+  return [
+    assets.combatHitSpark1,
+    assets.combatHitSpark2,
+    assets.combatHitSpark3,
+    assets.combatHitSpark4,
+    assets.combatHitSpark5,
+    assets.combatHitSpark6,
+    assets.combatHitSpark7
+  ]
+}
+
+/** A full-size sibling of the popping number, following the same character. */
+export function addCombatDamageFlipbook(
+  indicator: DamageIndicatorView,
+  assets: GameAssets,
+  animations: ImpactAnimations
+): void {
+  const frames = combatHitSparkFrames(assets)
+  const flipbook = new Sprite(frames[0])
+  flipbook.label = 'game.damage-indicator.hit-flipbook'
+  flipbook.eventMode = 'none'
+  flipbook.visible = false
+  applyAnchoredPlacement(flipbook, LAYOUT.flipbook.placement)
+  indicator.addChildAt(flipbook, 0)
+
+  const timeline = animations.timeline()
+  const finish = (): void => {
+    if (!flipbook.destroyed) flipbook.destroy()
+  }
+  flipbook.once('destroyed', () => animations.cancel(timeline))
+  for (const [index, texture] of frames.entries()) {
+    timeline.call(
+      () => {
+        flipbook.texture = texture
+        flipbook.visible = true
+      },
+      [],
+      LAYOUT.flipbook.delay + index * LAYOUT.flipbook.frameDuration
+    )
+  }
+  // Hold the final, nearly transparent frame for one complete frame interval.
+  timeline.set(
+    flipbook,
+    { visible: false },
+    LAYOUT.flipbook.delay + frames.length * LAYOUT.flipbook.frameDuration
+  )
+  timeline.eventCallback('onComplete', finish)
+  timeline.eventCallback('onInterrupt', finish)
+}
 
 /** Board-space particles keep their momentum when either combatant moves away. */
 export function playCombatImpact(
@@ -32,11 +89,22 @@ export function playCombatImpact(
   timeline.eventCallback('onComplete', finish)
   timeline.eventCallback('onInterrupt', finish)
 
+  const fullTurn = Math.PI * 2
+  // Exclude nearby angles so consecutive hits always have a visible rotation change.
+  const rotation =
+    previousFlashRotation === undefined
+      ? Math.random() * fullTurn
+      : (previousFlashRotation +
+          LAYOUT.flashMinRotationChange +
+          Math.random() * (fullTurn - 2 * LAYOUT.flashMinRotationChange)) %
+        fullTurn
+  previousFlashRotation = rotation
+
   for (let i = 0; i < LAYOUT.flashCopies; i++) {
-    const flash = new Sprite(assets.playSpotlight4)
+    const flash = new Sprite(assets.combatHitSpark)
     flash.label = `game.combat-impact.flash-${i}`
     applyAnchoredPlacement(flash, LAYOUT.flash)
-    flash.rotation = LAYOUT.flashRotation
+    flash.rotation = rotation
     flash.blendMode = 'add'
     effect.addChild(flash)
     timeline.to(
@@ -63,6 +131,7 @@ export function playCombatImpact(
   for (let i = 0; i < tuning.count; i++) {
     const spark = new Sprite(assets.ghostSpotlight)
     spark.label = `game.combat-impact.ember-${i}`
+    spark.visible = false
     spark.anchor.copyFrom(tuning.anchor)
     spark.blendMode = 'add'
     spark.tint = tuning.tint
@@ -78,6 +147,7 @@ export function playCombatImpact(
     effect.addChild(spark)
     const distance = between(tuning.distanceMin, tuning.distanceMax)
     const duration = between(tuning.durationMin, tuning.durationMax)
+    timeline.set(spark, { visible: true }, COMBAT_DAMAGE_REVEAL_DELAY)
     timeline.to(
       spark,
       {
@@ -86,7 +156,7 @@ export function playCombatImpact(
         duration,
         ease: 'power1.out'
       },
-      0
+      COMBAT_DAMAGE_REVEAL_DELAY
     )
     timeline.to(
       spark,
@@ -95,7 +165,7 @@ export function playCombatImpact(
         duration: duration * 0.65,
         ease: 'power1.in'
       },
-      duration * 0.35
+      COMBAT_DAMAGE_REVEAL_DELAY + duration * 0.35
     )
     timeline.to(
       spark.scale,
@@ -105,7 +175,7 @@ export function playCombatImpact(
         duration,
         ease: 'power1.in'
       },
-      0
+      COMBAT_DAMAGE_REVEAL_DELAY
     )
   }
 }
@@ -122,13 +192,17 @@ export function addCombatDamageGlow(
   applyAnchoredPlacement(glow, LAYOUT.glow)
   glow.tint = LAYOUT.glowTint
   glow.blendMode = 'add'
-  indicator.addChildAt(glow, 0)
+  indicator.content.addChildAt(glow, 0)
   const timeline = animations.timeline()
   const finish = (): void => {
     if (!glow.destroyed) glow.destroy()
   }
   glow.once('destroyed', () => animations.cancel(timeline))
-  timeline.to(glow, { alpha: 0, duration: LAYOUT.glowDuration, ease: 'power1.in' })
+  timeline.to(
+    glow,
+    { alpha: 0, duration: LAYOUT.glowDuration, ease: 'power1.in' },
+    COMBAT_DAMAGE_REVEAL_DELAY
+  )
   timeline.eventCallback('onComplete', finish)
   timeline.eventCallback('onInterrupt', finish)
 }

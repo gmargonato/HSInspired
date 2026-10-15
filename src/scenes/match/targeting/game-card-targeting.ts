@@ -24,6 +24,7 @@ import {
   type HandCardTargetingOrigin
 } from '../hand/hand-play-gesture'
 import { OPENING_TIMING } from '../presentation/game-presentation-timing'
+import { ACTIVE_HAND_CARD_DEPTH } from '../match-layers'
 import type {
   CardPlayTargetingState,
   PendingMinionTargetPreview,
@@ -375,6 +376,7 @@ export class GameCardTargeting {
       const returnTo = pointer ?? this.lastTargetingPointer
       if (entry?.restTransform) {
         entry.slot.visible = true
+        entry.slot.zIndex = ACTIVE_HAND_CARD_DEPTH
         if (returnTo) {
           entry.slot.position.set(returnTo.x, returnTo.y)
           entry.slot.rotation = 0

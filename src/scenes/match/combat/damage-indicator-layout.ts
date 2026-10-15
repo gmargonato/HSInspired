@@ -1,7 +1,7 @@
 import { CENTER, placement } from '../../../visual-components/layout'
 
 /** Local design space for one transient damage burst. */
-export const DAMAGE_INDICATOR_CANVAS = { width: 159, height: 163 } as const
+export const DAMAGE_INDICATOR_CANVAS = { width: 158, height: 181 } as const
 
 export const DAMAGE_INDICATOR_LAYOUT = {
   name: 'Damage indicator',

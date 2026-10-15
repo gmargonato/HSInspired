@@ -1,4 +1,5 @@
 import { CARD_CANVAS } from '../../../visual-components/cards/card-layout'
+import { ACTIVE_HAND_CARD_DEPTH } from '../match-layers'
 
 export interface HandLayoutConfig {
   readonly centerX: number
@@ -150,7 +151,7 @@ export function layoutHand(
       y: config.baselineY - handLift + edgeTuck - (isHovered ? config.hoverLift : 0),
       rotation: isHovered ? 0 : normalized * outerRotation,
       scale: isHovered ? config.hoverScale : config.cardScale,
-      zIndex: isHovered ? 1000 : index
+      zIndex: isHovered ? ACTIVE_HAND_CARD_DEPTH : index
     }
   })
 }

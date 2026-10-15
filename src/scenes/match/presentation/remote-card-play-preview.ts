@@ -8,6 +8,7 @@ import type { LayoutPlacement } from '../../../visual-components/layout'
 import { CardAssetResolver } from '../../../visual-components/assets/card-asset-resolver'
 import { Actor } from '../../../visual-components/lifecycle/actor'
 import { MATCH_HISTORY_LAYOUT } from '../history/match-history-layout'
+import { CARD_PLAY_LAYOUT } from './card-play-layout'
 
 function topLeftForCard(placement: LayoutPlacement): {
   readonly x: number
@@ -154,10 +155,24 @@ export class RemoteCardPlayPreview extends Actor {
 
     const aura =
       card instanceof CardView ? this.createPlayAura?.(card, timeline) : undefined
-    if (aura) {
+    if (aura && card instanceof CardView) {
+      const profile = CARD_PLAY_LAYOUT[card.plan.template].aura
       timeline.to(
         aura,
-        { alpha: 1, duration: MATCH_HISTORY_LAYOUT.remoteCardPlay.holdDuration },
+        {
+          alpha: profile.peakAlpha,
+          duration: MATCH_HISTORY_LAYOUT.remoteCardPlay.travelDuration
+        },
+        0
+      )
+      timeline.to(
+        aura,
+        {
+          alpha: 0,
+          duration:
+            MATCH_HISTORY_LAYOUT.remoteCardPlay.auraFadeDuration[card.plan.template],
+          ease: 'power2.out'
+        },
         MATCH_HISTORY_LAYOUT.remoteCardPlay.travelDuration
       )
     }

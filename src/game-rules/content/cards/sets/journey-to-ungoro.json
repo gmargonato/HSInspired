@@ -1023,7 +1023,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 6
+            "amount": 6,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -1757,7 +1758,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           },
           {
             "action": "add-to-hand",
@@ -1938,7 +1940,8 @@
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "random" },
             "amount": 1,
-            "hits": 15
+            "hits": 15,
+            "vfx": "fire-missile"
           },
           { "action": "overload", "amount": 1 }
         ]
@@ -2386,7 +2389,8 @@
         "actions": [
           {
             "action": "destroy",
-            "target": { "controller": "any", "type": "minion", "selection": "chosen" }
+            "target": { "controller": "any", "type": "minion", "selection": "chosen" },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -2713,7 +2717,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -3312,7 +3317,8 @@
           {
             "action": "damage",
             "target": { "controller": "any", "type": "hero", "selection": "all" },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-blast-both-heroes"
           }
         ]
       }
@@ -3359,7 +3365,8 @@
               "type": "minion",
               "selection": "chosen",
               "filter": { "tribe": "Pirate" }
-            }
+            },
+            "vfx": "fire-missile"
           },
           {
             "action": "modify",
@@ -3530,7 +3537,8 @@
           {
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -3561,7 +3569,8 @@
               "type": "minion",
               "selection": "random"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -3658,7 +3667,8 @@
                   "controller": "any",
                   "type": "minion",
                   "selection": "source"
-                }
+                },
+                "vfx": "fire-missile"
               }
             ]
           }
@@ -3739,7 +3749,8 @@
           {
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           },
           {
             "action": "summon",
@@ -4038,7 +4049,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-missile"
           }
         ],
         "condition": {
@@ -4073,7 +4085,8 @@
               "selection": "all",
               "exclude": "source"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -4203,7 +4216,8 @@
           {
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           },
           {
             "action": "damage",
@@ -4213,7 +4227,8 @@
               "selection": "adjacent",
               "adjacentTo": "event-target"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -4632,7 +4647,8 @@
               "filter": {
                 "damaged": true
               }
-            }
+            },
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -4920,7 +4936,8 @@
           {
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
-            "amount": 15
+            "amount": 15,
+            "vfx": "fire-missile"
           },
           {
             "action": "damage",
@@ -4930,7 +4947,8 @@
               "selection": "adjacent",
               "adjacentTo": "event-target"
             },
-            "amount": 4
+            "amount": 4,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -5201,7 +5219,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }

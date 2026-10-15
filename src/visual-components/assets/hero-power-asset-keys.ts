@@ -9,6 +9,7 @@ export const HERO_POWER_ASSET_KEYS = [
   'hero-power-mind-shatter',
   'hero-power-rogue',
   'hero-power-shaman',
+  'hero-power-lightning-jolt',
   'hero-power-warlock',
   'hero-power-warrior',
   'hero-power-deaths-shadow',

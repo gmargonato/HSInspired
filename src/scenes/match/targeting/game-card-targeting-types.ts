@@ -14,7 +14,7 @@ export interface MinionPreviewPresentation {
 export interface PendingMinionTargetPreview {
   readonly entry: HandEntry
   readonly position: number
-  /** Final summon-layer position used as the targeting arrow's fixed source. */
+  /** Final selected-card-layer position used as the targeting arrow's fixed source. */
   readonly targetingOrigin: { readonly x: number; readonly y: number }
   cancelled: boolean
   ready: boolean

@@ -1,3 +1,4 @@
+import { MinionLandingDust, hasMinionLandingDust } from './minion-landing-dust'
 import { WeaponView, type WeaponViewTextures } from '../board/weapon-view'
 import * as ShatterEffect from '../../../visual-components/effects/shatter'
 import * as ScreenShake from '../combat/screen-shake'
@@ -67,6 +68,9 @@ import { Burn } from '../../../visual-components/effects/burn'
 import { CARD_DEPARTURE_LAYOUT } from './card-departure-layout'
 import { HandCardPerspectivePool } from '../hand/hand-card-perspective-pool'
 import { CardView } from '../../../visual-components/cards/card-view'
+import { MATCH_LAYERS, ACTIVE_HAND_CARD_DEPTH } from '../match-layers'
+import { DeckInfoView } from '../hud/deck-info-view'
+import { MatchHistoryView } from '../history/match-history-view'
 import { SecretRevealView, SecretZoneView } from '../board/secret-view'
 import { SECRET_LAYOUT } from '../board/secret-layout'
 import type { CardAssetResolver } from '../../../visual-components/assets/card-asset-resolver'
@@ -681,6 +685,278 @@ function mulliganSlot(instanceId: string): GameCardSlot {
 }
 
 const boards: GameBoardView[] = []
+
+describe('match layer and inspection contract', () => {
+  it.each(['choice', 'confirm', 'announcement', 'waiting'])(
+    'contains the %s disappearance below hands and restores its control on reuse',
+    (kind) => {
+      type Aura = {
+        setEnabled(enabled: boolean): void
+        disappearance: gsap.core.Tween | null
+      }
+      const value = board()
+      value.position.set(17, 23)
+      const view = value as unknown as {
+        modalExitLayer: Container
+        hand: GameHandView
+        cardSelectionOverlay: CardSelectionOverlay
+        mulligan: GameMulliganView
+      }
+      // Private component fields are inspected only in this lifecycle regression.
+      const choice = view.cardSelectionOverlay as unknown as {
+        visible: boolean
+        toggle: Container
+        toggleOutline: Aura
+        clear(): void
+      }
+      const mulligan = view.mulligan as unknown as {
+        createLayer(): void
+        createControls(): void
+        beginConfirmation(slots: readonly GameCardSlot[]): unknown
+        showConfirmed(waiting: boolean): void
+        disappearControls(): void
+        layer: Container
+        confirmButton: Container
+        announcement: Container
+        opponentStillChoosing: Container
+        confirmMulliganOutline: Aura
+        mulliganAnnouncementOutline: Aura
+        opponentStillChoosingOutline: Aura
+      }
+      mulligan.createLayer()
+      mulligan.createControls()
+      const [control, aura] =
+        kind === 'choice'
+          ? [choice.toggle, choice.toggleOutline]
+          : kind === 'confirm'
+            ? [mulligan.confirmButton, mulligan.confirmMulliganOutline]
+            : kind === 'announcement'
+              ? [mulligan.announcement, mulligan.mulliganAnnouncementOutline]
+              : [mulligan.opponentStillChoosing, mulligan.opponentStillChoosingOutline]
+      choice.visible = true
+      aura.setEnabled(true)
+      const parent = control.parent
+      const position = control.getGlobalPosition().clone()
+      if (kind === 'choice') choice.clear()
+      else if (kind === 'confirm') mulligan.beginConfirmation([])
+      else if (kind === 'announcement') mulligan.showConfirmed(false)
+      else mulligan.disappearControls()
+      const exit = control.parent!
+      expect(exit.parent).toBe(view.modalExitLayer)
+      expect(control.getGlobalPosition()).toEqual(position)
+      expect(exit.eventMode).toBe('none')
+      expect(exit.interactiveChildren).toBe(false)
+      expect(view.modalExitLayer.zIndex).toBeLessThan(view.hand.layer.zIndex)
+      expect(view.modalExitLayer.zIndex).toBeLessThan(MATCH_LAYERS.selection)
+      expect(aura.disappearance!.duration()).toBe(1.8)
+      aura.setEnabled(true)
+      expect(control.parent).toBe(parent)
+      expect(control.getGlobalPosition()).toEqual(position)
+      expect(exit.destroyed).toBe(true)
+      // Dismissal can also animate the announcement; finish concurrent exits.
+      for (const effect of [
+        choice.toggleOutline,
+        mulligan.confirmMulliganOutline,
+        mulligan.mulliganAnnouncementOutline,
+        mulligan.opponentStillChoosingOutline
+      ])
+        effect.disappearance?.progress(1)
+      expect(view.modalExitLayer.children).toHaveLength(0)
+    }
+  )
+
+  function layers() {
+    return board() as unknown as {
+      gameplayLayer: Container
+      travelLayer: Container
+      hand: GameHandView
+      cardSelectionOverlay: CardSelectionOverlay
+      heroPowerTargeting: boolean
+      selectedCombatView: Container | null
+      cardPlay: GameCardTargeting
+      historyView: MatchHistoryView | null
+      hud: { deckInfo: DeckInfoView | null }
+      mountMatchLayers(): void
+      syncPassiveInspection(): void
+      setHistoryBoardDesaturated(active: boolean): void
+    }
+  }
+
+  it('keeps every ordinary presentation below hands and modal choices above them', () => {
+    const view = layers()
+    // Opening transport is the explicit exception until the mulligan finishes.
+    expect(view.travelLayer.zIndex).toBe(MATCH_LAYERS.mulliganTravel)
+    view.travelLayer.zIndex = MATCH_LAYERS.travel
+    view.gameplayLayer.sortChildren()
+    for (const child of view.gameplayLayer.children) {
+      if (child.zIndex < MATCH_LAYERS.remoteHand)
+        expect(view.gameplayLayer.getChildIndex(child)).toBeLessThan(
+          view.gameplayLayer.getChildIndex(view.hand.layer)
+        )
+    }
+    expect(view.cardSelectionOverlay.zIndex).toBeGreaterThan(view.hand.layer.zIndex)
+    expect(view.cardPlay.cardChoiceLayer.zIndex).toBeGreaterThan(view.hand.layer.zIndex)
+  })
+
+  it.each(['hover', 'drag', 'return', 'card', 'hero-power', 'combat'])(
+    'closes passive inspection during %s ownership and restores eligibility afterward',
+    (kind) => {
+      const view = layers()
+      const history = new MatchHistoryView(
+        new Proxy({}, { get: () => Texture.WHITE }) as ConstructorParameters<
+          typeof MatchHistoryView
+        >[0],
+        'local',
+        vi.fn()
+      )
+      view.historyView = history
+      view.gameplayLayer.addChild(history, history.rail)
+      const deckInfo = new DeckInfoView(Texture.WHITE)
+      view.hud.deckInfo = deckInfo
+      view.gameplayLayer.addChild(deckInfo)
+      deckInfo.show('local', new Sprite(Texture.WHITE))
+      if (kind === 'hover')
+        vi.spyOn(view.hand, 'hoveredSlot', 'get').mockReturnValue(
+          mulliganSlot('hovered')
+        )
+      if (kind === 'drag') vi.spyOn(view.hand.drag, 'index', 'get').mockReturnValue(0)
+      if (kind === 'return')
+        vi.spyOn(view.hand.drag, 'returning', 'get').mockReturnValue(true)
+      if (kind === 'card')
+        vi.spyOn(view.cardPlay, 'current', 'get').mockReturnValue({} as never)
+      if (kind === 'hero-power') view.heroPowerTargeting = true
+      if (kind === 'combat') view.selectedCombatView = new Container()
+      view.syncPassiveInspection()
+      expect(deckInfo.visible).toBe(false)
+      expect(history.rail.eventMode).toBe('none')
+      deckInfo.show('local', new Sprite(Texture.WHITE))
+      expect(deckInfo.visible).toBe(false)
+      vi.restoreAllMocks()
+      view.heroPowerTargeting = false
+      view.selectedCombatView = null
+      view.syncPassiveInspection()
+      expect(history.rail.eventMode).toBe('static')
+      deckInfo.show('local', new Sprite(Texture.WHITE))
+      expect(deckInfo.visible).toBe(true)
+    }
+  )
+
+  it('keeps the history rail at its declared depth throughout desaturation', () => {
+    const view = layers()
+    const history = new MatchHistoryView(
+      new Proxy({}, { get: () => Texture.WHITE }) as ConstructorParameters<
+        typeof MatchHistoryView
+      >[0],
+      'local',
+      (active) => view.setHistoryBoardDesaturated(active)
+    )
+    view.historyView = history
+    history.rail.zIndex = MATCH_LAYERS.historyRail
+    history.zIndex = MATCH_LAYERS.historyPreview
+    view.gameplayLayer.addChild(history, history.rail)
+    view.setHistoryBoardDesaturated(true)
+    expect(history.rail.parent).toBe(view.gameplayLayer)
+    expect(history.rail.zIndex).toBe(MATCH_LAYERS.historyRail)
+    expect(history.rail.filters ?? []).toHaveLength(0)
+    expect(view.hand.layer.filters).toHaveLength(1)
+    view.setHistoryBoardDesaturated(false)
+    expect(history.rail.parent).toBe(view.gameplayLayer)
+    expect(view.hand.layer.filters ?? []).toHaveLength(0)
+  })
+
+  it('keeps a returning card above the hand until its animation completes', async () => {
+    const view = layers()
+    const slot = mulliganSlot('return-depth')
+    const rest = layoutHand(1)[0]!
+    view.hand.append({
+      card: { instanceId: slot.instanceId, cardId: asCardId('classic_wisp') },
+      slot,
+      restTransform: rest,
+      displaced: true
+    })
+    view.hand.layer.addChild(slot)
+    slot.zIndex = ACTIVE_HAND_CARD_DEPTH
+    const returning = view.hand.animateSlotToHand(slot, rest, 0, 1, 1)
+    expect(slot.zIndex).toBe(ACTIVE_HAND_CARD_DEPTH)
+    gsap.getTweensOf(slot)[0]!.parent!.progress(1)
+    await returning
+    expect(slot.zIndex).toBe(rest.zIndex)
+  })
+
+  it('limits hover to the resting hand zone even over enlarged card artwork', () => {
+    const view = layers()
+    const slot = mulliganSlot('hover-hit')
+    slot.addChild(new Graphics().rect(-100, -150, 200, 300).fill(0xffffff))
+    slot.position.set(960, 400)
+    view.hand.layer.addChild(slot)
+    view.hand.append({
+      card: { instanceId: slot.instanceId, cardId: asCardId('classic_wisp') },
+      slot,
+      restTransform: layoutHand(1)[0],
+      displaced: true
+    })
+    view.hand.activate()
+    view.hand.hoverForBenchmark(slot)
+    expect(view.hand.layer.hitArea!.contains(960, 400)).toBe(false)
+    const rest = view.hand.restTransforms[0]!
+    expect(view.hand.layer.hitArea!.contains(rest.x, 1000)).toBe(true)
+    view.hand.layer.emit('pointermove', {
+      getLocalPosition: () => ({ x: 960, y: 400 })
+    } as unknown as FederatedPointerEvent)
+    expect(view.hand.hoveredSlot).toBeNull()
+    view.hand.layer.emit('pointermove', {
+      getLocalPosition: () => ({ x: rest.x, y: 1000 })
+    } as unknown as FederatedPointerEvent)
+    expect(view.hand.hoveredSlot).toBe(slot)
+  })
+
+  it('blocks inspection for visible choices but permits the explicit board view', () => {
+    const view = layers()
+    const history = new MatchHistoryView(
+      new Proxy({}, { get: () => Texture.WHITE }) as ConstructorParameters<
+        typeof MatchHistoryView
+      >[0],
+      'local',
+      vi.fn()
+    )
+    view.historyView = history
+    view.gameplayLayer.addChild(history)
+    view.cardSelectionOverlay.visible = true
+    Object.assign(view.cardSelectionOverlay, { boardVisible: false })
+    view.syncPassiveInspection()
+    expect(history.rail.eventMode).toBe('none')
+    Object.assign(view.cardSelectionOverlay, { boardVisible: true })
+    view.syncPassiveInspection()
+    expect(history.rail.eventMode).toBe('static')
+    view.heroPowerTargeting = true
+    view.syncPassiveInspection()
+    expect(history.rail.eventMode).toBe('none')
+    view.heroPowerTargeting = false
+  })
+
+  it.each(['opening', 'mulligan'])(
+    'blocks inspection during %s presentation',
+    (kind) => {
+      const value = board()
+      const view = value as unknown as {
+        openingLayer: Container
+        mulligan: GameMulliganView
+        isPassiveInspectionEnabled(): boolean
+      }
+      if (kind === 'opening') view.openingLayer.addChild(new Container())
+      else {
+        const dimmer = new Container()
+        dimmer.label = 'game.mulligan.dark-overlay'
+        view.mulligan.layer.addChild(dimmer)
+      }
+      expect(view.isPassiveInspectionEnabled()).toBe(false)
+      if (kind === 'opening') view.openingLayer.visible = false
+      else view.mulligan.layer.visible = false
+      expect(view.isPassiveInspectionEnabled()).toBe(true)
+    }
+  )
+})
+
 function board() {
   vi.stubGlobal('window', {
     addEventListener: vi.fn(),
@@ -1400,7 +1676,7 @@ describe('match interaction frame ordering', () => {
     const transforms = layoutHand(3)
     const entries = transforms.map((rest, index) => {
       const card = Object.assign(new Container(), {
-        plan: { width: 620 },
+        plan: { width: 620, template: 'minion' },
         renderedHeight: 900,
         createAppearanceSnapshot: vi.fn(() =>
           RenderTexture.create({ width: 620, height: 900 })
@@ -2892,6 +3168,22 @@ describe('random spell playback', () => {
 
 describe('Legendary minion entrance shake', () => {
   it.each([
+    {
+      remote: false,
+      legendary: false,
+      slot: false,
+      preview: false,
+      cancel: false,
+      handPull: true
+    },
+    {
+      remote: true,
+      legendary: false,
+      slot: false,
+      preview: false,
+      cancel: false,
+      handPull: true
+    },
     { remote: false, legendary: true, slot: true, preview: false, cancel: false },
     { remote: true, legendary: true, slot: true, preview: false, cancel: false },
     { remote: false, legendary: false, slot: true, preview: false, cancel: false },
@@ -2914,6 +3206,7 @@ describe('Legendary minion entrance shake', () => {
       session: GameBoardSession
       animationScope: AnimationScope
       resolver: { loadArtwork(): Promise<Texture> }
+      landingDust: MinionLandingDust
       cardPlayAnimation: CardPlayAnimation
       presentMinionPlayed(
         event: OpeningMatchEvent,
@@ -2949,6 +3242,7 @@ describe('Legendary minion entrance shake', () => {
       timelines.push(timeline)
       return timeline
     })
+    const dust = vi.spyOn(internal.landingDust, 'play')
     const shake = vi.spyOn(ScreenShake, 'runScreenShake')
     for (const player of internal.session.getState().players)
       internal.session.dispatch({
@@ -2969,7 +3263,12 @@ describe('Legendary minion entrance shake', () => {
     )!
     const event = {
       ...summoned,
-      type: scenario.summoned ? 'dev-minion-summoned' : 'minion-played'
+      type: scenario.handPull
+        ? 'minion-summoned'
+        : scenario.summoned
+          ? 'dev-minion-summoned'
+          : 'minion-played',
+      ...(scenario.handPull ? { sourceZone: 'hand' } : {})
     } as OpeningMatchEvent
     const slot = scenario.slot
       ? Object.assign(mulliganSlot('legendary-entrance'), {
@@ -2992,6 +3291,11 @@ describe('Legendary minion entrance shake', () => {
       scenario.preview,
       preview
     )
+    if (slot) {
+      expect(slot.parent?.zIndex).toBe(
+        scenario.preview ? MATCH_LAYERS.selectedCard : MATCH_LAYERS.summons
+      )
+    }
     void job.then(() => {
       done = true
     })
@@ -3008,11 +3312,13 @@ describe('Legendary minion entrance shake', () => {
       : landing.duration()
     landing.time(landingTime - 0.001, false)
     expect(shake).not.toHaveBeenCalled()
+    expect(dust).not.toHaveBeenCalled()
     if (scenario.cancel && preview) preview.cancelled = true
     landing.time(landingTime, false)
     await Promise.resolve()
     const eligible = scenario.legendary && !scenario.cancel && !scenario.summoned
     expect(shake).toHaveBeenCalledTimes(eligible ? 1 : 0)
+    expect(dust).toHaveBeenCalledTimes(!scenario.cancel && !scenario.summoned ? 1 : 0)
     if (eligible) {
       expect(shake).toHaveBeenCalledWith(
         value,
@@ -3035,6 +3341,7 @@ describe('Legendary minion entrance shake', () => {
     if (eligible && !scenario.preview) {
       await internal.presentMinionPlayed(event)
       expect(shake).toHaveBeenCalledTimes(1)
+      expect(dust).toHaveBeenCalledTimes(1)
     }
   })
 })
@@ -5369,6 +5676,79 @@ describe('board lifecycle preservation', () => {
     }
   )
 
+  it.each(['cast', 'scene-exit'] as const)(
+    'preserves a queued spell tilt through hand reflow and releases it on %s',
+    async (cleanup) => {
+      const value = board()
+      const { hand } = value as unknown as { hand: GameHandView }
+      const card = Object.assign(new Container(), {
+        plan: { width: 620, template: 'spell' },
+        renderedHeight: 900,
+        createAppearanceSnapshot: vi.fn(() =>
+          RenderTexture.create({ width: 620, height: 900 })
+        ),
+        flushAppearanceSnapshot: vi.fn()
+      })
+      card.addChild(new Sprite(Texture.WHITE))
+      const slot = Object.assign(mulliganSlot('queued-spell'), {
+        card,
+        playableOutlineTexture: Texture.WHITE,
+        suppressPlayableOutline: vi.fn(),
+        isPlayableOutlineEnabled: () => true,
+        getPlayableOutlinePalette: () => 'blue',
+        getPlayableOutlineTuning: () => undefined,
+        getPlayableOutlinePreset: () => 'card'
+      })
+      slot.addChild(card)
+      const rest = layoutHand(1)[0]!
+      slot.position.set(rest.x, rest.y)
+      hand.layer.addChild(slot)
+      hand.append({
+        card: { instanceId: slot.instanceId, cardId: asCardId('basic_flamestrike') },
+        slot,
+        restTransform: rest,
+        displaced: true
+      })
+      hand.drag.begin(0, { x: rest.x, y: rest.y }, 1)
+      hand.drag.update(16)
+      hand.drag.moveForBenchmark({ x: rest.x + 180, y: rest.y - 120 })
+      hand.drag.update(16)
+      const corners = hand.drag.capturePerspective()
+      expect(corners?.topLeft).not.toEqual({ x: 0, y: 0 })
+      const meshes = slot.children.filter((child) => child instanceof PerspectiveMesh)
+      const pose = {
+        x: slot.x,
+        y: slot.y,
+        rotation: slot.rotation,
+        scale: slot.scale.x
+      }
+      expect(hand.drag.acceptSpellCard()).toEqual(corners)
+      expect(hand.drag.index).toBeNull()
+      expect(hand.drag.isAwaitingPresentation(slot)).toBe(true)
+      hand.drag.update(16)
+      await hand.applyLayout({ positionDuration: 0, scaleDuration: 0 })
+      expect(card.visible).toBe(false)
+      expect(slot.children.filter((child) => child instanceof PerspectiveMesh)).toEqual(
+        meshes
+      )
+      expect({
+        x: slot.x,
+        y: slot.y,
+        rotation: slot.rotation,
+        scale: slot.scale.x
+      }).toEqual(pose)
+      if (cleanup === 'cast') {
+        hand.removeAt(0)
+        expect(hand.drag.isAwaitingPresentation(slot)).toBe(false)
+        expect(meshes.every((mesh) => mesh.destroyed)).toBe(true)
+        slot.destroy({ children: true })
+      }
+      value.dispose()
+      expect(meshes.every((mesh) => mesh.destroyed)).toBe(true)
+      expect(card.createAppearanceSnapshot.mock.results[0]!.value.destroyed).toBe(true)
+    }
+  )
+
   it('reuses held card resources on return and releases them on exit', async () => {
     const value = board()
     const internal = value as unknown as {
@@ -5376,7 +5756,7 @@ describe('board lifecycle preservation', () => {
       updateLocalBoardPreview(point: { x: number; y: number }): void
     }
     const card = Object.assign(new Container(), {
-      plan: { width: 620 },
+      plan: { width: 620, template: 'minion' },
       renderedHeight: 900,
       createAppearanceSnapshot: vi.fn(() =>
         RenderTexture.create({ width: 620, height: 900 })
@@ -6401,3 +6781,61 @@ it.each([false, true])(
     expect(Texture.WHITE.destroyed).toBe(false)
   }
 )
+
+describe('minion landing dust', () => {
+  it('qualifies plays and hand pulls, excluding every other entrance origin', () => {
+    expect(hasMinionLandingDust({ type: 'minion-played' } as OpeningMatchEvent)).toBe(
+      true
+    )
+    for (const sourceZone of [
+      undefined,
+      'hand',
+      'deck',
+      'graveyard',
+      'revealed',
+      'discarded'
+    ] as const) {
+      expect(
+        hasMinionLandingDust({
+          type: 'minion-summoned',
+          sourceZone
+        } as OpeningMatchEvent)
+      ).toBe(sourceZone === 'hand')
+    }
+    expect(
+      hasMinionLandingDust({ type: 'dev-minion-summoned' } as OpeningMatchEvent)
+    ).toBe(false)
+    expect(
+      hasMinionLandingDust({ type: 'hero-power-minion-summoned' } as OpeningMatchEvent)
+    ).toBe(false)
+  })
+
+  it('cleans up completed and cancelled bursts without destroying shared textures', () => {
+    const dust = new MinionLandingDust([
+      Texture.WHITE,
+      Texture.WHITE,
+      Texture.WHITE,
+      Texture.WHITE
+    ])
+    const internal = dust as unknown as { animationScope: AnimationScope }
+    const timelines: gsap.core.Timeline[] = []
+    const makeTimeline = internal.animationScope.timeline.bind(internal.animationScope)
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const timeline = makeTimeline(vars)
+      timelines.push(timeline)
+      return timeline
+    })
+    const completed = dust.play(100, 200, 1)
+    timelines[0].progress(1)
+    expect(completed.destroyed).toBe(true)
+    expect(dust.children).toHaveLength(0)
+    const cancelled = dust.play(300, 200, 1)
+    cancelled.destroy({ children: true })
+    expect(timelines[1].parent).toBeNull()
+    expect(dust.children).toHaveLength(0)
+    dust.play(400, 200, 1)
+    dust.dispose()
+    expect(dust.destroyed).toBe(true)
+    expect(Texture.WHITE.destroyed).toBe(false)
+  })
+})

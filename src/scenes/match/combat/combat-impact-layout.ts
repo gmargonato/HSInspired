@@ -1,6 +1,16 @@
 import { CENTER, placement } from '../../../visual-components/layout'
 import { DAMAGE_INDICATOR_CANVAS } from './damage-indicator-layout'
 
+const flipbookTiming = {
+  delay: 0.05,
+  frameDuration: 0.04,
+  indicatorRevealFrame: 4
+} as const
+
+export const COMBAT_DAMAGE_REVEAL_DELAY =
+  flipbookTiming.delay +
+  (flipbookTiming.indicatorRevealFrame - 1) * flipbookTiming.frameDuration
+
 /** Impact-local geometry; travel distances are in the board's design pixels. */
 export const COMBAT_IMPACT_LAYOUT = {
   name: 'Combat impact',
@@ -9,10 +19,22 @@ export const COMBAT_IMPACT_LAYOUT = {
     { width: 256, height: 256 },
     { anchor: CENTER, scale: 1.6, note: 'Overlapping white rays at contact.' }
   ),
-  flashRotation: Math.PI / 4,
+  flashMinRotationChange: Math.PI / 6,
   flashCopies: 3,
   flashDuration: 0.1,
   flashExpansion: 1.35,
+  flipbook: {
+    ...flipbookTiming,
+    placement: placement(
+      { x: DAMAGE_INDICATOR_CANVAS.width / 2, y: DAMAGE_INDICATOR_CANVAS.height / 2 },
+      { width: 254, height: 254 },
+      {
+        anchor: CENTER,
+        scale: DAMAGE_INDICATOR_CANVAS.height / 254,
+        note: 'Upright hit frames behind the burst; one uniform scale preserves their relative sizes.'
+      }
+    )
+  },
   glow: placement(
     { x: DAMAGE_INDICATOR_CANVAS.width / 2, y: DAMAGE_INDICATOR_CANVAS.height / 2 },
     { width: 256, height: 256 },

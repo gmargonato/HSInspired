@@ -27,6 +27,7 @@ import {
 } from '../presentation/game-presentation-timing'
 import { completeTimeline } from '../presentation/game-presentation-animation'
 import { MATCH_SHADOW_CONFIG } from '../board/match-shadow-config'
+import { ACTIVE_HAND_CARD_DEPTH } from '../match-layers'
 
 interface HandCallbacks {
   beginTargetGesture(entry: HandEntry, pointer: HandPointer, pointerId: number): void
@@ -173,6 +174,8 @@ export class GameHandView {
     this.callbacks.activateWindowInput()
     const bounds = handHoverHitBounds(DEFAULT_HAND_LAYOUT)
     const handRect = new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
+    // Product decision: hover and pickup are limited to the resting hand zone.
+    // Enlarging a card changes its appearance, never its interactive area.
     // The fixed hand zone sits above board controls in the display tree. A
     // resting hand area owns card input; elsewhere, holes
     // expose only board objects that can currently accept pointer input.
@@ -278,6 +281,7 @@ export class GameHandView {
     this.hoverRefreshPending = true
     await Promise.all(
       this.handEntries.map((entry, index) => {
+        if (this.drag.isAwaitingPresentation(entry.slot)) return Promise.resolve()
         const transform = transforms[index]
         if (!transform) return Promise.resolve()
         entry.restTransform = transform
@@ -362,7 +366,7 @@ export class GameHandView {
       y: rest.y - DEFAULT_HAND_LAYOUT.hoverLift,
       rotation: 0,
       scale: DEFAULT_HAND_LAYOUT.hoverScale,
-      zIndex: 1000
+      zIndex: ACTIVE_HAND_CARD_DEPTH
     }
   }
 
@@ -453,8 +457,16 @@ export class GameHandView {
       },
       0
     )
-    slot.zIndex = transform.zIndex
-    return completeTimeline(timeline)
+    // Hovered/held cards retain priority over the fan for the entire return.
+    const keepRaised = slot.zIndex === ACTIVE_HAND_CARD_DEPTH
+    if (!keepRaised) slot.zIndex = transform.zIndex
+    return completeTimeline(timeline, () => {
+      if (!slot.destroyed && this.localHoveredSlot !== slot) {
+        const entry = this.handEntries.find((candidate) => candidate.slot === slot)
+        if (entry && slot.parent === this.layer)
+          slot.zIndex = entry.restTransform?.zIndex ?? transform.zIndex
+      }
+    })
   }
 
   configureSlot(slot: GameCardSlot): void {

@@ -1,4 +1,5 @@
 export interface HoverPreviewControllerOptions<T> {
+  readonly isEnabled?: () => boolean
   readonly delayMs: number
   readonly key: (target: T) => string
   readonly onEnter: (target: T) => void
@@ -19,6 +20,10 @@ export class HoverPreviewController<T> {
   constructor(private readonly options: HoverPreviewControllerOptions<T>) {}
 
   enter(target: T): void {
+    if (this.options.isEnabled?.() === false) {
+      this.cancel()
+      return
+    }
     const key = this.options.key(target)
     if (this.active?.key === key) return
 
@@ -28,6 +33,10 @@ export class HoverPreviewController<T> {
     this.timer = setTimeout(
       () => {
         this.timer = null
+        if (this.options.isEnabled?.() === false) {
+          this.cancel()
+          return
+        }
         if (this.active?.key !== key) return
         this.options.onActivate(target)
       },

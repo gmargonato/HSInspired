@@ -75,10 +75,15 @@ export const DECK_SELECTION_LAYOUT = {
       note: 'Transparent square canvas; the visible hexagon is approximately 123 by 140 pixels.'
     }
   ),
+  rankBanner: placement(
+    { x: 1475, y: 270 },
+    { width: 154, height: 151 },
+    { anchor: CENTER, scale: 0.4, note: 'Parchment behind the non-Legend rank number.' }
+  ),
   rankNumber: placement(
-    { x: 1475, y: 258 },
+    { x: 1475, y: 265 },
     { width: 0, height: 0 },
-    { anchor: CENTER, note: 'Live rank number over the lower medal, without a banner.' }
+    { anchor: CENTER, note: 'Live rank number over the parchment on the lower medal.' }
   ),
   legendNumber: placement(
     { x: 1475, y: 216 },

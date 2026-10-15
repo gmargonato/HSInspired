@@ -910,8 +910,17 @@ function actionsValue(value: unknown, path: string): void {
     const actionName = actionRecord(record, actionPath)
     validateActionShape(actionName, record, actionPath)
     if (record['vfx'] !== undefined) {
-      if (actionName !== 'damage' && actionName !== 'destroy')
-        fail(`${actionPath}.vfx`, 'is only supported by damage and destroy actions')
+      if (
+        ![
+          'damage',
+          'destroy',
+          'redirect-damage',
+          'sacrifice-and-damage',
+          'destroy-all-but-highest-attack',
+          'destroy-and-gain-stats'
+        ].includes(actionName)
+      )
+        fail(`${actionPath}.vfx`, 'requires a damage or character-destruction action')
       const vfx = stringValue(record['vfx'], `${actionPath}.vfx`)
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(vfx))
         fail(`${actionPath}.vfx`, 'must be a lowercase kebab-case effect key')

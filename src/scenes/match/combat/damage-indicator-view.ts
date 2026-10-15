@@ -11,6 +11,8 @@ export function formatDamageAmount(amount: number): string {
 
 /** Non-interactive burst and amount shown over a character that took damage. */
 export class DamageIndicatorView extends Container {
+  readonly content = new Container()
+
   constructor(texture: Texture, amount: number) {
     super()
     this.label = 'game.damage-indicator'
@@ -19,12 +21,18 @@ export class DamageIndicatorView extends Container {
       DAMAGE_INDICATOR_CANVAS.width / 2,
       DAMAGE_INDICATOR_CANVAS.height / 2
     )
+    this.content.label = 'game.damage-indicator.content'
+    this.content.eventMode = 'none'
+    // Keep the pop-in centered while a sibling flipbook stays at full size.
+    this.content.pivot.copyFrom(this.pivot)
+    this.content.position.copyFrom(this.pivot)
+    this.addChild(this.content)
 
     const burst = new Sprite(texture)
     applyAnchoredPlacement(burst, DAMAGE_INDICATOR_LAYOUT.burst)
     burst.label = 'game.damage-indicator.burst'
     burst.eventMode = 'none'
-    this.addChild(burst)
+    this.content.addChild(burst)
 
     const label = new Text({
       text: formatDamageAmount(amount),
@@ -35,6 +43,6 @@ export class DamageIndicatorView extends Container {
     label.rotation = DAMAGE_INDICATOR_LAYOUT.amountRotation
     label.label = 'game.damage-indicator.amount'
     label.eventMode = 'none'
-    this.addChild(label)
+    this.content.addChild(label)
   }
 }

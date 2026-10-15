@@ -178,6 +178,60 @@
         "aoeEdgeSoftness": 0.055,
         "aoeShape": "wide"
       }
+    },
+    {
+      "id": "fire-blast-enemy-side",
+      "name": "Fire blast: enemy side",
+      "family": "aoe",
+      "zones": ["enemyBoard", "enemyHero"],
+      "tuning": {
+        "flameColor": "#ff5900",
+        "coreColor": "#ffe600",
+        "intensity": 1.65,
+        "noiseScale": 2.6,
+        "flowSpeed": 0.85,
+        "turbulence": 0.85,
+        "durationMs": 1250,
+        "aoeRadius": 0.98,
+        "aoeEdgeSoftness": 0.1,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "fire-blast-both-heroes",
+      "name": "Fire blast: both heroes",
+      "family": "aoe",
+      "zones": ["enemyHero", "friendlyHero"],
+      "tuning": {
+        "flameColor": "#ff5900",
+        "coreColor": "#ffe600",
+        "intensity": 1.65,
+        "noiseScale": 2.6,
+        "flowSpeed": 0.85,
+        "turbulence": 0.85,
+        "durationMs": 1250,
+        "aoeRadius": 0.98,
+        "aoeEdgeSoftness": 0.1,
+        "aoeShape": "wide"
+      }
+    },
+    {
+      "id": "fire-blast-friendly-board",
+      "name": "Fire blast: friendly board",
+      "family": "aoe",
+      "zones": ["friendlyBoard"],
+      "tuning": {
+        "flameColor": "#ff5900",
+        "coreColor": "#ffe600",
+        "intensity": 1.65,
+        "noiseScale": 2.6,
+        "flowSpeed": 0.85,
+        "turbulence": 0.85,
+        "durationMs": 1250,
+        "aoeRadius": 0.98,
+        "aoeEdgeSoftness": 0.1,
+        "aoeShape": "wide"
+      }
     }
   ]
 }

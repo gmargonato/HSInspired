@@ -21,6 +21,8 @@ export interface SelectedCardSlot {
 }
 
 export interface CardSelectionOverlayOptions {
+  /** Match-owned host below hands, independent of the closing modal's visibility. */
+  readonly exitLayer: Container
   readonly renderer: Renderer
   readonly ghostNoise: Texture
   readonly ghostDissolve: Texture
@@ -477,7 +479,7 @@ export class CardSelectionOverlay extends Container {
     if (this.destroyed) return
     if (this.visible && this.toggle.visible) {
       this.toggle.setEnabled(false)
-      this.toggleOutline.disappear(this.parent)
+      this.toggleOutline.disappear(this.options.exitLayer)
     }
     this.prompt.text = ''
     this.requestRevision += 1
@@ -585,6 +587,10 @@ export class CardSelectionOverlay extends Container {
 
   private inputBlocked(): boolean {
     return this.options.isInputBlocked?.() === true
+  }
+
+  get blocksInspection(): boolean {
+    return this.visible && !this.boardVisible
   }
 
   private setToggleVisible(visible: boolean): void {

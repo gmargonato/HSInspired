@@ -16,7 +16,12 @@ import { WeaponView } from '../board/weapon-view'
 import type { GameAssets } from '../../../visual-components/assets'
 import { DamageIndicatorView } from './damage-indicator-view'
 import { HealIndicatorView } from './heal-indicator-view'
-import { addCombatDamageGlow, playCombatImpact } from './combat-impact-effect'
+import {
+  addCombatDamageFlipbook,
+  addCombatDamageGlow,
+  playCombatImpact
+} from './combat-impact-effect'
+import { COMBAT_DAMAGE_REVEAL_DELAY } from './combat-impact-layout'
 import {
   BOARD_TIMING,
   RESOLUTION_TIMING
@@ -589,8 +594,6 @@ export class GameCombatPresentation {
       followDeathMarkers()
       const screenShake = this.context.screenShake(event.attacker.attack)
       this.context.onImpact()
-      await this.wait(BOARD_TIMING.combatImpact)
-      if (this.layer.destroyed) return
 
       const attackerDamageTaken = event.attacker.divineShieldConsumed
         ? 0
@@ -600,6 +603,8 @@ export class GameCombatPresentation {
         : event.defender.attemptedDamage
       this.showDamageIndicator(attacker, attackerDamageTaken, true)
       this.showDamageIndicator(defender, defenderDamageTaken, true)
+      await this.wait(Math.max(BOARD_TIMING.combatImpact, COMBAT_DAMAGE_REVEAL_DELAY))
+      if (this.layer.destroyed) return
 
       const settle = async (
         view: MinionView,
@@ -715,13 +720,13 @@ export class GameCombatPresentation {
       followDeathMarkers()
       const screenShake = this.context.screenShake(event.attacker.attack)
       this.context.onImpact()
-      await this.wait(BOARD_TIMING.combatImpact)
-      if (this.layer.destroyed) return
 
       const damageTaken = (combatant: CharacterCombatantResult): number =>
         combatant.divineShieldConsumed ? 0 : combatant.attemptedDamage
       this.showDamageIndicator(attacker, damageTaken(event.attacker), true)
       this.showDamageIndicator(defender, damageTaken(event.defender), true)
+      await this.wait(Math.max(BOARD_TIMING.combatImpact, COMBAT_DAMAGE_REVEAL_DELAY))
+      if (this.layer.destroyed) return
 
       const settle = async (
         view: CombatView,
@@ -871,8 +876,16 @@ export class GameCombatPresentation {
 
     view.pulseHealth()
     const indicator = new DamageIndicatorView(this.assets.damageIndicator, amount)
-    if (combatImpact) addCombatDamageGlow(indicator, this.assets, this.animations)
-    return this.showCharacterIndicator(indicator, view)
+    if (combatImpact) {
+      addCombatDamageFlipbook(indicator, this.assets, this.animations)
+      addCombatDamageGlow(indicator, this.assets, this.animations)
+    }
+    return this.showCharacterIndicator(
+      indicator,
+      view,
+      combatImpact ? COMBAT_DAMAGE_REVEAL_DELAY : 0,
+      combatImpact ? indicator.content : indicator
+    )
   }
 
   showHealIndicator(view: CombatView, amount: number): HealIndicatorView | null {
@@ -884,10 +897,12 @@ export class GameCombatPresentation {
 
   private showCharacterIndicator<T extends DamageIndicatorView | HealIndicatorView>(
     indicator: T,
-    view: CombatView
+    view: CombatView,
+    revealDelay = 0,
+    popTarget: Container = indicator
   ): T {
     this.positionCharacterIndicator(indicator, view)
-    indicator.scale.set(0)
+    popTarget.scale.set(0)
     indicator.zIndex = 1100
     this.indicatorLayer.addChild(indicator)
     this.indicatorSources.set(indicator, view)
@@ -900,12 +915,16 @@ export class GameCombatPresentation {
       this.indicatorSources.delete(indicator)
       this.animations.cancel(timeline)
     })
-    timeline.to(indicator.scale, {
-      x: 1,
-      y: 1,
-      duration: BOARD_TIMING.characterIndicatorGrow,
-      ease: 'back.out(1.7)'
-    })
+    timeline.to(
+      popTarget.scale,
+      {
+        x: 1,
+        y: 1,
+        duration: BOARD_TIMING.characterIndicatorGrow,
+        ease: 'back.out(1.7)'
+      },
+      revealDelay
+    )
     timeline.to(indicator, {
       alpha: 1,
       duration: BOARD_TIMING.characterIndicatorHold

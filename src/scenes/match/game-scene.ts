@@ -1,6 +1,7 @@
 import { prewarmMinionStatus } from './loading/minion-status-warmup'
 import { prewarmWindfury } from './loading/windfury-warmup'
 import { prewarmCardPlay } from './loading/card-play-warmup'
+import { prewarmCombatImpact } from './loading/combat-impact-warmup'
 import { prewarmMatchResult } from './loading/match-result-warmup'
 import {
   MatchVisualResources,
@@ -331,6 +332,12 @@ export class GameScene extends Scene {
       prewarmCardPlay(this.appInstance.renderer, gameAssets)
     } catch (error) {
       this.logger?.warn('[GameScene] card play warm-up failed', error)
+    }
+
+    try {
+      prewarmCombatImpact(this.appInstance.renderer, gameAssets)
+    } catch (error) {
+      this.logger?.warn('[GameScene] combat impact warm-up failed', error)
     }
 
     try {

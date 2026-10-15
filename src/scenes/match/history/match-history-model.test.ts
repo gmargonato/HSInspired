@@ -484,6 +484,48 @@ describe('history retention and content layout', () => {
 })
 
 describe('history rail lifecycle', () => {
+  it('rejects hover and wheel before frame suppression and cancels pending artwork', async () => {
+    let finish!: () => void
+    const artwork = vi
+      .spyOn(CardAssetResolver.prototype, 'loadArtwork')
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = () => resolve(undefined)
+          })
+      )
+    const textures = new Proxy(
+      {},
+      { get: () => Texture.WHITE }
+    ) as ConstructorParameters<typeof MatchHistoryView>[0]
+    const desaturate = vi.fn()
+    const view = new MatchHistoryView(textures, local, desaturate)
+    let enabled = true
+    view.canInspect = () => enabled
+    view.rail.position.set(0)
+    try {
+      view.record(played('basic_fireball', local))
+      view.inspectAt({ x: 20, y: 20 })
+      expect(desaturate).toHaveBeenLastCalledWith(true)
+      enabled = false
+      const wheel = { deltaY: 1, stopPropagation: vi.fn(), preventDefault: vi.fn() }
+      view.rail.emit('wheel', wheel as unknown as FederatedWheelEvent)
+      expect(wheel.stopPropagation).not.toHaveBeenCalled()
+      view.inspectAt({ x: 20, y: 20 })
+      expect(desaturate).toHaveBeenLastCalledWith(false)
+      finish()
+      await Promise.resolve()
+      expect(view.children[1].children).toHaveLength(0)
+      view.setHoverSuppressed(true)
+      enabled = true
+      view.inspectAt({ x: 20, y: 20 })
+      expect(view.children[1].children).toHaveLength(0)
+    } finally {
+      view.destroy({ children: true })
+      artwork.mockRestore()
+    }
+  })
+
   it('closes when reparenting causes Pixi to miss the rail leave event', () => {
     const artwork = vi
       .spyOn(CardAssetResolver.prototype, 'loadArtwork')

@@ -85,6 +85,9 @@ export class MatchHistoryView extends Actor {
   private hoveredIndex: number | null = null
   private activeId: number | null = null
   private previewSequence = 0
+  private hoverSuppressed = false
+  /** The match supplies live eligibility so events cannot race the next frame. */
+  canInspect: () => boolean = () => true
 
   private readonly clearHover = (): void => {
     this.hoveredIndex = null
@@ -123,8 +126,12 @@ export class MatchHistoryView extends Actor {
     this.addChild(this.rail, this.preview)
     for (let index = 0; index < layout.capacity; index++)
       this.slots.push(this.createSlot(index))
-    this.rail.on('pointermove', (event: FederatedPointerEvent) => this.hover(event))
-    this.rail.on('pointerenter', (event: FederatedPointerEvent) => this.hover(event))
+    this.rail.on('pointermove', (event: FederatedPointerEvent) =>
+      this.inspectAt(event.global)
+    )
+    this.rail.on('pointerenter', (event: FederatedPointerEvent) =>
+      this.inspectAt(event.global)
+    )
     this.rail.on('pointerleave', this.clearHover)
     // Reparenting the rail for the preview can invalidate Pixi's leave target.
     this.rail.on('globalpointermove', (event: FederatedPointerEvent) => {
@@ -139,6 +146,7 @@ export class MatchHistoryView extends Actor {
     if (typeof document !== 'undefined')
       document.addEventListener('visibilitychange', this.handleVisibilityChange)
     this.rail.on('wheel', (event: FederatedWheelEvent) => {
+      if (this.hoverSuppressed || !this.canInspect()) return
       event.stopPropagation()
       event.preventDefault()
       if (event.deltaY === 0) return
@@ -177,8 +185,16 @@ export class MatchHistoryView extends Actor {
     if (this.hoveredIndex !== null) this.openHovered()
   }
 
-  private hover(event: FederatedPointerEvent): void {
-    const point = this.rail.toLocal(event.global)
+  inspectAt(global: { x: number; y: number }): void {
+    if (this.hoverSuppressed || !this.canInspect()) {
+      this.clearHover()
+      return
+    }
+    const point = this.rail.toLocal(global)
+    if (!this.rail.hitArea?.contains(point.x, point.y)) {
+      this.clearHover()
+      return
+    }
     const index = Math.min(
       this.slots.length - 1,
       Math.floor(point.y / MATCH_HISTORY_LAYOUT.rail.gap)
@@ -194,6 +210,10 @@ export class MatchHistoryView extends Actor {
     this.openHovered()
   }
   private openHovered(): void {
+    if (this.hoverSuppressed || !this.canInspect()) {
+      this.clearHover()
+      return
+    }
     const entry =
       this.hoveredIndex === null ? undefined : this.slots[this.hoveredIndex]?.entry
     if (!entry) {
@@ -336,8 +356,26 @@ export class MatchHistoryView extends Actor {
     )
   }
   private current(id: number, sequence: number): boolean {
-    return !this.destroyed && this.activeId === id && this.previewSequence === sequence
+    return (
+      !this.destroyed &&
+      !this.hoverSuppressed &&
+      this.canInspect() &&
+      this.activeId === id &&
+      this.previewSequence === sequence
+    )
   }
+
+  setHoverSuppressed(suppressed: boolean): void {
+    if (this.hoverSuppressed === suppressed) return
+    this.hoverSuppressed = suppressed
+    this.rail.eventMode = suppressed ? 'none' : 'static'
+    if (suppressed) this.clearHover()
+  }
+
+  clearInspection(): void {
+    this.clearHover()
+  }
+
   private close(): void {
     this.activeId = null
     this.previewSequence++

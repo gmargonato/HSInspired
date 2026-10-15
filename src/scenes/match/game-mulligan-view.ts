@@ -41,13 +41,19 @@ export class GameMulliganView {
     private readonly assets: GameAssets,
     private readonly animations: Pick<AnimationScope, 'timeline'>,
     private readonly transport: MulliganCardTransport,
-    private readonly onConfirm: () => void
+    private readonly onConfirm: () => void,
+    private readonly exitLayer: Container
   ) {
     this.layer.sortableChildren = true
   }
 
   get initialCardCount(): number {
     return this.initialSlots.length
+  }
+
+  get blocksInspection(): boolean {
+    const dimmer = this.layer.getChildByLabel('game.mulligan.dark-overlay')
+    return this.layer.visible && this.layer.alpha > 0 && (dimmer?.alpha ?? 0) > 0
   }
 
   enableSelection(): void {
@@ -63,7 +69,7 @@ export class GameMulliganView {
     this.confirmationLocked = true
     this.setInputEnabled(false)
     this.confirmButton.setEnabled(false)
-    this.confirmMulliganOutline?.disappear(this.layer.parent)
+    this.confirmMulliganOutline?.disappear(this.exitLayer)
     for (const slot of slots) {
       slot.setMulliganInteractionEnabled(false)
       slot.setPlayableOutlineEnabled(false)
@@ -323,7 +329,7 @@ export class GameMulliganView {
   }
 
   showConfirmed(waitingForOpponent: boolean): void {
-    this.mulliganAnnouncementOutline?.disappear(this.layer.parent)
+    this.mulliganAnnouncementOutline?.disappear(this.exitLayer)
 
     if (!waitingForOpponent) return
     if (this.opponentStillChoosing) this.opponentStillChoosing.visible = true
@@ -344,7 +350,7 @@ export class GameMulliganView {
       this.mulliganAnnouncementOutline,
       this.opponentStillChoosingOutline
     ])
-      effect?.disappear(this.layer.parent)
+      effect?.disappear(this.exitLayer)
   }
 
   private fadeTo(

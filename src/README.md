@@ -39,6 +39,24 @@ src/
 | The bridge exposed to the game window                     | `desktop/preload`                                            |
 | Message schemas shared by the desktop processes           | `desktop/contracts`                                          |
 
+## Match layers and inspection
+
+Match-wide stacking is declared in `scenes/match/match-layers.ts` and assigned by
+`GameBoardView.mountMatchLayers`. Board/HUD/history thumbnails sit below transit
+and combat, followed by indicators, passive previews and reveals, hands, pending
+card selections, and modal choices. Loading, settings and results cover the match.
+Mulligan transport temporarily sits above its dimmer until the opening completes.
+Internal card/component z-indices only order siblings inside their own layer.
+Outgoing choice controls use a dedicated modal-exit layer below hands.
+Outgoing mulligan controls use a separate exit layer above the mulligan dimmer
+and transport, but below new modal choices.
+
+History keeps a fixed rail parent/depth when inspected. Hover desaturation applies
+to gameplay layers without promoting the rail. The match's passive-inspection
+predicate blocks history, deck details and board previews during card, attack and
+hero-power gestures, including return animations. Delayed previews check the same
+predicate before activation; modal choices can explicitly expose board inspection.
+
 ## Card appearance tuning
 
 `visual-components/cards/card-layout.ts` owns positions, sizes, typography, curves,

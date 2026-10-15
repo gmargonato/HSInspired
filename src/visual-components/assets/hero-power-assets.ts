@@ -40,6 +40,7 @@ import heartOfVirnaalImage from '@assets/images/heroes/original-art-heropower/jo
 import tomeOfOriginationImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_tome_of_origination.jpg'
 import anraphetsCoreImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_anraphets_core.jpg'
 import type { HeroPowerAssetKey } from './hero-power-asset-keys'
+import lightningJoltImage from '@assets/images/card-artwork/classic_lightning_bolt.png'
 
 export { HERO_POWER_ASSET_KEYS, type HeroPowerAssetKey } from './hero-power-asset-keys'
 
@@ -59,6 +60,7 @@ export const HERO_POWER_ASSET_SOURCES: Record<HeroPowerAssetKey, string> = {
   'hero-power-mind-shatter': mindShatterImage,
   'hero-power-rogue': rogueImage,
   'hero-power-shaman': shamanImage,
+  'hero-power-lightning-jolt': lightningJoltImage,
   'hero-power-warlock': warlockImage,
   'hero-power-warrior': warriorImage,
   'hero-power-deaths-shadow': deathsShadowImage,

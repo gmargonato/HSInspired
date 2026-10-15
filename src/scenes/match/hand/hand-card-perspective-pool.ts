@@ -41,6 +41,16 @@ export class HandCardPerspectivePool {
     this.prune()
   }
 
+  /** Transfer a visible presentation without restoring its flat card face. */
+  take(card: CardView): HandCardPerspective | undefined {
+    const presentation = this.entries.get(card)
+    if (!presentation) return undefined
+    this.entries.delete(card)
+    if (this.active === presentation) this.active = null
+    if (this.lastHeld === presentation) this.lastHeld = null
+    return presentation
+  }
+
   flush(): void {
     this.prune()
     this.active?.flushSnapshot()

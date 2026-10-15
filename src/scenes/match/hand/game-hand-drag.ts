@@ -23,6 +23,7 @@ import {
 import type { HandCardPerspective, PerspectiveCorners } from './hand-card-perspective'
 import { HandCardPerspectivePool } from './hand-card-perspective-pool'
 import { OPENING_TIMING } from '../presentation/game-presentation-timing'
+import { ACTIVE_HAND_CARD_DEPTH } from '../match-layers'
 
 export const DRAG_MOVE_THRESHOLD = 10
 /** Stationary-pointer preparation only; hover visuals and actual pickup never wait. */
@@ -55,6 +56,7 @@ export class GameHandDrag {
   private dragState: HandDragState | null = null
   private dragRotator: DragRotatorState | null = null
   private readonly perspectivePool: HandCardPerspectivePool
+  private readonly queuedPerspectives = new Map<GameCardSlot, HandCardPerspective>()
   private prepareSlot: GameCardSlot | null = null
   private prepareElapsedMS = 0
   private preparationPending = false
@@ -93,6 +95,26 @@ export class GameHandDrag {
 
   capturePerspective(): PerspectiveCorners | undefined {
     return this.dragPerspective?.captureCorners()
+  }
+
+  isAwaitingPresentation(slot: GameCardSlot): boolean {
+    return this.queuedPerspectives.has(slot)
+  }
+
+  /** Freeze the released spell until its queued cast consumes the hand entry. */
+  acceptSpellCard(): PerspectiveCorners | undefined {
+    const corners = this.capturePerspective()
+    this.acceptCard(() => {
+      const slot = this.perspectiveSlot
+      if (!slot) return
+      const presentation = this.perspectivePool.take(slot.card)
+      if (!presentation) return
+      presentation.setOutlineEnabled(false)
+      this.queuedPerspectives.set(slot, presentation)
+      this.dragPerspective = null
+      this.perspectiveSlot = null
+    })
+    return corners
   }
   get movedBeyondThreshold(): boolean {
     return this.dragMovedBeyondThreshold
@@ -153,6 +175,8 @@ export class GameHandDrag {
 
   /** A transferred card must not remain retained by hand-only preparation. */
   invalidate(slot: GameCardSlot): void {
+    this.queuedPerspectives.get(slot)?.destroy()
+    this.queuedPerspectives.delete(slot)
     if (this.prepareSlot === slot) this.prepare(null)
     if (this.pendingPerspectiveSlot === slot) this.pendingPerspectiveSlot = null
     // A play can detach the slot while borrowing its visible perspective. Its
@@ -183,6 +207,8 @@ export class GameHandDrag {
       }
     }
     this.perspectivePool.flush()
+    for (const presentation of this.queuedPerspectives.values())
+      presentation.flushSnapshot()
   }
 
   private activatePendingPerspective(): void {
@@ -279,6 +305,8 @@ export class GameHandDrag {
   }
 
   dispose(): void {
+    for (const presentation of this.queuedPerspectives.values()) presentation.destroy()
+    this.queuedPerspectives.clear()
     this.layer.off('globalpointermove', this.onPointerMove)
     this.layer.off('rightdown', this.onRightDown)
     if (this.draggingIndex !== null) {
@@ -334,7 +362,7 @@ export class GameHandDrag {
       ease: 'power2.out',
       overwrite: 'auto'
     })
-    entry.slot.zIndex = 1000
+    entry.slot.zIndex = ACTIVE_HAND_CARD_DEPTH
 
     this.context.syncMana()
     this.previewPending = false

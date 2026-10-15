@@ -4,7 +4,7 @@ import {
 } from '../../../visual-components/cards/card-layout'
 
 /** Blue tint shared by every card-play aura, including legendary variants. */
-export const CARD_PLAY_AURA_TINT = 0x3388ff
+export const CARD_PLAY_AURA_TINT = 0x229fff
 
 /** Burst surrounds the card body and fades before its aura and particles. */
 export const CARD_PLAY_BURST = {
@@ -50,9 +50,9 @@ export const CARD_PLAY_LAYOUT = {
     fallbackStartYOffset: -30,
     aura: {
       ...AURA_IMAGE_FIT,
-      initialAlpha: 0.4,
+      initialAlpha: 0.65,
       peakAlpha: 1,
-      fadeDuration: 0.32
+      fadeDuration: 0.7
     },
     chargeParticles: {
       count: 54,
@@ -87,9 +87,9 @@ export const CARD_PLAY_LAYOUT = {
     fallbackStartYOffset: -30,
     aura: {
       ...AURA_IMAGE_FIT,
-      initialAlpha: 0.4,
+      initialAlpha: 0.65,
       peakAlpha: 1,
-      fadeDuration: 0.32
+      fadeDuration: 0.7
     },
     chargeParticles: {
       count: 54,
@@ -117,24 +117,24 @@ export const CARD_PLAY_LAYOUT = {
   spell: {
     aura: {
       ...AURA_IMAGE_FIT,
-      initialAlpha: 0.5,
+      initialAlpha: 0.7,
       peakAlpha: 1,
       brightenDuration: 0.12,
-      holdDuration: 0.09,
-      fadeDuration: 0.28,
-      expansion: 1.06
+      holdDuration: 0.24,
+      fadeDuration: 0.6,
+      expansion: 1.02
     },
     particles: CAST_PARTICLES
   },
   hero: {
     aura: {
       ...AURA_IMAGE_FIT,
-      initialAlpha: 0.5,
+      initialAlpha: 0.7,
       peakAlpha: 1,
       brightenDuration: 0.12,
-      holdDuration: 0.09,
-      fadeDuration: 0.28,
-      expansion: 1.06
+      holdDuration: 0.24,
+      fadeDuration: 0.6,
+      expansion: 1.02
     },
     particles: CAST_PARTICLES
   }

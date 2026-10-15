@@ -22,7 +22,8 @@
               "type": "character",
               "selection": "all"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-blast-all-characters"
           }
         ]
       }
@@ -791,7 +792,8 @@
               "selection": "random"
             },
             "amount": 1,
-            "hits": 8
+            "hits": 8,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -891,7 +893,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ],
         "then": {
@@ -966,7 +969,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -1138,7 +1142,8 @@
             },
             "amount": {
               "reference": "source.attack"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -1171,7 +1176,8 @@
                 "operator": "gte",
                 "value": 7
               }
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -1253,7 +1259,8 @@
             },
             "amount": {
               "reference": "destroyed-weapon.attack"
-            }
+            },
+            "vfx": "fire-blast-enemy-side"
           }
         ]
       }
@@ -1350,7 +1357,8 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-blast-enemy-board"
           },
           {
             "action": "freeze",
@@ -1580,7 +1588,8 @@
                 "selection": "random",
                 "count": 1
               }
-            }
+            },
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -1982,7 +1991,8 @@
               "type": "minion",
               "selection": "chosen-and-adjacent"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           },
           {
             "action": "freeze",
@@ -2117,7 +2127,8 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           },
           {
             "action": "modify",
@@ -2228,7 +2239,8 @@
               "controller": "opponent",
               "type": "minion",
               "selection": "random"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -2257,7 +2269,8 @@
               "type": "minion",
               "selection": "all",
               "exclude": "source"
-            }
+            },
+            "vfx": "fire-blast-both-boards"
           },
           {
             "action": "discard",
@@ -2392,7 +2405,8 @@
               "type": "character",
               "selection": "random"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -2442,7 +2456,8 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -2856,7 +2871,8 @@
               "selection": "event-target",
               "type": "minion"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -3080,7 +3096,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 4
+            "amount": 4,
+            "vfx": "fire-missile"
           }
         ]
       },
@@ -3097,7 +3114,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -3129,7 +3147,8 @@
                   "type": "minion",
                   "selection": "chosen"
                 },
-                "amount": 5
+                "amount": 5,
+                "vfx": "fire-missile"
               },
               {
                 "action": "damage",
@@ -3139,7 +3158,8 @@
                   "selection": "adjacent",
                   "adjacentTo": "event-target"
                 },
-                "amount": 2
+                "amount": 2,
+                "vfx": "fire-missile"
               }
             ]
           }
@@ -3174,7 +3194,8 @@
               "type": "character",
               "selection": "all"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-blast-enemy-side"
           }
         ]
       }
@@ -3209,7 +3230,8 @@
             },
             "amount": {
               "reference": "event.damage"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -3397,7 +3419,8 @@
               "selection": "random"
             },
             "amount": 1,
-            "hits": 5
+            "hits": 5,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -3566,7 +3589,8 @@
               "selection": "random",
               "count": 2
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           },
           {
             "action": "overload",
@@ -3952,7 +3976,8 @@
               "type": "hero",
               "selection": "all"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ],
         "then": {
@@ -4042,7 +4067,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 4
+            "amount": 4,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -4071,7 +4097,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-missile"
           },
           {
             "action": "restore",
@@ -4109,7 +4136,8 @@
               "type": "character",
               "selection": "all"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-blast-enemy-side"
           },
           {
             "action": "restore",
@@ -4155,7 +4183,8 @@
             },
             "amount": {
               "reference": "drawn-card.cost"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -4220,7 +4249,8 @@
               "filter": {
                 "tribe": "Murloc"
               }
-            }
+            },
+            "vfx": "fire-missile"
           },
           {
             "action": "modify",
@@ -4351,7 +4381,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 4
+            "amount": 4,
+            "vfx": "fire-missile"
           }
         ]
       },
@@ -4547,7 +4578,8 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           },
           {
             "action": "modify",
@@ -4626,7 +4658,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -4672,7 +4705,8 @@
                     "type": "character",
                     "selection": "chosen"
                   },
-                  "amount": 2
+                  "amount": 2,
+                  "vfx": "fire-missile"
                 }
               ],
               "presentationCardId": "classic_moonfire_choose_one"
@@ -4756,7 +4790,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-missile"
           }
         ]
       },
@@ -4777,7 +4812,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -4889,7 +4925,8 @@
               "type": "character",
               "selection": "random"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -4933,7 +4970,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-missile"
           },
           {
             "action": "overload",
@@ -5088,7 +5126,8 @@
               "type": "hero",
               "selection": "all"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -5166,7 +5205,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           },
           {
             "action": "overload",
@@ -5202,7 +5242,8 @@
             "amount": {
               "random": [2, 3]
             },
-            "damageResolution": "per-target"
+            "damageResolution": "per-target",
+            "vfx": "fire-blast-enemy-board"
           },
           {
             "action": "overload",
@@ -5442,7 +5483,8 @@
               "exclude": "source"
             },
             "amount": 1,
-            "hits": 3
+            "hits": 3,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -5971,7 +6013,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -6008,7 +6051,8 @@
               },
               "thenValue": 6,
               "elseValue": 4
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -6231,7 +6275,8 @@
               "controller": "any",
               "type": "minion",
               "selection": "chosen"
-            }
+            },
+            "vfx": "fire-missile"
           },
           {
             "action": "draw",
@@ -6447,7 +6492,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       },
@@ -6464,7 +6510,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -6650,7 +6697,8 @@
                 "target": {
                   "type": "minion",
                   "selection": "event-target"
-                }
+                },
+                "vfx": "fire-missile"
               }
             ]
           }
@@ -6775,7 +6823,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 10
+            "amount": 10,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -6878,7 +6927,8 @@
               "type": "character",
               "selection": "random"
             },
-            "amount": 8
+            "amount": 8,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -7023,7 +7073,8 @@
             },
             "amount": {
               "reference": "self.hero.attack"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -7296,7 +7347,8 @@
             },
             "amount": {
               "reference": "source.attack"
-            }
+            },
+            "vfx": "fire-blast-enemy-board"
           }
         ]
       }
@@ -7451,7 +7503,8 @@
             },
             "amount": {
               "reference": "self.hero.armor"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -7529,7 +7582,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -7638,7 +7692,8 @@
               "controller": "any",
               "type": "minion",
               "selection": "chosen"
-            }
+            },
+            "vfx": "fire-missile"
           },
           {
             "action": "restore",
@@ -7691,7 +7746,8 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-missile"
           }
         ],
         "then": {
@@ -7779,7 +7835,8 @@
               "type": "minion",
               "selection": "event-target"
             },
-            "amount": 4
+            "amount": 4,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -8091,7 +8148,8 @@
                 "operator": "lte",
                 "value": 2
               }
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -8123,7 +8181,8 @@
                     "type": "minion",
                     "selection": "chosen"
                   },
-                  "amount": 5
+                  "amount": 5,
+                  "vfx": "fire-missile"
                 }
               ],
               "presentationCardId": "classic_starfall_single"
@@ -8137,7 +8196,8 @@
                     "type": "minion",
                     "selection": "all"
                   },
-                  "amount": 2
+                  "amount": 2,
+                  "vfx": "fire-blast-enemy-board"
                 }
               ],
               "presentationCardId": "classic_starfall_all"
@@ -8171,7 +8231,8 @@
               "type": "character",
               "selection": "all"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "fire-blast-enemy-side"
           }
         ]
       }
@@ -8515,7 +8576,8 @@
               "filter": {
                 "keyword": "taunt"
               }
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -8779,7 +8841,8 @@
               "controller": "any",
               "type": "minion",
               "selection": "all"
-            }
+            },
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -8955,7 +9018,8 @@
             "target": {
               "type": "minion",
               "selection": "event-target"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -9125,7 +9189,8 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -9214,7 +9279,8 @@
                     "type": "minion",
                     "selection": "chosen"
                   },
-                  "amount": 3
+                  "amount": 3,
+                  "vfx": "fire-missile"
                 }
               ],
               "presentationCardId": "classic_wrath_damage"
@@ -9228,7 +9294,8 @@
                     "type": "minion",
                     "selection": "chosen"
                   },
-                  "amount": 1
+                  "amount": 1,
+                  "vfx": "fire-missile"
                 },
                 {
                   "action": "draw",
@@ -9373,7 +9440,8 @@
               "selection": "all",
               "excludeCardId": "classic_ysera"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-blast-all-characters"
           }
         ]
       }
@@ -9465,7 +9533,8 @@
                 "target": {
                   "type": "minion",
                   "selection": "event-target"
-                }
+                },
+                "vfx": "fire-missile"
               }
             ]
           }

@@ -491,7 +491,8 @@
               "controller": "any",
               "type": "minion",
               "selection": "all"
-            }
+            },
+            "vfx": "fire-blast-both-boards"
           },
           {
             "action": "summon-for-each",
@@ -563,7 +564,8 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -651,7 +653,8 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -679,7 +682,8 @@
               "controller": "any",
               "type": "minion",
               "selection": "chosen"
-            }
+            },
+            "vfx": "fire-missile"
           },
           {
             "action": "resurrect",

@@ -1,3 +1,7 @@
+import landingDust1Image from '@assets/images/effects/dust-01.png'
+import landingDust2Image from '@assets/images/effects/dust-02.png'
+import landingDust3Image from '@assets/images/effects/dust-03.png'
+import landingDust4Image from '@assets/images/effects/dust-04.png'
 import loadScreenOverlayImage from '@assets/images/ui/deck-selection/load-screen-overlay.png'
 import appStartImage from '@assets/images/ui/common/app-start.png'
 import ghostSpotlightImage from '@assets/images/effects/spotlight-triangle.png'
@@ -16,6 +20,14 @@ import playSpotlight1Image from '@assets/images/effects/spotlight-01.png'
 import playSpotlight2Image from '@assets/images/effects/spotlight-02.png'
 import playSpotlight3Image from '@assets/images/effects/spotlight-03.png'
 import playSpotlight4Image from '@assets/images/effects/spotlight-04.png'
+import combatHitSparkImage from '@assets/images/effects/hit-spark-0.png'
+import combatHitSpark1Image from '@assets/images/effects/hit-spark-01.png'
+import combatHitSpark2Image from '@assets/images/effects/hit-spark-02.png'
+import combatHitSpark3Image from '@assets/images/effects/hit-spark-03.png'
+import combatHitSpark4Image from '@assets/images/effects/hit-spark-04.png'
+import combatHitSpark5Image from '@assets/images/effects/hit-spark-05.png'
+import combatHitSpark6Image from '@assets/images/effects/hit-spark-06.png'
+import combatHitSpark7Image from '@assets/images/effects/hit-spark-07.png'
 import playSpotlight5Image from '@assets/images/effects/spotlight-05.png'
 import playSpotlight6Image from '@assets/images/effects/spotlight-06.png'
 import playSpotlight7Image from '@assets/images/effects/spotlight-07.png'
@@ -85,6 +97,7 @@ import rankMedal23Image from '@assets/images/ui/deck-selection/ranks/23.png'
 import rankMedal24Image from '@assets/images/ui/deck-selection/ranks/24.png'
 import rankMedal25Image from '@assets/images/ui/deck-selection/ranks/25.png'
 import rankLegendImage from '@assets/images/ui/deck-selection/ranks/legend-medal.png'
+import rankBannerImage from '@assets/images/ui/deck-selection/ranks/banner.png'
 import collectionBackgroundImage from '@assets/images/ui/collection/collection-background.png'
 import collectionCoverImage from '@assets/images/ui/collection/collection-cover.png'
 import collectionCoverLockImage from '@assets/images/ui/collection/collection-cover-lock.png'
@@ -182,10 +195,8 @@ import heroImmuneImage from '@assets/images/board/hero-immune.png'
 import minionFrozenImage from '@assets/images/board/minion-frozen.png'
 import minionImmuneImage from '@assets/images/board/minion-immune.png'
 import minionElusiveImage from '@assets/images/board/minion-elusive.png'
-import minionSpellDamageImage from '@assets/images/board/minion-spell-damage.png'
 import minionLifestealImage from '@assets/images/board/minion-lifesteal.png'
 import minionAuraImage from '@assets/images/board/minion-aura.png'
-import minionWindfuryImage from '@assets/images/board/minion-windfury.png'
 import minionStealthImage from '@assets/images/board/minion-stealth.png'
 import minionTriggerImage from '@assets/images/board/minion-trigger.png'
 import minionInspireImage from '@assets/images/board/minion-inspire.png'
@@ -930,6 +941,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'deck-selection'
   ),
   asset(
+    'scene.deck-selection.rank-banner',
+    ASSET_BUNDLE_IDS.deckSelection,
+    'rankBanner',
+    rankBannerImage,
+    154,
+    190,
+    'deck-selection'
+  ),
+  asset(
     'scene.collection.background',
     ASSET_BUNDLE_IDS.collection,
     'background',
@@ -1132,8 +1152,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'damageIndicator',
     damageIndicatorImage,
-    159,
-    163,
+    158,
+    181,
     'game-scene'
   ),
   asset(
@@ -1425,24 +1445,6 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
-    'scene.game.minion-windfury',
-    ASSET_BUNDLE_IDS.game,
-    'minionWindfury',
-    minionWindfuryImage,
-    51,
-    48,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.minion-spell-damage',
-    ASSET_BUNDLE_IDS.game,
-    'minionSpellDamage',
-    minionSpellDamageImage,
-    43,
-    45,
-    'game-scene'
-  ),
-  asset(
     'scene.game.minion-lifesteal',
     ASSET_BUNDLE_IDS.game,
     'minionLifesteal',
@@ -1641,6 +1643,42 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.landing-dust-01',
+    ASSET_BUNDLE_IDS.game,
+    'landingDust1',
+    landingDust1Image,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.landing-dust-02',
+    ASSET_BUNDLE_IDS.game,
+    'landingDust2',
+    landingDust2Image,
+    128,
+    128,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.landing-dust-03',
+    ASSET_BUNDLE_IDS.game,
+    'landingDust3',
+    landingDust3Image,
+    128,
+    128,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.landing-dust-04',
+    ASSET_BUNDLE_IDS.game,
+    'landingDust4',
+    landingDust4Image,
+    128,
+    128,
+    'game-scene'
+  ),
+  asset(
     'scene.game.card-play-burst',
     ASSET_BUNDLE_IDS.game,
     'cardPlayBurst',
@@ -1683,6 +1721,78 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     playSpotlight4Image,
     256,
     256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.combat-hit-spark',
+    ASSET_BUNDLE_IDS.game,
+    'combatHitSpark',
+    combatHitSparkImage,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.combat-hit-spark-01',
+    ASSET_BUNDLE_IDS.game,
+    'combatHitSpark1',
+    combatHitSpark1Image,
+    244,
+    248,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.combat-hit-spark-02',
+    ASSET_BUNDLE_IDS.game,
+    'combatHitSpark2',
+    combatHitSpark2Image,
+    252,
+    234,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.combat-hit-spark-03',
+    ASSET_BUNDLE_IDS.game,
+    'combatHitSpark3',
+    combatHitSpark3Image,
+    254,
+    254,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.combat-hit-spark-04',
+    ASSET_BUNDLE_IDS.game,
+    'combatHitSpark4',
+    combatHitSpark4Image,
+    252,
+    249,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.combat-hit-spark-05',
+    ASSET_BUNDLE_IDS.game,
+    'combatHitSpark5',
+    combatHitSpark5Image,
+    236,
+    232,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.combat-hit-spark-06',
+    ASSET_BUNDLE_IDS.game,
+    'combatHitSpark6',
+    combatHitSpark6Image,
+    205,
+    210,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.combat-hit-spark-07',
+    ASSET_BUNDLE_IDS.game,
+    'combatHitSpark7',
+    combatHitSpark7Image,
+    226,
+    228,
     'game-scene'
   ),
   asset(
@@ -2741,6 +2851,7 @@ export interface DeckSelectionAssets extends Record<
   (typeof RANK_MEDAL_ASSET_KEYS)[number],
   Texture
 > {
+  rankBanner: Texture
   panel: Texture
   paginationNextButton: Texture
   playButton: Texture
@@ -2826,8 +2937,6 @@ export interface GameAssets extends Record<
   heroFrozen: Texture
   heroImmune: Texture
   minionFrozen: Texture
-  minionWindfury: Texture
-  minionSpellDamage: Texture
   minionLifesteal: Texture
   minionAura: Texture
   minionElusive: Texture
@@ -2850,11 +2959,23 @@ export interface GameAssets extends Record<
   heroPlayAura: Texture
   legendaryMinionPlayAura: Texture
   legendarySpellPlayAura: Texture
+  landingDust1: Texture
+  landingDust2: Texture
+  landingDust3: Texture
+  landingDust4: Texture
   cardPlayBurst: Texture
   playSpotlight1: Texture
   playSpotlight2: Texture
   playSpotlight3: Texture
   playSpotlight4: Texture
+  combatHitSpark: Texture
+  combatHitSpark1: Texture
+  combatHitSpark2: Texture
+  combatHitSpark3: Texture
+  combatHitSpark4: Texture
+  combatHitSpark5: Texture
+  combatHitSpark6: Texture
+  combatHitSpark7: Texture
   playSpotlight5: Texture
   playSpotlight6: Texture
   playSpotlight7: Texture

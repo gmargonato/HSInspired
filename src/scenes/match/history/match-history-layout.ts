@@ -55,7 +55,9 @@ export const MATCH_HISTORY_LAYOUT = {
     }),
     travelDuration: 0.2,
     holdDuration: 1,
-    fadeDuration: 0.1
+    fadeDuration: 0.1,
+    // Preview auras dissipate quickly, independently of normal play tuning.
+    auraFadeDuration: { spell: 0.28, hero: 0.28, minion: 0.32, weapon: 0.32 }
   }
 } as const
 

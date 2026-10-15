@@ -101,5 +101,5 @@ export const HERO_LAYOUT = {
       }
     )
   },
-  selectionScale: 1.08
+  selectionScale: 1.2
 } as const

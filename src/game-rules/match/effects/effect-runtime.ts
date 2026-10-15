@@ -689,6 +689,12 @@ export class EffectRuntime {
   private readonly rngSnapshot: unknown
   private nextEntityOrdinal: number
   private semanticSequence = 0
+  private vfxSequence = 0
+  private activeVfxGroup: {
+    id: string
+    frame: EffectFrame
+    paths: readonly string[]
+  } | null = null
   private presentationSequence = 0
   private combatSequence = 0
   private activeFrame: EffectFrame | null = null
@@ -865,6 +871,13 @@ export class EffectRuntime {
         frame.event?.type,
         data
       ),
+      ...(this.activeVfxGroup?.frame === frame &&
+      (action === 'damage' || action === 'destroy') &&
+      this.activeVfxGroup.paths.some(
+        (path) => actionPath === path || actionPath.startsWith(path + '.')
+      )
+        ? { vfxGroupId: this.activeVfxGroup.id }
+        : {}),
       ...(cardMovement ? { cardMovement: clonePlain(cardMovement) } : {}),
       ...(cardReveal ? { cardReveal: clonePlain(cardReveal) } : {})
     })
@@ -932,21 +945,101 @@ export class EffectRuntime {
       })
   }
 
-  private emitVfx(
+  /** Only authored VFX keys create cues; this never chooses a visual from gameplay. */
+  private withActionVfx(
     frame: EffectFrame,
-    action: Record<string, unknown>,
-    actionPath: string,
-    target?: EntityRef
+    entries: readonly {
+      action: Record<string, unknown>
+      path: string
+      targets: readonly EntityRef[]
+    }[],
+    resolve: () => void
   ): void {
-    if (this.deriving || typeof action.vfx !== 'string') return
+    const configured = entries.filter((entry) => typeof entry.action.vfx === 'string')
+    const visuals = new Map<string, string[]>()
+    for (const entry of configured) {
+      const targets = entry.targets
+        .filter(
+          (target) =>
+            target.kind === 'hero' ||
+            (target.kind === 'minion' &&
+              target.zone === 'board' &&
+              !this.currentMinion(target)?.dormant)
+        )
+        .map((target) => target.instanceId)
+      if (targets.length) {
+        const key = entry.action.vfx as string
+        visuals.set(key, [...(visuals.get(key) ?? []), ...targets])
+      }
+    }
+    if (this.deriving || !visuals.size) {
+      resolve()
+      return
+    }
+    const groupId = this.resolutionId + ':vfx:' + this.vfxSequence++
+    const cues = [...visuals].map(([vfxId, targetInstanceIds]) => ({
+      vfxId,
+      targetInstanceIds
+    }))
+    const first = cues[0]!
+    const cueIndex = this.events.length
     this.events.push({
       type: 'effect-vfx-started',
-      vfxId: action.vfx,
+      ...first,
+      targetInstanceId: first.targetInstanceIds[0],
+      ...(cues.length > 1 ? { visuals: cues } : {}),
       sourceInstanceId: frame.source.instanceId,
       controllerId: frame.controllerId,
-      actionPath,
-      ...(target ? { targetInstanceId: target.instanceId } : {})
+      origin: frame.isHeroPower ? 'hero-power' : 'source',
+      actionPath: configured[0]!.path,
+      vfxGroupId: groupId,
+      correlation: frame.correlation
     })
+    const previous = this.activeVfxGroup
+    this.activeVfxGroup = {
+      id: groupId,
+      frame,
+      paths: configured.map((entry) => entry.path)
+    }
+    try {
+      resolve()
+      // Use actual outcomes so redirects and selective clears cannot animate a bystander.
+      const outcomes = this.events
+        .slice(cueIndex + 1)
+        .filter(
+          (event): event is EffectDomainEvent =>
+            event.type === 'effect-resolved' && event.vfxGroupId === groupId
+        )
+      const resolved = cues
+        .map((cue) => ({
+          ...cue,
+          targetInstanceIds: outcomes.flatMap((outcome) =>
+            typeof outcome.data?.target === 'string' &&
+            configured.some(
+              (entry) =>
+                entry.action.vfx === cue.vfxId &&
+                (outcome.actionPath === entry.path ||
+                  outcome.actionPath.startsWith(entry.path + '.'))
+            )
+              ? [outcome.data.target]
+              : []
+          )
+        }))
+        .filter((cue) => cue.targetInstanceIds.length > 0)
+      if (resolved.length) {
+        this.events[cueIndex] = {
+          ...(this.events[cueIndex] as Extract<
+            OpeningMatchEvent,
+            { type: 'effect-vfx-started' }
+          >),
+          ...resolved[0]!,
+          targetInstanceId: resolved[0]!.targetInstanceIds[0],
+          visuals: resolved.length > 1 ? resolved : undefined
+        }
+      } else this.events.splice(cueIndex, 1)
+    } finally {
+      this.activeVfxGroup = previous
+    }
   }
 
   /** Records one concrete trigger frame before any of its consequences run. */
@@ -4535,6 +4628,7 @@ export class EffectRuntime {
     const definition = cardDefinition(cardId)
     if (!definition || definition.type !== 'Minion') return null
     const instanceId = sourceInstanceId ?? this.allocateId(`${participantId}:summoned`)
+    const sourceZone = cardState?.zone
     if (cardId === CTHUN_ID && !copyFrom) {
       cardState = applyCthunToCard(
         cardState ?? {
@@ -4655,6 +4749,7 @@ export class EffectRuntime {
     if (!deferSummonTriggers) {
       this.events.push({
         type: 'minion-summoned',
+        ...(sourceZone ? { sourceZone } : {}),
         ...(frame.summonGroupId ? { summonGroupId: frame.summonGroupId } : {}),
         participantId,
         minion: clonePlain(minion) as BoardMinion,
@@ -7239,15 +7334,25 @@ export class EffectRuntime {
         this.emit(frame, name, path, { eventType: frame.event?.type ?? null })
         return
       case 'damage-group': {
+        const entries: {
+          action: Record<string, unknown>
+          path: string
+          targets: EntityRef[]
+        }[] = []
         const packets = asArray(action.actions).flatMap((value, index) => {
           const damage = asRecord(value)
-          return this.damageTargets(damage, frame).map((target) =>
-            this.prepareDamage(damage, target, frame, `${path}.actions[${index}].hit0`)
+          const targets = this.damageTargets(damage, frame)
+          const hitPath = path + '.actions[' + index + '].hit0'
+          entries.push({ action: damage, path: hitPath, targets })
+          return targets.map((target) =>
+            this.prepareDamage(damage, target, frame, hitPath)
           )
         })
-        this.runDamageStep(() => {
-          for (const apply of packets) apply()
-        })
+        this.withActionVfx(frame, entries, () =>
+          this.runDamageStep(() => {
+            for (const apply of packets) apply()
+          })
+        )
         return
       }
       case 'damage': {
@@ -7258,8 +7363,6 @@ export class EffectRuntime {
         const randomTarget =
           isRecord(action.target) && action.target.selection === 'random'
         const targets = randomTarget ? [] : this.damageTargets(action, frame)
-        if (!randomTarget) this.emitVfx(frame, action, path, targets[0])
-        let randomVfxEmitted = false
         const randomSplitSpell =
           this.sourceIsSpell(frame) && randomTarget && action.amount === 1
         const hits = randomSplitSpell
@@ -7282,34 +7385,34 @@ export class EffectRuntime {
             const selectedTargets = randomTarget
               ? this.damageTargets(action, frame)
               : targets
-            if (randomTarget && !randomVfxEmitted) {
-              this.emitVfx(frame, action, path, selectedTargets[0])
-              randomVfxEmitted = true
-            }
+            const hitPath = path + '.hit' + hit
             if (action.damageResolution === 'per-target') {
-              for (const target of selectedTargets)
-                this.runDamageStep(
-                  this.prepareDamage(
-                    action,
-                    target,
-                    frame,
-                    `${path}.hit${hit}`,
-                    randomSplitSpell
-                  )
-                )
-            } else {
-              const packets = selectedTargets.map((target) =>
-                this.prepareDamage(
+              for (const target of selectedTargets) {
+                const apply = this.prepareDamage(
                   action,
                   target,
                   frame,
-                  `${path}.hit${hit}`,
+                  hitPath,
                   randomSplitSpell
                 )
+                this.withActionVfx(
+                  frame,
+                  [{ action, path: hitPath, targets: [target] }],
+                  () => this.runDamageStep(apply)
+                )
+              }
+            } else {
+              const packets = selectedTargets.map((target) =>
+                this.prepareDamage(action, target, frame, hitPath, randomSplitSpell)
               )
-              this.runDamageStep(() => {
-                for (const apply of packets) apply()
-              })
+              this.withActionVfx(
+                frame,
+                [{ action, path: hitPath, targets: selectedTargets }],
+                () =>
+                  this.runDamageStep(() => {
+                    for (const apply of packets) apply()
+                  })
+              )
             }
             for (const target of selectedTargets) {
               const minion =
@@ -7327,87 +7430,106 @@ export class EffectRuntime {
       }
       case 'destroy': {
         const targets = this.actionTargets(action, frame)
-        this.emitVfx(frame, action, path, targets[0])
-        for (const target of targets) {
-          if (action.storeCardId === true && frame.source.kind === 'minion') {
-            const victim = this.currentMinion(target)
-            if (victim) {
-              const storedControllerId = victim.controllerId ?? target.participantId
-              this.updateMinion(frame.source, (sourceMinion) => {
-                sourceMinion.enchantments = (sourceMinion.enchantments ?? []).filter(
-                  (enchantment) => enchantment.storedCardId === undefined
-                )
-              })
-              this.addEnchantment(frame.source, {
-                id: this.allocateId(`${frame.source.instanceId}:stored-card`),
-                sourceInstanceId: frame.source.instanceId,
-                sourceCardId: frame.sourceCardId,
-                costDelta: 0,
-                storedCardId: victim.cardId,
-                storedControllerId
-              })
+        this.withActionVfx(frame, [{ action, path, targets }], () => {
+          for (const target of targets) {
+            if (action.storeCardId === true && frame.source.kind === 'minion') {
+              const victim = this.currentMinion(target)
+              if (victim) {
+                const storedControllerId = victim.controllerId ?? target.participantId
+                this.updateMinion(frame.source, (sourceMinion) => {
+                  sourceMinion.enchantments = (sourceMinion.enchantments ?? []).filter(
+                    (enchantment) => enchantment.storedCardId === undefined
+                  )
+                })
+                this.addEnchantment(frame.source, {
+                  id: this.allocateId(`${frame.source.instanceId}:stored-card`),
+                  sourceInstanceId: frame.source.instanceId,
+                  sourceCardId: frame.sourceCardId,
+                  costDelta: 0,
+                  storedCardId: victim.cardId,
+                  storedControllerId
+                })
+              }
             }
-          }
-          if (
-            action.storeStats === true &&
-            !frame.storedValues.has('destroyed-target.attack')
-          ) {
-            const victim = this.currentMinion(target)
-            if (victim) {
-              frame.storedValues.set('destroyed-target.attack', victim.attack)
-              frame.storedValues.set('destroyed-target.health', victim.health)
+            if (
+              action.storeStats === true &&
+              !frame.storedValues.has('destroyed-target.attack')
+            ) {
+              const victim = this.currentMinion(target)
+              if (victim) {
+                frame.storedValues.set('destroyed-target.attack', victim.attack)
+                frame.storedValues.set('destroyed-target.health', victim.health)
+              }
             }
+            this.queries.withTarget(frame, target, () =>
+              this.directDestroy(target, frame, path)
+            )
+            frame.lastActionTarget = target
           }
-          this.queries.withTarget(frame, target, () =>
-            this.directDestroy(target, frame, path)
-          )
-          frame.lastActionTarget = target
-        }
+        })
         return
       }
-      case 'destroy-all-but-highest-attack':
-        for (const player of this.draft.players) {
-          const highest = Math.max(
-            ...player.board.map((minion) => minion.attack),
-            Number.NEGATIVE_INFINITY
-          )
-          const contenders = player.board.filter((minion) => minion.attack === highest)
-          const survivor =
-            contenders[Math.floor(this.rng.next() * contenders.length)] ?? null
-          for (const minion of [...player.board]) {
-            if (minion.instanceId === survivor?.instanceId) continue
-            this.directDestroy(
-              {
-                instanceId: minion.instanceId,
-                kind: 'minion',
-                participantId: player.participantId,
-                zone: 'board',
-                cardId: minion.cardId
-              },
-              frame,
-              path
+      case 'destroy-all-but-highest-attack': {
+        // Coverage is known now; preserve survivor selection/destruction order.
+        // withActionVfx records the actual victims after the action resolves.
+        const targets: EntityRef[] = this.draft.players.flatMap((player) =>
+          player.board.map((minion) => ({
+            instanceId: minion.instanceId,
+            kind: 'minion' as const,
+            participantId: player.participantId,
+            zone: 'board' as const,
+            cardId: minion.cardId
+          }))
+        )
+        this.withActionVfx(frame, [{ action, path, targets }], () => {
+          for (const player of this.draft.players) {
+            const highest = Math.max(
+              ...player.board.map((minion) => minion.attack),
+              Number.NEGATIVE_INFINITY
             )
+            const contenders = player.board.filter(
+              (minion) => minion.attack === highest
+            )
+            const survivor =
+              contenders[Math.floor(this.rng.next() * contenders.length)] ?? null
+            for (const minion of [...player.board]) {
+              if (minion.instanceId === survivor?.instanceId) continue
+              this.directDestroy(
+                {
+                  instanceId: minion.instanceId,
+                  kind: 'minion',
+                  participantId: player.participantId,
+                  zone: 'board',
+                  cardId: minion.cardId
+                },
+                frame,
+                path
+              )
+            }
           }
-        }
+        })
         return
+      }
       case 'destroy-and-gain-stats': {
         const targets = this.actionTargets(action, frame)
         const destination = isRecord(action.destination)
           ? this.queries.select(action.destination, frame)
           : [frame.source]
-        for (const target of targets) {
-          const attack = this.readAttack(target)
-          const health = this.readMaximumHealth(target)
-          this.directDestroy(target, frame, path)
-          for (const targetDestination of destination) {
-            this.modifyEntity(
-              targetDestination,
-              { action: 'modify', attack, health },
-              frame,
-              path + '.destination'
-            )
+        this.withActionVfx(frame, [{ action, path, targets }], () => {
+          for (const target of targets) {
+            const attack = this.readAttack(target)
+            const health = this.readMaximumHealth(target)
+            this.directDestroy(target, frame, path)
+            for (const targetDestination of destination) {
+              this.modifyEntity(
+                targetDestination,
+                { action: 'modify', attack, health },
+                frame,
+                path + '.destination'
+              )
+            }
           }
-        }
+        })
         return
       }
       case 'destroy-secrets':
@@ -8489,9 +8611,11 @@ export class EffectRuntime {
           const packets = targets.map((target) =>
             this.prepareDamage(action, target, sourceFrame, path)
           )
-          this.runDamageStep(() => {
-            for (const apply of packets) apply()
-          })
+          this.withActionVfx(sourceFrame, [{ action, path, targets }], () =>
+            this.runDamageStep(() => {
+              for (const apply of packets) apply()
+            })
+          )
           frame.lastActionTarget = sourceFrame.lastActionTarget
         }
         return
@@ -8756,9 +8880,14 @@ export class EffectRuntime {
           const packets = targets.map((target) =>
             this.prepareDamage(action, target, sourceFrame, path + '.damage')
           )
-          this.runDamageStep(() => {
-            for (const apply of packets) apply()
-          })
+          this.withActionVfx(
+            sourceFrame,
+            [{ action, path: path + '.damage', targets }],
+            () =>
+              this.runDamageStep(() => {
+                for (const apply of packets) apply()
+              })
+          )
           frame.lastActionTarget = sourceFrame.lastActionTarget
         }
         return
@@ -12432,7 +12561,13 @@ export class EffectRuntime {
         this.executeQueued(
           path,
           () => {
-            this.runAction(action, frame, path)
+            const authoredAction =
+              isRecord(action) &&
+              (action.action === 'damage' || action.action === 'destroy') &&
+              effect.vfx
+                ? { ...action, vfx: effect.vfx }
+                : action
+            this.runAction(authoredAction, frame, path)
             this.processDeaths()
           },
           'action'
@@ -12455,7 +12590,8 @@ export class EffectRuntime {
         player.heroPower.effectOverride?.damage !== undefined
           ? {
               kind: 'damage-character' as const,
-              amount: player.heroPower.effectOverride.damage
+              amount: player.heroPower.effectOverride.damage,
+              vfx: player.heroPower.effectOverride.vfx
             }
           : power.effect
       const restoreIsDamage =
@@ -13052,6 +13188,13 @@ export class EffectRuntime {
             ? {
                 type: 'character-damaged',
                 source: 'hero-power',
+                vfxGroupId: this.events.find(
+                  (event): event is EffectDomainEvent =>
+                    event.type === 'effect-resolved' &&
+                    event.action === 'damage' &&
+                    event.actionPath.startsWith('hero-power.damage.') &&
+                    event.vfxGroupId !== undefined
+                )?.vfxGroupId,
                 participantId: reportedTarget.participantId,
                 character:
                   reportedTarget.kind === 'hero'
@@ -13103,12 +13246,14 @@ export class EffectRuntime {
       return {
         accepted: true,
         state: nextState,
-        // Targeted hero powers publish typed character outcomes below. Bladestorm
-        // has one area-damage result per minion instead, so retain those direct
+        // Keep authored visual impacts, including nested triggered actions. Targeted
+        // powers also publish typed outcomes for history; their group prevents replay.
+        // Bladestorm has one area-damage result per minion, so retain those direct
         // effect cues for the board presentation.
         events: clonePlain(this.events).filter(
           (event) =>
             event.type !== 'effect-resolved' ||
+            event.vfxGroupId !== undefined ||
             (effect.kind === 'damage-all-minions' &&
               event.action === 'damage' &&
               event.actionPath.startsWith('hero-power.damage-all-minions.'))

@@ -53,7 +53,8 @@ function ingredient(
         action: {
           action: 'damage',
           target: { controller: 'any', type: 'character', selection: 'chosen' },
-          amount: damage
+          amount: damage,
+          vfx: 'fire-missile'
         }
       }
     case 'felbloom':
@@ -62,7 +63,8 @@ function ingredient(
         action: {
           action: 'damage',
           target: { controller: 'any', type: 'minion', selection: 'all' },
-          amount: health
+          amount: health,
+          vfx: 'fire-blast-both-boards'
         }
       }
     case 'goldthorn':

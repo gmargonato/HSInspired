@@ -231,7 +231,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -260,7 +261,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-missile"
           },
           {
             "action": "summon-random",
@@ -497,7 +499,8 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": 1
+            "amount": 1,
+            "vfx": "fire-blast-enemy-board"
           },
           {
             "action": "summon-random",
@@ -748,7 +751,8 @@
                 "operator": "lte",
                 "value": 3
               }
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       }
@@ -1061,7 +1065,8 @@
               "controller": "any",
               "type": "minion",
               "selection": "chosen"
-            }
+            },
+            "vfx": "fire-missile"
           }
         ]
       },

@@ -492,7 +492,7 @@ export const GAME_BOARD_LAYOUT = {
 
   /** Fanned remote hand of card backs, anchored bottom-center. */
   remoteHand: {
-    centerX: 960,
+    centerX: 980,
     baselineY: 72,
     gap: 82,
     /** Compressed centre-to-centre step at a full hand. */

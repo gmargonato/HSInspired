@@ -2,7 +2,8 @@ import { resolveCardPlay } from './effect-runtime'
 import { CARD_CATALOG } from '../../content/cards'
 import { validateCardSet } from '../../content/cards/card-validator'
 import type { OpeningMatchEvent } from '../opening-match-types'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { createSeededRng } from '../rng'
 import { createMatchScenario } from '../testing/match-scenario-builder'
 
 type Scenario = ReturnType<typeof createMatchScenario>
@@ -77,6 +78,74 @@ function play(
 }
 
 describe('resolution presentation events', () => {
+  it('preserves the hand origin of Dirty Rat pulls without treating them as plays', () => {
+    const scenario = createMatchScenario({ seed: 1701 })
+    scenario.confirmBothMulligans()
+    const [active, opponent] = activePlayers(scenario)
+    addCard(scenario, active, 'mean_streets_of_gadgetzan_dirty_rat')
+    addCard(scenario, opponent, 'basic_boulderfist_ogre')
+    setMana(scenario, active)
+    const handIds = new Set(
+      player(scenario, opponent).hand.map((card) => card.instanceId)
+    )
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: active,
+      cardInstanceId: player(scenario, active).hand.find(
+        (card) => card.cardId === 'mean_streets_of_gadgetzan_dirty_rat'
+      )!.instanceId,
+      position: 0,
+      targets: []
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    const pulled = result.events.find(
+      (event) => event.type === 'minion-summoned' && event.participantId === opponent
+    )
+    expect(pulled).toMatchObject({ type: 'minion-summoned', sourceZone: 'hand' })
+    if (pulled?.type !== 'minion-summoned') throw new Error('Missing pulled minion')
+    expect(handIds.has(pulled.minion.instanceId)).toBe(true)
+    expect(
+      result.events.some(
+        (event) => event.type === 'minion-played' && event.participantId === opponent
+      )
+    ).toBe(false)
+  })
+
+  it('does not label Alleycat generated summons as hand arrivals', () => {
+    const scenario = createMatchScenario({ seed: 1702 })
+    scenario.confirmBothMulligans()
+    const [active] = activePlayers(scenario)
+    addCard(scenario, active, 'mean_streets_of_gadgetzan_alleycat')
+    setMana(scenario, active)
+    const result = scenario.match.dispatch({
+      type: 'play-card',
+      participantId: active,
+      cardInstanceId: player(scenario, active).hand.find(
+        (card) => card.cardId === 'mean_streets_of_gadgetzan_alleycat'
+      )!.instanceId,
+      position: 0,
+      targets: []
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) return
+    const tabby = result.events.find(
+      (event) =>
+        event.type === 'minion-summoned' &&
+        event.minion.cardId === 'mean_streets_of_gadgetzan_tabbycat'
+    )
+    expect(tabby).toBeDefined()
+    if (tabby?.type !== 'minion-summoned') throw new Error('Missing Tabbycat')
+    expect(tabby.sourceZone).toBeUndefined()
+    expect(
+      result.events.some(
+        (event) =>
+          event.type === 'minion-played' &&
+          event.minion.cardId === 'mean_streets_of_gadgetzan_alleycat'
+      )
+    ).toBe(true)
+  })
+
   it('reports Healing Totem full values for undamaged friendly minions', () => {
     const scenario = createMatchScenario({ seed: 1698 })
     scenario.confirmBothMulligans()
@@ -417,6 +486,7 @@ function damagePhaseFixture(cardId = 'basic_swipe') {
       type: 'play-card',
       participantId: self,
       cardInstanceId: player(self).hand.find((c) => c.cardId === cardId)!.instanceId,
+      ...(CARD_CATALOG.require(cardId).type === 'Minion' ? { position: 0 } : {}),
       ...(target
         ? {
             targets: [
@@ -432,6 +502,7 @@ function damagePhaseFixture(cardId = 'basic_swipe') {
         : {})
     })
     expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
     return result
   }
   return { s, self, enemy, player, summon, play }
@@ -717,4 +788,220 @@ it('converted area healing applies all damage before damage triggers', () => {
   const r = f.play()
   expect(f.player().board.filter((m) => m.cardId === impId)).toHaveLength(2)
   damageBeforeTriggers(r.events, 'classic_circle_of_healing')
+})
+
+describe('explicit action VFX', () => {
+  const cues = (events: readonly OpeningMatchEvent[]) =>
+    events.filter((e) => e.type === 'effect-vfx-started')
+  const outcomes = (events: readonly OpeningMatchEvent[]) =>
+    events.filter(
+      (e): e is Extract<OpeningMatchEvent, { type: 'effect-resolved' }> =>
+        e.type === 'effect-resolved' &&
+        (e.action === 'damage' || e.action === 'destroy')
+    )
+
+  it.each([
+    'basic_fireball',
+    'basic_frostbolt',
+    'basic_shadow_word_death',
+    'classic_big_game_hunter'
+  ])('%s emits its explicitly authored missile before the outcome', (cardId) => {
+    const f = damagePhaseFixture(cardId)
+    const target = f.summon('basic_war_golem')
+    const r = f.play(target)
+    const cue = cues(r.events)[0]!
+    expect(cue).toMatchObject({
+      vfxId: 'fire-missile',
+      targetInstanceIds: [target.instanceId],
+      origin: 'source'
+    })
+    const outcome = outcomes(r.events).find((e) => e.vfxGroupId === cue.vfxGroupId)!
+    expect(outcome).toBeDefined()
+    expect(r.events.indexOf(cue)).toBeLessThan(r.events.indexOf(outcome))
+  })
+
+  it('Flamestrike stays AoE for one shielded target and skips an empty board', () => {
+    const f = damagePhaseFixture('basic_flamestrike')
+    expect(cues(f.play().events)).toHaveLength(0)
+    setMana(f.s, f.self)
+    const target = f.summon('classic_argent_squire')
+    const r = f.play()
+    expect(cues(r.events)).toHaveLength(1)
+    expect(cues(r.events)[0]).toMatchObject({
+      vfxId: 'fire-blast-enemy-board',
+      targetInstanceIds: [target.instanceId]
+    })
+    expect(outcomes(r.events)[0].data?.shieldConsumed).toBe(true)
+  })
+
+  it('each random hit has its own cue and matching outcome, even on the same hero', () => {
+    const f = damagePhaseFixture('basic_arcane_missiles')
+    const r = f.play()
+    expect(cues(r.events)).toHaveLength(3)
+    expect(new Set(cues(r.events).map((e) => e.vfxGroupId)).size).toBe(3)
+    for (const cue of cues(r.events)) {
+      const outcome = outcomes(r.events).find((e) => e.vfxGroupId === cue.vfxGroupId)!
+      expect(cue.targetInstanceIds).toEqual([outcome.data?.target])
+      expect(r.events.indexOf(cue)).toBeLessThan(r.events.indexOf(outcome))
+    }
+  })
+
+  it('Swipe gates its mixed missile and AoE together before all damage', () => {
+    const f = damagePhaseFixture('basic_swipe')
+    const target = f.summon('basic_chillwind_yeti')
+    f.summon('basic_chillwind_yeti')
+    const r = f.play(target)
+    const cue = cues(r.events)[0]!
+    expect(cues(r.events)).toHaveLength(1)
+    expect(cue.visuals?.map((v) => v.vfxId)).toEqual([
+      'fire-missile',
+      'fire-blast-enemy-side'
+    ])
+    expect(outcomes(r.events).every((e) => e.vfxGroupId === cue.vfxGroupId)).toBe(true)
+  })
+
+  it('Explosive Shot launches its three missiles as one simultaneous wave', () => {
+    const f = damagePhaseFixture('classic_explosive_shot')
+    f.summon('basic_chillwind_yeti')
+    const target = f.summon('basic_chillwind_yeti')
+    f.summon('basic_chillwind_yeti')
+    const r = f.play(target)
+    expect(cues(r.events)).toHaveLength(1)
+    expect(cues(r.events)[0].targetInstanceIds).toHaveLength(3)
+    expect(new Set(outcomes(r.events).map((e) => e.vfxGroupId)).size).toBe(1)
+  })
+
+  it('a triggered minion missile retains its own group inside an AoE resolution', () => {
+    const f = damagePhaseFixture('basic_hellfire')
+    const leper = f.summon('classic_leper_gnome')
+    const r = f.play()
+    const wave = cues(r.events).find((e) => e.vfxId === 'fire-blast-all-characters')!
+    const deathrattle = cues(r.events).find(
+      (e) => e.sourceInstanceId === leper.instanceId
+    )!
+    expect(deathrattle.vfxId).toBe('fire-missile')
+    expect(deathrattle.vfxGroupId).not.toBe(wave.vfxGroupId)
+    expect(
+      outcomes(r.events).some((e) => e.vfxGroupId === deathrattle.vfxGroupId)
+    ).toBe(true)
+  })
+
+  it.each(['classic_baron_geddon', 'classic_doomsayer'])(
+    '%s retains its turn-trigger AoE',
+    (cardId) => {
+      const f = damagePhaseFixture()
+      f.summon(cardId, f.self)
+      f.summon('basic_chillwind_yeti')
+      const end = f.s.match.dispatch({ type: 'end-turn', participantId: f.self })
+      const events =
+        cardId === 'classic_doomsayer'
+          ? f.s.match.dispatch({ type: 'end-turn', participantId: f.enemy }).events
+          : end.events
+      expect(
+        cues(events).some(
+          (e) =>
+            e.vfxId ===
+            (cardId === 'classic_doomsayer'
+              ? 'fire-blast-both-boards'
+              : 'fire-blast-all-characters')
+        )
+      ).toBe(true)
+    }
+  )
+
+  it('specialized selective clears animate only once', () => {
+    const f = damagePhaseFixture('the_grand_tournament_enter_the_coliseum')
+    for (const id of [f.self, f.enemy]) {
+      f.summon('basic_chillwind_yeti', id)
+      f.summon('basic_stonetusk_boar', id)
+    }
+    const r = f.play()
+    expect(cues(r.events)).toHaveLength(1)
+    expect(cues(r.events)[0].vfxId).toBe('fire-blast-both-boards')
+    expect(outcomes(r.events)).toHaveLength(2)
+  })
+
+  it('leaves an explicit self-cost without a shader', () => {
+    const f = damagePhaseFixture('classic_flame_imp')
+    const r = f.play()
+    expect(outcomes(r.events)).toHaveLength(1)
+    expect(cues(r.events)).toHaveLength(0)
+  })
+
+  it('removing the authored key removes all cues without changing RNG, state or gameplay events', () => {
+    const f = damagePhaseFixture('basic_arcane_missiles')
+    const state = f.s.match.getState()
+    const options = {
+      state,
+      participantId: f.self,
+      cardInstanceId: f.player(f.self).hand[0].instanceId
+    }
+    const run = () => resolveCardPlay({ ...options, rng: createSeededRng(401) })
+    const configured = run()
+    const get = CARD_CATALOG.get.bind(CARD_CATALOG)
+    const spy = vi.spyOn(CARD_CATALOG, 'get').mockImplementation((id) => {
+      const card = get(id)
+      if (id !== 'basic_arcane_missiles') return card
+      return JSON.parse(
+        JSON.stringify(card, (key, value) => (key === 'vfx' ? undefined : value))
+      )
+    })
+    try {
+      const unconfigured = run()
+      expect(configured.accepted).toBe(true)
+      expect(unconfigured.accepted).toBe(true)
+      if (!configured.accepted || !unconfigured.accepted) return
+      expect(cues(configured.events)).toHaveLength(3)
+      expect(cues(unconfigured.events)).toHaveLength(0)
+      expect(unconfigured.state).toEqual(configured.state)
+      const gameplay = (events: readonly OpeningMatchEvent[]) =>
+        JSON.parse(
+          JSON.stringify(
+            events.filter((e) => e.type !== 'effect-vfx-started'),
+            (key, value) => (key === 'vfxGroupId' ? undefined : value)
+          )
+        )
+      expect(gameplay(unconfigured.events)).toEqual(gameplay(configured.events))
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
+it('Shadowflame animates its damage without animating the sacrifice', () => {
+  const f = damagePhaseFixture('classic_shadowflame')
+  const sacrifice = f.summon('basic_chillwind_yeti', f.self)
+  f.summon('basic_chillwind_yeti')
+  const r = f.s.match.dispatch({
+    type: 'play-card',
+    participantId: f.self,
+    cardInstanceId: f.player(f.self).hand[0].instanceId,
+    targets: [
+      { kind: 'minion', participantId: f.self, instanceId: sacrifice.instanceId }
+    ]
+  })
+  expect(r.accepted).toBe(true)
+  if (!r.accepted) throw new Error(r.message)
+  const cues = r.events.filter((e) => e.type === 'effect-vfx-started')
+  expect(cues).toHaveLength(1)
+  expect(cues[0].vfxId).toBe('fire-blast-enemy-board')
+  const cost = r.events.find(
+    (e) => e.type === 'effect-resolved' && e.action === 'destroy'
+  )
+  expect(cost?.type === 'effect-resolved' && cost.vfxGroupId).toBeUndefined()
+})
+
+it('Betrayal emits missiles from the selected minion to both neighbours', () => {
+  const f = damagePhaseFixture('classic_betrayal')
+  const left = f.summon('basic_chillwind_yeti')
+  const source = f.summon('basic_chillwind_yeti')
+  const right = f.summon('basic_chillwind_yeti')
+  const r = f.play(source)
+  const cues = r.events.filter((e) => e.type === 'effect-vfx-started')
+  expect(cues).toHaveLength(1)
+  expect(cues[0]).toMatchObject({
+    sourceInstanceId: source.instanceId,
+    vfxId: 'fire-missile'
+  })
+  expect(cues[0].targetInstanceIds).toEqual([left.instanceId, right.instanceId])
 })

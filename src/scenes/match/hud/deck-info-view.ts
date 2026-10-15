@@ -15,6 +15,7 @@ export class DeckInfoView extends Container {
   private readonly heading: Text
   private readonly body: Text
   private hovered: { side: Side; deck: Sprite } | null = null
+  private hoverSuppressed = false
   private counts = {
     local: { deck: 0, hand: 0 },
     remote: { deck: 0, hand: 0 }
@@ -62,6 +63,7 @@ export class DeckInfoView extends Container {
   }
 
   show(side: Side, deck: Sprite): void {
+    if (this.hoverSuppressed) return
     this.hovered = { side, deck }
     this.refresh()
     this.visible = true
@@ -69,6 +71,16 @@ export class DeckInfoView extends Container {
 
   hide(side: Side): void {
     if (this.hovered?.side !== side) return
+    this.hovered = null
+    this.visible = false
+  }
+
+  setHoverSuppressed(suppressed: boolean): void {
+    this.hoverSuppressed = suppressed
+    if (suppressed) this.clearHover()
+  }
+
+  clearHover(): void {
     this.hovered = null
     this.visible = false
   }
