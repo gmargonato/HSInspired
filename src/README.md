@@ -44,7 +44,8 @@ src/
 Match-wide stacking is declared in `scenes/match/match-layers.ts` and assigned by
 `GameBoardView.mountMatchLayers`. Board/HUD/history thumbnails sit below transit
 and combat, followed by indicators, passive previews and reveals, hands, pending
-card selections, and modal choices. Loading, settings and results cover the match.
+card selections, targeting arrows, and modal choices. Loading, settings and results
+cover the match. Targeting arrows sit above selected minions and landing effects.
 Mulligan transport temporarily sits above its dimmer until the opening completes.
 Internal card/component z-indices only order siblings inside their own layer.
 Outgoing choice controls use a dedicated modal-exit layer below hands.

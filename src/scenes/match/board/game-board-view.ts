@@ -58,7 +58,11 @@ import { eventPresentationPolicy } from '../presentation/event-presentation-poli
 import { MatchVfxPresenter } from '../presentation/match-vfx-presenter'
 import { getVfxTemplate } from '../../../visual-components/effects/vfx-templates'
 import { handDiscardBatch, isHandDiscard } from '../hand/hand-discard-presentation'
-import { summonPresentationBatch } from '../presentation/summon-presentation'
+import {
+  hasSummonGlow,
+  summonPresentationBatch
+} from '../presentation/summon-presentation'
+import { appendSummonGlow } from '../presentation/summon-glow'
 import {
   isMinionReturn,
   returnPresentationBatch
@@ -1083,7 +1087,7 @@ export class GameBoardView extends Actor {
     this.combat.indicatorLayer.eventMode = 'none'
     this.combat.indicatorLayer.sortableChildren = true
     this.gameplayLayer.addChild(this.combat.indicatorLayer)
-    // Keep the Pixi arrow body above board effects, below hand cards. The cursor's
+    // Keep the Pixi arrow body above selected minions and effects, below modals. The cursor's
     // arrow head is rendered in the DOM above the canvas.
     this.attackLineLayer.label = 'game.attack-line-layer'
     this.attackLineLayer.eventMode = 'none'
@@ -2716,6 +2720,14 @@ export class GameBoardView extends Actor {
     this.syncBoardAttackability(this.match.getState())
   }
 
+  private heroRestingPosition(view: HeroView): { x: number; y: number } {
+    const placement =
+      view.ownerId === this.localParticipantId
+        ? GAME_BOARD_LAYOUT.heroes.local
+        : GAME_BOARD_LAYOUT.heroes.remote
+    return view.parent!.toLocal(this.heroLayer.toGlobal(placement.position))
+  }
+
   private selectAttacker(view: CombatView, toggleSelected = true): void {
     if (this.randomSpellRevision !== null) return
     if (!view.isCanAttack()) return
@@ -2728,7 +2740,10 @@ export class GameBoardView extends Actor {
       const previous = this.selectedCombatView
       previous.setSelected(false)
       this.tweenTo(previous, {
-        y: previous.y + 12,
+        y:
+          previous instanceof HeroView
+            ? this.heroRestingPosition(previous).y
+            : previous.y + 12,
         duration: 0.18,
         ease: 'power2.inOut',
         overwrite: 'auto'
@@ -2741,7 +2756,7 @@ export class GameBoardView extends Actor {
     this.hideBoardCardPreview()
     view.setSelected(true)
     this.tweenTo(view, {
-      y: view.y - 12,
+      y: (view instanceof HeroView ? this.heroRestingPosition(view).y : view.y) - 12,
       duration: 0.22,
       ease: 'back.out(1.4)',
       overwrite: 'auto'
@@ -2763,14 +2778,16 @@ export class GameBoardView extends Actor {
       view.setSelected(false)
       if (animate) {
         this.tweenTo(view, {
-          y: view.y + 12,
+          y: view instanceof HeroView ? this.heroRestingPosition(view).y : view.y + 12,
           duration: 0.18,
           ease: 'power2.inOut',
           overwrite: 'auto'
         })
       } else if (!(view instanceof MinionView)) {
         this.killTweensOf(view)
-        view.y += 12
+        // Combat captures this position as its return origin. Never retain a
+        // partial selection lift or its easing overshoot as the hero's home.
+        view.position.copyFrom(this.heroRestingPosition(view))
       }
       // Minion row movement belongs to boardPositions. A queued attack borrows
       // it when combat starts, not while an earlier entrance is still landing.
@@ -4351,6 +4368,7 @@ export class GameBoardView extends Actor {
       existing: boolean
     }[] = []
     let completed = false
+    const cleanGlows: (() => void)[] = []
     try {
       const results = await Promise.allSettled(
         events.map(async (event) => {
@@ -4384,19 +4402,32 @@ export class GameBoardView extends Actor {
         side,
         prepared.map(({ event, view }) => ({ position: event.position, view }))
       )
-      for (const { view, existing } of prepared) {
+      for (const { event, view, existing } of prepared) {
         if (existing) continue
         const resting = this.boardPositions.slotPosition(view)!
         view.position.set(resting.x, resting.y)
-        view.scale.set(resting.scale * 1.25)
+        view.scale.set(resting.scale * (hasSummonGlow(event) ? 1 : 1.25))
         view.setBaseScale(resting.scale)
       }
       await this.boardPositions.layout(side)
       if (this.destroyed) return
       this.syncBoardAttackability(this.presentationState())
       const timeline = this.timeline()
-      for (const { view, existing } of prepared) {
+      for (const { event, view, existing } of prepared) {
         if (existing) continue
+        if (hasSummonGlow(event)) {
+          cleanGlows.push(
+            appendSummonGlow(
+              timeline,
+              this.summonLayer,
+              this.options.gameAssets.summonGlow,
+              view,
+              this.boardPositions.slotPosition(view)!.scale,
+              () => view.presentTauntPop()
+            )
+          )
+          continue
+        }
         timeline.to(
           view,
           {
@@ -4408,17 +4439,22 @@ export class GameBoardView extends Actor {
           0
         )
         view.presentTauntPop()
-      }
-      if (prepared.length) await completeTimeline(timeline)
-      if (!this.destroyed) {
-        for (const { event, view, existing } of prepared) {
-          if (existing || !hasMinionLandingDust(event)) continue
-          const resting = this.boardPositions.slotPosition(view)!
-          this.landingDust.play(resting.x, resting.y, resting.scale)
+        if (hasMinionLandingDust(event)) {
+          timeline.call(
+            () => {
+              if (this.destroyed || view.destroyed) return
+              const resting = this.boardPositions.slotPosition(view)
+              if (resting) this.landingDust.play(resting.x, resting.y, resting.scale)
+            },
+            [],
+            BOARD_TIMING.minionSettle
+          )
         }
       }
+      if (prepared.length) await completeTimeline(timeline)
       completed = true
     } finally {
+      for (const cleanup of cleanGlows) cleanup()
       for (const { view, existing } of prepared) {
         if (existing) continue
         if (!completed && !view.destroyed) {
@@ -6562,6 +6598,31 @@ export class GameBoardView extends Actor {
         view.instanceId = event.minion.instanceId
         view.ownerId = event.participantId
         view.cardId = event.minion.cardId
+        if (hasSummonGlow(event)) {
+          view.alpha = 0
+          if (isLocal) this.insertLocalMinionView(event.position, view)
+          else this.insertRemoteMinionView(event.position, view)
+          view.position.set(resting.x, resting.y)
+          view.scale.set(resting.scale)
+          view.setBaseScale(resting.scale)
+          this.wireMinionView(view)
+          this.syncBoardAttackability(this.presentationState())
+          const timeline = this.timeline()
+          const cleanup = appendSummonGlow(
+            timeline,
+            this.summonLayer,
+            this.options.gameAssets.summonGlow,
+            view,
+            resting.scale,
+            () => view.presentTauntPop()
+          )
+          try {
+            await completeTimeline(timeline)
+          } finally {
+            cleanup()
+          }
+          return null
+        }
         if (isLocal) {
           this.insertLocalMinionView(event.position, view)
           if (resting) {

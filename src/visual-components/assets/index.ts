@@ -1,4 +1,5 @@
 import landingDust1Image from '@assets/images/effects/dust-01.png'
+import summonGlowImage from '@assets/images/effects/summon-glow.png'
 import landingDust2Image from '@assets/images/effects/dust-02.png'
 import landingDust3Image from '@assets/images/effects/dust-03.png'
 import landingDust4Image from '@assets/images/effects/dust-04.png'
@@ -1832,6 +1833,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.summon-glow',
+    ASSET_BUNDLE_IDS.game,
+    'summonGlow',
+    summonGlowImage,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
     'scene.game.minion-summon-rays',
     ASSET_BUNDLE_IDS.game,
     'minionSummonRays',
@@ -2960,6 +2970,7 @@ export interface GameAssets extends Record<
   legendaryMinionPlayAura: Texture
   legendarySpellPlayAura: Texture
   landingDust1: Texture
+  summonGlow: Texture
   landingDust2: Texture
   landingDust3: Texture
   landingDust4: Texture

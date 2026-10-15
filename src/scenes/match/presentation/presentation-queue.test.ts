@@ -3,7 +3,9 @@ import { WeaponView, type WeaponViewTextures } from '../board/weapon-view'
 import * as ShatterEffect from '../../../visual-components/effects/shatter'
 import * as ScreenShake from '../combat/screen-shake'
 import { CARD_PLAY_LAYOUT } from './card-play-layout'
-import { summonPresentationBatch } from './summon-presentation'
+import { hasSummonGlow, summonPresentationBatch } from './summon-presentation'
+import { appendSummonGlow } from './summon-glow'
+import { SUMMON_GLOW_LAYOUT } from './summon-glow-layout'
 import { returnPresentationBatch } from './return-presentation'
 import { PresentationQueue } from './presentation-queue'
 import { randomSpellPresentationStates } from './random-spell-presentation'
@@ -4695,6 +4697,9 @@ describe('board lifecycle preservation', () => {
     internal.createHeroes(state)
     const attacker = internal.heroViews.get(internal.session.localParticipantId)!
     const target = internal.heroViews.get(internal.session.remoteParticipantId)!
+    const resting = GAME_BOARD_LAYOUT.heroes.local.position
+    // Commit while the selection lift is only partially complete.
+    attacker.position.set(resting.x, resting.y - 7)
     Object.assign(value, { selectedCombatView: attacker })
 
     const result = { accepted: true as const, state, events: [] as OpeningMatchEvent[] }
@@ -4704,7 +4709,11 @@ describe('board lifecycle preservation', () => {
       .spyOn(internal, 'syncTurnHud')
       .mockImplementation(() => undefined)
     vi.spyOn(internal, 'syncTurnControls').mockImplementation(() => undefined)
-    vi.spyOn(internal, 'enqueuePresentation').mockResolvedValue(undefined)
+    vi.spyOn(internal, 'enqueuePresentation').mockImplementation(async () => {
+      // Combat must capture the declared home, not the interrupted lift + 12.
+      expect(attacker.x).toBe(resting.x)
+      expect(attacker.y).toBe(resting.y)
+    })
 
     await internal.attackCharacter(target)
 
@@ -6495,9 +6504,14 @@ describe('grouped summon presentation', () => {
     ).toBeNull()
   })
 
-  it.each(['local', 'remote'] as const)(
-    'waits for all artwork and starts the %s entrances together',
-    async (side) => {
+  it.each([
+    ['local', false],
+    ['remote', false],
+    ['local', true],
+    ['remote', true]
+  ] as const)(
+    'waits for all artwork and starts the %s entrances together (mixed: %s)',
+    async (side, mixed) => {
       const value = board()
       const internal = value as unknown as {
         session: GameBoardSession
@@ -6533,7 +6547,12 @@ describe('grouped summon presentation', () => {
       const events = boomEvents()
         .filter((event) => event.type === 'minion-summoned')
         .filter((event) => !!event.summonGroupId)
-        .map((event) => ({ ...event, participantId, position: 0 }))
+        .map((event, index) => ({
+          ...event,
+          participantId,
+          position: 0,
+          ...(mixed && index === 1 ? { sourceZone: 'deck' as const } : {})
+        }))
       const layout = vi.spyOn(internal.boardPositions, 'layout')
       const timelines: gsap.core.Timeline[] = []
       const makeTimeline = internal.animationScope.timeline.bind(
@@ -6554,13 +6573,15 @@ describe('grouped summon presentation', () => {
       expect(layout).toHaveBeenCalledTimes(1)
       expect(timelines).toHaveLength(1)
       const timeline = timelines[0]!
-      const starts = timeline.getChildren().map((child) => child.startTime())
-      expect(starts).toEqual([0, 0])
       expect(firstView.alpha).toBe(0)
       expect(secondView.alpha).toBe(0)
-      timeline.progress(0.5)
+      timeline.time(SUMMON_GLOW_LAYOUT.buildup / 2)
+      expect(firstView.alpha).toBe(0)
+      if (mixed) expect(secondView.alpha).toBeGreaterThan(0)
+      else expect(secondView.alpha).toBe(0)
+      timeline.time(SUMMON_GLOW_LAYOUT.buildup + SUMMON_GLOW_LAYOUT.peak / 2)
       expect(firstView.alpha).toBeGreaterThan(0)
-      expect(firstView.alpha).toBe(secondView.alpha)
+      if (!mixed) expect(firstView.alpha).toBe(secondView.alpha)
       timeline.progress(1)
       await job
     }
@@ -6781,6 +6802,131 @@ it.each([false, true])(
     expect(Texture.WHITE.destroyed).toBe(false)
   }
 )
+
+describe('summon glow', () => {
+  it.each(['local', 'remote'] as const)(
+    'presents one %s summon and releases it on cancellation',
+    async (side) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        animationScope: AnimationScope
+        boardPositions: BoardPositionController
+        summonLayer: Container
+        createSummonedMinionView(event: unknown): Promise<MinionView>
+        presentMinionSummoned(event: unknown): Promise<void>
+        wireMinionView(view: MinionView): void
+        syncBoardAttackability(): void
+      }
+      vi.spyOn(internal, 'wireMinionView').mockImplementation(() => undefined)
+      vi.spyOn(internal, 'syncBoardAttackability').mockImplementation(() => undefined)
+      const view = Object.assign(new Container(), {
+        setBaseScale: vi.fn(),
+        presentTauntPop: vi.fn(),
+        isSelected: () => false
+      }) as unknown as MinionView
+      vi.spyOn(internal, 'createSummonedMinionView').mockResolvedValue(view)
+      const participantId =
+        side === 'local'
+          ? internal.session.localParticipantId
+          : internal.session.remoteParticipantId
+      const timelines: gsap.core.Timeline[] = []
+      const makeTimeline = internal.animationScope.timeline.bind(
+        internal.animationScope
+      )
+      vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+        const timeline = makeTimeline(vars).pause()
+        timelines.push(timeline)
+        return timeline
+      })
+      const job = internal.presentMinionSummoned({
+        type: 'minion-summoned',
+        participantId,
+        position: 0,
+        minion: { instanceId: 'glow-test', cardId: 'classic_wisp' }
+      })
+      for (let i = 0; i < 15; i++) await Promise.resolve()
+      expect(internal.boardPositions.views(side)).toContain(view)
+      expect(view.alpha).toBe(0)
+      expect(internal.summonLayer.children).toHaveLength(1)
+      const timeline = timelines.at(-1)!
+      timeline.time(SUMMON_GLOW_LAYOUT.buildup / 2)
+      expect(view.alpha).toBe(0)
+      internal.animationScope.cancel(timeline)
+      await job
+      expect(view.alpha).toBe(1)
+      expect(internal.summonLayer.children).toHaveLength(0)
+    }
+  )
+
+  it('excludes hand/deck pulls and other entry paths', () => {
+    for (const sourceZone of [undefined, 'graveyard', 'hand', 'deck'] as const) {
+      expect(
+        hasSummonGlow({ type: 'minion-summoned', sourceZone } as OpeningMatchEvent)
+      ).toBe(sourceZone !== 'hand' && sourceZone !== 'deck')
+    }
+    expect(
+      hasSummonGlow({ type: 'hero-power-minion-summoned' } as OpeningMatchEvent)
+    ).toBe(true)
+    for (const type of [
+      'minion-played',
+      'dev-minion-summoned',
+      'effect-resolved'
+    ] as const) {
+      expect(hasSummonGlow({ type } as OpeningMatchEvent)).toBe(false)
+    }
+  })
+
+  it.each(['complete', 'interrupt'] as const)(
+    'conceals the body until peak and cleans up on %s',
+    (mode) => {
+      const root = new Container()
+      const row = new Container()
+      const layer = new Container()
+      root.addChild(row, layer)
+      const view = new Container()
+      view.pivot.set(80, 105)
+      view.position.set(300, 400)
+      view.scale.set(0.8)
+      row.addChild(view)
+      const reveal = vi.fn()
+      const timeline = gsap.timeline({ paused: true })
+      const cleanup = appendSummonGlow(
+        timeline,
+        layer,
+        Texture.WHITE,
+        view,
+        0.8,
+        reveal
+      )
+      const glow = layer.children[0] as Sprite
+      expect(glow.position.x).toBeCloseTo(300)
+      expect(glow.position.y).toBeCloseTo(388)
+      expect(glow.blendMode).toBe('add')
+      expect(glow.eventMode).toBe('none')
+      timeline.time(SUMMON_GLOW_LAYOUT.buildup / 2)
+      expect(glow.alpha).toBeGreaterThan(0)
+      expect(view.alpha).toBe(0)
+      expect(reveal).not.toHaveBeenCalled()
+      if (mode === 'complete') {
+        timeline.time(SUMMON_GLOW_LAYOUT.buildup + SUMMON_GLOW_LAYOUT.peak)
+        expect(glow.alpha).toBe(1)
+        expect(view.alpha).toBe(1)
+        expect(reveal).toHaveBeenCalledTimes(1)
+        timeline.progress(1)
+        expect(glow.alpha).toBe(0)
+      } else {
+        timeline.kill()
+      }
+      cleanup()
+      expect(view.alpha).toBe(1)
+      expect(glow.destroyed).toBe(true)
+      expect(layer.children).toHaveLength(0)
+      timeline.kill()
+      root.destroy({ children: true })
+    }
+  )
+})
 
 describe('minion landing dust', () => {
   it('qualifies plays and hand pulls, excluding every other entrance origin', () => {

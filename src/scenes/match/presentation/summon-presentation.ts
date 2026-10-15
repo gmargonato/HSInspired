@@ -2,6 +2,16 @@ import type { OpeningMatchEvent } from '../../../game-rules/match'
 
 type SummonEvent = Extract<OpeningMatchEvent, { type: 'minion-summoned' }>
 
+/** Call only for new views, after the existing-instance reconciliation guard. */
+export function hasSummonGlow(event: OpeningMatchEvent): boolean {
+  return (
+    event.type === 'hero-power-minion-summoned' ||
+    (event.type === 'minion-summoned' &&
+      event.sourceZone !== 'hand' &&
+      event.sourceZone !== 'deck')
+  )
+}
+
 /** Only bookkeeping for these summons may be crossed; consequences are barriers. */
 export function summonPresentationBatch(
   events: readonly OpeningMatchEvent[],

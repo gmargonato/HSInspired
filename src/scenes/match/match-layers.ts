@@ -15,7 +15,6 @@ export const MATCH_LAYERS = {
   discard: 54,
   combat: 55,
   indicators: 56,
-  targeting: 57,
   historyPreview: 60,
   boardPreview: 61,
   remotePlayPreview: 62,
@@ -29,6 +28,7 @@ export const MATCH_LAYERS = {
   selectedCard: 72,
   // Landing minions can still occupy selectedCard while choosing a Battlecry target.
   landingDust: 73,
+  targeting: 74,
   mulligan: 80,
   mulliganTravel: 81,
   mulliganExit: 82,
