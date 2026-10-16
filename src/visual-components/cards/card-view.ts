@@ -30,6 +30,8 @@ import {
   shouldRenderClassFrameColors
 } from './class-frame-colors'
 import type { ClassFrameLayerAppearance } from './class-frame-colors'
+import { PremiumFrameShimmer } from '../effects/premium-frame-shimmer'
+import { ManaCrystalShimmer } from '../effects/mana-crystal-shimmer'
 import {
   isCardPremium,
   isPremiumEnabled,
@@ -394,6 +396,8 @@ export class CardView extends Container {
   private readonly content: Container
   private staticLayers: Container | null = null
   private artworkBreath: PremiumArtworkBreath | null = null
+  private frameShimmer: PremiumFrameShimmer | null = null
+  private manaShimmer: ManaCrystalShimmer | null = null
   private readonly animatedSnapshots = new Map<
     Texture,
     { refresh: () => void; isVisible: () => boolean }
@@ -429,8 +433,40 @@ export class CardView extends Container {
         resolver.load('card.stat.life-cost')
       ])
       view.costTextures = { mana, health }
+      if (supportsPremium) {
+        view.prepareAnimatedLayers()
+        const frame = view.treeObjects.get('card.frame')?.object
+        if (frame instanceof Sprite) {
+          view.frameShimmer = new PremiumFrameShimmer(
+            frame,
+            await resolver.load('card.effect.premium-scroll'),
+            () =>
+              !view.premiumAppearancePaused &&
+              ((isArtworkVisible(view) && isArtworkVisible(frame)) ||
+                [...view.animatedSnapshots.values()].some((snapshot) =>
+                  snapshot.isVisible()
+                )),
+            () => view.refreshAnimatedSnapshots()
+          )
+        }
+      }
       if (supportsPremium && options.animatePremiumArtwork && options.artwork) {
         view.prepareArtworkBreathing()
+      }
+      const manaIcon = view.treeObjects.get('card.stats.mana.icon')?.object
+      if (manaIcon instanceof Sprite) {
+        view.manaShimmer = new ManaCrystalShimmer(
+          manaIcon,
+          await resolver.load('card.effect.crystal-scroll'),
+          () =>
+            !view.premiumAppearancePaused &&
+            ((isArtworkVisible(view) && isArtworkVisible(manaIcon)) ||
+              [...view.animatedSnapshots.values()].some((snapshot) =>
+                snapshot.isVisible()
+              )),
+          () => view.refreshAnimatedSnapshots()
+        )
+        view.manaShimmer.setEnabled(true)
       }
       if (supportsPremium) await view.preparePremiumAppearance(card, resolver, options)
       if (options.snapshot) view.applySnapshot(card, options.snapshot)
@@ -484,31 +520,60 @@ export class CardView extends Container {
     return this.snapshotRevision
   }
 
-  private prepareArtworkBreathing(): void {
+  private prepareAnimatedLayers(): void {
     const artwork = this.treeObjects.get('card.artwork')?.object
+    const frame = this.treeObjects.get('card.frame')?.object
     const root = this.treeObjects.get('card')?.object
-    if (!artwork || !root) return
+    if (!artwork || !frame || !root) return
     const staticLayers = new Container()
     staticLayers.label = `${this.plan.cardId}:card.static-layers`
     staticLayers.sortableChildren = true
-    staticLayers.zIndex = 1
-    // Artwork is the bottom layer; everything above it can remain cached.
+    const liveLayers = new Set<Container>([artwork, frame])
+    const frameShadow = this.treeObjects.get('card.frame-shadow')?.object
+    if (frameShadow) liveLayers.add(frameShadow)
+    let topLiveLayer = frame.zIndex
+    // Class colors must blend against the live frame, not an empty cache surface.
+    for (const path of ['card.class-frame-mask-1', 'card.class-frame-mask-2']) {
+      const layer = this.treeObjects.get(path)?.object
+      if (layer) {
+        liveLayers.add(layer)
+        topLiveLayer = Math.max(topLiveLayer, layer.zIndex)
+      }
+      const mask = this.alphaMasks.get(path)
+      if (mask) liveLayers.add(mask)
+    }
+    staticLayers.zIndex = topLiveLayer + 1
+    const stats = this.treeObjects.get('card.stats')?.object
+    // Animated mana stays in its original stats hierarchy, below any overlays.
+    if (stats) {
+      for (const child of root.children) {
+        if (child.zIndex >= stats.zIndex) liveLayers.add(child)
+      }
+    }
+    // Keep animated surfaces and their class-color overlays below cached details.
     for (const child of [...root.children]) {
-      if (child !== artwork) staticLayers.addChild(child)
+      if (!liveLayers.has(child)) staticLayers.addChild(child)
     }
     root.addChild(staticLayers)
     this.staticLayers = staticLayers
     staticLayers.cacheAsTexture({ antialias: true, resolution: 1 })
+  }
+
+  private refreshAnimatedSnapshots(): void {
+    for (const snapshot of this.animatedSnapshots.values()) {
+      if (snapshot.isVisible()) snapshot.refresh()
+    }
+  }
+
+  private prepareArtworkBreathing(): void {
+    const artwork = this.treeObjects.get('card.artwork')?.object
+    if (!artwork) return
     this.artworkBreath = new PremiumArtworkBreath(
       artwork,
       () =>
         (isArtworkVisible(this) && isArtworkVisible(artwork)) ||
         [...this.animatedSnapshots.values()].some((snapshot) => snapshot.isVisible()),
-      () => {
-        for (const snapshot of this.animatedSnapshots.values()) {
-          if (snapshot.isVisible()) snapshot.refresh()
-        }
-      }
+      () => this.refreshAnimatedSnapshots()
     )
   }
 
@@ -595,6 +660,8 @@ export class CardView extends Container {
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
+    this.manaShimmer?.destroy()
+    this.frameShimmer?.destroy()
     this.artworkBreath?.destroy()
     this.animatedSnapshots.clear()
     this.appearanceSnapshots.clear()
@@ -804,6 +871,7 @@ export class CardView extends Container {
       enabled &&= supportsPremiumFormat(card.type)
       this.premium = enabled
       this.artworkBreath?.setEnabled(enabled)
+      this.frameShimmer?.setEnabled(enabled)
       this.activePlan = enabled ? premium : standard
       const images = enabled ? premiumImages : standardImages
       for (const id of changedIds) {
@@ -909,6 +977,7 @@ export class CardView extends Container {
     const entry = this.treeObjects.get('card.stats.mana.icon')
     if (!entry || !(entry.object instanceof Sprite)) return
     this.costResource = resource
+    this.manaShimmer?.setEnabled(resource === 'mana')
     entry.object.texture = this.costTextures[resource]
     this.updateCacheTexture()
     for (const refresh of this.appearanceSnapshots) refresh()

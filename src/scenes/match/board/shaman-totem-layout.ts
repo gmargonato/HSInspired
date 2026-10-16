@@ -7,6 +7,7 @@ export const SHAMAN_TOTEM = {
     { width: 242, height: 237 },
     { anchor: CENTER, note: "Centered at the PNG asset's authored 1x dimensions." }
   ),
+  artworkTint: 0x66bbff,
   fadeDuration: 2,
   burst: {
     delay: 1,

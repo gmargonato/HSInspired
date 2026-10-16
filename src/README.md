@@ -47,6 +47,7 @@ and combat, followed by indicators, passive previews and reveals, hands, pending
 card selections, targeting arrows, and modal choices. Loading, settings and results
 cover the match. Targeting arrows sit above selected minions and landing effects.
 Mulligan transport temporarily sits above its dimmer until the opening completes.
+The hand also stays above the dimmer during its opening slide and the dimmer fade.
 Internal card/component z-indices only order siblings inside their own layer.
 Outgoing choice controls use a dedicated modal-exit layer below hands.
 Outgoing mulligan controls use a separate exit layer above the mulligan dimmer
@@ -83,8 +84,9 @@ holds their asset scope and GPU residency for the renderer lifetime, including
 shared card frames but excluding individual card artwork and match-only bundles.
 Only selectable hero portraits belong to `deck-presentation`; transformation
 portraits load with `game` and are combined with the menu portraits for matches.
-The deck-frame, Play-button, and Collection expansion-toggle outline fields stay
-cached so silhouette generation happens during startup instead of on menu visits.
+The deck-frame, nine New Deck portraits, Play-button, and Collection expansion-toggle
+outline fields stay cached so silhouette generation happens during startup instead
+of on menu visits.
 Fonts, cached menu data, and texture loading overlap, with asset bundles decoded
 in pairs and GPU uploads processed sequentially. Decks, player statistics, and
 progression fill their renderer caches; preferences prime the main-process cache

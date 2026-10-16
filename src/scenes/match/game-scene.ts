@@ -391,12 +391,12 @@ export class GameScene extends Scene {
     const preferences =
       this.preferences ??
       (typeof window !== 'undefined' ? window.api?.preferences : undefined)
-    if (!preferences) return { lastPlayedDeckId: null, aiMode: 'api' }
+    if (!preferences) return { lastPlayedDeckId: null, aiMode: 'api', cursorScale: 1 }
     try {
       return await preferences.get()
     } catch (error) {
       this.logger?.warn('[GameScene] AI mode preference unavailable; using API.', error)
-      return { lastPlayedDeckId: null, aiMode: 'api' }
+      return { lastPlayedDeckId: null, aiMode: 'api', cursorScale: 1 }
     }
   }
 

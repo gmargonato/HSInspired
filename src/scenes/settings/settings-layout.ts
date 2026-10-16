@@ -74,27 +74,27 @@ export const SETTINGS_LAYOUT = {
   ),
 
   aiModeTitle: placement(
-    { x: 790, y: 535 },
+    { x: 790, y: 480 },
     { width: 344, height: 54 },
     { anchor: TOP_LEFT, note: 'AI mode heading below Resolution.' }
   ),
   aiModeField: placement(
-    { x: 960, y: 635 },
+    { x: 960, y: 580 },
     { width: 344, height: 76 },
     { anchor: CENTER, note: 'Closed AI mode selector.' }
   ),
   aiModeValue: placement(
-    { x: 918, y: 635 },
+    { x: 918, y: 580 },
     { width: 208, height: 42 },
     { anchor: CENTER, note: 'Selected AI mode within the field.' }
   ),
   aiModeButton: placement(
-    { x: 1058, y: 635 },
+    { x: 1058, y: 580 },
     { width: 62, height: 42 },
     { anchor: CENTER, note: 'AI mode selector arrow.' }
   ),
   aiModeOptions: placement(
-    { x: 840, y: 655 },
+    { x: 840, y: 600 },
     { width: 240, height: 156 },
     { anchor: TOP_LEFT, note: 'Three-row Easy, Hardware V2, and API mode dropdown.' }
   ),
@@ -103,6 +103,22 @@ export const SETTINGS_LAYOUT = {
     { width: 200, height: 52 },
     { anchor: CENTER, note: 'Local text placement within an AI mode option.' }
   ),
+  cursorSizeTitle: placement(
+    { x: 790, y: 640 },
+    { width: 344, height: 54 },
+    { anchor: TOP_LEFT, note: 'Cursor Size heading.' }
+  ),
+  cursorSlider: placement(
+    { x: 960, y: 740 },
+    { width: 379, height: 83 },
+    { anchor: CENTER, scale: 344 / 379, note: 'Cursor size track.' }
+  ),
+  cursorSliderHandle: placement(
+    { x: 960, y: 740 },
+    { width: 35, height: 77 },
+    { anchor: CENTER, scale: 344 / 379, note: 'Handle centered on the recessed track.' }
+  ),
+  cursorSliderTravel: { minX: 858, maxX: 1062 },
   /** Match-only action frames and buttons, centered inside the game settings panel. */
   gameActions: {
     concedeFrame: placement(

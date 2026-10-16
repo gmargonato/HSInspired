@@ -20,6 +20,12 @@ import heroSpellPlayImage from '@assets/images/effects/hero-spell-play-01.png'
 import playSpotlight1Image from '@assets/images/effects/spotlight-01.png'
 import playSpotlight2Image from '@assets/images/effects/spotlight-02.png'
 import playSpotlight3Image from '@assets/images/effects/spotlight-03.png'
+import heroPortraitCrack1Image from '@assets/images/effects/hero-potrait-crack-01.png'
+import heroPortraitCrack2Image from '@assets/images/effects/hero-potrait-crack-02.png'
+import heroPortraitCrack3Image from '@assets/images/effects/hero-potrait-crack-03.png'
+import heroPortraitCrack4Image from '@assets/images/effects/hero-potrait-crack-04.png'
+import heroPortraitCrack5Image from '@assets/images/effects/hero-potrait-crack-05.png'
+import heroPortraitCrack6Image from '@assets/images/effects/hero-potrait-crack-06.png'
 import playSpotlight4Image from '@assets/images/effects/spotlight-04.png'
 import combatHitSparkImage from '@assets/images/effects/hit-spark-0.png'
 import combatHitSpark1Image from '@assets/images/effects/hit-spark-01.png'
@@ -111,6 +117,8 @@ import newDeckButtonImage from '@assets/images/ui/deck-builder/new-deck-button.p
 import newDeckHeroSelectionImage from '@assets/images/ui/deck-builder/new-deck-hero-selection.png'
 import selectClassButtonImage from '@assets/images/ui/deck-builder/select-class-button.png'
 import uiCancelButtonImage from '@assets/images/ui/common/ui-cancel-button.png'
+import settingsHorizontalSliderImage from '@assets/images/ui/settings/setting-horizontal-slider.png'
+import horizontalSliderImage from '@assets/images/ui/common/horizontal-slider.png'
 import verticalSliderImage from '@assets/images/ui/common/vertical-slider.png'
 import menuSettingsBackgroundImage from '@assets/images/ui/settings/menu-settings-background.png'
 import gameSettingsBackgroundImage from '@assets/images/ui/settings/game-settings-background.png'
@@ -958,6 +966,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     1920,
     1080,
     'collection'
+  ),
+  asset(
+    'scene.menu-settings.cursor-slider',
+    ASSET_BUNDLE_IDS.menuSettings,
+    'cursorSlider',
+    settingsHorizontalSliderImage,
+    379,
+    83,
+    'menu-settings'
+  ),
+  asset(
+    'ui.horizontal-slider',
+    ASSET_BUNDLE_IDS.sharedUI,
+    'horizontalSlider',
+    horizontalSliderImage,
+    35,
+    77,
+    'shared-ui'
   ),
   asset(
     'scene.menu-settings.background',
@@ -2203,6 +2229,12 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     243,
     'game-scene'
   ),
+  asset('scene.game.hero-portrait-crack-1', ASSET_BUNDLE_IDS.game, 'heroPortraitCrack1', heroPortraitCrack1Image, 256, 256, 'game-scene'),
+  asset('scene.game.hero-portrait-crack-2', ASSET_BUNDLE_IDS.game, 'heroPortraitCrack2', heroPortraitCrack2Image, 256, 256, 'game-scene'),
+  asset('scene.game.hero-portrait-crack-3', ASSET_BUNDLE_IDS.game, 'heroPortraitCrack3', heroPortraitCrack3Image, 256, 256, 'game-scene'),
+  asset('scene.game.hero-portrait-crack-4', ASSET_BUNDLE_IDS.game, 'heroPortraitCrack4', heroPortraitCrack4Image, 256, 256, 'game-scene'),
+  asset('scene.game.hero-portrait-crack-5', ASSET_BUNDLE_IDS.game, 'heroPortraitCrack5', heroPortraitCrack5Image, 256, 256, 'game-scene'),
+  asset('scene.game.hero-portrait-crack-6', ASSET_BUNDLE_IDS.game, 'heroPortraitCrack6', heroPortraitCrack6Image, 256, 256, 'game-scene'),
   asset(
     'scene.game.destroyed-local',
     ASSET_BUNDLE_IDS.game,
@@ -3024,6 +3056,12 @@ export interface GameAssets extends Record<
   arrowHead: Texture
   arrowCircle: Texture
   winScreen: Texture
+  heroPortraitCrack1: Texture
+  heroPortraitCrack2: Texture
+  heroPortraitCrack3: Texture
+  heroPortraitCrack4: Texture
+  heroPortraitCrack5: Texture
+  heroPortraitCrack6: Texture
   destroyedLocal: Texture
   destroyedRemote: Texture
   arcaneDust: Texture
@@ -3031,6 +3069,7 @@ export interface GameAssets extends Record<
 }
 
 export interface MenuSettingsAssets {
+  cursorSlider: Texture
   background: Texture
   resolutionField: Texture
   resolutionButton: Texture
@@ -3045,6 +3084,7 @@ export interface GameSettingsAssets {
 }
 
 export interface SharedUIAssets {
+  horizontalSlider: Texture
   backButton: Texture
   doneButton: Texture
   genericDialog: Texture

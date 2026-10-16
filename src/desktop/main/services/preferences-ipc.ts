@@ -11,17 +11,27 @@ export function registerPreferencesIpc(repository: PreferencesRepository): void 
   ipcMain.handle(PREFERENCES_IPC_CHANNELS.get, async () =>
     parsePreferences(await repository.get())
   )
-  ipcMain.handle(PREFERENCES_IPC_CHANNELS.set, async (_event, request: unknown) => {
+  let updates: Promise<unknown> = Promise.resolve()
+  ipcMain.handle(PREFERENCES_IPC_CHANNELS.set, (_event, request: unknown) => {
     const update = parsePreferencesUpdateRequest(request)
-    const current = await repository.get()
-    const next = {
-      ...current,
-      ...(update.lastPlayedDeckId === undefined
-        ? {}
-        : { lastPlayedDeckId: update.lastPlayedDeckId }),
-      ...(update.aiMode === undefined ? {} : { aiMode: update.aiMode })
-    }
-    await repository.set(next)
-    return parsePreferences(next)
+    const result = updates
+      .catch(() => undefined)
+      .then(async () => {
+        const current = await repository.get()
+        const next = {
+          ...current,
+          ...(update.lastPlayedDeckId === undefined
+            ? {}
+            : { lastPlayedDeckId: update.lastPlayedDeckId }),
+          ...(update.cursorScale === undefined
+            ? {}
+            : { cursorScale: update.cursorScale }),
+          ...(update.aiMode === undefined ? {} : { aiMode: update.aiMode })
+        }
+        await repository.set(next)
+        return parsePreferences(next)
+      })
+    updates = result
+    return result
   })
 }

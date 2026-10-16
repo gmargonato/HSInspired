@@ -170,6 +170,10 @@ export function runSummonAction(
     }
     case 'summon-random': {
       const count = Math.max(0, context.queries.evaluate(action.count ?? 1, frame))
+      const controller =
+        action.player === 'opponent'
+          ? context.queries.otherPlayer(frame.controllerId)
+          : frame.controllerId
       const pool =
         action.source === 'discarded-minions'
           ? context
@@ -205,12 +209,12 @@ export function runSummonAction(
           CardId | undefined
         if (cardId) {
           const summoned = context.createMinion(
-            frame.controllerId,
+            controller,
             cardId,
             frame,
             `${path}.${index}`,
             undefined,
-            context.summonPosition(frame, frame.controllerId, placement, summonIndex)
+            context.summonPosition(frame, controller, placement, summonIndex)
           )
           if (summoned) {
             summonIndex += 1

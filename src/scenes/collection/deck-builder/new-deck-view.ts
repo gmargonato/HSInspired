@@ -1,6 +1,7 @@
 import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
 import { Button } from '../../../visual-components/controls/button'
+import { AnimatedOutline } from '../../../visual-components/effects/animated-outline'
 import {
   ASSET_BUNDLE_IDS,
   type CollectionAssets,
@@ -43,6 +44,8 @@ export class NewDeckView extends Container {
   private heroPortrait!: Sprite
   private heroName!: Text
   private classButtons: Button[] = []
+  private readonly classOutlines: AnimatedOutline[] = []
+  private selectedClassOutline: AnimatedOutline | null = null
   private selectButton!: Button
   private cancelButton!: Button
   private selectedHero: HeroDefinition | null = null
@@ -141,9 +144,10 @@ export class NewDeckView extends Container {
         hero.presentationAssetKey
       )
       const button = new Button(portraitTexture, {
+        pressedScale: 1,
         highlightOnHover: false,
         pressedBrightness: 1,
-        onClick: () => this.selectHero(hero)
+        onClick: () => this.selectHero(hero, outline)
       })
       button.label = `new-deck.class.${heroClass}`
       button.sprite.label = `new-deck.portrait.${heroClass}`
@@ -156,6 +160,21 @@ export class NewDeckView extends Container {
           portraitSize.height / portraitTexture.height
         )
       )
+      // Keep the portrait visible when its selection outline is disabled.
+      const outlineTarget = new Sprite(portraitTexture)
+      outlineTarget.label = `new-deck.class-outline.${heroClass}`
+      outlineTarget.eventMode = 'none'
+      outlineTarget.anchor.copyFrom(button.sprite.anchor)
+      outlineTarget.position.copyFrom(button.sprite.position)
+      outlineTarget.scale.copyFrom(button.sprite.scale)
+      button.addChildAt(outlineTarget, 0)
+      const outline = new AnimatedOutline(outlineTarget, {
+        palette: 'blue',
+        preset: 'deck-frame'
+      })
+      outline.setEnabled(false)
+      this.classOutlines.push(outline)
+
       const label = new Sprite(
         this.deckPresentationAssets[NEW_DECK_FRAME_ASSET_KEYS[heroClass]]
       )
@@ -212,6 +231,8 @@ export class NewDeckView extends Container {
   }
 
   private resetSelectionState(): void {
+    this.selectedClassOutline?.setEnabled(false)
+    this.selectedClassOutline = null
     this.selectedHero = null
     this.actionInProgress = false
     this.heroPortrait.visible = false
@@ -243,9 +264,12 @@ export class NewDeckView extends Container {
     await this.callbacks.onCancelled?.()
   }
 
-  private selectHero(hero: HeroDefinition): void {
+  private selectHero(hero: HeroDefinition, outline: AnimatedOutline): void {
     if (!this.selectionOpen || this.actionInProgress) return
 
+    this.selectedClassOutline?.setEnabled(false)
+    this.selectedClassOutline = outline
+    outline.setEnabled(true)
     this.selectedHero = hero
     this.heroPortrait.texture = getDeckHeroTexture(
       this.deckPresentationAssets,
@@ -379,6 +403,9 @@ export class NewDeckView extends Container {
     this.disposed = true
     this.selectionOpen = false
     this.killSelectionAnimations()
+    for (const outline of this.classOutlines) outline.dispose()
+    this.classOutlines.length = 0
+    this.selectedClassOutline = null
     await this.assetScope.releaseAll()
   }
 }

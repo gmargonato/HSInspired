@@ -14,8 +14,8 @@ export const MINION_HIT_AREA = { x: 12, y: 5, width: 136, height: 184 } as const
 export const MINION_LAYOUT = {
   name: 'Board minion',
   artwork: placement(
-    { x: 80, y: 78 },
-    { width: 98, height: 124 },
+    { x: 80, y: 75 },
+    { width: 100, height: 120 },
     {
       anchor: CENTER,
       note: 'Enlarged oval artwork aperture, still inset inside the minion frame.'
@@ -190,7 +190,7 @@ export const MINION_LAYOUT = {
   artworkOval: {
     center: { x: 0, y: 10 },
     radiusX: 55,
-    radiusY: 70
+    radiusY: 75
   },
   statText: {
     fontFamily: 'Belwe',

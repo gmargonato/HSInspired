@@ -14,6 +14,7 @@ export interface ButtonOptions {
   hoverScale?: number
   hoverBrightness?: number
   pressedBrightness?: number
+  pressOffsetX?: number
   sinkPx?: number
   onClick?: () => void | Promise<void>
   onError?: (error: unknown) => void
@@ -31,10 +32,12 @@ export class Button extends Actor {
   private readonly hoverScale: number
   private readonly hoverBrightness: number
   private readonly pressedBrightness: number
+  private readonly pressOffsetX: number
   private readonly sinkPx: number
   private readonly myFilter = new ColorMatrixFilter()
   private filterAttached = false
   private readonly brightnessState = { value: 1 }
+  private baseX = 0
   private baseY = 0
   private hovered = false
   private pressed = false
@@ -56,6 +59,7 @@ export class Button extends Actor {
     this.hoverScale = options.hoverScale ?? 1
     this.hoverBrightness = options.hoverBrightness ?? DEFAULT_HOVER_BRIGHTNESS
     this.pressedBrightness = options.pressedBrightness ?? 0.8
+    this.pressOffsetX = options.pressOffsetX ?? 0
     this.sinkPx = options.sinkPx ?? 0
     this.onClick = options.onClick
     this.onError = options.onError
@@ -79,6 +83,10 @@ export class Button extends Actor {
     this.on('pointerupoutside', this.onPressOutside)
     this.on('pointercancel', this.onPressOutside)
     this.on('pointertap', this.handleClick)
+  }
+
+  setBaseX(x: number): void {
+    this.baseX = x
   }
 
   setBaseY(y: number): void {
@@ -138,6 +146,7 @@ export class Button extends Actor {
       this.killTweensOf(this.brightnessState)
       this.content.scale.set(1)
       if (this.pressFromLeft) this.content.x = 0
+      if (this.pressOffsetX !== 0) this.x = this.baseX
       this.y = this.baseY
       this.setBrightness(this.idleBrightness)
     }
@@ -248,6 +257,7 @@ export class Button extends Actor {
     }
     this.tweenBrightness(this.pressedBrightness, 0.08)
     this.tweenTo(this, {
+      ...(this.pressOffsetX !== 0 ? { x: this.baseX + this.pressOffsetX } : {}),
       y: this.baseY + this.sinkPx,
       duration: 0.08,
       ease: 'power2.out'
@@ -289,6 +299,7 @@ export class Button extends Actor {
       0.12
     )
     this.tweenTo(this, {
+      ...(this.pressOffsetX !== 0 ? { x: this.baseX } : {}),
       y: this.baseY,
       duration: 0.12,
       ease: 'power2.out'

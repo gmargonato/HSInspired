@@ -24,6 +24,7 @@ export const RARITY_GEM_SCALE = 1.1
 export const CARD_LAYERS = {
   root: 0,
   artwork: 0,
+  frameShadow: 50,
   frame: 100,
   classMask: 102,
   legendary: 105,
@@ -388,6 +389,67 @@ export const CARD_PROFILES: Readonly<Record<CardVisualTemplate, CardProfile>> = 
       )
     }
   }
+}
+
+// Aperture top centers in source-frame pixels, paired with the top shadow ridge
+// in each cropped export. Align the visible ridge, not the export's bounding box.
+// Only the frame reference point is scaled; shadow images stay at native size.
+const FRAME_SHADOW_ALIGNMENT = {
+  minion: {
+    standard: { aperture: { x: 327, y: 28 }, ridge: { x: 230.5, y: 21 } },
+    premium: { aperture: { x: 328, y: 58 }, ridge: { x: 226.5, y: 25 } }
+  },
+  spell: {
+    standard: { aperture: { x: 323, y: 49 }, ridge: { x: 281, y: 26 } },
+    premium: { aperture: { x: 329, y: 72 }, ridge: { x: 281, y: 26 } }
+  },
+  weapon: {
+    standard: { aperture: { x: 326, y: 57 }, ridge: { x: 251, y: 25 } },
+    premium: { aperture: { x: 326, y: 57 }, ridge: { x: 251, y: 25 } }
+  },
+  hero: {
+    standard: { aperture: { x: 327, y: 64 }, ridge: { x: 214.5, y: 26 } },
+    premium: { aperture: { x: 327, y: 64 }, ridge: { x: 214.5, y: 26 } }
+  }
+} as const
+
+// Final placement adjustment in card-canvas pixels; keep native shadow sizes.
+const FRAME_SHADOW_OFFSET = { x: -2, y: -5 } as const
+
+export function cardFrameShadowKey(
+  template: CardVisualTemplate,
+  premium: boolean
+): string {
+  return (
+    'card.frame-shadow.' +
+    template +
+    (template === 'minion' ? (premium ? '.premium' : '.standard') : '')
+  )
+}
+
+export function cardFrameShadowPlacement(
+  template: CardVisualTemplate,
+  premium: boolean
+): LayoutPlacement {
+  const transform = cardFrameTransform(template, premium)
+  const { aperture, ridge } =
+    FRAME_SHADOW_ALIGNMENT[template][premium ? 'premium' : 'standard']
+  return placement(
+    {
+      x:
+        transform.position.x +
+        aperture.x * transform.scale.x -
+        ridge.x +
+        FRAME_SHADOW_OFFSET.x,
+      y:
+        transform.position.y +
+        aperture.y * transform.scale.y -
+        ridge.y +
+        FRAME_SHADOW_OFFSET.y
+    },
+    assetSize(cardFrameShadowKey(template, premium)),
+    { anchor: TOP_LEFT }
+  )
 }
 
 // Geometry helpers: no additional visual tuning below this line.

@@ -241,6 +241,10 @@ async function bootstrap(): Promise<void> {
 
   try {
     app.ticker.maxFPS = 60
+    await services.preferences?.get().then(
+      (preferences) => cursor.setScale(preferences.cursorScale),
+      (error: unknown) => services.logger.warn('Could not restore cursor size.', error)
+    )
     if (directStart) {
       await prepareMainMenuEffects(app.renderer)
     } else {

@@ -5,6 +5,7 @@ export const PREFERENCES_IPC_CHANNELS = {
 
 export interface Preferences {
   readonly lastPlayedDeckId: string | null
+  readonly cursorScale: number
   readonly aiMode: AiMode
 }
 
@@ -12,6 +13,7 @@ export type AiMode = 'hardware' | 'hardware-v2' | 'api'
 
 export interface PreferencesUpdateRequest {
   readonly lastPlayedDeckId?: string | null
+  readonly cursorScale?: number
   readonly aiMode?: AiMode
 }
 
@@ -35,10 +37,24 @@ export function parseAiMode(value: unknown): AiMode {
   throw new Error('Invalid AI mode')
 }
 
+export function parseCursorScale(value: unknown): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value < 0.5 ||
+    value > 1
+  ) {
+    throw new Error('Cursor scale must be between 0.5 and 1')
+  }
+  return value
+}
+
 export function parsePreferences(value: unknown): Preferences {
   if (!isRecord(value)) throw new Error('Invalid preferences response')
   return {
     lastPlayedDeckId: parseLastPlayedDeckId(value.lastPlayedDeckId),
+    cursorScale:
+      value.cursorScale === undefined ? 1 : parseCursorScale(value.cursorScale),
     aiMode: parseAiMode(value.aiMode)
   }
 }
@@ -51,6 +67,9 @@ export function parsePreferencesUpdateRequest(
     ...(value.lastPlayedDeckId === undefined
       ? {}
       : { lastPlayedDeckId: parseLastPlayedDeckId(value.lastPlayedDeckId) }),
+    ...(value.cursorScale === undefined
+      ? {}
+      : { cursorScale: parseCursorScale(value.cursorScale) }),
     ...(value.aiMode === undefined ? {} : { aiMode: parseAiMode(value.aiMode) })
   }
 }

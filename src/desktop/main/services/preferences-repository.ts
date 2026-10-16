@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
   parseAiMode,
+  parseCursorScale,
   parseLastPlayedDeckId,
   type AiMode,
   type Preferences
@@ -13,6 +14,7 @@ const PREFERENCES_FILE_VERSION = 2
 interface PersistedPreferences {
   readonly version: typeof PREFERENCES_FILE_VERSION
   readonly lastPlayedDeckId: string | null
+  readonly cursorScale: number
   readonly aiMode: AiMode
 }
 
@@ -27,6 +29,7 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 function clonePreferences(preferences: Preferences): Preferences {
   return {
     lastPlayedDeckId: preferences.lastPlayedDeckId,
+    cursorScale: preferences.cursorScale,
     aiMode: preferences.aiMode
   }
 }
@@ -43,13 +46,14 @@ export class PreferencesRepository {
   async get(): Promise<Preferences> {
     await this.ensureLoaded()
     return clonePreferences(
-      this.preferences ?? { lastPlayedDeckId: null, aiMode: 'api' }
+      this.preferences ?? { lastPlayedDeckId: null, aiMode: 'api', cursorScale: 1 }
     )
   }
 
   async set(preferences: Preferences): Promise<void> {
     parseLastPlayedDeckId(preferences.lastPlayedDeckId)
     parseAiMode(preferences.aiMode)
+    parseCursorScale(preferences.cursorScale)
     await this.ensureLoaded()
     await this.persist(preferences)
     this.preferences = clonePreferences(preferences)
@@ -85,6 +89,13 @@ export class PreferencesRepository {
       try {
         this.preferences = {
           lastPlayedDeckId: parseLastPlayedDeckId(parsed.lastPlayedDeckId),
+          cursorScale:
+            typeof parsed.cursorScale === 'number' &&
+            Number.isFinite(parsed.cursorScale) &&
+            parsed.cursorScale >= 0.5 &&
+            parsed.cursorScale <= 1
+              ? parsed.cursorScale
+              : 1,
           aiMode:
             parsed.version === 1
               ? 'api'
@@ -107,6 +118,7 @@ export class PreferencesRepository {
     const payload: PersistedPreferences = {
       version: PREFERENCES_FILE_VERSION,
       lastPlayedDeckId: preferences.lastPlayedDeckId,
+      cursorScale: preferences.cursorScale,
       aiMode: preferences.aiMode
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`

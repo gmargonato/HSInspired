@@ -11,6 +11,8 @@ import {
   CARD_RULES_LINE_BREAKS,
   RARITY_GEM_SCALE,
   cardFramePlacement,
+  cardFrameShadowKey,
+  cardFrameShadowPlacement,
   cardClassMaskPlacement,
   cardNameBannerPlacement,
   visualTemplateFor,
@@ -252,6 +254,12 @@ export function buildCardRenderTree(
   const legendary = legendaryFrame(card, profile, premium)
   const children: CardRenderNode[] = [
     artwork(profile),
+    image(
+      'frame-shadow',
+      cardFrameShadowKey(profile.template, premium),
+      cardFrameShadowPlacement(profile.template, premium),
+      CARD_LAYERS.frameShadow
+    ),
     image(
       'frame',
       cardFrameAssetKey(card, premium),

@@ -7719,6 +7719,8 @@ export class GameBoardView extends Actor {
   private async completeLocalMulliganPresentation(): Promise<void> {
     const allSlots = this.hand.entries.map((entry) => entry.slot)
     this.hand.setReflowing(true)
+    // Keep the hand transition above the dimmer until it finishes fading.
+    this.hand.layer.zIndex = MATCH_LAYERS.mulliganTravel
     for (const slot of allSlots) {
       if (slot.parent !== this.hand.layer) this.hand.layer.addChild(slot)
       this.hand.configureSlot(slot)
@@ -7731,6 +7733,7 @@ export class GameBoardView extends Actor {
     this.hand.setReflowing(false)
     this.hand.activate()
     await this.mulligan.dismiss()
+    this.hand.layer.zIndex = MATCH_LAYERS.hand
     this.travelLayer.zIndex = MATCH_LAYERS.travel
   }
 

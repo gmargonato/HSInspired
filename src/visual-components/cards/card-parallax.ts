@@ -27,6 +27,7 @@ interface CardBaseTransform {
 export const CARD_PARALLAX_LAYERS: readonly ParallaxLayerDefinition[] = [
   { path: 'card.artwork', depth: -18 },
   { path: 'card.frame', depth: 0 },
+  { path: 'card.frame-shadow', depth: 0 },
   { path: 'card.rules', depth: 0 },
   { path: 'card.race-banner', depth: 0 },
   { path: 'card.race', depth: 0 },

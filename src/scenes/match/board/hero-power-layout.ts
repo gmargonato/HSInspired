@@ -9,7 +9,7 @@ export const HERO_POWER_PRESENTATION_LAYOUT = {
   icon: {
     artwork: placement(
       { x: 75, y: 77 },
-      { width: 500, height: 500 },
+      { width: 510, height: 510 },
       {
         anchor: CENTER,
         scale: 0.18,

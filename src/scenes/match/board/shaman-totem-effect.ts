@@ -27,6 +27,8 @@ export class ShamanTotemEffect extends Container {
     const artwork = new Sprite(textures.artwork)
     artwork.label = 'game.shaman-totem.artwork'
     artwork.eventMode = 'none'
+    artwork.blendMode = 'screen'
+    artwork.tint = CONFIG.artworkTint
     applyAnchoredPlacement(artwork, CONFIG.artwork)
     this.addChild(artwork)
 

@@ -11,12 +11,12 @@ export type CursorVariant =
 export type CursorContextVariant = Exclude<CursorVariant, 'default' | 'observer'>
 export type CursorOverrideVariant = Extract<CursorVariant, 'observer'>
 
-/** The standard cursor artwork is 32 CSS pixels at the default scale. */
-export const CURSOR_BASE_SIZE = 32
+/** The standard cursor artwork is 64 CSS pixels at the default scale. */
+export const CURSOR_BASE_SIZE = 64
 export const DEFAULT_CURSOR_SCALE = 1
 export const CURSOR_SCALE_LIMITS = {
   min: 0.5,
-  max: 4
+  max: 1
 } as const
 
 /** Native geometry of the DOM targeting head, whose tip is glued to the pointer. */
@@ -43,7 +43,6 @@ interface CursorAsset {
   hotspotX: number
   hotspotY: number
   flipX?: boolean
-  scaleWithCursor?: boolean
 }
 
 export interface CursorTargetPoint {
@@ -64,14 +63,14 @@ const CURSOR_ASSETS: Record<CursorVariant, CursorAsset> = {
     image: defaultCursorImage,
     width: CURSOR_BASE_SIZE,
     height: CURSOR_BASE_SIZE,
-    hotspotX: 9,
+    hotspotX: 18,
     hotspotY: 0
   },
   grab: {
     image: grabCursorImage,
     width: CURSOR_BASE_SIZE,
     height: CURSOR_BASE_SIZE,
-    hotspotX: 9,
+    hotspotX: 18,
     hotspotY: 0
   },
   observer: {
@@ -84,20 +83,18 @@ const CURSOR_ASSETS: Record<CursorVariant, CursorAsset> = {
   },
   'collection-next-page': {
     image: collectionNewPageImage,
-    width: 59,
-    height: 55,
-    hotspotX: 29.5,
-    hotspotY: 27.5,
-    scaleWithCursor: false
+    width: CURSOR_BASE_SIZE,
+    height: CURSOR_BASE_SIZE,
+    hotspotX: CURSOR_BASE_SIZE / 2,
+    hotspotY: CURSOR_BASE_SIZE / 2
   },
   'collection-previous-page': {
     image: collectionNewPageImage,
-    width: 59,
-    height: 55,
-    hotspotX: 29.5,
-    hotspotY: 27.5,
-    flipX: true,
-    scaleWithCursor: false
+    width: CURSOR_BASE_SIZE,
+    height: CURSOR_BASE_SIZE,
+    hotspotX: CURSOR_BASE_SIZE / 2,
+    hotspotY: CURSOR_BASE_SIZE / 2,
+    flipX: true
   }
 }
 
@@ -272,10 +269,8 @@ export class CursorManager {
   }
 
   /**
-   * Updates the shared size of the standard cursor variants.
-   *
-   * The collection page cursor deliberately keeps its source dimensions so
-   * the artwork remains at the size it was authored for.
+   * Scales all cursor variants relative to their original dimensions.
+   * Targeting visuals retain their independent scale.
    */
   setScale(scale: number): void {
     this.scale = normalizeCursorScale(scale)
@@ -466,7 +461,9 @@ export class CursorManager {
 
   private applyCursorAppearance(animate = false): void {
     const asset = CURSOR_ASSETS[this.variant]
-    const image = this.leftButtonDown ? (asset.pressedImage ?? asset.image) : asset.image
+    const image = this.leftButtonDown
+      ? (asset.pressedImage ?? asset.image)
+      : asset.image
     if (this.element.getAttribute('src') !== image) this.element.src = image
     const isDefault = this.variant === 'default'
     // Animate presses only; variant changes must immediately discard the old transform.
@@ -481,12 +478,6 @@ export class CursorManager {
 
   private applyScale(): void {
     const asset = CURSOR_ASSETS[this.variant]
-    if (asset.scaleWithCursor === false) {
-      this.element.style.width = `${asset.width}px`
-      this.element.style.height = `${asset.height}px`
-      return
-    }
-
     this.element.style.width = `${asset.width * this.scale}px`
     this.element.style.height = `${asset.height * this.scale}px`
   }
@@ -502,7 +493,7 @@ export class CursorManager {
     if (this.pointerX === null || this.pointerY === null) return
 
     const asset = CURSOR_ASSETS[this.variant]
-    const assetScale = asset.scaleWithCursor === false ? 1 : this.scale
+    const assetScale = this.scale
     this.element.style.left = `${this.pointerX - asset.hotspotX * assetScale}px`
     this.element.style.top = `${this.pointerY - asset.hotspotY * assetScale}px`
   }

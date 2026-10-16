@@ -276,10 +276,8 @@ export class DeckSelectionView extends Container {
       // effect never hides the interactive deck button itself.
       const outlineTarget = new Sprite(texture)
       outlineTarget.anchor.set(0.5)
-      outlineTarget.position.set(framePosition.x, framePosition.y)
       outlineTarget.eventMode = 'none'
       outlineTarget.label = `deck-selection.deck-outline:${entry.deck.id}`
-      this.deckGrid.addChild(outlineTarget)
 
       const outline = new AnimatedOutline(outlineTarget, {
         palette: 'blue',
@@ -289,13 +287,20 @@ export class DeckSelectionView extends Container {
       this.deckOutlines.push(outline)
 
       const button = new DeckEntryButton(texture, {
+        pressedScale: 1,
+        pressedBrightness: 1,
+        highlightOnHover: false,
+        pressOffsetX: DECK_SELECTION_LAYOUT.deckGrid.pressOffset.x,
+        sinkPx: DECK_SELECTION_LAYOUT.deckGrid.pressOffset.y,
         portrait: portraitAssetKey ? assets[portraitAssetKey] : undefined,
         portraitYOffset: getDeckPortraitYOffset(entry.deck.heroId),
         deckName: entry.deck.name,
         onClick: () => this.selectDeck(entry.deck, assets, outline)
       })
+      button.addChildAt(outlineTarget, 0)
       button.label = `deck-selection.deck:${entry.deck.id}`
       button.position.set(framePosition.x, framePosition.y)
+      button.setBaseX(framePosition.x)
       button.setBaseY(framePosition.y)
       this.deckButtons.push(button)
       this.deckGrid.addChild(button)

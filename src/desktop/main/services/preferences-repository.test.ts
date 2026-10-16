@@ -34,48 +34,112 @@ afterEach(async () => {
 })
 
 describe('PreferencesRepository', () => {
+  it('persists cursor size without changing other preferences', async () => {
+    const { repository, filePath } = await createRepository()
+    await repository.set({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'hardware-v2',
+      cursorScale: 0.75
+    })
+    expect(await new PreferencesRepository(filePath).get()).toEqual({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'hardware-v2',
+      cursorScale: 0.75
+    })
+  })
+
+  it.each([undefined, null, '2', 0.25, 1.5, 2, 3])(
+    'defaults invalid stored scale %s without losing preferences',
+    async (cursorScale) => {
+      const { repository, filePath } = await createRepository()
+      await writeFile(
+        filePath,
+        JSON.stringify({
+          version: 2,
+          lastPlayedDeckId: 'deck-123',
+          aiMode: 'hardware-v2',
+          cursorScale
+        })
+      )
+      expect(await repository.get()).toEqual({
+        lastPlayedDeckId: 'deck-123',
+        aiMode: 'hardware-v2',
+        cursorScale: 1
+      })
+    }
+  )
+
+  it('validates cursor scale updates', () => {
+    for (const cursorScale of [0.5, 0.75, 1]) {
+      expect(parsePreferencesUpdateRequest({ cursorScale })).toEqual({ cursorScale })
+    }
+    for (const cursorScale of [0.25, 1.5, 2, NaN, Infinity, '2', null]) {
+      expect(() => parsePreferencesUpdateRequest({ cursorScale })).toThrow()
+    }
+  })
+
   it('starts with no last played deck when no file exists', async () => {
     const { repository } = await createRepository()
 
-    expect(await repository.get()).toEqual({ lastPlayedDeckId: null, aiMode: 'api' })
+    expect(await repository.get()).toEqual({
+      lastPlayedDeckId: null,
+      aiMode: 'api',
+      cursorScale: 1
+    })
   })
 
   it('persists the last played deck id across repository reloads', async () => {
     const { repository, filePath } = await createRepository()
 
-    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'api' })
+    await repository.set({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'api',
+      cursorScale: 1
+    })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api'
+      aiMode: 'api',
+      cursorScale: 1
     })
   })
 
   it('clears the last played deck id back to null', async () => {
     const { repository, filePath } = await createRepository()
 
-    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'hardware' })
-    await repository.set({ lastPlayedDeckId: null, aiMode: 'hardware' })
+    await repository.set({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'hardware',
+      cursorScale: 1
+    })
+    await repository.set({ lastPlayedDeckId: null, aiMode: 'hardware', cursorScale: 1 })
 
     const persisted = JSON.parse(await readFile(filePath, 'utf8'))
     expect(persisted.version).toBe(2)
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: null,
-      aiMode: 'hardware'
+      aiMode: 'hardware',
+      cursorScale: 1
     })
   })
 
   it('persists Expert AI mode across repository reloads', async () => {
     const { repository, filePath } = await createRepository()
 
-    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'hardware-v2' })
+    await repository.set({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'hardware-v2',
+      cursorScale: 1
+    })
 
     expect(JSON.parse(await readFile(filePath, 'utf8'))).toMatchObject({
       version: 2,
-      aiMode: 'hardware-v2'
+      aiMode: 'hardware-v2',
+      cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware-v2'
+      aiMode: 'hardware-v2',
+      cursorScale: 1
     })
   })
 
@@ -95,7 +159,8 @@ describe('PreferencesRepository', () => {
     const preferences = await repository.get()
     expect(preferences).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware-v2'
+      aiMode: 'hardware-v2',
+      cursorScale: 1
     })
     expect(parsePreferencesUpdateRequest({ expertDeckStrategyEnabled: false })).toEqual(
       {}
@@ -109,18 +174,27 @@ describe('PreferencesRepository', () => {
 
   it('rejects invalid deck ids without modifying the saved file', async () => {
     const { repository, filePath } = await createRepository()
-    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'api' })
+    await repository.set({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'api',
+      cursorScale: 1
+    })
     const saved = await readFile(filePath, 'utf8')
 
     await expect(
-      repository.set({ lastPlayedDeckId: '', aiMode: 'api' })
+      repository.set({ lastPlayedDeckId: '', aiMode: 'api', cursorScale: 1 })
     ).rejects.toThrow()
     await expect(
-      repository.set({ lastPlayedDeckId: '   ' as string, aiMode: 'api' })
+      repository.set({
+        lastPlayedDeckId: '   ' as string,
+        aiMode: 'api',
+        cursorScale: 1
+      })
     ).rejects.toThrow()
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api'
+      aiMode: 'api',
+      cursorScale: 1
     })
     expect(await readFile(filePath, 'utf8')).toBe(saved)
   })
@@ -129,11 +203,20 @@ describe('PreferencesRepository', () => {
     const { filePath, repository } = await createRepository()
     await writeFile(filePath, '{not valid json', 'utf8')
 
-    expect(await repository.get()).toEqual({ lastPlayedDeckId: null, aiMode: 'api' })
-    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'api' })
+    expect(await repository.get()).toEqual({
+      lastPlayedDeckId: null,
+      aiMode: 'api',
+      cursorScale: 1
+    })
+    await repository.set({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'api',
+      cursorScale: 1
+    })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api'
+      aiMode: 'api',
+      cursorScale: 1
     })
   })
 
@@ -147,7 +230,8 @@ describe('PreferencesRepository', () => {
 
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: null,
-      aiMode: 'api'
+      aiMode: 'api',
+      cursorScale: 1
     })
   })
 
@@ -161,12 +245,18 @@ describe('PreferencesRepository', () => {
 
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api'
+      aiMode: 'api',
+      cursorScale: 1
     })
-    await repository.set({ lastPlayedDeckId: 'deck-123', aiMode: 'hardware' })
+    await repository.set({
+      lastPlayedDeckId: 'deck-123',
+      aiMode: 'hardware',
+      cursorScale: 1
+    })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware'
+      aiMode: 'hardware',
+      cursorScale: 1
     })
   })
 
@@ -180,7 +270,8 @@ describe('PreferencesRepository', () => {
 
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api'
+      aiMode: 'api',
+      cursorScale: 1
     })
   })
 
@@ -189,7 +280,8 @@ describe('PreferencesRepository', () => {
       expect(parsePreferencesUpdateRequest({ aiMode })).toEqual({ aiMode })
       expect(parsePreferences({ lastPlayedDeckId: null, aiMode })).toEqual({
         lastPlayedDeckId: null,
-        aiMode
+        aiMode,
+        cursorScale: 1
       })
     }
     expect(() => parsePreferencesUpdateRequest({ aiMode: 'unknown' })).toThrow()

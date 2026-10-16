@@ -313,11 +313,11 @@ export const GAME_BOARD_LAYOUT = {
       firstCrystalCenter: { x: 1345, y: 1012 },
       pendingRowOffsetY: 40,
       overloadCrystal: placement(
-        { x: 0, y: 0 },
+        { x: 3, y: 0 },
         { width: 49, height: 48 },
         {
           anchor: CENTER,
-          scale: 38 / 49,
+          scale: 0.7,
           note: 'Locked crystal artwork shared by current and pending overload rows.'
         }
       ),
@@ -334,15 +334,15 @@ export const GAME_BOARD_LAYOUT = {
         }
       ),
       glow: placement(
-        { x: 3, y: -4 },
+        { x: 3, y: 0 },
         { width: 96, height: 96 },
         {
           anchor: CENTER,
-          scale: 0.65,
+          scale: 0.8,
           note: 'Glow aligned to the visible crystal body, excluding its baked-in shadow.'
         }
       ),
-      glowFade: { inDuration: 0.15, outDuration: 0.2 }
+      glowFade: { inDuration: 0.15, outDuration: 0.3 }
     }
   },
 
