@@ -1,5 +1,6 @@
 import {
   CARD_CATALOG,
+  isCardAllowedForClass,
   HERO_CATALOG,
   type CardId,
   type CardCatalog,
@@ -39,7 +40,7 @@ export class DeckRules {
   isCardAllowedInDeck(deck: Pick<Deck, 'heroId'>, card: CardDefinition): boolean {
     if (!isCollectibleDeckCard(card)) return false
     const heroClass = this.getHeroClass(deck)
-    return card.cardClass === 'Neutral' || card.cardClass === heroClass
+    return isCardAllowedForClass(card, heroClass)
   }
 
   validate(deck: Deck): readonly string[] {

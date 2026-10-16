@@ -14,7 +14,7 @@ export interface AiObservedCard {
   readonly instanceId: string
   readonly modifications?: Pick<
     OpeningCard,
-    'attack' | 'health' | 'enchantments' | 'costAdjustments'
+    'attack' | 'health' | 'enchantments' | 'costAdjustments' | 'baseStatsOverride'
   >
   readonly cardId: CardId
   readonly baseCost: number | null
@@ -23,7 +23,13 @@ export interface AiObservedCard {
 
 export type AiObservedQuest = Pick<
   NonNullable<OpeningPlayerState['quest']>,
-  'cardId' | 'rewardCardId' | 'goal' | 'progress' | 'target'
+  | 'cardId'
+  | 'rewardCardId'
+  | 'goal'
+  | 'progress'
+  | 'target'
+  | 'objectives'
+  | 'completedObjectives'
 >
 
 export interface AiObservedPlayer {
@@ -57,6 +63,10 @@ export interface AiObservedPlayer {
     | 'lockAndLoadCount'
     | 'lockAndLoadTurn'
     | 'heroPowerCostOverride'
+    | 'minionBaseStats'
+    | 'murlocSummonBonus'
+    | 'ninjaCycle'
+    | 'futureAdaptations'
   >
   readonly fatigueDamage: number
   readonly secrets: readonly Readonly<{
@@ -82,6 +92,9 @@ export interface AiObservation {
   readonly phase: OpeningMatchState['phase']
   readonly turnNumber: number
   readonly activePlayerId: PlayerId | null
+  readonly extraTurnQueue?: readonly PlayerId[]
+  readonly nextRegularPlayerId?: PlayerId
+  readonly isExtraTurn?: boolean
   readonly perspectivePlayerId: PlayerId
   readonly players: readonly [AiObservedPlayer, AiObservedPlayer]
   readonly selfOriginalDeck: AiObservedDeck

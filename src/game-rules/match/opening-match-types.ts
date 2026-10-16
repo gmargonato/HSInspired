@@ -14,7 +14,14 @@ import type { AiInformationPolicy, AiObservation } from './ai/ai-types'
 
 export type OpeningPhase = 'mulligan' | 'turns' | 'ended'
 
+export interface MinionBaseStats {
+  readonly attack: number
+  readonly health: number
+}
+
 export interface OpeningCard {
+  /** Persistent base stats, retained across control and zone changes. */
+  readonly baseStatsOverride?: MinionBaseStats
   readonly instanceId: string
   readonly cardId: CardId
   /** True only for cards copied from the original, submitted deck. */
@@ -109,7 +116,9 @@ export interface RuntimeEnchantment {
   readonly storedControllerId?: PlayerId | null
   readonly duration?: string
   readonly startsOnTurn?: number
+  readonly startsOnPlayerTurn?: PlayerId
   readonly expiresOnTurn?: number
+  readonly expiresBeforePlayerTurn?: PlayerId
   readonly expiresOnAttack?: number
   /** Removes this Hero Power cost modifier immediately after one use. */
   readonly consumeOnHeroPowerUse?: boolean
@@ -123,7 +132,9 @@ export interface RuntimeCostAdjustment {
   readonly amount: number
   readonly duration?: string
   readonly startsOnTurn?: number
+  readonly startsOnPlayerTurn?: PlayerId
   readonly expiresOnTurn?: number
+  readonly expiresBeforePlayerTurn?: PlayerId
   readonly continuous?: boolean
 }
 
@@ -134,7 +145,9 @@ export interface RuntimeGrantedTrigger {
   readonly sourceInstanceId: string
   readonly duration?: string
   readonly startsOnTurn?: number
+  readonly startsOnPlayerTurn?: PlayerId
   readonly expiresOnTurn?: number
+  readonly expiresBeforePlayerTurn?: PlayerId
 }
 
 /**
@@ -150,6 +163,8 @@ export interface RuntimeAttachedEffect {
   readonly trigger: 'start-of-turn' | 'end-of-turn'
   readonly actions: readonly Record<string, unknown>[]
   readonly executeOnTurn: number
+  /** Relative schedules wait for this participant rather than assuming alternating turns. */
+  readonly executeForPlayerId?: PlayerId
 }
 
 export interface SecretState {
@@ -207,6 +222,8 @@ export interface ScheduledEffect {
   readonly trigger: CardTrigger
   readonly actions: readonly Record<string, unknown>[]
   readonly executeOnTurn: number
+  /** Relative schedules wait for this participant rather than assuming alternating turns. */
+  readonly executeForPlayerId?: PlayerId
   readonly duration?: string
 }
 
@@ -360,8 +377,15 @@ export interface ResolutionDiagnostic {
   readonly recentQueue: readonly string[]
 }
 
-/** A minion in play. Stats are current values (base today; buffs later). */
+/** A board-lane occupant. Permanent objects retain zero internal combat stats. */
 export interface BoardMinion {
+  /** Provenance of this entity; actual zone moves preserve it, new copies do not. */
+  readonly startedInDeck?: boolean
+  readonly baseStatsOverride?: MinionBaseStats
+  /** A permanent, statless board occupant; consumes a slot but is not a minion. */
+  readonly boardObject?: 'nether-portal' | 'underfel-rift'
+  /** Global turn on which an activated permanent object was last used. */
+  readonly boardObjectLastUsedOnTurn?: number
   readonly instanceId: string
   readonly cardId: CardId
   readonly attack: number
@@ -503,7 +527,9 @@ export interface PendingCostModifier {
   readonly filter: Readonly<Record<string, unknown>>
   readonly duration?: string
   readonly startsOnTurn?: number
+  readonly startsOnPlayerTurn?: PlayerId
   readonly expiresOnTurn?: number
+  readonly expiresBeforePlayerTurn?: PlayerId
   /** Removes this modifier after the first matching card is played. */
   readonly consumeOnMatch?: boolean
 }
@@ -515,6 +541,11 @@ export interface CthunProgression {
 }
 
 export interface OpeningPlayerState {
+  /** Crystal Core changes current and future minion bases, not later enchantments. */
+  readonly murlocSummonBonus?: number
+  readonly ninjaCycle?: boolean
+  readonly futureAdaptations?: readonly CardId[]
+  readonly minionBaseStats?: MinionBaseStats
   /** Original C'Thun ritual totals, independent of any physical card instance. */
   readonly cthun?: CthunProgression
   readonly cthunDied?: boolean
@@ -538,6 +569,9 @@ export interface OpeningPlayerState {
     readonly target: number
     readonly seenCardInstanceIds?: readonly string[]
     readonly playedNames?: Readonly<Record<string, number>>
+    readonly objectives?: Readonly<Record<string, number>>
+    readonly completedObjectives?: readonly string[]
+    readonly lastProgressTurn?: number
   } | null
   readonly hand: readonly OpeningCard[]
   readonly revealedCards?: readonly OpeningCard[]
@@ -578,6 +612,10 @@ export interface OpeningMatchState {
   readonly playerTwoId: PlayerId
   readonly activePlayerId: PlayerId | null
   readonly turnNumber: number
+  /** Extra turns are consumed in grant order before the interrupted regular turn. */
+  readonly extraTurnQueue?: readonly PlayerId[]
+  readonly nextRegularPlayerId?: PlayerId
+  readonly isExtraTurn?: boolean
   readonly winnerId: PlayerId | null
   readonly loserId: PlayerId | null
   readonly players: readonly [OpeningPlayerState, OpeningPlayerState]
@@ -596,6 +634,8 @@ export interface OpeningMatchState {
 }
 
 export interface PendingDiscoverChoice {
+  readonly fromHeroPower?: boolean
+  readonly setChosenCost?: number
   /** Summoning choices never enter the hand. Omitted for ordinary Discover. */
   readonly destination?: 'board'
   /** Public source for a bonus with no physical played card. */
@@ -666,6 +706,7 @@ export interface PendingCardChoice {
     | { readonly type: 'bonus-spell' }
     | {
         readonly type: 'adapt'
+        readonly appliesToFutureMinions?: boolean
         readonly historySource?: {
           readonly instanceId: string
           readonly cardId: CardId
@@ -714,6 +755,13 @@ export interface ConfirmMulliganCommand {
 export interface EndTurnCommand {
   readonly type: 'end-turn'
   readonly participantId: PlayerId
+}
+
+export interface ActivateBoardObjectCommand {
+  readonly type: 'activate-board-object'
+  readonly participantId: PlayerId
+  readonly boardObjectInstanceId: string
+  readonly cardInstanceId: string
 }
 
 export interface UseHeroPowerCommand {
@@ -868,6 +916,7 @@ export type OpeningMatchCommand =
   | ConfirmMulliganCommand
   | EndTurnCommand
   | UseHeroPowerCommand
+  | ActivateBoardObjectCommand
   | PlayCardCommand
   | ChooseDiscoverCardCommand
   | ChooseCardOptionCommand
@@ -913,6 +962,7 @@ export interface OpeningCardDrawnEvent {
 
 export interface TurnStartedEvent {
   readonly type: 'turn-started'
+  readonly isExtraTurn?: boolean
   readonly participantId: PlayerId
   readonly turnNumber: number
   readonly mana: PlayerMana
@@ -1623,6 +1673,8 @@ export interface CardPlayEffectPreview {
 }
 
 export interface MatchLegality {
+  /** Permanent objects with a legal zero-mana hand-card activation. */
+  readonly activatableBoardObjectInstanceIds?: readonly string[]
   readonly canEndTurn: boolean
   readonly playableCardInstanceIds: readonly string[]
   readonly legalAttackerInstanceIds: readonly string[]

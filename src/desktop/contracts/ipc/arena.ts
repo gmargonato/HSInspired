@@ -6,6 +6,7 @@ import {
   ARENA_MAX_WINS,
   ARENA_MAX_DEFEATS,
   CARD_CATALOG,
+  isCardAllowedForClass,
   HERO_CATALOG,
   asCardId,
   asHeroId,
@@ -144,7 +145,7 @@ export function parseArenaRunSnapshot(value: unknown): ArenaRunSnapshot {
       !heroClass ||
       !definition.collectible ||
       !definition.deckLegal ||
-      (definition.cardClass !== 'Neutral' && definition.cardClass !== heroClass)
+      !isCardAllowedForClass(definition, heroClass)
     ) {
       throw new Error(`Arena card ${cardId} is not legal for this hero`)
     }
@@ -183,7 +184,7 @@ export function parseArenaRunSnapshot(value: unknown): ArenaRunSnapshot {
       if (
         !definition.collectible ||
         !definition.deckLegal ||
-        (definition.cardClass !== 'Neutral' && definition.cardClass !== heroClass)
+        !isCardAllowedForClass(definition, heroClass)
       ) {
         throw new Error(`Arena choice ${cardId} is not legal for this hero`)
       }

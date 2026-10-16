@@ -135,6 +135,18 @@ export function enumerateLegalCommands(
     }
   }
 
+  for (const boardObjectInstanceId of legality.activatableBoardObjectInstanceIds ??
+    []) {
+    for (const card of player.hand) {
+      commands.push({
+        type: 'activate-board-object',
+        participantId,
+        boardObjectInstanceId,
+        cardInstanceId: card.instanceId
+      })
+    }
+  }
+
   if (legality.legalHeroPower) {
     const targets =
       legality.legalHeroPowerTargets.length > 0

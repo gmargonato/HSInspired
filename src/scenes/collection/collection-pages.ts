@@ -1,5 +1,6 @@
 import {
   CARD_CLASSES,
+  cardHasClass,
   type CardClass,
   type CardDefinition,
   type CardId,
@@ -45,6 +46,12 @@ export function resolvePageAnchor(
   anchor: CollectionPageAnchor | null
 ): number {
   if (!anchor) return 0
+  const sameClassCardIndex = pages.findIndex(
+    (page) =>
+      page.cardClass === anchor.cardClass &&
+      page.cards.some((card) => card.id === anchor.cardId)
+  )
+  if (sameClassCardIndex >= 0) return sameClassCardIndex
   const cardIndex = pages.findIndex((page) =>
     page.cards.some((card) => card.id === anchor.cardId)
   )
@@ -69,7 +76,7 @@ export function buildCollectionPages(
     const classCards = cards
       .filter(
         (card) =>
-          card.cardClass === cardClass && COLLECTION_CARD_TYPE_SET.has(card.type)
+          cardHasClass(card, cardClass) && COLLECTION_CARD_TYPE_SET.has(card.type)
       )
       .sort(compareCards)
 

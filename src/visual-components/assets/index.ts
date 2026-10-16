@@ -143,6 +143,7 @@ import gameDeckSlicedImage from '@assets/images/match/deck-sliced.png'
 import gameDeckInfoImage from '@assets/images/match/tray-number-of-cards-hand-deck.png'
 import gameFatigueDeckImage from '@assets/images/match/fatigue-deck.png'
 import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
+import gameExtraTurnImage from '@assets/images/match/button-extra-turn.png'
 import gameEnemyTurnImage from '@assets/images/match/button-enemy-turn.png'
 import gameYourTurnImage from '@assets/images/match/flag-your-turn.png'
 import fatigueImage from '@assets/images/match/fatigue.png'
@@ -191,6 +192,7 @@ import premiumHeroPowerFrontImage from '@assets/images/heroes/hero-power/premium
 import heroPowerManaImage from '@assets/images/heroes/hero-power/hero-power-mana.png'
 import discoverHistoryHeroPowerImage from '@assets/images/match/discover-history-hero-power.png'
 import minionFrameImage from '@assets/images/board/minion-frame.png'
+import minionDormantImage from '@assets/images/board/minion-dormant.png'
 import premiumMinionFrameImage from '@assets/images/board/premium-minion-frame.png'
 import minionFrameLegendaryImage from '@assets/images/board/minion-frame-legendary.png'
 import premiumMinionFrameLegendaryImage from '@assets/images/board/premium-minion-frame-legendary.png'
@@ -1157,6 +1159,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.minion-dormant',
+    ASSET_BUNDLE_IDS.game,
+    'minionDormant',
+    minionDormantImage,
+    115,
+    157,
+    'game-scene'
+  ),
+  asset(
     'scene.game.minion-frame-premium',
     ASSET_BUNDLE_IDS.game,
     'premiumMinionFrame',
@@ -1989,6 +2000,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'endTurn',
     gameEndTurnImage,
+    157,
+    86,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.extra-turn',
+    ASSET_BUNDLE_IDS.game,
+    'extraTurn',
+    gameExtraTurnImage,
     157,
     86,
     'game-scene'
@@ -2984,6 +3004,8 @@ export interface GameAssets extends Record<
   minionElusive: Texture
   minionImmune: Texture
   minionStealth: Texture
+  /** Optional for partial asset consumers; full game bundles provide this texture. */
+  minionDormant?: Texture
   boardTrigger: Texture
   boardInspire: Texture
   boardDeathrattle: Texture
@@ -3032,6 +3054,8 @@ export interface GameAssets extends Record<
   manaGlow: Texture
   manaOverload: Texture
   endTurn: Texture
+  /** Optional for partial asset consumers; full game bundles provide this texture. */
+  extraTurn?: Texture
   toggleViewButton: Texture
   enemyTurn: Texture
   yourTurn: Texture

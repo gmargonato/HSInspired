@@ -1,6 +1,7 @@
 import type { CardId } from '../../content/cards'
 import type { Deck } from '../../decks'
 import { cloneUnknown } from '../match-state-snapshot'
+import { withoutMinionDeckProvenance } from '../match-public-projection'
 import type { OpeningCard, OpeningMatchState } from '../opening-match-types'
 import type { MatchSetup, PlayerId } from '../match-types'
 import type {
@@ -16,6 +17,7 @@ function observedCard(card: OpeningCard, revealCost: boolean): AiObservedCard {
     ...(revealCost
       ? {
           modifications: cloneUnknown({
+            baseStatsOverride: card.baseStatsOverride,
             attack: card.attack,
             health: card.health,
             enchantments: card.enchantments,
@@ -64,7 +66,9 @@ export function createAiObservation(
           rewardCardId: player.quest.rewardCardId,
           goal: player.quest.goal,
           progress: player.quest.progress,
-          target: player.quest.target
+          target: player.quest.target,
+          objectives: player.quest.objectives,
+          completedObjectives: player.quest.completedObjectives
         }
       : null,
     hand:
@@ -75,7 +79,13 @@ export function createAiObservation(
             .map((card) => observedCard(card, false)),
     handSize: player.hand.length,
     deckSize: player.deck.length,
-    board: player.board.map(stripOrdering),
+    board: player.board.map((minion) =>
+      stripOrdering(
+        player.participantId === perspectivePlayerId
+          ? minion
+          : withoutMinionDeckProvenance(minion)
+      )
+    ),
     weapon: player.weapon ? stripOrdering(player.weapon) : null,
     mana: structuredClone(player.mana),
     heroPower: stripOrdering(player.heroPower),
@@ -85,6 +95,10 @@ export function createAiObservation(
       overload: player.overload,
       counters: player.counters,
       heroPowerCostOverride: player.heroPowerCostOverride,
+      minionBaseStats: player.minionBaseStats,
+      murlocSummonBonus: player.murlocSummonBonus,
+      ninjaCycle: player.ninjaCycle,
+      futureAdaptations: player.futureAdaptations,
       lockAndLoadCount: player.lockAndLoadCount,
       lockAndLoadTurn: player.lockAndLoadTurn,
       ...(player.participantId === perspectivePlayerId
@@ -119,6 +133,11 @@ export function createAiObservation(
     phase: state.phase,
     turnNumber: state.turnNumber,
     activePlayerId: state.activePlayerId,
+    ...(state.extraTurnQueue ? { extraTurnQueue: [...state.extraTurnQueue] } : {}),
+    ...(state.nextRegularPlayerId
+      ? { nextRegularPlayerId: state.nextRegularPlayerId }
+      : {}),
+    ...(state.isExtraTurn ? { isExtraTurn: true } : {}),
     perspectivePlayerId,
     players,
     selfOriginalDeck: observedDeck(deck)

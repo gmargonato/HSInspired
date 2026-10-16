@@ -19,6 +19,7 @@ export interface HeroDefinition {
 }
 
 export type HeroPresentationAssetKey =
+  | 'hero-placeholder'
   | 'hero-guldan'
   | 'hero-rexxar'
   | 'hero-valeera'
@@ -150,6 +151,14 @@ const HERO_DATA = [
     'Scourgelord Garrosh',
     'knights_of_the_frozen_throne_bladestorm',
     'hero-garrosh-scourgelord',
+    false
+  ],
+  [
+    'journey_to_ungoro_master_dusk',
+    'Rogue',
+    'Master Dusk',
+    'journey_to_ungoro_way_of_the_shell',
+    'hero-placeholder',
     false
   ]
 ] as const

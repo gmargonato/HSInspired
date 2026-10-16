@@ -160,7 +160,11 @@ export class QuestZoneView extends Container {
     const badge = this.badges[side]
     badge.visible = !!quest
     const count = badge.getChildByLabel(`game.quest.${side}.count`)
-    if (count instanceof Text && quest) count.text = `${quest.progress}/${quest.target}`
+    if (count instanceof Text && quest)
+      count.text =
+        quest.goal === 'cast-holy-shadow'
+          ? `H${quest.objectives?.Holy ?? 0}/4 S${quest.objectives?.Shadow ?? 0}/4`
+          : `${quest.progress}/${quest.target}`
     const x =
       SECRET_LAYOUT.badges[side].position.x -
       (paired ? SECRET_LAYOUT.pairedBadgeOffset : 0)

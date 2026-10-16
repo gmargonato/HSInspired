@@ -23,6 +23,12 @@ export function aiActionIntent(
       return { ...intent, source: command.cardInstanceId }
     case 'choose-card-option':
       return { ...intent, source: command.sourceCardInstanceId, option: command.choice }
+    case 'activate-board-object':
+      return {
+        ...intent,
+        source: command.boardObjectInstanceId,
+        targets: [command.cardInstanceId]
+      }
     case 'play-card':
       return {
         ...intent,

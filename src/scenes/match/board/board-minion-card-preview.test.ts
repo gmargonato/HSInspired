@@ -7,6 +7,7 @@ import {
   boardWeaponCardPreviewModel,
   boardWeaponCardPreviewKey,
   boardMinionCardPreviewModel,
+  boardObjectCardPreviewModel,
   canShowBoardMinionCardPreview,
   positionBoardMinionCardPreview
 } from './board-minion-card-preview'
@@ -27,6 +28,34 @@ function previewMinion(overrides: Partial<BoardMinion> = {}): BoardMinion {
 }
 
 describe('board minion card preview', () => {
+  it('preserves the statless spell card preview for a permanent Nether Portal', () => {
+    const definition = CARD_CATALOG.require(asCardId('journey_to_ungoro_nether_portal'))
+    const portal = previewMinion({
+      cardId: definition.id,
+      boardObject: 'nether-portal',
+      dormant: true,
+      attack: 0,
+      health: 0,
+      maxHealth: 0
+    })
+    const model = boardObjectCardPreviewModel(definition, portal)
+
+    expect(model?.card).toBe(definition)
+    expect(model?.card.type).toBe('Spell')
+    expect(model?.card).not.toHaveProperty('attack')
+    expect(model?.card).not.toHaveProperty('health')
+    expect(model?.silenced).toBe(false)
+    expect(
+      boardObjectCardPreviewModel(definition, { ...portal, boardObject: undefined })
+    ).toBeNull()
+    expect(
+      boardObjectCardPreviewModel(
+        CARD_CATALOG.require(asCardId('basic_chillwind_yeti')),
+        portal
+      )
+    ).toBeNull()
+  })
+
   it('renders current stats with Hearthstone-style colors', () => {
     const definition = CARD_CATALOG.require(asCardId('basic_chillwind_yeti'))
     if (definition.type !== 'Minion') throw new Error('Expected a minion card.')

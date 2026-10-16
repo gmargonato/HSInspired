@@ -283,7 +283,7 @@ export class AddCardPickerView {
 
     const metadata = document.createElement('span')
     metadata.className = 'add-card-picker__metadata'
-    metadata.textContent = `${card.cardClass} · ${formatExpansionName(card.expansionId)} · ${card.type}${card.collectible ? '' : ' · Non-collectible'}`
+    metadata.textContent = `${(card.allowedClasses ?? [card.cardClass]).join(' / ')} · ${formatExpansionName(card.expansionId)} · ${card.type}${card.collectible ? '' : ' · Non-collectible'}`
 
     row.append(cost, name, metadata)
     row.addEventListener('click', () => void this.handleCardSelect(card.id))

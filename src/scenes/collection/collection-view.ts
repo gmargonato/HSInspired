@@ -745,7 +745,15 @@ export class CollectionView extends Actor {
       this.collectionQuery.snapshot(),
       this.deckClass
     )
-    return buildCollectionPages(filteredCards)
+    const classFilter = this.collectionQuery.classFilter
+    return buildCollectionPages(
+      filteredCards,
+      classFilter
+        ? [classFilter]
+        : this.deckClass
+          ? [this.deckClass, 'Neutral']
+          : undefined
+    )
   }
 
   async renderPage(index: number): Promise<void> {

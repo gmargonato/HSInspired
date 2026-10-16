@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CARD_CATALOG } from '../../content/cards'
 import { createSeededRng } from '../rng'
 import { createOpeningMatch } from '../opening-match'
 import { createAiFixture } from '../testing/ai-scenario-builder'
@@ -323,4 +324,65 @@ describe('fair Expert AI checkpoints', () => {
       )?.hand
     )
   })
+})
+
+describe('Crystal Core in fair hypothetical worlds', () => {
+  it.each(['self', 'opponent'])(
+    'uses only the %s player’s public base effect for that player’s sampled cards',
+    (affectedRole) => {
+      const fixture = createAiFixture({
+        seed: 8111,
+        aiHeroId: 'jaina',
+        opponentHeroId: 'jaina',
+        aiDeck: Array(30).fill('basic_acidic_swamp_ooze'),
+        opponentDeck: Array(30).fill('basic_acidic_swamp_ooze'),
+        opponentHand: ['basic_acidic_swamp_ooze']
+      })
+      const affectedId =
+        affectedRole === 'self' ? fixture.aiParticipantId : fixture.localParticipantId
+      const source = structuredClone(fixture.checkpoint)
+      const state = {
+        ...source.state,
+        players: source.state.players.map((p) => ({
+          ...p,
+          ...(p.participantId === affectedId
+            ? { minionBaseStats: { attack: 5, health: 5 } }
+            : {}),
+          deck: p.deck.map((card) => ({
+            ...card,
+            startedInDeck: false,
+            ...(p.participantId === affectedId
+              ? { baseStatsOverride: { attack: 5, health: 5 }, attack: 5, health: 5 }
+              : {})
+          })),
+          hand: p.hand.map((card) => ({
+            ...card,
+            ...(p.participantId === affectedId
+              ? { baseStatsOverride: { attack: 5, health: 5 }, attack: 5, health: 5 }
+              : {})
+          }))
+        })) as unknown as typeof source.state.players
+      }
+      const sampled = createFairHypothesisCheckpoint(
+        { ...source, state },
+        fixture.aiParticipantId,
+        8112
+      )
+      for (const p of sampled.state.players) {
+        const minions = p.deck.filter(
+          (card) => CARD_CATALOG.require(card.cardId).type === 'Minion'
+        )
+        expect(minions.length).toBeGreaterThan(0)
+        for (const card of minions) {
+          if (p.participantId === affectedId)
+            expect(card).toMatchObject({
+              baseStatsOverride: { attack: 5, health: 5 },
+              attack: 5,
+              health: 5
+            })
+          else expect(card.baseStatsOverride).toBeUndefined()
+        }
+      }
+    }
+  )
 })

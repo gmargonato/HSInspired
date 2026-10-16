@@ -86,6 +86,8 @@ export interface CardMetadata {
   readonly name: string
   readonly rarity: CardRarity
   readonly cardClass: ClassId
+  /** Explicit class membership for multi-class cards; excludes Neutral. */
+  readonly allowedClasses?: readonly ClassId[]
   readonly subtype: string | null
   /** All tribes carried by the card. `subtype` remains the primary legacy tribe. */
   readonly tribes?: readonly string[]
@@ -99,6 +101,27 @@ export interface CardMetadata {
   readonly playCondition?: Readonly<Record<string, CardEffectValue>>
   readonly collectible: boolean
   readonly deckLegal: boolean
+}
+
+/** Tests class membership without treating Neutral as a playable class wildcard. */
+export function cardHasClass(
+  card: Pick<CardMetadata, 'cardClass' | 'allowedClasses'> | null | undefined,
+  classId: string
+): boolean {
+  return Boolean(
+    card &&
+    (card.allowedClasses
+      ? card.allowedClasses.some((allowed) => allowed === classId)
+      : card.cardClass === classId)
+  )
+}
+
+/** Tests class eligibility, including ordinary Neutral cards in every class. */
+export function isCardAllowedForClass(
+  card: Pick<CardMetadata, 'cardClass' | 'allowedClasses'>,
+  classId: string
+): boolean {
+  return cardHasClass(card, classId) || cardHasClass(card, 'Neutral')
 }
 
 /** Returns whether a card carries a tribe, including its legacy primary subtype. */
@@ -139,6 +162,16 @@ export interface SpellCardDefinition extends CardMetadata {
       | 'play-battlecry-card'
       | 'draw-card'
       | 'hero-attack'
+      | 'fill-board-turns'
+      | 'play-beast-attack-set'
+      | 'discover-card'
+      | 'summon-murloc-repeatable'
+      | 'cast-holy-shadow'
+      | 'shuffle-into-own-deck'
+      | 'play-unique-minion-type'
+      | 'play-demon'
+      | 'survive-turns'
+      | 'fill-then-empty-hand'
     readonly target: number
     readonly rewardCardId: CardId
   }

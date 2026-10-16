@@ -79,6 +79,7 @@ export class OutlineLabBoard extends Container {
         divineShield: assets.minionDivineShield,
         frozen: assets.minionFrozen,
         stealth: assets.minionStealth,
+        dormant: assets.minionDormant,
         curtainSpark: assets.playSpotlight8,
         curtainMote: assets.playSpotlight8,
         lifesteal: assets.minionLifesteal,

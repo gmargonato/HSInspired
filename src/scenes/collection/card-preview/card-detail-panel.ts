@@ -82,7 +82,7 @@ export function cardDetailRows(card: CardDefinition): readonly CardDetailRow[] {
     { label: 'Name', value: card.name },
     { label: 'Type', value: card.type },
     { label: 'Mana', value: String(card.cost) },
-    { label: 'Class', value: card.cardClass },
+    { label: 'Class', value: (card.allowedClasses ?? [card.cardClass]).join(' / ') },
     { label: 'Collection', value: formatExpansionName(card.expansionId) },
     { label: 'Rarity', value: card.rarity }
   ]

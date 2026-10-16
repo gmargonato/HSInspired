@@ -157,6 +157,7 @@ export class HeroPowerAnimFixtures extends Container {
       divineShield: a.minionDivineShield,
       frozen: a.minionFrozen,
       stealth: a.minionStealth,
+      dormant: a.minionDormant,
       curtainSpark: a.playSpotlight8,
       curtainMote: a.playSpotlight8,
       lifesteal: a.minionLifesteal,

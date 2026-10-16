@@ -1,4 +1,4 @@
-import type { CardDefinition } from '../../../game-rules/content/cards'
+import { cardHasClass, type CardDefinition } from '../../../game-rules/content/cards'
 
 export const ALL_ADD_CARD_FILTER_VALUE = ''
 
@@ -21,7 +21,7 @@ export function filterAddCardCards(
 
   return cards
     .filter((card) => {
-      if (filters.cardClass && card.cardClass !== filters.cardClass) return false
+      if (filters.cardClass && !cardHasClass(card, filters.cardClass)) return false
       if (filters.expansionId && card.expansionId !== filters.expansionId) {
         return false
       }

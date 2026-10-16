@@ -35,6 +35,8 @@ export interface MinionViewModel {
   readonly attack: number
   readonly health: number
   readonly maxHealth: number
+  readonly statsVisible?: boolean
+  readonly dormant?: boolean
   /** Printed Attack of the current card identity; Set and enchantments do not change it. */
   readonly baseAttack?: number
   /** Printed Health of the current card identity; Set and enchantments do not change it. */
@@ -59,6 +61,7 @@ export interface MinionViewModel {
 }
 
 export interface MinionViewTextures {
+  readonly dormant?: Texture
   readonly curtainSpark: Texture
   readonly curtainMote: Texture
   readonly lifesteal: Texture
@@ -171,6 +174,8 @@ export class MinionView extends Container {
   private readonly inspire: Sprite
   private readonly attackLabel: Text
   private readonly healthLabel: Text
+  private readonly attackStats: Container
+  private readonly healthStats: Container
   readonly pulseHealth: () => void
   private readonly artworkImage: Sprite
   private readonly artworkPlaceholder: Graphics
@@ -189,7 +194,10 @@ export class MinionView extends Container {
   private baseAttack: number
   private baseHealth: number
   private maxHealth: number
+  private dormant: boolean
+  private readonly dormantOverlay: Sprite | undefined
   private canAttackEnabled = false
+  private activatableEnabled = false
   private targetingOutlineEnabled = false
   private targetableEnabled = false
   private hoverableEnabled = false
@@ -213,6 +221,7 @@ export class MinionView extends Container {
     this.baseAttack = model.baseAttack ?? model.attack
     this.baseHealth = model.baseHealth ?? model.maxHealth
     this.maxHealth = model.maxHealth
+    this.dormant = model.dormant ?? false
     this.eventMode = 'none'
     this.pivot.set(MINION_CANVAS.width / 2, MINION_CANVAS.height / 2)
 
@@ -281,6 +290,14 @@ export class MinionView extends Container {
     this.stealth.visible = model.stealth
     this.stealth.label = 'minion.stealth'
     this.addChild(this.stealth)
+
+    if (textures.dormant) {
+      this.dormantOverlay = new Sprite(textures.dormant)
+      applyAnchoredPlacement(this.dormantOverlay, MINION_LAYOUT.dormant)
+      this.dormantOverlay.label = 'minion.dormant'
+      this.dormantOverlay.visible = this.dormant
+      this.addChild(this.dormantOverlay)
+    }
 
     const frame = new Sprite(
       this.premium || isPremiumEnabled(this.premiumSide)
@@ -396,6 +413,8 @@ export class MinionView extends Container {
       MINION_LAYOUT.statValueOffsets.attack
     )
     this.attackLabel = attack.value
+    this.attackStats = attack.group
+    this.attackStats.visible = model.statsVisible ?? true
     this.addChild(attack.group)
 
     const health = createStatGroup(
@@ -406,6 +425,8 @@ export class MinionView extends Container {
       MINION_LAYOUT.statValueOffsets.health
     )
     this.healthLabel = health.value
+    this.healthStats = health.group
+    this.healthStats.visible = model.statsVisible ?? true
     this.pulseHealth = createHealthPulse(health.group, this.animationScope)
     this.addChild(health.group)
 
@@ -446,6 +467,8 @@ export class MinionView extends Container {
         body.addChild(portrait)
         for (const source of surfaces) {
           if (!source?.visible) continue
+          if (source.parent && source.parent !== this && !source.parent.visible)
+            continue
           const copy = new Sprite(source.texture)
           copy.label = `${source.label}.shadow-surface`
           copy.anchor.copyFrom(source.anchor)
@@ -530,6 +553,25 @@ export class MinionView extends Container {
     this.setAttackColor(attack)
     this.setHealthColor(health)
     if (health <= 0) this.setCanAttack(false)
+  }
+
+  /** Board objects can retain their ability marker without displaying combat stats. */
+  setStatsVisible(visible: boolean): void {
+    if (this.attackStats.visible === visible && this.healthStats.visible === visible)
+      return
+    this.attackStats.visible = visible
+    this.healthStats.visible = visible
+    if (this.shadow.silhouette) this.shadow.silhouette.revision++
+  }
+
+  setDormant(dormant: boolean): void {
+    this.dormant = dormant
+    if (this.dormantOverlay) this.dormantOverlay.visible = dormant
+    if (!dormant) return
+    this.setCanAttack(false)
+    this.setTargetable(false)
+    this.setTargetingOutline(false)
+    this.setSleeping(false)
   }
 
   setBaseStats(attack: number, health: number): void {
@@ -846,17 +888,26 @@ export class MinionView extends Container {
   }
 
   private syncOutlineState(): void {
-    const showAttackOutline = this.canAttackEnabled && !this.targetingOutlineEnabled
+    const showAttackOutline =
+      (this.canAttackEnabled || this.activatableEnabled) &&
+      !this.targetingOutlineEnabled
     this.attackOutline.setEnabled(showAttackOutline)
     this.outlineProxy.visible = showAttackOutline
     this.targetingOutline.setEnabled(this.targetingOutlineEnabled)
     this.targetingOutlineProxy.visible = this.targetingOutlineEnabled
   }
 
-  setCanAttack(enabled: boolean): void {
-    this.canAttackEnabled = enabled
+  /** Activated objects use the ready outline without becoming combat targets. */
+  setActivatable(enabled: boolean): void {
+    this.activatableEnabled = enabled
     this.syncOutlineState()
-    if (!enabled && this.selected) this.setSelected(false)
+    this.syncPointerInputState()
+  }
+
+  setCanAttack(enabled: boolean): void {
+    this.canAttackEnabled = enabled && !this.dormant
+    this.syncOutlineState()
+    if (!this.canAttackEnabled && this.selected) this.setSelected(false)
   }
 
   setOutlineAppearance(
@@ -877,7 +928,7 @@ export class MinionView extends Container {
 
   /** Shows the red outline while this minion is a valid targeting destination. */
   setTargetingOutline(enabled: boolean): void {
-    this.targetingOutlineEnabled = enabled
+    this.targetingOutlineEnabled = enabled && !this.dormant
     this.syncOutlineState()
   }
 
@@ -891,7 +942,7 @@ export class MinionView extends Container {
 
   /** Enables pointer input independently of the green attacker-ready state. */
   setTargetable(enabled: boolean): void {
-    this.targetableEnabled = enabled
+    this.targetableEnabled = enabled && !this.dormant
     this.syncPointerInputState()
   }
 
@@ -902,8 +953,12 @@ export class MinionView extends Container {
   }
 
   private syncPointerInputState(): void {
-    this.eventMode = this.targetableEnabled || this.hoverableEnabled ? 'static' : 'none'
-    this.cursor = this.targetableEnabled ? 'pointer' : 'default'
+    this.eventMode =
+      this.targetableEnabled || this.activatableEnabled || this.hoverableEnabled
+        ? 'static'
+        : 'none'
+    this.cursor =
+      this.targetableEnabled || this.activatableEnabled ? 'pointer' : 'default'
   }
 
   isTargetable(): boolean {
@@ -915,6 +970,7 @@ export class MinionView extends Container {
   }
 
   setSelected(selected: boolean): void {
+    selected = selected && !this.dormant
     if (this.selected === selected) return
     this.selected = selected
     const targetScale = this.baseScale * (selected ? MINION_LAYOUT.selectionScale : 1)
@@ -954,7 +1010,7 @@ export class MinionView extends Container {
   }
 
   setSleeping(sleeping: boolean): void {
-    if (sleeping) this.sleepingZs.start()
+    if (sleeping && !this.dormant) this.sleepingZs.start()
     else this.sleepingZs.stop()
   }
 

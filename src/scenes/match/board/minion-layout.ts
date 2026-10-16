@@ -29,6 +29,14 @@ export const MINION_LAYOUT = {
       note: 'Base oval minion frame.'
     }
   ),
+  dormant: placement(
+    { x: 80, y: 90 },
+    { width: 115, height: 157 },
+    {
+      anchor: CENTER,
+      note: 'Dormant veil at native size, above artwork and below the frame and bottom ability markers.'
+    }
+  ),
   legendaryFrame: placement(
     { x: 95, y: 45 },
     { width: 136, height: 99 },
