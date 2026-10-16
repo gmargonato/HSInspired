@@ -2,6 +2,7 @@ import { cloneOpeningMatchState, cloneUnknown } from './match-state-snapshot'
 import { projectHistoryAction } from './history-visibility'
 import type { PlayerId } from './match-types'
 import type {
+  BoardMinion,
   OpeningCard,
   OpeningPublicCard,
   OpeningMatchState,
@@ -18,6 +19,13 @@ import type {
   CardBurnedEvent,
   DevCardAddedEvent
 } from './opening-match-types'
+
+/** Keeps revealed minion identity without revealing its private starting-deck origin. */
+export function withoutMinionDeckProvenance(minion: BoardMinion): BoardMinion {
+  const { startedInDeck: _startedInDeck, ...visibleMinion } = minion
+  void _startedInDeck
+  return visibleMinion
+}
 
 /** Masks private card identity while preserving immutable public snapshot data. */
 function maskPublicCard(
@@ -80,7 +88,7 @@ export function getOpeningMatchPublicState(
         const {
           concealedDeathrattleChoice: _concealedDeathrattleChoice,
           ...withoutPrivateChoice
-        } = minion
+        } = withoutMinionDeckProvenance(minion)
         const deathrattles = minion.deathrattles ?? []
         const visibleDeathrattles = deathrattles.filter(
           (deathrattle) => deathrattle.concealed !== true
@@ -89,6 +97,14 @@ export function getOpeningMatchPublicState(
           ? withoutPrivateChoice
           : { ...withoutPrivateChoice, deathrattles: visibleDeathrattles }
       }),
+      ...(player.graveyard && player.participantId !== viewerId
+        ? {
+            graveyard: player.graveyard.map((entry) => ({
+              ...entry,
+              minion: withoutMinionDeckProvenance(entry.minion)
+            }))
+          }
+        : {}),
       // Deck order and identity are private even to its owner in a public snapshot.
       deck: player.deck.map((card) => maskPublicCard(card, viewerId)),
       hand: player.hand.map((card) => maskPublicCard(card, viewerId)),
@@ -227,6 +243,8 @@ export function getOpeningMatchPublicEvents(
         event.type !== 'random-spell-completed'
     )
     .map((event) => {
+      if ('minion' in event && event.participantId !== viewerId)
+        return { ...event, minion: withoutMinionDeckProvenance(event.minion) }
       switch (event.type) {
         case 'trigger-activated':
           return event.participantId !== viewerId &&

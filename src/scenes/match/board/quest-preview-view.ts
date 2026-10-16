@@ -37,10 +37,11 @@ export class QuestPreviewView extends Container {
     cardId: string,
     rewardCardId: string,
     progress: number,
-    target: number
+    target: number,
+    detail?: string
   ): Promise<void> {
     const key = `${cardId}:${rewardCardId}`
-    const progressLabel = `${progress}/${target}`
+    const progressLabel = detail ?? `${progress}/${target}`
     if (this.key === key) {
       this.latestProgress = progressLabel
       if (this.progressText) this.progressText.text = progressLabel

@@ -1,3 +1,4 @@
+import { isPermanentBoardObject } from '../rules/board-objects'
 import { CARD_CATALOG } from '../../content/cards'
 import { HERO_POWER_CATALOG } from '../../content/hero-powers'
 import type {
@@ -156,6 +157,15 @@ export function describeAiEvents(
       }
       case 'minion-played':
       case 'minion-summoned':
+        if (isPermanentBoardObject(event.minion))
+          return [
+            actor(event.participantId) +
+              ': opens permanent ' +
+              cardName(event.minion.cardId) +
+              ' [' +
+              event.minion.instanceId +
+              '].'
+          ]
         return [
           actor(event.participantId) +
             ': ' +
@@ -189,6 +199,7 @@ export function describeAiEvents(
           (event.participantId === perspectivePlayerId
             ? 'Your turn'
             : "Your opponent's turn") +
+            ('isExtraTurn' in event && event.isExtraTurn ? ' (extra turn)' : '') +
             ' began (global turn ' +
             ('turnNumber' in event ? event.turnNumber : 1) +
             ').'

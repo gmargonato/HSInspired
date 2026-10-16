@@ -68,7 +68,10 @@ export function filterCollectionCards(
 
     if (
       parsedQuery.classConstraints.some(
-        (className) => normalizeSearchText(card.cardClass) !== className
+        (className) =>
+          !(card.allowedClasses ?? [card.cardClass]).some(
+            (cardClass) => normalizeSearchText(cardClass) === className
+          )
       )
     ) {
       return false

@@ -248,7 +248,10 @@ export function aiActions(
         ? state.pendingCardChoice?.options.find((o) => o.choice === command.choice)
             ?.label
         : undefined
-    let manaHint = ''
+    let manaHint =
+      command.type === 'activate-board-object'
+        ? '; feed this hand card to Underfel Rift (remove without discarding); summon two random Rift Demons, space permitting; 0 mana, once this turn'
+        : ''
     if (command.type === 'play-card' && card?.cardId === 'basic_the_coin') {
       const input = session.match.getPlayInput?.(
         perspectiveParticipantId,
@@ -356,6 +359,13 @@ export function aiModelState(
       : undefined
   return compactAiFacts({
     turn: observation.turnNumber,
+    ...(observation.extraTurnQueue
+      ? { extraTurnQueue: observation.extraTurnQueue }
+      : {}),
+    ...(observation.nextRegularPlayerId
+      ? { nextRegularPlayerId: observation.nextRegularPlayerId }
+      : {}),
+    ...(observation.isExtraTurn ? { isExtraTurn: true } : {}),
     remainingDeck: cardNameCounts(
       session.findPlayer(state, selfId).deck.map((card) => card.cardId)
     ),
@@ -396,6 +406,8 @@ export function aiModelState(
               goal: player.quest.goal,
               progress: player.quest.progress,
               target: player.quest.target,
+              objectives: player.quest.objectives,
+              completedObjectives: player.quest.completedObjectives,
               completed: player.quest.progress >= player.quest.target
             }
           : null,

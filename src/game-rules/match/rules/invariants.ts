@@ -1,3 +1,4 @@
+import { isPermanentBoardObject } from './board-objects'
 import { CARD_CATALOG } from '../../content/cards'
 import type { OpeningMatchState, OpeningPlayerState } from '../opening-match-types'
 import type { PlayerId } from '../match-types'
@@ -30,6 +31,20 @@ export function assertOpeningMatchInvariants(state: OpeningMatchState): void {
   assert(
     state.players.every((player) => participantIds.has(player.participantId)),
     'Every player must be registered in the match participant ids.'
+  )
+
+  assert(
+    (state.extraTurnQueue ?? []).every((id) => participantIds.has(id)),
+    'An extra turn references an unknown participant.'
+  )
+  assert(
+    state.nextRegularPlayerId === undefined ||
+      participantIds.has(state.nextRegularPlayerId),
+    'The interrupted regular turn references an unknown participant.'
+  )
+  assert(
+    !state.isExtraTurn || state.nextRegularPlayerId !== undefined,
+    'An extra turn must retain the interrupted regular turn.'
   )
 
   const ids = state.players.flatMap(cardIdList)
@@ -180,6 +195,34 @@ export function assertOpeningMatchInvariants(state: OpeningMatchState): void {
         typeof minion.instanceId === 'string' && minion.instanceId.length > 0,
         'Board minion has no instance id.'
       )
+      if (isPermanentBoardObject(minion)) {
+        assert(
+          minion.cardId ===
+            (minion.boardObject === 'underfel-rift'
+              ? 'journey_to_ungoro_underfel_rift'
+              : 'journey_to_ungoro_nether_portal') &&
+            minion.dormant === true &&
+            minion.attack === 0 &&
+            minion.health === 0 &&
+            minion.maxHealth === 0,
+          `Board object ${minion.instanceId} has invalid permanent state.`
+        )
+        assert(
+          minion.boardObjectLastUsedOnTurn === undefined ||
+            (Number.isInteger(minion.boardObjectLastUsedOnTurn) &&
+              minion.boardObjectLastUsedOnTurn >= 0 &&
+              minion.boardObjectLastUsedOnTurn <= state.turnNumber),
+          `Board object ${minion.instanceId} has an invalid activation turn.`
+        )
+        checkOwnership(
+          minion.ownerId,
+          minion.controllerId,
+          player.participantId,
+          `Board object ${minion.instanceId}`
+        )
+        recordOrdinal(minion.creationOrdinal, `Board object ${minion.instanceId}`)
+        continue
+      }
       assert(
         CARD_CATALOG.get(minion.cardId)?.type === 'Minion',
         `Board entity ${minion.instanceId} does not reference a minion card.`

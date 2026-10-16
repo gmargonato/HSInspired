@@ -1,4 +1,5 @@
 export const HERO_POWER_ASSET_KEYS = [
+  'hero-power-placeholder',
   'hero-power-druid',
   'hero-power-hunter',
   'hero-power-mage',

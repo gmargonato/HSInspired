@@ -1,4 +1,4 @@
-import { CARD_CATALOG, asCardId } from '../content/cards'
+import { CARD_CATALOG, asCardId, isCardAllowedForClass } from '../content/cards'
 import { HERO_CATALOG } from '../content/heroes'
 import type { Deck } from '../decks'
 import type {
@@ -24,7 +24,7 @@ export function resolvePrinceMalchezaar(
       card.type === 'Minion' &&
       card.rarity === 'Legendary' &&
       card.collectible &&
-      (card.cardClass === 'Neutral' || card.cardClass === classId) &&
+      isCardAllowedForClass(card, classId) &&
       card.id !== PRINCE_MALCHEZAAR_ID &&
       !originalDeck.cards[card.id]
   )

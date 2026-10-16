@@ -37,9 +37,9 @@ describe('deck name validation', () => {
 
 describe('approved curated opponent roster', () => {
   it('pins the exact version 2 roster, heroes, names and card counts', () => {
-    expect(CURATED_OPPONENT_CATALOG_VERSION).toBe(2)
+    expect(CURATED_OPPONENT_CATALOG_VERSION).toBe(3)
     expect(
-      CURATED_OPPONENT_DECKS.map(({ definition, deck }) => ({
+      CURATED_OPPONENT_DECKS.slice(0, 27).map(({ definition, deck }) => ({
         id: definition.id,
         name: deck.name,
         classId: definition.classId,
@@ -49,7 +49,7 @@ describe('approved curated opponent roster', () => {
     ).toMatchSnapshot()
   })
 
-  it('contains three legal historical-pool adaptations per class with valid unique names', () => {
+  it('contains four legal historical-pool adaptations per class with valid unique names', () => {
     const historicalExpansions = new Set([
       'basic',
       'classic',
@@ -65,19 +65,19 @@ describe('approved curated opponent roster', () => {
       'knights-of-the-frozen-throne'
     ])
     const rules = new DeckRules()
-    expect(CURATED_OPPONENT_DECKS).toHaveLength(27)
+    expect(CURATED_OPPONENT_DECKS).toHaveLength(36)
     expect(
       new Set(CURATED_OPPONENT_DECKS.map(({ definition }) => definition.id)).size
-    ).toBe(27)
-    expect(new Set(CURATED_OPPONENT_DECKS.map(({ deck }) => deck.name)).size).toBe(27)
+    ).toBe(36)
+    expect(new Set(CURATED_OPPONENT_DECKS.map(({ deck }) => deck.name)).size).toBe(36)
     expect(
       CURATED_OPPONENT_DECKS.reduce(
         (total, { deck }) => total + countDeckCards(deck),
         0
       )
-    ).toBe(810)
+    ).toBe(1080)
     for (const classId of PLAYABLE_CLASSES)
-      expect(getCuratedOpponentDecksForClass(classId)).toHaveLength(3)
+      expect(getCuratedOpponentDecksForClass(classId)).toHaveLength(4)
     for (const { definition, deck, strategy } of CURATED_OPPONENT_DECKS) {
       expect(countDeckCards(deck), definition.id).toBe(30)
       expect(deck.name.length).toBeLessThanOrEqual(MAX_DECK_NAME_LENGTH)
@@ -108,7 +108,7 @@ describe('approved curated opponent roster', () => {
       expect(selected).toEqual(selectCuratedConstructedOpponent(seed))
       expect(selected.deck).toEqual(expected.deck)
       expect(selected.metadata).toMatchObject({
-        catalogVersion: 2,
+        catalogVersion: 3,
         seed,
         classId,
         deckId: expected.definition.id,

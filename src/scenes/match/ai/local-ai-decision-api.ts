@@ -3845,7 +3845,8 @@ export class LocalAiDecisionApi implements AiDecisionApi {
 
   private simulate(command: TurnMatchCommand): Simulation {
     const cardId = this.cardIdForCommand(command, this.session.getState())
-    if (cardId && hasRandomText(cardId)) return this.simulateRandom(command)
+    if (command.type === 'activate-board-object' || (cardId && hasRandomText(cardId)))
+      return this.simulateRandom(command)
     return this.session.match.analyze((fork) => {
       const result = fork.dispatch(command)
       if (!result.accepted) return { accepted: false }
@@ -3931,6 +3932,8 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         command.defender.kind === 'hero' ? 'enemy hero' : command.defender.instanceId
       return `attack ${defender} with ${attacker}`
     }
+    if (command.type === 'activate-board-object')
+      return `feed ${command.cardInstanceId} to Underfel Rift`
     if (command.type === 'use-hero-power') return 'use hero power'
     if (command.type === 'choose-discover-card')
       return `choose discover ${command.cardInstanceId}`

@@ -35,6 +35,7 @@ export type HeroPowerEffect = { readonly vfx?: string } & (
       readonly amount: number
     }
   | { readonly kind: 'draw-cards'; readonly count: number }
+  | { readonly kind: 'draw-generated-cards'; readonly count: number }
   | { readonly kind: 'gain-armor'; readonly amount: number }
   | {
       readonly kind: 'buff-friendly-beast'
@@ -574,6 +575,16 @@ const HERO_POWER_DATA = [
     'hero-power-warrior-upgraded',
     'none',
     { kind: 'gain-armor', amount: 4 }
+  ],
+  [
+    'journey_to_ungoro_way_of_the_shell',
+    'Rogue',
+    'Way of the Shell',
+    1,
+    "Draw 2 cards that didn't start in your deck.",
+    'hero-power-placeholder',
+    'none',
+    { kind: 'draw-generated-cards', count: 2 }
   ]
 ] as const
 

@@ -201,7 +201,8 @@ export function boardMinionAbilityMarkers(
       definition.effects.some((effect) =>
         effect.actions?.some((action) => action.duration === 'while-damaged')
       ),
-    trigger: authored.trigger || grantedTrigger,
+    trigger:
+      authored.trigger || grantedTrigger || minion.boardObject === 'underfel-rift',
     poisonous:
       authored.poisonous ||
       new Set(effectiveBoardMinionKeywords(minion, turnNumber)).has('poisonous'),

@@ -40,11 +40,11 @@ import {
   resolvePendingCardChoice,
   resolvePendingDiscoverChoice,
   resolveHeroPower,
+  resolveBoardObject,
   resolveTurnTransition
 } from './effects/effect-runtime'
 import type { DraftCard } from './effects/effect-context'
 import { assertOpeningMatchInvariants } from './rules/invariants'
-import { moveCardForPlayer, removeCardFromPlayer } from './rules/zone-state'
 import { createAiObservation } from './ai/observation'
 import type { MatchParticipantSetup, MatchSetup, PlayerId } from './match-types'
 import type {
@@ -1047,131 +1047,21 @@ export function createOpeningMatch(
         'wrong-controller',
         'Only the Discover owner may choose a card.'
       )
-    // Board choices require the summon resolver even without follow-up actions.
-    if (pending.continuation || pending.destination === 'board') {
-      const before = state
-      const rngSnapshot = rng.snapshot()
-      const resolution = resolvePendingDiscoverChoice({
-        state,
-        rng,
-        participantId: command.participantId,
-        cardInstanceId: command.cardInstanceId,
-        nextEntityOrdinal,
-        recordTrace: recordEffectTrace
-      })
-      const result = commitResolution(resolution, rngSnapshot)
-      if (!result.accepted) return result
-      const selected = result.events.find((event) => event.type === 'card-drawn')
-      const events = [...withoutHistoryFacts(result.events)]
-      if (selected?.type === 'card-drawn')
-        events.push({
-          type: 'history-action-resolved',
-          append: true,
-          participantId: command.participantId,
-          action: 'card',
-          source: {
-            id: pending.sourceCardInstanceId,
-            participantId: command.participantId,
-            kind: 'card',
-            cardId: pending.publicSourceCardId ?? null
-          },
-          outcomes: [
-            {
-              kind: 'create-hand',
-              target: {
-                id: selected.card.instanceId,
-                participantId: command.participantId,
-                kind: 'card',
-                cardId: selected.card.cardId,
-                zone: 'hand',
-                baseCost: selected.card.baseCost,
-                currentCost: selected.card.currentCost
-              }
-            }
-          ]
-        })
-      return {
-        accepted: true,
-        state: cloneOpeningMatchState(state),
-        events: [
-          ...events,
-          ...triggerHistoryEvents(before, result.state, result.events, false),
-          ...fatigueHistoryEvents(before, result.events)
-        ]
-      }
-    }
-    if (!pending.candidates.some((card) => card.instanceId === command.cardInstanceId))
-      return reject(
-        state,
-        'invalid-target',
-        'The selected card is not a Discover candidate.'
-      )
-
-    const playerIndex = findPlayerIndex(state.players, command.participantId)
-    if (playerIndex === -1)
-      return reject(state, 'unknown-participant', 'Unknown participant.')
-    let player = state.players[playerIndex]
-    const events: OpeningMatchEvent[] = []
-    const candidatesAreCopies =
-      pending.origin === 'generated' || pending.origin === 'opponent-deck'
-    for (const candidate of pending.candidates) {
-      if (candidatesAreCopies && candidate.instanceId !== command.cardInstanceId) {
-        const removed = removeCardFromPlayer(player, candidate.instanceId)
-        if (!removed || removed.zone !== 'revealed')
-          return reject(
-            state,
-            'stale-target',
-            'A Discover candidate is no longer available.'
-          )
-        player = removed.player
-        continue
-      }
-      const isSelected = candidate.instanceId === command.cardInstanceId
-      const burned = isSelected && player.hand.length >= MAX_HAND_SIZE
-      const destination = isSelected && !burned ? 'hand' : 'discarded'
-      const moved = moveCardForPlayer(player, candidate.instanceId, destination)
-      if (!moved || moved.from !== 'revealed')
-        return reject(
-          state,
-          'stale-target',
-          'A Discover candidate is no longer available.'
-        )
-      player = moved.player
-      if (isSelected) {
-        events.push({
-          type: burned ? 'card-burned' : 'card-drawn',
-          participantId: command.participantId,
-          card: burned
-            ? { ...moved.card, zone: 'discarded', revealed: false }
-            : moved.card
-        })
-      }
-    }
-    const players = [...state.players] as [OpeningPlayerState, OpeningPlayerState]
-    players[playerIndex] = player
-    const nextPending =
-      pending.queued && pending.queued.length > 0
-        ? {
-            ...pending.queued[0]!,
-            ...(pending.queued.length > 1 ? { queued: pending.queued.slice(1) } : {})
-          }
-        : undefined
-    if (nextPending)
-      events.push({
-        type: 'discover-started',
-        participantId: nextPending.participantId,
-        sourceCardInstanceId: nextPending.sourceCardInstanceId,
-        candidates: nextPending.candidates
-      })
-    const nextState: OpeningMatchState = {
-      ...state,
-      players,
-      pendingDiscover: nextPending,
-      revision: state.revision + 1
-    }
-    assertOpeningMatchInvariants(nextState)
-    commitState(nextState)
-    const selected = events.find((event) => event.type === 'card-drawn')
+    // All Discover choices share reward hooks, cost adjustments and continuations.
+    const before = state
+    const rngSnapshot = rng.snapshot()
+    const resolution = resolvePendingDiscoverChoice({
+      state,
+      rng,
+      participantId: command.participantId,
+      cardInstanceId: command.cardInstanceId,
+      nextEntityOrdinal,
+      recordTrace: recordEffectTrace
+    })
+    const result = commitResolution(resolution, rngSnapshot)
+    if (!result.accepted) return result
+    const selected = result.events.find((event) => event.type === 'card-drawn')
+    const events = [...withoutHistoryFacts(result.events)]
     if (selected?.type === 'card-drawn')
       events.push({
         type: 'history-action-resolved',
@@ -1199,7 +1089,15 @@ export function createOpeningMatch(
           }
         ]
       })
-    return { accepted: true, state: cloneOpeningMatchState(state), events }
+    return {
+      accepted: true,
+      state: cloneOpeningMatchState(state),
+      events: [
+        ...events,
+        ...triggerHistoryEvents(before, result.state, result.events, false),
+        ...fatigueHistoryEvents(before, result.events)
+      ]
+    }
   }
   const dispatchTurnTransition = (participantId: PlayerId): OpeningCommandResult => {
     const before = state
@@ -1430,6 +1328,22 @@ export function createOpeningMatch(
 
       if (command.type === 'end-turn') {
         return dispatchTurnTransition(command.participantId)
+      }
+
+      if (command.type === 'activate-board-object') {
+        const rngSnapshot = rng.snapshot()
+        return commitResolution(
+          resolveBoardObject({
+            state,
+            rng,
+            participantId: command.participantId,
+            boardObjectInstanceId: command.boardObjectInstanceId,
+            cardInstanceId: command.cardInstanceId,
+            nextEntityOrdinal,
+            recordTrace: recordEffectTrace
+          }),
+          rngSnapshot
+        )
       }
 
       if (command.type === 'use-hero-power') {

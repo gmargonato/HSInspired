@@ -1,11 +1,15 @@
 import { prewarmMinionStatus } from '../loading/minion-status-warmup'
+import {
+  matchVisualTextures,
+  MatchVisualResources
+} from '../loading/match-visual-resources'
 import { MinionStatusCurtainEffect } from './minion-status-curtain-effect'
 import type { GameAssets } from '../../../visual-components/assets'
 import { prewarmWindfury } from '../loading/windfury-warmup'
 import { WINDFURY_DEFAULTS } from '../../../desktop/contracts/ipc/windfury-tuning'
 import type { Container, Renderer, RenderTexture } from 'pixi.js'
 import { AnimationScope } from '../../../visual-components/animation/animations'
-import { Graphics, Sprite, Text, Texture } from 'pixi.js'
+import { Graphics, Sprite, Text, Texture, TextureSource } from 'pixi.js'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../../visual-components/effects/animated-outline', () => ({
@@ -88,7 +92,242 @@ const tauntMinion: MinionViewModel = {
   immune: false
 }
 
+describe('MinionView dormant overlay', () => {
+  it.each([
+    { label: 'Nether Portal', statsVisible: false },
+    { label: 'Underfel Rift', statsVisible: false },
+    { label: 'Sherazin', statsVisible: true }
+  ])('layers the dormant veil without changing $label stats', async (model) => {
+    const dormantTexture = new Texture({
+      source: new TextureSource({ width: 115, height: 157 })
+    })
+    const view = await MinionView.create(
+      {
+        ...tauntMinion,
+        ...model,
+        dormant: true,
+        taunt: false,
+        trigger: true
+      },
+      { ...textures, dormant: dormantTexture },
+      Texture.WHITE
+    )
+    try {
+      const overlay = view.getChildByLabel('minion.dormant') as Sprite
+      const index = (label: string) => view.getChildIndex(view.getChildByLabel(label)!)
+      expect(overlay.texture).toBe(dormantTexture)
+      expect(overlay.visible).toBe(true)
+      expect(overlay.position).toMatchObject({ x: 80, y: 90 })
+      expect(overlay.anchor).toMatchObject({ x: 0.5, y: 0.5 })
+      expect(overlay.scale).toMatchObject({ x: 1, y: 1 })
+      expect(overlay.width).toBe(115)
+      expect(overlay.height).toBe(157)
+      expect(overlay.eventMode).toBe('none')
+      expect(index('minion.dormant')).toBeGreaterThan(index('minion.artwork'))
+      expect(index('minion.dormant')).toBeLessThan(index('minion.frame'))
+      expect(index('minion.dormant')).toBeLessThan(index('minion.trigger'))
+      expect(view.getChildByLabel('minion.trigger')?.visible).toBe(true)
+      for (const name of ['attack', 'health']) {
+        expect(view.getChildByLabel(`minion.stat-${name}`)?.visible).toBe(
+          model.statsVisible
+        )
+      }
+      const silhouette = view.shadow.silhouette!.create()
+      expect(silhouette.getChildByLabel('minion.dormant.shadow-surface')).toBeNull()
+      silhouette.destroy({ children: true })
+
+      view.setDormant(false)
+      expect(overlay.visible).toBe(false)
+      view.setDormant(true)
+      view.setDormant(true)
+      expect(overlay.visible).toBe(true)
+      view.setDormant(false)
+      expect(overlay.visible).toBe(false)
+      expect(view.getChildByLabel('minion.dormant')).toBe(overlay)
+      for (const name of ['attack', 'health']) {
+        expect(view.getChildByLabel(`minion.stat-${name}`)?.visible).toBe(
+          model.statsVisible
+        )
+      }
+      view.destroy({ children: true })
+      expect(overlay.destroyed).toBe(true)
+      expect(dormantTexture.destroyed).toBe(false)
+    } finally {
+      if (!view.destroyed) view.destroy({ children: true })
+      dormantTexture.destroy(true)
+    }
+  })
+
+  it('starts hidden on an awake view and reveals the same sprite when dormant', async () => {
+    const view = await MinionView.create(
+      tauntMinion,
+      { ...textures, dormant: Texture.WHITE },
+      undefined
+    )
+    try {
+      const overlay = view.getChildByLabel('minion.dormant')!
+      expect(overlay.visible).toBe(false)
+      view.setDormant(true)
+      expect(overlay.visible).toBe(true)
+      view.setDormant(false)
+      expect(overlay.visible).toBe(false)
+    } finally {
+      view.destroy({ children: true })
+    }
+  })
+
+  it('keeps dormant presentation usable when the optional texture is absent', async () => {
+    const view = await MinionView.create(
+      { ...tauntMinion, dormant: true, statsVisible: false, trigger: true },
+      textures,
+      undefined
+    )
+    try {
+      expect(view.getChildByLabel('minion.dormant')).toBeNull()
+      view.setDormant(false)
+      view.setDormant(true)
+      expect(view.getChildByLabel('minion.dormant')).toBeNull()
+      expect(view.getChildByLabel('minion.trigger')?.visible).toBe(true)
+      expect(view.getChildByLabel('minion.stat-attack')?.visible).toBe(false)
+      expect(view.getChildByLabel('minion.stat-health')?.visible).toBe(false)
+    } finally {
+      view.destroy({ children: true })
+    }
+  })
+
+  it('includes a registered dormant texture in normal match warm-up and residency', async () => {
+    const dormantTexture = new Texture({
+      source: new TextureSource({ width: 115, height: 157 })
+    })
+    const resources = new MatchVisualResources()
+    const automatic = dormantTexture.source.autoGarbageCollect
+    const initSource = vi.fn()
+    const renderer = { texture: { initSource } } as unknown as Renderer
+    try {
+      const assets = {
+        boardBase: Texture.EMPTY,
+        board1: Texture.WHITE,
+        minionDormant: dormantTexture
+      }
+      const warmed = matchVisualTextures(assets, Texture.WHITE)
+      expect(warmed).toEqual([Texture.WHITE, dormantTexture])
+      await resources.prepare(renderer, [], warmed, async () => undefined)
+      expect(initSource).toHaveBeenCalledWith(dormantTexture.source)
+      expect(dormantTexture.source.autoGarbageCollect).toBe(false)
+      resources.dispose()
+      expect(dormantTexture.source.autoGarbageCollect).toBe(automatic)
+      expect(dormantTexture.destroyed).toBe(false)
+    } finally {
+      resources.dispose()
+      dormantTexture.destroy(true)
+    }
+  })
+})
+
 describe('MinionView outline layering', () => {
+  it('hides board object stats and their shadows while retaining the trigger marker', async () => {
+    const view = await MinionView.create(
+      {
+        ...tauntMinion,
+        attack: 0,
+        health: 0,
+        maxHealth: 0,
+        statsVisible: false,
+        dormant: true,
+        taunt: false,
+        poisonous: false,
+        trigger: true
+      },
+      textures,
+      undefined
+    )
+    try {
+      const stats = ['attack', 'health'].map((name) =>
+        view.getChildByLabel(`minion.stat-${name}`)!
+      )
+      expect(stats.every((group) => !group.visible)).toBe(true)
+      view.setStats(0, 0, 0)
+      expect(stats.every((group) => !group.visible)).toBe(true)
+      expect(view.getChildByLabel('minion.trigger')?.visible).toBe(true)
+      expect(view.getAbilityMarkerSnapshot('trigger')?.texture).toBe(textures.trigger)
+
+      const silhouette = view.shadow.silhouette!
+      const hidden = silhouette.create()
+      expect(
+        hidden.getChildByLabel('minion.stat-attack-badge.shadow-surface')
+      ).toBeNull()
+      expect(
+        hidden.getChildByLabel('minion.stat-health-badge.shadow-surface')
+      ).toBeNull()
+      expect(hidden.getChildByLabel('minion.trigger.shadow-surface')).not.toBeNull()
+      hidden.destroy({ children: true })
+
+      const revision = silhouette.revision
+      view.setStatsVisible(true)
+      expect(stats.every((group) => group.visible)).toBe(true)
+      expect(silhouette.revision).toBeGreaterThan(revision)
+      const visible = silhouette.create()
+      expect(
+        visible.getChildByLabel('minion.stat-attack-badge.shadow-surface')
+      ).not.toBeNull()
+      expect(
+        visible.getChildByLabel('minion.stat-health-badge.shadow-surface')
+      ).not.toBeNull()
+      visible.destroy({ children: true })
+      view.setStatsVisible(false)
+      expect(stats.every((group) => !group.visible)).toBe(true)
+    } finally {
+      view.destroy({ children: true })
+    }
+  })
+
+  it('blocks dormant attack and target highlights without disabling hover', async () => {
+    const view = await MinionView.create(
+      { ...tauntMinion, dormant: true },
+      textures,
+      undefined
+    )
+    try {
+      view.setHoverable(true)
+      view.setCanAttack(true)
+      view.setTargetable(true)
+      view.setTargetingOutline(true)
+      view.setSelected(true)
+      view.setSleeping(true)
+      expect(view.isCanAttack()).toBe(false)
+      expect(view.isTargetable()).toBe(false)
+      expect(view.isSelected()).toBe(false)
+      expect(view.getChildByLabel('minion.attack-outline-proxy')?.visible).toBe(false)
+      expect(view.getChildByLabel('minion.targeting-outline-proxy')?.visible).toBe(
+        false
+      )
+      expect(view.getChildByLabel('minion.sleeping-zs', true)?.children).toHaveLength(0)
+      expect(view.eventMode).toBe('static')
+      expect(view.cursor).toBe('default')
+
+      view.setDormant(false)
+      view.setCanAttack(true)
+      view.setTargetable(true)
+      view.setTargetingOutline(true)
+      view.setSelected(true)
+      expect(view.isCanAttack()).toBe(true)
+      expect(view.isTargetable()).toBe(true)
+      expect(view.isSelected()).toBe(true)
+      expect(view.getChildByLabel('minion.targeting-outline-proxy')?.visible).toBe(true)
+
+      view.setDormant(true)
+      expect(view.isCanAttack()).toBe(false)
+      expect(view.isTargetable()).toBe(false)
+      expect(view.isSelected()).toBe(false)
+      expect(view.getChildByLabel('minion.attack-outline-proxy')?.visible).toBe(false)
+      expect(view.getChildByLabel('minion.targeting-outline-proxy')?.visible).toBe(
+        false
+      )
+    } finally {
+      view.destroy({ children: true })
+    }
+  })
+
   it('refreshes equipped weapons for the selected player', async () => {
     const weaponTextures: WeaponViewTextures = {
       frame: Texture.EMPTY,

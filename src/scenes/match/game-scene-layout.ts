@@ -458,6 +458,20 @@ export const GAME_BOARD_LAYOUT = {
 
   /** Reusable three-card selection surface used by Tracking and Discover cards. */
   cardSelection: {
+    /** A full hand needs two rows while ordinary Discover retains its three-card spread. */
+    handSelection: {
+      centerX: 960,
+      firstBaselineY: 620,
+      rowGap: 330,
+      columns: 5,
+      gap: 320,
+      scale: 0.32,
+      cancelButton: placement(
+        { x: 1650, y: 210 },
+        { width: 235, height: 127 },
+        { anchor: CENTER, note: 'Cancels optional hand-card activation selection.' }
+      )
+    },
     prompt: placement(
       { x: 960, y: 280 },
       { width: 1200, height: 44 },

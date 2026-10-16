@@ -1,3 +1,4 @@
+import { enumerateLegalCommands } from './ai/legal-commands'
 import { cardHasTribe } from '../content/cards/card-definition'
 import { describe, expect, it } from 'vitest'
 import { selectAiHeroPowerBonus } from './ai-bonuses'
@@ -453,15 +454,12 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     return { match, scenario, activeId, card }
   }
 
-  it("refills only the caster's original deck when Time Warp is cast", () => {
+  it('queues an extra turn without refilling either deck when Time Warp is cast', () => {
     const { match, activeId, card } = readyCard('journey_to_ungoro_time_warp')
-    expect(CARD_CATALOG.require(card.cardId).rulesText).toBe('Refill your deck.')
-    const opponentId = match
-      .getState()
-      .players.find((player) => player.participantId !== activeId)!.participantId
-    const opponentDeckBefore = match
-      .getState()
-      .players.find((player) => player.participantId === opponentId)!.deck
+    expect(CARD_CATALOG.require(card.cardId).rulesText).toBe(
+      'Take an extra turn. (Once per game.)'
+    )
+    const decksBefore = match.getState().players.map((player) => player.deck)
     accept(
       match.dispatch({
         type: 'play-card',
@@ -469,17 +467,11 @@ describe("Un'Goro and Frozen Throne rewards", () => {
         cardInstanceId: card.instanceId
       })
     )
-    expect(
-      match.getState().players.find((player) => player.participantId === activeId)!.deck
-        .length
-    ).toBe(30)
-    expect(
-      match.getState().players.find((player) => player.participantId === opponentId)!
-        .deck
-    ).toEqual(opponentDeckBefore)
+    expect(match.getState().extraTurnQueue).toEqual([activeId])
+    expect(match.getState().players.map((player) => player.deck)).toEqual(decksBefore)
   })
 
-  it('shuffles twenty collectible Beasts for Queen Carnassa', () => {
+  it('shuffles twenty dedicated Brood for Queen Carnassa', () => {
     const { match, activeId, card } = readyCard('journey_to_ungoro_queen_carnassa')
     const before = match
       .getState()
@@ -504,7 +496,7 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     expect(
       deck
         .filter((entry) => !entry.startedInDeck)
-        .every((entry) => CARD_CATALOG.require(entry.cardId).collectible)
+        .every((entry) => entry.cardId === 'journey_to_ungoro_carnassas_brood')
     ).toBe(true)
   })
 
@@ -593,12 +585,146 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     ).toBe('ragnaros-die-insects')
   })
 
-  it('refills the deck with collectible Demons that scale on each draw', () => {
+  function portalCommands(match: OpeningMatchInstance, participantId: PlayerId) {
+    return enumerateLegalCommands(
+      {
+        getState: match.getState,
+        getPlayInput: match.getPlayInput!,
+        getLegality: match.getLegality!
+      },
+      participantId
+    )
+  }
+
+  function openPortal(minions = 0) {
+    const ready = readyCard('journey_to_ungoro_nether_portal')
+    for (let index = 0; index < minions; index += 1)
+      accept(
+        ready.match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: ready.activeId,
+          cardId: 'classic_wisp'
+        })
+      )
+    const before = ready.match.getState()
+    const result = accept(
+      ready.match.dispatch({
+        type: 'play-card',
+        participantId: ready.activeId,
+        cardInstanceId: ready.card.instanceId
+      })
+    )
+    const player = () =>
+      ready.match
+        .getState()
+        .players.find((entry) => entry.participantId === ready.activeId)!
+    const portal = player().board.find(
+      (entity) => entity.boardObject === 'nether-portal'
+    )!
+    return { ...ready, before, result, player, portal }
+  }
+
+  it('opens a permanent statless Portal without changing decks or counting a minion summon', () => {
+    const { match, activeId, before, player, portal } = openPortal()
+    expect(portal).toMatchObject({
+      cardId: 'journey_to_ungoro_nether_portal',
+      dormant: true,
+      attack: 0,
+      health: 0,
+      maxHealth: 0
+    })
+    expect(player().deck).toEqual(
+      before.players.find((entry) => entry.participantId === activeId)!.deck
+    )
+    expect(match.getState().history?.minionsSummonedThisTurn).not.toContain(
+      portal.cardId
+    )
+    expect(
+      boardMinionAbilityMarkers(
+        portal,
+        CARD_CATALOG.require(portal.cardId),
+        match.getState().turnNumber
+      ).trigger
+    ).toBe(true)
+    expect(match.getLegality!(activeId).legalAttackerInstanceIds).not.toContain(
+      portal.instanceId
+    )
+    accept(match.dispatch({ type: 'end-turn', participantId: activeId }))
+    expect(player().board.map((entity) => entity.cardId)).toEqual([
+      'journey_to_ungoro_nether_imp',
+      portal.cardId,
+      'journey_to_ungoro_nether_imp'
+    ])
+    for (const imp of player().board.filter((entity) => !entity.boardObject))
+      expect(imp).toMatchObject({ attack: 3, health: 2, maxHealth: 2 })
+    const opponentId = match.getState().activePlayerId!
+    accept(match.dispatch({ type: 'end-turn', participantId: opponentId }))
+    expect(player().board).toHaveLength(3)
+    accept(match.dispatch({ type: 'end-turn', participantId: activeId }))
+    expect(player().board).toHaveLength(5)
+    expect(
+      player().board.find((entity) => entity.instanceId === portal.instanceId)
+    ).toMatchObject({ dormant: true, health: 0 })
+  })
+
+  it.each([
+    [4, 2],
+    [5, 1],
+    [6, 0]
+  ])(
+    'Portal with %i existing minions summons %i Imps within seven slots',
+    (count, expected) => {
+      const { match, activeId, player } = openPortal(count)
+      accept(match.dispatch({ type: 'end-turn', participantId: activeId }))
+      expect(
+        player().board.filter(
+          (entity) => entity.cardId === 'journey_to_ungoro_nether_imp'
+        )
+      ).toHaveLength(expected)
+      expect(player().board).toHaveLength(count + 1 + expected)
+    }
+  )
+
+  it('rejects manual Portal play on a full board without spending mana or removing the card', () => {
     const { match, activeId, card } = readyCard('journey_to_ungoro_nether_portal')
-    const findPlayer = () =>
-      match.getState().players.find((player) => player.participantId === activeId)!
-    const before = findPlayer().deck.length
-    expect(before).toBeLessThan(30)
+    for (let index = 0; index < 7; index += 1)
+      accept(
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: activeId,
+          cardId: 'classic_wisp'
+        })
+      )
+    const before = match.getState()
+    expect(match.getPlayInput!(activeId, card.instanceId)).toBeNull()
+    expect(
+      portalCommands(match, activeId).some(
+        (command) =>
+          command.type === 'play-card' && command.cardInstanceId === card.instanceId
+      )
+    ).toBe(false)
+    expect(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    ).toMatchObject({ accepted: false, code: 'board-full' })
+    expect(match.getState()).toEqual(before)
+  })
+
+  it('does not activate Knife Juggler when the Portal opens', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_nether_portal')
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: activeId,
+        cardId: 'classic_knife_juggler'
+      })
+    )
+    const enemy = () =>
+      match.getState().players.find((entry) => entry.participantId !== activeId)!
+    const health = enemy().hero.health
     accept(
       match.dispatch({
         type: 'play-card',
@@ -606,68 +732,280 @@ describe("Un'Goro and Frozen Throne rewards", () => {
         cardInstanceId: card.instanceId
       })
     )
-    const deck = findPlayer().deck
-    expect(deck).toHaveLength(30)
-    expect(
-      deck.every((entry) => CARD_CATALOG.require(entry.cardId).subtype === 'Demon')
-    ).toBe(true)
-    expect(deck.every((entry) => CARD_CATALOG.require(entry.cardId).collectible)).toBe(
-      true
+    expect(enemy().hero.health).toBe(health)
+    accept(match.dispatch({ type: 'end-turn', participantId: activeId }))
+    expect(enemy().hero.health).toBe(health - 2)
+  })
+
+  it.each([
+    'classic_twisting_nether',
+    'classic_brawl',
+    'basic_hellfire',
+    'classic_mass_dispel',
+    'basic_vanish'
+  ])('%s leaves the Portal intact without death history', (spellId) => {
+    const { match, activeId, player, portal } = openPortal(2)
+    accept(
+      match.dispatch({ type: 'dev-add-card', participantId: activeId, cardId: spellId })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: activeId,
+        available: 10,
+        maximum: 10
+      })
+    )
+    const spell = player().hand.findLast((entry) => entry.cardId === spellId)!
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: spell.instanceId
+      })
     )
     expect(
-      deck.every((entry) => entry.scalingCounter === 'nether-portal-draw-buff')
-    ).toBe(true)
+      player().board.find((entity) => entity.instanceId === portal.instanceId)
+    ).toEqual(portal)
     expect(
-      deck.every((entry) => entry.attack !== undefined && entry.health !== undefined)
-    ).toBe(true)
+      (player().graveyard ?? []).some(
+        (entry) => entry.minion.instanceId === portal.instanceId
+      )
+    ).toBe(false)
+    expect(match.getState().history?.cardsDiedThisGame).not.toContain(portal.cardId)
+    if (spellId === 'classic_brawl')
+      expect(player().board.filter((entity) => !entity.boardObject)).toHaveLength(1)
+    if (
+      spellId === 'classic_twisting_nether' ||
+      spellId === 'basic_hellfire' ||
+      spellId === 'basic_vanish'
+    )
+      expect(player().board).toHaveLength(1)
+  })
 
-    const drawnBase = () => {
-      accept(match.dispatch({ type: 'dev-draw', participantId: activeId }))
-      const handCard = findPlayer().hand.at(-1)!
-      const definition = CARD_CATALOG.require(handCard.cardId)
-      if (definition.type !== 'Minion') throw new Error('Expected a Demon minion')
-      return { handCard, definition }
-    }
-    const first = drawnBase()
-    expect(first.handCard.attack).toBe(first.definition.attack + 1)
-    expect(first.handCard.health).toBe(first.definition.health + 1)
-    expect(findPlayer().counters?.['nether-portal-draw-buff']).toBe(2)
-    const second = drawnBase()
-    expect(second.handCard.attack).toBe(second.definition.attack + 2)
-    expect(second.handCard.health).toBe(second.definition.health + 2)
-    expect(findPlayer().counters?.['nether-portal-draw-buff']).toBe(3)
+  it.each([
+    'basic_fireball',
+    'basic_polymorph',
+    'classic_silence',
+    'classic_shadowstep',
+    'classic_faceless_manipulator',
+    'classic_power_overwhelming'
+  ])('%s cannot choose the Portal', (cardId) => {
+    const { match, activeId, player, portal } = openPortal()
+    accept(match.dispatch({ type: 'dev-add-card', participantId: activeId, cardId }))
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: activeId,
+        available: 10,
+        maximum: 10
+      })
+    )
+    const card = player().hand.findLast((entry) => entry.cardId === cardId)!
+    const input = match.getPlayInput!(activeId, card.instanceId)
+    expect(
+      input?.legalTargetOptions
+        .flat()
+        .some(
+          (target) => 'instanceId' in target && target.instanceId === portal.instanceId
+        ) ?? false
+    ).toBe(false)
+    const before = match.getState()
+    expect(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId,
+        ...(CARD_CATALOG.require(cardId).type === 'Minion' ? { position: 0 } : {}),
+        targets: [
+          { kind: 'minion', participantId: activeId, instanceId: portal.instanceId }
+        ]
+      }).accepted
+    ).toBe(false)
+    expect(match.getState()).toEqual(before)
+  })
 
+  it('blocks physical adjacency and is excluded from Sea Giant minion-count scaling', () => {
+    const { match, activeId, card } = readyCard('journey_to_ungoro_nether_portal')
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: activeId,
+        cardId: 'classic_dire_wolf_alpha'
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: card.instanceId
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: activeId,
+        cardId: 'basic_stonetusk_boar'
+      })
+    )
     accept(
       match.dispatch({
         type: 'dev-add-card',
         participantId: activeId,
-        cardId: 'journey_to_ungoro_nether_portal'
+        cardId: 'classic_sea_giant'
       })
     )
-    accept(
-      match.dispatch({
-        type: 'dev-set-mana',
-        participantId: activeId,
-        available: 10,
-        maximum: 10
-      })
-    )
-    const secondPortal = findPlayer().hand.findLast(
-      (entry) => entry.cardId === 'journey_to_ungoro_nether_portal'
-    )!
-    accept(
-      match.dispatch({
-        type: 'play-card',
-        participantId: activeId,
-        cardInstanceId: secondPortal.instanceId
-      })
-    )
-    expect(findPlayer().deck).toHaveLength(30)
-    const third = drawnBase()
-    expect(third.handCard.attack).toBe(third.definition.attack + 3)
-    expect(third.handCard.health).toBe(third.definition.health + 3)
-    expect(findPlayer().counters?.['nether-portal-draw-buff']).toBe(4)
+    const player = match
+      .getState()
+      .players.find((entry) => entry.participantId === activeId)!
+    expect(player.board[2]!.attack).toBe(1)
+    expect(player.board[1]).toMatchObject({
+      boardObject: 'nether-portal',
+      attack: 0,
+      health: 0
+    })
+    expect(
+      player.hand.findLast((entry) => entry.cardId === 'classic_sea_giant')!.currentCost
+    ).toBe(CARD_CATALOG.require('classic_sea_giant').cost - 2)
+  })
 
+  it('excludes the Portal from enemy attacks, hero powers, control and random damage', () => {
+    const opened = openPortal()
+    const checkpoint = opened.match.getCheckpoint()
+    const enemyId = checkpoint.state.players.find(
+      (entry) => entry.participantId !== opened.activeId
+    )!.participantId
+    const match = createOpeningMatchFromCheckpoint({
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        activePlayerId: enemyId,
+        players: checkpoint.state.players.map((player) =>
+          player.participantId === enemyId
+            ? {
+                ...player,
+                heroPower: {
+                  ...player.heroPower,
+                  id: HERO_POWER_CATALOG.get('mage-fireblast')!.id,
+                  targetType: 'any-character'
+                }
+              }
+            : player
+        ) as unknown as typeof checkpoint.state.players
+      }
+    })
+    const owner = () =>
+      match.getState().players.find((entry) => entry.participantId === opened.activeId)!
+    const enemy = () =>
+      match.getState().players.find((entry) => entry.participantId === enemyId)!
+    accept(
+      match.dispatch({
+        type: 'dev-set-mana',
+        participantId: enemyId,
+        available: 10,
+        maximum: 10
+      })
+    )
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: enemyId,
+        cardId: 'basic_stonetusk_boar'
+      })
+    )
+    const attacker = enemy().board[0]!
+    const legality = match.getLegality!(enemyId)
+    expect(legality.legalAttackTargets[attacker.instanceId]).not.toContainEqual({
+      kind: 'minion',
+      instanceId: opened.portal.instanceId
+    })
+    expect(
+      legality.legalHeroPowerTargets.some(
+        (target) =>
+          target.kind === 'minion' && target.instanceId === opened.portal.instanceId
+      )
+    ).toBe(false)
+    expect(
+      match.dispatch({
+        type: 'attack-character',
+        participantId: enemyId,
+        attacker: { kind: 'minion', instanceId: attacker.instanceId },
+        defender: { kind: 'minion', instanceId: opened.portal.instanceId }
+      }).accepted
+    ).toBe(false)
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: enemyId,
+        cardId: 'basic_mind_control'
+      })
+    )
+    const control = enemy().hand.findLast(
+      (entry) => entry.cardId === 'basic_mind_control'
+    )!
+    expect(
+      match.getPlayInput!(enemyId, control.instanceId)?.legalTargetOptions.flat()
+    ).not.toContainEqual(
+      expect.objectContaining({ instanceId: opened.portal.instanceId })
+    )
+    expect(
+      match.dispatch({
+        type: 'play-card',
+        participantId: enemyId,
+        cardInstanceId: control.instanceId,
+        targets: [
+          {
+            kind: 'minion',
+            participantId: opened.activeId,
+            instanceId: opened.portal.instanceId
+          }
+        ]
+      }).accepted
+    ).toBe(false)
+    accept(
+      match.dispatch({
+        type: 'dev-add-card',
+        participantId: enemyId,
+        cardId: 'basic_arcane_missiles'
+      })
+    )
+    const missiles = enemy().hand.findLast(
+      (entry) => entry.cardId === 'basic_arcane_missiles'
+    )!
+    const health = owner().hero.health
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: enemyId,
+        cardInstanceId: missiles.instanceId
+      })
+    )
+    expect(owner().hero.health).toBe(health - 3)
+    expect(owner().board).toEqual([opened.portal])
+  })
+
+  it('excludes the Portal from Eerie Statue and Gormok semantic minion counts', () => {
+    const { match, activeId, player } = openPortal()
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: activeId,
+        cardId: 'league_of_explorers_eerie_statue'
+      })
+    )
+    expect(
+      player().board[1]!.enchantments?.some((entry) =>
+        entry.keywords?.includes('cannot-attack')
+      ) ?? false
+    ).toBe(false)
+    for (let index = 0; index < 2; index += 1)
+      accept(
+        match.dispatch({
+          type: 'dev-summon-minion',
+          participantId: activeId,
+          cardId: 'classic_wisp'
+        })
+      )
     accept(
       match.dispatch({
         type: 'dev-set-mana',
@@ -678,19 +1016,79 @@ describe("Un'Goro and Frozen Throne rewards", () => {
     )
     accept(
       match.dispatch({
-        type: 'play-card',
+        type: 'dev-add-card',
         participantId: activeId,
-        cardInstanceId: third.handCard.instanceId,
-        position: 0
+        cardId: 'the_grand_tournament_gormok_the_impaler'
       })
     )
-    const played = findPlayer().board[0]
-    expect(played.instanceId).toBe(third.handCard.instanceId)
-    expect(played.attack).toBe(third.definition.attack + 3)
-    expect(played.health).toBe(third.definition.health + 3)
-    expect(played.maxHealth).toBe(third.definition.health + 3)
-    expect(played.baseAttack).toBe(third.definition.attack)
-    expect(played.baseHealth).toBe(third.definition.health)
+    const gormok = player().hand.findLast(
+      (entry) => entry.cardId === 'the_grand_tournament_gormok_the_impaler'
+    )!
+    expect(
+      match.getPlayInput!(activeId, gormok.instanceId)!.legalTargetOptions
+    ).toEqual([])
+    accept(
+      match.dispatch({
+        type: 'play-card',
+        participantId: activeId,
+        cardInstanceId: gormok.instanceId,
+        position: 4
+      })
+    )
+  })
+
+  it('does not enable an ordinary dormant minion end-turn trigger', () => {
+    const { match, activeId } = openPortal()
+    accept(
+      match.dispatch({
+        type: 'dev-summon-minion',
+        participantId: activeId,
+        cardId: 'classic_gruul'
+      })
+    )
+    const checkpoint = match.getCheckpoint()
+    const state = {
+      ...checkpoint.state,
+      players: checkpoint.state.players.map((player) => ({
+        ...player,
+        board: player.board.map((entity) =>
+          entity.cardId === 'classic_gruul' ? { ...entity, dormant: true } : entity
+        )
+      })) as unknown as typeof checkpoint.state.players
+    }
+    const resumed = createOpeningMatchFromCheckpoint({ ...checkpoint, state })
+    const before = resumed
+      .getState()
+      .players.find((entry) => entry.participantId === activeId)!.board[1]!
+    accept(resumed.dispatch({ type: 'end-turn', participantId: activeId }))
+    const board = resumed
+      .getState()
+      .players.find((entry) => entry.participantId === activeId)!.board
+    expect(
+      board.find((entity) => entity.instanceId === before.instanceId)
+    ).toMatchObject({ dormant: true, attack: before.attack, health: before.health })
+    expect(
+      board.filter((entity) => entity.cardId === 'journey_to_ungoro_nether_imp')
+    ).toHaveLength(2)
+  })
+
+  it('preserves the Portal in JSON checkpoints, observations and deterministic resumed commands', () => {
+    const { match, activeId, portal } = openPortal()
+    const checkpoint = JSON.parse(JSON.stringify(match.getCheckpoint()))
+    const restored = createOpeningMatchFromCheckpoint(checkpoint)
+    expect(restored.getState()).toEqual(match.getState())
+    const observation = restored.getAiObservation!(activeId, 'fair')
+    expect(
+      observation.players
+        .find((entry) => entry.participantId === activeId)
+        ?.board.find((entry) => entry.instanceId === portal.instanceId)
+    ).toMatchObject({ boardObject: 'nether-portal', dormant: true })
+    expect(portalCommands(restored, activeId)).toEqual(portalCommands(match, activeId))
+    const first = accept(match.dispatch({ type: 'end-turn', participantId: activeId }))
+    const second = accept(
+      restored.dispatch({ type: 'end-turn', participantId: activeId })
+    )
+    expect(second).toEqual(first)
   })
 
   it.each([

@@ -1,6 +1,7 @@
-import { CARD_CATALOG, asCardId } from '../../content/cards'
+import { CARD_CATALOG, asCardId, isCardAllowedForClass } from '../../content/cards'
 import { HERO_CATALOG } from '../../content/heroes'
 import { createSeededRng } from '../rng'
+import { withoutMinionDeckProvenance } from '../match-public-projection'
 import type { Deck } from '../../decks'
 import { generateConstructedOpponent } from '../../decks/opponent-generator'
 import { OPPONENT_ARCHETYPES } from '../../decks/opponent-archetypes'
@@ -20,7 +21,7 @@ function eligibleCards(heroId: string) {
       card.collectible &&
       card.deckLegal &&
       !('quest' in card) &&
-      (card.cardClass === 'Neutral' || card.cardClass === heroClass)
+      isCardAllowedForClass(card, heroClass)
   )
 }
 
@@ -295,7 +296,8 @@ export function createFairHypothesisCheckpoint(
     zone: string,
     cardPool: ReturnType<typeof eligibleCards> = pool,
     sampleRng = rng,
-    startedInDeck = true
+    startedInDeck = true,
+    cardController: OpeningPlayerState = hiddenPlayer
   ): OpeningCard => {
     const knownIdentity = card.knownTo?.includes(perspectivePlayerId) === true
     const definition = knownIdentity
@@ -305,6 +307,7 @@ export function createFairHypothesisCheckpoint(
         : sampleCard(cardPool, sampleRng)
     if (!definition) throw new Error('A known hidden card is missing its definition.')
     const {
+      baseStatsOverride: _baseStatsOverride,
       attack: _attack,
       health: _health,
       enchantments: _enchantments,
@@ -314,8 +317,18 @@ export function createFairHypothesisCheckpoint(
       playOrder: _playOrder,
       ...visibleFields
     } = card
+    const publicBaseStats =
+      cardController.minionBaseStats ??
+      (knownIdentity ? card.baseStatsOverride : undefined)
     return {
       ...visibleFields,
+      ...(definition.type === 'Minion' && publicBaseStats
+        ? {
+            baseStatsOverride: { ...publicBaseStats },
+            attack: publicBaseStats.attack,
+            health: publicBaseStats.health
+          }
+        : {}),
       instanceId: knownIdentity
         ? card.instanceId
         : `${EXPERT_FAIR_HYPOTHESIS_PREFIX}${zone}:${syntheticOrdinal++}`,
@@ -384,7 +397,8 @@ export function createFairHypothesisCheckpoint(
               `perspective-deck:${index}`,
               perspectivePool,
               perspectiveDeckSampleRng,
-              false
+              false,
+              player
             )
       )
       return {
@@ -402,6 +416,15 @@ export function createFairHypothesisCheckpoint(
     const { pendingCostModifiers: _pendingCostModifiers, ...publicPlayer } = player
     return {
       ...publicPlayer,
+      board: player.board.map(withoutMinionDeckProvenance),
+      ...(player.graveyard
+        ? {
+            graveyard: player.graveyard.map((entry) => ({
+              ...entry,
+              minion: withoutMinionDeckProvenance(entry.minion)
+            }))
+          }
+        : {}),
       deck: shuffleDeckOrder(
         player.deck.map((card, index) =>
           hideCard(card, `deck:${index}`, pool, rng, card.startedInDeck === true)

@@ -4,6 +4,7 @@ import {
   asExpansionId,
   asHeroId,
   CARD_CLASSES,
+  PLAYABLE_CLASSES,
   CARD_RARITIES,
   CARD_TYPES,
   type CardDefinition,
@@ -47,6 +48,7 @@ export interface RawCardRecord {
   readonly name?: unknown
   readonly rarity?: unknown
   readonly cardClass?: unknown
+  readonly allowedClasses?: unknown
   readonly type?: unknown
   readonly subtype?: unknown
   readonly tribes?: unknown
@@ -284,6 +286,9 @@ const ACTION_FIELDS = new Set([
 ])
 
 const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>> = {
+  'grant-extra-turn-once': ['counter'],
+  'shuffle-cards': ['cardId', 'count'],
+  'set-minion-base-stats': ['attack', 'health'],
   damage: ['target', 'amount'],
   'damage-group': ['actions'],
   restore: ['target', 'amount'],
@@ -1123,6 +1128,17 @@ export function validateCardRecord(
   const type = enumValue(raw.type, CARD_TYPES, `${indexOrPath}.type`)
   const rarity = enumValue(raw.rarity, CARD_RARITIES, `${indexOrPath}.rarity`)
   const cardClass = enumValue(raw.cardClass, CARD_CLASSES, `${indexOrPath}.cardClass`)
+  const allowedClasses = optionalStringArray(
+    raw.allowedClasses,
+    `${indexOrPath}.allowedClasses`
+  )?.map((entry, index) =>
+    asClassId(
+      enumValue(entry, PLAYABLE_CLASSES, `${indexOrPath}.allowedClasses[${index}]`)
+    )
+  )
+  if (allowedClasses && !allowedClasses.some((entry) => entry === cardClass)) {
+    return fail(`${indexOrPath}.allowedClasses`, 'must include the primary card class')
+  }
   const name = stringValue(raw.name, `${indexOrPath}.name`)
   const rulesText = textValue(raw.rulesText, `${indexOrPath}.rulesText`)
   const keywords = keywordsValue(raw.keywords, `${indexOrPath}.keywords`)
@@ -1156,6 +1172,7 @@ export function validateCardRecord(
     name,
     rarity,
     cardClass: asClassId(cardClass),
+    ...(allowedClasses === undefined ? {} : { allowedClasses }),
     subtype,
     ...(tribes === undefined ? {} : { tribes }),
     spellSchool,
@@ -1216,7 +1233,17 @@ export function validateCardRecord(
           'play-battlecry-minion',
           'play-battlecry-card',
           'draw-card',
-          'hero-attack'
+          'hero-attack',
+          'fill-board-turns',
+          'play-beast-attack-set',
+          'discover-card',
+          'summon-murloc-repeatable',
+          'cast-holy-shadow',
+          'shuffle-into-own-deck',
+          'play-unique-minion-type',
+          'play-demon',
+          'survive-turns',
+          'fill-then-empty-hand'
         ] as const,
         `${indexOrPath}.quest.goal`
       )
