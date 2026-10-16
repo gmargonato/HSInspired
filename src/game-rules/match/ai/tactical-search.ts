@@ -338,7 +338,6 @@ export function searchTactics(
             if (
               outcome === 'ongoing' &&
               proven &&
-              command.type !== 'end-turn' &&
               result.state.activePlayerId === playerId &&
               !result.state.pendingDiscover &&
               !result.state.pendingCardChoice
@@ -454,7 +453,7 @@ export function inspectTacticalLine(
       const outcome = terminalOutcome(fork.getState(), playerId)
       if (outcome !== 'ongoing')
         return { outcome: certain ? outcome : 'unknown', reply: 'unknown' }
-      if (command.type === 'end-turn') break
+      if (fork.getState().activePlayerId !== playerId) break
     }
     if (fork.getState().activePlayerId === playerId) {
       if (!apply({ type: 'end-turn', participantId: playerId }))

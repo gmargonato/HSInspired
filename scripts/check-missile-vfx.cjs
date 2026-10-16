@@ -28,7 +28,9 @@ function load(relativePath, imports = {}) {
 
 async function main() {
   const contract = load('src/desktop/contracts/ipc/vfx-templates.ts')
-  const model = load('src/dev-tools/vfx-lab/vfx-lab-model.ts')
+  const model = load('src/dev-tools/vfx-lab/vfx-lab-model.ts', {
+    '../../desktop/contracts/ipc/vfx-templates': contract
+  })
   const common = load('src/visual-components/effects/fire-vfx-shader-common.ts')
   const { VfxTemplateRepository } = load(
     'src/desktop/main/services/vfx-template-repository.ts',

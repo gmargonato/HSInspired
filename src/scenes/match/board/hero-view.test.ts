@@ -1,4 +1,6 @@
-import { Sprite, Text, Texture } from 'pixi.js'
+import { Text, Texture } from 'pixi.js'
+import { HeroPortrait } from '../../../visual-components/hero-portrait'
+import { hasPremiumHeroPortrait } from '../../../visual-components/hero-portrait-appearance'
 import { describe, expect, it, vi } from 'vitest'
 import { gsap } from '../../../visual-components/animation/animations'
 
@@ -12,7 +14,20 @@ vi.mock('../../../visual-components/effects/animated-outline', () => ({
 import { HERO_HEALTH_COLORS, HeroView } from './hero-view'
 
 describe('hero identity presentation', () => {
-  it('flips only the portrait frame when the hero is replaced', async () => {
+  it('unlocks only the local class at 500 or more wins', () => {
+    let mageWins = 499
+    const stats = { getWins: (classId: string) => (classId === 'Mage' ? mageWins : 0) }
+    expect(hasPremiumHeroPortrait(stats, 'jaina')).toBe(false)
+    mageWins = 500
+    expect(hasPremiumHeroPortrait(stats, 'jaina')).toBe(true)
+    expect(hasPremiumHeroPortrait(stats, 'jaina-frost-lich')).toBe(true)
+    expect(hasPremiumHeroPortrait(stats, 'guldan')).toBe(false)
+    expect(hasPremiumHeroPortrait(stats, 'jaina', false)).toBe(false)
+    expect(hasPremiumHeroPortrait(undefined, 'jaina')).toBe(false)
+    mageWins = 501
+    expect(hasPremiumHeroPortrait(stats, 'jaina')).toBe(true)
+  })
+  it('flips the assembled portrait while preserving stats and overlays', async () => {
     const view = HeroView.create(
       {
         label: 'game.hero.local',
@@ -58,9 +73,9 @@ describe('hero identity presentation', () => {
     await replacement
 
     const frame = view.getChildByLabel('hero.frame')
-    expect(frame).toBeInstanceOf(Sprite)
-    expect((frame as Sprite).texture).toBe(Texture.WHITE)
-    expect((frame as Sprite).scale.x).toBe(1)
+    expect(frame).toBeInstanceOf(HeroPortrait)
+    expect((frame as HeroPortrait).texture).toBe(Texture.WHITE)
+    expect((frame as HeroPortrait).scale.x).toBe(1)
     expect(view.getChildByLabel('hero.stat-health')!.scale).toEqual(healthScale)
     expect(view.getChildByLabel('hero.frozen')!.scale).toEqual(frozenScale)
     expect(view.getChildByLabel('hero.immune')!.scale).toEqual(immuneScale)

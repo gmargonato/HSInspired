@@ -12,18 +12,19 @@
         "foldColor": "#d84a08",
         "glowColor": "#ffb02e",
         "sootColor": "#1f130b",
-        "missileGlow": 0.8,
-        "headStartSize": 28,
-        "headEndSize": 116,
-        "headGrowthMs": 350,
+        "missileGlow": 1,
+        "headStartSize": 62,
+        "headEndSize": 62,
+        "headGrowthMs": 0,
         "coreColor": "#fffdd6",
-        "intensity": 1.7,
-        "noiseScale": 2.8,
-        "flowSpeed": 1.2,
-        "turbulence": 0.85,
-        "durationMs": 950,
+        "intensity": 1,
+        "noiseScale": 1,
+        "flowSpeed": 1,
+        "turbulence": 0,
+        "durationMs": 400,
         "missileLength": 550,
-        "missileWidth": 0.32
+        "missileWidth": 0.32,
+        "useOriginalColors": true
       }
     },
     {
@@ -32,19 +33,16 @@
       "family": "aoe",
       "zones": ["enemyBoard"],
       "tuning": {
-        "flameColor": "#F4A30F",
-        "coreColor": "#EFE28B",
-        "redColor": "#EB530D",
-        "intensity": 1.65,
-        "noiseScale": 2.6,
-        "flowSpeed": 0.85,
-        "turbulence": 0.85,
-        "durationMs": 3000,
-        "impactMs": 350,
-        "sootColor": "#1f130b",
-        "aoeRadius": 0.98,
-        "aoeEdgeSoftness": 0.1,
-        "aoeShape": "wide"
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1,
+          "rampIntensity": 1.1,
+          "glow": 0.75,
+          "timingScale": 1
+        }
       }
     },
     {
@@ -53,19 +51,16 @@
       "family": "aoe",
       "zones": ["enemyBoard", "friendlyBoard"],
       "tuning": {
-        "flameColor": "#F4A30F",
-        "coreColor": "#EFE28B",
-        "redColor": "#EB530D",
-        "intensity": 1.65,
-        "noiseScale": 2.6,
-        "flowSpeed": 0.85,
-        "turbulence": 0.85,
-        "durationMs": 3000,
-        "impactMs": 350,
-        "sootColor": "#1f130b",
-        "aoeRadius": 0.98,
-        "aoeEdgeSoftness": 0.1,
-        "aoeShape": "wide"
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1,
+          "rampIntensity": 1.1,
+          "glow": 0.75,
+          "timingScale": 1
+        }
       }
     },
     {
@@ -74,127 +69,16 @@
       "family": "aoe",
       "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
       "tuning": {
-        "flameColor": "#F4A30F",
-        "coreColor": "#EFE28B",
-        "redColor": "#EB530D",
-        "intensity": 1.65,
-        "noiseScale": 2.6,
-        "flowSpeed": 0.85,
-        "turbulence": 0.85,
-        "durationMs": 3000,
-        "impactMs": 350,
-        "sootColor": "#1f130b",
-        "aoeRadius": 0.98,
-        "aoeEdgeSoftness": 0.1,
-        "aoeShape": "wide"
-      }
-    },
-    {
-      "id": "orange-explosion-enemy-board",
-      "name": "Orange explosion: enemy board",
-      "family": "aoe",
-      "zones": ["enemyBoard"],
-      "tuning": {
-        "flameColor": "#ff4b08",
-        "coreColor": "#ffd13b",
-        "intensity": 1.7,
-        "noiseScale": 2.8,
-        "flowSpeed": 1.2,
-        "turbulence": 0.85,
-        "durationMs": 1800,
-        "aoeRadius": 0.92,
-        "aoeEdgeSoftness": 0.055,
-        "aoeShape": "wide"
-      }
-    },
-    {
-      "id": "orange-explosion-friendly-board",
-      "name": "Orange explosion: friendly board",
-      "family": "aoe",
-      "zones": ["friendlyBoard"],
-      "tuning": {
-        "flameColor": "#ff4b08",
-        "coreColor": "#ffd13b",
-        "intensity": 1.7,
-        "noiseScale": 2.8,
-        "flowSpeed": 1.2,
-        "turbulence": 0.85,
-        "durationMs": 1800,
-        "aoeRadius": 0.92,
-        "aoeEdgeSoftness": 0.055,
-        "aoeShape": "wide"
-      }
-    },
-    {
-      "id": "orange-explosion-both-boards",
-      "name": "Orange explosion: both boards",
-      "family": "aoe",
-      "zones": ["enemyBoard", "friendlyBoard"],
-      "tuning": {
-        "flameColor": "#ff4b08",
-        "coreColor": "#ffd13b",
-        "intensity": 1.7,
-        "noiseScale": 2.8,
-        "flowSpeed": 1.2,
-        "turbulence": 0.85,
-        "durationMs": 1800,
-        "aoeRadius": 0.92,
-        "aoeEdgeSoftness": 0.055,
-        "aoeShape": "wide"
-      }
-    },
-    {
-      "id": "orange-explosion-enemy-side",
-      "name": "Orange explosion: enemy side",
-      "family": "aoe",
-      "zones": ["enemyBoard", "enemyHero"],
-      "tuning": {
-        "flameColor": "#ff4b08",
-        "coreColor": "#ffd13b",
-        "intensity": 1.7,
-        "noiseScale": 2.8,
-        "flowSpeed": 1.2,
-        "turbulence": 0.85,
-        "durationMs": 1800,
-        "aoeRadius": 0.92,
-        "aoeEdgeSoftness": 0.055,
-        "aoeShape": "wide"
-      }
-    },
-    {
-      "id": "orange-explosion-friendly-side",
-      "name": "Orange explosion: friendly side",
-      "family": "aoe",
-      "zones": ["friendlyBoard", "friendlyHero"],
-      "tuning": {
-        "flameColor": "#ff4b08",
-        "coreColor": "#ffd13b",
-        "intensity": 1.7,
-        "noiseScale": 2.8,
-        "flowSpeed": 1.2,
-        "turbulence": 0.85,
-        "durationMs": 1800,
-        "aoeRadius": 0.92,
-        "aoeEdgeSoftness": 0.055,
-        "aoeShape": "wide"
-      }
-    },
-    {
-      "id": "orange-explosion-all-characters",
-      "name": "Orange explosion: all characters",
-      "family": "aoe",
-      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
-      "tuning": {
-        "flameColor": "#ff4b08",
-        "coreColor": "#ffd13b",
-        "intensity": 1.7,
-        "noiseScale": 2.8,
-        "flowSpeed": 1.2,
-        "turbulence": 0.85,
-        "durationMs": 1800,
-        "aoeRadius": 0.92,
-        "aoeEdgeSoftness": 0.055,
-        "aoeShape": "wide"
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1,
+          "rampIntensity": 1.1,
+          "glow": 0.75,
+          "timingScale": 1
+        }
       }
     },
     {
@@ -203,19 +87,16 @@
       "family": "aoe",
       "zones": ["enemyBoard", "enemyHero"],
       "tuning": {
-        "flameColor": "#F4A30F",
-        "coreColor": "#EFE28B",
-        "redColor": "#EB530D",
-        "intensity": 1.65,
-        "noiseScale": 2.6,
-        "flowSpeed": 0.85,
-        "turbulence": 0.85,
-        "durationMs": 3000,
-        "impactMs": 350,
-        "sootColor": "#1f130b",
-        "aoeRadius": 0.98,
-        "aoeEdgeSoftness": 0.1,
-        "aoeShape": "wide"
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1,
+          "rampIntensity": 1.1,
+          "glow": 0.75,
+          "timingScale": 1
+        }
       }
     },
     {
@@ -224,19 +105,16 @@
       "family": "aoe",
       "zones": ["enemyHero", "friendlyHero"],
       "tuning": {
-        "flameColor": "#F4A30F",
-        "coreColor": "#EFE28B",
-        "redColor": "#EB530D",
-        "intensity": 1.65,
-        "noiseScale": 2.6,
-        "flowSpeed": 0.85,
-        "turbulence": 0.85,
-        "durationMs": 3000,
-        "impactMs": 350,
-        "sootColor": "#1f130b",
-        "aoeRadius": 0.98,
-        "aoeEdgeSoftness": 0.1,
-        "aoeShape": "wide"
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1,
+          "rampIntensity": 1.1,
+          "glow": 0.75,
+          "timingScale": 1
+        }
       }
     },
     {
@@ -245,19 +123,16 @@
       "family": "aoe",
       "zones": ["friendlyBoard"],
       "tuning": {
-        "flameColor": "#F4A30F",
-        "coreColor": "#EFE28B",
-        "redColor": "#EB530D",
-        "intensity": 1.65,
-        "noiseScale": 2.6,
-        "flowSpeed": 0.85,
-        "turbulence": 0.85,
-        "durationMs": 3000,
-        "impactMs": 350,
-        "sootColor": "#1f130b",
-        "aoeRadius": 0.98,
-        "aoeEdgeSoftness": 0.1,
-        "aoeShape": "wide"
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1,
+          "rampIntensity": 1.1,
+          "glow": 0.75,
+          "timingScale": 1
+        }
       }
     }
   ]

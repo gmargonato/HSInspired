@@ -6,8 +6,8 @@ export const MANA_CRYSTAL_SHIMMER = {
   intensity: 0.5,
   tilesX: 1,
   tilesY: 1,
-  velocityX: -0.105,
-  velocityY: 0.105
+  velocityX: -0.126,
+  velocityY: 0
 } as const
 
 const vertex = `
@@ -61,7 +61,7 @@ export class ManaCrystalShimmer {
     private readonly isVisible: () => boolean,
     private readonly onUpdate: () => void
   ) {
-    clouds.source.style.addressMode = 'repeat'
+    clouds.source.style.addressMode = 'mirror-repeat'
     this.filter = Filter.from({
       gl: { vertex, fragment, name: 'mana-crystal-shimmer' },
       padding: 0,
@@ -87,8 +87,9 @@ export class ManaCrystalShimmer {
   private readonly tick = (_time: number, deltaMS: number): void => {
     if (document.hidden || !this.isVisible()) return
     const seconds = Math.min(deltaMS, 100) / 1000
-    this.offset[0] = (this.offset[0] + seconds * MANA_CRYSTAL_SHIMMER.velocityX) % 1
-    this.offset[1] = (this.offset[1] + seconds * MANA_CRYSTAL_SHIMMER.velocityY) % 1
+    // Mirrored wrapping repeats after two tiles; resetting after one would jump.
+    this.offset[0] = (this.offset[0] + seconds * MANA_CRYSTAL_SHIMMER.velocityX) % 2
+    this.offset[1] = (this.offset[1] + seconds * MANA_CRYSTAL_SHIMMER.velocityY) % 2
     this.onUpdate()
   }
 

@@ -50,6 +50,10 @@ export { HERO_POWER_ASSET_KEYS, type HeroPowerAssetKey } from './hero-power-asse
  * game content catalog drives the lookup without renderer-side logic.
  */
 export const HERO_POWER_ASSET_SOURCES: Record<HeroPowerAssetKey, string> = {
+  // The regular icon/card frames remain in place over the missing-art gray.
+  'hero-power-placeholder': `data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500"><rect width="500" height="500" fill="#535b65"/></svg>'
+  )}`,
   'hero-power-druid': druidImage,
   'hero-power-hunter': hunterImage,
   'hero-power-mage': mageImage,

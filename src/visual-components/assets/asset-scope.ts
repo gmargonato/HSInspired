@@ -1,6 +1,8 @@
 import { Assets } from 'pixi.js'
 
 type AssetBundle = Record<string, string>
+type PreparedBundle = { assets: unknown; dispose: () => void }
+type BundlePreparation = (assets: unknown) => PreparedBundle
 
 const registeredBundles = new Set<string>()
 const bundleSources = new Map<string, readonly string[]>()
@@ -14,11 +16,13 @@ const loadedBundles = new Map<string, unknown>()
 const pendingLoads = new Map<string, Promise<unknown>>()
 const pendingUnloads = new Map<string, Promise<void>>()
 const pendingSourceUnloads = new Map<string, Promise<void>>()
+const bundlePreparations = new Map<string, BundlePreparation>()
+const preparedDisposals = new Map<string, () => void>()
 
 export function registerAssetBundle(
   bundleId: string,
   assets: AssetBundle,
-  options: { readonly persistent?: boolean } = {}
+  options: { readonly persistent?: boolean; readonly prepare?: BundlePreparation } = {}
 ): void {
   if (registeredBundles.has(bundleId)) return
 
@@ -39,6 +43,7 @@ export function registerAssetBundle(
   bundleAliases.set(bundleId, aliases)
   bundleSources.set(bundleId, [...new Set(Object.values(assets))])
   if (options.persistent) persistentBundles.add(bundleId)
+  if (options.prepare) bundlePreparations.set(bundleId, options.prepare)
 }
 
 function restoreBundleAliases(bundleId: string, loaded: unknown): unknown {
@@ -99,15 +104,20 @@ async function loadBundle(bundleId: string): Promise<unknown> {
 
   let pendingLoad = pendingLoads.get(bundleId)
   if (!pendingLoad) {
-    pendingLoad = Assets.loadBundle(bundleId)
+    pendingLoad = Assets.loadBundle(bundleId).then((value) => {
+      const loaded = restoreBundleAliases(bundleId, value)
+      const prepared = bundlePreparations.get(bundleId)?.(loaded)
+      if (prepared) preparedDisposals.set(bundleId, prepared.dispose)
+      const result = prepared?.assets ?? loaded
+      loadedBundles.set(bundleId, result)
+      pinPersistentBundle(bundleId)
+      return result
+    })
     pendingLoads.set(bundleId, pendingLoad)
   }
 
   try {
-    const loaded = restoreBundleAliases(bundleId, await pendingLoad)
-    loadedBundles.set(bundleId, loaded)
-    pinPersistentBundle(bundleId)
-    return loaded
+    return await pendingLoad
   } finally {
     pendingLoads.delete(bundleId)
   }
@@ -115,6 +125,8 @@ async function loadBundle(bundleId: string): Promise<unknown> {
 
 async function unloadBundle(bundleId: string): Promise<void> {
   if (persistentBundles.has(bundleId)) return
+  preparedDisposals.get(bundleId)?.()
+  preparedDisposals.delete(bundleId)
 
   const unreferencedSources = sourcesFor(bundleId).filter(
     (source) =>

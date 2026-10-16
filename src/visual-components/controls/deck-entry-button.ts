@@ -1,5 +1,6 @@
 import { Graphics, Sprite, Text, Texture } from 'pixi.js'
 import { Button, type ButtonOptions } from './button'
+import { PremiumArtworkBreath } from '../effects/premium-artwork-breath'
 
 const PORTRAIT_WIDTH = 210
 // Match the frame's 210 × 75 inner opening so portrait art is not reduced to a
@@ -14,6 +15,7 @@ const DECK_NAME_Y = 25
 
 export interface DeckEntryButtonOptions extends ButtonOptions {
   readonly portrait?: Texture
+  readonly premiumPortrait?: boolean
   readonly portraitYOffset?: number
   readonly deckName: string
   readonly showDeckName?: boolean
@@ -24,18 +26,27 @@ export class DeckEntryButton extends Button {
   constructor(frame: Texture, options: DeckEntryButtonOptions) {
     super(frame, options)
 
-    if (options.portrait) this.addPortrait(options.portrait, options.portraitYOffset)
+    if (options.portrait)
+      this.addPortrait(
+        options.portrait,
+        options.portraitYOffset,
+        options.premiumPortrait
+      )
     if (options.showDeckName ?? true) this.addDeckName(options.deckName)
   }
 
   private addPortrait(
     texture: Texture,
-    yOffset: number = PORTRAIT_ARTWORK_Y_OFFSET
+    yOffset: number = PORTRAIT_ARTWORK_Y_OFFSET,
+    premium: boolean = false
   ): void {
     const portrait = new Sprite(texture)
     portrait.anchor.set(0.5)
     portrait.y = PORTRAIT_Y + yOffset
     portrait.eventMode = 'none'
+    const breath = new PremiumArtworkBreath(portrait)
+    breath.setEnabled(premium)
+    portrait.once('destroyed', () => breath.destroy())
     const scale = Math.max(
       PORTRAIT_WIDTH / texture.width,
       PORTRAIT_HEIGHT / texture.height

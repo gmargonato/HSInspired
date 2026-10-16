@@ -1,3 +1,4 @@
+import type { PlayerStatsStore } from '../../application/contracts/player-stats-store'
 import { BlurFilter, Sprite } from 'pixi.js'
 import {
   ASSET_BUNDLE_IDS,
@@ -61,12 +62,14 @@ export class CollectionScene extends Scene {
       info: () => undefined,
       warn: () => undefined,
       error: () => undefined
-    }
+    },
+    private readonly playerStats?: PlayerStatsStore
   ) {
     super()
   }
 
   async init(): Promise<void> {
+    await this.playerStats?.load()
     const assets = await this.assetScope.acquire<CollectionAssets>(
       ASSET_BUNDLE_IDS.collection
     )
@@ -120,6 +123,7 @@ export class CollectionScene extends Scene {
       doneButton: sharedAssets.doneButton
     }
     this.deckPanel = new DeckPanelView({
+      playerStats: this.playerStats,
       assets: deckPanelAssets,
       canvas: this.appInstance.canvas,
       inputParent: this.appInstance.canvas.parentElement ?? document.body,
@@ -146,7 +150,8 @@ export class CollectionScene extends Scene {
         onDeckCreated: (deck) => this.handleNewDeckCreated(deck),
         onError: (message, error) => this.reportError(message, error)
       },
-      this.logger
+      this.logger,
+      this.playerStats
     )
     await this.newDeckScene.mount()
     this.root.addChild(this.newDeckScene)

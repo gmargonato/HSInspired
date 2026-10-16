@@ -1,3 +1,4 @@
+import type { PlayerStatsStore } from '../../application/contracts/player-stats-store'
 import type { AppLogger, DialogService } from '../../application/services'
 import type { SceneRouter } from '../../application/navigation/router'
 import { ArenaView } from './arena-view'
@@ -24,7 +25,8 @@ export class ArenaScene extends Scene {
       warn: () => undefined,
       error: () => undefined
     },
-    private readonly progression?: ProgressionStore
+    private readonly progression?: ProgressionStore,
+    private readonly playerStats?: PlayerStatsStore
   ) {
     super()
   }
@@ -36,7 +38,8 @@ export class ArenaScene extends Scene {
         ASSET_BUNDLE_IDS.deckPresentation
       ),
       this.assetScope.acquire<SharedUIAssets>(ASSET_BUNDLE_IDS.sharedUI),
-      this.arenaStore.load()
+      this.arenaStore.load(),
+      this.playerStats?.load()
     ])
     await this.assetScope.acquire(ASSET_BUNDLE_IDS.cardRendering)
     await this.waitForFonts()
@@ -63,7 +66,8 @@ export class ArenaScene extends Scene {
           this.logger.error(message, error)
           this.dialogs?.error(message)
         }
-      }
+      },
+      this.playerStats
     )
     this.root.addChild(this.view)
     await this.view.mount(snapshot)

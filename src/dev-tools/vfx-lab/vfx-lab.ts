@@ -1,11 +1,11 @@
-import { Container, Graphics, Sprite, Text, Texture, type Renderer } from 'pixi.js'
+import { Container, Graphics, Sprite, type Renderer } from 'pixi.js'
 import { applyAnchoredPlacement, applyPlacement } from '../../visual-components/layout'
-import { AoeVfxShader } from '../../visual-components/effects/aoe-vfx-shader'
-import { AoeMotes, AoeMoteTexture } from '../../visual-components/effects/aoe-motes'
 import {
-  MissileVfxShader,
-  MISSILE_VFX_TIMING
-} from '../../visual-components/effects/missile-vfx-shader'
+  FireAoeEffect,
+  type FireAoeTarget
+} from '../../visual-components/effects/fire-aoe-effect'
+import { FireAoeResources } from '../../visual-components/effects/fire-aoe-materials'
+import { FireballEffect } from '../../visual-components/effects/fireball-effect'
 import type { GameAssets } from '../../visual-components/assets'
 import {
   getVfxTemplateLibrary,
@@ -15,12 +15,9 @@ import type { VfxTemplate } from '../../desktop/contracts/ipc/vfx-templates'
 import { VfxLabControls } from './vfx-lab-controls'
 import {
   DEFAULT_VFX_LAB_SETTINGS,
-  AOE_ZONES,
-  getAoePreviewAreas,
   createTemplateFromSettings,
   settingsFromTemplate,
   templateFromSettings,
-  type AoePreviewAreaId,
   type VfxEffectId,
   type VfxLabSettingKey,
   type VfxLabSettingValue,
@@ -33,19 +30,6 @@ interface VfxLabOptions {
   readonly renderer: Renderer
   readonly parent: HTMLElement
   readonly assets: GameAssets
-}
-
-function colorValue(color: string): number {
-  return Number.parseInt(color.replace('#', ''), 16) || 0xffffff
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value))
-}
-
-function smoothstep(edge0: number, edge1: number, value: number): number {
-  const t = clamp01((value - edge0) / (edge1 - edge0))
-  return t * t * (3 - 2 * t)
 }
 
 function makeMarker(label: string, color: number): Container {
@@ -63,49 +47,23 @@ function makeMarker(label: string, color: number): Container {
   return marker
 }
 
-function makeParticles(
-  layer: Container,
-  texture: Texture,
-  prefix: string,
-  count: number
-): Sprite[] {
-  const particles: Sprite[] = []
-  for (let index = 0; index < count; index++) {
-    const particle = new Sprite(texture)
-    particle.label = prefix + '.particle-' + index
-    particle.anchor.set(0.5)
-    particle.blendMode = 'add'
-    particle.alpha = 0
-    particle.width = 10 + (index % 4) * 4
-    particle.height = particle.width
-    layer.addChild(particle)
-    particles.push(particle)
-  }
-  return particles
-}
-
 /** Standalone, parameter-tunable preview for the first reusable VFX families. */
 export class VfxLab extends Container {
-  private readonly missileShader: MissileVfxShader
-  private readonly aoeShader: AoeVfxShader
-  private readonly aoeImpactShader: AoeVfxShader
-  private readonly aoeFriendlyImpactShader: AoeVfxShader
-  private readonly aoeMoteTexture: AoeMoteTexture
+  private missileEffect?: FireballEffect
+  private readonly fireResources: FireAoeResources
+  private fireEffect?: FireAoeEffect
+  private readonly fireTargets = new Graphics()
+  private get playbackDurationMS(): number {
+    return (
+      (this.fireEffect?.duration ??
+        this.missileEffect?.duration ??
+        this.settings.durationMs / 1000) * 1000
+    )
+  }
   private readonly missileGroup = new Container()
-  private readonly aoeGroup = new Container()
-  private readonly missileSprite: Sprite
-  private readonly aoeZones: {
-    id: AoePreviewAreaId
-    group: Container
-    sprite: Sprite
-    motes: AoeMotes
-  }[] = []
-  private readonly missileParticles: Sprite[]
   private readonly missileGuide = new Graphics()
-  private readonly zoneLabels: Text[] = []
   private readonly missileSource: Container
   private readonly missileTarget: Container
-  private readonly areaGuide: Graphics
   private readonly controls: VfxLabControls
   private templates: VfxTemplate[] = structuredClone([
     ...getVfxTemplateLibrary().templates
@@ -137,7 +95,7 @@ export class VfxLab extends Container {
   private looping = false
   private disposed = false
 
-  constructor(options: VfxLabOptions) {
+  constructor(private readonly options: VfxLabOptions) {
     super()
     this.label = 'vfx-lab.preview'
     this.eventMode = 'none'
@@ -148,18 +106,6 @@ export class VfxLab extends Container {
     background.eventMode = 'none'
     applyAnchoredPlacement(background, LAYOUT.board)
     this.addChild(background)
-
-    const previewFrame = new Graphics()
-    previewFrame.label = 'vfx-lab.preview-frame'
-    previewFrame
-      .rect(
-        LAYOUT.previewPanel.position.x,
-        LAYOUT.previewPanel.position.y,
-        LAYOUT.previewPanel.size.width,
-        LAYOUT.previewPanel.size.height
-      )
-      .stroke({ color: 0x68483e, alpha: 0.68, width: 2 })
-    this.addChild(previewFrame)
 
     const missileGuide = this.missileGuide
     missileGuide.label = 'vfx-lab.missile.path'
@@ -180,83 +126,12 @@ export class VfxLab extends Container {
     applyPlacement(this.missileTarget, LAYOUT.missile.target)
     this.addChild(this.missileSource, this.missileTarget)
 
-    this.areaGuide = new Graphics()
-    this.areaGuide.label = 'vfx-lab.aoe.footprint'
-    this.addChild(this.areaGuide)
-
-    this.missileShader = new MissileVfxShader(options.assets.burnNoise)
     this.missileGroup.label = 'vfx-lab.missile.effect'
-    this.missileSprite = new Sprite(Texture.WHITE)
-    this.missileSprite.anchor.set(0)
-    this.missileSprite.label = 'vfx-lab.missile.shader'
-    this.missileSprite.filters = [this.missileShader.filter]
-    this.missileGroup.addChild(this.missileSprite)
-    this.missileParticles = makeParticles(
-      this.missileGroup,
-      options.assets.playSpotlight1,
-      'vfx-lab.missile',
-      15
-    )
     this.addChild(this.missileGroup)
 
-    this.aoeShader = new AoeVfxShader(options.assets.burnNoise)
-    this.aoeImpactShader = new AoeVfxShader(options.assets.burnNoise)
-    this.aoeFriendlyImpactShader = new AoeVfxShader(options.assets.burnNoise, 1)
-    this.aoeMoteTexture = new AoeMoteTexture(
-      options.assets.ghostSpotlight,
-      options.renderer
-    )
-    this.aoeGroup.label = 'vfx-lab.aoe.effect'
-    for (const id of Object.keys(LAYOUT.aoe.blasts) as AoePreviewAreaId[]) {
-      const zone = LAYOUT.aoe.blasts[id]
-      const group = new Container()
-      group.label = 'vfx-lab.aoe.' + id
-      applyPlacement(group, zone)
-      const sprite = new Sprite(Texture.WHITE)
-      sprite.anchor.set(0.5)
-      sprite.width = zone.size.width
-      sprite.height = zone.size.height
-      sprite.label = group.label + '.shader'
-      sprite.filters = [
-        id === 'friendlyHero'
-          ? this.aoeFriendlyImpactShader.filter
-          : id.endsWith('Hero')
-            ? this.aoeImpactShader.filter
-            : this.aoeShader.filter
-      ]
-      group.addChild(sprite)
-      const seed = {
-        enemyBoard: 0,
-        friendlyBoard: 1,
-        bothBoards: 2,
-        enemyHero: 3,
-        friendlyHero: 4
-      }[id]
-      const motes = new AoeMotes(
-        this.aoeMoteTexture.texture,
-        zone.size,
-        group.label,
-        seed
-      )
-      group.addChild(motes.container)
-      this.aoeGroup.addChild(group)
-      this.aoeZones.push({ id, group, sprite, motes })
-    }
-    for (const { key: id, label } of AOE_ZONES) {
-      const zone = LAYOUT.aoe.zones[id]
-      const caption = new Text({
-        text: label,
-        style: { fontFamily: 'Segoe UI', fontSize: 15, fill: 0xffe6b2 }
-      })
-      caption.label = 'vfx-lab.aoe.' + id + '.label'
-      caption.position.set(
-        zone.position.x - zone.size.width / 2 + 12,
-        zone.position.y - zone.size.height / 2 + 5
-      )
-      this.zoneLabels.push(caption)
-      this.aoeGroup.addChild(caption)
-    }
-    this.addChild(this.aoeGroup)
+    this.fireResources = new FireAoeResources(options.renderer, options.assets)
+    this.fireTargets.label = 'vfx-lab.fire-targets'
+    this.addChild(this.fireTargets)
 
     this.controls = new VfxLabControls(
       options.canvas,
@@ -275,7 +150,6 @@ export class VfxLab extends Container {
       }
     )
     this.loadSelectedTemplate()
-    this.applySettings()
     this.setEffectVisibility()
     this.refreshControls()
     this.play()
@@ -287,8 +161,8 @@ export class VfxLab extends Container {
     this.clockSeconds += delta / 1000
     if (this.playing) {
       this.elapsedMS += delta
-      if (this.elapsedMS >= this.settings.durationMs) {
-        this.elapsedMS = this.settings.durationMs
+      if (this.elapsedMS >= this.playbackDurationMS) {
+        this.elapsedMS = this.playbackDurationMS
         this.playing = false
         this.loopDelayMS = this.looping ? LAYOUT.loopPauseMS : -1
         this.refreshControls()
@@ -298,9 +172,8 @@ export class VfxLab extends Container {
       if (this.loopDelayMS <= 0) this.play()
     }
 
-    const progress = clamp01(this.elapsedMS / Math.max(1, this.settings.durationMs))
-    this.updateMissile(progress)
-    this.updateAoe(progress)
+    this.updateMissile()
+    this.updateAoe()
   }
 
   setControlsVisible(visible: boolean): void {
@@ -310,17 +183,10 @@ export class VfxLab extends Container {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.fireEffect?.dispose()
+    this.fireResources.destroy()
     this.controls.dispose()
-    this.missileSprite.filters = null
-    for (const zone of this.aoeZones) {
-      zone.sprite.filters = null
-      zone.motes.destroy()
-    }
-    this.aoeMoteTexture.destroy()
-    this.missileShader.dispose()
-    this.aoeShader.dispose()
-    this.aoeImpactShader.dispose()
-    this.aoeFriendlyImpactShader.dispose()
+    this.missileEffect?.dispose()
   }
 
   private selectEffect(effect: VfxEffectId): void {
@@ -329,7 +195,6 @@ export class VfxLab extends Container {
     this.selectedTemplateId =
       this.templates.find((template) => template.family === effect)?.id ?? null
     this.loadSelectedTemplate()
-    this.applySettings()
     this.setEffectVisibility()
     this.play()
     this.refreshControls()
@@ -340,7 +205,6 @@ export class VfxLab extends Container {
     if (!template || template.family !== this.selectedEffect) return
     this.selectedTemplateId = id
     this.loadSelectedTemplate()
-    this.applySettings()
     this.play()
     this.refreshControls()
   }
@@ -392,7 +256,6 @@ export class VfxLab extends Container {
     this.selectedTemplateId = template.id
     this.loadSelectedTemplate()
     this.markDirty()
-    this.applySettings()
     this.play()
     this.refreshControls()
   }
@@ -406,7 +269,6 @@ export class VfxLab extends Container {
       null
     this.loadSelectedTemplate()
     this.markDirty()
-    this.applySettings()
     this.setEffectVisibility()
     this.playing = false
     this.play()
@@ -481,10 +343,14 @@ export class VfxLab extends Container {
     this.replaceSelectedTemplate(
       templateFromSettings(this.selectedTemplate, this.settings)
     )
-    if (key !== 'showTargetGuides') this.markDirty()
-    this.applySettings()
+    if (
+      key !== 'showTargetGuides' &&
+      key !== 'previewMinions' &&
+      key !== 'opponentCaster'
+    )
+      this.markDirty()
     this.setEffectVisibility()
-    if (!this.playing) this.play()
+    this.play()
     this.refreshControls()
   }
 
@@ -496,98 +362,94 @@ export class VfxLab extends Container {
   }
 
   private play(): void {
+    this.missileEffect?.dispose()
+    this.missileEffect = undefined
+    this.fireEffect?.dispose()
+    this.fireEffect = undefined
+    this.fireTargets.clear()
     if (this.disposed || !this.selectedTemplate) return
+    const template = this.selectedTemplate
+    if (template.family === 'missile') {
+      this.missileEffect = new FireballEffect(
+        this.options.renderer,
+        this.options.assets,
+        {
+          source: LAYOUT.missile.source.position,
+          target: LAYOUT.missile.target.position,
+          tuning: template.tuning
+        }
+      )
+      this.missileGroup.addChild(this.missileEffect.container)
+    } else if (template.family === 'aoe') {
+      const flip = this.settings.opponentCaster
+      const enemyBoard = flip ? this.settings.friendlyBoard : this.settings.enemyBoard
+      const friendlyBoard = flip
+        ? this.settings.enemyBoard
+        : this.settings.friendlyBoard
+      const board =
+        enemyBoard && friendlyBoard
+          ? 'bothBoards'
+          : enemyBoard
+            ? 'enemyBoard'
+            : friendlyBoard
+              ? 'friendlyBoard'
+              : undefined
+      const targets: FireAoeTarget[] = []
+      for (const [enabled, id] of [
+        [enemyBoard, 'enemyBoard'],
+        [friendlyBoard, 'friendlyBoard']
+      ] as const) {
+        if (!enabled) continue
+        const center = LAYOUT.aoe.zones[id].position
+        const count = Math.min(
+          LAYOUT.aoe.previewTargets.maxPerRow,
+          this.settings.previewMinions
+        )
+        for (let i = 0; i < count; i++)
+          targets.push({
+            kind: 'minion',
+            x: center.x + (i - (count - 1) / 2) * LAYOUT.aoe.previewTargets.gap,
+            y: center.y
+          })
+      }
+      if (this.settings.enemyHero)
+        targets.push({
+          ...LAYOUT.aoe.zones[flip ? 'friendlyHero' : 'enemyHero'].position,
+          kind: 'hero'
+        })
+      if (this.settings.friendlyHero)
+        targets.push({
+          ...LAYOUT.aoe.zones[flip ? 'enemyHero' : 'friendlyHero'].position,
+          kind: 'hero'
+        })
+      this.fireEffect = new FireAoeEffect(this.fireResources, {
+        area: board
+          ? {
+              coverage:
+                board === 'bothBoards'
+                  ? 'full'
+                  : board === 'enemyBoard'
+                    ? 'opponent'
+                    : 'friendly',
+              placement: LAYOUT.aoe.blasts[board]
+            }
+          : undefined,
+        targets,
+        tuning: template.tuning.fire,
+        intensity: template.tuning.intensity
+      })
+      this.addChild(this.fireEffect.container)
+      for (const target of targets)
+        this.fireTargets
+          .circle(target.x, target.y, 24)
+          .stroke({ color: 0xffe2a0, width: 2, alpha: 0.8 })
+      this.fireEffect.update(0)
+    }
     this.elapsedMS = 0
     this.loopDelayMS = -1
     this.playing = true
     this.setEffectVisibility()
     this.refreshControls()
-  }
-
-  private applySettings(): void {
-    const palette = {
-      flameColor: this.settings.flameColor,
-      coreColor: this.settings.coreColor
-    }
-    this.missileShader.setPalette({
-      ...palette,
-      headSurfaceColor: this.settings.headSurfaceColor,
-      edgeColor: this.settings.edgeColor,
-      foldColor: this.settings.foldColor,
-      glowColor: this.settings.glowColor,
-      sootColor: this.settings.sootColor
-    })
-    this.missileShader.setTuning({
-      intensity: this.settings.intensity,
-      noiseScale: this.settings.noiseScale,
-      flowSpeed: this.settings.flowSpeed,
-      turbulence: this.settings.turbulence,
-      width: this.settings.missileWidth,
-      trailLength: this.settings.missileLength,
-      glow: this.settings.missileGlow,
-      headStartSize: this.settings.headStartSize,
-      headEndSize: this.settings.headEndSize,
-      headGrowthMs: this.settings.headGrowthMs,
-      durationMs: this.settings.durationMs
-    })
-    this.aoeShader.setPalette({
-      ...palette,
-      sootColor: this.settings.sootColor,
-      redColor: this.settings.edgeColor
-    })
-    this.aoeImpactShader.setPalette({
-      ...palette,
-      sootColor: this.settings.sootColor,
-      redColor: this.settings.edgeColor
-    })
-    this.aoeFriendlyImpactShader.setPalette({
-      ...palette,
-      sootColor: this.settings.sootColor,
-      redColor: this.settings.edgeColor
-    })
-    const aoeTuning = {
-      intensity: this.settings.intensity,
-      noiseScale: this.settings.noiseScale,
-      flowSpeed: this.settings.flowSpeed,
-      turbulence: this.settings.turbulence,
-      radius: this.settings.aoeRadius,
-      edgeSoftness: this.settings.aoeEdgeSoftness,
-      shape: this.settings.aoeShape
-    }
-    this.aoeShader.setTuning(aoeTuning)
-    this.aoeImpactShader.setTuning({ ...aoeTuning, shape: 'radial', impact: true })
-    this.aoeFriendlyImpactShader.setTuning({
-      ...aoeTuning,
-      shape: 'radial',
-      impact: true
-    })
-    const source = LAYOUT.missile.source.position
-    const target = LAYOUT.missile.target.position
-    const margin = Math.max(
-      LAYOUT.missile.margin,
-      Math.max(this.settings.headStartSize ?? 28, this.settings.headEndSize ?? 116) *
-        0.8 +
-        24
-    )
-    const left = Math.min(source.x, target.x) - margin
-    const top = Math.min(source.y, target.y) - margin
-    const width = Math.abs(target.x - source.x) + margin * 2
-    const height = Math.abs(target.y - source.y) + margin * 2
-    this.missileGroup.position.set(left, top)
-    this.missileSprite.width = width
-    this.missileSprite.height = height
-    this.missileShader.setGeometry(
-      { width, height },
-      { x: source.x - left, y: source.y - top },
-      { x: target.x - left, y: target.y - top }
-    )
-    for (const particle of this.missileParticles)
-      particle.tint = colorValue(this.settings.flameColor)
-    for (const zone of this.aoeZones)
-      zone.motes.setPalette(
-        this.selectedTemplate?.family === 'aoe' ? this.selectedTemplate.tuning : palette
-      )
-    this.drawAoeGuide()
   }
 
   private setEffectVisibility(): void {
@@ -599,83 +461,17 @@ export class VfxLab extends Container {
       missile && !!this.selectedTemplate && this.settings.showTargetGuides
     this.missileTarget.visible =
       missile && !!this.selectedTemplate && this.settings.showTargetGuides
-    this.aoeGroup.visible = !missile && !!this.selectedTemplate
-    this.areaGuide.visible =
+    this.fireTargets.visible =
       !missile && !!this.selectedTemplate && this.settings.showTargetGuides
   }
 
-  private updateMissile(progress: number): void {
-    const active = this.playing && this.selectedEffect === 'missile'
+  private updateMissile(): void {
     this.missileGroup.visible =
       this.selectedEffect === 'missile' && !!this.selectedTemplate
-    this.missileSprite.visible = active
-    // Time is local to each cast, so replaying the reference is deterministic.
-    this.missileShader.setFrame(this.elapsedMS / 1000, active ? progress : 1)
-    const target = LAYOUT.missile.target.position
-    const post = clamp01(
-      (progress - MISSILE_VFX_TIMING.arrival) / (1 - MISSILE_VFX_TIMING.arrival)
-    )
-    for (let index = 0; index < this.missileParticles.length; index++) {
-      const particle = this.missileParticles[index]!
-      if (!active || progress < MISSILE_VFX_TIMING.arrival) {
-        particle.alpha = 0
-        continue
-      }
-      const angle = index * 2.39996
-      const reach = (20 + ((index * 37) % 85)) * Math.sqrt(post)
-      particle.position.set(
-        target.x - this.missileGroup.x + Math.cos(angle) * reach,
-        target.y - this.missileGroup.y + Math.sin(angle) * reach * 0.65 - post * 75
-      )
-      particle.alpha = Math.sin(post * Math.PI) * (1 - smoothstep(0.6, 1, post)) * 0.85
-      particle.width = 3 + (index % 4)
-      particle.height = particle.width * (1.0 + post)
-      particle.rotation = angle
-    }
+    this.missileEffect?.update(this.elapsedMS / 1000)
   }
 
-  private updateAoe(progress: number): void {
-    const active = this.playing && this.selectedEffect === 'aoe'
-    this.aoeGroup.visible = this.selectedEffect === 'aoe' && !!this.selectedTemplate
-    // Match combat's cast-local clock so idle time cannot change hero replay.
-    const effectSeconds = (progress * this.settings.durationMs) / 1000
-    this.aoeShader.setFrame(effectSeconds, active ? progress : 1)
-    this.aoeImpactShader.setFrame(effectSeconds + 1.7, active ? progress : 1)
-    this.aoeFriendlyImpactShader.setFrame(effectSeconds + 1.7, active ? progress : 1)
-    this.areaGuide.visible =
-      this.selectedEffect === 'aoe' &&
-      !!this.selectedTemplate &&
-      this.settings.showTargetGuides
-    const areas = getAoePreviewAreas(this.settings)
-    for (const zone of this.aoeZones) {
-      zone.group.visible = areas.includes(zone.id)
-      zone.sprite.visible = active
-      zone.motes.update(
-        active ? progress : 1,
-        this.settings.aoeRadius,
-        this.settings.intensity
-      )
-    }
-  }
-
-  private drawAoeGuide(): void {
-    this.areaGuide.clear()
-    for (const [index, { key: id }] of AOE_ZONES.entries()) {
-      const zone = LAYOUT.aoe.zones[id]
-      const enabled = this.settings[id]
-      const color = enabled ? 0xffcd81 : 0x9faebf
-      this.areaGuide
-        .roundRect(
-          zone.position.x - zone.size.width / 2,
-          zone.position.y - zone.size.height / 2,
-          zone.size.width,
-          zone.size.height,
-          18
-        )
-        .fill({ color, alpha: enabled ? 0.035 : 0.015 })
-        .stroke({ color, alpha: enabled ? 0.55 : 0.18, width: enabled ? 2 : 1 })
-      this.zoneLabels[index]!.alpha = enabled ? 0.95 : 0.4
-      this.zoneLabels[index]!.visible = this.settings.showTargetGuides
-    }
+  private updateAoe(): void {
+    this.fireEffect?.update(this.elapsedMS / 1000)
   }
 }

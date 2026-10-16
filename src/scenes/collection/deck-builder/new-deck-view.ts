@@ -1,3 +1,4 @@
+import type { PlayerStatsStore } from '../../../application/contracts/player-stats-store'
 import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
 import { Button } from '../../../visual-components/controls/button'
@@ -12,6 +13,7 @@ import type { RendererLogger } from '../../../application/contracts/logger'
 import { AnimationScope } from '../../../visual-components/animation/animations'
 import { AssetScope } from '../../../visual-components/assets/asset-scope'
 import { getDeckHeroTexture } from '../../../visual-components/assets/hero-assets'
+import { HeroPortrait } from '../../../visual-components/hero-portrait'
 import type { DeckStore } from '../../../application/contracts/deck-store'
 import { NEW_DECK_FRAME_ASSET_KEYS } from '../../../visual-components/assets/deck-frames'
 import { NEW_DECK_LAYOUT } from './new-deck-layout'
@@ -41,7 +43,7 @@ export class NewDeckView extends Container {
   private selectionLayer!: Container
   private selectionContent!: Container
   private selectionBackground!: Sprite
-  private heroPortrait!: Sprite
+  private heroPortrait!: HeroPortrait
   private heroName!: Text
   private classButtons: Button[] = []
   private readonly classOutlines: AnimatedOutline[] = []
@@ -61,7 +63,8 @@ export class NewDeckView extends Container {
       info: () => undefined,
       warn: () => undefined,
       error: () => undefined
-    }
+    },
+    private readonly playerStats?: PlayerStatsStore
   ) {
     super()
     this.deckStore = deckStore
@@ -73,6 +76,7 @@ export class NewDeckView extends Container {
   }
 
   async mount(): Promise<void> {
+    await this.playerStats?.load()
     const assets = await this.assetScope.acquire<CollectionAssets>(
       ASSET_BUNDLE_IDS.collection
     )
@@ -116,7 +120,7 @@ export class NewDeckView extends Container {
     this.selectionContent.addChild(this.selectionBackground)
     this.setSelectionContentY(GAME_HEIGHT)
 
-    this.heroPortrait = new Sprite(Texture.EMPTY)
+    this.heroPortrait = new HeroPortrait(Texture.EMPTY)
     applyAnchoredPlacement(this.heroPortrait, NEW_DECK_LAYOUT.heroPortrait)
     this.heroPortrait.visible = false
     this.heroPortrait.eventMode = 'none'
@@ -141,7 +145,8 @@ export class NewDeckView extends Container {
       if (!hero) continue
       const portraitTexture = getDeckHeroTexture(
         this.deckPresentationAssets,
-        hero.presentationAssetKey
+        hero.presentationAssetKey,
+        this.playerStats
       )
       const button = new Button(portraitTexture, {
         pressedScale: 1,
@@ -160,6 +165,12 @@ export class NewDeckView extends Container {
           portraitSize.height / portraitTexture.height
         )
       )
+      const portrait = new HeroPortrait(portraitTexture)
+      portrait.anchor.copyFrom(button.sprite.anchor)
+      portrait.position.copyFrom(button.sprite.position)
+      portrait.scale.copyFrom(button.sprite.scale)
+      button.sprite.visible = false
+      button.content.addChild(portrait)
       // Keep the portrait visible when its selection outline is disabled.
       const outlineTarget = new Sprite(portraitTexture)
       outlineTarget.label = `new-deck.class-outline.${heroClass}`
@@ -273,7 +284,8 @@ export class NewDeckView extends Container {
     this.selectedHero = hero
     this.heroPortrait.texture = getDeckHeroTexture(
       this.deckPresentationAssets,
-      hero.presentationAssetKey
+      hero.presentationAssetKey,
+      this.playerStats
     )
     this.heroPortrait.visible = true
     this.heroName.text = hero.displayName

@@ -72,6 +72,20 @@ export function parseCommand(value: unknown): OpeningMatchCommand | null {
     return { type: 'end-turn', participantId: value.participantId as PlayerId }
   }
 
+  if (value.type === 'activate-board-object') {
+    if (
+      typeof value.boardObjectInstanceId !== 'string' ||
+      typeof value.cardInstanceId !== 'string'
+    )
+      return null
+    return {
+      type: 'activate-board-object',
+      participantId: value.participantId as PlayerId,
+      boardObjectInstanceId: value.boardObjectInstanceId,
+      cardInstanceId: value.cardInstanceId
+    }
+  }
+
   if (value.type === 'use-hero-power') {
     const target =
       value.target === undefined ? undefined : parseHeroPowerTarget(value.target)

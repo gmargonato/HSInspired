@@ -217,6 +217,7 @@ export function invalidatesExpertContinuation(
       event.type === 'secret-resolution-completed' ||
       (event.type === 'effect-resolved' &&
         (event.action.includes('random') ||
+          event.action === 'activate-board-object' ||
           hasRandomEffect(
             event.sourceCardId
               ? CARD_CATALOG.get(event.sourceCardId)?.effects

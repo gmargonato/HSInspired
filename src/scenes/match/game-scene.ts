@@ -284,6 +284,7 @@ export class GameScene extends Scene {
         ASSET_BUNDLE_IDS.deckPresentation
       )
     const heroAssets = { ...deckPresentationAssets, ...gameAssets }
+    await this.playerStatsStore.load()
     this.logger?.info('[GameScene] hero assets acquired')
     await this.reportLoading(0.26, 'Loading card frames')
     const cardAssets = await this.assetScope.acquire<Record<string, Texture>>(
@@ -364,6 +365,7 @@ export class GameScene extends Scene {
       decks,
       gameAssets,
       heroAssets,
+      playerStats: this.playerStatsStore,
       renderer: this.appInstance.renderer,
       cursor: this.sceneManager.cursor,
       logger: aiLogger,
@@ -503,6 +505,7 @@ export class GameScene extends Scene {
 
       const classId = HERO_CATALOG.require(human.heroId).classId
       await this.playerStatsStore.recordWin(classId)
+      this.view?.refreshHeroPremiumAppearance()
     } catch (error) {
       this.logger?.warn('Failed to save the match result.', error)
     }

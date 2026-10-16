@@ -3,6 +3,7 @@ import { ASSET_BUNDLE_IDS } from '../visual-components/assets'
 import { AssetScope } from '../visual-components/assets/asset-scope'
 import { configureCardTexture } from '../visual-components/assets/card-asset-resolver'
 import { DECK_HERO_ASSET_SOURCES } from '../visual-components/assets/hero-assets'
+import { premiumHeroPortrait } from '../visual-components/assets/hero-portrait-textures'
 import {
   prepareMenuEffects,
   prepareMenuOutline,
@@ -90,6 +91,11 @@ export class MenuStartupResources {
           // New Deck uses these same textures, so clicks reuse the retained fields.
           for (const key of Object.keys(DECK_HERO_ASSET_SOURCES)) {
             this.prepareOutline(renderer, assets[key], 'deck-frame')
+            this.prepareOutline(
+              renderer,
+              premiumHeroPortrait(assets[key]),
+              'deck-frame'
+            )
           }
         } else if (bundle === ASSET_BUNDLE_IDS.collection) {
           this.prepareOutline(renderer, assets.expansionToggle, 'expansion-toggle')

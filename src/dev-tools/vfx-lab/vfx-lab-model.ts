@@ -1,8 +1,11 @@
 import type { VfxAoeZone } from '../../desktop/contracts/ipc/vfx-templates'
 import type { VfxTemplate } from '../../desktop/contracts/ipc/vfx-templates'
+import {
+  DEFAULT_FIRE_AOE_TUNING,
+  DEFAULT_FIRE_AOE_DYNAMICS
+} from '../../desktop/contracts/ipc/vfx-templates'
 
 export type VfxEffectId = 'missile' | 'aoe'
-export type AoeShape = 'radial' | 'wide'
 
 export const AOE_ZONES = [
   { key: 'enemyBoard', label: 'Enemy board' },
@@ -11,7 +14,6 @@ export const AOE_ZONES = [
   { key: 'friendlyHero', label: 'Friendly hero' }
 ] as const
 export type AoeZoneId = VfxAoeZone
-export type AoePreviewAreaId = AoeZoneId | 'bothBoards'
 
 export interface VfxLabSettings {
   flameColor: string
@@ -27,17 +29,45 @@ export interface VfxLabSettings {
   glowColor: string
   sootColor: string
   missileGlow: number
+  missileOriginalColors: boolean
+  missileOriginalColorsAuthored: boolean
   headStartSize: number
   headEndSize: number
   headGrowthMs: number
   missileLength: number
   missileWidth: number
-  aoeRedColorAuthored?: boolean
-  aoeSootColorAuthored?: boolean
   aoeImpactMs?: number
-  aoeRadius: number
-  aoeEdgeSoftness: number
-  aoeShape: AoeShape
+  fireDensity: number
+  fireParticleScale: number
+  fireMotion: number
+  fireRampIntensity: number
+  fireGlow: number
+  fireTimingScale: number
+  fireMinionImpacts: boolean
+  fireMinionImpactsAuthored: boolean
+  firePalette: 'original' | 'custom'
+  fireEdgeColor: string
+  fireFlameColor: string
+  fireCoreColor: string
+  fireGlowOverride: boolean
+  fireGlowColor: string
+  fireEmberOverride: boolean
+  fireEmberColor: string
+  fireImpactOverride: boolean
+  fireImpactColor: string
+  fireSmokeOverride: boolean
+  fireSmokeColor: string
+  fireSmokeOpacity: number
+  fireAppearanceAuthored: boolean
+  fireSmokeOpacityAuthored: boolean
+  fireDynamicsAuthored: boolean
+  fireTurbulence: number
+  fireSmokeAmount: number
+  fireSmokePersistence: number
+  fireEmberAmount: number
+  fireEmberPersistence: number
+  previewMinions: number
+  opponentCaster: boolean
   enemyBoard: boolean
   friendlyBoard: boolean
   enemyHero: boolean
@@ -53,25 +83,56 @@ const VFX_DEFAULT_MISSILE_LENGTH = 550
 export const DEFAULT_VFX_LAB_SETTINGS: VfxLabSettings = {
   flameColor: '#ff4b08',
   coreColor: '#ffd13b',
-  intensity: 1.7,
-  noiseScale: 2.8,
-  flowSpeed: 1.2,
-  turbulence: 0.85,
-  durationMs: 1800,
+  intensity: 1,
+  noiseScale: 1,
+  flowSpeed: 1,
+  turbulence: 0,
+  durationMs: 400,
   headSurfaceColor: '#d90c00',
   edgeColor: '#ff6500',
   foldColor: '#d84a08',
   glowColor: '#ffb02e',
   sootColor: '#1f130b',
-  missileGlow: 0.8,
-  headStartSize: 28,
-  headEndSize: 116,
-  headGrowthMs: 350,
+  missileGlow: 1,
+  missileOriginalColors: true,
+  missileOriginalColorsAuthored: false,
+  headStartSize: 62,
+  headEndSize: 62,
+  headGrowthMs: 0,
   missileLength: VFX_DEFAULT_MISSILE_LENGTH,
   missileWidth: 0.32,
-  aoeRadius: 0.92,
-  aoeEdgeSoftness: 0.055,
-  aoeShape: 'wide',
+  aoeImpactMs: 500,
+  fireDensity: DEFAULT_FIRE_AOE_TUNING.density,
+  fireParticleScale: DEFAULT_FIRE_AOE_TUNING.particleScale,
+  fireMotion: DEFAULT_FIRE_AOE_TUNING.motion,
+  fireRampIntensity: DEFAULT_FIRE_AOE_TUNING.rampIntensity,
+  fireGlow: DEFAULT_FIRE_AOE_TUNING.glow,
+  fireTimingScale: DEFAULT_FIRE_AOE_TUNING.timingScale,
+  fireMinionImpacts: false,
+  fireMinionImpactsAuthored: false,
+  firePalette: 'original',
+  fireEdgeColor: '#a51b08',
+  fireFlameColor: '#ff790f',
+  fireCoreColor: '#fff4c2',
+  fireGlowOverride: false,
+  fireGlowColor: '#ff790f',
+  fireEmberOverride: false,
+  fireEmberColor: '#ff790f',
+  fireImpactOverride: false,
+  fireImpactColor: '#ff790f',
+  fireSmokeOverride: false,
+  fireSmokeColor: '#0b0b0b',
+  fireSmokeOpacity: 1,
+  fireAppearanceAuthored: false,
+  fireSmokeOpacityAuthored: false,
+  fireDynamicsAuthored: false,
+  fireTurbulence: DEFAULT_FIRE_AOE_DYNAMICS.turbulence,
+  fireSmokeAmount: DEFAULT_FIRE_AOE_DYNAMICS.smokeAmount,
+  fireSmokePersistence: DEFAULT_FIRE_AOE_DYNAMICS.smokePersistence,
+  fireEmberAmount: DEFAULT_FIRE_AOE_DYNAMICS.emberAmount,
+  fireEmberPersistence: DEFAULT_FIRE_AOE_DYNAMICS.emberPersistence,
+  previewMinions: 3,
+  opponentCaster: false,
   enemyBoard: true,
   friendlyBoard: false,
   enemyHero: false,
@@ -79,29 +140,19 @@ export const DEFAULT_VFX_LAB_SETTINGS: VfxLabSettings = {
   showTargetGuides: false
 }
 
-/** Adjacent board rows share one blast; heroes remain separately targetable. */
-export function getAoePreviewAreas(
-  settings: VfxLabSettings
-): readonly AoePreviewAreaId[] {
-  const areas: AoePreviewAreaId[] = []
-  if (settings.enemyBoard && settings.friendlyBoard) areas.push('bothBoards')
-  else if (settings.enemyBoard) areas.push('enemyBoard')
-  else if (settings.friendlyBoard) areas.push('friendlyBoard')
-  if (settings.enemyHero) areas.push('enemyHero')
-  if (settings.friendlyHero) areas.push('friendlyHero')
-  return areas
-}
-
 export function settingsFromTemplate(
   template: VfxTemplate,
   showTargetGuides = false
 ): VfxLabSettings {
-  const settings = {
+  const settings: VfxLabSettings = {
     ...DEFAULT_VFX_LAB_SETTINGS,
     ...template.tuning,
     showTargetGuides
   }
   if (template.family === 'missile') {
+    settings.missileOriginalColors = template.tuning.useOriginalColors ?? true
+    settings.missileOriginalColorsAuthored =
+      template.tuning.useOriginalColors !== undefined
     settings.edgeColor = template.tuning.edgeColor ?? template.tuning.flameColor
     settings.headSurfaceColor = template.tuning.headSurfaceColor ?? settings.edgeColor
     settings.foldColor = template.tuning.foldColor ?? settings.edgeColor
@@ -109,10 +160,51 @@ export function settingsFromTemplate(
     settings.sootColor = template.tuning.sootColor ?? DEFAULT_VFX_LAB_SETTINGS.sootColor
   }
   if (template.family === 'aoe') {
+    const fire = template.tuning.fire
+    settings.fireDensity = fire.density
+    settings.fireParticleScale = fire.particleScale
+    settings.fireMotion = fire.motion
+    settings.fireRampIntensity = fire.rampIntensity
+    settings.fireGlow = fire.glow
+    settings.fireTimingScale = fire.timingScale
+    settings.fireMinionImpacts = fire.minionImpacts ?? false
+    settings.fireMinionImpactsAuthored = fire.minionImpacts !== undefined
+    const appearance = fire.appearance
+    settings.fireAppearanceAuthored = appearance !== undefined
+    settings.firePalette = appearance?.palette ? 'custom' : 'original'
+    if (appearance?.palette) {
+      settings.fireEdgeColor = appearance.palette.edge
+      settings.fireFlameColor = appearance.palette.flame
+      settings.fireCoreColor = appearance.palette.core
+    }
+    settings.fireGlowOverride = appearance?.glowColor !== undefined
+    settings.fireGlowColor =
+      appearance?.glowColor ??
+      appearance?.palette?.flame ??
+      DEFAULT_VFX_LAB_SETTINGS.fireGlowColor
+    settings.fireEmberOverride = appearance?.emberColor !== undefined
+    settings.fireEmberColor =
+      appearance?.emberColor ??
+      appearance?.palette?.flame ??
+      DEFAULT_VFX_LAB_SETTINGS.fireEmberColor
+    settings.fireImpactOverride = appearance?.impactColor !== undefined
+    settings.fireImpactColor =
+      appearance?.impactColor ??
+      appearance?.palette?.flame ??
+      DEFAULT_VFX_LAB_SETTINGS.fireImpactColor
+    settings.fireSmokeOverride = appearance?.smokeColor !== undefined
+    settings.fireSmokeColor =
+      appearance?.smokeColor ?? DEFAULT_VFX_LAB_SETTINGS.fireSmokeColor
+    settings.fireSmokeOpacity = appearance?.smokeOpacity ?? 1
+    settings.fireSmokeOpacityAuthored = appearance?.smokeOpacity !== undefined
+    const dynamics = fire.dynamics ?? DEFAULT_FIRE_AOE_DYNAMICS
+    settings.fireDynamicsAuthored = fire.dynamics !== undefined
+    settings.fireTurbulence = dynamics.turbulence
+    settings.fireSmokeAmount = dynamics.smokeAmount
+    settings.fireSmokePersistence = dynamics.smokePersistence
+    settings.fireEmberAmount = dynamics.emberAmount
+    settings.fireEmberPersistence = dynamics.emberPersistence
     settings.aoeImpactMs = template.tuning.impactMs
-    settings.edgeColor = template.tuning.redColor ?? template.tuning.flameColor
-    settings.aoeRedColorAuthored = template.tuning.redColor !== undefined
-    settings.aoeSootColorAuthored = template.tuning.sootColor !== undefined
     for (const zone of AOE_ZONES) settings[zone.key] = template.zones.includes(zone.key)
   }
   return settings
@@ -158,6 +250,9 @@ export function createTemplateFromSettings(
         glowColor: settings.glowColor,
         sootColor: settings.sootColor,
         missileGlow: settings.missileGlow,
+        ...(settings.missileOriginalColorsAuthored || !settings.missileOriginalColors
+          ? { useOriginalColors: settings.missileOriginalColors }
+          : {}),
         headStartSize: settings.headStartSize,
         headEndSize: settings.headEndSize,
         headGrowthMs: settings.headGrowthMs,
@@ -165,26 +260,60 @@ export function createTemplateFromSettings(
         missileWidth: settings.missileWidth
       }
     }
+  const appearance = {
+    ...(settings.firePalette === 'custom'
+      ? {
+          palette: {
+            edge: settings.fireEdgeColor,
+            flame: settings.fireFlameColor,
+            core: settings.fireCoreColor
+          }
+        }
+      : {}),
+    ...(settings.fireGlowOverride ? { glowColor: settings.fireGlowColor } : {}),
+    ...(settings.fireEmberOverride ? { emberColor: settings.fireEmberColor } : {}),
+    ...(settings.fireImpactOverride ? { impactColor: settings.fireImpactColor } : {}),
+    ...(settings.fireSmokeOverride ? { smokeColor: settings.fireSmokeColor } : {}),
+    ...(settings.fireSmokeOpacityAuthored || settings.fireSmokeOpacity !== 1
+      ? { smokeOpacity: settings.fireSmokeOpacity }
+      : {})
+  }
+  const dynamics = {
+    turbulence: settings.fireTurbulence,
+    smokeAmount: settings.fireSmokeAmount,
+    smokePersistence: settings.fireSmokePersistence,
+    emberAmount: settings.fireEmberAmount,
+    emberPersistence: settings.fireEmberPersistence
+  }
+  const hasDynamics =
+    settings.fireDynamicsAuthored ||
+    Object.entries(dynamics).some(
+      ([key, value]) =>
+        value !== DEFAULT_FIRE_AOE_DYNAMICS[key as keyof typeof dynamics]
+    )
   return {
     id,
     name,
     family,
     zones: AOE_ZONES.filter(({ key }) => settings[key]).map(({ key }) => key),
     tuning: {
-      ...common,
-      ...(settings.aoeSootColorAuthored ||
-      settings.sootColor !== DEFAULT_VFX_LAB_SETTINGS.sootColor
-        ? { sootColor: settings.sootColor }
-        : {}),
-      ...(settings.aoeImpactMs !== undefined
-        ? { impactMs: Math.min(settings.aoeImpactMs, settings.durationMs) }
-        : {}),
-      ...(settings.aoeRedColorAuthored || settings.edgeColor !== settings.flameColor
-        ? { redColor: settings.edgeColor }
-        : {}),
-      aoeRadius: settings.aoeRadius,
-      aoeEdgeSoftness: settings.aoeEdgeSoftness,
-      aoeShape: settings.aoeShape
+      intensity: settings.intensity,
+      fire: {
+        density: settings.fireDensity,
+        particleScale: settings.fireParticleScale,
+        motion: settings.fireMotion,
+        rampIntensity: settings.fireRampIntensity,
+        glow: settings.fireGlow,
+        timingScale: settings.fireTimingScale,
+        ...(settings.fireMinionImpactsAuthored || settings.fireMinionImpacts
+          ? { minionImpacts: settings.fireMinionImpacts }
+          : {}),
+        ...(settings.fireAppearanceAuthored || Object.keys(appearance).length
+          ? { appearance }
+          : {}),
+        ...(hasDynamics ? { dynamics } : {})
+      },
+      ...(settings.aoeImpactMs !== undefined ? { impactMs: settings.aoeImpactMs } : {})
     }
   }
 }

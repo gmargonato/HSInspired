@@ -1,3 +1,4 @@
+import type { PlayerStatsStore } from '../../../application/contracts/player-stats-store'
 import type { AppLogger, DialogService } from '../../../application/services'
 import { NewDeckView } from './new-deck-view'
 import type { DeckStore } from '../../../application/contracts/deck-store'
@@ -7,12 +8,18 @@ import { Scene } from '../../../visual-components/lifecycle/scene'
 export class NewDeckScene extends Scene {
   private readonly view: NewDeckView
 
-  constructor(deckStore: DeckStore, logger?: AppLogger, dialogs?: DialogService) {
+  constructor(
+    deckStore: DeckStore,
+    logger?: AppLogger,
+    dialogs?: DialogService,
+    playerStats?: PlayerStatsStore
+  ) {
     super()
     this.view = new NewDeckView(
       deckStore,
       { onError: (message) => dialogs?.error(message) },
-      logger
+      logger,
+      playerStats
     )
   }
 

@@ -16,13 +16,15 @@ import {
   type HandCardTransform,
   type HandPointer,
   handHoverHitBounds,
+  handHoverTarget,
   layoutHand,
   resolveHandHover
 } from './hand-layout'
 import { isHandOwnedSlot } from './hand-play-gesture'
 import { GameHandDrag } from './game-hand-drag'
 import {
-  OPENING_TIMING,
+  HAND_FOCUS_TIMING,
+  handEaseOutExpo,
   RESOLUTION_TIMING
 } from '../presentation/game-presentation-timing'
 import { completeTimeline } from '../presentation/game-presentation-animation'
@@ -276,7 +278,7 @@ export class GameHandView {
     readonly delayedInstanceId?: string
     readonly preserveHover?: boolean
   }): Promise<void> {
-    const transforms = layoutHand(this.handEntries.length, DEFAULT_HAND_LAYOUT, null)
+    const transforms = layoutHand(this.handEntries.length, DEFAULT_HAND_LAYOUT)
     this.cachedRestTransforms = transforms
     this.hoverRefreshPending = true
     await Promise.all(
@@ -297,7 +299,6 @@ export class GameHandView {
           this.animateHoverTarget(
             entry.slot,
             this.computeHoverTarget(transform, index, hoveredIndex),
-            entry.displaced,
             opts.positionDuration,
             opts.scaleDuration
           )
@@ -335,20 +336,12 @@ export class GameHandView {
       if (!shouldDisplace && !entry.displaced) return
       if (shouldDisplace && entry.displaced) return
       const target = this.computeHoverTarget(entry.restTransform, index, hoveredIndex)
-      if (shouldDisplace) {
-        // Appear enlarged just below the final hover position, then settle upward.
-        entry.slot.position.set(
-          target.x,
-          target.y + DEFAULT_HAND_LAYOUT.hoverSettleDistance
-        )
-        entry.slot.rotation = target.rotation
-      }
-      this.animateHoverTarget(
-        entry.slot,
-        target,
-        shouldDisplace,
-        shouldDisplace ? OPENING_TIMING.hoverSettle : OPENING_TIMING.hover
-      )
+      // Focus snaps scale/rotation and vertical pose before moving. Keep the
+      // currently displayed X, including when focus interrupts a hand reflow.
+      const startY = shouldDisplace
+        ? target.y + DEFAULT_HAND_LAYOUT.hoverSettleDistance
+        : target.y - DEFAULT_HAND_LAYOUT.hoverReturnLift
+      this.animateHoverTarget(entry.slot, target, HAND_FOCUS_TIMING.move, 0, startY)
       entry.displaced = shouldDisplace
     })
     this.drag.prepare(this.localHoveredSlot)
@@ -361,42 +354,47 @@ export class GameHandView {
     hoveredIndex: number
   ): HandCardTransform {
     if (hoveredIndex < 0 || index !== hoveredIndex) return rest
-    return {
-      x: rest.x,
-      y: rest.y - DEFAULT_HAND_LAYOUT.hoverLift,
-      rotation: 0,
-      scale: DEFAULT_HAND_LAYOUT.hoverScale,
-      zIndex: ACTIVE_HAND_CARD_DEPTH
-    }
+    return handHoverTarget(rest)
   }
 
   private animateHoverTarget(
     slot: GameCardSlot,
     target: HandCardTransform,
-    isHovered: boolean,
-    positionDuration = isHovered ? 0 : OPENING_TIMING.hover,
-    scaleDuration = isHovered ? 0 : OPENING_TIMING.hover
+    positionDuration: number,
+    scaleDuration: number,
+    startY?: number
   ): void {
     if (slot.destroyed) return
     // Also cancel reflow tweens that have not started yet; overwrite:auto
     // only resolves active conflicts and can otherwise lower a new hover.
     gsap.killTweensOf(slot, 'x,y,rotation')
     gsap.killTweensOf(slot.scale, 'x,y')
+    if (startY !== undefined) slot.y = startY
     this.animations.to(slot, {
       x: target.x,
       y: target.y,
-      rotation: target.rotation,
       duration: positionDuration,
-      ease: 'power2.out',
+      ease: handEaseOutExpo,
       overwrite: 'auto'
     })
-    this.animations.to(slot.scale, {
-      x: target.scale,
-      y: target.scale,
-      duration: scaleDuration,
-      ease: 'power2.out',
-      overwrite: 'auto'
-    })
+    if (scaleDuration === 0) {
+      slot.rotation = target.rotation
+      slot.scale.set(target.scale)
+    } else {
+      this.animations.to(slot, {
+        rotation: target.rotation,
+        duration: scaleDuration,
+        ease: handEaseOutExpo,
+        overwrite: 'auto'
+      })
+      this.animations.to(slot.scale, {
+        x: target.scale,
+        y: target.scale,
+        duration: scaleDuration,
+        ease: handEaseOutExpo,
+        overwrite: 'auto'
+      })
+    }
     slot.zIndex = target.zIndex
   }
 
@@ -429,12 +427,21 @@ export class GameHandView {
     timeline.to(slot, {
       x: transform.x,
       y: transform.y,
-      rotation: transform.rotation,
       alpha: 1,
       duration: positionDuration,
       delay,
-      ease: 'power2.out'
+      ease: handEaseOutExpo
     })
+    timeline.to(
+      slot,
+      {
+        rotation: transform.rotation,
+        duration: scaleDuration,
+        delay,
+        ease: handEaseOutExpo
+      },
+      0
+    )
     timeline.to(
       slot.scale,
       {
@@ -442,7 +449,7 @@ export class GameHandView {
         y: transform.scale,
         duration: scaleDuration,
         delay,
-        ease: 'power2.out'
+        ease: handEaseOutExpo
       },
       0
     )
@@ -453,7 +460,7 @@ export class GameHandView {
         y: 0,
         duration: positionDuration,
         delay,
-        ease: 'power2.out'
+        ease: handEaseOutExpo
       },
       0
     )

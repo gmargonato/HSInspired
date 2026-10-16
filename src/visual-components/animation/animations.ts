@@ -104,7 +104,13 @@ export class AnimationScope implements Animations {
 
   private prune(): void {
     for (const item of this.tracked) {
-      if (!item.animation.isActive() && item.animation.progress() >= 1) {
+      // GSAP detaches killed animations from their parent without completing
+      // them. Release those too, including direct killTweensOf/overwrite calls.
+      // Paused and delayed animations still have a parent and remain owned.
+      if (
+        !item.animation.parent ||
+        (!item.animation.isActive() && item.animation.progress() >= 1)
+      ) {
         this.tracked.delete(item)
       }
     }

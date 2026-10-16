@@ -27,6 +27,8 @@ import {
 } from '../../../visual-components/layout'
 import { Actor } from '../../../visual-components/lifecycle/actor'
 import type { HeroAssets, HeroPowerAssetKey } from '../../../visual-components/assets'
+import { HeroPortrait } from '../../../visual-components/hero-portrait'
+import { premiumHeroPortrait } from '../../../visual-components/assets/hero-portrait-textures'
 import { CardAssetResolver } from '../../../visual-components/assets/card-asset-resolver'
 import {
   MATCH_HISTORY_LAYOUT,
@@ -68,7 +70,7 @@ export interface MatchHistoryTextures {
 
 interface RailSlot {
   readonly container: Container
-  readonly artwork: Sprite
+  readonly artwork: HeroPortrait
   readonly frame: Sprite
   entry?: MatchHistoryEntry
   generation: number
@@ -232,7 +234,7 @@ export class MatchHistoryView extends Actor {
     container.position.y = index * MATCH_HISTORY_LAYOUT.rail.gap
     container.eventMode = 'none'
     container.visible = false
-    const artwork = new Sprite(this.textures.secretThumb)
+    const artwork = new HeroPortrait(this.textures.secretThumb)
     artwork.label = 'game.history.thumbnail-' + index
     const mask = new Graphics().roundRect(9, 9, 57, 57, 5).fill(0xffffff)
     mask.label = 'game.history.thumbnail-mask-' + index
@@ -332,7 +334,7 @@ export class MatchHistoryView extends Actor {
     else if (entry.source.heroPowerId)
       this.showThumbnail(slot.artwork, this.heroPowerTexture(entry.source.heroPowerId))
     else if (entry.source.heroId)
-      this.showThumbnail(slot.artwork, this.heroTexture(entry.source.heroId))
+      this.showThumbnail(slot.artwork, this.heroTexture(entry.source))
     else if (entry.source.cardId)
       void this.resolver
         .loadArtwork(entry.source.cardId)
@@ -344,7 +346,7 @@ export class MatchHistoryView extends Actor {
           /* Keep the explicit placeholder if artwork fails. */
         })
   }
-  private showThumbnail(sprite: Sprite, texture: Texture): void {
+  private showThumbnail(sprite: HeroPortrait, texture: Texture): void {
     const size = MATCH_HISTORY_LAYOUT.rail.artworkSize
     sprite.texture = texture
     sprite.tint = 0xffffff
@@ -443,7 +445,8 @@ export class MatchHistoryView extends Actor {
             definition,
             entry.source.currentCost ?? definition.cost,
             this.heroPowerTexture(entry.source.heroPowerId),
-            this.textures.heroPowerCardFrame
+            this.textures.heroPowerCardFrame,
+            { premium: this.premiumFor(entry.source) }
           )
         )
       } else {
@@ -478,8 +481,12 @@ export class MatchHistoryView extends Actor {
       })
     )
   }
-  private heroTexture(heroId: NonNullable<HistoryEntitySnapshot['heroId']>): Texture {
-    return this.textures.heroFrames[HERO_CATALOG.require(heroId).presentationAssetKey]
+  private heroTexture(snapshot: HistoryEntitySnapshot): Texture {
+    const texture =
+      this.textures.heroFrames[
+        HERO_CATALOG.require(snapshot.heroId!).presentationAssetKey
+      ]
+    return this.premiumFor(snapshot) ? premiumHeroPortrait(texture) : texture
   }
   private heroPowerTexture(id: string): Texture {
     return this.textures.heroPowers[
@@ -506,13 +513,14 @@ export class MatchHistoryView extends Actor {
           definition,
           snapshot.currentCost ?? definition.cost,
           this.heroPowerTexture(snapshot.heroPowerId),
-          this.textures.heroPowerCardFrame
+          this.textures.heroPowerCardFrame,
+          { premium: this.premiumFor(snapshot) }
         )
       )
       return
     }
     if (snapshot.kind === 'hero' && snapshot.heroId) {
-      const portrait = new Sprite(this.heroTexture(snapshot.heroId))
+      const portrait = new HeroPortrait(this.heroTexture(snapshot))
       portrait.label = 'game.history.hero'
       applyAnchoredPlacement(portrait, HISTORY_CARD_DETAILS.hero)
       container.addChild(portrait)

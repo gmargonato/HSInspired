@@ -14,6 +14,7 @@ import { WindfuryEffect } from './windfury-effect'
 import { createHealthPulse } from './health-pulse'
 import { HERO_CANVAS, HERO_LAYOUT, HERO_SPELL_PLAY } from './hero-layout'
 import { attachShadow } from '../../../visual-components/effects/shadow-caster'
+import { HeroPortrait } from '../../../visual-components/hero-portrait'
 
 export interface HeroViewModel {
   readonly label: string
@@ -96,7 +97,7 @@ export class HeroView extends Container {
     { restingHeight: 0 }
   )
   private readonly windfury: WindfuryEffect
-  private readonly frame: Sprite
+  private readonly frame: HeroPortrait
   private readonly frozen: Sprite
   private readonly immune: Sprite
   private immuneVisible = false
@@ -134,7 +135,7 @@ export class HeroView extends Container {
     this.windfury.setEnabled(model.windfury ?? false)
     this.addChild(this.windfury.rear)
 
-    this.frame = new Sprite(textures.frame)
+    this.frame = new HeroPortrait(textures.frame)
     applyAnchoredPlacement(this.frame, HERO_LAYOUT.frame)
     this.frame.label = 'hero.frame'
     this.addChild(this.frame)
@@ -188,8 +189,8 @@ export class HeroView extends Container {
     this.armorGroup.visible = false
     this.addChild(this.armorGroup)
 
-    // Bake the physical portrait and badges once, then reuse the texture as the
-    // hero moves. The frame's alpha preserves its arched top and squared base.
+    // Snapshot the complete portrait and badges, not the hollow frame layer.
+    // Reuse that silhouette while the assembled hero moves.
     const surfaces = [this.frame, attack.badge, health.badge, armor.badge]
     this.shadow.silhouette = {
       revision: 0,
@@ -314,7 +315,7 @@ export class HeroView extends Container {
     portrait.label = 'hero.portrait-copy'
     portrait.pivot.set(HERO_CANVAS.width / 2, HERO_CANVAS.height / 2)
     portrait.eventMode = 'none'
-    const frame = new Sprite(this.frame.texture)
+    const frame = new HeroPortrait(this.frame.texture)
     frame.label = 'hero.portrait-copy.frame'
     applyAnchoredPlacement(frame, HERO_LAYOUT.frame)
     portrait.addChild(frame)
@@ -343,7 +344,7 @@ export class HeroView extends Container {
     this.armorGroup.visible = this.healthVisible && armor > 0
   }
 
-  /** Replaces the portrait frame while preserving the hero's board state. */
+  /** Replaces both portrait layers while preserving the hero's board state. */
   setFrame(texture: Texture): void {
     this.frame.texture = texture
     this.outlineProxy.texture = texture
@@ -351,7 +352,7 @@ export class HeroView extends Container {
     this.shadow.silhouette!.revision++
   }
 
-  /** Horizontally flips only the portrait frame, swapping identity edge-on. */
+  /** Flips the portrait assembly, swapping identity edge-on without flipping stats. */
   replaceFrame(texture: Texture): Promise<void> {
     const baseScaleX = this.frame.scale.x
     const timeline = this.animationScope.timeline()

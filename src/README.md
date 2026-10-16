@@ -84,6 +84,19 @@ holds their asset scope and GPU residency for the renderer lifetime, including
 shared card frames but excluding individual card artwork and match-only bundles.
 Only selectable hero portraits belong to `deck-presentation`; transformation
 portraits load with `game` and are combined with the menu portraits for matches.
+Hero artwork and the shared frame are assembled during bundle acquisition, before
+GPU uploads. `visual-components/hero-portrait-layout.ts` preserves the former
+358 x 410 canvas and each artwork crop. The former outer-shadow margin stays
+transparent; the supplied frame retains its inner shadow. `hero-artwork-mask.png`
+clips art to the frame opening. Live `HeroPortrait` containers keep art and frame
+together; complete composed textures serve history thumbnails, outlines and
+shadow silhouettes. Bundle ownership releases generated textures after the final
+scene releases them. Whole-portrait filters target the container; premium saturation
+breathes only on the artwork. Both frame variants load before use. At least 500
+class wins unlock the premium portrait and hero power for the local player only.
+Menus use the displayed hero's class; matches retain the starting class's unlock
+through hero/power replacements. The winning match refreshes its presentation when
+it crosses the threshold. Deck-button artwork uses the same saturation unlock.
 The deck-frame, nine New Deck portraits, Play-button, and Collection expansion-toggle
 outline fields stay cached so silhouette generation happens during startup instead
 of on menu visits.

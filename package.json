@@ -35,7 +35,8 @@
     "dist:mac": "electron-vite build && electron-builder --mac",
     "dist:linux": "electron-vite build && electron-builder --linux",
     "test:missile-vfx": "node scripts/check-missile-vfx.cjs",
-    "test:aoe-vfx": "node scripts/check-aoe-vfx.cjs"
+    "test:fire-aoe": "node scripts/check-fire-aoe.cjs",
+    "test:fireball": "node scripts/check-fireball.cjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",

@@ -1,8 +1,10 @@
-import type {
-  CardClass,
-  CardDefinition,
-  DeckClass,
-  ExpansionId
+import {
+  cardHasClass,
+  isCardAllowedForClass,
+  type CardClass,
+  type CardDefinition,
+  type DeckClass,
+  type ExpansionId
 } from '../../game-rules/content/cards'
 import {
   filterCollectionCards,
@@ -36,9 +38,7 @@ export function queryCollectionCards(
 
   return filtered.filter(
     (card) =>
-      (state.classFilter === null || card.cardClass === state.classFilter) &&
-      (deckClass === null ||
-        card.cardClass === deckClass ||
-        card.cardClass === 'Neutral')
+      (state.classFilter === null || cardHasClass(card, state.classFilter)) &&
+      (deckClass === null || isCardAllowedForClass(card, deckClass))
   )
 }

@@ -56,6 +56,69 @@ Repeated hits play individual missiles; simultaneous hits share an impact bounda
 Power missiles start at the power center, minion effects at the visible source,
 and spells or missing sources at the controller's hero.
 
+Fireball uses the extracted medium missile, idle and impact prefabs' textures,
+particle curves and material equations through one renderer shared by matches and
+the VFX Lab. A fresh cast grows its three rotating cores over 300 ms, reaches Idle
+after one second, then launches. The saved `durationMs` controls flight only
+(400 ms by default); the gameplay cue occurs at arrival and particle tails finish
+independently. Callers that already presented Idle can use the renderer's
+`prewarmed` path. Bloom uses separate color and alpha blur at the native reduced
+resolutions. Sphere projection, particle physics and board lighting remain
+adaptations. `Artifacts/fireball-reference.json` records source assets and the
+implementation comparison; `npm run test:fireball` captures isolated WebGL frames
+and checks shader pixels, saved tuning, playback and cleanup.
+
+Fire-blast templates use the extracted wisp, smoke, ember, impact and color-ramp
+textures. Bright, multiplicative-dark and smoke particles build a 256×256 heat
+texture; its red channel selects fire color and opacity. Full-board and half-board
+presets have separate emission rates and lifetimes. Target bursts come from event
+target IDs, independently of the board coverage. The default gameplay cue is 500 ms;
+the visual tail continues on its own timeline.
+Minion impact bursts are off by default. Enable **Minion impact bursts** in the
+VFX Lab to restore them for a template (`fire.minionImpacts`). Hero target impacts
+remain enabled. This setting affects visuals only, not the affected targets or
+gameplay cue.
+
+In the VFX Lab, these templates expose particle density, size, motion, ramp, glow,
+timing and target-preview controls. All AoE templates use this renderer through
+`tuning.fire`. Fire animation speed uses `fire.timingScale`; missile duration uses
+`durationMs`.
+Choose **Original fire** to retain the extracted ramp, or **Custom colors** to set
+the cool edge, main flame, and hot core. Custom ramps retain the original opacity
+curve. Glow, embers, and impacts follow the palette unless their color override is
+enabled; smoke tint and opacity are independent. Appearance is saved under
+`fire.appearance`. Turbulence and separate smoke/ember amount and persistence
+controls are saved under `fire.dynamics`; omitted settings preserve the default
+effect. Turbulence is smooth and seeded, and persistence updates cleanup timing.
+Use **Create copy** and **Save effects** to keep a variation as its own template.
+
+The VFX Lab derives board-effect placement from the match layout with the same
+translation as the board artwork. Heat filters retain their full quad bounds so
+viewport clipping cannot stretch or reposition the fire. Flame and smoke billows
+can extend beyond their emitter footprint.
+The board glow has a soft outer feather to bridge the filled center and moving
+flame rim. Its quad includes transparent margins so that feather remains unclipped;
+the original mask mapping and particle geometry stay fixed.
+Enemy-board inner fill extends toward the center seam independently of the flame
+footprint; its depth is tuned with `boardGlowDepthScale` in `fire-aoe-layout.ts`.
+
+`fire-aoe-authored.json` retains the extracted emitter vertices/normals, particle
+delays, and emission, size, color, rotation, and speed-limit curves. Particle clocks
+continue independently of state changes. Board smoke and embers use separate
+billboards so half-board coverage does not flatten them. Smoke and impact material
+equations follow the inspected shader bytecode. Board glow uses the coverage mask
+without a dissolve texture. Post-fire smoke uses reduced
+counts, emission windows, lifetimes, and travel speeds in `fire-aoe-layout.ts` to keep
+the tail brief and local; its cloud size and blending are preserved. Ember emission
+and lifetimes are shortened, and cleanup follows the last particle and board fade
+instead of a fixed wait. World-to-screen projection, native velocity damping,
+and scene lighting remain adaptations; the original global
+bloom pipeline is not reproduced. See the implementation addendum in
+`Artifacts/fire-explosions.md`.
+
+`npm run test:fire-aoe` runs a hidden, isolated Electron/WebGL check (no game or
+server) and writes a contact sheet/report to `.tmp/fire-aoe-check`.
+
 ## Run locally
 
 Requires Node.js 20+ and npm.

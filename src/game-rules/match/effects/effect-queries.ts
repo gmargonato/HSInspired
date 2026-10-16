@@ -1,7 +1,10 @@
+import { countBoardMinions, isPermanentBoardObject } from '../rules/board-objects'
 import { cthunSnapshot } from '../cthun'
 import { HERO_CATALOG } from '../../content/heroes'
 import {
   cardHasTribe,
+  cardHasClass,
+  isCardAllowedForClass,
   type CardDefinition,
   type CardKeyword
 } from '../../content/cards'
@@ -219,6 +222,7 @@ export class EffectQueries {
   }
 
   matchesFilter(ref: EntityRef, filterValue: unknown, frame: EffectFrame): boolean {
+    if (isPermanentBoardObject(this.context.currentMinion(ref))) return false
     if (!isRecord(filterValue)) return true
     const filter = filterValue
     const minion = this.context.currentMinion(ref)
@@ -242,16 +246,22 @@ export class EffectQueries {
             : value
         condition =
           value === 'self'
-            ? definition?.cardClass === selfClass
+            ? Boolean(selfClass && cardHasClass(definition, selfClass))
             : value === 'self-or-neutral'
-              ? definition?.cardClass === selfClass ||
-                definition?.cardClass === 'Neutral'
-              : definition?.cardClass === expected
+              ? Boolean(
+                  definition &&
+                  selfClass &&
+                  isCardAllowedForClass(definition, selfClass)
+                )
+              : typeof expected === 'string' && cardHasClass(definition, expected)
       } else if (key === 'cardClassIn') {
         condition =
           Array.isArray(value) &&
           typeof definition?.cardClass === 'string' &&
-          value.includes(definition.cardClass)
+          value.some(
+            (cardClass) =>
+              typeof cardClass === 'string' && cardHasClass(definition, cardClass)
+          )
       } else if (key === 'collectible') {
         condition = typeof value === 'boolean' && definition?.collectible === value
       } else if (key === 'cost') {
@@ -565,6 +575,16 @@ export class EffectQueries {
   ): readonly EntityRef[] {
     this.context.step(`${frame.actionPath}:select`)
     if (typeof selectorValue === 'string') {
+      const reference =
+        selectorValue === 'source'
+          ? frame.source
+          : selectorValue === 'event-source'
+            ? frame.event?.source
+            : selectorValue === 'event-target'
+              ? (frame.event?.target ?? frame.lastActionTarget)
+              : undefined
+      if (reference && isPermanentBoardObject(this.context.currentMinion(reference)))
+        return []
       if (selectorValue === 'source') return [frame.source]
       if (selectorValue === 'event-source' && frame.event?.source)
         return [frame.event.source]
@@ -847,8 +867,10 @@ export class EffectQueries {
       case 'other-minions-on-board':
         return Math.max(
           0,
-          this.context.draft.players.flatMap((player) => player.board).length -
-            (sourceMinion ? 1 : 0)
+          this.context.draft.players.reduce(
+            (count, player) => count + countBoardMinions(player.board),
+            0
+          ) - (sourceMinion && !isPermanentBoardObject(sourceMinion) ? 1 : 0)
         )
       case 'removed-keyword-count':
         return frame.removedKeywordCount
@@ -979,13 +1001,15 @@ export class EffectQueries {
       targetPlayer: OpeningPlayerState,
       filter: unknown
     ): readonly EntityRef[] => {
-      const candidates: EntityRef[] = targetPlayer.board.map((minion) => ({
-        instanceId: minion.instanceId,
-        kind: 'minion',
-        participantId: targetPlayer.participantId,
-        zone: 'board',
-        cardId: minion.cardId
-      }))
+      const candidates: EntityRef[] = targetPlayer.board
+        .filter((minion) => !isPermanentBoardObject(minion))
+        .map((minion) => ({
+          instanceId: minion.instanceId,
+          kind: 'minion',
+          participantId: targetPlayer.participantId,
+          zone: 'board',
+          cardId: minion.cardId
+        }))
       if (
         isProspectiveController(targetPlayer) &&
         prospectiveDefinition?.type === 'Minion'
@@ -1037,7 +1061,7 @@ export class EffectQueries {
           frame.event?.minionCountBeforePlay ??
           frame.minionCountBeforePlay ??
           (frame.prospectiveCardPlay && prospectiveDefinition?.type === 'Minion'
-            ? player.board.length
+            ? countBoardMinions(player.board)
             : 0)
         return this.compare(
           minionCountBeforePlay,
@@ -1121,13 +1145,15 @@ export class EffectQueries {
         return (this.context.draft.history?.healingThisTurn ?? 0) > 0
       case 'opponent-has-more-minions':
         return (
-          this.context.player(this.otherPlayer(player.participantId)).board.length >
-          player.board.length
+          countBoardMinions(
+            this.context.player(this.otherPlayer(player.participantId)).board
+          ) > countBoardMinions(player.board)
         )
       case 'opponent-has-no-more-minions':
         return (
-          this.context.player(this.otherPlayer(player.participantId)).board.length <=
-          player.board.length
+          countBoardMinions(
+            this.context.player(this.otherPlayer(player.participantId)).board
+          ) <= countBoardMinions(player.board)
         )
       case 'repeat-ended-without-minion-death':
         return frame.storedValues.get('repeat.minions-died') === 0

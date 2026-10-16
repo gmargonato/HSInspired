@@ -1,3 +1,23 @@
+import fireAoeWispAtlasImage from '@assets/images/effects/fire-aoe-wisp-atlas.png'
+import fireballCoreCloudsImage from '@assets/images/effects/fireball-core-clouds.png'
+import fireballCoreShadowsImage from '@assets/images/effects/fireball-core-shadows.png'
+import fireballCrescentImage from '@assets/images/effects/fireball-crescent.png'
+import fireballErosionImage from '@assets/images/effects/fireball-erosion.png'
+import fireballFillImage from '@assets/images/effects/fireball-fill.png'
+import fireballGlowImage from '@assets/images/effects/fireball-glow.png'
+import fireballImpactFlashImage from '@assets/images/effects/fireball-impact-flash.png'
+import fireballScorchImage from '@assets/images/effects/fireball-scorch.png'
+import fireballSmokeImage from '@assets/images/effects/fireball-smoke.png'
+import fireballSparkImage from '@assets/images/effects/fireball-spark.png'
+import fireAoeDarkWispImage from '@assets/images/effects/fire-aoe-dark-wisp.png'
+import fireAoeSmokeImage from '@assets/images/effects/fire-aoe-smoke.png'
+import fireAoeColorRampImage from '@assets/images/effects/fire-aoe-color-ramp.png'
+import fireAoeEmbersImage from '@assets/images/effects/fire-aoe-embers.png'
+import fireAoeGlowMaskOpponentImage from '@assets/images/effects/fire-aoe-glow-mask-opponent.png'
+import fireAoeGlowMaskFriendlyImage from '@assets/images/effects/fire-aoe-glow-mask-friendly.png'
+import fireAoeGlowMaskFullImage from '@assets/images/effects/fire-aoe-glow-mask-full.png'
+import fireAoeImpactBurstImage from '@assets/images/effects/fire-aoe-impact-burst.png'
+import fireAoeImpactSparkImage from '@assets/images/effects/fire-aoe-impact-spark.png'
 import landingDust1Image from '@assets/images/effects/dust-01.png'
 import summonGlowImage from '@assets/images/effects/summon-glow.png'
 import landingDust2Image from '@assets/images/effects/dust-02.png'
@@ -143,6 +163,7 @@ import gameDeckSlicedImage from '@assets/images/match/deck-sliced.png'
 import gameDeckInfoImage from '@assets/images/match/tray-number-of-cards-hand-deck.png'
 import gameFatigueDeckImage from '@assets/images/match/fatigue-deck.png'
 import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
+import gameExtraTurnImage from '@assets/images/match/button-extra-turn.png'
 import gameEnemyTurnImage from '@assets/images/match/button-enemy-turn.png'
 import gameYourTurnImage from '@assets/images/match/flag-your-turn.png'
 import fatigueImage from '@assets/images/match/fatigue.png'
@@ -183,7 +204,12 @@ import historySecretThumbImage from '@assets/images/match/history-secret-thumb.p
 import summonTotemImage from '@assets/images/match/summon-totem.png'
 import tankUpHammerImage from '@assets/images/match/tank-up.png'
 import effectCircle1Image from '@assets/images/effects/circle-01.png'
-import effectSwirl2Image from '@assets/images/effects/swirl-02.png'
+// Small wisp and bright mote encode source intensity in alpha with white RGB (avoid squaring intensity).
+import warlockTapWispLargeImage from '@assets/images/effects/warlock-tap-wisp-large.png'
+import warlockTapWispSmallImage from '@assets/images/effects/warlock-tap-wisp-small.png'
+import warlockTapMoteSoftImage from '@assets/images/effects/warlock-tap-mote-soft.png'
+import warlockTapMoteBrightImage from '@assets/images/effects/warlock-tap-mote-bright.png'
+import warlockTapColorRampImage from '@assets/images/effects/warlock-tap-color-ramp.png'
 import heroPowerBackImage from '@assets/images/heroes/hero-power/hero-power-back.png'
 import premiumHeroPowerBackImage from '@assets/images/heroes/hero-power/premium-hero-power-back.png'
 import heroPowerFrontImage from '@assets/images/heroes/hero-power/hero-power-front.png'
@@ -191,6 +217,7 @@ import premiumHeroPowerFrontImage from '@assets/images/heroes/hero-power/premium
 import heroPowerManaImage from '@assets/images/heroes/hero-power/hero-power-mana.png'
 import discoverHistoryHeroPowerImage from '@assets/images/match/discover-history-hero-power.png'
 import minionFrameImage from '@assets/images/board/minion-frame.png'
+import minionDormantImage from '@assets/images/board/minion-dormant.png'
 import premiumMinionFrameImage from '@assets/images/board/premium-minion-frame.png'
 import minionFrameLegendaryImage from '@assets/images/board/minion-frame-legendary.png'
 import premiumMinionFrameLegendaryImage from '@assets/images/board/premium-minion-frame-legendary.png'
@@ -270,6 +297,11 @@ import {
 import { HERO_POWER_ASSET_SOURCES, type HeroPowerAssetKey } from './hero-power-assets'
 import { CARD_ASSET_DEFINITIONS, type CardAssetDefinition } from './card-assets'
 import { registerAssetBundle } from './asset-scope'
+import heroPortraitFrameImage from '@assets/images/heroes/frames/hero-frame.png'
+import heroPortraitPremiumFrameImage from '@assets/images/heroes/frames/hero-frame -premium.png'
+import heroPortraitMaskImage from '@assets/images/heroes/frames/hero-artwork-mask.png'
+import { prepareHeroPortraitTextures } from './hero-portrait-textures'
+import { HERO_ARTWORK_PLACEMENTS } from '../hero-portrait-layout'
 
 export { AssetScope } from './asset-scope'
 export { CardAssetResolver } from './card-asset-resolver'
@@ -1157,6 +1189,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.minion-dormant',
+    ASSET_BUNDLE_IDS.game,
+    'minionDormant',
+    minionDormantImage,
+    115,
+    157,
+    'game-scene'
+  ),
+  asset(
     'scene.game.minion-frame-premium',
     ASSET_BUNDLE_IDS.game,
     'premiumMinionFrame',
@@ -1994,6 +2035,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.extra-turn',
+    ASSET_BUNDLE_IDS.game,
+    'extraTurn',
+    gameExtraTurnImage,
+    157,
+    86,
+    'game-scene'
+  ),
+  asset(
     'scene.game.enemy-turn',
     ASSET_BUNDLE_IDS.game,
     'enemyTurn',
@@ -2173,13 +2223,149 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     256,
     'game-scene'
   ),
+  asset('scene.game.fireball-core-clouds', ASSET_BUNDLE_IDS.game, 'fireballCoreClouds', fireballCoreCloudsImage, 256, 256, 'game-scene'),
+  asset('scene.game.fireball-core-shadows', ASSET_BUNDLE_IDS.game, 'fireballCoreShadows', fireballCoreShadowsImage, 256, 256, 'game-scene'),
+  asset('scene.game.fireball-crescent', ASSET_BUNDLE_IDS.game, 'fireballCrescent', fireballCrescentImage, 128, 128, 'game-scene'),
+  asset('scene.game.fireball-erosion', ASSET_BUNDLE_IDS.game, 'fireballErosion', fireballErosionImage, 256, 256, 'game-scene'),
+  asset('scene.game.fireball-fill', ASSET_BUNDLE_IDS.game, 'fireballFill', fireballFillImage, 128, 128, 'game-scene'),
+  asset('scene.game.fireball-glow', ASSET_BUNDLE_IDS.game, 'fireballGlow', fireballGlowImage, 64, 64, 'game-scene'),
+  asset('scene.game.fireball-impact-flash', ASSET_BUNDLE_IDS.game, 'fireballImpactFlash', fireballImpactFlashImage, 128, 128, 'game-scene'),
+  asset('scene.game.fireball-scorch', ASSET_BUNDLE_IDS.game, 'fireballScorch', fireballScorchImage, 256, 256, 'game-scene'),
+  asset('scene.game.fireball-smoke', ASSET_BUNDLE_IDS.game, 'fireballSmoke', fireballSmokeImage, 128, 128, 'game-scene'),
+  asset('scene.game.fireball-spark', ASSET_BUNDLE_IDS.game, 'fireballSpark', fireballSparkImage, 256, 256, 'game-scene'),
   asset(
-    'scene.game.effect-swirl-2',
+    'scene.game.fire-aoe-wisp-atlas',
     ASSET_BUNDLE_IDS.game,
-    'effectSwirl2',
-    effectSwirl2Image,
+    'fireAoeWispAtlas',
+    fireAoeWispAtlasImage,
+    128,
+    512,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fire-aoe-dark-wisp',
+    ASSET_BUNDLE_IDS.game,
+    'fireAoeDarkWisp',
+    fireAoeDarkWispImage,
     256,
     256,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fire-aoe-smoke',
+    ASSET_BUNDLE_IDS.game,
+    'fireAoeSmoke',
+    fireAoeSmokeImage,
+    128,
+    128,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fire-aoe-color-ramp',
+    ASSET_BUNDLE_IDS.game,
+    'fireAoeColorRamp',
+    fireAoeColorRampImage,
+    256,
+    1,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fire-aoe-embers',
+    ASSET_BUNDLE_IDS.game,
+    'fireAoeEmbers',
+    fireAoeEmbersImage,
+    128,
+    128,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fire-aoe-glow-mask-opponent',
+    ASSET_BUNDLE_IDS.game,
+    'fireAoeGlowMaskOpponent',
+    fireAoeGlowMaskOpponentImage,
+    128,
+    128,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fire-aoe-glow-mask-friendly',
+    ASSET_BUNDLE_IDS.game,
+    'fireAoeGlowMaskFriendly',
+    fireAoeGlowMaskFriendlyImage,
+    128,
+    128,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fire-aoe-glow-mask-full',
+    ASSET_BUNDLE_IDS.game,
+    'fireAoeGlowMaskFull',
+    fireAoeGlowMaskFullImage,
+    512,
+    512,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fire-aoe-impact-burst',
+    ASSET_BUNDLE_IDS.game,
+    'fireAoeImpactBurst',
+    fireAoeImpactBurstImage,
+    1024,
+    1024,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.fire-aoe-impact-spark',
+    ASSET_BUNDLE_IDS.game,
+    'fireAoeImpactSpark',
+    fireAoeImpactSparkImage,
+    128,
+    128,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.warlock-tap-wisp-large',
+    ASSET_BUNDLE_IDS.game,
+    'warlockTapWispLarge',
+    warlockTapWispLargeImage,
+    512,
+    512,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.warlock-tap-wisp-small',
+    ASSET_BUNDLE_IDS.game,
+    'warlockTapWispSmall',
+    warlockTapWispSmallImage,
+    512,
+    512,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.warlock-tap-mote-soft',
+    ASSET_BUNDLE_IDS.game,
+    'warlockTapMoteSoft',
+    warlockTapMoteSoftImage,
+    64,
+    64,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.warlock-tap-mote-bright',
+    ASSET_BUNDLE_IDS.game,
+    'warlockTapMoteBright',
+    warlockTapMoteBrightImage,
+    64,
+    64,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.warlock-tap-color-ramp',
+    ASSET_BUNDLE_IDS.game,
+    'warlockTapColorRamp',
+    warlockTapColorRampImage,
+    128,
+    16,
     'game-scene'
   ),
   ...Object.entries(HERO_POWER_ASSET_SOURCES).map(([key, source]) =>
@@ -2676,6 +2862,35 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     355,
     'shared-ui'
   ),
+  ...[ASSET_BUNDLE_IDS.deckPresentation, ASSET_BUNDLE_IDS.game].flatMap((bundle) => [
+    asset(
+      `hero.premium-frame.${bundle}`,
+      bundle,
+      'heroPortraitPremiumFrame',
+      heroPortraitPremiumFrameImage,
+      326,
+      378,
+      'hero-catalog'
+    ),
+    asset(
+      `hero.frame.${bundle}`,
+      bundle,
+      'heroPortraitFrame',
+      heroPortraitFrameImage,
+      326,
+      378,
+      'hero-catalog'
+    ),
+    asset(
+      `hero.mask.${bundle}`,
+      bundle,
+      'heroPortraitMask',
+      heroPortraitMaskImage,
+      358,
+      410,
+      'hero-catalog'
+    )
+  ]),
   ...Object.entries(HERO_ASSET_SOURCES).map(([key, source]) =>
     asset(
       `hero.${key}`,
@@ -2684,8 +2899,10 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
         : ASSET_BUNDLE_IDS.game,
       key,
       source,
-      345,
-      433,
+      HERO_ARTWORK_PLACEMENTS[key as keyof typeof HERO_ARTWORK_PLACEMENTS]?.size
+        .width ?? 345,
+      HERO_ARTWORK_PLACEMENTS[key as keyof typeof HERO_ARTWORK_PLACEMENTS]?.size
+        .height ?? 433,
       'hero-catalog'
     )
   )
@@ -2790,6 +3007,11 @@ for (const bundle of manifestBundles) {
     bundle.assets.map((entry) => [entry.alias, entry.src])
   ) as Record<string, string>
   registerAssetBundle(bundle.name, entries, {
+    prepare:
+      bundle.name === ASSET_BUNDLE_IDS.deckPresentation ||
+      bundle.name === ASSET_BUNDLE_IDS.game
+        ? (assets) => prepareHeroPortraitTextures(assets as Record<string, Texture>)
+        : undefined,
     // Pixi pools alpha-mask filters across scenes. Destroying a card-frame
     // TextureSource leaves those pooled filters with a dead WebGPU bind group,
     // so card rendering assets live until the renderer itself is destroyed.
@@ -2932,7 +3154,31 @@ export interface GameAssets extends Record<
   heroPowerAura2: Texture
   heroPowerAura3: Texture
   heroPowerAura4: Texture
-  effectSwirl2: Texture
+  fireAoeWispAtlas: Texture
+  fireballCoreClouds: Texture
+  fireballCoreShadows: Texture
+  fireballCrescent: Texture
+  fireballErosion: Texture
+  fireballFill: Texture
+  fireballGlow: Texture
+  fireballImpactFlash: Texture
+  fireballScorch: Texture
+  fireballSmoke: Texture
+  fireballSpark: Texture
+  fireAoeDarkWisp: Texture
+  fireAoeSmoke: Texture
+  fireAoeColorRamp: Texture
+  fireAoeEmbers: Texture
+  fireAoeGlowMaskOpponent: Texture
+  fireAoeGlowMaskFriendly: Texture
+  fireAoeGlowMaskFull: Texture
+  fireAoeImpactBurst: Texture
+  fireAoeImpactSpark: Texture
+  warlockTapWispLarge: Texture
+  warlockTapWispSmall: Texture
+  warlockTapMoteSoft: Texture
+  warlockTapMoteBright: Texture
+  warlockTapColorRamp: Texture
   boardBase: Texture
   board1: Texture
   board2: Texture
@@ -2984,6 +3230,8 @@ export interface GameAssets extends Record<
   minionElusive: Texture
   minionImmune: Texture
   minionStealth: Texture
+  /** Optional for partial asset consumers; full game bundles provide this texture. */
+  minionDormant?: Texture
   boardTrigger: Texture
   boardInspire: Texture
   boardDeathrattle: Texture
@@ -3032,6 +3280,8 @@ export interface GameAssets extends Record<
   manaGlow: Texture
   manaOverload: Texture
   endTurn: Texture
+  /** Optional for partial asset consumers; full game bundles provide this texture. */
+  extraTurn?: Texture
   toggleViewButton: Texture
   enemyTurn: Texture
   yourTurn: Texture

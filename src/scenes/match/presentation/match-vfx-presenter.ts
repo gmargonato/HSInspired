@@ -1,11 +1,15 @@
-import { Container, Sprite, Texture, type PointData, type Renderer } from 'pixi.js'
+import { Container, type PointData, type Renderer } from 'pixi.js'
 import type { GameAssets } from '../../../visual-components/assets'
-import { AoeVfxShader } from '../../../visual-components/effects/aoe-vfx-shader'
-import { AoeMotes, AoeMoteTexture } from '../../../visual-components/effects/aoe-motes'
 import {
-  MissileVfxShader,
-  MISSILE_VFX_TIMING
-} from '../../../visual-components/effects/missile-vfx-shader'
+  FireAoeEffect,
+  type FireAoeTarget
+} from '../../../visual-components/effects/fire-aoe-effect'
+import {
+  FireAoeResources,
+  type FireAoeAssets
+} from '../../../visual-components/effects/fire-aoe-materials'
+import { FireballEffect } from '../../../visual-components/effects/fireball-effect'
+import type { FireballAssets } from '../../../visual-components/effects/fireball-materials'
 import type { VfxTemplate } from '../../../visual-components/effects/vfx-templates'
 import type { VfxAoeZone } from '../../../desktop/contracts/ipc/vfx-templates'
 import { MATCH_VFX_LAYOUT } from './match-vfx-layout'
@@ -32,52 +36,34 @@ export function matchVfxAreas(
   return [...(board.size === 2 ? ['bothBoards' as const] : [...board]), ...heroes]
 }
 
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value))
-}
-
-function smoothstep(edge0: number, edge1: number, value: number): number {
-  const t = clamp01((value - edge0) / (edge1 - edge0))
-  return t * t * (3 - 2 * t)
-}
-
-function particles(
-  parent: Container,
-  texture: Texture,
-  prefix: string,
-  count: number
-): Sprite[] {
-  return Array.from({ length: count }, (_, index) => {
-    const sprite = new Sprite(texture)
-    sprite.label = `${prefix}.particle-${index}`
-    sprite.anchor.set(0.5)
-    sprite.blendMode = 'add'
-    sprite.alpha = 0
-    parent.addChild(sprite)
-    return sprite
-  })
-}
-
 interface ActiveEffect {
   readonly timeline: gsap.core.Timeline
   finish(): void
+}
+
+interface VfxVisual {
+  readonly duration?: number
+  readonly impactSeconds?: number
+  update(progress: number, seconds: number): void
+  dispose(): void
 }
 
 /** Plays one saved visual while the presentation queue waits only for impact. */
 export class MatchVfxPresenter {
   readonly layer = new Container()
   private readonly active = new Set<ActiveEffect>()
-  private readonly aoeMoteTexture?: AoeMoteTexture
+  private readonly fireResources?: FireAoeResources
+  private shaking = false
 
   constructor(
     private readonly assets: Pick<GameAssets, 'burnNoise' | 'playSpotlight1'> &
-      Partial<Pick<GameAssets, 'ghostSpotlight'>>,
+      Partial<FireAoeAssets & FireballAssets>,
     private readonly timeline: () => gsap.core.Timeline,
-    renderer?: Renderer
+    private readonly renderer?: Renderer,
+    private readonly shake?: () => Promise<void>
   ) {
-    // Missile-only/headless consumers need no DOM texture; the game supplies both.
-    if (assets.ghostSpotlight && typeof document !== 'undefined')
-      this.aoeMoteTexture = new AoeMoteTexture(assets.ghostSpotlight, renderer)
+    if (renderer && assets.fireAoeWispAtlas)
+      this.fireResources = new FireAoeResources(renderer, assets as FireAoeAssets)
     this.layer.label = 'game.vfx'
     this.layer.eventMode = 'none'
     this.layer.interactiveChildren = false
@@ -87,23 +73,25 @@ export class MatchVfxPresenter {
     template: VfxTemplate,
     controllerIsLocal: boolean,
     source?: PointData,
-    target?: PointData
+    target?: PointData,
+    affectedTargets: readonly FireAoeTarget[] = []
   ): Promise<void> {
-    const visual =
+    const visual: VfxVisual | null =
       template.family === 'missile'
         ? source && target
           ? this.makeMissile(template, source, target)
           : null
-        : this.makeAoe(template, controllerIsLocal)
+        : this.makeAoe(template, controllerIsLocal, affectedTargets)
     if (!visual) return Promise.resolve()
-    const seconds = template.tuning.durationMs / 1000
+    const seconds =
+      visual.duration ??
+      (template.family === 'missile' ? template.tuning.durationMs / 1000 : 0)
     const impactSeconds =
-      template.family === 'missile'
-        ? seconds * MISSILE_VFX_TIMING.arrival
-        : Math.min(
-            seconds,
-            (template.tuning.impactMs ?? template.tuning.durationMs * 0.28) / 1000
-          )
+      visual.impactSeconds ??
+      Math.min(
+        seconds,
+        template.family === 'aoe' ? (template.tuning.impactMs ?? 500) / 1000 : seconds
+      )
     const clock = { progress: 0 }
     const timeline = this.timeline()
     return new Promise((resolve) => {
@@ -134,6 +122,23 @@ export class MatchVfxPresenter {
         onUpdate: () => visual.update(clock.progress, seconds)
       })
       timeline.call(resolveImpact, undefined, impactSeconds)
+      if (
+        template.family === 'aoe' &&
+        template.zones.some((zone) => zone.endsWith('Board')) &&
+        this.shake
+      ) {
+        timeline.call(
+          () => {
+            if (this.shaking) return
+            this.shaking = true
+            void this.shake!().finally(() => {
+              this.shaking = false
+            })
+          },
+          undefined,
+          0.25 * template.tuning.fire.timingScale
+        )
+      }
     })
   }
 
@@ -142,179 +147,70 @@ export class MatchVfxPresenter {
       effect.timeline.kill()
       effect.finish()
     }
-    this.aoeMoteTexture?.destroy()
+    this.fireResources?.destroy()
   }
 
   private makeMissile(
     template: Extract<VfxTemplate, { family: 'missile' }>,
     source: PointData,
     target: PointData
-  ): { update(progress: number, seconds: number): void; dispose(): void } {
-    const group = new Container()
-    group.label = `game.vfx.${template.id}`
-    const margin = Math.max(
-      MATCH_VFX_LAYOUT.missileMargin,
-      Math.max(
-        template.tuning.headStartSize ?? 28,
-        template.tuning.headEndSize ?? 116
-      ) *
-        0.8 +
-        24
-    )
-    const left = Math.min(source.x, target.x) - margin
-    const top = Math.min(source.y, target.y) - margin
-    const width = Math.abs(target.x - source.x) + margin * 2
-    const height = Math.abs(target.y - source.y) + margin * 2
-    group.position.set(left, top)
-    const shader = new MissileVfxShader(this.assets.burnNoise)
-    shader.setPalette(template.tuning)
-    shader.setTuning({
-      intensity: template.tuning.intensity,
-      noiseScale: template.tuning.noiseScale,
-      flowSpeed: template.tuning.flowSpeed,
-      turbulence: template.tuning.turbulence,
-      width: template.tuning.missileWidth,
-      trailLength: template.tuning.missileLength,
-      glow: template.tuning.missileGlow,
-      headStartSize: template.tuning.headStartSize,
-      headEndSize: template.tuning.headEndSize,
-      headGrowthMs: template.tuning.headGrowthMs,
-      durationMs: template.tuning.durationMs
+  ): VfxVisual {
+    if (!this.renderer || !this.assets.fireballCoreClouds)
+      throw new Error('Fireball requires registered assets and a renderer')
+    const effect = new FireballEffect(this.renderer, this.assets as FireballAssets, {
+      source,
+      target,
+      tuning: template.tuning
     })
-    shader.setGeometry(
-      { width, height },
-      { x: source.x - left, y: source.y - top },
-      { x: target.x - left, y: target.y - top }
-    )
-    const sprite = new Sprite(Texture.WHITE)
-    sprite.label = `${group.label}.shader`
-    sprite.width = width
-    sprite.height = height
-    sprite.filters = [shader.filter]
-    group.addChild(sprite)
-    const sparks = particles(group, this.assets.playSpotlight1, group.label, 15)
-    const tint = Number.parseInt(template.tuning.flameColor.slice(1), 16)
-    for (const spark of sparks) spark.tint = tint
-    this.layer.addChild(group)
+    this.layer.addChild(effect.container)
     return {
-      update(progress, seconds) {
-        shader.setFrame(progress * seconds, progress)
-        const post = clamp01(
-          (progress - MISSILE_VFX_TIMING.arrival) / (1 - MISSILE_VFX_TIMING.arrival)
-        )
-        for (const [index, spark] of sparks.entries()) {
-          if (progress < MISSILE_VFX_TIMING.arrival) {
-            spark.alpha = 0
-            continue
-          }
-          const angle = index * 2.39996
-          const reach = (20 + ((index * 37) % 85)) * Math.sqrt(post)
-          spark.position.set(
-            target.x - left + Math.cos(angle) * reach,
-            target.y - top + Math.sin(angle) * reach * 0.65 - post * 75
-          )
-          spark.alpha = Math.sin(post * Math.PI) * (1 - smoothstep(0.6, 1, post)) * 0.85
-          spark.width = 3 + (index % 4)
-          spark.height = spark.width * (1 + post)
-          spark.rotation = angle
-        }
-      },
-      dispose() {
-        sprite.filters = null
-        shader.dispose()
-        group.removeFromParent()
-        group.destroy({ children: true })
-      }
+      duration: effect.duration,
+      impactSeconds: effect.impactSeconds,
+      update: (progress, seconds) => effect.update(progress * seconds),
+      dispose: () => effect.dispose()
     }
   }
 
   private makeAoe(
     template: Extract<VfxTemplate, { family: 'aoe' }>,
-    controllerIsLocal: boolean
-  ): { update(progress: number, seconds: number): void; dispose(): void } | null {
+    controllerIsLocal: boolean,
+    targets: readonly FireAoeTarget[] = []
+  ): {
+    duration?: number
+    update(progress: number, seconds: number): void
+    dispose(): void
+  } | null {
     const areas = matchVfxAreas(template.zones, controllerIsLocal)
-    if (!areas.length) return null
-    if (!this.aoeMoteTexture)
-      throw new Error('AOE VFX requires the ghostSpotlight asset')
-    const group = new Container()
-    group.label = `game.vfx.${template.id}`
-    const boardShader = new AoeVfxShader(this.assets.burnNoise)
-    const heroShader = new AoeVfxShader(this.assets.burnNoise)
-    const friendlyHeroShader = new AoeVfxShader(this.assets.burnNoise, 1)
-    for (const shader of [boardShader, heroShader, friendlyHeroShader])
-      shader.setPalette(template.tuning)
-    const tuning = {
-      intensity: template.tuning.intensity,
-      noiseScale: template.tuning.noiseScale,
-      flowSpeed: template.tuning.flowSpeed,
-      turbulence: template.tuning.turbulence,
-      radius: template.tuning.aoeRadius,
-      edgeSoftness: template.tuning.aoeEdgeSoftness,
-      shape: template.tuning.aoeShape
-    }
-    boardShader.setTuning(tuning)
-    heroShader.setTuning({ ...tuning, shape: 'radial', impact: true })
-    friendlyHeroShader.setTuning({ ...tuning, shape: 'radial', impact: true })
-    const views = areas.map((id) => {
-      const placement = MATCH_VFX_LAYOUT.areas[id]
-      const area = new Container()
-      area.label = `${group.label}.${id}`
-      area.position.set(placement.position.x, placement.position.y)
-      const sprite = new Sprite(Texture.WHITE)
-      sprite.label = `${area.label}.shader`
-      sprite.anchor.set(0.5)
-      sprite.width = placement.size.width
-      sprite.height = placement.size.height
-      sprite.filters = [
-        id === (controllerIsLocal ? 'localHero' : 'remoteHero')
-          ? friendlyHeroShader.filter
-          : id.endsWith('Hero')
-            ? heroShader.filter
-            : boardShader.filter
-      ]
-      area.addChild(sprite)
-      const friendly = id.startsWith(controllerIsLocal ? 'local' : 'remote')
-      const seed =
-        id === 'bothBoards'
-          ? 2
-          : id.endsWith('Hero')
-            ? friendly
-              ? 4
-              : 3
-            : friendly
-              ? 1
-              : 0
-      const motes = new AoeMotes(
-        this.aoeMoteTexture!.texture,
-        placement.size,
-        area.label,
-        seed
+    if (!areas.length && !targets.length) return null
+    if (!this.fireResources)
+      throw new Error(
+        'Particle fire requires registered fire AOE assets and a renderer'
       )
-      motes.setPalette(template.tuning)
-      area.addChild(motes.container)
-      group.addChild(area)
-      return { sprite, motes }
+    const board = areas.find(
+      (id) => id === 'bothBoards' || id === 'localBoard' || id === 'remoteBoard'
+    )
+    const effect = new FireAoeEffect(this.fireResources, {
+      area: board
+        ? {
+            coverage:
+              board === 'bothBoards'
+                ? 'full'
+                : board === 'remoteBoard'
+                  ? 'opponent'
+                  : 'friendly',
+            placement: MATCH_VFX_LAYOUT.areas[board]
+          }
+        : undefined,
+      targets,
+      tuning: template.tuning.fire,
+      intensity: template.tuning.intensity
     })
-    this.layer.addChild(group)
+    this.layer.addChild(effect.container)
+    effect.update(0)
     return {
-      update(progress, seconds) {
-        boardShader.setFrame(progress * seconds, progress)
-        heroShader.setFrame(progress * seconds + 1.7, progress)
-        friendlyHeroShader.setFrame(progress * seconds + 1.7, progress)
-        for (const { motes } of views)
-          motes.update(progress, template.tuning.aoeRadius, template.tuning.intensity)
-      },
-      dispose() {
-        for (const { sprite, motes } of views) {
-          sprite.filters = null
-          motes.destroy()
-        }
-        boardShader.dispose()
-        heroShader.dispose()
-        friendlyHeroShader.dispose()
-        group.removeFromParent()
-        group.destroy({ children: true })
-      }
+      duration: effect.duration,
+      update: (progress, seconds) => effect.update(progress * seconds),
+      dispose: () => effect.dispose()
     }
   }
 }

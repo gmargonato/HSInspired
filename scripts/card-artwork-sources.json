@@ -3979,6 +3979,12 @@
       "sha256": "6010af2bdd312d1936d153b8a3b313983c3610f8f6eadaaa4415a9eebb22e582",
       "runtimeSha256": "e3c1a5a7f8e3cb55cce65a47b2586aa80409979dd8cd760ed973cd48427cf63f"
     },
+    "journey_to_ungoro_ashalon_ridge_guardian": {
+      "hearthstoneIds": ["TLC_229t14"],
+      "source": "assets/original/card_art_and_layers/727e69910188/HS35-061_M__37169c643c8f.png",
+      "sha256": "c3287faf23974ea3a7e27720b51ae007fe3bbda040db229f8dc2bfb1add416f2",
+      "runtimeSha256": "043a268194ac0c3e659272f61e474ecca579c069725244c4596d63f9a0441343"
+    },
     "journey_to_ungoro_awaken_the_makers": {
       "hearthstoneIds": ["UNG_940"],
       "source": "assets/original/card_art_and_layers/2e9fe0284203/HS10-189_S__5596cec4041d.png",
@@ -3990,6 +3996,12 @@
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-171_D__e3edaf3a17f3.png",
       "sha256": "4d6a387042f4b889fd7005acbbaf6a9067ab4b057dc47a2c5bbd0fd7a53222ae",
       "runtimeSha256": "a20f3667e52ff7aac22d5949d06530e9a2cc06b34da6ca3563be72c6af653110"
+    },
+    "journey_to_ungoro_battle_at_the_end_time": {
+      "hearthstoneIds": ["END_017"],
+      "source": "assets/original/card_art_and_layers/ff96e8847ef7/HS36-325_S__9444e38dc8b5.png",
+      "sha256": "b12c3b0b132f3fd0e046c507637d4e24da9572921e1ebde09a6a2d1ccadf9a99",
+      "runtimeSha256": "55516c7ed091520aa35a40df5871093d745bdb679a0a60ff5e84d59d0888bc18"
     },
     "journey_to_ungoro_bazaar_burglary": {
       "hearthstoneIds": ["ULD_326"],
@@ -4032,6 +4044,12 @@
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-161_D_New__5204d1a011de.png",
       "sha256": "229089e1ef7e2f907bd8f9c905e57a4803a340095360c5aa444088a7f72aed7c",
       "runtimeSha256": "9bedf27db06c3af30d5399d4d544a9724dbebe18d3aa85921eb851c662ed8d19"
+    },
+    "journey_to_ungoro_carnassas_brood": {
+      "hearthstoneIds": ["UNG_920t2"],
+      "source": "assets/original/card_art_and_layers/2e9fe0284203/HS10-180_D__cb620178de04.png",
+      "sha256": "b826ac4bb2b4a2613d132007fd2e7a69b418ee23927c15b27235fb2175ac1822",
+      "runtimeSha256": "c615525abe46b17db7d32e0f9ff98aae7436b58948d7e232362e5b5de3a094be"
     },
     "journey_to_ungoro_charged_devilsaur": {
       "hearthstoneIds": ["UNG_099"],
@@ -4141,6 +4159,12 @@
       "sha256": "069084253287825b810c94ff3342b87549df1ccb1d0ffb4158019c9027dda506",
       "runtimeSha256": "7ddb4c48e44ab9e6341d26b63d97aeb968e5bf241d46d9d0fb039d40dd2c8803"
     },
+    "journey_to_ungoro_dive_the_golakka_depths": {
+      "hearthstoneIds": ["TLC_426"],
+      "source": "assets/original/card_art_and_layers/727e69910188/HS35-225_S__429130e2fa45.png",
+      "sha256": "37ad0cd4800b94c0774ce90cb57d16b415c8413530ad8a316710e6222c32d151",
+      "runtimeSha256": "1d518f88382809e329e7cf16f076e28f82150b05bc55deae5084f255117abc8a"
+    },
     "journey_to_ungoro_earthen_scales": {
       "hearthstoneIds": ["UNG_108"],
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-082_D__19ff106f3cc4.png",
@@ -4183,11 +4207,23 @@
       "sha256": "64cad26038d79423804f75122234e215d418cb53ea9ee3418f21a2e133fb3763",
       "runtimeSha256": "0bb1d4d5a6129a4e2733558b28a48de3eede3b70401721f48f9e273a80499cd3"
     },
+    "journey_to_ungoro_enter_the_lost_city": {
+      "hearthstoneIds": ["TLC_602"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-074_S__a1c552795ff3.png",
+      "sha256": "20cf2c24f9518ad13a2781b1bf99df86d6c1f93967a54ff4cc626bfddc0e4c71",
+      "runtimeSha256": "0a5ced4ce33de9bb3d0f33c0b27147a4df2b63ed08b3f9526d753b4f1d665a86"
+    },
     "journey_to_ungoro_envenom_weapon": {
       "hearthstoneIds": ["UNG_823"],
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-136_D__2d300f47078a.png",
       "sha256": "115ad3ea9254cdfae0eac5481b680fdc55e1b740bc853b4c42b33b0caf04fb3d",
       "runtimeSha256": "c10a3760c4e0dedf826df8db0f841b844c8223f69c870f23353f19fa0c1f741e"
+    },
+    "journey_to_ungoro_escape_the_underfel": {
+      "hearthstoneIds": ["TLC_446"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-067_S__a74b21c35a3d.png",
+      "sha256": "a97bf8c293d72a5cb0f8f5430358f9894a9c3222a4b9dea5b65085a6d3d85e22",
+      "runtimeSha256": "9399969e2c085c1953e8b450a304c761fcb3b97460d1f8561dab0eee475664e6"
     },
     "journey_to_ungoro_evolving_spores": {
       "hearthstoneIds": ["UNG_103"],
@@ -4206,6 +4242,30 @@
       "source": "assets/original/card_art_and_layers/2e9fe0284203/HS10-129_D__f198513fc04b.png",
       "sha256": "bbe195acf7e68e0e7368b860160c594956b631d781407a9e2ae83a1646d40504",
       "runtimeSha256": "0ed134503f535309228e1509cf1e9943cf6ab1a0a1b8866a31cdd952689adf7b"
+    },
+    "journey_to_ungoro_felhorn": {
+      "hearthstoneIds": ["TLC_446t4"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-181_M__9970bcb2e1e9.png",
+      "sha256": "e330be2acaced54d2f2cbc5cff58696283799e579e8ea865fbbcfb024ccbf3ce",
+      "runtimeSha256": "beff3f3b83be1b6b331cfebca3fa3a93f119a2b63a8d085b1401d1cc40673af2"
+    },
+    "journey_to_ungoro_felhorn_echo": {
+      "hearthstoneIds": ["TLC_446t4"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-181_M__9970bcb2e1e9.png",
+      "sha256": "e330be2acaced54d2f2cbc5cff58696283799e579e8ea865fbbcfb024ccbf3ce",
+      "runtimeSha256": "beff3f3b83be1b6b331cfebca3fa3a93f119a2b63a8d085b1401d1cc40673af2"
+    },
+    "journey_to_ungoro_felraptor": {
+      "hearthstoneIds": ["TLC_446t3"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-180_M__431d0bbb167b.png",
+      "sha256": "3291ddbb43ad4ea655e25e7fafc7acba64370bad87b67ef5fdf17b60190af447",
+      "runtimeSha256": "1c64c6081964b46c6f0c93b339a92e3df4b88d7eefb19ed548a90b457d959860"
+    },
+    "journey_to_ungoro_felscreamer": {
+      "hearthstoneIds": ["TLC_446t2"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-068_M__54b26835008c.png",
+      "sha256": "37390060982bb11a8081c695af97061ba1a860afb8d1ec6bdfd9dad35f96f506",
+      "runtimeSha256": "ddb3ccc62b5732b1b18ffdacfb77ebf2db46afc7147ba3208988aad5098a5663"
     },
     "journey_to_ungoro_fire_fly": {
       "hearthstoneIds": ["UNG_809"],
@@ -4308,6 +4368,12 @@
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-049_M__224a85c6cde8.png",
       "sha256": "12da936b721442abb38e06157adf0f2eacc7a4c29f3545dede694173960e4f07",
       "runtimeSha256": "f65efbb3cf2895b6e17f99f6b29035d849d2453b05829cf58424ae22e491362d"
+    },
+    "journey_to_ungoro_golakkas_blessing": {
+      "hearthstoneIds": ["TLC_426"],
+      "source": "assets/original/card_art_and_layers/727e69910188/HS35-225_S__429130e2fa45.png",
+      "sha256": "37ad0cd4800b94c0774ce90cb57d16b415c8413530ad8a316710e6222c32d151",
+      "runtimeSha256": "1d518f88382809e329e7cf16f076e28f82150b05bc55deae5084f255117abc8a"
     },
     "journey_to_ungoro_grievous_bite": {
       "hearthstoneIds": ["UNG_910"],
@@ -4423,6 +4489,18 @@
       "sha256": "08f4d18e8acaa68eb1115250dc19d4d407f798b748dcf6d5ac233f210b162f11",
       "runtimeSha256": "2a68508f886bc934fe8d56838e952072e1ab400a8ca71da6927ec3ffbcbd70d5"
     },
+    "journey_to_ungoro_latorvius_gaze_of_the_city": {
+      "hearthstoneIds": ["TLC_602t"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-075_M__4b04c6d0df38.png",
+      "sha256": "560c3a4b4c801e1d3d4a444c53113498c5e5b4f1483702870bf3497688d8cc06",
+      "runtimeSha256": "6eb7f00bf46b7cc5cf5e7079fea3c2aa0749a4e025212156b930801250d7cefa"
+    },
+    "journey_to_ungoro_lie_in_wait": {
+      "hearthstoneIds": ["TLC_513"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-054_S__ce4bec4180a3.png",
+      "sha256": "28d3a6b89ee7842fdc50ec6310f9f99a0bfb868d248af61eedc5b594d47ec2de",
+      "runtimeSha256": "a72f3b64dc44332ee2ad39b60b8fb48ae3f1f5f36b3f2c2a249577c3eac8af5d"
+    },
     "journey_to_ungoro_lightfused_stegodon": {
       "hearthstoneIds": ["UNG_962"],
       "source": "assets/original/card_art_and_layers/2e9fe0284203/HS10-110_D__7dbc58200a19.png",
@@ -4489,6 +4567,12 @@
       "sha256": "321994e16b682f61d900b51f40450bb3aa556e4754dba8a3483c9197ac1d437c",
       "runtimeSha256": "089b791249d5a82b105fd3e4a8be606b23e546bddd9c536e0ccb817cb4650681"
     },
+    "journey_to_ungoro_master_dusk": {
+      "hearthstoneIds": ["TLC_513t"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-168_H__d27c208ecaae.png",
+      "sha256": "f44b029c7d0f4b29602fa7168a3ee34dffea739513e8cc42018084d488774a1f",
+      "runtimeSha256": "bfaa7aec13b09de25c3db14d23488403d5b2e9e3db9584a66a87eb0bf4adb871"
+    },
     "journey_to_ungoro_megafin": {
       "hearthstoneIds": ["UNG_942t"],
       "source": "assets/original/card_art_and_layers/2e9fe0284203/HS10-175_D__0e2c22432f9b.png",
@@ -4530,6 +4614,12 @@
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-143_D__e0457348a8be.png",
       "sha256": "30ce2c07911e2e1a6cd5d3622d726563f8380d2c89193f668dbb19f852476e5b",
       "runtimeSha256": "ba8bf4618d40d2257b1fe6fd34d41bfd8fdf7af28e81c8f8350d3fb7dfe000a9"
+    },
+    "journey_to_ungoro_nether_imp": {
+      "hearthstoneIds": ["UNG_829t3"],
+      "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-142_D__96d80fb38478.png",
+      "sha256": "1f90b0f1e2f985aa7bd297e5e9e60a99107e61abbf281c60872cf1ceea0f80c0",
+      "runtimeSha256": "7663b67beb3db802e03452538924074f58f30d053c3f0a59acb06f44956bd064"
     },
     "journey_to_ungoro_nether_portal": {
       "hearthstoneIds": ["UNG_829t1"],
@@ -4717,6 +4807,18 @@
       "sha256": "1061ed400d23e6cec494f8de7268abae2e44025ff9af0dfdcae2508ec6f61117",
       "runtimeSha256": "2670ffd9e5d2db75b15361c6da6b37b8b8ea1969a655653d716548925a17f05b"
     },
+    "journey_to_ungoro_reach_equilibrium": {
+      "hearthstoneIds": ["TLC_817"],
+      "source": "assets/original/premium_art_and_layers/31bff88fcae0/HS35-046_S__b103816561d9.png",
+      "sha256": "fcd428f2d4dd6f2e08da42988b1ebf9545ad93175f8d4c14a472c555ddbec716",
+      "runtimeSha256": "b13d51efe490ad71ed093019517260be065615fba76966dbc884334a9be5eefd"
+    },
+    "journey_to_ungoro_restore_the_wild": {
+      "hearthstoneIds": ["TLC_239"],
+      "source": "assets/original/card_art_and_layers/727e69910188/HS35-024_S__d6e0146f5581.png",
+      "sha256": "cf416356b4d8a9af231f1236b7b2433ab15f24f95ca7888d950d020a3316613c",
+      "runtimeSha256": "c6a46c23f74b0e9c0d11ed0791b57b9bc35b623b3cb7c57776e6d1dbb14c8546"
+    },
     "journey_to_ungoro_rockpool_hunter": {
       "hearthstoneIds": ["UNG_073"],
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-010_M__4cd8bb24d2f2.png",
@@ -4783,11 +4885,47 @@
       "sha256": "3842e2528aeb41948cf20392e31acfc2ee020deb127d3088bce4fe1e73174299",
       "runtimeSha256": "b911f73e3ee62920ca3bbaf4d56b68bd6a9b1db17e9cf3f2b5854f64d4559370"
     },
+    "journey_to_ungoro_shokk_jungle_tyrant": {
+      "hearthstoneIds": ["TLC_830t"],
+      "source": "assets/original/card_art_and_layers/17a730b76979/HS35-031_M__8b2fa939a8ab.png",
+      "sha256": "1aec4939124c1ef831b61c067ad5375cfe7f0234c73bc7aebaf88fb58056381b",
+      "runtimeSha256": "c8151b5515434bc8f0647eacac51084b71e507763fdb25e2eed5553ed14444b2"
+    },
     "journey_to_ungoro_shrouding_mist": {
       "hearthstoneIds": ["UNG_999t10"],
       "source": "assets/original/card_art_and_layers/2e9fe0284203/HS10-079_S__6cbbe7c63302.png",
       "sha256": "959999f2185a009330795a3b9102a44aa04f71c75d230396a3e73c1f89a48b38",
       "runtimeSha256": "269a4b4b3db680484884c03f2b8b38a21c25dc695ed2099704fd92c6b08183a3"
+    },
+    "journey_to_ungoro_soletos_cycles_rebirth": {
+      "hearthstoneIds": ["TLC_817t5"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-162_M__7a8e941c8bff.png",
+      "sha256": "37487d0d35d4f94da4269d2e633c9e1e79b0d21a6cda14940f9496529152beec",
+      "runtimeSha256": "f420ceea437b5c489f784e1fe9eb003e8f954904c412441df199d05414cfbcd8"
+    },
+    "journey_to_ungoro_soletos_cycles_rebirth_echo": {
+      "hearthstoneIds": ["TLC_817t5"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-162_M__7a8e941c8bff.png",
+      "sha256": "37487d0d35d4f94da4269d2e633c9e1e79b0d21a6cda14940f9496529152beec",
+      "runtimeSha256": "f420ceea437b5c489f784e1fe9eb003e8f954904c412441df199d05414cfbcd8"
+    },
+    "journey_to_ungoro_soletos_deaths_touch": {
+      "hearthstoneIds": ["TLC_817t4"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-048_M__e6c691b81434.png",
+      "sha256": "1bc8e7f7ba62a6a0a9f06d59b99bf428872923cad0317693bc97f7be3dcb911d",
+      "runtimeSha256": "e514a7e3c63b1339d4078ff4420fba8a46bfd76d27438180d10629363ae2aff7"
+    },
+    "journey_to_ungoro_soletos_deaths_touch_echo": {
+      "hearthstoneIds": ["TLC_817t4"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-048_M__e6c691b81434.png",
+      "sha256": "1bc8e7f7ba62a6a0a9f06d59b99bf428872923cad0317693bc97f7be3dcb911d",
+      "runtimeSha256": "e514a7e3c63b1339d4078ff4420fba8a46bfd76d27438180d10629363ae2aff7"
+    },
+    "journey_to_ungoro_soletos_lifes_breath": {
+      "hearthstoneIds": ["TLC_817t3"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-047_M__56067344f9ea.png",
+      "sha256": "379feee3b4fc822a4ba11025eabd8030a3b1de9434f1045e77ee9fcac2aba606",
+      "runtimeSha256": "b90757df65415ed00e3f646add73b6a4fc3d3a5a8ff9510e31a3b7e076a3ead5"
     },
     "journey_to_ungoro_spikeridged_steed": {
       "hearthstoneIds": ["UNG_952"],
@@ -4800,6 +4938,12 @@
       "source": "assets/original/card_art_and_layers/2e9fe0284203/HS10-092_D__22c54c8f2f03.png",
       "sha256": "22a6d78567ce44b8c1dae1b94d4832924513045b68d447f4bd9664edbcce3967",
       "runtimeSha256": "5393c0cd0372b2c1542e4527c6d0bbf1deb431eb946f45bbd65a1cb5ee85c2a0"
+    },
+    "journey_to_ungoro_spirit_of_the_mountain": {
+      "hearthstoneIds": ["TLC_229"],
+      "source": "assets/original/card_art_and_layers/727e69910188/HS35-060_S__6e3b64244518.png",
+      "sha256": "59ad6a22a7b7548d2ee93650006c611c5970ac7e02a67bdc22ad9b370631738f",
+      "runtimeSha256": "907110890929a04523a2bd28171aeeb67cb526558092111159d6bf10bbadaec8"
     },
     "journey_to_ungoro_spiritsinger_umbra": {
       "hearthstoneIds": ["UNG_900"],
@@ -4927,6 +5071,24 @@
       "sha256": "79dbc2338b6e88d330e5e6849c2a0ffc6aa11d0b39d0551f6177e1917f3975da",
       "runtimeSha256": "1b859be0f7f7d7853ac12a1399db641f14d58509882efb13edf4351a79f4aa91"
     },
+    "journey_to_ungoro_the_everbloom": {
+      "hearthstoneIds": ["TLC_239t"],
+      "source": "assets/original/card_art_and_layers/727e69910188/HS35-136_W__e0b706a6a97c.png",
+      "sha256": "8344090c3ac557f3b204e9cf48fbb773a1760b365232fab6a81e27456eac4ee4",
+      "runtimeSha256": "e35b658421e1abc43cb66805737f218e6c117ba27ffef624c4467b6e9c617d4c"
+    },
+    "journey_to_ungoro_the_food_chain": {
+      "hearthstoneIds": ["TLC_830"],
+      "source": "assets/original/card_art_and_layers/17a730b76979/HS35-030_S__32b6fef8423a.png",
+      "sha256": "1d6e791314b7d56055af67cc7b2acd922cac1bfc4aa781b6dfd8549a3b364102",
+      "runtimeSha256": "2eb8f7ce0317094e6c182482845f372058b156d9b9fba37383b2f7054e892936"
+    },
+    "journey_to_ungoro_the_forbidden_sequence": {
+      "hearthstoneIds": ["TLC_460"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-036_S__ada79e3d0708.png",
+      "sha256": "8523110d487fb5e2a3d59f285fc0c0d98a09ed3e54316b412fb21e682c15cd59",
+      "runtimeSha256": "b8de3973925f535ef92dd9ad6e5b78122ce85fc208ef9b19ad9f19be09f015b3"
+    },
     "journey_to_ungoro_the_last_kaleidosaur": {
       "hearthstoneIds": ["UNG_954"],
       "source": "assets/original/card_art_and_layers/2e9fe0284203/HS10-185_D_New__01c17caf4c4c.png",
@@ -4939,6 +5101,12 @@
       "sha256": "1d34f9e38e27d148352c4bdcb925404dcc2317b8e11e0a6b423ecb5795828458",
       "runtimeSha256": "b2567f8409744892e20d51021c0c32e8bf7d33b106fc9e5d2479a7779a8fcada"
     },
+    "journey_to_ungoro_the_origin_stone": {
+      "hearthstoneIds": ["TLC_460t"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-145_W__abab742390bd.png",
+      "sha256": "6ad45c2fdf917bb35e8e6beb0b90b2d5995e209331f58bad562c920ed6f8548a",
+      "runtimeSha256": "1c8b4a55f31bcda796540a8eea620373c81ec41c3fe34c540ab0bdad4f6c19f4"
+    },
     "journey_to_ungoro_the_voraxx": {
       "hearthstoneIds": ["UNG_843"],
       "source": "assets/original/card_art_and_layers/2e9fe0284203/HS10-163_D__2debed76d82f.png",
@@ -4950,6 +5118,12 @@
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-061_M__a76e954f1108.png",
       "sha256": "bfac2a6078ec9194c7f51ef9310ef80fa9928b535dfa50f19633411d38c8f612",
       "runtimeSha256": "af44149a189f0dd2639ccc459a3fef3071ecc44721a0bb11b538ce142894cad4"
+    },
+    "journey_to_ungoro_tick_and_tock": {
+      "hearthstoneIds": ["END_017t"],
+      "source": "assets/original/card_art_and_layers/ff96e8847ef7/HS36-326_M__3afa3b84bc6c.png",
+      "sha256": "4ffdecf12df7d69bf352fe6cb497652c40fc767cf3352e9b59840c7e4b754c34",
+      "runtimeSha256": "fccde36cafedf4f9e1d1b5602b87c4de828ba84f001e0bacdfaf5d036dab5754"
     },
     "journey_to_ungoro_tidal_surge": {
       "hearthstoneIds": ["UNG_817"],
@@ -4987,6 +5161,12 @@
       "sha256": "b56085b1e030921ba3c4ea3e34aeb7576f44b424d98b98ff02820b0ff2f9524f",
       "runtimeSha256": "524c5a0883a75406b9b488dbe52e6a6f784ff917894104075efb5676e1fea760"
     },
+    "journey_to_ungoro_tortollan_ninja": {
+      "hearthstoneIds": ["TLC_513t2"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-169_M__309d0c3ca707.png",
+      "sha256": "36e45ed60d3a2be30ca382e85193a3aa6cd902b77bf73a3144cbd86bbbcb9408",
+      "runtimeSha256": "ee2d21f33ef17d9b6826f8724d5feba2e3242b0b8e87ef9aa99e2ae943cff453"
+    },
     "journey_to_ungoro_tortollan_primalist": {
       "hearthstoneIds": ["UNG_088"],
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-066_M__9d0ba5ab692c.png",
@@ -5010,6 +5190,12 @@
       "source": "assets/original/card_art_and_layers/7c03ab02b57c/HS10-047_M__43fd6a587112.png",
       "sha256": "80f47417aad51e585dcac788a2f1fa2fc20bca2af59c7fed81721e9b285b0a46",
       "runtimeSha256": "69343efc84fafc66508f0751d612bc62326818998af93f1f00d8de3129d3fe8b"
+    },
+    "journey_to_ungoro_underfel_rift": {
+      "hearthstoneIds": ["TLC_446t"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-178_S__9916d43d06ec.png",
+      "sha256": "d11beeaad899f3270cff49019e9a19019767a0148190c33861dfcf40359b6bc3",
+      "runtimeSha256": "87345d81180ea486c3613d6ccb28ec6433794bd086503228af5d27e81bc03532"
     },
     "journey_to_ungoro_unite_the_murlocs": {
       "hearthstoneIds": ["UNG_942"],

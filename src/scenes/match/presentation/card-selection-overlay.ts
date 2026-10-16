@@ -83,6 +83,7 @@ export class CardSelectionOverlay extends Container {
   private dimBoard = true
   private selecting = false
   private animateSelection = false
+  private cancelSelection: (() => void) | null = null
   private selected: SelectedCardSlot | null = null
   private readonly choicesByInstanceId = new Map<string, CardChoiceOption>()
 
@@ -110,7 +111,9 @@ export class CardSelectionOverlay extends Container {
       highlightOnHover: false,
       hoverScale: 1.05,
       onClick: () => {
-        if (!this.inputBlocked()) this.toggleView()
+        if (this.inputBlocked()) return
+        if (this.cancelSelection) this.cancelSelection()
+        else this.toggleView()
       }
     })
     this.toggle.label = 'game.card-selection.toggle'
@@ -143,6 +146,15 @@ export class CardSelectionOverlay extends Container {
 
   async show(candidates: readonly OpeningCard[]): Promise<void> {
     await this.showCards(candidates)
+  }
+
+  /** Optional hand feed selection, with enough room for all ten cards. */
+  async showHandSelection(
+    candidates: readonly OpeningCard[],
+    prompt: string,
+    onCancel: () => void
+  ): Promise<void> {
+    await this.showCards(candidates, [], undefined, false, true, prompt, onCancel)
   }
 
   /** Shows concealed remote Discover choices while the AI decides. */
@@ -268,6 +280,7 @@ export class CardSelectionOverlay extends Container {
     this.remoteEntries.length = 0
     this.entries.length = 0
     this.choicesByInstanceId.clear()
+    this.cancelSelection = null
     this.selected = null
     this.selecting = false
     this.visible = false
@@ -320,11 +333,18 @@ export class CardSelectionOverlay extends Container {
     sourceInstanceId?: string,
     animateSelection = false,
     dimBoard = true,
-    prompt = ''
+    prompt = '',
+    onCancel?: () => void
   ): Promise<void> {
     if (this.destroyed) return
     this.clear()
     this.prompt.text = prompt
+    this.cancelSelection = onCancel ?? null
+    const togglePosition = onCancel
+      ? GAME_BOARD_LAYOUT.cardSelection.handSelection.cancelButton.position
+      : GAME_BOARD_LAYOUT.cardSelection.toggleButton.position
+    this.toggle.position.set(togglePosition.x, togglePosition.y)
+    this.toggle.setBaseY(togglePosition.y)
     this.animateSelection = animateSelection
     const revision = this.requestRevision
     choiceOptions.forEach((option, index) => {
@@ -348,12 +368,24 @@ export class CardSelectionOverlay extends Container {
           return null
         }
         slot.label = `game.card-selection.option:${card.instanceId}`
+        const handLayout = onCancel
+          ? GAME_BOARD_LAYOUT.cardSelection.handSelection
+          : null
+        const row = handLayout ? Math.floor(index / handLayout.columns) : 0
+        const column = handLayout ? index % handLayout.columns : index
+        const rowSize = handLayout
+          ? Math.min(handLayout.columns, candidates.length - row * handLayout.columns)
+          : candidates.length
         slot.position.set(
-          GAME_BOARD_LAYOUT.cardSelection.cards.centerX +
-            (index - midpoint) * GAME_BOARD_LAYOUT.cardSelection.cards.gap,
-          GAME_BOARD_LAYOUT.cardSelection.cards.baselineY
+          handLayout
+            ? handLayout.centerX + (column - (rowSize - 1) / 2) * handLayout.gap
+            : GAME_BOARD_LAYOUT.cardSelection.cards.centerX +
+                (index - midpoint) * GAME_BOARD_LAYOUT.cardSelection.cards.gap,
+          handLayout
+            ? handLayout.firstBaselineY + row * handLayout.rowGap
+            : GAME_BOARD_LAYOUT.cardSelection.cards.baselineY
         )
-        slot.scale.set(GAME_BOARD_LAYOUT.cardSelection.cards.scale)
+        slot.scale.set(handLayout?.scale ?? GAME_BOARD_LAYOUT.cardSelection.cards.scale)
         slot.alpha = 0
         slot.setMulliganInteractionEnabled(true)
         slot.on('pointertap', () => this.choose(card, slot))
@@ -481,6 +513,9 @@ export class CardSelectionOverlay extends Container {
       this.toggle.setEnabled(false)
       this.toggleOutline.disappear(this.options.exitLayer)
     }
+    const defaultToggle = GAME_BOARD_LAYOUT.cardSelection.toggleButton.position
+    this.toggle.position.set(defaultToggle.x, defaultToggle.y)
+    this.toggle.setBaseY(defaultToggle.y)
     this.prompt.text = ''
     this.requestRevision += 1
     this.animationScope.kill()
@@ -496,6 +531,7 @@ export class CardSelectionOverlay extends Container {
       if (!child.destroyed) child.destroy({ children: true })
     }
     this.choicesByInstanceId.clear()
+    this.cancelSelection = null
     this.selected = null
     this.boardVisible = false
     this.dimming = true
@@ -603,6 +639,11 @@ export class CardSelectionOverlay extends Container {
     const dimmed = !this.boardVisible && this.dimming
     this.darkOverlay.alpha = dimmed && this.dimBoard ? 1 : 0
     this.darkOverlay.eventMode = dimmed ? 'static' : 'none'
-    if (updateLabel) this.toggleLabel.text = this.boardVisible ? 'Show' : 'Hide'
+    if (updateLabel)
+      this.toggleLabel.text = this.cancelSelection
+        ? 'Cancel'
+        : this.boardVisible
+          ? 'Show'
+          : 'Hide'
   }
 }

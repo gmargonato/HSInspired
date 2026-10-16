@@ -1,4 +1,5 @@
 import { CENTER, TOP_LEFT, placement } from '../../visual-components/layout'
+import { MATCH_VFX_LAYOUT } from '../../scenes/match/presentation/match-vfx-layout'
 import { GAME_BOARD_LAYOUT } from '../../scenes/match/game-scene-layout'
 
 const CANVAS_SIZE = { width: 1920, height: 1080 }
@@ -48,32 +49,32 @@ export const VFX_LAB_LAYOUT = {
     height: 176
   },
   aoe: {
+    previewTargets: { gap: 140, maxPerRow: 7 },
     // Flame quads include room for broad billows. Logical target outlines stay
     // on the rows below; selecting both rows removes the internal seam.
     blasts: {
       enemyBoard: placement(
-        { x: 754, y: 394 },
-        { width: 1400, height: 370 },
+        {
+          x: MATCH_VFX_LAYOUT.areas.remoteBoard.position.x + BOARD_OFFSET_X,
+          y: MATCH_VFX_LAYOUT.areas.remoteBoard.position.y
+        },
+        MATCH_VFX_LAYOUT.areas.remoteBoard.size,
         { anchor: CENTER }
       ),
       friendlyBoard: placement(
-        { x: 754, y: 633 },
-        { width: 1400, height: 370 },
+        {
+          x: MATCH_VFX_LAYOUT.areas.localBoard.position.x + BOARD_OFFSET_X,
+          y: MATCH_VFX_LAYOUT.areas.localBoard.position.y
+        },
+        MATCH_VFX_LAYOUT.areas.localBoard.size,
         { anchor: CENTER }
       ),
       bothBoards: placement(
-        { x: 754, y: 514 },
-        { width: 1400, height: 700 },
-        { anchor: CENTER }
-      ),
-      enemyHero: placement(
-        { x: 754, y: 175 },
-        { width: 280, height: 320 },
-        { anchor: CENTER }
-      ),
-      friendlyHero: placement(
-        { x: 754, y: 830 },
-        { width: 280, height: 320 },
+        {
+          x: MATCH_VFX_LAYOUT.areas.bothBoards.position.x + BOARD_OFFSET_X,
+          y: MATCH_VFX_LAYOUT.areas.bothBoards.position.y
+        },
+        MATCH_VFX_LAYOUT.areas.bothBoards.size,
         { anchor: CENTER }
       )
     },

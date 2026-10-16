@@ -226,6 +226,8 @@ async function bootstrap(): Promise<void> {
     import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'card-inspector'
   const directOutlineLabStart =
     import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'outline-lab'
+  const directHeroPowerAnimStart =
+    import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'hero-power-anim'
   const directVfxLabStart =
     import.meta.env.DEV && import.meta.env.VITE_DEV_START_ROUTE === 'vfx-lab'
   const directMatchPerformanceStart =
@@ -235,6 +237,7 @@ async function bootstrap(): Promise<void> {
   const directStart =
     directInspectorStart ||
     directOutlineLabStart ||
+    directHeroPowerAnimStart ||
     directVfxLabStart ||
     directMatchPerformanceStart ||
     directGameStart
@@ -289,6 +292,9 @@ async function bootstrap(): Promise<void> {
     } else if (directOutlineLabStart) {
       const { OutlineLabScene } = await import('@outline-lab')
       await game.start(new OutlineLabScene())
+    } else if (directHeroPowerAnimStart) {
+      const { HeroPowerAnimScene } = await import('@hero-power-anim')
+      await game.start(new HeroPowerAnimScene())
     } else if (directVfxLabStart) {
       const { VfxLabScene } = await import('@vfx-lab')
       await game.start(new VfxLabScene())

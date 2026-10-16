@@ -13,6 +13,8 @@ import { Button } from '../../visual-components/controls/button'
 import { DeckEntryButton } from '../../visual-components/controls/deck-entry-button'
 import { HERO_CATALOG } from '../../game-rules/content/heroes'
 import { getDeckHeroTexture } from '../../visual-components/assets/hero-assets'
+import { HeroPortrait } from '../../visual-components/hero-portrait'
+import { hasPremiumHeroPortrait } from '../../visual-components/hero-portrait-appearance'
 import type { Deck } from '../../game-rules/decks'
 import type { PreferencesApi } from '../../desktop/contracts/ipc/preferences'
 import type { DeckStore } from '../../application/contracts/deck-store'
@@ -48,7 +50,7 @@ export class DeckSelectionView extends Container {
   private previousPageButton!: Button
   private nextPageButton!: Button
   private backButton!: Button
-  private heroPortrait!: Sprite
+  private heroPortrait!: HeroPortrait
   private heroName!: Text
   private classWins!: Text
   private playOutlineTarget!: Sprite
@@ -178,7 +180,7 @@ export class DeckSelectionView extends Container {
   }
 
   private createSelectionDetails(assets: DeckSelectionAssets): void {
-    this.heroPortrait = new Sprite()
+    this.heroPortrait = new HeroPortrait()
     applyAnchoredPlacement(this.heroPortrait, DECK_SELECTION_LAYOUT.heroPortrait)
     this.heroPortrait.visible = false
     this.heroPortrait.eventMode = 'none'
@@ -287,6 +289,10 @@ export class DeckSelectionView extends Container {
       this.deckOutlines.push(outline)
 
       const button = new DeckEntryButton(texture, {
+        premiumPortrait: hasPremiumHeroPortrait(
+          this.playerStatsStore,
+          entry.deck.heroId
+        ),
         pressedScale: 1,
         pressedBrightness: 1,
         highlightOnHover: false,
@@ -316,7 +322,11 @@ export class DeckSelectionView extends Container {
     this.selectedDeckOutline?.setEnabled(false)
     this.selectedDeckOutline = outline
     this.selectedDeck = deck
-    this.heroPortrait.texture = getDeckHeroTexture(assets, hero.presentationAssetKey)
+    this.heroPortrait.texture = getDeckHeroTexture(
+      assets,
+      hero.presentationAssetKey,
+      this.playerStatsStore
+    )
     this.heroPortrait.visible = true
     this.heroName.text = hero.displayName
     this.heroName.visible = true

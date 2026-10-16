@@ -115,7 +115,8 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       dependencies.services.deckStore,
       dependencies.router,
       dependencies.services.dialogs,
-      dependencies.services.logger
+      dependencies.services.logger,
+      dependencies.services.playerStatsStore
     ),
   arena: (_request, dependencies) =>
     new ArenaScene(
@@ -123,13 +124,15 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       dependencies.router,
       dependencies.services.dialogs,
       dependencies.services.logger,
-      dependencies.services.progressionStore
+      dependencies.services.progressionStore,
+      dependencies.services.playerStatsStore
     ),
   'new-deck': (_request, dependencies) =>
     new NewDeckScene(
       dependencies.services.deckStore,
       dependencies.services.logger,
-      dependencies.services.dialogs
+      dependencies.services.dialogs,
+      dependencies.services.playerStatsStore
     ),
   'tavern-brawl': (_request, dependencies) =>
     new TavernBrawlScene(
@@ -486,7 +489,8 @@ export class SceneNavigator implements SceneRouter {
           this.services.deckStore,
           this,
           this.services.dialogs,
-          this.services.logger
+          this.services.logger,
+          this.services.playerStatsStore
         )
       case 'arena':
         return new ArenaScene(
@@ -494,13 +498,15 @@ export class SceneNavigator implements SceneRouter {
           this,
           this.services.dialogs,
           this.services.logger,
-          this.services.progressionStore
+          this.services.progressionStore,
+          this.services.playerStatsStore
         )
       case 'new-deck':
         return new NewDeckScene(
           this.services.deckStore,
           this.services.logger,
-          this.services.dialogs
+          this.services.dialogs,
+          this.services.playerStatsStore
         )
       case 'tavern-brawl':
         return new TavernBrawlScene(

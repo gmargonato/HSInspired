@@ -1,5 +1,7 @@
+import { isPermanentBoardObject } from '../../../game-rules/match/rules/board-objects'
 import { cthunCardRulesText } from '../../../game-rules/match/cthun'
 import type {
+  CardDefinition,
   MinionCardDefinition,
   WeaponCardDefinition
 } from '../../../game-rules/content/cards'
@@ -69,6 +71,15 @@ export function boardMinionCardPreviewModel(
     attackColor: minionAttackColor(minion.attack, baseAttack),
     healthColor: minionHealthColor(minion.health, minion.maxHealth, baseHealth)
   }
+}
+
+/** Permanent spell board objects retain their authored statless card preview. */
+export function boardObjectCardPreviewModel(
+  definition: CardDefinition,
+  minion: BoardMinion
+) {
+  if (!isPermanentBoardObject(minion) || definition.type !== 'Spell') return null
+  return { card: definition, silenced: false }
 }
 
 /** Stable key used to avoid rebuilding an unchanged hovered preview. */

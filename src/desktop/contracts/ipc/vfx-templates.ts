@@ -11,6 +11,57 @@ export const VFX_AOE_ZONES = [
 /** Zones are relative to the effect controller, independent of screen side. */
 export type VfxAoeZone = (typeof VFX_AOE_ZONES)[number]
 
+/** Particle fire uses the extracted color ramp. */
+export interface FireAoePalette {
+  readonly edge: string
+  readonly flame: string
+  readonly core: string
+}
+export interface FireAoeAppearance {
+  /** Omit to use the original extracted ramp. */
+  readonly palette?: FireAoePalette
+  readonly glowColor?: string
+  readonly emberColor?: string
+  readonly impactColor?: string
+  readonly smokeColor?: string
+  readonly smokeOpacity?: number
+}
+export interface FireAoeDynamics {
+  readonly turbulence: number
+  readonly smokeAmount: number
+  readonly smokePersistence: number
+  readonly emberAmount: number
+  readonly emberPersistence: number
+}
+export const DEFAULT_FIRE_AOE_DYNAMICS: FireAoeDynamics = {
+  turbulence: 0,
+  smokeAmount: 1,
+  smokePersistence: 1,
+  emberAmount: 1,
+  emberPersistence: 1
+}
+export interface FireAoeTuning {
+  readonly density: number
+  readonly particleScale: number
+  readonly motion: number
+  readonly rampIntensity: number
+  readonly glow: number
+  readonly timingScale: number
+  /** Off when omitted. Hero target impacts always remain enabled. */
+  readonly minionImpacts?: boolean
+  readonly appearance?: FireAoeAppearance
+  readonly dynamics?: FireAoeDynamics
+}
+
+export const DEFAULT_FIRE_AOE_TUNING: FireAoeTuning = {
+  density: 1,
+  particleScale: 1,
+  motion: 1,
+  rampIntensity: 1.1,
+  glow: 0.75,
+  timingScale: 1
+}
+
 interface VfxCommonTuning {
   readonly flameColor: string
   readonly coreColor: string
@@ -34,6 +85,8 @@ export type VfxTemplate =
         readonly glowColor?: string
         readonly sootColor?: string
         readonly missileGlow?: number
+        /** Omit for the extracted material colors; false enables palette overrides. */
+        readonly useOriginalColors?: boolean
         /** Fireball head diameters, in design pixels. */
         readonly headStartSize?: number
         readonly headEndSize?: number
@@ -48,14 +101,11 @@ export type VfxTemplate =
       readonly name: string
       readonly family: 'aoe'
       readonly zones: readonly VfxAoeZone[]
-      readonly tuning: VfxCommonTuning & {
-        readonly redColor?: string
-        readonly sootColor?: string
+      readonly tuning: {
+        readonly intensity: number
+        readonly fire: FireAoeTuning
         /** Optional visual impact cue, independent of the residual tail. */
         readonly impactMs?: number
-        readonly aoeRadius: number
-        readonly aoeEdgeSoftness: number
-        readonly aoeShape: 'radial' | 'wide'
       }
     }
 
@@ -104,6 +154,11 @@ function color(value: unknown, label: string): string {
   return value
 }
 
+function boolean(value: unknown, label: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`${label} must be a boolean`)
+  return value
+}
+
 function headSize(value: unknown, label: string): number {
   const size = numberInRange(value, 0, 1000, label)
   if (size === 0) throw new Error(`${label} must be greater than zero`)
@@ -136,6 +191,75 @@ function tuning(value: unknown, maxDuration = 2200): VfxCommonTuning {
   }
 }
 
+function fireTuning(value: unknown): FireAoeTuning {
+  const source = record(value, 'fire')
+  if (source.minionImpacts !== undefined && typeof source.minionImpacts !== 'boolean')
+    throw new Error('fire.minionImpacts must be a boolean')
+  return {
+    density: numberInRange(source.density, 0.25, 2, 'fire.density'),
+    particleScale: numberInRange(source.particleScale, 0.5, 2, 'fire.particleScale'),
+    motion: numberInRange(source.motion, 0, 2, 'fire.motion'),
+    rampIntensity: numberInRange(source.rampIntensity, 0.25, 2, 'fire.rampIntensity'),
+    glow: numberInRange(source.glow, 0, 2, 'fire.glow'),
+    timingScale: numberInRange(source.timingScale, 0.5, 2, 'fire.timingScale'),
+    ...(source.minionImpacts !== undefined
+      ? { minionImpacts: source.minionImpacts }
+      : {}),
+    ...(source.appearance !== undefined
+      ? { appearance: fireAppearance(source.appearance) }
+      : {}),
+    ...(source.dynamics !== undefined
+      ? { dynamics: fireDynamics(source.dynamics) }
+      : {})
+  }
+}
+
+function fireAppearance(value: unknown): FireAoeAppearance {
+  const source = record(value, 'fire.appearance')
+  const result: Record<string, unknown> = {}
+  if (source.palette !== undefined) {
+    const palette = record(source.palette, 'fire.appearance.palette')
+    result.palette = Object.fromEntries(
+      ['edge', 'flame', 'core'].map((key) => [
+        key,
+        color(palette[key], `fire.palette.${key}`)
+      ])
+    )
+  }
+  for (const key of ['glowColor', 'emberColor', 'impactColor', 'smokeColor'])
+    if (source[key] !== undefined)
+      result[key] = color(source[key], `fire.appearance.${key}`)
+  if (source.smokeOpacity !== undefined)
+    result.smokeOpacity = numberInRange(
+      source.smokeOpacity,
+      0,
+      1,
+      'fire.appearance.smokeOpacity'
+    )
+  return result as FireAoeAppearance
+}
+
+function fireDynamics(value: unknown): FireAoeDynamics {
+  const source = record(value, 'fire.dynamics')
+  return {
+    turbulence: numberInRange(source.turbulence, 0, 2, 'fire.dynamics.turbulence'),
+    smokeAmount: numberInRange(source.smokeAmount, 0, 2, 'fire.dynamics.smokeAmount'),
+    smokePersistence: numberInRange(
+      source.smokePersistence,
+      0.25,
+      2,
+      'fire.dynamics.smokePersistence'
+    ),
+    emberAmount: numberInRange(source.emberAmount, 0, 2, 'fire.dynamics.emberAmount'),
+    emberPersistence: numberInRange(
+      source.emberPersistence,
+      0.25,
+      2,
+      'fire.dynamics.emberPersistence'
+    )
+  }
+}
+
 export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
   const source = record(value, 'VFX template library')
   if (source.version !== 1 || !Array.isArray(source.templates))
@@ -149,7 +273,6 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
     ids.add(item.id)
     if (typeof item.name !== 'string' || !item.name.trim() || item.name.length > 80)
       throw new Error(`Invalid VFX template name: ${item.id}`)
-    const common = tuning(item.tuning, item.family === 'aoe' ? 5000 : 2200)
     const values = record(item.tuning, 'tuning')
     if (item.family === 'missile')
       return {
@@ -157,7 +280,7 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
         name: item.name.trim(),
         family: 'missile',
         tuning: {
-          ...common,
+          ...tuning(item.tuning),
           ...(values.headSurfaceColor !== undefined
             ? { headSurfaceColor: color(values.headSurfaceColor, 'headSurfaceColor') }
             : {}),
@@ -175,6 +298,14 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
             : {}),
           ...(values.missileGlow !== undefined
             ? { missileGlow: numberInRange(values.missileGlow, 0, 2, 'missileGlow') }
+            : {}),
+          ...(values.useOriginalColors !== undefined
+            ? {
+                useOriginalColors: boolean(
+                  values.useOriginalColors,
+                  'useOriginalColors'
+                )
+              }
             : {}),
           ...(values.headStartSize !== undefined
             ? { headStartSize: headSize(values.headStartSize, 'headStartSize') }
@@ -203,39 +334,23 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
         new Set(item.zones).size !== item.zones.length
       )
         throw new Error(`Invalid AoE zones: ${item.id}`)
-      if (values.aoeShape !== 'radial' && values.aoeShape !== 'wide')
-        throw new Error(`Invalid AoE shape: ${item.id}`)
       return {
         id: item.id,
         name: item.name.trim(),
         family: 'aoe',
         zones: [...item.zones] as VfxAoeZone[],
         tuning: {
-          ...common,
-          ...(values.sootColor !== undefined
-            ? { sootColor: color(values.sootColor, 'sootColor') }
-            : {}),
+          intensity: numberInRange(
+            values.intensity,
+            ...commonRanges.intensity,
+            'intensity'
+          ),
+          fire: fireTuning(values.fire),
           ...(values.impactMs !== undefined
             ? {
-                impactMs: numberInRange(
-                  values.impactMs,
-                  0,
-                  common.durationMs,
-                  'impactMs'
-                )
+                impactMs: numberInRange(values.impactMs, 0, 5000, 'impactMs')
               }
-            : {}),
-          ...(values.redColor !== undefined
-            ? { redColor: color(values.redColor, 'redColor') }
-            : {}),
-          aoeRadius: numberInRange(values.aoeRadius, 0.35, 1.15, 'aoeRadius'),
-          aoeEdgeSoftness: numberInRange(
-            values.aoeEdgeSoftness,
-            0.01,
-            0.2,
-            'aoeEdgeSoftness'
-          ),
-          aoeShape: values.aoeShape
+            : {})
         }
       }
     }

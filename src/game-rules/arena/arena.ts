@@ -1,5 +1,6 @@
 import {
   CARD_CATALOG,
+  isCardAllowedForClass,
   PLAYABLE_CLASSES,
   type CardDefinition,
   type CardId,
@@ -92,7 +93,7 @@ export function getArenaCardPool(heroId: HeroId): readonly CardDefinition[] {
     (card) =>
       card.collectible &&
       card.deckLegal &&
-      (card.cardClass === 'Neutral' || card.cardClass === heroClass) &&
+      isCardAllowedForClass(card, heroClass) &&
       (card.rarity === 'Free' ||
         card.rarity === 'Common' ||
         card.rarity === 'Rare' ||

@@ -28,10 +28,7 @@ import type { GameCardTargeting } from '../targeting/game-card-targeting'
 import type { GameCombatPresentation } from '../combat/game-combat-presentation'
 import { Button } from '../../../visual-components/controls/button'
 import { GameBoardView, type GameBoardViewOptions } from '../board/game-board-view'
-import {
-  gsap,
-  type AnimationScope
-} from '../../../visual-components/animation/animations'
+import { gsap, AnimationScope } from '../../../visual-components/animation/animations'
 import { createMatchScenario } from '../../../game-rules/match/testing/match-scenario-builder'
 import { GameBoardSession } from '../game-board-session'
 import type {
@@ -47,6 +44,7 @@ import { asCardId } from '../../../game-rules/content/cards'
 import { GAME_BOARD_LAYOUT } from '../game-scene-layout'
 import {
   BOARD_TIMING,
+  handEaseOutExpo,
   OPENING_TIMING,
   RESOLUTION_TIMING
 } from './game-presentation-timing'
@@ -998,6 +996,71 @@ afterEach(() => {
   for (const value of boards.splice(0)) if (!value.destroyed) value.dispose()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('fire VFX match integration', () => {
+  it.each([true, false])(
+    'passes typed targets in effect-layer coordinates, local caster=%s',
+    async (localCaster) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        heroViews: Map<PlayerId, HeroView>
+        localMinionViews: MinionView[]
+        createHeroes(state: OpeningMatchState): void
+        presentEffectVfx(
+          event: Extract<OpeningMatchEvent, { type: 'effect-vfx-started' }>
+        ): Promise<void>
+        vfxPresenter: {
+          layer: Container
+          play(...args: unknown[]): Promise<void>
+        }
+      }
+      internal.createHeroes(internal.session.getState())
+      const owner = internal.session.localParticipantId
+      const remote = internal.session.remoteParticipantId
+      const hero = internal.heroViews.get(remote)!
+      const minion = Object.assign(new Container(), {
+        instanceId: 'fire-target-minion',
+        ownerId: owner
+      }) as unknown as MinionView
+      minion.position.set(985, 610)
+      internal.localMinionViews.push(minion)
+      value.addChild(minion)
+      value.position.set(170, 90)
+      value.scale.set(0.8)
+      const play = vi.spyOn(internal.vfxPresenter, 'play').mockResolvedValue()
+      await internal.presentEffectVfx({
+        type: 'effect-vfx-started',
+        vfxId: 'fire-blast-all-characters',
+        sourceInstanceId: 'played-spell',
+        controllerId: localCaster ? owner : remote,
+        actionPath: 'cast.damage',
+        targetInstanceIds: [
+          minion.instanceId!,
+          `${remote}:hero`,
+          minion.instanceId!,
+          'removed-target'
+        ]
+      })
+      expect(play).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: 'fire-blast-all-characters' }),
+        localCaster,
+        undefined,
+        undefined,
+        [
+          {
+            ...internal.vfxPresenter.layer.toLocal(minion.getGlobalPosition()),
+            kind: 'minion'
+          },
+          {
+            ...internal.vfxPresenter.layer.toLocal(hero.getGlobalPosition()),
+            kind: 'hero'
+          }
+        ]
+      )
+    }
+  )
 })
 
 describe('weapon play entrances', () => {
@@ -5349,6 +5412,114 @@ describe('board lifecycle preservation', () => {
     expect(slot.destroyed).toBe(true)
   })
 
+  it('snaps desktop focus poses and interrupts movement without displacing neighbors', () => {
+    const value = board()
+    const { hand, animationScope } = value as unknown as {
+      hand: GameHandView
+      animationScope: AnimationScope
+    }
+    const rests = layoutHand(4)
+    const slots = rests.map((rest, index) => {
+      const slot = mulliganSlot(`focus-${index}`)
+      slot.position.set(rest.x, rest.y)
+      slot.rotation = rest.rotation
+      slot.scale.set(rest.scale)
+      hand.layer.addChild(slot)
+      hand.append({
+        card: { instanceId: slot.instanceId, cardId: asCardId('classic_wisp') },
+        slot,
+        restTransform: rest,
+        displaced: false
+      })
+      return slot
+    })
+    const create = animationScope.to.bind(animationScope)
+    const tweens: gsap.core.Tween[] = []
+    vi.spyOn(animationScope, 'to').mockImplementation((target, vars) => {
+      const tween = create(target, vars).pause()
+      tweens.push(tween)
+      return tween
+    })
+    // Simulate a card midway through reflow: focus must not snap its X.
+    const first = slots[0]!
+    first.x -= 25
+    hand.hoverForBenchmark(first)
+    hand.applyHoverDelta()
+    expect(first.x).toBeCloseTo(rests[0]!.x - 25)
+    expect(first.y).toBeCloseTo(1020 + 0.1 * DEFAULT_HAND_LAYOUT.verticalUnitsToPixels)
+    expect(first.rotation).toBe(0)
+    expect(first.scale.x).toBeCloseTo(DEFAULT_HAND_LAYOUT.hoverScale)
+    expect(first.zIndex).toBe(ACTIVE_HAND_CARD_DEPTH)
+    const entryMove = tweens.find((tween) => tween.vars.y !== undefined)!
+    expect(entryMove.duration()).toBe(0.5)
+    expect(entryMove.vars.ease).toBe(handEaseOutExpo)
+    expect(tweens).toHaveLength(1)
+    entryMove.progress(0.5)
+    expect(first.x).toBeCloseTo(rests[0]!.x - 25 * 2 ** -5, 5)
+    const interruptedX = first.x
+    hand.hoverForBenchmark(slots[3]!)
+    hand.applyHoverDelta()
+    expect(gsap.getTweensOf(first)).not.toContain(entryMove)
+    expect(first.x).toBe(interruptedX)
+    expect(first.y).toBeCloseTo(
+      rests[0]!.y - 0.5 * DEFAULT_HAND_LAYOUT.verticalUnitsToPixels
+    )
+    expect(first.scale.x).toBe(rests[0]!.scale)
+    expect(first.rotation).toBeCloseTo(rests[0]!.rotation, 6)
+    for (const index of [1, 2]) {
+      expect(slots[index]!.x).toBe(rests[index]!.x)
+      expect(slots[index]!.y).toBe(rests[index]!.y)
+      expect(gsap.getTweensOf(slots[index]!)).toHaveLength(0)
+    }
+    for (const slot of [first, slots[3]!]) {
+      for (const tween of gsap.getTweensOf([slot, slot.scale])) tween.progress(1)
+    }
+    expect(first.x).toBeCloseTo(rests[0]!.x)
+    expect(first.y).toBeCloseTo(rests[0]!.y)
+    expect(slots[3]!.y).toBe(1020)
+  })
+
+  it('matches the extracted hand ease and lands exactly on its target', () => {
+    for (const progress of [0, 0.1, 0.25, 0.5, 0.9]) {
+      expect(handEaseOutExpo(progress)).toBeCloseTo(1 - 2 ** (-10 * progress), 12)
+    }
+    expect(handEaseOutExpo(1)).toBe(1)
+  })
+
+  it('releases interrupted scoped tweens while preserving paused and delayed work', () => {
+    const scope = new AnimationScope()
+    const tracked = (
+      scope as unknown as { tracked: Set<{ animation: gsap.core.Animation }> }
+    ).tracked
+    const target = { x: 0 }
+    const paused = scope.to({ x: 0 }, { x: 1, duration: 1, paused: true })
+    const delayed = scope.to({ x: 0 }, { x: 1, duration: 1, delay: 100 })
+    try {
+      for (let index = 0; index < 100; index++) {
+        const tween = scope.to(target, { x: index + 1, duration: 0.5 }).pause()
+        tween.progress(0.2)
+        gsap.killTweensOf(target)
+      }
+      scope.pause()
+      expect([...tracked].map((item) => item.animation)).toEqual([paused, delayed])
+      scope.resume()
+      expect(paused.paused()).toBe(false)
+      expect(delayed.paused()).toBe(false)
+
+      const partialTarget = { x: 0, y: 0 }
+      const partial = scope.to(partialTarget, { x: 1, y: 1, duration: 1 }).pause()
+      partial.progress(0.2)
+      gsap.killTweensOf(partialTarget, 'x')
+      scope.pause()
+      expect([...tracked].map((item) => item.animation)).toContain(partial)
+      partial.progress(1)
+      expect(partialTarget.x).toBeLessThan(1)
+      expect(partialTarget.y).toBe(1)
+    } finally {
+      scope.kill()
+    }
+  })
+
   it('refreshes the current pointer after a lock without hovering through an overlay', () => {
     const value = board()
     const internal = value as unknown as {
@@ -5661,12 +5832,12 @@ describe('board lifecycle preservation', () => {
       expect(hand.hoveredSlot).toBe(existing[0])
       for (const tween of gsap.getTweensOf([existing[0], existing[0]!.scale]))
         tween.progress(1)
-      expect(existing[0]!.scale.x).toBe(enlargedScale)
+      expect(existing[0]!.scale.x).toBeCloseTo(enlargedScale, 6)
       move(1)
       expect(hand.hoveredSlot).toBe(existing[1])
       for (const tween of gsap.getTweensOf([existing[1], existing[1]!.scale]))
         tween.progress(1)
-      expect(existing[1]!.scale.x).toBe(enlargedScale)
+      expect(existing[1]!.scale.x).toBeCloseTo(enlargedScale, 6)
       hand.layer.emit('pointerleave', {} as FederatedPointerEvent)
       expect(hand.hoveredSlot).toBeNull()
       move(2)

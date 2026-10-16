@@ -61,7 +61,7 @@ const COMMON_CONTROLS: readonly ControlSpec[] = [
   },
   {
     key: 'flowSpeed',
-    label: 'Texture speed',
+    label: 'Core rotation speed',
     type: 'range',
     min: 0,
     max: 3.5,
@@ -75,92 +75,205 @@ const COMMON_CONTROLS: readonly ControlSpec[] = [
     max: 1.2,
     step: 0.01
   },
-  { key: 'durationMs', label: 'Duration', type: 'range', min: 400, max: 2200, step: 50 }
+  {
+    key: 'durationMs',
+    label: 'Flight time (ms)',
+    type: 'range',
+    min: 400,
+    max: 2200,
+    step: 50
+  }
 ]
 
-const EFFECT_CONTROLS: Record<VfxEffectId, readonly ControlSpec[]> = {
-  missile: [
-    { key: 'headSurfaceColor', label: 'Head surface color', type: 'color' },
-    { key: 'edgeColor', label: 'Outer flame color', type: 'color' },
-    { key: 'foldColor', label: 'Fold color', type: 'color' },
-    { key: 'glowColor', label: 'Glow color', type: 'color' },
-    { key: 'sootColor', label: 'Soot color', type: 'color' },
-    { key: 'missileGlow', label: 'Glow', type: 'range', min: 0, max: 2, step: 0.05 },
-    {
-      key: 'headStartSize',
-      label: 'Head start diameter',
-      type: 'range',
-      min: 8,
-      max: 240,
-      step: 1
-    },
-    {
-      key: 'headEndSize',
-      label: 'Head final diameter',
-      type: 'range',
-      min: 16,
-      max: 400,
-      step: 1
-    },
-    {
-      key: 'headGrowthMs',
-      label: 'Head growth time',
-      type: 'range',
-      min: 0,
-      max: 600,
-      step: 10
-    },
-    {
-      key: 'missileLength',
-      label: 'Wake length',
-      type: 'range',
-      min: 150,
-      max: 750,
-      step: 5
-    },
-    {
-      key: 'missileWidth',
-      label: 'Fireball size',
-      type: 'range',
-      min: 0.12,
-      max: 0.48,
-      step: 0.005
-    },
-    { key: 'showTargetGuides', label: 'Show hero endpoints', type: 'checkbox' }
-  ],
-  aoe: [
-    { key: 'edgeColor', label: 'Red / cool flame color', type: 'color' },
-    { key: 'sootColor', label: 'Ash / soot color', type: 'color' },
-    {
-      key: 'aoeRadius',
-      label: 'Blast radius',
-      type: 'range',
-      min: 0.35,
-      max: 1.15,
-      step: 0.01
-    },
-    {
-      key: 'aoeEdgeSoftness',
-      label: 'Edge softness',
-      type: 'range',
-      min: 0.01,
-      max: 0.2,
-      step: 0.005
-    },
-    {
-      key: 'aoeShape',
-      label: 'Coverage shape',
-      type: 'select',
-      options: [
-        { value: 'radial', label: 'Radial burst' },
-        { value: 'wide', label: 'Wide burst' }
-      ]
-    }
-  ]
-}
+const MISSILE_CONTROLS: readonly ControlSpec[] = [
+  { key: 'headSurfaceColor', label: 'Head surface color', type: 'color' },
+  { key: 'edgeColor', label: 'Outer flame color', type: 'color' },
+  { key: 'foldColor', label: 'Fold color', type: 'color' },
+  { key: 'glowColor', label: 'Glow color', type: 'color' },
+  { key: 'sootColor', label: 'Soot color', type: 'color' },
+  { key: 'missileGlow', label: 'Glow', type: 'range', min: 0, max: 2, step: 0.05 },
+  {
+    key: 'headStartSize',
+    label: 'Head start diameter',
+    type: 'range',
+    min: 8,
+    max: 240,
+    step: 1
+  },
+  {
+    key: 'headEndSize',
+    label: 'Head final diameter',
+    type: 'range',
+    min: 16,
+    max: 400,
+    step: 1
+  },
+  {
+    key: 'headGrowthMs',
+    label: 'Head growth time',
+    type: 'range',
+    min: 0,
+    max: 600,
+    step: 10
+  },
+  {
+    key: 'missileLength',
+    label: 'Wake length',
+    type: 'range',
+    min: 150,
+    max: 750,
+    step: 5
+  },
+  {
+    key: 'missileWidth',
+    label: 'Fireball size',
+    type: 'range',
+    min: 0.12,
+    max: 0.48,
+    step: 0.005
+  },
+  { key: 'showTargetGuides', label: 'Show hero endpoints', type: 'checkbox' }
+]
+
+const FIRE_CONTROLS: readonly ControlSpec[] = [
+  {
+    key: 'intensity',
+    label: 'Fire intensity',
+    type: 'range',
+    min: 0.25,
+    max: 2.5,
+    step: 0.01
+  },
+  {
+    key: 'fireRampIntensity',
+    label: 'Fire ramp intensity',
+    type: 'range',
+    min: 0.25,
+    max: 2,
+    step: 0.01
+  },
+  {
+    key: 'fireDensity',
+    label: 'Particle density',
+    type: 'range',
+    min: 0.25,
+    max: 2,
+    step: 0.05
+  },
+  {
+    key: 'fireParticleScale',
+    label: 'Particle size',
+    type: 'range',
+    min: 0.5,
+    max: 2,
+    step: 0.05
+  },
+  {
+    key: 'fireMotion',
+    label: 'Particle motion',
+    type: 'range',
+    min: 0,
+    max: 2,
+    step: 0.05
+  },
+  { key: 'fireGlow', label: 'Glow', type: 'range', min: 0, max: 2, step: 0.05 },
+  {
+    key: 'fireTimingScale',
+    label: 'Animation time scale',
+    type: 'range',
+    min: 0.5,
+    max: 2,
+    step: 0.05
+  },
+  {
+    key: 'aoeImpactMs',
+    label: 'Gameplay cue (ms)',
+    type: 'range',
+    min: 0,
+    max: 3000,
+    step: 10
+  },
+  {
+    key: 'previewMinions',
+    label: 'Preview minions per row',
+    type: 'range',
+    min: 0,
+    max: 7,
+    step: 1
+  },
+  { key: 'opponentCaster', label: 'Preview opponent caster', type: 'checkbox' }
+]
+
+const FIRE_PALETTE_CONTROLS: readonly ControlSpec[] = [
+  {
+    key: 'firePalette',
+    label: 'Palette',
+    type: 'select',
+    options: [
+      { value: 'original', label: 'Original fire' },
+      { value: 'custom', label: 'Custom colors' }
+    ]
+  }
+]
+const FIRE_COLOR_CONTROLS: readonly ControlSpec[] = [
+  { key: 'fireEdgeColor', label: 'Cool edge', type: 'color' },
+  { key: 'fireFlameColor', label: 'Main flame', type: 'color' },
+  { key: 'fireCoreColor', label: 'Hot core', type: 'color' }
+]
+const FIRE_TAIL_CONTROLS: readonly ControlSpec[] = [
+  {
+    key: 'fireTurbulence',
+    label: 'Turbulence',
+    type: 'range',
+    min: 0,
+    max: 2,
+    step: 0.05
+  },
+  {
+    key: 'fireSmokeAmount',
+    label: 'Smoke amount',
+    type: 'range',
+    min: 0,
+    max: 2,
+    step: 0.05
+  },
+  {
+    key: 'fireSmokePersistence',
+    label: 'Smoke persistence',
+    type: 'range',
+    min: 0.25,
+    max: 2,
+    step: 0.05
+  },
+  {
+    key: 'fireSmokeOpacity',
+    label: 'Smoke opacity',
+    type: 'range',
+    min: 0,
+    max: 1,
+    step: 0.05
+  },
+  {
+    key: 'fireEmberAmount',
+    label: 'Ember amount',
+    type: 'range',
+    min: 0,
+    max: 2,
+    step: 0.05
+  },
+  {
+    key: 'fireEmberPersistence',
+    label: 'Ember persistence',
+    type: 'range',
+    min: 0.25,
+    max: 2,
+    step: 0.05
+  }
+]
 
 /** DOM controls are overlaid on the Pixi preview like the other development labs. */
 export class VfxLabControls {
+  private parameterMode = ''
   private readonly host = element('section')
   private readonly shadow: ShadowRoot
   private readonly effectSelect = element('select')
@@ -368,7 +481,18 @@ export class VfxLabControls {
     this.playButton.disabled = !selected
     this.saveButton.disabled = !dirty || saving
     this.saveStatus.textContent = saveMessage || (dirty ? 'Unsaved changes' : 'Saved')
-    if (this.currentEffect !== effect) this.renderParameters(effect, settings)
+    const parameterMode = [
+      settings.missileOriginalColors,
+      settings.firePalette,
+      settings.fireGlowOverride,
+      settings.fireEmberOverride,
+      settings.fireImpactOverride,
+      settings.fireSmokeOverride
+    ].join(':')
+    if (this.currentEffect !== effect || this.parameterMode !== parameterMode) {
+      this.parameterMode = parameterMode
+      this.renderParameters(effect, settings)
+    }
     this.parameterList.hidden = !selected
     for (const [key, input] of this.inputs) {
       if (input instanceof HTMLInputElement && input.type === 'checkbox') {
@@ -376,7 +500,7 @@ export class VfxLabControls {
         continue
       }
       if (this.shadow.activeElement === input) continue
-      const value = settings[key]
+      const value = settings[key] ?? (key === 'aoeImpactMs' ? 500 : '')
       input.value = String(value)
       const output = this.outputs.get(key)
       if (output) output.value = this.formatValue(key, Number(value))
@@ -417,21 +541,70 @@ export class VfxLabControls {
             label,
             type: 'checkbox' as const
           })),
-          { key: 'showTargetGuides', label: 'Show target guides', type: 'checkbox' }
+          { key: 'showTargetGuides', label: 'Show target guides', type: 'checkbox' },
+          { key: 'fireMinionImpacts', label: 'Minion impact bursts', type: 'checkbox' }
         ],
         settings
       )
     }
+    if (effect === 'aoe') {
+      this.addGroup(
+        'Colors',
+        [
+          ...FIRE_PALETTE_CONTROLS,
+          ...(settings.firePalette === 'custom' ? FIRE_COLOR_CONTROLS : [])
+        ],
+        settings
+      )
+      const supporting: ControlSpec[] = []
+      for (const name of ['Glow', 'Ember', 'Impact', 'Smoke'] as const) {
+        const override = ('fire' + name + 'Override') as VfxLabSettingKey
+        supporting.push({
+          key: override,
+          label: 'Custom ' + name.toLowerCase() + ' color',
+          type: 'checkbox'
+        })
+        if (settings[override])
+          supporting.push({
+            key: ('fire' + name + 'Color') as VfxLabSettingKey,
+            label: name + ' color',
+            type: 'color'
+          })
+      }
+      this.addGroup('Supporting colors', supporting, settings)
+      this.addGroup('Fire particles and timing', FIRE_CONTROLS, settings)
+      this.addGroup('Motion and tail', FIRE_TAIL_CONTROLS, settings)
+      return
+    }
     this.addGroup(
-      'Flame color and intensity',
-      COMMON_CONTROLS.map((spec) =>
-        effect === 'aoe' && spec.key === 'durationMs' ? { ...spec, max: 5000 } : spec
-      ),
+      'Fireball colors',
+      [
+        {
+          key: 'missileOriginalColors',
+          label: 'Original material colors',
+          type: 'checkbox'
+        },
+        ...(!settings.missileOriginalColors
+          ? [
+              ...COMMON_CONTROLS.filter((c) => c.type === 'color'),
+              ...MISSILE_CONTROLS.filter(
+                (c) =>
+                  c.type === 'color' &&
+                  ['headSurfaceColor', 'edgeColor', 'sootColor'].includes(c.key)
+              )
+            ]
+          : [])
+      ],
       settings
     )
     this.addGroup(
-      effect === 'missile' ? 'Missile shape' : 'Area shape',
-      EFFECT_CONTROLS[effect],
+      'Fireball motion and size',
+      [
+        ...COMMON_CONTROLS.filter((c) => c.type !== 'color'),
+        ...MISSILE_CONTROLS.filter(
+          (c) => c.type !== 'color' && c.key !== 'missileLength'
+        )
+      ],
       settings
     )
   }

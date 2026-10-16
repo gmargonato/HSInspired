@@ -14,9 +14,18 @@ export const OPENING_TIMING = {
   playerTwoFourthCard: 0.65,
   replacementPause: 0.25,
   handoffPause: 0.5,
-  hover: 0.2,
-  hoverSettle: 0.1
+  hover: 0.2
 } as const
+
+/** Recovered desktop focus timing; draw and drag choreography keep their own pace. */
+export const HAND_FOCUS_TIMING = {
+  move: 0.5
+} as const
+
+/** Extracted iTween exponential curve, with the exact final target on completion. */
+export function handEaseOutExpo(progress: number): number {
+  return progress === 1 ? 1 : 1 - 2 ** (-10 * progress)
+}
 
 /** Sequential Secret reveal, totaling 1.6 seconds before the effect plays. */
 export const SECRET_REVEAL_TIMING = {

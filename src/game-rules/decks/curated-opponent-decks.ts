@@ -1,5 +1,6 @@
 import {
   CARD_CATALOG,
+  isCardAllowedForClass,
   EXPANSION_IDS,
   PLAYABLE_CLASSES,
   type CardDefinition,
@@ -11,7 +12,7 @@ import { DeckRules, isCollectibleDeckCard } from './deck-rules'
 import type { OpponentStrategyBrief } from './opponent-strategy'
 import type { ExpertDeckStrategyProfileId } from './expert-deck-strategy'
 
-export const CURATED_OPPONENT_CATALOG_VERSION = 2
+export const CURATED_OPPONENT_CATALOG_VERSION = 3
 
 const HISTORICAL_EXPANSIONS: ReadonlySet<string> = new Set([
   'basic',
@@ -901,6 +902,284 @@ export const CURATED_OPPONENT_DECK_DEFINITIONS: readonly CuratedOpponentDeckDefi
         'Grommash Hellscream': 1,
         'Ragnaros the Firelord': 1
       }
+    },
+    // Append-only original Un'Goro quest additions; the original 27 lists stay intact.
+    {
+      id: 'druid-jungle-giants',
+      name: 'Jungle Giants',
+      classId: 'Druid',
+      source: {
+        title: 'Taunted Quest Druid',
+        url: 'https://www.hearthpwn.com/decks/895183-taunted-quest-druid',
+        format: 'wild-legal'
+      },
+      plan: 'Ramp and stabilize with Taunts while summoning five minions with at least 5 Attack. Play Barnabus, then draw discounted threats with Ancient of Lore and Nourish; Ysera is continuing value rather than quest progress.',
+      cardList: {
+        'Jungle Giants': 1,
+        'Tortollan Forager': 2,
+        'Wild Growth': 2,
+        Wrath: 2,
+        'Elder Longneck': 1,
+        'Fandral Staghelm': 1,
+        'Mire Keeper': 1,
+        Fatespinner: 2,
+        Nourish: 2,
+        'Verdant Longneck': 1,
+        'Dark Arakkoa': 2,
+        'Spreading Plague': 2,
+        'Malfurion the Pestilent': 1,
+        Doomsayer: 2,
+        'Stonehill Defender': 2,
+        Bonemare: 2,
+        'The Lich King': 1,
+        'Ancient of Lore': 2,
+        Ysera: 1
+      }
+    },
+    {
+      id: 'hunter-marsh-queen',
+      name: 'Marsh Queen',
+      classId: 'Hunter',
+      source: {
+        title: 'Hunter Quest with DK',
+        url: 'https://www.hearthpwn.com/decks/833002-hunter-quest-with-dk',
+        format: 'wild-legal'
+      },
+      plan: "Play five one-cost minions to earn Queen Carnassa, then use her Brood, Tol'vir Warden and Tundra Rhino for sustained Beast pressure. Keep early one-drops; Rexxar supplies a slower backup value plan.",
+      cardList: {
+        'The Marsh Queen': 1,
+        Alleycat: 2,
+        'Fiery Bat': 2,
+        'Jeweled Macaw': 2,
+        'Raptor Hatchling': 2,
+        Tracking: 2,
+        'Animal Companion': 2,
+        Infest: 2,
+        "Tol'vir Warden": 2,
+        'Tundra Rhino': 2,
+        'Deathstalker Rexxar': 1,
+        'Bloodsail Corsair': 2,
+        'Fire Fly': 2,
+        'Hungry Crab': 2,
+        'Mistress of Mixtures': 2,
+        'Patches the Pirate': 1,
+        'Prince Keleseth': 1
+      }
+    },
+    {
+      id: 'mage-giants-waygate',
+      name: 'Waygate Giants',
+      classId: 'Mage',
+      source: {
+        title: 'Exodia Quest Mage KOFT In-depth Guide',
+        url: 'https://www.hearthpwn.com/decks/918727-exodia-quest-mage-koft-in-depth-guide',
+        format: 'wild-legal'
+      },
+      plan: "Generate and cast five spells with Babbling Book, Primordial Glyph and Cabalist's Tome while drawing and freezing threats. Establish discounted Arcane Giants, then use the once-per-game Time Warp for another attack turn; preserve survival tools when behind.",
+      cardList: {
+        'Open the Waygate': 1,
+        'Babbling Book': 2,
+        Arcanologist: 2,
+        'Primordial Glyph': 2,
+        'Arcane Intellect': 2,
+        'Frost Nova': 2,
+        'Ice Barrier': 1,
+        'Ice Block': 2,
+        "Cabalist's Tome": 2,
+        Blizzard: 2,
+        Doomsayer: 2,
+        'Novice Engineer': 2,
+        'Coldlight Oracle': 2,
+        'Arcane Giant': 2,
+        Frostbolt: 2,
+        'Ghastly Conjurer': 1,
+        Alexstrasza: 1
+      }
+    },
+    {
+      id: 'paladin-kaleidosaur',
+      name: 'Kaleidosaur',
+      classId: 'Paladin',
+      source: {
+        title: "Un'Goro Quest Paladin",
+        url: 'https://www.hearthpwn.com/decks/855807-ungoro-quest-paladin',
+        format: 'wild-legal'
+      },
+      plan: 'Protect sticky early minions and cast five friendly-targeted spells to earn Galvadon. Primalfin Champion recovers buffs; use removal and healing to survive until the adapted finisher can pressure safely.',
+      cardList: {
+        'The Last Kaleidosaur': 1,
+        Adaptation: 2,
+        'Blessing of Wisdom': 2,
+        'Divine Strength': 2,
+        Equality: 2,
+        'Primalfin Champion': 2,
+        Consecration: 1,
+        'Blessing of Kings': 2,
+        'Spikeridged Steed': 2,
+        'Lay on Hands': 1,
+        'Ragnaros, Lightlord': 1,
+        Doomsayer: 1,
+        'Wild Pyromancer': 2,
+        'Acolyte of Pain': 2,
+        'Stonehill Defender': 2,
+        'The Voraxx': 1,
+        'Righteous Protector': 2,
+        'Argent Squire': 2
+      }
+    },
+    {
+      id: 'priest-awaken-makers',
+      name: 'Awaken Makers',
+      classId: 'Priest',
+      source: {
+        title: "Savjz's Quest Priest",
+        url: 'https://www.hearthpwn.com/decks/826476-savjzs-quest-priest',
+        format: 'wild-legal'
+      },
+      plan: "Summon five Deathrattle minions, including copies and resummons, to earn Amara. Develop sticky early bodies, trade for value and use Amara's health reset and N'Zoth for a durable late game.",
+      cardList: {
+        'Awaken the Makers': 1,
+        'Crystalline Oracle': 2,
+        'Northshire Cleric': 2,
+        'Potion of Madness': 1,
+        'Power Word: Shield': 2,
+        'Shadow Visions': 2,
+        'Shadow Word: Death': 1,
+        'Shadow Word: Pain': 2,
+        'Kabal Talonpriest': 2,
+        'Mirage Caller': 2,
+        'Tortollan Shellraiser': 2,
+        'Dragonfire Potion': 1,
+        'Loot Hoarder': 2,
+        'Twilight Summoner': 2,
+        Barnes: 1,
+        'Elise the Trailblazer': 1,
+        'Cairne Bloodhoof': 1,
+        "N'Zoth, the Corruptor": 1,
+        'Haunted Creeper': 2
+      }
+    },
+    {
+      id: 'rogue-crystal-caverns',
+      name: 'Crystal Caverns',
+      classId: 'Rogue',
+      source: {
+        title: 'QUEST ROGUE DECK LIST GUIDE',
+        url: 'https://www.hearthpwn.com/decks/793687-quest-rogue-deck-list-guide',
+        format: 'wild-legal'
+      },
+      plan: 'Generate repeated Flame Elementals or bounce an affordable minion to play the same name five times. After Crystal Core, exploit cheap 5/5 bodies, tokens and Charge threats; retain bounce tools until completion when safe.',
+      cardList: {
+        'The Caverns Below': 1,
+        Preparation: 2,
+        Shadowstep: 2,
+        Swashburglar: 2,
+        'Gadgetzan Ferryman': 2,
+        'Mimic Pod': 2,
+        Vanish: 2,
+        'Fire Fly': 2,
+        'Glacial Shard': 2,
+        'Patches the Pirate': 1,
+        'Southsea Deckhand': 2,
+        'Stonetusk Boar': 2,
+        'Bilefin Tidehunter': 2,
+        'Novice Engineer': 2,
+        'Youthful Brewmaster': 2,
+        'Igneous Elemental': 2
+      }
+    },
+    {
+      id: 'shaman-unite-murlocs',
+      name: 'Unite Murlocs',
+      classId: 'Shaman',
+      source: {
+        title: "Murloc's Unite: Murloc Association list",
+        url: 'https://www.hearthpwn.com/forums/hearthstone-events/tournaments/decklists/195983-murlocs-unite',
+        format: 'wild-legal'
+      },
+      plan: 'Summon eight Murlocs using cheap bodies and Call in the Finishers, then refill with Megafin. Protect a wide board with tribal buffs and Everyfin is Awesome, trading when necessary before pushing damage.',
+      cardList: {
+        'Unite the Murlocs': 1,
+        'Grimscale Oracle': 2,
+        'Murloc Tidecaller': 2,
+        'Bilefin Tidehunter': 2,
+        'Blowgill Sniper': 2,
+        'Bluegill Warrior': 2,
+        Devolve: 1,
+        'Flametongue Totem': 1,
+        'Murloc Tidehunter': 2,
+        'Primalfin Totem': 1,
+        'Rockpool Hunter': 2,
+        'Coldlight Seer': 2,
+        Hex: 1,
+        'Murloc Warleader': 2,
+        'Primalfin Lookout': 1,
+        'Call in the Finishers': 2,
+        'Gentle Megasaur': 1,
+        'Finja, the Flying Star': 1,
+        'Everyfin is Awesome': 2
+      }
+    },
+    {
+      id: 'warlock-lakkari-portal',
+      name: 'Lakkari Portal',
+      classId: 'Warlock',
+      source: {
+        title: "Lakkari's Scrifice",
+        url: 'https://www.hearthpwn.com/decks/877156-lakkaris-scrifice',
+        format: 'wild-legal'
+      },
+      plan: "Use discard minions and Soulfire to reach six discards while Malchezaar's Imp and Silverware Golem recover value. Lakkari Felhound discards the two lowest-cost cards. Stabilize, play the permanent Nether Portal, then leverage repeated Imps and Councilman growth.",
+      cardList: {
+        'Lakkari Sacrifice': 1,
+        'Possessed Villager': 2,
+        Soulfire: 2,
+        Voidwalker: 2,
+        'Darkshire Librarian': 2,
+        "Malchezaar's Imp": 2,
+        'Tiny Knight of Evil': 2,
+        'Darkshire Councilman': 2,
+        Demonwrath: 1,
+        'Imp Gang Boss': 2,
+        'Silverware Golem': 2,
+        'Fist of Jaraxxus': 2,
+        Doomguard: 2,
+        'Bloodsail Corsair': 1,
+        'Patches the Pirate': 1,
+        'Lakkari Felhound': 2,
+        Succubus: 2
+      }
+    },
+    {
+      id: 'warrior-fire-plume',
+      name: 'Fire Plume',
+      classId: 'Warrior',
+      source: {
+        title:
+          'How do you counter Taunt Quest Warrior?: [42-22] Quest Taunt Warrior list',
+        url: 'https://www.hearthpwn.com/forums/hearthstone-game-modes/standard-format/190975-how-do-you-counter-taunt-quest-warrior?page=2',
+        format: 'wild-legal'
+      },
+      plan: 'Play seven Taunt minions while using armor, removal and board clears to survive. Curator and Stonehill Defender replenish resources; Sulfuras unlocks the custom targeted eight-damage hero power for removal or finishing damage.',
+      cardList: {
+        "Fire Plume's Heart": 1,
+        'The Curator': 1,
+        'Dirty Rat': 2,
+        'Primordial Drake': 2,
+        'Alley Armorsmith': 2,
+        'Direhorn Hatchling': 1,
+        'Stonehill Defender': 2,
+        'Acolyte of Pain': 2,
+        'Bloodhoof Brave': 2,
+        'Ravaging Ghoul': 2,
+        Brawl: 2,
+        'Shield Slam': 2,
+        'Sleep with the Fishes': 2,
+        Execute: 2,
+        'Shield Block': 2,
+        Whirlwind: 1,
+        'Fiery War Axe': 2
+      }
     }
   ]
 
@@ -926,7 +1205,7 @@ function resolveSourceCard(
     (card) =>
       normalizeName(card.name) === normalizedName &&
       allowedExpansions.has(card.expansionId) &&
-      (card.cardClass === 'Neutral' || card.cardClass === classId) &&
+      isCardAllowedForClass(card, classId) &&
       isCollectibleDeckCard(card) &&
       rules.isCardAllowedInDeck(deck, card)
   )
@@ -976,9 +1255,9 @@ function buildDeck(definition: CuratedOpponentDeckDefinition): CuratedOpponentDe
   }
 }
 
-if (CURATED_OPPONENT_DECK_DEFINITIONS.length !== PLAYABLE_CLASSES.length * 3) {
+if (CURATED_OPPONENT_DECK_DEFINITIONS.length !== PLAYABLE_CLASSES.length * 4) {
   throw new Error(
-    'Curated opponent catalog must contain exactly three decks per playable class.'
+    'Curated opponent catalog must contain exactly four decks per playable class.'
   )
 }
 
@@ -992,9 +1271,9 @@ for (const classId of PLAYABLE_CLASSES) {
   const classDeckCount = CURATED_OPPONENT_DECK_DEFINITIONS.filter(
     (definition) => definition.classId === classId
   ).length
-  if (classDeckCount !== 3) {
+  if (classDeckCount !== 4) {
     throw new Error(
-      `Curated opponent catalog must contain exactly three ${classId} decks.`
+      `Curated opponent catalog must contain exactly four ${classId} decks.`
     )
   }
 }

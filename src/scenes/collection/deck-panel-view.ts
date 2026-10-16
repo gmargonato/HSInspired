@@ -1,3 +1,5 @@
+import { hasPremiumHeroPortrait } from '../../visual-components/hero-portrait-appearance'
+import type { PlayerStatsStore } from '../../application/contracts/player-stats-store'
 import {
   BlurFilter,
   Container,
@@ -88,6 +90,7 @@ export type DeckPanelAssets = Pick<
   DeckPresentationAssets
 
 export interface DeckPanelViewOptions {
+  readonly playerStats?: PlayerStatsStore
   readonly assets: DeckPanelAssets
   readonly canvas: HTMLCanvasElement
   readonly inputParent: HTMLElement
@@ -923,6 +926,7 @@ export class DeckPanelView extends Actor {
   ): DeckEntryButton {
     const portraitAssetKey = getDeckPortraitAssetKey(deck.heroId)
     return new DeckEntryButton(this.options.assets.deckButtonFrame, {
+      premiumPortrait: hasPremiumHeroPortrait(this.options.playerStats, deck.heroId),
       portrait: portraitAssetKey ? this.options.assets[portraitAssetKey] : undefined,
       portraitYOffset: getDeckPortraitYOffset(deck.heroId),
       deckName: deck.name,

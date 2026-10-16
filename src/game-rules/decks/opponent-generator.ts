@@ -1,5 +1,7 @@
 import {
   CARD_CATALOG,
+  cardHasClass,
+  isCardAllowedForClass,
   PLAYABLE_CLASSES,
   type CardCatalog,
   type CardDefinition,
@@ -114,7 +116,7 @@ function classPools(
   if (cached) return cached
   const legal = catalog.all.filter(
     (card) =>
-      (card.cardClass === 'Neutral' || card.cardClass === heroClass) &&
+      isCardAllowedForClass(card, heroClass) &&
       !isOpponentPowerCard(card) &&
       rules.isCardAllowedInDeck({ heroId }, card)
   )
@@ -342,7 +344,7 @@ function pickHeroCard(
     .filter(
       (card) =>
         card.type === 'Hero' &&
-        card.cardClass === heroClass &&
+        cardHasClass(card, heroClass) &&
         rules.isCardAllowedInDeck({ heroId }, card)
     )
     .sort((a, b) => a.id.localeCompare(b.id))

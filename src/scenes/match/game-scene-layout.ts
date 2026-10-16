@@ -313,32 +313,32 @@ export const GAME_BOARD_LAYOUT = {
       firstCrystalCenter: { x: 1345, y: 1012 },
       pendingRowOffsetY: 40,
       overloadCrystal: placement(
-        { x: 3, y: 0 },
+        { x: 4, y: 0 },
         { width: 49, height: 48 },
         {
           anchor: CENTER,
-          scale: 0.7,
+          scale: 0.75,
           note: 'Locked crystal artwork shared by current and pending overload rows.'
         }
       ),
       /** Center-to-center spacing between crystals. */
-      gap: 33,
+      gap: 35,
       /** Native crystal size with a uniform scale, local to each crystal. */
       crystal: placement(
         { x: 0, y: 0 },
         { width: 45, height: 47 },
         {
           anchor: CENTER,
-          scale: 1,
+          scale: 0.9,
           note: 'Native available size; spent artwork is 44 x 45 at the same scale.'
         }
       ),
       glow: placement(
-        { x: 3, y: 0 },
+        { x: 0, y: -4 },
         { width: 96, height: 96 },
         {
           anchor: CENTER,
-          scale: 0.8,
+          scale: 1,
           note: 'Glow aligned to the visible crystal body, excluding its baked-in shadow.'
         }
       ),
@@ -458,6 +458,20 @@ export const GAME_BOARD_LAYOUT = {
 
   /** Reusable three-card selection surface used by Tracking and Discover cards. */
   cardSelection: {
+    /** A full hand needs two rows while ordinary Discover retains its three-card spread. */
+    handSelection: {
+      centerX: 960,
+      firstBaselineY: 620,
+      rowGap: 330,
+      columns: 5,
+      gap: 320,
+      scale: 0.32,
+      cancelButton: placement(
+        { x: 1650, y: 210 },
+        { width: 235, height: 127 },
+        { anchor: CENTER, note: 'Cancels optional hand-card activation selection.' }
+      )
+    },
     prompt: placement(
       { x: 960, y: 280 },
       { width: 1200, height: 44 },

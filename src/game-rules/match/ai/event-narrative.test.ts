@@ -104,3 +104,26 @@ describe('AI event perspective', () => {
     expect(text).not.toContain('damageDealt')
   })
 })
+
+it('labels extra turn starts explicitly for either player', () => {
+  expect(
+    narrate([
+      {
+        type: 'turn-started',
+        participantId: 'ai-player',
+        turnNumber: 2,
+        isExtraTurn: true
+      }
+    ])
+  ).toBe('Your turn (extra turn) began (global turn 2).')
+  expect(
+    narrate([
+      {
+        type: 'turn-started',
+        participantId: 'human-player',
+        turnNumber: 3,
+        isExtraTurn: true
+      }
+    ])
+  ).toBe("Your opponent's turn (extra turn) began (global turn 3).")
+})

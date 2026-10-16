@@ -20,6 +20,10 @@ import guldanBloodreaverFrameImage from '@assets/images/heroes/frames/warlock-gu
 import garroshScourgelordFrameImage from '@assets/images/heroes/frames/warrior-garrosh-scourgelord-frame.png'
 import type { HeroPresentationAssetKey } from '../../game-rules/content/heroes'
 import type { Texture } from 'pixi.js'
+import { HERO_CATALOG } from '../../game-rules/content/heroes'
+import type { PlayerStatsStore } from '../../application/contracts/player-stats-store'
+import { hasPremiumHeroPortrait } from '../hero-portrait-appearance'
+import { premiumHeroPortrait } from './hero-portrait-textures'
 
 export const DECK_HERO_ASSET_SOURCES = {
   'hero-guldan': guldanFrameImage,
@@ -35,6 +39,10 @@ export const DECK_HERO_ASSET_SOURCES = {
 
 /** These portraits are only used after a hero transforms during a match. */
 export const MATCH_HERO_ASSET_SOURCES = {
+  // Flat missing-art gray, matching the card renderer without borrowing a hero.
+  'hero-placeholder': `data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="345" height="433" viewBox="0 0 345 433"><path d="M0 433V173A172.5 172.5 0 0 1 345 173V433Z" fill="#535b65"/></svg>'
+  )}`,
   'hero-jaraxxus': jaraxxusFrameImage,
   'hero-ragnaros': ragnarosFrameImage,
   'hero-malfurion-pestilent': malfurionPestilentFrameImage,
@@ -60,10 +68,15 @@ export type MatchHeroAssetKey = keyof typeof MATCH_HERO_ASSET_SOURCES
 /** Menu portraits only exist for selectable deck heroes. */
 export function getDeckHeroTexture(
   assets: Record<DeckHeroAssetKey, Texture>,
-  key: HeroAssetKey
+  key: HeroAssetKey,
+  stats?: Pick<PlayerStatsStore, 'getWins'>
 ): Texture {
   if (!Object.hasOwn(DECK_HERO_ASSET_SOURCES, key)) {
     throw new Error(`Hero portrait ${key} is only available during a match.`)
   }
-  return assets[key as DeckHeroAssetKey]
+  const texture = assets[key as DeckHeroAssetKey]
+  const hero = HERO_CATALOG.all.find((hero) => hero.presentationAssetKey === key)
+  return hero && hasPremiumHeroPortrait(stats, hero.id)
+    ? premiumHeroPortrait(texture)
+    : texture
 }

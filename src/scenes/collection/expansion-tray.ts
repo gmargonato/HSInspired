@@ -12,6 +12,20 @@ import {
 import { Button } from '../../visual-components/controls/button'
 import { Actor } from '../../visual-components/lifecycle/actor'
 
+/** Compact collection-menu names with authored line breaks. */
+const EXPANSION_FILTER_LABELS: Readonly<Record<string, string>> = {
+  naxxramas: 'Naxxramas',
+  'goblins-vs-gnomes': 'Goblins vs\nGnomes',
+  'blackrock-mountain': 'Blackrock\nMountain',
+  'the-grand-tournament': 'Grand\nTournament',
+  'league-of-explorers': 'League of\nExplorers',
+  'whispers-of-the-old-gods': 'Old Gods',
+  'one-night-in-karazhan': 'Karazhan',
+  'mean-streets-of-gadgetzan': 'Gadgetzan',
+  'journey-to-ungoro': "Un'Goro",
+  'knights-of-the-frozen-throne': 'Frozen Throne'
+}
+
 export interface ExpansionTrayAssets {
   readonly toggle: Texture
   readonly tray: Texture
@@ -242,18 +256,18 @@ export class ExpansionTray extends Actor {
       })
 
       const label = new Text({
-        text: expansion.displayName,
+        text: EXPANSION_FILTER_LABELS[expansion.id] ?? expansion.displayName,
         style: {
           fontFamily: 'Belwe',
-          fontSize: 16,
+          fontWeight: 'bold',
+          fontSize: 24,
+          lineHeight: 24,
           fill: 0x2b2118,
-          align: 'left',
-          wordWrap: true,
-          wordWrapWidth: 210
+          align: 'left'
         }
       })
       label.anchor.set(0, 0.5)
-      label.position.set(-130, 0)
+      label.position.set(-125, 0)
       label.eventMode = 'none'
       button.addChild(label)
 
