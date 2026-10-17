@@ -269,7 +269,9 @@ export function createFairHypothesisCheckpoint(
 
   const pool = eligibleCards(hiddenPlayer.heroId)
   const perspectivePool = eligibleCards(perspectivePlayer.heroId)
-  const secretPool = pool.filter((card) => card.keywords.includes('secret'))
+  const secretPool = pool.filter(
+    (card) => card.type === 'Spell' && card.keywords.includes('secret')
+  )
   if (!pool.length || !perspectivePool.length)
     throw new Error('No public card pool exists for this hero.')
   const rng = createSeededRng(seed)
@@ -283,11 +285,26 @@ export function createFairHypothesisCheckpoint(
     secretsOnly = false
   ) => {
     const cards = secretsOnly
-      ? cardPool === pool && secretPool.length
+      ? cardPool === pool
         ? secretPool
-        : cardPool.filter((card) => card.keywords.includes('secret'))
+        : cardPool.filter(
+            (card) => card.type === 'Spell' && card.keywords.includes('secret')
+          )
       : cardPool
-    const candidates = cards.length > 0 ? cards : cardPool
+    // A class without native secrets may still generate or steal one. Use only
+    // public catalog possibilities; the concealed secret's identity is unknown.
+    const candidates =
+      secretsOnly && cards.length === 0
+        ? CARD_CATALOG.all.filter(
+            (card) =>
+              card.collectible &&
+              card.deckLegal &&
+              card.type === 'Spell' &&
+              card.keywords.includes('secret')
+          )
+        : cards
+    if (!candidates.length)
+      throw new Error('No public secret spell pool exists for a hidden secret.')
     return candidates[Math.floor(sampleRng.next() * candidates.length)]!
   }
 

@@ -629,10 +629,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     )
       return null
     const continuationOutcome = !continuation.provenWin
-      ? createExpertActionInspector(
-          this.session.match.getCheckpoint(),
-          this.perspectiveParticipantId
-        )(selectedAction.command)
+      ? this.createActionInspector()(selectedAction.command)
       : { penalty: 0 }
     if (continuationOutcome.penalty >= 0.25) {
       this.continuationRejection = continuationOutcome.reason
@@ -646,8 +643,12 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         this.session,
         this.currentLegalActions().map((action) => action.command)
       )?.command.type !== 'end-turn'
-    )
+    ) {
+      // A reopened pass must compete without the old continuation score bonus.
+      // Keep its existing legality and timeout checks; do not force another move.
+      if (!fallback) this.continuation = { ...continuation, reconsidering: true }
       return null
+    }
     if (
       !continuation.provenWin &&
       unpaidActionPenalty(
@@ -771,10 +772,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     if (!selected) return response
     const terminal = this.createTerminalInspector()
     const terminalLoss = terminal(selected.command) === 'loss'
-    const inspect = createExpertActionInspector(
-      this.session.match.getCheckpoint(),
-      this.perspectiveParticipantId
-    )
+    const inspect = this.createActionInspector()
     const selectedOutcome = inspect(selected.command)
     const unsafe = (action: (typeof legal)[number]) =>
       unpaidFriendlyDamageHeroPowerPenalty(
@@ -972,6 +970,30 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       this.planCommit = null
     }
     return changed
+  }
+
+  private createActionInspector() {
+    const started = this.now()
+    return createExpertActionInspector(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      () =>
+        this.now() - started >= EXPERT_TERMINAL_SAFETY_MAX_MS ||
+        this.searchUsedMs >= this.budget.searchBudgetMs ||
+        this.now() - this.turnStartedAt >=
+          this.budget.turnBudgetMs -
+            EXPERT_AI_PRESENTATION_RESERVE_MS -
+            EXPERT_AI_DISPATCH_RESERVE_MS,
+      (probe) => {
+        const probeStarted = this.now()
+        try {
+          return probe()
+        } finally {
+          // Charge only the added resource check, preserving older inspector accounting.
+          this.searchUsedMs += Math.max(0, this.now() - probeStarted)
+        }
+      }
+    )
   }
 
   private createTerminalInspector() {

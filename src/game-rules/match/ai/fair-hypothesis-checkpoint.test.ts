@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_CATALOG } from '../../content/cards'
 import { createSeededRng } from '../rng'
-import { createOpeningMatch } from '../opening-match'
+import { createOpeningMatch, createOpeningMatchFromCheckpoint } from '../opening-match'
 import { createAiFixture } from '../testing/ai-scenario-builder'
 import { createFairHypothesisCheckpoint } from './fair-hypothesis-checkpoint'
 
@@ -385,4 +385,75 @@ describe('Crystal Core in fair hypothetical worlds', () => {
       }
     }
   )
+})
+
+describe('off-class secret sampling', () => {
+  it('samples only valid public secret spells for hidden off-class secrets', () => {
+    const fixture = createAiFixture({
+      seed: 0x5eed,
+      aiHeroId: 'rexxar',
+      opponentHeroId: 'valeera',
+      aiDeck: ['basic_acidic_swamp_ooze'],
+      opponentDeck: ['basic_acidic_swamp_ooze'],
+      opponentSecrets: [{ cardId: 'classic_snipe' }]
+    })
+    const original = structuredClone(fixture.checkpoint)
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 0x1234, 0xabcd]) {
+      const sampled = createFairHypothesisCheckpoint(
+        fixture.checkpoint,
+        fixture.aiParticipantId,
+        seed
+      )
+      const secret = sampled.state.players.find(
+        (player) => player.participantId === fixture.localParticipantId
+      )!.secrets![0]!
+      const definition = CARD_CATALOG.get(secret.cardId)!
+      expect(definition.type).toBe('Spell')
+      expect(definition.keywords).toContain('secret')
+      expect(definition.collectible && definition.deckLegal).toBe(true)
+      expect(secret.instanceId).toMatch(/^expert-hidden:secret:/)
+      expect(() => createOpeningMatchFromCheckpoint(sampled)).not.toThrow()
+    }
+    expect(fixture.checkpoint).toEqual(original)
+  })
+
+  it('does not use the concealed identity when sampling an off-class secret', () => {
+    const fixtureFor = (cardId: string, revealed = false) =>
+      createAiFixture({
+        seed: 0x5eed,
+        aiHeroId: 'rexxar',
+        opponentHeroId: 'valeera',
+        aiDeck: ['basic_acidic_swamp_ooze'],
+        opponentDeck: ['basic_acidic_swamp_ooze'],
+        opponentSecrets: [{ cardId, revealed }]
+      })
+    const first = fixtureFor('classic_snipe')
+    const other = fixtureFor('classic_counterspell')
+    for (const seed of [1, 2, 3, 0x1234]) {
+      const sampled = createFairHypothesisCheckpoint(
+        first.checkpoint,
+        first.aiParticipantId,
+        seed
+      )
+      expect(
+        createFairHypothesisCheckpoint(other.checkpoint, other.aiParticipantId, seed)
+      ).toEqual(sampled)
+      expect(() => createOpeningMatchFromCheckpoint(sampled)).not.toThrow()
+    }
+    const revealed = fixtureFor('classic_snipe', true)
+    const sampled = createFairHypothesisCheckpoint(
+      revealed.checkpoint,
+      revealed.aiParticipantId,
+      0x1234
+    )
+    expect(
+      sampled.state.players.find(
+        (player) => player.participantId === revealed.localParticipantId
+      )!.secrets
+    ).toEqual(
+      revealed.checkpoint.state.players.find(
+        (player) => player.participantId === revealed.localParticipantId
+      )!.secrets
+    )
+  })
 })

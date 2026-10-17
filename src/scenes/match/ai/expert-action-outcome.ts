@@ -15,6 +15,7 @@ import {
 import { effectiveBoardMinionKeywords } from '../../../game-rules/match/rules/minion-attack-state'
 import { hasKnownCthunPayoff, unpaidActionPenalty } from './expert-ai-action-safety'
 import { wastesImmediateTemporaryMana } from './expert-temporary-mana'
+import { wastesEmptySelectorSpell } from './expert-empty-selector'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
 import {
   revealsTacticalInformation,
@@ -257,7 +258,7 @@ export function expertContinuationPenalty(
       if (index > 0)
         penalty = Math.max(
           penalty,
-          inspectExpertAction(fork, actorId, command).penalty,
+          inspectExpertAction(fork, actorId, command, shouldStop).penalty,
           unpaidActionPenalty(command, fork.getState(), actorId)
         )
       if (command.type === 'end-turn') break
@@ -642,7 +643,9 @@ function wastedHealingTarget(
 export function inspectExpertAction(
   root: OpeningMatchAnalysis,
   actorId: PlayerId,
-  command: TurnMatchCommand
+  command: TurnMatchCommand,
+  shouldStop: () => boolean = () => false,
+  measureResourceProbe: (probe: () => boolean) => boolean = (probe) => probe()
 ): ExpertActionOutcome {
   if (command.type === 'attack-character') {
     const buff = attackBeforeBuffPenalty(root, actorId, command)
@@ -653,6 +656,12 @@ export function inspectExpertAction(
   if (command.type !== 'play-card' && command.type !== 'use-hero-power')
     return { penalty: 0 }
   if (command.type === 'play-card') {
+    if (
+      measureResourceProbe(() =>
+        wastesEmptySelectorSpell(root, actorId, command, shouldStop)
+      )
+    )
+      return { penalty: 0.35, reason: 'no-payoff' }
     if (wastesImmediateTemporaryMana(root, actorId, command))
       return { penalty: 0.35, reason: 'no-payoff' }
     const damage = unpaidTargetedHeroDamage(root, actorId, command)
@@ -865,8 +874,15 @@ export function inspectExpertAction(
 
 export function createExpertActionInspector(
   checkpoint: OpeningMatchCheckpoint,
-  actorId: PlayerId
+  actorId: PlayerId,
+  shouldStop?: () => boolean,
+  measureResourceProbe: (probe: () => boolean) => boolean = (probe) => probe()
 ): (command: TurnMatchCommand) => ExpertActionOutcome {
+  // Fallback callers without a turn budget still bound the added resource probe.
+  const resourceDeadline = performance.now() + EXPERT_TERMINAL_SAFETY_MAX_MS
+  const stopResourceProbe = shouldStop ?? (() => performance.now() >= resourceDeadline)
+  // Preserve the actual public count before any fair hidden-identity sampling.
+  const hasPublicSecrets = checkpoint.state.players.some((p) => p.secrets?.length)
   let match: ReturnType<typeof createOpeningMatchFromCheckpoint> | undefined
   return (command) => {
     if (
@@ -879,7 +895,15 @@ export function createExpertActionInspector(
     match ??= createOpeningMatchFromCheckpoint(
       createFairHypothesisCheckpoint(checkpoint, actorId, 0x71ac71c)
     )
-    return match.analyze((fork) => inspectExpertAction(fork, actorId, command))
+    return match.analyze((fork) =>
+      inspectExpertAction(
+        fork,
+        actorId,
+        command,
+        () => hasPublicSecrets || stopResourceProbe(),
+        measureResourceProbe
+      )
+    )
   }
 }
 

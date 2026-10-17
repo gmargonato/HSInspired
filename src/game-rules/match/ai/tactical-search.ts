@@ -1,3 +1,4 @@
+import { CARD_CATALOG } from '../../content/cards'
 import type { PlayerId } from '../match-types'
 import type {
   OpeningMatchAnalysis,
@@ -21,12 +22,107 @@ export function terminalOutcome(
   return state.winnerId === playerId ? 'win' : state.winnerId ? 'loss' : 'draw'
 }
 
+/** Only a small public, unconditional generation grammar is safe to forecast.
+ * Unknown, copied, conditional or dynamically selected effects stay uncertain.
+ */
+function isPublicFixedGeneration(
+  event: Extract<OpeningMatchEvent, { type: 'card-generated' }>,
+  before: OpeningMatchState,
+  after: OpeningMatchState,
+  playerId: PlayerId,
+  resolved: OpeningMatchEvent | undefined
+): boolean {
+  if (event.participantId !== playerId || event.origin.kind !== 'minion') return false
+  const sourceId = event.origin.instanceId
+  const source = before.players
+    .find((player) => player.participantId === playerId)
+    ?.board.find((minion) => minion.instanceId === sourceId)
+  if (
+    !source ||
+    source.silenced ||
+    source.grantedTriggers?.length ||
+    source.attachedEffects?.length ||
+    source.deathrattles?.length
+  )
+    return false
+  const current = after.players
+    .find((player) => player.participantId === playerId)
+    ?.board.find((minion) => minion.instanceId === sourceId)
+  if (
+    !current ||
+    current.cardId !== source.cardId ||
+    current.silenced ||
+    current.grantedTriggers?.length ||
+    current.attachedEffects?.length ||
+    current.deathrattles?.length
+  )
+    return false
+  // Bind the presentation event to the actual top-level trigger action.
+  if (
+    resolved?.type !== 'effect-resolved' ||
+    resolved.action !== 'add-to-hand' ||
+    resolved.sourceInstanceId !== sourceId ||
+    resolved.sourceCardId !== source.cardId ||
+    resolved.controllerId !== playerId ||
+    resolved.eventType !== 'spell-cast' ||
+    resolved.data?.instanceId !== event.card.instanceId ||
+    resolved.data?.cardId !== event.card.cardId ||
+    resolved.data?.participantId !== playerId ||
+    !/^trigger\.on-cast\.actions\[\d+\]\./.test(resolved.actionPath) ||
+    resolved.actionPath.slice(resolved.actionPath.indexOf('].') + 2) !== playerId
+  )
+    return false
+  const effects = CARD_CATALOG.require(source.cardId).effects
+  if (!effects.length) return false
+  return effects.every(
+    (effect) =>
+      Object.keys(effect).every((key) =>
+        ['trigger', 'event', 'actions'].includes(key)
+      ) &&
+      effect.trigger === 'on-cast' &&
+      effect.event?.type === 'spell-cast' &&
+      effect.event.controller === 'self' &&
+      Object.keys(effect.event).every((key) => ['type', 'controller'].includes(key)) &&
+      !!effect.actions?.length &&
+      effect.actions.every(
+        (action) =>
+          Object.keys(action).every((key) =>
+            ['action', 'player', 'cardId', 'count'].includes(key)
+          ) &&
+          action.action === 'add-to-hand' &&
+          action.player === 'self' &&
+          action.cardId === event.card.cardId &&
+          (action.count === undefined ||
+            (typeof action.count === 'number' &&
+              Number.isSafeInteger(action.count) &&
+              action.count > 0))
+      )
+  )
+}
+
 /** Draws/choices stop exact forecasting, even when a sampled deck is deterministic. */
 export function revealsTacticalInformation(
   events: readonly OpeningMatchEvent[],
-  allowOrdinaryTurnDraw = false
+  allowOrdinaryTurnDraw = false,
+  publicContext?: {
+    readonly before: OpeningMatchState
+    readonly after: OpeningMatchState
+    readonly playerId: PlayerId
+  }
 ): boolean {
   return events.some((event, index) => {
+    if (
+      event.type === 'card-generated' &&
+      publicContext &&
+      isPublicFixedGeneration(
+        event,
+        publicContext.before,
+        publicContext.after,
+        publicContext.playerId,
+        events[index + 1]
+      )
+    )
+      return false
     // A normal opposing turn draw does not change its available public attacks.
     // Triggered draws and draw effects (for example a deck trap) remain uncertain.
     if (
@@ -228,7 +324,11 @@ export function searchTactics(
           !fork.getAiObservation ||
           !fork.getRandomState ||
           rng !== JSON.stringify(fork.getRandomState()) ||
-          revealsTacticalInformation(result.events)
+          revealsTacticalInformation(result.events, false, {
+            before,
+            after: result.state,
+            playerId
+          })
         )
           return null
         commands.push(command)
@@ -319,7 +419,8 @@ export function searchTactics(
               JSON.stringify(rngBefore) === JSON.stringify(child.getRandomState()) &&
               !revealsTacticalInformation(
                 result.events,
-                options.publicRepliesOnly === true && command.type === 'end-turn'
+                options.publicRepliesOnly === true && command.type === 'end-turn',
+                { before, after: result.state, playerId }
               )
             const outcome = terminalOutcome(result.state, playerId)
             const value =
@@ -431,6 +532,7 @@ export function inspectTacticalLine(
       return { outcome: 'unknown', reply: 'unknown' }
     let certain = true
     const apply = (command: TurnMatchCommand) => {
+      const before = fork.getState()
       const rng = fork.getRandomState?.()
       const secret = fork
         .getState()
@@ -444,7 +546,11 @@ export function inspectTacticalLine(
         !secret &&
         fork.getRandomState !== undefined &&
         JSON.stringify(rng) === JSON.stringify(fork.getRandomState()) &&
-        !revealsTacticalInformation(result.events, command.type === 'end-turn')
+        !revealsTacticalInformation(result.events, command.type === 'end-turn', {
+          before,
+          after: result.state,
+          playerId
+        })
       return result.accepted
     }
     for (const command of commands) {
