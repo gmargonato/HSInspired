@@ -504,7 +504,7 @@
               "selection": "all"
             },
             "amount": 1,
-            "vfx": "fire-blast-enemy-board"
+            "vfx": "frost-blast-enemy-board"
           },
           {
             "action": "summon-random",

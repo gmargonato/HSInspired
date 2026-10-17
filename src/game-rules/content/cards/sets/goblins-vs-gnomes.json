@@ -993,7 +993,7 @@
               }
             },
             "amount": 2,
-            "vfx": "fire-blast-both-boards"
+            "vfx": "holy-blast-both-boards"
           }
         ]
       }
@@ -1169,7 +1169,7 @@
               "selection": "all"
             },
             "amount": 3,
-            "vfx": "fire-blast-both-heroes"
+            "vfx": "shadow-blast-both-heroes"
           }
         ]
       }
@@ -1376,7 +1376,7 @@
               "reference": "target.attack"
             },
             "damageResolution": "per-target",
-            "vfx": "fire-blast-both-boards"
+            "vfx": "holy-blast-both-boards"
           }
         ]
       }
@@ -1689,7 +1689,7 @@
               "selection": "chosen"
             },
             "amount": { "random": [3, 4, 5, 6] },
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           },
           {
             "action": "overload",
@@ -1937,7 +1937,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -2082,7 +2082,7 @@
               "selection": "chosen"
             },
             "amount": 5,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }

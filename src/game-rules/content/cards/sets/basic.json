@@ -91,7 +91,7 @@
               "selection": "all"
             },
             "amount": 1,
-            "vfx": "fire-blast-enemy-board"
+            "vfx": "shadow-blast-enemy-board"
           }
         ]
       }
@@ -149,7 +149,7 @@
             },
             "amount": 1,
             "hits": 3,
-            "vfx": "fire-missile"
+            "vfx": "arcane-missile-small"
           }
         ]
       }
@@ -180,7 +180,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "arcane-missile-small"
           }
         ]
       }
@@ -585,7 +585,7 @@
               "selection": "all"
             },
             "amount": 2,
-            "vfx": "fire-blast-enemy-side"
+            "vfx": "holy-blast-enemy-side"
           }
         ]
       }
@@ -839,7 +839,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "restore",
@@ -879,7 +879,7 @@
               "exclude": "source"
             },
             "amount": 1,
-            "vfx": "fire-blast-all-characters"
+            "vfx": "fel-blast-all-characters"
           }
         ]
       }
@@ -1046,7 +1046,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -1198,7 +1198,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           },
           {
             "action": "freeze",
@@ -1237,7 +1237,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           },
           {
             "action": "freeze",
@@ -2010,7 +2010,7 @@
               "selection": "all"
             },
             "amount": 5,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -2162,7 +2162,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ],
         "then": {
@@ -2712,7 +2712,7 @@
               "selection": "chosen"
             },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -2979,7 +2979,7 @@
               "selection": "chosen"
             },
             "amount": 5,
-            "vfx": "fire-missile"
+            "vfx": "arcane-missile-small"
           },
           {
             "action": "draw",

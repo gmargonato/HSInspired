@@ -92,6 +92,8 @@ export type VfxTemplate =
         readonly headEndSize?: number
         /** Milliseconds to reach the final head diameter; zero grows immediately. */
         readonly headGrowthMs?: number
+        /** Birth delay before flight; omit for the original 1000 ms cast. */
+        readonly launchDelayMs?: number
         readonly missileLength: number
         readonly missileWidth: number
       }
@@ -320,6 +322,16 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
                   0,
                   5000,
                   'headGrowthMs'
+                )
+              }
+            : {}),
+          ...(values.launchDelayMs !== undefined
+            ? {
+                launchDelayMs: numberInRange(
+                  values.launchDelayMs,
+                  0,
+                  2000,
+                  'launchDelayMs'
                 )
               }
             : {}),

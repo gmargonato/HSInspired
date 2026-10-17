@@ -285,7 +285,7 @@ describe('explicit hero power VFX', () => {
           expect(cues[0]).toMatchObject({
             origin: 'hero-power',
             controllerId: id,
-            vfxId: 'fire-missile',
+            vfxId: heroId === 'jaina' ? 'fire-missile-small' : 'fire-missile',
             targetInstanceIds: [enemy + ':hero']
           })
           const outcome = result.events.find((e) => e.type === 'character-damaged')
@@ -376,7 +376,7 @@ describe('Charged Hammer replacement', () => {
         result.events.filter((e) => e.type === 'effect-vfx-started')
       ).toMatchObject([
         {
-          vfxId: 'fire-missile',
+          vfxId: 'frost-missile-small',
           origin: 'hero-power',
           controllerId: own,
           targetInstanceIds: [enemy + ':hero']

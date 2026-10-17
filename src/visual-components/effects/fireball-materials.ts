@@ -126,7 +126,11 @@ export class FireballParticleMesh extends Mesh<MeshGeometry, Shader> {
         // Unity SrcAlpha,One squares alpha too. Pixi add-npm uses One for the
         // alpha channel, so bake both factors and use its One,One blend instead.
         finalColor=uKind<1.5?vec4(color*alpha,alpha*alpha):vec4(color,alpha);
-        if(uKind>2.5)finalColor=vec4(mix(vec3(1.),rgb*vParticleColor.rgb,tex.a*vParticleColor.a),1.);
+        if(uKind>2.5){
+          vec3 scorch=rgb*vParticleColor.rgb;
+          if(uRecolor>.5)scorch=uTint*max(max(scorch.r,scorch.g),scorch.b);
+          finalColor=vec4(mix(vec3(1.),scorch,tex.a*vParticleColor.a),1.);
+        }
       }`
       },
       resources: {
@@ -199,7 +203,7 @@ export class FireballCoreMesh extends Container {
         fragment: `
       in vec2 vUV; out vec4 finalColor;
       uniform sampler2D uClouds,uShadows;uniform vec2 uWorldSize;uniform float uCameraZ,uRadius;
-      uniform vec4 uQ0,uQ1,uQ2; uniform vec3 uTint;uniform float uRecolor;
+      uniform vec4 uQ0,uQ1,uQ2; uniform vec3 uFoldTint;uniform float uRecolor;
       vec3 inverseRotate(vec3 p,vec4 q){q.xyz=-q.xyz;return p+2.0*cross(q.xyz,cross(q.xyz,p)+q.w*p);}
       vec2 sphereUV(vec3 p){return vec2(atan(p.x,p.z)/6.28318530718+.5,acos(clamp(p.y,-1.0,1.0))/3.14159265359);}
       void main(){
@@ -212,7 +216,7 @@ export class FireballCoreMesh extends Container {
         vec3 dark=mask2>0.5?vec3(.05223882,.00818668,.00818668):vec3(.05970150,.02717755,.02717755);
         float mask=max(mask1,mask2);
         vec3 rgb=(mask2>0.5?b.rgb:a.rgb)*dark;
-        if(uRecolor>.5)rgb=uTint*max(max(rgb.r,rgb.g),rgb.b);
+        if(uRecolor>.5)rgb=uFoldTint*max(max(rgb.r,rgb.g),rgb.b);
         finalColor=vec4(rgb*mask,mask);
       }`
       },
@@ -227,6 +231,7 @@ export class FireballCoreMesh extends Container {
           uQ1: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
           uQ2: { value: [0, 0, 0, 1], type: 'vec4<f32>' },
           uTint: { value: [1, 1, 1], type: 'vec3<f32>' },
+          uFoldTint: { value: [1, 1, 1], type: 'vec3<f32>' },
           uRecolor: { value: 0, type: 'f32' }
         }
       }

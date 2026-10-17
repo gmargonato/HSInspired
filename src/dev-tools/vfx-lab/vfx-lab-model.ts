@@ -34,6 +34,8 @@ export interface VfxLabSettings {
   headStartSize: number
   headEndSize: number
   headGrowthMs: number
+  launchDelayMs: number
+  launchDelayMsAuthored: boolean
   missileLength: number
   missileWidth: number
   aoeImpactMs?: number
@@ -99,6 +101,8 @@ export const DEFAULT_VFX_LAB_SETTINGS: VfxLabSettings = {
   headStartSize: 62,
   headEndSize: 62,
   headGrowthMs: 0,
+  launchDelayMs: 1000,
+  launchDelayMsAuthored: false,
   missileLength: VFX_DEFAULT_MISSILE_LENGTH,
   missileWidth: 0.32,
   aoeImpactMs: 500,
@@ -153,6 +157,7 @@ export function settingsFromTemplate(
     settings.missileOriginalColors = template.tuning.useOriginalColors ?? true
     settings.missileOriginalColorsAuthored =
       template.tuning.useOriginalColors !== undefined
+    settings.launchDelayMsAuthored = template.tuning.launchDelayMs !== undefined
     settings.edgeColor = template.tuning.edgeColor ?? template.tuning.flameColor
     settings.headSurfaceColor = template.tuning.headSurfaceColor ?? settings.edgeColor
     settings.foldColor = template.tuning.foldColor ?? settings.edgeColor
@@ -256,6 +261,10 @@ export function createTemplateFromSettings(
         headStartSize: settings.headStartSize,
         headEndSize: settings.headEndSize,
         headGrowthMs: settings.headGrowthMs,
+        ...(settings.launchDelayMsAuthored ||
+        settings.launchDelayMs !== DEFAULT_VFX_LAB_SETTINGS.launchDelayMs
+          ? { launchDelayMs: settings.launchDelayMs }
+          : {}),
         missileLength: settings.missileLength,
         missileWidth: settings.missileWidth
       }
