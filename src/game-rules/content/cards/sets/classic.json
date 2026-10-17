@@ -896,7 +896,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ],
         "then": {
@@ -1363,7 +1363,7 @@
               "selection": "all"
             },
             "amount": 2,
-            "vfx": "fire-blast-enemy-board"
+            "vfx": "frost-blast-enemy-board"
           },
           {
             "action": "freeze",
@@ -2000,7 +2000,7 @@
               "selection": "chosen-and-adjacent"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           },
           {
             "action": "freeze",
@@ -3438,7 +3438,7 @@
             },
             "amount": 1,
             "hits": 5,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -3610,7 +3610,7 @@
               "count": 2
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           },
           {
             "action": "overload",
@@ -4160,7 +4160,7 @@
               "selection": "all"
             },
             "amount": 2,
-            "vfx": "fire-blast-enemy-side"
+            "vfx": "holy-blast-enemy-side"
           },
           {
             "action": "restore",
@@ -4409,7 +4409,7 @@
               "selection": "chosen"
             },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           }
         ]
       },
@@ -5236,7 +5236,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           },
           {
             "action": "overload",
@@ -5274,7 +5274,7 @@
               "random": [2, 3]
             },
             "damageResolution": "per-target",
-            "vfx": "fire-blast-enemy-board"
+            "vfx": "frost-blast-enemy-board"
           },
           {
             "action": "overload",
@@ -6049,7 +6049,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "arcane-missile-small"
           }
         ]
       }
@@ -6863,7 +6863,7 @@
               "selection": "chosen"
             },
             "amount": 10,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-large"
           }
         ]
       }
@@ -6967,7 +6967,7 @@
               "selection": "random"
             },
             "amount": 8,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-large"
           }
         ]
       }
@@ -7392,7 +7392,7 @@
             "amount": {
               "reference": "source.attack"
             },
-            "vfx": "fire-blast-enemy-board"
+            "vfx": "shadow-blast-enemy-board"
           }
         ]
       }
@@ -8232,7 +8232,7 @@
                     "selection": "chosen"
                   },
                   "amount": 5,
-                  "vfx": "fire-missile"
+                  "vfx": "arcane-missile-small"
                 }
               ],
               "presentationCardId": "classic_starfall_single"
@@ -8247,7 +8247,7 @@
                     "selection": "all"
                   },
                   "amount": 2,
-                  "vfx": "fire-blast-enemy-board"
+                  "vfx": "shadow-blast-enemy-board"
                 }
               ],
               "presentationCardId": "classic_starfall_all"

@@ -93,6 +93,14 @@ const MISSILE_CONTROLS: readonly ControlSpec[] = [
   { key: 'sootColor', label: 'Soot color', type: 'color' },
   { key: 'missileGlow', label: 'Glow', type: 'range', min: 0, max: 2, step: 0.05 },
   {
+    key: 'launchDelayMs',
+    label: 'Launch delay (ms)',
+    type: 'range',
+    min: 0,
+    max: 2000,
+    step: 10
+  },
+  {
     key: 'headStartSize',
     label: 'Head start diameter',
     type: 'range',
@@ -587,11 +595,7 @@ export class VfxLabControls {
         ...(!settings.missileOriginalColors
           ? [
               ...COMMON_CONTROLS.filter((c) => c.type === 'color'),
-              ...MISSILE_CONTROLS.filter(
-                (c) =>
-                  c.type === 'color' &&
-                  ['headSurfaceColor', 'edgeColor', 'sootColor'].includes(c.key)
-              )
+              ...MISSILE_CONTROLS.filter((c) => c.type === 'color')
             ]
           : [])
       ],
@@ -669,7 +673,8 @@ export class VfxLabControls {
   }
 
   private formatValue(key: VfxLabSettingKey, value: number): string {
-    if (key === 'durationMs' || key === 'headGrowthMs') return Math.round(value) + ' ms'
+    if (key === 'durationMs' || key === 'headGrowthMs' || key === 'launchDelayMs')
+      return Math.round(value) + ' ms'
     if (key === 'missileLength' || key === 'headStartSize' || key === 'headEndSize')
       return Math.round(value) + ' px'
     return value.toFixed(2)

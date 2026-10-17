@@ -46,6 +46,7 @@ class FireballField {
   private readonly bloomTransform: Matrix
   private readonly planes: Sprite[] = []
   private readonly filters: ReturnType<typeof createFireballComposite>[] = []
+  private readonly clearColor: [number, number, number, number]
   constructor(
     readonly phase: FireballPhase,
     assets: FireballAssets,
@@ -54,6 +55,17 @@ class FireballField {
     tuning: FireballTuning
   ) {
     const layout = L[phase]
+    // Zero alpha does not erase RGB from the native heat accumulation target.
+    // Keep the recovered warm clear only for the original material palette.
+    this.clearColor =
+      tuning.useOriginalColors === false
+        ? [
+            ...(Array.from(hexColorToRgb(tuning.flameColor)).map(
+              (channel) => channel * 0.45490196
+            ) as [number, number, number]),
+            0
+          ]
+        : [0.45490196, 0.25128558, 0.08384467, 0]
     this.content.label = 'fireball.' + phase + '.offscreen'
     this.display.label = 'fireball.' + phase + '.composite'
     // Unity RenderTextureFormat.Default (7) resolves to the clamped color target.
@@ -88,7 +100,10 @@ class FireballField {
       if (tuning.useOriginalColors === false) {
         this.core.shader!.resources.core.uniforms.uRecolor = 1
         this.core.shader!.resources.core.uniforms.uTint = hexColorToRgb(
-          tuning.headSurfaceColor ?? tuning.flameColor
+          tuning.headSurfaceColor ?? tuning.edgeColor ?? tuning.flameColor
+        )
+        this.core.shader!.resources.core.uniforms.uFoldTint = hexColorToRgb(
+          tuning.foldColor ?? tuning.edgeColor ?? tuning.flameColor
         )
       }
       this.content.addChild(this.core)
@@ -134,14 +149,14 @@ class FireballField {
       container: this.content,
       target: this.heat,
       clear: true,
-      clearColor: [0.45490196, 0.25128558, 0.08384467, 0]
+      clearColor: this.clearColor
     })
     this.renderer.render({
       container: this.content,
       target: this.bloomCapture,
       transform: this.bloomTransform,
       clear: true,
-      clearColor: [0.45490196, 0.25128558, 0.08384467, 0]
+      clearColor: this.clearColor
     })
     this.renderer.render({
       container: this.bloomPass,
@@ -219,7 +234,9 @@ export class FireballEffect {
       Math.hypot(dx, dy) > 0.001 ? Math.atan2(dy, dx) + Math.PI / 2 : 0
     this.scale = L.worldPixels * (request.tuning.missileWidth / 0.32)
     this.distance = Math.hypot(dx, dy) / this.scale
-    this.launchSeconds = request.prewarmed ? 0 : L.birth.waitSeconds
+    this.launchSeconds = request.prewarmed
+      ? 0
+      : (request.tuning.launchDelayMs ?? L.birth.waitSeconds * 1000) / 1000
     const flight = request.tuning.durationMs / 1000
     this.impactSeconds = this.launchSeconds + flight
     this.birth = new FireballField(
@@ -256,6 +273,14 @@ export class FireballEffect {
     this.birth.display.zIndex = 200
     this.container.addChild(this.birth.display)
     const birth = createFireballParticles('birth', this.launchSeconds, request.seed)
+      // The native Birth prefab includes bursts at 3 and 4 seconds. Short casts
+      // release this emitter at launch instead of leaving delayed source sparks.
+      .filter(
+        (particle) =>
+          request.tuning.launchDelayMs === undefined ||
+          this.launchSeconds >= L.birth.waitSeconds ||
+          particle.birth < this.launchSeconds
+      )
     const missile = createFireballParticles('missile', flight, request.seed)
     const impact = createFireballParticles('impact', flight, (request.seed ?? 1) + 1237)
     for (const [phase, particles] of [
@@ -282,7 +307,7 @@ export class FireballEffect {
         if (request.tuning.useOriginalColors === false) {
           mesh.shader!.resources.fireball.uniforms.uRecolor = 1
           mesh.shader!.resources.fireball.uniforms.uTint = hexColorToRgb(
-            name === 'Smoke01'
+            name === 'Smoke01' || name === 'BlastMark'
               ? (request.tuning.sootColor ?? '#1f130b')
               : name === 'Sparks01'
                 ? request.tuning.coreColor
@@ -305,8 +330,8 @@ export class FireballEffect {
     this.birth.content.addChild(this.birthGlow)
     if (request.tuning.useOriginalColors === false) {
       for (const [mesh, color] of [
-        [this.glow, request.tuning.flameColor],
-        [this.birthGlow, request.tuning.flameColor],
+        [this.glow, request.tuning.glowColor ?? request.tuning.flameColor],
+        [this.birthGlow, request.tuning.glowColor ?? request.tuning.flameColor],
         [this.flash, request.tuning.coreColor]
       ] as const) {
         mesh.shader!.resources.fireball.uniforms.uRecolor = 1
@@ -363,7 +388,8 @@ export class FireballEffect {
     const elapsed = Math.max(0, seconds),
       t = elapsed - this.launchSeconds,
       flight = this.request.tuning.durationMs / 1000,
-      head = this.distance * fireballTravel(t / flight)
+      head = this.distance * fireballTravel(t / flight),
+      birthGrowth = Math.max(0.001, Math.min(L.birth.growthSeconds, this.launchSeconds))
     this.container.visible = elapsed < this.duration
     this.flightRoot.y = -head * this.scale
     this.missile.display.visible = t >= 0 && elapsed < this.fieldEnd
@@ -387,7 +413,7 @@ export class FireballEffect {
       if (phase === 'birth') {
         phaseCore.visible = elapsed > 0 && elapsed < this.launchSeconds
         phaseCore.shader!.resources.core.uniforms.uRadius =
-          ((0.3 * diameter) / nativeHead) * Math.min(1, elapsed / L.birth.growthSeconds)
+          ((0.3 * diameter) / nativeHead) * Math.min(1, elapsed / birthGrowth)
       }
       for (const [i, node] of authored[phase].cores
         .filter((n) => n.name.startsWith('Core'))
@@ -494,7 +520,7 @@ export class FireballEffect {
     this.glow.upload()
     const birthGlowPixels =
       (L.birth.glowScale *
-        Math.min(1, elapsed / L.birth.growthSeconds) *
+        Math.min(1, elapsed / birthGrowth) *
         L.birth.resolution.width) /
       L.birth.plane.size.width
     this.writeQuad(this.birthGlow, 0, 85, 85, birthGlowPixels, birthGlowPixels, 0, [

@@ -249,7 +249,7 @@
               "selection": "random"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -965,7 +965,7 @@
               }
             },
             "amount": 5,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -1726,7 +1726,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "buff-cthun",
@@ -2046,7 +2046,7 @@
             "hits": {
               "reference": "source.attack"
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -2385,7 +2385,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -3178,7 +3178,7 @@
             },
             "amount": 1,
             "hits": 9,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -3743,7 +3743,7 @@
               "selection": "chosen"
             },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           },
           {
             "action": "overload",

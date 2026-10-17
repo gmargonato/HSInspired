@@ -1769,7 +1769,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           },
           {
             "action": "add-to-hand",
@@ -1951,7 +1951,7 @@
             "target": { "controller": "any", "type": "minion", "selection": "random" },
             "amount": 1,
             "hits": 15,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           },
           { "action": "overload", "amount": 1 }
         ]
@@ -2728,7 +2728,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -4947,7 +4947,7 @@
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
             "amount": 15,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-large"
           },
           {
             "action": "damage",

@@ -610,7 +610,7 @@
             "target": { "type": "minion", "selection": "chosen" },
             "amount": 2,
             "spellDamageBonusMultiplier": 2,
-            "vfx": "fire-missile"
+            "vfx": "arcane-missile-small"
           }
         ]
       }
@@ -773,7 +773,7 @@
               "selection": "chosen"
             },
             "amount": 8,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-large"
           }
         ]
       }
@@ -1322,7 +1322,7 @@
               "selection": "all"
             },
             "amount": 4,
-            "vfx": "fire-blast-both-heroes"
+            "vfx": "shadow-blast-both-heroes"
           }
         ]
       }
@@ -1776,7 +1776,7 @@
             "minimum": 4,
             "maximum": 5,
             "damageResolution": "per-target",
-            "vfx": "fire-blast-both-boards"
+            "vfx": "frost-blast-both-boards"
           },
           {
             "action": "overload",
@@ -2639,7 +2639,7 @@
               "selection": "random"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -2961,7 +2961,7 @@
               "selection": "random"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -3607,7 +3607,7 @@
             "action": "damage",
             "target": { "type": "minion", "controller": "any", "selection": "all" },
             "amount": 3,
-            "vfx": "fire-blast-both-boards"
+            "vfx": "frost-blast-both-boards"
           }
         ]
       }

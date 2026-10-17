@@ -408,7 +408,9 @@ export class FireImpactMesh extends Mesh<MeshGeometry, Shader> {
             vec3 rgb=tex.rgb/max(tex.a,0.00001);
             vec4 outputColor=vec4(rgb*uMaterialColor.rgb,tex.a*(uMaterialColor.a-tex.a));
             finalColor=clamp(outputColor*(2.0*uIntensity)*uParticleColor,0.0,1.0)*uColor;
-            if (uRecolor > 0.5) finalColor.rgb = uTint * max(max(finalColor.r, finalColor.g), finalColor.b);
+            // Preserve luminance rather than spreading the saturated red channel
+            // into every tint channel, which turns overlapping cold impacts white.
+            if (uRecolor > 0.5) finalColor.rgb = uTint * dot(finalColor.rgb, vec3(0.2126, 0.7152, 0.0722));
           }`
       },
       resources: {

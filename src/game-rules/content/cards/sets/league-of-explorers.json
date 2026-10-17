@@ -249,7 +249,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           },
           {
             "action": "shuffle-into-deck",
@@ -510,7 +510,7 @@
               "selection": "all"
             },
             "amount": 3,
-            "vfx": "fire-blast-both-boards"
+            "vfx": "shadow-blast-both-boards"
           },
           {
             "action": "shuffle-into-deck",

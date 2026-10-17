@@ -134,6 +134,658 @@
           "timingScale": 1
         }
       }
+    },
+    {
+      "id": "fire-missile-small",
+      "name": "Fire \u2022 Small",
+      "family": "missile",
+      "tuning": {
+        "flameColor": "#ffd820",
+        "headSurfaceColor": "#d90c00",
+        "edgeColor": "#ff6300",
+        "foldColor": "#d84a08",
+        "glowColor": "#ffb02e",
+        "sootColor": "#1f130b",
+        "missileGlow": 1,
+        "headStartSize": 62,
+        "headEndSize": 62,
+        "headGrowthMs": 0,
+        "coreColor": "#fffdd6",
+        "intensity": 1,
+        "noiseScale": 1,
+        "flowSpeed": 1,
+        "turbulence": 0,
+        "durationMs": 400,
+        "missileLength": 550,
+        "missileWidth": 0.16,
+        "useOriginalColors": true,
+        "launchDelayMs": 80
+      }
+    },
+    {
+      "id": "fire-missile-large",
+      "name": "Fire \u2022 Large",
+      "family": "missile",
+      "tuning": {
+        "flameColor": "#ffd820",
+        "headSurfaceColor": "#d90c00",
+        "edgeColor": "#ff6300",
+        "foldColor": "#d84a08",
+        "glowColor": "#ffb02e",
+        "sootColor": "#1f130b",
+        "missileGlow": 1,
+        "headStartSize": 62,
+        "headEndSize": 62,
+        "headGrowthMs": 0,
+        "coreColor": "#fffdd6",
+        "intensity": 1,
+        "noiseScale": 1,
+        "flowSpeed": 1,
+        "turbulence": 0,
+        "durationMs": 400,
+        "missileLength": 550,
+        "missileWidth": 0.48,
+        "useOriginalColors": true
+      }
+    },
+    {
+      "id": "shadow-missile-small",
+      "name": "Shadow \u2022 Small",
+      "family": "missile",
+      "tuning": {
+        "flameColor": "#7136b2",
+        "headSurfaceColor": "#401761",
+        "edgeColor": "#6a299e",
+        "foldColor": "#29113f",
+        "glowColor": "#5c2991",
+        "sootColor": "#170d24",
+        "missileGlow": 0.55,
+        "headStartSize": 62,
+        "headEndSize": 62,
+        "headGrowthMs": 0,
+        "coreColor": "#ebdcff",
+        "intensity": 0.72,
+        "noiseScale": 1,
+        "flowSpeed": 1,
+        "turbulence": 0,
+        "durationMs": 400,
+        "missileLength": 550,
+        "missileWidth": 0.16,
+        "useOriginalColors": false,
+        "launchDelayMs": 80
+      }
+    },
+    {
+      "id": "arcane-missile-small",
+      "name": "Arcane \u2022 Small",
+      "family": "missile",
+      "tuning": {
+        "flameColor": "#c832a8",
+        "headSurfaceColor": "#8c155e",
+        "edgeColor": "#972781",
+        "foldColor": "#4e153e",
+        "glowColor": "#bd4da8",
+        "sootColor": "#291329",
+        "missileGlow": 0.45,
+        "headStartSize": 62,
+        "headEndSize": 62,
+        "headGrowthMs": 0,
+        "coreColor": "#ffd1ee",
+        "intensity": 0.86,
+        "noiseScale": 1,
+        "flowSpeed": 1,
+        "turbulence": 0,
+        "durationMs": 400,
+        "missileLength": 550,
+        "missileWidth": 0.16,
+        "useOriginalColors": false,
+        "launchDelayMs": 80
+      }
+    },
+    {
+      "id": "frost-missile-small",
+      "name": "Frost / Storm \u2022 Small",
+      "family": "missile",
+      "tuning": {
+        "flameColor": "#248fc7",
+        "headSurfaceColor": "#164b82",
+        "edgeColor": "#246a9f",
+        "foldColor": "#102d58",
+        "glowColor": "#3889ba",
+        "sootColor": "#152d3e",
+        "missileGlow": 0.48,
+        "headStartSize": 62,
+        "headEndSize": 62,
+        "headGrowthMs": 0,
+        "coreColor": "#cef2ff",
+        "intensity": 0.88,
+        "noiseScale": 1,
+        "flowSpeed": 1,
+        "turbulence": 0,
+        "durationMs": 400,
+        "missileLength": 550,
+        "missileWidth": 0.16,
+        "useOriginalColors": false,
+        "launchDelayMs": 80
+      }
+    },
+    {
+      "id": "fel-blast-all-characters",
+      "name": "Demonic Green \u2022 All Characters",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 0.94,
+          "rampIntensity": 1.1,
+          "glow": 0.62,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#031b0b",
+              "flame": "#167a2f",
+              "core": "#a6d96a"
+            },
+            "glowColor": "#1d742e",
+            "emberColor": "#75b742",
+            "impactColor": "#88c853",
+            "smokeColor": "#07140b",
+            "smokeOpacity": 0.85
+          },
+          "dynamics": {
+            "turbulence": 0.18,
+            "smokeAmount": 1.1,
+            "smokePersistence": 1.05,
+            "emberAmount": 0.7,
+            "emberPersistence": 1.05
+          }
+        }
+      }
+    },
+    {
+      "id": "frost-blast-all-characters",
+      "name": "Frost / Storm Blue \u2022 All Characters",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1.06,
+          "rampIntensity": 1.1,
+          "glow": 0.65,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#123a72",
+              "flame": "#56baf2",
+              "core": "#ecfcff"
+            },
+            "glowColor": "#4c97d6",
+            "emberColor": "#c0efff",
+            "impactColor": "#d8faff",
+            "smokeColor": "#7592a1",
+            "smokeOpacity": 0.4
+          },
+          "dynamics": {
+            "turbulence": 0.28,
+            "smokeAmount": 0.55,
+            "smokePersistence": 0.8,
+            "emberAmount": 0.9,
+            "emberPersistence": 0.8
+          }
+        }
+      }
+    },
+    {
+      "id": "holy-blast-all-characters",
+      "name": "Orange / Gold \u2022 All Characters",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1,
+          "rampIntensity": 1.1,
+          "glow": 0.72,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#6c1700",
+              "flame": "#f49d24",
+              "core": "#fff1b0"
+            },
+            "glowColor": "#e88a22",
+            "emberColor": "#ffd36d",
+            "impactColor": "#ffe7a0",
+            "smokeColor": "#30251a",
+            "smokeOpacity": 0.7
+          },
+          "dynamics": {
+            "turbulence": 0.1,
+            "smokeAmount": 0.8,
+            "smokePersistence": 0.9,
+            "emberAmount": 1.05,
+            "emberPersistence": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "shadow-blast-all-characters",
+      "name": "Shadow / Arcane Purple \u2022 All Characters",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 0.94,
+          "rampIntensity": 1.1,
+          "glow": 0.58,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#160b2c",
+              "flame": "#7443b0",
+              "core": "#ccb6ef"
+            },
+            "glowColor": "#573582",
+            "emberColor": "#ae7ee0",
+            "impactColor": "#ba8de8",
+            "smokeColor": "#130f20",
+            "smokeOpacity": 0.85
+          },
+          "dynamics": {
+            "turbulence": 0.3,
+            "smokeAmount": 1.1,
+            "smokePersistence": 1.1,
+            "emberAmount": 0.65,
+            "emberPersistence": 0.95
+          }
+        }
+      }
+    },
+    {
+      "id": "shadow-blast-enemy-board",
+      "name": "Shadow / Arcane Purple \u2022 Enemy Board",
+      "family": "aoe",
+      "zones": ["enemyBoard"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 0.94,
+          "rampIntensity": 1.1,
+          "glow": 0.58,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#160b2c",
+              "flame": "#7443b0",
+              "core": "#ccb6ef"
+            },
+            "glowColor": "#573582",
+            "emberColor": "#ae7ee0",
+            "impactColor": "#ba8de8",
+            "smokeColor": "#130f20",
+            "smokeOpacity": 0.85
+          },
+          "dynamics": {
+            "turbulence": 0.3,
+            "smokeAmount": 1.1,
+            "smokePersistence": 1.1,
+            "emberAmount": 0.65,
+            "emberPersistence": 0.95
+          }
+        }
+      }
+    },
+    {
+      "id": "holy-blast-enemy-side",
+      "name": "Orange / Gold \u2022 Enemy Side",
+      "family": "aoe",
+      "zones": ["enemyBoard", "enemyHero"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1,
+          "rampIntensity": 1.1,
+          "glow": 0.72,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#6c1700",
+              "flame": "#f49d24",
+              "core": "#fff1b0"
+            },
+            "glowColor": "#e88a22",
+            "emberColor": "#ffd36d",
+            "impactColor": "#ffe7a0",
+            "smokeColor": "#30251a",
+            "smokeOpacity": 0.7
+          },
+          "dynamics": {
+            "turbulence": 0.1,
+            "smokeAmount": 0.8,
+            "smokePersistence": 0.9,
+            "emberAmount": 1.05,
+            "emberPersistence": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "fel-blast-both-boards",
+      "name": "Demonic Green \u2022 Both Boards",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 0.94,
+          "rampIntensity": 1.1,
+          "glow": 0.62,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#031b0b",
+              "flame": "#167a2f",
+              "core": "#a6d96a"
+            },
+            "glowColor": "#1d742e",
+            "emberColor": "#75b742",
+            "impactColor": "#88c853",
+            "smokeColor": "#07140b",
+            "smokeOpacity": 0.85
+          },
+          "dynamics": {
+            "turbulence": 0.18,
+            "smokeAmount": 1.1,
+            "smokePersistence": 1.05,
+            "emberAmount": 0.7,
+            "emberPersistence": 1.05
+          }
+        }
+      }
+    },
+    {
+      "id": "frost-blast-enemy-board",
+      "name": "Frost / Storm Blue \u2022 Enemy Board",
+      "family": "aoe",
+      "zones": ["enemyBoard"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1.06,
+          "rampIntensity": 1.1,
+          "glow": 0.65,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#123a72",
+              "flame": "#56baf2",
+              "core": "#ecfcff"
+            },
+            "glowColor": "#4c97d6",
+            "emberColor": "#c0efff",
+            "impactColor": "#d8faff",
+            "smokeColor": "#7592a1",
+            "smokeOpacity": 0.4
+          },
+          "dynamics": {
+            "turbulence": 0.28,
+            "smokeAmount": 0.55,
+            "smokePersistence": 0.8,
+            "emberAmount": 0.9,
+            "emberPersistence": 0.8
+          }
+        }
+      }
+    },
+    {
+      "id": "holy-blast-both-boards",
+      "name": "Orange / Gold \u2022 Both Boards",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1,
+          "rampIntensity": 1.1,
+          "glow": 0.72,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#6c1700",
+              "flame": "#f49d24",
+              "core": "#fff1b0"
+            },
+            "glowColor": "#e88a22",
+            "emberColor": "#ffd36d",
+            "impactColor": "#ffe7a0",
+            "smokeColor": "#30251a",
+            "smokeOpacity": 0.7
+          },
+          "dynamics": {
+            "turbulence": 0.1,
+            "smokeAmount": 0.8,
+            "smokePersistence": 0.9,
+            "emberAmount": 1.05,
+            "emberPersistence": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "shadow-blast-both-heroes",
+      "name": "Shadow / Arcane Purple \u2022 Both Heroes",
+      "family": "aoe",
+      "zones": ["enemyHero", "friendlyHero"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 0.94,
+          "rampIntensity": 1.1,
+          "glow": 0.58,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#160b2c",
+              "flame": "#7443b0",
+              "core": "#ccb6ef"
+            },
+            "glowColor": "#573582",
+            "emberColor": "#ae7ee0",
+            "impactColor": "#ba8de8",
+            "smokeColor": "#130f20",
+            "smokeOpacity": 0.85
+          },
+          "dynamics": {
+            "turbulence": 0.3,
+            "smokeAmount": 1.1,
+            "smokePersistence": 1.1,
+            "emberAmount": 0.65,
+            "emberPersistence": 0.95
+          }
+        }
+      }
+    },
+    {
+      "id": "shadow-blast-enemy-side",
+      "name": "Shadow / Arcane Purple \u2022 Enemy Side",
+      "family": "aoe",
+      "zones": ["enemyBoard", "enemyHero"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 0.94,
+          "rampIntensity": 1.1,
+          "glow": 0.58,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#160b2c",
+              "flame": "#7443b0",
+              "core": "#ccb6ef"
+            },
+            "glowColor": "#573582",
+            "emberColor": "#ae7ee0",
+            "impactColor": "#ba8de8",
+            "smokeColor": "#130f20",
+            "smokeOpacity": 0.85
+          },
+          "dynamics": {
+            "turbulence": 0.3,
+            "smokeAmount": 1.1,
+            "smokePersistence": 1.1,
+            "emberAmount": 0.65,
+            "emberPersistence": 0.95
+          }
+        }
+      }
+    },
+    {
+      "id": "shadow-blast-both-boards",
+      "name": "Shadow / Arcane Purple \u2022 Both Boards",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 0.94,
+          "rampIntensity": 1.1,
+          "glow": 0.58,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#160b2c",
+              "flame": "#7443b0",
+              "core": "#ccb6ef"
+            },
+            "glowColor": "#573582",
+            "emberColor": "#ae7ee0",
+            "impactColor": "#ba8de8",
+            "smokeColor": "#130f20",
+            "smokeOpacity": 0.85
+          },
+          "dynamics": {
+            "turbulence": 0.3,
+            "smokeAmount": 1.1,
+            "smokePersistence": 1.1,
+            "emberAmount": 0.65,
+            "emberPersistence": 0.95
+          }
+        }
+      }
+    },
+    {
+      "id": "fel-blast-enemy-board",
+      "name": "Demonic Green \u2022 Enemy Board",
+      "family": "aoe",
+      "zones": ["enemyBoard"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 0.94,
+          "rampIntensity": 1.1,
+          "glow": 0.62,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#031b0b",
+              "flame": "#167a2f",
+              "core": "#a6d96a"
+            },
+            "glowColor": "#1d742e",
+            "emberColor": "#75b742",
+            "impactColor": "#88c853",
+            "smokeColor": "#07140b",
+            "smokeOpacity": 0.85
+          },
+          "dynamics": {
+            "turbulence": 0.18,
+            "smokeAmount": 1.1,
+            "smokePersistence": 1.05,
+            "emberAmount": 0.7,
+            "emberPersistence": 1.05
+          }
+        }
+      }
+    },
+    {
+      "id": "frost-blast-both-boards",
+      "name": "Frost / Storm Blue \u2022 Both Boards",
+      "family": "aoe",
+      "zones": ["enemyBoard", "friendlyBoard"],
+      "tuning": {
+        "intensity": 2,
+        "impactMs": 500,
+        "fire": {
+          "density": 1,
+          "particleScale": 1,
+          "motion": 1.06,
+          "rampIntensity": 1.1,
+          "glow": 0.65,
+          "timingScale": 1,
+          "appearance": {
+            "palette": {
+              "edge": "#123a72",
+              "flame": "#56baf2",
+              "core": "#ecfcff"
+            },
+            "glowColor": "#4c97d6",
+            "emberColor": "#c0efff",
+            "impactColor": "#d8faff",
+            "smokeColor": "#7592a1",
+            "smokeOpacity": 0.4
+          },
+          "dynamics": {
+            "turbulence": 0.28,
+            "smokeAmount": 0.55,
+            "smokePersistence": 0.8,
+            "emberAmount": 0.9,
+            "emberPersistence": 0.8
+          }
+        }
+      }
     }
   ]
 }

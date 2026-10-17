@@ -112,7 +112,7 @@ const HERO_POWER_DATA = [
     'Deal 2 damage.',
     'hero-power-lightning-jolt',
     'any-character',
-    { kind: 'damage-character', amount: 2, vfx: 'fire-missile' }
+    { kind: 'damage-character', amount: 2, vfx: 'frost-missile-small' }
   ],
   [
     'druid-shapeshift',
@@ -152,7 +152,7 @@ const HERO_POWER_DATA = [
     'Deal 1 damage.',
     'hero-power-mage',
     'any-character',
-    { kind: 'damage-character', vfx: 'fire-missile', amount: 1 }
+    { kind: 'damage-character', vfx: 'fire-missile-small', amount: 1 }
   ],
   [
     'paladin-reinforce',
@@ -192,7 +192,7 @@ const HERO_POWER_DATA = [
     'Deal 2 damage.',
     'hero-power-mind-spike',
     'any-character',
-    { kind: 'damage-character', vfx: 'fire-missile', amount: 2 }
+    { kind: 'damage-character', vfx: 'shadow-missile-small', amount: 2 }
   ],
   [
     'priest-mind-shatter',
@@ -202,7 +202,7 @@ const HERO_POWER_DATA = [
     'Deal 3 damage.',
     'hero-power-mind-shatter',
     'any-character',
-    { kind: 'damage-character', vfx: 'fire-missile', amount: 3 }
+    { kind: 'damage-character', vfx: 'shadow-missile-small', amount: 3 }
   ],
   [
     'rogue-dagger-mastery',
@@ -260,7 +260,7 @@ const HERO_POWER_DATA = [
     'Deal 8 damage to a character.',
     'hero-power-ragnaros',
     'any-character',
-    { kind: 'damage-character', vfx: 'fire-missile', amount: 8 }
+    { kind: 'damage-character', vfx: 'fire-missile-large', amount: 8 }
   ],
   [
     'knights_of_the_frozen_throne_deaths_shadow',
@@ -318,7 +318,7 @@ const HERO_POWER_DATA = [
     'any-character',
     {
       kind: 'damage-and-summon-on-kill',
-      vfx: 'fire-missile',
+      vfx: 'frost-missile-small',
       amount: 1,
       cardId: 'basic_water_elemental'
     }
@@ -350,7 +350,7 @@ const HERO_POWER_DATA = [
     'Deal 2 damage. After you play a card, refresh this.',
     'hero-power-voidform',
     'any-character',
-    { kind: 'damage-and-refresh-after-card', vfx: 'fire-missile', amount: 2 }
+    { kind: 'damage-and-refresh-after-card', vfx: 'shadow-missile-small', amount: 2 }
   ],
   [
     'knights_of_the_frozen_throne_transmute_spirit',
@@ -373,7 +373,7 @@ const HERO_POWER_DATA = [
     'Lifesteal. Deal 3 damage.',
     'hero-power-siphon-life',
     'any-character',
-    { kind: 'lifesteal-damage', vfx: 'fire-missile', amount: 3 }
+    { kind: 'lifesteal-damage', vfx: 'shadow-missile-small', amount: 3 }
   ],
   [
     'saviors_of_uldum_ossirian_tear',
@@ -506,7 +506,7 @@ const HERO_POWER_DATA = [
     'Deal 2 damage.',
     'hero-power-mage-upgraded',
     'any-character',
-    { kind: 'damage-character', vfx: 'fire-missile', amount: 2 }
+    { kind: 'damage-character', vfx: 'fire-missile-small', amount: 2 }
   ],
   [
     'paladin-the-silver-hand',

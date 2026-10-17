@@ -950,7 +950,7 @@
               "selection": "chosen"
             },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           },
           {
             "action": "summon-jade-golem",
@@ -1168,7 +1168,7 @@
               "selection": "all"
             },
             "amount": 5,
-            "vfx": "fire-blast-all-characters"
+            "vfx": "fel-blast-all-characters"
           }
         ]
       }
@@ -1199,7 +1199,7 @@
               "exclude": "source"
             },
             "amount": 3,
-            "vfx": "fire-blast-all-characters"
+            "vfx": "fel-blast-all-characters"
           }
         ]
       }
@@ -2566,7 +2566,7 @@
               "selection": "random"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "arcane-missile-small"
           },
           {
             "action": "damage",
@@ -2576,7 +2576,7 @@
               "selection": "random"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "arcane-missile-small"
           },
           {
             "action": "damage",
@@ -2586,7 +2586,7 @@
               "selection": "random"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "arcane-missile-small"
           }
         ]
       }

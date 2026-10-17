@@ -811,7 +811,7 @@ describe('explicit action VFX', () => {
     const r = f.play(target)
     const cue = cues(r.events)[0]!
     expect(cue).toMatchObject({
-      vfxId: 'fire-missile',
+      vfxId: cardId === 'basic_frostbolt' ? 'frost-missile-small' : 'fire-missile',
       targetInstanceIds: [target.instanceId],
       origin: 'source'
     })
@@ -840,6 +840,7 @@ describe('explicit action VFX', () => {
     expect(cues(r.events)).toHaveLength(3)
     expect(new Set(cues(r.events).map((e) => e.vfxGroupId)).size).toBe(3)
     for (const cue of cues(r.events)) {
+      expect(cue.vfxId).toBe('arcane-missile-small')
       const outcome = outcomes(r.events).find((e) => e.vfxGroupId === cue.vfxGroupId)!
       expect(cue.targetInstanceIds).toEqual([outcome.data?.target])
       expect(r.events.indexOf(cue)).toBeLessThan(r.events.indexOf(outcome))
@@ -868,6 +869,9 @@ describe('explicit action VFX', () => {
     const r = f.play(target)
     expect(cues(r.events)).toHaveLength(1)
     expect(cues(r.events)[0].targetInstanceIds).toHaveLength(3)
+    // Keep the entire damage-group on medium so all three impacts stay aligned.
+    expect(cues(r.events)[0].vfxId).toBe('fire-missile')
+    expect(cues(r.events)[0].visuals).toBeUndefined()
     expect(new Set(outcomes(r.events).map((e) => e.vfxGroupId)).size).toBe(1)
   })
 
@@ -984,7 +988,7 @@ it('Shadowflame animates its damage without animating the sacrifice', () => {
   if (!r.accepted) throw new Error(r.message)
   const cues = r.events.filter((e) => e.type === 'effect-vfx-started')
   expect(cues).toHaveLength(1)
-  expect(cues[0].vfxId).toBe('fire-blast-enemy-board')
+  expect(cues[0].vfxId).toBe('shadow-blast-enemy-board')
   const cost = r.events.find(
     (e) => e.type === 'effect-resolved' && e.action === 'destroy'
   )

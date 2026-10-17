@@ -65,7 +65,7 @@
                     "selection": "chosen"
                   },
                   "amount": 5,
-                  "vfx": "fire-missile"
+                  "vfx": "shadow-missile-small"
                 }
               ]
             },
@@ -176,7 +176,7 @@
               "selection": "all"
             },
             "amount": 3,
-            "vfx": "fire-blast-enemy-side"
+            "vfx": "shadow-blast-enemy-side"
           }
         ]
       }
@@ -1350,7 +1350,7 @@
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "all" },
             "amount": 1,
-            "vfx": "fire-blast-both-boards"
+            "vfx": "shadow-blast-both-boards"
           }
         ],
         "repeat": {
@@ -1360,7 +1360,7 @@
               "action": "damage",
               "target": { "controller": "any", "type": "minion", "selection": "all" },
               "amount": 1,
-              "vfx": "fire-blast-both-boards"
+              "vfx": "shadow-blast-both-boards"
             }
           ]
         }
@@ -1654,7 +1654,7 @@
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -1951,7 +1951,7 @@
               "selection": "all"
             },
             "amount": 1,
-            "vfx": "fire-blast-enemy-board"
+            "vfx": "fel-blast-enemy-board"
           }
         ]
       }
@@ -1989,7 +1989,7 @@
               "adjacentTo": "event-target"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           }
         ]
       }
@@ -3823,7 +3823,7 @@
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "all" },
             "amount": 1,
-            "vfx": "fire-blast-both-boards"
+            "vfx": "shadow-blast-both-boards"
           }
         ]
       }
@@ -4145,7 +4145,7 @@
               "selection": "random"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           }
         ]
       }
@@ -4712,7 +4712,10 @@
           {
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
-            "amount": { "reference": "cards-played-earlier-this-turn", "multiplier": 2 },
+            "amount": {
+              "reference": "cards-played-earlier-this-turn",
+              "multiplier": 2
+            },
             "vfx": "fire-missile"
           }
         ]
