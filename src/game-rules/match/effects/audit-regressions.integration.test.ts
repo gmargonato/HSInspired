@@ -605,10 +605,13 @@ describe('approved broad printed effects', () => {
   it('Brann doubles hero Battlecries while replacement and base Armor happen once', () => {
     const f = fixture()
     f.summon('league_of_explorers_brann_bronzebeard')
-    f.play('knights_of_the_frozen_throne_frost_lich_jaina')
+    f.summon('basic_chillwind_yeti', f.foe)
+    const result = f.play('knights_of_the_frozen_throne_frost_lich_jaina')
     expect(
-      f.player().board.filter((c) => c.cardId === 'basic_water_elemental')
+      result.events.filter((e) => e.type === 'effect-resolved' && e.action === 'freeze')
     ).toHaveLength(2)
+    expect(result.events.filter((e) => e.type === 'hero-replaced')).toHaveLength(1)
+    expect(f.player().board).toHaveLength(1)
     const definition = CARD_CATALOG.require(
       'knights_of_the_frozen_throne_frost_lich_jaina'
     )

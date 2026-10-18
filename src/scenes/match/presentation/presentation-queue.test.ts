@@ -1,3 +1,7 @@
+import {
+  MinionLandingCracks,
+  hasMinionLandingCracks
+} from './minion-landing-cracks'
 import { MinionLandingDust, hasMinionLandingDust } from './minion-landing-dust'
 import { WeaponView, type WeaponViewTextures } from '../board/weapon-view'
 import * as ShatterEffect from '../../../visual-components/effects/shatter'
@@ -83,6 +87,9 @@ import {
 } from './card-draw-animation'
 import { CARD_DRAW_LAYOUT } from './card-draw-layout'
 import { CARD_REVEAL_LAYOUT } from './card-reveal-layout'
+import { presentDeckAddition } from './deck-addition-presenter'
+import { DECK_ADDITION_LAYOUT } from './deck-addition-layout'
+import type { DeckAddition } from '../../../game-rules/match'
 import type { MinionCardMovement } from '../../../game-rules/match'
 
 vi.mock('../../../visual-components/effects/ghost-mist-particles', () => ({
@@ -996,6 +1003,311 @@ afterEach(() => {
   for (const value of boards.splice(0)) if (!value.destroyed) value.dispose()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('deck addition animation', () => {
+  it.each([true, false])(
+    'flies visibly to the deck with the real flight helper (already in travel layer=%s)',
+    async (alreadyInTravelLayer) => {
+      const value = board()
+      const internal = value as unknown as {
+        travelLayer: Container
+        timeline(): gsap.core.Timeline
+        animateBodyToDeck(
+          body: Container,
+          deck: typeof GAME_BOARD_LAYOUT.decks.local,
+          sequence: number
+        ): Promise<void>
+      }
+      const sourceLayer = new Container()
+      value.addChild(sourceLayer)
+      const body = new Sprite(Texture.WHITE)
+      body.position.set(500, 400)
+      body.scale.set(DECK_ADDITION_LAYOUT.scale)
+      ;(alreadyInTravelLayer ? internal.travelLayer : sourceLayer).addChild(body)
+      const timeline = gsap.timeline({ paused: true })
+      vi.spyOn(internal, 'timeline').mockReturnValue(timeline)
+      const destination = GAME_BOARD_LAYOUT.decks.local
+      const flight = internal.animateBodyToDeck(body, destination, 0)
+      expect(body.parent).toBe(internal.travelLayer)
+      const start = body.position.clone()
+      timeline.progress(0.5)
+      expect(body.x).toBeGreaterThan(Math.min(start.x, destination.position.x))
+      expect(body.x).toBeLessThan(Math.max(start.x, destination.position.x))
+      expect(body.y).not.toBe(start.y)
+      expect(body.alpha).toBeGreaterThan(0)
+      expect(body.visible).toBe(true)
+      expect(body.destroyed).toBe(false)
+      timeline.progress(1)
+      await flight
+      expect(body.position).toMatchObject(destination.position)
+      expect(body.alpha).toBe(0)
+      expect(body.scale.x).toBeCloseTo(GAME_BOARD_LAYOUT.cardTravel.slotScale.x)
+    }
+  )
+
+  it('captures a dying source before its view is removed and routes its card to the destination', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      travelLayer: Container
+      combat: GameCombatPresentation
+      timeline(): gsap.core.Timeline
+      findEffectTargetView(
+        id: string
+      ): { view: Container; participantId: PlayerId } | null
+      syncSecrets(): void
+      animateBodyToDeck(body: Container, deck: unknown, sequence: number): Promise<void>
+      presentEvent(event: OpeningMatchEvent): Promise<void>
+    }
+    const source = new Container()
+    source.position.set(340, 250)
+    internal.travelLayer.addChild(source)
+    const remote = internal.session.remoteParticipantId
+    const lookup = vi
+      .spyOn(internal, 'findEffectTargetView')
+      .mockReturnValue({ view: source, participantId: remote })
+    vi.spyOn(internal.combat, 'presentDeathBatchStarted').mockImplementation(
+      async () => {
+        lookup.mockReturnValue(null)
+        source.destroy()
+      }
+    )
+    vi.spyOn(internal, 'syncSecrets').mockImplementation(() => undefined)
+    const timelines: gsap.core.Timeline[] = []
+    vi.spyOn(internal, 'timeline').mockImplementation(() => {
+      const timeline = gsap.timeline({ paused: true })
+      timelines.push(timeline)
+      return timeline
+    })
+    const fly = vi.spyOn(internal, 'animateBodyToDeck')
+    await internal.presentEvent({
+      type: 'death-batch-started',
+      batchId: 'death',
+      deaths: [
+        {
+          instanceId: 'dead-source',
+          participantId: remote,
+          kind: 'minion',
+          cardId: asCardId('goblins_vs_gnomes_malorne'),
+          hasDeathrattle: true
+        }
+      ]
+    })
+    const presenting = internal.presentEvent({
+      type: 'effect-resolved',
+      revision: 1,
+      controllerId: remote,
+      sourceInstanceId: 'dead-source',
+      sourceCardId: asCardId('goblins_vs_gnomes_malorne'),
+      action: 'shuffle-into-deck',
+      actionPath: 'deathrattle',
+      deckAddition: {
+        id: 'death-addition',
+        participantId: remote,
+        sourceInstanceId: 'dead-source',
+        cards: [
+          {
+            card: {
+              instanceId: 'returning',
+              cardId: asCardId('goblins_vs_gnomes_malorne')
+            },
+            visibleTo: []
+          }
+        ]
+      }
+    })
+    await vi.waitFor(() => expect(timelines).toHaveLength(1))
+    const body = internal.travelLayer.children.find((child) =>
+      child.label.startsWith('game.deck-addition.')
+    )!
+    expect(body.position).toMatchObject({ x: 340, y: 250 })
+    timelines[0].progress(1)
+    expect(timelines).toHaveLength(2)
+    timelines[1].progress(0.5)
+    expect(body.x).not.toBe(340)
+    expect(body.alpha).toBeGreaterThan(0)
+    await Promise.resolve()
+    expect(body.destroyed).toBe(false)
+    timelines[1].progress(1)
+    await presenting
+    expect(fly).toHaveBeenCalledWith(body, GAME_BOARD_LAYOUT.decks.remote, 0)
+    expect(body.destroyed).toBe(true)
+  })
+
+  function fixture(count: number, visible = false) {
+    const layer = new Container()
+    const bodies = new Set<Container>()
+    const slots = new Set<GameCardSlot>()
+    const timelines: gsap.core.Timeline[] = []
+    const pendingFlights: (() => void)[] = []
+    const addition: DeckAddition = {
+      id: 'batch',
+      participantId: 'remote' as PlayerId,
+      sourceInstanceId: 'source',
+      cards: Array.from({ length: count }, (_, index) => ({
+        card: {
+          instanceId: `created-${index}`,
+          cardId: asCardId('basic_chillwind_yeti'),
+          baseCost: 4,
+          currentCost: 4
+        },
+        visibleTo: visible ? 'all' : []
+      }))
+    }
+    const createSlot = vi.fn(async () => {
+      const slot = new Container() as GameCardSlot
+      slot.setMulliganInteractionEnabled = vi.fn()
+      slot.suppressPlayableOutline = vi.fn()
+      return slot
+    })
+    const aura = vi.fn((slot: GameCardSlot) => slot.addChild(new Sprite(Texture.WHITE)))
+    const fly = vi.fn((body: Container) => {
+      expect(body.scale.x).toBeCloseTo(DECK_ADDITION_LAYOUT.scale)
+      return new Promise<void>((resolve) => pendingFlights.push(resolve))
+    })
+    const host = {
+      layer,
+      back: Texture.WHITE,
+      backAura: Texture.WHITE,
+      viewerId: 'local' as PlayerId,
+      bodies,
+      slots,
+      origin: { x: 440, y: 330 },
+      destroyed: () => layer.destroyed,
+      createSlot,
+      aura,
+      fly,
+      timeline: () => {
+        const value = gsap.timeline({ paused: true })
+        timelines.push(value)
+        return value
+      }
+    }
+    return { host, addition, timelines, pendingFlights }
+  }
+
+  it('grows all twenty hidden cards at the source, staggers flights, and waits for their arrival', async () => {
+    const f = fixture(20)
+    let finished = false
+    const presenting = presentDeckAddition(f.addition, f.host).then(() => {
+      finished = true
+    })
+    await vi.waitFor(() => expect(f.timelines).toHaveLength(1))
+    const timeline = f.timelines[0]
+    expect(f.host.bodies.size).toBe(20)
+    expect(f.host.createSlot).not.toHaveBeenCalled()
+    for (const body of f.host.bodies) {
+      expect(body.position).toMatchObject(f.host.origin)
+      expect(body.scale.x).toBeCloseTo(
+        DECK_ADDITION_LAYOUT.scale * DECK_ADDITION_LAYOUT.initialScale
+      )
+      expect(body.eventMode).toBe('none')
+    }
+    timeline.time(
+      DECK_ADDITION_LAYOUT.growDuration + DECK_ADDITION_LAYOUT.holdDuration + 0.001
+    )
+    expect(f.host.fly).toHaveBeenCalledTimes(1)
+    expect(f.host.fly).toHaveBeenCalledWith(expect.any(Container), 'remote', 0)
+    timeline.progress(1)
+    expect(f.host.fly).toHaveBeenCalledTimes(20)
+    await Promise.resolve()
+    expect(finished).toBe(false)
+    f.pendingFlights.forEach((resolve) => resolve())
+    await presenting
+    expect(finished).toBe(true)
+    expect(f.host.bodies.size).toBe(0)
+    expect(f.host.layer.children).toHaveLength(0)
+    f.host.layer.destroy({ children: true })
+  })
+
+  it('uses face-up slots and the existing glow for known generated cards', async () => {
+    const f = fixture(1, true)
+    const presenting = presentDeckAddition(f.addition, f.host)
+    await vi.waitFor(() => expect(f.timelines).toHaveLength(1))
+    expect(f.host.createSlot).toHaveBeenCalledWith(f.addition.cards[0].card)
+    expect(f.host.aura).toHaveBeenCalledTimes(1)
+    const slot = [...f.host.slots][0]
+    expect(slot.position.y).toBe(450)
+    f.timelines[0].progress(1)
+    f.pendingFlights.forEach((resolve) => resolve())
+    await presenting
+    expect(slot.destroyed).toBe(true)
+    expect(f.host.slots.size).toBe(0)
+    f.host.layer.destroy({ children: true })
+  })
+
+  it('releases partial preparation when one face fails to load', async () => {
+    const f = fixture(2, true)
+    f.host.createSlot.mockRejectedValueOnce(new Error('missing artwork'))
+    await expect(presentDeckAddition(f.addition, f.host)).rejects.toThrow(
+      'missing artwork'
+    )
+    expect(f.host.bodies.size).toBe(0)
+    expect(f.host.slots.size).toBe(0)
+    expect(f.host.layer.children).toHaveLength(0)
+    f.host.layer.destroy({ children: true })
+  })
+
+  it('cancels while assets are loading and destroys a late slot', async () => {
+    const f = fixture(1, true)
+    let finishLoading!: (slot: GameCardSlot) => void
+    f.host.createSlot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishLoading = resolve
+        })
+    )
+    const presenting = presentDeckAddition(f.addition, f.host)
+    f.host.layer.destroy({ children: true })
+    await presenting
+    const slot = new Container() as GameCardSlot
+    finishLoading(slot)
+    await vi.waitFor(() => expect(slot.destroyed).toBe(true))
+    expect(f.host.bodies.size).toBe(0)
+    expect(f.timelines).toHaveLength(0)
+  })
+
+  it('destroys a loaded face if configuring its glow fails', async () => {
+    const f = fixture(1, true)
+    f.host.aura.mockImplementationOnce(() => {
+      throw new Error('glow failed')
+    })
+    await expect(presentDeckAddition(f.addition, f.host)).rejects.toThrow('glow failed')
+    const slot = await f.host.createSlot.mock.results[0].value
+    expect(slot.destroyed).toBe(true)
+    expect(f.host.slots.size).toBe(0)
+    expect(f.host.bodies.size).toBe(0)
+    f.host.layer.destroy({ children: true })
+  })
+
+  it('cleans the batch up if starting a deck flight throws', async () => {
+    const f = fixture(1)
+    f.host.fly.mockImplementationOnce(() => {
+      throw new Error('flight failed')
+    })
+    const presenting = presentDeckAddition(f.addition, f.host)
+    const rejection = expect(presenting).rejects.toThrow('flight failed')
+    await vi.waitFor(() => expect(f.timelines).toHaveLength(1))
+    f.timelines[0].progress(1)
+    await rejection
+    expect(f.host.bodies.size).toBe(0)
+    expect(f.host.layer.children).toHaveLength(0)
+    f.host.layer.destroy({ children: true })
+  })
+
+  it('cancels a growing batch when the scene layer is destroyed', async () => {
+    const f = fixture(3)
+    const presenting = presentDeckAddition(f.addition, f.host)
+    await vi.waitFor(() => expect(f.timelines).toHaveLength(1))
+    const bodies = [...f.host.bodies]
+    f.timelines[0].time(0.1)
+    f.host.layer.destroy({ children: true })
+    await presenting
+    expect(bodies.every((body) => body.destroyed)).toBe(true)
+    expect(f.host.fly).not.toHaveBeenCalled()
+    expect(f.host.bodies.size).toBe(0)
+  })
 })
 
 describe('fire VFX match integration', () => {
@@ -2635,6 +2947,8 @@ describe('AI decision overlap', () => {
         destroyed: false,
         aiTurnRunning: false,
         aiController: controller,
+        aiAttention: { clear: () => undefined },
+        bindRemoteHand: () => undefined,
         remoteParticipantId: 'ai',
         turnLayer: { visible: true },
         match: { getState: () => state },
@@ -2724,6 +3038,8 @@ describe('AI decision overlap', () => {
       destroyed: false,
       aiTurnRunning: false,
       aiController: controller,
+      aiAttention: { clear: () => undefined },
+      bindRemoteHand: () => undefined,
       remoteParticipantId: 'ai',
       turnLayer: { visible: true },
       match: {
@@ -3097,7 +3413,11 @@ describe('random spell playback', () => {
     expect(reveals).toHaveLength(1)
     expect(effects).toHaveLength(0)
     expect(idle).toBe(false)
-    expect(preview.mock.calls[0][2]).toEqual({ side: 'local', concealSecret: false })
+    expect(preview.mock.calls[0][2]).toEqual({
+      side: 'local',
+      concealSecret: false,
+      onOrigin: expect.any(Function)
+    })
     reveals[0]()
     await flush()
     expect(seen).toEqual([middle])
@@ -3271,6 +3591,7 @@ describe('Legendary minion entrance shake', () => {
       session: GameBoardSession
       animationScope: AnimationScope
       resolver: { loadArtwork(): Promise<Texture> }
+      landingCracks: MinionLandingCracks
       landingDust: MinionLandingDust
       cardPlayAnimation: CardPlayAnimation
       presentMinionPlayed(
@@ -3307,6 +3628,9 @@ describe('Legendary minion entrance shake', () => {
       timelines.push(timeline)
       return timeline
     })
+    const cracks = vi.spyOn(internal.landingCracks, 'play')
+    expect(internal.landingCracks.zIndex).toBeGreaterThan(MATCH_LAYERS.board)
+    expect(internal.landingCracks.zIndex).toBeLessThan(MATCH_LAYERS.shadows)
     const dust = vi.spyOn(internal.landingDust, 'play')
     const shake = vi.spyOn(ScreenShake, 'runScreenShake')
     for (const player of internal.session.getState().players)
@@ -3378,11 +3702,15 @@ describe('Legendary minion entrance shake', () => {
     landing.time(landingTime - 0.001, false)
     expect(shake).not.toHaveBeenCalled()
     expect(dust).not.toHaveBeenCalled()
+    expect(cracks).not.toHaveBeenCalled()
     if (scenario.cancel && preview) preview.cancelled = true
     landing.time(landingTime, false)
     await Promise.resolve()
     const eligible = scenario.legendary && !scenario.cancel && !scenario.summoned
     expect(shake).toHaveBeenCalledTimes(eligible ? 1 : 0)
+    expect(cracks).toHaveBeenCalledTimes(
+      !scenario.cancel && hasMinionLandingCracks(event) ? 1 : 0
+    )
     expect(dust).toHaveBeenCalledTimes(!scenario.cancel && !scenario.summoned ? 1 : 0)
     if (eligible) {
       expect(shake).toHaveBeenCalledWith(
@@ -6676,17 +7004,20 @@ describe('grouped summon presentation', () => {
   })
 
   it.each([
-    ['local', false],
-    ['remote', false],
-    ['local', true],
-    ['remote', true]
+    ['local', false, 'deck'],
+    ['remote', false, 'deck'],
+    ['local', true, 'deck'],
+    ['remote', true, 'deck'],
+    ['local', true, 'hand'],
+    ['remote', true, 'hand']
   ] as const)(
-    'waits for all artwork and starts the %s entrances together (mixed: %s)',
-    async (side, mixed) => {
+    'waits for all artwork and starts the %s entrances together (mixed: %s, source: %s)',
+    async (side, mixed, sourceZone) => {
       const value = board()
       const internal = value as unknown as {
         session: GameBoardSession
         animationScope: AnimationScope
+        landingCracks: MinionLandingCracks
         boardPositions: BoardPositionController
         createSummonedMinionView(event: unknown): Promise<MinionView>
         presentMinionSummonBatch(events: readonly OpeningMatchEvent[]): Promise<void>
@@ -6722,7 +7053,8 @@ describe('grouped summon presentation', () => {
           ...event,
           participantId,
           position: 0,
-          ...(mixed && index === 1 ? { sourceZone: 'deck' as const } : {})
+          minion: { ...event.minion, attack: 7 },
+          ...(mixed && index === 1 ? { sourceZone } : {})
         }))
       const layout = vi.spyOn(internal.boardPositions, 'layout')
       const timelines: gsap.core.Timeline[] = []
@@ -6734,6 +7066,7 @@ describe('grouped summon presentation', () => {
         timelines.push(timeline)
         return timeline
       })
+      const cracks = vi.spyOn(internal.landingCracks, 'play')
       const job = internal.presentMinionSummonBatch(events)
       for (let i = 0; i < 8; i++) await Promise.resolve()
       expect(firstView.parent).toBeNull()
@@ -6755,6 +7088,7 @@ describe('grouped summon presentation', () => {
       if (!mixed) expect(firstView.alpha).toBe(secondView.alpha)
       timeline.progress(1)
       await job
+      expect(cracks).toHaveBeenCalledTimes(sourceZone === 'hand' ? 1 : 0)
     }
   )
   it.each(['failure', 'disposal'] as const)(
@@ -7154,5 +7488,358 @@ describe('minion landing dust', () => {
     dust.dispose()
     expect(dust.destroyed).toBe(true)
     expect(Texture.WHITE.destroyed).toBe(false)
+  })
+})
+
+describe('Expert attention presentation', () => {
+  it('keeps a considered card down across target changes and removes that exact back', () => {
+    const value = board()
+    const internal = value as unknown as {
+      remoteBacks: Sprite[]
+      remoteBackCount: number
+      bindRemoteHand(cards: readonly OpeningCard[]): void
+      presentAiAttention(
+        value: import('../ai/ai-attention-controller').AiAttention | null
+      ): void
+      animateRemoteAttention(back: Sprite, enabled: boolean): void
+      removeRemoteBack(id: string): void
+      remoteBackIndex(id: string): number
+      remoteHandTransform(index: number, count: number): { y: number }
+    }
+    const cards = ['a', 'b', 'c'].map((instanceId) => ({ instanceId }) as OpeningCard)
+    internal.bindRemoteHand(cards)
+    const [a, b, c] = internal.remoteBacks
+    const motion = vi.spyOn(internal, 'animateRemoteAttention')
+    const attention = (target: string) => ({
+      matchId: 'match',
+      requestId: 'request',
+      expectedRevision: 0,
+      intent: {
+        type: 'play-card',
+        source: 'a',
+        targets: [target],
+        position: null,
+        option: null
+      }
+    })
+    internal.presentAiAttention(attention('target-one'))
+    for (const tween of gsap.getTweensOf(a)) tween.progress(1)
+    expect(a.y).toBe(
+      internal.remoteHandTransform(0, 3).y + GAME_BOARD_LAYOUT.remoteHand.attentionDrop
+    )
+    expect([a.zIndex, b.zIndex, c.zIndex]).toEqual([0, 1, 2])
+    a.parent!.sortChildren()
+    expect(a.parent!.children).toEqual([a, b, c])
+    internal.presentAiAttention(attention('target-two'))
+    expect(motion).toHaveBeenCalledTimes(1)
+    internal.presentAiAttention(null)
+    for (const tween of gsap.getTweensOf(a)) tween.progress(1)
+    expect([a.zIndex, b.zIndex, c.zIndex]).toEqual([0, 1, 2])
+    expect(a.y).toBe(internal.remoteHandTransform(0, 3).y)
+    internal.removeRemoteBack('a')
+    expect(a.destroyed).toBe(true)
+    expect(internal.remoteBacks).toEqual([b, c])
+    expect(internal.remoteBackIndex('b')).toBe(0)
+    expect(gsap.getTweensOf(a)).toHaveLength(0)
+    internal.bindRemoteHand([cards[2], cards[1], { instanceId: 'd' } as OpeningCard])
+    expect(internal.remoteBacks[0]).toBe(c)
+    expect(internal.remoteBacks[1]).toBe(b)
+    expect(internal.remoteBackIndex('d')).toBe(2)
+  })
+
+  it('allows attention during the opponent turn input lock but blocks unresolved visuals', () => {
+    const update = vi.fn()
+    const harness = {
+      session: {},
+      match: {
+        getState: () => ({ phase: 'turns', activePlayerId: 'ai', revision: 7 })
+      },
+      remoteParticipantId: 'ai',
+      aiAttentionReady: true,
+      inspectionPaused: false,
+      presentationQueue: { busy: false },
+      resolutionPresentationDepth: 0,
+      turnInProgress: true,
+      randomSpellRevision: null,
+      turnLayer: { visible: true },
+      aiAttention: { update }
+    }
+    const tick = (GameBoardView.prototype as unknown as { updateAiAttention(): void })
+      .updateAiAttention
+    tick.call(harness)
+    expect(update).toHaveBeenLastCalledWith(expect.any(Number), true, 7)
+    harness.presentationQueue.busy = true
+    tick.call(harness)
+    expect(update).toHaveBeenLastCalledWith(expect.any(Number), false, 7)
+    harness.presentationQueue.busy = false
+    harness.inspectionPaused = true
+    tick.call(harness)
+    expect(update).toHaveBeenLastCalledWith(expect.any(Number), false, 7)
+  })
+})
+
+describe('Committed opponent attack warning', () => {
+  it.each(['impact', 'exit', 'error', 'local'] as const)(
+    'clears at the correct boundary: %s',
+    async (ending) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        createHeroes(state: OpeningMatchState): void
+        heroViews: Map<PlayerId, HeroView>
+        combat: GameCombatPresentation
+        animationScope: AnimationScope
+      }
+      internal.createHeroes(internal.session.getState())
+      const attackerId =
+        ending === 'local'
+          ? internal.session.localParticipantId
+          : internal.session.remoteParticipantId
+      const defenderId =
+        ending === 'local'
+          ? internal.session.remoteParticipantId
+          : internal.session.localParticipantId
+      const defender = internal.heroViews.get(defenderId)!
+      const warning = vi.spyOn(defender, 'setAttackWarning')
+      const privateCombat = internal.combat as unknown as {
+        wait(duration: number): Promise<void>
+        showCombatImpact(...args: unknown[]): void
+      }
+      let release!: () => void
+      let reject!: (error: Error) => void
+      vi.spyOn(privateCombat, 'wait').mockImplementation(
+        () =>
+          new Promise<void>((resolve, fail) => {
+            release = resolve
+            reject = fail
+          })
+      )
+      const impact = vi
+        .spyOn(privateCombat, 'showCombatImpact')
+        .mockImplementation(() => {
+          if (ending !== 'local') expect(warning).toHaveBeenLastCalledWith(false)
+        })
+      const timelines: gsap.core.Timeline[] = []
+      const timeline = internal.animationScope.timeline.bind(internal.animationScope)
+      vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+        const result = timeline(vars)
+        timelines.push(result)
+        return result
+      })
+      const job = internal.combat.presentCombatStarted({
+        type: 'combat-started',
+        combatId: 'warning-test',
+        attacker: {
+          participantId: attackerId,
+          character: { kind: 'hero' },
+          attack: 3,
+          healthBefore: 30,
+          armorBefore: 0
+        },
+        defender: {
+          participantId: defenderId,
+          character: { kind: 'hero' },
+          attack: 0,
+          healthBefore: 30,
+          armorBefore: 0
+        }
+      })
+      if (ending === 'local') expect(warning).not.toHaveBeenCalled()
+      else {
+        expect(warning).toHaveBeenLastCalledWith(true)
+        defender.setAiAttention(false)
+        expect(defender.getChildByLabel('hero.attention-outline-proxy')!.visible).toBe(
+          true
+        )
+      }
+      expect(impact).not.toHaveBeenCalled()
+      if (ending === 'error') {
+        const assertion = expect(job).rejects.toThrow('Interrupted windup')
+        reject(new Error('Interrupted windup'))
+        await assertion
+        expect(warning).toHaveBeenLastCalledWith(false)
+        return
+      }
+      if (ending === 'exit') value.dispose()
+      release()
+      for (let pass = 0; pass < 10; pass++) {
+        await Promise.resolve()
+        for (const animation of timelines) animation.progress(1)
+      }
+      await job
+      if (ending === 'local') expect(warning).not.toHaveBeenCalled()
+      else expect(warning).toHaveBeenLastCalledWith(false)
+      expect(impact).toHaveBeenCalledTimes(ending === 'exit' ? 0 : 1)
+    }
+  )
+})
+
+describe('minion landing cracks', () => {
+  it('uses event attack for plays and hand pulls only', () => {
+    for (const attack of [6, 7, 8]) {
+      for (const type of [
+        'minion-played',
+        'minion-summoned',
+        'dev-minion-summoned'
+      ] as const) {
+        for (const sourceZone of ['hand', 'deck', 'graveyard'] as const) {
+          const event = {
+            type,
+            sourceZone,
+            minion: { cardId: asCardId('basic_bloodfen_raptor'), attack }
+          } as OpeningMatchEvent
+          expect(hasMinionLandingCracks(event)).toBe(
+            attack >= 7 &&
+              (type === 'minion-played' ||
+                (type === 'minion-summoned' && sourceZone === 'hand'))
+          )
+        }
+      }
+    }
+  })
+
+  it('holds independent marks, pauses, and cleans up without destroying shared textures', () => {
+    const cracks = new MinionLandingCracks(Texture.WHITE)
+    const internal = cracks as unknown as { animationScope: AnimationScope }
+    const timelines: gsap.core.Timeline[] = []
+    const makeTimeline = internal.animationScope.timeline.bind(internal.animationScope)
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const timeline = makeTimeline(vars)
+      timelines.push(timeline)
+      return timeline
+    })
+    const first = cracks.play(100, 200, 0.5)
+    const second = cracks.play(300, 400, 1)
+    expect(first.position.x).toBe(100)
+    expect(first.scale.x).toBe(0.5)
+    timelines[0].time(3)
+    expect(first.alpha).toBe(1)
+    cracks.pauseAnimations()
+    expect(timelines.every((timeline) => timeline.paused())).toBe(true)
+    cracks.resumeAnimations()
+    expect(timelines.every((timeline) => !timeline.paused())).toBe(true)
+    timelines[0].progress(1)
+    expect(first.destroyed).toBe(true)
+    expect(second.destroyed).toBe(false)
+    second.destroy({ children: true })
+    expect(timelines[1].parent).toBeNull()
+    expect(cracks.children).toHaveLength(0)
+    const third = cracks.play(500, 400, 1)
+    cracks.dispose()
+    expect(third.destroyed).toBe(true)
+    expect(Texture.WHITE.destroyed).toBe(false)
+  })
+})
+
+
+describe('hero attack return dust', () => {
+  it.each([
+    ['local', 'early'],
+    ['remote', 'early'],
+    ['local', 'normal'],
+    ['remote', 'normal'],
+    ['local', 'cancel'],
+    ['remote', 'cancel']
+  ] as const)('emits once on the %s hero return (%s)', async (side, mode) => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      combat: GameCombatPresentation
+      createHeroes(state: OpeningMatchState): void
+      heroViews: Map<string, HeroView>
+      landingDust: MinionLandingDust
+      animationScope: AnimationScope
+    }
+    internal.createHeroes(internal.session.getState())
+    const owner =
+      side === 'local'
+        ? internal.session.localParticipantId
+        : internal.session.remoteParticipantId
+    const opponent =
+      side === 'local'
+        ? internal.session.remoteParticipantId
+        : internal.session.localParticipantId
+    const hero = internal.heroViews.get(owner)!
+    const center = internal.landingDust.toLocal(hero.toGlobal(hero.pivot))
+    const dust = vi.spyOn(internal.landingDust, 'play')
+    const timelines: gsap.core.Timeline[] = []
+    const makeTimeline = internal.animationScope.timeline.bind(internal.animationScope)
+    vi.spyOn(internal.animationScope, 'timeline').mockImplementation((vars) => {
+      const timeline = makeTimeline(vars).pause()
+      timelines.push(timeline)
+      return timeline
+    })
+    const finish = async (job: Promise<void>): Promise<void> => {
+      let done = false
+      void job.then(() => {
+        done = true
+      })
+      for (let pass = 0; pass < 60 && !done; pass++) {
+        for (const timeline of timelines) timeline.progress(1)
+        await Promise.resolve()
+      }
+      expect(done).toBe(true)
+      await job
+    }
+    const attacker = {
+      participantId: owner,
+      character: { kind: 'hero' as const },
+      attack: 1,
+      healthBefore: 30,
+      armorBefore: 0
+    }
+    const defender = { ...attacker, participantId: opponent, attack: 0 }
+    await finish(
+      internal.combat.presentCombatStarted({
+        type: 'combat-started',
+        combatId: 'hero-dust',
+        attacker,
+        defender
+      })
+    )
+    expect(dust).not.toHaveBeenCalled()
+    if (mode !== 'normal') {
+      const returning = internal.combat.returnLatestAttacker()!
+      if (mode === 'cancel') {
+        const timeline = timelines.at(-1)!
+        timeline.progress(0.5)
+        timeline.kill()
+        await returning
+        expect(dust).not.toHaveBeenCalled()
+        value.dispose()
+        return
+      }
+      await finish(returning)
+      expect(dust).toHaveBeenCalledTimes(1)
+    }
+    await finish(
+      internal.combat.presentCombatResolved({
+        type: 'character-combat-resolved',
+        combatId: 'hero-dust',
+        weapon: null,
+        attacker: {
+          ...attacker,
+          damageDealt: 0,
+          attemptedDamage: 0,
+          healthAfter: 30,
+          armorAfter: 0,
+          destroyed: false
+        },
+        defender: {
+          ...defender,
+          damageDealt: 0,
+          attemptedDamage: 1,
+          healthAfter: 30,
+          armorAfter: 0,
+          destroyed: false
+        }
+      })
+    )
+    expect(dust).toHaveBeenCalledTimes(1)
+    expect(dust.mock.calls[0][0]).toBeCloseTo(center.x)
+    expect(dust.mock.calls[0][1]).toBeCloseTo(center.y)
+    expect(dust.mock.calls[0][2]).toBeGreaterThan(0)
+    expect(dust.mock.calls[0][3]).toBeGreaterThan(0)
+    value.dispose()
   })
 })

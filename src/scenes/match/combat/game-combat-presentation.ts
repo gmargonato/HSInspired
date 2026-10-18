@@ -58,6 +58,7 @@ interface ActiveCombatPresentation {
   readonly attackerAttack: number
   impactStarted: boolean
   attackerReturned: boolean
+  heroReturnDustPlayed: boolean
   screenShake: Promise<void> | null
 }
 
@@ -71,6 +72,7 @@ interface DeathGhostTemplate {
 }
 
 interface CombatPresentationContext {
+  shouldWarnAttack?(attackerId: PlayerId): boolean
   findCharacter(
     ownerId: PlayerId,
     character: AttackCharacterRef
@@ -85,6 +87,7 @@ interface CombatPresentationContext {
   positions: BoardPositionController
   screenShake(attack: number): Promise<void>
   onImpact(): void
+  onHeroAttackReturned(view: HeroView): void
   renderer: Renderer
 }
 
@@ -106,6 +109,7 @@ export class GameCombatPresentation {
     DamageIndicatorView | HealIndicatorView,
     CombatView
   >()
+  private readonly attackWarnings = new Set<CombatView>()
   private readonly activeWarps = new Map<MinionView, CombatAttackWarp>()
 
   private readonly activeShatters = new Set<ReturnType<typeof createShatter>>()
@@ -141,6 +145,9 @@ export class GameCombatPresentation {
   }
 
   dispose(): void {
+    for (const view of this.attackWarnings)
+      if (!view.destroyed) view.setAttackWarning(false)
+    this.attackWarnings.clear()
     for (const shatter of this.activeShatters) shatter.dispose()
     this.activeShatters.clear()
     this.indicatorLayer.onRender = null
@@ -211,6 +218,16 @@ export class GameCombatPresentation {
     this.combatPreviewMarkers.clear()
   }
 
+  private beginAttackWarning(attackerId: PlayerId, defender: CombatView): () => void {
+    if (!this.context.shouldWarnAttack?.(attackerId)) return () => undefined
+    this.attackWarnings.add(defender)
+    defender.setAttackWarning(true)
+    return () => {
+      if (!this.attackWarnings.delete(defender)) return
+      if (!defender.destroyed) defender.setAttackWarning(false)
+    }
+  }
+
   async presentCombatStarted(
     event: Extract<OpeningMatchEvent, { type: 'combat-started' }>
   ): Promise<void> {
@@ -244,6 +261,7 @@ export class GameCombatPresentation {
       attackerAttack: event.attacker.attack,
       impactStarted: false,
       attackerReturned: false,
+      heroReturnDustPlayed: false,
       screenShake: null
     }
     this.activeCombatPresentations.set(event.combatId, active)
@@ -254,6 +272,10 @@ export class GameCombatPresentation {
     }
     const contact = attacker.parent.toLocal(contactGlobal)
     const followDeathMarkers = (): void => this.updateCombatMarkerPositions()
+    const clearAttackWarning = this.beginAttackWarning(
+      event.attacker.participantId,
+      defender
+    )
 
     try {
       this.updateCombatMarkerPositions()
@@ -276,6 +298,7 @@ export class GameCombatPresentation {
       lunge.eventCallback('onUpdate', followDeathMarkers)
       await completeTimeline(lunge)
       if (this.layer.destroyed) return
+      clearAttackWarning()
       this.showCombatImpact(attacker, defender, attackerGlobal, defenderGlobal)
       this.context.onImpact()
     } catch (error) {
@@ -285,6 +308,8 @@ export class GameCombatPresentation {
       if (!attacker.destroyed)
         this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
       throw error
+    } finally {
+      clearAttackWarning()
     }
   }
 
@@ -368,7 +393,9 @@ export class GameCombatPresentation {
         timeline.eventCallback('onUpdate', () => {
           this.updateCombatMarkerPositions()
         })
-        return completeTimeline(timeline)
+        return completeTimeline(timeline, () => {
+          if (returningNow) this.notifyHeroAttackReturned(active)
+        })
       }
 
       await Promise.all([
@@ -552,6 +579,10 @@ export class GameCombatPresentation {
     }
 
     let attackerPlacement: CombatViewPlacement | null = null
+    const clearAttackWarning = this.beginAttackWarning(
+      event.attacker.participantId,
+      defender
+    )
     try {
       const attackerOrigin = { x: attacker.x, y: attacker.y }
       const defenderOrigin = { x: defender.x, y: defender.y }
@@ -588,6 +619,7 @@ export class GameCombatPresentation {
       await completeTimeline(lunge)
       if (this.layer.destroyed) return
 
+      clearAttackWarning()
       this.showCombatImpact(attacker, defender, attackerGlobal, defenderGlobal)
       this.setCombatViewStats(attacker, event.attacker)
       this.setCombatViewStats(defender, event.defender)
@@ -655,6 +687,7 @@ export class GameCombatPresentation {
       this.context.layoutLocalRow()
       this.context.layoutRemoteRow()
     } finally {
+      clearAttackWarning()
       if (attacker.destroyed) this.context.positions.endMotion(attacker)
       if (!attacker.destroyed && attackerPlacement) {
         this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
@@ -680,6 +713,10 @@ export class GameCombatPresentation {
     }
 
     let attackerPlacement: CombatViewPlacement | null = null
+    const clearAttackWarning = this.beginAttackWarning(
+      event.attacker.participantId,
+      defender
+    )
     try {
       const attackerOrigin = { x: attacker.x, y: attacker.y }
       const defenderOrigin = { x: defender.x, y: defender.y }
@@ -714,6 +751,7 @@ export class GameCombatPresentation {
       await completeTimeline(lunge)
       if (this.layer.destroyed) return
 
+      clearAttackWarning()
       this.showCombatImpact(attacker, defender, attackerGlobal, defenderGlobal)
       this.setCombatViewStats(attacker, event.attacker)
       this.setCombatViewStats(defender, event.defender)
@@ -797,6 +835,7 @@ export class GameCombatPresentation {
       this.context.layoutLocalRow()
       this.context.layoutRemoteRow()
     } finally {
+      clearAttackWarning()
       if (attacker.destroyed) this.context.positions.endMotion(attacker)
       if (!attacker.destroyed && attackerPlacement) {
         this.restoreCombatViewAfterCombat(attacker, attackerPlacement)
@@ -998,11 +1037,25 @@ export class GameCombatPresentation {
       timeline.eventCallback('onUpdate', () => {
         this.updateCombatMarkerPositions()
       })
-      await completeTimeline(timeline)
+      await completeTimeline(timeline, () => this.notifyHeroAttackReturned(active))
     }
     active.attackerReturned = true
     if (!attacker.destroyed)
       this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)
+  }
+
+  private notifyHeroAttackReturned(active: ActiveCombatPresentation): void {
+    const view = active.attacker
+    if (
+      active.heroReturnDustPlayed ||
+      this.layer.destroyed ||
+      view.destroyed ||
+      !view.parent ||
+      !(view instanceof HeroView)
+    )
+      return
+    active.heroReturnDustPlayed = true
+    this.context.onHeroAttackReturned(view)
   }
 
   /** Swaps a returning minion for its perspective warp; null keeps the plain return. */

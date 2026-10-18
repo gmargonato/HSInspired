@@ -233,7 +233,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -757,7 +757,7 @@
                 "value": 3
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "arcane-missile-small"
           }
         ]
       }
@@ -1071,7 +1071,7 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       },

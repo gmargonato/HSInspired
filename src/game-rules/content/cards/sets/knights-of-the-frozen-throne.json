@@ -132,7 +132,7 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "damage",
@@ -583,7 +583,7 @@
     "cost": 8,
     "attack": null,
     "armor": 5,
-    "rulesText": "Battlecry: Summon a 3/6 Water Elemental. Your Elementals have Lifesteal for the rest of the game.",
+    "rulesText": "Battlecry: Freeze all enemy minions. Your Elementals have Lifesteal for the rest of the game.",
     "keywords": [],
     "effects": [
       {
@@ -599,9 +599,13 @@
         "trigger": "battlecry",
         "actions": [
           {
-            "action": "summon",
-            "cardId": "basic_water_elemental",
-            "count": 1
+            "action": "freeze",
+            "vfx": "frost-blast-enemy-board",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            }
           }
         ]
       }
@@ -1464,7 +1468,7 @@
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ],
         "then": {
@@ -1687,6 +1691,7 @@
           },
           {
             "action": "freeze",
+            "vfx": "frost-missile-small",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" }
           }
         ]
@@ -1714,6 +1719,7 @@
         "actions": [
           {
             "action": "freeze",
+            "vfx": "frost-missile-small",
             "target": {
               "controller": "opponent",
               "type": "character",
@@ -1978,6 +1984,7 @@
         "actions": [
           {
             "action": "freeze",
+            "vfx": "frost-missile-small",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" }
           },
           {
@@ -2135,7 +2142,7 @@
               "selection": "chosen"
             },
             "amount": 5,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           },
           { "action": "draw", "player": "self", "count": 5 },
           { "action": "gain-armor", "player": "self", "amount": 5 },
@@ -2775,7 +2782,7 @@
               "type": "minion",
               "selection": "random"
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -2913,7 +2920,7 @@
             "action": "damage",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
             "amount": { "reference": "source.weapon.attack" },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           },
           {
             "action": "return-to-hand",
@@ -3025,7 +3032,7 @@
               "selection": "event-target"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3159,7 +3166,7 @@
               "selection": "random"
             },
             "amount": { "reference": "event.amount" },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3562,7 +3569,7 @@
             "action": "damage",
             "target": { "controller": "opponent", "type": "hero", "selection": "hero" },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3598,7 +3605,7 @@
               "type": "minion",
               "selection": "random"
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -4464,6 +4471,7 @@
         "actions": [
           {
             "action": "freeze",
+            "vfx": "frost-missile-small",
             "target": {
               "controller": "self",
               "type": "minion",
@@ -4716,7 +4724,7 @@
               "reference": "cards-played-earlier-this-turn",
               "multiplier": 2
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }

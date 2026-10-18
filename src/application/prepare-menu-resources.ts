@@ -12,6 +12,10 @@ import {
 import type { AuraFieldLease } from '../visual-components/effects/aura-field-cache'
 import type { OutlinePresetName } from '../visual-components/effects/animated-outline'
 import { warmMainMenuEffects } from './prepare-main-menu-effects'
+import {
+  acquireCardShadowTexture,
+  type CardShadowTextureLease
+} from '../visual-components/effects/card-shadow-texture'
 
 // Deliberate allowlist: adding a match bundle must never make it a boot dependency.
 export const MENU_STARTUP_BUNDLES = [
@@ -33,6 +37,7 @@ export class MenuStartupResources {
   private readonly scope = new AssetScope()
   private readonly sources = new Map<TextureSource, boolean>()
   private readonly outlineFields: AuraFieldLease[] = []
+  private cardShadowTexture: CardShadowTextureLease | null = null
 
   async prepare(renderer: Renderer): Promise<void> {
     // Settle all work before failure cleanup can release its resources.
@@ -46,6 +51,7 @@ export class MenuStartupResources {
     for (const result of results) {
       if (result.status === 'rejected') throw result.reason
     }
+    this.cardShadowTexture ??= acquireCardShadowTexture(renderer)
     prepareMenuEffects(renderer)
   }
 
@@ -123,6 +129,8 @@ export class MenuStartupResources {
     this.sources.clear()
     for (const field of this.outlineFields) field.release()
     this.outlineFields.length = 0
+    this.cardShadowTexture?.release()
+    this.cardShadowTexture = null
     await this.scope.releaseAll()
   }
 }

@@ -16,7 +16,10 @@ import {
 } from '../../../visual-components/layout'
 import { CardAssetResolver } from '../../../visual-components/assets/card-asset-resolver'
 import { SECRET_LAYOUT } from './secret-layout'
-import { SECRET_REVEAL_TIMING } from '../presentation/game-presentation-timing'
+import {
+  QUEST_BADGE_TIMING,
+  SECRET_REVEAL_TIMING
+} from '../presentation/game-presentation-timing'
 import type { OpeningPlayerState } from '../../../game-rules/match'
 
 export type SecretPresentationSide = 'local' | 'remote'
@@ -54,7 +57,7 @@ export class SecretZoneView extends Container {
     const countLabel = badge.getChildByLabel(`game.secret.${side}.count`)
     if (countLabel instanceof Text) {
       countLabel.visible = nextCount > 0
-      countLabel.text = String(nextCount)
+      countLabel.text = nextCount === 1 ? '?' : String(nextCount)
     }
   }
 
@@ -137,6 +140,14 @@ export class QuestZoneView extends Container {
   private readonly badges: Record<SecretPresentationSide, Container>
   private readonly hoverOutlines = new Map<SecretPresentationSide, AnimatedOutline>()
   private readonly animations = new AnimationScope()
+  private readonly previousQuests = new Map<
+    SecretPresentationSide,
+    Pick<NonNullable<OpeningPlayerState['quest']>, 'cardId' | 'progress' | 'target'>
+  >()
+  private readonly progressTimers = new Map<
+    SecretPresentationSide,
+    ReturnType<AnimationScope['timeline']>
+  >()
 
   constructor(
     texture: Texture,
@@ -159,8 +170,7 @@ export class QuestZoneView extends Container {
   ): void {
     const badge = this.badges[side]
     badge.visible = !!quest
-    const count = badge.getChildByLabel(`game.quest.${side}.count`)
-    if (count instanceof Text && quest) count.text = `${quest.progress}/${quest.target}`
+    this.syncProgress(side, quest)
     const x =
       SECRET_LAYOUT.badges[side].position.x -
       (paired ? SECRET_LAYOUT.pairedBadgeOffset : 0)
@@ -174,6 +184,53 @@ export class QuestZoneView extends Container {
 
   setHoverAura(side: SecretPresentationSide, enabled: boolean): void {
     this.hoverOutlines.get(side)?.setEnabled(enabled)
+  }
+
+  private syncProgress(
+    side: SecretPresentationSide,
+    quest: OpeningPlayerState['quest']
+  ): void {
+    const previous = this.previousQuests.get(side)
+    const sameQuest = !!quest && previous?.cardId === quest.cardId
+    if (
+      sameQuest &&
+      previous.progress === quest.progress &&
+      previous.target === quest.target
+    )
+      return
+
+    const timer = this.progressTimers.get(side)
+    if (timer) this.animations.cancel(timer)
+    this.progressTimers.delete(side)
+
+    const count = this.badges[side].getChildByLabel(`game.quest.${side}.count`)
+    if (!quest) {
+      this.previousQuests.delete(side)
+      return
+    }
+    this.previousQuests.set(side, {
+      cardId: quest.cardId,
+      progress: quest.progress,
+      target: quest.target
+    })
+    if (!(count instanceof Text)) return
+
+    count.text = sameQuest ? `${quest.progress}/${quest.target}` : '!'
+    count.style = sameQuest
+      ? SECRET_LAYOUT.questProgressTextStyle
+      : SECRET_LAYOUT.countTextStyle
+    if (!sameQuest) return
+
+    const nextTimer = this.animations.timeline().call(
+      () => {
+        count.text = '!'
+        count.style = SECRET_LAYOUT.countTextStyle
+        this.progressTimers.delete(side)
+      },
+      [],
+      QUEST_BADGE_TIMING.progressHold
+    )
+    this.progressTimers.set(side, nextTimer)
   }
 
   private createBadge(
@@ -209,8 +266,8 @@ export class QuestZoneView extends Container {
     hoverOutline.setEnabled(false)
     this.hoverOutlines.set(side, hoverOutline)
     const count = new Text({
-      text: '0/0',
-      style: SECRET_LAYOUT.questProgressTextStyle,
+      text: '!',
+      style: SECRET_LAYOUT.countTextStyle,
       anchor: 0.5
     })
     applyAnchoredPlacement(count, SECRET_LAYOUT.count)
@@ -226,6 +283,8 @@ export class QuestZoneView extends Container {
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     this.animations.kill()
+    this.progressTimers.clear()
+    this.previousQuests.clear()
     for (const outline of this.hoverOutlines.values()) outline.dispose()
     super.destroy(options)
   }

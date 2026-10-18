@@ -1,6 +1,7 @@
 /** Match-wide depths, relative to the gameplay container. Child depths stay local. */
 export const MATCH_LAYERS = {
   board: 0,
+  landingCracks: 5,
   shadows: 10,
   entities: 20,
   opening: 25,

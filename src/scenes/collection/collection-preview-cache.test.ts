@@ -20,6 +20,16 @@ import {
   setCollectionPreviewCached
 } from './collection-preview-cache'
 
+// Transaction tests use a renderer stub; GPU baking is owned by startup.
+vi.mock('../../visual-components/effects/card-shadow-texture', () => ({
+  acquireCardShadowTexture: () => ({
+    texture: Texture.EMPTY,
+    bodySize: 256,
+    padding: 9,
+    release: () => undefined
+  })
+}))
+
 function cacheTarget(initiallyCached = false) {
   const target = {
     isCachedAsTexture: initiallyCached,
@@ -46,7 +56,7 @@ describe('collection render transactions', () => {
     const create = vi.spyOn(CardView, 'create').mockImplementation(async () => {
       const view = new Container()
       Object.assign(view, {
-        plan: { width: 620 },
+        plan: { width: 620, renderScaleY: 1 },
         renderedHeight: 900,
         enableTextureCache: () => undefined,
         setPremiumAppearancePaused: () => undefined

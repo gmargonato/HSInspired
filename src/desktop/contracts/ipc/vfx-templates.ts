@@ -62,7 +62,18 @@ export const DEFAULT_FIRE_AOE_TUNING: FireAoeTuning = {
   timingScale: 1
 }
 
+export interface VfxImpactShake {
+  readonly enabled: boolean
+  readonly intensity: number
+}
+
+export const DEFAULT_VFX_IMPACT_SHAKE: VfxImpactShake = {
+  enabled: true,
+  intensity: 1
+}
+
 interface VfxCommonTuning {
+  readonly impactShake?: VfxImpactShake
   readonly flameColor: string
   readonly coreColor: string
   readonly intensity: number
@@ -96,6 +107,11 @@ export type VfxTemplate =
         readonly launchDelayMs?: number
         readonly missileLength: number
         readonly missileWidth: number
+        /** Signed bend relative to travel; omitted means straight. */
+        readonly pathCurvature?: number
+        /** Tail irregularity: 0 smooth, 1 authored fire, 2 exaggerated billows.
+         * Retains its original saved key for existing Lab presets. */
+        readonly tailMotion?: number
       }
     }
   | {
@@ -104,6 +120,7 @@ export type VfxTemplate =
       readonly family: 'aoe'
       readonly zones: readonly VfxAoeZone[]
       readonly tuning: {
+        readonly impactShake?: VfxImpactShake
         readonly intensity: number
         readonly fire: FireAoeTuning
         /** Optional visual impact cue, independent of the residual tail. */
@@ -165,6 +182,17 @@ function headSize(value: unknown, label: string): number {
   const size = numberInRange(value, 0, 1000, label)
   if (size === 0) throw new Error(`${label} must be greater than zero`)
   return size
+}
+
+function impactShake(value: unknown): { impactShake?: VfxImpactShake } {
+  if (value === undefined) return {}
+  const source = record(value, 'impactShake')
+  return {
+    impactShake: {
+      enabled: boolean(source.enabled, 'impactShake.enabled'),
+      intensity: numberInRange(source.intensity, 0, 3, 'impactShake.intensity')
+    }
+  }
 }
 
 function tuning(value: unknown, maxDuration = 2200): VfxCommonTuning {
@@ -283,6 +311,7 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
         family: 'missile',
         tuning: {
           ...tuning(item.tuning),
+          ...impactShake(values.impactShake),
           ...(values.headSurfaceColor !== undefined
             ? { headSurfaceColor: color(values.headSurfaceColor, 'headSurfaceColor') }
             : {}),
@@ -336,7 +365,20 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
               }
             : {}),
           missileLength: numberInRange(values.missileLength, 150, 750, 'missileLength'),
-          missileWidth: numberInRange(values.missileWidth, 0.12, 0.48, 'missileWidth')
+          missileWidth: numberInRange(values.missileWidth, 0.12, 0.48, 'missileWidth'),
+          ...(values.pathCurvature !== undefined
+            ? {
+                pathCurvature: numberInRange(
+                  values.pathCurvature,
+                  -1,
+                  1,
+                  'pathCurvature'
+                )
+              }
+            : {}),
+          ...(values.tailMotion !== undefined
+            ? { tailMotion: numberInRange(values.tailMotion, 0, 2, 'tailMotion') }
+            : {})
         }
       }
     if (item.family === 'aoe') {
@@ -352,6 +394,7 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
         family: 'aoe',
         zones: [...item.zones] as VfxAoeZone[],
         tuning: {
+          ...impactShake(values.impactShake),
           intensity: numberInRange(
             values.intensity,
             ...commonRanges.intensity,

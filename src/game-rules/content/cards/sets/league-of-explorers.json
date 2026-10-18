@@ -184,7 +184,7 @@
               "selection": "random"
             },
             "amount": 5,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -354,7 +354,7 @@
               "type": "minion",
               "selection": "event-target"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -662,7 +662,7 @@
               "selection": "random"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           }
         ]
       }
@@ -993,7 +993,7 @@
               "selection": "random"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -1785,7 +1785,7 @@
             },
             "amount": 1,
             "hits": 10,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }

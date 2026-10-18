@@ -59,6 +59,24 @@ predicate blocks history, deck details and board previews during card, attack an
 hero-power gestures, including return animations. Delayed previews check the same
 predicate before activation; modal choices can explicitly expose board inspection.
 
+Expert AI attention samples provisional search candidates as brief, single-object
+inspection gestures. Hand plays move only the considered card back downward,
+preserving the fan's stacking order; board gestures highlight either the source
+or a target, never both. After a 350 ms initial delay, gestures last 600-1000 ms
+with 2-4 seconds of quiet between them. Consecutive gestures on the same object
+are spaced at least 8 seconds apart. Cosmetic randomness does not use the match
+or search RNG. Quiet gaps persist across decisions. Completion clears attention
+immediately without delaying play. Timing lives in
+`scenes/match/ai/ai-attention-controller.ts`; the downward hand offset lives in
+`GAME_BOARD_LAYOUT.remoteHand.attentionDrop`. Easy and API modes do not emit
+attention updates. Opponent backs retain card-instance associations internally
+through draw, play, discard, and return presentation; faces remain concealed.
+
+Committed opponent attacks independently highlight their actual defender in white
+during wind-up and lunge, clearing at impact or interruption. This combat cue
+applies to all opponent modes and never delays the attack. With the current
+`BOARD_TIMING` values it lasts about 0.26 seconds.
+
 ## Card appearance tuning
 
 `visual-components/cards/card-layout.ts` owns positions, sizes, typography, curves,

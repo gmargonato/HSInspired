@@ -504,7 +504,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           },
           {
             "action": "damage",
@@ -514,7 +514,7 @@
               "selection": "all"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -780,7 +780,7 @@
             },
             "amount": 1,
             "hits": 4,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ],
         "condition": {
@@ -1202,7 +1202,7 @@
               "selection": "random"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -1543,7 +1543,7 @@
               "type": "minion",
               "selection": "random"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ],
         "then": {
@@ -1985,7 +1985,7 @@
               }
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -2018,7 +2018,7 @@
             "amount": {
               "random": [2, 3, 4]
             },
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ],
         "then": {
@@ -2269,7 +2269,7 @@
                 "selection": "random"
               },
               "amount": 1,
-              "vfx": "fire-missile"
+              "vfx": "neutral-missile-raw"
             }
           ]
         }
@@ -2452,7 +2452,7 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -2732,7 +2732,7 @@
               "selection": "random"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ],
         "event": {
@@ -3443,7 +3443,7 @@
                 "tribe": "Beast"
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3513,7 +3513,7 @@
             },
             "amount": 1,
             "hits": 6,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -3785,6 +3785,7 @@
         "actions": [
           {
             "action": "damage",
+            "vfx": "fire-missile-small",
             "target": {
               "controller": "opponent",
               "type": "minion",

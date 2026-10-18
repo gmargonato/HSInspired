@@ -19,6 +19,7 @@ const source = buildSync({
   stdin: {
     contents: `
       export { FireballEffect } from './src/visual-components/effects/fireball-effect';
+      export { fireballPathPoint } from './src/visual-components/effects/fireball-path';
       export { FIREBALL_LAYOUT } from './src/visual-components/effects/fireball-layout';
       export { hexColorToRgb } from './src/visual-components/effects/fire-vfx-shader-common';
       export { parseVfxTemplateLibrary } from './src/desktop/contracts/ipc/vfx-templates';
@@ -39,6 +40,7 @@ compiled.paths = Module._nodeModulePaths(root)
 compiled._compile(source, filename)
 const {
   FireballEffect,
+  fireballPathPoint,
   FIREBALL_LAYOUT: layout,
   hexColorToRgb,
   parseVfxTemplateLibrary: parse,
@@ -82,6 +84,122 @@ const roundTrip = (template) =>
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-6)
 const tint = (mesh, color) =>
   assert.deepEqual(mesh.shader.resources.fireball.uniforms.uTint, hexColorToRgb(color))
+
+// Both effect families default to shake On at 1x without rewriting old presets.
+for (const original of library.templates) {
+  const legacy = { ...original, tuning: { ...original.tuning } }
+  delete legacy.tuning.impactShake
+  const defaults = settingsFromTemplate(legacy)
+  assert.equal(defaults.impactShakeEnabled, true)
+  assert.equal(defaults.shakeIntensity, 1)
+  assert.ok(!('impactShake' in roundTrip(legacy).tuning))
+  for (const enabled of [false, true])
+    for (const intensity of [0, 1, 3]) {
+      const template = {
+        ...legacy,
+        tuning: { ...legacy.tuning, impactShake: { enabled, intensity } }
+      }
+      const parsed = parse({ version: 1, templates: [template] }).templates[0]
+      assert.deepEqual(parsed, template)
+      assert.deepEqual(roundTrip(parsed), parsed)
+      const settings = settingsFromTemplate(legacy)
+      settings.impactShakeEnabled = enabled
+      settings.shakeIntensity = intensity
+      assert.deepEqual(
+        templateFromSettings(legacy, settings).tuning.impactShake ?? {
+          enabled: true,
+          intensity: 1
+        },
+        { enabled, intensity }
+      )
+    }
+  for (const invalid of [
+    null,
+    false,
+    [],
+    {},
+    { enabled: true },
+    { enabled: 'true', intensity: 1 },
+    ...[-1, 3.01, NaN, Infinity, '1', null].map((intensity) => ({
+      enabled: true,
+      intensity
+    }))
+  ]) {
+    assert.throws(
+      () =>
+        parse({
+          version: 1,
+          templates: [{ ...legacy, tuning: { ...legacy.tuning, impactShake: invalid } }]
+        }),
+      /impactShake/
+    )
+  }
+}
+
+// New controls preserve absent fields and round-trip explicit defaults as well.
+const legacy = { ...baseline, tuning: { ...baseline.tuning } }
+delete legacy.tuning.pathCurvature
+delete legacy.tuning.tailMotion
+assert.equal(settingsFromTemplate(legacy).pathCurvature, 0)
+assert.equal(settingsFromTemplate(legacy).tailMotion, 1)
+assert.deepEqual(roundTrip(legacy), legacy)
+for (const pathCurvature of [-1, -0.37, 0, 0.37, 1]) {
+  for (const tailMotion of [0, 1, 2]) {
+    const template = {
+      ...baseline,
+      tuning: parsedTuning({ ...baseline.tuning, pathCurvature, tailMotion })
+    }
+    assert.deepEqual(roundTrip(template), template)
+    const effect = make(template.tuning)
+    close(
+      effect.impactSeconds,
+      effect.launchSeconds + template.tuning.durationMs / 1000
+    )
+    for (const time of [
+      effect.launchSeconds,
+      effect.launchSeconds + template.tuning.durationMs / 2000,
+      effect.impactSeconds,
+      effect.duration
+    ]) {
+      effect.update(time)
+      for (const batch of effect.batches)
+        assert.ok(batch.mesh.positions.every(Number.isFinite))
+      for (const { mesh } of effect.missile.curvedPlanes)
+        assert.ok(mesh.geometry.positions.every(Number.isFinite))
+    }
+    assert.equal(effect.container.visible, false)
+    effect.dispose()
+  }
+  close(fireballPathPoint(0, 0, 655, pathCurvature).x, 0)
+  close(fireballPathPoint(0, 0, 655, pathCurvature).y, 0)
+  close(fireballPathPoint(0, 655, 655, pathCurvature).x, 0)
+  close(fireballPathPoint(0, 655 / 2, 655, pathCurvature).x, (pathCurvature * 655) / 4)
+  assert.deepEqual(fireballPathPoint(20, 10, 0, pathCurvature), { x: 20, y: -10 })
+}
+for (const [key, invalid] of [
+  ['pathCurvature', [-1.01, 1.01]],
+  ['tailMotion', [-0.01, 2.01]]
+]) {
+  for (const value of [...invalid, NaN, Infinity, '1', null, false]) {
+    assert.throws(
+      () => parsedTuning({ ...baseline.tuning, [key]: value }),
+      new RegExp(key)
+    )
+  }
+}
+// Pixel checks exercise smoothness and contrast; CPU checks retain lifecycle
+// coverage without mistaking a change in velocity for a change in appearance.
+for (const tailMotion of [0, 0.5, 1, 2]) {
+  const effect = make({ ...baseline.tuning, tailMotion })
+  effect.update(effect.launchSeconds + 0.3)
+  assert.equal(!!effect.missile.tailFilter, tailMotion < 1)
+  assert.ok(
+    effect.batches
+      .filter((b) => b.phase === 'missile' && !b.field)
+      .every((b) => b.mesh.visible === tailMotion > 0)
+  )
+  effect.dispose()
+}
 
 // A missing optional delay must not appear merely by opening/saving in the Lab.
 const omitted = { ...baseline, tuning: { ...baseline.tuning } }

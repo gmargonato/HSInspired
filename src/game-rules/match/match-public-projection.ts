@@ -215,15 +215,34 @@ function maskPublicEffectEvent(
         )
       }
     : undefined
-  if (event.controllerId === viewerId)
-    return { ...event, ...(cardMovement ? { cardMovement } : {}) }
+  const deckAddition = event.deckAddition
+    ? {
+        ...event.deckAddition,
+        cards: event.deckAddition.cards.map(({ card, visibleTo }) => ({
+          card: maskPublicCard(
+            card,
+            viewerId,
+            visibleTo === 'all' || visibleTo.includes(viewerId)
+          )
+        }))
+      }
+    : undefined
+  const privateDeckCopy =
+    event.action === 'copy' && event.data?.copySourceZone === 'deck'
+  if (event.controllerId === viewerId && !privateDeckCopy)
+    return {
+      ...event,
+      ...(cardMovement ? { cardMovement } : {}),
+      ...(deckAddition ? { deckAddition } : {})
+    }
   const data = event.data
     ? (maskPublicEffectData(event.data, viewerId) as Readonly<Record<string, unknown>>)
     : undefined
   return {
     ...event,
-    sourceCardId: null,
+    sourceCardId: event.controllerId === viewerId ? event.sourceCardId : null,
     ...(cardMovement ? { cardMovement } : {}),
+    ...(deckAddition ? { deckAddition } : {}),
     ...(data ? { data } : {})
   }
 }

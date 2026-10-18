@@ -46,7 +46,14 @@ The game features animated card auras, premium card appearances, board shadows,
 ghostly mist and particles, card and Secret reveals, combat, and selected
 hero-power animations. In development, press **F3** to toggle GPU effects.
 
-Damage and character-destruction shaders are opt-in: set an action's `vfx` key in
+In-match deck additions materialize at their source with a growing card and blue
+glow before flying into the destination deck. Every card in a bulk shuffle is
+shown with overlapping flights. Hidden hand/deck copies use card backs where their
+identities are private; existing board-minion movements retain their animation.
+The catalog has 22 direct deck-addition cards, plus Ninja returns enabled by
+Master Dusk. Prince Malchezaar's opening setup is separate.
+
+Damage, freeze, and character-destruction shaders are opt-in: set an action's `vfx` key in
 its card JSON. Hero powers declare the key beside their effect in
 `src/game-rules/content/hero-powers/hero-power-catalog.ts`; card-authored power
 overrides and generated Kazakus ingredients carry their own explicit keys.
@@ -91,6 +98,29 @@ enabled; smoke tint and opacity are independent. Appearance is saved under
 controls are saved under `fire.dynamics`; omitted settings preserve the default
 effect. Turbulence is smooth and seeded, and persistence updates cleanup timing.
 Use **Create copy** and **Save effects** to keep a variation as its own template.
+
+Missile and AoE templates expose **Impact shake** (On by default) and **Shake
+intensity** (0–3×, default 1×). A medium kick moves the board by up to 8 design
+pixels over 180 ms; intensity changes displacement, and 0 suppresses shaking.
+Each landing refreshes the shake without stacking beyond the strongest active
+impulse. Shake starts at the gameplay impact cue, independently of the remaining
+visual tail, and does not delay damage resolution. The Lab previews the same
+shake while its HTML controls stay still. Settings save as
+`tuning.impactShake: { enabled, intensity }`; omitted settings mean On at 1×.
+
+Missiles expose **Path curvature** (−1 left, 0 straight, +1 right, relative to
+travel) and **Tail irregularity** (0 smooth, 1 original Fireball, 2 stronger billows).
+Curvature is continuous; at either extreme the path bows by 25% of the source-to-target
+distance. Flame, glow, smoke, and sparks follow the curve. Tail irregularity blends
+a smooth, continuous tapered ribbon into the original flame's uneven outline and
+texture; higher values exaggerate folds and erosion. A smooth trail has no loose
+smoke or sparks. This controls appearance independently of flight time, head
+rotation, and impact timing. These settings save as `pathCurvature` and `tailMotion`; omitted
+values preserve a straight path and original Fireball appearance.
+**Nature** uses the small missile's timing and size with a green palette and a
+straight path for Leper Gnome. **Nature — Left curve** supplies the same palette
+with maximum left curvature for existing Druid Nature missiles (including both
+Wrath choices). Arcane missiles use maximum right curvature.
 
 The VFX Lab derives board-effect placement from the match layout with the same
 translation as the board artwork. Heat filters retain their full quad bounds so

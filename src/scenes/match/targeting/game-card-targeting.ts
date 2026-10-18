@@ -48,6 +48,7 @@ interface CardTargetingContext {
   syncAttackability(): void
   syncControls(): void
   syncHud(): void
+  syncMana(): void
   hideBoardCardPreview(): void
   deselectAttacker(): void
   cancelHeroPowerTargeting(): void
@@ -246,6 +247,7 @@ export class GameCardTargeting {
     }
     this.cardTargeting = targeting
     this.hand.clearHover()
+    this.context.syncMana()
     this.context.hideBoardCardPreview()
     this.context.deselectAttacker()
     this.context.cancelHeroPowerTargeting()
@@ -357,6 +359,7 @@ export class GameCardTargeting {
       this.hand.setReflowing(true)
       this.lastTargetingPointer = null
       if (this.context.hasSession()) {
+        this.context.syncMana()
         this.context.syncAttackability()
         this.context.syncControls()
       }
@@ -403,6 +406,7 @@ export class GameCardTargeting {
     }
     this.lastTargetingPointer = null
     if (this.context.hasSession()) {
+      this.context.syncMana()
       this.context.syncAttackability()
       this.context.syncControls()
     }
@@ -527,6 +531,7 @@ export class GameCardTargeting {
       choice,
       choiceAnimated
     }
+    this.context.syncMana()
     const preview = this.minionTargetPreview()
     if (preview && !preview.presentationPromise) {
       this.beginMinionTargetPreview(this.cardTargeting)

@@ -108,7 +108,7 @@ export class FireballParticleMesh extends Mesh<MeshGeometry, Shader> {
         fragment: `
       in vec2 vUV; in vec4 vParticleColor; out vec4 finalColor;
       uniform sampler2D uArtwork,uErosion;
-      uniform vec4 uMaterial; uniform float uAlphaIntensity,uNoiseScale,uKind;
+      uniform vec4 uMaterial; uniform float uAlphaIntensity,uNoiseScale,uKind,uIrregularity;
       uniform vec3 uTint; uniform float uRecolor;
       void main(){
         vec4 tex=texture(uArtwork,vUV);vec3 rgb=tex.rgb;
@@ -117,6 +117,7 @@ export class FireballParticleMesh extends Mesh<MeshGeometry, Shader> {
           // FX Particle Additive Alpha 2Layer: particle red/alpha drive the noise UV.
           vec2 noiseUV=(vUV+vParticleColor.rr-vParticleColor.aa*vec2(.33,.30))*uNoiseScale;
           float noise=texture(uErosion,fract(noiseUV)).r;
+          if(uIrregularity>1.0)noise=clamp((noise-0.5)*uIrregularity+0.5,0.0,1.0);
           alpha=noise*tex.a*uAlphaIntensity*vParticleColor.a;color=uMaterial.rgb;
         }else{
           vec4 vertex=2.0*uMaterial*vParticleColor;
@@ -144,6 +145,7 @@ export class FireballParticleMesh extends Mesh<MeshGeometry, Shader> {
           uAlphaIntensity: { value: values._AlphaIntensity ?? 1, type: 'f32' },
           uNoiseScale: { value: values._Scale ?? 1, type: 'f32' },
           uKind: { value: material.shader.includes('2Layer') ? 0 : 1, type: 'f32' },
+          uIrregularity: { value: 1, type: 'f32' },
           uTint: { value: [1, 1, 1], type: 'vec3<f32>' },
           uRecolor: { value: 0, type: 'f32' }
         }

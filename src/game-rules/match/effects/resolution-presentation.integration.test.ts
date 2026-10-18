@@ -5,8 +5,281 @@ import type { OpeningMatchEvent } from '../opening-match-types'
 import { describe, expect, it, vi } from 'vitest'
 import { createSeededRng } from '../rng'
 import { createMatchScenario } from '../testing/match-scenario-builder'
+import { getOpeningMatchPublicEvents } from '../match-public-projection'
 
 type Scenario = ReturnType<typeof createMatchScenario>
+
+function deckAdditions(events: readonly OpeningMatchEvent[]) {
+  return events.flatMap((event) =>
+    event.type === 'effect-resolved' && event.deckAddition ? [event.deckAddition] : []
+  )
+}
+
+describe('deck addition presentation', () => {
+  it.each([
+    [
+      'league_of_explorers_elise_starseeker',
+      'league_of_explorers_map_to_the_golden_monkey',
+      1
+    ],
+    [
+      'league_of_explorers_map_to_the_golden_monkey',
+      'league_of_explorers_golden_monkey',
+      1
+    ],
+    ['league_of_explorers_forgotten_torch', 'league_of_explorers_roaring_torch', 1],
+    ['league_of_explorers_excavated_evil', 'league_of_explorers_excavated_evil', 1],
+    ['league_of_explorers_ancient_shade', 'league_of_explorers_ancient_curse', 1],
+    ['goblins_vs_gnomes_iron_juggernaut', 'goblins_vs_gnomes_burrowing_mine', 1],
+    ['the_grand_tournament_beneath_the_grounds', 'the_grand_tournament_ambush', 3],
+    ['journey_to_ungoro_queen_carnassa', 'journey_to_ungoro_carnassas_brood', 20]
+  ] as const)(
+    '%s captures every inserted card once',
+    (sourceId, generatedId, count) => {
+      const f = damagePhaseFixture(sourceId)
+      const result = f.play(
+        sourceId === 'league_of_explorers_forgotten_torch' ? 'hero' : undefined
+      )
+      const batches = deckAdditions(result.events)
+      expect(batches).toHaveLength(1)
+      expect(batches[0].cards).toHaveLength(count)
+      expect(new Set(batches[0].cards.map(({ card }) => card.instanceId)).size).toBe(
+        count
+      )
+      expect(
+        batches[0].cards.every(
+          ({ card, visibleTo }) => card.cardId === generatedId && visibleTo === 'all'
+        )
+      ).toBe(true)
+      const destination =
+        sourceId === 'goblins_vs_gnomes_iron_juggernaut' ||
+        sourceId === 'the_grand_tournament_beneath_the_grounds' ||
+        sourceId === 'league_of_explorers_excavated_evil'
+          ? f.enemy
+          : f.self
+      expect(batches[0].participantId).toBe(destination)
+      for (const viewer of [f.self, f.enemy]) {
+        const publicBatch = getOpeningMatchPublicEvents(result.events, viewer).flatMap(
+          (e) =>
+            e.type === 'effect-resolved' && e.deckAddition ? [e.deckAddition] : []
+        )[0]
+        expect(publicBatch.cards.every(({ card }) => card.cardId === generatedId)).toBe(
+          true
+        )
+        expect(
+          publicBatch.cards.every(
+            (entry) => !('visibleTo' in entry) && !('knownTo' in entry.card)
+          )
+        ).toBe(true)
+      }
+    }
+  )
+
+  it('keeps the Monkey snapshot before an immediate draw removes it from the deck', () => {
+    const f = damagePhaseFixture('league_of_explorers_map_to_the_golden_monkey')
+    const state = f.s.match.getState()
+    const result = resolveCardPlay({
+      state: {
+        ...state,
+        players: [
+          state.players[0].participantId === f.self
+            ? { ...state.players[0], deck: [] }
+            : state.players[0],
+          state.players[1].participantId === f.self
+            ? { ...state.players[1], deck: [] }
+            : state.players[1]
+        ]
+      },
+      participantId: f.self,
+      cardInstanceId: f.player(f.self).hand[0].instanceId,
+      rng: createSeededRng(99)
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    const batch = deckAdditions(result.events)[0]
+    const additionIndex = result.events.findIndex(
+      (e) => e.type === 'effect-resolved' && !!e.deckAddition
+    )
+    const drawIndex = result.events.findIndex(
+      (e) =>
+        e.type === 'card-drawn' && e.card.instanceId === batch.cards[0].card.instanceId
+    )
+    expect(drawIndex).toBeGreaterThan(additionIndex)
+    expect(batch.cards[0].card.zone).toBe('deck')
+    expect(
+      result.state.players.find((p) => p.participantId === f.self)!.deck
+    ).toHaveLength(0)
+  })
+
+  it.each([
+    'journey_to_ungoro_raptor_hatchling',
+    'journey_to_ungoro_direhorn_hatchling',
+    'mean_streets_of_gadgetzan_white_eyes',
+    'mean_streets_of_gadgetzan_weasel_tunneler',
+    'goblins_vs_gnomes_malorne',
+    'goblins_vs_gnomes_iron_juggernaut'
+  ])('captures %s deathrattle without requiring a live board body', (cardId) => {
+    const f = damagePhaseFixture('basic_assassinate')
+    const source = f.summon(cardId)
+    const result = f.play(source)
+    const batch = deckAdditions(result.events)[0]
+    expect(batch).toBeDefined()
+    expect(batch.sourceInstanceId).toBe(source.instanceId)
+    expect(batch.cards).toHaveLength(1)
+    expect(f.player().board.some((m) => m.instanceId === source.instanceId)).toBe(false)
+  })
+
+  it.each([
+    'blackrock_mountain_gang_up',
+    'league_of_explorers_entomb',
+    'goblins_vs_gnomes_recycle'
+  ])('%s retains its board movement without a duplicate addition', (cardId) => {
+    const f = damagePhaseFixture(cardId)
+    const result = f.play(f.summon('basic_chillwind_yeti'))
+    expect(deckAdditions(result.events)).toHaveLength(0)
+    expect(
+      result.events.filter(
+        (e) => e.type === 'effect-resolved' && e.cardMovement?.destination === 'deck'
+      )
+    ).toHaveLength(1)
+  })
+
+  it.each([
+    'knights_of_the_frozen_throne_dead_mans_hand',
+    'knights_of_the_frozen_throne_archbishop_benedictus'
+  ])('%s masks hidden-zone copies by viewer', (cardId) => {
+    const f = damagePhaseFixture(cardId)
+    const expected = cardId.endsWith('dead_mans_hand')
+      ? f.player(f.self).hand.length - 1
+      : f.player().deck.length
+    const result = f.play()
+    const batches = deckAdditions(result.events)
+    expect(batches).toHaveLength(1)
+    expect(batches[0].cards).toHaveLength(expected)
+    for (const viewer of [f.self, f.enemy]) {
+      const publicEvents = getOpeningMatchPublicEvents(result.events, viewer)
+      const publicBatch = publicEvents.flatMap((e) =>
+        e.type === 'effect-resolved' && e.deckAddition ? [e.deckAddition] : []
+      )[0]
+      const visible = cardId.endsWith('dead_mans_hand') && viewer === f.self
+      expect(
+        publicBatch.cards.every(({ card }) =>
+          visible ? card.cardId !== null : card.cardId === null
+        )
+      ).toBe(true)
+      if (!visible) {
+        expect(
+          publicEvents
+            .filter((e) => e.type === 'effect-resolved' && e.action === 'copy')
+            .every((e) => e.type === 'effect-resolved' && e.data?.cardId === null)
+        ).toBe(true)
+      }
+    }
+  })
+
+  it('keeps Latorvius random deck rewards hidden and batches all seven', () => {
+    const f = damagePhaseFixture('journey_to_ungoro_latorvius_gaze_of_the_city')
+    const result = f.play()
+    expect(deckAdditions(result.events)[0].cards).toHaveLength(7)
+    for (const viewer of [f.self, f.enemy]) {
+      const batch = getOpeningMatchPublicEvents(result.events, viewer).flatMap((e) =>
+        e.type === 'effect-resolved' && e.deckAddition ? [e.deckAddition] : []
+      )[0]
+      expect(batch.cards.every(({ card }) => card.cardId === null)).toBe(true)
+    }
+  })
+
+  it('batches all three Jade Idols after choosing shuffle', () => {
+    const f = damagePhaseFixture('mean_streets_of_gadgetzan_jade_idol')
+    const result = f.s.match.dispatch({
+      type: 'play-card',
+      participantId: f.self,
+      cardInstanceId: f.player(f.self).hand[0].instanceId,
+      choice: 1
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    expect(deckAdditions(result.events)).toHaveLength(1)
+    expect(deckAdditions(result.events)[0].cards).toHaveLength(3)
+  })
+
+  it.each([false, true])(
+    'Doomcaller only presents a successful shuffle (dead=%s)',
+    (cthunDied) => {
+      const f = damagePhaseFixture('whispers_of_the_old_gods_doomcaller')
+      const state = f.s.match.getState()
+      const change = (p: (typeof state.players)[number]) =>
+        p.participantId === f.self ? { ...p, cthunDied } : p
+      const result = resolveCardPlay({
+        state: {
+          ...state,
+          players: [change(state.players[0]), change(state.players[1])]
+        },
+        participantId: f.self,
+        cardInstanceId: f.player(f.self).hand[0].instanceId,
+        position: 0,
+        rng: createSeededRng(99)
+      })
+      expect(result.accepted).toBe(true)
+      if (!result.accepted) throw new Error(result.message)
+      expect(deckAdditions(result.events)).toHaveLength(cthunDied ? 1 : 0)
+      if (cthunDied)
+        expect(deckAdditions(result.events)[0].cards[0].card.cardId).toBe(
+          'whispers_of_the_old_gods_cthun'
+        )
+    }
+  )
+
+  it('retains Manic Soulcaster board-copy materialization', () => {
+    const f = damagePhaseFixture('mean_streets_of_gadgetzan_manic_soulcaster')
+    const target = f.summon('basic_chillwind_yeti', f.self)
+    const result = f.s.match.dispatch({
+      type: 'play-card',
+      participantId: f.self,
+      cardInstanceId: f.player(f.self).hand[0].instanceId,
+      position: 0,
+      targets: [
+        { kind: 'minion', participantId: f.self, instanceId: target.instanceId }
+      ]
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    expect(deckAdditions(result.events)).toHaveLength(0)
+    const movement = result.events.flatMap((e) =>
+      e.type === 'effect-resolved' && e.cardMovement ? [e.cardMovement] : []
+    )[0]
+    expect(movement).toMatchObject({
+      destination: 'deck',
+      copy: true,
+      sourceInstanceId: target.instanceId
+    })
+    expect(movement.cards).toHaveLength(1)
+  })
+
+  it('presents Ninja returns enabled by Master Dusk', () => {
+    const f = damagePhaseFixture('basic_hellfire')
+    const ninja = f.summon('journey_to_ungoro_tortollan_ninja')
+    const state = f.s.match.getState()
+    const change = (p: (typeof state.players)[number]) =>
+      p.participantId === f.enemy ? { ...p, ninjaCycle: true } : p
+    const result = resolveCardPlay({
+      state: {
+        ...state,
+        players: [change(state.players[0]), change(state.players[1])]
+      },
+      participantId: f.self,
+      cardInstanceId: f.player(f.self).hand[0].instanceId,
+      rng: createSeededRng(99)
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    expect(deckAdditions(result.events)[0]).toMatchObject({
+      sourceInstanceId: ninja.instanceId,
+      participantId: f.enemy,
+      cards: [{ card: { cardId: ninja.cardId }, visibleTo: 'all' }]
+    })
+  })
+})
 
 function activePlayers(scenario: Scenario) {
   const active = scenario.match.getState().activePlayerId!
@@ -800,18 +1073,111 @@ describe('explicit action VFX', () => {
         (e.action === 'damage' || e.action === 'destroy')
     )
 
+  it.each(['basic_frost_nova', 'knights_of_the_frozen_throne_frost_lich_jaina'])(
+    '%s shares Blizzard VFX, freezes only enemy minions, and deals no damage',
+    (cardId) => {
+      const f = damagePhaseFixture(cardId)
+      const friendly = f.summon('basic_chillwind_yeti', f.self)
+      const first = f.summon('basic_chillwind_yeti')
+      const second = f.summon('basic_bloodfen_raptor')
+      const before = f
+        .player()
+        .board.map((m) => ({ id: m.instanceId, health: m.health }))
+      const r = f.play()
+      const visual = cues(r.events)
+      expect(visual).toHaveLength(1)
+      expect(visual[0]).toMatchObject({
+        vfxId: 'frost-blast-enemy-board',
+        targetInstanceIds: [first.instanceId, second.instanceId]
+      })
+      const freezes = r.events.filter(
+        (e) => e.type === 'effect-resolved' && e.action === 'freeze'
+      )
+      expect(freezes).toHaveLength(2)
+      expect(
+        freezes.every(
+          (e) => e.type === 'effect-resolved' && e.vfxGroupId === visual[0].vfxGroupId
+        )
+      ).toBe(true)
+      expect(r.events.indexOf(visual[0])).toBeLessThan(r.events.indexOf(freezes[0]))
+      expect(
+        f.player().board.map((m) => ({ id: m.instanceId, health: m.health }))
+      ).toEqual(before)
+      expect(f.player().board.every((m) => typeof m.frozenUntilTurn === 'number')).toBe(
+        true
+      )
+      expect(f.player(f.self).board).toHaveLength(1)
+      expect(
+        f.player(f.self).board.find((m) => m.instanceId === friendly.instanceId)
+          ?.frozenUntilTurn
+      ).toBeNull()
+      expect(f.player(f.self).hero.frozenUntilTurn).toBeNull()
+      expect(f.player().hero.frozenUntilTurn).toBeNull()
+      expect(
+        r.events.some((e) => e.type === 'effect-resolved' && e.action === 'damage')
+      ).toBe(false)
+    }
+  )
+
+  it.each(['basic_frost_nova', 'knights_of_the_frozen_throne_frost_lich_jaina'])(
+    '%s skips VFX on an empty enemy board',
+    (cardId) => {
+      const f = damagePhaseFixture(cardId)
+      f.summon('basic_chillwind_yeti', f.self)
+      expect(cues(f.play().events)).toHaveLength(0)
+      expect(f.player().board).toHaveLength(0)
+      expect(f.player(f.self).board).toHaveLength(1)
+    }
+  )
+
   it.each([
-    'basic_fireball',
-    'basic_frostbolt',
-    'basic_shadow_word_death',
-    'classic_big_game_hunter'
-  ])('%s emits its explicitly authored missile before the outcome', (cardId) => {
+    'classic_frost_elemental',
+    'journey_to_ungoro_glacial_shard',
+    'knights_of_the_frozen_throne_brrrloc',
+    'mean_streets_of_gadgetzan_freezing_potion',
+    'classic_ice_lance',
+    'goblins_vs_gnomes_spare_part_emergency_coolant'
+  ])('%s links its frost missile to the chosen freeze outcome', (cardId) => {
+    const f = damagePhaseFixture(cardId)
+    const target = f.summon('basic_chillwind_yeti')
+    const bystander = f.summon('basic_bloodfen_raptor')
+    const r = f.play(target)
+    const visual = cues(r.events)
+    expect(visual).toHaveLength(1)
+    expect(visual[0]).toMatchObject({
+      vfxId: 'frost-missile-small',
+      targetInstanceIds: [target.instanceId]
+    })
+    const freeze = r.events.find(
+      (e) => e.type === 'effect-resolved' && e.action === 'freeze'
+    )
+    expect(freeze).toMatchObject({ vfxGroupId: visual[0].vfxGroupId })
+    expect(r.events.indexOf(visual[0])).toBeLessThan(r.events.indexOf(freeze!))
+    expect(
+      f.player().board.find((m) => m.instanceId === target.instanceId)
+    ).toMatchObject({
+      health: target.health,
+      frozenUntilTurn: expect.any(Number)
+    })
+    expect(
+      f.player().board.find((m) => m.instanceId === bystander.instanceId)
+        ?.frozenUntilTurn
+    ).toBeNull()
+    expect(outcomes(r.events)).toHaveLength(0)
+  })
+
+  it.each([
+    ['basic_fireball', 'fire-missile'],
+    ['basic_frostbolt', 'frost-missile-small'],
+    ['basic_shadow_word_death', 'shadow-missile-small'],
+    ['classic_big_game_hunter', 'neutral-missile-raw']
+  ])('%s emits its explicitly authored missile before the outcome', (cardId, vfxId) => {
     const f = damagePhaseFixture(cardId)
     const target = f.summon('basic_war_golem')
     const r = f.play(target)
     const cue = cues(r.events)[0]!
     expect(cue).toMatchObject({
-      vfxId: cardId === 'basic_frostbolt' ? 'frost-missile-small' : 'fire-missile',
+      vfxId,
       targetInstanceIds: [target.instanceId],
       origin: 'source'
     })
@@ -832,6 +1198,25 @@ describe('explicit action VFX', () => {
       targetInstanceIds: [target.instanceId]
     })
     expect(outcomes(r.events)[0].data?.shieldConsumed).toBe(true)
+  })
+
+  it('Bouncing Blade gives each raw missile its own cue before its damage outcome', () => {
+    const f = damagePhaseFixture('goblins_vs_gnomes_bouncing_blade')
+    const target = f.summon('basic_bloodfen_raptor')
+    const r = f.play()
+    const missiles = cues(r.events)
+    expect(missiles).toHaveLength(target.health)
+    expect(new Set(missiles.map((cue) => cue.vfxGroupId)).size).toBe(missiles.length)
+    for (const cue of missiles) {
+      expect(cue).toMatchObject({
+        vfxId: 'neutral-missile-raw',
+        targetInstanceIds: [target.instanceId]
+      })
+      const outcome = outcomes(r.events).find((e) => e.vfxGroupId === cue.vfxGroupId)
+      expect(outcome).toBeDefined()
+      expect(r.events.indexOf(cue)).toBeLessThan(r.events.indexOf(outcome!))
+    }
+    expect(f.player().board).toHaveLength(0)
   })
 
   it('each random hit has its own cue and matching outcome, even on the same hero', () => {
@@ -855,7 +1240,7 @@ describe('explicit action VFX', () => {
     const cue = cues(r.events)[0]!
     expect(cues(r.events)).toHaveLength(1)
     expect(cue.visuals?.map((v) => v.vfxId)).toEqual([
-      'fire-missile',
+      'neutral-missile-raw',
       'fire-blast-enemy-side'
     ])
     expect(outcomes(r.events).every((e) => e.vfxGroupId === cue.vfxGroupId)).toBe(true)
@@ -883,7 +1268,7 @@ describe('explicit action VFX', () => {
     const deathrattle = cues(r.events).find(
       (e) => e.sourceInstanceId === leper.instanceId
     )!
-    expect(deathrattle.vfxId).toBe('fire-missile')
+    expect(deathrattle.vfxId).toBe('nature-missile-small')
     expect(deathrattle.vfxGroupId).not.toBe(wave.vfxGroupId)
     expect(
       outcomes(r.events).some((e) => e.vfxGroupId === deathrattle.vfxGroupId)
@@ -1005,7 +1390,7 @@ it('Betrayal emits missiles from the selected minion to both neighbours', () => 
   expect(cues).toHaveLength(1)
   expect(cues[0]).toMatchObject({
     sourceInstanceId: source.instanceId,
-    vfxId: 'fire-missile'
+    vfxId: 'neutral-missile-raw'
   })
   expect(cues[0].targetInstanceIds).toEqual([left.instanceId, right.instanceId])
 })

@@ -18,7 +18,7 @@ export class MinionLandingDust extends Actor {
     this.eventMode = 'none'
   }
 
-  play(x: number, y: number, scale: number): Container {
+  play(x: number, y: number, scale: number, scaleY = scale): Container {
     const burst = new Container()
     burst.label = 'game.minion-landing-dust-burst'
     burst.position.set(x, y)
@@ -27,7 +27,7 @@ export class MinionLandingDust extends Actor {
     // Scale only the ellipse geometry; textures retain their native 1x size.
     const ring = new Container()
     ring.label = 'game.minion-landing-dust-ring'
-    ring.y = DUST.centerY * scale
+    ring.y = DUST.centerY * scaleY
     burst.addChild(ring)
     burst.alpha = 0
     const phase = Math.random() * Math.PI * 2
@@ -47,13 +47,13 @@ export class MinionLandingDust extends Actor {
     }
     const motion = { progress: 0 }
     const updateRing = (): void => {
-      const expansion = (1 + (DUST.expansion - 1) * motion.progress) * scale
+      const expansion = 1 + (DUST.expansion - 1) * motion.progress
       for (const { sprite, angle } of puffs) {
         const vertical = Math.sin(angle)
         const radiusY = vertical > 0 ? DUST.bottomRadiusY : DUST.radiusY
         sprite.position.set(
-          Math.cos(angle) * DUST.radiusX * expansion,
-          vertical * radiusY * expansion
+          Math.cos(angle) * DUST.radiusX * expansion * scale,
+          vertical * radiusY * expansion * scaleY
         )
       }
     }

@@ -43,6 +43,12 @@ export function prewarmCardPlay(renderer: Renderer, assets: GameAssets): void {
       sprite.tint = CARD_PLAY_AURA_TINT
       root.addChild(sprite)
     }
+    const cracks = new Sprite(assets.summonCracks)
+    cracks.label = 'game.card-play-warmup.summon-cracks'
+    cracks.width = cracks.height = 24
+    cracks.alpha = 0.5
+    cracks.blendMode = 'add'
+    root.addChild(cracks)
     // Landing dust uses untinted, normal-blended sprites rather than additive glows.
     for (const [index, texture] of [
       assets.landingDust1,

@@ -1,3 +1,4 @@
+import type { AiCandidateUpdate } from './ai-attention-controller'
 import {
   AiRequestError,
   type AiDecisionApi,
@@ -231,6 +232,16 @@ export function invalidatesExpertContinuation(
  * module worker. The easy local opponent remains the in-renderer default.
  */
 export class ExpertAiDecisionApi implements AiDecisionApi {
+  private readonly candidateListeners = new Set<
+    (candidate: AiCandidateUpdate) => void
+  >()
+
+  onCandidate(listener: (candidate: AiCandidateUpdate) => void): () => void {
+    this.candidateListeners.add(listener)
+    return () => {
+      this.candidateListeners.delete(listener)
+    }
+  }
   private worker: Worker | null = null
   private readonly pending = new Map<string, PendingDecision>()
   private disposed = false
@@ -434,6 +445,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.candidateListeners.clear()
     this.singletonOrder = null
     for (const requestId of [...this.pending.keys()])
       this.takePending(requestId)?.reject(
@@ -2003,6 +2015,27 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     if (response.type === 'progress') {
       const pending = this.pending.get(response.requestId)
       if (!pending || !this.isCurrentProgress(pending, response.response)) return
+      const choice = response.response.choice
+      const actionId =
+        'plan' in choice
+          ? choice.plan.firstActionId
+          : 'actionId' in choice
+            ? choice.actionId
+            : null
+      if (actionId && pending.request.actionIds.includes(actionId)) {
+        for (const listener of this.candidateListeners) {
+          try {
+            listener({
+              matchId: pending.request.matchId,
+              requestId: pending.request.requestId,
+              expectedRevision: pending.request.expectedRevision,
+              actionId
+            })
+          } catch {
+            /* Presentation must never interrupt search or recovery. */
+          }
+        }
+      }
       if (Number.isFinite(response.recommendationValue))
         pending.bestProgress = {
           response: response.response,

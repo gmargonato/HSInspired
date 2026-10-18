@@ -187,7 +187,13 @@ const GENERATED_CARD_RECORDS: readonly CardDefinition[] = [
     'goblins_vs_gnomes_spare_part_emergency_coolant',
     'Emergency Coolant',
     'Freeze a minion.',
-    [{ action: 'freeze', target: { type: 'minion', selection: 'chosen' } }]
+    [
+      {
+        action: 'freeze',
+        target: { type: 'minion', selection: 'chosen' },
+        vfx: 'frost-missile-small'
+      }
+    ]
   ),
   generatedSpell(
     'goblins_vs_gnomes_spare_part_finicky_cloakfield',

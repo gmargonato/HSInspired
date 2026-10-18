@@ -6,6 +6,8 @@ import {
 } from '../../visual-components/effects/fire-aoe-effect'
 import { FireAoeResources } from '../../visual-components/effects/fire-aoe-materials'
 import { FireballEffect } from '../../visual-components/effects/fireball-effect'
+import { AnimationScope } from '../../visual-components/animation/animations'
+import { ImpactShakeController } from '../../visual-components/animation/impact-shake'
 import type { GameAssets } from '../../visual-components/assets'
 import {
   getVfxTemplateLibrary,
@@ -49,6 +51,9 @@ function makeMarker(label: string, color: number): Container {
 
 /** Standalone, parameter-tunable preview for the first reusable VFX families. */
 export class VfxLab extends Container {
+  private readonly animations = new AnimationScope()
+  private readonly impactShake = new ImpactShakeController(this, this.animations)
+  private impactTriggered = false
   private missileEffect?: FireballEffect
   private readonly fireResources: FireAoeResources
   private fireEffect?: FireAoeEffect
@@ -174,6 +179,7 @@ export class VfxLab extends Container {
 
     this.updateMissile()
     this.updateAoe()
+    this.updateImpactShake()
   }
 
   setControlsVisible(visible: boolean): void {
@@ -183,6 +189,8 @@ export class VfxLab extends Container {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.impactShake.dispose()
+    this.animations.kill()
     this.fireEffect?.dispose()
     this.fireResources.destroy()
     this.controls.dispose()
@@ -362,6 +370,8 @@ export class VfxLab extends Container {
   }
 
   private play(): void {
+    this.impactShake.reset()
+    this.impactTriggered = false
     this.missileEffect?.dispose()
     this.missileEffect = undefined
     this.fireEffect?.dispose()
@@ -448,11 +458,27 @@ export class VfxLab extends Container {
     this.elapsedMS = 0
     this.loopDelayMS = -1
     this.playing = true
+    this.updateImpactShake()
     this.setEffectVisibility()
     this.refreshControls()
   }
 
   private setEffectVisibility(): void {
+    const source = LAYOUT.missile.source.position
+    const target = LAYOUT.missile.target.position
+    const dx = target.x - source.x
+    const dy = target.y - source.y
+    const bend = this.settings.pathCurvature * 0.5
+    this.missileGuide
+      .clear()
+      .moveTo(source.x, source.y)
+      .quadraticCurveTo(
+        (source.x + target.x) / 2 - dy * bend,
+        (source.y + target.y) / 2 + dx * bend,
+        target.x,
+        target.y
+      )
+      .stroke({ color: 0xb79061, alpha: 0.26, width: 2 })
     const missile = this.selectedEffect === 'missile'
     this.missileGuide.visible =
       missile && !!this.selectedTemplate && this.settings.showTargetGuides
@@ -473,5 +499,20 @@ export class VfxLab extends Container {
 
   private updateAoe(): void {
     this.fireEffect?.update(this.elapsedMS / 1000)
+  }
+
+  private updateImpactShake(): void {
+    if (this.impactTriggered || !this.selectedTemplate) return
+    const template = this.selectedTemplate
+    const impact =
+      template.family === 'missile'
+        ? this.missileEffect?.impactSeconds
+        : this.fireEffect && template.zones.length
+          ? Math.min(this.fireEffect.duration, (template.tuning.impactMs ?? 500) / 1000)
+          : undefined
+    if (impact === undefined || this.elapsedMS / 1000 + 1e-9 < impact) return
+    this.impactTriggered = true
+    if (this.settings.impactShakeEnabled)
+      this.impactShake.trigger(this.settings.shakeIntensity)
   }
 }

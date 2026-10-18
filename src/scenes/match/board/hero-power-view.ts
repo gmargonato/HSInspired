@@ -14,6 +14,10 @@ import {
   type OutlineTuning
 } from '../../../visual-components/effects/animated-outline'
 import { HERO_POWER_ICON_CANVAS, HeroPowerIconView } from './hero-power-presentation'
+import {
+  createHeroPowerOutlineProxy,
+  heroPowerOutlineShapeKey
+} from './hero-power-outline-shape'
 import { Actor } from '../../../visual-components/lifecycle/actor'
 import { attachShadow } from '../../../visual-components/effects/shadow-caster'
 
@@ -106,10 +110,15 @@ export class HeroPowerView extends Actor {
   private readonly premiumBackTexture: Texture
   private readonly manaCrystal: Sprite
   private readonly costLabel: Text
-  private readonly playableOutline: AnimatedOutline
-  private readonly outlineTarget: HeroPowerIconView
-  private readonly hoverOutline: AnimatedOutline
-  private readonly hoverOutlineTarget: HeroPowerIconView
+  private playableOutline: AnimatedOutline
+  private hoverOutline: AnimatedOutline
+  private readonly outlines = new Map<
+    boolean,
+    {
+      readonly playable: AnimatedOutline
+      readonly hover: AnimatedOutline
+    }
+  >()
   private readonly baseScaleX: number
   private readonly interactionRect: Rectangle
   private readonly onPointerDown?: (event: FederatedPointerEvent) => void
@@ -141,53 +150,40 @@ export class HeroPowerView extends Actor {
     this.interactionRect = new Rectangle(cardLeft, cardTop, cardWidth, cardHeight)
     this.hitArea = this.interactionRect
 
-    // The playable-outline silhouette: a static copy of the front face behind
-    // the flipping card, exactly like the hand cards' playable outlines.
-    this.outlineTarget = new HeroPowerIconView(
-      options.artworkTexture,
-      options.frontFrameTexture,
-      { premiumFrame: options.premiumFrameTexture }
-    )
-    this.outlineTarget.pivot.set(
-      HERO_POWER_ICON_CANVAS.width * cardPlacement.anchor.x,
-      HERO_POWER_ICON_CANVAS.height * cardPlacement.anchor.y
-    )
-    this.outlineTarget.position.set(cardCenterX, cardCenterY)
-    this.outlineTarget.scale.set(
-      cardPlacement.scale?.x ?? 1,
-      cardPlacement.scale?.y ?? 1
-    )
-    this.outlineTarget.eventMode = 'none'
-    this.outlineTarget.label = 'hero-power-outline-target'
-    this.addChild(this.outlineTarget)
-    this.playableOutline = new AnimatedOutline(this.outlineTarget, {
-      palette: 'green',
-      preset: 'hero-power'
-    })
-    this.playableOutline.setEnabled(false)
-
-    this.hoverOutlineTarget = new HeroPowerIconView(
-      options.artworkTexture,
-      options.frontFrameTexture,
-      { premiumFrame: options.premiumFrameTexture }
-    )
-    this.hoverOutlineTarget.pivot.set(
-      HERO_POWER_ICON_CANVAS.width * cardPlacement.anchor.x,
-      HERO_POWER_ICON_CANVAS.height * cardPlacement.anchor.y
-    )
-    this.hoverOutlineTarget.position.set(cardCenterX, cardCenterY)
-    this.hoverOutlineTarget.scale.set(
-      cardPlacement.scale?.x ?? 1,
-      cardPlacement.scale?.y ?? 1
-    )
-    this.hoverOutlineTarget.eventMode = 'none'
-    this.hoverOutlineTarget.label = 'hero-power-hover-outline-target'
-    this.addChild(this.hoverOutlineTarget)
-    this.hoverOutline = new AnimatedOutline(this.hoverOutlineTarget, {
-      palette: 'white',
-      preset: 'hero-power'
-    })
-    this.hoverOutline.setEnabled(false)
+    // Both frame variants retain shared fields, so replacement never builds a
+    // new silhouette on the first playable or hover frame.
+    for (const [premium, texture] of [
+      [false, options.frontFrameTexture],
+      [true, options.premiumFrameTexture]
+    ] as const) {
+      const createOutline = (
+        palette: 'green' | 'white',
+        label: string
+      ): AnimatedOutline => {
+        const proxy = createHeroPowerOutlineProxy(texture)
+        proxy.pivot.set(
+          HERO_POWER_ICON_CANVAS.width * cardPlacement.anchor.x,
+          HERO_POWER_ICON_CANVAS.height * cardPlacement.anchor.y
+        )
+        proxy.position.set(cardCenterX, cardCenterY)
+        proxy.scale.set(cardPlacement.scale?.x ?? 1, cardPlacement.scale?.y ?? 1)
+        proxy.label = label
+        this.addChild(proxy)
+        const outline = new AnimatedOutline(proxy, {
+          palette,
+          preset: 'hero-power',
+          sharedShapeKey: heroPowerOutlineShapeKey(texture)
+        })
+        outline.setEnabled(false)
+        return outline
+      }
+      this.outlines.set(premium, {
+        playable: createOutline('green', 'hero-power-outline-target'),
+        hover: createOutline('white', 'hero-power-hover-outline-target')
+      })
+    }
+    this.playableOutline = this.outlines.get(false)!.playable
+    this.hoverOutline = this.outlines.get(false)!.hover
 
     this.card = new Container()
     this.card.position.set(cardCenterX, cardCenterY)
@@ -261,22 +257,34 @@ export class HeroPowerView extends Actor {
   /** Replaces the visible hero-power face without changing its used/up state. */
   setArtwork(texture: Texture): void {
     this.frontFace.setArtwork(texture)
-    this.outlineTarget.setArtwork(texture)
-    this.hoverOutlineTarget.setArtwork(texture)
   }
 
   /** Swaps every face between the standard and premium plates + breathing. */
   setPremium(enabled: boolean): void {
     this.premium = enabled
     this.frontFace.setPremium(enabled)
-    this.outlineTarget.setPremium(enabled)
-    this.hoverOutlineTarget.setPremium(enabled)
+    this.playableOutline.setEnabled(false)
+    this.hoverOutline.setEnabled(false)
+    const outlines = this.outlines.get(enabled)!
+    this.playableOutline = outlines.playable
+    this.hoverOutline = outlines.hover
+    this.syncPlayableOutline()
+    this.hoverOutline.setEnabled(
+      (this.hoverAuraEnabled || this.aiAttention) && !this.targeting
+    )
     this.backFace.texture = enabled ? this.premiumBackTexture : this.standardBackTexture
   }
 
   setHoverAura(enabled: boolean): void {
     this.hoverAuraEnabled = enabled
-    this.hoverOutline.setEnabled(enabled && !this.targeting)
+    this.hoverOutline.setEnabled((enabled || this.aiAttention) && !this.targeting)
+  }
+
+  private aiAttention = false
+
+  setAiAttention(enabled: boolean): void {
+    this.aiAttention = enabled
+    this.hoverOutline.setEnabled((this.hoverAuraEnabled || enabled) && !this.targeting)
   }
 
   /** Hides readiness and hover glows while keeping click-to-cancel available. */
@@ -284,7 +292,9 @@ export class HeroPowerView extends Actor {
     if (this.targeting === targeting) return
     this.targeting = targeting
     this.syncPlayableOutline()
-    this.hoverOutline.setEnabled(this.hoverAuraEnabled && !targeting)
+    this.hoverOutline.setEnabled(
+      (this.hoverAuraEnabled || this.aiAttention) && !targeting
+    )
   }
 
   setOutlineAppearance(
@@ -292,10 +302,12 @@ export class HeroPowerView extends Actor {
     tuning: OutlineTuning,
     hoverPalette?: OutlinePaletteInput
   ): void {
-    this.playableOutline.setPalette(palette)
-    if (hoverPalette) this.hoverOutline.setPalette(hoverPalette)
-    this.playableOutline.setTuning(tuning)
-    this.hoverOutline.setTuning(tuning)
+    for (const { playable, hover } of this.outlines.values()) {
+      playable.setPalette(palette)
+      if (hoverPalette) hover.setPalette(hoverPalette)
+      playable.setTuning(tuning)
+      hover.setTuning(tuning)
+    }
   }
 
   /** Replaces this power through a horizontal flip and refreshes it face-up. */
@@ -469,13 +481,18 @@ export class HeroPowerView extends Actor {
   }
 
   prebuildOutlines(renderer: Renderer): void {
-    this.playableOutline.prebuild(renderer)
-    this.hoverOutline.prebuild(renderer)
+    for (const { playable, hover } of this.outlines.values()) {
+      playable.prebuild(renderer)
+      hover.prebuild(renderer)
+    }
   }
 
   override dispose(): void {
-    this.playableOutline.dispose()
-    this.hoverOutline.dispose()
+    for (const { playable, hover } of this.outlines.values()) {
+      playable.dispose()
+      hover.dispose()
+    }
+    this.outlines.clear()
     super.dispose()
   }
 }

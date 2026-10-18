@@ -10,6 +10,7 @@ import {
 import { VFX_LAB_LAYOUT as LAYOUT } from './vfx-lab-layout'
 
 interface ControlSpec {
+  readonly description?: string
   readonly key: VfxLabSettingKey
   readonly label: string
   readonly type: 'range' | 'color' | 'select' | 'checkbox'
@@ -86,6 +87,25 @@ const COMMON_CONTROLS: readonly ControlSpec[] = [
 ]
 
 const MISSILE_CONTROLS: readonly ControlSpec[] = [
+  {
+    key: 'pathCurvature',
+    label: 'Path curvature',
+    type: 'range',
+    min: -1,
+    max: 1,
+    step: 0.01,
+    description: '−1: left arc · 0: straight · +1: right arc, relative to travel.'
+  },
+  {
+    key: 'tailMotion',
+    label: 'Tail irregularity',
+    type: 'range',
+    min: 0,
+    max: 2,
+    step: 0.01,
+    description:
+      '0: smooth energy trail · 1: original Fireball · 2: stronger billows and wisps. Path curvature is independent.'
+  },
   { key: 'headSurfaceColor', label: 'Head surface color', type: 'color' },
   { key: 'edgeColor', label: 'Outer flame color', type: 'color' },
   { key: 'foldColor', label: 'Fold color', type: 'color' },
@@ -503,6 +523,7 @@ export class VfxLabControls {
     }
     this.parameterList.hidden = !selected
     for (const [key, input] of this.inputs) {
+      input.disabled = key === 'shakeIntensity' && !settings.impactShakeEnabled
       if (input instanceof HTMLInputElement && input.type === 'checkbox') {
         input.checked = Boolean(settings[key])
         continue
@@ -540,6 +561,23 @@ export class VfxLabControls {
     this.inputs.clear()
     this.outputs.clear()
     this.parameterList.replaceChildren()
+    this.addGroup(
+      'Impact',
+      [
+        { key: 'impactShakeEnabled', label: 'Impact shake', type: 'checkbox' },
+        {
+          key: 'shakeIntensity',
+          label: 'Shake intensity',
+          type: 'range',
+          min: 0,
+          max: 3,
+          step: 0.05,
+          description:
+            '1×: medium kick. 0: no shake. Repeated impacts refresh without stacking strength.'
+        }
+      ],
+      settings
+    )
     if (effect === 'aoe') {
       this.addGroup(
         'Target zones',
@@ -667,12 +705,14 @@ export class VfxLabControls {
       }
       this.inputs.set(spec.key, input)
       label.append(header, input)
+      if (spec.description) label.append(element('small', spec.description))
       group.append(label)
     }
     this.parameterList.append(group)
   }
 
   private formatValue(key: VfxLabSettingKey, value: number): string {
+    if (key === 'shakeIntensity') return value.toFixed(2) + '×'
     if (key === 'durationMs' || key === 'headGrowthMs' || key === 'launchDelayMs')
       return Math.round(value) + ' ms'
     if (key === 'missileLength' || key === 'headStartSize' || key === 'headEndSize')

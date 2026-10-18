@@ -1,3 +1,4 @@
+import { AiAttentionController, type AiAttention } from './ai-attention-controller'
 import { describe, expect, it, vi } from 'vitest'
 import type {
   AiDecisionRequest,
@@ -3731,4 +3732,278 @@ describe('Visible defense controller integration', () => {
       }
     }
   )
+})
+
+describe('Expert attention pacing', () => {
+  const candidate = (source: string, target = 'target', revision = 1): AiAttention => ({
+    matchId: 'match',
+    requestId: 'request',
+    expectedRevision: revision,
+    intent: {
+      type: 'play-card',
+      source,
+      targets: [target],
+      position: null,
+      option: null
+    }
+  })
+
+  it('skips quick decisions and waits for a settled board', () => {
+    const shown: (AiAttention | null)[] = []
+    const attention = new AiAttentionController((value) => shown.push(value))
+    attention.offer(candidate('a'))
+    attention.update(0, false, 1)
+    attention.update(2000, false, 1)
+    attention.update(2100, true, 1)
+    attention.update(2400, true, 1)
+    expect(shown).toEqual([])
+    attention.offer(null)
+    attention.update(3000, true, 1)
+    expect(shown).toEqual([])
+  })
+
+  it('ends gestures even when the recommendation stays unchanged and avoids immediate repeats', () => {
+    const shown: (AiAttention | null)[] = []
+    const attention = new AiAttentionController(
+      (value) => shown.push(value),
+      () => 0
+    )
+    attention.offer(candidate('power'))
+    attention.update(0, true, 1)
+    attention.update(350, true, 1)
+    attention.offer(candidate('power'))
+    attention.update(949, true, 1)
+    expect(shown).toHaveLength(1)
+    attention.update(950, true, 1)
+    expect(shown.at(-1)).toBeNull()
+    attention.update(2950, true, 1)
+    expect(shown).toHaveLength(2)
+    attention.update(8349, true, 1)
+    expect(shown).toHaveLength(2)
+    attention.update(8350, true, 1)
+    expect(shown).toHaveLength(3)
+  })
+
+  it('keeps quiet across decisions and samples only the newest candidate', () => {
+    const shown: (AiAttention | null)[] = []
+    const attention = new AiAttentionController(
+      (value) => shown.push(value),
+      () => 0
+    )
+    attention.offer(candidate('a'))
+    attention.update(0, true, 1)
+    attention.update(350, true, 1)
+    attention.offer(candidate('b'))
+    attention.update(500, true, 1)
+    expect(shown).toHaveLength(1)
+    attention.offer(null)
+    expect(shown.at(-1)).toBeNull()
+    attention.offer({ ...candidate('c'), requestId: 'next' })
+    attention.update(600, true, 1)
+    attention.update(1000, true, 1)
+    expect(shown).toHaveLength(2)
+    attention.offer({ ...candidate('d'), requestId: 'next' })
+    attention.update(2950, true, 1)
+    expect(shown.map((value) => value?.intent.source)).toEqual(['a', undefined, 'd'])
+  })
+
+  it('clears stale candidates and waits after a presentation barrier', () => {
+    const shown: (AiAttention | null)[] = []
+    const attention = new AiAttentionController(
+      (value) => shown.push(value),
+      () => 0
+    )
+    attention.offer(candidate('a'))
+    attention.update(0, true, 1)
+    attention.update(350, true, 1)
+    attention.update(400, false, 1)
+    expect(shown.at(-1)).toBeNull()
+    attention.offer(candidate('b'))
+    attention.update(2800, true, 1)
+    attention.update(3149, true, 1)
+    expect(shown).toHaveLength(2)
+    attention.update(3150, true, 1)
+    expect(shown).toHaveLength(3)
+    attention.update(3200, true, 2)
+    expect(shown.at(-1)).toBeNull()
+    attention.update(10000, true, 2)
+    expect(shown).toHaveLength(4)
+  })
+
+  it.each([0, 0.999])('shows only one board object, random sample %s', (random) => {
+    const shown: (AiAttention | null)[] = []
+    const attention = new AiAttentionController(
+      (value) => shown.push(value),
+      () => random
+    )
+    const attack = candidate('attacker', 'defender')
+    attention.offer({
+      ...attack,
+      intent: { ...attack.intent, type: 'attack-character' }
+    })
+    attention.update(0, true, 1)
+    attention.update(350, true, 1)
+    expect(shown[0]?.intent.source).toBe(random === 0 ? 'attacker' : 'defender')
+    expect(shown[0]?.intent.targets).toEqual([])
+    attention.update(1350, true, 1)
+    expect(shown.at(-1)).toBeNull()
+  })
+
+  it('does not alternate attacker and target when the recommendation stays the same', () => {
+    const shown: (AiAttention | null)[] = []
+    const random = vi.fn(() => 0)
+    const attention = new AiAttentionController((value) => shown.push(value), random)
+    const action = candidate('attacker', 'defender')
+    const attack = { ...action, intent: { ...action.intent, type: 'attack-character' } }
+    attention.offer(attack)
+    attention.update(0, true, 1)
+    attention.update(350, true, 1)
+    attention.update(950, true, 1)
+    random.mockReturnValue(0.999)
+    attention.offer(attack)
+    attention.update(2950, true, 1)
+    attention.update(5000, true, 1)
+    expect(shown).toHaveLength(2)
+    attention.update(8350, true, 1)
+    expect(shown.filter(Boolean).map((value) => value!.intent.source)).toEqual([
+      'attacker',
+      'attacker'
+    ])
+  })
+
+  it('keeps targeted hand plays as card-back gestures without exposing targets', () => {
+    const shown: (AiAttention | null)[] = []
+    const attention = new AiAttentionController(
+      (value) => shown.push(value),
+      () => 0.999
+    )
+    attention.offer(candidate('card', 'hero'))
+    attention.update(0, true, 1)
+    attention.update(350, true, 1)
+    expect(shown[0]?.intent).toMatchObject({
+      type: 'play-card',
+      source: 'card',
+      targets: []
+    })
+    attention.update(1350, true, 1)
+    attention.offer(candidate('other-card'))
+    attention.update(5347, true, 1)
+    expect(shown).toHaveLength(2)
+    attention.update(5350, true, 1)
+    expect(shown).toHaveLength(3)
+  })
+})
+
+describe('Expert candidate subscription', () => {
+  it('publishes only current legal candidates and isolates listener failures', async () => {
+    const fixture = createAiFixture({
+      seed: 100506,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'garrosh',
+      aiMana: 6,
+      aiHand: ['basic_chillwind_yeti', 'basic_bloodfen_raptor']
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actions = aiActions(
+      session,
+      enumerateLegalCommands(
+        {
+          getState: session.match.getState,
+          getPlayInput: session.match.getPlayInput!,
+          getLegality: session.match.getLegality!
+        },
+        session.remoteParticipantId
+      )
+    )
+    const selected = actions.find((action) => action.command.type === 'play-card')!
+    let receive!: (event: MessageEvent<ExpertAiWorkerResponse>) => void
+    let request: AiDecisionRequest | undefined
+    const worker = {
+      addEventListener(type: string, listener: unknown) {
+        if (type === 'message') receive = listener as typeof receive
+      },
+      postMessage(message: ExpertAiWorkerRequest) {
+        if (message.type === 'decide') request = message.request
+      },
+      removeEventListener() {},
+      terminate() {}
+    }
+    const api = new ExpertAiDecisionApi(session, () => worker as unknown as Worker)
+    const listener = vi.fn()
+    const unsubscribe = api.onCandidate(listener)
+    api.onCandidate(() => {
+      throw new Error('Visual subscriber failed')
+    })
+    try {
+      const decision = api.decide({
+        matchId: 'attention-match',
+        requestId: 'attention-request',
+        expectedRevision: session.getState().revision,
+        phase: 'action',
+        messages: [],
+        actionIds: actions.map((a) => a.id)
+      })
+      await vi.waitFor(() => expect(request).toBeDefined())
+      const response: AiDecisionResponse = {
+        ...request!,
+        modelId: 'hardware-local-v2',
+        durationMs: 1,
+        finishReason: 'fixture',
+        reason: 'Candidate fixture',
+        choice: {
+          actionId: selected.id,
+          intent: aiActionIntent(selected.command, session.localParticipantId),
+          expectedResult: 'Play',
+          planUpdate: null
+        }
+      }
+      const progress = (value: AiDecisionResponse) =>
+        receive({
+          data: {
+            type: 'progress',
+            requestId: request!.requestId,
+            response: value,
+            recommendationValue: 0.5,
+            iterations: 64,
+            worldIndex: 0
+          }
+        } as MessageEvent<ExpertAiWorkerResponse>)
+      progress({ ...response, expectedRevision: response.expectedRevision + 1 })
+      progress({
+        ...response,
+        choice: {
+          ...(response.choice as {
+            actionId: string
+            intent: AiActionIntent
+            expectedResult: string
+            planUpdate: null
+          }),
+          actionId: 'invalid'
+        }
+      })
+      expect(listener).not.toHaveBeenCalled()
+      progress(response)
+      expect(listener).toHaveBeenCalledExactlyOnceWith({
+        matchId: request!.matchId,
+        requestId: request!.requestId,
+        expectedRevision: request!.expectedRevision,
+        actionId: selected.id
+      })
+      unsubscribe()
+      progress(response)
+      expect(listener).toHaveBeenCalledTimes(1)
+      receive({
+        data: { type: 'decision', requestId: request!.requestId, response }
+      } as MessageEvent<ExpertAiWorkerResponse>)
+      await expect(decision).resolves.toMatchObject({ requestId: request!.requestId })
+      progress(response)
+      expect(listener).toHaveBeenCalledTimes(1)
+    } finally {
+      api.dispose()
+    }
+  })
 })

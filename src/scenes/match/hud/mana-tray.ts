@@ -2,7 +2,6 @@ import { Container, Sprite, Texture } from 'pixi.js'
 import { MAX_MANA, type PlayerMana } from '../../../game-rules/match'
 import {
   applyAnchoredPlacement,
-  applyPlacement,
   type LayoutPlacement,
   type LayoutPoint
 } from '../../../visual-components/layout'
@@ -40,8 +39,8 @@ export interface ManaCrystalState {
  * Derives the tray's per-crystal states from the engine mana, plus the cost of
  * the hand card currently hovered/dragged (or null for none). Full crystals
  * cover `available`; locked crystals occupy the rightmost slots, with consumed
- * crystals between them and the full crystals. Crystals beyond
- * `maximum` are simply absent. The highlight covers the right-most
+ * crystals between them and the full crystals. Temporary mana adds slots for
+ * the turn, capped at ten crystals total. The highlight covers the right-most
  * `highlightCost` full crystals, capped by availability and by the ten-crystal
  * maximum.
  */
@@ -49,10 +48,12 @@ export function resolveManaCrystalStates(
   mana: PlayerMana,
   highlightCost: number | null = null
 ): ManaCrystalState[] {
-  const maximum = Math.max(0, Math.min(MAX_MANA, Math.trunc(mana.maximum) || 0))
+  const permanent = Math.max(0, Math.min(MAX_MANA, Math.trunc(mana.maximum) || 0))
+  const temporary = Math.max(0, Math.trunc(mana.temporary ?? 0) || 0)
+  const maximum = Math.min(MAX_MANA, permanent + temporary)
   const locked = Math.max(
     0,
-    Math.min(maximum, Math.trunc(mana.overloadLocked ?? 0) || 0)
+    Math.min(permanent, Math.trunc(mana.overloadLocked ?? 0) || 0)
   )
   const available = Math.max(
     0,
@@ -70,226 +71,420 @@ export function resolveManaCrystalStates(
   }))
 }
 
-/** Scale multiplier for the brief pop a crystal makes when it becomes full. */
-const MANA_TRAY_POP_SCALE = 1.5
-const MANA_TRAY_POP_DURATION = 0.5
-const MANA_TRAY_INSERT_DURATION = 0.4
+/** Cosmetic timings in seconds; gameplay never waits for these transitions. */
+const MANA_TRAY_ANIMATION = {
+  spendDuration: 0.18,
+  refillDuration: 0.24,
+  refillPulseScale: 1.12,
+  refillPulseDuration: 0.28,
+  insertDuration: 0.4,
+  insertOvershoot: 1.08,
+  removeDuration: 0.18,
+  closeGapDuration: 0.3,
+  overloadDuration: 0.2,
+  pendingDuration: 0.18
+} as const
 
-/**
- * The local player's mana crystal tray: one pooled container per crystal slot
- * up to the ten-crystal maximum. `sync` is the single entry point — it
- * reconciles visibility and state textures, grows new crystals at the left,
- * and preserves the "refreshed" pop for existing crystals that turn full.
- */
+interface CrystalSlot {
+  readonly root: Container
+  readonly entrance: Container
+  readonly pulse: Container
+  readonly normal: Container
+  readonly available: Sprite
+  readonly locked: Sprite
+  readonly glow: Sprite
+  phase: ManaCrystalPhase | undefined
+  highlighted: boolean
+}
+
+interface PendingCrystal {
+  readonly sprite: Sprite
+  shown: boolean
+  targetX: number | undefined
+}
+
+/** Pooled, layered crystals with independently interruptible motion and fades. */
 export class ManaTray extends Actor {
-  private readonly crystals: Container[]
-  private readonly pendingCrystals: Sprite[]
-  private readonly highlightedGlows = new Set<Sprite>()
-  private previousStates: ManaCrystalState[] = []
+  private readonly slots: CrystalSlot[]
+  private readonly activeSlots: CrystalSlot[] = []
+  private readonly pendingCrystals: PendingCrystal[]
   private initialized = false
-  private growingCount = 0
-  private readonly insertion = { progress: 1 }
 
   constructor(
-    private readonly availableTexture: Texture,
-    private readonly spentTexture: Texture,
+    availableTexture: Texture,
+    spentTexture: Texture,
     glowTexture: Texture,
-    private readonly overloadTexture: Texture,
+    overloadTexture: Texture,
     private readonly layout: ManaTrayLayout
   ) {
     super()
     this.label = 'game.mana-tray'
     this.eventMode = 'none'
-    this.crystals = Array.from({ length: MAX_MANA }, (_, index) => {
-      const crystal = new Container()
-      applyPlacement(crystal, layout.crystal)
-      crystal.position.set(
-        layout.firstCrystalCenter.x + index * layout.gap,
-        layout.firstCrystalCenter.y
-      )
-      crystal.visible = false
-      crystal.alpha = 0
-      crystal.eventMode = 'none'
-      crystal.label = `game.mana-crystal-${index}`
-      const image = new Sprite(availableTexture)
-      image.anchor.set(layout.crystal.anchor.x, layout.crystal.anchor.y)
-      image.eventMode = 'none'
-      image.label = 'game.mana-crystal-image'
+    this.slots = Array.from({ length: MAX_MANA }, (_, index) => {
+      const root = new Container()
+      root.label = `game.mana-pooled-${index}`
+      root.visible = false
+      root.eventMode = 'none'
+      const entrance = new Container()
+      entrance.label = 'game.mana-entrance'
+      const pulse = new Container()
+      pulse.label = 'game.mana-pulse'
+      const normal = new Container()
+      normal.label = 'game.mana-normal'
+      const spent = new Sprite(spentTexture)
+      applyAnchoredPlacement(spent, layout.crystal)
+      spent.label = 'game.mana-spent'
+      const available = new Sprite(availableTexture)
+      applyAnchoredPlacement(available, layout.crystal)
+      available.label = 'game.mana-available'
+      const locked = new Sprite(overloadTexture)
+      applyAnchoredPlacement(locked, layout.overloadCrystal)
+      // Current overload artwork shares the row center; the offset is for pending markers.
+      locked.position.set(0, 0)
+      locked.label = 'game.mana-locked'
       const glow = new Sprite(glowTexture)
       applyAnchoredPlacement(glow, layout.glow)
+      // Preserve the old crystal container's scale on the cost-preview glow.
+      glow.position.set(
+        glow.x * (layout.crystal.scale?.x ?? 1),
+        glow.y * (layout.crystal.scale?.y ?? 1)
+      )
+      glow.scale.set(
+        glow.scale.x * (layout.crystal.scale?.x ?? 1),
+        glow.scale.y * (layout.crystal.scale?.y ?? 1)
+      )
+      glow.label = 'game.mana-glow'
       glow.blendMode = 'screen'
       glow.alpha = 0
       glow.visible = false
-      glow.eventMode = 'none'
-      glow.label = 'game.mana-glow'
-      crystal.addChild(image, glow)
-      this.addChild(crystal)
-      return crystal
+      normal.addChild(spent, available)
+      pulse.addChild(normal, locked, glow)
+      entrance.addChild(pulse)
+      root.addChild(entrance)
+      this.addChild(root)
+      return {
+        root,
+        entrance,
+        pulse,
+        normal,
+        available,
+        locked,
+        glow,
+        phase: undefined,
+        highlighted: false
+      }
     })
     this.pendingCrystals = Array.from({ length: MAX_MANA }, (_, index) => {
-      const crystal = new Sprite(overloadTexture)
-      applyAnchoredPlacement(crystal, layout.overloadCrystal)
-      crystal.visible = false
-      crystal.eventMode = 'none'
-      crystal.label = `game.mana-pending-${index}`
-      this.addChild(crystal)
-      return crystal
+      const sprite = new Sprite(overloadTexture)
+      applyAnchoredPlacement(sprite, layout.overloadCrystal)
+      sprite.label = `game.mana-pending-${index}`
+      sprite.visible = false
+      sprite.alpha = 0
+      sprite.eventMode = 'none'
+      this.addChild(sprite)
+      return { sprite, shown: false, targetX: undefined }
     })
   }
 
-  /** Applies a full tray state; crystals beyond the returned states hide. */
-  sync(states: readonly ManaCrystalState[], overloadNextTurn = 0): void {
+  sync(
+    states: readonly ManaCrystalState[],
+    overloadNextTurn = 0,
+    turnStarted = false
+  ): void {
     const count = Math.min(MAX_MANA, states.length)
-    const previousCount = this.previousStates.length
+    const previousCount = this.activeSlots.length
     const countChanged = count !== previousCount
-    const added = this.initialized ? Math.max(0, count - previousCount) : 0
-    if (countChanged) {
-      this.killTweensOf(this.insertion)
-      this.insertion.progress = 1
-      this.applyInsertion()
-      this.growingCount = 0
+    if (count < previousCount) {
+      for (const slot of this.activeSlots.splice(0, previousCount - count)) {
+        this.retireSlot(slot)
+      }
     }
-    if (added > 0) {
-      // Reuse hidden slots at the left; retain the visible row's identity.
-      const incoming = this.crystals.splice(previousCount, added)
-      this.crystals.unshift(...incoming)
-      this.growingCount = added
-      this.insertion.progress = 0
-      this.crystals.forEach((crystal, index) => {
-        crystal.label = `game.mana-crystal-${index}`
-        this.setChildIndex(crystal, index)
-      })
+    const incoming = new Set<CrystalSlot>()
+    if (count > previousCount) {
+      // Prefer hidden slots; interrupt a retirement only when the pool is full.
+      const free = this.slots.filter((slot) => !this.activeSlots.includes(slot))
+      free.sort((a, b) => Number(a.root.visible) - Number(b.root.visible))
+      const added = free.slice(0, count - previousCount)
+      for (const slot of added) {
+        this.resetSlot(slot)
+        incoming.add(slot)
+      }
+      this.activeSlots.unshift(...added)
     }
-    this.crystals.forEach((crystal, index) => {
-      const state = states[index]
-      const glow = crystal.getChildByLabel('game.mana-glow') as Sprite
-      const previousState =
-        index < added ? undefined : this.previousStates[index - added]
-      if (!state) {
-        this.killTweensOf(glow)
-        this.highlightedGlows.delete(glow)
-        glow.alpha = 0
-        glow.visible = false
-        this.killTweensOf(crystal.scale)
-        crystal.visible = false
-        crystal.tint = 0xffffff
-        return
+    if (this.initialized && turnStarted) {
+      for (const slot of incoming) {
+        const index = this.activeSlots.indexOf(slot)
+        if (states[index].phase === 'full') {
+          this.setPhase(slot, 'consumed', 0, true)
+        }
       }
-      crystal.visible = true
-      crystal.alpha = 1
-      crystal.tint = 0xffffff
-      this.setGlowHighlight(glow, state.phase === 'full' && state.highlighted)
-      const placement =
-        state.phase === 'locked' ? this.layout.overloadCrystal : this.layout.crystal
-      const image = crystal.getChildByLabel('game.mana-crystal-image') as Sprite
-      image.texture =
-        state.phase === 'locked'
-          ? this.overloadTexture
-          : state.phase === 'consumed'
-            ? this.spentTexture
-            : this.availableTexture
-      if (countChanged || !this.initialized) {
-        crystal.position.set(
-          this.layout.firstCrystalCenter.x + index * this.layout.gap,
-          this.layout.firstCrystalCenter.y
-        )
-      }
-      if (state.phase !== previousState?.phase) {
-        this.killTweensOf(crystal.scale)
-        image.anchor.set(placement.anchor.x, placement.anchor.y)
-        crystal.scale.set(placement.scale?.x ?? 1, placement.scale?.y ?? 1)
-      }
-      if (
-        this.initialized &&
-        index >= this.growingCount &&
-        state.phase === 'full' &&
-        previousState?.phase !== 'full'
-      ) {
-        this.popCrystal(crystal)
-      }
-    })
-    const pendingCount = Math.max(
-      0,
-      Math.min(MAX_MANA, Math.trunc(overloadNextTurn) || 0)
+    }
+    const refillStartDelay =
+      this.initialized && turnStarted && incoming.size > 0
+        ? MANA_TRAY_ANIMATION.insertDuration
+        : 0
+    const spending = this.activeSlots
+      .filter(
+        (slot, index) => slot.phase === 'full' && states[index].phase === 'consumed'
+      )
+      .reverse()
+    const refilling = this.activeSlots.filter(
+      (slot, index) =>
+        slot.phase !== undefined &&
+        slot.phase !== 'full' &&
+        states[index].phase === 'full'
     )
-    const rightmostSlot = Math.max(0, Math.min(MAX_MANA, states.length) - 1)
-    this.pendingCrystals.forEach((crystal, index) => {
-      crystal.visible = index < pendingCount
-      crystal.position.set(
-        this.layout.firstCrystalCenter.x + (rightmostSlot - index) * this.layout.gap,
-        this.layout.firstCrystalCenter.y + this.layout.pendingRowOffsetY
+    this.activeSlots.forEach((slot, index) => {
+      slot.root.label = `game.mana-crystal-${index}`
+      if (countChanged) this.setChildIndex(slot.root, index)
+      const x = this.layout.firstCrystalCenter.x + index * this.layout.gap
+      if (incoming.has(slot) || !this.initialized) {
+        slot.root.position.set(x, this.layout.firstCrystalCenter.y)
+        slot.root.visible = true
+        if (this.initialized) this.insertSlot(slot)
+      } else if (countChanged) {
+        this.killTweensOf(slot.root.position)
+        this.tweenTo(slot.root.position, {
+          x,
+          duration:
+            count > previousCount
+              ? MANA_TRAY_ANIMATION.insertDuration
+              : MANA_TRAY_ANIMATION.closeGapDuration,
+          ease: 'power2.out'
+        })
+      }
+      const spendIndex = spending.indexOf(slot)
+      const refillIndex = refilling.indexOf(slot)
+      const delay =
+        spendIndex >= 0
+          ? spendIndex * MANA_TRAY_ANIMATION.spendDuration
+          : refillIndex >= 0
+            ? refillStartDelay + refillIndex * MANA_TRAY_ANIMATION.refillDuration
+            : 0
+      this.setPhase(
+        slot,
+        states[index].phase,
+        delay,
+        !this.initialized || (incoming.has(slot) && refillIndex < 0)
+      )
+      this.setGlowHighlight(
+        slot,
+        states[index].phase === 'full' && states[index].highlighted,
+        !this.initialized
       )
     })
-    this.previousStates = states.slice(0, MAX_MANA)
+    this.syncPending(count, overloadNextTurn)
     this.initialized = true
-    if (this.growingCount > 0) this.applyInsertion()
-    if (added > 0) {
-      this.tweenTo(this.insertion, {
-        progress: 1,
-        duration: MANA_TRAY_INSERT_DURATION,
-        ease: 'power2.out',
-        onUpdate: () => this.applyInsertion(),
+  }
+
+  private resetSlot(slot: CrystalSlot): void {
+    this.cancelSlotAnimations(slot)
+    slot.root.alpha = 1
+    slot.entrance.scale.set(1)
+    slot.pulse.scale.set(1)
+    slot.glow.alpha = 0
+    slot.glow.visible = false
+    slot.highlighted = false
+    slot.phase = undefined
+  }
+
+  private cancelSlotAnimations(slot: CrystalSlot): void {
+    for (const target of [
+      slot.root,
+      slot.root.position,
+      slot.entrance.scale,
+      slot.pulse.scale,
+      slot.normal,
+      slot.available,
+      slot.locked,
+      slot.glow
+    ]) {
+      this.killTweensOf(target)
+    }
+  }
+
+  private insertSlot(slot: CrystalSlot): void {
+    slot.entrance.scale.set(0)
+    this.tweenTo(slot.entrance.scale, {
+      x: MANA_TRAY_ANIMATION.insertOvershoot,
+      y: MANA_TRAY_ANIMATION.insertOvershoot,
+      duration: MANA_TRAY_ANIMATION.insertDuration * 0.7,
+      ease: 'power2.out',
+      onComplete: () => {
+        this.tweenTo(slot.entrance.scale, {
+          x: 1,
+          y: 1,
+          duration: MANA_TRAY_ANIMATION.insertDuration * 0.3,
+          ease: 'sine.inOut'
+        })
+      }
+    })
+  }
+
+  private retireSlot(slot: CrystalSlot): void {
+    slot.root.label = `game.mana-retiring-${this.slots.indexOf(slot)}`
+    // Cancel delayed fills and entrance callbacks before starting the exit.
+    this.cancelSlotAnimations(slot)
+    slot.phase = undefined
+    slot.highlighted = false
+    slot.glow.alpha = 0
+    slot.glow.visible = false
+    this.tweenTo(slot.root, {
+      alpha: 0,
+      duration: MANA_TRAY_ANIMATION.removeDuration,
+      ease: 'sine.inOut',
+      onComplete: () => {
+        slot.root.visible = false
+      }
+    })
+    this.tweenTo(slot.entrance.scale, {
+      x: 0,
+      y: 0,
+      duration: MANA_TRAY_ANIMATION.removeDuration,
+      ease: 'power2.in'
+    })
+  }
+
+  private setPhase(
+    slot: CrystalSlot,
+    phase: ManaCrystalPhase,
+    delay: number,
+    immediate: boolean
+  ): void {
+    if (slot.phase === phase) return
+    const previous = slot.phase
+    slot.phase = phase
+    for (const target of [slot.normal, slot.available, slot.locked, slot.pulse.scale]) {
+      this.killTweensOf(target)
+    }
+    const normalAlpha = phase === 'locked' ? 0 : 1
+    const availableAlpha = phase === 'full' ? 1 : 0
+    if (immediate) {
+      slot.normal.alpha = normalAlpha
+      slot.locked.alpha = 1 - normalAlpha
+      slot.available.alpha = availableAlpha
+      slot.pulse.scale.set(1)
+      return
+    }
+    const overloadChange = previous === 'locked' || phase === 'locked'
+    const duration = overloadChange
+      ? MANA_TRAY_ANIMATION.overloadDuration
+      : phase === 'full'
+        ? MANA_TRAY_ANIMATION.refillDuration
+        : MANA_TRAY_ANIMATION.spendDuration
+    this.tweenTo(slot.normal, {
+      alpha: normalAlpha,
+      duration: MANA_TRAY_ANIMATION.overloadDuration,
+      ease: 'sine.inOut'
+    })
+    this.tweenTo(slot.locked, {
+      alpha: 1 - normalAlpha,
+      duration: MANA_TRAY_ANIMATION.overloadDuration,
+      ease: 'sine.inOut'
+    })
+    this.tweenTo(slot.available, {
+      alpha: availableAlpha,
+      duration,
+      delay,
+      ease: 'sine.inOut'
+    })
+    if (phase === 'full') {
+      this.tweenTo(slot.pulse.scale, {
+        x: MANA_TRAY_ANIMATION.refillPulseScale,
+        y: MANA_TRAY_ANIMATION.refillPulseScale,
+        duration: MANA_TRAY_ANIMATION.refillPulseDuration * 0.35,
+        delay,
+        ease: 'sine.out',
         onComplete: () => {
-          this.growingCount = 0
+          this.tweenTo(slot.pulse.scale, {
+            x: 1,
+            y: 1,
+            duration: MANA_TRAY_ANIMATION.refillPulseDuration * 0.65,
+            ease: 'sine.inOut'
+          })
         }
+      })
+    } else {
+      this.tweenTo(slot.pulse.scale, {
+        x: 1,
+        y: 1,
+        duration: MANA_TRAY_ANIMATION.spendDuration,
+        ease: 'sine.out'
       })
     }
   }
 
-  /** Repeated syncs keep their fade; changed highlights continue from current opacity. */
-  private setGlowHighlight(glow: Sprite, highlighted: boolean): void {
-    if (this.highlightedGlows.has(glow) === highlighted) return
-    if (highlighted) this.highlightedGlows.add(glow)
-    else this.highlightedGlows.delete(glow)
-    this.killTweensOf(glow)
-    glow.visible = true
-    this.tweenTo(glow, {
+  /** Repeated preview syncs leave in-flight fades and mana transitions alone. */
+  private setGlowHighlight(
+    slot: CrystalSlot,
+    highlighted: boolean,
+    immediate = false
+  ): void {
+    if (immediate) {
+      slot.highlighted = highlighted
+      slot.glow.alpha = highlighted ? 1 : 0
+      slot.glow.visible = highlighted
+      return
+    }
+    if (slot.highlighted === highlighted) return
+    slot.highlighted = highlighted
+    this.killTweensOf(slot.glow)
+    slot.glow.visible = true
+    this.tweenTo(slot.glow, {
       alpha: highlighted ? 1 : 0,
       duration: highlighted
         ? this.layout.glowFade.inDuration
         : this.layout.glowFade.outDuration,
       ease: 'sine.inOut',
       onComplete: () => {
-        if (!highlighted) glow.visible = false
+        if (!highlighted) slot.glow.visible = false
       }
     })
   }
 
-  /** One progress value keeps the new crystals' growth and the row's push in step. */
-  private applyInsertion(): void {
-    if (this.growingCount === 0) return
-    const progress = this.insertion.progress
-    this.crystals.slice(0, this.previousStates.length).forEach((crystal, index) => {
-      const growing = index < this.growingCount
-      crystal.x =
-        this.layout.firstCrystalCenter.x +
-        (index - (growing ? 0 : this.growingCount * (1 - progress))) * this.layout.gap
-      if (growing) {
-        const placement =
-          this.previousStates[index].phase === 'locked'
-            ? this.layout.overloadCrystal
-            : this.layout.crystal
-        crystal.scale.set(
-          (placement.scale?.x ?? 1) * progress,
-          (placement.scale?.y ?? 1) * progress
-        )
-      }
-    })
-  }
-
-  /** Quick scale pop so a freshly refreshed crystal reads as "new". */
-  private popCrystal(crystal: Container): void {
-    const base = this.layout.crystal.scale?.x ?? 1
-    this.killTweensOf(crystal.scale)
-    this.tweenFromTo(
-      crystal.scale,
-      { x: base * MANA_TRAY_POP_SCALE, y: base * MANA_TRAY_POP_SCALE },
-      {
-        x: base,
-        y: base,
-        duration: MANA_TRAY_POP_DURATION,
-        ease: 'power2.out'
-      }
+  private syncPending(count: number, overloadNextTurn: number): void {
+    const pendingCount = Math.max(
+      0,
+      Math.min(MAX_MANA, Math.trunc(overloadNextTurn) || 0)
     )
+    this.pendingCrystals.forEach((pending, index) => {
+      const { sprite } = pending
+      const shown = index < pendingCount
+      const x =
+        this.layout.firstCrystalCenter.x +
+        (Math.max(0, count - 1) - index) * this.layout.gap
+      const y = this.layout.firstCrystalCenter.y + this.layout.pendingRowOffsetY
+      if (!this.initialized) {
+        sprite.position.set(x, y)
+        sprite.alpha = shown ? 1 : 0
+        sprite.visible = shown
+      } else {
+        if (shown !== pending.shown) {
+          this.killTweensOf(sprite)
+          sprite.visible = true
+          this.tweenTo(sprite, {
+            alpha: shown ? 1 : 0,
+            duration: MANA_TRAY_ANIMATION.pendingDuration,
+            ease: 'sine.inOut',
+            onComplete: () => {
+              if (!shown) sprite.visible = false
+            }
+          })
+        }
+        if (x !== pending.targetX) {
+          this.killTweensOf(sprite.position)
+          if (!pending.shown && shown) sprite.position.set(x, y)
+          else
+            this.tweenTo(sprite.position, {
+              x,
+              y,
+              duration: MANA_TRAY_ANIMATION.closeGapDuration,
+              ease: 'power2.out'
+            })
+        }
+      }
+      pending.shown = shown
+      pending.targetX = x
+    })
   }
 }

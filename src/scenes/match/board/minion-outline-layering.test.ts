@@ -878,3 +878,40 @@ describe('minion status curtains', () => {
     }
   )
 })
+
+describe('AI attention and player hover', () => {
+  it('keeps the shared white outline until both attention sources leave', async () => {
+    const view = await MinionView.create(tauntMinion, textures, Texture.EMPTY)
+    const outline = (view as unknown as { hoverOutline: { isEnabled(): boolean } })
+      .hoverOutline
+    view.setHoverAura(true)
+    view.setAiAttention(true)
+    view.setHoverAura(false)
+    expect(outline.isEnabled()).toBe(true)
+    view.setAiAttention(false)
+    expect(outline.isEnabled()).toBe(false)
+    view.setAiAttention(true)
+    view.setHoverAura(true)
+    view.setAiAttention(false)
+    expect(outline.isEnabled()).toBe(true)
+    view.setHoverAura(false)
+    expect(outline.isEnabled()).toBe(false)
+    view.destroy({ children: true })
+  })
+})
+
+it('keeps attack warnings independent of attention and mouse hover', async () => {
+  const view = await MinionView.create(tauntMinion, textures, Texture.EMPTY)
+  const outline = (view as unknown as { hoverOutline: { isEnabled(): boolean } })
+    .hoverOutline
+  view.setAttackWarning(true)
+  view.setAiAttention(false)
+  view.setHoverAura(false)
+  expect(outline.isEnabled()).toBe(true)
+  view.setHoverAura(true)
+  view.setAttackWarning(false)
+  expect(outline.isEnabled()).toBe(true)
+  view.setHoverAura(false)
+  expect(outline.isEnabled()).toBe(false)
+  view.destroy({ children: true })
+})

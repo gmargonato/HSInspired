@@ -266,6 +266,7 @@ export class GameScene extends Scene {
     }
     const aiController = new AiTurnController({
       api: aiApi,
+      candidates: this.expertAiApi ?? undefined,
       session: aiSession,
       logger: aiLogger,
       recorder: this.recorder,

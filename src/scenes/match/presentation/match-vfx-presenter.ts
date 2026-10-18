@@ -12,6 +12,7 @@ import { FireballEffect } from '../../../visual-components/effects/fireball-effe
 import type { FireballAssets } from '../../../visual-components/effects/fireball-materials'
 import type { VfxTemplate } from '../../../visual-components/effects/vfx-templates'
 import type { VfxAoeZone } from '../../../desktop/contracts/ipc/vfx-templates'
+import { DEFAULT_VFX_IMPACT_SHAKE } from '../../../desktop/contracts/ipc/vfx-templates'
 import { MATCH_VFX_LAYOUT } from './match-vfx-layout'
 
 type AreaId = keyof typeof MATCH_VFX_LAYOUT.areas
@@ -53,14 +54,13 @@ export class MatchVfxPresenter {
   readonly layer = new Container()
   private readonly active = new Set<ActiveEffect>()
   private readonly fireResources?: FireAoeResources
-  private shaking = false
 
   constructor(
     private readonly assets: Pick<GameAssets, 'burnNoise' | 'playSpotlight1'> &
       Partial<FireAoeAssets & FireballAssets>,
     private readonly timeline: () => gsap.core.Timeline,
     private readonly renderer?: Renderer,
-    private readonly shake?: () => Promise<void>
+    private readonly shake?: (intensity: number) => void
   ) {
     if (renderer && assets.fireAoeWispAtlas)
       this.fireResources = new FireAoeResources(renderer, assets as FireAoeAssets)
@@ -121,24 +121,16 @@ export class MatchVfxPresenter {
         ease: 'none',
         onUpdate: () => visual.update(clock.progress, seconds)
       })
-      timeline.call(resolveImpact, undefined, impactSeconds)
-      if (
-        template.family === 'aoe' &&
-        template.zones.some((zone) => zone.endsWith('Board')) &&
-        this.shake
-      ) {
-        timeline.call(
-          () => {
-            if (this.shaking) return
-            this.shaking = true
-            void this.shake!().finally(() => {
-              this.shaking = false
-            })
-          },
-          undefined,
-          0.25 * template.tuning.fire.timingScale
-        )
-      }
+      timeline.call(
+        () => {
+          if (finished || impactResolved) return
+          resolveImpact()
+          const shake = template.tuning.impactShake ?? DEFAULT_VFX_IMPACT_SHAKE
+          if (shake.enabled && shake.intensity > 0) this.shake?.(shake.intensity)
+        },
+        undefined,
+        impactSeconds
+      )
     })
   }
 

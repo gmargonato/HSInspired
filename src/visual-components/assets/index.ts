@@ -18,6 +18,7 @@ import fireAoeGlowMaskFriendlyImage from '@assets/images/effects/fire-aoe-glow-m
 import fireAoeGlowMaskFullImage from '@assets/images/effects/fire-aoe-glow-mask-full.png'
 import fireAoeImpactBurstImage from '@assets/images/effects/fire-aoe-impact-burst.png'
 import fireAoeImpactSparkImage from '@assets/images/effects/fire-aoe-impact-spark.png'
+import summonCracksImage from '@assets/images/effects/summon-cracks.png'
 import landingDust1Image from '@assets/images/effects/dust-01.png'
 import summonGlowImage from '@assets/images/effects/summon-glow.png'
 import landingDust2Image from '@assets/images/effects/dust-02.png'
@@ -1711,6 +1712,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
+    'scene.game.summon-cracks',
+    ASSET_BUNDLE_IDS.game,
+    'summonCracks',
+    summonCracksImage,
+    256,
+    256,
+    'game-scene'
+  ),
+  asset(
     'scene.game.landing-dust-01',
     ASSET_BUNDLE_IDS.game,
     'landingDust1',
@@ -3249,6 +3259,7 @@ export interface GameAssets extends Record<
   heroPlayAura: Texture
   legendaryMinionPlayAura: Texture
   legendarySpellPlayAura: Texture
+  summonCracks: Texture
   landingDust1: Texture
   summonGlow: Texture
   landingDust2: Texture

@@ -49,6 +49,7 @@ export class GameHudView {
   deckCountLabels: { local: Text; remote: Text } | null = null
   manaLabels: { local: Text; remote: Text } | null = null
   manaLocalTray: ManaTray | null = null
+  private lastManaTurnNumber: number | null = null
   private yourTurnFlag: Sprite | null = null
   private yourTurnTimeline: gsap.core.Timeline | null = null
 
@@ -202,9 +203,19 @@ export class GameHudView {
       this.manaLabels.remote.text = `${remote.mana.available}/${remote.mana.maximum}`
     }
     this.manaLocalTray?.sync(
-      resolveManaCrystalStates(local.mana, highlightCost),
-      local.mana.overloadNextTurn
+      resolveManaCrystalStates(
+        // The engine retains temporary mana until the owner's next turn starts.
+        state.activePlayerId === ids.local
+          ? local.mana
+          : { ...local.mana, temporary: 0 },
+        highlightCost
+      ),
+      local.mana.overloadNextTurn,
+      this.lastManaTurnNumber !== null &&
+        state.turnNumber !== this.lastManaTurnNumber &&
+        state.activePlayerId === ids.local
     )
+    if (this.manaLocalTray) this.lastManaTurnNumber = state.turnNumber
   }
 
   toggleDeckTracker(deck: readonly OpeningCard[]): boolean {

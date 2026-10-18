@@ -71,6 +71,7 @@ export class RemoteCardPlayPreview extends Actor {
       readonly side: 'local' | 'remote'
       readonly concealSecret: boolean
       readonly onStart?: () => void
+      readonly onOrigin?: (globalPosition: { x: number; y: number }) => void
     } = {
       side: 'remote',
       concealSecret: true
@@ -128,6 +129,12 @@ export class RemoteCardPlayPreview extends Actor {
     card.position.set(originPosition.x, originPosition.y)
     card.scale.set(origin.scale!.x, origin.scale!.y)
     this.addChild(card)
+    options.onOrigin?.(
+      this.toGlobal({
+        x: destinationPosition.x + (destination.size.width * destination.scale!.x) / 2,
+        y: destinationPosition.y + (destination.size.height * destination.scale!.y) / 2
+      })
+    )
     options.onStart?.()
     const timeline = this.timeline()
       .to(card, {

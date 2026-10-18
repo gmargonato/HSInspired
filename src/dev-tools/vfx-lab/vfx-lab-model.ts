@@ -2,7 +2,8 @@ import type { VfxAoeZone } from '../../desktop/contracts/ipc/vfx-templates'
 import type { VfxTemplate } from '../../desktop/contracts/ipc/vfx-templates'
 import {
   DEFAULT_FIRE_AOE_TUNING,
-  DEFAULT_FIRE_AOE_DYNAMICS
+  DEFAULT_FIRE_AOE_DYNAMICS,
+  DEFAULT_VFX_IMPACT_SHAKE
 } from '../../desktop/contracts/ipc/vfx-templates'
 
 export type VfxEffectId = 'missile' | 'aoe'
@@ -16,6 +17,9 @@ export const AOE_ZONES = [
 export type AoeZoneId = VfxAoeZone
 
 export interface VfxLabSettings {
+  impactShakeEnabled: boolean
+  shakeIntensity: number
+  impactShakeAuthored: boolean
   flameColor: string
   coreColor: string
   intensity: number
@@ -38,6 +42,10 @@ export interface VfxLabSettings {
   launchDelayMsAuthored: boolean
   missileLength: number
   missileWidth: number
+  pathCurvature: number
+  tailMotion: number
+  pathCurvatureAuthored: boolean
+  tailMotionAuthored: boolean
   aoeImpactMs?: number
   fireDensity: number
   fireParticleScale: number
@@ -83,6 +91,9 @@ export type VfxLabSettingValue = string | number | boolean
 const VFX_DEFAULT_MISSILE_LENGTH = 550
 
 export const DEFAULT_VFX_LAB_SETTINGS: VfxLabSettings = {
+  impactShakeEnabled: DEFAULT_VFX_IMPACT_SHAKE.enabled,
+  shakeIntensity: DEFAULT_VFX_IMPACT_SHAKE.intensity,
+  impactShakeAuthored: false,
   flameColor: '#ff4b08',
   coreColor: '#ffd13b',
   intensity: 1,
@@ -105,6 +116,10 @@ export const DEFAULT_VFX_LAB_SETTINGS: VfxLabSettings = {
   launchDelayMsAuthored: false,
   missileLength: VFX_DEFAULT_MISSILE_LENGTH,
   missileWidth: 0.32,
+  pathCurvature: 0,
+  tailMotion: 1,
+  pathCurvatureAuthored: false,
+  tailMotionAuthored: false,
   aoeImpactMs: 500,
   fireDensity: DEFAULT_FIRE_AOE_TUNING.density,
   fireParticleScale: DEFAULT_FIRE_AOE_TUNING.particleScale,
@@ -153,7 +168,13 @@ export function settingsFromTemplate(
     ...template.tuning,
     showTargetGuides
   }
+  const shake = template.tuning.impactShake ?? DEFAULT_VFX_IMPACT_SHAKE
+  settings.impactShakeEnabled = shake.enabled
+  settings.shakeIntensity = shake.intensity
+  settings.impactShakeAuthored = template.tuning.impactShake !== undefined
   if (template.family === 'missile') {
+    settings.pathCurvatureAuthored = template.tuning.pathCurvature !== undefined
+    settings.tailMotionAuthored = template.tuning.tailMotion !== undefined
     settings.missileOriginalColors = template.tuning.useOriginalColors ?? true
     settings.missileOriginalColorsAuthored =
       template.tuning.useOriginalColors !== undefined
@@ -233,7 +254,19 @@ export function createTemplateFromSettings(
   family: VfxEffectId,
   settings: VfxLabSettings
 ): VfxTemplate {
+  const shake =
+    settings.impactShakeAuthored ||
+    !settings.impactShakeEnabled ||
+    settings.shakeIntensity !== DEFAULT_VFX_IMPACT_SHAKE.intensity
+      ? {
+          impactShake: {
+            enabled: settings.impactShakeEnabled,
+            intensity: settings.shakeIntensity
+          }
+        }
+      : {}
   const common = {
+    ...shake,
     flameColor: settings.flameColor,
     coreColor: settings.coreColor,
     intensity: settings.intensity,
@@ -266,7 +299,13 @@ export function createTemplateFromSettings(
           ? { launchDelayMs: settings.launchDelayMs }
           : {}),
         missileLength: settings.missileLength,
-        missileWidth: settings.missileWidth
+        missileWidth: settings.missileWidth,
+        ...(settings.pathCurvatureAuthored || settings.pathCurvature !== 0
+          ? { pathCurvature: settings.pathCurvature }
+          : {}),
+        ...(settings.tailMotionAuthored || settings.tailMotion !== 1
+          ? { tailMotion: settings.tailMotion }
+          : {})
       }
     }
   const appearance = {
@@ -306,6 +345,7 @@ export function createTemplateFromSettings(
     family,
     zones: AOE_ZONES.filter(({ key }) => settings[key]).map(({ key }) => key),
     tuning: {
+      ...shake,
       intensity: settings.intensity,
       fire: {
         density: settings.fireDensity,

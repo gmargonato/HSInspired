@@ -22,6 +22,7 @@ import {
   type AiPlanNote
 } from '../../../desktop/contracts/ipc/ai-deliberation'
 import { aiActionIntent, validateAiCommitIntent } from './ai-action-intent'
+import type { AiAttention, AiCandidateSource } from './ai-attention-controller'
 import { createExpertActionInspector } from './expert-action-outcome'
 import { forcedLegalCommand } from './ai-forced-command'
 import { answerAiChecks, aiDecisionFacts } from './ai-fact-checks'
@@ -66,6 +67,7 @@ export interface AiActionDecision extends AiDecisionIdentity {
   readonly expectedResult?: string
 }
 export interface AiTurnControllerOptions {
+  readonly candidates?: AiCandidateSource
   readonly recorder?: MatchRecorder
   readonly api?: AiDecisionApi
   readonly session: GameBoardSession
@@ -74,6 +76,26 @@ export interface AiTurnControllerOptions {
   readonly online?: () => boolean
 }
 export class AiTurnController {
+  private readonly candidateCommands = new Map<string, TurnMatchCommand>()
+  private readonly attentionListeners = new Set<(value: AiAttention | null) => void>()
+  private readonly unsubscribeCandidates?: () => void
+
+  onAttention(listener: (value: AiAttention | null) => void): () => void {
+    this.attentionListeners.add(listener)
+    return () => {
+      this.attentionListeners.delete(listener)
+    }
+  }
+
+  private publishAttention(value: AiAttention | null): void {
+    for (const listener of this.attentionListeners) {
+      try {
+        listener(value)
+      } catch {
+        /* Visual telemetry cannot abort an AI turn. */
+      }
+    }
+  }
   private readonly matchId = crypto.randomUUID()
   private readonly system: AiMessage
   private readonly unsubscribe: () => void
@@ -104,6 +126,32 @@ export class AiTurnController {
 
   constructor(private readonly options: AiTurnControllerOptions) {
     this.system = aiSystemContext(options.session)
+    this.unsubscribeCandidates = options.candidates?.onCandidate((candidate) => {
+      const identity = this.active?.identity
+      if (
+        !identity ||
+        candidate.matchId !== identity.matchId ||
+        candidate.requestId !== identity.requestId ||
+        candidate.expectedRevision !== identity.expectedRevision ||
+        !this.current(identity)
+      )
+        return
+      const session = options.session
+      const command = this.candidateCommands.get(candidate.actionId)
+      if (
+        !command ||
+        !['play-card', 'attack-character', 'use-hero-power', 'end-turn'].includes(
+          command.type
+        )
+      ) {
+        this.publishAttention(null)
+        return
+      }
+      this.publishAttention({
+        ...identity,
+        intent: aiActionIntent(command, session.localParticipantId)
+      })
+    })
     this.unsubscribeProgress = options.api?.onProgress?.((progress) => {
       const identity = this.active?.identity
       if (
@@ -128,11 +176,15 @@ export class AiTurnController {
     this.cancel('match exited')
     this.unsubscribe()
     this.unsubscribeProgress?.()
+    this.unsubscribeCandidates?.()
+    this.attentionListeners.clear()
     this.exchanges.length = 0
     this.actualResults.length = 0
     this.outcomeReviews.length = 0
   }
   private cancel(reason: string): void {
+    this.candidateCommands.clear()
+    this.publishAttention(null)
     const active = this.active
     if (!active) return
     this.active = null
@@ -195,6 +247,8 @@ export class AiTurnController {
   chooseTurnAction(): Promise<AiActionDecision | null> {
     if (this.pending) return this.pending
     this.pending = this.choose().finally(() => {
+      this.candidateCommands.clear()
+      this.publishAttention(null)
       this.pending = null
     })
     return this.pending
@@ -615,6 +669,9 @@ export class AiTurnController {
           return mulliganDecision
         }
         const actions = aiActions(session, commands)
+        this.candidateCommands.clear()
+        for (const action of actions)
+          this.candidateCommands.set(action.id, action.command)
         const history = session.getAiPublicHistory().recentEvents
         const retainedEvents = Array.isArray(history)
           ? history.filter((event): event is string => typeof event === 'string')

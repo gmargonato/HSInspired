@@ -687,7 +687,7 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           },
           {
             "action": "resurrect",

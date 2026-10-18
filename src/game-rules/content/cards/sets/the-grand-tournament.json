@@ -26,7 +26,7 @@
                     "selection": "chosen"
                   },
                   "amount": 2,
-                  "vfx": "fire-missile"
+                  "vfx": "nature-missile-left"
                 }
               ],
               "presentationCardId": "the_grand_tournament_living_roots_damage"
@@ -139,7 +139,7 @@
           {
             "action": "destroy",
             "target": { "type": "minion", "selection": "chosen" },
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-left"
           },
           {
             "action": "add-to-hand",
@@ -354,7 +354,7 @@
             "action": "damage",
             "target": { "type": "hero", "controller": "opponent", "selection": "all" },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -436,7 +436,7 @@
             "action": "damage",
             "target": { "type": "minion", "selection": "chosen-and-adjacent" },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -529,7 +529,7 @@
               "controller": "any",
               "selection": "event-target"
             },
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -1402,7 +1402,7 @@
             "action": "damage",
             "target": { "type": "character", "selection": "chosen" },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -2052,7 +2052,7 @@
               "selection": "random"
             },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       },
@@ -2067,7 +2067,7 @@
               "selection": "random"
             },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -2098,7 +2098,7 @@
               "selection": "random",
               "count": 2
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "discard",
@@ -2131,7 +2131,7 @@
           {
             "action": "destroy",
             "target": { "type": "minion", "controller": "self", "selection": "random" },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "destroy",
@@ -2140,7 +2140,7 @@
               "controller": "opponent",
               "selection": "random"
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -2202,7 +2202,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           },
           {
             "action": "gain-armor",
@@ -2382,6 +2382,7 @@
         "actions": [
           {
             "action": "damage",
+            "vfx": "frost-missile-small",
             "target": {
               "type": "minion",
               "controller": "opponent",
@@ -3200,7 +3201,7 @@
             "action": "damage",
             "target": { "type": "character", "selection": "chosen" },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3633,7 +3634,7 @@
             "action": "damage",
             "target": { "type": "character", "selection": "chosen" },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }

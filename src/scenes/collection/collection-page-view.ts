@@ -2,6 +2,7 @@ import {
   AlphaFilter,
   Container,
   type FederatedPointerEvent,
+  type Renderer,
   Sprite,
   Text
 } from 'pixi.js'
@@ -10,9 +11,16 @@ import { getCardCopyLimit, getDeckCardCount, type Deck } from '../../game-rules/
 import { CardAssetResolver } from '../../visual-components/assets/card-asset-resolver'
 import type { CollectionAssets } from '../../visual-components/assets'
 import { CardView } from '../../visual-components/cards/card-view'
+import { CARD_BODY_BOUNDS } from '../../visual-components/cards/card-layout'
+import {
+  acquireCardShadowTexture,
+  type CardShadowTextureLease
+} from '../../visual-components/effects/card-shadow-texture'
+import { applyAnchoredPlacement, placement } from '../../visual-components/layout'
 import { getCollectionCardPlacement } from './collection-card-grid'
 import {
   CARD_GRID_LAYOUT,
+  COLLECTION_CARD_SHADOW,
   COLLECTION_LAYOUT,
   COMPLETED_COLLECTION_CARD_ALPHA
 } from './collection-layout'
@@ -28,6 +36,7 @@ export interface CollectionPageViewState {
 
 export interface CollectionPageViewOptions {
   readonly assets: Pick<CollectionAssets, 'searchNoResults'>
+  readonly renderer: Renderer
   readonly resolver?: CardAssetResolver
   readonly state: CollectionPageViewState
   readonly getCardBounds: (view: CardView) => CardPreviewRouteBounds
@@ -47,6 +56,8 @@ export class CollectionPageView extends Container {
   private readonly cardResolver: CardAssetResolver
   private readonly options: CollectionPageViewOptions
   private readonly cardLayerRoot = new Container()
+  private readonly shadowLayerRoot = new Container()
+  private readonly shadowTexture: CardShadowTextureLease
   private readonly completionFilters = new WeakMap<CardView, AlphaFilter>()
   private readonly classLabel: Text
   private readonly pageLabel: Text
@@ -63,8 +74,12 @@ export class CollectionPageView extends Container {
     super()
     this.options = options
     this.cardResolver = options.resolver ?? new CardAssetResolver()
+    this.shadowTexture = acquireCardShadowTexture(options.renderer)
+    this.once('destroyed', () => this.shadowTexture.release())
     this.label = 'collection.page-content'
-    this.addChild(this.cardLayerRoot)
+    this.addChild(this.shadowLayerRoot, this.cardLayerRoot)
+    this.shadowLayerRoot.label = 'collection.card-shadows'
+    this.shadowLayerRoot.eventMode = 'none'
     this.cardLayerRoot.label = 'collection.card-layer'
 
     this.classLabel = new Text({
@@ -128,6 +143,8 @@ export class CollectionPageView extends Container {
     const sequence = ++this.renderSequence
     this.loading = true
     const nextCardLayer = new Container()
+    const nextShadowLayer = new Container()
+    nextShadowLayer.label = `collection.card-shadows.page-${page.pageNumber}`
     nextCardLayer.label = `collection.card-layer.page-${page.pageNumber}`
     try {
       const results = await Promise.allSettled(
@@ -163,6 +180,7 @@ export class CollectionPageView extends Container {
           )
         }
         this.layoutCard(view, cardIndex)
+        nextShadowLayer.addChild(this.createCardShadow(view, cardIndex))
         view.setPremiumAppearancePaused(this.premiumAppearancePaused)
         // Keep the full authored card resolution for sharp thumbnails and card-add
         // snapshots, but composite its static masks and blends only once per page.
@@ -170,8 +188,11 @@ export class CollectionPageView extends Container {
         nextCardLayer.addChild(view)
       }
       const previousCardLayer = this.cardLayerRoot.removeChildren()[0]
+      const previousShadowLayer = this.shadowLayerRoot.removeChildren()[0]
       this.cardLayerRoot.addChild(nextCardLayer)
+      this.shadowLayerRoot.addChild(nextShadowLayer)
       previousCardLayer?.destroy({ children: true })
+      previousShadowLayer?.destroy({ children: true })
       this.pageIndex = index
       this.currentPage = page
       this.classLabel.text = page.cardClass
@@ -182,6 +203,7 @@ export class CollectionPageView extends Container {
       return true
     } finally {
       if (!nextCardLayer.parent) nextCardLayer.destroy({ children: true })
+      if (!nextShadowLayer.parent) nextShadowLayer.destroy({ children: true })
       if (sequence === this.renderSequence) this.loading = false
     }
   }
@@ -193,6 +215,9 @@ export class CollectionPageView extends Container {
     this.pageIndex = 0
     const oldLayer = this.cardLayerRoot.removeChildren()
     for (const child of oldLayer) child.destroy({ children: true })
+    for (const child of this.shadowLayerRoot.removeChildren()) {
+      child.destroy({ children: true })
+    }
     this.classLabel.text = ''
     this.pageLabel.text = ''
     this.emptyStateImage.visible = true
@@ -209,6 +234,12 @@ export class CollectionPageView extends Container {
       const atLimit = Boolean(
         deck && card && getDeckCardCount(deck, card.id) >= getCardCopyLimit(card)
       )
+      const shadow = this.shadowLayerRoot.children[0]?.children[cardIndex]
+      if (shadow) {
+        shadow.alpha =
+          COLLECTION_CARD_SHADOW.opacity *
+          (atLimit ? COMPLETED_COLLECTION_CARD_ALPHA : 1)
+      }
       // Fade the finished composite so live artwork cannot bleed through the frame.
       let filter = this.completionFilters.get(child)
       if (atLimit && !filter) {
@@ -251,6 +282,40 @@ export class CollectionPageView extends Container {
     )
     view.scale.set(placement.scale)
     view.position.set(placement.x, placement.y)
+  }
+
+  private createCardShadow(view: CardView, cardIndex: number): Sprite {
+    const { texture, bodySize, padding } = this.shadowTexture
+    const body = CARD_BODY_BOUNDS
+    const scaleX = (body.width * view.scale.x) / bodySize
+    const scaleY = (body.height * view.plan.renderScaleY * view.scale.y) / bodySize
+    const shadow = new Sprite(texture)
+    shadow.label = `collection.card-shadow.${cardIndex}`
+    shadow.eventMode = 'none'
+    shadow.alpha = COLLECTION_CARD_SHADOW.opacity
+    applyAnchoredPlacement(
+      shadow,
+      placement(
+        {
+          x:
+            view.x +
+            body.x * view.scale.x +
+            COLLECTION_CARD_SHADOW.offset.x -
+            padding * scaleX,
+          y:
+            view.y +
+            body.y * view.plan.renderScaleY * view.scale.y +
+            COLLECTION_CARD_SHADOW.offset.y -
+            padding * scaleY
+        },
+        { width: texture.width, height: texture.height },
+        {
+          scale: { x: scaleX, y: scaleY },
+          note: 'Physical card body with transparent blur padding, offset down and left.'
+        }
+      )
+    )
+    return shadow
   }
 
   private destroyCardViews(views: readonly CardView[]): void {

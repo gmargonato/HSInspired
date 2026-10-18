@@ -251,7 +251,7 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -284,7 +284,7 @@
               }
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -554,7 +554,7 @@
               "count": 2
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -639,7 +639,7 @@
                   "type": "minion",
                   "selection": "event-target"
                 },
-                "vfx": "fire-missile"
+                "vfx": "shadow-missile-small"
               }
             ]
           }
@@ -909,7 +909,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -967,7 +967,7 @@
                 "damaged": true
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -1163,6 +1163,7 @@
         "actions": [
           {
             "action": "freeze",
+            "vfx": "frost-blast-enemy-board",
             "target": {
               "controller": "opponent",
               "type": "minion",
@@ -1470,7 +1471,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           },
           {
             "action": "draw",
@@ -1732,7 +1733,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -2205,7 +2206,7 @@
               "count": 2
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -2289,7 +2290,7 @@
               "selection": "all"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -2585,7 +2586,7 @@
                 "tribe": "Demon"
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "restore",
@@ -2747,7 +2748,7 @@
                 "value": 5
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -2782,7 +2783,7 @@
                 "value": 3
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -2858,7 +2859,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           },
           {
             "action": "draw",
@@ -2908,7 +2909,7 @@
               "selection": "all"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3075,7 +3076,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3169,7 +3170,7 @@
                   "selection": "chosen"
                 },
                 "amount": 4,
-                "vfx": "fire-missile"
+                "vfx": "neutral-missile-raw"
               },
               {
                 "action": "damage",

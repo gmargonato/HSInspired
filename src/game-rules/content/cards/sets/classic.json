@@ -794,7 +794,7 @@
             },
             "amount": 1,
             "hits": 8,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -972,7 +972,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -1145,7 +1145,7 @@
             "amount": {
               "reference": "source.attack"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -1179,7 +1179,7 @@
                 "value": 7
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -2137,7 +2137,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           },
           {
             "action": "modify",
@@ -2249,7 +2249,7 @@
               "type": "minion",
               "selection": "random"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -2415,7 +2415,7 @@
               "selection": "random"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -2467,7 +2467,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -2884,7 +2884,7 @@
               "type": "minion"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -3110,7 +3110,7 @@
               "selection": "chosen"
             },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       },
@@ -3128,7 +3128,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3247,7 +3247,7 @@
             "amount": {
               "reference": "event.damage"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3695,6 +3695,7 @@
         "actions": [
           {
             "action": "freeze",
+            "vfx": "frost-missile-small",
             "target": {
               "controller": "any",
               "type": "character",
@@ -3998,7 +3999,7 @@
               "selection": "all"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ],
         "then": {
@@ -4089,7 +4090,7 @@
               "selection": "chosen"
             },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -4120,7 +4121,7 @@
               "selection": "chosen"
             },
             "amount": 5,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           },
           {
             "action": "restore",
@@ -4208,7 +4209,7 @@
             "amount": {
               "reference": "drawn-card.cost"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -4274,7 +4275,7 @@
                 "tribe": "Murloc"
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           },
           {
             "action": "modify",
@@ -4421,6 +4422,7 @@
         "actions": [
           {
             "action": "freeze",
+            "vfx": "frost-missile-small",
             "target": {
               "controller": "any",
               "type": "character",
@@ -4606,7 +4608,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           },
           {
             "action": "modify",
@@ -4686,7 +4688,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -4733,7 +4735,7 @@
                     "selection": "chosen"
                   },
                   "amount": 2,
-                  "vfx": "fire-missile"
+                  "vfx": "nature-missile-left"
                 }
               ],
               "presentationCardId": "classic_moonfire_choose_one"
@@ -4818,7 +4820,7 @@
               "selection": "chosen"
             },
             "amount": 5,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       },
@@ -4840,7 +4842,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -4953,7 +4955,7 @@
               "selection": "random"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -5156,7 +5158,7 @@
               "selection": "all"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -5515,7 +5517,7 @@
             },
             "amount": 1,
             "hits": 3,
-            "vfx": "fire-missile"
+            "vfx": "fire-missile-small"
           }
         ]
       }
@@ -6087,7 +6089,7 @@
               "thenValue": 6,
               "elseValue": 4
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -6312,7 +6314,7 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-left"
           },
           {
             "action": "draw",
@@ -6736,7 +6738,7 @@
                   "type": "minion",
                   "selection": "event-target"
                 },
-                "vfx": "fire-missile"
+                "vfx": "shadow-missile-small"
               }
             ]
           }
@@ -7115,7 +7117,7 @@
             "amount": {
               "reference": "self.hero.attack"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -7550,7 +7552,7 @@
             "amount": {
               "reference": "self.hero.armor"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -7629,7 +7631,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -7741,7 +7743,7 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "restore",
@@ -7795,7 +7797,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ],
         "then": {
@@ -7884,7 +7886,7 @@
               "selection": "event-target"
             },
             "amount": 4,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -8198,7 +8200,7 @@
                 "value": 2
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -8627,7 +8629,7 @@
                 "keyword": "taunt"
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -9334,7 +9336,7 @@
                     "selection": "chosen"
                   },
                   "amount": 3,
-                  "vfx": "fire-missile"
+                  "vfx": "nature-missile-left"
                 }
               ],
               "presentationCardId": "classic_wrath_damage"
@@ -9349,7 +9351,7 @@
                     "selection": "chosen"
                   },
                   "amount": 1,
-                  "vfx": "fire-missile"
+                  "vfx": "nature-missile-left"
                 },
                 {
                   "action": "draw",
@@ -9591,7 +9593,7 @@
                   "type": "minion",
                   "selection": "event-target"
                 },
-                "vfx": "fire-missile"
+                "vfx": "shadow-missile-small"
               }
             ]
           }

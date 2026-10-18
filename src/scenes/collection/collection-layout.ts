@@ -279,6 +279,11 @@ export const COVER_PERSPECTIVE_DEPTH = 14
 
 /** Cards already at their deck copy limit are dimmed to this alpha. */
 export const COMPLETED_COLLECTION_CARD_ALPHA = 0.25
+/** Small cast shadow in design pixels; light comes from the upper right. */
+export const COLLECTION_CARD_SHADOW = {
+  offset: { x: -3, y: 5 },
+  opacity: 0.3
+} as const
 /** Blur strength applied to the collection when the card preview opens. */
 export const COLLECTION_PREVIEW_BLUR_STRENGTH = 4
 

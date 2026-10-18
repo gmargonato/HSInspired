@@ -111,6 +111,10 @@ export class HeroView extends Container {
   private readonly armorLabel: Text
   private readonly outlineProxy: Sprite
   private readonly attackOutline: AnimatedOutline
+  private readonly attentionProxy: Sprite
+  private readonly attentionOutline: AnimatedOutline
+  private aiAttention = false
+  private attackWarning = false
   private readonly targetingOutlineProxy: Sprite
   private readonly targetingOutline: AnimatedOutline
   private readonly animationScope = new AnimationScope()
@@ -235,6 +239,18 @@ export class HeroView extends Container {
     })
     this.attackOutline.setEnabled(false)
 
+    this.attentionProxy = new Sprite(textures.frame)
+    applyAnchoredPlacement(this.attentionProxy, HERO_LAYOUT.frame)
+    this.attentionProxy.label = 'hero.attention-outline-proxy'
+    this.attentionProxy.eventMode = 'none'
+    this.attentionProxy.visible = false
+    this.addChildAt(this.attentionProxy, 0)
+    this.attentionOutline = new AnimatedOutline(this.attentionProxy, {
+      palette: 'white',
+      preset: 'hero'
+    })
+    this.attentionOutline.setEnabled(false)
+
     this.targetingOutlineProxy = new Sprite(textures.frame)
     applyAnchoredPlacement(this.targetingOutlineProxy, HERO_LAYOUT.frame)
     this.targetingOutlineProxy.label = 'hero.targeting-outline-proxy'
@@ -348,6 +364,7 @@ export class HeroView extends Container {
   setFrame(texture: Texture): void {
     this.frame.texture = texture
     this.outlineProxy.texture = texture
+    this.attentionProxy.texture = texture
     this.targetingOutlineProxy.texture = texture
     this.shadow.silhouette!.revision++
   }
@@ -441,6 +458,7 @@ export class HeroView extends Container {
   }
 
   setOutlineAppearance(palette: OutlinePaletteInput, tuning: OutlineTuning): void {
+    this.attentionOutline.setTuning(tuning)
     this.attackOutline.setPalette(palette)
     this.attackOutline.setTuning(tuning)
     this.targetingOutline.setTuning(tuning)
@@ -450,6 +468,16 @@ export class HeroView extends Container {
   setTargetingOutline(enabled: boolean): void {
     this.targetingOutlineEnabled = enabled
     this.syncOutlineState()
+  }
+
+  setAiAttention(enabled: boolean): void {
+    this.aiAttention = enabled
+    this.attentionOutline.setEnabled(this.aiAttention || this.attackWarning)
+  }
+
+  setAttackWarning(enabled: boolean): void {
+    this.attackWarning = enabled
+    this.attentionOutline.setEnabled(this.aiAttention || this.attackWarning)
   }
 
   isCanAttack(): boolean {
@@ -492,6 +520,7 @@ export class HeroView extends Container {
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
     this.attackOutline.dispose()
+    this.attentionOutline.dispose()
     this.targetingOutline.dispose()
     this.animationScope.kill()
     this.windfury.destroy()

@@ -4,8 +4,6 @@ import { GAME_BOARD_LAYOUT } from '../game-scene-layout'
 /** The lab's authored blast quads, expressed on the unshifted match canvas. */
 export const MATCH_VFX_LAYOUT = {
   missileMargin: 145,
-  // Unity's 0.1 world-unit shake is calibrated to design pixels on our 2D board.
-  fireShake: { amplitude: 3, pulses: 9, duration: 2.15, damped: true },
   areas: {
     remoteBoard: placement(
       { x: GAME_BOARD_LAYOUT.boardMinions.remote.centerX, y: 365 },

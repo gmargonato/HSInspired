@@ -162,6 +162,7 @@ export class CollectionView extends Actor {
     super()
     this.pageView = new CollectionPageView({
       assets: options.assets,
+      renderer: options.renderer,
       resolver: this.cardResolver,
       state: options.state,
       canInteract: () => this.canInteract() && !this.pageLoading,

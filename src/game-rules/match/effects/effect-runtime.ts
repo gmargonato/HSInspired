@@ -82,6 +82,7 @@ import type {
   DeathBatchStartedEvent,
   EffectDomainEvent,
   CardReveal,
+  DeckAddition,
   EffectTraceEntry,
   GraveyardMinion,
   MatchHistory,
@@ -865,6 +866,36 @@ export class EffectRuntime {
     return this.player(frame.controllerId)
   }
 
+  /** Attach a single batch to its last outcome without creating extra history. */
+  private annotateDeckAddition(
+    frame: EffectFrame,
+    path: string,
+    participantId: PlayerId,
+    cards: DeckAddition['cards'],
+    sourceInstanceId = frame.source.instanceId
+  ): void {
+    if (this.deriving || cards.length === 0) return
+    for (let index = this.events.length - 1; index >= 0; index--) {
+      const event = this.events[index]!
+      if (
+        event.type === 'effect-resolved' &&
+        event.sourceInstanceId === frame.source.instanceId &&
+        (event.actionPath === path || event.actionPath.startsWith(path + '.'))
+      ) {
+        this.events[index] = {
+          ...event,
+          deckAddition: clonePlain({
+            id: `${this.resolutionId}:${index}`,
+            participantId,
+            sourceInstanceId,
+            cards
+          })
+        }
+        return
+      }
+    }
+  }
+
   private emit(
     frame: EffectFrame,
     action: string,
@@ -884,7 +915,7 @@ export class EffectRuntime {
         data
       ),
       ...(this.activeVfxGroup?.frame === frame &&
-      (action === 'damage' || action === 'destroy') &&
+      (action === 'damage' || action === 'destroy' || action === 'freeze') &&
       this.activeVfxGroup.paths.some(
         (path) => actionPath === path || actionPath.startsWith(path + '.')
       )
@@ -6554,6 +6585,9 @@ export class EffectRuntime {
         cardId: CTHUN_ID,
         instanceId: card.instanceId
       })
+      this.annotateDeckAddition(frame, path, participantId, [
+        { card, visibleTo: 'all' }
+      ])
     }
   }
 
@@ -6927,6 +6961,7 @@ export class EffectRuntime {
           this.addCardToHand(frame.controllerId, cardId, frame, path)
         // One shuffle operation distributes the seven distinct remaining rewards.
         const player = this.player(frame.controllerId)
+        const additions: DeckAddition['cards'][number][] = []
         for (const cardId of shuffled.slice(2)) {
           const definition = CARD_CATALOG.require(cardId)
           player.deck.push({
@@ -6939,9 +6974,15 @@ export class EffectRuntime {
             zone: 'deck',
             revealed: false
           })
+          additions.push({ card: player.deck.at(-1)!, visibleTo: [] })
         }
         player.deck = this.shuffle(player.deck)
         this.recordShuffleIntoDeck(frame.controllerId, frame.controllerId)
+        this.emit(frame, name, path, {
+          participantId: frame.controllerId,
+          count: additions.length
+        })
+        this.annotateDeckAddition(frame, path, frame.controllerId, additions)
         return
       }
       case 'grant-extra-turn-once':
@@ -7127,6 +7168,15 @@ export class EffectRuntime {
           if (added.length)
             this.recordShuffleIntoDeck(participantId, frame.controllerId)
           this.emit(frame, name, path, { participantId, count: added.length })
+          this.annotateDeckAddition(
+            frame,
+            path,
+            participantId,
+            added.map((card) => ({
+              card,
+              visibleTo: name === 'shuffle-cards' ? 'all' : []
+            }))
+          )
         }
         return
       }
@@ -7820,6 +7870,7 @@ export class EffectRuntime {
         if (destination === 'deck') {
           const destinationPlayer = this.player(frame.controllerId)
           let generated = false
+          const additions: DeckAddition['cards'][number][] = []
           for (const target of targets) {
             if (!target.cardId) continue
             const definition = cardDefinition(target.cardId)
@@ -7849,6 +7900,16 @@ export class EffectRuntime {
               ) as DraftPlayer
               this.applyCardZones(destinationPlayer, updated)
               copies.push(card)
+              if (!boardSource) {
+                const sourceCard = this.currentCard(target)
+                additions.push({
+                  card,
+                  visibleTo:
+                    target.kind === 'card' && sourceCard?.zone === 'hand'
+                      ? [target.participantId, ...(sourceCard.knownTo ?? [])]
+                      : []
+                })
+              }
               this.emit(
                 frame,
                 name,
@@ -7856,7 +7917,10 @@ export class EffectRuntime {
                 {
                   participantId: frame.controllerId,
                   cardId: card.cardId,
-                  instanceId: card.instanceId
+                  instanceId: card.instanceId,
+                  ...(!boardSource
+                    ? { copySourceZone: this.currentCard(target)?.zone }
+                    : {})
                 },
                 boardSource && index === count - 1
                   ? {
@@ -7877,6 +7941,7 @@ export class EffectRuntime {
               deck: this.shuffle(destinationPlayer.deck)
             })
             this.recordShuffleIntoDeck(frame.controllerId, frame.controllerId)
+            this.annotateDeckAddition(frame, path, frame.controllerId, additions)
           }
           return
         }
@@ -8699,28 +8764,32 @@ export class EffectRuntime {
         }
         return
       }
-      case 'freeze':
-        for (const target of this.actionTargets(action, frame)) {
-          if (target.kind === 'minion') {
-            const wasFrozen = this.isFrozen(target)
-            this.updateMinion(target, (minion) => {
-              minion.frozenUntilTurn = this.draft.turnNumber + 1
-            })
-            if (!wasFrozen)
-              this.emitSemantic({
-                type: 'minion-frozen',
-                source: frame.source,
-                target,
-                controllerId: frame.controllerId,
-                targetControllerId: target.participantId
+      case 'freeze': {
+        const targets = this.actionTargets(action, frame)
+        this.withActionVfx(frame, [{ action, path, targets }], () => {
+          for (const target of targets) {
+            if (target.kind === 'minion') {
+              const wasFrozen = this.isFrozen(target)
+              this.updateMinion(target, (minion) => {
+                minion.frozenUntilTurn = this.draft.turnNumber + 1
               })
+              if (!wasFrozen)
+                this.emitSemantic({
+                  type: 'minion-frozen',
+                  source: frame.source,
+                  target,
+                  controllerId: frame.controllerId,
+                  targetControllerId: target.participantId
+                })
+            }
+            if (target.kind === 'hero')
+              this.player(target.participantId).hero.frozenUntilTurn =
+                this.draft.turnNumber + 1
+            this.emit(frame, name, path, { target: target.instanceId })
           }
-          if (target.kind === 'hero')
-            this.player(target.participantId).hero.frozenUntilTurn =
-              this.draft.turnNumber + 1
-          this.emit(frame, name, path, { target: target.instanceId })
-        }
+        })
         return
+      }
       case 'gain-armor':
         for (const target of this.actionTargets(action, frame)) {
           if (target.kind !== 'hero') continue
@@ -9917,6 +9986,15 @@ export class EffectRuntime {
                   }
                 : undefined
             )
+            if (!boardSource) {
+              this.annotateDeckAddition(
+                frame,
+                path,
+                destinationParticipant,
+                [{ card, visibleTo: 'all' }],
+                target.instanceId
+              )
+            }
           }
         }
         const generatedCardId = this.actionCardId(action)
@@ -9929,6 +10007,7 @@ export class EffectRuntime {
             const player = this.player(participantId)
             const definition = cardDefinition(generatedCardId)
             if (!definition) continue
+            const additions: DeckAddition['cards'][number][] = []
             for (let index = 0; index < generatedCount; index += 1) {
               const generated: DraftCard = {
                 instanceId: this.allocateId(participantId + ':generated-deck'),
@@ -9947,12 +10026,14 @@ export class EffectRuntime {
                 'deck'
               ) as DraftPlayer
               this.applyCardZones(player, updated)
+              additions.push({ card: generated, visibleTo: 'all' })
               this.emit(frame, name, path + '.generated.' + index, {
                 participantId,
                 cardId: generated.cardId,
                 instanceId: generated.instanceId
               })
             }
+            this.annotateDeckAddition(frame, path, participantId, additions)
             if (generatedCount > 0) shuffledParticipants.add(participantId)
           }
         }

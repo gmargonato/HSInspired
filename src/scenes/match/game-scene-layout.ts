@@ -112,7 +112,7 @@ export const GAME_BOARD_LAYOUT = {
       { width: 345, height: 433 },
       {
         anchor: CENTER,
-        scale: 0.5
+        scale: 0.53
       }
     ),
     /** Remote hero portrait in its board slot (top of the screen). */
@@ -121,7 +121,7 @@ export const GAME_BOARD_LAYOUT = {
       { width: 345, height: 433 },
       {
         anchor: CENTER,
-        scale: 0.5
+        scale: 0.53
       }
     ),
     /** Local hero banner used by the pre-match "versus" intro. */
@@ -506,6 +506,8 @@ export const GAME_BOARD_LAYOUT = {
 
   /** Fanned remote hand of card backs, anchored bottom-center. */
   remoteHand: {
+    /** Considered hidden cards move toward the board without resizing the fan. */
+    attentionDrop: 32,
     centerX: 980,
     baselineY: 72,
     gap: 82,

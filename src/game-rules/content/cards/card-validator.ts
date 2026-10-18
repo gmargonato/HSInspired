@@ -918,6 +918,7 @@ function actionsValue(value: unknown, path: string): void {
       if (
         ![
           'damage',
+          'freeze',
           'destroy',
           'redirect-damage',
           'sacrifice-and-damage',
@@ -925,7 +926,10 @@ function actionsValue(value: unknown, path: string): void {
           'destroy-and-gain-stats'
         ].includes(actionName)
       )
-        fail(`${actionPath}.vfx`, 'requires a damage or character-destruction action')
+        fail(
+          `${actionPath}.vfx`,
+          'requires a damage, freeze or character-destruction action'
+        )
       const vfx = stringValue(record['vfx'], `${actionPath}.vfx`)
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(vfx))
         fail(`${actionPath}.vfx`, 'must be a lowercase kebab-case effect key')

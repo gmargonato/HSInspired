@@ -775,7 +775,7 @@
               "selection": "chosen"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -1099,7 +1099,7 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "destroy-mana-crystal",
@@ -2200,7 +2200,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -2265,7 +2265,7 @@
               "selection": "hero"
             },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "nature-missile-small"
           }
         ]
       }
@@ -2772,7 +2772,7 @@
             "amount": {
               "reference": "source.attack"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -3037,6 +3037,7 @@
         "actions": [
           {
             "action": "freeze",
+            "vfx": "frost-missile-small",
             "target": {
               "controller": "opponent",
               "type": "character",
@@ -3873,7 +3874,7 @@
             "amount": {
               "reference": "source.attack"
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }

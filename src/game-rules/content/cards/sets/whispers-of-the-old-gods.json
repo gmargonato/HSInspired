@@ -1484,7 +1484,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -2046,7 +2046,7 @@
             "hits": {
               "reference": "source.attack"
             },
-            "vfx": "shadow-missile-small"
+            "vfx": "cthun-missile"
           }
         ]
       }
@@ -3140,7 +3140,7 @@
               "selection": "chosen"
             },
             "amount": 1,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           },
           {
             "action": "summon",
@@ -3370,6 +3370,7 @@
         "actions": [
           {
             "action": "freeze",
+            "vfx": "frost-missile-small",
             "target": {
               "controller": "opponent",
               "type": "character",
@@ -3868,7 +3869,7 @@
                 "frozen": true
               }
             },
-            "vfx": "fire-missile"
+            "vfx": "frost-missile-small"
           }
         ]
       }
@@ -4334,7 +4335,7 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "vfx": "fire-missile"
+            "vfx": "cthun-missile"
           },
           {
             "action": "buff-cthun",

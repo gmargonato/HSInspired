@@ -1,7 +1,10 @@
 import {
   Container,
   Matrix,
+  MeshPlane,
   RenderTexture,
+  Rectangle,
+  Shader,
   Sprite,
   type PointData,
   type Renderer
@@ -26,6 +29,8 @@ import {
   type FireballParticle
 } from './fireball-particles'
 import { hexColorToRgb } from './fire-vfx-shader-common'
+import { fireballPathPoint } from './fireball-path'
+import { createFireballTailFilter } from './fireball-tail-filter'
 
 export type FireballTuning = Extract<VfxTemplate, { family: 'missile' }>['tuning']
 interface Batch {
@@ -37,6 +42,8 @@ interface Batch {
 
 class FireballField {
   readonly content = new Container()
+  readonly tailContent = new Container()
+  readonly tailFilter?: ReturnType<typeof createFireballTailFilter>
   readonly display = new Container()
   readonly heat: RenderTexture
   readonly bloomCapture: RenderTexture
@@ -44,7 +51,8 @@ class FireballField {
   readonly core?: FireballCoreMesh
   private readonly bloomPass: Sprite
   private readonly bloomTransform: Matrix
-  private readonly planes: Sprite[] = []
+  private readonly planes: (Sprite | MeshPlane)[] = []
+  private readonly curvedPlanes: { mesh: MeshPlane; positions: Float32Array }[] = []
   private readonly filters: ReturnType<typeof createFireballComposite>[] = []
   private readonly clearColor: [number, number, number, number]
   constructor(
@@ -108,6 +116,20 @@ class FireballField {
       }
       this.content.addChild(this.core)
     }
+    if (phase === 'missile') {
+      this.tailContent.label = 'fireball.missile.tail'
+      this.tailContent.boundsArea = new Rectangle(
+        0,
+        0,
+        layout.resolution.width,
+        layout.resolution.height
+      )
+      if ((tuning.tailMotion ?? 1) < 1) {
+        this.tailFilter = createFireballTailFilter(tuning)
+        this.tailContent.filters = [this.tailFilter]
+      }
+      this.content.addChild(this.tailContent)
+    }
     const main = createFireballComposite('main', layout)
     main.resources.fireballComposite.uniforms.uIntensity =
       layout.intensity * tuning.intensity
@@ -129,19 +151,69 @@ class FireballField {
     bloomDisplay.blendMode = 'add'
     this.filters.push(main, ...bloom, bloomDisplay)
     for (const [i, filters] of [[main], [bloomDisplay]].entries()) {
-      const sprite = new Sprite(i ? this.bloomHeat : this.heat)
+      const texture = i ? this.bloomHeat : this.heat
+      const curved = phase === 'missile' && (tuning.pathCurvature ?? 0) !== 0
+      const sprite = curved
+        ? new MeshPlane({ texture, verticesX: 5, verticesY: 65 })
+        : new Sprite(texture)
       sprite.label = 'fireball.' + phase + (i ? '.bloom' : '.color')
-      applyAnchoredPlacement(sprite, layout.plane)
-      sprite.position.set(
-        layout.plane.position.x * scale,
-        layout.plane.position.y * scale
-      )
-      sprite.width = layout.plane.size.width * scale
-      sprite.height = layout.plane.size.height * scale
+      if (sprite instanceof MeshPlane) {
+        // Own the texture binding: Pixi's shared default mesh shader can retain
+        // bindings to render textures after an effect has been disposed.
+        sprite.shader = Object.assign(
+          Shader.from({
+            gl: {
+              name: 'fireball-curved-plane',
+              vertex: `in vec2 aPosition; in vec2 aUV; out vec2 vUV;
+              uniform mat3 uProjectionMatrix,uWorldTransformMatrix,uTransformMatrix;
+              void main(){vUV=aUV;gl_Position=vec4((uProjectionMatrix*uWorldTransformMatrix*uTransformMatrix*vec3(aPosition,1.0)).xy,0.0,1.0);}`,
+              fragment: `in vec2 vUV; out vec4 finalColor; uniform sampler2D uArtwork;
+              void main(){finalColor=texture(uArtwork,vUV);}`
+            },
+            resources: { uArtwork: texture.source }
+          }),
+          { texture }
+        )
+        const positions = sprite.geometry.positions
+        for (let j = 0; j < positions.length; j += 2) {
+          positions[j] =
+            (positions[j] / texture.width - 0.5) * layout.plane.size.width * scale
+          positions[j + 1] =
+            (positions[j + 1] / texture.height - 0.5) *
+              layout.plane.size.height *
+              scale +
+            layout.plane.position.y * scale
+        }
+        this.curvedPlanes.push({ mesh: sprite, positions: positions.slice() })
+      } else {
+        applyAnchoredPlacement(sprite, layout.plane)
+        sprite.position.set(
+          layout.plane.position.x * scale,
+          layout.plane.position.y * scale
+        )
+        sprite.width = layout.plane.size.width * scale
+        sprite.height = layout.plane.size.height * scale
+      }
       sprite.filters = filters
       if (i) sprite.blendMode = 'add'
       this.planes.push(sprite)
       this.display.addChild(sprite)
+    }
+  }
+  bend(head: number, distance: number, curvature: number): void {
+    for (const { mesh, positions } of this.curvedPlanes) {
+      const output = mesh.geometry.positions
+      for (let i = 0; i < positions.length; i += 2) {
+        const point = fireballPathPoint(
+          positions[i],
+          head - positions[i + 1],
+          distance,
+          curvature
+        )
+        output[i] = point.x
+        output[i + 1] = point.y + head
+      }
+      mesh.geometry.getBuffer('aPosition').update()
     }
   }
   render(): void {
@@ -166,7 +238,19 @@ class FireballField {
     })
   }
   dispose(): void {
+    this.tailContent.filters = null
+    this.tailFilter?.destroy()
+    this.tailContent.destroy({ children: true })
     for (const sprite of this.planes) sprite.filters = null
+    for (const { mesh } of this.curvedPlanes) {
+      const geometry = mesh.geometry
+      const shader = mesh.shader
+      mesh.removeFromParent()
+      mesh.destroy()
+      geometry.destroy(true)
+      shader?.destroy()
+    }
+    this.curvedPlanes.length = 0
     for (const filter of this.filters) filter.destroy()
     this.bloomPass.filters = null
     this.bloomPass.destroy()
@@ -304,6 +388,11 @@ export class FireballEffect {
         mesh.shader!.resources.fireball.uniforms.uNoiseScale =
           Number(FIREBALL_MATERIALS[particles[0].profile.material].values._Scale ?? 1) *
           request.tuning.noiseScale
+        if (phase === 'missile' && field)
+          mesh.shader!.resources.fireball.uniforms.uIrregularity = Math.max(
+            1,
+            request.tuning.tailMotion ?? 1
+          )
         if (request.tuning.useOriginalColors === false) {
           mesh.shader!.resources.fireball.uniforms.uRecolor = 1
           mesh.shader!.resources.fireball.uniforms.uTint = hexColorToRgb(
@@ -316,7 +405,11 @@ export class FireballEffect {
                   : request.tuning.flameColor
           )
         }
-        if (field) this[phase].content.addChild(mesh)
+        if (field)
+          (phase === 'missile'
+            ? this.missile.tailContent
+            : this[phase].content
+          ).addChild(mesh)
         else if (phase !== 'impact') this.container.addChild(mesh)
         else this.impactRoot.addChild(mesh)
         this.batches.push({ phase, mesh, particles, field })
@@ -392,6 +485,11 @@ export class FireballEffect {
       birthGrowth = Math.max(0.001, Math.min(L.birth.growthSeconds, this.launchSeconds))
     this.container.visible = elapsed < this.duration
     this.flightRoot.y = -head * this.scale
+    this.missile.bend(
+      head * this.scale,
+      this.distance * this.scale,
+      this.request.tuning.pathCurvature ?? 0
+    )
     this.missile.display.visible = t >= 0 && elapsed < this.fieldEnd
     this.impact.display.visible = t >= flight && elapsed < this.impactEnd
     this.birth.display.visible = elapsed < this.birthEnd
@@ -407,6 +505,15 @@ export class FireballEffect {
             Math.max(0, Math.min(1, (t * 1000) / growth))
         : (this.request.tuning.headEndSize ?? nativeHead)
     core.shader!.resources.core.uniforms.uRadius = (0.3 * diameter) / nativeHead
+    const irregularity = this.request.tuning.tailMotion ?? 1
+    if (this.missile.tailFilter) {
+      const uniforms = this.missile.tailFilter.resources.tail.uniforms
+      uniforms.uIrregularity = irregularity
+      uniforms.uLength = Math.min(head, this.request.tuning.missileLength / this.scale)
+      uniforms.uRadius = Math.max(0.04, (diameter / L.worldPixels) * 0.3)
+      uniforms.uLife =
+        t >= 0 && head > 0.001 ? Math.max(0, 1 - Math.max(0, t - flight) / 0.35) : 0
+    }
     for (const phase of ['birth', 'missile'] as const) {
       const phaseCore = this[phase].core!
       const phaseTime = phase === 'birth' ? elapsed : Math.max(0, t)
@@ -437,6 +544,9 @@ export class FireballEffect {
     }
     for (const batch of this.batches) {
       const phase = batch.phase
+      // A clean energy ribbon has no loose flame scraps, smoke or sparks.
+      // Fade those supporting streams back in toward the original fire preset.
+      batch.mesh.visible = phase !== 'missile' || batch.field || irregularity > 0
       const particleTime = phase === 'birth' ? elapsed : t
       const layout = L[phase],
         res = layout.resolution
@@ -446,6 +556,8 @@ export class FireballEffect {
           continue
         }
         const state = fireballParticleAt(p, particleTime, flight, this.distance)
+        if (phase === 'missile' && !batch.field)
+          state.color[3] *= Math.min(1, irregularity)
         state.position[0] +=
           this.request.tuning.turbulence *
           0.1 *
@@ -454,6 +566,19 @@ export class FireballEffect {
           z = state.position[2]
         let size = state.size,
           rotation = state.rotation
+        if (phase === 'missile' && batch.field && irregularity > 1) {
+          const excess = irregularity - 1
+          const behind = head - z
+          // Coherent folds run along the plume; this changes its silhouette,
+          // rather than only spinning textures inside nearly identical bounds.
+          x +=
+            excess *
+            0.24 *
+            Math.sin(behind * 4 - t * 9) *
+            Math.min(1, Math.max(0, behind) / 0.6)
+          size *=
+            1 + excess * (0.2 + 0.25 * Math.sin(behind * 6 + t * 7 + p.random * 2))
+        }
         if (batch.field) {
           if (phase === 'missile') z -= head
           x = (x / layout.plane.size.width + 0.5) * res.width
@@ -487,6 +612,18 @@ export class FireballEffect {
             rotation,
             state.visible ? state.color : [0, 0, 0, 0]
           )
+      }
+      if (phase === 'missile' && !batch.field && this.request.tuning.pathCurvature) {
+        for (let i = 0; i < batch.mesh.positions.length; i += 2) {
+          const point = fireballPathPoint(
+            batch.mesh.positions[i],
+            -batch.mesh.positions[i + 1],
+            this.distance * this.scale,
+            this.request.tuning.pathCurvature
+          )
+          batch.mesh.positions[i] = point.x
+          batch.mesh.positions[i + 1] = point.y
+        }
       }
       batch.mesh.upload()
     }

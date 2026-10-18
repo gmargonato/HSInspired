@@ -191,6 +191,9 @@ export class MatchPremiumAppearance {
           Boolean(sourcePremium) || this.identityPremium(cardId, participantId)
         this.instances.set(instanceId, { cardId, ownerId: participantId, premium })
       }
+      for (const { card } of event.deckAddition?.cards ?? []) {
+        inherit(card.instanceId, card.cardId)
+      }
       if (
         [
           'add-to-hand',

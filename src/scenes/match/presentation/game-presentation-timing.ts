@@ -27,6 +27,11 @@ export function handEaseOutExpo(progress: number): number {
   return progress === 1 ? 1 : 1 - 2 ** (-10 * progress)
 }
 
+/** Briefly replaces the Quest marker with its updated progress. */
+export const QUEST_BADGE_TIMING = {
+  progressHold: 2
+} as const
+
 /** Sequential Secret reveal, totaling 1.6 seconds before the effect plays. */
 export const SECRET_REVEAL_TIMING = {
   bannerGrow: 0.35,

@@ -258,6 +258,17 @@ export interface MinionCardMovement {
   readonly handIndex?: number
 }
 
+/** Action-time deck additions not already represented by a board movement. */
+export interface DeckAddition {
+  readonly id: string
+  readonly participantId: PlayerId
+  readonly sourceInstanceId: string
+  readonly cards: readonly {
+    readonly card: OpeningCard
+    readonly visibleTo: 'all' | readonly PlayerId[]
+  }[]
+}
+
 /** Public, action-time faces only; contains no private card bookkeeping. */
 export interface CardReveal {
   readonly id: string
@@ -286,6 +297,7 @@ export interface EffectDomainEvent {
   readonly action: string
   readonly actionPath: string
   readonly cardMovement?: MinionCardMovement
+  readonly deckAddition?: DeckAddition
   readonly cardReveal?: CardReveal
   readonly eventType?: CardEventType
   readonly data?: Readonly<Record<string, unknown>>
@@ -1542,11 +1554,14 @@ export type PublicizeOpeningMatchEvent<E> = E extends
   RandomSpellPresentationEvent | SecretPresentationEvent
   ? never
   : E extends EffectDomainEvent
-    ? Omit<E, 'sourceCardId' | 'data' | 'cardMovement'> & {
+    ? Omit<E, 'sourceCardId' | 'data' | 'cardMovement' | 'deckAddition'> & {
         readonly sourceCardId: CardId | null
         readonly data?: Readonly<Record<string, unknown>>
         readonly cardMovement?: Omit<MinionCardMovement, 'cards'> & {
           readonly cards: readonly OpeningPublicCard[]
+        }
+        readonly deckAddition?: Omit<DeckAddition, 'cards'> & {
+          readonly cards: readonly { readonly card: OpeningPublicCard }[]
         }
       }
     : E extends MulliganResolvedEvent

@@ -81,6 +81,7 @@ function ingredient(
         text: `Freeze ${count} random enemy minion${plural}.`,
         action: {
           action: 'freeze',
+          vfx: 'frost-missile-small',
           target: {
             controller: 'opponent',
             type: 'minion',

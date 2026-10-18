@@ -99,7 +99,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ],
         "then": {
@@ -577,7 +577,7 @@
             "action": "damage",
             "target": { "controller": "opponent", "type": "hero", "selection": "all" },
             "amount": 2,
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -729,7 +729,7 @@
               "selection": "chosen"
             },
             "amount": 3,
-            "vfx": "fire-missile"
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -878,7 +878,7 @@
               "selection": "chosen",
               "filter": { "rarity": "Legendary" }
             },
-            "vfx": "fire-missile"
+            "vfx": "neutral-missile-raw"
           }
         ]
       }

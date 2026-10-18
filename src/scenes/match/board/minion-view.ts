@@ -185,6 +185,9 @@ export class MinionView extends Container {
   private readonly targetingOutline: AnimatedOutline
   private readonly hoverOutlineProxy: Graphics
   private readonly hoverOutline: AnimatedOutline
+  private pointerHover = false
+  private aiAttention = false
+  private attackWarning = false
   private readonly sleepingZs: SleepingZs
   private readonly animationScope = new AnimationScope()
   private readonly activeAbilityPulses = new Set<Sprite>()
@@ -933,7 +936,24 @@ export class MinionView extends Container {
   }
 
   setHoverAura(enabled: boolean): void {
-    this.hoverOutline.setEnabled(enabled)
+    this.pointerHover = enabled
+    this.hoverOutline.setEnabled(
+      this.pointerHover || this.aiAttention || this.attackWarning
+    )
+  }
+
+  setAiAttention(enabled: boolean): void {
+    this.aiAttention = enabled
+    this.hoverOutline.setEnabled(
+      this.pointerHover || this.aiAttention || this.attackWarning
+    )
+  }
+
+  setAttackWarning(enabled: boolean): void {
+    this.attackWarning = enabled
+    this.hoverOutline.setEnabled(
+      this.pointerHover || this.aiAttention || this.attackWarning
+    )
   }
 
   isCanAttack(): boolean {

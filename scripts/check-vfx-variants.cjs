@@ -166,7 +166,7 @@ async function main() {
       }
       const lab=new VfxLab({canvas:app.canvas,renderer:app.renderer,parent:document.body,assets});app.stage.addChild(lab);lab.controls.updatePosition();
       const templates=getVfxTemplateLibrary().templates.filter(t=>t.family==='missile'||t.id.endsWith('-all-characters'));
-      check(templates.length===11,'Exactly six missile and five AoE visual appearances');
+      check(templates.length===14,'Exactly nine missile and five AoE visual appearances');
       for(const template of templates){
         lab.selectEffect(template.family);lab.selectTemplate(template.id);
         const effect=template.family==='missile'?lab.missileEffect:lab.fireEffect;

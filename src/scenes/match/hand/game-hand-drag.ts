@@ -442,6 +442,7 @@ export class GameHandDrag {
     this.cursor?.setContextVariant(null)
     this.context.clearHover()
     this.context.clearBoardPreview()
+    this.context.syncMana()
     const entry = this.context.entryAt(index)
     if (entry?.restTransform) {
       void this.context
