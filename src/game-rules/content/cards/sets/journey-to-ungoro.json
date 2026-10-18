@@ -5854,7 +5854,7 @@
     "cost": 5,
     "attack": 8,
     "health": 8,
-    "rulesText": "Taunt. Battlecry: Get 2 random 'Journey to Un'Goro' Quest Rewards. Shuffle the rest into your deck.",
+    "rulesText": "Taunt. Battlecry: Get 1 random 'Journey to Un'Goro' Quest Reward. Shuffle the rest into your deck.",
     "keywords": ["taunt"],
     "effects": [
       {

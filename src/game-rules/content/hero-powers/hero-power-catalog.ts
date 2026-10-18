@@ -132,7 +132,7 @@ const HERO_POWER_DATA = [
     'Deal 2 damage to the enemy hero.',
     'hero-power-hunter',
     'none',
-    { kind: 'damage-enemy-hero', vfx: 'fire-missile', amount: 2 }
+    { kind: 'damage-enemy-hero', vfx: 'neutral-missile-raw', amount: 2 }
   ],
   [
     'hunter-dinomancy',
@@ -306,7 +306,7 @@ const HERO_POWER_DATA = [
     'Deal 1 damage to all minions.',
     'hero-power-bladestorm',
     'none',
-    { kind: 'damage-all-minions', vfx: 'fire-blast-both-boards', amount: 1 }
+    { kind: 'damage-all-minions', vfx: 'frost-blast-both-boards', amount: 1 }
   ],
   [
     'knights_of_the_frozen_throne_icy_touch',
@@ -333,7 +333,7 @@ const HERO_POWER_DATA = [
     'none',
     {
       kind: 'summon-horseman-and-destroy-if-complete',
-      vfx: 'fire-missile',
+      vfx: 'frost-missile-small',
       cardIds: [
         'knights_of_the_frozen_throne_darion_mograine',
         'knights_of_the_frozen_throne_deathlord_nazgrim',
@@ -496,7 +496,7 @@ const HERO_POWER_DATA = [
     'Deal 3 damage to the enemy hero.',
     'hero-power-hunter-upgraded',
     'none',
-    { kind: 'damage-enemy-hero', vfx: 'fire-missile', amount: 3 }
+    { kind: 'damage-enemy-hero', vfx: 'neutral-missile-raw', amount: 3 }
   ],
   [
     'mage-fireblast-rank-2',

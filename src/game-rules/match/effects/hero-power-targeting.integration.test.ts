@@ -285,7 +285,7 @@ describe('explicit hero power VFX', () => {
           expect(cues[0]).toMatchObject({
             origin: 'hero-power',
             controllerId: id,
-            vfxId: heroId === 'jaina' ? 'fire-missile-small' : 'fire-missile',
+            vfxId: heroId === 'jaina' ? 'fire-missile-small' : 'neutral-missile-raw',
             targetInstanceIds: [enemy + ':hero']
           })
           const outcome = result.events.find((e) => e.type === 'character-damaged')

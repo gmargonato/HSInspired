@@ -311,6 +311,8 @@ export interface EffectVfxEvent {
   readonly sourceInstanceId: string
   readonly controllerId: PlayerId
   readonly actionPath: string
+  /** Explicit board origins for a simultaneous missile wave, overriding origin. */
+  readonly sourceInstanceIds?: readonly string[]
   readonly targetInstanceId?: string
   readonly targetInstanceIds?: readonly string[]
   readonly origin?: 'source' | 'hero-power'

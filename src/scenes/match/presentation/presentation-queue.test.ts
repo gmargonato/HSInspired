@@ -1312,6 +1312,87 @@ describe('deck addition animation', () => {
 
 describe('fire VFX match integration', () => {
   it.each([true, false])(
+    'launches all four Horsemen missiles concurrently from their board positions, local=%s',
+    async (localCaster) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        heroViews: Map<PlayerId, HeroView>
+        localMinionViews: MinionView[]
+        remoteMinionViews: MinionView[]
+        createHeroes(state: OpeningMatchState): void
+        presentEffectVfx(
+          event: Extract<OpeningMatchEvent, { type: 'effect-vfx-started' }>
+        ): Promise<void>
+        vfxPresenter: {
+          layer: Container
+          play(...args: unknown[]): Promise<void>
+        }
+      }
+      internal.createHeroes(internal.session.getState())
+      const owner = internal.session.localParticipantId
+      const remote = internal.session.remoteParticipantId
+      const caster = localCaster ? owner : remote
+      const enemy = localCaster ? remote : owner
+      const minions = Array.from({ length: 4 }, (_, index) => {
+        const minion = Object.assign(new Container(), {
+          instanceId: `horseman-${index}`,
+          ownerId: caster
+        }) as unknown as MinionView
+        minion.position.set(550 + index * 250, localCaster ? 610 : 410)
+        ;(localCaster ? internal.localMinionViews : internal.remoteMinionViews).push(
+          minion
+        )
+        value.addChild(minion)
+        return minion
+      })
+      value.position.set(170, 90)
+      value.scale.set(0.8)
+      const arrivals: (() => void)[] = []
+      const play = vi
+        .spyOn(internal.vfxPresenter, 'play')
+        .mockImplementation(
+          () => new Promise<void>((resolve) => arrivals.push(resolve))
+        )
+      let finished = false
+      const presenting = internal
+        .presentEffectVfx({
+          type: 'effect-vfx-started',
+          vfxId: 'frost-missile-small',
+          sourceInstanceId: `${caster}:hero-power`,
+          sourceInstanceIds: minions.map((minion) => minion.instanceId!),
+          controllerId: caster,
+          origin: 'hero-power',
+          actionPath: 'hero-power.four-horsemen.destroy-enemy-hero',
+          vfxGroupId: 'horsemen-finish',
+          targetInstanceIds: [`${enemy}:hero`]
+        })
+        .then(() => {
+          finished = true
+        })
+      // All four start before any impact promise resolves.
+      expect(play).toHaveBeenCalledTimes(4)
+      for (const [index, minion] of minions.entries()) {
+        expect(play).toHaveBeenNthCalledWith(
+          index + 1,
+          expect.objectContaining({ id: 'frost-missile-small' }),
+          localCaster,
+          internal.vfxPresenter.layer.toLocal(minion.getGlobalPosition()),
+          internal.vfxPresenter.layer.toLocal(
+            internal.heroViews.get(enemy)!.getGlobalPosition()
+          )
+        )
+      }
+      for (const arrive of arrivals.slice(0, 3)) arrive()
+      await Promise.resolve()
+      expect(finished).toBe(false)
+      arrivals[3]()
+      await presenting
+      expect(finished).toBe(true)
+    }
+  )
+
+  it.each([true, false])(
     'passes typed targets in effect-layer coordinates, local caster=%s',
     async (localCaster) => {
       const value = board()

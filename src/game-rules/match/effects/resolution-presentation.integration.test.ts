@@ -1,7 +1,8 @@
-import { resolveCardPlay } from './effect-runtime'
+import { getDerivedState, resolveCardPlay } from './effect-runtime'
 import { CARD_CATALOG } from '../../content/cards'
 import { validateCardSet } from '../../content/cards/card-validator'
-import type { OpeningMatchEvent } from '../opening-match-types'
+import type { OpeningMatchEvent, OpeningMatchState } from '../opening-match-types'
+import type { PlayerId } from '../match-types'
 import { describe, expect, it, vi } from 'vitest'
 import { createSeededRng } from '../rng'
 import { createMatchScenario } from '../testing/match-scenario-builder'
@@ -177,10 +178,26 @@ describe('deck addition presentation', () => {
     }
   })
 
-  it('keeps Latorvius random deck rewards hidden and batches all seven', () => {
+  it('gives one Latorvius reward to hand and batches the eight hidden deck rewards', () => {
     const f = damagePhaseFixture('journey_to_ungoro_latorvius_gaze_of_the_city')
+    const handIds = new Set(f.player(f.self).hand.map((card) => card.instanceId))
+    const deckSize = f.player(f.self).deck.length
     const result = f.play()
-    expect(deckAdditions(result.events)[0].cards).toHaveLength(7)
+    const rewards = f
+      .player(f.self)
+      .hand.filter((card) => !handIds.has(card.instanceId))
+    expect(rewards).toHaveLength(1)
+    const batches = deckAdditions(result.events)
+    expect(batches).toHaveLength(1)
+    expect(batches[0].cards).toHaveLength(8)
+    expect(f.player(f.self).deck).toHaveLength(deckSize + 8)
+    expect(
+      new Set(
+        [...rewards, ...batches[0].cards.map(({ card }) => card)].map(
+          (card) => card.cardId
+        )
+      ).size
+    ).toBe(9)
     for (const viewer of [f.self, f.enemy]) {
       const batch = getOpeningMatchPublicEvents(result.events, viewer).flatMap((e) =>
         e.type === 'effect-resolved' && e.deckAddition ? [e.deckAddition] : []
@@ -346,6 +363,7 @@ function play(
     type: 'play-card',
     participantId,
     cardInstanceId: card!.instanceId,
+    ...(CARD_CATALOG.require(cardId).type === 'Minion' ? { position: 0 } : {}),
     targets
   })
 }
@@ -1393,4 +1411,307 @@ it('Betrayal emits missiles from the selected minion to both neighbours', () => 
     vfxId: 'neutral-missile-raw'
   })
   expect(cues[0].targetInstanceIds).toEqual([left.instanceId, right.instanceId])
+})
+
+describe('Four Horsemen passive victory', () => {
+  const horsemen = [
+    'knights_of_the_frozen_throne_darion_mograine',
+    'knights_of_the_frozen_throne_deathlord_nazgrim',
+    'knights_of_the_frozen_throne_inquisitor_whitemane',
+    'knights_of_the_frozen_throne_thoras_trollbane'
+  ]
+  function fixture(withPower = true) {
+    const s = createMatchScenario({
+      seed: 423,
+      firstHeroId: withPower ? 'uther-ebon-blade' : 'jaina',
+      secondHeroId: withPower ? 'uther-ebon-blade' : 'jaina'
+    })
+    s.confirmBothMulligans()
+    const [self, enemy] = activePlayers(s)
+    setMana(s, self)
+    for (const id of horsemen.slice(0, 3)) summon(s, self, id)
+    return { s, self, enemy }
+  }
+  function expectVictory(
+    result: {
+      readonly accepted: boolean
+      readonly message?: string
+      readonly events: readonly OpeningMatchEvent[]
+      readonly state: OpeningMatchState
+    },
+    self: PlayerId,
+    enemy: PlayerId
+  ) {
+    expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    const waves = result.events.filter(
+      (e): e is Extract<OpeningMatchEvent, { type: 'effect-vfx-started' }> =>
+        e.type === 'effect-vfx-started' &&
+        e.actionPath === 'hero-power.four-horsemen.destroy-enemy-hero'
+    )
+    expect(waves).toHaveLength(1)
+    const wave = waves[0]
+    const owner = result.state.players.find((p) => p.participantId === self)!
+    expect(wave).toMatchObject({
+      vfxId: 'frost-missile-small',
+      controllerId: self,
+      origin: 'source',
+      targetInstanceIds: [`${enemy}:hero`],
+      sourceInstanceIds: horsemen.map(
+        (id) => owner.board.find((minion) => minion.cardId === id)!.instanceId
+      )
+    })
+    expect(new Set(wave.sourceInstanceIds).size).toBe(4)
+    const destruction = result.events.filter(
+      (e) => e.type === 'effect-resolved' && e.action === 'destroy'
+    )
+    expect(destruction).toContainEqual(
+      expect.objectContaining({
+        vfxGroupId: wave.vfxGroupId,
+        data: { target: `${enemy}:hero` }
+      })
+    )
+    expect(result.events.indexOf(wave)).toBeLessThan(
+      result.events.indexOf(destruction.at(-1)!)
+    )
+    const ended = result.events.find((e) => e.type === 'match-ended')!
+    expect(ended).toMatchObject({ winnerId: self })
+    expect(result.events.indexOf(ended)).toBeGreaterThan(
+      result.events.indexOf(destruction.at(-1)!)
+    )
+    expect(result.events.some((e) => e.type === 'character-damaged')).toBe(false)
+    expect(
+      result.state.players.find((p) => p.participantId === enemy)!.hero.health
+    ).toBe(0)
+    for (const viewer of [self, enemy]) {
+      const publicWave = getOpeningMatchPublicEvents(result.events, viewer).find(
+        (e) => e.type === 'effect-vfx-started' && e.vfxGroupId === wave.vfxGroupId
+      )
+      expect(publicWave).toEqual(wave)
+    }
+    return wave
+  }
+
+  it('summons the missing fourth before emitting one four-origin finishing wave', () => {
+    const { s, self, enemy } = fixture()
+    const result = s.match.dispatch({ type: 'use-hero-power', participantId: self })
+    if (!result.accepted) throw new Error(result.message)
+    const wave = expectVictory(result, self, enemy)
+    const entrance = result.events.find(
+      (e) => e.type === 'minion-summoned' && e.minion.cardId === horsemen[3]
+    )!
+    expect(result.events.indexOf(entrance)).toBeLessThan(result.events.indexOf(wave))
+  })
+
+  it('wins when a Horseman is played from hand even after the power was spent', () => {
+    const { s, self, enemy } = fixture()
+    addCard(s, self, horsemen[3])
+    const original = s.match.getState()
+    const state = {
+      ...original,
+      players: original.players.map((p) =>
+        p.participantId === self
+          ? {
+              ...p,
+              mana: { ...p.mana, available: 2 },
+              heroPower: { ...p.heroPower, available: false, usesThisTurn: 1 }
+            }
+          : { ...p, hero: { ...p.hero, armor: 100, immune: true } }
+      ) as unknown as typeof original.players
+    }
+    const options = {
+      state,
+      participantId: self,
+      position: 0,
+      cardInstanceId: state.players
+        .find((p) => p.participantId === self)!
+        .hand.find((c) => c.cardId === horsemen[3])!.instanceId
+    }
+    const result = resolveCardPlay(options)
+    expectVictory(result, self, enemy)
+    expect(result.events.some((e) => e.type === 'hero-power-used')).toBe(false)
+    expect(
+      result.state.players.find((p) => p.participantId === enemy)!.hero.armor
+    ).toBe(100)
+    expect(resolveCardPlay(options)).toEqual(result)
+    expect(s.match.getState()).toEqual(original)
+  })
+
+  it.each(['classic_faceless_manipulator', 'basic_mind_control'])(
+    'wins when %s completes the controlled set',
+    (cardId) => {
+      const { s, self, enemy } = fixture()
+      summon(s, enemy, horsemen[3])
+      const target = player(s, enemy).board[0]
+      addCard(s, self, cardId)
+      expectVictory(
+        play(s, self, cardId, [
+          { kind: 'minion', participantId: enemy, instanceId: target.instanceId }
+        ]),
+        self,
+        enemy
+      )
+    }
+  )
+
+  it('waits while Mindbreaker disables the power and wins when it is silenced', () => {
+    const { s, self, enemy } = fixture()
+    summon(s, enemy, 'knights_of_the_frozen_throne_mindbreaker')
+    addCard(s, self, horsemen[3])
+    const blocked = play(s, self, horsemen[3], [])
+    expect(blocked.accepted).toBe(true)
+    expect(blocked.state.phase).toBe('turns')
+    expect(blocked.events.some((e) => e.type === 'effect-vfx-started')).toBe(false)
+    addCard(s, self, 'classic_silence')
+    expectVictory(
+      play(s, self, 'classic_silence', [
+        {
+          kind: 'minion',
+          participantId: enemy,
+          instanceId: player(s, enemy).board[0].instanceId
+        }
+      ]),
+      self,
+      enemy
+    )
+  })
+
+  it('wins when resurrection summons the missing Horseman', () => {
+    const { s, self, enemy } = fixture()
+    summon(s, self, horsemen[3])
+    const fourth = player(s, self).board.at(-1)!
+    addCard(s, self, 'basic_shadow_word_pain')
+    expect(
+      play(s, self, 'basic_shadow_word_pain', [
+        { kind: 'minion', participantId: self, instanceId: fourth.instanceId }
+      ]).accepted
+    ).toBe(true)
+    expect(player(s, self).board).toHaveLength(3)
+    addCard(s, self, 'blackrock_mountain_resurrect')
+    const result = play(s, self, 'blackrock_mountain_resurrect', [])
+    if (!result.accepted) throw new Error(result.message)
+    const wave = expectVictory(result, self, enemy)
+    const entrance = result.events.find((e) => e.type === 'minion-summoned')!
+    expect(result.events.indexOf(entrance)).toBeLessThan(result.events.indexOf(wave))
+  })
+
+  it('does not win from a temporary complete set during two Sylvanas deathrattles', () => {
+    const { s, self, enemy } = fixture()
+    summon(s, self, 'classic_sylvanas_windrunner')
+    const attacker = player(s, self).board.at(-1)!
+    summon(s, enemy, horsemen[3])
+    summon(s, enemy, 'classic_sylvanas_windrunner')
+    const defender = player(s, enemy).board.at(-1)!
+    expect(s.match.dispatch({ type: 'end-turn', participantId: self }).accepted).toBe(
+      true
+    )
+    expect(s.match.dispatch({ type: 'end-turn', participantId: enemy }).accepted).toBe(
+      true
+    )
+    const result = s.match.dispatch({
+      type: 'attack-character',
+      participantId: self,
+      attacker: { kind: 'minion', instanceId: attacker.instanceId },
+      defender: {
+        kind: 'minion',
+        instanceId: defender.instanceId
+      }
+    })
+    expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+    expect(
+      result.events.filter(
+        (e) => e.type === 'effect-resolved' && e.action === 'take-control'
+      )
+    ).toHaveLength(2)
+    expect(result.state.phase).toBe('turns')
+    expect(result.events.some((e) => e.type === 'effect-vfx-started')).toBe(false)
+  })
+
+  it('can complete the condition on the opposing turn through a control change', () => {
+    const { s, self, enemy } = fixture()
+    summon(s, self, 'classic_sylvanas_windrunner')
+    const sylvanas = player(s, self).board.at(-1)!
+    summon(s, enemy, horsemen[3])
+    expect(s.match.dispatch({ type: 'end-turn', participantId: self }).accepted).toBe(
+      true
+    )
+    setMana(s, enemy)
+    addCard(s, enemy, 'basic_shadow_word_death')
+    expectVictory(
+      play(s, enemy, 'basic_shadow_word_death', [
+        { kind: 'minion', participantId: self, instanceId: sylvanas.instanceId }
+      ]),
+      self,
+      enemy
+    )
+  })
+
+  it('resolves two complete sets at the same checkpoint as simultaneous hero destruction', () => {
+    const { s, self, enemy } = fixture()
+    summon(s, self, horsemen[3])
+    for (const id of horsemen) summon(s, enemy, id)
+    addCard(s, self, 'classic_silence')
+    const result = play(s, self, 'classic_silence', [
+      {
+        kind: 'minion',
+        participantId: self,
+        instanceId: player(s, self).board[0].instanceId
+      }
+    ])
+    expect(result.accepted).toBe(true)
+    expect(result.events.filter((e) => e.type === 'effect-vfx-started')).toHaveLength(2)
+    expect(result.state).toMatchObject({
+      phase: 'ended',
+      winnerId: null,
+      loserId: null
+    })
+    expect(result.state.players.map((p) => p.hero.health)).toEqual([0, 0])
+  })
+
+  it.each(['missing identity', 'wrong power', 'dormant Horseman', 'dead Horseman'])(
+    'does not complete the condition with a %s',
+    (condition) => {
+      const { s, self } = fixture(condition !== 'wrong power')
+      summon(s, self, condition === 'missing identity' ? horsemen[0] : horsemen[3])
+      const original = s.match.getState()
+      const state = {
+        ...original,
+        players: original.players.map((p) =>
+          p.participantId === self
+            ? {
+                ...p,
+                board: p.board.map((m, i) =>
+                  i !== 3
+                    ? m
+                    : condition === 'dormant Horseman'
+                      ? { ...m, dormant: true }
+                      : condition === 'dead Horseman'
+                        ? { ...m, health: 0, damageTaken: m.maxHealth }
+                        : m
+                )
+              }
+            : p
+        ) as unknown as typeof original.players
+      }
+      const result = resolveCardPlay({
+        state,
+        participantId: self,
+        position: 0,
+        cardInstanceId: player(s, self).hand[0].instanceId
+      })
+      expect(result.accepted).toBe(true)
+      expect(result.state.phase).toBe('turns')
+      expect(result.events.some((e) => e.type === 'effect-vfx-started')).toBe(false)
+    }
+  )
+
+  it('does not execute the passive condition while deriving or reading a complete board', () => {
+    const { s, self } = fixture()
+    summon(s, self, horsemen[3])
+    const before = s.match.getState()
+    expect(getDerivedState(before).phase).toBe('turns')
+    expect(s.match.getState()).toEqual(before)
+    expect(s.match.getLegality!(self).legalHeroPower).toBe(false)
+    expect(s.match.getState()).toEqual(before)
+  })
 })

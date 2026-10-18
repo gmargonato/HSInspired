@@ -703,6 +703,7 @@ export class EffectRuntime {
   private nextEntityOrdinal: number
   private semanticSequence = 0
   private vfxSequence = 0
+  private readonly resolvedHorsemenPlayers = new Set<PlayerId>()
   private activeVfxGroup: {
     id: string
     frame: EffectFrame
@@ -996,7 +997,8 @@ export class EffectRuntime {
       path: string
       targets: readonly EntityRef[]
     }[],
-    resolve: () => void
+    resolve: () => void,
+    sourceInstanceIds?: readonly string[]
   ): void {
     const configured = entries.filter((entry) => typeof entry.action.vfx === 'string')
     const visuals = new Map<string, string[]>()
@@ -1032,6 +1034,7 @@ export class EffectRuntime {
       targetInstanceId: first.targetInstanceIds[0],
       ...(cues.length > 1 ? { visuals: cues } : {}),
       sourceInstanceId: frame.source.instanceId,
+      ...(sourceInstanceIds ? { sourceInstanceIds } : {}),
       controllerId: frame.controllerId,
       origin: frame.isHeroPower ? 'hero-power' : 'source',
       actionPath: configured[0]!.path,
@@ -4484,6 +4487,58 @@ export class EffectRuntime {
     return healed
   }
 
+  /** A passive hero-power aura; callers choose summon/phase aura-update boundaries. */
+  private resolveFourHorsemen(): void {
+    if (this.deriving || this.draft.phase !== 'turns') return
+    // Capture both sides before applying either destruction, preserving simultaneous lethal.
+    const completed = this.draft.players.flatMap((player) => {
+      const power = HERO_POWER_CATALOG.get(player.heroPower.id)
+      if (
+        this.resolvedHorsemenPlayers.has(player.participantId) ||
+        player.hero.health <= 0 ||
+        this.player(this.queries.otherPlayer(player.participantId)).hero.health <= 0 ||
+        power?.effect.kind !== 'summon-horseman-and-destroy-if-complete' ||
+        this.heroPowerUseLimit(player.participantId) === 0
+      )
+        return []
+      const horsemen = power.effect.cardIds.flatMap((cardId) => {
+        const minion = player.board.find(
+          (entry) => entry.cardId === cardId && entry.health > 0 && !entry.dormant
+        )
+        return minion ? [minion.instanceId] : []
+      })
+      return horsemen.length === power.effect.cardIds.length
+        ? [{ participantId: player.participantId, horsemen, vfx: power.effect.vfx }]
+        : []
+    })
+    for (const { participantId, horsemen, vfx } of completed) {
+      this.resolvedHorsemenPlayers.add(participantId)
+      const target: EntityRef = {
+        instanceId: `${this.queries.otherPlayer(participantId)}:hero`,
+        kind: 'hero',
+        participantId: this.queries.otherPlayer(participantId),
+        zone: 'hero'
+      }
+      const frame = this.frameFor(
+        {
+          instanceId: `${participantId}:hero-power`,
+          kind: 'hero-power',
+          participantId,
+          zone: 'hero-power'
+        },
+        null,
+        []
+      )
+      const path = 'hero-power.four-horsemen.destroy-enemy-hero'
+      this.withActionVfx(
+        frame,
+        [{ action: { action: 'destroy', vfx }, path, targets: [target] }],
+        () => this.directDestroy(target, frame, path),
+        horsemen
+      )
+    }
+  }
+
   private processDeaths(force = false): void {
     // Death effects can create new lethal minions, but those deaths are not
     // checked until the current death event has finished resolving.
@@ -4516,7 +4571,10 @@ export class EffectRuntime {
         })
       }
       const weapons = [...this.pendingWeaponDeaths.values()]
-      if (dead.length === 0 && weapons.length === 0) return
+      if (dead.length === 0 && weapons.length === 0) {
+        this.resolveFourHorsemen()
+        return
+      }
       this.step('checkpoint.death-batch', 'death-batch')
 
       // A death batch is captured before any Deathrattle runs. The timestamp
@@ -4637,6 +4695,7 @@ export class EffectRuntime {
         })
       }
       this.events.push(batchEvent)
+      this.resolveFourHorsemen()
       for (const entry of deathEntries) {
         this.deathResolutionDepth += 1
         try {
@@ -5045,6 +5104,7 @@ export class EffectRuntime {
         minion: clonePlain(minion) as BoardMinion,
         position: insertion
       } satisfies MinionSummonedEvent)
+      this.resolveFourHorsemen()
       this.emitMinionSummoned(frame, ref, participantId, cardId, instanceId)
     }
     return ref
@@ -6957,12 +7017,12 @@ export class EffectRuntime {
           'sulfuras'
         ].map((id) => asCardId(`journey_to_ungoro_${id}`))
         const shuffled = this.shuffle(ids)
-        for (const cardId of shuffled.slice(0, 2))
+        for (const cardId of shuffled.slice(0, 1))
           this.addCardToHand(frame.controllerId, cardId, frame, path)
-        // One shuffle operation distributes the seven distinct remaining rewards.
+        // One shuffle operation distributes the eight distinct remaining rewards.
         const player = this.player(frame.controllerId)
         const additions: DeckAddition['cards'][number][] = []
-        for (const cardId of shuffled.slice(2)) {
+        for (const cardId of shuffled.slice(1)) {
           const definition = CARD_CATALOG.require(cardId)
           player.deck.push({
             instanceId: this.allocateId(`${frame.controllerId}:quest-reward`),
@@ -12105,6 +12165,7 @@ export class EffectRuntime {
   private commitResolution(): OpeningMatchState {
     this.step('checkpoint.commit', 'checkpoint')
     this.recomputeContinuousEffects()
+    this.resolveFourHorsemen()
     const nextState = clonePlain(this.draft) as unknown as DraftState
     nextState.revision = this.draft.revision + 1
     nextState.pendingResolution = false
@@ -13764,18 +13825,6 @@ export class EffectRuntime {
             },
             'hero-power.summon-horseman'
           )
-          if (
-            effect.cardIds.every((cardId) =>
-              player.board.some((minion) => minion.cardId === cardId)
-            )
-          )
-            runHeroPowerAction(
-              {
-                action: 'destroy',
-                target: { controller: 'opponent', type: 'hero', selection: 'all' }
-              },
-              'hero-power.destroy-enemy-hero'
-            )
           break
         case 'damage-and-refresh-after-card':
           runHeroPowerAction(
@@ -14978,6 +15027,7 @@ export class EffectRuntime {
         })
       }
       this.recomputeContinuousEffects()
+      this.resolveFourHorsemen()
       const nextState = clonePlain(this.draft) as DraftState
       nextState.revision = this.draft.revision + 1
       nextState.pendingResolution = false

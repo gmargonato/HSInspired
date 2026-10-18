@@ -5076,18 +5076,26 @@ export class GameBoardView extends Actor {
             )
           ]
         }
+        const sources = event.sourceInstanceIds
+          ? [...new Set(event.sourceInstanceIds)].flatMap((id) => {
+              const point = pointFor(id)
+              return point ? [point] : []
+            })
+          : source
+            ? [source]
+            : []
         return visual.targetInstanceIds.flatMap((id) => {
           const target = pointFor(id)
-          if (!source || !target) return []
-          played = true
-          return [
-            this.vfxPresenter.play(
+          if (!target) return []
+          return sources.map((missileSource) => {
+            played = true
+            return this.vfxPresenter.play(
               template,
               event.controllerId === this.localParticipantId,
-              source,
+              missileSource,
               target
             )
-          ]
+          })
         })
       })
     )
