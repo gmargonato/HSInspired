@@ -1797,7 +1797,12 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       const outcomes = new Map<string, ExpertActionOutcome>()
       for (const action of actions) {
         if (this.workBudget === undefined && performance.now() >= searchDeadline) break
-        const outcome = inspectExpertAction(fork, rootId, action.command)
+        const outcome = inspectExpertAction(
+          fork,
+          rootId,
+          action.command,
+          () => this.workBudget === undefined && performance.now() >= searchDeadline
+        )
         outcomes.set(
           canonicalCommandKey(action.command),
           outcome.penalty < 0.25 && inspectOrder(action.command)
@@ -2166,6 +2171,13 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       let continuation = sampledContinuation(sampledTurnLines.get(stat.key)) ?? [
         action.command
       ]
+      let supportedCoinPayoff:
+        | {
+            readonly commands: readonly TurnMatchCommand[]
+            readonly visits: number
+            readonly valueSum: number
+          }
+        | undefined
       const rootSelf = rootState.players.find(
         (player) => player.participantId === rootId
       )
@@ -2207,14 +2219,21 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             }
           })
         const payoffs = sampledLines.filter((line) => line.penalty === 0)
-        const bestPayoff = [...payoffs].sort(
-          (left, right) =>
-            right.valueSum / right.visits - left.valueSum / left.visits ||
-            left.commands.length - right.commands.length ||
-            right.visits - left.visits
-        )[0]
-        if (bestPayoff) continuation = bestPayoff.commands
-        else if (sampledLines.some((line) => line.penalty > 0)) {
+        const bestPayoff = payoffs
+          .filter((line) => line.visits >= 2)
+          .sort(
+            (left, right) =>
+              right.valueSum / right.visits - left.valueSum / left.visits ||
+              left.commands.length - right.commands.length ||
+              right.visits - left.visits
+          )[0]
+        if (bestPayoff) {
+          continuation = bestPayoff.commands
+          supportedCoinPayoff = bestPayoff
+        } else if (payoffs.length) {
+          // A single lucky payoff cannot supply a supported continuation value.
+          continuation = [action.command]
+        } else if (sampledLines.some((line) => line.penalty > 0)) {
           rootCandidateTacticalPenalties.set(
             stat.key,
             (rootCandidateTacticalPenalties.get(stat.key) ?? 0) +
@@ -2235,7 +2254,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         // Review at most three supported lines per shortlisted root. Do not let
         // an execution-rejected later action inflate the value of its first move.
         const lines = isCoinAction
-          ? []
+          ? supportedCoinPayoff
+            ? [supportedCoinPayoff]
+            : []
           : [...(sampledTurnLines.get(stat.key)?.values() ?? [])]
               .filter((line) => line.visits >= 2)
               .sort((a, b) => b.valueSum / b.visits - a.valueSum / a.visits)
