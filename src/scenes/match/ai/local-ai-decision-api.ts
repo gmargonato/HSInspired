@@ -64,6 +64,7 @@ import { CTHUN_ID } from '../../../game-rules/match/cthun'
 import { expertDrawPreference } from './expert-draw-preference'
 import { expertResourceSetupPreference } from './expert-resource-preference'
 import { expertSingletonCleanupSeeds } from './expert-cleanup-seeds'
+import { inspectExpertPublicThreat } from './expert-public-threat'
 import { createExpertAttackOrderInspector } from './expert-action-ordering'
 import { identicalSupportedContinuation } from './expert-completed-attack-order'
 import {
@@ -99,6 +100,7 @@ interface LocalAiSearchLimits {
 }
 
 export interface LocalAiDecisionOptions {
+  readonly publicThreat?: ReturnType<typeof inspectExpertPublicThreat>
   readonly profile?: LocalAiSearchProfile
   readonly deckStrategy?: ExpertDeckStrategyBinding
   readonly budgetMs?: number
@@ -165,6 +167,9 @@ type LocalAction = ReturnType<typeof aiActions>[number]
 
 /** A compact, serializable explanation of one candidate considered by the CPU search. */
 export interface LocalAiCandidateTrace {
+  /** Exact sequence is certified against public attacks under a root lethal threat. */
+  readonly publicAttackThreat?: boolean
+  readonly publicAttackSurvival?: boolean
   readonly outcome?: TacticalOutcome
   readonly provenWin?: boolean
   readonly publicReply?: 'lethal' | 'clear' | 'unknown'
@@ -194,6 +199,7 @@ export interface LocalAiCandidateTrace {
 /** Diagnostics for one local decision; kept small enough to persist with a match log. */
 export interface LocalAiDecisionTrace {
   readonly boundaryEvaluations?: number
+  readonly publicThreatReview?: ReturnType<typeof inspectExpertPublicThreat>['stats']
   readonly tacticalNodes?: number
   readonly orderingReview?: {
     readonly dispatches: number
@@ -1405,6 +1411,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
   private workBudgetHit = false
   private readonly preferredContinuation?: AiActionIntent
   private readonly onSearchProgress?: (progress: LocalAiSearchProgress) => void
+  private readonly publicThreat?: ReturnType<typeof inspectExpertPublicThreat>
   private readonly fairHypothesis: boolean
   private readonly expertPlanSearchLimitMs: number
   private readonly expertReplanSearchLimitMs: number
@@ -1431,6 +1438,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     this.workBudget = options.workBudget
     this.preferredContinuation = options.preferredContinuation
     this.onSearchProgress = options.onSearchProgress
+    this.publicThreat = options.publicThreat
     this.fairHypothesis = options.fairHypothesis ?? false
     this.expertPlanSearchLimitMs =
       options.expertPlanSearchLimitMs ?? EXPERT_AI_PLAN_SEARCH_LIMIT_MS
@@ -1709,6 +1717,19 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       this.publishTrace(trace)
       return { best, trace }
     }
+    // Establish the threat before rollout resource allocation. A defense is a
+    // search seed, not a verdict about an unfinished continuation.
+    const publicThreat =
+      (this.publicThreat?.rootRevision === simulationSession.getState().revision &&
+      this.publicThreat.actorId === rootId
+        ? this.publicThreat
+        : undefined) ??
+      inspectExpertPublicThreat(
+        simulationSession.match.getCheckpoint(),
+        rootId,
+        actions.map((action) => action.command),
+        () => performance.now() >= deadline
+      )
     const rootSequencePreferences = simulationSession.match.analyze((fork) => {
       const preferences = new Map<string, number>()
       for (const action of actions) {
@@ -1767,6 +1788,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       )
     )
     const seedLines = [
+      ...publicThreat.defenses,
       ...informationAndSetupSeeds,
       ...cleanupSeedLines,
       ...tacticalSeedLines
@@ -2146,6 +2168,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const rootState = simulationSession.getState()
     const rootCandidateContinuations = new Map<string, readonly TurnMatchCommand[]>()
     const reviewedLineValues = new Map<string, number>()
+    const certifiedCompletions = new Set<string>()
     const continuationOutcomes = new Map<
       string,
       ReturnType<typeof inspectTacticalLine>
@@ -2306,7 +2329,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         }
       }
       const immediateOutcome = rootTerminalOutcomes.get(stat.key)
-      const inspection = immediateOutcome
+      let inspection: ReturnType<typeof inspectTacticalLine> = immediateOutcome
         ? { outcome: immediateOutcome, reply: 'unknown' as const }
         : safetyCandidates.has(stat.key) && performance.now() < deadline
           ? simulationSession.match.analyze((fork) =>
@@ -2319,6 +2342,88 @@ export class LocalAiDecisionApi implements AiDecisionApi {
               )
             )
           : { outcome: 'unknown' as const, reply: 'unknown' as const }
+      // A broader clear reply to a partial line describes its available pass
+      // completion. Retain that exact completion only with repeated real samples.
+      if (
+        publicThreat.reply === 'lethal' &&
+        inspection.reply === 'clear' &&
+        inspection.outcome === 'ongoing' &&
+        continuation.at(-1)?.type !== 'end-turn'
+      ) {
+        const complete = [
+          ...continuation,
+          { type: 'end-turn' as const, participantId: rootId }
+        ]
+        const sample = sampledTurnLines
+          .get(stat.key)
+          ?.get(JSON.stringify(complete.map(canonicalCommandKey)))
+        if (sample && sample.visits >= 2 && performance.now() < deadline) {
+          const checked = simulationSession.match.analyze((fork) =>
+            inspectTacticalLine(
+              fork,
+              rootId,
+              complete,
+              () => performance.now() >= deadline,
+              96
+            )
+          )
+          if (checked.reply === 'clear' && checked.outcome === 'ongoing') {
+            continuation = complete
+            inspection = checked
+            reviewedLineValues.set(stat.key, sample.valueSum / sample.visits)
+          }
+        }
+      }
+      // A certificate belongs to its exact completion, never another suffix.
+      // Require repeated real visits to that completion, and keep any discovered
+      // own win ahead of this conservative immediate-survival preference.
+      const certified =
+        publicThreat.reply === 'lethal'
+          ? publicThreat.defenses.find(
+              (line) => canonicalCommandKey(line.commands[0]!) === stat.key
+            )
+          : undefined
+      const certifiedSample =
+        certified &&
+        sampledTurnLines
+          .get(stat.key)
+          ?.get(JSON.stringify(certified.commands.map(canonicalCommandKey)))
+      if (
+        certified &&
+        certifiedSample &&
+        certifiedSample.visits >= 2 &&
+        inspection.outcome !== 'win' &&
+        !(
+          inspection.reply === 'clear' &&
+          continuation.at(-1)?.type === 'end-turn' &&
+          (sampledTurnLines
+            .get(stat.key)
+            ?.get(JSON.stringify(continuation.map(canonicalCommandKey)))?.visits ??
+            0) >= 2
+        ) &&
+        performance.now() < deadline
+      ) {
+        const contrary = simulationSession.match.analyze((fork) =>
+          inspectTacticalLine(
+            fork,
+            rootId,
+            certified.commands,
+            () => performance.now() >= deadline,
+            96
+          )
+        )
+        // Stronger adverse evidence for this exact line beats attack-only safety.
+        // Unknown alternatives retain neutral truth labels; this is a policy.
+        if (contrary.outcome !== 'loss' && contrary.reply !== 'lethal') {
+          continuation = certified.commands
+          inspection = contrary
+          reviewedLineValues.set(
+            stat.key,
+            certifiedSample.valueSum / certifiedSample.visits
+          )
+          certifiedCompletions.add(stat.key)
+        }
+      }
       continuationOutcomes.set(stat.key, inspection)
       rootCandidateContinuations.set(stat.key, continuation)
     }
@@ -2342,12 +2447,19 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         ? Math.max(...lines.map((line) => line.valueSum / line.visits))
         : mctsRootRecommendationScore(fallback)
     }
+    const survivalPreference = (key: string) =>
+      publicThreat.reply === 'lethal' &&
+      (certifiedCompletions.has(key) ||
+        (continuationOutcomes.get(key)?.reply === 'clear' &&
+          rootCandidateContinuations.get(key)?.at(-1)?.type === 'end-turn'))
     const selected = [...visited].sort(
       (left, right) =>
         Number(continuationOutcomes.get(right.stat.key)?.outcome === 'win') -
           Number(continuationOutcomes.get(left.stat.key)?.outcome === 'win') ||
         Number(continuationOutcomes.get(left.stat.key)?.outcome === 'loss') -
           Number(continuationOutcomes.get(right.stat.key)?.outcome === 'loss') ||
+        Number(survivalPreference(right.stat.key)) -
+          Number(survivalPreference(left.stat.key)) ||
         Number(continuationOutcomes.get(left.stat.key)?.reply === 'lethal') -
           Number(continuationOutcomes.get(right.stat.key)?.reply === 'lethal') ||
         supportedLineValue(right.stat.key, right.stat) -
@@ -2367,6 +2479,12 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const candidates: LocalAiCandidateTrace[] = [...visited]
       .sort(
         (left, right) =>
+          (certifiedCompletions.size > 0 || survivalPreference(selected.stat.key)
+            ? Number(right.stat.key === selected.stat.key) -
+              Number(left.stat.key === selected.stat.key)
+            : 0) ||
+          Number(certifiedCompletions.has(right.stat.key)) -
+            Number(certifiedCompletions.has(left.stat.key)) ||
           right.stat.visits - left.stat.visits ||
           right.stat.meanValue - left.stat.meanValue
       )
@@ -2381,6 +2499,8 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             )
           }
         })(),
+        publicAttackThreat: publicThreat.reply === 'lethal',
+        publicAttackSurvival: certifiedCompletions.has(stat.key),
         actionId: action.id,
         type: action.command.type,
         description: action.description,
@@ -2452,6 +2572,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       }
     }
     const trace: LocalAiDecisionTrace = {
+      publicThreatReview: publicThreat.stats,
       boundaryEvaluations,
       orderingReview: { ...inspectOrder.stats },
       requestId,

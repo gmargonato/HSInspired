@@ -1,3 +1,4 @@
+import type { inspectExpertPublicThreat } from './expert-public-threat'
 import type {
   AiDecisionIdentity,
   AiDecisionRequest,
@@ -71,6 +72,8 @@ export function expertAiBudgetForTurn(turnBudgetMs: number): ExpertAiBudget {
 export type ExpertAiWorkerRequest =
   | {
       readonly type: 'decide'
+      /** Shared public-only review, computed once before sampled worlds. */
+      readonly publicThreat?: ReturnType<typeof inspectExpertPublicThreat>
       readonly request: AiDecisionRequest
       /** Already redacted in the renderer; never send the live checkpoint to this worker. */
       readonly checkpoint: OpeningMatchCheckpoint

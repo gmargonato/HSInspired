@@ -1,3 +1,4 @@
+import { inspectExpertPublicThreat } from './expert-public-threat'
 import type { AiDecisionResponse } from '../../../desktop/contracts/ipc/ai'
 import type { AiDecisionChoice } from '../../../desktop/contracts/ipc/ai-deliberation'
 import { aiActionIntent } from './ai-action-intent'
@@ -138,6 +139,7 @@ function aggregateResponse(
       searchDiagnostics: results.map((result, worldIndex) => ({
         worldIndex: worldDetails[worldIndex]?.worldIndex ?? worldIndex,
         status: worldDetails[worldIndex]?.status ?? 'completed',
+        publicThreatReview: result.trace?.publicThreatReview ?? null,
         tacticalNodes: result.trace?.tacticalNodes ?? 0,
         tacticalExhausted: result.trace?.tacticalExhausted ?? false,
         durationMs: result.trace?.durationMs ?? null,
@@ -254,7 +256,7 @@ export async function runExpertAiWorkerDecision(
     Math.min(3, Math.floor(Math.max(0, searchBudgetMs - 1_000) / 5_000) + 1)
   )
   // Concurrent worlds share a wall-clock window, not a divided time allowance.
-  const worldBudgetMs = Math.min(
+  const decisionWindowMs = Math.min(
     searchBudgetMs,
     request.request.phase === 'plan'
       ? (request.planSearchLimitMs ?? EXPERT_AI_PLAN_SEARCH_LIMIT_MS)
@@ -262,6 +264,20 @@ export async function runExpertAiWorkerDecision(
         ? (request.replanSearchLimitMs ?? 4_000)
         : searchBudgetMs
   )
+  // One bounded public review is shared by all worlds and paid from their
+  // existing wall-clock window, never added to the turn's thinking allowance.
+  if (request.request.phase === 'plan' || request.request.phase === 'action') {
+    request = {
+      ...request,
+      publicThreat: inspectExpertPublicThreat(
+        request.checkpoint,
+        request.perspectivePlayerId,
+        undefined,
+        () => isCancelled() || performance.now() >= started + decisionWindowMs
+      )
+    }
+  }
+  const worldBudgetMs = Math.max(1, decisionWindowMs - (performance.now() - started))
   const runInlineWorld = (
     index: number,
     onProgress: (

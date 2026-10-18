@@ -1,0 +1,324 @@
+// Materialized outside the repository by scripts/run-early-threat-regressions.cjs.
+import { describe, it, expect, vi } from 'vitest'
+import { CARD_CATALOG } from '__SOURCE_ROOT__/game-rules/content/cards'
+import { inspectPublicAttackReply } from '__SOURCE_ROOT__/scenes/match/ai/expert-public-attack-reply'
+import {
+  createAiFixture,
+  type AiFixtureOptions
+} from '__SOURCE_ROOT__/game-rules/match/testing/ai-scenario-builder'
+import { createOpeningMatchFromCheckpoint } from '__SOURCE_ROOT__/game-rules/match/opening-match'
+import { enumerateLegalCommands } from '__SOURCE_ROOT__/game-rules/match/ai'
+import { inspectExpertPublicThreat } from '__SOURCE_ROOT__/scenes/match/ai/expert-public-threat'
+function review(
+  overrides: Partial<AiFixtureOptions> = {},
+  stop = () => false,
+  now = () => performance.now(),
+  mutate?: (cp: any) => void
+) {
+  const f = createAiFixture({
+    seed: 87109,
+    aiHeroId: 'jaina',
+    opponentHeroId: 'thrall',
+    aiHealth: 4,
+    aiMana: 4,
+    aiHand: ['classic_ice_block'],
+    aiDeck: ['basic_chillwind_yeti'],
+    opponentDeck: ['basic_chillwind_yeti'],
+    opponentBoard: [{ cardId: 'basic_chillwind_yeti' }],
+    aiHeroPowerAvailable: false,
+    ...overrides
+  })
+  if (mutate) mutate(f.checkpoint)
+  const m = createOpeningMatchFromCheckpoint(f.checkpoint),
+    cp = m.getCheckpoint(),
+    actor = cp.state.activePlayerId!,
+    enemy = cp.state.players.find((p) => p.participantId !== actor)!.participantId
+  const commands = m.analyze((f) => enumerateLegalCommands(f, actor))
+  const inspected = inspectExpertPublicThreat(cp, actor, commands, stop, now)
+  const result = { ...inspected, defense: inspected.defenses[0] }
+  const chosen = result.defense?.commands[0]
+  const card =
+    chosen?.type === 'play-card'
+      ? cp.state.players
+          .find((p) => p.participantId === actor)!
+          .hand.find((c) => c.instanceId === chosen.cardInstanceId)?.cardId
+      : undefined
+  expect(result.stats.dispatches).toBeLessThanOrEqual(512)
+  return { ...result, card, cp, actor, enemy }
+}
+describe('attack continuation repair controls', () => {
+  it('does not carry own-turn immunity into the opposing turn', () => {
+    const r = review(
+      {},
+      () => false,
+      () => performance.now(),
+      (cp) => {
+        const p = cp.state.players.find(
+          (p: any) => p.participantId === cp.state.activePlayerId
+        )
+        p.hero.immune = true
+        p.hero.enchantments = [
+          {
+            id: 'expiry-control',
+            keywords: ['immune'],
+            duration: 'this-turn',
+            expiresOnTurn: cp.state.turnNumber
+          }
+        ]
+      }
+    )
+    expect(r.card).toBe('classic_ice_block')
+  })
+  it.each([0, 2, 8])(
+    'certificate survives every legal attack order with %i armor',
+    (armor) => {
+      const r = review({
+        aiHealth: 1,
+        aiArmor: armor,
+        opponentBoard: [
+          { cardId: 'basic_chillwind_yeti' },
+          { cardId: 'basic_boulderfist_ogre' },
+          { cardId: 'basic_bloodfen_raptor' }
+        ],
+        aiBoard: [{ cardId: 'classic_frog' }]
+      })
+      expect(r.card).toBe('classic_ice_block')
+      const m = createOpeningMatchFromCheckpoint(r.cp)
+      expect(m.dispatch(r.defense!.commands[0]!).accepted).toBe(true)
+      expect(m.dispatch({ type: 'end-turn', participantId: r.actor }).accepted).toBe(
+        true
+      )
+      let leaves = 0
+      const seen = new Set<string>()
+      const all = (fork: any) => {
+        const st = fork.getState()
+        expect(st.winnerId).not.toBe(r.enemy)
+        if (st.phase === 'ended') return
+        const key = JSON.stringify(fork.getAiObservation(r.actor, 'fair'), (k, v) =>
+          ['revision', 'recentEvents'].includes(k) ? undefined : v
+        )
+        if (seen.has(key)) return
+        seen.add(key)
+        const attacks = enumerateLegalCommands(fork, r.enemy).filter(
+          (c) => c.type === 'attack-character'
+        )
+        if (!attacks.length) {
+          leaves++
+          return
+        }
+        for (const c of attacks)
+          fork.analyze((child: any) => {
+            expect(child.dispatch(c).accepted).toBe(true)
+            all(child)
+          })
+      }
+      m.analyze(all)
+      expect(leaves).toBeGreaterThan(0)
+    }
+  )
+
+  it('conserves Block when armor and taunt make all orders nonlethal', () =>
+    expect(
+      review({
+        aiHealth: 1,
+        aiArmor: 10,
+        opponentBoard: [
+          { cardId: 'basic_chillwind_yeti' },
+          { cardId: 'basic_boulderfist_ogre' },
+          { cardId: 'basic_bloodfen_raptor' }
+        ],
+        aiBoard: [{ cardId: 'classic_frog' }]
+      }).defense
+    ).toBeUndefined())
+  it('is unchanged by concealed opponent card identities', () => {
+    const a = review(),
+      b = review(
+        {},
+        () => false,
+        () => performance.now(),
+        (cp) => {
+          const p = cp.state.players.find(
+            (p: any) => p.participantId !== cp.state.activePlayerId
+          )
+          for (const c of [...p.hand, ...p.deck]) c.cardId = 'basic_fireball'
+        }
+      )
+    expect(b.card).toBe(a.card)
+    expect(b.stats.dispatches).toBe(a.stats.dispatches)
+  })
+  it('handles missing optional minion enchantments', () =>
+    expect(
+      review(
+        {},
+        () => false,
+        () => performance.now(),
+        (cp) => {
+          for (const p of cp.state.players)
+            for (const m of p.board) delete m.enchantments
+        }
+      ).card
+    ).toBe('classic_ice_block'))
+  it('accounts for multiple windfury attacks', () =>
+    expect(
+      review({
+        aiHealth: 7,
+        opponentBoard: [{ cardId: 'basic_chillwind_yeti', keywords: ['windfury'] }]
+      }).card
+    ).toBe('classic_ice_block'))
+  it('returns exact action-plus-pass certificates', () => {
+    const r = review()
+    expect(r.defense?.commands.at(-1)?.type).toBe('end-turn')
+  })
+  it('plays known defensive secret against lethal', () =>
+    expect(review().card).toBe('classic_ice_block'))
+  it('conserves secret against nonlethal attacks', () =>
+    expect(review({ aiHealth: 10 }).defense).toBeUndefined())
+  it('counts armor', () => expect(review({ aiArmor: 1 }).defense).toBeUndefined())
+  it('respects taunt protection', () =>
+    expect(
+      review({ aiBoard: [{ cardId: 'basic_senjin_shieldmasta' }] }).defense
+    ).toBeUndefined())
+  it('respects frozen attackers', () =>
+    expect(
+      review({
+        opponentBoard: [{ cardId: 'basic_chillwind_yeti', frozenUntilTurn: 999 }]
+      }).defense
+    ).toBeUndefined())
+  it('keeps existing secret instead of spending another', () =>
+    expect(
+      review({ aiSecrets: [{ cardId: 'classic_ice_block' }] }).defense
+    ).toBeUndefined())
+  it('prefers direct lethal over defense', () => {
+    const r = review({
+      aiHand: ['classic_ice_block', 'basic_fireball'],
+      opponentHealth: 6
+    })
+    expect(r.card).toBe('basic_fireball')
+    expect(r.defense?.outcome).toBe('win')
+  })
+  it('supports non-Mage healing defense', () =>
+    expect(review({ aiHeroId: 'uther', aiHand: ['basic_holy_light'] }).card).toBe(
+      'basic_holy_light'
+    ))
+  it('supports a taunt defense', () =>
+    expect(review({ aiHand: ['basic_senjin_shieldmasta'] }).card).toBe(
+      'basic_senjin_shieldmasta'
+    ))
+  it('prefers reusable board freeze over one-shot secret', () =>
+    expect(review({ aiHand: ['classic_ice_block', 'basic_frost_nova'] }).card).toBe(
+      'basic_frost_nova'
+    ))
+  it('abstains on concealed opponent secret', () => {
+    const r = review({ opponentSecrets: [{ cardId: 'classic_ice_block' }] })
+    expect(r.defense).toBeUndefined()
+    expect(r.stats.supported).toBe(false)
+  })
+  it('abstains on attack/deathrattle triggers', () => {
+    const r = review({ opponentBoard: [{ cardId: 'classic_abomination' }] })
+    expect(r.defense).toBeUndefined()
+    expect(r.stats.supported).toBe(false)
+  })
+  it('deadline returns unknown without spending', () => {
+    let ticks = 0
+    const r = review(
+      {},
+      () => false,
+      () => ticks++ * 751
+    )
+    expect(r.defense).toBeUndefined()
+    expect(r.stats.exhausted).toBe(true)
+    expect(r.stats.dispatches).toBe(0)
+  })
+  it('mid-review exhaustion never certifies safety', () => {
+    let checks = 0
+    const r = review(
+      {},
+      () => ++checks > 5,
+      () => 0
+    )
+    expect(r.defense).toBeUndefined()
+    expect(r.stats.exhausted).toBe(true)
+  })
+})
+
+it('extra attack upper bound cannot certify a lethal board clear', () => {
+  const r = review({ aiHealth: 7 }),
+    m = createOpeningMatchFromCheckpoint(r.cp)
+  expect(m.dispatch({ type: 'end-turn', participantId: r.actor }).accepted).toBe(true)
+  const cp: any = m.getCheckpoint(),
+    foe = cp.state.players.find((p: any) => p.participantId === r.enemy)
+  foe.board[0].extraAttacksThisTurn = 2
+  const after = createOpeningMatchFromCheckpoint(cp)
+  const result = after.analyze((f) =>
+    inspectPublicAttackReply(
+      f,
+      r.actor,
+      () => true,
+      () => false
+    )
+  )
+  expect(result.reply).toBe('lethal')
+  expect(result.witness?.length).toBe(2)
+})
+
+it('proof result does not depend on concealed RNG state', () => {
+  const a = review(
+      {},
+      () => false,
+      () => 0
+    ),
+    b = review(
+      {},
+      () => false,
+      () => 0,
+      (cp) => {
+        cp.rngState = 123456789
+      }
+    )
+  expect(b.reply).toBe(a.reply)
+  expect(b.defenses).toEqual(a.defenses)
+  expect(b.stats.dispatches).toBe(a.stats.dispatches)
+})
+
+it('negative aura removal cannot make the initial attack sum a safety proof', () => {
+  const original = CARD_CATALOG.get.bind(CARD_CATALOG)
+  const spy = vi.spyOn(CARD_CATALOG, 'get').mockImplementation((id: any) => {
+    const d: any = original(id)
+    return id === 'classic_leokk'
+      ? {
+          ...d,
+          effects: [
+            {
+              trigger: 'aura',
+              actions: [
+                {
+                  action: 'modify',
+                  attack: -2,
+                  target: { controller: 'opponent', type: 'minion', selection: 'all' }
+                }
+              ]
+            }
+          ]
+        }
+      : d
+  })
+  try {
+    const r = review(
+      {
+        aiHealth: 4,
+        aiBoard: [{ cardId: 'classic_leokk', health: 1 }],
+        opponentBoard: [
+          { cardId: 'basic_bloodfen_raptor' },
+          { cardId: 'basic_bloodfen_raptor' },
+          { cardId: 'basic_bloodfen_raptor' }
+        ]
+      },
+      () => false,
+      () => 0
+    )
+    expect(r.reply).toBe('lethal')
+    expect(r.card).toBe('classic_ice_block')
+  } finally {
+    spy.mockRestore()
+  }
+})
