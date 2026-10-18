@@ -1,0 +1,225 @@
+// Materialized outside the repository by scripts/run-early-threat-regressions.cjs.
+import { describe, it, expect } from 'vitest'
+import { createAiFixture } from '__SOURCE_ROOT__/game-rules/match/testing/ai-scenario-builder'
+import { enumerateLegalCommands } from '__SOURCE_ROOT__/game-rules/match'
+import { GameBoardSession } from '__SOURCE_ROOT__/scenes/match/game-board-session'
+import { LocalAiDecisionApi } from '__SOURCE_ROOT__/scenes/match/ai/local-ai-decision-api'
+import { aiActions } from '__SOURCE_ROOT__/scenes/match/ai/ai-context'
+import { chooseExpertConsensus } from '__SOURCE_ROOT__/scenes/match/ai/expert-ai-consensus'
+async function decide(overrides: any = {}) {
+  const f = createAiFixture({
+    seed: 87109,
+    aiHeroId: 'jaina',
+    opponentHeroId: 'thrall',
+    aiHealth: 4,
+    aiMana: 4,
+    aiHand: ['classic_ice_block'],
+    aiDeck: ['basic_chillwind_yeti'],
+    opponentDeck: ['basic_chillwind_yeti'],
+    opponentBoard: [{ cardId: 'basic_chillwind_yeti' }],
+    aiHeroPowerAvailable: false,
+    ...overrides
+  })
+  const session = new GameBoardSession({
+      setup: f.setup,
+      decks: f.decks,
+      checkpoint: f.checkpoint
+    }),
+    actor = session.remoteParticipantId
+  const actions = aiActions(
+      session,
+      enumerateLegalCommands(session.match as any, actor)
+    ),
+    api = new LocalAiDecisionApi(session, undefined, {
+      profile: 'expert',
+      workBudget: 160,
+      fairHypothesis: true
+    })
+  const response = await api.decide({
+    matchId: 'early-control',
+    requestId: 'early-control:' + f.checkpoint.state.revision,
+    phase: 'action',
+    expectedRevision: session.getState().revision,
+    actionIds: actions.map((a) => a.id),
+    allowInspection: false,
+    messages: []
+  })
+  const trace = api.getLastTrace()!,
+    chosen = trace.candidates.find((c) => c.actionId === trace.chosenActionId)!
+  return { session, actor, response, trace, chosen, actions }
+}
+describe('early threat search integration', () => {
+  it.each([
+    ['basic_fireball', 6],
+    ['basic_fireball', 12]
+  ])('preserves single and two-action own lethal %s %i', async (_card, health) => {
+    const r = await decide({
+      aiMana: 8,
+      aiHand: ['basic_fireball', 'basic_fireball', 'classic_ice_block'],
+      opponentHealth: health
+    })
+    expect(r.trace.decisionPriority).toBe('verified-win')
+    expect(r.chosen.provenWin).toBe(true)
+  })
+  it('preserves a mana setup into own lethal', async () => {
+    const r = await decide({
+      aiMana: 3,
+      aiHand: ['basic_the_coin', 'basic_fireball', 'classic_ice_block'],
+      opponentHealth: 6
+    })
+    expect(r.trace.decisionPriority).toBe('verified-win')
+    expect(r.chosen.provenWin).toBe(true)
+    expect(r.chosen.sequenceIntents?.length).toBeGreaterThan(1)
+  })
+  it('does not certify attack-safe taunt against known hunter power lethal', async () => {
+    const r = await decide({
+      aiHealth: 2,
+      aiHand: ['basic_senjin_shieldmasta'],
+      opponentHeroId: 'rexxar',
+      opponentMaximumMana: 10
+    })
+    expect(r.chosen.publicAttackSurvival ?? false).toBe(false)
+  })
+  it('nonthreat position has no survival preference', async () => {
+    const r = await decide({ aiHealth: 30 })
+    expect(r.trace.candidates.some((c) => c.publicAttackSurvival)).toBe(false)
+  })
+  it.each([
+    ['paladin-heal', { aiHeroId: 'uther', aiHand: ['basic_holy_light'] }],
+    ['neutral-taunt', { aiHeroId: 'garrosh', aiHand: ['basic_senjin_shieldmasta'] }],
+    ['mage-freeze', { aiHand: ['basic_frost_nova'] }],
+    [
+      'priest-removal',
+      {
+        aiHeroId: 'anduin',
+        aiHand: ['basic_shadow_word_pain'],
+        opponentBoard: [{ cardId: 'basic_bloodfen_raptor' }],
+        aiHealth: 3
+      }
+    ],
+    ['mage-secret', {}]
+  ])('certifies searched exact completion for %s', async (_name, opts) => {
+    const r = await decide(opts)
+    expect(
+      r.chosen.publicAttackSurvival ||
+        (r.chosen.publicAttackThreat && r.chosen.publicReply === 'clear')
+    ).toBe(true)
+    expect(r.chosen.sequenceIntents?.at(-1)?.type).toBe('end-turn')
+    expect(r.chosen.visits).toBeGreaterThanOrEqual(2)
+  })
+})
+const intent = (type: string) => ({
+  type,
+  source: null,
+  targets: [],
+  position: null,
+  option: null
+})
+const candidate = (actionId: string, extra: any = {}) => ({
+  actionId,
+  accepted: true,
+  score: 0.8,
+  visits: 5,
+  meanValue: 0.8,
+  outcome: 'ongoing',
+  publicReply: 'unknown',
+  sequenceIntents: [intent(actionId)],
+  ...extra
+})
+const world = (c: any[]) =>
+  ({
+    response: { choice: { actionId: c[0].actionId } },
+    trace: { candidates: c }
+  }) as any
+describe('certificate consensus binding', () => {
+  it('prefers exact certificate to unknown, without calling unknown lethal', () => {
+    const safe = candidate('defend', {
+      score: -0.5,
+      meanValue: -0.5,
+      publicAttackSurvival: true,
+      sequenceIntents: [intent('defend'), intent('end-turn')]
+    })
+    const r = chooseExpertConsensus(
+      [world([candidate('greed'), safe]), world([candidate('defend')])],
+      ['greed', 'defend']
+    )
+    expect(r.actionId).toBe('defend')
+    expect(r.scores.get('greed')?.publicLethal).toBe(false)
+    expect(r.scores.get('defend')?.trace?.sequenceIntents?.at(-1)?.type).toBe(
+      'end-turn'
+    )
+  })
+  it('keeps proven own win above survival', () => {
+    expect(
+      chooseExpertConsensus(
+        [
+          world([
+            candidate('defend', { publicAttackSurvival: true }),
+            candidate('win', { provenWin: true, outcome: 'win' })
+          ])
+        ],
+        ['defend', 'win']
+      ).actionId
+    ).toBe('win')
+  })
+  it('cannot promote a contradictory lethal certificate', () => {
+    expect(
+      chooseExpertConsensus(
+        [
+          world([
+            candidate('defend', { publicAttackSurvival: true, publicReply: 'lethal' }),
+            candidate('other')
+          ])
+        ],
+        ['defend', 'other']
+      ).actionId
+    ).toBe('other')
+  })
+})
+it('cross-world contrary evidence revokes only the same completion', () => {
+  const exact = [intent('defend'), intent('end-turn')]
+  const safe = candidate('defend', {
+    publicAttackSurvival: true,
+    score: -0.5,
+    meanValue: -0.5,
+    sequenceIntents: exact
+  })
+  const lethal = candidate('defend', { publicReply: 'lethal', sequenceIntents: exact })
+  const r = chooseExpertConsensus(
+    [world([safe, candidate('other')]), world([lethal])],
+    ['defend', 'other']
+  )
+  expect(r.scores.get('defend')?.publicAttackSurvival).toBe(false)
+  expect(r.scores.get('defend')?.trace?.publicAttackSurvival).toBe(false)
+  const different = candidate('defend', {
+    publicReply: 'lethal',
+    sequenceIntents: [intent('defend'), intent('different'), intent('end-turn')]
+  })
+  const separate = chooseExpertConsensus(
+    [world([safe, candidate('other')]), world([different])],
+    ['defend', 'other']
+  )
+  expect(separate.actionId).toBe('defend')
+  expect(separate.scores.get('defend')?.trace?.sequenceIntents).toEqual(exact)
+})
+
+it('broader explicit clear completion ties narrow safety only under root threat', () => {
+  const narrow = candidate('defend', {
+    publicAttackSurvival: true,
+    score: -0.5,
+    meanValue: -0.5,
+    sequenceIntents: [intent('defend'), intent('end-turn')]
+  })
+  const broad = candidate('taunt', {
+    publicAttackThreat: true,
+    publicReply: 'clear',
+    sequenceIntents: [intent('taunt'), intent('end-turn')]
+  })
+  expect(
+    chooseExpertConsensus([world([narrow, broad])], ['defend', 'taunt']).actionId
+  ).toBe('taunt')
+  const partial = { ...broad, sequenceIntents: [intent('taunt')] }
+  expect(
+    chooseExpertConsensus([world([narrow, partial])], ['defend', 'taunt']).actionId
+  ).toBe('defend')
+})

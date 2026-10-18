@@ -1,0 +1,126 @@
+// Materialized outside the repository by scripts/run-early-threat-regressions.cjs.
+import { expect, it } from 'vitest'
+import {
+  createAiFixture,
+  type AiFixtureOptions
+} from '__SOURCE_ROOT__/game-rules/match/testing/ai-scenario-builder'
+import { GameBoardSession } from '__SOURCE_ROOT__/scenes/match/game-board-session'
+import { LocalAiDecisionApi } from '__SOURCE_ROOT__/scenes/match/ai/local-ai-decision-api'
+import { enumerateLegalCommands } from '__SOURCE_ROOT__/game-rules/match'
+import { aiActions } from '__SOURCE_ROOT__/scenes/match/ai/ai-context'
+import { chooseExpertConsensus } from '__SOURCE_ROOT__/scenes/match/ai/expert-ai-consensus'
+
+// This seeded search produces a lower-visit, broader-clear selected completion while
+// every narrow publicAttackSurvival bit is false. Keep the actual fixture here so
+// the regression needs neither historical source copies nor external search output.
+const fixtureOptions: AiFixtureOptions = {
+  seed: 87109,
+  aiHeroId: 'garrosh',
+  opponentHeroId: 'thrall',
+  aiHealth: 4,
+  aiMana: 8,
+  aiHand: [
+    'basic_senjin_shieldmasta',
+    'basic_chillwind_yeti',
+    'basic_boulderfist_ogre',
+    'basic_gnomish_inventor'
+  ],
+  aiDeck: ['basic_chillwind_yeti'],
+  opponentDeck: ['basic_chillwind_yeti'],
+  opponentBoard: [{ cardId: 'basic_boulderfist_ogre' }],
+  aiHeroPowerAvailable: false
+}
+
+async function run(traceCandidateLimit: number, nonthreat = false) {
+  const fixture = createAiFixture({
+    ...fixtureOptions,
+    ...(nonthreat ? { aiHealth: 30 } : {})
+  })
+  const session = new GameBoardSession({
+    setup: fixture.setup,
+    decks: fixture.decks,
+    checkpoint: fixture.checkpoint
+  })
+  const actor = session.remoteParticipantId
+  const actions = aiActions(session, enumerateLegalCommands(session.match, actor))
+  const api = new LocalAiDecisionApi(session, undefined, {
+    profile: 'expert',
+    workBudget: 240,
+    fairHypothesis: true
+  })
+  // Exercise the real search with only its presentation cap changed. No sampled
+  // statistics, chosen action, continuation, or certificate is synthesized.
+  const configurable = api as unknown as {
+    limits: Record<string, unknown> & { traceCandidateLimit: number }
+  }
+  configurable.limits = { ...configurable.limits, traceCandidateLimit }
+  const response = await api.decide({
+    matchId: 'shortlist',
+    requestId: 'shortlist',
+    phase: 'action',
+    expectedRevision: session.getState().revision,
+    actionIds: actions.map((action) => action.id),
+    allowInspection: false,
+    messages: []
+  })
+  const trace = api.getLastTrace()!
+  expect(trace).toBeDefined()
+  return { response, trace, actions }
+}
+
+it('retains a genuinely sampled lower-visit broader-clear completion through cap one and consensus', async () => {
+  const full = await run(192)
+  const chosen = full.trace.candidates.find(
+    (candidate) => candidate.actionId === full.trace.chosenActionId
+  )!
+  expect(chosen).toBeDefined()
+  expect(chosen.visits).toBeGreaterThan(0)
+  expect(chosen.publicAttackThreat).toBe(true)
+  expect(chosen.publicReply).toBe('clear')
+  expect(chosen.sequenceIntents?.at(-1)?.type).toBe('end-turn')
+  expect(
+    full.trace.candidates.every((candidate) => candidate.publicAttackSurvival === false)
+  ).toBe(true)
+  expect(
+    full.trace.candidates.some((candidate) => candidate.visits! > chosen.visits!)
+  ).toBe(true)
+
+  const capped = await run(1)
+  expect(capped.trace.chosenActionId).toBe(full.trace.chosenActionId)
+  expect(capped.trace.rootVisitDistribution).toEqual(full.trace.rootVisitDistribution)
+  expect(capped.trace.candidates).toEqual([chosen])
+
+  const consensus = chooseExpertConsensus(
+    [capped],
+    capped.actions.map((action) => action.id)
+  )
+  expect(consensus.actionId).toBe(full.trace.chosenActionId)
+  expect(consensus.scores.get(consensus.actionId)?.trace?.sequenceIntents).toEqual(
+    chosen.sequenceIntents
+  )
+  expect(consensus.scores.get(consensus.actionId)?.trace?.publicReply).toBe('clear')
+})
+
+it('preserves ordinary no-threat ordering at cap one', async () => {
+  const full = await run(192, true)
+  const capped = await run(1, true)
+  expect(full.trace.candidates.length).toBeGreaterThan(1)
+  expect(
+    full.trace.candidates.every(
+      (candidate) =>
+        candidate.publicAttackThreat === false &&
+        candidate.publicAttackSurvival === false
+    )
+  ).toBe(true)
+
+  // With no root threat or narrow certificate, the ordinary trace order is visits
+  // descending, then mean value descending. Derive its cap-one result from the
+  // complete current search instead of importing a frozen historical module.
+  const expected = [...full.trace.candidates].sort(
+    (left, right) => right.visits! - left.visits! || right.meanValue! - left.meanValue!
+  )
+  expect(full.trace.candidates).toEqual(expected)
+  expect(capped.trace.chosenActionId).toBe(full.trace.chosenActionId)
+  expect(capped.trace.rootVisitDistribution).toEqual(full.trace.rootVisitDistribution)
+  expect(capped.trace.candidates).toEqual(expected.slice(0, 1))
+})

@@ -85,6 +85,7 @@ export async function evaluateExpertAiWorld(
   const searchStartedAt = performance.now()
   const api = new LocalAiDecisionApi(session, undefined, {
     profile: 'expert',
+    ...(request.publicThreat ? { publicThreat: request.publicThreat } : {}),
     ...(hooks.workBudget === undefined ? {} : { workBudget: hooks.workBudget }),
     budgetMs: Math.max(1, budgetMs - (performance.now() - startedAt) - 250),
     fairHypothesis: true,
