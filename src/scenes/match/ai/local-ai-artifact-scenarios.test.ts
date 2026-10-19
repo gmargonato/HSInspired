@@ -1,3 +1,7 @@
+import {
+  findExpertDelayedDamageRescue,
+  EXPERT_DELAYED_DAMAGE_MAX_DISPATCHES
+} from './expert-delayed-damage-rescue'
 import { describe, expect, it } from 'vitest'
 import { asCardId, CARD_CATALOG } from '../../../game-rules/content/cards'
 import {
@@ -31,6 +35,7 @@ import { ExpertAiDecisionApi } from './expert-ai-decision-api'
 import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
 import {
   createExpertActionInspector,
+  inspectExpertAction,
   expertContinuationPenalty,
   evaluateExpertBoundary
 } from './expert-action-outcome'
@@ -1179,6 +1184,133 @@ describe('Expert October match regressions', () => {
       aiPlayer(session).hand.filter((c) => c.cardId === 'league_of_explorers_huge_toad')
     ).toHaveLength(2)
   }, 30_000)
+
+  it.each([0, 1])(
+    'stops optional delayed-clear inspection at dispatch allowance %s',
+    (allowance) => {
+      const session = createSession({
+        seed: 101499,
+        aiHeroId: 'garrosh',
+        opponentHeroId: 'uther',
+        aiMana: 4,
+        aiHand: ['basic_chillwind_yeti'],
+        aiBoard: [{ cardId: 'basic_bloodfen_raptor', ready: true }],
+        opponentBoard: [{ cardId: 'future_past_depth_charge' }]
+      })
+      const before = session.match.getCheckpoint()
+      let dispatches = 0
+      const counted = (fork: OpeningMatchAnalysis): OpeningMatchAnalysis => ({
+        ...fork,
+        dispatch: (command) => {
+          dispatches++
+          return fork.dispatch(command)
+        },
+        analyze: (work) => fork.analyze((child) => work(counted(child)))
+      })
+      session.match.analyze((fork) => {
+        expect(
+          inspectExpertAction(
+            counted(fork),
+            session.remoteParticipantId,
+            { type: 'end-turn', participantId: session.remoteParticipantId },
+            () => dispatches >= allowance
+          ).penalty
+        ).toBe(0)
+        expect(
+          inspectExpertAction(
+            counted(fork),
+            session.remoteParticipantId,
+            playCommand(session, 'basic_chillwind_yeti'),
+            () => dispatches >= allowance
+          ).penalty
+        ).toBe(0)
+      })
+      expect(dispatches).toBe(allowance)
+      expect(session.match.getCheckpoint()).toEqual(before)
+    }
+  )
+
+  it('timeout fallback keeps a body that dies to public delayed area damage', () => {
+    const session = createSession({
+      seed: 20261019,
+      aiHeroId: 'garrosh',
+      opponentHeroId: 'uther',
+      aiMana: 4,
+      aiHand: ['basic_chillwind_yeti'],
+      aiDeck: ['basic_chillwind_yeti'],
+      opponentDeck: ['basic_chillwind_yeti'],
+      opponentBoard: [{ cardId: 'future_past_depth_charge' }]
+    })
+    const before = session.match.getCheckpoint()
+    const first = selectExpertTimeoutFallbackAction(session, legal(session))!
+    expect(session.match.getCheckpoint()).toEqual(before)
+    expect(first.command.type).toBe('use-hero-power')
+    dispatch(session, first.command)
+    const next = selectExpertTimeoutFallbackAction(session, legal(session))!
+    expect(next.command.type).toBe('end-turn')
+    dispatch(session, next.command)
+    expect(
+      aiPlayer(session).hand.some((c) => c.cardId === 'basic_chillwind_yeti')
+    ).toBe(true)
+    expect(aiPlayer(session).hero.armor).toBe(2)
+    expect(aiPlayer(session).board).toHaveLength(0)
+  })
+
+  it.each([
+    'basic_boulderfist_ogre',
+    'classic_argent_squire',
+    'naxxramas_haunted_creeper'
+  ])(
+    'timeout fallback still develops useful survivors against delayed damage: %s',
+    (cardId) => {
+      const session = createSession({
+        seed: 20261019,
+        aiHeroId: 'garrosh',
+        opponentHeroId: 'uther',
+        aiMana: 6,
+        aiHand: [cardId],
+        opponentBoard: [{ cardId: 'future_past_depth_charge' }],
+        aiDeck: ['basic_chillwind_yeti'],
+        opponentDeck: ['basic_chillwind_yeti']
+      })
+      for (
+        let step = 0;
+        step < 8 && session.getState().activePlayerId === session.remoteParticipantId;
+        step++
+      ) {
+        const action = selectExpertTimeoutFallbackAction(session, legal(session))!
+        dispatch(session, action.command)
+      }
+      expect(aiPlayer(session).board.length).toBeGreaterThan(0)
+      expect(aiPlayer(session).hand.some((card) => card.cardId === cardId)).toBe(false)
+    }
+  )
+
+  it('resolves damage-clear shields, high-health bodies and rebuilding deathrattles', () => {
+    const session = createSession({
+      seed: 20261019,
+      aiHeroId: 'garrosh',
+      opponentHeroId: 'uther',
+      aiMana: 6,
+      aiBoard: [
+        { cardId: 'basic_boulderfist_ogre' },
+        { cardId: 'classic_argent_squire', divineShield: true },
+        { cardId: 'naxxramas_haunted_creeper' }
+      ],
+      opponentBoard: [{ cardId: 'future_past_depth_charge' }]
+    })
+    const before = session.match.getCheckpoint()
+    const result = session.match.analyze((root) =>
+      evaluateExpertBoundary(root, (fork) => fork.getState())
+    )
+    const board = result.players.find(
+      (p) => p.participantId === session.remoteParticipantId
+    )!.board
+    expect(board.find((m) => m.cardId === 'basic_boulderfist_ogre')?.health).toBe(2)
+    expect(board.find((m) => m.cardId === 'classic_argent_squire')?.health).toBe(1)
+    expect(board.filter((m) => m.cardId.includes('spectral_spider'))).toHaveLength(2)
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
 
   it('distinguishes wasted development from useful clear-boundary payoffs', () => {
     for (const [cardId, aiHealth, opponentHealth, penalized] of [
@@ -9515,5 +9647,245 @@ describe('Expert immediate unspendable temporary mana', () => {
     expect(review({}, true)).toBe(false)
     expect(review({ opponentHand: ['classic_wisp'] })).toBe(true)
     expect(review({ opponentHand: ['one_night_in_karazhan_arcane_giant'] })).toBe(true)
+  })
+})
+
+describe('Expert delayed-damage prevention', () => {
+  const base: AiFixtureOptions = {
+    seed: 20261019,
+    aiHeroId: 'garrosh',
+    opponentHeroId: 'uther',
+    aiMana: 4,
+    aiDeck: ['basic_chillwind_yeti'],
+    opponentDeck: ['basic_chillwind_yeti'],
+    aiBoard: [
+      { cardId: 'basic_chillwind_yeti', attack: 3, health: 3, ready: true },
+      { cardId: 'basic_chillwind_yeti', attack: 2, health: 2, ready: true }
+    ],
+    opponentBoard: [{ cardId: 'future_past_depth_charge' }]
+  }
+  const create = (options: Partial<AiFixtureOptions> = {}) => {
+    const fixture = createAiFixture({ ...base, ...options })
+    return new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+  }
+  const legal = (s: GameBoardSession) =>
+    enumerateLegalCommands(
+      {
+        getState: s.match.getState,
+        getPlayInput: s.match.getPlayInput!,
+        getLegality: s.match.getLegality!
+      },
+      s.remoteParticipantId
+    )
+  const inspect = (s: GameBoardSession, stop = () => false) => {
+    const before = s.match.getCheckpoint()
+    const result = findExpertDelayedDamageRescue(
+      before,
+      s.getAiObservation(),
+      legal(s),
+      stop
+    )
+    expect(s.match.getCheckpoint()).toEqual(before)
+    expect(result.dispatches).toBeLessThanOrEqual(EXPERT_DELAYED_DAMAGE_MAX_DISPATCHES)
+    return result
+  }
+  it('witnesses a complete one/two-attack answer and preserves its live checkpoint', () => {
+    expect(inspect(create()).command?.type).toBe('attack-character')
+    expect(
+      inspect(
+        create({
+          aiBoard: [{ cardId: 'basic_chillwind_yeti', ready: true }],
+          opponentBoard: [{ cardId: 'future_past_depth_charge', health: 4 }]
+        })
+      ).command?.type
+    ).toBe('attack-character')
+  })
+  it('rejects beneficial clears, high-health/shield survival and rebuilding deathrattles', () => {
+    for (const options of [
+      { aiBoard: [{ cardId: 'basic_boulderfist_ogre', ready: true }] },
+      {
+        aiBoard: [
+          {
+            cardId: 'classic_argent_squire',
+            attack: 4,
+            divineShield: true,
+            ready: true
+          },
+          {
+            cardId: 'classic_argent_squire',
+            attack: 4,
+            divineShield: true,
+            ready: true
+          }
+        ]
+      },
+      {
+        aiBoard: [{ cardId: 'naxxramas_haunted_creeper', ready: true }],
+        opponentBoard: [{ cardId: 'future_past_depth_charge', health: 1 }]
+      },
+      {
+        aiBoard: [{ cardId: 'basic_chillwind_yeti', health: 1, ready: true }],
+        opponentBoard: [
+          { cardId: 'future_past_depth_charge' },
+          { cardId: 'basic_boulderfist_ogre' }
+        ]
+      }
+    ])
+      expect(inspect(create(options)).command, JSON.stringify(options)).toBeUndefined()
+  })
+  it('does not invent lethal damage, bypass taunt, secrets or random triggers', () => {
+    expect(
+      inspect(
+        create({
+          aiBoard: [{ cardId: 'basic_chillwind_yeti', attack: 2, ready: true }]
+        })
+      ).command
+    ).toBeUndefined()
+    expect(
+      inspect(
+        create({
+          opponentBoard: [
+            { cardId: 'future_past_depth_charge' },
+            { cardId: 'basic_senjin_shieldmasta' }
+          ]
+        })
+      ).dispatches
+    ).toBe(0)
+    expect(
+      inspect(create({ opponentSecrets: [{ cardId: 'classic_noble_sacrifice' }] }))
+        .dispatches
+    ).toBe(0)
+    const random = inspect(
+      create({
+        aiHeroPowerAvailable: false,
+        aiBoard: [
+          ...base.aiBoard!,
+          { cardId: 'classic_ragnaros_the_firelord', ready: false }
+        ]
+      })
+    )
+    expect(random.command).toBeUndefined()
+    expect(random.dispatches).toBe(0)
+  })
+  it('ignores concealed opponent identities, including the ordinary Peasant draw', () => {
+    const choices = [
+      'basic_chillwind_yeti',
+      'classic_ragnaros_the_firelord',
+      'basic_fireball'
+    ].map((cardId) => {
+      const s = create({
+        opponentHand: [cardId],
+        opponentDeck: [cardId, cardId],
+        opponentBoard: [
+          { cardId: 'future_past_peasant' },
+          { cardId: 'future_past_depth_charge' }
+        ]
+      })
+      return inspect(s).command
+    })
+    expect(choices[0]).toBeDefined()
+    expect(choices[1]).toEqual(choices[0])
+    expect(choices[2]).toEqual(choices[0])
+  })
+  it('does not spend face-face or spell-plus-attack lethal on removing the clear', () => {
+    const lethal = create({ opponentHealth: 5 })
+    expect(inspect(lethal).command).toBeUndefined()
+    for (let index = 0; index < 3 && lethal.getState().phase !== 'ended'; index++) {
+      const selected = selectExpertTimeoutFallbackAction(lethal, legal(lethal))!
+      expect(lethal.dispatch(selected.command).accepted).toBe(true)
+    }
+    expect(lethal.getState().winnerId).toBe(lethal.remoteParticipantId)
+    expect(
+      inspect(
+        create({ aiHeroId: 'jaina', opponentHealth: 8, aiHand: ['basic_frostbolt'] })
+      ).command
+    ).toBeUndefined()
+    expect(
+      inspect(
+        create({
+          opponentHealth: 5,
+          opponentBoard: [
+            { cardId: 'future_past_depth_charge' },
+            { cardId: 'basic_senjin_shieldmasta' }
+          ]
+        })
+      ).command
+    ).toBeUndefined()
+    expect(inspect(create({ opponentHealth: 6 })).command).toBeDefined()
+    expect(
+      inspect(
+        create({
+          aiMana: 0,
+          aiHeroPowerAvailable: false,
+          opponentHealth: 6,
+          aiBoard: [...base.aiBoard!, { cardId: 'classic_baron_geddon', ready: false }]
+        })
+      ).command
+    ).toBeUndefined()
+    expect(
+      inspect(
+        create({
+          aiMana: 0,
+          aiHeroPowerAvailable: false,
+          aiWeapon: { cardId: 'classic_doomhammer' },
+          opponentHealth: 5,
+          aiBoard: [{ cardId: 'basic_river_crocolisk', ready: true }],
+          opponentBoard: [
+            { cardId: 'future_past_depth_charge', health: 2, maxHealth: 5 }
+          ]
+        })
+      ).command
+    ).toBeUndefined()
+  })
+  it('abstains before stopped work and obeys the hard dispatch cap', () => {
+    expect(inspect(create(), () => true).dispatches).toBe(0)
+    let checks = 0
+    const interrupted = inspect(create(), () => ++checks >= 3)
+    expect(interrupted.dispatches).toBeLessThanOrEqual(1)
+    expect(interrupted.command).toBeUndefined()
+    const capped = inspect(
+      create({
+        aiBoard: Array.from({ length: 7 }, () => ({
+          cardId: 'basic_silver_hand_recruit',
+          ready: true
+        })),
+        opponentBoard: [
+          { cardId: 'future_past_depth_charge', health: 20, maxHealth: 20 }
+        ]
+      })
+    )
+    expect(capped.dispatches).toBe(EXPERT_DELAYED_DAMAGE_MAX_DISPATCHES)
+    expect(capped.command).toBeUndefined()
+    expect(capped.abstained).toBe(true)
+  })
+  it('timeout fallback executes the answer and preserves its threatened board', () => {
+    const session = create()
+    const first = selectExpertTimeoutFallbackAction(session, legal(session))!
+    expect(first.command.type).toBe('attack-character')
+    expect(session.dispatch(first.command).accepted).toBe(true)
+    for (
+      let step = 0;
+      step < 8 && session.getState().activePlayerId === session.remoteParticipantId;
+      step++
+    ) {
+      const action = selectExpertTimeoutFallbackAction(session, legal(session))!
+      expect(session.dispatch(action.command).accepted).toBe(true)
+    }
+    expect(
+      session
+        .getState()
+        .players.find((player) => player.participantId === session.remoteParticipantId)!
+        .board
+    ).toHaveLength(2)
+    expect(
+      session
+        .getState()
+        .players.find((player) => player.participantId === session.localParticipantId)!
+        .board
+    ).toHaveLength(0)
   })
 })

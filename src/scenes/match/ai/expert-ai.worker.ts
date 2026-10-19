@@ -178,6 +178,15 @@ function aggregateResponse(
             }
           : null
       })),
+      ...(candidate?.resourceReviewIntents &&
+      candidate.reconsiderAfterPrefix === undefined
+        ? {
+            resourceReviewIntents: candidate.resourceReviewIntents.map((intent) => ({
+              ...intent,
+              targets: [...intent.targets]
+            }))
+          }
+        : {}),
       plannedActionIntents: plannedActionIntents.map((intent) => ({
         type: intent.type,
         source: intent.source,

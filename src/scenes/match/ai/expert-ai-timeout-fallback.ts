@@ -10,6 +10,10 @@ import { expertCoinHeroPowerActionPenalty } from './expert-coin-hero-power-polic
 import { immediateExpertWin } from './expert-tactics'
 import { findExpertTimeoutCombatRescue } from './expert-timeout-combat-rescue'
 import {
+  findExpertDelayedDamageRescue,
+  hasExpertDelayedDamageSource
+} from './expert-delayed-damage-rescue'
+import {
   createExpertActionInspector,
   createExpertTerminalInspector,
   EXPERT_TERMINAL_SAFETY_MAX_MS
@@ -1108,6 +1112,26 @@ export function selectExpertTimeoutFallbackAction(
       actions.find((action) => action.command.type === 'end-turn') ?? actions[0]!
     )
 
+  // Share the existing optional resource-probe allowance; do not add another
+  // timeout budget for the delayed-damage comparison.
+  const resourceDeadline = performance.now() + EXPERT_TERMINAL_SAFETY_MAX_MS
+  const stopResourceProbe = () => performance.now() >= resourceDeadline
+  const delayedDamageRescue = opponent.board.some(hasExpertDelayedDamageSource)
+    ? findExpertDelayedDamageRescue(
+        session.match.getCheckpoint(),
+        observation,
+        legalCommands,
+        stopResourceProbe
+      ).command
+    : undefined
+  if (delayedDamageRescue) {
+    const rescue = actions.find(
+      (action) =>
+        canonicalCommandKey(action.command) === canonicalCommandKey(delayedDamageRescue)
+    )
+    if (rescue) return guardTerminalLoss(rescue)
+  }
+
   const ownTaunt = self.board.some((minion) =>
     effectiveBoardMinionKeywords(minion, observation.turnNumber).includes('taunt')
   )
@@ -1131,7 +1155,8 @@ export function selectExpertTimeoutFallbackAction(
   let bestScore = 0
   const inspect = createExpertActionInspector(
     session.match.getCheckpoint(),
-    session.remoteParticipantId
+    session.remoteParticipantId,
+    stopResourceProbe
   )
   for (const action of actions) {
     const outcome = inspect(action.command)

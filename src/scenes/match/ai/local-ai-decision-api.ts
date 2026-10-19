@@ -182,6 +182,8 @@ export interface LocalAiCandidateTrace {
   readonly phase: TurnMatchState['phase'] | null
   readonly winnerId: string | null
   readonly sequenceIntents?: readonly AiActionIntent[]
+  /** Same sampled prefix, same supporting visits; review evidence only, not a plan. */
+  readonly resourceReviewIntents?: readonly AiActionIntent[]
   readonly visits?: number
   readonly meanValue?: number
   /** Mean added position points across this root action's sampled leaves. */
@@ -2493,7 +2495,22 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         ...(() => {
           const selectedLine = rootCandidateContinuations.get(stat.key) ??
             sampledContinuation(sampledTurnLines.get(stat.key)) ?? [action.command]
+          const sample = sampledTurnLines
+            .get(stat.key)
+            ?.get(JSON.stringify(selectedLine.map(canonicalCommandKey)))
+          const complete =
+            sample &&
+            identicalSupportedContinuation(sample, [
+              ...(sampledTurnLines.get(stat.key)?.values() ?? [])
+            ])
           return {
+            ...(complete?.commands.at(-1)?.type === 'end-turn' && complete.visits >= 2
+              ? {
+                  resourceReviewIntents: complete.commands.map((command) =>
+                    aiActionIntent(command, this.session.localParticipantId)
+                  )
+                }
+              : {}),
             sequenceIntents: selectedLine.map((command) =>
               aiActionIntent(command, this.session.localParticipantId)
             )
