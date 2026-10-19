@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDeck } from './deck-validation'
+import { FUTURE_PAST_UTHER_OTK_DECK } from './future-past-uther-otk'
 import { CARD_CATALOG, PLAYABLE_CLASSES } from '../content/cards'
 import { HERO_CATALOG } from '../content/heroes'
 import {
@@ -139,5 +140,61 @@ describe('approved curated opponent roster', () => {
     expect(deck.cards.knights_of_the_frozen_throne_spirit_lash).toBe(1)
     expect(deck.cards.mean_streets_of_gadgetzan_greater_healing_potion).toBeUndefined()
     expect(Object.values(deck.cards).every((count) => count === 1)).toBe(true)
+  })
+})
+
+describe('Future Past Uther OTK player recipe', () => {
+  it('contains exactly the approved thirty cards and five reused definitions', () => {
+    const deck = FUTURE_PAST_UTHER_OTK_DECK
+    expect(deck.id).toBe('future-past-uther-otk')
+    expect(deck.name).toBe('Uther OTK')
+    expect(deck.heroId).toBe('uther')
+    expect(parseDeck(deck)).toEqual(deck)
+    expect(countDeckCards(deck)).toBe(30)
+    expect(new DeckRules().validate(deck)).toEqual([])
+    expect(deck.cards).toEqual({
+      future_past_animated_broomstick: 2,
+      future_past_armor_vendor: 2,
+      future_past_critter_caretaker: 2,
+      future_past_depth_charge: 2,
+      future_past_dragonscale_armaments: 2,
+      future_past_knight_of_anointment: 2,
+      future_past_miracle_salesman: 2,
+      mean_streets_of_gadgetzan_mistress_of_mixtures: 2,
+      future_past_peasant: 2,
+      knights_of_the_frozen_throne_righteous_protector: 2,
+      naxxramas_zombie_chow: 2,
+      the_grand_tournament_garrison_commander: 2,
+      future_past_order_in_the_court: 2,
+      future_past_sing_along_buddy: 2,
+      future_past_nozdormu_the_timeless: 1,
+      knights_of_the_frozen_throne_uther_of_the_ebon_blade: 1
+    })
+    expect(
+      Object.keys(deck.cards).filter((id) => !id.startsWith('future_past_'))
+    ).toHaveLength(5)
+    expect(CARD_CATALOG.require('future_past_sing_along_buddy')).toMatchObject({
+      cost: 3,
+      attack: 2,
+      health: 4
+    })
+    expect(CARD_CATALOG.require('future_past_order_in_the_court').cost).toBe(4)
+    expect(
+      CARD_CATALOG.require('knights_of_the_frozen_throne_uther_of_the_ebon_blade').cost
+    ).toBe(8)
+    expect(deck.cards.future_past_snake_oil).toBeUndefined()
+  })
+
+  it('keeps Snake Oil out of decks and leaves the curated AI roster unchanged', () => {
+    const token = CARD_CATALOG.require('future_past_snake_oil')
+    const rules = new DeckRules()
+    expect(isCollectibleDeckCard(token)).toBe(false)
+    expect(rules.isCardAllowedInDeck(FUTURE_PAST_UTHER_OTK_DECK, token)).toBe(false)
+    expect(CURATED_OPPONENT_DECKS).toHaveLength(36)
+    expect(
+      CURATED_OPPONENT_DECKS.every(({ deck }) =>
+        Object.keys(deck.cards).every((id) => !id.startsWith('future_past_'))
+      )
+    ).toBe(true)
   })
 })

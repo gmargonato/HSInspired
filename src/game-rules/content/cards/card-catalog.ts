@@ -1,3 +1,4 @@
+import { FUTURE_PAST_CARD_SOURCE } from './sets/future-past'
 import { BASIC_CARD_SOURCE } from './sets/basic'
 import { BLACKROCK_MOUNTAIN_CARD_SOURCE } from './sets/blackrock-mountain'
 import { CLASSIC_CARD_SOURCE } from './sets/classic'
@@ -108,7 +109,8 @@ export const CARD_SET_SOURCES = [
   WHISPERS_OF_THE_OLD_GODS_CARD_SOURCE,
   MEAN_STREETS_OF_GADGETZAN_CARD_SOURCE,
   JOURNEY_TO_UNGORO_CARD_SOURCE,
-  KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE
+  KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE,
+  FUTURE_PAST_CARD_SOURCE
 ] as const
 
 export function createCardCatalog(

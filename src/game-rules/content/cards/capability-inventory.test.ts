@@ -1,4 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
+import { EXPANSION_CATALOG } from '../expansions'
+import { FUTURE_PAST_CARD_SOURCE } from './sets/future-past'
 import {
   CARD_ACTIONS,
   CARD_CATALOG,
@@ -224,5 +226,99 @@ describe('card classification metadata', () => {
     expect(() =>
       validateCardRecord({ ...spell, spellSchool: null }, 'basic')
     ).not.toThrow()
+  })
+})
+
+describe('Future Past approved card content', () => {
+  it('registers exactly eleven collectibles and the non-collectible Snake Oil', () => {
+    const expansion = EXPANSION_CATALOG.require('future-past')
+    expect(expansion.displayName).toBe('Future Past')
+    expect(expansion.releaseOrder).toBe(12)
+    expect(expansion.source).toBe(FUTURE_PAST_CARD_SOURCE)
+    expect(expansion.sourceModule.expansionId).toBe('future-past')
+    expect(expansion.sourceModule.load()).toBe(FUTURE_PAST_CARD_SOURCE)
+    expect(FUTURE_PAST_CARD_SOURCE).toHaveLength(12)
+    expect(FUTURE_PAST_CARD_SOURCE.filter((card) => card.collectible)).toHaveLength(11)
+    expect(FUTURE_PAST_CARD_SOURCE.map((card) => card.id).sort()).toEqual([
+      'future_past_animated_broomstick',
+      'future_past_armor_vendor',
+      'future_past_critter_caretaker',
+      'future_past_depth_charge',
+      'future_past_dragonscale_armaments',
+      'future_past_knight_of_anointment',
+      'future_past_miracle_salesman',
+      'future_past_nozdormu_the_timeless',
+      'future_past_order_in_the_court',
+      'future_past_peasant',
+      'future_past_sing_along_buddy',
+      'future_past_snake_oil'
+    ])
+    for (const card of FUTURE_PAST_CARD_SOURCE) {
+      expect(CARD_CATALOG.require(card.id)).toBe(card)
+      expect(card.expansionId).toBe('future-past')
+      expect(card.set).toBe('future-past')
+      expect(card.deckLegal).toBe(card.collectible)
+    }
+    expect(CARD_CATALOG.require('future_past_snake_oil')).toMatchObject({
+      type: 'Spell',
+      cost: 0,
+      keywords: ['tradeable'],
+      collectible: false,
+      deckLegal: false,
+      spellSchool: null
+    })
+  })
+
+  it.each([
+    ['animated_broomstick', 1, 1, 1],
+    ['armor_vendor', 1, 1, 3],
+    ['critter_caretaker', 1, 2, 2],
+    ['depth_charge', 1, 0, 5],
+    ['knight_of_anointment', 1, 1, 1],
+    ['miracle_salesman', 1, 2, 2],
+    ['peasant', 1, 2, 1],
+    ['sing_along_buddy', 3, 2, 4],
+    ['nozdormu_the_timeless', 4, 8, 8]
+  ])('pins approved minion stats for %s', (id, cost, attack, health) => {
+    expect(CARD_CATALOG.require(`future_past_${id}`)).toMatchObject({
+      type: 'Minion',
+      cost,
+      attack,
+      health
+    })
+  })
+
+  it('preserves the approved spells, tribes and existing eight-mana Uther', () => {
+    expect(CARD_CATALOG.require('future_past_dragonscale_armaments')).toMatchObject({
+      type: 'Spell',
+      cost: 1,
+      spellSchool: 'Holy'
+    })
+    expect(CARD_CATALOG.require('future_past_order_in_the_court')).toMatchObject({
+      type: 'Spell',
+      cost: 4,
+      spellSchool: null,
+      effects: [
+        {
+          trigger: 'cast',
+          actions: [
+            { action: 'sort-deck', player: 'self', order: 'descending' },
+            { action: 'draw', player: 'self', count: 1 }
+          ]
+        }
+      ]
+    })
+    expect(CARD_CATALOG.require('future_past_sing_along_buddy').subtype).toBe('Mech')
+    expect(CARD_CATALOG.require('future_past_nozdormu_the_timeless').subtype).toBe(
+      'Dragon'
+    )
+    expect(
+      CARD_CATALOG.require('knights_of_the_frozen_throne_uther_of_the_ebon_blade')
+    ).toMatchObject({
+      type: 'Hero',
+      cost: 8,
+      armor: 5,
+      replacementHeroId: 'uther-ebon-blade'
+    })
   })
 })

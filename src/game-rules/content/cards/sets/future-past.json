@@ -1,0 +1,383 @@
+[
+  {
+    "id": "future_past_animated_broomstick",
+    "name": "Animated Broomstick",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Rush. Battlecry: Give your other minions Rush.",
+    "keywords": ["rush"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "keyword": "rush",
+            "duration": "permanent"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_armor_vendor",
+    "name": "Armor Vendor",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "Battlecry: Give 4 Armor to each hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "gain-armor",
+            "target": {
+              "controller": "any",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 4
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_critter_caretaker",
+    "name": "Critter Caretaker",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 1,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "At the end of your turn, restore 3 Health to both heroes.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "restore",
+            "target": {
+              "controller": "any",
+              "type": "hero",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_depth_charge",
+    "name": "Depth Charge",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 1,
+    "attack": 0,
+    "health": 5,
+    "rulesText": "At the start of your turn, deal 5 damage to ALL minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_dragonscale_armaments",
+    "name": "Dragonscale Armaments",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 1,
+    "rulesText": "Draw a spell that started in your deck and one that didn't.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "source": {
+              "controller": "self",
+              "type": "spell-card",
+              "selection": "random",
+              "zone": "deck",
+              "count": 1,
+              "filter": {
+                "startedInDeck": true
+              }
+            }
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "source": {
+              "controller": "self",
+              "type": "spell-card",
+              "selection": "random",
+              "zone": "deck",
+              "count": 1,
+              "filter": {
+                "startedInDeck": false
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "spellSchool": "Holy"
+  },
+  {
+    "id": "future_past_knight_of_anointment",
+    "name": "Knight of Anointment",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Battlecry: Draw a Holy spell.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "source": {
+              "controller": "self",
+              "type": "spell-card",
+              "selection": "random",
+              "zone": "deck",
+              "count": 1,
+              "filter": {
+                "spellSchool": "Holy"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_miracle_salesman",
+    "name": "Miracle Salesman",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 1,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Deathrattle: Get a Tradeable Snake Oil.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "future_past_snake_oil",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_peasant",
+    "name": "Peasant",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "At the start of your turn, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_order_in_the_court",
+    "name": "Order in the Court",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 4,
+    "rulesText": "Reorder your deck from highest Cost to lowest Cost. Draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "sort-deck",
+            "player": "self",
+            "order": "descending"
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_sing_along_buddy",
+    "name": "Sing-Along Buddy",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 3,
+    "attack": 2,
+    "health": 4,
+    "rulesText": "Your Hero Power triggers twice.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "repeat-hero-power-effect"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_nozdormu_the_timeless",
+    "name": "Nozdormu the Timeless",
+    "rarity": "Legendary",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 4,
+    "attack": 8,
+    "health": 8,
+    "rulesText": "Battlecry: Set each player to 10 Mana Crystals.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "gain-mana",
+            "player": "each",
+            "amount": 10,
+            "crystal": "empty"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_snake_oil",
+    "name": "Snake Oil",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 0,
+    "rulesText": "Tradeable. Deal 0 damage.",
+    "keywords": ["tradeable"],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 0
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  }
+]

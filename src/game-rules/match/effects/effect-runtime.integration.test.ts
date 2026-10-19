@@ -7177,3 +7177,395 @@ describe('put-into-play supported card types', () => {
     }
   )
 })
+
+describe('Future Past player deck effects', () => {
+  function fixture(cardId: string) {
+    const scenario = createMatchScenario({
+      firstHeroId: 'uther',
+      secondHeroId: 'uther'
+    })
+    scenario.confirmBothMulligans()
+    const id = scenario.match.getState().activePlayerId!
+    const enemy = scenario.participants.find((p) => p !== id)!
+    const dispatch = (command: Parameters<typeof scenario.match.dispatch>[0]) => {
+      const result = scenario.match.dispatch(command)
+      expect(result.accepted, result.accepted ? '' : result.message).toBe(true)
+      return result
+    }
+    dispatch({ type: 'dev-clear-zone', participantId: id, zone: 'hand' })
+    dispatch({ type: 'dev-set-mana', participantId: id, maximum: 10, available: 10 })
+    dispatch({ type: 'dev-add-card', participantId: id, cardId })
+    const player = () =>
+      scenario.match.getState().players.find((p) => p.participantId === id)!
+    const opponent = () =>
+      scenario.match.getState().players.find((p) => p.participantId === enemy)!
+    const play = () =>
+      dispatch({
+        type: 'play-card',
+        participantId: id,
+        cardInstanceId: player().hand.find((c) => c.cardId === cardId)!.instanceId,
+        ...(CARD_CATALOG.require(cardId).type === 'Minion'
+          ? { position: player().board.length }
+          : {})
+      })
+    return { scenario, id, enemy, dispatch, player, opponent, play }
+  }
+
+  function resolveWithDeck(
+    cardId: string,
+    entries: { id: string; original?: boolean; enemyOwned?: boolean; cost?: number }[]
+  ) {
+    const f = fixture(cardId)
+    const state = f.scenario.match.getState()
+    const deck = entries.map((entry, index) => ({
+      instanceId: `future-past-deck-${index}`,
+      cardId: CARD_CATALOG.require(entry.id).id,
+      ownerId: entry.enemyOwned ? f.enemy : f.id,
+      controllerId: f.id,
+      startedInDeck: entry.original ?? true,
+      baseCost: CARD_CATALOG.require(entry.id).cost,
+      currentCost: entry.cost ?? CARD_CATALOG.require(entry.id).cost,
+      ...(entry.cost === undefined
+        ? {}
+        : {
+            costAdjustments: [
+              {
+                id: `cost-${index}`,
+                sourceInstanceId: 'test-cost-source',
+                amount: entry.cost - CARD_CATALOG.require(entry.id).cost,
+                duration: 'permanent'
+              }
+            ]
+          }),
+      zone: 'deck' as const
+    }))
+    const input = {
+      ...state,
+      players: state.players.map((p) =>
+        p.participantId === f.id ? { ...p, deck } : p
+      ) as unknown as OpeningMatchState['players']
+    }
+    const result = resolveCardPlay({
+      state: input,
+      participantId: f.id,
+      cardInstanceId: f.player().hand[0]!.instanceId,
+      ...(CARD_CATALOG.require(cardId).type === 'Minion' ? { position: 0 } : {})
+    })
+    expect(result.accepted).toBe(true)
+    return {
+      result,
+      player: result.state.players.find((p) => p.participantId === f.id)!,
+      originalDeck: deck
+    }
+  }
+
+  it('Order sorts actual instances by cost, draws Uther first, and preserves equal-cost order and enchantments', () => {
+    const { player, originalDeck } = resolveWithDeck('future_past_order_in_the_court', [
+      { id: 'future_past_peasant' },
+      { id: 'future_past_sing_along_buddy' },
+      { id: 'knights_of_the_frozen_throne_uther_of_the_ebon_blade' },
+      { id: 'future_past_nozdormu_the_timeless' },
+      { id: 'the_grand_tournament_garrison_commander', cost: 3 }
+    ])
+    expect(player.hand.map((c) => c.cardId)).toEqual([
+      'knights_of_the_frozen_throne_uther_of_the_ebon_blade'
+    ])
+    expect(player.deck.map((c) => c.instanceId)).toEqual([
+      originalDeck[3]!.instanceId,
+      originalDeck[1]!.instanceId,
+      originalDeck[4]!.instanceId,
+      originalDeck[0]!.instanceId
+    ])
+    expect(player.mana.available).toBe(6)
+  })
+
+  it('Order uses current deck costs and empty deck draw applies fatigue', () => {
+    const sorted = resolveWithDeck('future_past_order_in_the_court', [
+      { id: 'future_past_peasant', cost: 9 },
+      { id: 'future_past_nozdormu_the_timeless' }
+    ])
+    expect(sorted.player.hand[0]!.cardId).toBe('future_past_peasant')
+    const empty = resolveWithDeck('future_past_order_in_the_court', [])
+    expect(empty.player.hero.health).toBe(29)
+  })
+
+  it('Knight tutors Holy only and fizzles without fatigue when none exists', () => {
+    const value = resolveWithDeck('future_past_knight_of_anointment', [
+      { id: 'future_past_order_in_the_court' },
+      { id: 'future_past_dragonscale_armaments' },
+      { id: 'future_past_peasant' }
+    ])
+    expect(value.player.hand.map((c) => c.cardId)).toEqual([
+      'future_past_dragonscale_armaments'
+    ])
+    expect(value.player.deck.map((c) => c.cardId)).toEqual([
+      'future_past_order_in_the_court',
+      'future_past_peasant'
+    ])
+    expect(
+      resolveWithDeck('future_past_knight_of_anointment', []).player.hero.health
+    ).toBe(30)
+  })
+
+  it('Armaments distinguishes generated copies by instance provenance and preserves other deck order', () => {
+    const { player } = resolveWithDeck('future_past_dragonscale_armaments', [
+      { id: 'future_past_peasant', original: false },
+      { id: 'future_past_order_in_the_court', original: true },
+      { id: 'future_past_order_in_the_court', original: false },
+      { id: 'future_past_armor_vendor', original: true }
+    ])
+    expect(player.hand.map((c) => c.instanceId)).toEqual([
+      'future-past-deck-1',
+      'future-past-deck-2'
+    ])
+    expect(player.deck.map((c) => c.instanceId)).toEqual([
+      'future-past-deck-0',
+      'future-past-deck-3'
+    ])
+  })
+
+  it('Armaments treats opponent-origin spells as non-original and missing pools never fatigue', () => {
+    const value = resolveWithDeck('future_past_dragonscale_armaments', [
+      { id: 'future_past_order_in_the_court', original: true, enemyOwned: true }
+    ])
+    expect(value.player.hand).toHaveLength(1)
+    expect(value.player.hero.health).toBe(30)
+    expect(
+      resolveWithDeck('future_past_dragonscale_armaments', []).player.hero.health
+    ).toBe(30)
+  })
+
+  it('Nozdormu fills maximum crystals without refilling spent mana for either player', () => {
+    const f = fixture('future_past_nozdormu_the_timeless')
+    f.dispatch({ type: 'dev-set-mana', participantId: f.id, maximum: 4, available: 4 })
+    f.dispatch({
+      type: 'dev-set-mana',
+      participantId: f.enemy,
+      maximum: 3,
+      available: 2
+    })
+    f.play()
+    expect(f.player().mana).toMatchObject({ maximum: 10, available: 0 })
+    expect(f.opponent().mana).toMatchObject({ maximum: 10, available: 2 })
+  })
+
+  it('Armor Vendor gives both heroes additive armor without healing', () => {
+    const f = fixture('future_past_armor_vendor')
+    f.dispatch({ type: 'dev-set-hero', participantId: f.id, health: 20, armor: 3 })
+    f.play()
+    expect(f.player().hero).toMatchObject({ health: 20, armor: 7 })
+    expect(f.opponent().hero.armor).toBe(4)
+  })
+
+  it('Critter heals both heroes only on its controller end turn', () => {
+    const f = fixture('future_past_critter_caretaker')
+    f.dispatch({ type: 'dev-set-hero', participantId: f.id, health: 20 })
+    f.dispatch({ type: 'dev-set-hero', participantId: f.enemy, health: 29 })
+    f.play()
+    expect(f.player().hero.health).toBe(20)
+    f.dispatch({ type: 'end-turn', participantId: f.id })
+    expect(f.player().hero.health).toBe(23)
+    expect(f.opponent().hero.health).toBe(30)
+    f.dispatch({ type: 'end-turn', participantId: f.enemy })
+    expect(f.player().hero.health).toBe(23)
+  })
+
+  it('Peasant draws once at friendly start in addition to normal turn draw', () => {
+    const f = fixture('future_past_peasant')
+    f.play()
+    f.dispatch({ type: 'end-turn', participantId: f.id })
+    expect(f.player().hand).toHaveLength(0)
+    f.dispatch({ type: 'end-turn', participantId: f.enemy })
+    expect(f.player().hand).toHaveLength(2)
+  })
+
+  it('Depth Charge damages itself and other minions, but not heroes, on friendly start', () => {
+    const f = fixture('future_past_depth_charge')
+    f.dispatch({
+      type: 'dev-summon-minion',
+      participantId: f.enemy,
+      cardId: 'basic_acidic_swamp_ooze'
+    })
+    f.play()
+    f.dispatch({ type: 'end-turn', participantId: f.id })
+    expect(f.player().board).toHaveLength(1)
+    f.dispatch({ type: 'end-turn', participantId: f.enemy })
+    expect(f.player().board).toHaveLength(0)
+    expect(f.opponent().board).toHaveLength(0)
+    expect(f.player().hero.health).toBe(30)
+    expect(f.opponent().hero.health).toBe(30)
+  })
+  it('Broom grants Rush to existing friends only, allows a Salesman trade, and creates Snake Oil', () => {
+    const f = fixture('future_past_animated_broomstick')
+    f.dispatch({
+      type: 'dev-summon-minion',
+      participantId: f.id,
+      cardId: 'future_past_miracle_salesman'
+    })
+    f.dispatch({
+      type: 'dev-summon-minion',
+      participantId: f.enemy,
+      cardId: 'basic_acidic_swamp_ooze'
+    })
+    f.play()
+    const salesman = f
+      .player()
+      .board.find((c) => c.cardId === 'future_past_miracle_salesman')!
+    expect(
+      f.scenario.match.dispatch({
+        type: 'attack-character',
+        participantId: f.id,
+        attacker: { kind: 'minion', instanceId: salesman.instanceId },
+        defender: { kind: 'hero' }
+      }).accepted
+    ).toBe(false)
+    f.dispatch({
+      type: 'attack-character',
+      participantId: f.id,
+      attacker: { kind: 'minion', instanceId: salesman.instanceId },
+      defender: { kind: 'minion', instanceId: f.opponent().board[0]!.instanceId }
+    })
+    const oil = f.player().hand.find((c) => c.cardId === 'future_past_snake_oil')!
+    expect(oil).toBeDefined()
+    expect(oil.startedInDeck).not.toBe(true)
+    f.dispatch({
+      type: 'dev-summon-minion',
+      participantId: f.id,
+      cardId: 'basic_acidic_swamp_ooze'
+    })
+    const later = f.player().board.find((c) => c.cardId === 'basic_acidic_swamp_ooze')!
+    expect(later.keywords).not.toContain('rush')
+  })
+
+  it('Snake Oil casts for zero, uses spell damage, and trades through the existing human mechanic', () => {
+    const f = fixture('future_past_snake_oil')
+    let oil = f.player().hand[0]!
+    f.dispatch({
+      type: 'play-card',
+      participantId: f.id,
+      cardInstanceId: oil.instanceId,
+      targets: [{ kind: 'hero', participantId: f.enemy }]
+    })
+    expect(f.opponent().hero.health).toBe(30)
+    expect(f.player().mana.available).toBe(10)
+    f.dispatch({
+      type: 'dev-summon-minion',
+      participantId: f.id,
+      cardId: 'basic_kobold_geomancer'
+    })
+    f.dispatch({
+      type: 'dev-add-card',
+      participantId: f.id,
+      cardId: 'future_past_snake_oil'
+    })
+    oil = f.player().hand[0]!
+    f.dispatch({
+      type: 'play-card',
+      participantId: f.id,
+      cardInstanceId: oil.instanceId,
+      targets: [{ kind: 'hero', participantId: f.enemy }]
+    })
+    expect(f.opponent().hero.health).toBe(29)
+    f.dispatch({
+      type: 'dev-add-card',
+      participantId: f.id,
+      cardId: 'future_past_snake_oil'
+    })
+    oil = f.player().hand[0]!
+    const topId = f.player().deck[0]!.instanceId
+    f.dispatch({
+      type: 'trade-card',
+      participantId: f.id,
+      cardInstanceId: oil.instanceId
+    })
+    expect(f.player().mana.available).toBe(9)
+    expect(f.player().hand[0]!.instanceId).toBe(topId)
+    expect(
+      f.player().deck.find((c) => c.instanceId === oil.instanceId)?.startedInDeck
+    ).not.toBe(true)
+  })
+  it('Depth Charge survives Divine Shield and can trigger again instead of forced self-destruction', () => {
+    const f = fixture('future_past_depth_charge')
+    f.play()
+    const charge = f.player().board[0]!
+    f.dispatch({
+      type: 'dev-add-card',
+      participantId: f.id,
+      cardId: 'basic_hand_of_protection'
+    })
+    f.dispatch({
+      type: 'play-card',
+      participantId: f.id,
+      cardInstanceId: f.player().hand[0]!.instanceId,
+      targets: [{ kind: 'minion', participantId: f.id, instanceId: charge.instanceId }]
+    })
+    f.dispatch({ type: 'end-turn', participantId: f.id })
+    f.dispatch({ type: 'end-turn', participantId: f.enemy })
+    expect(f.player().board).toHaveLength(1)
+    expect(f.player().board[0]!.health).toBe(5)
+    f.dispatch({ type: 'end-turn', participantId: f.id })
+    f.dispatch({ type: 'end-turn', participantId: f.enemy })
+    expect(f.player().board).toHaveLength(0)
+  })
+
+  it('Silence suppresses the new start-turn and end-turn engines', () => {
+    for (const cardId of [
+      'future_past_depth_charge',
+      'future_past_peasant',
+      'future_past_critter_caretaker'
+    ]) {
+      const f = fixture(cardId)
+      f.dispatch({ type: 'dev-set-hero', participantId: f.id, health: 20 })
+      f.play()
+      const minion = f.player().board[0]!
+      f.dispatch({
+        type: 'dev-add-card',
+        participantId: f.id,
+        cardId: 'classic_silence'
+      })
+      f.dispatch({
+        type: 'play-card',
+        participantId: f.id,
+        cardInstanceId: f.player().hand[0]!.instanceId,
+        targets: [
+          { kind: 'minion', participantId: f.id, instanceId: minion.instanceId }
+        ]
+      })
+      f.dispatch({ type: 'end-turn', participantId: f.id })
+      f.dispatch({ type: 'end-turn', participantId: f.enemy })
+      expect(f.player().board).toHaveLength(1)
+      expect(f.player().hand).toHaveLength(1)
+      expect(f.player().hero.health).toBe(20)
+    }
+  })
+  it('Brann repeats Armor Vendor armor without changing either hero health', () => {
+    const f = fixture('future_past_armor_vendor')
+    f.dispatch({
+      type: 'dev-summon-minion',
+      participantId: f.id,
+      cardId: 'league_of_explorers_brann_bronzebeard'
+    })
+    f.play()
+    expect(f.player().hero.armor).toBe(8)
+    expect(f.opponent().hero.armor).toBe(8)
+    expect(f.player().hero.health).toBe(30)
+    expect(f.opponent().hero.health).toBe(30)
+  })
+
+  it('Depth Charge and Peasant preserve start-trigger source lifecycle in both summon orders', () => {
+    for (const order of [
+      ['future_past_depth_charge', 'future_past_peasant'],
+      ['future_past_peasant', 'future_past_depth_charge']
+    ]) {
+      const f = fixture('future_past_armor_vendor')
+      for (const cardId of order)
+        f.dispatch({ type: 'dev-summon-minion', participantId: f.id, cardId })
+      f.dispatch({ type: 'end-turn', participantId: f.id })
+      const before = f.player().hand.length
+      f.dispatch({ type: 'end-turn', participantId: f.enemy })
+      expect(f.player().board).toHaveLength(0)
+      // Existing turn-trigger batching captures both effects before death cleanup.
+      expect(f.player().hand.length - before).toBe(2)
+    }
+  })
+})

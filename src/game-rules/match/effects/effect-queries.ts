@@ -234,6 +234,14 @@ export class EffectQueries {
       let condition = true
       if (key === 'cardId') condition = ref.cardId === value
       else if (key === 'cardType') condition = definition?.type === value
+      else if (key === 'spellSchool') condition = definition?.spellSchool === value
+      else if (key === 'startedInDeck')
+        condition =
+          ((card?.startedInDeck === true &&
+            (card.ownerId === undefined || card.ownerId === ref.participantId)) ||
+            (minion?.startedInDeck === true &&
+              (minion.ownerId === undefined ||
+                minion.ownerId === ref.participantId))) === value
       else if (key === 'cardClass') {
         const selfClass = HERO_CATALOG.get(
           this.context.player(frame.controllerId).heroId
