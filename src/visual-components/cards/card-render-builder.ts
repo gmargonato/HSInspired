@@ -8,6 +8,7 @@ import {
   CARD_STATS,
   CARD_RACE_LAYOUT,
   CARD_SILENCE_LAYOUT,
+  CARD_TRADEABLE_LAYOUT,
   CARD_RULES_LINE_BREAKS,
   RARITY_GEM_SCALE,
   cardFramePlacement,
@@ -318,6 +319,15 @@ export function buildCardRenderTree(
       )
     )
   }
+  if (card.keywords.includes('tradeable'))
+    children.push(
+      image(
+        'tradeable',
+        'card.keyword.tradeable',
+        CARD_TRADEABLE_LAYOUT,
+        CARD_LAYERS.stats - 1
+      )
+    )
   children.push(stats(card))
   const rarityNode = rarity(card, profile, premium)
   if (rarityNode) children.push(rarityNode)

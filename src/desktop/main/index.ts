@@ -13,6 +13,7 @@ import {
 import { WindowSettingsRepository } from './services/window-settings-repository'
 import { PreferencesRepository } from './services/preferences-repository'
 import { registerPreferencesIpc } from './services/preferences-ipc'
+import { registerWindowAttentionIpc } from './services/window-attention-ipc'
 import { installSceneMenu } from './dev-menu'
 import { loadAiConfig } from './services/ai-config'
 import { registerAiIpc } from './services/ai-ipc'
@@ -138,6 +139,7 @@ async function createWindow(
     windowSettingsRepository
   )
   registerWindowSettingsIpc(mainWindow, windowSettings)
+  registerWindowAttentionIpc(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()

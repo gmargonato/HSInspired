@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import {
+  WINDOW_ATTENTION_CHANNEL,
+  parseWindowHighlighted,
+  type WindowAttentionApi
+} from '../contracts/ipc/window-attention'
+import {
   MATCH_LOG_CHANNELS,
   parseMatchLogId,
   parseMatchLogObject,
@@ -114,6 +119,14 @@ import {
 } from '../contracts/ipc/vfx-templates'
 
 const api = {
+  windowAttention: {
+    setHighlighted: async (highlighted) => {
+      await ipcRenderer.invoke(
+        WINDOW_ATTENTION_CHANNEL,
+        parseWindowHighlighted(highlighted)
+      )
+    }
+  } satisfies WindowAttentionApi,
   matchLogs: {
     start: async (metadata) =>
       parseMatchLogId(

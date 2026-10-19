@@ -20,6 +20,7 @@ export const CARD_KEYWORDS = [
   'spell-immune',
   'stealth',
   'taunt',
+  'tradeable',
   'windfury'
 ] as const
 export type CardKeyword = (typeof CARD_KEYWORDS)[number]

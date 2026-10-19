@@ -59,9 +59,7 @@ export class ArenaRewardsView extends Actor {
     this.addChild(this.confirm)
     this.confirmAura = new GhostAura(this.confirm, {
       silhouette: this.confirm.sprite,
-      noise: assets.burnNoise,
-      dissolve: assets.ghostDissolve,
-      spotlight: assets.ghostSpotlight
+      textures: assets
     })
     this.confirmAura.setEnabled(false)
     this.confirm.setEnabled(false)

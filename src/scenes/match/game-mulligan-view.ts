@@ -120,9 +120,8 @@ export class GameMulliganView {
     this.layer.addChild(announcement)
     this.announcement = announcement
     this.mulliganAnnouncementOutline = new GhostAura(announcement, {
-      noise: this.assets.burnNoise,
-      dissolve: this.assets.ghostDissolve,
-      spotlight: this.assets.ghostSpotlight
+      profile: 'banner',
+      textures: this.assets
     })
   }
 
@@ -149,9 +148,7 @@ export class GameMulliganView {
     this.layer.addChild(this.confirmButton)
     this.confirmMulliganOutline = new GhostAura(this.confirmButton, {
       silhouette: this.confirmButton.sprite,
-      noise: this.assets.burnNoise,
-      dissolve: this.assets.ghostDissolve,
-      spotlight: this.assets.ghostSpotlight
+      textures: this.assets
     })
     this.confirmMulliganOutline.setEnabled(false)
 
@@ -165,9 +162,7 @@ export class GameMulliganView {
     this.opponentStillChoosing.visible = false
     this.layer.addChild(this.opponentStillChoosing)
     this.opponentStillChoosingOutline = new GhostAura(this.opponentStillChoosing, {
-      noise: this.assets.burnNoise,
-      dissolve: this.assets.ghostDissolve,
-      spotlight: this.assets.ghostSpotlight
+      textures: this.assets
     })
     this.opponentStillChoosingOutline.setEnabled(false)
   }

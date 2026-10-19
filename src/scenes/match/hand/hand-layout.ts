@@ -7,6 +7,10 @@ export interface HandLayoutConfig {
   /** Extracted desktop distances, in original world units. */
   readonly width: number
   readonly defaultSpacing: number
+  /** Three-card center spacing, in original world units. */
+  readonly threeCardSpacing: number
+  /** Upward offset for exactly three cards, in design pixels. */
+  readonly threeCardLift: number
   /** Independent 2D calibration, not recovered camera projection. */
   readonly horizontalUnitsToPixels: number
   readonly verticalUnitsToPixels: number
@@ -45,6 +49,8 @@ export const DEFAULT_HAND_LAYOUT: HandLayoutConfig = {
   baselineY: 1140,
   width: 4.8,
   defaultSpacing: 1.270804,
+  threeCardSpacing: 1.4,
+  threeCardLift: 12,
   // Fit the visible rotated fan, not just the distance between card origins.
   horizontalUnitsToPixels: 90,
   verticalUnitsToPixels: VERTICAL_UNITS_TO_PIXELS,
@@ -74,8 +80,14 @@ export function layoutHand(
   if (!Number.isFinite(count) || count < 1) return []
   const n = Math.floor(count)
   const fanned = n > 3
-  const spacing = Math.min(config.defaultSpacing, config.width / n)
-  const handLift = config.maxHandLift * Math.min(1, Math.max(0, (n - 3) / 3))
+  const spacing = Math.min(
+    n === 3 ? config.threeCardSpacing : config.defaultSpacing,
+    config.width / n
+  )
+  const handLift =
+    n === 3
+      ? config.threeCardLift
+      : config.maxHandLift * Math.min(1, Math.max(0, (n - 3) / 3))
   const transforms = Array.from({ length: n }, (_, index): HandCardTransform => {
     const d = index - (n - 1) / 2
     const sourceAngle = fanned
@@ -140,7 +152,7 @@ export interface HandHoverHitBounds {
 export function handHoverHitBounds(config: HandLayoutConfig): HandHoverHitBounds {
   const top =
     config.baselineY -
-    config.maxHandLift -
+    Math.max(config.maxHandLift, config.threeCardLift) -
     Math.hypot(CARD_CANVAS.width / 2, CARD_CANVAS.height) * config.cardScale -
     config.hoverEntryMargin
   return { x: 0, y: top, width: 1920, height: 1080 - top }

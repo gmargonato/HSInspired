@@ -20,6 +20,7 @@ export const EVENT_PRESENTATION_POLICY: Readonly<
   'coin-granted': 'animation',
   'opening-card-drawn': 'animation',
   'card-drawn': 'animation',
+  'card-traded': 'animation',
   'discover-started': 'animation',
   'card-choice-started': 'animation',
   'card-generated': 'animation',

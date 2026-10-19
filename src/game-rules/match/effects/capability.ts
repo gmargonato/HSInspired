@@ -405,6 +405,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'spell-immune',
       'stealth',
       'taunt',
+      'tradeable',
       'windfury'
     ],
     'selector-controller': ['self', 'opponent', 'any'],

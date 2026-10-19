@@ -121,7 +121,7 @@ export interface GhostAuraTuning {
   readonly particleIntensity: number
   readonly particleWindStrength: number
   readonly particleCount: number
-  /** Average screen-pixel diameter, with built-in +/-60% variation. */
+  /** Multiplier over the authored mote sizes; 15 preserves their source size. */
   readonly particleSize: number
   readonly particleTravelDistance: number
 }
@@ -132,24 +132,24 @@ export interface GhostAuraPalette {
 }
 export const GHOST_MIST_DEFAULTS = {
   tuning: {
-    windDirection: 2,
+    windDirection: 0,
     mistEnabled: true,
-    mistIntensity: 0.8,
-    mistWidth: 15,
-    mistSoftness: 1.5,
-    mistTextureScale: 1.5,
+    mistIntensity: 1,
+    mistWidth: 16,
+    mistSoftness: 1,
+    mistTextureScale: 1,
     mistAnimationSpeed: 1,
     particlesEnabled: true,
-    particleIntensity: 0.8,
-    particleWindStrength: 2,
+    particleIntensity: 1,
+    particleWindStrength: 1,
     particleCount: 120,
     particleSize: 15,
-    particleTravelDistance: 60
+    particleTravelDistance: 300
   },
   palette: {
-    mistPrimaryColor: 994493,
-    mistHighlightColor: 37375,
-    particleColor: 37375
+    mistPrimaryColor: 16777215,
+    mistHighlightColor: 16777215,
+    particleColor: 16777215
   }
 } as const
 export const AURA_CONTROLS = [

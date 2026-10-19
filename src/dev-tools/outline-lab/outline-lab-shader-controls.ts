@@ -180,23 +180,32 @@ export class OutlineLabShaderControls {
   ): void {
     this.shader.value = 'ghost'
     const labels: Record<string, string> = {
-      windDirection: 'Direction',
+      windDirection: 'Motion override',
       mistIntensity: 'Intensity',
-      mistWidth: 'Width (px)',
-      mistSoftness: 'Softness',
+      mistWidth: 'Cloud size (16 = original)',
+      mistSoftness: 'Opacity exponent',
       mistTextureScale: 'Texture scale',
       mistAnimationSpeed: 'Animation speed',
       particleIntensity: 'Intensity',
       particleWindStrength: 'Wind strength',
-      particleCount: 'Count',
-      particleSize: 'Average size (px)',
+      particleCount: 'Density (120 = original)',
+      particleSize: 'Mote size (15 = original)',
       particleTravelDistance: 'Maximum travel distance (px)',
-      mistPrimaryColor: 'Primary color',
-      mistHighlightColor: 'Highlight color',
+      mistPrimaryColor: 'Glow / gas tint',
+      mistHighlightColor: 'Smoke tint',
       particleColor: 'Color'
     }
     const section = (key: string): string =>
-      key === 'windDirection' ? 'Shared' : key.startsWith('mist') ? 'Mist' : 'Particles'
+      [
+        'windDirection',
+        'particleCount',
+        'particleWindStrength',
+        'particleTravelDistance'
+      ].includes(key)
+        ? 'Shared'
+        : key.startsWith('mist')
+          ? 'Mist'
+          : 'Particles'
     const controls: Control[] = [
       { key: 'mistEnabled', label: 'Enabled', section: 'Mist', type: 'checkbox' },
       {
@@ -210,7 +219,12 @@ export class OutlineLabShaderControls {
         label: labels[key],
         section: section(key),
         type: key === 'windDirection' ? 'select' : 'range',
-        options: key === 'windDirection' ? GHOST_WIND_DIRECTIONS : undefined,
+        options:
+          key === 'windDirection'
+            ? GHOST_WIND_DIRECTIONS.map((d) =>
+                d.value === 0 ? { ...d, label: 'Original motion' } : d
+              )
+            : undefined,
         min,
         max,
         step: ['particleCount', 'particleTravelDistance', 'mistWidth'].includes(key)

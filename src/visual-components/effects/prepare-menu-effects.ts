@@ -1,3 +1,4 @@
+import type { GhostTextures } from './ghost-materials'
 import {
   AlphaFilter,
   BlurFilter,
@@ -92,10 +93,7 @@ export function prepareMenuEffects(renderer: Renderer): void {
 /** Compile the reward button's ghost filter and particles during menu startup. */
 export function prepareRewardGhostAura(
   renderer: Renderer,
-  assets: Pick<
-    ArenaAssets,
-    'confirmReward' | 'burnNoise' | 'ghostDissolve' | 'ghostSpotlight'
-  >
+  assets: Pick<ArenaAssets, 'confirmReward'> & GhostTextures
 ): void {
   const root = new Container()
   const button = new Sprite(assets.confirmReward)
@@ -103,9 +101,7 @@ export function prepareRewardGhostAura(
   root.addChild(button)
   const aura = new GhostAura(button, {
     silhouette: button,
-    noise: assets.burnNoise,
-    dissolve: assets.ghostDissolve,
-    spotlight: assets.ghostSpotlight
+    textures: assets
   })
   const target = RenderTexture.create({ width: 300, height: 190, resolution: 1 })
   try {

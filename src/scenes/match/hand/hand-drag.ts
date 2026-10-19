@@ -1,7 +1,7 @@
 import { CARD_CANVAS } from '../../../visual-components/cards/card-layout'
 import type { HandPointer } from './hand-layout'
 
-/** Tunables for the pick-up "weight" and the unaffordable shake. */
+/** Tunables for pickup weight and on-turn rejection shakes. */
 export interface HandDragConfig {
   /** Time constant for pickup settling and scale; pointer translation is immediate. */
   readonly followResponseMS: number
@@ -18,7 +18,7 @@ export interface HandDragConfig {
   /** Pointer Y limits on the 1920x1080 design canvas. */
   readonly nearHandY: number
   readonly boardY: number
-  /** Horizontal wobble amplitude (px) of the unaffordable shake. */
+  /** Horizontal wobble amplitude (px) for rule locks and unaffordable cards. */
   readonly shakeDistance: number
   /** Total duration of one shake. */
   readonly shakeDuration: number

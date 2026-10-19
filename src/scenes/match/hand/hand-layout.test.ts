@@ -108,7 +108,7 @@ describe('layoutHand', () => {
     }
   )
 
-  it.each([1, 2, 3])('keeps %i cards straight with uncompressed spacing', (count) => {
+  it.each([1, 2])('keeps %i cards straight with uncompressed spacing', (count) => {
     const hand = layoutHand(count)
     for (const card of hand) {
       expect(card.rotation).toBe(0)
@@ -119,6 +119,18 @@ describe('layoutHand', () => {
         1.270804 * DEFAULT_HAND_LAYOUT.horizontalUnitsToPixels
       )
     }
+  })
+
+  it('spreads three cards to 126 px and lifts them 12 px while keeping the middle centered', () => {
+    const hand = layoutHand(3)
+    expect(hand[1]!.x).toBe(DEFAULT_HAND_LAYOUT.centerX)
+    hand.forEach((card, index) => {
+      expect(card.x).toBe(DEFAULT_HAND_LAYOUT.centerX + (index - 1) * 126)
+      expect(card.y).toBe(DEFAULT_HAND_LAYOUT.baselineY - 12)
+      expect(card.rotation).toBe(0)
+      expect(card.scale).toBe(DEFAULT_HAND_LAYOUT.cardScale)
+      expect(handHoverTarget(card).y).toBe(1020)
+    })
   })
 
   it.each([4, 5, 6, 7, 8, 9, 10])(

@@ -28,6 +28,7 @@ import rarityEpicImage from '@assets/images/cards/rarity-epic.png'
 import rarityLegendaryImage from '@assets/images/cards/rarity-legendary.png'
 import rarityRareImage from '@assets/images/cards/rarity-rare.png'
 import silenceImage from '@assets/images/cards/silence.png'
+import tradeableImage from '@assets/images/cards/tradeable.png'
 import weaponAttackImage from '@assets/images/cards/weapon-attack.png'
 import weaponDurabilityImage from '@assets/images/cards/weapon-durability.png'
 import weaponNameImage from '@assets/images/cards/weapon-name.png'
@@ -178,6 +179,7 @@ export const CARD_ASSET_DEFINITIONS = [
   ),
   cardAsset('card.rarity.rare', 'rarity-rare.png', rarityRareImage, 58, 79),
   cardAsset('card.overlay.silence', 'silence.png', silenceImage, 327, 265),
+  cardAsset('card.keyword.tradeable', 'tradeable.png', tradeableImage, 128, 274),
   cardAsset(
     'card.stat.weapon-attack',
     'weapon-attack.png',

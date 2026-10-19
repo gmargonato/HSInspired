@@ -1,4 +1,7 @@
-import { cardFrameTransform } from '../../../visual-components/cards/card-layout'
+import {
+  cardFrameTransform,
+  CARD_TRADEABLE_LAYOUT
+} from '../../../visual-components/cards/card-layout'
 import { Container, PerspectiveMesh, Rectangle, Sprite, type Renderer } from 'pixi.js'
 import type { CardView } from '../../../visual-components/cards/card-view'
 import { MAX_TILT_X_DEG, MAX_TILT_Y_DEG } from './drag-rotator'
@@ -30,6 +33,8 @@ export interface PerspectiveCorners {
 }
 
 export interface HandCardPerspectiveOptions {
+  readonly tradeableTexture?: Texture
+  readonly tradeableEnabled?: boolean
   /** Raw card-frame texture used to keep the outline outside the card snapshot. */
   readonly outlineTexture?: Texture
   readonly outlineEnabled?: boolean
@@ -51,7 +56,8 @@ function clampUnit(value: number): number {
 export function resolvePerspectiveCorners(
   tilt: PerspectivePoint,
   width: number,
-  height: number
+  height: number,
+  region = { x: 0, y: 0, width, height }
 ): PerspectiveCorners {
   const rotateX = -clampUnit(tilt.y) * ((MAX_TILT_X_DEG * Math.PI) / 180)
   const rotateY = clampUnit(tilt.x) * ((MAX_TILT_Y_DEG * Math.PI) / 180)
@@ -75,10 +81,13 @@ export function resolvePerspectiveCorners(
   const halfWidth = width / 2
   const halfHeight = height / 2
   return {
-    topLeft: project(-halfWidth, -halfHeight),
-    topRight: project(halfWidth, -halfHeight),
-    bottomRight: project(halfWidth, halfHeight),
-    bottomLeft: project(-halfWidth, halfHeight)
+    topLeft: project(region.x - halfWidth, region.y - halfHeight),
+    topRight: project(region.x + region.width - halfWidth, region.y - halfHeight),
+    bottomRight: project(
+      region.x + region.width - halfWidth,
+      region.y + region.height - halfHeight
+    ),
+    bottomLeft: project(region.x - halfWidth, region.y + region.height - halfHeight)
   }
 }
 
@@ -89,6 +98,8 @@ export class HandCardPerspective {
   private outlineMesh: PerspectiveMesh | null = null
   private outlineMaskTexture: ReturnType<Renderer['generateTexture']> | null = null
   private outlineEffect: AnimatedOutline | null = null
+  private tradeableMesh: PerspectiveMesh | null = null
+  private tradeableEffect: AnimatedOutline | null = null
   private readonly current = { x: 0, y: 0 }
   private readonly applied = { x: Number.NaN, y: Number.NaN }
   private wasVisible = true
@@ -225,6 +236,22 @@ export class HandCardPerspective {
       this.outlineEffect = null
     }
 
+    if (options.tradeableTexture) {
+      this.tradeableMesh = new PerspectiveMesh({
+        texture: options.tradeableTexture,
+        verticesX: 2,
+        verticesY: 2
+      })
+      this.tradeableMesh.label = 'card.tradeable-perspective-outline'
+      this.tradeableMesh.eventMode = 'none'
+      const geometry = this.tradeableMesh.geometry
+      this.tradeableMesh.once('destroyed', () => geometry.destroy(true))
+      this.tradeableEffect = new AnimatedOutline(this.tradeableMesh, {
+        palette: 'green',
+        preset: 'card'
+      })
+      this.tradeableEffect.setEnabled(false)
+    }
     this.observedRevision = cardView.appearanceRevision
   }
 
@@ -236,6 +263,7 @@ export class HandCardPerspective {
   isCompatible(options: HandCardPerspectiveOptions): boolean {
     if (this.destroyed || this.cardView.destroyed) return false
     if (this.outlineTexture !== options.outlineTexture) return false
+    if (this.options.tradeableTexture !== options.tradeableTexture) return false
     const bounds = this.cardView.getLocalBounds()
     return (
       this.shadowFrame.x === bounds.minX - SNAPSHOT_PADDING &&
@@ -262,6 +290,8 @@ export class HandCardPerspective {
       this.cardView.position.y + this.shadowFrame.y
     )
     this.outlineMesh?.position.copyFrom(this.mesh.position)
+    this.tradeableMesh?.position.copyFrom(this.mesh.position)
+    this.tradeableEffect?.setEnabled(options.tradeableEnabled === true)
     this.outlineEffect?.setPalette(options.outlinePalette ?? 'green')
     this.outlineEffect?.setPreset(options.outlinePreset ?? 'card')
     if (options.outlineTuning) this.outlineEffect?.setTuning(options.outlineTuning)
@@ -269,6 +299,8 @@ export class HandCardPerspective {
     const cardIndex = parent.getChildIndex(this.cardView)
     if (this.outlineMesh) parent.addChildAt(this.outlineMesh, cardIndex)
     parent.addChildAt(this.mesh, cardIndex + (this.outlineMesh ? 1 : 0))
+    if (this.tradeableMesh)
+      parent.addChildAt(this.tradeableMesh, parent.getChildIndex(this.mesh) + 1)
     this.wasVisible = this.cardView.visible
     this.cardView.visible = false
     this.active = true
@@ -297,6 +329,8 @@ export class HandCardPerspective {
     if (!this.cardView.destroyed) this.cardView.visible = this.wasVisible
     this.outlineEffect?.setEnabled(false)
     this.outlineMesh?.removeFromParent()
+    this.tradeableEffect?.setEnabled(false)
+    this.tradeableMesh?.removeFromParent()
     this.mesh.removeFromParent()
     this.shadow = undefined
   }
@@ -428,6 +462,11 @@ export class HandCardPerspective {
     this.outlineEffect?.setEnabled(enabled)
   }
 
+  setTradeableOutlineEnabled(enabled: boolean): void {
+    this.options = { ...this.options, tradeableEnabled: enabled }
+    this.tradeableEffect?.setEnabled(enabled)
+  }
+
   setOutlinePalette(palette: OutlinePaletteInput): void {
     if (typeof palette === 'string' && this.options.outlinePalette === palette) return
     this.options = { ...this.options, outlinePalette: palette }
@@ -460,6 +499,10 @@ export class HandCardPerspective {
   }
 
   private destroyResources(): void {
+    this.tradeableEffect?.dispose()
+    this.tradeableEffect = null
+    this.tradeableMesh?.destroy()
+    this.tradeableMesh = null
     this.outlineEffect?.dispose()
     this.outlineEffect = null
     this.outlineMesh?.removeFromParent()
@@ -483,6 +526,36 @@ export class HandCardPerspective {
     bottomLeftX: number,
     bottomLeftY: number
   ): void {
+    if (this.tradeableMesh) {
+      const layout = CARD_TRADEABLE_LAYOUT
+      const corners = resolvePerspectiveCorners(
+        this.current,
+        this.texture.width,
+        this.texture.height,
+        {
+          x:
+            layout.position.x -
+            layout.anchor.x * layout.size.width -
+            this.shadowFrame.x,
+          y:
+            layout.position.y -
+            layout.anchor.y * layout.size.height -
+            this.shadowFrame.y,
+          width: layout.size.width,
+          height: layout.size.height
+        }
+      )
+      this.tradeableMesh.setCorners(
+        corners.topLeft.x,
+        corners.topLeft.y,
+        corners.topRight.x,
+        corners.topRight.y,
+        corners.bottomRight.x,
+        corners.bottomRight.y,
+        corners.bottomLeft.x,
+        corners.bottomLeft.y
+      )
+    }
     this.mesh.setCorners(
       topLeftX,
       topLeftY,

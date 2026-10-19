@@ -1,4 +1,26 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { Container, type Renderer } from 'pixi.js'
+import { GameHandDrag } from './game-hand-drag'
+import type { HandEntry } from './game-hand-entry'
+import { layoutHand } from './hand-layout'
+
+vi.mock('./hand-card-perspective-pool', () => ({
+  HandCardPerspectivePool: class {
+    acquire() {
+      return {
+        setTarget: vi.fn(),
+        update: vi.fn(),
+        flushSnapshot: vi.fn(),
+        setOutlineEnabled: vi.fn()
+      }
+    }
+    prepare() {}
+    flush() {}
+    release() {}
+    invalidate() {}
+    dispose() {}
+  }
+}))
 import {
   OneShotPointerTapGuard,
   PointerReleaseInputGate,
@@ -168,5 +190,115 @@ describe('hand-play gesture', () => {
     expect(isHandOwnedSlot({ parent: handLayer }, handLayer)).toBe(true)
     expect(isHandOwnedSlot({ parent: summonLayer }, handLayer)).toBe(false)
     expect(isHandOwnedSlot({ parent: null }, handLayer)).toBe(false)
+  })
+})
+
+describe('cosmetic hand drag lifecycle', () => {
+  function setup() {
+    const layer = new Container()
+    const slot = Object.assign(new Container(), {
+      card: new Container(),
+      suppressPlayableOutline: vi.fn(),
+      isPlayableOutlineEnabled: () => true,
+      isTradeableOutlineEnabled: () => false,
+      getPlayableOutlinePalette: () => 'green',
+      getPlayableOutlinePreset: () => 'card',
+      getPlayableOutlineTuning: () => undefined
+    })
+    const entry = {
+      slot,
+      restTransform: layoutHand(1)[0]!,
+      displaced: false
+    } as unknown as HandEntry
+    const entries = [entry]
+    const completions: (() => void)[] = []
+    const context = {
+      entryAt: (index: number) => entries[index],
+      entryFor: (candidate: unknown) => entries.find((item) => item.slot === candidate),
+      indexFor: (candidate: unknown) =>
+        entries.findIndex((item) => item.slot === candidate),
+      shouldReturnCosmetic: vi.fn(
+        (pointer: { x: number; y: number }) => pointer.y < 820
+      ),
+      beginTargetGesture: vi.fn(),
+      tryTarget: vi.fn(() => false),
+      updateBoardPreview: vi.fn(),
+      clearBoardPreview: vi.fn(),
+      clearHover: vi.fn(),
+      beginReflow: vi.fn(),
+      syncMana: vi.fn(),
+      onReturned: vi.fn(),
+      returnToHand: vi.fn<(slot: HandEntry['slot']) => Promise<void>>(
+        () => new Promise<void>((resolve) => completions.push(resolve))
+      )
+    }
+    const drag = new GameHandDrag(
+      layer,
+      {} as Renderer,
+      { kill: vi.fn(), to: vi.fn() },
+      context
+    )
+    drag.begin(0, { x: 960, y: 1000 }, 1, 'cosmetic')
+    return { drag, context, entries, entry, slot, completions }
+  }
+
+  it('allows movement without targeting or board preview, then returns at the boundary', async () => {
+    const { drag, context, completions } = setup()
+    drag.flushPointer({ x: 1020, y: 950 }, 1)
+    drag.update(16)
+    expect(drag.pointer).toEqual({ x: 1020, y: 950 })
+    expect(context.beginTargetGesture).not.toHaveBeenCalled()
+    expect(context.tryTarget).not.toHaveBeenCalled()
+    expect(context.updateBoardPreview).not.toHaveBeenCalled()
+    drag.flushPointer({ x: 1020, y: 800 }, 2)
+    expect(drag.returning).toBe(false)
+    drag.flushPointer({ x: 1020, y: 800 }, 1)
+    expect(drag.returning).toBe(true)
+    expect(context.returnToHand).toHaveBeenCalledOnce()
+    completions[0]!()
+    await Promise.resolve()
+    expect(drag.index).toBeNull()
+    expect(context.onReturned).not.toHaveBeenCalled()
+    drag.dispose()
+  })
+
+  it('rechecks turn eligibility with a stationary pointer', () => {
+    const { drag, context } = setup()
+    context.shouldReturnCosmetic.mockReturnValue(true)
+    drag.update(16)
+    expect(drag.returning).toBe(true)
+    expect(context.returnToHand).toHaveBeenCalledOnce()
+    drag.dispose()
+  })
+
+  it('returns the original card even when its index changes during a return', async () => {
+    const { drag, context, entries, entry, slot, completions } = setup()
+    entries.unshift({ ...entry, slot: new Container() as HandEntry['slot'] })
+    expect(drag.index).toBe(1)
+    drag.end()
+    expect(context.returnToHand.mock.calls[0]?.[0]).toBe(slot)
+    entries.shift()
+    completions[0]!()
+    await Promise.resolve()
+    expect(drag.index).toBeNull()
+    expect(slot.suppressPlayableOutline).toHaveBeenLastCalledWith(false)
+    drag.dispose()
+  })
+
+  it('does not let a removed card’s late return clear a new pickup', async () => {
+    const { drag, entries, entry, slot, completions } = setup()
+    drag.end()
+    entries.pop()
+    drag.invalidate(entry.slot)
+    expect(drag.index).toBeNull()
+    expect(drag.cosmetic).toBe(false)
+    entries.push(entry)
+    drag.begin(0, { x: 960, y: 1000 }, 1, 'cosmetic')
+    completions[0]!()
+    await Promise.resolve()
+    expect(drag.index).toBe(0)
+    expect(drag.returning).toBe(false)
+    expect(slot.suppressPlayableOutline).toHaveBeenLastCalledWith(true)
+    drag.dispose()
   })
 })

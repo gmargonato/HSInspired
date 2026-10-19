@@ -32,7 +32,7 @@ export function projectHistoryAction(
     definition !== undefined &&
     isSecretCardPlay(definition)
   const unknownSource =
-    event.action === 'trigger' &&
+    (event.action === 'trigger' || event.action === 'trade') &&
     event.source.participantId !== viewerId &&
     (event.source.zone === 'hand' || event.source.zone === 'deck') &&
     !event.source.publicIdentity &&

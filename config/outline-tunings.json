@@ -470,24 +470,24 @@
   },
   "ghost": {
     "tuning": {
-      "windDirection": 3,
-      "mistIntensity": 1.77,
-      "mistWidth": 16,
-      "mistSoftness": 0.29,
-      "mistTextureScale": 4.21,
-      "mistAnimationSpeed": 1,
-      "particleIntensity": 0.48,
-      "particleWindStrength": 0.65,
-      "particleCount": 63,
-      "particleSize": 25.03,
-      "particleTravelDistance": 293,
+      "windDirection": 0,
       "mistEnabled": true,
-      "particlesEnabled": true
+      "mistIntensity": 1,
+      "mistWidth": 16,
+      "mistSoftness": 1,
+      "mistTextureScale": 1,
+      "mistAnimationSpeed": 1,
+      "particlesEnabled": true,
+      "particleIntensity": 1,
+      "particleWindStrength": 1,
+      "particleCount": 120,
+      "particleSize": 15,
+      "particleTravelDistance": 300
     },
     "palette": {
-      "mistPrimaryColor": 6967533,
-      "mistHighlightColor": 37375,
-      "particleColor": 46079
+      "mistPrimaryColor": 16777215,
+      "mistHighlightColor": 16777215,
+      "particleColor": 16777215
     }
   }
 }

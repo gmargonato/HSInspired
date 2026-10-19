@@ -169,7 +169,8 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
         (message) => dependencies.services.dialogs.error(message),
         dependencies.services.progressionStore,
         dependencies.services.dialogs,
-        dependencies.services.preferences
+        dependencies.services.preferences,
+        dependencies.services.windowAttention
       )
     }
 
@@ -191,7 +192,8 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       (message) => dependencies.services.dialogs.error(message),
       dependencies.services.progressionStore,
       dependencies.services.dialogs,
-      dependencies.services.preferences
+      dependencies.services.preferences,
+      dependencies.services.windowAttention
     )
   }
 }
@@ -527,7 +529,8 @@ export class SceneNavigator implements SceneRouter {
           (message) => this.services.dialogs.error(message),
           this.services.progressionStore,
           this.services.dialogs,
-          this.services.preferences
+          this.services.preferences,
+          this.services.windowAttention
         )
       case 'card-preview':
         return new CardViewScene({

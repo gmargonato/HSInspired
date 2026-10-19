@@ -12,7 +12,7 @@ import {
   CTHUN_ID,
   EMPTY_CTHUN
 } from '../cthun'
-import { HistoryRecorder } from '../history-recorder'
+import { HistoryRecorder, historySnapshot } from '../history-recorder'
 import { cardCostResource } from '../rules/card-cost-resource'
 import {
   kazakusCostOptions,
@@ -197,6 +197,15 @@ export interface BoardObjectRuntimeOptions {
   readonly rng?: DeterministicRng
   readonly participantId: PlayerId
   readonly boardObjectInstanceId: string
+  readonly cardInstanceId: string
+  readonly nextEntityOrdinal?: number
+  readonly recordTrace?: boolean
+}
+
+export interface CardTradeRuntimeOptions {
+  readonly state: OpeningMatchState
+  readonly rng?: DeterministicRng
+  readonly participantId: PlayerId
   readonly cardInstanceId: string
   readonly nextEntityOrdinal?: number
   readonly recordTrace?: boolean
@@ -11578,6 +11587,7 @@ export class EffectRuntime {
       return {
         canEndTurn: false,
         playableCardInstanceIds: [],
+        tradeableCardInstanceIds: [],
         legalAttackerInstanceIds: [],
         legalAttackTargets: {},
         legalHeroPower: false,
@@ -11743,6 +11753,7 @@ export class EffectRuntime {
               .map((entity) => entity.instanceId)
           : [],
       playableCardInstanceIds,
+      tradeableCardInstanceIds: this.tradeableCards(participantId),
       legalAttackerInstanceIds,
       legalAttackTargets,
       legalHeroPower,
@@ -13107,6 +13118,116 @@ export class EffectRuntime {
         weapon.enchantments = remove(
           weapon.enchantments
         ) as Mutable<BoardWeapon>['enchantments']
+    }
+  }
+
+  private tradeableCards(participantId: PlayerId): string[] {
+    const player = this.draft.players.find(
+      (candidate) => candidate.participantId === participantId
+    )
+    if (
+      !player ||
+      this.draft.phase !== 'turns' ||
+      this.draft.activePlayerId !== participantId ||
+      this.initialState.pendingResolution ||
+      this.draft.pendingDiscover ||
+      this.draft.pendingCardChoice ||
+      player.mana.available < 1 ||
+      player.deck.length === 0
+    )
+      return []
+    return player.hand
+      .filter((card) =>
+        this.hasKeyword(
+          {
+            kind: 'card',
+            zone: 'hand',
+            participantId,
+            instanceId: card.instanceId,
+            cardId: card.cardId
+          },
+          'tradeable'
+        )
+      )
+      .map((card) => card.instanceId)
+  }
+
+  resolveCardTrade(options: CardTradeRuntimeOptions): EffectResolutionResult {
+    this.historyRecorder = new HistoryRecorder(
+      this.draft as unknown as OpeningMatchState
+    )
+    try {
+      if (!this.tradeableCards(options.participantId).includes(options.cardInstanceId))
+        throw new ResolutionInputError(
+          'resolution-failed',
+          'This card cannot be traded now.'
+        )
+      const player = this.player(options.participantId)
+      const sourceSnapshot = historySnapshot(
+        this.initialState,
+        options.participantId,
+        options.cardInstanceId
+      )
+      const top = player.deck[0]!
+      const card = player.hand.splice(
+        player.hand.findIndex((entry) => entry.instanceId === options.cardInstanceId),
+        1
+      )[0]!
+      player.mana.available -= 1
+      // Preserve the entity and its enchantments; trading never resets or shuffles cards.
+      card.zone = 'deck'
+      card.revealed = false
+      player.deck.splice(
+        Math.floor(this.rng.next() * (player.deck.length + 1)),
+        0,
+        card
+      )
+      this.events.push({
+        type: 'card-traded',
+        participantId: options.participantId,
+        cardInstanceId: options.cardInstanceId
+      })
+      const source: EntityRef = {
+        kind: 'card',
+        zone: 'deck',
+        participantId: options.participantId,
+        instanceId: card.instanceId,
+        cardId: card.cardId
+      }
+      const frame = this.frameFor(source, null, [])
+      this.recomputeContinuousEffects()
+      // Select the original top card even when the traded card was inserted above it.
+      this.drawOne(options.participantId, frame, 'trade.draw', {
+        kind: 'card',
+        zone: 'deck',
+        participantId: options.participantId,
+        instanceId: top.instanceId,
+        cardId: top.cardId
+      })
+      this.processDeaths()
+      this.events.push({
+        type: 'history-action-resolved',
+        participantId: options.participantId,
+        action: 'trade',
+        source: sourceSnapshot,
+        outcomes: this.events.flatMap((event) =>
+          event.type === 'history-effect-recorded' &&
+          event.source.id === card.instanceId
+            ? event.outcomes
+            : []
+        )
+      })
+      const nextState = this.commitResolution()
+      return {
+        accepted: true,
+        state: nextState,
+        events: clonePlain(this.events) as OpeningMatchEvent[],
+        trace: copyPlainArray(this.trace),
+        nextEntityOrdinal: this.nextEntityOrdinal,
+        triggerEvents: copyPlainArray(this.triggerEvents)
+      }
+    } catch (error) {
+      return this.resolutionFailure(error)
     }
   }
 
@@ -16027,6 +16148,17 @@ export function resolveBoardObject(
     options.nextEntityOrdinal,
     options.recordTrace
   ).resolveBoardObject(options)
+}
+
+export function resolveCardTrade(
+  options: CardTradeRuntimeOptions
+): EffectResolutionResult {
+  return new EffectRuntime(
+    options.state,
+    options.rng ?? createSeededRng(options.state.revision + 1),
+    options.nextEntityOrdinal,
+    options.recordTrace
+  ).resolveCardTrade(options)
 }
 
 export function resolveHeroPower(

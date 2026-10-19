@@ -170,6 +170,16 @@ export const CARD_SILENCE_LAYOUT = assetPlacement('card.overlay.silence', {
   y: 695
 })
 
+export const CARD_TRADEABLE_LAYOUT = placement(
+  { x: 60, y: 40 },
+  { width: 128, height: 274 },
+  {
+    anchor: TOP_CENTER,
+    scale: 1,
+    note: 'Native-size Tradeable ribbon behind the mana crystal.'
+  }
+)
+
 /** Stat label positions are local to their icon's center. */
 export const CARD_STATS = {
   mana: statLayout('card.stat.mana', { x: 60, y: 100 }, { x: 0, y: -10 }, STAT_STYLE),

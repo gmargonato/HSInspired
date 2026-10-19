@@ -1,21 +1,24 @@
-import { Container, Sprite, type Texture } from 'pixi.js'
+import { Container, Sprite } from 'pixi.js'
 import { Actor } from '../lifecycle/actor'
 import { GHOST_AURA_CONFIG } from './outline-tuning'
 import { createGhostMistFilter, type GhostMistValues } from './ghost-mist-filter'
 import { createMistParticles } from './ghost-mist-particles'
+import type { GhostTextures } from './ghost-materials'
+import { GHOST_TIMING, type GhostProfile } from './ghost-layout'
 import type {
   GhostAuraTuning,
   GhostAuraPalette
 } from '../../desktop/contracts/ipc/outline-tuning'
 
 export interface GhostAuraOptions {
-  readonly noise: Texture
-  readonly dissolve: Texture
-  readonly spotlight: Texture
+  readonly textures: GhostTextures
+  readonly profile?: GhostProfile
   /** Artwork silhouette; the filtered target may also contain a button label. */
   readonly silhouette?: Sprite
+  /** Separate text, when available. Baked-in lettering hides with its artwork. */
+  readonly text?: Container
 }
-export const GHOST_DISAPPEARANCE_SECONDS = 1.8
+export const GHOST_DISAPPEARANCE_SECONDS = GHOST_TIMING.duration
 
 /** Owns the live mist, foreground particles and interruptible disappearance. */
 export class GhostAura extends Actor {
@@ -33,6 +36,9 @@ export class GhostAura extends Actor {
     progress: 0
   }
   private readonly mist: ReturnType<typeof createGhostMistFilter>
+  private readonly artwork: Sprite
+  private readonly text: Container | undefined
+  private readonly textFade: ReturnType<typeof createGhostMistFilter> | undefined
   private readonly particles: ReturnType<typeof createMistParticles>
   private readonly clock = { time: 0 }
   private lastTime = 0
@@ -55,6 +61,7 @@ export class GhostAura extends Actor {
   private disappearing = false
   private disappearance: gsap.core.Tween | null = null
   private timeTween: gsap.core.Tween
+  private readonly profile: GhostProfile
 
   constructor(
     private readonly target: Container,
@@ -63,11 +70,23 @@ export class GhostAura extends Actor {
     super()
     const silhouette = options.silhouette ?? (target instanceof Sprite ? target : null)
     if (!silhouette) throw new Error('Ghost Mist requires a sprite silhouette')
+    this.artwork = silhouette
+    this.text = options.text
     this.label = 'ghost-mist.effect'
-    this.mist = createGhostMistFilter(options.noise, options.dissolve, this.values)
-    this.particles = createMistParticles(silhouette, this.values, options.spotlight)
+    this.profile = options.profile ?? 'button'
+    this.mist = createGhostMistFilter(this.values, this.profile)
+    if (this.text) {
+      this.textFade = createGhostMistFilter(this.values, this.profile, true)
+      this.text.filters = [...(this.text.filters ?? []), this.textFade.filter]
+    }
+    this.particles = createMistParticles(
+      silhouette,
+      this.values,
+      options.textures,
+      this.profile
+    )
     this.particles.refresh()
-    target.filters = [...(target.filters ?? []), this.mist.filter]
+    silhouette.filters = [...(silhouette.filters ?? []), this.mist.filter]
     this.timeTween = this.tweenTo(this.clock, {
       time: 1,
       duration: 1,
@@ -75,16 +94,16 @@ export class GhostAura extends Actor {
       ease: 'none',
       onUpdate: () => {
         const time = this.timeTween.totalTime()
-        const delta = Math.max(0, time - this.lastTime)
         this.lastTime = time
         if (!this.syncVisibility()) return
-        this.mist.update(delta)
-        this.particles.refresh()
+        this.mist.update()
+        this.textFade?.sync()
         this.particles.update(time)
       }
     })
     GhostAura.instances.add(this)
     this.syncVisibility()
+    this.particles.update(0)
   }
 
   setEnabled(enabled: boolean): void {
@@ -107,11 +126,15 @@ export class GhostAura extends Actor {
   setTuning(tuning: GhostAuraTuning): void {
     Object.assign(this.values, tuning)
     this.mist.sync()
+    this.textFade?.sync()
     this.syncVisibility()
+    this.particles.update(this.lastTime)
   }
   setPalette(palette: GhostAuraPalette): void {
     Object.assign(this.values, palette)
     this.mist.sync()
+    this.textFade?.sync()
+    this.particles.update(this.lastTime)
   }
 
   restore(): void {
@@ -121,8 +144,10 @@ export class GhostAura extends Actor {
     this.values.progress = 0
     this.target.visible = true
     this.mist.sync()
+    this.textFade?.sync()
     this.timeTween.resume()
     this.syncVisibility()
+    this.particles.update(this.lastTime)
   }
 
   /** Move only the outgoing visual out of a closing overlay; never delay game logic. */
@@ -170,11 +195,28 @@ export class GhostAura extends Actor {
     this.disappearing = true
     this.values.progress = 0
     this.syncVisibility()
+    const scaleX = this.target.scale.x,
+      scaleY = this.target.scale.y
     this.disappearance = this.tweenTo(this.values, {
       progress: 1,
-      duration: GHOST_DISAPPEARANCE_SECONDS,
+      duration:
+        this.profile === 'banner'
+          ? GHOST_TIMING.bannerDuration
+          : GHOST_DISAPPEARANCE_SECONDS,
       ease: 'none',
-      onUpdate: () => this.mist.sync(),
+      onUpdate: () => {
+        if (this.profile === 'banner') {
+          // MulliganManager.ShrinkStartingHandBanner: iTween ScaleTo, 0.5s,
+          // with Defaults.easeType = easeOutExpo. The caller owns dismissal time.
+          const scale =
+            this.values.progress >= 1 ? 0 : 2 ** (-10 * this.values.progress)
+          this.target.scale.set(scaleX * scale, scaleY * scale)
+        }
+        this.mist.sync()
+        this.textFade?.sync()
+        this.syncVisibility()
+        this.particles.update(this.lastTime)
+      },
       onComplete: () => {
         this.disappearance = null
         this.returnToParent()
@@ -198,6 +240,7 @@ export class GhostAura extends Actor {
     if (!exit) return
     this.exit = null
     this.particles.container.removeFromParent()
+    this.particles.foreground.removeFromParent()
     if (!this.target.destroyed) {
       if (!exit.parent.destroyed)
         exit.parent.addChildAt(
@@ -217,33 +260,48 @@ export class GhostAura extends Actor {
   }
   private syncVisibility(): boolean {
     const particles = this.particles.container
+    const foreground = this.particles.foreground
     if (this.target.destroyed) {
       particles.visible = false
+      foreground.visible = false
       return false
     }
     const parent = this.target.parent
-    if (parent && particles.parent !== parent) parent.addChild(particles)
+    if (parent && particles.parent !== parent)
+      parent.addChildAt(particles, parent.getChildIndex(this.target))
+    if (parent && foreground.parent !== parent)
+      parent.addChildAt(foreground, parent.getChildIndex(this.target) + 1)
     let visible = this.enabled && !GhostAura.suppressed
     for (let node: Container | null = this.target; node; node = node.parent)
       visible &&= node.visible && node.renderable && node.alpha > 0
-    particles.visible = visible && this.values.particlesEnabled
+    particles.visible = visible
+    foreground.visible = visible
     particles.alpha = parent
       ? this.target.getGlobalAlpha() / (parent.getGlobalAlpha() || 1)
       : 0
     particles.zIndex = this.target.zIndex
-    this.mist.filter.enabled = !GhostAura.suppressed
+    foreground.alpha = particles.alpha
+    foreground.zIndex = particles.zIndex
+    // These filters only control departure; idle art needs no offscreen pass.
+    this.mist.filter.enabled = !GhostAura.suppressed && this.values.progress > 0
+    if (this.textFade) this.textFade.filter.enabled = this.mist.filter.enabled
     return visible
   }
   override dispose(): void {
     if (this.destroyed) return
     this.cancelDisappearance()
     GhostAura.instances.delete(this)
-    if (!this.target.destroyed)
-      this.target.filters = (this.target.filters ?? []).filter(
+    if (!this.artwork.destroyed)
+      this.artwork.filters = (this.artwork.filters ?? []).filter(
         (filter) => filter !== this.mist.filter
+      )
+    if (this.text && !this.text.destroyed)
+      this.text.filters = (this.text.filters ?? []).filter(
+        (filter) => filter !== this.textFade?.filter
       )
     this.particles.destroy()
     this.mist.destroy()
+    this.textFade?.destroy()
     super.dispose()
   }
 }

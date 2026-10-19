@@ -10,6 +10,7 @@ import type { AiDecisionBridge } from '../contracts/ipc/ai'
 import type { MatchLogsApi } from '../contracts/ipc/match-logs'
 import type { DecksApi } from '../contracts/ipc/decks'
 import type { WindowSettingsApi } from '../contracts/ipc/window-settings'
+import type { WindowAttentionApi } from '../contracts/ipc/window-attention'
 import type { PreferencesApi } from '../contracts/ipc/preferences'
 import type { PlayerStatsApi } from '../contracts/ipc/player-stats'
 import type { ProgressionApi } from '../contracts/ipc/progression'
@@ -19,6 +20,7 @@ import type { OutlineTuningApi } from '../contracts/ipc/outline-tuning'
 import type { VfxTemplatesApi } from '../contracts/ipc/vfx-templates'
 
 interface AppAPI {
+  windowAttention: WindowAttentionApi
   devMenu: {
     notifyArenaAvailability(availability: DevArenaAvailability): void
     notifyPremiumMode(mode: PremiumMode): void

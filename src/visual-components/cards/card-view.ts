@@ -516,6 +516,12 @@ export class CardView extends Container {
   }
 
   /** Lets prepared presentations validate their bounds only after semantic changes. */
+  /** Shared banner texture for match-only affordances outside the cached face. */
+  get tradeableTexture(): Texture | undefined {
+    const banner = this.treeObjects.get('card.tradeable')?.object
+    return banner instanceof Sprite ? banner.texture : undefined
+  }
+
   get appearanceRevision(): number {
     return this.snapshotRevision
   }

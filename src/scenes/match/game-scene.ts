@@ -54,6 +54,7 @@ import { GameBoardSession } from './game-board-session'
 import { AiTurnController, AI_CONVERSATION_LIMITS } from './ai/ai-turn-controller'
 import { MatchRecorder, logObject } from './history/match-recorder'
 import type { MatchLogsApi } from '../../desktop/contracts/ipc/match-logs'
+import type { WindowAttentionApi } from '../../desktop/contracts/ipc/window-attention'
 import type {
   PreferencesApi,
   Preferences
@@ -112,7 +113,8 @@ export class GameScene extends Scene {
     ) => void = console.error,
     private readonly progression?: ProgressionStore,
     private readonly dialogs?: DialogService,
-    private readonly preferences?: PreferencesApi
+    private readonly preferences?: PreferencesApi,
+    private readonly windowAttention?: WindowAttentionApi
   ) {
     super()
     this.route = route
@@ -372,6 +374,7 @@ export class GameScene extends Scene {
       logger: aiLogger,
       ai: aiApi,
       aiRuntime: { session: aiSession, controller: aiController },
+      windowAttention: this.windowAttention,
       onMatchEnded: (event) => this.recordMatchResult(event),
       onMatchComplete: () => this.router?.navigate(this.createExitRoute()),
       onOpponentLeft: () => this.handleOpponentLeft()

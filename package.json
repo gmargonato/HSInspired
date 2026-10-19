@@ -37,6 +37,7 @@
     "test:missile-vfx": "node scripts/check-missile-vfx.cjs",
     "test:fire-aoe": "node scripts/check-fire-aoe.cjs",
     "test:fireball": "node scripts/check-fireball.cjs",
+    "test:ghost": "node scripts/check-ghost.cjs",
     "test:vfx-variants": "node scripts/check-fireball-tuning.cjs && node scripts/check-aoe-palette-materials.cjs && node scripts/check-vfx-variants.cjs"
   },
   "dependencies": {

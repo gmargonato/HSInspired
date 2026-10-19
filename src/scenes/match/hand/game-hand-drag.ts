@@ -32,6 +32,8 @@ export const HAND_PREPARATION_DWELL_MS = 120
 interface HandDragContext {
   entryAt(index: number): HandEntry | undefined
   entryFor(slot: GameCardSlot): HandEntry | undefined
+  indexFor(slot: GameCardSlot): number
+  shouldReturnCosmetic(pointer: HandPointer): boolean
   beginTargetGesture(entry: HandEntry, pointer: HandPointer, pointerId: number): void
   tryTarget(entry: HandEntry, pointer: HandPointer, pointerId: number): boolean
   updateBoardPreview(pointer: HandPointer): void
@@ -52,6 +54,8 @@ interface HandDragContext {
 /** Owns a held card's pointer tracking and presentation, advanced by the scene frame. */
 export class GameHandDrag {
   private draggingIndex: number | null = null
+  private cosmeticSlot: GameCardSlot | null = null
+  private gestureRevision = 0
   private dragPointer: HandPointer | null = null
   private dragState: HandDragState | null = null
   private dragRotator: DragRotatorState | null = null
@@ -80,7 +84,14 @@ export class GameHandDrag {
   }
 
   get index(): number | null {
+    if (this.cosmeticSlot) {
+      const index = this.context.indexFor(this.cosmeticSlot)
+      return index < 0 ? null : index
+    }
     return this.draggingIndex
+  }
+  get cosmetic(): boolean {
+    return this.cosmeticSlot !== null
   }
   get pointer(): HandPointer | null {
     return this.dragPointer
@@ -110,6 +121,7 @@ export class GameHandDrag {
       const presentation = this.perspectivePool.take(slot.card)
       if (!presentation) return
       presentation.setOutlineEnabled(false)
+      presentation.setTradeableOutlineEnabled(false)
       this.queuedPerspectives.set(slot, presentation)
       this.dragPerspective = null
       this.perspectiveSlot = null
@@ -127,7 +139,11 @@ export class GameHandDrag {
     this.dragReturning = false
   }
   setOutlineEnabled(enabled: boolean): void {
-    this.dragPerspective?.setOutlineEnabled(enabled)
+    this.dragPerspective?.setOutlineEnabled(enabled && !this.cosmetic)
+  }
+
+  setTradeableOutlineEnabled(enabled: boolean): void {
+    this.dragPerspective?.setTradeableOutlineEnabled(enabled && !this.cosmetic)
   }
 
   refreshOutlineAppearance(): void {
@@ -141,6 +157,7 @@ export class GameHandDrag {
   }
 
   setDropAllowed(allowed: boolean, palette: OutlinePaletteInput = 'blue'): void {
+    if (this.cosmetic) return
     if (this.draggingIndex === null) return
     const entry = this.context.entryAt(this.draggingIndex)
     if (!entry) return
@@ -175,6 +192,22 @@ export class GameHandDrag {
 
   /** A transferred card must not remain retained by hand-only preparation. */
   invalidate(slot: GameCardSlot): void {
+    if (this.cosmeticSlot === slot) {
+      // Release before the caller transfers or destroys this card. A late return
+      // completion must not clear a subsequent pickup in the same hand slot.
+      this.gestureRevision += 1
+      this.animations.kill(slot)
+      this.animations.kill(slot.scale)
+      this.dragPointer = null
+      this.dragPointerId = null
+      this.dragState = null
+      this.previewPending = false
+      this.cursor?.setContextVariant(null)
+      this.context.clearHover()
+      this.context.clearBoardPreview()
+      slot.suppressPlayableOutline(false)
+      this.finishDrag(this.draggingIndex!, slot)
+    }
     this.queuedPerspectives.get(slot)?.destroy()
     this.queuedPerspectives.delete(slot)
     if (this.prepareSlot === slot) this.prepare(null)
@@ -193,6 +226,13 @@ export class GameHandDrag {
 
   /** Runs before board shadows and rendering, once for each presented frame. */
   update(deltaMS: number): void {
+    if (
+      this.cosmetic &&
+      !this.dragReturning &&
+      this.dragPointer &&
+      this.context.shouldReturnCosmetic(this.dragPointer)
+    )
+      this.end()
     this.stepDragFrame(deltaMS)
     this.activatePendingPerspective()
     this.flushBoardPreview()
@@ -249,8 +289,10 @@ export class GameHandDrag {
 
   private perspectiveOptions(slot: GameCardSlot) {
     return {
+      tradeableTexture: slot.card.tradeableTexture,
+      tradeableEnabled: !this.cosmetic && slot.isTradeableOutlineEnabled(),
       outlineTexture: slot.playableOutlineTexture,
-      outlineEnabled: slot.isPlayableOutlineEnabled(),
+      outlineEnabled: !this.cosmetic && slot.isPlayableOutlineEnabled(),
       outlinePalette: slot.getPlayableOutlinePalette(),
       outlinePreset: slot.getPlayableOutlinePreset(),
       outlineTuning: slot.getPlayableOutlineTuning()
@@ -260,7 +302,12 @@ export class GameHandDrag {
   private flushBoardPreview(): void {
     if (!this.previewPending) return
     this.previewPending = false
-    if (this.draggingIndex !== null && !this.dragReturning && this.dragPointer) {
+    if (
+      !this.cosmetic &&
+      this.draggingIndex !== null &&
+      !this.dragReturning &&
+      this.dragPointer
+    ) {
       this.context.updateBoardPreview(this.dragPointer)
     }
   }
@@ -284,6 +331,10 @@ export class GameHandDrag {
     )
       return
     this.dragPointer = { x: pointer.x, y: pointer.y }
+    if (this.cosmetic && this.context.shouldReturnCosmetic(this.dragPointer)) {
+      this.end()
+      return
+    }
     if (this.dragStartPointer) {
       this.dragMovedBeyondThreshold =
         this.dragMovedBeyondThreshold ||
@@ -293,7 +344,11 @@ export class GameHandDrag {
         ) > DRAG_MOVE_THRESHOLD
     }
     const entry = this.context.entryAt(this.draggingIndex)
-    if (entry && this.context.tryTarget(entry, this.dragPointer, pointerId)) {
+    if (
+      !this.cosmetic &&
+      entry &&
+      this.context.tryTarget(entry, this.dragPointer, pointerId)
+    ) {
       return
     }
     this.previewPending = true
@@ -305,12 +360,14 @@ export class GameHandDrag {
   }
 
   dispose(): void {
+    this.gestureRevision += 1
     for (const presentation of this.queuedPerspectives.values()) presentation.destroy()
     this.queuedPerspectives.clear()
     this.layer.off('globalpointermove', this.onPointerMove)
     this.layer.off('rightdown', this.onRightDown)
     if (this.draggingIndex !== null) {
-      this.context.entryAt(this.draggingIndex)?.slot.suppressPlayableOutline(false)
+      const slot = this.cosmeticSlot ?? this.context.entryAt(this.draggingIndex)?.slot
+      slot?.suppressPlayableOutline(false)
       this.releasePerspective()
       this.draggingIndex = null
       this.dragPointer = null
@@ -321,23 +378,31 @@ export class GameHandDrag {
       this.dragReturning = false
     }
     this.dragPointerId = null
+    this.cosmeticSlot = null
     this.previewPending = false
     this.prepare(null)
     this.pendingPerspectiveSlot = null
     this.perspectivePool.dispose()
   }
 
-  begin(index: number, pointer: HandPointer, pointerId: number): void {
+  begin(
+    index: number,
+    pointer: HandPointer,
+    pointerId: number,
+    mode: 'play' | 'cosmetic' = 'play'
+  ): void {
     const entry = this.context.entryAt(index)
     const rest = entry?.restTransform
     if (!entry || !rest) return
+    this.gestureRevision += 1
+    this.cosmeticSlot = mode === 'cosmetic' ? entry.slot : null
     this.draggingIndex = index
     this.dragPointerId = pointerId
     this.dragPointer = { ...pointer }
     this.dragStartPointer = { ...pointer }
     this.dragMovedBeyondThreshold = false
     this.dragReturning = false
-    this.context.beginTargetGesture(entry, pointer, pointerId)
+    if (!this.cosmetic) this.context.beginTargetGesture(entry, pointer, pointerId)
     // Start from the card's current (hovered) position so the pickup glides up
     // toward the cursor instead of snapping back to the resting baseline.
     this.dragState = initialDragState(
@@ -352,6 +417,7 @@ export class GameHandDrag {
     // Pointerdown keeps the existing card visible. Even a cold pickup prepares
     // its GPU presentation in the next scene frame, alongside the first pose.
     this.pendingPerspectiveSlot = entry.slot
+    if (this.cosmetic) entry.slot.suppressPlayableOutline(true)
     this.cursor?.setContextVariant('grab')
 
     this.animations.kill(entry.slot)
@@ -367,7 +433,7 @@ export class GameHandDrag {
     this.context.syncMana()
     this.previewPending = false
     this.prepare(null)
-    this.context.updateBoardPreview(pointer)
+    if (!this.cosmetic) this.context.updateBoardPreview(pointer)
   }
 
   private stepDragFrame(deltaMS: number): void {
@@ -388,7 +454,9 @@ export class GameHandDrag {
       return
     }
     if (!this.dragPointer || !this.dragState) return
-    const entry = this.context.entryAt(this.draggingIndex)
+    const entry = this.cosmeticSlot
+      ? this.context.entryFor(this.cosmeticSlot)
+      : this.context.entryAt(this.draggingIndex)
     if (!entry || entry.slot.destroyed) {
       this.end()
       return
@@ -430,7 +498,8 @@ export class GameHandDrag {
   end(): void {
     if (this.draggingIndex === null || this.dragReturning) return
     this.setDropAllowed(false)
-    const index = this.draggingIndex
+    const index = this.index ?? this.draggingIndex
+    const revision = this.gestureRevision
     this.dragPointer = null
     this.dragPointerId = null
     this.previewPending = false
@@ -443,7 +512,9 @@ export class GameHandDrag {
     this.context.clearHover()
     this.context.clearBoardPreview()
     this.context.syncMana()
-    const entry = this.context.entryAt(index)
+    const entry = this.cosmeticSlot
+      ? this.context.entryFor(this.cosmeticSlot)
+      : this.context.entryAt(index)
     if (entry?.restTransform) {
       void this.context
         .returnToHand(
@@ -453,16 +524,21 @@ export class GameHandDrag {
           OPENING_TIMING.hover,
           OPENING_TIMING.hover
         )
-        .then(() => this.finishDrag(index, entry.slot))
+        .then(() => {
+          if (revision === this.gestureRevision) this.finishDrag(index, entry.slot)
+        })
       return
     }
-    this.finishDrag(index)
+    this.finishDrag(index, this.cosmeticSlot ?? undefined)
   }
 
   private finishDrag(index: number, slot?: GameCardSlot): void {
-    if (this.draggingIndex !== index) return
+    if (this.cosmeticSlot ? this.cosmeticSlot !== slot : this.draggingIndex !== index)
+      return
     const entry = slot ? this.context.entryFor(slot) : this.context.entryAt(index)
+    const cosmetic = this.cosmetic
     this.releasePerspective()
+    this.cosmeticSlot = null
     this.draggingIndex = null
     this.dragStartPointer = null
     this.dragMovedBeyondThreshold = false
@@ -473,7 +549,7 @@ export class GameHandDrag {
       entry.displaced = false
     }
     this.context.syncMana()
-    this.context.onReturned()
+    if (!cosmetic) this.context.onReturned()
   }
 
   releaseForTargeting(entry: HandEntry): void {

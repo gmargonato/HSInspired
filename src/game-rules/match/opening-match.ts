@@ -41,6 +41,7 @@ import {
   resolvePendingDiscoverChoice,
   resolveHeroPower,
   resolveBoardObject,
+  resolveCardTrade,
   resolveTurnTransition
 } from './effects/effect-runtime'
 import type { DraftCard } from './effects/effect-context'
@@ -1408,6 +1409,31 @@ export function createOpeningMatch(
       }
 
       if (command.type === 'play-card') return dispatchPlayCard(command)
+
+      if (command.type === 'trade-card') {
+        const before = state
+        const rngSnapshot = rng.snapshot()
+        const result = commitResolution(
+          resolveCardTrade({
+            state,
+            rng,
+            participantId: command.participantId,
+            cardInstanceId: command.cardInstanceId,
+            nextEntityOrdinal,
+            recordTrace: recordEffectTrace
+          }),
+          rngSnapshot
+        )
+        if (!result.accepted) return result
+        return {
+          ...result,
+          events: [
+            ...withoutHistoryFacts(result.events),
+            ...triggerHistoryEvents(before, result.state, result.events, false),
+            ...fatigueHistoryEvents(before, result.events)
+          ]
+        }
+      }
 
       if (command.type === 'attack-character') {
         const before = state

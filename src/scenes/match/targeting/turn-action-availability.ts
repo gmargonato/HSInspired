@@ -9,6 +9,7 @@ export function hasAvailableTurnAction(legality: MatchLegality | undefined): boo
   if (!legality) return false
   return (
     (legality.activatableBoardObjectInstanceIds?.length ?? 0) > 0 ||
+    (legality.tradeableCardInstanceIds?.length ?? 0) > 0 ||
     legality.playableCardInstanceIds.length > 0 ||
     legality.legalHeroPower ||
     Object.keys(legality.legalAttackTargets).length > 0

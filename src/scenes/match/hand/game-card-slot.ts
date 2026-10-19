@@ -1,4 +1,8 @@
-import { cardFrameTransform } from '../../../visual-components/cards/card-layout'
+import {
+  cardFrameTransform,
+  CARD_TRADEABLE_LAYOUT
+} from '../../../visual-components/cards/card-layout'
+import { applyAnchoredPlacement } from '../../../visual-components/layout'
 import { Container, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
 import { CardView } from '../../../visual-components/cards/card-view'
 import {
@@ -39,6 +43,9 @@ export class GameCardSlot extends Actor {
   private playableOutlinePreset: OutlinePresetName = 'card'
   private playableOutlinePalette: OutlinePaletteInput = 'green'
   private playableOutlineTuning?: OutlineTuning
+  private tradeableOutline: AnimatedOutline | null = null
+  private tradeableTarget: Sprite | null = null
+  private tradeableOutlineRequested = false
 
   constructor(
     card: CardView,
@@ -99,6 +106,7 @@ export class GameCardSlot extends Actor {
 
     this.addChild(card)
     card.enableTextureCache()
+    this.replaceTradeableOutline()
 
     this.replaceCross = new Sprite(replaceCrossTexture)
     this.replaceCross.anchor.set(0.5)
@@ -184,6 +192,37 @@ export class GameCardSlot extends Actor {
     this.syncPlayableOutline()
   }
 
+  setTradeableOutlineEnabled(enabled: boolean): void {
+    this.tradeableOutlineRequested = enabled
+    this.syncPlayableOutline()
+  }
+
+  isTradeableOutlineEnabled(): boolean {
+    return this.tradeableOutlineRequested
+  }
+
+  private replaceTradeableOutline(): void {
+    this.tradeableOutline?.dispose()
+    this.tradeableTarget?.destroy()
+    this.tradeableOutline = null
+    this.tradeableTarget = null
+    const texture = this.card.tradeableTexture
+    if (!texture || this.playableOutlineDisposed) return
+    const target = new Sprite(texture)
+    target.label = 'card.tradeable-outline'
+    target.eventMode = 'none'
+    applyAnchoredPlacement(target, CARD_TRADEABLE_LAYOUT)
+    target.x += this.card.x
+    target.y += this.card.y
+    this.addChildAt(target, this.getChildIndex(this.card) + 1)
+    this.tradeableTarget = target
+    this.tradeableOutline = new AnimatedOutline(target, {
+      palette: 'green',
+      preset: 'card'
+    })
+    this.syncPlayableOutline()
+  }
+
   /** Gives conditionally enhanced cards a more agitated outline treatment. */
   setPlayableOutlineEnhanced(enhanced: boolean): void {
     this.playableOutlinePreset = enhanced ? 'bonus-card' : 'card'
@@ -243,6 +282,9 @@ export class GameCardSlot extends Actor {
     this.playableOutlineDisposed = true
     this.playableOutline.removeFromParent()
     this.playableOutline.dispose()
+    this.tradeableOutline?.dispose()
+    this.tradeableOutline = null
+    if (this.tradeableTarget) this.tradeableTarget.visible = false
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
@@ -271,6 +313,7 @@ export class GameCardSlot extends Actor {
     replacement.card.visible = true
     this.addChildAt(replacement.card, cardIndex)
     this.activeCard = replacement.card
+    this.replaceTradeableOutline()
     this.shadow.visual = replacement.card
     this.outlineTarget.label = `${replacement.card.label}.playable-outline-target`
     this.replacePlayableOutline(replacement.outlineTexture)
@@ -312,8 +355,12 @@ export class GameCardSlot extends Actor {
   }
 
   private syncPlayableOutline(): void {
+    if (this.playableOutlineDisposed) return
     this.playableOutline.setEnabled(
       this.playableOutlineRequested && !this.playableOutlineSuppressed
+    )
+    this.tradeableOutline?.setEnabled(
+      this.tradeableOutlineRequested && !this.playableOutlineSuppressed
     )
   }
 }

@@ -108,11 +108,11 @@ export const GAME_BOARD_LAYOUT = {
   heroes: {
     /** Local hero portrait in its board slot (bottom of the screen). */
     local: placement(
-      { x: 985, y: 830 },
+      { x: 985, y: 825 },
       { width: 345, height: 433 },
       {
         anchor: CENTER,
-        scale: 0.53
+        scale: 0.55
       }
     ),
     /** Remote hero portrait in its board slot (top of the screen). */
@@ -149,7 +149,7 @@ export const GAME_BOARD_LAYOUT = {
   weapons: {
     /** Local equipped weapon, screen-left of the local hero frame. */
     local: placement(
-      { x: 800, y: 855 },
+      { x: 800, y: 850 },
       { width: 240, height: 210 },
       {
         anchor: CENTER,
@@ -213,7 +213,7 @@ export const GAME_BOARD_LAYOUT = {
    * the remote player's turn.
    */
   endTurnButton: placement(
-    { x: 1595, y: 495 },
+    { x: 1595, y: 490 },
     { width: 157, height: 86 },
     {
       anchor: CENTER,
@@ -364,7 +364,7 @@ export const GAME_BOARD_LAYOUT = {
   heroPowers: {
     /** Local hero power card, right of the local hero portrait. */
     local: placement(
-      { x: 1160, y: 835 },
+      { x: 1160, y: 810 },
       { width: 150, height: 150 },
       {
         anchor: CENTER,
@@ -374,7 +374,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote hero power card, right of the remote hero portrait. */
     remote: placement(
-      { x: 1160, y: 200 },
+      { x: 1160, y: 210 },
       { width: 150, height: 150 },
       {
         anchor: CENTER,

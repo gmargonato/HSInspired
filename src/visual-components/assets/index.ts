@@ -1,3 +1,11 @@
+import type { GhostTextures } from '../effects/ghost-materials'
+import ghostCloudsImage from '@assets/images/effects/ghost-clouds.png'
+import ghostBannerAtlasImage from '@assets/images/effects/ghost-banner-atlas.png'
+import ghostButtonAtlasImage from '@assets/images/effects/ghost-button-atlas.png'
+import ghostSmokeAddImage from '@assets/images/effects/ghost-smoke-add.png'
+import ghostSmokeImage from '@assets/images/effects/ghost-smoke.png'
+import ghostMoteImage from '@assets/images/effects/ghost-mote.png'
+import ghostEvaporateImage from '@assets/images/effects/ghost-evaporate.png'
 import fireAoeWispAtlasImage from '@assets/images/effects/fire-aoe-wisp-atlas.png'
 import fireballCoreCloudsImage from '@assets/images/effects/fireball-core-clouds.png'
 import fireballCoreShadowsImage from '@assets/images/effects/fireball-core-shadows.png'
@@ -161,6 +169,7 @@ import gameBoard8Image from '@assets/images/match/BOARD-8.png'
 import gameBoard9Image from '@assets/images/match/BOARD-9.png'
 import gameDeckImage from '@assets/images/match/deck.png'
 import gameDeckSlicedImage from '@assets/images/match/deck-sliced.png'
+import gameTradeableGlowImage from '@assets/images/match/tradeable-glow.png'
 import gameDeckInfoImage from '@assets/images/match/tray-number-of-cards-hand-deck.png'
 import gameFatigueDeckImage from '@assets/images/match/fatigue-deck.png'
 import gameEndTurnImage from '@assets/images/match/button-end-my-turn.png'
@@ -479,31 +488,130 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'arena'
   ),
   asset(
-    'scene.arena.ghost-spotlight',
+    'scene.arena.ghost-clouds',
     ASSET_BUNDLE_IDS.arena,
-    'ghostSpotlight',
-    ghostSpotlightImage,
+    'ghostClouds',
+    ghostCloudsImage,
     256,
     256,
     'arena'
   ),
   asset(
-    'scene.arena.ghost-dissolve',
+    'scene.game.ghost-clouds',
+    ASSET_BUNDLE_IDS.game,
+    'ghostClouds',
+    ghostCloudsImage,
+    256,
+    256,
+    'game'
+  ),
+  asset(
+    'scene.arena.ghost-banner-atlas',
     ASSET_BUNDLE_IDS.arena,
-    'ghostDissolve',
-    ghostDissolveImage,
+    'ghostBannerAtlas',
+    ghostBannerAtlasImage,
+    512,
+    512,
+    'arena'
+  ),
+  asset(
+    'scene.game.ghost-banner-atlas',
+    ASSET_BUNDLE_IDS.game,
+    'ghostBannerAtlas',
+    ghostBannerAtlasImage,
+    512,
+    512,
+    'game'
+  ),
+  asset(
+    'scene.arena.ghost-button-atlas',
+    ASSET_BUNDLE_IDS.arena,
+    'ghostButtonAtlas',
+    ghostButtonAtlasImage,
     256,
     256,
     'arena'
   ),
   asset(
-    'scene.arena.burn-noise',
+    'scene.game.ghost-button-atlas',
+    ASSET_BUNDLE_IDS.game,
+    'ghostButtonAtlas',
+    ghostButtonAtlasImage,
+    256,
+    256,
+    'game'
+  ),
+  asset(
+    'scene.arena.ghost-smoke-add',
     ASSET_BUNDLE_IDS.arena,
-    'burnNoise',
-    burnNoiseImage,
-    512,
-    512,
+    'ghostSmokeAdd',
+    ghostSmokeAddImage,
+    256,
+    256,
     'arena'
+  ),
+  asset(
+    'scene.game.ghost-smoke-add',
+    ASSET_BUNDLE_IDS.game,
+    'ghostSmokeAdd',
+    ghostSmokeAddImage,
+    256,
+    256,
+    'game'
+  ),
+  asset(
+    'scene.arena.ghost-smoke',
+    ASSET_BUNDLE_IDS.arena,
+    'ghostSmoke',
+    ghostSmokeImage,
+    128,
+    128,
+    'arena'
+  ),
+  asset(
+    'scene.game.ghost-smoke',
+    ASSET_BUNDLE_IDS.game,
+    'ghostSmoke',
+    ghostSmokeImage,
+    128,
+    128,
+    'game'
+  ),
+  asset(
+    'scene.arena.ghost-mote',
+    ASSET_BUNDLE_IDS.arena,
+    'ghostMote',
+    ghostMoteImage,
+    64,
+    64,
+    'arena'
+  ),
+  asset(
+    'scene.game.ghost-mote',
+    ASSET_BUNDLE_IDS.game,
+    'ghostMote',
+    ghostMoteImage,
+    64,
+    64,
+    'game'
+  ),
+  asset(
+    'scene.arena.ghost-evaporate',
+    ASSET_BUNDLE_IDS.arena,
+    'ghostEvaporate',
+    ghostEvaporateImage,
+    64,
+    64,
+    'arena'
+  ),
+  asset(
+    'scene.game.ghost-evaporate',
+    ASSET_BUNDLE_IDS.game,
+    'ghostEvaporate',
+    ghostEvaporateImage,
+    64,
+    64,
+    'game'
   ),
   asset(
     'scene.arena.reward-dust',
@@ -1316,15 +1424,6 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-scene'
   ),
   asset(
-    'scene.game.ghost-dissolve',
-    ASSET_BUNDLE_IDS.game,
-    'ghostDissolve',
-    ghostDissolveImage,
-    256,
-    256,
-    'game-scene'
-  ),
-  asset(
     'scene.game.burn-noise',
     ASSET_BUNDLE_IDS.game,
     'burnNoise',
@@ -1989,6 +2088,18 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     246,
     131,
     'game-scene'
+  ),
+  // The shared alias uploads this small match affordance during app warmup too.
+  ...[ASSET_BUNDLE_IDS.game, ASSET_BUNDLE_IDS.sharedUI].map((bundle) =>
+    asset(
+      `scene.game.tradeable-glow.${bundle}`,
+      bundle,
+      'tradeableGlow',
+      gameTradeableGlowImage,
+      283,
+      340,
+      'game-scene'
+    )
   ),
   asset(
     'scene.game.fatigue-deck',
@@ -3073,10 +3184,7 @@ export const ARENA_KEY_ASSET_KEYS = [
 export interface ArenaAssets extends Record<
   (typeof ARENA_KEY_ASSET_KEYS)[number],
   Texture
-> {
-  ghostSpotlight: Texture
-  ghostDissolve: Texture
-  burnNoise: Texture
+>, GhostTextures {
   rewardBox: Texture
   confirmReward: Texture
   rewardDust: Texture
@@ -3158,7 +3266,7 @@ export interface DeckPresentationAssets extends Record<DeckHeroAssetKey, Texture
 export interface GameAssets extends Record<
   HeroPowerAssetKey | MatchHeroAssetKey,
   Texture
-> {
+>, GhostTextures {
   heroPowerAura1: Texture
   heroSpellPlay: Texture
   heroPowerAura2: Texture
@@ -3211,7 +3319,6 @@ export interface GameAssets extends Record<
   historyArrowLocal: Texture
   historyArrowRemote: Texture
   burnNoise: Texture
-  ghostDissolve: Texture
   ghostSpotlight: Texture
   historyBurnCard: Texture
   historyBurnThumb: Texture
@@ -3284,6 +3391,7 @@ export interface GameAssets extends Record<
   playSpotlight8: Texture
   deck: Texture
   deckSliced: Texture
+  tradeableGlow: Texture
   deckInfo: Texture
   fatigueDeck: Texture
   manaAvailable: Texture

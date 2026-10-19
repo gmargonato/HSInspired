@@ -32,6 +32,7 @@ import { MATCH_SHADOW_CONFIG } from '../board/match-shadow-config'
 import { ACTIVE_HAND_CARD_DEPTH } from '../match-layers'
 
 interface HandCallbacks {
+  shouldReturnCosmetic?(pointer: HandPointer): boolean
   beginTargetGesture(entry: HandEntry, pointer: HandPointer, pointerId: number): void
   tryTarget(entry: HandEntry, pointer: HandPointer, pointerId: number): boolean
   updateBoardPreview(pointer: HandPointer): void
@@ -79,6 +80,9 @@ export class GameHandView {
       {
         entryAt: (index) => this.handEntries[index],
         entryFor: (slot) => this.handEntries.find((entry) => entry.slot === slot),
+        indexFor: (slot) => this.handEntries.findIndex((entry) => entry.slot === slot),
+        shouldReturnCosmetic: (pointer) =>
+          callbacks.shouldReturnCosmetic?.(pointer) ?? false,
         beginTargetGesture: callbacks.beginTargetGesture,
         tryTarget: callbacks.tryTarget,
         updateBoardPreview: callbacks.updateBoardPreview,
@@ -242,6 +246,8 @@ export class GameHandView {
     let pointer = this.hoverPointer
     const events = this.renderer.events
     if (events) {
+      // Keep the refresh pending until Pixi receives its first pointer event.
+      if (!events.rootBoundary.rootTarget) return
       const global = events.pointer.global
       pointer = this.layer.toLocal(global)
       // Re-test the actual input target: a modal can cover a stationary pointer.

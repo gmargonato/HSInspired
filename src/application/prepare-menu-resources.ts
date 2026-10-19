@@ -78,6 +78,9 @@ export class MenuStartupResources {
         })
         // Pixi spreads uploads over frames; only one upload queue runs at a time.
         await renderer.prepare.upload(textures)
+        if (bundle === ASSET_BUNDLE_IDS.cardRendering) {
+          this.prepareOutline(renderer, assets['card.keyword.tradeable'], 'card')
+        }
         if (bundle === ASSET_BUNDLE_IDS.mainMenu) {
           warmMainMenuEffects(renderer, {
             dustRound: assets.dustRound,
@@ -86,9 +89,13 @@ export class MenuStartupResources {
         } else if (bundle === ASSET_BUNDLE_IDS.arena) {
           prepareRewardGhostAura(renderer, {
             confirmReward: assets.confirmReward,
-            burnNoise: assets.burnNoise,
-            ghostDissolve: assets.ghostDissolve,
-            ghostSpotlight: assets.ghostSpotlight
+            ghostClouds: assets.ghostClouds,
+            ghostBannerAtlas: assets.ghostBannerAtlas,
+            ghostButtonAtlas: assets.ghostButtonAtlas,
+            ghostSmokeAdd: assets.ghostSmokeAdd,
+            ghostSmoke: assets.ghostSmoke,
+            ghostMote: assets.ghostMote,
+            ghostEvaporate: assets.ghostEvaporate
           })
         } else if (bundle === ASSET_BUNDLE_IDS.deckSelection) {
           this.prepareOutline(renderer, assets.playButton, 'play-button')

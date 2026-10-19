@@ -829,6 +829,19 @@ export interface PlayCardCommand {
   readonly choice?: number
 }
 
+export interface TradeCardCommand {
+  readonly type: 'trade-card'
+  readonly participantId: PlayerId
+  readonly cardInstanceId: string
+}
+
+/** A trade exposes the action, not the identity or position of either private card. */
+export interface CardTradedEvent {
+  readonly type: 'card-traded'
+  readonly participantId: PlayerId
+  readonly cardInstanceId: string
+}
+
 export interface ChooseDiscoverCardCommand {
   readonly type: 'choose-discover-card'
   readonly participantId: PlayerId
@@ -926,6 +939,7 @@ export interface DevDrawCommand {
 }
 
 export type OpeningMatchCommand =
+  | TradeCardCommand
   | { readonly type: 'concede'; readonly participantId: PlayerId }
   | ConfirmMulliganCommand
   | EndTurnCommand
@@ -1351,7 +1365,7 @@ export interface HistoryActionResolvedEvent {
   readonly append?: boolean
   readonly type: 'history-action-resolved'
   readonly participantId: PlayerId
-  readonly action: 'card' | 'hero-power' | 'combat' | 'trigger' | 'fatigue'
+  readonly action: 'card' | 'hero-power' | 'combat' | 'trigger' | 'fatigue' | 'trade'
   readonly source: HistoryEntitySnapshot
   readonly outcomes: readonly HistoryActionOutcome[]
 }
@@ -1388,6 +1402,7 @@ export type SecretPresentationEvent = (
 }
 
 export type OpeningMatchEvent =
+  | CardTradedEvent
   | SecretPresentationEvent
   | RandomSpellPresentationEvent
   | MulliganResolvedEvent
@@ -1690,6 +1705,7 @@ export interface CardPlayEffectPreview {
 }
 
 export interface MatchLegality {
+  readonly tradeableCardInstanceIds?: readonly string[]
   /** Permanent objects with a legal zero-mana hand-card activation. */
   readonly activatableBoardObjectInstanceIds?: readonly string[]
   readonly canEndTurn: boolean

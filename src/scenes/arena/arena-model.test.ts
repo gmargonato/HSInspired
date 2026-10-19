@@ -96,9 +96,13 @@ describe('Arena reward overlay', () => {
     rewardBox: Texture.WHITE,
     rewardDust: Texture.WHITE,
     confirmReward: Texture.WHITE,
-    burnNoise: Texture.WHITE,
-    ghostDissolve: Texture.WHITE,
-    ghostSpotlight: Texture.WHITE
+    ghostClouds: Texture.WHITE,
+    ghostBannerAtlas: Texture.WHITE,
+    ghostButtonAtlas: Texture.WHITE,
+    ghostSmokeAdd: Texture.WHITE,
+    ghostSmoke: Texture.WHITE,
+    ghostMote: Texture.WHITE,
+    ghostEvaporate: Texture.WHITE
   } as ArenaAssets
   const views: ArenaRewardsView[] = []
   const event = {

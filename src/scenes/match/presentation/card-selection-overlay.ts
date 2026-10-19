@@ -1,3 +1,4 @@
+import type { GhostTextures } from '../../../visual-components/effects/ghost-materials'
 import { Container, Graphics, Sprite, Text, type Renderer, type Texture } from 'pixi.js'
 import type { HeroPowerId } from '../../../game-rules/content/cards'
 import type { CardChoiceOption, OpeningCard, PlayerId } from '../../../game-rules/match'
@@ -24,9 +25,7 @@ export interface CardSelectionOverlayOptions {
   /** Match-owned host below hands, independent of the closing modal's visibility. */
   readonly exitLayer: Container
   readonly renderer: Renderer
-  readonly ghostNoise: Texture
-  readonly ghostDissolve: Texture
-  readonly ghostSpotlight: Texture
+  readonly ghostTextures: GhostTextures
   readonly toggleTexture: Texture
   readonly cardBackTexture: Texture
   readonly createSlot: (
@@ -137,9 +136,8 @@ export class CardSelectionOverlay extends Container {
     this.addChild(this.toggle)
     this.toggleOutline = new GhostAura(this.toggle, {
       silhouette: this.toggle.sprite,
-      noise: options.ghostNoise,
-      dissolve: options.ghostDissolve,
-      spotlight: options.ghostSpotlight
+      text: this.toggleLabel,
+      textures: options.ghostTextures
     })
     this.visible = false
   }
@@ -338,6 +336,9 @@ export class CardSelectionOverlay extends Container {
   ): Promise<void> {
     if (this.destroyed) return
     this.clear()
+    // Restore an outgoing toggle before assigning its next layout. Its exit
+    // transform belongs to the old parent until GhostAura returns it here.
+    this.setToggleVisible(true)
     this.prompt.text = prompt
     this.cancelSelection = onCancel ?? null
     const togglePosition = onCancel
@@ -352,7 +353,6 @@ export class CardSelectionOverlay extends Container {
       if (card) this.choicesByInstanceId.set(card.instanceId, option)
     })
     this.visible = true
-    this.setToggleVisible(true)
     this.toggle.setEnabled(true)
     this.boardVisible = false
     this.dimming = true
@@ -432,8 +432,11 @@ export class CardSelectionOverlay extends Container {
   ): Promise<void> {
     if (this.destroyed) return
     this.clear()
-    this.visible = true
     this.setToggleVisible(true)
+    const position = GAME_BOARD_LAYOUT.cardSelection.toggleButton.position
+    this.toggle.position.set(position.x, position.y)
+    this.toggle.setBaseY(position.y)
+    this.visible = true
     this.toggle.setEnabled(true)
     this.boardVisible = false
     this.dimming = true
@@ -513,9 +516,6 @@ export class CardSelectionOverlay extends Container {
       this.toggle.setEnabled(false)
       this.toggleOutline.disappear(this.options.exitLayer)
     }
-    const defaultToggle = GAME_BOARD_LAYOUT.cardSelection.toggleButton.position
-    this.toggle.position.set(defaultToggle.x, defaultToggle.y)
-    this.toggle.setBaseY(defaultToggle.y)
     this.prompt.text = ''
     this.requestRevision += 1
     this.animationScope.kill()

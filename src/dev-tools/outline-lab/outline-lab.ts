@@ -638,9 +638,12 @@ export class OutlineLab extends Container {
     if (preset === 'shatter' || preset === 'god-rays' || preset === 'windfury') return
     if (preset === 'ghost') {
       const outline = new GhostAura(target, {
-        noise: this.ghostAssets.burnNoise,
-        dissolve: this.ghostAssets.ghostDissolve,
-        spotlight: this.ghostAssets.ghostSpotlight
+        textures: this.ghostAssets,
+        profile:
+          target instanceof Sprite &&
+          target.texture === this.ghostAssets.mulliganAnnouncement
+            ? 'banner'
+            : 'button'
       })
       outline.setTuning(this.ghostTuning)
       outline.setPalette(this.ghostPalette)

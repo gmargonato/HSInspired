@@ -51,6 +51,7 @@ import {
 } from '../../../game-rules/match'
 import type { PlayerId } from '../../../game-rules/match'
 import type { AiDecisionApi } from '../../../desktop/contracts/ipc/ai'
+import type { WindowAttentionApi } from '../../../desktop/contracts/ipc/window-attention'
 import type {
   DevCommand,
   DevCardPickerAction,
@@ -253,6 +254,7 @@ function isFrozen(
 }
 
 export interface GameBoardViewOptions {
+  readonly windowAttention?: WindowAttentionApi
   readonly boardTexture?: Texture
   readonly onLoadProgress?: (progress: number) => Promise<void>
   readonly route: GameRoute
@@ -586,6 +588,7 @@ export class GameBoardView extends Actor {
    * Blocks repeat end-turn commands and the AI from acting out of turn.
    */
   private turnInProgress = false
+  private tradeInProgress = false
   private remoteBackCount = 0
   private openingRevealStarted = false
   /** Current insertion gap preview, or null when no gap is previewed. */
@@ -616,8 +619,16 @@ export class GameBoardView extends Actor {
         event.pointerId
       )
       if (this.hand.drag.index === null) return
+      if (this.hand.drag.cosmetic || this.hand.drag.returning) {
+        this.hand.drag.end()
+        return
+      }
       const index = this.hand.drag.index
       const entry = this.hand.entries[index]
+      if (this.hand.drag.pointer && this.isOverLocalDeck(this.hand.drag.pointer)) {
+        this.resolveCardDrop(this.hand.drag.pointer)
+        return
+      }
       const input = entry
         ? this.match.getPlayInput?.(this.localParticipantId, entry.card.instanceId)
         : null
@@ -678,7 +689,13 @@ export class GameBoardView extends Actor {
       return
     }
     const carriedEntry = this.hand.entries[this.hand.drag.index]
-    if (carriedEntry && this.requiresSeparatePlacementClick(carriedEntry)) return
+    if (
+      !this.hand.drag.cosmetic &&
+      carriedEntry &&
+      !(this.hand.drag.pointer && this.isOverLocalDeck(this.hand.drag.pointer)) &&
+      this.requiresSeparatePlacementClick(carriedEntry)
+    )
+      return
     const pointer = this.hand.drag.pointer
     const cardInstanceId = carriedEntry?.card.instanceId
     if (pointer) this.resolveCardDrop(pointer)
@@ -852,6 +869,11 @@ export class GameBoardView extends Actor {
       options.renderer,
       this.animationScope,
       {
+        shouldReturnCosmetic: (pointer) =>
+          this.isLocalTurn() ||
+          this.isGameplayBlocked() ||
+          this.match.getState().phase !== 'turns' ||
+          isInDropZone(pointer, GAME_BOARD_LAYOUT.cardPlay.localDropZone),
         beginTargetGesture: (entry, pointer, pointerId) => {
           const input = this.match.getPlayInput?.(
             this.localParticipantId,
@@ -1165,9 +1187,7 @@ export class GameBoardView extends Actor {
       exitLayer: this.modalExitLayer,
       renderer: options.renderer,
       toggleTexture: options.gameAssets.toggleViewButton,
-      ghostNoise: options.gameAssets.burnNoise,
-      ghostDissolve: options.gameAssets.ghostDissolve,
-      ghostSpotlight: options.gameAssets.ghostSpotlight,
+      ghostTextures: options.gameAssets,
       cardBackTexture: options.gameAssets.cardBack,
       createSlot: (card, sourceInstanceId) => this.createSlot(card, sourceInstanceId),
       createHeroPowerChoice: (heroPowerId, premium) => {
@@ -1440,6 +1460,9 @@ export class GameBoardView extends Actor {
   private restorePassiveInspection(): void {
     const events = this.options.renderer.events
     if (!events || !this.isPassiveInspectionEnabled()) return
+    // Native-menu launches may reach the first turn before any pointer event.
+    // Pixi only initializes this root when it receives input.
+    if (!events.rootBoundary.rootTarget) return
     const global = events.pointer.global
     this.gameplayLayer.sortChildren()
     let target: Container | null = events.rootBoundary.hitTest(global.x, global.y)
@@ -2002,7 +2025,7 @@ export class GameBoardView extends Actor {
    * drags returning to the hand. Only the local turn can light the tray.
    */
   private localManaHighlightCost(): number | null {
-    if (!this.isLocalTurn()) return null
+    if (!this.isLocalTurn() || this.hand.drag.cosmetic) return null
     const targeting = this.cardPlay.current
     if (targeting) return targeting.input.currentCost
     if (this.hand.drag.returning) return null
@@ -2015,6 +2038,13 @@ export class GameBoardView extends Actor {
       : undefined
     const entry = draggingEntry ?? hoveredEntry
     if (!entry) return null
+    if (
+      draggingEntry &&
+      this.hand.drag.pointer &&
+      this.isOverLocalDeck(this.hand.drag.pointer)
+    ) {
+      return this.canTradeCard(entry) ? 1 : null
+    }
     const input = this.match.getPlayInput?.(
       this.localParticipantId,
       entry.card.instanceId
@@ -2032,6 +2062,9 @@ export class GameBoardView extends Actor {
     options: { readonly skipWeaponSync?: boolean } = {}
   ): void {
     state = this.randomSpellState ?? state
+    if (this.hand.drag.cosmetic && state.activePlayerId === this.localParticipantId) {
+      this.hand.drag.end()
+    }
     this.syncMatchCursor(state)
     this.syncDeckCounts(state)
     this.syncLocalHandCards(state)
@@ -2118,6 +2151,7 @@ export class GameBoardView extends Actor {
   /** Choices and automatic spell sequences block gameplay, while inspection remains available. */
   private isGameplayBlocked(state: OpeningMatchState = this.match.getState()): boolean {
     return (
+      this.tradeInProgress ||
       this.selectedBoardObjectInstanceId !== null ||
       this.randomSpellRevision !== null ||
       state.pendingDiscover?.participantId === this.localParticipantId ||
@@ -2543,6 +2577,9 @@ export class GameBoardView extends Actor {
 
   /** Shows playable cards, with yellow reserved for active conditional bonuses. */
   private syncPlayableCardOutlines(): void {
+    const tradeableCardInstanceIds = new Set(
+      this.match.getLegality?.(this.localParticipantId)?.tradeableCardInstanceIds ?? []
+    )
     const playableCardInstanceIds = new Set(
       this.match.getLegality?.(this.localParticipantId)?.playableCardInstanceIds ?? []
     )
@@ -2555,20 +2592,27 @@ export class GameBoardView extends Actor {
       const canPlay =
         this.randomSpellRevision === null &&
         playableCardInstanceIds.has(entry.card.instanceId)
+      const canTrade =
+        this.randomSpellRevision === null &&
+        tradeableCardInstanceIds.has(entry.card.instanceId)
       const effectPreview = this.match.getPlayInput?.(
         this.localParticipantId,
         entry.card.instanceId
       )?.effectPreview
       entry.slot.setPlayableOutlineEnabled(canPlay)
+      entry.slot.setTradeableOutlineEnabled(canTrade)
       entry.slot.setPlayableOutlineEnhanced(
         effectPreview?.conditionallyEnhanced === true
       )
       if (entry === draggingEntry) {
         this.hand.drag.setOutlineEnabled(canPlay)
+        this.hand.drag.setTradeableOutlineEnabled(canTrade)
       }
     }
     if (this.hand.drag.pointer) {
       this.updateDraggedCardDropOutline(this.hand.drag.pointer)
+    } else {
+      this.deckViews.get(this.localParticipantId)?.setTradeableGlowVisible(false)
     }
   }
 
@@ -3742,7 +3786,10 @@ export class GameBoardView extends Actor {
     // Configure every base frame before acquiring any field: resolver mipmap
     // configuration can unload a source and invalidate an existing field.
     const frames = await Promise.allSettled(
-      Object.values(CARD_PROFILES).map((profile) => this.resolver.load(profile.frame))
+      [
+        ...Object.values(CARD_PROFILES).map((profile) => profile.frame),
+        'card.keyword.tradeable'
+      ].map((key) => this.resolver.load(key))
     )
     if (this.destroyed) return
     const tasks: (() => void)[] = frames.map((result) => () => {
@@ -4420,6 +4467,28 @@ export class GameBoardView extends Actor {
           await this.presentDraw(event.participantId, event.card)
         }
         return
+      case 'card-traded': {
+        const entry =
+          event.participantId === this.localParticipantId
+            ? this.findEntry(event.cardInstanceId)
+            : undefined
+        if (entry) {
+          entry.slot.suppressPlayableOutline(true)
+          this.travelLayer.reparentChild(entry.slot)
+          this.removePresentedHandEntry(entry)
+          this.activeDepartureSlots.add(entry.slot)
+          try {
+            await Promise.all([
+              this.animateBodyToDeck(entry.slot, GAME_BOARD_LAYOUT.decks.local, 0),
+              this.reflowHandAfterPlay()
+            ])
+          } finally {
+            this.activeDepartureSlots.delete(entry.slot)
+            if (!entry.slot.destroyed) entry.slot.destroy({ children: true })
+          }
+        }
+        return
+      }
       case 'opening-card-drawn':
       case 'card-drawn':
         await this.presentDraw(
@@ -4467,11 +4536,13 @@ export class GameBoardView extends Actor {
         this.syncTurnHud(this.match.getState())
         return
       case 'opening-turn-started':
+        this.setWindowHighlighted(event.participantId === this.localParticipantId)
         this.syncTurnHud(this.match.getState())
         this.handleTurnStarted(event.participantId)
         await this.heroPowerEffects.reveal()
         return
       case 'turn-started':
+        this.setWindowHighlighted(event.participantId === this.localParticipantId)
         this.syncTurnHud(this.match.getState())
         this.handleTurnStarted(event.participantId)
         return
@@ -4566,6 +4637,7 @@ export class GameBoardView extends Actor {
         await this.presentEffectVfx(event)
         return
       case 'match-ended':
+        this.setWindowHighlighted(false)
         this.syncTurnControls(this.match.getState())
         await this.presentMatchResult(event)
         return
@@ -7012,7 +7084,11 @@ export class GameBoardView extends Actor {
     }
 
     const definition = CARD_CATALOG.require(event.minion.cardId)
-    const effectsOnLanding = (resting: { x: number; y: number; scale: number }): void => {
+    const effectsOnLanding = (resting: {
+      x: number
+      y: number
+      scale: number
+    }): void => {
       if (!hasMinionLandingDust(event) || targetPreview?.cancelled || this.destroyed)
         return
       const dust = this.landingDust.play(resting.x, resting.y, resting.scale)
@@ -8135,6 +8211,13 @@ export class GameBoardView extends Actor {
     void this.boardPositions.layout('remote')
   }
 
+  private setWindowHighlighted(highlighted: boolean): void {
+    if (this.destroyed) return
+    void this.options.windowAttention?.setHighlighted(highlighted).catch((error) => {
+      this.options.logger?.warn('Could not update taskbar attention.', error)
+    })
+  }
+
   /** Reveals the turn controls and reflects the new active player's turn. */
   private handleTurnStarted(participantId: PlayerId): void {
     this.cancelBoardObjectSelection()
@@ -8400,6 +8483,8 @@ export class GameBoardView extends Actor {
   }
 
   private resolveLocalBoardPreview(pointer: HandPointer): number | null {
+    if (this.isOverLocalDeck(pointer)) return null
+    if (this.hand.drag.cosmetic) return null
     if (this.hand.drag.index === null) return null
     const entry = this.hand.entries[this.hand.drag.index]
     if (!entry) return null
@@ -8437,20 +8522,81 @@ export class GameBoardView extends Actor {
   ): void {
     const index = this.hand.drag.index
     const entry = index === null ? undefined : this.hand.entries[index]
+    const canTrade =
+      !!entry &&
+      !this.hand.drag.returning &&
+      !this.hand.drag.cosmetic &&
+      this.canTradeCard(entry)
+    this.deckViews.get(this.localParticipantId)?.setTradeableGlowVisible(canTrade)
     if (!entry) return
+    if (this.isOverLocalDeck(pointer)) {
+      this.hand.drag.setDropAllowed(canTrade, 'green')
+      if (canTrade) this.syncManaTray(this.match.getState())
+      return
+    }
+    if (canTrade) this.syncManaTray(this.match.getState())
     const input = this.match.getPlayInput?.(
       this.localParticipantId,
       entry.card.instanceId
     )
     this.hand.drag.setDropAllowed(
-      !!input &&
+      !this.hand.drag.cosmetic &&
+        !!input &&
         isInDropZone(pointer, GAME_BOARD_LAYOUT.cardPlay.localDropZone) &&
         (!input.requiresPosition || insertionIndex !== null)
     )
   }
 
   private clearLocalBoardPreview(): void {
+    this.deckViews.get(this.localParticipantId)?.setTradeableGlowVisible(false)
     this.boardPositions.preview('local', 'drag', null)
+  }
+
+  private isOverLocalDeck(pointer: HandPointer): boolean {
+    const deck = this.deckViews.get(this.localParticipantId)
+    if (!deck?.hitArea) return false
+    const point = deck.toLocal(this.hand.layer.toGlobal(pointer))
+    return deck.hitArea.contains(point.x, point.y)
+  }
+
+  private canTradeCard(entry: HandEntry): boolean {
+    return (
+      this.match
+        .getLegality?.(this.localParticipantId)
+        .tradeableCardInstanceIds?.includes(entry.card.instanceId) === true
+    )
+  }
+
+  private tradeCard(entry: HandEntry): void {
+    if (this.tradeInProgress) return
+    const result = this.dispatchCommand({
+      type: 'trade-card',
+      participantId: this.localParticipantId,
+      cardInstanceId: entry.card.instanceId
+    })
+    if (!result.accepted) {
+      this.hand.drag.end()
+      return
+    }
+    this.tradeInProgress = true
+    this.hand.drag.acceptCard()
+    this.clearLocalBoardPreview()
+    this.syncTurnHud(result.state)
+    this.syncTurnControls(result.state)
+    void this.enqueuePresentation(result.state, async () => {
+      try {
+        await this.presentResolutionEvents(result.events)
+      } finally {
+        this.tradeInProgress = false
+        if (!this.destroyed) {
+          this.hand.setReflowing(false)
+          this.hand.drag.presentationSettled()
+          this.hand.activate()
+          this.syncTurnHud(this.match.getState())
+          this.syncTurnControls(this.match.getState())
+        }
+      }
+    })
   }
 
   /** Confirms an already-selected targetless spell (for example Coin or Tracking). */
@@ -8472,10 +8618,20 @@ export class GameBoardView extends Actor {
   /** Resolves a carried card through the engine and presents an accepted play. */
   private resolveCardDrop(pointer: HandPointer): void {
     if (this.hand.drag.index === null || this.hand.drag.returning) return
+    if (this.hand.drag.cosmetic) {
+      this.hand.drag.end()
+      return
+    }
     const index = this.hand.drag.index
     const entry = this.hand.entries[index]
     if (!entry) {
       this.hand.drag.end()
+      return
+    }
+
+    if (this.isOverLocalDeck(pointer)) {
+      if (!this.hand.drag.cosmetic && this.canTradeCard(entry)) this.tradeCard(entry)
+      else this.hand.drag.end()
       return
     }
 
@@ -8923,6 +9079,8 @@ export class GameBoardView extends Actor {
     pointer: HandPointer,
     pointerId: number
   ): boolean {
+    // Keep Tradeable spells carried until a board drop chooses the play action.
+    if (cardDefinition(entry.card).keywords.includes('tradeable')) return false
     const input = this.match.getPlayInput?.(
       this.localParticipantId,
       entry.card.instanceId
@@ -8948,8 +9106,7 @@ export class GameBoardView extends Actor {
 
   /**
    * Left click on the hand: resolve the card under the pointer and attach it to
-   * the cursor if the local player can afford it on their turn, otherwise give
-   * it a small "no" shake. Clicks on the opponent's turn are ignored.
+   * the cursor. Opponent-turn pickup is cosmetic; on-turn rule rejections shake.
    */
   private onHandPointerDown(event: FederatedPointerEvent): void {
     if (this.heroPowerTargeting || this.cardPlay.current || this.isGameplayBlocked())
@@ -8969,7 +9126,16 @@ export class GameBoardView extends Actor {
     if (resolved === null) return
     const legality = this.match.getLegality?.(this.localParticipantId)
     const card = this.hand.entries[resolved]?.card
-    if (!card || !legality?.playableCardInstanceIds.includes(card.instanceId)) {
+    if (!card) return
+    if (!this.isLocalTurn() && this.match.getState().phase === 'turns') {
+      this.hand.drag.begin(resolved, local, event.pointerId, 'cosmetic')
+      this.syncPassiveInspection()
+      return
+    }
+    if (
+      !legality?.playableCardInstanceIds.includes(card.instanceId) &&
+      !legality?.tradeableCardInstanceIds?.includes(card.instanceId)
+    ) {
       this.shakeCard(resolved)
       return
     }
@@ -8977,7 +9143,7 @@ export class GameBoardView extends Actor {
     this.syncPassiveInspection()
   }
 
-  /** A quick horizontal wobble for an unaffordable card, settling back at rest. */
+  /** A quick rejection wobble for an on-turn rule lock or unaffordable card. */
   private shakeCard(index: number): void {
     const entry = this.hand.entries[index]
     if (!entry) return
@@ -9082,6 +9248,7 @@ export class GameBoardView extends Actor {
   }
 
   override dispose(): void {
+    this.setWindowHighlighted(false)
     this.unsubscribeAttention?.()
     this.aiAttention.clear()
     for (const back of this.attentionMotions.keys())

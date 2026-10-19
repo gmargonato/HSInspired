@@ -1,205 +1,319 @@
-import { Container, Sprite, type Texture } from 'pixi.js'
-
+import { Container, type Sprite } from 'pixi.js'
 import { GHOST_WIND_DIRECTIONS } from '../../desktop/contracts/ipc/outline-tuning'
 import type { GhostMistValues } from './ghost-mist-filter'
-
-// Preserve the saved movement baseline without coupling it to mist width.
-const PARTICLE_MOTION_SPREAD = 14
+import {
+  GhostMaterialMesh,
+  configureGhostTextures,
+  type GhostTextures
+} from './ghost-materials'
+import {
+  GHOST_LAYOUT,
+  GHOST_TIMING,
+  GHOST_BUTTON_ECHO,
+  type GhostProfile
+} from './ghost-layout'
+import authored from './ghost-authored.json'
 
 const random = (n: number): number => {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453
   return x - Math.floor(x)
 }
+const sample = (range: readonly number[], seed: number): number =>
+  range[0] + (range[1] - range[0]) * random(seed)
+const rgb = (color: number): number[] => [
+  (color >>> 16) / 255,
+  ((color >>> 8) & 255) / 255,
+  (color & 255) / 255
+]
 
-// Read the silhouette only when the asset changes. Particles then move
-// independently of the artwork and are never clipped back to its alpha.
+/** Unity AnimationCurve's unweighted cubic Hermite interpolation. */
+export function ghostCurve(keys: readonly (readonly number[])[], t: number): number {
+  if (t <= keys[0][0]) return keys[0][1]
+  for (let i = 1; i < keys.length; i++) {
+    const a = keys[i - 1],
+      b = keys[i]
+    if (t > b[0]) continue
+    const span = b[0] - a[0],
+      u = (t - a[0]) / span
+    if (a.length === 2) return a[1] + (b[1] - a[1]) * u
+    return (
+      (2 * u ** 3 - 3 * u * u + 1) * a[1] +
+      (u ** 3 - 2 * u * u + u) * span * a[3] +
+      (-2 * u ** 3 + 3 * u * u) * b[1] +
+      (u ** 3 - u * u) * span * b[2]
+    )
+  }
+  return keys[keys.length - 1][1]
+}
+
+/** Fixed-step adaptation of Unity's velocity limiter; deterministic when seeking. */
+export function ghostDisplacement(
+  vx: number,
+  vy: number,
+  fx: number,
+  fy: number,
+  seconds: number,
+  limit: number,
+  dampen: number
+): [number, number] {
+  if (!limit)
+    return [
+      vx * seconds + (fx * seconds * seconds) / 2,
+      vy * seconds + (fy * seconds * seconds) / 2
+    ]
+  let x = 0,
+    y = 0
+  for (let t = 0; t < seconds; t += 1 / 60) {
+    const dt = Math.min(1 / 60, seconds - t)
+    vx += fx * dt
+    vy += fy * dt
+    const speed = Math.hypot(vx, vy)
+    if (speed > limit) {
+      const damping = 1 - (1 - dampen) ** (dt * 60)
+      const factor = (speed - (speed - limit) * damping) / speed
+      vx *= factor
+      vy *= factor
+    }
+    x += vx * dt
+    y += vy * dt
+  }
+  return [x, y]
+}
+
+/** Authored light motes, additive gas, alpha smoke, and the death burst. */
 export function createMistParticles(
   target: Sprite,
   values: GhostMistValues,
-  texture: Texture
+  textures: GhostTextures,
+  profile: GhostProfile
 ) {
+  configureGhostTextures(textures)
   const container = new Container()
-  container.label = 'ghost-mist.particles'
+  container.label = 'ghost-mist.layers'
   container.eventMode = 'none'
-  const sprites = Array.from({ length: 120 }, () => {
-    const sprite = new Sprite({ texture, anchor: 0.5, blendMode: 'add' })
-    sprite.label = 'ghost-mist.particle'
-    sprite.visible = false
-    container.addChild(sprite)
-    return sprite
-  })
-  let burstSequence = 0
-  let wasDisappearing = false
-  let sourceTexture: Texture | undefined
-  type Point = { x: number; y: number }
-  type Edge = Point & { nx: number; ny: number }
-  let edges: Edge[] = []
-  let surface: Point[] = []
-  const births = Array.from({ length: sprites.length }, () => ({
-    key: '',
-    expired: false
-  }))
-
-  function refresh() {
-    if (target.texture === sourceTexture) return
-    sourceTexture = target.texture
-    const mask = document.createElement('canvas')
-    const ratio = Math.min(1, 384 / sourceTexture.width)
-    mask.width = Math.max(1, Math.round(sourceTexture.width * ratio))
-    mask.height = Math.max(1, Math.round(sourceTexture.height * ratio))
-    const context = mask.getContext('2d', { willReadFrequently: true })!
-    context.drawImage(
-      sourceTexture.source.resource as CanvasImageSource,
-      0,
-      0,
-      mask.width,
-      mask.height
-    )
-    const { data } = context.getImageData(0, 0, mask.width, mask.height)
-    const alpha = (x: number, y: number) =>
-      x < 0 || y < 0 || x >= mask.width || y >= mask.height
-        ? 0
-        : data[(y * mask.width + x) * 4 + 3] / 255
-    edges = []
-    surface = []
-    for (let y = 0; y < mask.height; y++) {
-      for (let x = 0; x < mask.width; x++) {
-        if (alpha(x, y) < 0.5) continue
-        const point = {
-          x: (x + 0.5) / mask.width - 0.5,
-          y: (y + 0.5) / mask.height - 0.5
-        }
-        surface.push(point)
-        if (
-          Math.min(
-            alpha(x - 1, y),
-            alpha(x + 1, y),
-            alpha(x, y - 1),
-            alpha(x, y + 1)
-          ) >= 0.5
+  const foreground = new Container()
+  foreground.label = 'ghost-mist.foreground'
+  foreground.eventMode = 'none'
+  const layout = GHOST_LAYOUT[profile]
+  const glowTint =
+    profile === 'banner'
+      ? [0.06415994, 0.18876508, 0.58431375, 1]
+      : [0.05382545, 0.11775625, 0.27450982, 0.7019608]
+  const glow = new GhostMaterialMesh(
+    profile === 'banner' ? textures.ghostBannerAtlas : textures.ghostButtonAtlas,
+    textures.ghostClouds,
+    1,
+    profile === 'banner' ? 0 : 1,
+    glowTint,
+    layout.uv
+  )
+  glow.label = 'ghost-mist.glow'
+  container.addChild(glow)
+  const echo =
+    profile === 'button'
+      ? new GhostMaterialMesh(
+          textures.ghostButtonAtlas,
+          textures.ghostClouds,
+          1,
+          1,
+          [...GHOST_BUTTON_ECHO.tint],
+          GHOST_BUTTON_ECHO.uv
         )
-          continue
-        let nx = alpha(x - 1, y) - alpha(x + 1, y)
-        let ny = alpha(x, y - 1) - alpha(x, y + 1)
-        const length = Math.hypot(nx, ny)
-        if (length < 0.01) {
-          nx = point.x
-          ny = point.y
-        }
-        const norm = Math.hypot(nx, ny) || 1
-        edges.push({ ...point, nx: nx / norm, ny: ny / norm })
+      : null
+  if (echo) {
+    echo.label = 'ghost-mist.death-echo'
+    foreground.addChild(echo)
+  }
+  const streams = [
+    ...authored[profile],
+    ...(profile === 'button' ? authored.evaporate : [])
+  ].map((source, index) => {
+    const kind = source.kind
+    const texture =
+      kind === 'mote'
+        ? textures.ghostMote
+        : kind === 'smokeAdd'
+          ? textures.ghostSmokeAdd
+          : kind === 'smoke'
+            ? textures.ghostSmoke
+            : textures.ghostEvaporate
+    const count =
+      kind === 'evaporate' ? 250 : Math.ceil(source.rate * source.lifetime[1]) + 1
+    const tint =
+      kind === 'mote'
+        ? [1, 1, 1, 1]
+        : kind === 'evaporate'
+          ? [0.9218608, 0.9433612, 0.9960784, 1]
+          : [0.5, 0.5, 0.5, 0.5]
+    const mesh = new GhostMaterialMesh(
+      texture,
+      textures.ghostClouds,
+      count,
+      kind === 'smoke' ? 3 : 2,
+      tint
+    )
+    mesh.label = 'ghost-mist.' + kind
+    ;(kind === 'mote' || kind === 'evaporate' ? foreground : container).addChild(mesh)
+    return { source, mesh, count, index }
+  })
+  let exitTime: number | null = null
+  let clock = 0,
+    previousTime = 0
+
+  function refresh(): void {
+    if (!container.parent || target.destroyed) return
+    const transform = target.getGlobalTransform()
+    transform.prepend(container.parent.getGlobalTransform().invert())
+    container.setFromMatrix(transform)
+    foreground.setFromMatrix(transform)
+  }
+  function update(time: number): void {
+    if (!container.parent || target.destroyed) return
+    refresh()
+    const dt = Math.max(0, time - previousTime)
+    previousTime = time
+    clock += dt * values.mistAnimationSpeed
+    if (values.progress === 0 || profile === 'banner') exitTime = null
+    else exitTime ??= time
+    const exiting = exitTime !== null
+    const elapsed = values.progress * GHOST_TIMING.duration
+    // Death State hides GameObjectContainer at 0.2s. Only UberText fades.
+    const idleFade = exiting && elapsed >= GHOST_TIMING.burstDelay ? 0 : 1
+    const body = layout.body
+    const width = target.texture.width * body.width,
+      height = target.texture.height * body.height
+    const x = (body.x - target.anchor.x) * target.texture.width
+    const y = (body.y - target.anchor.y) * target.texture.height
+    const pixelsPerUnit = width / layout.worldWidth
+    const opacity = container.getGlobalAlpha()
+    const primary = rgb(values.mistPrimaryColor),
+      secondary = rgb(values.mistHighlightColor)
+    const gu = glow.shader!.resources.ghostUniforms.uniforms
+    gu.uIntensity = values.mistIntensity * (profile === 'banner' ? 2.22 : 1)
+    gu.uTextureScale = values.mistTextureScale
+    gu.uScroll.set([clock / 20, clock / 20])
+    gu.uOpacity = opacity * idleFade
+    glow.visible = values.mistEnabled && idleFade > 0
+    glow.quad(0, x, y, width * layout.glow.width, height * layout.glow.height, 0, [
+      ...primary,
+      1
+    ])
+    glow.upload()
+    if (echo) {
+      echo.visible = values.mistEnabled && exiting && idleFade > 0
+      if (echo.visible) {
+        const eu = echo.shader!.resources.ghostUniforms.uniforms
+        eu.uTint[3] = ghostCurve(GHOST_BUTTON_ECHO.alpha, elapsed * 2)
+        eu.uOpacity = opacity
+        eu.uIntensity = values.mistIntensity
+        echo.quad(
+          0,
+          x,
+          y,
+          width * GHOST_BUTTON_ECHO.width,
+          height * GHOST_BUTTON_ECHO.height,
+          0,
+          [...primary, 1]
+        )
+        echo.upload()
       }
     }
-  }
-
-  function update(time: number) {
-    if (!container.parent || target.destroyed) return
-    const targetTransform = target.getGlobalTransform()
-    const parentTransform = container.parent.getGlobalTransform()
-    const toParent = parentTransform.clone().invert()
     const direction = GHOST_WIND_DIRECTIONS[values.windDirection]
-    const allDirections = values.windDirection === 0
-    const windX = direction.x,
-      windY = direction.y
-    const progress = values.progress
-    if (progress > 0 && !wasDisappearing) burstSequence += 1
-    wasDisappearing = progress > 0
-    const color = values.particleColor
-    for (let i = 0; i < sprites.length; i++) {
-      const sprite = sprites[i]
-      sprite.visible =
-        values.particlesEnabled &&
-        i < values.particleCount &&
-        edges.length > 0 &&
-        progress < 1 &&
-        values.particleIntensity > 0
-      if (!sprite.visible) continue
-      const lifetime = 1.3 + random(i + 4) * 1.1
-      const phase = time / lifetime + random(i + 10)
-      const cycle = Math.floor(phase)
-      // The surface burst follows the white flash. Staggered births keep it
-      // from looking like a particle overlay switched on across the button.
-      const birth = 0.18 + random(i + 45) * 0.22
-      const age =
-        progress > 0
-          ? Math.max(0, Math.min(1, (progress - birth) / (1 - birth)))
-          : phase - cycle
-      const seed = i * 31 + (progress > 0 ? burstSequence : cycle) * 157
-      const spawn = births[i]
-      const birthKey = progress > 0 ? 'burst:' + burstSequence : 'idle:' + cycle
-      if (spawn.key !== birthKey) {
-        spawn.key = birthKey
-        spawn.expired = false
+    const angle = values.windDirection === 0 ? 0 : Math.atan2(-direction.y, direction.x)
+    const cos = Math.cos(angle),
+      sin = Math.sin(angle)
+    for (const { source, mesh, count, index } of streams) {
+      const burst = source.kind === 'evaporate'
+      const smoke = source.kind === 'smoke' || source.kind === 'smokeAdd'
+      mesh.visible =
+        (smoke ? values.mistEnabled : values.particlesEnabled) &&
+        (burst ? exiting && elapsed >= GHOST_TIMING.burstDelay : idleFade > 0)
+      if (!mesh.visible) continue
+      const u = mesh.shader!.resources.ghostUniforms.uniforms
+      u.uOpacity = opacity * (burst ? 1 : idleFade)
+      u.uIntensity = smoke ? values.mistIntensity : values.particleIntensity
+      u.uSoftness = smoke ? values.mistSoftness : 1
+      const tint = smoke
+        ? source.kind === 'smokeAdd'
+          ? primary
+          : secondary
+        : rgb(values.particleColor)
+      const density = values.particleCount / 120
+      const rate = source.rate * density
+      const now =
+        (exiting ? exitTime! + elapsed : smoke ? clock : time) +
+        (source.prewarm ? source.lifetime[1] : 0)
+      const latest = Math.floor(now * rate)
+      mesh.colors.fill(0)
+      for (let i = 0; i < count; i++) {
+        if ((!burst && rate <= 0) || (burst && i >= Math.round(250 * density))) continue
+        const birth = latest - i,
+          seed = (burst ? i : birth) * 31 + index * 7919
+        if (!burst && birth < 0) continue
+        const lifetime = sample(source.lifetime, seed + 4)
+        const seconds = burst ? elapsed - GHOST_TIMING.burstDelay : now - birth / rate
+        const age = seconds / lifetime
+        if (age < 0 || age >= 1) continue
+        const shapeScale = pixelsPerUnit * layout.emitterScale
+        const sx = (random(seed + 7) - 0.5) * source.shape[0] * shapeScale
+        const sy = (random(seed + 8) - 0.5) * source.shape[1] * shapeScale
+        const vx = sample(source.velocity.x, seed + 11),
+          vy = sample(source.velocity.y, seed + 12)
+        const fx = sample(source.force.x, seed + 13),
+          fy = sample(source.force.y, seed + 14)
+        let [dx, dy] = ghostDisplacement(
+          vx,
+          vy,
+          fx,
+          fy,
+          seconds,
+          source.speedLimit,
+          source.dampen
+        )
+        dx *= pixelsPerUnit * values.particleWindStrength
+        dy *= pixelsPerUnit * values.particleWindStrength
+        const rotatedX = dx * cos - dy * sin
+        dy = dx * sin + dy * cos
+        dx = rotatedX
+        const distance = Math.hypot(dx, dy)
+        const travelFade = Math.min(
+          1,
+          Math.max(
+            0,
+            (values.particleTravelDistance - distance) /
+              (values.particleTravelDistance * 0.3)
+          )
+        )
+        const size =
+          sample(source.size, seed + 15) *
+          pixelsPerUnit *
+          ghostCurve(source.sizeCurve, age) *
+          (smoke ? values.mistWidth / 16 : values.particleSize / 15)
+        const alpha = source.color[3] * ghostCurve(source.alphaCurve, age) * travelFade
+        const color = source.color.slice(0, 3).map((c, channel) => c * tint[channel])
+        const rotation =
+          random(seed + 16) * Math.PI * 2 + sample(source.rotation, seed + 17) * seconds
+        mesh.quad(
+          i,
+          x + sx + dx,
+          y + sy - dy,
+          Math.max(0, size),
+          Math.max(0, size),
+          rotation,
+          [...color, alpha]
+        )
       }
-      if (spawn.expired) {
-        sprite.visible = false
-        continue
-      }
-      const edge = edges[Math.floor(random(seed) * edges.length)]
-      const origin =
-        progress > 0 ? surface[Math.floor(random(seed + 7) * surface.length)] : edge
-      const outward = age * (14 + PARTICLE_MOTION_SPREAD * (0.8 + random(seed + 3)))
-      const drift =
-        values.particleWindStrength *
-        age *
-        age *
-        lifetime *
-        (25 + PARTICLE_MOTION_SPREAD * 0.7)
-      const swirl =
-        Math.sin(age * 6 + random(seed + 9) * 6) * Math.sin(age * Math.PI) * 7
-      const originGlobal = targetTransform.apply({
-        x: (origin.x + 0.5 - target.anchor.x) * target.texture.width,
-        y: (origin.y + 0.5 - target.anchor.y) * target.texture.height
-      })
-      // Full-surface bursts expand radially in All directions mode.
-      const radial =
-        allDirections && progress > 0 && Math.hypot(origin.x, origin.y) > 1e-6
-      const localX = radial ? origin.x * target.texture.width : edge.nx
-      const localY = radial ? origin.y * target.texture.height : edge.ny
-      const nx = targetTransform.a * localX + targetTransform.c * localY
-      const ny = targetTransform.b * localX + targetTransform.d * localY
-      const normalLength = Math.hypot(nx, ny) || 1
-      // Bound the complete displacement, including outward motion and swirl.
-      const travelX = allDirections ? nx / normalLength : windX
-      const travelY = allDirections ? ny / normalLength : windY
-      const offsetX = (nx / normalLength) * outward + travelX * drift - travelY * swirl
-      const offsetY = (ny / normalLength) * outward + travelY * drift + travelX * swirl
-      const distance = Math.hypot(offsetX, offsetY)
-      const limit = values.particleTravelDistance
-      if (distance >= limit) {
-        spawn.expired = true
-        sprite.visible = false
-        continue
-      }
-      // Smoothly fade through the final 30% of the permitted distance.
-      const fade = Math.min(1, Math.max(0, (distance / limit - 0.7) / 0.3))
-      const distanceOpacity = 1 - fade * fade * (3 - 2 * fade)
-      const position = toParent.apply({
-        x: originGlobal.x + offsetX,
-        y: originGlobal.y + offsetY
-      })
-      sprite.position.copyFrom(position)
-      // Each spawn keeps its chosen direction: half a turn over its lifetime.
-      const spinDirection = random(seed + 71) < 0.5 ? -1 : 1
-      sprite.rotation = random(seed + 83) * Math.PI * 2 + spinDirection * age * Math.PI
-      // Fixed lifetime diameter, distributed around the requested pixel average.
-      const size = values.particleSize * (0.4 + random(i + 20) * 1.2)
-      const transform = parentTransform
-      sprite.width = size / (Math.hypot(transform.a, transform.b) || 1)
-      sprite.height = size / (Math.hypot(transform.c, transform.d) || 1)
-      const envelope = Math.min(1, age * 12) * (1 - age) ** 1.4
-      sprite.alpha =
-        Math.min(1, envelope * values.particleIntensity * (progress > 0 ? 2 : 0.9)) *
-        distanceOpacity
-      sprite.tint = progress > 0 ? 0xffffff : color
+      mesh.upload()
     }
   }
   return {
     container,
+    foreground,
     refresh,
     update,
     destroy() {
       container.destroy({ children: true })
+      foreground.destroy({ children: true })
     }
   }
 }

@@ -94,6 +94,11 @@ in the layout. `card-render-builder.ts` selects assets and constructs the semant
 render tree; it contains no visual calibration values. Restart the development
 session to apply source changes.
 
+Tradeable banners use `CARD_TRADEABLE_LAYOUT` at native size. In a match, the
+banner's green outline indicates a legal trade independently of the card's play
+outline, including during dragging. App startup and match loading retain the
+banner's outline field and warm its shader before interaction.
+
 ## Startup
 
 Normal startup shows the HTML `app-start.png` splash while application-owned

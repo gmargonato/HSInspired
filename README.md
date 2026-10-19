@@ -26,6 +26,10 @@ Common mechanics include:
   continuously affect cards as long as they are active.
 - **Discover** offers a choice of cards. **Overload** locks some mana crystals on
   your next turn.
+- **Tradeable** lets you drag Big Game Hunter or The Black Knight from your hand
+  onto your deck to spend 1 mana and draw a different card. Trading preserves the
+  card's buffs and the order of the other cards, and requires a nonempty deck.
+  AI opponents do not choose trades yet.
 - **Taunt** forces enemy attacks onto a minion when possible. **Rush** lets a
   minion attack enemy minions right away; **Charge** allows immediate attacks.
   **Windfury** grants an extra attack.
@@ -45,6 +49,19 @@ Journey to Un'Goro, and Knights of the Frozen Throne.
 The game features animated card auras, premium card appearances, board shadows,
 ghostly mist and particles, card and Secret reveals, combat, and selected
 hero-power animations. In development, press **F3** to toggle GPU effects.
+
+Ghost UI uses the extracted mulligan glow atlas, scrolling clouds, two smoke
+layers, light motes, and floating-button evaporation textures. Shader Lab's
+**Reset Ghost** restores the recovered material and particle defaults; white
+palette controls preserve the original colors. Banners shrink over 0.5 seconds,
+while buttons play a blue echo, hide at 0.2 seconds, and evaporate through a
+1.7-second cleanup window. Separate text fades over 0.3 seconds; lettering baked
+into an image hides with that image. [Ghost reference](docs/ghost-effect-reference.md)
+records verified behavior and remaining adaptations. Local inspection evidence
+in `Artifacts/ghost-reference.json` includes source IDs and texture hashes.
+`npm run test:ghost` runs isolated WebGL pixel/lifecycle checks and captures the
+Ghost page of Shader Lab under `.tmp/ghost-check`. It also exercises production
+mulligan, Discover/Cancel, reward confirmation, and startup shader warm-up.
 
 In-match deck additions materialize at their source with a growing card and blue
 glow before flying into the destination deck. Every card in a bulk shuffle is

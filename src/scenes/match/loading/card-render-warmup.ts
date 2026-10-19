@@ -9,12 +9,15 @@ import { AnimatedOutline } from '../../../visual-components/effects/animated-out
 /** One real class card per layout, rather than constructing the whole catalog. */
 export function matchCardRenderSamples(): readonly CardDefinition[] {
   const cards = CARD_CATALOG.all
-  return (['Minion', 'Spell', 'Weapon', 'Hero'] as const).flatMap((type) => {
-    const card = cards.find(
-      (candidate) => candidate.type === type && isClassFrameClass(candidate.cardClass)
-    )
-    return card ? [card] : []
-  })
+  return [
+    ...(['Minion', 'Spell', 'Weapon', 'Hero'] as const).flatMap((type) => {
+      const card = cards.find(
+        (candidate) => candidate.type === type && isClassFrameClass(candidate.cardClass)
+      )
+      return card ? [card] : []
+    }),
+    CARD_CATALOG.require('classic_big_game_hunter')
+  ]
 }
 
 /** Exercise actual curved text, masks, premium color passes and cache/outline shaders. */
@@ -31,6 +34,7 @@ export async function prewarmCardRenderPaths(
     root.label = 'game.card-render-warmup'
     let target: RenderTexture | undefined
     let outline: AnimatedOutline | undefined
+    let tradeableOutline: AnimatedOutline | undefined
     try {
       const card = await CardView.create(definition, resolver, {
         artwork: Texture.WHITE,
@@ -53,6 +57,17 @@ export async function prewarmCardRenderPaths(
       root.addChild(frame)
       outline = new AnimatedOutline(frame, { palette: 'green', preset: 'card' })
       outline.prebuild(renderer)
+      if (card.tradeableTexture) {
+        const banner = new Sprite(card.tradeableTexture)
+        banner.scale.set(0.1)
+        banner.label = 'game.tradeable-outline-warmup'
+        root.addChild(banner)
+        tradeableOutline = new AnimatedOutline(banner, {
+          palette: 'green',
+          preset: 'card'
+        })
+        tradeableOutline.prebuild(renderer)
+      }
       target = RenderTexture.create({ width: 128, height: 128, resolution: 1 })
       for (const premium of [false, true]) {
         card.setPremiumPresentation(premium)
@@ -60,6 +75,7 @@ export async function prewarmCardRenderPaths(
       }
     } finally {
       outline?.dispose()
+      tradeableOutline?.dispose()
       root.destroy({ children: true, texture: false, textureSource: false })
       target?.destroy(true)
     }

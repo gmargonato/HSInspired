@@ -1,7 +1,4 @@
-import {
-  MinionLandingCracks,
-  hasMinionLandingCracks
-} from './minion-landing-cracks'
+import { MinionLandingCracks, hasMinionLandingCracks } from './minion-landing-cracks'
 import { MinionLandingDust, hasMinionLandingDust } from './minion-landing-dust'
 import { WeaponView, type WeaponViewTextures } from '../board/weapon-view'
 import * as ShatterEffect from '../../../visual-components/effects/shatter'
@@ -95,10 +92,12 @@ import type { MinionCardMovement } from '../../../game-rules/match'
 vi.mock('../../../visual-components/effects/ghost-mist-particles', () => ({
   createMistParticles: () => ({
     container: new Container(),
+    foreground: new Container(),
     refresh: vi.fn(),
     update: vi.fn(),
     destroy() {
       this.container.destroy({ children: true })
+      this.foreground.destroy({ children: true })
     }
   })
 }))
@@ -683,6 +682,8 @@ function mulliganSlot(instanceId: string): GameCardSlot {
     instanceId,
     setSelected: vi.fn(),
     setPlayableOutlineEnabled: vi.fn(),
+    setTradeableOutlineEnabled: vi.fn(),
+    isTradeableOutlineEnabled: () => false,
     setPlayableOutlineEnhanced: vi.fn(),
     setMulliganInteractionEnabled: vi.fn(),
     prepareCardReplacement: vi.fn(),
@@ -964,7 +965,7 @@ describe('match layer and inspection contract', () => {
   )
 })
 
-function board() {
+function board(options: Partial<GameBoardViewOptions> = {}) {
   vi.stubGlobal('window', {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -991,7 +992,8 @@ function board() {
       generateTexture: () => RenderTexture.create({ width: 620, height: 900 })
     },
     route: { setup: scenario.setup },
-    decks: scenario.decks
+    decks: scenario.decks,
+    ...options
   } as unknown as GameBoardViewOptions)
   Object.assign(value, { session: new GameBoardSession(scenario) })
   boards.push(value)
@@ -1003,6 +1005,302 @@ afterEach(() => {
   for (const value of boards.splice(0)) if (!value.destroyed) value.dispose()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('opponent-turn hand pickup', () => {
+  function setup() {
+    const value = board()
+    const view = value as unknown as {
+      session: GameBoardSession
+      hand: GameHandView
+      targetGestures: TargetGestureController<unknown>
+      onHandPointerDown(event: FederatedPointerEvent): void
+      handleWindowPointerDown(event: PointerEvent): void
+      handleWindowPointerUp(event: PointerEvent): void
+      localManaHighlightCost(): number | null
+      shakeCard(index: number): void
+    }
+    for (const player of view.session.getState().players) {
+      view.session.dispatch({
+        type: 'confirm-mulligan',
+        participantId: player.participantId,
+        replaceInstanceIds: []
+      })
+    }
+    if (view.session.getState().activePlayerId === view.session.localParticipantId) {
+      view.session.dispatch({
+        type: 'end-turn',
+        participantId: view.session.localParticipantId
+      })
+    }
+    const local = view.session
+      .getState()
+      .players.find(
+        (player) => player.participantId === view.session.localParticipantId
+      )!
+    const card = Object.assign(new Container(), {
+      plan: { width: 620, template: 'minion' },
+      renderedHeight: 900,
+      createAppearanceSnapshot: vi.fn(() =>
+        RenderTexture.create({ width: 620, height: 900 })
+      ),
+      flushAppearanceSnapshot: vi.fn()
+    })
+    card.addChild(new Sprite(Texture.WHITE))
+    const slot = Object.assign(mulliganSlot(local.hand[0]!.instanceId), {
+      card,
+      playableOutlineTexture: Texture.WHITE,
+      suppressPlayableOutline: vi.fn(),
+      isPlayableOutlineEnabled: () => false,
+      getPlayableOutlinePalette: () => 'green',
+      getPlayableOutlineTuning: () => undefined,
+      getPlayableOutlinePreset: () => 'card'
+    })
+    slot.addChild(card)
+    const rest = layoutHand(1)[0]!
+    slot.position.set(rest.x, rest.y)
+    slot.scale.set(rest.scale)
+    const entry: HandEntry = {
+      card: local.hand[0]!,
+      slot,
+      restTransform: rest,
+      displaced: false
+    }
+    view.hand.append(entry)
+    view.hand.layer.addChild(slot)
+    view.hand.drag.activate()
+    const point = { x: rest.x, y: rest.y - 40 }
+    const pick = () =>
+      view.onHandPointerDown({
+        button: 0,
+        pointerId: 1,
+        getLocalPosition: () => point
+      } as unknown as FederatedPointerEvent)
+    const shake = vi.spyOn(view, 'shakeCard')
+    const dispatch = vi.spyOn(view.session, 'dispatch')
+    const target = vi.spyOn(view.targetGestures, 'begin')
+    const finishReturn = async () => {
+      gsap.getTweensOf(slot)[0]!.parent!.progress(1)
+      await Promise.resolve()
+      expect(view.hand.drag.index).toBeNull()
+    }
+    return {
+      value,
+      view,
+      slot,
+      entry,
+      point,
+      pick,
+      shake,
+      dispatch,
+      target,
+      finishReturn
+    }
+  }
+
+  it('picks up, follows the pointer, and returns at the playfield before release', async () => {
+    const { view, slot, point, pick, shake, dispatch, target, finishReturn } = setup()
+    pick()
+    expect(view.hand.drag.cosmetic).toBe(true)
+    expect(shake).not.toHaveBeenCalled()
+    view.hand.drag.flushPointer({ x: point.x + 80, y: point.y }, 1)
+    view.hand.drag.update(16)
+    expect(view.hand.drag.pointer?.x).toBe(point.x + 80)
+    expect(view.localManaHighlightCost()).toBeNull()
+    const drop = GAME_BOARD_LAYOUT.cardPlay.localDropZone
+    // An unrelated pointer cannot move or cancel the held card.
+    view.hand.drag.flushPointer({ x: drop.x + 10, y: drop.y + 10 }, 2)
+    expect(view.hand.drag.returning).toBe(false)
+    view.hand.drag.flushPointer({ x: drop.x + 10, y: drop.y + 10 }, 1)
+    expect(view.hand.drag.returning).toBe(true)
+    expect(view.hand.drag.pointer).toBeNull()
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(target).not.toHaveBeenCalled()
+    await finishReturn()
+    expect(slot.suppressPlayableOutline).toHaveBeenLastCalledWith(false)
+  })
+
+  it.each(['release', 'outside', 'click', 'right-click'] as const)(
+    'cancels cosmetic pickup on %s',
+    async (action) => {
+      const { view, point, pick, dispatch, finishReturn } = setup()
+      pick()
+      const event = (x: number, y: number) =>
+        ({
+          button: 0,
+          pointerId: 1,
+          clientX: x,
+          clientY: y,
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn()
+        }) as unknown as PointerEvent
+      // A stationary first release keeps click-to-hold active.
+      view.handleWindowPointerUp(event(point.x, point.y))
+      expect(view.hand.drag.returning).toBe(false)
+      if (action === 'click') view.handleWindowPointerDown(event(point.x, point.y))
+      else if (action === 'right-click')
+        view.handleWindowPointerDown({ ...event(point.x, point.y), button: 2 })
+      else
+        view.handleWindowPointerUp(
+          event(action === 'outside' ? -50 : point.x + 50, point.y)
+        )
+      expect(view.hand.drag.returning).toBe(true)
+      expect(dispatch).not.toHaveBeenCalled()
+      await finishReturn()
+    }
+  )
+
+  it('returns on turn change without making the held card playable', async () => {
+    const { view, pick, dispatch, target, finishReturn } = setup()
+    pick()
+    const result = view.session.dispatch({
+      type: 'end-turn',
+      participantId: view.session.remoteParticipantId
+    })
+    expect(result.accepted).toBe(true)
+    dispatch.mockClear()
+    view.hand.drag.update(16)
+    expect(view.hand.drag.returning).toBe(true)
+    expect(view.localManaHighlightCost()).toBeNull()
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(target).not.toHaveBeenCalled()
+    await finishReturn()
+  })
+
+  it('keeps the held identity through insertion and cancels when that card leaves', async () => {
+    const { view, slot, entry, point, pick, dispatch } = setup()
+    pick()
+    view.hand.drag.update(16)
+    const neighbor = mulliganSlot('neighbor')
+    view.hand.insert(0, {
+      ...entry,
+      slot: neighbor,
+      card: { ...entry.card, instanceId: 'neighbor' }
+    })
+    expect(view.hand.drag.index).toBe(1)
+    view.hand.drag.flushPointer({ x: point.x + 50, y: point.y }, 1)
+    view.hand.drag.update(16)
+    expect(neighbor.x).toBe(0)
+    view.hand.drag.end()
+    view.hand.removeAt(1)
+    await Promise.resolve()
+    expect(view.hand.drag.index).toBeNull()
+    expect(view.hand.drag.cosmetic).toBe(false)
+    expect(slot.suppressPlayableOutline).toHaveBeenLastCalledWith(false)
+    expect(dispatch).not.toHaveBeenCalled()
+    neighbor.destroy()
+  })
+
+  it('preserves on-turn rejection shakes and ordinary legal pickup', () => {
+    const { view, pick, shake } = setup()
+    view.session.dispatch({
+      type: 'end-turn',
+      participantId: view.session.remoteParticipantId
+    })
+    const local = view.session.localParticipantId
+    view.session.dispatch({
+      type: 'dev-set-mana',
+      participantId: local,
+      available: 0,
+      maximum: 10
+    })
+    pick()
+    expect(shake).toHaveBeenCalledOnce()
+    expect(view.hand.drag.index).toBeNull()
+    view.session.dispatch({
+      type: 'dev-set-mana',
+      participantId: local,
+      available: 10,
+      maximum: 10
+    })
+    pick()
+    expect(view.hand.drag.index).toBe(0)
+    expect(view.hand.drag.cosmetic).toBe(false)
+    expect(shake).toHaveBeenCalledOnce()
+  })
+
+  it('releases a cosmetic held perspective when the scene closes', () => {
+    const { value, view, slot, pick } = setup()
+    pick()
+    view.hand.drag.update(16)
+    const meshes = slot.children.filter((child) => child instanceof PerspectiveMesh)
+    expect(meshes).toHaveLength(2)
+    value.dispose()
+    expect(meshes.every((mesh) => mesh.destroyed)).toBe(true)
+    expect(view.hand.drag.index).toBeNull()
+  })
+})
+
+describe('turn taskbar attention', () => {
+  function setup() {
+    const setHighlighted = vi.fn().mockResolvedValue(undefined)
+    const value = board({ windowAttention: { setHighlighted } })
+    const internal = value as unknown as {
+      session: GameBoardSession
+      syncTurnHud(): void
+      syncTurnControls(): void
+      handleTurnStarted(): void
+      startInitialTurn(): void
+      presentMatchResult(): Promise<void>
+      heroPowerEffects: { reveal(): Promise<void> }
+      presentEvent(event: OpeningMatchEvent): Promise<void>
+    }
+    vi.spyOn(internal, 'syncTurnHud').mockImplementation(() => undefined)
+    vi.spyOn(internal, 'syncTurnControls').mockImplementation(() => undefined)
+    vi.spyOn(internal, 'handleTurnStarted').mockImplementation(() => undefined)
+    vi.spyOn(internal.heroPowerEffects, 'reveal').mockResolvedValue(undefined)
+    return { value, internal, setHighlighted }
+  }
+
+  it.each(['turn-started', 'opening-turn-started'] as const)(
+    'highlights only the local player for %s',
+    async (type) => {
+      const { internal, setHighlighted } = setup()
+      for (const participantId of [
+        internal.session.remoteParticipantId,
+        internal.session.localParticipantId
+      ]) {
+        await internal.presentEvent({
+          type,
+          participantId,
+          turnNumber: 2,
+          playerNumber: 1,
+          mana: internal.session.getState().players[0].mana
+        })
+      }
+      expect(setHighlighted.mock.calls).toEqual([[false], [true]])
+    }
+  )
+
+  it('does not notify when synchronizing the existing initial turn', () => {
+    const { internal, setHighlighted } = setup()
+    internal.startInitialTurn()
+    expect(setHighlighted).not.toHaveBeenCalled()
+  })
+
+  it('clears attention on match completion and disposal', async () => {
+    const { value, internal, setHighlighted } = setup()
+    vi.spyOn(internal, 'presentMatchResult').mockResolvedValue(undefined)
+    await internal.presentEvent({ type: 'match-ended' } as OpeningMatchEvent)
+    expect(setHighlighted).toHaveBeenLastCalledWith(false)
+    setHighlighted.mockClear()
+    value.dispose()
+    expect(setHighlighted).toHaveBeenCalledExactlyOnceWith(false)
+  })
+
+  it('keeps turn presentation working when the bridge rejects', async () => {
+    const { internal, setHighlighted } = setup()
+    setHighlighted.mockRejectedValue(new Error('Bridge unavailable'))
+    await expect(
+      internal.presentEvent({
+        type: 'turn-started',
+        participantId: internal.session.localParticipantId,
+        turnNumber: 2,
+        mana: internal.session.getState().players[0].mana
+      })
+    ).resolves.toBeUndefined()
+    expect(internal.handleTurnStarted).toHaveBeenCalled()
+  })
 })
 
 describe('deck addition animation', () => {
@@ -7811,7 +8109,6 @@ describe('minion landing cracks', () => {
     expect(Texture.WHITE.destroyed).toBe(false)
   })
 })
-
 
 describe('hero attack return dust', () => {
   it.each([

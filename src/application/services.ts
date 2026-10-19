@@ -5,6 +5,7 @@ import type { AiDecisionApi } from '../desktop/contracts/ipc/ai'
 import { createAiDecisionApi } from './ai-decision-api'
 import type { MatchLogsApi } from '../desktop/contracts/ipc/match-logs'
 import type { PreferencesApi } from '../desktop/contracts/ipc/preferences'
+import type { WindowAttentionApi } from '../desktop/contracts/ipc/window-attention'
 import { PersistentPlayerStatsStore } from './player-stats-store'
 import { PersistentProgressionStore } from './progression-store'
 import type { ProgressionStore } from './contracts/progression-store'
@@ -54,6 +55,7 @@ export class BrowserDialogService implements DialogService {
 
 /** Renderer-lifetime dependencies assembled once by the application root. */
 export interface AppServices {
+  readonly windowAttention?: WindowAttentionApi
   readonly matchLogs?: MatchLogsApi
   readonly preferences?: PreferencesApi
   readonly ai: AiDecisionApi
@@ -82,6 +84,9 @@ export function createAppServices(overrides: Partial<AppServices> = {}): AppServ
         })
   return {
     ai,
+    windowAttention:
+      overrides.windowAttention ??
+      (typeof window !== 'undefined' ? window.api?.windowAttention : undefined),
     preferences:
       overrides.preferences ??
       (typeof window !== 'undefined' ? window.api?.preferences : undefined),

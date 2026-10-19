@@ -1,9 +1,19 @@
+import { CENTER, placement } from '../../../visual-components/layout'
+
 /** Coordinates inside the original 83 x 181 deck image, before board scaling. */
 export const DECK_STACK_LAYOUT = {
   name: 'Dynamic deck stack',
   /** Set to 'static' to restore deck.png for both players. */
   mode: 'dynamic' as 'dynamic' | 'static',
   card: { width: 47, height: 180 },
+  tradeableGlow: placement(
+    { x: 14, y: 0 },
+    { width: 283, height: 340 },
+    {
+      anchor: CENTER,
+      note: 'Native-size glow behind the pile; its opening aligns with the front card, relative to the deck center.'
+    }
+  ),
   // Thirty cards occupy the same width as the original painted pile.
   gap: 0.72,
   // A wider seam separates four-card groups without spreading every card apart.

@@ -8,7 +8,12 @@ import {
 import { DECK_STACK_LAYOUT } from './deck-stack-layout'
 
 type DeckMode = 'dynamic' | 'static'
-type DeckTextures = { deck: Texture; deckSliced: Texture; fatigueDeck: Texture }
+type DeckTextures = {
+  deck: Texture
+  deckSliced: Texture
+  fatigueDeck: Texture
+  tradeableGlow?: Texture
+}
 
 /** Shared-texture sprites; no filters, render textures, or per-frame updates. */
 export class DeckStackView extends Container {
@@ -16,6 +21,7 @@ export class DeckStackView extends Container {
   readonly drawOrigin: Sprite
   private readonly stack = new Container()
   private readonly cards: Sprite[] = []
+  private readonly tradeableGlow: Sprite | null
   private count = -1
   private mode: DeckMode
 
@@ -32,6 +38,16 @@ export class DeckStackView extends Container {
     applyPlacement(this, layout)
     this.eventMode = 'static'
     this.interactiveChildren = false
+    this.tradeableGlow = textures.tradeableGlow
+      ? new Sprite(textures.tradeableGlow)
+      : null
+    if (this.tradeableGlow) {
+      this.tradeableGlow.label = 'game.deck-tradeable-glow'
+      applyAnchoredPlacement(this.tradeableGlow, DECK_STACK_LAYOUT.tradeableGlow)
+      this.tradeableGlow.eventMode = 'none'
+      this.tradeableGlow.visible = false
+      this.addChild(this.tradeableGlow)
+    }
     this.drawOrigin = new Sprite(textures.deck)
     this.drawOrigin.label = 'game.deck-original'
     applyAnchoredPlacement(
@@ -56,10 +72,15 @@ export class DeckStackView extends Container {
     this.syncCount(Math.max(0, count))
   }
 
+  setTradeableGlowVisible(visible: boolean): void {
+    if (this.tradeableGlow) this.tradeableGlow.visible = visible && this.count > 0
+  }
+
   syncCount(count: number): void {
     if (this.count === count) return
     this.count = count
     const empty = count === 0
+    if (empty) this.setTradeableGlowVisible(false)
     const dynamic = this.mode === 'dynamic' && !empty
     this.drawOrigin.texture = empty ? this.textures.fatigueDeck : this.textures.deck
     this.drawOrigin.visible = !dynamic

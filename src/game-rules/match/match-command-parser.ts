@@ -72,6 +72,15 @@ export function parseCommand(value: unknown): OpeningMatchCommand | null {
     return { type: 'end-turn', participantId: value.participantId as PlayerId }
   }
 
+  if (value.type === 'trade-card') {
+    if (typeof value.cardInstanceId !== 'string') return null
+    return {
+      type: 'trade-card',
+      participantId: value.participantId as PlayerId,
+      cardInstanceId: value.cardInstanceId
+    }
+  }
+
   if (value.type === 'activate-board-object') {
     if (
       typeof value.boardObjectInstanceId !== 'string' ||

@@ -1161,8 +1161,8 @@
     "cost": 3,
     "attack": 4,
     "health": 2,
-    "rulesText": "Battlecry: Destroy a minion with an Attack of 7 or more.",
-    "keywords": [],
+    "rulesText": "Tradeable. Battlecry: Destroy a minion with an Attack of 7 or more.",
+    "keywords": ["tradeable"],
     "effects": [
       {
         "trigger": "battlecry",
@@ -8610,11 +8610,11 @@
     "cardClass": "Neutral",
     "type": "Minion",
     "subtype": "Undead",
-    "cost": 6,
+    "cost": 4,
     "attack": 4,
-    "health": 5,
-    "rulesText": "Battlecry: Destroy an enemy minion with Taunt.",
-    "keywords": [],
+    "health": 4,
+    "rulesText": "Tradeable. Battlecry: Destroy an enemy minion with Taunt.",
+    "keywords": ["tradeable"],
     "effects": [
       {
         "trigger": "battlecry",
