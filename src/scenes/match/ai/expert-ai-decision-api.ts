@@ -39,6 +39,11 @@ import {
 } from './expert-action-ordering'
 import { reviewCommittedActionOrder } from './expert-committed-order'
 import { reviewCompletedAttackOrder } from './expert-completed-attack-order'
+import { reviewRedundantHealingPrefix } from './expert-redundant-healing'
+import {
+  isRedundantSpellPrefixCandidate,
+  reviewRedundantSpellPrefix
+} from './expert-redundant-spell'
 import {
   EXPERT_CHANCE_ORDER_MAX_MS,
   hasChanceWeaponSetup,
@@ -79,6 +84,8 @@ export {
 const EXPERT_AI_MULLIGAN_BUDGET_MS = 3_000
 
 interface PendingDecision {
+  /** Fresh redacted checkpoint owned only by this exact pending request. */
+  readonly resourceReviewCheckpoint?: OpeningMatchCheckpoint
   readonly request: AiDecisionRequest
   readonly startedAt: number
   readonly resolve: (response: AiDecisionResponse) => void
@@ -414,6 +421,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
 
       this.pending.set(request.requestId, {
         request,
+        resourceReviewCheckpoint: checkpoint,
         startedAt,
         resolve,
         reject,
@@ -1070,8 +1078,14 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
 
   private guardCommittedOrder(
     request: AiDecisionRequest,
-    response: AiDecisionResponse
+    response: AiDecisionResponse,
+    resourceReviewCheckpoint?: OpeningMatchCheckpoint
   ): AiDecisionResponse {
+    response = this.guardRedundantSpell(request, response, resourceReviewCheckpoint)
+    // A successful omission can expose a healing prefix; do not stack a second
+    // resource review onto the same decision's bounded review allowance.
+    if (!response.usage?.redundantSpellReview)
+      response = this.guardRedundantHealing(request, response)
     response = this.guardSingletonAttackOrder(request, response)
     if (response.usage?.actionOutcomeReason === 'committed-singleton-attack-order')
       return response
@@ -1193,6 +1207,260 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
           ...review.stats,
           fromActionId: selected.id,
           toActionId: next.id
+        }
+      }
+    }
+  }
+
+  private guardRedundantSpell(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse,
+    resourceReviewCheckpoint?: OpeningMatchCheckpoint
+  ): AiDecisionResponse {
+    const planned = response.usage?.plannedActionIntents
+    const witness = response.usage?.resourceReviewIntents
+    const intents = witness ?? planned
+    if (
+      !resourceReviewCheckpoint ||
+      request.phase === 'mulligan' ||
+      response.usage?.decisionPriority === 'verified-win' ||
+      this.session.getState().revision !== request.expectedRevision ||
+      !Array.isArray(intents) ||
+      intents.length < 2 ||
+      intents.length > 6 ||
+      !intents.every(isAiActionIntent) ||
+      !Array.isArray(planned) ||
+      !planned.every(isAiActionIntent) ||
+      planned.length > intents.length ||
+      !planned.every((intent, index) => sameAiIntent(intent, intents[index]!)) ||
+      !isRedundantSpellPrefixCandidate(
+        this.session.getState(),
+        this.perspectiveParticipantId,
+        intents
+      )
+    )
+      return response
+    const selectedId =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    const started = this.now(),
+      remaining = this.remainingBudget(request)
+    if (!Number.isFinite(remaining) || remaining <= 0) return response
+    const deadline = started + Math.min(25, remaining)
+    const legal = this.currentLegalActions().filter((action) =>
+      request.actionIds.includes(action.id)
+    )
+    const selected = legal.find((action) => action.id === selectedId)
+    const opponent = this.opponentParticipantId()
+    if (
+      !selected ||
+      !sameAiIntent(intents[0]!, aiActionIntent(selected.command, opponent)) ||
+      this.now() >= deadline
+    ) {
+      const elapsed = Math.max(0, this.now() - started)
+      this.searchUsedMs += elapsed
+      return { ...response, durationMs: response.durationMs + elapsed }
+    }
+    const review = reviewRedundantSpellPrefix(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      intents,
+      () => this.now() >= deadline,
+      resourceReviewCheckpoint
+    )
+    const commands = review.commands
+    const replacement =
+      commands &&
+      legal.find(
+        (action) =>
+          canonicalCommandKey(action.command) === canonicalCommandKey(commands[0]!)
+      )
+    const elapsed = Math.max(0, this.now() - started)
+    this.searchUsedMs += elapsed
+    const expired = this.now() >= deadline
+    if (!commands || !replacement || expired)
+      return {
+        ...response,
+        durationMs: response.durationMs + elapsed,
+        usage: {
+          ...response.usage,
+          redundantSpellReview: {
+            ...review.stats,
+            abstained: review.stats.abstained || expired
+          }
+        }
+      }
+    const reason =
+      'The reviewed continuation reaches the same board while retaining this spell.'
+    const sequence = commands.map((command) => aiActionIntent(command, opponent))
+    const plan = 'plan' in response.choice ? response.choice.plan : null
+    return {
+      ...response,
+      reason,
+      durationMs: response.durationMs + elapsed,
+      choice: plan
+        ? {
+            plan: {
+              ...plan,
+              objective: reason,
+              firstActionId: replacement.id,
+              candidates: plan.candidates.map((candidate, index) =>
+                index === plan.preferred
+                  ? {
+                      ...candidate,
+                      sequence: commands.map((command) => JSON.stringify(command))
+                    }
+                  : candidate
+              )
+            }
+          }
+        : {
+            actionId: replacement.id,
+            intent: sequence[0]!,
+            expectedResult: reason,
+            planUpdate: null
+          },
+      usage: {
+        ...response.usage,
+        decisionPriority:
+          response.usage?.decisionPriority === 'tactical-safety'
+            ? 'tactical-safety'
+            : 'tactical-preference',
+        tacticalOverride: true,
+        actionOutcomeReason: 'redundant-spell-prefix',
+        resourceReviewIntents: null,
+        plannedActionIntents: sequence.map((intent) => ({
+          ...intent,
+          targets: [...intent.targets]
+        })),
+        redundantSpellReview: {
+          ...review.stats,
+          fromActionId: selected.id,
+          toActionId: replacement.id
+        }
+      }
+    }
+  }
+
+  private guardRedundantHealing(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    const intents = response.usage?.plannedActionIntents
+    if (
+      request.phase === 'mulligan' ||
+      response.usage?.decisionPriority === 'verified-win' ||
+      this.session.getState().revision !== request.expectedRevision ||
+      !Array.isArray(intents) ||
+      intents.length < 2 ||
+      intents.length > 6 ||
+      !intents.every(isAiActionIntent) ||
+      intents[0]!.type !== 'use-hero-power' ||
+      intents[0]!.targets.length !== 1 ||
+      intents[0]!.targets[0] !== `${this.perspectiveParticipantId}:hero` ||
+      !(
+        intents.at(-1)?.type === 'end-turn' ? intents.slice(1, -1) : intents.slice(1)
+      ).every((intent) => intent.type === 'play-card')
+    )
+      return response
+    const selectedId =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    const started = this.now(),
+      remaining = this.remainingBudget(request)
+    if (!Number.isFinite(remaining) || remaining <= 0) return response
+    const deadline = started + Math.min(25, remaining)
+    const legal = this.currentLegalActions().filter((action) =>
+      request.actionIds.includes(action.id)
+    )
+    const selected = legal.find((action) => action.id === selectedId)
+    const opponent = this.opponentParticipantId()
+    if (
+      !selected ||
+      !sameAiIntent(intents[0]!, aiActionIntent(selected.command, opponent)) ||
+      this.now() >= deadline
+    ) {
+      const elapsed = Math.max(0, this.now() - started)
+      this.searchUsedMs += elapsed
+      return { ...response, durationMs: response.durationMs + elapsed }
+    }
+    const review = reviewRedundantHealingPrefix(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      intents,
+      () => this.now() >= deadline
+    )
+    const commands = review.commands
+    const replacement =
+      commands &&
+      legal.find(
+        (action) =>
+          canonicalCommandKey(action.command) === canonicalCommandKey(commands[0]!)
+      )
+    const elapsed = Math.max(0, this.now() - started)
+    this.searchUsedMs += elapsed
+    const expired = this.now() >= deadline
+    if (!commands || !replacement || expired)
+      return {
+        ...response,
+        durationMs: response.durationMs + elapsed,
+        usage: {
+          ...response.usage,
+          redundantHealingReview: {
+            ...review.stats,
+            abstained: review.stats.abstained || expired
+          }
+        }
+      }
+    const reason =
+      'Keep the selected healing card plays and save the redundant hero-power expenditure.'
+    const sequence = commands.map((command) => aiActionIntent(command, opponent))
+    const plan = 'plan' in response.choice ? response.choice.plan : null
+    return {
+      ...response,
+      reason,
+      durationMs: response.durationMs + elapsed,
+      choice: plan
+        ? {
+            plan: {
+              ...plan,
+              objective: reason,
+              firstActionId: replacement.id,
+              candidates: plan.candidates.map((candidate, index) =>
+                index === plan.preferred
+                  ? { ...candidate, sequence: candidate.sequence.slice(1) }
+                  : candidate
+              )
+            }
+          }
+        : {
+            actionId: replacement.id,
+            intent: sequence[0]!,
+            expectedResult: reason,
+            planUpdate: null
+          },
+      usage: {
+        ...response.usage,
+        decisionPriority:
+          response.usage?.decisionPriority === 'tactical-safety'
+            ? 'tactical-safety'
+            : 'tactical-preference',
+        tacticalOverride: true,
+        actionOutcomeReason: 'redundant-healing-prefix',
+        plannedActionIntents: sequence.map((intent) => ({
+          ...intent,
+          targets: [...intent.targets]
+        })),
+        redundantHealingReview: {
+          ...review.stats,
+          fromActionId: selected.id,
+          toActionId: replacement.id
         }
       }
     }
@@ -2199,7 +2467,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       this.guardUnpaidDamageDecision(pending.request, response)
     const guarded = this.guardExpiringAttackPass(
       pending.request,
-      this.guardCommittedOrder(pending.request, safe)
+      this.guardCommittedOrder(pending.request, safe, pending.resourceReviewCheckpoint)
     )
     this.rememberPlanCommit(pending.request, guarded)
     this.rememberContinuation(pending.request, guarded)

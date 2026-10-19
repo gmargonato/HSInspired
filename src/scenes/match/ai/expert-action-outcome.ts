@@ -131,7 +131,11 @@ export interface ExpertActionOutcome {
 }
 
 /** Conservatively keep setup attacks when a bounded search cannot rule out an answer. */
-function canAnswerClear(root: OpeningMatchAnalysis, actorId: PlayerId): boolean {
+function canAnswerClear(
+  root: OpeningMatchAnalysis,
+  actorId: PlayerId,
+  shouldStop: () => boolean
+): boolean {
   let remaining = 48
   const visit = (fork: OpeningMatchAnalysis, depth: number): boolean => {
     const state = fork.getState()
@@ -140,6 +144,7 @@ function canAnswerClear(root: OpeningMatchAnalysis, actorId: PlayerId): boolean 
       state.pendingDiscover ||
       state.pendingCardChoice ||
       depth >= 6 ||
+      shouldStop() ||
       remaining <= 0
     )
       return true
@@ -147,7 +152,7 @@ function canAnswerClear(root: OpeningMatchAnalysis, actorId: PlayerId): boolean 
       (c) => c.type !== 'end-turn'
     )
     for (const command of commands) {
-      if (--remaining < 0) return true
+      if (shouldStop() || --remaining < 0) return true
       if (
         fork.analyze(
           (next) => next.dispatch(command).accepted && visit(next, depth + 1)
@@ -164,9 +169,11 @@ function canAnswerClear(root: OpeningMatchAnalysis, actorId: PlayerId): boolean 
 function wastedClearActionPenalty(
   root: OpeningMatchAnalysis,
   actorId: PlayerId,
-  command: Extract<TurnMatchCommand, { type: 'attack-character' | 'end-turn' }>
+  command: Extract<TurnMatchCommand, { type: 'attack-character' | 'end-turn' }>,
+  shouldStop: () => boolean
 ): ExpertActionOutcome {
   if (
+    shouldStop() ||
     (command.type === 'attack-character' &&
       (command.attacker.kind !== 'minion' || command.defender.kind !== 'minion')) ||
     !hasImminentBoardClear(root.getState())
@@ -194,18 +201,20 @@ function wastedClearActionPenalty(
       )
         return undefined
     }
+    if (shouldStop()) return undefined
     const boundary = evaluateExpertBoundary(fork, (end) =>
       end === fork || end.getState().phase === 'ended'
         ? undefined
         : end.getAiObservation?.(actorId, 'fair')
     )
-    return boundary && (command.type === 'end-turn' || !canAnswerClear(fork, actorId))
+    return boundary &&
+      (command.type === 'end-turn' || !canAnswerClear(fork, actorId, shouldStop))
       ? boundary
       : undefined
   })
-  if (!attacked) return { penalty: 0 }
+  if (!attacked || shouldStop()) return { penalty: 0 }
   return root.analyze((fork) => {
-    if (!fork.dispatch(face).accepted) return { penalty: 0 }
+    if (!fork.dispatch(face).accepted || shouldStop()) return { penalty: 0 }
     return evaluateExpertBoundary(fork, (end) => {
       if (end === fork || end.getState().phase === 'ended') return { penalty: 0 }
       const alternative = end.getAiObservation?.(actorId, 'fair')
@@ -649,10 +658,12 @@ export function inspectExpertAction(
 ): ExpertActionOutcome {
   if (command.type === 'attack-character') {
     const buff = attackBeforeBuffPenalty(root, actorId, command)
-    return buff.penalty > 0 ? buff : wastedClearActionPenalty(root, actorId, command)
+    return buff.penalty > 0
+      ? buff
+      : wastedClearActionPenalty(root, actorId, command, shouldStop)
   }
   if (command.type === 'end-turn')
-    return wastedClearActionPenalty(root, actorId, command)
+    return wastedClearActionPenalty(root, actorId, command, shouldStop)
   if (command.type !== 'play-card' && command.type !== 'use-hero-power')
     return { penalty: 0 }
   if (command.type === 'play-card') {
@@ -722,12 +733,14 @@ export function inspectExpertAction(
       )
     )
       return { penalty: 0 }
-    if (!isSpell && !hasImminentBoardClear(fork.getState())) return { penalty: 0 }
+    if (!isSpell && (shouldStop() || !hasImminentBoardClear(fork.getState())))
+      return { penalty: 0 }
     const unplayed = !isSpell
       ? evaluateExpertBoundary(fork, (boundary) =>
           boundary.getAiObservation?.(actorId, 'fair')
         )
       : undefined
+    if (!isSpell && shouldStop()) return { penalty: 0 }
     const result = fork.dispatch(command)
     if (!result.accepted || result.state.phase === 'ended') return { penalty: 0 }
     const after = fork.getAiObservation?.(actorId, 'fair')
@@ -740,6 +753,7 @@ export function inspectExpertAction(
     )
       return { penalty: 0 }
     if (!isSpell) {
+      if (shouldStop()) return { penalty: 0 }
       const summoned = nextSelf.board.filter(
         (m) => !self.board.some((old) => old.instanceId === m.instanceId)
       )
@@ -781,6 +795,7 @@ export function inspectExpertAction(
         )
       )
         return { penalty: 0 }
+      if (shouldStop()) return { penalty: 0 }
       return evaluateExpertBoundary(fork, (boundary) => {
         if (boundary === fork || boundary.getState().phase === 'ended')
           return { penalty: 0 }
@@ -907,7 +922,7 @@ export function createExpertActionInspector(
   }
 }
 
-/** Only extend across an imminent authored board clear, not an arbitrary turn. */
+/** Extend across imminent authored area harm; the real boundary decides its casualties. */
 export function hasImminentBoardClear(state: OpeningMatchState): boolean {
   if (state.phase !== 'turns') return false
   return state.players.some((player) =>
@@ -923,7 +938,7 @@ export function hasImminentBoardClear(state: OpeningMatchState): boolean {
                 player.participantId !== state.activePlayerId)) &&
             effect.actions?.some(
               (action) =>
-                action.action === 'destroy' &&
+                (action.action === 'destroy' || action.action === 'damage') &&
                 typeof action.target === 'object' &&
                 action.target !== null &&
                 !Array.isArray(action.target) &&
