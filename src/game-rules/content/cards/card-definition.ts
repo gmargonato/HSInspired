@@ -74,7 +74,8 @@ export const EXPANSION_IDS = [
   'whispers-of-the-old-gods',
   'mean-streets-of-gadgetzan',
   'journey-to-ungoro',
-  'knights-of-the-frozen-throne'
+  'knights-of-the-frozen-throne',
+  'future-past'
 ] as const
 export type KnownExpansionId = (typeof EXPANSION_IDS)[number]
 

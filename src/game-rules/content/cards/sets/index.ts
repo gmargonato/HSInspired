@@ -10,3 +10,4 @@ export { WHISPERS_OF_THE_OLD_GODS_CARD_SOURCE } from './whispers-of-the-old-gods
 export { MEAN_STREETS_OF_GADGETZAN_CARD_SOURCE } from './mean-streets-of-gadgetzan'
 export { JOURNEY_TO_UNGORO_CARD_SOURCE } from './journey-to-ungoro'
 export { KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE } from './knights-of-the-frozen-throne'
+export { FUTURE_PAST_CARD_SOURCE } from './future-past'

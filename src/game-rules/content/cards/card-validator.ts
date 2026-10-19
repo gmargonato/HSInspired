@@ -474,6 +474,9 @@ function validateActionShape(
   record: Record<string, unknown>,
   path: string
 ): void {
+  if (actionName === 'sort-deck') {
+    enumValue(record['order'], ['ascending', 'descending'], `${path}.order`)
+  }
   for (const field of ACTION_REQUIRED_FIELDS[actionName] ?? []) {
     if (record[field] === undefined) {
       fail(`${path}.${field}`, 'is required for this action')
@@ -651,6 +654,7 @@ function filterValue(value: unknown, path: string): void {
       key === 'negate' ||
       key === 'overload' ||
       key === 'sparePart' ||
+      key === 'startedInDeck' ||
       key === 'printedOnly'
     ) {
       if (typeof candidate !== 'boolean') {

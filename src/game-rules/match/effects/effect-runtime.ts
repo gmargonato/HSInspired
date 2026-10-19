@@ -8703,6 +8703,26 @@ export class EffectRuntime {
         })
         return
       }
+      case 'sort-deck': {
+        const direction = action.order === 'ascending' ? 1 : -1
+        for (const participantId of this.targetPlayers(action, frame)) {
+          const player = this.player(participantId)
+          player.deck.sort(
+            (left, right) =>
+              direction *
+              ((left.currentCost ??
+                left.baseCost ??
+                cardDefinition(left.cardId)?.cost ??
+                0) -
+                (right.currentCost ??
+                  right.baseCost ??
+                  cardDefinition(right.cardId)?.cost ??
+                  0))
+          )
+          this.emit(frame, name, path, { participantId, order: action.order })
+        }
+        return
+      }
       case 'draw': {
         if (typeof action.chance === 'number' && this.rng.next() >= action.chance)
           return
@@ -9188,6 +9208,9 @@ export class EffectRuntime {
       }
       case 'modify-hero-power-uses':
         // This is a declarative aura read by heroPowerUseLimit().
+        return
+      case 'repeat-hero-power-effect':
+        // This is a declarative aura read once when a hero power is activated.
         return
       case 'randomize-targets':
         // Mayor Noggenfogger's aura is read when player-selected targets are resolved.
@@ -12441,6 +12464,25 @@ export class EffectRuntime {
     return heroPowerUseLimit(this.draft, participantId)
   }
 
+  private heroPowerEffectRepeatCount(participantId: PlayerId): number {
+    const repeats = this.player(participantId).board.some(
+      (minion) =>
+        minion.health > 0 &&
+        !minion.silenced &&
+        !minion.dormant &&
+        (minion.controllerId ?? participantId) === participantId &&
+        (cardDefinition(minion.cardId)?.effects ?? []).some(
+          (block) =>
+            block.trigger === 'aura' &&
+            (block.actions ?? []).some(
+              (action) => action.action === 'repeat-hero-power-effect'
+            )
+        )
+    )
+    // "Triggers twice" does not stack with additional copies of the aura.
+    return repeats ? 2 : 1
+  }
+
   private heroPowerDamageBonus(participantId: PlayerId): number {
     return this.player(participantId).board.reduce((total, minion) => {
       if (minion.silenced) return total
@@ -13604,7 +13646,7 @@ export class EffectRuntime {
         cost,
         mana: { ...player.mana }
       })
-      const frame = {
+      let frame = {
         ...this.frameFor(source, null, target ? [target] : []),
         isHeroPower: true
       }
@@ -13646,11 +13688,6 @@ export class EffectRuntime {
               vfx: player.heroPower.effectOverride.vfx
             }
           : power.effect
-      const restoreIsDamage =
-        (effect.kind === 'restore-character' ||
-          effect.kind === 'restore-and-buff-minion') &&
-        this.hasHealthReplacement(options.participantId, frame)
-      const heroPowerDamageBonus = this.heroPowerDamageBonus(options.participantId)
       const reportedTarget =
         target ??
         (effect.kind === 'damage-enemy-hero'
@@ -13668,63 +13705,72 @@ export class EffectRuntime {
                 zone: 'hero' as const
               }
             : null)
-      const reportedBefore = reportedTarget
-        ? {
-            health:
-              reportedTarget.kind === 'hero'
-                ? this.player(reportedTarget.participantId).hero.health
-                : (this.currentMinion(reportedTarget)?.health ?? 0),
-            armor:
-              reportedTarget.kind === 'hero'
-                ? this.player(reportedTarget.participantId).hero.armor
-                : 0
-          }
-        : null
-      let reportedRestoreAmount: number | null = null
-      switch (effect.kind) {
-        case 'gain-attack-and-armor':
-          runHeroPowerAction(
-            {
-              action: 'modify',
-              target: { type: 'hero', selection: 'source' },
-              attack: effect.attack,
-              duration: 'this-turn'
-            },
-            'hero-power.modify'
-          )
-          runHeroPowerAction(
-            {
-              action: 'gain-armor',
-              target: { type: 'hero', selection: 'source' },
-              amount: effect.armor
-            },
-            'hero-power.armor'
-          )
-          break
-        case 'gain-armor':
-          runHeroPowerAction(
-            {
-              action: 'gain-armor',
-              target: { type: 'hero', selection: 'source' },
-              amount: effect.amount + heroPowerDamageBonus
-            },
-            'hero-power.armor'
-          )
-          break
-        case 'copy-last-card-this-turn': {
-          const playedThisTurn = this.draft.history?.cardsPlayedThisTurn ?? []
-          const lastCardId = playedThisTurn[playedThisTurn.length - 1]
-          if (lastCardId)
-            this.addCardToHand(
-              options.participantId,
-              asCardId(lastCardId),
-              frame,
-              'hero-power.copy-last-card'
-            )
-          break
+      const finishHeroPowerActivation = (): void => {
+        this.emitSemantic({
+          type: 'hero-power-used',
+          source: {
+            instanceId: `${options.participantId}:hero-power`,
+            kind: 'hero-power',
+            participantId: options.participantId,
+            zone: 'hero-power'
+          },
+          target: reportedTarget ?? {
+            instanceId: `${options.participantId}:hero`,
+            kind: 'hero',
+            participantId: options.participantId,
+            zone: 'hero'
+          },
+          controllerId: options.participantId,
+          targetControllerId: reportedTarget?.participantId ?? options.participantId,
+          amount: cost
+        })
+        this.processDeaths()
+        if (player.hero.armor !== heroBefore.armor) {
+          this.events.push({
+            type: 'armor-gained',
+            participantId: player.participantId,
+            amount: player.hero.armor - heroBefore.armor,
+            armorBefore: heroBefore.armor,
+            armorAfter: player.hero.armor
+          })
         }
-        case 'choose-one':
-          if (combineChoices || options.choice === 0)
+      }
+      // Snapshot the aura for this activation. Paying, counting the use, and
+      // firing Inspire stay outside the repeated effect, even if its source dies.
+      const effectRepeatCount = this.heroPowerEffectRepeatCount(options.participantId)
+      for (let repeat = 0; repeat < effectRepeatCount; repeat += 1) {
+        if (
+          repeat > 0 &&
+          (this.draft.players.some((entry) => entry.hero.health <= 0) ||
+            (target !== null && !this.liveCombatTarget(target)))
+        )
+          break
+        if (repeat > 0)
+          frame = {
+            ...this.frameFor(source, null, target ? [target] : []),
+            isHeroPower: true
+          }
+        const restoreIsDamage =
+          (effect.kind === 'restore-character' ||
+            effect.kind === 'restore-and-buff-minion') &&
+          this.hasHealthReplacement(options.participantId, frame)
+        const heroPowerDamageBonus = this.heroPowerDamageBonus(options.participantId)
+        const effectEventStart = this.events.length
+        const reportedBefore = reportedTarget
+          ? {
+              health:
+                reportedTarget.kind === 'hero'
+                  ? this.player(reportedTarget.participantId).hero.health
+                  : (this.currentMinion(reportedTarget)?.health ?? 0),
+              armor:
+                reportedTarget.kind === 'hero'
+                  ? this.player(reportedTarget.participantId).hero.armor
+                  : 0
+            }
+          : null
+        let reportedRestoreAmount: number | null = null
+        switch (effect.kind) {
+          case 'gain-attack-and-armor':
             runHeroPowerAction(
               {
                 action: 'modify',
@@ -13732,558 +13778,591 @@ export class EffectRuntime {
                 attack: effect.attack,
                 duration: 'this-turn'
               },
-              'hero-power.choose-one.attack'
+              'hero-power.modify'
             )
-          if (combineChoices || options.choice === 1)
             runHeroPowerAction(
               {
                 action: 'gain-armor',
                 target: { type: 'hero', selection: 'source' },
                 amount: effect.armor
               },
-              'hero-power.choose-one.armor'
+              'hero-power.armor'
             )
-          break
-        case 'buff-friendly-minions':
-          runHeroPowerAction(
-            {
-              action: 'modify',
-              target: { controller: 'self', type: 'minion', selection: 'all' },
-              attack: effect.amount
-            },
-            'hero-power.buff-minions'
-          )
-          break
-        case 'buff-friendly-beast':
-          runHeroPowerAction(
-            {
-              action: 'modify',
-              target: {
-                controller: 'self',
-                type: 'minion',
-                selection: 'chosen',
-                filter: { tribe: 'Beast' }
-              },
-              attack: effect.attack,
-              health: effect.health
-            },
-            'hero-power.buff-beast'
-          )
-          break
-        case 'discover-spell-discount':
-          runHeroPowerActions(
-            [
+            break
+          case 'gain-armor':
+            runHeroPowerAction(
               {
-                action: 'add-to-hand',
-                player: 'self',
-                count: 1,
-                source: 'random-card',
-                filter: { cardType: 'Spell', cardClass: 'Mage' }
+                action: 'gain-armor',
+                target: { type: 'hero', selection: 'source' },
+                amount: effect.amount + heroPowerDamageBonus
               },
-              {
-                action: 'change-cost',
-                target: {
-                  type: 'added-card',
-                  zone: 'hand'
-                },
-                amount: -2,
-                minimum: 0,
-                duration: 'permanent'
-              }
-            ],
-            'hero-power.discover-spell'
-          )
-          break
-        case 'summon-copy-with-stats':
-          runHeroPowerAction(
-            {
-              action: 'summon-copy',
-              target: selected,
-              count: 1,
-              modifications: {
-                attack: { operation: 'set', value: 2 },
-                health: { operation: 'set', value: 2 }
-              }
-            },
-            'hero-power.summon-copy'
-          )
-          break
-        case 'restore-and-buff-minion': {
-          const healthBeforeRestore = target ? this.readHealth(target) : 0
-          runHeroPowerAction(
-            { action: 'restore', target: selected, amount: effect.amount },
-            'hero-power.restore'
-          )
-          if (target) {
-            reportedRestoreAmount = Math.max(
-              0,
-              this.readHealth(target) - healthBeforeRestore
+              'hero-power.armor'
             )
-            if (target.kind === 'minion')
+            break
+          case 'copy-last-card-this-turn': {
+            const playedThisTurn = this.draft.history?.cardsPlayedThisTurn ?? []
+            const lastCardId = playedThisTurn[playedThisTurn.length - 1]
+            if (lastCardId)
+              this.addCardToHand(
+                options.participantId,
+                asCardId(lastCardId),
+                frame,
+                'hero-power.copy-last-card'
+              )
+            break
+          }
+          case 'choose-one':
+            if (combineChoices || options.choice === 0)
               runHeroPowerAction(
                 {
                   action: 'modify',
-                  target: selected,
-                  attack: 3,
-                  health: 3
+                  target: { type: 'hero', selection: 'source' },
+                  attack: effect.attack,
+                  duration: 'this-turn'
                 },
-                'hero-power.restore-buff'
+                'hero-power.choose-one.attack'
               )
-          }
-          break
-        }
-        case 'double-battlecries-this-turn':
-          this.addEnchantment(source, {
-            id: this.allocateId(`${source.instanceId}:battlecry-multiplier`),
-            sourceInstanceId: source.instanceId,
-            sourceCardId: null,
-            triggerMultipliers: { battlecry: 2 },
-            duration: 'this-turn',
-            expiresOnTurn: this.draft.turnNumber
-          })
-          break
-        case 'draw-with-set-cost':
-          runHeroPowerAction(
-            {
-              action: 'draw',
-              player: 'self',
-              count: 1,
-              modifyDrawnCard: { setCost: effect.cost }
-            },
-            'hero-power.draw'
-          )
-          break
-        case 'summon-and-refresh-after-hero-attack':
-          runHeroPowerAction(
-            { action: 'summon', cardId: effect.cardId, count: 1 },
-            'hero-power.summon-golem'
-          )
-          break
-        case 'build-a-beast': {
-          const offers = zombeastPoolOffers(CARD_CATALOG.all, 'first', () =>
-            this.rng.next()
-          )
-          if (!offers.length || !zombeastPoolCards(CARD_CATALOG.all, 'second').length)
-            throw new ResolutionInputError(
-              'resolution-failed',
-              'No eligible Beasts are available.'
-            )
-          this.draft.pendingCardChoice = {
-            participantId: options.participantId,
-            sourceCardInstanceId: source.instanceId,
-            sourceCardId: asCardId(power.id),
-            prompt: 'Build-a-Beast: Choose the first Beast',
-            options: offers.map((card, choice) => ({
-              choice,
-              label: card.name,
-              presentationCardId: card.id
-            })),
-            resolution: { type: 'build-a-beast', stage: 'first' }
-          }
-          this.announcePendingCardChoice()
-          break
-        }
-        case 'discover-choose-one':
-          runHeroPowerAction(
-            {
-              action: 'discover',
-              player: 'self',
-              count: 3,
-              source: 'random-card',
-              pool: CARD_CATALOG.all
-                .filter(
-                  (card) =>
-                    card.collectible &&
-                    card.rulesText.toLowerCase().includes('choose one') &&
-                    (collectChoiceOptions(card.effects)?.length ?? 0) > 0
-                )
-                .map((card) => card.id)
-            },
-            'hero-power.discover-choose-one'
-          )
-          break
-        case 'damage-all-minions':
-          runHeroPowerAction(
-            {
-              action: 'damage',
-              target: { controller: 'any', type: 'minion', selection: 'all' },
-              amount: effect.amount + heroPowerDamageBonus
-            },
-            'hero-power.damage-all-minions'
-          )
-          break
-        case 'damage-and-summon-on-kill': {
-          const targetInstanceId = target?.kind === 'minion' ? target.instanceId : null
-          runHeroPowerAction(
-            {
-              action: 'damage',
-              target: selected,
-              amount: effect.amount + heroPowerDamageBonus
-            },
-            'hero-power.damage'
-          )
-          if (
-            targetInstanceId &&
-            !this.player(options.target!.participantId).board.some(
-              (minion) => minion.instanceId === targetInstanceId
-            ) &&
-            player.board.length < MAX_BOARD_SIZE
-          )
-            runHeroPowerAction(
-              { action: 'summon', cardId: effect.cardId, count: 1 },
-              'hero-power.summon-water-elemental'
-            )
-          break
-        }
-        case 'summon-horseman-and-destroy-if-complete':
-          runHeroPowerAction(
-            {
-              action: 'summon-random',
-              pool: effect.cardIds.filter(
-                (cardId) => !player.board.some((minion) => minion.cardId === cardId)
-              ),
-              count: 1
-            },
-            'hero-power.summon-horseman'
-          )
-          break
-        case 'damage-and-refresh-after-card':
-          runHeroPowerAction(
-            {
-              action: 'damage',
-              target: selected,
-              amount: effect.amount + heroPowerDamageBonus
-            },
-            'hero-power.damage'
-          )
-          break
-        case 'transform-friendly-minion-random-more-expensive':
-          runHeroPowerAction(
-            {
-              action: 'transform-random',
-              target: selected,
-              filter: {
-                cost: {
-                  reference: 'target.baseCost',
-                  offset: effect.costIncrease,
-                  operator: 'eq'
-                }
-              }
-            },
-            'hero-power.transform'
-          )
-          break
-        case 'lifesteal-damage': {
-          const healthBefore = player.hero.health
-          const damageBefore = frame.damageDealt
-          runHeroPowerAction(
-            {
-              action: 'damage',
-              target: selected,
-              amount: effect.amount + heroPowerDamageBonus
-            },
-            'hero-power.damage'
-          )
-          const dealt = Math.max(0, frame.damageDealt - damageBefore)
-          if (dealt > 0) {
-            runHeroPowerAction(
-              {
-                action: 'restore',
-                target: { type: 'hero', selection: 'source' },
-                amount: dealt
-              },
-              'hero-power.lifesteal'
-            )
-            this.events.push({
-              type: 'character-healed',
-              participantId: options.participantId,
-              character: { kind: 'hero' },
-              amount: Math.max(0, player.hero.health - healthBefore),
-              attemptedAmount: dealt,
-              healthBefore,
-              healthAfter: player.hero.health
-            })
-          }
-          break
-        }
-        case 'damage-enemy-hero':
-          runHeroPowerAction(
-            {
-              action: 'damage',
-              target: target
-                ? selected
-                : { controller: 'opponent', type: 'hero', selection: 'all' },
-              amount: effect.amount
-            },
-            'hero-power.damage'
-          )
-          break
-        case 'damage-character':
-          runHeroPowerAction(
-            {
-              action: 'damage',
-              target: selected,
-              amount: effect.amount + heroPowerDamageBonus
-            },
-            'hero-power.damage'
-          )
-          break
-        case 'damage-random-enemy':
-          runHeroPowerAction(
-            {
-              action: 'damage',
-              target: {
-                controller: 'opponent',
-                type: 'character',
-                selection: 'random'
-              },
-              amount: effect.amount + heroPowerDamageBonus
-            },
-            'hero-power.random-damage'
-          )
-          break
-        case 'restore-character':
-          runHeroPowerAction(
-            { action: 'restore', target: selected, amount: effect.amount },
-            'hero-power.restore'
-          )
-          break
-        case 'summon':
-          runHeroPowerAction(
-            { action: 'summon', cardId: effect.cardId, count: effect.count ?? 1 },
-            'hero-power.summon'
-          )
-          break
-        case 'summon-random-totem':
-          runHeroPowerAction(
-            {
-              action: 'summon-random',
-              pool: effect.cardIds.filter(
-                (cardId) => !player.board.some((minion) => minion.cardId === cardId)
-              ),
-              count: 1
-            },
-            'hero-power.summon'
-          )
-          break
-        case 'equip-weapon': {
-          const bonus = this.heroPowerEquipAttackBonus(options.participantId)
-          if (bonus !== null)
+            if (combineChoices || options.choice === 1)
+              runHeroPowerAction(
+                {
+                  action: 'gain-armor',
+                  target: { type: 'hero', selection: 'source' },
+                  amount: effect.armor
+                },
+                'hero-power.choose-one.armor'
+              )
+            break
+          case 'buff-friendly-minions':
             runHeroPowerAction(
               {
                 action: 'modify',
-                target: { type: 'weapon', controller: 'self', selection: 'all' },
-                attack: bonus
+                target: { controller: 'self', type: 'minion', selection: 'all' },
+                attack: effect.amount
               },
-              'hero-power.equip-replacement'
+              'hero-power.buff-minions'
             )
-          else
+            break
+          case 'buff-friendly-beast':
             runHeroPowerAction(
-              { action: 'equip', cardId: effect.cardId },
-              'hero-power.equip'
-            )
-          break
-        }
-        case 'draw-and-self-damage': {
-          // Life Tap's displayed text starts with drawing, but Hearthstone
-          // resolves its self-damage (and any resulting damage triggers)
-          // before it performs the draw.
-          const healthBefore = player.hero.health
-          const armorBefore = player.hero.armor
-          const attemptedAmount = this.damageAmounts(
-            source,
-            effect.amount,
-            frame
-          ).displayAmount
-          runHeroPowerAction(
-            {
-              action: 'damage',
-              target: { type: 'hero', selection: 'source' },
-              amount: effect.amount
-            },
-            'hero-power.damage'
-          )
-          const healthAfter = player.hero.health
-          const armorAfter = player.hero.armor
-          this.events.push({
-            type: 'character-damaged',
-            source: 'hero-power',
-            participantId: player.participantId,
-            character: { kind: 'hero' },
-            amount:
-              Math.max(0, healthBefore - healthAfter) +
-              Math.max(0, armorBefore - armorAfter),
-            attemptedAmount,
-            healthBefore,
-            healthAfter,
-            armorBefore,
-            armorAfter,
-            destroyed: healthAfter <= 0
-          })
-          runHeroPowerAction(
-            {
-              action: 'draw',
-              player: 'self',
-              count: effect.count,
-              ...(this.heroPowerDrawCost(options.participantId) !== null
-                ? {
-                    modifyDrawnCard: {
-                      setCost: this.heroPowerDrawCost(options.participantId)
-                    }
-                  }
-                : {})
-            },
-            'hero-power.draw'
-          )
-          break
-        }
-        case 'draw-generated-cards':
-          for (let index = 0; index < effect.count; index += 1) {
-            const candidate = player.deck.find(
-              (card) =>
-                card.startedInDeck !== true ||
-                (card.ownerId !== undefined && card.ownerId !== options.participantId)
-            )
-            if (!candidate) break
-            this.drawOne(
-              options.participantId,
-              this.frameFor(source, null, []),
-              'hero-power.generated-draw',
               {
-                instanceId: candidate.instanceId,
-                kind: 'card',
-                participantId: options.participantId,
-                zone: 'deck',
-                cardId: candidate.cardId
-              }
+                action: 'modify',
+                target: {
+                  controller: 'self',
+                  type: 'minion',
+                  selection: 'chosen',
+                  filter: { tribe: 'Beast' }
+                },
+                attack: effect.attack,
+                health: effect.health
+              },
+              'hero-power.buff-beast'
             )
-          }
-          break
-        case 'draw-cards':
-          runHeroPowerAction(
-            {
-              action: 'draw',
-              player: 'self',
-              count: effect.count,
-              ...(this.heroPowerDrawCost(options.participantId) !== null
-                ? {
-                    modifyDrawnCard: {
-                      setCost: this.heroPowerDrawCost(options.participantId)
-                    }
-                  }
-                : {})
-            },
-            'hero-power.draw'
-          )
-          break
-      }
-      this.processDeaths()
-      this.emitSemantic({
-        type: 'hero-power-used',
-        source: {
-          instanceId: `${options.participantId}:hero-power`,
-          kind: 'hero-power',
-          participantId: options.participantId,
-          zone: 'hero-power'
-        },
-        target: reportedTarget ?? {
-          instanceId: `${options.participantId}:hero`,
-          kind: 'hero',
-          participantId: options.participantId,
-          zone: 'hero'
-        },
-        controllerId: options.participantId,
-        targetControllerId: reportedTarget?.participantId ?? options.participantId,
-        amount: cost
-      })
-      this.processDeaths()
-      if (player.hero.armor !== heroBefore.armor) {
-        this.events.push({
-          type: 'armor-gained',
-          participantId: player.participantId,
-          amount: player.hero.armor - heroBefore.armor,
-          armorBefore: heroBefore.armor,
-          armorAfter: player.hero.armor
-        })
-      }
-      if (
-        reportedTarget &&
-        reportedBefore &&
-        (effect.kind === 'damage-character' ||
-          effect.kind === 'damage-enemy-hero' ||
-          effect.kind === 'restore-character' ||
-          effect.kind === 'restore-and-buff-minion' ||
-          effect.kind === 'damage-and-summon-on-kill' ||
-          effect.kind === 'damage-and-refresh-after-card' ||
-          effect.kind === 'lifesteal-damage')
-      ) {
-        const currentTarget =
-          reportedTarget.kind === 'hero'
-            ? this.player(reportedTarget.participantId).hero
-            : this.currentMinion(reportedTarget)
-        const healthAfter = currentTarget?.health ?? 0
-        const armorAfter =
-          reportedTarget.kind === 'hero'
-            ? this.player(reportedTarget.participantId).hero.armor
-            : 0
-        const isRestoreEffect =
-          effect.kind === 'restore-character' ||
-          effect.kind === 'restore-and-buff-minion'
-        const reportedAsDamage = !isRestoreEffect || restoreIsDamage
-        const amount = reportedAsDamage
-          ? Math.max(0, reportedBefore.health - healthAfter) +
-            Math.max(0, reportedBefore.armor - armorAfter)
-          : effect.kind === 'restore-and-buff-minion' && reportedRestoreAmount !== null
-            ? reportedRestoreAmount
-            : Math.max(0, healthAfter - reportedBefore.health)
-        const attemptedAmount = isRestoreEffect
-          ? Math.max(
-              0,
-              integer(
-                effect.amount *
-                  this.effectMultiplier(frame.controllerId, 'heroPowerMultiplier')
+            break
+          case 'discover-spell-discount':
+            runHeroPowerActions(
+              [
+                {
+                  action: 'add-to-hand',
+                  player: 'self',
+                  count: 1,
+                  source: 'random-card',
+                  filter: { cardType: 'Spell', cardClass: 'Mage' }
+                },
+                {
+                  action: 'change-cost',
+                  target: {
+                    type: 'added-card',
+                    zone: 'hand'
+                  },
+                  amount: -2,
+                  minimum: 0,
+                  duration: 'permanent'
+                }
+              ],
+              'hero-power.discover-spell'
+            )
+            break
+          case 'summon-copy-with-stats':
+            runHeroPowerAction(
+              {
+                action: 'summon-copy',
+                target: selected,
+                count: 1,
+                modifications: {
+                  attack: { operation: 'set', value: 2 },
+                  health: { operation: 'set', value: 2 }
+                }
+              },
+              'hero-power.summon-copy'
+            )
+            break
+          case 'restore-and-buff-minion': {
+            const healthBeforeRestore = target ? this.readHealth(target) : 0
+            runHeroPowerAction(
+              { action: 'restore', target: selected, amount: effect.amount },
+              'hero-power.restore'
+            )
+            if (target) {
+              reportedRestoreAmount = Math.max(
+                0,
+                this.readHealth(target) - healthBeforeRestore
               )
+              if (target.kind === 'minion')
+                runHeroPowerAction(
+                  {
+                    action: 'modify',
+                    target: selected,
+                    attack: 3,
+                    health: 3
+                  },
+                  'hero-power.restore-buff'
+                )
+            }
+            break
+          }
+          case 'double-battlecries-this-turn':
+            this.addEnchantment(source, {
+              id: this.allocateId(`${source.instanceId}:battlecry-multiplier`),
+              sourceInstanceId: source.instanceId,
+              sourceCardId: null,
+              triggerMultipliers: { battlecry: 2 },
+              duration: 'this-turn',
+              expiresOnTurn: this.draft.turnNumber
+            })
+            break
+          case 'draw-with-set-cost':
+            runHeroPowerAction(
+              {
+                action: 'draw',
+                player: 'self',
+                count: 1,
+                modifyDrawnCard: { setCost: effect.cost }
+              },
+              'hero-power.draw'
             )
-          : this.damageAmounts(reportedTarget, effect.amount, frame).displayAmount
-        this.events.push(
-          reportedAsDamage
-            ? {
-                type: 'character-damaged',
-                source: 'hero-power',
-                vfxGroupId: this.events.find(
-                  (event): event is EffectDomainEvent =>
-                    event.type === 'effect-resolved' &&
-                    event.action === 'damage' &&
-                    event.actionPath.startsWith('hero-power.damage.') &&
-                    event.vfxGroupId !== undefined
-                )?.vfxGroupId,
-                participantId: reportedTarget.participantId,
-                character:
-                  reportedTarget.kind === 'hero'
-                    ? { kind: 'hero' }
-                    : { kind: 'minion', instanceId: reportedTarget.instanceId },
-                amount,
-                attemptedAmount,
-                healthBefore: reportedBefore.health,
-                healthAfter,
-                armorBefore: reportedBefore.armor,
-                armorAfter,
-                destroyed: healthAfter <= 0
-              }
-            : {
+            break
+          case 'summon-and-refresh-after-hero-attack':
+            runHeroPowerAction(
+              { action: 'summon', cardId: effect.cardId, count: 1 },
+              'hero-power.summon-golem'
+            )
+            break
+          case 'build-a-beast': {
+            const offers = zombeastPoolOffers(CARD_CATALOG.all, 'first', () =>
+              this.rng.next()
+            )
+            if (!offers.length || !zombeastPoolCards(CARD_CATALOG.all, 'second').length)
+              throw new ResolutionInputError(
+                'resolution-failed',
+                'No eligible Beasts are available.'
+              )
+            const pending: Omit<PendingCardChoice, 'queued'> = {
+              participantId: options.participantId,
+              sourceCardInstanceId: source.instanceId,
+              sourceCardId: asCardId(power.id),
+              prompt: 'Build-a-Beast: Choose the first Beast',
+              options: offers.map((card, choice) => ({
+                choice,
+                label: card.name,
+                presentationCardId: card.id
+              })),
+              resolution: { type: 'build-a-beast', stage: 'first' }
+            }
+            if (this.draft.pendingCardChoice) {
+              this.draft.pendingCardChoice.queued = [
+                ...(this.draft.pendingCardChoice.queued ?? []),
+                clonePlain(pending) as Mutable<Omit<PendingCardChoice, 'queued'>>
+              ]
+            } else {
+              this.draft.pendingCardChoice = clonePlain(
+                pending
+              ) as DraftState['pendingCardChoice']
+              this.announcePendingCardChoice()
+            }
+            break
+          }
+          case 'discover-choose-one':
+            runHeroPowerAction(
+              {
+                action: 'discover',
+                player: 'self',
+                count: 3,
+                source: 'random-card',
+                pool: CARD_CATALOG.all
+                  .filter(
+                    (card) =>
+                      card.collectible &&
+                      card.rulesText.toLowerCase().includes('choose one') &&
+                      (collectChoiceOptions(card.effects)?.length ?? 0) > 0
+                  )
+                  .map((card) => card.id)
+              },
+              'hero-power.discover-choose-one'
+            )
+            break
+          case 'damage-all-minions':
+            runHeroPowerAction(
+              {
+                action: 'damage',
+                target: { controller: 'any', type: 'minion', selection: 'all' },
+                amount: effect.amount + heroPowerDamageBonus
+              },
+              'hero-power.damage-all-minions'
+            )
+            break
+          case 'damage-and-summon-on-kill': {
+            const targetInstanceId =
+              target?.kind === 'minion' ? target.instanceId : null
+            runHeroPowerAction(
+              {
+                action: 'damage',
+                target: selected,
+                amount: effect.amount + heroPowerDamageBonus
+              },
+              'hero-power.damage'
+            )
+            if (
+              targetInstanceId &&
+              !this.player(target!.participantId).board.some(
+                (minion) => minion.instanceId === targetInstanceId
+              ) &&
+              player.board.length < MAX_BOARD_SIZE
+            )
+              runHeroPowerAction(
+                { action: 'summon', cardId: effect.cardId, count: 1 },
+                'hero-power.summon-water-elemental'
+              )
+            break
+          }
+          case 'summon-horseman-and-destroy-if-complete':
+            runHeroPowerAction(
+              {
+                action: 'summon-random',
+                pool: effect.cardIds.filter(
+                  (cardId) => !player.board.some((minion) => minion.cardId === cardId)
+                ),
+                count: 1
+              },
+              'hero-power.summon-horseman'
+            )
+            break
+          case 'damage-and-refresh-after-card':
+            runHeroPowerAction(
+              {
+                action: 'damage',
+                target: selected,
+                amount: effect.amount + heroPowerDamageBonus
+              },
+              'hero-power.damage'
+            )
+            break
+          case 'transform-friendly-minion-random-more-expensive':
+            runHeroPowerAction(
+              {
+                action: 'transform-random',
+                target: selected,
+                filter: {
+                  cost: {
+                    reference: 'target.baseCost',
+                    offset: effect.costIncrease,
+                    operator: 'eq'
+                  }
+                }
+              },
+              'hero-power.transform'
+            )
+            break
+          case 'lifesteal-damage': {
+            const healthBefore = player.hero.health
+            const damageBefore = frame.damageDealt
+            runHeroPowerAction(
+              {
+                action: 'damage',
+                target: selected,
+                amount: effect.amount + heroPowerDamageBonus
+              },
+              'hero-power.damage'
+            )
+            const dealt = Math.max(0, frame.damageDealt - damageBefore)
+            if (dealt > 0) {
+              runHeroPowerAction(
+                {
+                  action: 'restore',
+                  target: { type: 'hero', selection: 'source' },
+                  amount: dealt
+                },
+                'hero-power.lifesteal'
+              )
+              this.events.push({
                 type: 'character-healed',
-                participantId: reportedTarget.participantId,
-                character:
-                  reportedTarget.kind === 'hero'
-                    ? { kind: 'hero' }
-                    : { kind: 'minion', instanceId: reportedTarget.instanceId },
-                amount,
-                attemptedAmount,
-                healthBefore: reportedBefore.health,
-                healthAfter
-              }
-        )
+                participantId: options.participantId,
+                character: { kind: 'hero' },
+                amount: Math.max(0, player.hero.health - healthBefore),
+                attemptedAmount: dealt,
+                healthBefore,
+                healthAfter: player.hero.health
+              })
+            }
+            break
+          }
+          case 'damage-enemy-hero':
+            runHeroPowerAction(
+              {
+                action: 'damage',
+                target: target
+                  ? selected
+                  : { controller: 'opponent', type: 'hero', selection: 'all' },
+                amount: effect.amount
+              },
+              'hero-power.damage'
+            )
+            break
+          case 'damage-character':
+            runHeroPowerAction(
+              {
+                action: 'damage',
+                target: selected,
+                amount: effect.amount + heroPowerDamageBonus
+              },
+              'hero-power.damage'
+            )
+            break
+          case 'damage-random-enemy':
+            runHeroPowerAction(
+              {
+                action: 'damage',
+                target: {
+                  controller: 'opponent',
+                  type: 'character',
+                  selection: 'random'
+                },
+                amount: effect.amount + heroPowerDamageBonus
+              },
+              'hero-power.random-damage'
+            )
+            break
+          case 'restore-character':
+            runHeroPowerAction(
+              { action: 'restore', target: selected, amount: effect.amount },
+              'hero-power.restore'
+            )
+            break
+          case 'summon':
+            runHeroPowerAction(
+              { action: 'summon', cardId: effect.cardId, count: effect.count ?? 1 },
+              'hero-power.summon'
+            )
+            break
+          case 'summon-random-totem':
+            runHeroPowerAction(
+              {
+                action: 'summon-random',
+                pool: effect.cardIds.filter(
+                  (cardId) => !player.board.some((minion) => minion.cardId === cardId)
+                ),
+                count: 1
+              },
+              'hero-power.summon'
+            )
+            break
+          case 'equip-weapon': {
+            const bonus = this.heroPowerEquipAttackBonus(options.participantId)
+            if (bonus !== null)
+              runHeroPowerAction(
+                {
+                  action: 'modify',
+                  target: { type: 'weapon', controller: 'self', selection: 'all' },
+                  attack: bonus
+                },
+                'hero-power.equip-replacement'
+              )
+            else
+              runHeroPowerAction(
+                { action: 'equip', cardId: effect.cardId },
+                'hero-power.equip'
+              )
+            break
+          }
+          case 'draw-and-self-damage': {
+            // Life Tap's displayed text starts with drawing, but Hearthstone
+            // resolves its self-damage (and any resulting damage triggers)
+            // before it performs the draw.
+            const healthBefore = player.hero.health
+            const armorBefore = player.hero.armor
+            const attemptedAmount = this.damageAmounts(
+              source,
+              effect.amount,
+              frame
+            ).displayAmount
+            runHeroPowerAction(
+              {
+                action: 'damage',
+                target: { type: 'hero', selection: 'source' },
+                amount: effect.amount
+              },
+              'hero-power.damage'
+            )
+            const healthAfter = player.hero.health
+            const armorAfter = player.hero.armor
+            this.events.push({
+              type: 'character-damaged',
+              source: 'hero-power',
+              participantId: player.participantId,
+              character: { kind: 'hero' },
+              amount:
+                Math.max(0, healthBefore - healthAfter) +
+                Math.max(0, armorBefore - armorAfter),
+              attemptedAmount,
+              healthBefore,
+              healthAfter,
+              armorBefore,
+              armorAfter,
+              destroyed: healthAfter <= 0
+            })
+            runHeroPowerAction(
+              {
+                action: 'draw',
+                player: 'self',
+                count: effect.count,
+                ...(this.heroPowerDrawCost(options.participantId) !== null
+                  ? {
+                      modifyDrawnCard: {
+                        setCost: this.heroPowerDrawCost(options.participantId)
+                      }
+                    }
+                  : {})
+              },
+              'hero-power.draw'
+            )
+            break
+          }
+          case 'draw-generated-cards':
+            for (let index = 0; index < effect.count; index += 1) {
+              const candidate = player.deck.find(
+                (card) =>
+                  card.startedInDeck !== true ||
+                  (card.ownerId !== undefined && card.ownerId !== options.participantId)
+              )
+              if (!candidate) break
+              this.drawOne(
+                options.participantId,
+                this.frameFor(source, null, []),
+                'hero-power.generated-draw',
+                {
+                  instanceId: candidate.instanceId,
+                  kind: 'card',
+                  participantId: options.participantId,
+                  zone: 'deck',
+                  cardId: candidate.cardId
+                }
+              )
+            }
+            break
+          case 'draw-cards':
+            runHeroPowerAction(
+              {
+                action: 'draw',
+                player: 'self',
+                count: effect.count,
+                ...(this.heroPowerDrawCost(options.participantId) !== null
+                  ? {
+                      modifyDrawnCard: {
+                        setCost: this.heroPowerDrawCost(options.participantId)
+                      }
+                    }
+                  : {})
+              },
+              'hero-power.draw'
+            )
+            break
+        }
+        this.processDeaths()
+        // Preserve the established single-resolution event/reporting boundary.
+        // Repeated effects report each hit before firing the one Inspire event.
+        if (effectRepeatCount === 1) finishHeroPowerActivation()
+        if (
+          reportedTarget &&
+          reportedBefore &&
+          (effect.kind === 'damage-character' ||
+            effect.kind === 'damage-enemy-hero' ||
+            effect.kind === 'restore-character' ||
+            effect.kind === 'restore-and-buff-minion' ||
+            effect.kind === 'damage-and-summon-on-kill' ||
+            effect.kind === 'damage-and-refresh-after-card' ||
+            effect.kind === 'lifesteal-damage')
+        ) {
+          const currentTarget =
+            reportedTarget.kind === 'hero'
+              ? this.player(reportedTarget.participantId).hero
+              : this.currentMinion(reportedTarget)
+          const healthAfter = currentTarget?.health ?? 0
+          const armorAfter =
+            reportedTarget.kind === 'hero'
+              ? this.player(reportedTarget.participantId).hero.armor
+              : 0
+          const isRestoreEffect =
+            effect.kind === 'restore-character' ||
+            effect.kind === 'restore-and-buff-minion'
+          const reportedAsDamage = !isRestoreEffect || restoreIsDamage
+          const amount = reportedAsDamage
+            ? Math.max(0, reportedBefore.health - healthAfter) +
+              Math.max(0, reportedBefore.armor - armorAfter)
+            : effect.kind === 'restore-and-buff-minion' &&
+                reportedRestoreAmount !== null
+              ? reportedRestoreAmount
+              : Math.max(0, healthAfter - reportedBefore.health)
+          const attemptedAmount = isRestoreEffect
+            ? Math.max(
+                0,
+                integer(
+                  effect.amount *
+                    this.effectMultiplier(frame.controllerId, 'heroPowerMultiplier')
+                )
+              )
+            : this.damageAmounts(reportedTarget, effect.amount, frame).displayAmount
+          this.events.push(
+            reportedAsDamage
+              ? {
+                  type: 'character-damaged',
+                  source: 'hero-power',
+                  vfxGroupId: this.events
+                    .slice(effectEventStart)
+                    .find(
+                      (event): event is EffectDomainEvent =>
+                        event.type === 'effect-resolved' &&
+                        event.action === 'damage' &&
+                        event.actionPath.startsWith('hero-power.damage.') &&
+                        event.vfxGroupId !== undefined
+                    )?.vfxGroupId,
+                  participantId: reportedTarget.participantId,
+                  character:
+                    reportedTarget.kind === 'hero'
+                      ? { kind: 'hero' }
+                      : { kind: 'minion', instanceId: reportedTarget.instanceId },
+                  amount,
+                  attemptedAmount,
+                  healthBefore: reportedBefore.health,
+                  healthAfter,
+                  armorBefore: reportedBefore.armor,
+                  armorAfter,
+                  destroyed: healthAfter <= 0
+                }
+              : {
+                  type: 'character-healed',
+                  participantId: reportedTarget.participantId,
+                  character:
+                    reportedTarget.kind === 'hero'
+                      ? { kind: 'hero' }
+                      : { kind: 'minion', instanceId: reportedTarget.instanceId },
+                  amount,
+                  attemptedAmount,
+                  healthBefore: reportedBefore.health,
+                  healthAfter
+                }
+          )
+        }
       }
+      if (effectRepeatCount > 1) finishHeroPowerActivation()
       const summoned = player.board.filter(
         (minion) => !boardBefore.has(minion.instanceId)
       )
