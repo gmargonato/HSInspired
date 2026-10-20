@@ -125,6 +125,7 @@ export interface ExpertActionOutcome {
     | 'unpaid-friendly-damage'
     | 'wasted-healing-target'
     | 'opponent-heal'
+    | 'opponent-buff'
     | 'imminent-clear'
     | 'attack-before-buff'
     | 'attack-before-setup'
@@ -447,6 +448,123 @@ function enablesHeldDamagePayoff(
   return after.hand.some((card) => inspect(CARD_CATALOG.get(card.cardId)?.effects))
 }
 
+/** A soft warning, not a ban: pure enemy Attack gifts need a known payoff. */
+function unpaidOpponentBuff(
+  root: OpeningMatchAnalysis,
+  actorId: PlayerId,
+  command: Extract<TurnMatchCommand, { type: 'play-card' }>
+): ExpertActionOutcome {
+  const state = root.getState()
+  const player = state.players.find((entry) => entry.participantId === actorId)
+  const card = player?.hand.find((entry) => entry.instanceId === command.cardInstanceId)
+  const definition = card && CARD_CATALOG.get(card.cardId)
+  const target = command.targets?.[0]
+  if (
+    !player ||
+    !definition ||
+    definition.type !== 'Spell' ||
+    command.targets?.length !== 1 ||
+    target?.kind !== 'minion' ||
+    target.participantId === actorId ||
+    !definition.effects.length ||
+    !definition.effects.every(
+      (effect) =>
+        effect.trigger === 'cast' &&
+        effect.actions?.length &&
+        effect.actions.every(
+          (action) =>
+            action.action === 'modify' &&
+            Object.keys(action).every((key) =>
+              ['action', 'target', 'attack'].includes(key)
+            ) &&
+            typeof action.attack === 'number' &&
+            action.attack > 0
+        )
+    )
+  )
+    return { penalty: 0 }
+  // Raising Attack can enable removal or combat/deathrattle setup. Those lines
+  // remain search decisions; an immediate stat delta is not a dominance proof.
+  const usesAttack = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(usesAttack)
+    if (!value || typeof value !== 'object') return false
+    const entry = value as Record<string, unknown>
+    return (
+      entry.stat === 'attack' ||
+      (typeof entry.reference === 'string' && entry.reference.includes('attack')) ||
+      Object.values(entry).some(usesAttack)
+    )
+  }
+  if (
+    player.hand.some(
+      (entry) =>
+        entry.instanceId !== command.cardInstanceId &&
+        usesAttack(CARD_CATALOG.get(entry.cardId)?.effects)
+    ) ||
+    state.players.some((entry) =>
+      entry.board.some(
+        (minion) =>
+          !minion.dormant &&
+          !minion.silenced &&
+          (minion.grantedTriggers?.length ||
+            minion.attachedEffects?.length ||
+            minion.deathrattles?.length ||
+            CARD_CATALOG.get(minion.cardId)?.effects.some((effect) =>
+              ['on-damage', 'on-death', 'deathrattle', 'on-attack'].includes(
+                effect.trigger
+              )
+            ))
+      )
+    )
+  )
+    return { penalty: 0 }
+  return root.analyze((fork) => {
+    const before = fork.getAiObservation?.(actorId, 'fair')
+    const rng = JSON.stringify(fork.getRandomState?.())
+    const result = fork.dispatch(command)
+    const after = fork.getAiObservation?.(actorId, 'fair')
+    if (
+      !before ||
+      !after ||
+      !result.accepted ||
+      result.state.phase !== 'turns' ||
+      result.state.pendingDiscover ||
+      result.state.pendingCardChoice ||
+      rng !== JSON.stringify(fork.getRandomState?.()) ||
+      revealsTacticalInformation(result.events)
+    )
+      return { penalty: 0 }
+    const oldTarget = before.players
+      .find((entry) => entry.participantId === target.participantId)
+      ?.board.find((minion) => minion.instanceId === target.instanceId)
+    const nextTarget = after.players
+      .find((entry) => entry.participantId === target.participantId)
+      ?.board.find((minion) => minion.instanceId === target.instanceId)
+    if (!oldTarget || !nextTarget || nextTarget.attack <= oldTarget.attack)
+      return { penalty: 0 }
+    const otherwiseUnchanged = before.players.every((entry) => {
+      const next = after.players.find(
+        (candidate) => candidate.participantId === entry.participantId
+      )!
+      return (
+        position(entry, command.cardInstanceId) ===
+        position(
+          {
+            ...next,
+            board: next.board.map((minion) =>
+              minion.instanceId === target.instanceId ? oldTarget : minion
+            )
+          },
+          command.cardInstanceId
+        )
+      )
+    })
+    return otherwiseUnchanged
+      ? { penalty: 0.25, reason: 'opponent-buff' }
+      : { penalty: 0 }
+  })
+}
+
 /** A chosen self-hero target must pay for its damage beyond ordinary development. */
 function unpaidTargetedHeroDamage(
   root: OpeningMatchAnalysis,
@@ -688,6 +806,8 @@ export function inspectExpertAction(
       return { penalty: 0.35, reason: 'no-payoff' }
     if (wastesImmediateTemporaryMana(root, actorId, command))
       return { penalty: 0.35, reason: 'no-payoff' }
+    const buff = unpaidOpponentBuff(root, actorId, command)
+    if (buff.penalty > 0) return buff
     const damage = unpaidTargetedHeroDamage(root, actorId, command)
     if (damage.penalty > 0) return damage
     const healing = wastedHealingTarget(root, actorId, command)
@@ -869,10 +989,20 @@ export function inspectExpertAction(
     if (spentCard && (hasDeferredCastPayoff(nextSelf) || self.handSize >= 10))
       return { penalty: 0 }
     if (
-      result.events.some(
-        (e) =>
-          e.type === 'character-healed' && e.participantId !== actorId && e.amount > 0
-      ) &&
+      before!.players.some((player) => {
+        if (player.participantId === actorId) return false
+        const next = after.players.find(
+          (entry) => entry.participantId === player.participantId
+        )!
+        return (
+          next.hero.health > player.hero.health ||
+          player.board.some(
+            (minion) =>
+              (next.board.find((entry) => entry.instanceId === minion.instanceId)
+                ?.health ?? 0) > minion.health
+          )
+        )
+      }) &&
       payoffPosition(self, spentCard) === payoffPosition(nextSelf, spentCard)
     )
       return { penalty: 0.25, reason: 'opponent-heal' }

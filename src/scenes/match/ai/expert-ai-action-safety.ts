@@ -107,14 +107,69 @@ export function unpaidActionPenalty(
     })
   )
     return 0.08
+  // A target-independent random summon is real development, but does not by
+  // itself reward choosing our hero for the preceding damage. This remains a
+  // soft search penalty; no sampled summon is treated as a certainty proof.
+  const damageAndSummon =
+    definition?.type === 'Spell' &&
+    command.targets?.length === 1 &&
+    command.targets[0]?.kind === 'hero' &&
+    command.targets[0].participantId === actorId &&
+    definition.effects.length === 1 &&
+    definition.effects.every(
+      (effect) =>
+        effect.trigger === 'cast' &&
+        !effect.condition &&
+        effect.actions?.length === 2 &&
+        effect.actions[0]?.action === 'damage' &&
+        typeof effect.actions[0].amount === 'number' &&
+        effect.actions[1]?.action === 'summon-random' &&
+        Object.keys(effect.actions[1]).every((key) =>
+          ['action', 'filter', 'count'].includes(key)
+        ) &&
+        typeof effect.actions[1].count === 'number'
+    )
+  const healthPayoff = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(healthPayoff)
+    if (!value || typeof value !== 'object') return false
+    const entry = value as Record<string, unknown>
+    return (
+      entry.type === 'player-health-lte' ||
+      (typeof entry.reference === 'string' &&
+        (entry.reference.includes('hero-damage') ||
+          entry.reference.includes('health') ||
+          entry.reference === 'matching-entity-count')) ||
+      Object.values(entry).some(healthPayoff)
+    )
+  }
+  if (
+    damageAndSummon &&
+    (player.hand.some(
+      (entry) =>
+        entry.instanceId !== command.cardInstanceId &&
+        healthPayoff(CARD_CATALOG.get(entry.cardId)?.effects)
+    ) ||
+      state.players.some((entry) =>
+        entry.board.some(
+          (minion) =>
+            !minion.dormant &&
+            !minion.silenced &&
+            CARD_CATALOG.get(minion.cardId)?.effects.some(
+              (effect) => effect.trigger === 'on-summon' || healthPayoff(effect)
+            )
+        )
+      ))
+  )
+    return 0
   if (
     definition?.type !== 'Spell' ||
     !definition.effects.length ||
-    !definition.effects.every(
-      (effect) =>
-        effect.trigger === 'cast' &&
-        effect.actions?.every((action) => action.action === 'damage')
-    )
+    (!damageAndSummon &&
+      !definition.effects.every(
+        (effect) =>
+          effect.trigger === 'cast' &&
+          effect.actions?.every((action) => action.action === 'damage')
+      ))
   )
     return 0
   if (!command.targets?.some((entry) => entry.participantId === actorId)) return 0
@@ -149,12 +204,13 @@ export function unpaidActionPenalty(
           !minion.dormant &&
           (minion.grantedTriggers?.length ||
             minion.attachedEffects?.length ||
-            minion.deathrattles?.length ||
+            (!damageAndSummon && minion.deathrattles?.length) ||
             CARD_CATALOG.get(minion.cardId)?.effects.some(
               (effect) =>
-                (['on-damage', 'on-death', 'deathrattle', 'on-cast'].includes(
-                  effect.trigger
-                ) ||
+                ((damageAndSummon
+                  ? ['on-damage', 'on-cast', 'on-summon']
+                  : ['on-damage', 'on-death', 'deathrattle', 'on-cast']
+                ).includes(effect.trigger) ||
                   (effect.trigger === 'aura' &&
                     effect.condition?.type === 'source-damaged' &&
                     command.targets?.some(

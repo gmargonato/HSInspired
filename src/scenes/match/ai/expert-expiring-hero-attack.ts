@@ -15,7 +15,7 @@ import type { RuntimeEnchantment } from '../../../game-rules/match/opening-match
 export const EXPERT_EXPIRING_ATTACK_MAX_DISPATCHES = 8
 export const EXPERT_EXPIRING_ATTACK_MAX_MS = 25
 
-type HeroAttack = Extract<TurnMatchCommand, { type: 'attack-character' }>
+type Attack = Extract<TurnMatchCommand, { type: 'attack-character' }>
 
 function onlyKeys(value: object, keys: readonly string[]): boolean {
   return Object.keys(value).every((key) => keys.includes(key))
@@ -165,13 +165,80 @@ function supportsFreeExpiringAttack(
   return true
 }
 
+/**
+ * A minion's unused attack expires too, but changing enemy Health can enable a
+ * threshold payoff. Only prefer damage wholly absorbed by Armor here. We do
+ * not predict a future draw or claim dominance over unknown armor synergies.
+ * The dispatch comparison below rejects every other observable consequence.
+ */
+function supportsFreeArmorAttack(
+  state: OpeningMatchState,
+  actorId: PlayerId,
+  command: Attack
+): boolean {
+  const opponent = state.players.find((player) => player.participantId !== actorId)
+  return (
+    command.attacker.kind === 'minion' &&
+    command.defender.kind === 'hero' &&
+    state.phase === 'turns' &&
+    state.activePlayerId === actorId &&
+    !state.pendingDiscover &&
+    !state.pendingCardChoice &&
+    !state.pendingResolution &&
+    !state.scheduledEffects?.length &&
+    !!opponent &&
+    opponent.hero.armor > 0 &&
+    opponent.deck.length > 0 &&
+    state.players.every(
+      (player) =>
+        player.hero.health > 0 &&
+        !player.weapon &&
+        !player.quest &&
+        !player.secrets?.length &&
+        player.board.every((minion) => {
+          if (minion.grantedTriggers?.length || minion.attachedEffects?.length)
+            return false
+          const definition = CARD_CATALOG.get(minion.cardId)
+          if (!definition) return false
+          if (minion.silenced) return true
+          return definition.effects.every(
+            (effect) =>
+              ['battlecry', 'on-play', 'deathrattle'].includes(effect.trigger) ||
+              (effect.trigger === 'aura' &&
+                onlyKeys(effect, ['trigger', 'actions']) &&
+                !!effect.actions?.length &&
+                effect.actions.every((action) => {
+                  const target = action.target as Record<string, unknown> | undefined
+                  return (
+                    action.action === 'modify' &&
+                    onlyKeys(action, ['action', 'target', 'attack']) &&
+                    typeof action.attack === 'number' &&
+                    Number.isFinite(action.attack) &&
+                    !!target &&
+                    onlyKeys(target, ['controller', 'type', 'selection', 'exclude']) &&
+                    target.type === 'minion' &&
+                    ['all', 'adjacent', 'source'].includes(String(target.selection))
+                  )
+                })) ||
+              // A sleeping opponent's end-turn effect cannot fire on our attack
+              // or the immediately following handoff. Other triggers abstain
+              // even when one sampled hidden condition would not activate them.
+              (minion.dormant &&
+                player.participantId !== actorId &&
+                effect.trigger === 'end-of-turn')
+          )
+        })
+    )
+  )
+}
+
 function samePositionWithDamage(
   before: AiObservation,
   after: AiObservation,
   beforeState: OpeningMatchState,
   afterState: OpeningMatchState,
   actorId: PlayerId,
-  command: HeroAttack
+  command: Attack
 ): boolean {
   let damage = 0
   const restored = {
@@ -184,17 +251,39 @@ function samePositionWithDamage(
       if (player.participantId === actorId)
         return {
           ...player,
-          hero: {
-            ...player.hero,
-            lastAttackedOnTurn: original.hero.lastAttackedOnTurn,
-            attacksUsedThisTurn: original.hero.attacksUsedThisTurn
-          }
+          ...(command.attacker.kind === 'hero'
+            ? {
+                hero: {
+                  ...player.hero,
+                  lastAttackedOnTurn: original.hero.lastAttackedOnTurn,
+                  attacksUsedThisTurn: original.hero.attacksUsedThisTurn
+                }
+              }
+            : {
+                board: player.board.map((minion) => {
+                  if (
+                    command.attacker.kind !== 'minion' ||
+                    minion.instanceId !== command.attacker.instanceId
+                  )
+                    return minion
+                  const attacker = original.board.find(
+                    (entry) => entry.instanceId === minion.instanceId
+                  )!
+                  return {
+                    ...minion,
+                    lastAttackedOnTurn: attacker.lastAttackedOnTurn,
+                    attacksUsedThisTurn: attacker.attacksUsedThisTurn
+                  }
+                })
+              })
         }
       if (command.defender.kind === 'hero') {
         if (
           player.hero.health <= 0 ||
           player.hero.health > original.hero.health ||
-          player.hero.armor > original.hero.armor
+          player.hero.armor > original.hero.armor ||
+          (command.attacker.kind === 'minion' &&
+            player.hero.health !== original.hero.health)
         )
           return player
         damage =
@@ -226,18 +315,34 @@ function samePositionWithDamage(
       }
     })
   }
-  const originalHero = before.players.find(
-    (player) => player.participantId === actorId
-  )!.hero
-  const spentHero = after.players.find(
-    (player) => player.participantId === actorId
-  )!.hero
+  const ownBefore = before.players.find((player) => player.participantId === actorId)!
+  const ownAfter = after.players.find((player) => player.participantId === actorId)!
+  const originalAttacker =
+    command.attacker.kind === 'hero'
+      ? ownBefore.hero
+      : ownBefore.board.find(
+          (minion) =>
+            command.attacker.kind === 'minion' &&
+            minion.instanceId === command.attacker.instanceId
+        )
+  const spentAttacker =
+    command.attacker.kind === 'hero'
+      ? ownAfter.hero
+      : ownAfter.board.find(
+          (minion) =>
+            command.attacker.kind === 'minion' &&
+            minion.instanceId === command.attacker.instanceId
+        )
+  const priorAttacks =
+    originalAttacker?.lastAttackedOnTurn === before.turnNumber
+      ? (originalAttacker.attacksUsedThisTurn ?? 0)
+      : 0
   const history = beforeState.history
   const nextHistory = afterState.history
   return (
     damage > 0 &&
-    spentHero.lastAttackedOnTurn === before.turnNumber &&
-    spentHero.attacksUsedThisTurn === (originalHero.attacksUsedThisTurn ?? 0) + 1 &&
+    spentAttacker?.lastAttackedOnTurn === before.turnNumber &&
+    spentAttacker?.attacksUsedThisTurn === priorAttacks + 1 &&
     JSON.stringify(before) === JSON.stringify(restored) &&
     !!history &&
     !!nextHistory &&
@@ -280,11 +385,7 @@ export function createExpertExpiringAttackInspector(
     )
   }
   const inspect = (command: TurnMatchCommand): boolean => {
-    if (
-      command.type !== 'attack-character' ||
-      command.attacker.kind !== 'hero' ||
-      command.participantId !== actorId
-    )
+    if (command.type !== 'attack-character' || command.participantId !== actorId)
       return false
     if (stop()) {
       stats.abstentions++
@@ -300,7 +401,12 @@ export function createExpertExpiringAttackInspector(
     started ??= callStarted
     try {
       fair ??= createFairHypothesisCheckpoint(checkpoint, actorId, 0x71ac71c)
-      if (!supportsFreeExpiringAttack(fair.state, actorId)) return false
+      if (
+        !(command.attacker.kind === 'hero'
+          ? supportsFreeExpiringAttack(fair.state, actorId)
+          : supportsFreeArmorAttack(fair.state, actorId, command))
+      )
+        return false
       match ??= createOpeningMatchFromCheckpoint(fair)
       if (stop()) {
         stats.abstentions++

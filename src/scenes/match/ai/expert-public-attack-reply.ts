@@ -124,7 +124,7 @@ export function inspectPublicAttackReply(
         if (stop() || !applyPublicAttackStep(fork, attack) || stop()) return 'unknown'
         const position = fork.getState()
         if (terminalOutcome(position, actorId) === 'loss') return 'lethal'
-        if (position.phase === 'ended') return 'unknown'
+        if (position.phase === 'ended' || !supported(position)) return 'unknown'
         if (
           shield &&
           protectiveSecretsSupported(state, actorId) &&
