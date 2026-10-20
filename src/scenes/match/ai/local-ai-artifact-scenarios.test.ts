@@ -9889,3 +9889,168 @@ describe('Expert delayed-damage prevention', () => {
     ).toHaveLength(0)
   })
 })
+
+describe('Yore sweep adverse target regressions', () => {
+  it('recognizes authored opponent healing without requiring hero-power events', () => {
+    const session = createSession({
+      seed: 2026102010,
+      aiHeroId: 'uther',
+      opponentHeroId: 'guldan',
+      aiMana: 1,
+      aiHealth: 27,
+      opponentHealth: 20,
+      aiHand: ['whispers_of_the_old_gods_forbidden_healing']
+    })
+    const before = session.match.getCheckpoint()
+    const inspect = createExpertActionInspector(before, session.remoteParticipantId)
+    const enemy = playCommand(
+      session,
+      'whispers_of_the_old_gods_forbidden_healing',
+      (target) =>
+        target.kind === 'hero' && target.participantId === session.localParticipantId
+    )
+    const self = playCommand(
+      session,
+      'whispers_of_the_old_gods_forbidden_healing',
+      (target) =>
+        target.kind === 'hero' && target.participantId === session.remoteParticipantId
+    )
+    expect(inspect(enemy).reason).toBe('opponent-heal')
+    expect(inspect(self).penalty).toBe(0)
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it('leaves healing-to-damage conversion and actual healing-trigger payoffs unpenalized', () => {
+    for (const engine of ['classic_auchenai_soulpriest', 'basic_northshire_cleric']) {
+      const session = createSession({
+        seed: 2026102011,
+        aiHeroId: 'anduin',
+        opponentHeroId: 'guldan',
+        aiMana: 2,
+        aiHand: ['whispers_of_the_old_gods_forbidden_healing'],
+        aiBoard: [{ cardId: engine }],
+        opponentBoard: [{ cardId: 'basic_chillwind_yeti', health: 2, maxHealth: 5 }]
+      })
+      const command = playCommand(
+        session,
+        'whispers_of_the_old_gods_forbidden_healing',
+        (target) =>
+          target.kind === 'minion' &&
+          target.participantId === session.localParticipantId
+      )
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty
+      ).toBe(0)
+    }
+  })
+
+  it('softly penalizes an enemy Attack gift while keeping a friendly buff available', () => {
+    const session = createSession({
+      seed: 2026102016,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'guldan',
+      aiMana: 3,
+      aiHand: ['classic_cold_blood', 'classic_cold_blood'],
+      aiBoard: [{ cardId: 'basic_chillwind_yeti' }],
+      opponentBoard: [{ cardId: 'future_past_ancient_of_yore' }]
+    })
+    const before = session.match.getCheckpoint()
+    const inspect = createExpertActionInspector(before, session.remoteParticipantId)
+    const enemy = playCommand(
+      session,
+      'classic_cold_blood',
+      (target) =>
+        target.kind === 'minion' && target.participantId === session.localParticipantId
+    )
+    const friendly = playCommand(
+      session,
+      'classic_cold_blood',
+      (target) =>
+        target.kind === 'minion' && target.participantId === session.remoteParticipantId
+    )
+    expect(inspect(enemy).reason).toBe('opponent-buff')
+    expect(inspect(friendly).penalty).toBe(0)
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it('preserves an enemy Attack buff that enables known threshold removal', () => {
+    const session = createSession({
+      seed: 2026102017,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'guldan',
+      aiMana: 10,
+      aiHand: ['classic_cold_blood', 'classic_big_game_hunter'],
+      opponentBoard: [{ cardId: 'basic_chillwind_yeti', attack: 5 }]
+    })
+    const command = playCommand(
+      session,
+      'classic_cold_blood',
+      (target) =>
+        target.kind === 'minion' && target.participantId === session.localParticipantId
+    )
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(command).penalty
+    ).toBe(0)
+  })
+
+  it('softly discourages own-hero Portal damage without certifying its random summon', () => {
+    const session = createSession({
+      seed: 2026102007,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'guldan',
+      aiMana: 7,
+      aiHealth: 9,
+      aiHand: ['one_night_in_karazhan_firelands_portal'],
+      opponentBoard: [{ cardId: 'future_past_ancient_of_yore' }]
+    })
+    const before = session.match.getCheckpoint()
+    const self = playCommand(
+      session,
+      'one_night_in_karazhan_firelands_portal',
+      (target) =>
+        target.kind === 'hero' && target.participantId === session.remoteParticipantId
+    )
+    const enemy = playCommand(
+      session,
+      'one_night_in_karazhan_firelands_portal',
+      (target) =>
+        target.kind === 'hero' && target.participantId === session.localParticipantId
+    )
+    expect(
+      unpaidActionPenalty(self, session.getState(), session.remoteParticipantId)
+    ).toBe(0.35)
+    expect(
+      unpaidActionPenalty(enemy, session.getState(), session.remoteParticipantId)
+    ).toBe(0)
+    expect(
+      createExpertActionInspector(before, session.remoteParticipantId)(self).penalty
+    ).toBe(0)
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it('retains known health-cost payoff for self-targeted Portal', () => {
+    const session = createSession({
+      seed: 2026102008,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'guldan',
+      aiMana: 10,
+      aiHealth: 20,
+      aiHand: ['one_night_in_karazhan_firelands_portal', 'classic_molten_giant']
+    })
+    const self = playCommand(
+      session,
+      'one_night_in_karazhan_firelands_portal',
+      (target) =>
+        target.kind === 'hero' && target.participantId === session.remoteParticipantId
+    )
+    expect(
+      unpaidActionPenalty(self, session.getState(), session.remoteParticipantId)
+    ).toBe(0)
+  })
+})

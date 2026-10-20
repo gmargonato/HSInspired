@@ -1,3 +1,7 @@
+import {
+  inspectExpertPublicThreat,
+  EXPERT_PUBLIC_THREAT_MAX_DISPATCHES
+} from './expert-public-threat'
 import { describe, expect, it } from 'vitest'
 import type {
   OpeningMatchCheckpoint,
@@ -1006,3 +1010,179 @@ it.each([
     }
   }
 )
+
+describe('Public attack defense with dormant recycling', () => {
+  function recycling(remaining = 2, hidden = 'basic_boulderfist_ogre') {
+    const fixture = createAiFixture({
+      seed: 99,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'guldan',
+      turnNumber: 16,
+      aiMana: 6,
+      aiMaximumMana: 8,
+      aiHealth: 5,
+      aiHand: [{ cardId: 'basic_sap', currentCost: 0 }],
+      aiQuest: { cardId: 'journey_to_ungoro_open_the_waygate', progress: 3 },
+      aiBoard: [],
+      opponentBoard: [
+        { cardId: 'journey_to_ungoro_flame_elemental' },
+        { cardId: 'future_past_ancient_of_yore' },
+        { cardId: 'future_past_puppetmaster_dorian', attack: 2, health: 3 },
+        { cardId: 'future_past_ancient_of_yore', health: 3 }
+      ],
+      aiDeck: ['basic_fireball'],
+      opponentDeck: [hidden],
+      opponentHand: [hidden]
+    })
+    const actor = fixture.setup.participants.find(
+      (p) => p.controllerKind === 'ai'
+    )!.participantId
+    const checkpoint = {
+      ...fixture.checkpoint,
+      state: {
+        ...fixture.checkpoint.state,
+        players: fixture.checkpoint.state.players.map((player) =>
+          player.participantId === actor
+            ? player
+            : {
+                ...player,
+                board: player.board.map((m, index) =>
+                  index === 1
+                    ? { ...m, dormant: true, dormantTurnsRemaining: remaining }
+                    : index === 3
+                      ? {
+                          ...m,
+                          dormant: false,
+                          deathrattles: [
+                            {
+                              trigger: 'deathrattle',
+                              actions: [
+                                {
+                                  action: 'summon-fresh-copy',
+                                  count: 2,
+                                  dormantTurns: 2
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      : m
+                )
+              }
+        )
+      }
+    } as unknown as OpeningMatchCheckpoint
+    return { checkpoint, actor }
+  }
+
+  it.each(['basic_boulderfist_ogre', 'basic_fireball'])(
+    'certifies free Sap without using concealed draw identity %s',
+    (hidden) => {
+      const { checkpoint, actor } = recycling(2, hidden)
+      const before = JSON.stringify(checkpoint)
+      const result = inspectExpertPublicThreat(
+        checkpoint,
+        actor,
+        undefined,
+        () => false,
+        () => 0
+      )
+      expect(result.stats.supported).toBe(true)
+      expect(result.reply).toBe('lethal')
+      expect(
+        result.defenses.some((line) => line.commands[0]?.type === 'play-card')
+      ).toBe(true)
+      expect(result.stats.dispatches).toBeLessThanOrEqual(
+        EXPERT_PUBLIC_THREAT_MAX_DISPATCHES
+      )
+      expect(JSON.stringify(checkpoint)).toBe(before)
+    }
+  )
+
+  it('does not certify Sap when the other Ancient wakes before attacking', () => {
+    const { checkpoint, actor } = recycling(1)
+    const result = inspectExpertPublicThreat(
+      checkpoint,
+      actor,
+      undefined,
+      () => false,
+      () => 0
+    )
+    expect(result.reply).toBe('lethal')
+    expect(result.defenses).toHaveLength(0)
+  })
+
+  it('keeps unsupported active deathrattle copies outside the safety boundary', () => {
+    const { checkpoint, actor } = recycling()
+    const changed = JSON.parse(JSON.stringify(checkpoint)) as OpeningMatchCheckpoint
+    const enemy = changed.state.players.find((p) => p.participantId !== actor)!
+    Object.assign(enemy.board[3]!.deathrattles![0]!.actions![0]!, { dormantTurns: 0 })
+    const result = inspectExpertPublicThreat(
+      changed,
+      actor,
+      undefined,
+      () => false,
+      () => 0
+    )
+    expect(result.stats.supported).toBe(false)
+    expect(result.defenses).toHaveLength(0)
+  })
+
+  it('rejects restored unsupported printed effects from a silenced copy source', () => {
+    const { checkpoint, actor } = recycling()
+    const changed = JSON.parse(JSON.stringify(checkpoint)) as OpeningMatchCheckpoint
+    const enemy = changed.state.players.find((p) => p.participantId !== actor)!
+    Object.assign(enemy.board[3]!, { cardId: 'classic_knife_juggler', silenced: true })
+    const result = inspectExpertPublicThreat(
+      changed,
+      actor,
+      undefined,
+      () => false,
+      () => 0
+    )
+    expect(result.stats.supported).toBe(false)
+    expect(result.defenses).toHaveLength(0)
+  })
+
+  it('finds a deterministic clear plus ping under the original shared budget', () => {
+    const fixture = createAiFixture({
+      seed: 99,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'guldan',
+      turnNumber: 18,
+      aiMana: 9,
+      aiMaximumMana: 10,
+      aiHealth: 9,
+      aiBoard: [],
+      aiHand: ['basic_flamestrike', 'one_night_in_karazhan_firelands_portal'],
+      opponentBoard: [
+        { cardId: 'future_past_ancient_of_yore', health: 5 },
+        { cardId: 'future_past_ancient_of_yore', health: 5 }
+      ],
+      aiDeck: ['basic_fireball'],
+      opponentDeck: ['basic_fireball']
+    })
+    const actor = fixture.setup.participants.find(
+      (p) => p.controllerKind === 'ai'
+    )!.participantId
+    const result = inspectExpertPublicThreat(
+      fixture.checkpoint,
+      actor,
+      undefined,
+      () => false,
+      () => 0
+    )
+    expect(result.reply).toBe('lethal')
+    expect(
+      result.defenses.some(
+        (line) =>
+          line.commands.length === 3 &&
+          line.commands.some((c) => c.type === 'use-hero-power') &&
+          line.commands.some((c) => c.type === 'play-card')
+      )
+    ).toBe(true)
+    expect(result.stats.dispatches).toBeLessThanOrEqual(
+      EXPERT_PUBLIC_THREAT_MAX_DISPATCHES
+    )
+  })
+})

@@ -445,3 +445,197 @@ describe('Expert free expiring hero attack preference', () => {
     expect(review.stats.dispatches).toBe(1)
   })
 })
+
+describe('Expert unused minion attack against Armor', () => {
+  function armoredPosition(
+    options: Partial<FixtureOptions> = {},
+    edit?: (checkpoint: Mutable<OpeningMatchCheckpoint>, actor: string) => void
+  ) {
+    const fixture = createAiFixture({
+      seed: 4013,
+      turnNumber: 10,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'guldan',
+      aiMana: 0,
+      aiHealth: 30,
+      aiHand: [],
+      aiBoard: [
+        {
+          cardId: 'the_grand_tournament_twilight_guardian',
+          ready: true,
+          attack: 3,
+          health: 8,
+          maxHealth: 8,
+          enchantments: [
+            {
+              id: 'guardian-taunt',
+              sourceInstanceId: 'guardian',
+              sourceCardId: null,
+              keywords: ['taunt'],
+              duration: 'permanent'
+            }
+          ]
+        }
+      ],
+      opponentHealth: 27,
+      opponentArmor: 3,
+      opponentBoard: [{ cardId: 'future_past_ancient_of_yore' }],
+      opponentHand: [],
+      aiDeck: ['basic_chillwind_yeti'],
+      opponentDeck: ['basic_chillwind_yeti'],
+      ...options
+    })
+    const checkpoint = structuredClone(
+      fixture.checkpoint
+    ) as Mutable<OpeningMatchCheckpoint>
+    for (const minion of checkpoint.state.players.find(
+      (player) => player.participantId !== fixture.aiParticipantId
+    )!.board) {
+      if (minion.cardId === 'future_past_ancient_of_yore') {
+        minion.dormant = true
+        minion.dormantTurnsRemaining = 2
+      }
+    }
+    edit?.(checkpoint, fixture.aiParticipantId)
+    return new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: checkpoint as unknown as OpeningMatchCheckpoint
+    })
+  }
+
+  function face(session: GameBoardSession): TurnMatchCommand {
+    const own = session
+      .getState()
+      .players.find((player) => player.participantId === session.remoteParticipantId)!
+    return {
+      type: 'attack-character',
+      participantId: session.remoteParticipantId,
+      attacker: { kind: 'minion', instanceId: own.board[0]!.instanceId },
+      defender: { kind: 'hero' }
+    }
+  }
+
+  it('prefers the unused Guardian attack without losing Health or defensive geometry', () => {
+    const session = armoredPosition()
+    const before = session.match.getCheckpoint()
+    const command = face(session)
+    const review = inspect(session)
+    expect(review(command)).toBe(true)
+    expect(review(command)).toBe(true)
+    expect(review.stats).toMatchObject({ dispatches: 1, cacheHits: 1 })
+    expect(session.match.getCheckpoint()).toEqual(before)
+    expect(session.dispatch(command).accepted).toBe(true)
+    const after = session.getState()
+    const enemy = after.players.find(
+      (p) => p.participantId === session.localParticipantId
+    )!
+    expect(enemy.hero.health).toBe(27)
+    expect(enemy.hero.armor).toBe(0)
+    expect(enemy.board).toMatchObject(
+      before.state.players.find((p) => p.participantId === session.localParticipantId)!
+        .board
+    )
+    expect(
+      after.players.find((p) => p.participantId === session.remoteParticipantId)!
+        .board[0]
+    ).toMatchObject({
+      attack: 3,
+      health: 8,
+      attacksUsedThisTurn: 1,
+      lastAttackedOnTurn: 10
+    })
+  })
+
+  it.each([
+    { name: 'health threshold', options: { opponentHealth: 16, opponentArmor: 0 } },
+    { name: 'damage overflowing Armor', options: { opponentArmor: 2 } },
+    {
+      name: 'Secret',
+      options: { opponentSecrets: [{ cardId: 'classic_ice_barrier' }] }
+    },
+    { name: 'possible terminal fatigue', options: { opponentDeck: [] } },
+    {
+      name: 'weapon durability',
+      options: { aiWeapon: { cardId: 'basic_wicked_knife', attack: 1, durability: 2 } }
+    },
+    {
+      name: 'attack trigger',
+      options: { aiBoard: [{ cardId: 'the_grand_tournament_cutpurse', ready: true }] }
+    },
+    {
+      name: 'conditional aura',
+      options: { aiBoard: [{ cardId: 'goblins_vs_gnomes_goblin_sapper', ready: true }] }
+    },
+    {
+      name: 'stealth loss',
+      options: { aiBoard: [{ cardId: 'classic_worgen_infiltrator', ready: true }] }
+    },
+    {
+      name: 'Lifesteal payoff',
+      options: {
+        aiHealth: 25,
+        aiBoard: [
+          {
+            cardId: 'basic_chillwind_yeti',
+            attack: 3,
+            ready: true,
+            keywords: ['lifesteal']
+          }
+        ]
+      }
+    }
+  ] satisfies { name: string; options: Partial<FixtureOptions> }[])(
+    'does not force a minion attack with $name',
+    ({ options }) => {
+      const session = armoredPosition(options)
+      const before = session.match.getCheckpoint()
+      expect(inspect(session)(face(session))).toBe(false)
+      expect(session.match.getCheckpoint()).toEqual(before)
+    }
+  )
+
+  it.each(['frozen', 'spent', 'sleeping'] as const)(
+    'does not invent a %s minion attack',
+    (kind) => {
+      const session = armoredPosition({}, (cp, actor) => {
+        const minion = cp.state.players.find((p) => p.participantId === actor)!
+          .board[0]!
+        if (kind === 'frozen') minion.frozenUntilTurn = cp.state.turnNumber + 1
+        if (kind === 'spent') {
+          minion.lastAttackedOnTurn = cp.state.turnNumber
+          minion.attacksUsedThisTurn = 1
+        }
+        if (kind === 'sleeping') {
+          minion.dormant = true
+          minion.dormantTurnsRemaining = 2
+        }
+      })
+      expect(inspect(session)(face(session))).toBe(false)
+    }
+  )
+
+  it('does not inspect concealed opponent hand identities', () => {
+    const first = armoredPosition({ opponentHand: ['classic_molten_giant'] })
+    const second = armoredPosition({ opponentHand: ['basic_chillwind_yeti'] })
+    expect(first.getAiObservation()).toEqual(second.getAiObservation())
+    expect(inspect(first)(face(first))).toBe(true)
+    expect(inspect(second)(face(second))).toBe(true)
+  })
+
+  it('shares the existing time and work caps with all attack candidates', () => {
+    const session = armoredPosition()
+    const stopped = inspect(session, () => true)
+    expect(stopped(face(session))).toBe(false)
+    expect(stopped.stats).toMatchObject({ dispatches: 0, abstentions: 1 })
+    const bounded = inspect(session)
+    for (let index = 0; index < 10; index++) {
+      bounded({
+        ...face(session),
+        attacker: { kind: 'minion', instanceId: `missing-${index}` }
+      } as TurnMatchCommand)
+    }
+    expect(bounded.stats.dispatches).toBe(EXPERT_EXPIRING_ATTACK_MAX_DISPATCHES)
+    expect(bounded.stats.abstentions).toBe(2)
+  })
+})

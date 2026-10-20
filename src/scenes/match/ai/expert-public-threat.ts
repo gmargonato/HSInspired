@@ -25,6 +25,87 @@ function onlyKeys(value: object, allowed: readonly string[]): boolean {
   return Object.keys(value).every((key) => allowed.includes(key))
 }
 
+/** These public effects cannot create a ready attacker during the reply. */
+function sleepingCopies(effect: object): boolean {
+  const entry = effect as {
+    trigger?: string
+    actions?: readonly Record<string, unknown>[]
+  }
+  return (
+    entry.trigger === 'deathrattle' &&
+    onlyKeys(effect, ['trigger', 'actions']) &&
+    !!entry.actions?.length &&
+    entry.actions.every(
+      (action) =>
+        action.action === 'summon-fresh-copy' &&
+        onlyKeys(action, ['action', 'count', 'dormantTurns']) &&
+        typeof action.count === 'number' &&
+        action.count > 0 &&
+        typeof action.dormantTurns === 'number' &&
+        action.dormantTurns >= 1
+    )
+  )
+}
+
+/** Only unconditional dormant Armor/draw; hidden conditions cannot certify safety. */
+function dormantEndIncome(effect: object): boolean {
+  const entry = effect as {
+    trigger?: string
+    whileDormant?: boolean
+    actions?: readonly Record<string, unknown>[]
+  }
+  return (
+    entry.trigger === 'end-of-turn' &&
+    entry.whileDormant === true &&
+    onlyKeys(effect, ['trigger', 'actions', 'whileDormant']) &&
+    !!entry.actions?.length &&
+    entry.actions.every(
+      (action) =>
+        (action.action === 'draw' &&
+          action.player === 'self' &&
+          onlyKeys(action, ['action', 'player', 'count']) &&
+          typeof action.count === 'number') ||
+        (action.action === 'gain-armor' &&
+          typeof action.amount === 'number' &&
+          onlyKeys(action, ['action', 'target', 'amount']) &&
+          JSON.stringify(action.target) ===
+            JSON.stringify({ controller: 'self', type: 'hero', selection: 'hero' }))
+    )
+  )
+}
+
+/** Draw-copy affects only cards in hand, which this attack-only model never plays. */
+function inertDrawCopy(effect: object): boolean {
+  const entry = effect as {
+    trigger?: string
+    activeZone?: string
+    event?: Record<string, unknown>
+    actions?: readonly Record<string, unknown>[]
+  }
+  return (
+    entry.trigger === 'on-draw' &&
+    entry.activeZone === 'board' &&
+    onlyKeys(effect, ['trigger', 'activeZone', 'event', 'actions']) &&
+    JSON.stringify(entry.event) ===
+      JSON.stringify({ controller: 'self', filter: { cardType: 'Minion' } }) &&
+    !!entry.actions?.length &&
+    entry.actions.every(
+      (action) =>
+        action.action === 'copy' &&
+        action.destination === 'hand' &&
+        onlyKeys(action, ['action', 'target', 'destination', 'stats', 'cost']) &&
+        JSON.stringify(action.target) ===
+          JSON.stringify({ type: 'drawn-card', selection: 'event-target' }) &&
+        (action.stats === undefined ||
+          (typeof action.stats === 'object' &&
+            action.stats !== null &&
+            onlyKeys(action.stats, ['attack', 'health']) &&
+            Object.values(action.stats).every((value) => typeof value === 'number'))) &&
+        (action.cost === undefined || typeof action.cost === 'number')
+    )
+  )
+}
+
 /** Closed support boundary; a sampled hidden condition cannot establish safety. */
 function publicCombatSupported(state: OpeningMatchState, actorId: PlayerId): boolean {
   if (
@@ -71,20 +152,25 @@ function publicCombatSupported(state: OpeningMatchState, actorId: PlayerId): boo
       return false
     for (const minion of player.board) {
       if (
-        minion.dormant ||
         minion.grantedTriggers?.length ||
         minion.attachedEffects?.length ||
-        minion.deathrattles?.length ||
+        minion.deathrattles?.some((effect) => !sleepingCopies(effect)) ||
         !plainEnchantments(minion.enchantments)
       )
         return false
       const definition = CARD_CATALOG.get(minion.cardId)
       if (!definition) return false
-      if (minion.silenced) continue
+      // A fresh copy loses silence, so validate the printed mechanics that a
+      // granted sleeping-copy Deathrattle could restore before using an upper bound.
+      if (minion.silenced && !minion.deathrattles?.length) continue
       if (
         definition.effects.some((effect) => {
           if (effect.trigger === 'battlecry' || effect.trigger === 'on-play')
             return false
+          // This model ends before the opponent's end-of-turn effects. An own
+          // dormant draw during our pass still fails the information guard.
+          if (dormantEndIncome(effect)) return false
+          if (inertDrawCopy(effect) || sleepingCopies(effect)) return false
           if (effect.trigger !== 'aura' || !onlyKeys(effect, ['trigger', 'actions']))
             return true
           return !effect.actions?.every((action) => {
@@ -157,6 +243,8 @@ function dynamicEffect(value: unknown): boolean {
 /**
  * Concealed cards are inert placeholders in this public-only reply model. This
  * deliberately excludes hidden plays, hidden passive effects and future draws;
+ * spell placeholders also suppress inert minion-draw hand copies. Such copies
+ * cannot affect combat under the closed board-only effect support above.
  * it never mistakes one sampled identity for a public safety fact.
  */
 function publicCombatCheckpoint(
@@ -175,7 +263,7 @@ function publicCombatCheckpoint(
             ? card
             : {
                 ...card,
-                cardId: asCardId('classic_wisp'),
+                cardId: asCardId('basic_the_coin'),
                 baseCost: 0,
                 currentCost: 0,
                 enchantments: [],
@@ -188,7 +276,7 @@ function publicCombatCheckpoint(
             ? card
             : {
                 ...card,
-                cardId: asCardId('classic_wisp'),
+                cardId: asCardId('basic_the_coin'),
                 baseCost: 0,
                 currentCost: 0,
                 enchantments: [],
@@ -202,7 +290,7 @@ function publicCombatCheckpoint(
 
 /**
  * Inspect the actual pass before search spends resources. A defense proves only
- * this action followed immediately by End Turn against the closed public attack
+ * this exact one- or two-action line followed by End Turn against the closed public attack
  * model. Extending the seed must not inherit that survival certificate.
  */
 export function inspectExpertPublicThreat(
@@ -274,8 +362,12 @@ export function inspectExpertPublicThreat(
     })
     reply = threat.reply
     if (reply !== 'lethal' || stop()) return
-    const candidates: { command: TurnMatchCommand; value: number; priority: number }[] =
-      []
+    const candidates: {
+      command: TurnMatchCommand
+      value: number
+      priority: number
+      pressure: number
+    }[] = []
     // Every supplied legal immediate action is considered, with no card IDs or
     // selected-plan eligibility. Complete the immediate-win scan before proofs.
     const legalCommands = commands ?? enumerateLegalCommands(root, actorId)
@@ -322,6 +414,7 @@ export function inspectExpertPublicThreat(
         candidates.push({
           command,
           value: self.mana.available,
+          pressure,
           priority:
             self.hero.health + self.hero.armor > pressure
               ? 2
@@ -332,7 +425,9 @@ export function inspectExpertPublicThreat(
       })
     }
     if (stop() || defenses.some((line) => line.outcome === 'win')) return
-    candidates.sort((a, b) => b.priority - a.priority || b.value - a.value)
+    candidates.sort(
+      (a, b) => b.priority - a.priority || a.pressure - b.pressure || b.value - a.value
+    )
     for (const candidate of candidates) {
       if (stop()) break
       const review = root.analyze((fork) => {
@@ -354,6 +449,70 @@ export function inspectExpertPublicThreat(
           proven: true,
           value: candidate.value
         })
+    }
+    // A single clear may need one follow-up ping or trade. Search only after no
+    // one-action defense was certified, under the same total dispatch/time cap.
+    // Every accepted certificate remains the exact complete line, never a seed
+    // whose unreviewed continuation inherits a survival promise.
+    if (defenses.length || stop()) return
+    for (const candidate of candidates.slice(0, 6)) {
+      if (stop() || defenses.length) break
+      root.analyze((first) => {
+        if (
+          !applyPublicAttackStep(first, candidate.command) ||
+          !supported(first.getState())
+        )
+          return
+        const followups = enumerateLegalCommands(first, actorId)
+        for (const followup of followups) {
+          if (stop() || defenses.length) break
+          if (followup.type === 'end-turn') continue
+          if (followup.type === 'play-card') {
+            const card = first
+              .getState()
+              .players.find((p) => p.participantId === actorId)
+              ?.hand.find((c) => c.instanceId === followup.cardInstanceId)
+            if (!card || dynamicEffect(CARD_CATALOG.get(card.cardId)?.effects)) continue
+          }
+          first.analyze((fork) => {
+            if (!applyPublicAttackStep(fork, followup) || stop()) return
+            const position = fork.getState()
+            if (position.phase === 'ended') {
+              if (position.winnerId === actorId)
+                defenses.push({
+                  commands: [candidate.command, followup],
+                  outcome: 'win',
+                  proven: true,
+                  value: Infinity
+                })
+              return
+            }
+            if (
+              !supported(position) ||
+              position.activePlayerId !== actorId ||
+              !applyPublicAttackStep(fork, end) ||
+              stop()
+            )
+              return
+            stats.reviewedLines++
+            const review = inspectPublicAttackReply(
+              fork,
+              actorId,
+              supported,
+              stop,
+              threat.witness
+            )
+            if (review.reply === 'clear' && !stop())
+              defenses.push({
+                commands: [candidate.command, followup, end],
+                outcome: 'ongoing',
+                proven: true,
+                value: position.players.find((p) => p.participantId === actorId)!.mana
+                  .available
+              })
+          })
+        }
+      })
     }
   })
   return finish()

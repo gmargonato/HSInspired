@@ -3411,6 +3411,48 @@ describe('Expert fresh friendly-target repair', () => {
     }
   }
 
+  it('repairs authored opponent healing to the useful same-card self-heal', () => {
+    const h = harness({
+      seed: 2026102010,
+      aiHeroId: 'uther',
+      opponentHeroId: 'guldan',
+      aiMana: 1,
+      aiHealth: 27,
+      opponentHealth: 20,
+      aiHand: ['whispers_of_the_old_gods_forbidden_healing']
+    })
+    const selected = h.target('enemy', 'hero')
+    const self = h.target('self', 'hero')
+    const before = h.session.match.getCheckpoint()
+    try {
+      const result = h.guard(h.request, h.responseFor(selected, [self]))
+      expect(result.choice).toMatchObject({ actionId: self.id })
+      expect(result.usage?.actionOutcomeReason).toBe('opponent-heal')
+      expect(h.session.match.getCheckpoint()).toEqual(before)
+    } finally {
+      h.api.dispose()
+    }
+  })
+
+  it('keeps enemy Attack gifts as soft search advice rather than a blanket target ban', () => {
+    const h = harness({
+      seed: 2026102016,
+      aiHeroId: 'valeera',
+      opponentHeroId: 'guldan',
+      aiMana: 3,
+      aiHand: ['classic_cold_blood'],
+      aiBoard: [{ cardId: 'basic_chillwind_yeti' }],
+      opponentBoard: [{ cardId: 'future_past_ancient_of_yore' }]
+    })
+    const selected = h.target('enemy', 'minion')
+    const response = h.responseFor(selected, [h.target('self', 'minion')])
+    try {
+      expect(h.guard(h.request, response)).toBe(response)
+    } finally {
+      h.api.dispose()
+    }
+  })
+
   const keeperOptions = {
     seed: 101426,
     aiHeroId: 'malfurion',

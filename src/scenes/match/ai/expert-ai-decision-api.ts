@@ -1832,10 +1832,18 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       if (!replacement) return response
       const intent = aiActionIntent(replacement.command, this.opponentParticipantId())
       const priorSafety = response.usage?.decisionPriority === 'tactical-safety'
-      const preference = `Use otherwise expiring hero damage: ${replacement.description}.`
+      const armorAttack =
+        replacement.command.type === 'attack-character' &&
+        replacement.command.attacker.kind === 'minion'
+      const preferenceKind = armorAttack
+        ? 'unused-minion-armor-attack'
+        : 'unused-expiring-hero-attack'
+      const preference = armorAttack
+        ? `Use otherwise unused minion damage against Armor: ${replacement.description}.`
+        : `Use otherwise expiring hero damage: ${replacement.description}.`
       const reason = priorSafety ? `${response.reason} ${preference}` : preference
       transition = {
-        reason: 'unused-expiring-hero-attack',
+        reason: preferenceKind,
         fromActionId: selected.id,
         toActionId: replacement.id,
         fromCommandKey: canonicalCommandKey(selected.command),
